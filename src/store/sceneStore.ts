@@ -1,9 +1,10 @@
 import { create } from 'zustand'
-import type { SceneNode } from '../types/scene'
+import type { SceneNode, FrameNode } from '../types/scene'
 
 interface SceneState {
   nodes: SceneNode[]
   addNode: (node: SceneNode) => void
+  addChildToFrame: (frameId: string, child: SceneNode) => void
   updateNode: (id: string, updates: Partial<SceneNode>) => void
   deleteNode: (id: string) => void
   clearNodes: () => void
@@ -13,12 +14,36 @@ interface SceneState {
   toggleVisibility: (id: string) => void
 }
 
+// Helper to recursively add child to a frame
+function addChildToFrameRecursive(nodes: SceneNode[], frameId: string, child: SceneNode): SceneNode[] {
+  return nodes.map((node) => {
+    if (node.id === frameId && node.type === 'frame') {
+      return {
+        ...node,
+        children: [...node.children, child],
+      } as FrameNode
+    }
+    if (node.type === 'frame') {
+      return {
+        ...node,
+        children: addChildToFrameRecursive(node.children, frameId, child),
+      } as FrameNode
+    }
+    return node
+  })
+}
+
 export const useSceneStore = create<SceneState>((set) => ({
   nodes: [],
 
   addNode: (node) =>
     set((state) => ({
       nodes: [...state.nodes, node],
+    })),
+
+  addChildToFrame: (frameId, child) =>
+    set((state) => ({
+      nodes: addChildToFrameRecursive(state.nodes, frameId, child),
     })),
 
   updateNode: (id, updates) =>

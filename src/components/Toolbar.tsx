@@ -1,21 +1,55 @@
 import { useSceneStore } from '../store/sceneStore'
+import { useSelectionStore } from '../store/selectionStore'
 import { useViewportStore } from '../store/viewportStore'
 import { generateId } from '../types/scene'
-import type { SceneNode } from '../types/scene'
+import type { SceneNode, FrameNode } from '../types/scene'
 import { downloadDocument, openFilePicker } from '../utils/fileUtils'
+
+// Helper to find a node by ID recursively
+function findNodeById(nodes: SceneNode[], id: string): SceneNode | null {
+  for (const node of nodes) {
+    if (node.id === id) return node
+    if (node.type === 'frame') {
+      const found = findNodeById(node.children, id)
+      if (found) return found
+    }
+  }
+  return null
+}
 
 const toolbarBtnClass = 'px-3 py-2 bg-surface-elevated border border-border-light rounded text-white text-[13px] cursor-pointer transition-colors duration-150 hover:bg-surface-hover hover:border-border-hover active:bg-surface-active'
 
 export function Toolbar() {
   const addNode = useSceneStore((state) => state.addNode)
+  const addChildToFrame = useSceneStore((state) => state.addChildToFrame)
   const nodes = useSceneStore((state) => state.nodes)
   const setNodes = useSceneStore((state) => state.setNodes)
+  const { selectedIds } = useSelectionStore()
   const { scale, x, y } = useViewportStore()
+
+  // Check if a Frame is selected
+  const getSelectedFrame = (): FrameNode | null => {
+    if (selectedIds.length !== 1) return null
+    const node = findNodeById(nodes, selectedIds[0])
+    return node?.type === 'frame' ? (node as FrameNode) : null
+  }
 
   const getViewportCenter = () => {
     const centerX = (window.innerWidth / 2 - x) / scale
     const centerY = (window.innerHeight / 2 - y) / scale
     return { centerX, centerY }
+  }
+
+  // Add node either to selected frame or to root
+  const addNodeOrChild = (node: SceneNode) => {
+    const selectedFrame = getSelectedFrame()
+    if (selectedFrame) {
+      // Add as child to selected frame (position relative to frame)
+      const childNode = { ...node, x: 10, y: 10 }
+      addChildToFrame(selectedFrame.id, childNode)
+    } else {
+      addNode(node)
+    }
   }
 
   const createFrame = () => {
@@ -32,7 +66,7 @@ export function Toolbar() {
       strokeWidth: 1,
       children: [],
     }
-    addNode(node)
+    addNodeOrChild(node)
   }
 
   const createRect = () => {
@@ -47,7 +81,7 @@ export function Toolbar() {
       fill: '#4a90d9',
       cornerRadius: 4,
     }
-    addNode(node)
+    addNodeOrChild(node)
   }
 
   const createEllipse = () => {
@@ -61,7 +95,7 @@ export function Toolbar() {
       height: 120,
       fill: '#d94a4a',
     }
-    addNode(node)
+    addNodeOrChild(node)
   }
 
   const createText = () => {
@@ -78,7 +112,7 @@ export function Toolbar() {
       fontFamily: 'Arial',
       fill: '#ffffff',
     }
-    addNode(node)
+    addNodeOrChild(node)
   }
 
   const handleSave = () => {
