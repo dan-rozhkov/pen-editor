@@ -127,6 +127,39 @@
     "passes": true
   },
   {
+    "category": "Phase 2.5: Editor Enhancements",
+    "description": "Удаление элементов клавишей Backspace/Delete",
+    "steps": [
+      "Нажатие Backspace/Delete удаляет выделенные элементы",
+      "Множественное выделение удаляется за один раз",
+      "После удаления selection очищается",
+      "Клавиша Escape снимает выделение"
+    ],
+    "passes": true
+  },
+  {
+    "category": "Phase 2.5: Editor Enhancements",
+    "description": "Отображение вложенности в панели Layers",
+    "steps": [
+      "Вложенные элементы отображаются с отступом",
+      "Frame можно развернуть/свернуть (expand/collapse)",
+      "Клик на вложенный элемент выделяет его",
+      "Drag-n-drop работает между уровнями вложенности"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 2.5: Editor Enhancements",
+    "description": "Отмена и повтор действий (Undo/Redo)",
+    "steps": [
+      "Cmd/Ctrl+Z отменяет последнее действие",
+      "Cmd/Ctrl+Shift+Z повторяет отменённое действие",
+      "История сохраняет изменения узлов",
+      "История работает для создания, удаления и изменения свойств"
+    ],
+    "passes": false
+  },
+  {
     "category": "Phase 3: Variables & Themes",
     "description": "Variable system (определение переменных)",
     "steps": [

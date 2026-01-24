@@ -19,6 +19,7 @@ export function Canvas() {
 
   const { scale, x, y, isPanning, setPosition, setIsPanning, zoomAtPoint } = useViewportStore()
   const nodes = useSceneStore((state) => state.nodes)
+  const deleteNode = useSceneStore((state) => state.deleteNode)
   const { selectedIds, clearSelection } = useSelectionStore()
 
   // Update transformer nodes when selection changes
@@ -56,13 +57,34 @@ export function Canvas() {
     return () => window.removeEventListener('resize', updateDimensions)
   }, [])
 
-  // Keyboard event handlers for spacebar panning
+  // Keyboard event handlers for spacebar panning, deletion, and escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Spacebar panning
       if (e.code === 'Space' && !e.repeat) {
         e.preventDefault()
         setIsSpacePressed(true)
         setIsPanning(true)
+      }
+
+      // Delete/Backspace - delete selected elements
+      if (e.code === 'Delete' || e.code === 'Backspace') {
+        // Don't delete if user is typing in an input field
+        const target = e.target as HTMLElement
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+          return
+        }
+        e.preventDefault()
+        const ids = useSelectionStore.getState().selectedIds
+        if (ids.length > 0) {
+          ids.forEach((id) => deleteNode(id))
+          clearSelection()
+        }
+      }
+
+      // Escape - clear selection
+      if (e.code === 'Escape') {
+        clearSelection()
       }
     }
 
@@ -81,7 +103,7 @@ export function Canvas() {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
     }
-  }, [isMiddleMouseDown, setIsPanning])
+  }, [isMiddleMouseDown, setIsPanning, deleteNode, clearSelection])
 
   // Mouse wheel zoom
   const handleWheel = useCallback(
