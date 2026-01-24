@@ -27,3 +27,22 @@
 - Konva.js canvas с viewport (pan/zoom)
 
 ---
+
+=== 2026-01-24 | Feature 2: Konva.js canvas с viewport (pan/zoom) ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Создан Zustand store для viewport state (scale, x, y, isPanning)
+- Создан Canvas компонент с Konva Stage и Layer
+- Реализован zoom колёсиком мыши с центрированием на курсоре
+- Реализован pan зажатием middle mouse button
+- Реализован pan зажатием пробела + drag
+- Добавлены демо-фигуры (Rect, Circle) для визуализации
+- Исправлена проблема с несколькими копиями React (vite.config.ts alias)
+- E2E тест пройден: zoom и pan работают корректно
+
+Следующие шаги:
+- Scene Graph с примитивами (frame, rect, ellipse, text)
+
+---
