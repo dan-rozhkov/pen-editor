@@ -7,6 +7,7 @@ interface SceneState {
   updateNode: (id: string, updates: Partial<SceneNode>) => void
   deleteNode: (id: string) => void
   clearNodes: () => void
+  setNodes: (nodes: SceneNode[]) => void
   reorderNode: (fromIndex: number, toIndex: number) => void
   setVisibility: (id: string, visible: boolean) => void
   toggleVisibility: (id: string) => void
@@ -33,6 +34,8 @@ export const useSceneStore = create<SceneState>((set) => ({
     })),
 
   clearNodes: () => set({ nodes: [] }),
+
+  setNodes: (nodes) => set({ nodes }),
 
   reorderNode: (fromIndex, toIndex) =>
     set((state) => {

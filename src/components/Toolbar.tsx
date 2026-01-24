@@ -2,11 +2,14 @@ import { useSceneStore } from '../store/sceneStore'
 import { useViewportStore } from '../store/viewportStore'
 import { generateId } from '../types/scene'
 import type { SceneNode } from '../types/scene'
+import { downloadDocument, openFilePicker } from '../utils/fileUtils'
 
 const toolbarBtnClass = 'px-3 py-2 bg-surface-elevated border border-border-light rounded text-white text-[13px] cursor-pointer transition-colors duration-150 hover:bg-surface-hover hover:border-border-hover active:bg-surface-active'
 
 export function Toolbar() {
   const addNode = useSceneStore((state) => state.addNode)
+  const nodes = useSceneStore((state) => state.nodes)
+  const setNodes = useSceneStore((state) => state.setNodes)
   const { scale, x, y } = useViewportStore()
 
   const getViewportCenter = () => {
@@ -78,9 +81,30 @@ export function Toolbar() {
     addNode(node)
   }
 
+  const handleSave = () => {
+    downloadDocument(nodes)
+  }
+
+  const handleOpen = async () => {
+    try {
+      const loadedNodes = await openFilePicker()
+      setNodes(loadedNodes)
+    } catch (err) {
+      console.error('Failed to open file:', err)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-2 p-3 bg-surface-panel border-r border-border-default w-[120px]">
-      <div className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Primitives</div>
+      <div className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">File</div>
+      <button className={toolbarBtnClass} onClick={handleOpen}>
+        Open
+      </button>
+      <button className={toolbarBtnClass} onClick={handleSave}>
+        Save
+      </button>
+
+      <div className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-1 mt-3">Primitives</div>
       <button className={toolbarBtnClass} onClick={createFrame}>
         Frame
       </button>
