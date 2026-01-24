@@ -103,3 +103,51 @@ export function TextInput({ label, value, onChange, placeholder }: TextInputProp
     </div>
   )
 }
+
+interface SelectInputProps {
+  label?: string
+  value: string
+  options: { value: string; label: string }[]
+  onChange: (value: string) => void
+}
+
+export function SelectInput({ label, value, options, onChange }: SelectInputProps) {
+  return (
+    <div className="flex-1 flex items-center gap-1">
+      {label && (
+        <span className="text-[11px] text-text-muted w-12 shrink-0">{label}</span>
+      )}
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full bg-surface-elevated border border-border-light rounded px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-bright cursor-pointer"
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+interface CheckboxInputProps {
+  label: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+}
+
+export function CheckboxInput({ label, checked, onChange }: CheckboxInputProps) {
+  return (
+    <label className="flex items-center gap-2 cursor-pointer">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="w-4 h-4 rounded border border-border-light bg-surface-elevated accent-accent-bright cursor-pointer"
+      />
+      <span className="text-xs text-text-primary">{label}</span>
+    </label>
+  )
+}

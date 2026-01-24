@@ -1,12 +1,14 @@
 import { useSceneStore } from '../store/sceneStore'
 import { useSelectionStore } from '../store/selectionStore'
-import type { SceneNode } from '../types/scene'
+import type { SceneNode, FrameNode, FlexDirection, AlignItems, JustifyContent } from '../types/scene'
 import {
   PropertySection,
   PropertyRow,
   NumberInput,
   ColorInput,
   TextInput,
+  SelectInput,
+  CheckboxInput,
 } from './ui/PropertyInputs'
 
 function Header() {
@@ -107,6 +109,89 @@ function PropertyEditor({ node, onUpdate }: PropertyEditorProps) {
             onChange={(v) => onUpdate({ cornerRadius: v })}
             min={0}
           />
+        </PropertySection>
+      )}
+
+      {/* Auto Layout (Frame only) */}
+      {node.type === 'frame' && (
+        <PropertySection title="Auto Layout">
+          <CheckboxInput
+            label="Enable Auto Layout"
+            checked={(node as FrameNode).layout?.autoLayout ?? false}
+            onChange={(v) => onUpdate({ layout: { ...(node as FrameNode).layout, autoLayout: v } } as Partial<SceneNode>)}
+          />
+          {(node as FrameNode).layout?.autoLayout && (
+            <>
+              <SelectInput
+                label="Direction"
+                value={(node as FrameNode).layout?.flexDirection ?? 'row'}
+                options={[
+                  { value: 'row', label: 'Horizontal' },
+                  { value: 'column', label: 'Vertical' },
+                ]}
+                onChange={(v) => onUpdate({ layout: { ...(node as FrameNode).layout, flexDirection: v as FlexDirection } } as Partial<SceneNode>)}
+              />
+              <NumberInput
+                label="Gap"
+                value={(node as FrameNode).layout?.gap ?? 0}
+                onChange={(v) => onUpdate({ layout: { ...(node as FrameNode).layout, gap: v } } as Partial<SceneNode>)}
+                min={0}
+              />
+              <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wide mt-2">
+                Padding
+              </div>
+              <PropertyRow>
+                <NumberInput
+                  label="T"
+                  value={(node as FrameNode).layout?.paddingTop ?? 0}
+                  onChange={(v) => onUpdate({ layout: { ...(node as FrameNode).layout, paddingTop: v } } as Partial<SceneNode>)}
+                  min={0}
+                />
+                <NumberInput
+                  label="R"
+                  value={(node as FrameNode).layout?.paddingRight ?? 0}
+                  onChange={(v) => onUpdate({ layout: { ...(node as FrameNode).layout, paddingRight: v } } as Partial<SceneNode>)}
+                  min={0}
+                />
+              </PropertyRow>
+              <PropertyRow>
+                <NumberInput
+                  label="B"
+                  value={(node as FrameNode).layout?.paddingBottom ?? 0}
+                  onChange={(v) => onUpdate({ layout: { ...(node as FrameNode).layout, paddingBottom: v } } as Partial<SceneNode>)}
+                  min={0}
+                />
+                <NumberInput
+                  label="L"
+                  value={(node as FrameNode).layout?.paddingLeft ?? 0}
+                  onChange={(v) => onUpdate({ layout: { ...(node as FrameNode).layout, paddingLeft: v } } as Partial<SceneNode>)}
+                  min={0}
+                />
+              </PropertyRow>
+              <SelectInput
+                label="Align"
+                value={(node as FrameNode).layout?.alignItems ?? 'flex-start'}
+                options={[
+                  { value: 'flex-start', label: 'Start' },
+                  { value: 'center', label: 'Center' },
+                  { value: 'flex-end', label: 'End' },
+                  { value: 'stretch', label: 'Stretch' },
+                ]}
+                onChange={(v) => onUpdate({ layout: { ...(node as FrameNode).layout, alignItems: v as AlignItems } } as Partial<SceneNode>)}
+              />
+              <SelectInput
+                label="Justify"
+                value={(node as FrameNode).layout?.justifyContent ?? 'flex-start'}
+                options={[
+                  { value: 'flex-start', label: 'Start' },
+                  { value: 'center', label: 'Center' },
+                  { value: 'flex-end', label: 'End' },
+                  { value: 'space-between', label: 'Space Between' },
+                ]}
+                onChange={(v) => onUpdate({ layout: { ...(node as FrameNode).layout, justifyContent: v as JustifyContent } } as Partial<SceneNode>)}
+              />
+            </>
+          )}
         </PropertySection>
       )}
 
