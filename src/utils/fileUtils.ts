@@ -1,28 +1,39 @@
 import type { SceneNode } from '../types/scene'
+import type { Variable } from '../types/variable'
 
 export interface PenDocument {
   version: string
   nodes: SceneNode[]
+  variables?: Variable[]
+}
+
+export interface DocumentData {
+  nodes: SceneNode[]
+  variables: Variable[]
 }
 
 const CURRENT_VERSION = '1.0'
 
-export function serializeDocument(nodes: SceneNode[]): string {
+export function serializeDocument(nodes: SceneNode[], variables: Variable[]): string {
   const doc: PenDocument = {
     version: CURRENT_VERSION,
     nodes,
+    variables,
   }
   return JSON.stringify(doc, null, 2)
 }
 
-export function deserializeDocument(json: string): SceneNode[] {
+export function deserializeDocument(json: string): DocumentData {
   const doc: PenDocument = JSON.parse(json)
   // Future: handle version migrations here
-  return doc.nodes
+  return {
+    nodes: doc.nodes,
+    variables: doc.variables ?? [],
+  }
 }
 
-export function downloadDocument(nodes: SceneNode[], filename = 'document.json') {
-  const json = serializeDocument(nodes)
+export function downloadDocument(nodes: SceneNode[], variables: Variable[], filename = 'document.json') {
+  const json = serializeDocument(nodes, variables)
   const blob = new Blob([json], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
 
@@ -34,7 +45,7 @@ export function downloadDocument(nodes: SceneNode[], filename = 'document.json')
   URL.revokeObjectURL(url)
 }
 
-export function openFilePicker(): Promise<SceneNode[]> {
+export function openFilePicker(): Promise<DocumentData> {
   return new Promise((resolve, reject) => {
     const input = document.createElement('input')
     input.type = 'file'
@@ -49,8 +60,8 @@ export function openFilePicker(): Promise<SceneNode[]> {
 
       try {
         const text = await file.text()
-        const nodes = deserializeDocument(text)
-        resolve(nodes)
+        const data = deserializeDocument(text)
+        resolve(data)
       } catch (err) {
         reject(err)
       }
