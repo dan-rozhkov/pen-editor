@@ -49,6 +49,24 @@ function updateNodeRecursive(nodes: SceneNode[], id: string, updates: Partial<Sc
   })
 }
 
+// Helper to recursively delete a node anywhere in the tree
+function deleteNodeRecursive(nodes: SceneNode[], id: string): SceneNode[] {
+  return nodes.reduce<SceneNode[]>((acc, node) => {
+    // Skip the node to delete
+    if (node.id === id) return acc
+    // Recursively process frame children
+    if (node.type === 'frame') {
+      acc.push({
+        ...node,
+        children: deleteNodeRecursive(node.children, id),
+      } as FrameNode)
+    } else {
+      acc.push(node)
+    }
+    return acc
+  }, [])
+}
+
 export const useSceneStore = create<SceneState>((set) => ({
   nodes: [],
 
@@ -69,7 +87,7 @@ export const useSceneStore = create<SceneState>((set) => ({
 
   deleteNode: (id) =>
     set((state) => ({
-      nodes: state.nodes.filter((node) => node.id !== id),
+      nodes: deleteNodeRecursive(state.nodes, id),
     })),
 
   clearNodes: () => set({ nodes: [] }),
