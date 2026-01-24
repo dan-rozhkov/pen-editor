@@ -265,8 +265,9 @@ export function Canvas() {
         position: 'relative',
       }}
     >
-      {/* Zoom indicator */}
+      {/* Zoom indicator - click to reset to 100% */}
       <div
+        onClick={() => useViewportStore.getState().setScale(1)}
         style={{
           position: 'absolute',
           bottom: 12,
@@ -278,9 +279,11 @@ export function Canvas() {
           fontFamily: 'system-ui, sans-serif',
           color: '#666',
           zIndex: 10,
-          pointerEvents: 'none',
+          cursor: 'pointer',
           boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+          userSelect: 'none',
         }}
+        title="Click to reset to 100%"
       >
         {Math.round(scale * 100)}%
       </div>
