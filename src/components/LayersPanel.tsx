@@ -57,11 +57,11 @@ const EyeIcon = ({ visible }: { visible: boolean }) => (
 interface LayerItemProps {
   node: SceneNode
   index: number
-  onDragStart: (index: number) => void
-  onDragOver: (index: number) => void
+  onDragStart: () => void
+  onDragOver: () => void
   onDragEnd: () => void
   isDragging: boolean
-  dragOverIndex: number | null
+  isDragOver: boolean
 }
 
 function LayerItem({
@@ -71,7 +71,7 @@ function LayerItem({
   onDragOver,
   onDragEnd,
   isDragging,
-  dragOverIndex,
+  isDragOver,
 }: LayerItemProps) {
   const { selectedIds, select, addToSelection } = useSelectionStore()
   const toggleVisibility = useSceneStore((state) => state.toggleVisibility)
@@ -96,17 +96,17 @@ function LayerItem({
   return (
     <div
       className={`layer-item ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${
-        dragOverIndex === index ? 'drag-over' : ''
+        isDragOver ? 'drag-over' : ''
       }`}
       onClick={handleClick}
       draggable
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = 'move'
-        onDragStart(index)
+        onDragStart()
       }}
       onDragOver={(e) => {
         e.preventDefault()
-        onDragOver(index)
+        onDragOver()
       }}
       onDragEnd={onDragEnd}
     >
@@ -132,18 +132,22 @@ export function LayersPanel() {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const dragIndexRef = useRef<number | null>(null)
 
-  const handleDragStart = (index: number) => {
-    setDragIndex(index)
-    dragIndexRef.current = index
+  // We work with "visual indices" (0 = top layer in UI = last in nodes array)
+  const handleDragStart = (visualIndex: number) => {
+    setDragIndex(visualIndex)
+    dragIndexRef.current = visualIndex
   }
 
-  const handleDragOver = (index: number) => {
-    setDragOverIndex(index)
+  const handleDragOver = (visualIndex: number) => {
+    setDragOverIndex(visualIndex)
   }
 
   const handleDragEnd = () => {
     if (dragIndexRef.current !== null && dragOverIndex !== null && dragIndexRef.current !== dragOverIndex) {
-      reorderNode(dragIndexRef.current, dragOverIndex)
+      // Convert visual indices to actual array indices
+      const fromActual = nodes.length - 1 - dragIndexRef.current
+      const toActual = nodes.length - 1 - dragOverIndex
+      reorderNode(fromActual, toActual)
     }
     setDragIndex(null)
     setDragOverIndex(null)
@@ -163,19 +167,19 @@ export function LayersPanel() {
         {reversedNodes.length === 0 ? (
           <div className="layers-empty">No layers yet</div>
         ) : (
-          reversedNodes.map((node, reversedIndex) => {
-            // Calculate actual index in original array
-            const actualIndex = nodes.length - 1 - reversedIndex
+          reversedNodes.map((node, visualIndex) => {
+            // actualIndex is for selection and display name
+            const actualIndex = nodes.length - 1 - visualIndex
             return (
               <LayerItem
                 key={node.id}
                 node={node}
                 index={actualIndex}
-                onDragStart={handleDragStart}
-                onDragOver={(idx) => handleDragOver(nodes.length - 1 - idx)}
+                onDragStart={() => handleDragStart(visualIndex)}
+                onDragOver={() => handleDragOver(visualIndex)}
                 onDragEnd={handleDragEnd}
-                isDragging={dragIndex === actualIndex}
-                dragOverIndex={dragOverIndex !== null ? nodes.length - 1 - dragOverIndex : null}
+                isDragging={dragIndex === visualIndex}
+                isDragOver={dragOverIndex === visualIndex}
               />
             )
           })
