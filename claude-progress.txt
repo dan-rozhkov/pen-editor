@@ -161,3 +161,23 @@
 - Layout properties в UI (direction, gap, padding, align)
 
 ---
+
+=== 2026-01-24 | Feature 9: Layout properties в UI ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Добавлен SelectInput компонент в PropertyInputs.tsx (dropdown)
+- Добавлен CheckboxInput компонент в PropertyInputs.tsx (toggle)
+- Добавлена секция "Auto Layout" в PropertiesPanel.tsx для Frame узлов
+- UI для выбора direction (Horizontal/Vertical)
+- Input для gap между элементами
+- Inputs для padding (T, R, B, L)
+- UI для alignItems (Start, Center, End, Stretch)
+- UI для justifyContent (Start, Center, End, Space Between)
+- E2E тест пройден: все контролы отображаются и изменяют свойства layout
+
+Следующие шаги:
+- fill_container / fit_content sizing
+
+---

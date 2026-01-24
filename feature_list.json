@@ -102,7 +102,7 @@
       "UI для alignItems (start, center, end, stretch)",
       "UI для justifyContent (start, center, end, space-between)"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "Phase 2: Auto-Layout",
