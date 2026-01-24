@@ -18,7 +18,7 @@ import {
 
 function Header() {
   return (
-    <div className="px-4 py-3 border-b border-border-default text-xs font-semibold text-white uppercase tracking-wide">
+    <div className="px-4 py-3 border-b border-border-default text-xs font-semibold text-text-primary uppercase tracking-wide">
       Properties
     </div>
   )

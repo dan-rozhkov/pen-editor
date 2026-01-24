@@ -265,7 +265,7 @@ export function VariablesPanel() {
       {/* Header */}
       <div className="flex justify-between items-center px-4 py-3 border-b border-border-default">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-white uppercase tracking-wide">Variables</span>
+          <span className="text-xs font-semibold text-text-primary uppercase tracking-wide">Variables</span>
           <span className="bg-border-default text-text-muted px-1.5 py-0.5 rounded text-[10px] font-medium">
             {variables.length}
           </span>

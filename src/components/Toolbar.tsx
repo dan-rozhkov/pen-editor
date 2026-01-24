@@ -19,7 +19,7 @@ function findNodeById(nodes: SceneNode[], id: string): SceneNode | null {
   return null
 }
 
-const toolbarBtnClass = 'px-3 py-2 bg-surface-elevated border border-border-light rounded text-white text-[13px] cursor-pointer transition-colors duration-150 hover:bg-surface-hover hover:border-border-hover active:bg-surface-active'
+const toolbarBtnClass = 'px-3 py-2 bg-surface-elevated border border-border-light rounded text-text-primary text-[13px] cursor-pointer transition-colors duration-150 hover:bg-surface-hover hover:border-border-hover active:bg-surface-active'
 
 export function Toolbar() {
   const addNode = useSceneStore((state) => state.addNode)
@@ -116,7 +116,7 @@ export function Toolbar() {
       text: 'Text',
       fontSize: 18,
       fontFamily: 'Arial',
-      fill: '#ffffff',
+      fill: '#333333',
     }
     addNodeOrChild(node)
   }

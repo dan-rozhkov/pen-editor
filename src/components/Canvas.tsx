@@ -228,7 +228,7 @@ export function Canvas() {
         height: '100%',
         overflow: 'hidden',
         cursor: isPanning ? 'grab' : 'default',
-        background: '#1a1a1a',
+        background: '#f5f5f5',
       }}
     >
       <Stage
@@ -253,7 +253,7 @@ export function Canvas() {
             y={0}
             width={2000}
             height={2000}
-            fill="#2a2a2a"
+            fill="#e8e8e8"
           />
           {/* Render scene nodes */}
           {nodes.map((node) => (

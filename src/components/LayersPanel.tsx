@@ -392,7 +392,7 @@ export function LayersPanel() {
 
   return (
     <div className="h-[280px] shrink-0 bg-surface-panel border-b border-border-default flex flex-col select-none">
-      <div className="flex justify-between items-center px-4 py-3 border-b border-border-default text-xs font-semibold text-white uppercase tracking-wide">
+      <div className="flex justify-between items-center px-4 py-3 border-b border-border-default text-xs font-semibold text-text-primary uppercase tracking-wide">
         <span>Layers</span>
         <span className="bg-border-default text-text-muted px-1.5 py-0.5 rounded text-[10px] font-medium">
           {totalCount}
