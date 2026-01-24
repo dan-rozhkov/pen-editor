@@ -68,7 +68,7 @@
       "Можно изменить stroke color и width",
       "Изменения применяются в реальном времени"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "Phase 1: Базовый редактор",

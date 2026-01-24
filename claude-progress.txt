@@ -105,3 +105,24 @@
 - Properties Panel (редактирование свойств)
 
 ---
+
+=== 2026-01-24 | Feature 6: Properties Panel (редактирование свойств) ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Создан компонент PropertyInputs.tsx с переиспользуемыми инпутами (NumberInput, ColorInput, TextInput)
+- Создан компонент PropertiesPanel.tsx с секциями Position, Size, Fill, Stroke, Corner Radius
+- Создан компонент RightSidebar.tsx как контейнер для LayersPanel + PropertiesPanel
+- Модифицирован LayersPanel.tsx для stacked layout (h-[280px], убран border-l)
+- Обновлён App.tsx для использования RightSidebar
+- Панель показывает "Select a layer" при отсутствии выделения
+- Панель показывает "X layers selected" при множественном выделении
+- Для text узлов добавлены секции Text и Font (fontSize, fontFamily)
+- Real-time обновления через updateNode() в Zustand store
+- E2E тест пройден: позиция, размер, цвета изменяются и отображаются на canvas
+
+Следующие шаги:
+- Сохранение/загрузка JSON файлов
+
+---
