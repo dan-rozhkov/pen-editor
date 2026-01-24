@@ -6,6 +6,7 @@ import { useSceneStore } from '../store/sceneStore'
 import { useSelectionStore } from '../store/selectionStore'
 import { useHistoryStore } from '../store/historyStore'
 import { RenderNode } from './nodes/RenderNode'
+import { Scrollbars } from './Scrollbars'
 import { getViewportBounds, isNodeVisible } from '../utils/viewportUtils'
 
 const ZOOM_FACTOR = 1.1
@@ -333,6 +334,16 @@ export function Canvas() {
           />
         </Layer>
       </Stage>
+      {/* Scrollbars */}
+      <Scrollbars
+        scale={scale}
+        x={x}
+        y={y}
+        viewportWidth={dimensions.width}
+        viewportHeight={dimensions.height}
+        nodes={nodes}
+        onScroll={setPosition}
+      />
     </div>
   )
 }
