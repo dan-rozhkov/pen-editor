@@ -55,14 +55,97 @@ export function NumberInput({ label, value, onChange, min, max, step = 1 }: Numb
   )
 }
 
+import { useState, useRef, useEffect } from 'react'
+import type { Variable, ThemeName } from '../../types/variable'
+import { getVariableValue } from '../../types/variable'
+
 interface ColorInputProps {
   value: string
   onChange: (value: string) => void
+  variableId?: string
+  onVariableChange?: (variableId: string | undefined) => void
+  availableVariables?: Variable[]
+  activeTheme?: ThemeName
 }
 
-export function ColorInput({ value, onChange }: ColorInputProps) {
+export function ColorInput({
+  value,
+  onChange,
+  variableId,
+  onVariableChange,
+  availableVariables = [],
+  activeTheme = 'light'
+}: ColorInputProps) {
+  const [showPicker, setShowPicker] = useState(false)
+  const pickerRef = useRef<HTMLDivElement>(null)
+
+  // Close picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setShowPicker(false)
+      }
+    }
+    if (showPicker) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showPicker])
+
+  // Find bound variable
+  const boundVariable = variableId
+    ? availableVariables.find(v => v.id === variableId)
+    : undefined
+
+  // Get display color (from variable or direct value)
+  const displayColor = boundVariable
+    ? getVariableValue(boundVariable, activeTheme)
+    : (value || '#000000')
+
+  const handleVariableSelect = (varId: string | undefined) => {
+    if (onVariableChange) {
+      onVariableChange(varId)
+    }
+    setShowPicker(false)
+  }
+
+  const handleUnbind = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (onVariableChange) {
+      onVariableChange(undefined)
+    }
+  }
+
+  // If variable is bound, show variable name with unbind button
+  if (boundVariable) {
+    return (
+      <div className="flex items-center gap-2">
+        <div
+          className="w-8 h-8 rounded border border-border-light"
+          style={{ backgroundColor: displayColor }}
+        />
+        <div className="flex-1 flex items-center gap-1 bg-surface-elevated border border-accent-default rounded px-2 py-1">
+          <span className="flex-1 text-xs text-accent-bright truncate">
+            {boundVariable.name}
+          </span>
+          <button
+            type="button"
+            onClick={handleUnbind}
+            className="text-text-muted hover:text-text-primary text-xs"
+            title="Unbind variable"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M3 3L9 9M9 3L3 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Normal mode: color picker + hex input + variable button
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 relative" ref={pickerRef}>
       <input
         type="color"
         value={value || '#000000'}
@@ -76,6 +159,41 @@ export function ColorInput({ value, onChange }: ColorInputProps) {
         placeholder="#000000"
         className="flex-1 bg-surface-elevated border border-border-light rounded px-2 py-1 text-xs text-text-primary font-mono focus:outline-none focus:border-accent-bright"
       />
+      {availableVariables.length > 0 && onVariableChange && (
+        <button
+          type="button"
+          onClick={() => setShowPicker(!showPicker)}
+          className="p-1.5 rounded border border-border-light hover:border-accent-default bg-surface-elevated text-text-muted hover:text-accent-bright transition-colors"
+          title="Bind to variable"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M2 5h10M2 9h10M5 2v10M9 2v10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+          </svg>
+        </button>
+      )}
+
+      {/* Variable Picker Dropdown */}
+      {showPicker && availableVariables.length > 0 && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-surface-default border border-border-light rounded shadow-lg z-50 max-h-40 overflow-y-auto">
+          {availableVariables.map((variable) => {
+            const varColor = getVariableValue(variable, activeTheme)
+            return (
+              <button
+                key={variable.id}
+                type="button"
+                onClick={() => handleVariableSelect(variable.id)}
+                className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-surface-hover text-left"
+              >
+                <div
+                  className="w-4 h-4 rounded border border-border-light shrink-0"
+                  style={{ backgroundColor: varColor }}
+                />
+                <span className="text-xs text-text-primary truncate">{variable.name}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

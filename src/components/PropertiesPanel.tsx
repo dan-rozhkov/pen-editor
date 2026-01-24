@@ -1,7 +1,9 @@
 import { useSceneStore } from '../store/sceneStore'
 import { useSelectionStore } from '../store/selectionStore'
+import { useVariableStore } from '../store/variableStore'
+import { useThemeStore } from '../store/themeStore'
 import type { SceneNode, FrameNode, FlexDirection, AlignItems, JustifyContent, SizingMode } from '../types/scene'
-import type { ThemeName } from '../types/variable'
+import type { ThemeName, Variable } from '../types/variable'
 import { findParentFrame, findNodeById, type ParentContext } from '../utils/nodeUtils'
 import {
   PropertySection,
@@ -42,6 +44,8 @@ interface PropertyEditorProps {
   node: SceneNode
   onUpdate: (updates: Partial<SceneNode>) => void
   parentContext: ParentContext
+  variables: Variable[]
+  activeTheme: ThemeName
 }
 
 const sizingOptions = [
@@ -50,7 +54,28 @@ const sizingOptions = [
   { value: 'fit_content', label: 'Fit' },
 ]
 
-function PropertyEditor({ node, onUpdate, parentContext }: PropertyEditorProps) {
+function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme }: PropertyEditorProps) {
+  // Handler for fill variable binding
+  const handleFillVariableChange = (variableId: string | undefined) => {
+    if (variableId) {
+      onUpdate({ fillBinding: { variableId } })
+    } else {
+      onUpdate({ fillBinding: undefined })
+    }
+  }
+
+  // Handler for stroke variable binding
+  const handleStrokeVariableChange = (variableId: string | undefined) => {
+    if (variableId) {
+      onUpdate({ strokeBinding: { variableId } })
+    } else {
+      onUpdate({ strokeBinding: undefined })
+    }
+  }
+
+  // Filter only color variables
+  const colorVariables = variables.filter(v => v.type === 'color')
+
   return (
     <div className="flex flex-col gap-4">
       {/* Position Section */}
@@ -109,6 +134,10 @@ function PropertyEditor({ node, onUpdate, parentContext }: PropertyEditorProps) 
         <ColorInput
           value={node.fill ?? '#000000'}
           onChange={(v) => onUpdate({ fill: v })}
+          variableId={node.fillBinding?.variableId}
+          onVariableChange={handleFillVariableChange}
+          availableVariables={colorVariables}
+          activeTheme={activeTheme}
         />
       </PropertySection>
 
@@ -117,6 +146,10 @@ function PropertyEditor({ node, onUpdate, parentContext }: PropertyEditorProps) 
         <ColorInput
           value={node.stroke ?? ''}
           onChange={(v) => onUpdate({ stroke: v || undefined })}
+          variableId={node.strokeBinding?.variableId}
+          onVariableChange={handleStrokeVariableChange}
+          availableVariables={colorVariables}
+          activeTheme={activeTheme}
         />
         <NumberInput
           label="Width"
@@ -274,6 +307,8 @@ export function PropertiesPanel() {
   const nodes = useSceneStore((s) => s.nodes)
   const updateNode = useSceneStore((s) => s.updateNode)
   const { selectedIds } = useSelectionStore()
+  const variables = useVariableStore((s) => s.variables)
+  const activeTheme = useThemeStore((s) => s.activeTheme)
 
   // Find selected node (recursively search in tree)
   const selectedNode =
@@ -300,7 +335,13 @@ export function PropertiesPanel() {
         {selectedIds.length === 0 && <EmptyState />}
         {selectedIds.length > 1 && <MultiSelectState count={selectedIds.length} />}
         {selectedNode && (
-          <PropertyEditor node={selectedNode} onUpdate={handleUpdate} parentContext={parentContext} />
+          <PropertyEditor
+            node={selectedNode}
+            onUpdate={handleUpdate}
+            parentContext={parentContext}
+            variables={variables}
+            activeTheme={activeTheme}
+          />
         )}
       </div>
     </div>

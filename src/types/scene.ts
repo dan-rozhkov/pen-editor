@@ -1,5 +1,10 @@
 import type { ThemeName } from './variable'
 
+// Color binding to a variable
+export interface ColorBinding {
+  variableId: string
+}
+
 // Sizing modes for elements inside auto-layout containers
 export type SizingMode = 'fixed' | 'fill_container' | 'fit_content'
 
@@ -22,6 +27,9 @@ export interface BaseNode {
   visible?: boolean // defaults to true
   // Sizing mode (used when node is inside auto-layout container)
   sizing?: SizingProperties
+  // Variable bindings for colors
+  fillBinding?: ColorBinding
+  strokeBinding?: ColorBinding
 }
 
 // Auto-layout properties for Frame nodes
