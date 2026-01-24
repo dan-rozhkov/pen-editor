@@ -90,7 +90,7 @@
       "Yoga.Node создаётся для каждого Frame",
       "Layout вычисляется при изменении свойств"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "Phase 2: Auto-Layout",

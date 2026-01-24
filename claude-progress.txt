@@ -142,3 +142,22 @@
 - Интеграция yoga-layout (WASM) для auto-layout
 
 ---
+
+=== 2026-01-24 | Feature 8: Интеграция yoga-layout (WASM) ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Установлен npm пакет yoga-layout (WASM версия)
+- Создан src/utils/yogaLayout.ts с функциями инициализации и расчёта layout
+- Создан src/store/layoutStore.ts для управления состоянием yoga
+- Добавлены типы LayoutProperties (flexDirection, gap, padding, alignItems, justifyContent)
+- Обновлён FrameNode с поддержкой layout properties
+- Обновлён App.tsx для инициализации yoga при загрузке
+- Обновлён FrameRenderer для расчёта layout когда autoLayout включён
+- E2E тест пройден: WASM загружается, Yoga.Node создаётся, layout вычисляется корректно
+
+Следующие шаги:
+- Layout properties в UI (direction, gap, padding, align)
+
+---
