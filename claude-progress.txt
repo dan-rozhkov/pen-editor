@@ -46,3 +46,21 @@
 - Scene Graph с примитивами (frame, rect, ellipse, text)
 
 ---
+
+=== 2026-01-24 | Feature 3: Scene Graph с примитивами (frame, rect, ellipse, text) ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Созданы TypeScript типы для узлов Scene Graph (src/types/scene.ts)
+- Создан Zustand store для управления узлами (src/store/sceneStore.ts)
+- Создан RenderNode компонент для рекурсивного рендеринга узлов
+- Создан Toolbar компонент с кнопками для создания примитивов
+- Обновлён Canvas.tsx для динамического рендеринга из store
+- Обновлён App.tsx с layout (Toolbar слева, Canvas справа)
+- E2E тест пройден: все 4 примитива создаются и отображаются на canvas
+
+Следующие шаги:
+- Selection & Transform (move, resize)
+
+---
