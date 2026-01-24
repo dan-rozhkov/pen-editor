@@ -146,7 +146,7 @@
       "Клик на вложенный элемент выделяет его",
       "Drag-n-drop работает между уровнями вложенности"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "Phase 2.5: Editor Enhancements",

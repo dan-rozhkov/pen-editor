@@ -237,3 +237,26 @@
 - Отображение вложенности в панели Layers
 
 ---
+
+=== 2026-01-24 | Feature 13: Отображение вложенности в панели Layers ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Добавлен expandedFrameIds в sceneStore для хранения развёрнутых Frame
+- Добавлены методы toggleFrameExpanded, setFrameExpanded для expand/collapse
+- Исправлен toggleVisibility и setVisibility на рекурсивный поиск для вложенных узлов
+- Добавлен moveNode метод для перемещения узлов между родителями (drag-n-drop)
+- Переписан LayersPanel.tsx с рекурсивным рендером (LayerItem + LayerList)
+- Добавлен отступ через depth prop (padding-left = 12 + depth * 16px)
+- Добавлен ChevronIcon для expand/collapse на Frame с детьми
+- Реализован drag-n-drop с определением позиции: before/after/inside
+- E2E тест пройден: вложенные элементы отображаются с отступом
+- E2E тест пройден: expand/collapse работает (chevron поворачивается)
+- E2E тест пройден: клик на вложенный слой выделяет его на canvas
+- E2E тест пройден: drag-n-drop переносит элемент внутрь Frame
+
+Следующие шаги:
+- Отмена и повтор действий (Undo/Redo)
+
+---
