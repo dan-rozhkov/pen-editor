@@ -3,6 +3,7 @@ import type { SceneNode, FrameNode } from '../types/scene'
 
 interface SceneState {
   nodes: SceneNode[]
+  expandedFrameIds: Set<string>
   addNode: (node: SceneNode) => void
   addChildToFrame: (frameId: string, child: SceneNode) => void
   updateNode: (id: string, updates: Partial<SceneNode>) => void
@@ -12,6 +13,9 @@ interface SceneState {
   reorderNode: (fromIndex: number, toIndex: number) => void
   setVisibility: (id: string, visible: boolean) => void
   toggleVisibility: (id: string) => void
+  toggleFrameExpanded: (id: string) => void
+  setFrameExpanded: (id: string, expanded: boolean) => void
+  moveNode: (nodeId: string, newParentId: string | null, newIndex: number) => void
 }
 
 // Helper to recursively add child to a frame
@@ -67,8 +71,93 @@ function deleteNodeRecursive(nodes: SceneNode[], id: string): SceneNode[] {
   }, [])
 }
 
+// Helper to recursively toggle visibility of a node anywhere in the tree
+function toggleVisibilityRecursive(nodes: SceneNode[], id: string): SceneNode[] {
+  return nodes.map((node) => {
+    if (node.id === id) {
+      return { ...node, visible: node.visible === false ? true : false } as SceneNode
+    }
+    if (node.type === 'frame') {
+      return {
+        ...node,
+        children: toggleVisibilityRecursive(node.children, id),
+      } as FrameNode
+    }
+    return node
+  })
+}
+
+// Helper to recursively set visibility of a node anywhere in the tree
+function setVisibilityRecursive(nodes: SceneNode[], id: string, visible: boolean): SceneNode[] {
+  return nodes.map((node) => {
+    if (node.id === id) {
+      return { ...node, visible } as SceneNode
+    }
+    if (node.type === 'frame') {
+      return {
+        ...node,
+        children: setVisibilityRecursive(node.children, id, visible),
+      } as FrameNode
+    }
+    return node
+  })
+}
+
+// Helper to find and extract a node from the tree (returns node and tree without it)
+function extractNodeRecursive(nodes: SceneNode[], id: string): { node: SceneNode | null; remaining: SceneNode[] } {
+  let foundNode: SceneNode | null = null
+
+  const remaining = nodes.reduce<SceneNode[]>((acc, node) => {
+    if (node.id === id) {
+      foundNode = node
+      return acc
+    }
+    if (node.type === 'frame') {
+      const result = extractNodeRecursive(node.children, id)
+      if (result.node) {
+        foundNode = result.node
+      }
+      acc.push({
+        ...node,
+        children: result.remaining,
+      } as FrameNode)
+    } else {
+      acc.push(node)
+    }
+    return acc
+  }, [])
+
+  return { node: foundNode, remaining }
+}
+
+// Helper to insert a node at a specific index in a parent (or root if parentId is null)
+function insertNodeRecursive(nodes: SceneNode[], nodeToInsert: SceneNode, parentId: string | null, index: number): SceneNode[] {
+  if (parentId === null) {
+    // Insert at root level
+    const newNodes = [...nodes]
+    newNodes.splice(index, 0, nodeToInsert)
+    return newNodes
+  }
+
+  return nodes.map((node) => {
+    if (node.id === parentId && node.type === 'frame') {
+      const newChildren = [...node.children]
+      newChildren.splice(index, 0, nodeToInsert)
+      return { ...node, children: newChildren } as FrameNode
+    }
+    if (node.type === 'frame') {
+      return {
+        ...node,
+        children: insertNodeRecursive(node.children, nodeToInsert, parentId, index),
+      } as FrameNode
+    }
+    return node
+  })
+}
+
 export const useSceneStore = create<SceneState>((set) => ({
   nodes: [],
+  expandedFrameIds: new Set<string>(),
 
   addNode: (node) =>
     set((state) => ({
@@ -104,17 +193,44 @@ export const useSceneStore = create<SceneState>((set) => ({
 
   setVisibility: (id, visible) =>
     set((state) => ({
-      nodes: state.nodes.map((node) =>
-        node.id === id ? ({ ...node, visible } as SceneNode) : node
-      ),
+      nodes: setVisibilityRecursive(state.nodes, id, visible),
     })),
 
   toggleVisibility: (id) =>
     set((state) => ({
-      nodes: state.nodes.map((node) =>
-        node.id === id
-          ? ({ ...node, visible: node.visible === false ? true : false } as SceneNode)
-          : node
-      ),
+      nodes: toggleVisibilityRecursive(state.nodes, id),
     })),
+
+  toggleFrameExpanded: (id) =>
+    set((state) => {
+      const newSet = new Set(state.expandedFrameIds)
+      if (newSet.has(id)) {
+        newSet.delete(id)
+      } else {
+        newSet.add(id)
+      }
+      return { expandedFrameIds: newSet }
+    }),
+
+  setFrameExpanded: (id, expanded) =>
+    set((state) => {
+      const newSet = new Set(state.expandedFrameIds)
+      if (expanded) {
+        newSet.add(id)
+      } else {
+        newSet.delete(id)
+      }
+      return { expandedFrameIds: newSet }
+    }),
+
+  moveNode: (nodeId, newParentId, newIndex) =>
+    set((state) => {
+      // Extract the node from its current position
+      const { node, remaining } = extractNodeRecursive(state.nodes, nodeId)
+      if (!node) return state
+
+      // Insert the node at the new position
+      const newNodes = insertNodeRecursive(remaining, node, newParentId, newIndex)
+      return { nodes: newNodes }
+    }),
 }))

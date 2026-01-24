@@ -1,8 +1,8 @@
-import { useState, useRef } from 'react'
+import { useState, useCallback } from 'react'
 import clsx from 'clsx'
 import { useSceneStore } from '../store/sceneStore'
 import { useSelectionStore } from '../store/selectionStore'
-import type { SceneNode } from '../types/scene'
+import type { SceneNode, FrameNode } from '../types/scene'
 
 // Icons for different node types
 const NodeIcon = ({ type, isSelected }: { type: SceneNode['type']; isSelected: boolean }) => {
@@ -56,29 +56,62 @@ const EyeIcon = ({ visible, isSelected }: { visible: boolean; isSelected: boolea
   </svg>
 )
 
+// Chevron icon for expand/collapse
+const ChevronIcon = ({ expanded, isSelected }: { expanded: boolean; isSelected: boolean }) => (
+  <svg
+    viewBox="0 0 16 16"
+    className={clsx(
+      'w-3 h-3 transition-transform duration-150',
+      isSelected ? 'text-white' : 'text-text-muted',
+      expanded && 'rotate-90'
+    )}
+  >
+    <path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
+type DropPosition = 'before' | 'after' | 'inside' | null
+
+interface DragState {
+  draggedId: string | null
+  dropTargetId: string | null
+  dropPosition: DropPosition
+  dropParentId: string | null
+}
+
 interface LayerItemProps {
   node: SceneNode
-  index: number
-  onDragStart: () => void
-  onDragOver: () => void
+  depth: number
+  parentId: string | null
+  dragState: DragState
+  onDragStart: (nodeId: string) => void
+  onDragOver: (nodeId: string, position: DropPosition, parentId: string | null) => void
   onDragEnd: () => void
-  isDragging: boolean
-  isDragOver: boolean
+  onDrop: () => void
 }
 
 function LayerItem({
   node,
-  index,
+  depth,
+  parentId,
+  dragState,
   onDragStart,
   onDragOver,
   onDragEnd,
-  isDragging,
-  isDragOver,
+  onDrop,
 }: LayerItemProps) {
   const { selectedIds, select, addToSelection } = useSelectionStore()
   const toggleVisibility = useSceneStore((state) => state.toggleVisibility)
+  const expandedFrameIds = useSceneStore((state) => state.expandedFrameIds)
+  const toggleFrameExpanded = useSceneStore((state) => state.toggleFrameExpanded)
+
   const isSelected = selectedIds.includes(node.id)
   const isVisible = node.visible !== false
+  const isFrame = node.type === 'frame'
+  const hasChildren = isFrame && (node as FrameNode).children.length > 0
+  const isExpanded = expandedFrameIds.has(node.id)
+  const isDragging = dragState.draggedId === node.id
+  const isDropTarget = dragState.dropTargetId === node.id
 
   const handleClick = (e: React.MouseEvent) => {
     if (e.shiftKey) {
@@ -93,114 +126,295 @@ function LayerItem({
     toggleVisibility(node.id)
   }
 
-  const displayName = node.name || `${node.type.charAt(0).toUpperCase() + node.type.slice(1)} ${index + 1}`
+  const handleChevronClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    toggleFrameExpanded(node.id)
+  }
+
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', node.id)
+    onDragStart(node.id)
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const rect = e.currentTarget.getBoundingClientRect()
+    const y = e.clientY - rect.top
+    const height = rect.height
+
+    let position: DropPosition
+    if (isFrame && y > height * 0.25 && y < height * 0.75) {
+      // Drop inside frame (middle 50%)
+      position = 'inside'
+    } else if (y < height / 2) {
+      position = 'before'
+    } else {
+      position = 'after'
+    }
+
+    onDragOver(node.id, position, parentId)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    onDrop()
+  }
+
+  const displayName = node.name || `${node.type.charAt(0).toUpperCase() + node.type.slice(1)}`
 
   return (
-    <div
-      className={clsx(
-        'flex items-center justify-between px-3 py-2 cursor-pointer transition-colors duration-100',
-        isSelected ? 'bg-accent-primary hover:bg-accent-hover' : 'hover:bg-surface-elevated',
-        isDragging && 'opacity-50',
-        isDragOver && 'border-t-2 border-accent-bright'
-      )}
-      onClick={handleClick}
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.effectAllowed = 'move'
-        onDragStart()
-      }}
-      onDragOver={(e) => {
-        e.preventDefault()
-        onDragOver()
-      }}
-      onDragEnd={onDragEnd}
-    >
-      <div className="flex items-center gap-2 flex-1 min-w-0">
-        <NodeIcon type={node.type} isSelected={isSelected} />
-        <span
-          className={clsx(
-            'text-xs whitespace-nowrap overflow-hidden text-ellipsis',
-            isSelected ? 'text-white' : 'text-text-secondary',
-            !isVisible && 'opacity-50'
-          )}
-        >
-          {displayName}
-        </span>
-      </div>
-      <button
+    <>
+      <div
         className={clsx(
-          'bg-transparent border-none cursor-pointer p-1 flex items-center justify-center rounded transition-opacity duration-100',
-          isVisible ? 'opacity-60 hover:opacity-100 hover:bg-white/10' : 'opacity-30'
+          'flex items-center justify-between py-1.5 pr-3 cursor-pointer transition-colors duration-100',
+          isSelected ? 'bg-accent-primary hover:bg-accent-hover' : 'hover:bg-surface-elevated',
+          isDragging && 'opacity-50',
+          isDropTarget && dragState.dropPosition === 'before' && 'border-t-2 border-accent-bright',
+          isDropTarget && dragState.dropPosition === 'after' && 'border-b-2 border-accent-bright',
+          isDropTarget && dragState.dropPosition === 'inside' && 'bg-accent-primary/30'
         )}
-        onClick={handleVisibilityClick}
-        title={isVisible ? 'Hide layer' : 'Show layer'}
+        style={{ paddingLeft: `${12 + depth * 16}px` }}
+        onClick={handleClick}
+        draggable
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragLeave={() => {}}
+        onDrop={handleDrop}
       >
-        <EyeIcon visible={isVisible} isSelected={isSelected} />
-      </button>
-    </div>
+        <div className="flex items-center gap-1 flex-1 min-w-0">
+          {/* Chevron for frames with children */}
+          {hasChildren ? (
+            <button
+              className="bg-transparent border-none cursor-pointer p-0.5 flex items-center justify-center rounded hover:bg-white/10"
+              onClick={handleChevronClick}
+            >
+              <ChevronIcon expanded={isExpanded} isSelected={isSelected} />
+            </button>
+          ) : (
+            <div className="w-4" />
+          )}
+          <NodeIcon type={node.type} isSelected={isSelected} />
+          <span
+            className={clsx(
+              'text-xs whitespace-nowrap overflow-hidden text-ellipsis',
+              isSelected ? 'text-white' : 'text-text-secondary',
+              !isVisible && 'opacity-50'
+            )}
+          >
+            {displayName}
+          </span>
+        </div>
+        <button
+          className={clsx(
+            'bg-transparent border-none cursor-pointer p-1 flex items-center justify-center rounded transition-opacity duration-100',
+            isVisible ? 'opacity-60 hover:opacity-100 hover:bg-white/10' : 'opacity-30'
+          )}
+          onClick={handleVisibilityClick}
+          title={isVisible ? 'Hide layer' : 'Show layer'}
+        >
+          <EyeIcon visible={isVisible} isSelected={isSelected} />
+        </button>
+      </div>
+
+      {/* Render children if this is an expanded frame */}
+      {isFrame && isExpanded && (
+        <LayerList
+          nodes={[...(node as FrameNode).children].reverse()}
+          depth={depth + 1}
+          parentId={node.id}
+          dragState={dragState}
+          onDragStart={onDragStart}
+          onDragOver={onDragOver}
+          onDragEnd={onDragEnd}
+          onDrop={onDrop}
+        />
+      )}
+    </>
   )
+}
+
+interface LayerListProps {
+  nodes: SceneNode[]
+  depth: number
+  parentId: string | null
+  dragState: DragState
+  onDragStart: (nodeId: string) => void
+  onDragOver: (nodeId: string, position: DropPosition, parentId: string | null) => void
+  onDragEnd: () => void
+  onDrop: () => void
+}
+
+function LayerList({
+  nodes,
+  depth,
+  parentId,
+  dragState,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+  onDrop,
+}: LayerListProps) {
+  return (
+    <>
+      {nodes.map((node) => (
+        <LayerItem
+          key={node.id}
+          node={node}
+          depth={depth}
+          parentId={parentId}
+          dragState={dragState}
+          onDragStart={onDragStart}
+          onDragOver={onDragOver}
+          onDragEnd={onDragEnd}
+          onDrop={onDrop}
+        />
+      ))}
+    </>
+  )
+}
+
+// Helper to count total visible nodes (for the badge)
+function countNodes(nodes: SceneNode[]): number {
+  return nodes.reduce((count, node) => {
+    if (node.type === 'frame') {
+      return count + 1 + countNodes((node as FrameNode).children)
+    }
+    return count + 1
+  }, 0)
+}
+
+// Helper to get children array of a parent (or root nodes if parentId is null)
+function getChildrenOfParent(nodes: SceneNode[], parentId: string | null): SceneNode[] {
+  if (parentId === null) {
+    return nodes
+  }
+  for (const node of nodes) {
+    if (node.id === parentId && node.type === 'frame') {
+      return (node as FrameNode).children
+    }
+    if (node.type === 'frame') {
+      const found = getChildrenOfParent((node as FrameNode).children, parentId)
+      if (found.length > 0 || parentId === node.id) {
+        return found
+      }
+    }
+  }
+  return []
 }
 
 export function LayersPanel() {
   const nodes = useSceneStore((state) => state.nodes)
-  const reorderNode = useSceneStore((state) => state.reorderNode)
-  const [dragIndex, setDragIndex] = useState<number | null>(null)
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
-  const dragIndexRef = useRef<number | null>(null)
+  const moveNode = useSceneStore((state) => state.moveNode)
+  const setFrameExpanded = useSceneStore((state) => state.setFrameExpanded)
 
-  // We work with "visual indices" (0 = top layer in UI = last in nodes array)
-  const handleDragStart = (visualIndex: number) => {
-    setDragIndex(visualIndex)
-    dragIndexRef.current = visualIndex
-  }
+  const [dragState, setDragState] = useState<DragState>({
+    draggedId: null,
+    dropTargetId: null,
+    dropPosition: null,
+    dropParentId: null,
+  })
 
-  const handleDragOver = (visualIndex: number) => {
-    setDragOverIndex(visualIndex)
-  }
+  const handleDragStart = useCallback((nodeId: string) => {
+    setDragState({
+      draggedId: nodeId,
+      dropTargetId: null,
+      dropPosition: null,
+      dropParentId: null,
+    })
+  }, [])
 
-  const handleDragEnd = () => {
-    if (dragIndexRef.current !== null && dragOverIndex !== null && dragIndexRef.current !== dragOverIndex) {
-      // Convert visual indices to actual array indices
-      const fromActual = nodes.length - 1 - dragIndexRef.current
-      const toActual = nodes.length - 1 - dragOverIndex
-      reorderNode(fromActual, toActual)
+  const handleDragOver = useCallback((nodeId: string, position: DropPosition, parentId: string | null) => {
+    setDragState((prev) => ({
+      ...prev,
+      dropTargetId: nodeId,
+      dropPosition: position,
+      dropParentId: parentId,
+    }))
+  }, [])
+
+  const handleDragEnd = useCallback(() => {
+    setDragState({
+      draggedId: null,
+      dropTargetId: null,
+      dropPosition: null,
+      dropParentId: null,
+    })
+  }, [])
+
+  const handleDrop = useCallback(() => {
+    const { draggedId, dropTargetId, dropPosition, dropParentId } = dragState
+
+    if (!draggedId || !dropTargetId || !dropPosition) {
+      handleDragEnd()
+      return
     }
-    setDragIndex(null)
-    setDragOverIndex(null)
-    dragIndexRef.current = null
-  }
+
+    // Don't drop on itself
+    if (draggedId === dropTargetId) {
+      handleDragEnd()
+      return
+    }
+
+    // Calculate new parent and index
+    let newParentId: string | null
+    let newIndex: number
+
+    if (dropPosition === 'inside') {
+      // Drop inside a frame
+      newParentId = dropTargetId
+      newIndex = 0 // Insert at the beginning (will appear at top in reversed list)
+      // Auto-expand the frame
+      setFrameExpanded(dropTargetId, true)
+    } else {
+      // Drop before or after the target
+      newParentId = dropParentId
+      const siblings = getChildrenOfParent(nodes, dropParentId)
+      const targetIndex = siblings.findIndex((n) => n.id === dropTargetId)
+
+      if (dropPosition === 'before') {
+        newIndex = targetIndex
+      } else {
+        newIndex = targetIndex + 1
+      }
+    }
+
+    moveNode(draggedId, newParentId, newIndex)
+    handleDragEnd()
+  }, [dragState, nodes, moveNode, setFrameExpanded, handleDragEnd])
 
   // Reverse the nodes array so that top items in the list appear on top visually (higher z-index)
   const reversedNodes = [...nodes].reverse()
+  const totalCount = countNodes(nodes)
 
   return (
     <div className="h-[280px] shrink-0 bg-surface-panel border-b border-border-default flex flex-col select-none">
       <div className="flex justify-between items-center px-4 py-3 border-b border-border-default text-xs font-semibold text-white uppercase tracking-wide">
         <span>Layers</span>
         <span className="bg-border-default text-text-muted px-1.5 py-0.5 rounded text-[10px] font-medium">
-          {nodes.length}
+          {totalCount}
         </span>
       </div>
-      <div className="flex-1 overflow-y-auto py-2">
+      <div
+        className="flex-1 overflow-y-auto py-2"
+        onDragEnd={handleDragEnd}
+      >
         {reversedNodes.length === 0 ? (
           <div className="text-text-disabled text-xs text-center p-5">No layers yet</div>
         ) : (
-          reversedNodes.map((node, visualIndex) => {
-            // actualIndex is for selection and display name
-            const actualIndex = nodes.length - 1 - visualIndex
-            return (
-              <LayerItem
-                key={node.id}
-                node={node}
-                index={actualIndex}
-                onDragStart={() => handleDragStart(visualIndex)}
-                onDragOver={() => handleDragOver(visualIndex)}
-                onDragEnd={handleDragEnd}
-                isDragging={dragIndex === visualIndex}
-                isDragOver={dragOverIndex === visualIndex}
-              />
-            )
-          })
+          <LayerList
+            nodes={reversedNodes}
+            depth={0}
+            parentId={null}
+            dragState={dragState}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+            onDrop={handleDrop}
+          />
         )}
       </div>
     </div>
