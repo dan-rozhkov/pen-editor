@@ -160,6 +160,28 @@
     "passes": true
   },
   {
+    "category": "Phase 2.5: Editor Enhancements",
+    "description": "Infinite canvas (бесконечный холст как в Figma)",
+    "steps": [
+      "Фон canvas не ограничен фиксированным размером",
+      "Динамическая сетка отображается на любом уровне зума",
+      "Zoom to fit all - кнопка центрирует все элементы",
+      "Viewport culling - рендерятся только видимые элементы"
+    ],
+    "passes": true
+  },
+  {
+    "category": "Phase 2.5: Editor Enhancements",
+    "description": "Ограничение перемещения элементов внутри auto-layout frames",
+    "steps": [
+      "Элементы внутри auto-layout нельзя перемещать свободно",
+      "Drag на canvas переупорядочивает элементы (reorder)",
+      "Визуальная индикация места вставки при drag",
+      "Drag-out из auto-layout frame переводит элемент в свободный режим"
+    ],
+    "passes": false
+  },
+  {
     "category": "Phase 3: Variables & Themes",
     "description": "Variable system (определение переменных)",
     "steps": [

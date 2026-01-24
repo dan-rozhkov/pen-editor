@@ -346,3 +346,23 @@
 - WebSocket server (Phase 4: MCP Server)
 
 ---
+
+=== 2026-01-24 | Feature 18: Infinite canvas (бесконечный холст как в Figma) ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Создан компонент Grid.tsx с динамической сеткой (10px мелкая + 100px крупная)
+- Сетка масштабируется с zoom, мелкая сетка скрывается при scale < 0.3
+- Создан viewportUtils.ts с функциями для viewport culling
+- Обновлён Canvas.tsx: интеграция Grid, viewport culling для узлов
+- Обновлён viewportStore.ts: добавлен метод fitToContent()
+- Обновлён Toolbar.tsx: добавлена секция View с кнопкой "Fit All"
+- Добавлен hotkey Cmd/Ctrl+0 для zoom to fit
+- Убран статический фон 2000x2000, canvas теперь бесконечный
+- E2E тест пройден: сетка отображается, Fit All центрирует элементы
+
+Следующие шаги:
+- Ограничение перемещения элементов внутри auto-layout frames
+
+---

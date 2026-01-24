@@ -31,7 +31,7 @@ export function Toolbar() {
   const activeTheme = useThemeStore((state) => state.activeTheme)
   const setActiveTheme = useThemeStore((state) => state.setActiveTheme)
   const { selectedIds } = useSelectionStore()
-  const { scale, x, y } = useViewportStore()
+  const { scale, x, y, fitToContent } = useViewportStore()
 
   // Check if a Frame is selected
   const getSelectedFrame = (): FrameNode | null => {
@@ -136,6 +136,14 @@ export function Toolbar() {
     }
   }
 
+  const handleFit = () => {
+    // Get actual canvas dimensions from DOM
+    const canvas = document.querySelector('[style*="overflow: hidden"]') as HTMLElement
+    const width = canvas?.clientWidth || window.innerWidth - 120 - 280 // fallback: minus toolbar and sidebar
+    const height = canvas?.clientHeight || window.innerHeight
+    fitToContent(nodes, width, height)
+  }
+
   return (
     <div className="flex flex-col gap-2 p-3 bg-surface-panel border-r border-border-default w-[120px]">
       <div className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">File</div>
@@ -144,6 +152,11 @@ export function Toolbar() {
       </button>
       <button className={toolbarBtnClass} onClick={handleSave}>
         Save
+      </button>
+
+      <div className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-1 mt-3">View</div>
+      <button className={toolbarBtnClass} onClick={handleFit} title="Zoom to fit all (Cmd/Ctrl+0)">
+        Fit All
       </button>
 
       <div className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-1 mt-3">Primitives</div>

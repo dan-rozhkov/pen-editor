@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState } from 'react'
+import { useRef, useEffect, useCallback, useState, useMemo } from 'react'
 import { Stage, Layer, Rect, Transformer } from 'react-konva'
 import Konva from 'konva'
 import { useViewportStore } from '../store/viewportStore'
@@ -6,6 +6,8 @@ import { useSceneStore } from '../store/sceneStore'
 import { useSelectionStore } from '../store/selectionStore'
 import { useHistoryStore } from '../store/historyStore'
 import { RenderNode } from './nodes/RenderNode'
+import { Grid } from './Grid'
+import { getViewportBounds, isNodeVisible } from '../utils/viewportUtils'
 
 const ZOOM_FACTOR = 1.1
 
@@ -18,8 +20,19 @@ export function Canvas() {
   const [isMiddleMouseDown, setIsMiddleMouseDown] = useState(false)
   const lastPointerPosition = useRef<{ x: number; y: number } | null>(null)
 
-  const { scale, x, y, isPanning, setPosition, setIsPanning, zoomAtPoint } = useViewportStore()
+  const { scale, x, y, isPanning, setPosition, setIsPanning, zoomAtPoint, fitToContent } = useViewportStore()
   const nodes = useSceneStore((state) => state.nodes)
+
+  // Calculate viewport bounds and filter visible nodes
+  const viewportBounds = useMemo(() =>
+    getViewportBounds(scale, x, y, dimensions.width, dimensions.height),
+    [scale, x, y, dimensions.width, dimensions.height]
+  )
+
+  const visibleNodes = useMemo(() =>
+    nodes.filter(node => isNodeVisible(node, viewportBounds)),
+    [nodes, viewportBounds]
+  )
   const deleteNode = useSceneStore((state) => state.deleteNode)
   const setNodesWithoutHistory = useSceneStore((state) => state.setNodesWithoutHistory)
   const { selectedIds, clearSelection } = useSelectionStore()
@@ -89,6 +102,14 @@ export function Canvas() {
         return
       }
 
+      // Zoom to fit: Cmd+0 (Mac) or Ctrl+0 (Win/Linux)
+      if ((e.metaKey || e.ctrlKey) && e.code === 'Digit0') {
+        e.preventDefault()
+        const currentNodes = useSceneStore.getState().nodes
+        fitToContent(currentNodes, dimensions.width, dimensions.height)
+        return
+      }
+
       // Spacebar panning
       if (e.code === 'Space' && !e.repeat) {
         e.preventDefault()
@@ -133,7 +154,7 @@ export function Canvas() {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
     }
-  }, [isMiddleMouseDown, setIsPanning, deleteNode, clearSelection, undo, redo, setNodesWithoutHistory, saveHistory, startBatch, endBatch])
+  }, [isMiddleMouseDown, setIsPanning, deleteNode, clearSelection, undo, redo, setNodesWithoutHistory, saveHistory, startBatch, endBatch, fitToContent, dimensions.width, dimensions.height])
 
   // Mouse wheel zoom
   const handleWheel = useCallback(
@@ -246,17 +267,25 @@ export function Canvas() {
         onContextMenu={handleContextMenu}
       >
         <Layer>
-          {/* Grid background indicator */}
+          {/* Infinite grid background */}
+          <Grid
+            scale={scale}
+            x={x}
+            y={y}
+            viewportWidth={dimensions.width}
+            viewportHeight={dimensions.height}
+          />
+          {/* Background rect for click detection (invisible, covers visible area) */}
           <Rect
             name="background"
-            x={0}
-            y={0}
-            width={2000}
-            height={2000}
-            fill="#e8e8e8"
+            x={viewportBounds.minX}
+            y={viewportBounds.minY}
+            width={viewportBounds.maxX - viewportBounds.minX}
+            height={viewportBounds.maxY - viewportBounds.minY}
+            fill="transparent"
           />
-          {/* Render scene nodes */}
-          {nodes.map((node) => (
+          {/* Render visible scene nodes (viewport culling) */}
+          {visibleNodes.map((node) => (
             <RenderNode key={node.id} node={node} />
           ))}
           {/* Transformer for selection */}
