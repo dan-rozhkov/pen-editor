@@ -1,6 +1,6 @@
 import { Canvas } from './components/Canvas'
 import { Toolbar } from './components/Toolbar'
-import { LayersPanel } from './components/LayersPanel'
+import { RightSidebar } from './components/RightSidebar'
 
 function App() {
   return (
@@ -9,7 +9,7 @@ function App() {
       <div className="flex-1 h-full overflow-hidden">
         <Canvas />
       </div>
-      <LayersPanel />
+      <RightSidebar />
     </div>
   )
 }
