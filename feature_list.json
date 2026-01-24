@@ -1,0 +1,195 @@
+[
+  {
+    "category": "Phase 1: Базовый редактор",
+    "description": "Настройка Vite + React + TypeScript + Zustand",
+    "steps": [
+      "npm create vite создаёт проект",
+      "Установлены зависимости: react, zustand, konva, react-konva",
+      "TypeScript конфигурация работает",
+      "Dev server запускается без ошибок"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 1: Базовый редактор",
+    "description": "Konva.js canvas с viewport (pan/zoom)",
+    "steps": [
+      "Canvas отображается на странице",
+      "Pan: можно перемещать canvas зажав пробел/колёсико",
+      "Zoom: колёсико мыши увеличивает/уменьшает масштаб",
+      "Zoom центрируется на позиции курсора"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 1: Базовый редактор",
+    "description": "Scene Graph с примитивами (frame, rect, ellipse, text)",
+    "steps": [
+      "Можно создать Frame",
+      "Можно создать Rectangle",
+      "Можно создать Ellipse",
+      "Можно создать Text",
+      "Узлы корректно рендерятся на canvas"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 1: Базовый редактор",
+    "description": "Selection & Transform (move, resize)",
+    "steps": [
+      "Клик на элемент выделяет его",
+      "Выделенный элемент показывает bounding box",
+      "Drag перемещает элемент",
+      "Resize handles изменяют размер",
+      "Множественное выделение работает (Shift+клик)"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 1: Базовый редактор",
+    "description": "Layers Panel (иерархия узлов)",
+    "steps": [
+      "Панель отображает дерево узлов",
+      "Клик выделяет узел на canvas",
+      "Drag-n-drop меняет порядок/иерархию",
+      "Иконки показывают тип узла",
+      "Можно скрыть/показать узел"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 1: Базовый редактор",
+    "description": "Properties Panel (редактирование свойств)",
+    "steps": [
+      "Панель показывает свойства выделенного узла",
+      "Можно изменить позицию (x, y)",
+      "Можно изменить размер (width, height)",
+      "Можно изменить fill color",
+      "Можно изменить stroke color и width",
+      "Изменения применяются в реальном времени"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 1: Базовый редактор",
+    "description": "Сохранение/загрузка JSON файлов",
+    "steps": [
+      "Кнопка Save сохраняет документ в .json",
+      "Кнопка Open загружает .json файл",
+      "Формат файла соответствует спецификации",
+      "После загрузки все узлы восстанавливаются корректно"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 2: Auto-Layout",
+    "description": "Интеграция yoga-layout (WASM)",
+    "steps": [
+      "yoga-layout установлен и инициализируется",
+      "WASM модуль загружается без ошибок",
+      "Yoga.Node создаётся для каждого Frame",
+      "Layout вычисляется при изменении свойств"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 2: Auto-Layout",
+    "description": "Layout properties в UI (direction, gap, padding, align)",
+    "steps": [
+      "UI для выбора direction (horizontal/vertical)",
+      "Input для gap между элементами",
+      "Inputs для padding (top, right, bottom, left)",
+      "UI для alignItems (start, center, end, stretch)",
+      "UI для justifyContent (start, center, end, space-between)"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 2: Auto-Layout",
+    "description": "fill_container / fit_content sizing",
+    "steps": [
+      "UI переключатель для режима sizing",
+      "fill_container растягивает элемент на всю ширину/высоту",
+      "fit_content подстраивает размер под содержимое",
+      "Fixed size задаёт фиксированный размер"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 2: Auto-Layout",
+    "description": "Nested auto-layout frames",
+    "steps": [
+      "Frame внутри Frame корректно вычисляет layout",
+      "Изменение вложенного Frame обновляет родителя",
+      "Несколько уровней вложенности работают",
+      "Смешанные направления (H внутри V) корректны"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 3: Variables & Themes",
+    "description": "Variable system (определение переменных)",
+    "steps": [
+      "Панель Variables отображает список переменных",
+      "Можно создать новую переменную",
+      "Можно удалить переменную",
+      "Переменные сохраняются в документ"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 3: Variables & Themes",
+    "description": "Theme switching (light/dark)",
+    "steps": [
+      "UI переключатель темы",
+      "Переменные имеют значения для разных тем",
+      "Переключение темы обновляет все элементы",
+      "Темы сохраняются в документ"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 3: Variables & Themes",
+    "description": "Variable picker в properties panel",
+    "steps": [
+      "При клике на color показывается picker",
+      "Picker показывает список переменных",
+      "Выбор переменной применяет её к свойству",
+      "Элемент показывает имя переменной вместо значения"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 4: MCP Server",
+    "description": "WebSocket server",
+    "steps": [
+      "Server запускается на указанном порту",
+      "Клиент может подключиться",
+      "Сообщения передаются в обе стороны",
+      "Обработка ошибок и переподключение"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 4: MCP Server",
+    "description": "MCP protocol implementation",
+    "steps": [
+      "Реализован MCP handshake",
+      "Поддержка tools/list запроса",
+      "Поддержка tools/call запроса",
+      "Корректные MCP response форматы"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 4: MCP Server",
+    "description": "Read/Write operations для AI",
+    "steps": [
+      "batch_get возвращает узлы документа",
+      "batch_design выполняет операции I/C/U/R/M/D",
+      "get_screenshot возвращает изображение",
+      "AI-агент может создавать дизайны через MCP"
+    ],
+    "passes": false
+  }
+]
