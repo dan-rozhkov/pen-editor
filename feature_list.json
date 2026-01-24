@@ -124,7 +124,7 @@
       "Несколько уровней вложенности работают",
       "Смешанные направления (H внутри V) корректны"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "Phase 3: Variables & Themes",

@@ -203,3 +203,19 @@
 - Nested auto-layout frames
 
 ---
+
+=== 2026-01-24 | Feature 11: Nested auto-layout frames ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Добавлена функция calculateFrameIntrinsicSize() для вычисления intrinsic размера вложенных фреймов
+- Обновлена createYogaChildNode() для детекции вложенных auto-layout фреймов и использования их intrinsic size
+- Добавлена helper функция createYogaChildNodeWithIntrinsicSize() для рекурсивного расчёта layout
+- Исправлен deleteNode() - теперь работает рекурсивно для вложенных узлов
+- E2E тест пройден: внешний Frame (Vertical) + внутренний Frame (Horizontal) с 3 прямоугольниками
+
+Следующие шаги:
+- Variable system (определение переменных)
+
+---
