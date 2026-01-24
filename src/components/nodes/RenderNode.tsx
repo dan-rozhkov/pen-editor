@@ -146,6 +146,7 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
     const target = e.target
     const scaleX = target.scaleX()
     const scaleY = target.scaleY()
+    const rotation = target.rotation()
 
     // Reset scale and apply to width/height
     target.scaleX(1)
@@ -156,6 +157,7 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
       y: target.y(),
       width: Math.max(5, target.width() * scaleX),
       height: Math.max(5, target.height() * scaleY),
+      rotation: rotation,
     })
   }
 
@@ -183,6 +185,7 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
           y={node.y}
           width={node.width}
           height={node.height}
+          rotation={node.rotation ?? 0}
           fill={fillColor}
           stroke={strokeColor}
           strokeWidth={node.strokeWidth}
@@ -218,6 +221,7 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
           y={node.y}
           width={node.width}
           height={node.height}
+          rotation={node.rotation ?? 0}
           text={node.text}
           fontSize={node.fontSize ?? 16}
           fontFamily={node.fontFamily ?? 'Arial'}
@@ -301,6 +305,7 @@ function EllipseRenderer({
     const target = e.target as Konva.Ellipse
     const scaleX = target.scaleX()
     const scaleY = target.scaleY()
+    const rotation = target.rotation()
 
     const newWidth = Math.max(5, target.radiusX() * 2 * scaleX)
     const newHeight = Math.max(5, target.radiusY() * 2 * scaleY)
@@ -318,6 +323,7 @@ function EllipseRenderer({
       y: target.y() - newHeight / 2,
       width: newWidth,
       height: newHeight,
+      rotation: rotation,
     })
   }
 
@@ -329,6 +335,7 @@ function EllipseRenderer({
       y={node.y + node.height / 2}
       radiusX={node.width / 2}
       radiusY={node.height / 2}
+      rotation={node.rotation ?? 0}
       fill={fillColor}
       stroke={strokeColor}
       strokeWidth={node.strokeWidth}
@@ -384,6 +391,7 @@ function FrameRenderer({
       y={node.y}
       width={node.width}
       height={node.height}
+      rotation={node.rotation ?? 0}
       draggable
       onClick={onClick}
       onTap={onClick}

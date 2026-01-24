@@ -129,6 +129,18 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme 
         </PropertyRow>
       </PropertySection>
 
+      {/* Rotation Section */}
+      <PropertySection title="Rotation">
+        <NumberInput
+          label="°"
+          value={node.rotation ?? 0}
+          onChange={(v) => onUpdate({ rotation: v })}
+          min={0}
+          max={360}
+          step={1}
+        />
+      </PropertySection>
+
       {/* Fill Section */}
       <PropertySection title="Fill">
         <ColorInput

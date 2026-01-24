@@ -30,6 +30,8 @@ export interface BaseNode {
   // Variable bindings for colors
   fillBinding?: ColorBinding
   strokeBinding?: ColorBinding
+  // Rotation in degrees (0-360)
+  rotation?: number
 }
 
 // Auto-layout properties for Frame nodes
