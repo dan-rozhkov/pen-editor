@@ -5,7 +5,9 @@ import { useViewportStore } from '../store/viewportStore'
 import { useSceneStore } from '../store/sceneStore'
 import { useSelectionStore } from '../store/selectionStore'
 import { useHistoryStore } from '../store/historyStore'
+import { useDragStore } from '../store/dragStore'
 import { RenderNode } from './nodes/RenderNode'
+import { DropIndicator } from './DropIndicator'
 import { getViewportBounds, isNodeVisible } from '../utils/viewportUtils'
 
 const ZOOM_FACTOR = 1.1
@@ -36,6 +38,7 @@ export function Canvas() {
   const setNodesWithoutHistory = useSceneStore((state) => state.setNodesWithoutHistory)
   const { selectedIds, clearSelection } = useSelectionStore()
   const { undo, redo, saveHistory, startBatch, endBatch } = useHistoryStore()
+  const dropIndicator = useDragStore((state) => state.dropIndicator)
 
   // Update transformer nodes when selection changes
   useEffect(() => {
@@ -315,6 +318,8 @@ export function Canvas() {
           {visibleNodes.map((node) => (
             <RenderNode key={node.id} node={node} />
           ))}
+          {/* Drop indicator for auto-layout reordering */}
+          {dropIndicator && <DropIndicator indicator={dropIndicator} />}
           {/* Transformer for selection */}
           <Transformer
             ref={transformerRef}

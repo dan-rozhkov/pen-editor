@@ -8,6 +8,9 @@ import { useSelectionStore } from '../../store/selectionStore'
 import { useLayoutStore } from '../../store/layoutStore'
 import { useVariableStore } from '../../store/variableStore'
 import { useThemeStore } from '../../store/themeStore'
+import { useDragStore } from '../../store/dragStore'
+import { findParentFrame } from '../../utils/nodeUtils'
+import { calculateDropPosition, isPointInsideRect, getFrameAbsoluteRect } from '../../utils/dragUtils'
 
 interface RenderNodeProps {
   node: SceneNode
@@ -15,13 +18,21 @@ interface RenderNodeProps {
 }
 
 export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
+  const nodes = useSceneStore((state) => state.nodes)
   const updateNode = useSceneStore((state) => state.updateNode)
+  const moveNode = useSceneStore((state) => state.moveNode)
   const { select, addToSelection } = useSelectionStore()
   const variables = useVariableStore((state) => state.variables)
   const globalTheme = useThemeStore((state) => state.activeTheme)
+  const { startDrag, updateDrop, endDrag } = useDragStore()
 
   // Use effective theme from parent, or fall back to global theme
   const currentTheme = effectiveTheme ?? globalTheme
+
+  // Find parent context to check if inside auto-layout
+  const parentContext = findParentFrame(nodes, node.id)
+  const isInAutoLayout = parentContext.isInsideAutoLayout
+  const parentFrame = parentContext.parent
 
   // Resolve color from variable binding or use direct value
   const resolveColor = (color: string | undefined, binding?: { variableId: string }): string | undefined => {
@@ -53,12 +64,82 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
     }
   }
 
+  const handleDragStart = () => {
+    if (isInAutoLayout) {
+      startDrag(node.id)
+    }
+  }
+
+  const handleDragMove = (e: Konva.KonvaEventObject<DragEvent>) => {
+    if (!isInAutoLayout || !parentFrame) return
+
+    const stage = e.target.getStage()
+    if (!stage) return
+
+    const pointerPos = stage.getPointerPosition()
+    if (!pointerPos) return
+
+    // Get absolute position of parent frame
+    const frameRect = getFrameAbsoluteRect(parentFrame, nodes)
+
+    // Check if cursor is inside parent frame
+    const isInsideParent = isPointInsideRect(pointerPos, frameRect)
+
+    if (isInsideParent) {
+      // Calculate drop position for reordering
+      const dropResult = calculateDropPosition(
+        pointerPos,
+        parentFrame,
+        { x: frameRect.x, y: frameRect.y },
+        node.id
+      )
+
+      if (dropResult) {
+        updateDrop(dropResult.indicator, dropResult.insertInfo, false)
+      }
+    } else {
+      // Outside parent - will move to root level
+      updateDrop(null, null, true)
+    }
+  }
+
   const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
     const target = e.target
-    updateNode(node.id, {
-      x: target.x(),
-      y: target.y(),
-    })
+
+    if (isInAutoLayout && parentFrame) {
+      const { insertInfo, isOutsideParent } = useDragStore.getState()
+
+      if (isOutsideParent) {
+        // Drag out of auto-layout frame - move to root level
+        const stage = target.getStage()
+        if (stage) {
+          const pointerPos = stage.getPointerPosition()
+          if (pointerPos) {
+            // Move to root level first
+            moveNode(node.id, null, 0)
+            // Then set position in world coordinates
+            updateNode(node.id, {
+              x: pointerPos.x - node.width / 2,
+              y: pointerPos.y - node.height / 2,
+            })
+          }
+        }
+      } else if (insertInfo) {
+        // Reorder within the frame
+        moveNode(node.id, insertInfo.parentId, insertInfo.index)
+      }
+
+      // Reset Konva element position (cancel visual drag)
+      target.x(node.x)
+      target.y(node.y)
+      endDrag()
+    } else {
+      // Normal behavior - update position
+      updateNode(node.id, {
+        x: target.x(),
+        y: target.y(),
+      })
+    }
   }
 
   const handleTransformEnd = (e: Konva.KonvaEventObject<Event>) => {
@@ -84,6 +165,8 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
         <FrameRenderer
           node={node}
           onClick={handleClick}
+          onDragStart={handleDragStart}
+          onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
           onTransformEnd={handleTransformEnd}
           fillColor={fillColor}
@@ -107,6 +190,8 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
           draggable
           onClick={handleClick}
           onTap={handleClick}
+          onDragStart={handleDragStart}
+          onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
           onTransformEnd={handleTransformEnd}
         />
@@ -116,8 +201,12 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
         <EllipseRenderer
           node={node}
           onClick={handleClick}
+          onDragStart={handleDragStart}
+          onDragMove={handleDragMove}
           fillColor={fillColor}
           strokeColor={strokeColor}
+          isInAutoLayout={isInAutoLayout}
+          parentFrame={parentFrame}
         />
       )
     case 'text':
@@ -136,6 +225,8 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
           draggable
           onClick={handleClick}
           onTap={handleClick}
+          onDragStart={handleDragStart}
+          onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
           onTransformEnd={handleTransformEnd}
         />
@@ -148,20 +239,62 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
 interface EllipseRendererProps {
   node: SceneNode & { type: 'ellipse' }
   onClick: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void
+  onDragStart: () => void
+  onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => void
   fillColor?: string
   strokeColor?: string
+  isInAutoLayout: boolean
+  parentFrame: FrameNode | null
 }
 
-function EllipseRenderer({ node, onClick, fillColor, strokeColor }: EllipseRendererProps) {
+function EllipseRenderer({
+  node,
+  onClick,
+  onDragStart,
+  onDragMove,
+  fillColor,
+  strokeColor,
+  isInAutoLayout,
+  parentFrame,
+}: EllipseRendererProps) {
   const updateNode = useSceneStore((state) => state.updateNode)
+  const moveNode = useSceneStore((state) => state.moveNode)
+  const { endDrag } = useDragStore()
 
   const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
     const target = e.target
-    // Ellipse position is center, convert back to top-left
-    updateNode(node.id, {
-      x: target.x() - node.width / 2,
-      y: target.y() - node.height / 2,
-    })
+
+    if (isInAutoLayout && parentFrame) {
+      const { insertInfo, isOutsideParent } = useDragStore.getState()
+
+      if (isOutsideParent) {
+        // Drag out of auto-layout frame
+        const stage = target.getStage()
+        if (stage) {
+          const pointerPos = stage.getPointerPosition()
+          if (pointerPos) {
+            moveNode(node.id, null, 0)
+            updateNode(node.id, {
+              x: pointerPos.x - node.width / 2,
+              y: pointerPos.y - node.height / 2,
+            })
+          }
+        }
+      } else if (insertInfo) {
+        moveNode(node.id, insertInfo.parentId, insertInfo.index)
+      }
+
+      // Reset position - Ellipse uses center
+      target.x(node.x + node.width / 2)
+      target.y(node.y + node.height / 2)
+      endDrag()
+    } else {
+      // Ellipse position is center, convert back to top-left
+      updateNode(node.id, {
+        x: target.x() - node.width / 2,
+        y: target.y() - node.height / 2,
+      })
+    }
   }
 
   const handleTransformEnd = (e: Konva.KonvaEventObject<Event>) => {
@@ -202,6 +335,8 @@ function EllipseRenderer({ node, onClick, fillColor, strokeColor }: EllipseRende
       draggable
       onClick={onClick}
       onTap={onClick}
+      onDragStart={onDragStart}
+      onDragMove={onDragMove}
       onDragEnd={handleDragEnd}
       onTransformEnd={handleTransformEnd}
     />
@@ -211,6 +346,8 @@ function EllipseRenderer({ node, onClick, fillColor, strokeColor }: EllipseRende
 interface FrameRendererProps {
   node: FrameNode
   onClick: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void
+  onDragStart: () => void
+  onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => void
   onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void
   onTransformEnd: (e: Konva.KonvaEventObject<Event>) => void
   fillColor?: string
@@ -218,7 +355,17 @@ interface FrameRendererProps {
   effectiveTheme: ThemeName
 }
 
-function FrameRenderer({ node, onClick, onDragEnd, onTransformEnd, fillColor, strokeColor, effectiveTheme }: FrameRendererProps) {
+function FrameRenderer({
+  node,
+  onClick,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+  onTransformEnd,
+  fillColor,
+  strokeColor,
+  effectiveTheme,
+}: FrameRendererProps) {
   const calculateLayoutForFrame = useLayoutStore((state) => state.calculateLayoutForFrame)
 
   // Calculate layout for children if auto-layout is enabled
@@ -240,6 +387,8 @@ function FrameRenderer({ node, onClick, onDragEnd, onTransformEnd, fillColor, st
       draggable
       onClick={onClick}
       onTap={onClick}
+      onDragStart={onDragStart}
+      onDragMove={onDragMove}
       onDragEnd={onDragEnd}
       onTransformEnd={onTransformEnd}
     >
