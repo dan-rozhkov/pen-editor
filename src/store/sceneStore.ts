@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { SceneNode, FrameNode } from '../types/scene'
+import { useHistoryStore } from './historyStore'
 
 interface SceneState {
   nodes: SceneNode[]
@@ -10,6 +11,7 @@ interface SceneState {
   deleteNode: (id: string) => void
   clearNodes: () => void
   setNodes: (nodes: SceneNode[]) => void
+  setNodesWithoutHistory: (nodes: SceneNode[]) => void
   reorderNode: (fromIndex: number, toIndex: number) => void
   setVisibility: (id: string, visible: boolean) => void
   toggleVisibility: (id: string) => void
@@ -160,31 +162,42 @@ export const useSceneStore = create<SceneState>((set) => ({
   expandedFrameIds: new Set<string>(),
 
   addNode: (node) =>
-    set((state) => ({
-      nodes: [...state.nodes, node],
-    })),
+    set((state) => {
+      useHistoryStore.getState().saveHistory(state.nodes)
+      return { nodes: [...state.nodes, node] }
+    }),
 
   addChildToFrame: (frameId, child) =>
-    set((state) => ({
-      nodes: addChildToFrameRecursive(state.nodes, frameId, child),
-    })),
+    set((state) => {
+      useHistoryStore.getState().saveHistory(state.nodes)
+      return { nodes: addChildToFrameRecursive(state.nodes, frameId, child) }
+    }),
 
   updateNode: (id, updates) =>
-    set((state) => ({
-      nodes: updateNodeRecursive(state.nodes, id, updates),
-    })),
+    set((state) => {
+      useHistoryStore.getState().saveHistory(state.nodes)
+      return { nodes: updateNodeRecursive(state.nodes, id, updates) }
+    }),
 
   deleteNode: (id) =>
-    set((state) => ({
-      nodes: deleteNodeRecursive(state.nodes, id),
-    })),
+    set((state) => {
+      useHistoryStore.getState().saveHistory(state.nodes)
+      return { nodes: deleteNodeRecursive(state.nodes, id) }
+    }),
 
   clearNodes: () => set({ nodes: [] }),
 
-  setNodes: (nodes) => set({ nodes }),
+  setNodes: (nodes) => {
+    useHistoryStore.getState().saveHistory(useSceneStore.getState().nodes)
+    set({ nodes })
+  },
+
+  // Set nodes without saving to history (used by undo/redo)
+  setNodesWithoutHistory: (nodes) => set({ nodes }),
 
   reorderNode: (fromIndex, toIndex) =>
     set((state) => {
+      useHistoryStore.getState().saveHistory(state.nodes)
       const newNodes = [...state.nodes]
       const [removed] = newNodes.splice(fromIndex, 1)
       newNodes.splice(toIndex, 0, removed)
@@ -192,14 +205,16 @@ export const useSceneStore = create<SceneState>((set) => ({
     }),
 
   setVisibility: (id, visible) =>
-    set((state) => ({
-      nodes: setVisibilityRecursive(state.nodes, id, visible),
-    })),
+    set((state) => {
+      useHistoryStore.getState().saveHistory(state.nodes)
+      return { nodes: setVisibilityRecursive(state.nodes, id, visible) }
+    }),
 
   toggleVisibility: (id) =>
-    set((state) => ({
-      nodes: toggleVisibilityRecursive(state.nodes, id),
-    })),
+    set((state) => {
+      useHistoryStore.getState().saveHistory(state.nodes)
+      return { nodes: toggleVisibilityRecursive(state.nodes, id) }
+    }),
 
   toggleFrameExpanded: (id) =>
     set((state) => {
@@ -229,6 +244,7 @@ export const useSceneStore = create<SceneState>((set) => ({
       const { node, remaining } = extractNodeRecursive(state.nodes, nodeId)
       if (!node) return state
 
+      useHistoryStore.getState().saveHistory(state.nodes)
       // Insert the node at the new position
       const newNodes = insertNodeRecursive(remaining, node, newParentId, newIndex)
       return { nodes: newNodes }

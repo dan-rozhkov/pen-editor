@@ -4,6 +4,7 @@ import Konva from 'konva'
 import { useViewportStore } from '../store/viewportStore'
 import { useSceneStore } from '../store/sceneStore'
 import { useSelectionStore } from '../store/selectionStore'
+import { useHistoryStore } from '../store/historyStore'
 import { RenderNode } from './nodes/RenderNode'
 
 const ZOOM_FACTOR = 1.1
@@ -20,7 +21,9 @@ export function Canvas() {
   const { scale, x, y, isPanning, setPosition, setIsPanning, zoomAtPoint } = useViewportStore()
   const nodes = useSceneStore((state) => state.nodes)
   const deleteNode = useSceneStore((state) => state.deleteNode)
+  const setNodesWithoutHistory = useSceneStore((state) => state.setNodesWithoutHistory)
   const { selectedIds, clearSelection } = useSelectionStore()
+  const { undo, redo, saveHistory, startBatch, endBatch } = useHistoryStore()
 
   // Update transformer nodes when selection changes
   useEffect(() => {
@@ -57,9 +60,35 @@ export function Canvas() {
     return () => window.removeEventListener('resize', updateDimensions)
   }, [])
 
-  // Keyboard event handlers for spacebar panning, deletion, and escape
+  // Keyboard event handlers for spacebar panning, deletion, undo/redo, and escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't handle if user is typing in an input field
+      const target = e.target as HTMLElement
+      const isTyping = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
+
+      // Undo: Cmd+Z (Mac) or Ctrl+Z (Win/Linux)
+      if ((e.metaKey || e.ctrlKey) && e.code === 'KeyZ' && !e.shiftKey) {
+        e.preventDefault()
+        const currentNodes = useSceneStore.getState().nodes
+        const prevState = undo(currentNodes)
+        if (prevState) {
+          setNodesWithoutHistory(prevState)
+        }
+        return
+      }
+
+      // Redo: Cmd+Shift+Z (Mac) or Ctrl+Shift+Z (Win/Linux)
+      if ((e.metaKey || e.ctrlKey) && e.code === 'KeyZ' && e.shiftKey) {
+        e.preventDefault()
+        const currentNodes = useSceneStore.getState().nodes
+        const nextState = redo(currentNodes)
+        if (nextState) {
+          setNodesWithoutHistory(nextState)
+        }
+        return
+      }
+
       // Spacebar panning
       if (e.code === 'Space' && !e.repeat) {
         e.preventDefault()
@@ -69,15 +98,16 @@ export function Canvas() {
 
       // Delete/Backspace - delete selected elements
       if (e.code === 'Delete' || e.code === 'Backspace') {
-        // Don't delete if user is typing in an input field
-        const target = e.target as HTMLElement
-        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
-          return
-        }
+        if (isTyping) return
         e.preventDefault()
         const ids = useSelectionStore.getState().selectedIds
         if (ids.length > 0) {
+          // Save history once before batch delete
+          const currentNodes = useSceneStore.getState().nodes
+          saveHistory(currentNodes)
+          startBatch()
           ids.forEach((id) => deleteNode(id))
+          endBatch()
           clearSelection()
         }
       }
@@ -103,7 +133,7 @@ export function Canvas() {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
     }
-  }, [isMiddleMouseDown, setIsPanning, deleteNode, clearSelection])
+  }, [isMiddleMouseDown, setIsPanning, deleteNode, clearSelection, undo, redo, setNodesWithoutHistory, saveHistory, startBatch, endBatch])
 
   // Mouse wheel zoom
   const handleWheel = useCallback(

@@ -260,3 +260,25 @@
 - Отмена и повтор действий (Undo/Redo)
 
 ---
+
+=== 2026-01-24 | Feature 14: Отмена и повтор действий (Undo/Redo) ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Создан src/store/historyStore.ts с past/future стеками (max 50 состояний)
+- Реализованы методы: saveHistory, undo, redo, canUndo, canRedo, clear
+- Добавлен batch mode для группировки операций (startBatch/endBatch)
+- Модифицирован sceneStore.ts - добавлен saveHistory вызов перед каждой мутацией
+- Добавлен setNodesWithoutHistory метод для применения undo/redo без записи в историю
+- Добавлены keyboard shortcuts в Canvas.tsx: Cmd/Ctrl+Z (undo), Cmd/Ctrl+Shift+Z (redo)
+- Удаление множественных элементов работает как одна операция undo (batch mode)
+- E2E тест пройден: Cmd+Z отменяет создание элемента
+- E2E тест пройден: Cmd+Shift+Z повторяет отменённое действие
+- E2E тест пройден: Cmd+Z восстанавливает удалённые элементы
+- E2E тест пройден: Cmd+Z отменяет изменения свойств (fill color)
+
+Следующие шаги:
+- Variable system (определение переменных)
+
+---
