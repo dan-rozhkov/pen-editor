@@ -1,3 +1,11 @@
+// Sizing modes for elements inside auto-layout containers
+export type SizingMode = 'fixed' | 'fill_container' | 'fit_content'
+
+export interface SizingProperties {
+  widthMode?: SizingMode   // default: 'fixed'
+  heightMode?: SizingMode  // default: 'fixed'
+}
+
 export interface BaseNode {
   id: string
   type: 'frame' | 'rect' | 'ellipse' | 'text'
@@ -10,6 +18,8 @@ export interface BaseNode {
   stroke?: string
   strokeWidth?: number
   visible?: boolean // defaults to true
+  // Sizing mode (used when node is inside auto-layout container)
+  sizing?: SizingProperties
 }
 
 // Auto-layout properties for Frame nodes

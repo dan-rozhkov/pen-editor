@@ -1,6 +1,7 @@
 import { useSceneStore } from '../store/sceneStore'
 import { useSelectionStore } from '../store/selectionStore'
-import type { SceneNode, FrameNode, FlexDirection, AlignItems, JustifyContent } from '../types/scene'
+import type { SceneNode, FrameNode, FlexDirection, AlignItems, JustifyContent, SizingMode } from '../types/scene'
+import { findParentFrame, findNodeById, type ParentContext } from '../utils/nodeUtils'
 import {
   PropertySection,
   PropertyRow,
@@ -9,6 +10,7 @@ import {
   TextInput,
   SelectInput,
   CheckboxInput,
+  SegmentedControl,
 } from './ui/PropertyInputs'
 
 function Header() {
@@ -38,9 +40,16 @@ function MultiSelectState({ count }: { count: number }) {
 interface PropertyEditorProps {
   node: SceneNode
   onUpdate: (updates: Partial<SceneNode>) => void
+  parentContext: ParentContext
 }
 
-function PropertyEditor({ node, onUpdate }: PropertyEditorProps) {
+const sizingOptions = [
+  { value: 'fixed', label: 'Fixed' },
+  { value: 'fill_container', label: 'Fill' },
+  { value: 'fit_content', label: 'Fit' },
+]
+
+function PropertyEditor({ node, onUpdate, parentContext }: PropertyEditorProps) {
   return (
     <div className="flex flex-col gap-4">
       {/* Position Section */}
@@ -61,6 +70,23 @@ function PropertyEditor({ node, onUpdate }: PropertyEditorProps) {
 
       {/* Size Section */}
       <PropertySection title="Size">
+        {/* Show sizing mode controls when inside auto-layout */}
+        {parentContext.isInsideAutoLayout && (
+          <>
+            <SegmentedControl
+              label="W"
+              value={node.sizing?.widthMode ?? 'fixed'}
+              options={sizingOptions}
+              onChange={(v) => onUpdate({ sizing: { ...node.sizing, widthMode: v as SizingMode } })}
+            />
+            <SegmentedControl
+              label="H"
+              value={node.sizing?.heightMode ?? 'fixed'}
+              options={sizingOptions}
+              onChange={(v) => onUpdate({ sizing: { ...node.sizing, heightMode: v as SizingMode } })}
+            />
+          </>
+        )}
         <PropertyRow>
           <NumberInput
             label="W"
@@ -228,11 +254,16 @@ export function PropertiesPanel() {
   const updateNode = useSceneStore((s) => s.updateNode)
   const { selectedIds } = useSelectionStore()
 
-  // Find selected node
+  // Find selected node (recursively search in tree)
   const selectedNode =
     selectedIds.length === 1
-      ? nodes.find((n) => n.id === selectedIds[0])
+      ? findNodeById(nodes, selectedIds[0])
       : null
+
+  // Get parent context for sizing controls
+  const parentContext: ParentContext = selectedNode
+    ? findParentFrame(nodes, selectedNode.id)
+    : { parent: null, isInsideAutoLayout: false }
 
   // Handle update with type-safe callback
   const handleUpdate = (updates: Partial<SceneNode>) => {
@@ -248,7 +279,7 @@ export function PropertiesPanel() {
         {selectedIds.length === 0 && <EmptyState />}
         {selectedIds.length > 1 && <MultiSelectState count={selectedIds.length} />}
         {selectedNode && (
-          <PropertyEditor node={selectedNode} onUpdate={handleUpdate} />
+          <PropertyEditor node={selectedNode} onUpdate={handleUpdate} parentContext={parentContext} />
         )}
       </div>
     </div>

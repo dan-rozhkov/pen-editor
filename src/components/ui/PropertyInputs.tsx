@@ -151,3 +151,44 @@ export function CheckboxInput({ label, checked, onChange }: CheckboxInputProps) 
     </label>
   )
 }
+
+interface SegmentedControlProps {
+  label?: string
+  value: string
+  options: { value: string; label: string }[]
+  onChange: (value: string) => void
+  disabled?: boolean
+}
+
+export function SegmentedControl({
+  label,
+  value,
+  options,
+  onChange,
+  disabled
+}: SegmentedControlProps) {
+  return (
+    <div className="flex items-center gap-1">
+      {label && (
+        <span className="text-[11px] text-text-muted w-4 shrink-0">{label}</span>
+      )}
+      <div className="flex-1 flex border border-border-light rounded overflow-hidden">
+        {options.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            className={`flex-1 px-2 py-1 text-[10px] transition-colors ${
+              value === opt.value
+                ? 'bg-accent-default text-white'
+                : 'bg-surface-elevated text-text-muted hover:bg-surface-hover'
+            } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+            onClick={() => !disabled && onChange(opt.value)}
+            disabled={disabled}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}

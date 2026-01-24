@@ -113,7 +113,7 @@
       "fit_content подстраивает размер под содержимое",
       "Fixed size задаёт фиксированный размер"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "Phase 2: Auto-Layout",

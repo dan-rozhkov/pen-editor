@@ -122,13 +122,53 @@ export function createYogaNodeForFrame(frame: FrameNode): YogaNode {
 
 /**
  * Create a Yoga child node for any scene node
+ * Supports sizing modes: fixed, fill_container, fit_content
  */
-export function createYogaChildNode(child: SceneNode): YogaNode {
+export function createYogaChildNode(child: SceneNode, parentLayout?: LayoutProperties): YogaNode {
   const Y = getYoga()
   const node = Y.Node.create()
 
-  node.setWidth(child.width)
-  node.setHeight(child.height)
+  const widthMode = child.sizing?.widthMode ?? 'fixed'
+  const heightMode = child.sizing?.heightMode ?? 'fixed'
+  const isHorizontal = parentLayout?.flexDirection === 'row' || parentLayout?.flexDirection === undefined
+
+  console.log('[Yoga] createYogaChildNode', { childId: child.id, widthMode, heightMode, isHorizontal })
+
+  // Width handling
+  if (widthMode === 'fixed') {
+    node.setWidth(child.width)
+  } else if (widthMode === 'fill_container') {
+    // On main axis (row): use flexGrow to fill available space
+    // On cross axis (column): use alignSelf stretch
+    if (isHorizontal) {
+      node.setFlexGrow(1)
+      node.setFlexShrink(1)
+      node.setFlexBasis(0) // Start from 0 and grow
+    } else {
+      node.setAlignSelf(Y.ALIGN_STRETCH)
+    }
+  } else if (widthMode === 'fit_content') {
+    // Let Yoga calculate based on content
+    // For now, we don't set width - Yoga will use auto
+  }
+
+  // Height handling
+  if (heightMode === 'fixed') {
+    node.setHeight(child.height)
+  } else if (heightMode === 'fill_container') {
+    // On main axis (column): use flexGrow to fill available space
+    // On cross axis (row): use alignSelf stretch
+    if (!isHorizontal) {
+      node.setFlexGrow(1)
+      node.setFlexShrink(1)
+      node.setFlexBasis(0) // Start from 0 and grow
+    } else {
+      node.setAlignSelf(Y.ALIGN_STRETCH)
+    }
+  } else if (heightMode === 'fit_content') {
+    // Let Yoga calculate based on content
+    // For now, we don't set height - Yoga will use auto
+  }
 
   return node
 }
@@ -167,7 +207,7 @@ export function calculateFrameLayout(frame: FrameNode): LayoutResult[] {
   const childNodes: YogaNode[] = []
 
   visibleChildren.forEach((child, index) => {
-    const childNode = createYogaChildNode(child)
+    const childNode = createYogaChildNode(child, frame.layout)
     rootNode.insertChild(childNode, index)
     childNodes.push(childNode)
   })
@@ -178,6 +218,7 @@ export function calculateFrameLayout(frame: FrameNode): LayoutResult[] {
   // Extract computed positions for children
   visibleChildren.forEach((child, index) => {
     const computed = childNodes[index].getComputedLayout()
+    console.log('[Yoga] computed layout for', child.id, computed)
     results.push({
       id: child.id,
       x: computed.left,
@@ -195,7 +236,7 @@ export function calculateFrameLayout(frame: FrameNode): LayoutResult[] {
 
 /**
  * Apply layout results to scene nodes
- * Returns a new array with updated positions
+ * Returns a new array with updated positions and sizes based on sizing mode
  */
 export function applyLayoutToChildren(
   children: SceneNode[],
@@ -206,13 +247,30 @@ export function applyLayoutToChildren(
   return children.map(child => {
     const result = resultMap.get(child.id)
     if (result) {
+      const widthMode = child.sizing?.widthMode ?? 'fixed'
+      const heightMode = child.sizing?.heightMode ?? 'fixed'
+
+      const newWidth = widthMode !== 'fixed' ? result.width : child.width
+      const newHeight = heightMode !== 'fixed' ? result.height : child.height
+
+      console.log('[Yoga] applyLayoutToChildren', {
+        id: child.id,
+        widthMode,
+        heightMode,
+        originalWidth: child.width,
+        computedWidth: result.width,
+        newWidth,
+        originalHeight: child.height,
+        computedHeight: result.height,
+        newHeight
+      })
+
       return {
         ...child,
         x: result.x,
         y: result.y,
-        // Optionally update size if needed
-        // width: result.width,
-        // height: result.height,
+        width: newWidth,
+        height: newHeight,
       }
     }
     return child

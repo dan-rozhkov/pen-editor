@@ -181,3 +181,25 @@
 - fill_container / fit_content sizing
 
 ---
+
+=== 2026-01-24 | Feature 10: fill_container / fit_content sizing ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Добавлены типы SizingMode ('fixed' | 'fill_container' | 'fit_content') и SizingProperties в scene.ts
+- Создан src/utils/nodeUtils.ts с функциями findParentFrame() и findNodeById() для навигации по дереву
+- Обновлён sceneStore.ts с рекурсивной функцией updateNodeRecursive() для вложенных узлов
+- Модифицирован yogaLayout.ts: createYogaChildNode() теперь поддерживает sizing modes
+  - fill_container: flexGrow(1), flexShrink(1), flexBasis(0) на главной оси, alignSelf(STRETCH) на поперечной
+  - fit_content: автоматический размер (Yoga auto)
+  - fixed: явное указание width/height (по умолчанию)
+- Обновлён applyLayoutToChildren() для применения вычисленных размеров при non-fixed mode
+- Добавлен SegmentedControl компонент в PropertyInputs.tsx (Fixed/Fill/Fit кнопки)
+- Интегрирован UI в PropertiesPanel.tsx: контролы sizing отображаются только внутри auto-layout Frame
+- E2E тест пройден: width Fill растягивает элемент на 200px (ширина Frame), height Fill - на 150px
+
+Следующие шаги:
+- Nested auto-layout frames
+
+---

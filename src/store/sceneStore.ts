@@ -33,6 +33,22 @@ function addChildToFrameRecursive(nodes: SceneNode[], frameId: string, child: Sc
   })
 }
 
+// Helper to recursively update a node anywhere in the tree
+function updateNodeRecursive(nodes: SceneNode[], id: string, updates: Partial<SceneNode>): SceneNode[] {
+  return nodes.map((node) => {
+    if (node.id === id) {
+      return { ...node, ...updates } as SceneNode
+    }
+    if (node.type === 'frame') {
+      return {
+        ...node,
+        children: updateNodeRecursive(node.children, id, updates),
+      } as FrameNode
+    }
+    return node
+  })
+}
+
 export const useSceneStore = create<SceneState>((set) => ({
   nodes: [],
 
@@ -48,9 +64,7 @@ export const useSceneStore = create<SceneState>((set) => ({
 
   updateNode: (id, updates) =>
     set((state) => ({
-      nodes: state.nodes.map((node) =>
-        node.id === id ? ({ ...node, ...updates } as SceneNode) : node
-      ),
+      nodes: updateNodeRecursive(state.nodes, id, updates),
     })),
 
   deleteNode: (id) =>

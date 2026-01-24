@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { initYoga, isYogaReady, calculateFrameLayout } from '../utils/yogaLayout'
+import { initYoga, isYogaReady, calculateFrameLayout, applyLayoutToChildren } from '../utils/yogaLayout'
 import type { FrameNode, SceneNode } from '../types/scene'
 
 interface LayoutState {
@@ -38,18 +38,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       return frame.children
     }
 
-    // Apply layout results to children
-    const resultMap = new Map(layoutResults.map(r => [r.id, r]))
-    return frame.children.map(child => {
-      const result = resultMap.get(child.id)
-      if (result) {
-        return {
-          ...child,
-          x: result.x,
-          y: result.y,
-        } as SceneNode
-      }
-      return child
-    })
+    // Apply layout results to children (including width/height for non-fixed sizing)
+    return applyLayoutToChildren(frame.children, layoutResults)
   },
 }))
