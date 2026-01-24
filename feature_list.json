@@ -179,7 +179,7 @@
       "Визуальная индикация места вставки при drag",
       "Drag-out из auto-layout frame переводит элемент в свободный режим"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "Phase 3: Variables & Themes",

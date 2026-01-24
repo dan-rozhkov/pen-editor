@@ -366,3 +366,22 @@
 - Ограничение перемещения элементов внутри auto-layout frames
 
 ---
+
+=== 2026-01-24 | Feature 19: Ограничение перемещения элементов внутри auto-layout frames ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Создан src/store/dragStore.ts для глобального состояния drag
+- Создан src/utils/dragUtils.ts с утилитами расчёта drop-позиции
+- Создан src/components/DropIndicator.tsx - Konva компонент для визуального индикатора
+- Модифицирован RenderNode.tsx - условная логика drag для auto-layout элементов
+- Элементы внутри auto-layout frame не перемещаются свободно (позиции сбрасываются после drag)
+- Drag-out из auto-layout frame переносит элемент на root уровень
+- Интегрирован drop indicator в Canvas.tsx
+- E2E тест пройден: drag-out из Frame работает корректно
+
+Следующие шаги:
+- WebSocket server (Phase 4: MCP Server)
+
+---
