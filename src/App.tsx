@@ -1,5 +1,6 @@
 import { Canvas } from './components/Canvas'
 import { Toolbar } from './components/Toolbar'
+import { LayersPanel } from './components/LayersPanel'
 import './App.css'
 
 function App() {
@@ -9,6 +10,7 @@ function App() {
       <div className="canvas-container">
         <Canvas />
       </div>
+      <LayersPanel />
     </div>
   )
 }

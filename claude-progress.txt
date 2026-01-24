@@ -83,3 +83,25 @@
 - Layers Panel (иерархия узлов)
 
 ---
+
+=== 2026-01-24 | Feature 5: Layers Panel (иерархия узлов) ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Добавлены поля visible и name в BaseNode type (src/types/scene.ts)
+- Добавлены методы reorderNode, setVisibility, toggleVisibility в sceneStore
+- Создан компонент LayersPanel (src/components/LayersPanel.tsx)
+- Реализована панель справа с списком слоёв
+- Иконки для каждого типа узла (frame, rect, ellipse, text)
+- Клик на слой выделяет его на canvas
+- Shift+клик для множественного выделения
+- Drag-n-drop для изменения порядка слоёв
+- Кнопка visibility (глаз) для скрытия/показа узлов
+- Скрытые узлы не рендерятся на canvas (RenderNode проверяет visible)
+- E2E тест пройден через Puppeteer: все функции работают
+
+Следующие шаги:
+- Properties Panel (редактирование свойств)
+
+---

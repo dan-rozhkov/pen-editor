@@ -12,6 +12,11 @@ export function RenderNode({ node }: RenderNodeProps) {
   const updateNode = useSceneStore((state) => state.updateNode)
   const { select, addToSelection } = useSelectionStore()
 
+  // Don't render if node is hidden
+  if (node.visible === false) {
+    return null
+  }
+
   const handleClick = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     e.cancelBubble = true
     const isShift = 'shiftKey' in e.evt && e.evt.shiftKey

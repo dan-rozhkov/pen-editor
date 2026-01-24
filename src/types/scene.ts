@@ -1,6 +1,7 @@
 export interface BaseNode {
   id: string
   type: 'frame' | 'rect' | 'ellipse' | 'text'
+  name?: string
   x: number
   y: number
   width: number
@@ -8,6 +9,7 @@ export interface BaseNode {
   fill?: string
   stroke?: string
   strokeWidth?: number
+  visible?: boolean // defaults to true
 }
 
 export interface FrameNode extends BaseNode {
