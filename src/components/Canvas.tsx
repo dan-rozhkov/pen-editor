@@ -268,9 +268,9 @@ export function Canvas() {
         position: 'relative',
       }}
     >
-      {/* Zoom indicator - click to reset to 100% */}
+      {/* Zoom indicator - click to fit all */}
       <div
-        onClick={() => useViewportStore.getState().setScale(1)}
+        onClick={() => fitToContent(nodes, dimensions.width, dimensions.height)}
         style={{
           position: 'absolute',
           bottom: 12,
@@ -286,7 +286,7 @@ export function Canvas() {
           boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
           userSelect: 'none',
         }}
-        title="Click to reset to 100%"
+        title="Click to fit all (Cmd/Ctrl+0)"
       >
         {Math.round(scale * 100)}%
       </div>
