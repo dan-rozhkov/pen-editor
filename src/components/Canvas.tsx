@@ -155,7 +155,10 @@ export function Canvas() {
     }
   }, [isMiddleMouseDown, setIsPanning, deleteNode, clearSelection, undo, redo, setNodesWithoutHistory, saveHistory, startBatch, endBatch, fitToContent, dimensions.width, dimensions.height])
 
-  // Mouse wheel zoom
+  // Mouse wheel handler (Figma-style)
+  // - Scroll = pan vertically
+  // - Shift + scroll = pan horizontally
+  // - Cmd/Ctrl + scroll = zoom
   const handleWheel = useCallback(
     (e: Konva.KonvaEventObject<WheelEvent>) => {
       e.evt.preventDefault()
@@ -163,15 +166,25 @@ export function Canvas() {
       const stage = stageRef.current
       if (!stage) return
 
-      const pointerPos = stage.getPointerPosition()
-      if (!pointerPos) return
+      // Cmd/Ctrl + scroll = zoom
+      if (e.evt.metaKey || e.evt.ctrlKey) {
+        const pointerPos = stage.getPointerPosition()
+        if (!pointerPos) return
 
-      const direction = e.evt.deltaY > 0 ? -1 : 1
-      const newScale = direction > 0 ? scale * ZOOM_FACTOR : scale / ZOOM_FACTOR
+        const direction = e.evt.deltaY > 0 ? -1 : 1
+        const newScale = direction > 0 ? scale * ZOOM_FACTOR : scale / ZOOM_FACTOR
 
-      zoomAtPoint(newScale, pointerPos.x, pointerPos.y)
+        zoomAtPoint(newScale, pointerPos.x, pointerPos.y)
+      } else {
+        // Normal scroll = pan
+        // Shift + scroll = horizontal pan
+        const dx = e.evt.shiftKey ? -e.evt.deltaY : -e.evt.deltaX
+        const dy = e.evt.shiftKey ? 0 : -e.evt.deltaY
+
+        setPosition(x + dx, y + dy)
+      }
     },
-    [scale, zoomAtPoint]
+    [scale, x, y, zoomAtPoint, setPosition]
   )
 
   // Pan handlers
