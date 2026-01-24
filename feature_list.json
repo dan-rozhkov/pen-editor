@@ -168,7 +168,7 @@
       "Можно удалить переменную",
       "Переменные сохраняются в документ"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "Phase 3: Variables & Themes",

@@ -282,3 +282,24 @@
 - Variable system (определение переменных)
 
 ---
+
+=== 2026-01-24 | Feature 15: Variable system (определение переменных) ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Созданы типы Variable и VariableType в src/types/variable.ts
+- Создан Zustand store для переменных (src/store/variableStore.ts)
+- Обновлена сериализация в fileUtils.ts - PenDocument теперь включает variables
+- Создан компонент VariablesPanel.tsx с UI для управления переменными
+- Header с названием, счётчиком и кнопкой Add (+)
+- List items с color swatch, name, delete button (on hover)
+- Inline editing: double-click на name, color picker для value
+- Интегрирована панель в RightSidebar (над LayersPanel)
+- Обновлён Toolbar.tsx для save/open с переменными
+- E2E тест пройден: add variable, delete variable, save/open с переменными
+
+Следующие шаги:
+- Theme switching (light/dark)
+
+---
