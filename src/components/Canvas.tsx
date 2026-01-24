@@ -6,7 +6,6 @@ import { useSceneStore } from '../store/sceneStore'
 import { useSelectionStore } from '../store/selectionStore'
 import { useHistoryStore } from '../store/historyStore'
 import { RenderNode } from './nodes/RenderNode'
-import { Grid } from './Grid'
 import { getViewportBounds, isNodeVisible } from '../utils/viewportUtils'
 
 const ZOOM_FACTOR = 1.1
@@ -250,8 +249,28 @@ export function Canvas() {
         overflow: 'hidden',
         cursor: isPanning ? 'grab' : 'default',
         background: '#f5f5f5',
+        position: 'relative',
       }}
     >
+      {/* Zoom indicator */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 12,
+          left: 12,
+          background: 'rgba(255, 255, 255, 0.9)',
+          padding: '4px 8px',
+          borderRadius: 4,
+          fontSize: 12,
+          fontFamily: 'system-ui, sans-serif',
+          color: '#666',
+          zIndex: 10,
+          pointerEvents: 'none',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+        }}
+      >
+        {Math.round(scale * 100)}%
+      </div>
       <Stage
         ref={stageRef}
         width={dimensions.width}
@@ -267,14 +286,6 @@ export function Canvas() {
         onContextMenu={handleContextMenu}
       >
         <Layer>
-          {/* Infinite grid background */}
-          <Grid
-            scale={scale}
-            x={x}
-            y={y}
-            viewportWidth={dimensions.width}
-            viewportHeight={dimensions.height}
-          />
           {/* Background rect for click detection (invisible, covers visible area) */}
           <Rect
             name="background"
