@@ -11,3 +11,19 @@
 - Реализация базового canvas с Konva.js
 
 ---
+
+=== 2026-01-24 | Feature 1: Настройка Vite + React + TypeScript + Zustand ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Создан Vite проект с шаблоном react-ts
+- Установлены зависимости: react, zustand, konva, react-konva
+- TypeScript конфигурация с strict: true
+- Dev server запускается на localhost:5173
+- E2E тест пройден: страница загружается, React работает (кнопка-счётчик)
+
+Следующие шаги:
+- Konva.js canvas с viewport (pan/zoom)
+
+---

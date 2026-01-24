@@ -8,7 +8,7 @@
       "TypeScript конфигурация работает",
       "Dev server запускается без ошибок"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "Phase 1: Базовый редактор",
