@@ -43,7 +43,7 @@
       "Resize handles изменяют размер",
       "Множественное выделение работает (Shift+клик)"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "Phase 1: Базовый редактор",

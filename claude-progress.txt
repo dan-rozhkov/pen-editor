@@ -64,3 +64,22 @@
 - Selection & Transform (move, resize)
 
 ---
+
+=== 2026-01-24 | Feature 4: Selection & Transform (move, resize) ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Создан Zustand store для selection state (src/store/selectionStore.ts)
+- Добавлен Konva Transformer компонент для bounding box и resize handles
+- Реализован клик на элемент для выделения
+- Реализован Shift+клик для множественного выделения
+- Реализован drag для перемещения элементов
+- Реализован resize через Transformer handles
+- Клик на пустое место снимает выделение
+- E2E тест пройден: все функции работают корректно
+
+Следующие шаги:
+- Layers Panel (иерархия узлов)
+
+---
