@@ -1,33 +1,35 @@
 import { useState, useRef } from 'react'
+import clsx from 'clsx'
 import { useSceneStore } from '../store/sceneStore'
 import { useSelectionStore } from '../store/selectionStore'
 import type { SceneNode } from '../types/scene'
-import './LayersPanel.css'
 
 // Icons for different node types
-const NodeIcon = ({ type }: { type: SceneNode['type'] }) => {
+const NodeIcon = ({ type, isSelected }: { type: SceneNode['type']; isSelected: boolean }) => {
+  const iconClass = clsx('w-4 h-4 shrink-0', isSelected ? 'text-white' : 'text-text-muted')
+
   switch (type) {
     case 'frame':
       return (
-        <svg viewBox="0 0 16 16" className="layer-icon">
+        <svg viewBox="0 0 16 16" className={iconClass}>
           <rect x="2" y="2" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" />
         </svg>
       )
     case 'rect':
       return (
-        <svg viewBox="0 0 16 16" className="layer-icon">
+        <svg viewBox="0 0 16 16" className={iconClass}>
           <rect x="2" y="4" width="12" height="8" fill="currentColor" rx="1" />
         </svg>
       )
     case 'ellipse':
       return (
-        <svg viewBox="0 0 16 16" className="layer-icon">
+        <svg viewBox="0 0 16 16" className={iconClass}>
           <ellipse cx="8" cy="8" rx="6" ry="4" fill="currentColor" />
         </svg>
       )
     case 'text':
       return (
-        <svg viewBox="0 0 16 16" className="layer-icon">
+        <svg viewBox="0 0 16 16" className={iconClass}>
           <text x="4" y="12" fontSize="10" fill="currentColor" fontWeight="bold">T</text>
         </svg>
       )
@@ -37,8 +39,8 @@ const NodeIcon = ({ type }: { type: SceneNode['type'] }) => {
 }
 
 // Eye icon for visibility
-const EyeIcon = ({ visible }: { visible: boolean }) => (
-  <svg viewBox="0 0 16 16" className="visibility-icon">
+const EyeIcon = ({ visible, isSelected }: { visible: boolean; isSelected: boolean }) => (
+  <svg viewBox="0 0 16 16" className={clsx('w-4 h-4', isSelected ? 'text-white' : 'text-text-muted')}>
     {visible ? (
       <>
         <ellipse cx="8" cy="8" rx="6" ry="3.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
@@ -95,9 +97,12 @@ function LayerItem({
 
   return (
     <div
-      className={`layer-item ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${
-        isDragOver ? 'drag-over' : ''
-      }`}
+      className={clsx(
+        'flex items-center justify-between px-3 py-2 cursor-pointer transition-colors duration-100',
+        isSelected ? 'bg-accent-primary hover:bg-accent-hover' : 'hover:bg-surface-elevated',
+        isDragging && 'opacity-50',
+        isDragOver && 'border-t-2 border-accent-bright'
+      )}
       onClick={handleClick}
       draggable
       onDragStart={(e) => {
@@ -110,16 +115,27 @@ function LayerItem({
       }}
       onDragEnd={onDragEnd}
     >
-      <div className="layer-content">
-        <NodeIcon type={node.type} />
-        <span className={`layer-name ${!isVisible ? 'hidden-layer' : ''}`}>{displayName}</span>
+      <div className="flex items-center gap-2 flex-1 min-w-0">
+        <NodeIcon type={node.type} isSelected={isSelected} />
+        <span
+          className={clsx(
+            'text-xs whitespace-nowrap overflow-hidden text-ellipsis',
+            isSelected ? 'text-white' : 'text-text-secondary',
+            !isVisible && 'opacity-50'
+          )}
+        >
+          {displayName}
+        </span>
       </div>
       <button
-        className={`visibility-btn ${!isVisible ? 'hidden' : ''}`}
+        className={clsx(
+          'bg-transparent border-none cursor-pointer p-1 flex items-center justify-center rounded transition-opacity duration-100',
+          isVisible ? 'opacity-60 hover:opacity-100 hover:bg-white/10' : 'opacity-30'
+        )}
         onClick={handleVisibilityClick}
         title={isVisible ? 'Hide layer' : 'Show layer'}
       >
-        <EyeIcon visible={isVisible} />
+        <EyeIcon visible={isVisible} isSelected={isSelected} />
       </button>
     </div>
   )
@@ -158,14 +174,16 @@ export function LayersPanel() {
   const reversedNodes = [...nodes].reverse()
 
   return (
-    <div className="layers-panel">
-      <div className="layers-panel-header">
+    <div className="w-[220px] h-full bg-surface-panel border-l border-border-default flex flex-col select-none">
+      <div className="flex justify-between items-center px-4 py-3 border-b border-border-default text-xs font-semibold text-white uppercase tracking-wide">
         <span>Layers</span>
-        <span className="layer-count">{nodes.length}</span>
+        <span className="bg-border-default text-text-muted px-1.5 py-0.5 rounded text-[10px] font-medium">
+          {nodes.length}
+        </span>
       </div>
-      <div className="layers-list">
+      <div className="flex-1 overflow-y-auto py-2">
         {reversedNodes.length === 0 ? (
-          <div className="layers-empty">No layers yet</div>
+          <div className="text-text-disabled text-xs text-center p-5">No layers yet</div>
         ) : (
           reversedNodes.map((node, visualIndex) => {
             // actualIndex is for selection and display name

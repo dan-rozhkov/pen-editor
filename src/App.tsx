@@ -1,13 +1,12 @@
 import { Canvas } from './components/Canvas'
 import { Toolbar } from './components/Toolbar'
 import { LayersPanel } from './components/LayersPanel'
-import './App.css'
 
 function App() {
   return (
-    <div className="app">
+    <div className="w-full h-full flex flex-row">
       <Toolbar />
-      <div className="canvas-container">
+      <div className="flex-1 h-full overflow-hidden">
         <Canvas />
       </div>
       <LayersPanel />

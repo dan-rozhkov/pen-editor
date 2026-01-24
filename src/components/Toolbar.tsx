@@ -2,7 +2,8 @@ import { useSceneStore } from '../store/sceneStore'
 import { useViewportStore } from '../store/viewportStore'
 import { generateId } from '../types/scene'
 import type { SceneNode } from '../types/scene'
-import './Toolbar.css'
+
+const toolbarBtnClass = 'px-3 py-2 bg-surface-elevated border border-border-light rounded text-white text-[13px] cursor-pointer transition-colors duration-150 hover:bg-surface-hover hover:border-border-hover active:bg-surface-active'
 
 export function Toolbar() {
   const addNode = useSceneStore((state) => state.addNode)
@@ -78,18 +79,18 @@ export function Toolbar() {
   }
 
   return (
-    <div className="toolbar">
-      <div className="toolbar-title">Primitives</div>
-      <button className="toolbar-btn" onClick={createFrame}>
+    <div className="flex flex-col gap-2 p-3 bg-surface-panel border-r border-border-default w-[120px]">
+      <div className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Primitives</div>
+      <button className={toolbarBtnClass} onClick={createFrame}>
         Frame
       </button>
-      <button className="toolbar-btn" onClick={createRect}>
+      <button className={toolbarBtnClass} onClick={createRect}>
         Rectangle
       </button>
-      <button className="toolbar-btn" onClick={createEllipse}>
+      <button className={toolbarBtnClass} onClick={createEllipse}>
         Ellipse
       </button>
-      <button className="toolbar-btn" onClick={createText}>
+      <button className={toolbarBtnClass} onClick={createText}>
         Text
       </button>
     </div>
