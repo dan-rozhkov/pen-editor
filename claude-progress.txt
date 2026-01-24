@@ -303,3 +303,25 @@
 - Theme switching (light/dark)
 
 ---
+
+=== 2026-01-24 | Feature 16: Theme switching (light/dark) ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Добавлены типы ThemeName, ThemeValues в src/types/variable.ts
+- Добавлены helper функции getVariableValue(), ensureThemeValues()
+- Создан Zustand store для темы (src/store/themeStore.ts)
+- Добавлен метод updateVariableThemeValue() в variableStore
+- Добавлен themeOverride в FrameNode (src/types/scene.ts)
+- Обновлена сериализация в fileUtils.ts с миграцией старых документов
+- Обновлён VariablesPanel.tsx с Theme Toggle (sun/moon icons)
+- Dual color swatches для light/dark значений переменных
+- Обновлён Toolbar.tsx для save/load с activeTheme
+- Добавлена секция Theme Override в PropertiesPanel для Frame
+- E2E тест пройден: theme toggle, dual swatches, frame override dropdown
+
+Следующие шаги:
+- Variable picker в properties panel
+
+---

@@ -1,6 +1,7 @@
 import { useSceneStore } from '../store/sceneStore'
 import { useSelectionStore } from '../store/selectionStore'
 import type { SceneNode, FrameNode, FlexDirection, AlignItems, JustifyContent, SizingMode } from '../types/scene'
+import type { ThemeName } from '../types/variable'
 import { findParentFrame, findNodeById, type ParentContext } from '../utils/nodeUtils'
 import {
   PropertySection,
@@ -218,6 +219,26 @@ function PropertyEditor({ node, onUpdate, parentContext }: PropertyEditorProps) 
               />
             </>
           )}
+        </PropertySection>
+      )}
+
+      {/* Theme Override (Frame only) */}
+      {node.type === 'frame' && (
+        <PropertySection title="Theme Override">
+          <SelectInput
+            label="Theme"
+            value={(node as FrameNode).themeOverride ?? 'inherit'}
+            options={[
+              { value: 'inherit', label: 'Inherit' },
+              { value: 'light', label: 'Light' },
+              { value: 'dark', label: 'Dark' },
+            ]}
+            onChange={(v) =>
+              onUpdate({
+                themeOverride: v === 'inherit' ? undefined : (v as ThemeName),
+              } as Partial<SceneNode>)
+            }
+          />
         </PropertySection>
       )}
 

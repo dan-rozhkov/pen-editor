@@ -1,3 +1,5 @@
+import type { ThemeName } from './variable'
+
 // Sizing modes for elements inside auto-layout containers
 export type SizingMode = 'fixed' | 'fill_container' | 'fit_content'
 
@@ -45,6 +47,8 @@ export interface FrameNode extends BaseNode {
   cornerRadius?: number
   // Auto-layout properties
   layout?: LayoutProperties
+  // Theme override (light/dark) - if set, overrides global theme for this frame
+  themeOverride?: ThemeName
 }
 
 export interface RectNode extends BaseNode {

@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
 import clsx from 'clsx'
 import { useVariableStore } from '../store/variableStore'
-import { generateVariableId } from '../types/variable'
-import type { Variable } from '../types/variable'
+import { useThemeStore } from '../store/themeStore'
+import { generateVariableId, getVariableValue } from '../types/variable'
+import type { Variable, ThemeName } from '../types/variable'
 
 // Plus icon for Add button
 const PlusIcon = () => (
@@ -24,6 +25,68 @@ const TrashIcon = () => (
   </svg>
 )
 
+// Sun icon for light theme
+const SunIcon = () => (
+  <svg viewBox="0 0 16 16" className="w-3 h-3">
+    <circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" strokeWidth="1.5" />
+    <path
+      d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.4 1.4M11.55 11.55l1.4 1.4M3.05 12.95l1.4-1.4M11.55 4.45l1.4-1.4"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    />
+  </svg>
+)
+
+// Moon icon for dark theme
+const MoonIcon = () => (
+  <svg viewBox="0 0 16 16" className="w-3 h-3">
+    <path
+      d="M13.5 8.5a5.5 5.5 0 01-7-7 5.5 5.5 0 107 7z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
+// Theme toggle component
+function ThemeToggle() {
+  const activeTheme = useThemeStore((s) => s.activeTheme)
+  const setActiveTheme = useThemeStore((s) => s.setActiveTheme)
+
+  return (
+    <div className="flex border border-border-light rounded overflow-hidden">
+      <button
+        className={clsx(
+          'px-1.5 py-0.5 transition-colors',
+          activeTheme === 'light'
+            ? 'bg-white text-gray-900'
+            : 'bg-surface-elevated text-text-muted hover:bg-surface-hover'
+        )}
+        onClick={() => setActiveTheme('light')}
+        title="Light theme"
+      >
+        <SunIcon />
+      </button>
+      <button
+        className={clsx(
+          'px-1.5 py-0.5 transition-colors',
+          activeTheme === 'dark'
+            ? 'bg-gray-700 text-white'
+            : 'bg-surface-elevated text-text-muted hover:bg-surface-hover'
+        )}
+        onClick={() => setActiveTheme('dark')}
+        title="Dark theme"
+      >
+        <MoonIcon />
+      </button>
+    </div>
+  )
+}
+
 interface VariableItemProps {
   variable: Variable
   isSelected: boolean
@@ -32,11 +95,16 @@ interface VariableItemProps {
 
 function VariableItem({ variable, isSelected, onSelect }: VariableItemProps) {
   const updateVariable = useVariableStore((s) => s.updateVariable)
+  const updateVariableThemeValue = useVariableStore((s) => s.updateVariableThemeValue)
   const deleteVariable = useVariableStore((s) => s.deleteVariable)
+  const activeTheme = useThemeStore((s) => s.activeTheme)
   const [isHovered, setIsHovered] = useState(false)
   const [isEditingName, setIsEditingName] = useState(false)
   const [editName, setEditName] = useState(variable.name)
   const nameInputRef = useRef<HTMLInputElement>(null)
+
+  const lightValue = getVariableValue(variable, 'light')
+  const darkValue = getVariableValue(variable, 'dark')
 
   useEffect(() => {
     if (isEditingName && nameInputRef.current) {
@@ -73,8 +141,8 @@ function VariableItem({ variable, isSelected, onSelect }: VariableItemProps) {
     }
   }
 
-  const handleColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    updateVariable(variable.id, { value: e.target.value })
+  const handleColorChange = (theme: ThemeName, value: string) => {
+    updateVariableThemeValue(variable.id, theme, value)
   }
 
   return (
@@ -88,20 +156,49 @@ function VariableItem({ variable, isSelected, onSelect }: VariableItemProps) {
       onMouseLeave={() => setIsHovered(false)}
     >
       <div className="flex items-center gap-2 flex-1 min-w-0">
-        {/* Color swatch with native color picker */}
-        <label className="relative w-5 h-5 shrink-0 cursor-pointer">
-          <div
-            className="w-5 h-5 rounded border border-border-light"
-            style={{ backgroundColor: variable.value }}
-          />
-          <input
-            type="color"
-            value={variable.value}
-            onChange={handleColorChange}
-            onClick={(e) => e.stopPropagation()}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-          />
-        </label>
+        {/* Dual color swatches (light | dark) */}
+        <div className="flex rounded overflow-hidden border border-border-light shrink-0">
+          {/* Light theme swatch */}
+          <label
+            className={clsx(
+              'relative w-4 h-5 cursor-pointer',
+              activeTheme === 'light' && 'ring-1 ring-inset ring-accent-bright'
+            )}
+            title="Light theme value"
+          >
+            <div
+              className="w-full h-full"
+              style={{ backgroundColor: lightValue }}
+            />
+            <input
+              type="color"
+              value={lightValue}
+              onChange={(e) => handleColorChange('light', e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            />
+          </label>
+          {/* Dark theme swatch */}
+          <label
+            className={clsx(
+              'relative w-4 h-5 cursor-pointer border-l border-border-light',
+              activeTheme === 'dark' && 'ring-1 ring-inset ring-accent-bright'
+            )}
+            title="Dark theme value"
+          >
+            <div
+              className="w-full h-full"
+              style={{ backgroundColor: darkValue }}
+            />
+            <input
+              type="color"
+              value={darkValue}
+              onChange={(e) => handleColorChange('dark', e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            />
+          </label>
+        </div>
 
         {/* Variable name (editable on double-click) */}
         {isEditingName ? (
@@ -148,11 +245,16 @@ export function VariablesPanel() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const handleAddVariable = () => {
+    const defaultColor = '#4a90d9'
     const newVar: Variable = {
       id: generateVariableId(),
       name: `Color ${variables.length + 1}`,
       type: 'color',
-      value: '#4a90d9',
+      value: defaultColor,
+      themeValues: {
+        light: defaultColor,
+        dark: defaultColor,
+      },
     }
     addVariable(newVar)
     setSelectedId(newVar.id)
@@ -168,13 +270,16 @@ export function VariablesPanel() {
             {variables.length}
           </span>
         </div>
-        <button
-          className="bg-transparent border-none cursor-pointer p-1 rounded hover:bg-surface-elevated transition-colors"
-          onClick={handleAddVariable}
-          title="Add variable"
-        >
-          <PlusIcon />
-        </button>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <button
+            className="bg-transparent border-none cursor-pointer p-1 rounded hover:bg-surface-elevated transition-colors"
+            onClick={handleAddVariable}
+            title="Add variable"
+          >
+            <PlusIcon />
+          </button>
+        </div>
       </div>
 
       {/* List */}

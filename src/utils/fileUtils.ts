@@ -1,39 +1,54 @@
 import type { SceneNode } from '../types/scene'
-import type { Variable } from '../types/variable'
+import type { Variable, ThemeName } from '../types/variable'
+import { ensureThemeValues } from '../types/variable'
 
 export interface PenDocument {
   version: string
   nodes: SceneNode[]
   variables?: Variable[]
+  activeTheme?: ThemeName
 }
 
 export interface DocumentData {
   nodes: SceneNode[]
   variables: Variable[]
+  activeTheme: ThemeName
 }
 
 const CURRENT_VERSION = '1.0'
 
-export function serializeDocument(nodes: SceneNode[], variables: Variable[]): string {
+export function serializeDocument(
+  nodes: SceneNode[],
+  variables: Variable[],
+  activeTheme: ThemeName
+): string {
   const doc: PenDocument = {
     version: CURRENT_VERSION,
     nodes,
     variables,
+    activeTheme,
   }
   return JSON.stringify(doc, null, 2)
 }
 
 export function deserializeDocument(json: string): DocumentData {
   const doc: PenDocument = JSON.parse(json)
-  // Future: handle version migrations here
+  // Migrate variables to ensure theme values exist
+  const migratedVariables = (doc.variables ?? []).map(ensureThemeValues)
   return {
     nodes: doc.nodes,
-    variables: doc.variables ?? [],
+    variables: migratedVariables,
+    activeTheme: doc.activeTheme ?? 'dark',
   }
 }
 
-export function downloadDocument(nodes: SceneNode[], variables: Variable[], filename = 'document.json') {
-  const json = serializeDocument(nodes, variables)
+export function downloadDocument(
+  nodes: SceneNode[],
+  variables: Variable[],
+  activeTheme: ThemeName,
+  filename = 'document.json'
+) {
+  const json = serializeDocument(nodes, variables, activeTheme)
   const blob = new Blob([json], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
 

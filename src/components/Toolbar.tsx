@@ -2,6 +2,7 @@ import { useSceneStore } from '../store/sceneStore'
 import { useSelectionStore } from '../store/selectionStore'
 import { useViewportStore } from '../store/viewportStore'
 import { useVariableStore } from '../store/variableStore'
+import { useThemeStore } from '../store/themeStore'
 import { generateId } from '../types/scene'
 import type { SceneNode, FrameNode } from '../types/scene'
 import { downloadDocument, openFilePicker } from '../utils/fileUtils'
@@ -27,6 +28,8 @@ export function Toolbar() {
   const setNodes = useSceneStore((state) => state.setNodes)
   const variables = useVariableStore((state) => state.variables)
   const setVariables = useVariableStore((state) => state.setVariables)
+  const activeTheme = useThemeStore((state) => state.activeTheme)
+  const setActiveTheme = useThemeStore((state) => state.setActiveTheme)
   const { selectedIds } = useSelectionStore()
   const { scale, x, y } = useViewportStore()
 
@@ -119,14 +122,15 @@ export function Toolbar() {
   }
 
   const handleSave = () => {
-    downloadDocument(nodes, variables)
+    downloadDocument(nodes, variables, activeTheme)
   }
 
   const handleOpen = async () => {
     try {
-      const { nodes: loadedNodes, variables: loadedVariables } = await openFilePicker()
+      const { nodes: loadedNodes, variables: loadedVariables, activeTheme: loadedTheme } = await openFilePicker()
       setNodes(loadedNodes)
       setVariables(loadedVariables)
+      setActiveTheme(loadedTheme)
     } catch (err) {
       console.error('Failed to open file:', err)
     }
