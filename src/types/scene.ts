@@ -12,10 +12,29 @@ export interface BaseNode {
   visible?: boolean // defaults to true
 }
 
+// Auto-layout properties for Frame nodes
+export type FlexDirection = 'row' | 'column'
+export type AlignItems = 'flex-start' | 'center' | 'flex-end' | 'stretch'
+export type JustifyContent = 'flex-start' | 'center' | 'flex-end' | 'space-between' | 'space-around' | 'space-evenly'
+
+export interface LayoutProperties {
+  autoLayout?: boolean // whether auto-layout is enabled
+  flexDirection?: FlexDirection
+  gap?: number
+  paddingTop?: number
+  paddingRight?: number
+  paddingBottom?: number
+  paddingLeft?: number
+  alignItems?: AlignItems
+  justifyContent?: JustifyContent
+}
+
 export interface FrameNode extends BaseNode {
   type: 'frame'
   children: SceneNode[]
   cornerRadius?: number
+  // Auto-layout properties
+  layout?: LayoutProperties
 }
 
 export interface RectNode extends BaseNode {

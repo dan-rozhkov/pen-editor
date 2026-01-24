@@ -3,6 +3,7 @@ import Konva from 'konva'
 import type { SceneNode, FrameNode } from '../../types/scene'
 import { useSceneStore } from '../../store/sceneStore'
 import { useSelectionStore } from '../../store/selectionStore'
+import { useLayoutStore } from '../../store/layoutStore'
 
 interface RenderNodeProps {
   node: SceneNode
@@ -178,6 +179,13 @@ interface FrameRendererProps {
 }
 
 function FrameRenderer({ node, onClick, onDragEnd, onTransformEnd }: FrameRendererProps) {
+  const calculateLayoutForFrame = useLayoutStore((state) => state.calculateLayoutForFrame)
+
+  // Calculate layout for children if auto-layout is enabled
+  const layoutChildren = node.layout?.autoLayout
+    ? calculateLayoutForFrame(node)
+    : node.children
+
   return (
     <Group
       id={node.id}
@@ -200,7 +208,7 @@ function FrameRenderer({ node, onClick, onDragEnd, onTransformEnd }: FrameRender
         strokeWidth={node.strokeWidth}
         cornerRadius={node.cornerRadius}
       />
-      {node.children.map((child) => (
+      {layoutChildren.map((child) => (
         <RenderNode key={child.id} node={child} />
       ))}
     </Group>
