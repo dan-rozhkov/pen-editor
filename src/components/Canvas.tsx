@@ -1,7 +1,9 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
-import { Stage, Layer, Rect, Circle } from 'react-konva'
+import { Stage, Layer, Rect } from 'react-konva'
 import Konva from 'konva'
 import { useViewportStore } from '../store/viewportStore'
+import { useSceneStore } from '../store/sceneStore'
+import { RenderNode } from './nodes/RenderNode'
 
 const ZOOM_FACTOR = 1.1
 
@@ -14,6 +16,7 @@ export function Canvas() {
   const lastPointerPosition = useRef<{ x: number; y: number } | null>(null)
 
   const { scale, x, y, isPanning, setPosition, setIsPanning, zoomAtPoint } = useViewportStore()
+  const nodes = useSceneStore((state) => state.nodes)
 
   // Resize handler
   useEffect(() => {
@@ -171,29 +174,10 @@ export function Canvas() {
             height={2000}
             fill="#2a2a2a"
           />
-          {/* Demo shapes to visualize pan/zoom */}
-          <Rect
-            x={100}
-            y={100}
-            width={200}
-            height={150}
-            fill="#4a90d9"
-            cornerRadius={8}
-          />
-          <Circle
-            x={500}
-            y={300}
-            radius={80}
-            fill="#d94a4a"
-          />
-          <Rect
-            x={300}
-            y={400}
-            width={180}
-            height={120}
-            fill="#4ad97a"
-            cornerRadius={4}
-          />
+          {/* Render scene nodes */}
+          {nodes.map((node) => (
+            <RenderNode key={node.id} node={node} />
+          ))}
         </Layer>
       </Stage>
     </div>
