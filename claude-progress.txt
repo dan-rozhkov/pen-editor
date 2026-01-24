@@ -405,3 +405,20 @@
 - Свойство Rotation в Properties Panel
 
 ---
+
+=== 2026-01-24 | Feature 21: Свойство Rotation в Properties Panel ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Добавлен rotation?: number в BaseNode (src/types/scene.ts)
+- Добавлена секция Rotation в PropertiesPanel.tsx с NumberInput (0-360°)
+- Добавлен rotation prop ко всем Konva рендерерам (Rect, Ellipse, Text, Group)
+- Обновлён handleTransformEnd для захвата rotation от Transformer
+- Rotation автоматически сохраняется/загружается в JSON документ
+- E2E тест пройден: ввод 45° → элемент повёрнут → Save → Reload → Open → rotation восстановлен
+
+Следующие шаги:
+- Inline редактирование текста на canvas
+
+---

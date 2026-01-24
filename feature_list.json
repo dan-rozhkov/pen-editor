@@ -201,7 +201,7 @@
       "Элемент поворачивается в реальном времени",
       "Rotation сохраняется в документ"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "Phase 2.5: Editor Enhancements",
