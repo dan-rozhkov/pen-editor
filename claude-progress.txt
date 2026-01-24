@@ -382,6 +382,26 @@
 - E2E тест пройден: drag-out из Frame работает корректно
 
 Следующие шаги:
-- WebSocket server (Phase 4: MCP Server)
+- Inline переименование элементов в Layers Panel
+
+---
+
+=== 2026-01-24 | Feature 20: Inline переименование элементов в Layers Panel ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Добавлен inline editing state в LayerItem (isEditing, editName, inputRef)
+- Добавлен useEffect для автофокуса input при начале редактирования
+- Добавлены обработчики: handleDoubleClick, handleNameSubmit, handleNameKeyDown, handleNameBlur
+- Двойной клик на имени слоя активирует режим редактирования
+- Enter сохраняет новое имя через updateNode()
+- Escape отменяет редактирование без сохранения
+- Blur (клик вне) сохраняет изменения
+- E2E тест пройден: double-click → edit → Enter сохраняет
+- E2E тест пройден: double-click → edit → Escape отменяет
+
+Следующие шаги:
+- Свойство Rotation в Properties Panel
 
 ---

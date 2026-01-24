@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import clsx from 'clsx'
 import { useSceneStore } from '../store/sceneStore'
 import { useSelectionStore } from '../store/selectionStore'
@@ -104,6 +104,20 @@ function LayerItem({
   const toggleVisibility = useSceneStore((state) => state.toggleVisibility)
   const expandedFrameIds = useSceneStore((state) => state.expandedFrameIds)
   const toggleFrameExpanded = useSceneStore((state) => state.toggleFrameExpanded)
+  const updateNode = useSceneStore((state) => state.updateNode)
+
+  // Inline editing state
+  const [isEditing, setIsEditing] = useState(false)
+  const [editName, setEditName] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Auto-focus input when editing starts
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [isEditing])
 
   const isSelected = selectedIds.includes(node.id)
   const isVisible = node.visible !== false
@@ -129,6 +143,36 @@ function LayerItem({
   const handleChevronClick = (e: React.MouseEvent) => {
     e.stopPropagation()
     toggleFrameExpanded(node.id)
+  }
+
+  // Inline editing handlers
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const currentName = node.name || `${node.type.charAt(0).toUpperCase() + node.type.slice(1)}`
+    setEditName(currentName)
+    setIsEditing(true)
+  }
+
+  const handleNameSubmit = () => {
+    const trimmed = editName.trim()
+    if (trimmed) {
+      updateNode(node.id, { name: trimmed })
+    }
+    setIsEditing(false)
+  }
+
+  const handleNameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleNameSubmit()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      setIsEditing(false)
+    }
+  }
+
+  const handleNameBlur = () => {
+    handleNameSubmit()
   }
 
   const handleDragStart = (e: React.DragEvent) => {
@@ -198,15 +242,32 @@ function LayerItem({
             <div className="w-4" />
           )}
           <NodeIcon type={node.type} isSelected={isSelected} />
-          <span
-            className={clsx(
-              'text-xs whitespace-nowrap overflow-hidden text-ellipsis',
-              isSelected ? 'text-white' : 'text-text-secondary',
-              !isVisible && 'opacity-50'
-            )}
-          >
-            {displayName}
-          </span>
+          {isEditing ? (
+            <input
+              ref={inputRef}
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              onKeyDown={handleNameKeyDown}
+              onBlur={handleNameBlur}
+              onClick={(e) => e.stopPropagation()}
+              className={clsx(
+                'text-xs bg-transparent border border-accent-bright rounded px-1 py-0.5 outline-none min-w-0 flex-1',
+                isSelected ? 'text-white' : 'text-text-secondary'
+              )}
+            />
+          ) : (
+            <span
+              className={clsx(
+                'text-xs whitespace-nowrap overflow-hidden text-ellipsis',
+                isSelected ? 'text-white' : 'text-text-secondary',
+                !isVisible && 'opacity-50'
+              )}
+              onDoubleClick={handleDoubleClick}
+            >
+              {displayName}
+            </span>
+          )}
         </div>
         <button
           className={clsx(

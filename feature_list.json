@@ -182,6 +182,39 @@
     "passes": true
   },
   {
+    "category": "Phase 2.5: Editor Enhancements",
+    "description": "Inline переименование элементов в Layers Panel",
+    "steps": [
+      "Двойной клик на имени элемента включает режим редактирования",
+      "Поле ввода отображается вместо текста",
+      "Enter сохраняет новое имя",
+      "Escape отменяет редактирование"
+    ],
+    "passes": true
+  },
+  {
+    "category": "Phase 2.5: Editor Enhancements",
+    "description": "Свойство Rotation в Properties Panel",
+    "steps": [
+      "Поле rotation отображается в Properties Panel",
+      "Можно ввести угол поворота в градусах",
+      "Элемент поворачивается в реальном времени",
+      "Rotation сохраняется в документ"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 2.5: Editor Enhancements",
+    "description": "Inline редактирование текста на canvas",
+    "steps": [
+      "Двойной клик на текстовом элементе включает режим редактирования",
+      "Курсор появляется в тексте",
+      "Можно вводить и изменять текст",
+      "Клик вне элемента или Escape завершает редактирование"
+    ],
+    "passes": false
+  },
+  {
     "category": "Phase 3: Variables & Themes",
     "description": "Variable system (определение переменных)",
     "steps": [
