@@ -20,7 +20,7 @@ export const useSceneStore = create<SceneState>((set) => ({
   updateNode: (id, updates) =>
     set((state) => ({
       nodes: state.nodes.map((node) =>
-        node.id === id ? { ...node, ...updates } : node
+        node.id === id ? ({ ...node, ...updates } as SceneNode) : node
       ),
     })),
 

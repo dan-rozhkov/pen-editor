@@ -1,14 +1,16 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
-import { Stage, Layer, Rect } from 'react-konva'
+import { Stage, Layer, Rect, Transformer } from 'react-konva'
 import Konva from 'konva'
 import { useViewportStore } from '../store/viewportStore'
 import { useSceneStore } from '../store/sceneStore'
+import { useSelectionStore } from '../store/selectionStore'
 import { RenderNode } from './nodes/RenderNode'
 
 const ZOOM_FACTOR = 1.1
 
 export function Canvas() {
   const stageRef = useRef<Konva.Stage>(null)
+  const transformerRef = useRef<Konva.Transformer>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 })
   const [isSpacePressed, setIsSpacePressed] = useState(false)
@@ -17,6 +19,26 @@ export function Canvas() {
 
   const { scale, x, y, isPanning, setPosition, setIsPanning, zoomAtPoint } = useViewportStore()
   const nodes = useSceneStore((state) => state.nodes)
+  const { selectedIds, clearSelection } = useSelectionStore()
+
+  // Update transformer nodes when selection changes
+  useEffect(() => {
+    const transformer = transformerRef.current
+    const stage = stageRef.current
+    if (!transformer || !stage) return
+
+    // Find selected nodes on stage
+    const selectedNodes: Konva.Node[] = []
+    selectedIds.forEach((id) => {
+      const node = stage.findOne(`#${id}`)
+      if (node) {
+        selectedNodes.push(node)
+      }
+    })
+
+    transformer.nodes(selectedNodes)
+    transformer.getLayer()?.batchDraw()
+  }, [selectedIds])
 
   // Resize handler
   useEffect(() => {
@@ -98,13 +120,19 @@ export function Canvas() {
         if (stage) {
           lastPointerPosition.current = stage.getPointerPosition()
         }
+      } else if (e.evt.button === 0) {
+        // Left click on empty space - clear selection
+        const clickedOnEmpty = e.target === e.target.getStage() || e.target.name() === 'background'
+        if (clickedOnEmpty) {
+          clearSelection()
+        }
       }
     },
-    [isSpacePressed, setIsPanning]
+    [isSpacePressed, setIsPanning, clearSelection]
   )
 
   const handleMouseMove = useCallback(
-    (e: Konva.KonvaEventObject<MouseEvent>) => {
+    () => {
       if (!isPanning || !lastPointerPosition.current) return
 
       const stage = stageRef.current
@@ -168,6 +196,7 @@ export function Canvas() {
         <Layer>
           {/* Grid background indicator */}
           <Rect
+            name="background"
             x={0}
             y={0}
             width={2000}
@@ -178,6 +207,22 @@ export function Canvas() {
           {nodes.map((node) => (
             <RenderNode key={node.id} node={node} />
           ))}
+          {/* Transformer for selection */}
+          <Transformer
+            ref={transformerRef}
+            boundBoxFunc={(oldBox, newBox) => {
+              // Limit minimum size
+              if (newBox.width < 5 || newBox.height < 5) {
+                return oldBox
+              }
+              return newBox
+            }}
+            anchorSize={8}
+            anchorCornerRadius={2}
+            borderStroke="#0d99ff"
+            anchorStroke="#0d99ff"
+            anchorFill="#ffffff"
+          />
         </Layer>
       </Stage>
     </div>
