@@ -325,3 +325,24 @@
 - Variable picker в properties panel
 
 ---
+
+=== 2026-01-24 | Feature 17: Variable picker в properties panel ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Добавлен тип ColorBinding в src/types/scene.ts для привязки переменных
+- Добавлены поля fillBinding и strokeBinding в BaseNode
+- Расширен ColorInput в PropertyInputs.tsx с variable picker dropdown
+- При наличии привязки показывается имя переменной с кнопкой Unbind
+- Кнопка "Bind to variable" открывает dropdown с доступными переменными
+- Интегрированы переменные в PropertiesPanel для fill/stroke
+- Обновлён RenderNode.tsx для разрешения переменных в цвета
+- Поддержка effectiveTheme для наследования темы от родителя
+- ThemeOverride на Frame корректно передаётся дочерним элементам
+- E2E тест пройден: bind variable, unbind variable, theme switching
+
+Следующие шаги:
+- WebSocket server (Phase 4: MCP Server)
+
+---
