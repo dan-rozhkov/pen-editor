@@ -10,6 +10,7 @@ import { RenderNode } from './nodes/RenderNode'
 import { DropIndicator } from './DropIndicator'
 import { InlineTextEditor } from './InlineTextEditor'
 import { InlineNameEditor } from './InlineNameEditor'
+import { FrameNameLabel } from './nodes/FrameNameLabel'
 import type { TextNode, FrameNode, SceneNode } from '../types/scene'
 import { getViewportBounds, isNodeVisible } from '../utils/viewportUtils'
 import { getNodeAbsolutePosition } from '../utils/nodeUtils'
@@ -40,7 +41,7 @@ export function Canvas() {
   )
   const deleteNode = useSceneStore((state) => state.deleteNode)
   const setNodesWithoutHistory = useSceneStore((state) => state.setNodesWithoutHistory)
-  const { selectedIds, clearSelection, editingNodeId, editingMode } = useSelectionStore()
+  const { selectedIds, clearSelection, editingNodeId, editingMode, isSelected } = useSelectionStore()
   const { undo, redo, saveHistory, startBatch, endBatch } = useHistoryStore()
   const dropIndicator = useDragStore((state) => state.dropIndicator)
 
@@ -70,6 +71,28 @@ export function Canvas() {
   const editingNamePosition = editingNameNode
     ? getNodeAbsolutePosition(nodes, editingNameNode.id)
     : null
+
+  // Collect all frame nodes with their absolute positions for rendering labels
+  const collectFrameNodes = useMemo(() => {
+    const frames: Array<{ node: FrameNode; absX: number; absY: number }> = []
+
+    const traverse = (searchNodes: SceneNode[], accX: number, accY: number) => {
+      for (const node of searchNodes) {
+        if (node.type === 'frame') {
+          frames.push({
+            node,
+            absX: accX + node.x,
+            absY: accY + node.y,
+          })
+          // Recursively collect nested frames
+          traverse(node.children, accX + node.x, accY + node.y)
+        }
+      }
+    }
+
+    traverse(visibleNodes, 0, 0)
+    return frames
+  }, [visibleNodes])
 
   // Update transformer nodes when selection changes
   useEffect(() => {
@@ -368,6 +391,16 @@ export function Canvas() {
             anchorStroke="#0d99ff"
             anchorFill="#ffffff"
           />
+          {/* Frame name labels - rendered after transformer so they're not included in bounding box */}
+          {collectFrameNodes.map(({ node, absX, absY }) => (
+            <FrameNameLabel
+              key={`label-${node.id}`}
+              node={node}
+              isSelected={isSelected(node.id)}
+              absoluteX={absX}
+              absoluteY={absY}
+            />
+          ))}
         </Layer>
       </Stage>
       {/* Inline text editor overlay */}

@@ -6,6 +6,8 @@ import { useSelectionStore } from '../../store/selectionStore'
 interface FrameNameLabelProps {
   node: FrameNode
   isSelected: boolean
+  absoluteX: number
+  absoluteY: number
 }
 
 const LABEL_FONT_SIZE = 11
@@ -13,7 +15,7 @@ const LABEL_OFFSET_Y = 4
 const LABEL_COLOR_NORMAL = '#666666'
 const LABEL_COLOR_SELECTED = '#0d99ff'
 
-export function FrameNameLabel({ node, isSelected }: FrameNameLabelProps) {
+export function FrameNameLabel({ node, isSelected, absoluteX, absoluteY }: FrameNameLabelProps) {
   const { startNameEditing, editingNodeId, editingMode } = useSelectionStore()
 
   // Hide if this frame's name is being edited
@@ -31,8 +33,8 @@ export function FrameNameLabel({ node, isSelected }: FrameNameLabelProps) {
 
   return (
     <Text
-      x={0}
-      y={-LABEL_FONT_SIZE - LABEL_OFFSET_Y}
+      x={absoluteX}
+      y={absoluteY - LABEL_FONT_SIZE - LABEL_OFFSET_Y}
       text={displayName}
       fontSize={LABEL_FONT_SIZE}
       fontFamily="system-ui, -apple-system, sans-serif"

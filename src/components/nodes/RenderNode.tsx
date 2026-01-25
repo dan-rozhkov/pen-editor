@@ -11,7 +11,6 @@ import { useThemeStore } from '../../store/themeStore'
 import { useDragStore } from '../../store/dragStore'
 import { findParentFrame } from '../../utils/nodeUtils'
 import { calculateDropPosition, isPointInsideRect, getFrameAbsoluteRect } from '../../utils/dragUtils'
-import { FrameNameLabel } from './FrameNameLabel'
 
 interface RenderNodeProps {
   node: SceneNode
@@ -187,7 +186,6 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
           fillColor={fillColor}
           strokeColor={strokeColor}
           effectiveTheme={currentTheme}
-          isSelected={isSelected(node.id)}
         />
       )
     case 'rect':
@@ -386,7 +384,6 @@ interface FrameRendererProps {
   fillColor?: string
   strokeColor?: string
   effectiveTheme: ThemeName
-  isSelected: boolean
 }
 
 function FrameRenderer({
@@ -399,7 +396,6 @@ function FrameRenderer({
   fillColor,
   strokeColor,
   effectiveTheme,
-  isSelected,
 }: FrameRendererProps) {
   const calculateLayoutForFrame = useLayoutStore((state) => state.calculateLayoutForFrame)
 
@@ -428,7 +424,6 @@ function FrameRenderer({
       onDragEnd={onDragEnd}
       onTransformEnd={onTransformEnd}
     >
-      <FrameNameLabel node={node} isSelected={isSelected} />
       <Rect
         width={node.width}
         height={node.height}

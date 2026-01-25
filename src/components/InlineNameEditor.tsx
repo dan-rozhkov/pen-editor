@@ -77,7 +77,7 @@ export function InlineNameEditor({ node, absoluteX, absoluteY }: InlineNameEdito
         border: '1px solid #0d99ff',
         borderRadius: 2,
         outline: 'none',
-        background: '#ffffff',
+        background: 'transparent',
         color: '#333333',
         zIndex: 100,
         boxSizing: 'border-box',
