@@ -41,7 +41,14 @@ export function Canvas() {
   )
   const deleteNode = useSceneStore((state) => state.deleteNode)
   const setNodesWithoutHistory = useSceneStore((state) => state.setNodesWithoutHistory)
-  const { selectedIds, clearSelection, editingNodeId, editingMode, isSelected } = useSelectionStore()
+  const {
+    selectedIds,
+    clearSelection,
+    editingNodeId,
+    editingMode,
+    isSelected,
+    exitInstanceEditMode,
+  } = useSelectionStore()
   const { undo, redo, saveHistory, startBatch, endBatch } = useHistoryStore()
   const dropIndicator = useDragStore((state) => state.dropIndicator)
 
@@ -205,9 +212,14 @@ export function Canvas() {
         }
       }
 
-      // Escape - clear selection
+      // Escape - exit instance edit mode first, then clear selection
       if (e.code === 'Escape') {
-        clearSelection()
+        const currentEditingInstanceId = useSelectionStore.getState().editingInstanceId
+        if (currentEditingInstanceId) {
+          exitInstanceEditMode()
+        } else {
+          clearSelection()
+        }
       }
     }
 
@@ -226,7 +238,7 @@ export function Canvas() {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
     }
-  }, [isMiddleMouseDown, setIsPanning, deleteNode, clearSelection, undo, redo, setNodesWithoutHistory, saveHistory, startBatch, endBatch, fitToContent, dimensions.width, dimensions.height])
+  }, [isMiddleMouseDown, setIsPanning, deleteNode, clearSelection, undo, redo, setNodesWithoutHistory, saveHistory, startBatch, endBatch, fitToContent, dimensions.width, dimensions.height, exitInstanceEditMode])
 
   // Mouse wheel handler (Figma-style)
   // - Scroll = pan vertically

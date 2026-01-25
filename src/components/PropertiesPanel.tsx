@@ -1,8 +1,8 @@
 import { useSceneStore } from '../store/sceneStore'
-import { useSelectionStore } from '../store/selectionStore'
+import { useSelectionStore, type InstanceContext } from '../store/selectionStore'
 import { useVariableStore } from '../store/variableStore'
 import { useThemeStore } from '../store/themeStore'
-import type { SceneNode, FrameNode, RefNode, FlexDirection, AlignItems, JustifyContent, SizingMode, TextNode, TextWidthMode, TextAlign } from '../types/scene'
+import type { SceneNode, FrameNode, RefNode, FlexDirection, AlignItems, JustifyContent, SizingMode, TextNode, TextWidthMode, TextAlign, DescendantOverride } from '../types/scene'
 import type { ThemeName, Variable } from '../types/variable'
 import { findParentFrame, findNodeById, findComponentById, type ParentContext } from '../utils/nodeUtils'
 import {
@@ -15,6 +15,18 @@ import {
   CheckboxInput,
   SegmentedControl,
 } from './ui/PropertyInputs'
+
+// Helper to find a node within a component's children tree
+function findNodeInComponent(children: SceneNode[], nodeId: string): SceneNode | null {
+  for (const child of children) {
+    if (child.id === nodeId) return child
+    if (child.type === 'frame') {
+      const found = findNodeInComponent(child.children, nodeId)
+      if (found) return found
+    }
+  }
+  return null
+}
 
 function Header() {
   return (
@@ -497,10 +509,206 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
   )
 }
 
+// Editor for descendant nodes inside an instance
+interface DescendantPropertyEditorProps {
+  instanceContext: InstanceContext
+  allNodes: SceneNode[]
+  variables: Variable[]
+  activeTheme: ThemeName
+}
+
+function DescendantPropertyEditor({
+  instanceContext,
+  allNodes,
+  variables,
+  activeTheme,
+}: DescendantPropertyEditorProps) {
+  const updateDescendantOverride = useSceneStore((s) => s.updateDescendantOverride)
+  const resetDescendantOverride = useSceneStore((s) => s.resetDescendantOverride)
+  const exitInstanceEditMode = useSelectionStore((s) => s.exitInstanceEditMode)
+
+  // Find the instance and component
+  const instance = findNodeById(allNodes, instanceContext.instanceId) as RefNode | null
+  if (!instance || instance.type !== 'ref') return null
+
+  const component = findComponentById(allNodes, instance.componentId)
+  if (!component) return null
+
+  // Find the original descendant node in the component
+  const originalNode = findNodeInComponent(component.children, instanceContext.descendantId)
+  if (!originalNode) return null
+
+  // Get current override values
+  const currentOverride = instance.descendants?.[instanceContext.descendantId] || {}
+
+  // Merge original node with overrides for display
+  const displayNode = { ...originalNode, ...currentOverride } as SceneNode
+
+  // Check if a property is overridden
+  const isPropertyOverridden = (property: keyof DescendantOverride): boolean => {
+    return currentOverride[property] !== undefined
+  }
+
+  // Handle update - save to descendants
+  const handleUpdate = (updates: Partial<SceneNode>) => {
+    updateDescendantOverride(instanceContext.instanceId, instanceContext.descendantId, updates as DescendantOverride)
+  }
+
+  // Reset a specific property
+  const handleResetProperty = (property: keyof DescendantOverride) => {
+    resetDescendantOverride(instanceContext.instanceId, instanceContext.descendantId, property)
+  }
+
+  // Reset all overrides for this descendant
+  const handleResetAll = () => {
+    resetDescendantOverride(instanceContext.instanceId, instanceContext.descendantId)
+  }
+
+  // Filter only color variables
+  const colorVariables = variables.filter(v => v.type === 'color')
+
+  // Handler for fill variable binding
+  const handleFillVariableChange = (variableId: string | undefined) => {
+    if (variableId) {
+      handleUpdate({ fillBinding: { variableId } })
+    } else {
+      handleUpdate({ fillBinding: undefined })
+    }
+  }
+
+  // Handler for stroke variable binding
+  const handleStrokeVariableChange = (variableId: string | undefined) => {
+    if (variableId) {
+      handleUpdate({ strokeBinding: { variableId } })
+    } else {
+      handleUpdate({ strokeBinding: undefined })
+    }
+  }
+
+  // Collect overridden properties for display
+  const overriddenProperties: string[] = []
+  if (isPropertyOverridden('fill')) overriddenProperties.push('Fill')
+  if (isPropertyOverridden('stroke')) overriddenProperties.push('Stroke')
+  if (isPropertyOverridden('strokeWidth')) overriddenProperties.push('Stroke Width')
+  if (isPropertyOverridden('enabled')) overriddenProperties.push('Enabled')
+  if (isPropertyOverridden('fillBinding')) overriddenProperties.push('Fill Variable')
+  if (isPropertyOverridden('strokeBinding')) overriddenProperties.push('Stroke Variable')
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Descendant Info */}
+      <PropertySection title="Editing Descendant">
+        <div className="flex items-center gap-2 text-xs text-purple-400">
+          <svg viewBox="0 0 16 16" className="w-4 h-4">
+            <path d="M8 2 L14 8 L8 14 L2 8 Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
+          </svg>
+          <span>{originalNode.name || originalNode.type}</span>
+        </div>
+        <div className="text-[10px] text-text-muted mt-1">
+          In instance: {instance.name || 'Instance'}
+        </div>
+        <button
+          onClick={exitInstanceEditMode}
+          className="mt-2 px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
+        >
+          Exit Edit Mode
+        </button>
+      </PropertySection>
+
+      {/* Enabled Toggle */}
+      <PropertySection title="Visibility">
+        <div className="flex items-center gap-1">
+          <div className="flex-1">
+            <CheckboxInput
+              label="Enabled"
+              checked={displayNode.enabled !== false}
+              onChange={(v) => handleUpdate({ enabled: v ? undefined : false })}
+            />
+          </div>
+          <OverrideIndicator
+            isOverridden={isPropertyOverridden('enabled')}
+            onReset={() => handleResetProperty('enabled')}
+          />
+        </div>
+      </PropertySection>
+
+      {/* Fill Section */}
+      <PropertySection title="Fill">
+        <div className="flex items-center gap-1">
+          <div className="flex-1">
+            <ColorInput
+              value={displayNode.fill ?? originalNode.fill ?? '#000000'}
+              onChange={(v) => handleUpdate({ fill: v })}
+              variableId={displayNode.fillBinding?.variableId}
+              onVariableChange={handleFillVariableChange}
+              availableVariables={colorVariables}
+              activeTheme={activeTheme}
+            />
+          </div>
+          <OverrideIndicator
+            isOverridden={isPropertyOverridden('fill')}
+            onReset={() => handleResetProperty('fill')}
+          />
+        </div>
+      </PropertySection>
+
+      {/* Stroke Section */}
+      <PropertySection title="Stroke">
+        <div className="flex items-center gap-1">
+          <div className="flex-1">
+            <ColorInput
+              value={displayNode.stroke ?? originalNode.stroke ?? ''}
+              onChange={(v) => handleUpdate({ stroke: v || undefined })}
+              variableId={displayNode.strokeBinding?.variableId}
+              onVariableChange={handleStrokeVariableChange}
+              availableVariables={colorVariables}
+              activeTheme={activeTheme}
+            />
+          </div>
+          <OverrideIndicator
+            isOverridden={isPropertyOverridden('stroke')}
+            onReset={() => handleResetProperty('stroke')}
+          />
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="flex-1">
+            <NumberInput
+              label="Width"
+              value={displayNode.strokeWidth ?? originalNode.strokeWidth ?? 0}
+              onChange={(v) => handleUpdate({ strokeWidth: v })}
+              min={0}
+              step={0.5}
+            />
+          </div>
+          <OverrideIndicator
+            isOverridden={isPropertyOverridden('strokeWidth')}
+            onReset={() => handleResetProperty('strokeWidth')}
+          />
+        </div>
+      </PropertySection>
+
+      {/* Overrides Summary */}
+      {overriddenProperties.length > 0 && (
+        <PropertySection title="Overrides">
+          <div className="text-xs text-text-secondary mb-2">
+            {overriddenProperties.join(', ')}
+          </div>
+          <button
+            onClick={handleResetAll}
+            className="px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
+          >
+            Reset All Overrides
+          </button>
+        </PropertySection>
+      )}
+    </div>
+  )
+}
+
 export function PropertiesPanel() {
   const nodes = useSceneStore((s) => s.nodes)
   const updateNode = useSceneStore((s) => s.updateNode)
-  const { selectedIds } = useSelectionStore()
+  const { selectedIds, instanceContext } = useSelectionStore()
   const variables = useVariableStore((s) => s.variables)
   const activeTheme = useThemeStore((s) => s.activeTheme)
 
@@ -528,7 +736,17 @@ export function PropertiesPanel() {
       <div className="flex-1 overflow-y-auto p-3">
         {selectedIds.length === 0 && <EmptyState />}
         {selectedIds.length > 1 && <MultiSelectState count={selectedIds.length} />}
-        {selectedNode && (
+        {/* If editing a descendant inside an instance, show descendant editor */}
+        {instanceContext && (
+          <DescendantPropertyEditor
+            instanceContext={instanceContext}
+            allNodes={nodes}
+            variables={variables}
+            activeTheme={activeTheme}
+          />
+        )}
+        {/* Otherwise show normal property editor */}
+        {selectedNode && !instanceContext && (
           <PropertyEditor
             node={selectedNode}
             onUpdate={handleUpdate}

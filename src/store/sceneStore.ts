@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { SceneNode, FrameNode } from '../types/scene'
+import type { SceneNode, FrameNode, RefNode, DescendantOverride } from '../types/scene'
 import { useHistoryStore } from './historyStore'
 
 interface SceneState {
@@ -18,6 +18,9 @@ interface SceneState {
   toggleFrameExpanded: (id: string) => void
   setFrameExpanded: (id: string, expanded: boolean) => void
   moveNode: (nodeId: string, newParentId: string | null, newIndex: number) => void
+  // Descendant override methods for component instances
+  updateDescendantOverride: (instanceId: string, descendantId: string, updates: DescendantOverride) => void
+  resetDescendantOverride: (instanceId: string, descendantId: string, property?: keyof DescendantOverride) => void
 }
 
 // Helper to recursively add child to a frame
@@ -157,6 +160,90 @@ function insertNodeRecursive(nodes: SceneNode[], nodeToInsert: SceneNode, parent
   })
 }
 
+// Helper to update descendant override in a RefNode
+function updateDescendantOverrideRecursive(
+  nodes: SceneNode[],
+  instanceId: string,
+  descendantId: string,
+  updates: DescendantOverride
+): SceneNode[] {
+  return nodes.map((node) => {
+    if (node.id === instanceId && node.type === 'ref') {
+      const refNode = node as RefNode
+      const existingOverrides = refNode.descendants || {}
+      const existingDescendant = existingOverrides[descendantId] || {}
+
+      return {
+        ...refNode,
+        descendants: {
+          ...existingOverrides,
+          [descendantId]: { ...existingDescendant, ...updates }
+        }
+      } as RefNode
+    }
+    if (node.type === 'frame') {
+      return {
+        ...node,
+        children: updateDescendantOverrideRecursive(node.children, instanceId, descendantId, updates),
+      } as FrameNode
+    }
+    return node
+  })
+}
+
+// Helper to reset descendant override (remove property or entire override)
+function resetDescendantOverrideRecursive(
+  nodes: SceneNode[],
+  instanceId: string,
+  descendantId: string,
+  property?: keyof DescendantOverride
+): SceneNode[] {
+  return nodes.map((node) => {
+    if (node.id === instanceId && node.type === 'ref') {
+      const refNode = node as RefNode
+      const existingOverrides = refNode.descendants || {}
+
+      if (!existingOverrides[descendantId]) {
+        return node
+      }
+
+      if (property) {
+        // Reset specific property
+        const { [property]: _, ...remainingProps } = existingOverrides[descendantId]
+        // If no properties left, remove the entire override
+        if (Object.keys(remainingProps).length === 0) {
+          const { [descendantId]: __, ...remainingOverrides } = existingOverrides
+          return {
+            ...refNode,
+            descendants: Object.keys(remainingOverrides).length > 0 ? remainingOverrides : undefined
+          } as RefNode
+        }
+        return {
+          ...refNode,
+          descendants: {
+            ...existingOverrides,
+            [descendantId]: remainingProps
+          }
+        } as RefNode
+      } else {
+        // Reset entire override for this descendant
+        const { [descendantId]: _, ...remainingOverrides } = existingOverrides
+        return {
+          ...refNode,
+          descendants: Object.keys(remainingOverrides).length > 0 ? remainingOverrides : undefined
+        } as RefNode
+      }
+    }
+    if (node.type === 'frame') {
+      return {
+        ...node,
+        children: resetDescendantOverrideRecursive(node.children, instanceId, descendantId, property),
+      } as FrameNode
+    }
+    return node
+  })
+}
+
 export const useSceneStore = create<SceneState>((set) => ({
   nodes: [],
   expandedFrameIds: new Set<string>(),
@@ -248,5 +335,17 @@ export const useSceneStore = create<SceneState>((set) => ({
       // Insert the node at the new position
       const newNodes = insertNodeRecursive(remaining, node, newParentId, newIndex)
       return { nodes: newNodes }
+    }),
+
+  updateDescendantOverride: (instanceId, descendantId, updates) =>
+    set((state) => {
+      useHistoryStore.getState().saveHistory(state.nodes)
+      return { nodes: updateDescendantOverrideRecursive(state.nodes, instanceId, descendantId, updates) }
+    }),
+
+  resetDescendantOverride: (instanceId, descendantId, property) =>
+    set((state) => {
+      useHistoryStore.getState().saveHistory(state.nodes)
+      return { nodes: resetDescendantOverrideRecursive(state.nodes, instanceId, descendantId, property) }
     }),
 }))

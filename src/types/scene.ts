@@ -25,6 +25,7 @@ export interface BaseNode {
   stroke?: string
   strokeWidth?: number
   visible?: boolean // defaults to true
+  enabled?: boolean // defaults to true, false hides node (used for instance overrides)
   // Sizing mode (used when node is inside auto-layout container)
   sizing?: SizingProperties
   // Variable bindings for colors
@@ -93,10 +94,23 @@ export interface TextNode extends BaseNode {
   letterSpacing?: number
 }
 
+// Descendant overrides for instance nodes
+// Maps child node IDs to their overridden properties
+export type DescendantOverride = Partial<Omit<BaseNode, 'id' | 'type'>> & {
+  // For nested frames with their own children
+  descendants?: DescendantOverrides
+}
+
+export type DescendantOverrides = {
+  [nodeId: string]: DescendantOverride
+}
+
 // Reference to a component (instance)
 export interface RefNode extends BaseNode {
   type: 'ref'
   componentId: string  // ID of the component (FrameNode with reusable: true)
+  // Overrides for descendant nodes within the component
+  descendants?: DescendantOverrides
 }
 
 export type SceneNode = FrameNode | RectNode | EllipseNode | TextNode | RefNode

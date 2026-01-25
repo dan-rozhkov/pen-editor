@@ -1,6 +1,6 @@
 import { Rect, Ellipse, Text, Group } from 'react-konva'
 import Konva from 'konva'
-import type { SceneNode, FrameNode, RefNode } from '../../types/scene'
+import type { SceneNode, FrameNode, RefNode, DescendantOverrides, DescendantOverride } from '../../types/scene'
 import type { ThemeName } from '../../types/variable'
 import { getVariableValue } from '../../types/variable'
 import { useSceneStore } from '../../store/sceneStore'
@@ -11,6 +11,19 @@ import { useThemeStore } from '../../store/themeStore'
 import { useDragStore } from '../../store/dragStore'
 import { findParentFrame, findComponentById } from '../../utils/nodeUtils'
 import { calculateDropPosition, isPointInsideRect, getFrameAbsoluteRect } from '../../utils/dragUtils'
+
+// Apply descendant overrides to a node
+function applyDescendantOverride(node: SceneNode, override?: DescendantOverride): SceneNode {
+  if (!override) return node
+  // Apply override properties (excluding nested descendants)
+  const { descendants: _, ...overrideProps } = override
+  return { ...node, ...overrideProps } as SceneNode
+}
+
+// Check if a node should be rendered (considering enabled property)
+function isNodeEnabled(override?: DescendantOverride): boolean {
+  return override?.enabled !== false
+}
 
 interface RenderNodeProps {
   node: SceneNode
@@ -481,6 +494,15 @@ function InstanceRenderer({
   const variables = useVariableStore((state) => state.variables)
   const globalTheme = useThemeStore((state) => state.activeTheme)
 
+  // Instance edit mode state
+  const editingInstanceId = useSelectionStore((state) => state.editingInstanceId)
+  const instanceContext = useSelectionStore((state) => state.instanceContext)
+  const enterInstanceEditMode = useSelectionStore((state) => state.enterInstanceEditMode)
+  const selectDescendant = useSelectionStore((state) => state.selectDescendant)
+
+  // Check if we are in edit mode for this instance
+  const isInEditMode = editingInstanceId === node.id
+
   // Find the component this instance references
   const component = findComponentById(nodes, node.componentId)
 
@@ -525,6 +547,63 @@ function InstanceRenderer({
   const scaleX = node.width / component.width
   const scaleY = node.height / component.height
 
+  // Get descendant overrides
+  const descendantOverrides = node.descendants || {}
+
+  // Handle double-click to enter instance edit mode
+  const handleDblClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    e.cancelBubble = true
+    enterInstanceEditMode(node.id)
+  }
+
+  // Handle click on descendant (only in edit mode)
+  const handleDescendantClick = (childId: string) => (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+    e.cancelBubble = true
+    selectDescendant(node.id, childId)
+  }
+
+  // Render a descendant with overrides applied
+  const renderDescendant = (child: SceneNode) => {
+    const override = descendantOverrides[child.id]
+
+    // Check if this descendant is disabled (hidden via override)
+    if (!isNodeEnabled(override)) {
+      return null
+    }
+
+    // Apply overrides to the child node
+    const overriddenChild = applyDescendantOverride(child, override)
+
+    // Check if this descendant is selected
+    const isSelected = instanceContext?.instanceId === node.id && instanceContext?.descendantId === child.id
+
+    if (isInEditMode) {
+      // In edit mode: render with click handlers and selection highlight
+      return (
+        <Group key={`${node.id}-${child.id}`}>
+          <DescendantRenderer
+            node={overriddenChild}
+            onClick={handleDescendantClick(child.id)}
+            isSelected={isSelected}
+            effectiveTheme={childTheme}
+            descendantOverrides={override?.descendants}
+            instanceId={node.id}
+          />
+        </Group>
+      )
+    } else {
+      // Not in edit mode: render normally with overrides
+      return (
+        <RenderNodeWithOverrides
+          key={`${node.id}-${child.id}`}
+          node={overriddenChild}
+          effectiveTheme={childTheme}
+          descendantOverrides={override?.descendants}
+        />
+      )
+    }
+  }
+
   return (
     <Group
       id={node.id}
@@ -534,9 +613,10 @@ function InstanceRenderer({
       width={node.width}
       height={node.height}
       rotation={node.rotation ?? 0}
-      draggable
+      draggable={!isInEditMode}
       onClick={onClick}
       onTap={onClick}
+      onDblClick={handleDblClick}
       onDragStart={onDragStart}
       onDragMove={onDragMove}
       onDragEnd={onDragEnd}
@@ -553,10 +633,326 @@ function InstanceRenderer({
       />
       {/* Scaled content from component */}
       <Group scaleX={scaleX} scaleY={scaleY}>
-        {layoutChildren.map((child) => (
-          <RenderNode key={`${node.id}-${child.id}`} node={child} effectiveTheme={childTheme} />
-        ))}
+        {layoutChildren.map(renderDescendant)}
       </Group>
+      {/* Instance edit mode indicator */}
+      {isInEditMode && (
+        <Rect
+          width={node.width}
+          height={node.height}
+          stroke="#8B5CF6"
+          strokeWidth={2}
+          dash={[4, 4]}
+          listening={false}
+        />
+      )}
     </Group>
   )
+}
+
+// Renderer for descendant nodes in instance edit mode
+interface DescendantRendererProps {
+  node: SceneNode
+  onClick: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void
+  isSelected: boolean
+  effectiveTheme: ThemeName
+  descendantOverrides?: DescendantOverrides
+  instanceId: string
+}
+
+function DescendantRenderer({
+  node,
+  onClick,
+  isSelected,
+  effectiveTheme,
+  descendantOverrides,
+  instanceId,
+}: DescendantRendererProps) {
+  const variables = useVariableStore((state) => state.variables)
+  const globalTheme = useThemeStore((state) => state.activeTheme)
+  const currentTheme = effectiveTheme ?? globalTheme
+  const selectDescendant = useSelectionStore((state) => state.selectDescendant)
+
+  // Resolve color from variable binding
+  const resolveColor = (color: string | undefined, binding?: { variableId: string }): string | undefined => {
+    if (binding) {
+      const variable = variables.find(v => v.id === binding.variableId)
+      if (variable) {
+        return getVariableValue(variable, currentTheme)
+      }
+    }
+    return color
+  }
+
+  const fillColor = resolveColor(node.fill, node.fillBinding)
+  const strokeColor = resolveColor(node.stroke, node.strokeBinding)
+
+  // Selection highlight stroke
+  const selectionStroke = isSelected ? '#8B5CF6' : undefined
+  const selectionStrokeWidth = isSelected ? 2 : undefined
+
+  switch (node.type) {
+    case 'rect':
+      return (
+        <Group>
+          <Rect
+            x={node.x}
+            y={node.y}
+            width={node.width}
+            height={node.height}
+            rotation={node.rotation ?? 0}
+            fill={fillColor}
+            stroke={strokeColor ?? selectionStroke}
+            strokeWidth={node.strokeWidth ?? selectionStrokeWidth}
+            cornerRadius={node.cornerRadius}
+            onClick={onClick}
+            onTap={onClick}
+          />
+          {isSelected && !strokeColor && (
+            <Rect
+              x={node.x}
+              y={node.y}
+              width={node.width}
+              height={node.height}
+              rotation={node.rotation ?? 0}
+              stroke="#8B5CF6"
+              strokeWidth={2}
+              listening={false}
+            />
+          )}
+        </Group>
+      )
+    case 'ellipse':
+      return (
+        <Group>
+          <Ellipse
+            x={node.x + node.width / 2}
+            y={node.y + node.height / 2}
+            radiusX={node.width / 2}
+            radiusY={node.height / 2}
+            rotation={node.rotation ?? 0}
+            fill={fillColor}
+            stroke={strokeColor ?? selectionStroke}
+            strokeWidth={node.strokeWidth ?? selectionStrokeWidth}
+            onClick={onClick}
+            onTap={onClick}
+          />
+          {isSelected && !strokeColor && (
+            <Ellipse
+              x={node.x + node.width / 2}
+              y={node.y + node.height / 2}
+              radiusX={node.width / 2}
+              radiusY={node.height / 2}
+              rotation={node.rotation ?? 0}
+              stroke="#8B5CF6"
+              strokeWidth={2}
+              listening={false}
+            />
+          )}
+        </Group>
+      )
+    case 'text':
+      const textWidth = node.textWidthMode === 'auto' ? undefined : node.width
+      return (
+        <Group>
+          <Text
+            x={node.x}
+            y={node.y}
+            width={textWidth}
+            height={node.height}
+            rotation={node.rotation ?? 0}
+            text={node.text}
+            fontSize={node.fontSize ?? 16}
+            fontFamily={node.fontFamily ?? 'Arial'}
+            fill={fillColor ?? '#000000'}
+            align={node.textAlign ?? 'left'}
+            lineHeight={node.lineHeight ?? 1.2}
+            letterSpacing={node.letterSpacing ?? 0}
+            onClick={onClick}
+            onTap={onClick}
+          />
+          {isSelected && (
+            <Rect
+              x={node.x}
+              y={node.y}
+              width={node.width}
+              height={node.height}
+              rotation={node.rotation ?? 0}
+              stroke="#8B5CF6"
+              strokeWidth={2}
+              listening={false}
+            />
+          )}
+        </Group>
+      )
+    case 'frame':
+      // For frames, recursively render children with nested overrides
+      const handleChildClick = (childId: string) => (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+        e.cancelBubble = true
+        selectDescendant(instanceId, childId)
+      }
+      return (
+        <Group
+          x={node.x}
+          y={node.y}
+          width={node.width}
+          height={node.height}
+          rotation={node.rotation ?? 0}
+          onClick={onClick}
+          onTap={onClick}
+        >
+          <Rect
+            width={node.width}
+            height={node.height}
+            fill={fillColor}
+            stroke={strokeColor ?? selectionStroke}
+            strokeWidth={node.strokeWidth ?? selectionStrokeWidth}
+            cornerRadius={node.cornerRadius}
+          />
+          {node.children.map((child) => {
+            const childOverride = descendantOverrides?.[child.id]
+            if (!isNodeEnabled(childOverride)) return null
+            const overriddenChild = applyDescendantOverride(child, childOverride)
+            const childIsSelected = false // Nested selection not yet supported
+            return (
+              <DescendantRenderer
+                key={child.id}
+                node={overriddenChild}
+                onClick={handleChildClick(child.id)}
+                isSelected={childIsSelected}
+                effectiveTheme={effectiveTheme}
+                descendantOverrides={childOverride?.descendants}
+                instanceId={instanceId}
+              />
+            )
+          })}
+          {isSelected && !strokeColor && (
+            <Rect
+              width={node.width}
+              height={node.height}
+              stroke="#8B5CF6"
+              strokeWidth={2}
+              listening={false}
+            />
+          )}
+        </Group>
+      )
+    default:
+      return null
+  }
+}
+
+// RenderNode variant that applies descendant overrides (for non-edit mode)
+interface RenderNodeWithOverridesProps {
+  node: SceneNode
+  effectiveTheme: ThemeName
+  descendantOverrides?: DescendantOverrides
+}
+
+function RenderNodeWithOverrides({ node, effectiveTheme, descendantOverrides }: RenderNodeWithOverridesProps) {
+  const variables = useVariableStore((state) => state.variables)
+  const globalTheme = useThemeStore((state) => state.activeTheme)
+  const currentTheme = effectiveTheme ?? globalTheme
+
+  // Resolve color from variable binding
+  const resolveColor = (color: string | undefined, binding?: { variableId: string }): string | undefined => {
+    if (binding) {
+      const variable = variables.find(v => v.id === binding.variableId)
+      if (variable) {
+        return getVariableValue(variable, currentTheme)
+      }
+    }
+    return color
+  }
+
+  const fillColor = resolveColor(node.fill, node.fillBinding)
+  const strokeColor = resolveColor(node.stroke, node.strokeBinding)
+
+  // Don't render if node is hidden
+  if (node.visible === false || node.enabled === false) {
+    return null
+  }
+
+  switch (node.type) {
+    case 'rect':
+      return (
+        <Rect
+          x={node.x}
+          y={node.y}
+          width={node.width}
+          height={node.height}
+          rotation={node.rotation ?? 0}
+          fill={fillColor}
+          stroke={strokeColor}
+          strokeWidth={node.strokeWidth}
+          cornerRadius={node.cornerRadius}
+        />
+      )
+    case 'ellipse':
+      return (
+        <Ellipse
+          x={node.x + node.width / 2}
+          y={node.y + node.height / 2}
+          radiusX={node.width / 2}
+          radiusY={node.height / 2}
+          rotation={node.rotation ?? 0}
+          fill={fillColor}
+          stroke={strokeColor}
+          strokeWidth={node.strokeWidth}
+        />
+      )
+    case 'text':
+      const textWidth = node.textWidthMode === 'auto' ? undefined : node.width
+      return (
+        <Text
+          x={node.x}
+          y={node.y}
+          width={textWidth}
+          height={node.height}
+          rotation={node.rotation ?? 0}
+          text={node.text}
+          fontSize={node.fontSize ?? 16}
+          fontFamily={node.fontFamily ?? 'Arial'}
+          fill={fillColor ?? '#000000'}
+          align={node.textAlign ?? 'left'}
+          lineHeight={node.lineHeight ?? 1.2}
+          letterSpacing={node.letterSpacing ?? 0}
+        />
+      )
+    case 'frame':
+      // Render frame children with nested overrides
+      return (
+        <Group
+          x={node.x}
+          y={node.y}
+          width={node.width}
+          height={node.height}
+          rotation={node.rotation ?? 0}
+        >
+          <Rect
+            width={node.width}
+            height={node.height}
+            fill={fillColor}
+            stroke={strokeColor}
+            strokeWidth={node.strokeWidth}
+            cornerRadius={node.cornerRadius}
+          />
+          {node.children.map((child) => {
+            const childOverride = descendantOverrides?.[child.id]
+            if (!isNodeEnabled(childOverride)) return null
+            const overriddenChild = applyDescendantOverride(child, childOverride)
+            return (
+              <RenderNodeWithOverrides
+                key={child.id}
+                node={overriddenChild}
+                effectiveTheme={effectiveTheme}
+                descendantOverrides={childOverride?.descendants}
+              />
+            )
+          })}
+        </Group>
+      )
+    default:
+      return null
+  }
 }
