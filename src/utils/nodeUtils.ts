@@ -93,3 +93,41 @@ export function getNodeAbsolutePosition(
 
   return findWithPath(nodes, 0, 0)
 }
+
+/**
+ * Find a component (reusable FrameNode) by ID
+ * Searches the entire tree for a FrameNode with matching ID and reusable: true
+ */
+export function findComponentById(nodes: SceneNode[], id: string): FrameNode | null {
+  for (const node of nodes) {
+    if (node.type === 'frame' && node.id === id && node.reusable) {
+      return node
+    }
+    if (node.type === 'frame') {
+      const found = findComponentById(node.children, id)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+/**
+ * Get all components (reusable FrameNodes) from the scene tree
+ */
+export function getAllComponents(nodes: SceneNode[]): FrameNode[] {
+  const components: FrameNode[] = []
+
+  function collect(searchNodes: SceneNode[]) {
+    for (const node of searchNodes) {
+      if (node.type === 'frame') {
+        if (node.reusable) {
+          components.push(node)
+        }
+        collect(node.children)
+      }
+    }
+  }
+
+  collect(nodes)
+  return components
+}

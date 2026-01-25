@@ -301,7 +301,7 @@
       "Изменение компонента обновляет все инстансы",
       "Инстансы визуально отличаются в Layers Panel"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "Phase 5: Components",

@@ -44,6 +44,13 @@ const NodeIcon = ({ type, isSelected, reusable }: { type: SceneNode['type']; isS
           <text x="4" y="12" fontSize="10" fill="currentColor" fontWeight="bold">T</text>
         </svg>
       )
+    case 'ref':
+      // Instance icon: single diamond (like Figma instance)
+      return (
+        <svg viewBox="0 0 16 16" className={iconClass}>
+          <path d="M8 2 L14 8 L8 14 L2 8 Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
+      )
     default:
       return null
   }

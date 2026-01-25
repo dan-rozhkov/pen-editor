@@ -1,6 +1,6 @@
 import { Rect, Ellipse, Text, Group } from 'react-konva'
 import Konva from 'konva'
-import type { SceneNode, FrameNode } from '../../types/scene'
+import type { SceneNode, FrameNode, RefNode } from '../../types/scene'
 import type { ThemeName } from '../../types/variable'
 import { getVariableValue } from '../../types/variable'
 import { useSceneStore } from '../../store/sceneStore'
@@ -9,7 +9,7 @@ import { useLayoutStore } from '../../store/layoutStore'
 import { useVariableStore } from '../../store/variableStore'
 import { useThemeStore } from '../../store/themeStore'
 import { useDragStore } from '../../store/dragStore'
-import { findParentFrame } from '../../utils/nodeUtils'
+import { findParentFrame, findComponentById } from '../../utils/nodeUtils'
 import { calculateDropPosition, isPointInsideRect, getFrameAbsoluteRect } from '../../utils/dragUtils'
 
 interface RenderNodeProps {
@@ -21,7 +21,7 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
   const nodes = useSceneStore((state) => state.nodes)
   const updateNode = useSceneStore((state) => state.updateNode)
   const moveNode = useSceneStore((state) => state.moveNode)
-  const { select, addToSelection, startEditing, editingNodeId, isSelected } = useSelectionStore()
+  const { select, addToSelection, startEditing, editingNodeId } = useSelectionStore()
   const variables = useVariableStore((state) => state.variables)
   const globalTheme = useThemeStore((state) => state.activeTheme)
   const { startDrag, updateDrop, endDrag } = useDragStore()
@@ -260,6 +260,18 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
         />
       )
     }
+    case 'ref':
+      return (
+        <InstanceRenderer
+          node={node as RefNode}
+          onClick={handleClick}
+          onDragStart={handleDragStart}
+          onDragMove={handleDragMove}
+          onDragEnd={handleDragEnd}
+          onTransformEnd={handleTransformEnd}
+          effectiveTheme={currentTheme}
+        />
+      )
     default:
       return null
   }
@@ -440,6 +452,103 @@ function FrameRenderer({
       {layoutChildren.map((child) => (
         <RenderNode key={child.id} node={child} effectiveTheme={childTheme} />
       ))}
+    </Group>
+  )
+}
+
+interface InstanceRendererProps {
+  node: RefNode
+  onClick: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void
+  onDragStart: () => void
+  onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => void
+  onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void
+  onTransformEnd: (e: Konva.KonvaEventObject<Event>) => void
+  effectiveTheme: ThemeName
+}
+
+function InstanceRenderer({
+  node,
+  onClick,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+  onTransformEnd,
+  effectiveTheme,
+}: InstanceRendererProps) {
+  const nodes = useSceneStore((state) => state.nodes)
+  const calculateLayoutForFrame = useLayoutStore((state) => state.calculateLayoutForFrame)
+  const variables = useVariableStore((state) => state.variables)
+  const globalTheme = useThemeStore((state) => state.activeTheme)
+
+  // Find the component this instance references
+  const component = findComponentById(nodes, node.componentId)
+
+  // Don't render if component not found
+  if (!component) {
+    return null
+  }
+
+  // Use effective theme or fall back to global theme
+  const currentTheme = effectiveTheme ?? globalTheme
+
+  // Resolve color from variable binding
+  const resolveColor = (color: string | undefined, binding?: { variableId: string }): string | undefined => {
+    if (binding) {
+      const variable = variables.find(v => v.id === binding.variableId)
+      if (variable) {
+        return getVariableValue(variable, currentTheme)
+      }
+    }
+    return color
+  }
+
+  const fillColor = resolveColor(component.fill, component.fillBinding)
+  const strokeColor = resolveColor(component.stroke, component.strokeBinding)
+
+  // Calculate layout for children if auto-layout is enabled
+  const layoutChildren = component.layout?.autoLayout
+    ? calculateLayoutForFrame(component)
+    : component.children
+
+  // If component has a theme override, use it for children
+  const childTheme = component.themeOverride ?? currentTheme
+
+  // Calculate scale to fit component content into instance size
+  const scaleX = node.width / component.width
+  const scaleY = node.height / component.height
+
+  return (
+    <Group
+      id={node.id}
+      name="selectable"
+      x={node.x}
+      y={node.y}
+      width={node.width}
+      height={node.height}
+      rotation={node.rotation ?? 0}
+      draggable
+      onClick={onClick}
+      onTap={onClick}
+      onDragStart={onDragStart}
+      onDragMove={onDragMove}
+      onDragEnd={onDragEnd}
+      onTransformEnd={onTransformEnd}
+    >
+      {/* Background rect from component */}
+      <Rect
+        width={node.width}
+        height={node.height}
+        fill={fillColor}
+        stroke={strokeColor}
+        strokeWidth={component.strokeWidth}
+        cornerRadius={component.cornerRadius}
+      />
+      {/* Scaled content from component */}
+      <Group scaleX={scaleX} scaleY={scaleY}>
+        {layoutChildren.map((child) => (
+          <RenderNode key={`${node.id}-${child.id}`} node={child} effectiveTheme={childTheme} />
+        ))}
+      </Group>
     </Group>
   )
 }

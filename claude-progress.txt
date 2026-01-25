@@ -511,3 +511,29 @@
 - Feature 27: Создание инстансов (ref nodes)
 
 ---
+
+=== 2026-01-25 | Feature 27: Создание инстансов (ref nodes) ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Добавлен тип RefNode в src/types/scene.ts (type: 'ref', componentId: string)
+- Добавлены функции findComponentById() и getAllComponents() в src/utils/nodeUtils.ts
+- Создан InstanceRenderer в RenderNode.tsx для рендеринга ref-нод
+- Инстанс отображает содержимое компонента (фон, дети) с масштабированием
+- Добавлена иконка ромба для инстансов в LayersPanel.tsx
+- Создан ComponentsPanel.tsx - панель со списком компонентов
+- Клик на компонент в панели создаёт инстанс в центре viewport
+- Обновлён PropertiesPanel.tsx - секция "Instance of: [Component Name]"
+- Интегрирован ComponentsPanel в LeftSidebar
+- E2E тест пройден через Playwright:
+  - Создание компонента (reusable: true)
+  - Создание инстанса через Components Panel
+  - Инстанс отображает содержимое компонента (Rectangle внутри)
+  - Изменение компонента обновляет инстанс
+  - Save/Load корректно сохраняет и загружает ref-ноды
+
+Следующие шаги:
+- Feature 28: Переопределение свойств в инстансах (overrides)
+
+---

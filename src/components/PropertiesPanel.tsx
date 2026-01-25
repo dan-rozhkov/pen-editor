@@ -2,9 +2,9 @@ import { useSceneStore } from '../store/sceneStore'
 import { useSelectionStore } from '../store/selectionStore'
 import { useVariableStore } from '../store/variableStore'
 import { useThemeStore } from '../store/themeStore'
-import type { SceneNode, FrameNode, FlexDirection, AlignItems, JustifyContent, SizingMode, TextNode, TextWidthMode, TextAlign } from '../types/scene'
+import type { SceneNode, FrameNode, RefNode, FlexDirection, AlignItems, JustifyContent, SizingMode, TextNode, TextWidthMode, TextAlign } from '../types/scene'
 import type { ThemeName, Variable } from '../types/variable'
-import { findParentFrame, findNodeById, type ParentContext } from '../utils/nodeUtils'
+import { findParentFrame, findNodeById, findComponentById, type ParentContext } from '../utils/nodeUtils'
 import {
   PropertySection,
   PropertyRow,
@@ -46,6 +46,7 @@ interface PropertyEditorProps {
   parentContext: ParentContext
   variables: Variable[]
   activeTheme: ThemeName
+  allNodes: SceneNode[]
 }
 
 const sizingOptions = [
@@ -54,7 +55,7 @@ const sizingOptions = [
   { value: 'fit_content', label: 'Fit' },
 ]
 
-function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme }: PropertyEditorProps) {
+function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme, allNodes }: PropertyEditorProps) {
   // Handler for fill variable binding
   const handleFillVariableChange = (variableId: string | undefined) => {
     if (variableId) {
@@ -320,6 +321,22 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme 
         </PropertySection>
       )}
 
+      {/* Instance info (RefNode only) */}
+      {node.type === 'ref' && (() => {
+        const refNode = node as RefNode
+        const component = findComponentById(allNodes, refNode.componentId)
+        return (
+          <PropertySection title="Instance">
+            <div className="flex items-center gap-2 text-xs text-purple-400">
+              <svg viewBox="0 0 16 16" className="w-4 h-4">
+                <path d="M8 2 L14 8 L8 14 L2 8 Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
+              </svg>
+              <span>Instance of: {component?.name || 'Component'}</span>
+            </div>
+          </PropertySection>
+        )
+      })()}
+
       {/* Text Properties (Text only) */}
       {node.type === 'text' && (
         <>
@@ -423,6 +440,7 @@ export function PropertiesPanel() {
             parentContext={parentContext}
             variables={variables}
             activeTheme={activeTheme}
+            allNodes={nodes}
           />
         )}
       </div>

@@ -15,7 +15,7 @@ export interface SizingProperties {
 
 export interface BaseNode {
   id: string
-  type: 'frame' | 'rect' | 'ellipse' | 'text'
+  type: 'frame' | 'rect' | 'ellipse' | 'text' | 'ref'
   name?: string
   x: number
   y: number
@@ -93,7 +93,13 @@ export interface TextNode extends BaseNode {
   letterSpacing?: number
 }
 
-export type SceneNode = FrameNode | RectNode | EllipseNode | TextNode
+// Reference to a component (instance)
+export interface RefNode extends BaseNode {
+  type: 'ref'
+  componentId: string  // ID of the component (FrameNode with reusable: true)
+}
+
+export type SceneNode = FrameNode | RectNode | EllipseNode | TextNode | RefNode
 
 export function generateId(): string {
   return Math.random().toString(36).substring(2, 9)
