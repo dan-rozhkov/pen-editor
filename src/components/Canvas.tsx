@@ -67,6 +67,21 @@ export function Canvas() {
     ? findNodeByIdGeneric(nodes, editingNodeId) as FrameNode | null
     : null
 
+  // Determine transformer color based on whether a component is selected
+  const transformerColor = useMemo(() => {
+    const defaultColor = '#0d99ff' // Blue
+    const componentColor = '#9747ff' // Purple (Figma component color)
+
+    // Check if any selected node is a reusable component
+    for (const id of selectedIds) {
+      const node = findNodeByIdGeneric(nodes, id)
+      if (node && node.type === 'frame' && (node as FrameNode).reusable) {
+        return componentColor
+      }
+    }
+    return defaultColor
+  }, [selectedIds, nodes])
+
   // Get absolute position for name editor
   const editingNamePosition = editingNameNode
     ? getNodeAbsolutePosition(nodes, editingNameNode.id)
@@ -387,8 +402,8 @@ export function Canvas() {
             }}
             anchorSize={8}
             anchorCornerRadius={2}
-            borderStroke="#0d99ff"
-            anchorStroke="#0d99ff"
+            borderStroke={transformerColor}
+            anchorStroke={transformerColor}
             anchorFill="#ffffff"
           />
           {/* Frame name labels - rendered after transformer so they're not included in bounding box */}
