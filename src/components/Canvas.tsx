@@ -9,8 +9,10 @@ import { useDragStore } from '../store/dragStore'
 import { RenderNode } from './nodes/RenderNode'
 import { DropIndicator } from './DropIndicator'
 import { InlineTextEditor } from './InlineTextEditor'
-import type { TextNode } from '../types/scene'
+import { InlineNameEditor } from './InlineNameEditor'
+import type { TextNode, FrameNode, SceneNode } from '../types/scene'
 import { getViewportBounds, isNodeVisible } from '../utils/viewportUtils'
+import { getNodeAbsolutePosition } from '../utils/nodeUtils'
 
 const ZOOM_FACTOR = 1.1
 
@@ -38,22 +40,36 @@ export function Canvas() {
   )
   const deleteNode = useSceneStore((state) => state.deleteNode)
   const setNodesWithoutHistory = useSceneStore((state) => state.setNodesWithoutHistory)
-  const { selectedIds, clearSelection, editingNodeId } = useSelectionStore()
+  const { selectedIds, clearSelection, editingNodeId, editingMode } = useSelectionStore()
   const { undo, redo, saveHistory, startBatch, endBatch } = useHistoryStore()
   const dropIndicator = useDragStore((state) => state.dropIndicator)
 
-  // Find the text node being edited (including nested nodes)
-  const findNodeById = (nodes: typeof visibleNodes, id: string): TextNode | null => {
-    for (const node of nodes) {
-      if (node.id === id && node.type === 'text') return node as TextNode
+  // Find a node by ID (including nested nodes)
+  const findNodeByIdGeneric = (searchNodes: SceneNode[], id: string): SceneNode | null => {
+    for (const node of searchNodes) {
+      if (node.id === id) return node
       if (node.type === 'frame' && node.children) {
-        const found = findNodeById(node.children, id)
+        const found = findNodeByIdGeneric(node.children, id)
         if (found) return found
       }
     }
     return null
   }
-  const editingTextNode = editingNodeId ? findNodeById(nodes, editingNodeId) : null
+
+  // Find the text node being edited
+  const editingTextNode = editingNodeId && editingMode === 'text'
+    ? findNodeByIdGeneric(nodes, editingNodeId) as TextNode | null
+    : null
+
+  // Find the frame node whose name is being edited
+  const editingNameNode = editingNodeId && editingMode === 'name'
+    ? findNodeByIdGeneric(nodes, editingNodeId) as FrameNode | null
+    : null
+
+  // Get absolute position for name editor
+  const editingNamePosition = editingNameNode
+    ? getNodeAbsolutePosition(nodes, editingNameNode.id)
+    : null
 
   // Update transformer nodes when selection changes
   useEffect(() => {
@@ -355,7 +371,17 @@ export function Canvas() {
         </Layer>
       </Stage>
       {/* Inline text editor overlay */}
-      {editingTextNode && <InlineTextEditor node={editingTextNode} />}
+      {editingTextNode && editingMode === 'text' && (
+        <InlineTextEditor node={editingTextNode} />
+      )}
+      {/* Inline name editor overlay for frame names */}
+      {editingNameNode && editingNamePosition && editingMode === 'name' && (
+        <InlineNameEditor
+          node={editingNameNode}
+          absoluteX={editingNamePosition.x}
+          absoluteY={editingNamePosition.y}
+        />
+      )}
     </div>
   )
 }

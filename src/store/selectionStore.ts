@@ -1,8 +1,11 @@
 import { create } from 'zustand'
 
+type EditingMode = 'text' | 'name' | null
+
 interface SelectionState {
   selectedIds: string[]
   editingNodeId: string | null
+  editingMode: EditingMode
 
   select: (id: string) => void
   addToSelection: (id: string) => void
@@ -10,16 +13,18 @@ interface SelectionState {
   clearSelection: () => void
   isSelected: (id: string) => boolean
   startEditing: (id: string) => void
+  startNameEditing: (id: string) => void
   stopEditing: () => void
 }
 
 export const useSelectionStore = create<SelectionState>((set, get) => ({
   selectedIds: [],
   editingNodeId: null,
+  editingMode: null,
 
   select: (id: string) => {
     // Stop editing when selection changes
-    set({ selectedIds: [id], editingNodeId: null })
+    set({ selectedIds: [id], editingNodeId: null, editingMode: null })
   },
 
   addToSelection: (id: string) => {
@@ -35,7 +40,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   },
 
   clearSelection: () => {
-    set({ selectedIds: [], editingNodeId: null })
+    set({ selectedIds: [], editingNodeId: null, editingMode: null })
   },
 
   isSelected: (id: string) => {
@@ -43,13 +48,20 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   },
 
   startEditing: (id: string) => {
-    // Can only edit if node is selected
+    // Can only edit text content if node is selected
     if (get().selectedIds.includes(id)) {
-      set({ editingNodeId: id })
+      set({ editingNodeId: id, editingMode: 'text' })
+    }
+  },
+
+  startNameEditing: (id: string) => {
+    // Can only edit frame name if node is selected
+    if (get().selectedIds.includes(id)) {
+      set({ editingNodeId: id, editingMode: 'name' })
     }
   },
 
   stopEditing: () => {
-    set({ editingNodeId: null })
+    set({ editingNodeId: null, editingMode: null })
   },
 }))

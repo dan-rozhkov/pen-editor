@@ -65,3 +65,31 @@ export function findNodeById(nodes: SceneNode[], id: string): SceneNode | null {
   }
   return null
 }
+
+/**
+ * Get absolute position of a node by traversing parent chain
+ * Returns the accumulated x,y from all parent frames
+ */
+export function getNodeAbsolutePosition(
+  nodes: SceneNode[],
+  targetId: string
+): { x: number; y: number } | null {
+  function findWithPath(
+    searchNodes: SceneNode[],
+    accX: number,
+    accY: number
+  ): { x: number; y: number } | null {
+    for (const node of searchNodes) {
+      if (node.id === targetId) {
+        return { x: accX + node.x, y: accY + node.y }
+      }
+      if (node.type === 'frame') {
+        const found = findWithPath(node.children, accX + node.x, accY + node.y)
+        if (found) return found
+      }
+    }
+    return null
+  }
+
+  return findWithPath(nodes, 0, 0)
+}
