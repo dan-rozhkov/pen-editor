@@ -76,25 +76,32 @@ export interface DropPositionResult {
 /**
  * Calculate drop position for reordering within an auto-layout frame
  * Returns indicator position and insert index
+ * @param layoutChildren - Layout-calculated children with actual positions (from Yoga)
  */
 export function calculateDropPosition(
   cursorPos: Point,
   parentFrame: FrameNode,
   frameAbsolutePos: Point,
-  draggedId: string
+  draggedId: string,
+  layoutChildren?: SceneNode[]
 ): DropPositionResult | null {
   const layout = parentFrame.layout
   if (!layout?.autoLayout) return null
 
-  const isHorizontal = layout.flexDirection === 'row'
+  // Default flexDirection is 'row' (horizontal) when undefined
+  const isHorizontal = layout.flexDirection === 'row' || layout.flexDirection === undefined
   const gap = layout.gap ?? 0
   const paddingTop = layout.paddingTop ?? 0
   const paddingRight = layout.paddingRight ?? 0
   const paddingBottom = layout.paddingBottom ?? 0
   const paddingLeft = layout.paddingLeft ?? 0
 
+  // Use layout-calculated children if provided, otherwise fall back to raw children
+  // Layout children have correct x/y positions from Yoga (important for justify center/end)
+  const sourceChildren = layoutChildren ?? parentFrame.children
+
   // Get visible children excluding the dragged one
-  const children = parentFrame.children.filter(
+  const children = sourceChildren.filter(
     (c) => c.id !== draggedId && c.visible !== false
   )
 

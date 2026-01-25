@@ -25,6 +25,7 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
   const variables = useVariableStore((state) => state.variables)
   const globalTheme = useThemeStore((state) => state.activeTheme)
   const { startDrag, updateDrop, endDrag } = useDragStore()
+  const calculateLayoutForFrame = useLayoutStore((state) => state.calculateLayoutForFrame)
 
   // Use effective theme from parent, or fall back to global theme
   const currentTheme = effectiveTheme ?? globalTheme
@@ -86,12 +87,19 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
     const isInsideParent = isPointInsideRect(pointerPos, frameRect)
 
     if (isInsideParent) {
+      // Get layout-calculated children positions (from Yoga) for correct indicator placement
+      // This is important when justify is center/end - raw children have x=0, y=0
+      const layoutChildren = parentFrame.layout?.autoLayout
+        ? calculateLayoutForFrame(parentFrame)
+        : parentFrame.children
+
       // Calculate drop position for reordering
       const dropResult = calculateDropPosition(
         pointerPos,
         parentFrame,
         { x: frameRect.x, y: frameRect.y },
-        node.id
+        node.id,
+        layoutChildren
       )
 
       if (dropResult) {
@@ -124,14 +132,14 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
             })
           }
         }
+        // Don't reset position - updateNode already set the new position
       } else if (insertInfo) {
         // Reorder within the frame
         moveNode(node.id, insertInfo.parentId, insertInfo.index)
+        // Don't reset position here - let React re-render with new layout positions
+        // Resetting to old position causes double jump: dragged → old → new
       }
 
-      // Reset Konva element position (cancel visual drag)
-      target.x(node.x)
-      target.y(node.y)
       endDrag()
     } else {
       // Normal behavior - update position
