@@ -127,8 +127,9 @@ export function Canvas() {
         return
       }
 
-      // Spacebar panning
+      // Spacebar panning (skip if typing)
       if (e.code === 'Space' && !e.repeat) {
+        if (isTyping) return
         e.preventDefault()
         setIsSpacePressed(true)
         setIsPanning(true)

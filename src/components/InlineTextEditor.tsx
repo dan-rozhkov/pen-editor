@@ -73,7 +73,7 @@ export function InlineTextEditor({ node }: InlineTextEditorProps) {
         border: '2px solid #0d99ff',
         borderRadius: 2,
         outline: 'none',
-        background: 'white',
+        background: 'transparent',
         color: '#000000',
         resize: 'none',
         overflow: 'hidden',
