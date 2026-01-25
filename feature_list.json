@@ -249,35 +249,35 @@
     "passes": true
   },
   {
-    "category": "Phase 4: MCP Server",
-    "description": "WebSocket server",
+    "category": "Phase 4: Advanced Editing",
+    "description": "Drag-n-drop сортировка элементов внутри auto-layout frame",
     "steps": [
-      "Server запускается на указанном порту",
-      "Клиент может подключиться",
-      "Сообщения передаются в обе стороны",
-      "Обработка ошибок и переподключение"
+      "Перетаскивание элемента внутри auto-layout frame не выбрасывает его",
+      "Визуальная индикация позиции вставки при перетаскивании",
+      "Элементы переупорядочиваются при отпускании",
+      "Работает для вложенных auto-layout frames"
+    ],
+    "passes": true
+  },
+  {
+    "category": "Phase 4: Advanced Editing",
+    "description": "Отображение названия frame на canvas с inline-редактированием",
+    "steps": [
+      "Название frame отображается мелким текстом справа от frame",
+      "Двойной клик на названии включает режим редактирования",
+      "Enter сохраняет новое название",
+      "Название обновляется в Layers Panel"
     ],
     "passes": false
   },
   {
-    "category": "Phase 4: MCP Server",
-    "description": "MCP protocol implementation",
+    "category": "Phase 4: Advanced Editing",
+    "description": "Ширина, выравнивание, высота строки и letter spacing для текста",
     "steps": [
-      "Реализован MCP handshake",
-      "Поддержка tools/list запроса",
-      "Поддержка tools/call запроса",
-      "Корректные MCP response форматы"
-    ],
-    "passes": false
-  },
-  {
-    "category": "Phase 4: MCP Server",
-    "description": "Read/Write operations для AI",
-    "steps": [
-      "batch_get возвращает узлы документа",
-      "batch_design выполняет операции I/C/U/R/M/D",
-      "get_screenshot возвращает изображение",
-      "AI-агент может создавать дизайны через MCP"
+      "Можно задать фиксированную ширину текстового блока",
+      "UI для выравнивания текста (left, center, right)",
+      "Input для line-height (высота строки)",
+      "Input для letter-spacing (межбуквенный интервал)"
     ],
     "passes": false
   }

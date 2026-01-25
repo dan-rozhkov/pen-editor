@@ -76,7 +76,7 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
     const stage = e.target.getStage()
     if (!stage) return
 
-    const pointerPos = stage.getPointerPosition()
+    const pointerPos = stage.getRelativePointerPosition()
     if (!pointerPos) return
 
     // Get absolute position of parent frame
@@ -113,7 +113,7 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
         // Drag out of auto-layout frame - move to root level
         const stage = target.getStage()
         if (stage) {
-          const pointerPos = stage.getPointerPosition()
+          const pointerPos = stage.getRelativePointerPosition()
           if (pointerPos) {
             // Move to root level first
             moveNode(node.id, null, 0)
@@ -283,7 +283,7 @@ function EllipseRenderer({
         // Drag out of auto-layout frame
         const stage = target.getStage()
         if (stage) {
-          const pointerPos = stage.getPointerPosition()
+          const pointerPos = stage.getRelativePointerPosition()
           if (pointerPos) {
             moveNode(node.id, null, 0)
             updateNode(node.id, {
