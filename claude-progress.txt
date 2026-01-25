@@ -471,3 +471,25 @@
 - Ширина, выравнивание, высота строки и letter spacing для текста
 
 ---
+
+=== 2026-01-25 | Feature 25: Ширина, выравнивание, высота строки и letter spacing для текста ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Добавлены типы TextWidthMode и TextAlign в src/types/scene.ts
+- Добавлены свойства textWidthMode, textAlign, lineHeight, letterSpacing в TextNode
+- Обновлён RenderNode.tsx - Konva Text получает align, lineHeight, letterSpacing
+- При textWidthMode='auto' - width не передаётся (Konva рассчитывает автоматически)
+- Добавлена секция "Text Layout" в PropertiesPanel.tsx
+- SegmentedControl для Width (Auto/Fixed) и Align (L/C/R)
+- NumberInput для Line Height (default 1.2, step 0.1) и Letter Spacing (default 0, step 0.5)
+- Обновлён InlineTextEditor.tsx с поддержкой lineHeight и letterSpacing
+- При fixed width mode редактор использует фиксированную ширину узла
+- Все свойства сохраняются и загружаются в JSON документ
+- E2E тест пройден через Playwright: все контролы работают, save/load корректен
+
+Следующие шаги:
+- Все фичи реализованы!
+
+---

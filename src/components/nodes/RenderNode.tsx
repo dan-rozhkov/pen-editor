@@ -230,19 +230,24 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
         e.cancelBubble = true
         startEditing(node.id)
       }
+      // For auto width mode, don't set width to let Konva calculate it from text
+      const textWidth = node.textWidthMode === 'auto' ? undefined : node.width
       return (
         <Text
           id={node.id}
           name="selectable"
           x={node.x}
           y={node.y}
-          width={node.width}
+          width={textWidth}
           height={node.height}
           rotation={node.rotation ?? 0}
           text={node.text}
           fontSize={node.fontSize ?? 16}
           fontFamily={node.fontFamily ?? 'Arial'}
           fill={fillColor ?? '#000000'}
+          align={node.textAlign ?? 'left'}
+          lineHeight={node.lineHeight ?? 1.2}
+          letterSpacing={node.letterSpacing ?? 0}
           opacity={isEditing ? 0 : 1}
           draggable={!isEditing}
           onClick={handleClick}

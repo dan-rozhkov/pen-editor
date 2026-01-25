@@ -25,6 +25,11 @@ export function InlineTextEditor({ node }: InlineTextEditorProps) {
   const screenX = node.x * scale + x
   const screenY = node.y * scale + y
   const screenFontSize = (node.fontSize ?? 16) * scale
+  const screenLetterSpacing = (node.letterSpacing ?? 0) * scale
+
+  // For fixed width mode, use node width scaled to screen
+  const isAutoWidth = node.textWidthMode === 'auto'
+  const fixedScreenWidth = node.width * scale
 
   // Measure content dimensions
   useEffect(() => {
@@ -32,11 +37,11 @@ export function InlineTextEditor({ node }: InlineTextEditorProps) {
       const width = measureRef.current.offsetWidth + PADDING
       const height = measureRef.current.offsetHeight + PADDING
       setDimensions({
-        width: Math.max(MIN_WIDTH, width),
+        width: isAutoWidth ? Math.max(MIN_WIDTH, width) : fixedScreenWidth,
         height: Math.max(MIN_HEIGHT, height),
       })
     }
-  }, [editText, screenFontSize])
+  }, [editText, screenFontSize, isAutoWidth, fixedScreenWidth])
 
   // Auto-focus and select all text on mount
   useEffect(() => {
@@ -71,7 +76,9 @@ export function InlineTextEditor({ node }: InlineTextEditorProps) {
   const fontStyle = {
     fontSize: screenFontSize,
     fontFamily: node.fontFamily ?? 'Arial',
-    lineHeight: 1.2,
+    lineHeight: node.lineHeight ?? 1.2,
+    letterSpacing: screenLetterSpacing,
+    textAlign: (node.textAlign ?? 'left') as React.CSSProperties['textAlign'],
   }
 
   return (

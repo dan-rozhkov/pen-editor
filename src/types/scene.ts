@@ -70,11 +70,25 @@ export interface EllipseNode extends BaseNode {
   type: 'ellipse'
 }
 
+// Text width mode
+export type TextWidthMode = 'auto' | 'fixed'
+
+// Text alignment
+export type TextAlign = 'left' | 'center' | 'right'
+
 export interface TextNode extends BaseNode {
   type: 'text'
   text: string
   fontSize?: number
   fontFamily?: string
+  // Text width mode: 'auto' = width follows text content, 'fixed' = manual width
+  textWidthMode?: TextWidthMode
+  // Text alignment within the text block
+  textAlign?: TextAlign
+  // Line height multiplier (e.g., 1.2 = 120% of font size)
+  lineHeight?: number
+  // Letter spacing in pixels
+  letterSpacing?: number
 }
 
 export type SceneNode = FrameNode | RectNode | EllipseNode | TextNode

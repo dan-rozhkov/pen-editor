@@ -2,7 +2,7 @@ import { useSceneStore } from '../store/sceneStore'
 import { useSelectionStore } from '../store/selectionStore'
 import { useVariableStore } from '../store/variableStore'
 import { useThemeStore } from '../store/themeStore'
-import type { SceneNode, FrameNode, FlexDirection, AlignItems, JustifyContent, SizingMode } from '../types/scene'
+import type { SceneNode, FrameNode, FlexDirection, AlignItems, JustifyContent, SizingMode, TextNode, TextWidthMode, TextAlign } from '../types/scene'
 import type { ThemeName, Variable } from '../types/variable'
 import { findParentFrame, findNodeById, type ParentContext } from '../utils/nodeUtils'
 import {
@@ -307,6 +307,43 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme 
               label="Family"
               value={node.fontFamily ?? 'Arial'}
               onChange={(v) => onUpdate({ fontFamily: v } as Partial<SceneNode>)}
+            />
+          </PropertySection>
+          <PropertySection title="Text Layout">
+            <SegmentedControl
+              label="Width"
+              value={(node as TextNode).textWidthMode ?? 'fixed'}
+              options={[
+                { value: 'auto', label: 'Auto' },
+                { value: 'fixed', label: 'Fixed' },
+              ]}
+              onChange={(v) => onUpdate({ textWidthMode: v as TextWidthMode } as Partial<SceneNode>)}
+            />
+            <SegmentedControl
+              label="Align"
+              value={(node as TextNode).textAlign ?? 'left'}
+              options={[
+                { value: 'left', label: 'L' },
+                { value: 'center', label: 'C' },
+                { value: 'right', label: 'R' },
+              ]}
+              onChange={(v) => onUpdate({ textAlign: v as TextAlign } as Partial<SceneNode>)}
+            />
+            <NumberInput
+              label="Line Height"
+              value={(node as TextNode).lineHeight ?? 1.2}
+              onChange={(v) => onUpdate({ lineHeight: v } as Partial<SceneNode>)}
+              min={0.5}
+              max={3}
+              step={0.1}
+            />
+            <NumberInput
+              label="Spacing"
+              value={(node as TextNode).letterSpacing ?? 0}
+              onChange={(v) => onUpdate({ letterSpacing: v } as Partial<SceneNode>)}
+              min={-5}
+              max={50}
+              step={0.5}
             />
           </PropertySection>
         </>
