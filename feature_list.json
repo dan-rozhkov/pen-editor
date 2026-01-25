@@ -312,7 +312,7 @@
       "UI показывает какие свойства переопределены",
       "Кнопка Reset override сбрасывает к значению компонента"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "Phase 5: Components",

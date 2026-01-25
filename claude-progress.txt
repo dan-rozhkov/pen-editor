@@ -537,3 +537,27 @@
 - Feature 28: Переопределение свойств в инстансах (overrides)
 
 ---
+
+=== 2026-01-25 | Feature 28: Переопределение свойств в инстансах (overrides) ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Модифицирован InstanceRenderer в RenderNode.tsx для merge свойств инстанса и компонента
+- Инстанс приоритет над компонентом: если node.fill !== undefined, используется node.fill
+- Добавлен компонент OverrideIndicator в PropertiesPanel.tsx (кнопка reset)
+- Добавлена логика isOverridden() для определения переопределённых свойств
+- Fill и Stroke секции показывают кнопку Reset при наличии override
+- Секция Instance показывает список overrides и кнопку "Reset All Overrides"
+- Сериализация работает автоматически (свойства RefNode сохраняются в JSON)
+- E2E тест пройден через Playwright:
+  - Создание компонента с fill=#FF0000
+  - Создание инстанса и изменение fill на #0000FF
+  - Override indicator появляется, показывает "Overrides (1): Fill"
+  - Reset возвращает цвет к значению компонента
+  - Save/Load корректно сохраняет и загружает overrides
+
+Следующие шаги:
+- Feature 29: Переопределение вложенных нод (descendants)
+
+---

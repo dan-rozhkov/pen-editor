@@ -40,6 +40,28 @@ function MultiSelectState({ count }: { count: number }) {
   )
 }
 
+// Override indicator for instance properties
+function OverrideIndicator({ isOverridden, onReset }: { isOverridden: boolean; onReset: () => void }) {
+  if (!isOverridden) return null
+  return (
+    <button
+      onClick={onReset}
+      className="ml-1 p-0.5 text-purple-400 hover:text-purple-300 flex-shrink-0"
+      title="Reset to component value"
+    >
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+        <path
+          d="M2 6a4 4 0 107.5-2M9.5 1v3h-3"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </button>
+  )
+}
+
 interface PropertyEditorProps {
   node: SceneNode
   onUpdate: (updates: Partial<SceneNode>) => void
@@ -56,6 +78,22 @@ const sizingOptions = [
 ]
 
 function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme, allNodes }: PropertyEditorProps) {
+  // Get component if this is an instance (RefNode)
+  const component = node.type === 'ref'
+    ? findComponentById(allNodes, (node as RefNode).componentId)
+    : null
+
+  // Check if a property is overridden (defined on instance and different from component)
+  const isOverridden = <T,>(instanceVal: T | undefined, componentVal: T | undefined): boolean => {
+    if (!component) return false
+    return instanceVal !== undefined && instanceVal !== componentVal
+  }
+
+  // Reset an override by setting property to undefined
+  const resetOverride = (property: keyof SceneNode) => {
+    onUpdate({ [property]: undefined } as Partial<SceneNode>)
+  }
+
   // Handler for fill variable binding
   const handleFillVariableChange = (variableId: string | undefined) => {
     if (variableId) {
@@ -144,33 +182,57 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
 
       {/* Fill Section */}
       <PropertySection title="Fill">
-        <ColorInput
-          value={node.fill ?? '#000000'}
-          onChange={(v) => onUpdate({ fill: v })}
-          variableId={node.fillBinding?.variableId}
-          onVariableChange={handleFillVariableChange}
-          availableVariables={colorVariables}
-          activeTheme={activeTheme}
-        />
+        <div className="flex items-center gap-1">
+          <div className="flex-1">
+            <ColorInput
+              value={node.fill ?? component?.fill ?? '#000000'}
+              onChange={(v) => onUpdate({ fill: v })}
+              variableId={node.fillBinding?.variableId}
+              onVariableChange={handleFillVariableChange}
+              availableVariables={colorVariables}
+              activeTheme={activeTheme}
+            />
+          </div>
+          <OverrideIndicator
+            isOverridden={isOverridden(node.fill, component?.fill)}
+            onReset={() => resetOverride('fill')}
+          />
+        </div>
       </PropertySection>
 
       {/* Stroke Section */}
       <PropertySection title="Stroke">
-        <ColorInput
-          value={node.stroke ?? ''}
-          onChange={(v) => onUpdate({ stroke: v || undefined })}
-          variableId={node.strokeBinding?.variableId}
-          onVariableChange={handleStrokeVariableChange}
-          availableVariables={colorVariables}
-          activeTheme={activeTheme}
-        />
-        <NumberInput
-          label="Width"
-          value={node.strokeWidth ?? 0}
-          onChange={(v) => onUpdate({ strokeWidth: v })}
-          min={0}
-          step={0.5}
-        />
+        <div className="flex items-center gap-1">
+          <div className="flex-1">
+            <ColorInput
+              value={node.stroke ?? component?.stroke ?? ''}
+              onChange={(v) => onUpdate({ stroke: v || undefined })}
+              variableId={node.strokeBinding?.variableId}
+              onVariableChange={handleStrokeVariableChange}
+              availableVariables={colorVariables}
+              activeTheme={activeTheme}
+            />
+          </div>
+          <OverrideIndicator
+            isOverridden={isOverridden(node.stroke, component?.stroke)}
+            onReset={() => resetOverride('stroke')}
+          />
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="flex-1">
+            <NumberInput
+              label="Width"
+              value={node.strokeWidth ?? component?.strokeWidth ?? 0}
+              onChange={(v) => onUpdate({ strokeWidth: v })}
+              min={0}
+              step={0.5}
+            />
+          </div>
+          <OverrideIndicator
+            isOverridden={isOverridden(node.strokeWidth, component?.strokeWidth)}
+            onReset={() => resetOverride('strokeWidth')}
+          />
+        </div>
       </PropertySection>
 
       {/* Corner Radius (Frame & Rect only) */}
@@ -324,15 +386,48 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
       {/* Instance info (RefNode only) */}
       {node.type === 'ref' && (() => {
         const refNode = node as RefNode
-        const component = findComponentById(allNodes, refNode.componentId)
+        const comp = findComponentById(allNodes, refNode.componentId)
+
+        // Collect overridden properties
+        const overrides: string[] = []
+        if (isOverridden(node.fill, comp?.fill)) overrides.push('Fill')
+        if (isOverridden(node.stroke, comp?.stroke)) overrides.push('Stroke')
+        if (isOverridden(node.strokeWidth, comp?.strokeWidth)) overrides.push('Stroke Width')
+        if (isOverridden(node.fillBinding, comp?.fillBinding)) overrides.push('Fill Variable')
+        if (isOverridden(node.strokeBinding, comp?.strokeBinding)) overrides.push('Stroke Variable')
+
         return (
           <PropertySection title="Instance">
             <div className="flex items-center gap-2 text-xs text-purple-400">
               <svg viewBox="0 0 16 16" className="w-4 h-4">
                 <path d="M8 2 L14 8 L8 14 L2 8 Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
               </svg>
-              <span>Instance of: {component?.name || 'Component'}</span>
+              <span>Instance of: {comp?.name || 'Component'}</span>
             </div>
+            {overrides.length > 0 && (
+              <div className="mt-2 flex flex-col gap-2">
+                <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wide">
+                  Overrides ({overrides.length})
+                </div>
+                <div className="text-xs text-text-secondary">
+                  {overrides.join(', ')}
+                </div>
+                <button
+                  onClick={() => {
+                    onUpdate({
+                      fill: undefined,
+                      stroke: undefined,
+                      strokeWidth: undefined,
+                      fillBinding: undefined,
+                      strokeBinding: undefined,
+                    })
+                  }}
+                  className="px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
+                >
+                  Reset All Overrides
+                </button>
+              </div>
+            )}
           </PropertySection>
         )
       })()}

@@ -502,8 +502,15 @@ function InstanceRenderer({
     return color
   }
 
-  const fillColor = resolveColor(component.fill, component.fillBinding)
-  const strokeColor = resolveColor(component.stroke, component.strokeBinding)
+  // Merge instance properties with component defaults (instance takes priority)
+  const effectiveFill = node.fill !== undefined ? node.fill : component.fill
+  const effectiveFillBinding = node.fillBinding !== undefined ? node.fillBinding : component.fillBinding
+  const effectiveStroke = node.stroke !== undefined ? node.stroke : component.stroke
+  const effectiveStrokeBinding = node.strokeBinding !== undefined ? node.strokeBinding : component.strokeBinding
+  const effectiveStrokeWidth = node.strokeWidth !== undefined ? node.strokeWidth : component.strokeWidth
+
+  const fillColor = resolveColor(effectiveFill, effectiveFillBinding)
+  const strokeColor = resolveColor(effectiveStroke, effectiveStrokeBinding)
 
   // Calculate layout for children if auto-layout is enabled
   const layoutChildren = component.layout?.autoLayout
@@ -534,13 +541,13 @@ function InstanceRenderer({
       onDragEnd={onDragEnd}
       onTransformEnd={onTransformEnd}
     >
-      {/* Background rect from component */}
+      {/* Background rect with merged properties (instance overrides component) */}
       <Rect
         width={node.width}
         height={node.height}
         fill={fillColor}
         stroke={strokeColor}
-        strokeWidth={component.strokeWidth}
+        strokeWidth={effectiveStrokeWidth}
         cornerRadius={component.cornerRadius}
       />
       {/* Scaled content from component */}
