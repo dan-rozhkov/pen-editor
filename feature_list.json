@@ -280,5 +280,82 @@
       "Input для letter-spacing (межбуквенный интервал)"
     ],
     "passes": true
+  },
+  {
+    "category": "Phase 5: Components",
+    "description": "Определение компонентов (reusable)",
+    "steps": [
+      "Любой Frame можно сделать компонентом (reusable: true)",
+      "Компоненты визуально отличаются в Layers Panel (иконка/цвет)",
+      "Кнопка Create Component в контекстном меню или toolbar",
+      "Компоненты сохраняются в документ"
+    ],
+    "passes": true
+  },
+  {
+    "category": "Phase 5: Components",
+    "description": "Создание инстансов (ref nodes)",
+    "steps": [
+      "Можно создать инстанс компонента (type: ref)",
+      "Инстанс отображает содержимое компонента",
+      "Изменение компонента обновляет все инстансы",
+      "Инстансы визуально отличаются в Layers Panel"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 5: Components",
+    "description": "Переопределение свойств в инстансах (overrides)",
+    "steps": [
+      "Можно изменить свойства инстанса (x, y, width, height, fill и т.д.)",
+      "Переопределённые свойства сохраняются при обновлении компонента",
+      "UI показывает какие свойства переопределены",
+      "Кнопка Reset override сбрасывает к значению компонента"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 5: Components",
+    "description": "Переопределение вложенных нод (descendants)",
+    "steps": [
+      "Можно изменить свойства вложенных элементов внутри инстанса",
+      "Путь к вложенной ноде через descendants: { childId: { ... } }",
+      "Поддержка путей для глубокой вложенности (parent/child/grandchild)",
+      "Можно скрыть вложенную ноду (enabled: false)"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 5: Components",
+    "description": "Варианты компонентов (variant refs)",
+    "steps": [
+      "Инстанс с reusable: true создаёт вариант компонента",
+      "Варианты наследуют от базового компонента",
+      "Можно создать инстансы от варианта",
+      "Цепочка наследования: Component → Variant → Instance"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 5: Components",
+    "description": "Слоты в компонентах (slots)",
+    "steps": [
+      "Frame внутри компонента можно пометить как slot",
+      "slot содержит массив рекомендуемых компонентов",
+      "В инстансе можно вставить контент в слот",
+      "UI показывает доступные слоты при редактировании инстанса"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 5: Components",
+    "description": "Базовое свойство enabled для скрытия нод",
+    "steps": [
+      "Добавлен enabled: boolean в BaseNode",
+      "enabled: false скрывает ноду при рендеринге",
+      "UI переключатель в Properties Panel",
+      "Используется для скрытия элементов в инстансах"
+    ],
+    "passes": false
   }
 ]

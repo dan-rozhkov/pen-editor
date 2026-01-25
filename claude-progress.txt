@@ -490,6 +490,24 @@
 - E2E тест пройден через Playwright: все контролы работают, save/load корректен
 
 Следующие шаги:
-- Все фичи реализованы!
+- Feature 26: Определение компонентов (reusable)
+
+---
+
+=== 2026-01-25 | Feature 26: Определение компонентов (reusable) ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Добавлен reusable?: boolean в FrameNode (src/types/scene.ts)
+- Обновлён NodeIcon в LayersPanel - 4 ромба для reusable frames (как в Figma)
+- Добавлена секция "Component" в PropertiesPanel с кнопкой Create Component
+- При клике на Create Component устанавливается reusable: true
+- Показывается индикатор "This is a Component" и кнопка "Detach Component"
+- Компоненты сохраняются и загружаются в JSON документ
+- E2E тест пройден через Playwright: create component, save/load работает
+
+Следующие шаги:
+- Feature 27: Создание инстансов (ref nodes)
 
 ---

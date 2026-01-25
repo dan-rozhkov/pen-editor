@@ -59,6 +59,8 @@ export interface FrameNode extends BaseNode {
   layout?: LayoutProperties
   // Theme override (light/dark) - if set, overrides global theme for this frame
   themeOverride?: ThemeName
+  // Reusable component flag - when true, this frame is a component that can be instantiated
+  reusable?: boolean
 }
 
 export interface RectNode extends BaseNode {

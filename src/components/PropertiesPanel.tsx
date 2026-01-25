@@ -287,6 +287,39 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme 
         </PropertySection>
       )}
 
+      {/* Component (Frame only) */}
+      {node.type === 'frame' && (
+        <PropertySection title="Component">
+          {(node as FrameNode).reusable ? (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2 text-xs text-accent-primary">
+                <svg viewBox="0 0 16 16" className="w-4 h-4">
+                  <rect x="2" y="2" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M2 4 L4 2 L4 4 Z" fill="currentColor" />
+                  <path d="M12 2 L14 4 L12 4 Z" fill="currentColor" />
+                  <path d="M2 12 L4 14 L4 12 Z" fill="currentColor" />
+                  <path d="M12 14 L14 12 L12 12 Z" fill="currentColor" />
+                </svg>
+                <span>This is a Component</span>
+              </div>
+              <button
+                className="px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
+                onClick={() => onUpdate({ reusable: false } as Partial<SceneNode>)}
+              >
+                Detach Component
+              </button>
+            </div>
+          ) : (
+            <button
+              className="w-full px-3 py-1.5 bg-accent-primary border-none rounded text-white text-xs cursor-pointer transition-colors hover:bg-accent-hover"
+              onClick={() => onUpdate({ reusable: true } as Partial<SceneNode>)}
+            >
+              Create Component
+            </button>
+          )}
+        </PropertySection>
+      )}
+
       {/* Text Properties (Text only) */}
       {node.type === 'text' && (
         <>

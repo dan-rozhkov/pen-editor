@@ -5,11 +5,22 @@ import { useSelectionStore } from '../store/selectionStore'
 import type { SceneNode, FrameNode } from '../types/scene'
 
 // Icons for different node types
-const NodeIcon = ({ type, isSelected }: { type: SceneNode['type']; isSelected: boolean }) => {
+const NodeIcon = ({ type, isSelected, reusable }: { type: SceneNode['type']; isSelected: boolean; reusable?: boolean }) => {
   const iconClass = clsx('w-4 h-4 shrink-0', isSelected ? 'text-white' : 'text-text-muted')
 
   switch (type) {
     case 'frame':
+      if (reusable) {
+        // Component icon: 4 diamonds in a grid pattern (like Figma)
+        return (
+          <svg viewBox="0 0 16 16" className={iconClass}>
+            <path d="M5 2 L8 5 L5 8 L2 5 Z" fill="currentColor" />
+            <path d="M11 2 L14 5 L11 8 L8 5 Z" fill="currentColor" />
+            <path d="M5 8 L8 11 L5 14 L2 11 Z" fill="currentColor" />
+            <path d="M11 8 L14 11 L11 14 L8 11 Z" fill="currentColor" />
+          </svg>
+        )
+      }
       return (
         <svg viewBox="0 0 16 16" className={iconClass}>
           <rect x="2" y="2" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" />
@@ -241,7 +252,7 @@ function LayerItem({
           ) : (
             <div className="w-4" />
           )}
-          <NodeIcon type={node.type} isSelected={isSelected} />
+          <NodeIcon type={node.type} isSelected={isSelected} reusable={node.type === 'frame' && (node as FrameNode).reusable} />
           {isEditing ? (
             <input
               ref={inputRef}
