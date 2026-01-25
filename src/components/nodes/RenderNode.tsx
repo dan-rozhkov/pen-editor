@@ -114,6 +114,10 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
   const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
     const target = e.target
 
+    // Only process if this is the actual node being dragged
+    // Prevents parent Group from handling child drag events
+    if (target.id() !== node.id) return
+
     if (isInAutoLayout && parentFrame) {
       const { insertInfo, isOutsideParent } = useDragStore.getState()
 
@@ -283,6 +287,10 @@ function EllipseRenderer({
 
   const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
     const target = e.target
+
+    // Only process if this is the actual node being dragged
+    // Prevents parent Group from handling child drag events
+    if (target.id() !== node.id) return
 
     if (isInAutoLayout && parentFrame) {
       const { insertInfo, isOutsideParent } = useDragStore.getState()
