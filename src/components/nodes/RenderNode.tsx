@@ -21,7 +21,7 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
   const nodes = useSceneStore((state) => state.nodes)
   const updateNode = useSceneStore((state) => state.updateNode)
   const moveNode = useSceneStore((state) => state.moveNode)
-  const { select, addToSelection } = useSelectionStore()
+  const { select, addToSelection, startEditing, editingNodeId } = useSelectionStore()
   const variables = useVariableStore((state) => state.variables)
   const globalTheme = useThemeStore((state) => state.activeTheme)
   const { startDrag, updateDrop, endDrag } = useDragStore()
@@ -212,7 +212,12 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
           parentFrame={parentFrame}
         />
       )
-    case 'text':
+    case 'text': {
+      const isEditing = editingNodeId === node.id
+      const handleDblClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
+        e.cancelBubble = true
+        startEditing(node.id)
+      }
       return (
         <Text
           id={node.id}
@@ -226,15 +231,18 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
           fontSize={node.fontSize ?? 16}
           fontFamily={node.fontFamily ?? 'Arial'}
           fill={fillColor ?? '#000000'}
-          draggable
+          opacity={isEditing ? 0 : 1}
+          draggable={!isEditing}
           onClick={handleClick}
           onTap={handleClick}
+          onDblClick={handleDblClick}
           onDragStart={handleDragStart}
           onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
           onTransformEnd={handleTransformEnd}
         />
       )
+    }
     default:
       return null
   }

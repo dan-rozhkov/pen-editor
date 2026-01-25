@@ -422,3 +422,28 @@
 - Inline редактирование текста на canvas
 
 ---
+
+=== 2026-01-25 | Feature 22: Inline редактирование текста на canvas ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Добавлен editingNodeId state в selectionStore.ts для отслеживания редактируемого узла
+- Добавлены методы startEditing() и stopEditing() в selectionStore
+- Создан компонент InlineTextEditor.tsx (HTML textarea overlay)
+- Позиционирование overlay с учётом viewport transforms (scale, x, y)
+- Auto-focus и select all при открытии редактора
+- Добавлен onDblClick handler в RenderNode.tsx для Text узлов
+- Konva Text скрывается (opacity: 0) во время редактирования
+- Интегрирован InlineTextEditor в Canvas.tsx
+- Enter сохраняет изменения и закрывает редактор
+- Escape отменяет изменения без сохранения
+- Blur (клик вне) сохраняет изменения
+- E2E тест пройден: double-click → type → Enter → text saved
+- E2E тест пройден: double-click → type → Escape → text preserved
+- E2E тест пройден: double-click → type → blur → text saved
+
+Следующие шаги:
+- WebSocket server (Phase 4: MCP Server)
+
+---

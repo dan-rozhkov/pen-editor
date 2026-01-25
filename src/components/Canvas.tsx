@@ -8,6 +8,8 @@ import { useHistoryStore } from '../store/historyStore'
 import { useDragStore } from '../store/dragStore'
 import { RenderNode } from './nodes/RenderNode'
 import { DropIndicator } from './DropIndicator'
+import { InlineTextEditor } from './InlineTextEditor'
+import type { TextNode } from '../types/scene'
 import { getViewportBounds, isNodeVisible } from '../utils/viewportUtils'
 
 const ZOOM_FACTOR = 1.1
@@ -36,9 +38,22 @@ export function Canvas() {
   )
   const deleteNode = useSceneStore((state) => state.deleteNode)
   const setNodesWithoutHistory = useSceneStore((state) => state.setNodesWithoutHistory)
-  const { selectedIds, clearSelection } = useSelectionStore()
+  const { selectedIds, clearSelection, editingNodeId } = useSelectionStore()
   const { undo, redo, saveHistory, startBatch, endBatch } = useHistoryStore()
   const dropIndicator = useDragStore((state) => state.dropIndicator)
+
+  // Find the text node being edited (including nested nodes)
+  const findNodeById = (nodes: typeof visibleNodes, id: string): TextNode | null => {
+    for (const node of nodes) {
+      if (node.id === id && node.type === 'text') return node as TextNode
+      if (node.type === 'frame' && node.children) {
+        const found = findNodeById(node.children, id)
+        if (found) return found
+      }
+    }
+    return null
+  }
+  const editingTextNode = editingNodeId ? findNodeById(nodes, editingNodeId) : null
 
   // Update transformer nodes when selection changes
   useEffect(() => {
@@ -338,6 +353,8 @@ export function Canvas() {
           />
         </Layer>
       </Stage>
+      {/* Inline text editor overlay */}
+      {editingTextNode && <InlineTextEditor node={editingTextNode} />}
     </div>
   )
 }

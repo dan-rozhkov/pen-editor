@@ -212,7 +212,7 @@
       "Можно вводить и изменять текст",
       "Клик вне элемента или Escape завершает редактирование"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "Phase 3: Variables & Themes",
