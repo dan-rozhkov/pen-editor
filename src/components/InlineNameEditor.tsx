@@ -12,20 +12,31 @@ interface InlineNameEditorProps {
 
 const LABEL_FONT_SIZE = 11
 const LABEL_OFFSET_Y = 4
+const MIN_WIDTH = 20
+const PADDING = 4
 
 export function InlineNameEditor({ node, absoluteX, absoluteY }: InlineNameEditorProps) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const measureRef = useRef<HTMLSpanElement>(null)
   const [editName, setEditName] = useState(node.name || 'Frame')
+  const [inputWidth, setInputWidth] = useState(MIN_WIDTH)
   const updateNode = useSceneStore((state) => state.updateNode)
   const stopEditing = useSelectionStore((state) => state.stopEditing)
   const { scale, x, y } = useViewportStore()
 
   // Calculate screen position
-  // Label is ABOVE frame: y - fontSize - offset
   const labelWorldY = absoluteY - LABEL_FONT_SIZE - LABEL_OFFSET_Y
   const screenX = absoluteX * scale + x
   const screenY = labelWorldY * scale + y
   const screenFontSize = LABEL_FONT_SIZE * scale
+
+  // Measure text width and update input width
+  useEffect(() => {
+    if (measureRef.current) {
+      const width = measureRef.current.offsetWidth + PADDING
+      setInputWidth(Math.max(MIN_WIDTH, width))
+    }
+  }, [editName, screenFontSize])
 
   useEffect(() => {
     if (inputRef.current) {
@@ -56,32 +67,51 @@ export function InlineNameEditor({ node, absoluteX, absoluteY }: InlineNameEdito
     handleSubmit()
   }
 
+  const fontStyle = {
+    fontSize: screenFontSize,
+    fontFamily: 'system-ui, -apple-system, sans-serif',
+    lineHeight: 1.2,
+  }
+
   return (
-    <input
-      ref={inputRef}
-      type="text"
-      value={editName}
-      onChange={(e) => setEditName(e.target.value)}
-      onKeyDown={handleKeyDown}
-      onBlur={handleBlur}
-      style={{
-        position: 'absolute',
-        left: screenX,
-        top: screenY,
-        minWidth: 50,
-        fontSize: screenFontSize,
-        fontFamily: 'system-ui, -apple-system, sans-serif',
-        lineHeight: 1.2,
-        padding: '0 2px',
-        margin: 0,
-        border: '1px solid #0d99ff',
-        borderRadius: 2,
-        outline: 'none',
-        background: 'transparent',
-        color: '#333333',
-        zIndex: 100,
-        boxSizing: 'border-box',
-      }}
-    />
+    <>
+      {/* Hidden span for measuring text width */}
+      <span
+        ref={measureRef}
+        style={{
+          ...fontStyle,
+          position: 'absolute',
+          visibility: 'hidden',
+          whiteSpace: 'pre',
+          pointerEvents: 'none',
+        }}
+      >
+        {editName || ' '}
+      </span>
+      <input
+        ref={inputRef}
+        type="text"
+        value={editName}
+        onChange={(e) => setEditName(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={handleBlur}
+        style={{
+          ...fontStyle,
+          position: 'absolute',
+          left: screenX,
+          top: screenY,
+          width: inputWidth,
+          padding: '0 2px',
+          margin: 0,
+          border: '1px solid #0d99ff',
+          borderRadius: 2,
+          outline: 'none',
+          background: 'transparent',
+          color: '#333333',
+          zIndex: 100,
+          boxSizing: 'border-box',
+        }}
+      />
+    </>
   )
 }

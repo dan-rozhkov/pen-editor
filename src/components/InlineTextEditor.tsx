@@ -8,9 +8,15 @@ interface InlineTextEditorProps {
   node: TextNode
 }
 
+const MIN_WIDTH = 50
+const MIN_HEIGHT = 24
+const PADDING = 8
+
 export function InlineTextEditor({ node }: InlineTextEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const measureRef = useRef<HTMLDivElement>(null)
   const [editText, setEditText] = useState(node.text)
+  const [dimensions, setDimensions] = useState({ width: MIN_WIDTH, height: MIN_HEIGHT })
   const updateNode = useSceneStore((state) => state.updateNode)
   const stopEditing = useSelectionStore((state) => state.stopEditing)
   const { scale, x, y } = useViewportStore()
@@ -18,9 +24,19 @@ export function InlineTextEditor({ node }: InlineTextEditorProps) {
   // Calculate screen position from world coordinates
   const screenX = node.x * scale + x
   const screenY = node.y * scale + y
-  const screenWidth = node.width * scale
-  const screenHeight = node.height * scale
   const screenFontSize = (node.fontSize ?? 16) * scale
+
+  // Measure content dimensions
+  useEffect(() => {
+    if (measureRef.current) {
+      const width = measureRef.current.offsetWidth + PADDING
+      const height = measureRef.current.offsetHeight + PADDING
+      setDimensions({
+        width: Math.max(MIN_WIDTH, width),
+        height: Math.max(MIN_HEIGHT, height),
+      })
+    }
+  }, [editText, screenFontSize])
 
   // Auto-focus and select all text on mount
   useEffect(() => {
@@ -52,34 +68,54 @@ export function InlineTextEditor({ node }: InlineTextEditorProps) {
     handleSubmit()
   }
 
+  const fontStyle = {
+    fontSize: screenFontSize,
+    fontFamily: node.fontFamily ?? 'Arial',
+    lineHeight: 1.2,
+  }
+
   return (
-    <textarea
-      ref={textareaRef}
-      value={editText}
-      onChange={(e) => setEditText(e.target.value)}
-      onKeyDown={handleKeyDown}
-      onBlur={handleBlur}
-      style={{
-        position: 'absolute',
-        left: screenX,
-        top: screenY,
-        width: Math.max(screenWidth, 50),
-        height: Math.max(screenHeight, 24),
-        fontSize: screenFontSize,
-        fontFamily: node.fontFamily ?? 'Arial',
-        lineHeight: 1.2,
-        padding: 0,
-        margin: 0,
-        border: '2px solid #0d99ff',
-        borderRadius: 2,
-        outline: 'none',
-        background: 'transparent',
-        color: '#000000',
-        resize: 'none',
-        overflow: 'hidden',
-        zIndex: 100,
-        boxSizing: 'border-box',
-      }}
-    />
+    <>
+      {/* Hidden div for measuring content dimensions */}
+      <div
+        ref={measureRef}
+        style={{
+          ...fontStyle,
+          position: 'absolute',
+          visibility: 'hidden',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          pointerEvents: 'none',
+        }}
+      >
+        {editText || ' '}
+      </div>
+      <textarea
+        ref={textareaRef}
+        value={editText}
+        onChange={(e) => setEditText(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={handleBlur}
+        style={{
+          ...fontStyle,
+          position: 'absolute',
+          left: screenX,
+          top: screenY,
+          width: dimensions.width,
+          height: dimensions.height,
+          padding: 0,
+          margin: 0,
+          border: '2px solid #0d99ff',
+          borderRadius: 2,
+          outline: 'none',
+          background: 'transparent',
+          color: '#000000',
+          resize: 'none',
+          overflow: 'hidden',
+          zIndex: 100,
+          boxSizing: 'border-box',
+        }}
+      />
+    </>
   )
 }
