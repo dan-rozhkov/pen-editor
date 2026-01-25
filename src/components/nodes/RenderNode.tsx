@@ -140,10 +140,11 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
       } else if (insertInfo) {
         // Reorder within the frame
         moveNode(node.id, insertInfo.parentId, insertInfo.index)
-        // Don't reset position here - let React re-render with new layout positions
-        // Resetting to old position causes double jump: dragged → old → new
       }
 
+      // Reset Konva target position to let React re-render with layout-calculated positions
+      target.x(node.x)
+      target.y(node.y)
       endDrag()
     } else {
       // Normal behavior - update position
