@@ -444,6 +444,30 @@
 - E2E тест пройден: double-click → type → blur → text saved
 
 Следующие шаги:
-- WebSocket server (Phase 4: MCP Server)
+- Отображение названия frame на canvas (Phase 4: Advanced Editing)
+
+---
+
+=== 2026-01-25 | Feature 23: Отображение названия frame на canvas с inline-редактированием ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Добавлен editingMode в selectionStore для различения типа редактирования (text vs name)
+- Добавлен метод startNameEditing() в selectionStore
+- Создан компонент FrameNameLabel.tsx - Konva Text над frame с названием
+- Создан компонент InlineNameEditor.tsx - HTML input для редактирования названия
+- Добавлена функция getNodeAbsolutePosition() в nodeUtils.ts для вложенных фреймов
+- Интегрирован FrameNameLabel в FrameRenderer
+- Интегрирован InlineNameEditor в Canvas.tsx
+- Название отображается над frame слева (как в Figma)
+- Синий цвет названия когда frame выделен
+- Двойной клик на названии активирует inline редактирование
+- Enter сохраняет новое название
+- Название синхронизируется с Layers Panel
+- E2E тест пройден через Playwright
+
+Следующие шаги:
+- Ширина, выравнивание, высота строки и letter spacing для текста
 
 ---

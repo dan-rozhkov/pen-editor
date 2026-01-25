@@ -268,7 +268,7 @@
       "Enter сохраняет новое название",
       "Название обновляется в Layers Panel"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "Phase 4: Advanced Editing",
