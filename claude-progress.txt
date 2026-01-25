@@ -561,3 +561,27 @@
 - Feature 29: Переопределение вложенных нод (descendants)
 
 ---
+
+=== 2026-01-25 | Feature 29: Переопределение вложенных нод (descendants) ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Добавлен enabled?: boolean в BaseNode для скрытия нод через overrides
+- Добавлены типы DescendantOverride и DescendantOverrides в scene.ts
+- Добавлено поле descendants?: DescendantOverrides в RefNode
+- Добавлен instance edit mode в selectionStore (double-click для входа)
+- Добавлены методы enterInstanceEditMode(), exitInstanceEditMode(), selectDescendant()
+- Добавлены методы updateDescendantOverride(), resetDescendantOverride() в sceneStore
+- Обновлён InstanceRenderer для поддержки edit mode и применения overrides
+- Добавлен DescendantRenderer для рендеринга детей с selection highlight
+- Добавлен RenderNodeWithOverrides для рендеринга детей без edit mode
+- Добавлен DescendantPropertyEditor в PropertiesPanel
+- UI для Fill, Stroke, Enabled с override indicators и Reset buttons
+- ESC ключ выходит из instance edit mode
+- Сериализация descendants работает автоматически в JSON
+
+Следующие шаги:
+- Feature 30: Варианты компонентов (variant refs)
+
+---

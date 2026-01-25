@@ -323,7 +323,7 @@
       "Поддержка путей для глубокой вложенности (parent/child/grandchild)",
       "Можно скрыть вложенную ноду (enabled: false)"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "Phase 5: Components",
