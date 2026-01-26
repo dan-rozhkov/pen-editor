@@ -22,6 +22,7 @@ import {
   isPointInsideRect,
   getFrameAbsoluteRectWithLayout,
 } from "../../utils/dragUtils";
+import { calculateFrameIntrinsicHeight } from "../../utils/yogaLayout";
 
 // Figma-style hover outline color
 const HOVER_OUTLINE_COLOR = "#0d99ff";
@@ -555,6 +556,12 @@ function FrameRenderer({
     ? calculateLayoutForFrame(node)
     : node.children;
 
+  // Calculate effective height (fit_content uses intrinsic height from Yoga)
+  const effectiveHeight =
+    node.sizing?.heightMode === "fit_content" && node.layout?.autoLayout
+      ? calculateFrameIntrinsicHeight(node)
+      : node.height;
+
   // If this frame has a theme override, use it for children
   const childTheme = node.themeOverride ?? effectiveTheme;
 
@@ -565,7 +572,7 @@ function FrameRenderer({
       x={node.x}
       y={node.y}
       width={node.width}
-      height={node.height}
+      height={effectiveHeight}
       rotation={node.rotation ?? 0}
       draggable
       onClick={onClick}
@@ -579,7 +586,7 @@ function FrameRenderer({
     >
       <Rect
         width={node.width}
-        height={node.height}
+        height={effectiveHeight}
         fill={fillColor}
         stroke={strokeColor}
         strokeWidth={node.strokeWidth}
@@ -592,7 +599,7 @@ function FrameRenderer({
       {isHovered && (
         <Rect
           width={node.width}
-          height={node.height}
+          height={effectiveHeight}
           stroke={HOVER_OUTLINE_COLOR}
           strokeWidth={1.5}
           cornerRadius={node.cornerRadius}

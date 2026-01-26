@@ -676,3 +676,23 @@
 - Feature: Высота frame автоматически становится fit_content при включении auto-layout
 
 ---
+
+=== 2026-01-26 | Feature: Высота frame автоматически становится fit_content при включении auto-layout ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Добавлена функция calculateFrameIntrinsicHeight() в src/utils/yogaLayout.ts
+- Функция вычисляет высоту Frame на основе содержимого через Yoga WASM
+- Модифицирован PropertiesPanel.tsx - при включении auto-layout устанавливается sizing.heightMode = 'fit_content'
+- Модифицирован FrameRenderer в RenderNode.tsx - использует effectiveHeight вместо node.height
+- effectiveHeight вычисляется через calculateFrameIntrinsicHeight когда heightMode === 'fit_content'
+- E2E тест пройден через Playwright:
+  - Horizontal layout: effectiveHeight = 100 (один Rectangle)
+  - Vertical layout: effectiveHeight = 200 (два Rectangle'а по 100px)
+  - Высота Frame динамически подстраивается под содержимое
+
+Следующие шаги:
+- Feature: Плавный зум canvas как в Figma
+
+---

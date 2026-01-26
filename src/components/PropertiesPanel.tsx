@@ -268,7 +268,19 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
           <CheckboxInput
             label="Enable Auto Layout"
             checked={(node as FrameNode).layout?.autoLayout ?? false}
-            onChange={(v) => onUpdate({ layout: { ...(node as FrameNode).layout, autoLayout: v } } as Partial<SceneNode>)}
+            onChange={(v) => {
+              const updates: Partial<SceneNode> = {
+                layout: { ...(node as FrameNode).layout, autoLayout: v }
+              };
+              // When enabling auto-layout, set heightMode to fit_content (like Figma)
+              if (v) {
+                updates.sizing = {
+                  ...(node as FrameNode).sizing,
+                  heightMode: 'fit_content',
+                };
+              }
+              onUpdate(updates);
+            }}
           />
           {(node as FrameNode).layout?.autoLayout && (
             <>

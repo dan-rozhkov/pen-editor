@@ -378,6 +378,59 @@ function createYogaChildNodeWithIntrinsicSize(
 }
 
 /**
+ * Calculate the intrinsic height of a Frame based on its children
+ * Used when sizing.heightMode === 'fit_content'
+ */
+export function calculateFrameIntrinsicHeight(frame: FrameNode): number {
+  if (!isYogaReady() || !frame.layout?.autoLayout) {
+    return frame.height;
+  }
+
+  const Y = getYoga();
+
+  // Create a copy of frame node without fixed height
+  const rootNode = Y.Node.create();
+  rootNode.setWidth(frame.width);
+  // Don't set height - let Yoga compute based on children
+
+  const layout = frame.layout;
+  // Apply layout properties
+  rootNode.setFlexDirection(mapFlexDirection(layout.flexDirection));
+  if (layout.gap !== undefined) {
+    rootNode.setGap(Y.GUTTER_ALL, layout.gap);
+  }
+  if (layout.paddingTop !== undefined) {
+    rootNode.setPadding(Y.EDGE_TOP, layout.paddingTop);
+  }
+  if (layout.paddingRight !== undefined) {
+    rootNode.setPadding(Y.EDGE_RIGHT, layout.paddingRight);
+  }
+  if (layout.paddingBottom !== undefined) {
+    rootNode.setPadding(Y.EDGE_BOTTOM, layout.paddingBottom);
+  }
+  if (layout.paddingLeft !== undefined) {
+    rootNode.setPadding(Y.EDGE_LEFT, layout.paddingLeft);
+  }
+  rootNode.setAlignItems(mapAlignItems(layout.alignItems));
+  rootNode.setJustifyContent(mapJustifyContent(layout.justifyContent));
+
+  // Create child nodes
+  const visibleChildren = frame.children.filter((c) => c.visible !== false);
+  visibleChildren.forEach((child, index) => {
+    const childNode = createYogaChildNode(child, frame.layout);
+    rootNode.insertChild(childNode, index);
+  });
+
+  // Calculate layout with undefined height (Yoga will compute based on children)
+  rootNode.calculateLayout(frame.width, undefined, Y.DIRECTION_LTR);
+
+  const computedHeight = rootNode.getComputedLayout().height;
+  rootNode.freeRecursive();
+
+  return computedHeight;
+}
+
+/**
  * Calculate layout for a Frame and its children
  * Returns updated positions for all children
  */
