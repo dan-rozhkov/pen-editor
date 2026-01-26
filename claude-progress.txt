@@ -696,3 +696,19 @@
 - Feature: Плавный зум canvas как в Figma
 
 ---
+
+=== 2026-01-26 | Feature: Width fit_content для top-level auto-layout Frame ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Расширена функция calculateFrameIntrinsicSize() в yogaLayout.ts для поддержки fitWidth и fitHeight
+- Модифицирован FrameRenderer - вычисляет effectiveWidth и effectiveHeight отдельно
+- Теперь Frame с auto-layout может использовать fit_content для ширины (не только для высоты)
+- Показаны sizing controls (W/H: Fixed/Fill/Fit) для Frame с auto-layout даже на верхнем уровне canvas
+- E2E тест пройден: effectiveWidth=150, effectiveHeight=100 при fitW=true, fitH=true
+
+Следующие шаги:
+- Feature: Плавный зум canvas как в Figma
+
+---
