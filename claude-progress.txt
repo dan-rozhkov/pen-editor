@@ -648,3 +648,31 @@
 - Feature: Варианты компонентов (variant refs)
 
 ---
+
+=== 2026-01-26 | Feature: Секция экспорта выделенных элементов в PNG/JPEG ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Создан src/store/canvasRefStore.ts - Zustand store для хранения ссылки на Konva Stage
+- Создан src/utils/exportUtils.ts - утилиты экспорта с функциями:
+  - exportNodeAsImage() - экспорт конкретного элемента
+  - exportCanvasAsImage() - экспорт всего canvas
+  - exportImage() - универсальная функция (элемент или canvas)
+- Обновлён Canvas.tsx - регистрация stageRef в store через useEffect
+- Обновлён PropertiesPanel.tsx - добавлена секция Export:
+  - Scale dropdown (1x, 2x, 3x)
+  - Кнопки PNG и JPEG
+  - Текст "Export [имя элемента]" или "Export entire canvas"
+- Поддержка pixelRatio для масштабирования (1x, 2x, 3x)
+- JPEG качество 0.92 (как в Figma)
+- Имя файла включает имя элемента и суффикс масштаба (@2x, @3x)
+- E2E тест пройден через Playwright:
+  - PNG экспорт элемента: Group.png
+  - JPEG экспорт с 2x масштабом: Group@2x.jpg
+  - Экспорт всего canvas: canvas@2x.png
+
+Следующие шаги:
+- Feature: Высота frame автоматически становится fit_content при включении auto-layout
+
+---

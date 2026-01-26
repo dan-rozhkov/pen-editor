@@ -322,7 +322,7 @@
       "Выбор масштаба экспорта (1x, 2x, 3x)",
       "Файл автоматически скачивается с именем элемента"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "Phase 4.5: Bug Fixes & Shortcuts",
