@@ -13,6 +13,7 @@ import { DropIndicator } from "./DropIndicator";
 import { InlineTextEditor } from "./InlineTextEditor";
 import { InlineNameEditor } from "./InlineNameEditor";
 import { FrameNameLabel } from "./nodes/FrameNameLabel";
+import { NodeSizeLabel } from "./nodes/NodeSizeLabel";
 import type { TextNode, FrameNode, SceneNode } from "../types/scene";
 import { getViewportBounds, isNodeVisible } from "../utils/viewportUtils";
 import {
@@ -22,6 +23,7 @@ import {
   findComponentById,
 } from "../utils/nodeUtils";
 import { useLayoutStore } from "../store/layoutStore";
+import { calculateFrameIntrinsicSize } from "../utils/yogaLayout";
 import { generateId } from "../types/scene";
 
 export function Canvas() {
@@ -219,6 +221,57 @@ export function Canvas() {
     traverse(visibleNodes, 0, 0, false);
     return frames;
   }, [visibleNodes]);
+
+  // Collect selected nodes with their absolute positions and effective sizes
+  const collectSelectedNodes = useMemo(() => {
+    const result: Array<{
+      node: SceneNode;
+      absX: number;
+      absY: number;
+      effectiveWidth: number;
+      effectiveHeight: number;
+    }> = [];
+
+    const traverse = (
+      searchNodes: SceneNode[],
+      accX: number,
+      accY: number
+    ) => {
+      for (const node of searchNodes) {
+        if (selectedIds.includes(node.id)) {
+          // Calculate effective size for auto-layout frames with fit_content
+          let effectiveWidth = node.width;
+          let effectiveHeight = node.height;
+
+          if (node.type === "frame" && node.layout?.autoLayout) {
+            const fitWidth = node.sizing?.widthMode === "fit_content";
+            const fitHeight = node.sizing?.heightMode === "fit_content";
+            if (fitWidth || fitHeight) {
+              const intrinsicSize = calculateFrameIntrinsicSize(node, { fitWidth, fitHeight });
+              if (fitWidth) effectiveWidth = intrinsicSize.width;
+              if (fitHeight) effectiveHeight = intrinsicSize.height;
+            }
+          }
+
+          result.push({
+            node,
+            absX: accX + node.x,
+            absY: accY + node.y,
+            effectiveWidth,
+            effectiveHeight,
+          });
+        }
+
+        // Recurse into frames
+        if (node.type === "frame") {
+          traverse(node.children, accX + node.x, accY + node.y);
+        }
+      }
+    };
+
+    traverse(visibleNodes, 0, 0);
+    return result;
+  }, [visibleNodes, selectedIds]);
 
   // Update transformer nodes when selection changes
   useEffect(() => {
@@ -711,6 +764,17 @@ export function Canvas() {
                 absoluteY={absY}
               />
             ))}
+          {/* Node size labels - displayed below selected nodes */}
+          {collectSelectedNodes.map(({ node, absX, absY, effectiveWidth, effectiveHeight }) => (
+            <NodeSizeLabel
+              key={`size-${node.id}`}
+              node={node}
+              absoluteX={absX}
+              absoluteY={absY}
+              effectiveWidth={effectiveWidth}
+              effectiveHeight={effectiveHeight}
+            />
+          ))}
         </Layer>
       </Stage>
       {/* Inline text editor overlay */}

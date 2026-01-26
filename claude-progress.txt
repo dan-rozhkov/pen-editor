@@ -729,6 +729,26 @@
 - E2E тест пройден: zoom in, zoom out, накопление delta, fitToContent работает
 
 Следующие шаги:
+- Feature: Отображение размеров выбранной ноды снизу по центру
+
+---
+
+=== 2026-01-26 | Feature: Отображение размеров выбранной ноды снизу по центру ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Создан компонент NodeSizeLabel.tsx по аналогии с FrameNameLabel
+- Отображает размеры в формате "width × height" (например "150 × 100")
+- Позиционируется снизу по центру выбранной ноды
+- Масштабируется с viewportом через scaleX/scaleY = 1/scale
+- Поддержка drag и transform tracking (размеры обновляются во время перемещения/изменения размера)
+- Поддержка effective size для auto-layout фреймов с fit_content
+- Добавлен collectSelectedNodes useMemo в Canvas.tsx
+- Интегрирован NodeSizeLabel после FrameNameLabel в Layer
+- E2E тест пройден: Rectangle показывает 150×100, Frame показывает 200×150
+
+Следующие шаги:
 - Feature: Варианты компонентов (variant refs)
 
 ---
