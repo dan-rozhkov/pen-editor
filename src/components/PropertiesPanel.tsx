@@ -1,7 +1,10 @@
+import { useState } from 'react'
 import { useSceneStore } from '../store/sceneStore'
 import { useSelectionStore, type InstanceContext } from '../store/selectionStore'
 import { useVariableStore } from '../store/variableStore'
 import { useThemeStore } from '../store/themeStore'
+import { useCanvasRefStore } from '../store/canvasRefStore'
+import { exportImage, type ExportFormat, type ExportScale } from '../utils/exportUtils'
 import type { SceneNode, FrameNode, RefNode, FlexDirection, AlignItems, JustifyContent, SizingMode, TextNode, TextWidthMode, TextAlign, DescendantOverride } from '../types/scene'
 import type { ThemeName, Variable } from '../types/variable'
 import { findParentFrame, findNodeById, findComponentById, type ParentContext } from '../utils/nodeUtils'
@@ -705,6 +708,66 @@ function DescendantPropertyEditor({
   )
 }
 
+// Export section component
+interface ExportSectionProps {
+  selectedNode: SceneNode | null
+}
+
+function ExportSection({ selectedNode }: ExportSectionProps) {
+  const stageRef = useCanvasRefStore((s) => s.stageRef)
+  const [scale, setScale] = useState<ExportScale>(1)
+
+  const handleExport = (format: ExportFormat) => {
+    if (!stageRef) {
+      console.error('Stage ref not available')
+      return
+    }
+
+    exportImage(
+      stageRef,
+      selectedNode?.id || null,
+      selectedNode?.name,
+      { format, scale }
+    )
+  }
+
+  const scaleOptions = [
+    { value: '1', label: '1x' },
+    { value: '2', label: '2x' },
+    { value: '3', label: '3x' },
+  ]
+
+  return (
+    <PropertySection title="Export">
+      <div className="flex flex-col gap-2">
+        <SelectInput
+          label="Scale"
+          value={String(scale)}
+          options={scaleOptions}
+          onChange={(v) => setScale(Number(v) as ExportScale)}
+        />
+        <div className="flex gap-2">
+          <button
+            onClick={() => handleExport('png')}
+            className="flex-1 px-3 py-1.5 bg-accent-primary border-none rounded text-white text-xs cursor-pointer transition-colors hover:bg-accent-hover"
+          >
+            PNG
+          </button>
+          <button
+            onClick={() => handleExport('jpeg')}
+            className="flex-1 px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
+          >
+            JPEG
+          </button>
+        </div>
+        <div className="text-[10px] text-text-muted">
+          {selectedNode ? `Export "${selectedNode.name || selectedNode.type}"` : 'Export entire canvas'}
+        </div>
+      </div>
+    </PropertySection>
+  )
+}
+
 export function PropertiesPanel() {
   const nodes = useSceneStore((s) => s.nodes)
   const updateNode = useSceneStore((s) => s.updateNode)
@@ -756,6 +819,10 @@ export function PropertiesPanel() {
             allNodes={nodes}
           />
         )}
+        {/* Export section - always visible at the bottom */}
+        <div className={selectedIds.length > 0 || instanceContext ? 'mt-4' : ''}>
+          <ExportSection selectedNode={selectedNode} />
+        </div>
       </div>
     </div>
   )

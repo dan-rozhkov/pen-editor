@@ -3,6 +3,7 @@ import { Stage, Layer, Rect, Transformer } from "react-konva";
 import Konva from "konva";
 import { useViewportStore } from "../store/viewportStore";
 import { useSceneStore } from "../store/sceneStore";
+import { useCanvasRefStore } from "../store/canvasRefStore";
 import { useSelectionStore } from "../store/selectionStore";
 import { useHistoryStore } from "../store/historyStore";
 import { useDragStore } from "../store/dragStore";
@@ -47,6 +48,7 @@ export function Canvas() {
   const nodes = useSceneStore((state) => state.nodes);
   const addNode = useSceneStore((state) => state.addNode);
   const { copiedNode, copyNode } = useClipboardStore();
+  const setStageRef = useCanvasRefStore((s) => s.setStageRef);
   const calculateLayoutForFrame = useLayoutStore((state) => state.calculateLayoutForFrame);
 
   // Calculate viewport bounds and filter visible nodes
@@ -253,6 +255,12 @@ export function Canvas() {
     window.addEventListener("resize", updateDimensions);
     return () => window.removeEventListener("resize", updateDimensions);
   }, []);
+
+  // Register stage ref for export functionality
+  useEffect(() => {
+    setStageRef(stageRef.current);
+    return () => setStageRef(null);
+  }, [setStageRef]);
 
   // Keyboard event handlers for spacebar panning, deletion, undo/redo, and escape
   useEffect(() => {
