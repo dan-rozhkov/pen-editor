@@ -25,11 +25,10 @@ export function InlineNameEditor({ node, absoluteX, absoluteY }: InlineNameEdito
   const stopEditing = useSelectionStore((state) => state.stopEditing)
   const { scale, x, y } = useViewportStore()
 
-  // Calculate screen position
-  const labelWorldY = absoluteY - LABEL_FONT_SIZE - LABEL_OFFSET_Y
+  // Calculate screen position with fixed-size label
   const screenX = absoluteX * scale + x
-  const screenY = labelWorldY * scale + y
-  const screenFontSize = LABEL_FONT_SIZE * scale
+  const screenY = absoluteY * scale + y - (LABEL_FONT_SIZE + LABEL_OFFSET_Y)
+  const screenFontSize = LABEL_FONT_SIZE
 
   // Keep ref in sync with state
   useEffect(() => {

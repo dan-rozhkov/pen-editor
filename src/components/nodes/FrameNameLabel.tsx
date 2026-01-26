@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import type Konva from 'konva'
 import type { FrameNode } from '../../types/scene'
 import { useSelectionStore } from '../../store/selectionStore'
+import { useViewportStore } from '../../store/viewportStore'
 
 interface FrameNameLabelProps {
   node: FrameNode
@@ -19,6 +20,7 @@ const LABEL_COLOR_COMPONENT = '#9747ff' // Purple for components
 
 export function FrameNameLabel({ node, isSelected, absoluteX, absoluteY }: FrameNameLabelProps) {
   const { startNameEditing, editingNodeId, editingMode, select } = useSelectionStore()
+  const { scale } = useViewportStore()
   const textRef = useRef<Konva.Text>(null)
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null)
   const dragTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -136,9 +138,12 @@ export function FrameNameLabel({ node, isSelected, absoluteX, absoluteY }: Frame
     }
   }
 
+  const safeScale = scale || 1
+  const worldOffsetY = (LABEL_FONT_SIZE + LABEL_OFFSET_Y) / safeScale
+
   // Use drag position if available, otherwise use absoluteX/Y
   const labelX = dragPosition ? dragPosition.x : absoluteX
-  const labelY = dragPosition ? dragPosition.y - LABEL_FONT_SIZE - LABEL_OFFSET_Y : absoluteY - LABEL_FONT_SIZE - LABEL_OFFSET_Y
+  const labelY = dragPosition ? dragPosition.y - worldOffsetY : absoluteY - worldOffsetY
 
   return (
     <Text
@@ -147,6 +152,8 @@ export function FrameNameLabel({ node, isSelected, absoluteX, absoluteY }: Frame
       y={labelY}
       text={displayName}
       fontSize={LABEL_FONT_SIZE}
+      scaleX={1 / safeScale}
+      scaleY={1 / safeScale}
       fontFamily="system-ui, -apple-system, sans-serif"
       fill={labelColor}
       listening={true}

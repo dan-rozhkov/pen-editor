@@ -313,6 +313,40 @@
     "passes": true
   },
   {
+    "category": "Phase 4.5: Bug Fixes & Shortcuts",
+    "description": "Секция экспорта выделенных элементов в PNG/JPEG",
+    "steps": [
+      "Секция Export отображается в нижней части Properties Panel",
+      "Кнопки для экспорта в PNG и JPEG форматы",
+      "Экспорт выделенного элемента или всего canvas если ничего не выделено",
+      "Выбор масштаба экспорта (1x, 2x, 3x)",
+      "Файл автоматически скачивается с именем элемента"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 4.5: Bug Fixes & Shortcuts",
+    "description": "Высота frame автоматически становится fit_content при включении auto-layout",
+    "steps": [
+      "При включении auto-layout на frame его sizing.heightMode устанавливается в fit_content",
+      "Размер frame подстраивается под содержимое после включения auto-layout",
+      "Ширина остаётся фиксированной (текущее поведение)",
+      "Соответствует поведению Figma при создании auto-layout"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 4.5: Bug Fixes & Shortcuts",
+    "description": "Плавный зум canvas как в Figma",
+    "steps": [
+      "Зум анимируется плавно при прокрутке колёсика мыши",
+      "Используется easing функция для естественного ощущения",
+      "Накопление delta значений при быстрой прокрутке",
+      "Зум остаётся центрированным на позиции курсора во время анимации"
+    ],
+    "passes": false
+  },
+  {
     "category": "Phase 5: Components",
     "description": "Определение компонентов (reusable)",
     "steps": [

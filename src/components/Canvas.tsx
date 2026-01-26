@@ -14,7 +14,12 @@ import { InlineNameEditor } from "./InlineNameEditor";
 import { FrameNameLabel } from "./nodes/FrameNameLabel";
 import type { TextNode, FrameNode, SceneNode } from "../types/scene";
 import { getViewportBounds, isNodeVisible } from "../utils/viewportUtils";
-import { getNodeAbsolutePosition, getNodeAbsolutePositionWithLayout, findParentFrame } from "../utils/nodeUtils";
+import {
+  getNodeAbsolutePosition,
+  getNodeAbsolutePositionWithLayout,
+  findParentFrame,
+  findComponentById,
+} from "../utils/nodeUtils";
 import { useLayoutStore } from "../store/layoutStore";
 import { generateId } from "../types/scene";
 
@@ -139,6 +144,21 @@ export function Canvas() {
     return null;
   };
 
+  const findParentFrameInComponent = (
+    children: SceneNode[],
+    targetId: string,
+    parent: FrameNode,
+  ): FrameNode | null => {
+    for (const child of children) {
+      if (child.id === targetId) return parent;
+      if (child.type === "frame") {
+        const found = findParentFrameInComponent(child.children, targetId, child);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
   // Find the text node being edited
   const editingTextNode =
     editingNodeId && editingMode === "text"
@@ -243,6 +263,42 @@ export function Canvas() {
         target.tagName === "INPUT" ||
         target.tagName === "TEXTAREA" ||
         target.isContentEditable;
+
+      // Shift+Enter - select nearest parent
+      if (e.key === "Enter" && e.shiftKey) {
+        if (isTyping) return;
+        e.preventDefault();
+
+        const { selectedIds, instanceContext } = useSelectionStore.getState();
+        if (instanceContext) {
+          const instance = findNodeByIdGeneric(nodes, instanceContext.instanceId);
+          if (instance && instance.type === "ref") {
+            const component = findComponentById(nodes, instance.componentId);
+            if (component) {
+              const parentFrame = findParentFrameInComponent(
+                component.children,
+                instanceContext.descendantId,
+                component,
+              );
+              if (parentFrame) {
+                if (parentFrame.id === component.id) {
+                  useSelectionStore.getState().clearDescendantSelection();
+                } else {
+                  useSelectionStore
+                    .getState()
+                    .selectDescendant(instanceContext.instanceId, parentFrame.id);
+                }
+              }
+            }
+          }
+        } else if (selectedIds.length === 1) {
+          const parentContext = findParentFrame(nodes, selectedIds[0]);
+          if (parentContext.parent) {
+            useSelectionStore.getState().select(parentContext.parent.id);
+          }
+        }
+        return;
+      }
 
       // Copy: Cmd+C (Mac) or Ctrl+C (Win/Linux)
       if ((e.metaKey || e.ctrlKey) && e.code === "KeyC") {
