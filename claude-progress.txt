@@ -622,3 +622,29 @@
 - Feature: Перемещение нод стрелками клавиатуры внутри auto-layout
 
 ---
+
+=== 2026-01-26 | Feature: Перемещение нод стрелками клавиатуры внутри auto-layout ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Добавлен импорт findParentFrame из nodeUtils в Canvas.tsx
+- Добавлен moveNode selector из sceneStore
+- Добавлен обработчик Arrow keys в handleKeyDown (между Delete/Backspace и Escape)
+- Логика определения направления layout (horizontal/vertical)
+- ArrowLeft/ArrowRight работают только в horizontal layout (flexDirection: 'row')
+- ArrowUp/ArrowDown работают только в vertical layout (flexDirection: 'column')
+- Стрелки игнорируются для нерелевантного направления
+- Работает только для элементов внутри auto-layout фреймов
+- История сохраняется (Undo работает)
+- Добавлен moveNode в dependency array useEffect
+- E2E тест пройден через Playwright:
+  - ArrowLeft перемещает элемент влево в horizontal layout
+  - ArrowRight перемещает элемент вправо в horizontal layout
+  - ArrowUp/ArrowDown игнорируются в horizontal layout
+  - ArrowUp перемещает элемент вверх в vertical layout
+
+Следующие шаги:
+- Feature: Варианты компонентов (variant refs)
+
+---

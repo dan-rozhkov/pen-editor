@@ -14,7 +14,7 @@ import { InlineNameEditor } from "./InlineNameEditor";
 import { FrameNameLabel } from "./nodes/FrameNameLabel";
 import type { TextNode, FrameNode, SceneNode } from "../types/scene";
 import { getViewportBounds, isNodeVisible } from "../utils/viewportUtils";
-import { getNodeAbsolutePosition, getNodeAbsolutePositionWithLayout } from "../utils/nodeUtils";
+import { getNodeAbsolutePosition, getNodeAbsolutePositionWithLayout, findParentFrame } from "../utils/nodeUtils";
 import { useLayoutStore } from "../store/layoutStore";
 import { generateId } from "../types/scene";
 
@@ -56,6 +56,7 @@ export function Canvas() {
   );
   const deleteNode = useSceneStore((state) => state.deleteNode);
   const updateNode = useSceneStore((state) => state.updateNode);
+  const moveNode = useSceneStore((state) => state.moveNode);
   const setNodesWithoutHistory = useSceneStore(
     (state) => state.setNodesWithoutHistory,
   );
@@ -356,6 +357,57 @@ export function Canvas() {
         }
       }
 
+      // Arrow keys for reordering inside auto-layout
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) {
+        if (isTyping) return;
+
+        const ids = useSelectionStore.getState().selectedIds;
+        if (ids.length !== 1) return; // Only for single selection
+
+        const nodeId = ids[0];
+        const currentNodes = useSceneStore.getState().nodes;
+
+        // Find parent frame
+        const parentContext = findParentFrame(currentNodes, nodeId);
+        if (!parentContext.isInsideAutoLayout || !parentContext.parent) return;
+
+        const parentFrame = parentContext.parent;
+        const layout = parentFrame.layout;
+        const isHorizontal = layout?.flexDirection === 'row' || layout?.flexDirection === undefined;
+
+        // Determine movement direction
+        let direction: 'prev' | 'next' | null = null;
+
+        if (isHorizontal) {
+          // Horizontal layout: only ←→
+          if (e.code === 'ArrowLeft') direction = 'prev';
+          else if (e.code === 'ArrowRight') direction = 'next';
+        } else {
+          // Vertical layout: only ↑↓
+          if (e.code === 'ArrowUp') direction = 'prev';
+          else if (e.code === 'ArrowDown') direction = 'next';
+        }
+
+        if (!direction) return; // Irrelevant arrow key for this layout direction
+
+        e.preventDefault();
+
+        // Find current index and calculate new index
+        const currentIndex = parentFrame.children.findIndex(c => c.id === nodeId);
+        if (currentIndex === -1) return;
+
+        const newIndex = direction === 'prev'
+          ? Math.max(0, currentIndex - 1)
+          : Math.min(parentFrame.children.length - 1, currentIndex + 1);
+
+        if (newIndex === currentIndex) return; // Already at the edge
+
+        // Move the element
+        saveHistory(currentNodes);
+        moveNode(nodeId, parentFrame.id, newIndex);
+        return;
+      }
+
       // Escape - exit instance edit mode first, then clear selection
       if (e.code === "Escape") {
         const currentEditingInstanceId =
@@ -403,6 +455,7 @@ export function Canvas() {
     copyNode,
     copiedNode,
     addNode,
+    moveNode,
   ]);
 
   // Mouse wheel handler (Figma-style)

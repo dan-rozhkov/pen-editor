@@ -310,7 +310,7 @@
       "Стрелки игнорируются для нерелевантного направления layout",
       "Работает только для элементов внутри auto-layout фреймов"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "Phase 5: Components",
