@@ -257,6 +257,23 @@ export function Canvas() {
             }
           }
 
+          // Handle nodes with fill_container inside auto-layout
+          const parentContext = findParentFrame(nodes, node.id);
+          if (parentContext.isInsideAutoLayout && parentContext.parent) {
+            const widthMode = node.sizing?.widthMode ?? "fixed";
+            const heightMode = node.sizing?.heightMode ?? "fixed";
+
+            // If sizing mode is not fixed, get sizes from Yoga layout
+            if (widthMode !== "fixed" || heightMode !== "fixed") {
+              const layoutChildren = calculateLayoutForFrame(parentContext.parent);
+              const layoutNode = layoutChildren.find((n) => n.id === node.id);
+              if (layoutNode) {
+                if (widthMode !== "fixed") effectiveWidth = layoutNode.width;
+                if (heightMode !== "fixed") effectiveHeight = layoutNode.height;
+              }
+            }
+          }
+
           result.push({
             node,
             absX: absPos.x,

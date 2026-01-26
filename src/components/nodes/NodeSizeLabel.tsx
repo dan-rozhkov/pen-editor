@@ -54,7 +54,7 @@ export function NodeSizeLabel({
     if (!konvaNode) return
 
     const updateDragState = () => {
-      const pos = konvaNode.position()
+      const pos = konvaNode.getAbsolutePosition()
       setDragState({
         x: pos.x,
         y: pos.y,
@@ -80,21 +80,20 @@ export function NodeSizeLabel({
     }
   }, [node.id])
 
+  // Hide label during drag/transform
+  if (dragState !== null) {
+    return null
+  }
+
   const safeScale = scale || 1
   const worldOffsetY = LABEL_OFFSET_Y / safeScale
 
-  // Use drag state if available, otherwise use props
-  const currentX = dragState ? dragState.x : absoluteX
-  const currentY = dragState ? dragState.y : absoluteY
-  const currentWidth = dragState ? dragState.width : effectiveWidth
-  const currentHeight = dragState ? dragState.height : effectiveHeight
-
   // Position at bottom center of the node
-  const labelX = currentX + currentWidth / 2
-  const labelY = currentY + currentHeight + worldOffsetY
+  const labelX = absoluteX + effectiveWidth / 2
+  const labelY = absoluteY + effectiveHeight + worldOffsetY
 
   // Format dimensions
-  const displayText = `${Math.round(currentWidth)} × ${Math.round(currentHeight)}`
+  const displayText = `${Math.round(effectiveWidth)} × ${Math.round(effectiveHeight)}`
 
   // Calculate background dimensions
   const bgWidth = textWidth + LABEL_PADDING_X * 2
