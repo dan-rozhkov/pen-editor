@@ -150,8 +150,8 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
 
       {/* Size Section */}
       <PropertySection title="Size">
-        {/* Show sizing mode controls when inside auto-layout */}
-        {parentContext.isInsideAutoLayout && (
+        {/* Show sizing mode controls when inside auto-layout OR when frame has auto-layout enabled */}
+        {(parentContext.isInsideAutoLayout || (node.type === 'frame' && (node as FrameNode).layout?.autoLayout)) && (
           <>
             <SegmentedControl
               label="W"
