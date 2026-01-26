@@ -53,17 +53,7 @@ export function NodeSizeLabel({
     const konvaNode = stage.findOne(`#${node.id}`)
     if (!konvaNode) return
 
-    const handleDragMove = () => {
-      const pos = konvaNode.position()
-      setDragState({
-        x: pos.x,
-        y: pos.y,
-        width: konvaNode.width() * konvaNode.scaleX(),
-        height: konvaNode.height() * konvaNode.scaleY(),
-      })
-    }
-
-    const handleTransform = () => {
+    const updateDragState = () => {
       const pos = konvaNode.position()
       setDragState({
         x: pos.x,
@@ -77,14 +67,14 @@ export function NodeSizeLabel({
       setDragState(null)
     }
 
-    konvaNode.on('dragmove', handleDragMove)
-    konvaNode.on('transform', handleTransform)
+    konvaNode.on('dragmove', updateDragState)
+    konvaNode.on('transform', updateDragState)
     konvaNode.on('dragend', handleEnd)
     konvaNode.on('transformend', handleEnd)
 
     return () => {
-      konvaNode.off('dragmove', handleDragMove)
-      konvaNode.off('transform', handleTransform)
+      konvaNode.off('dragmove', updateDragState)
+      konvaNode.off('transform', updateDragState)
       konvaNode.off('dragend', handleEnd)
       konvaNode.off('transformend', handleEnd)
     }

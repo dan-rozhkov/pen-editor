@@ -8,7 +8,7 @@ import type {
   DescendantOverride,
 } from "../../types/scene";
 import type { ThemeName } from "../../types/variable";
-import { getVariableValue } from "../../types/variable";
+import { resolveColor } from "../../utils/colorUtils";
 import { useSceneStore } from "../../store/sceneStore";
 import { useSelectionStore } from "../../store/selectionStore";
 import { useLayoutStore } from "../../store/layoutStore";
@@ -21,6 +21,7 @@ import {
   calculateDropPosition,
   isPointInsideRect,
   getFrameAbsoluteRectWithLayout,
+  handleAutoLayoutDragEnd,
 } from "../../utils/dragUtils";
 import { calculateFrameIntrinsicSize } from "../../utils/yogaLayout";
 
@@ -70,23 +71,9 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
   const isInAutoLayout = parentContext.isInsideAutoLayout;
   const parentFrame = parentContext.parent;
 
-  // Resolve color from variable binding or use direct value
-  const resolveColor = (
-    color: string | undefined,
-    binding?: { variableId: string },
-  ): string | undefined => {
-    if (binding) {
-      const variable = variables.find((v) => v.id === binding.variableId);
-      if (variable) {
-        return getVariableValue(variable, currentTheme);
-      }
-    }
-    return color;
-  };
-
   // Resolved colors for this node
-  const fillColor = resolveColor(node.fill, node.fillBinding);
-  const strokeColor = resolveColor(node.stroke, node.strokeBinding);
+  const fillColor = resolveColor(node.fill, node.fillBinding, variables, currentTheme);
+  const strokeColor = resolveColor(node.stroke, node.strokeBinding, variables, currentTheme);
 
   // Don't render if node is hidden
   if (node.visible === false) {
@@ -179,31 +166,19 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
 
     if (isInAutoLayout && parentFrame) {
       const { insertInfo, isOutsideParent } = useDragStore.getState();
-
-      if (isOutsideParent) {
-        // Drag out of auto-layout frame - move to root level
-        const stage = target.getStage();
-        if (stage) {
-          const pointerPos = stage.getRelativePointerPosition();
-          if (pointerPos) {
-            // Move to root level first
-            moveNode(node.id, null, 0);
-            // Then set position in world coordinates
-            updateNode(node.id, {
-              x: pointerPos.x - node.width / 2,
-              y: pointerPos.y - node.height / 2,
-            });
-          }
-        }
-        // Don't reset position - updateNode already set the new position
-      } else if (insertInfo) {
-        // Reorder within the frame
-        moveNode(node.id, insertInfo.parentId, insertInfo.index);
-      }
-
-      // Reset Konva target position to let React re-render with layout-calculated positions
-      target.x(node.x);
-      target.y(node.y);
+      
+      handleAutoLayoutDragEnd(
+        target,
+        node.id,
+        node.width,
+        node.height,
+        insertInfo,
+        isOutsideParent,
+        moveNode,
+        updateNode,
+        () => ({ x: node.x, y: node.y })
+      );
+      
       endDrag();
     } else {
       // Normal behavior - update position
@@ -422,26 +397,19 @@ function EllipseRenderer({
     if (isInAutoLayout && parentFrame) {
       const { insertInfo, isOutsideParent } = useDragStore.getState();
 
-      if (isOutsideParent) {
-        // Drag out of auto-layout frame
-        const stage = target.getStage();
-        if (stage) {
-          const pointerPos = stage.getRelativePointerPosition();
-          if (pointerPos) {
-            moveNode(node.id, null, 0);
-            updateNode(node.id, {
-              x: pointerPos.x - node.width / 2,
-              y: pointerPos.y - node.height / 2,
-            });
-          }
-        }
-      } else if (insertInfo) {
-        moveNode(node.id, insertInfo.parentId, insertInfo.index);
-      }
+      handleAutoLayoutDragEnd(
+        target,
+        node.id,
+        node.width,
+        node.height,
+        insertInfo,
+        isOutsideParent,
+        moveNode,
+        updateNode,
+        // Ellipse uses center, so adjust position
+        () => ({ x: node.x + node.width / 2, y: node.y + node.height / 2 })
+      );
 
-      // Reset position - Ellipse uses center
-      target.x(node.x + node.width / 2);
-      target.y(node.y + node.height / 2);
       endDrag();
     } else {
       // Ellipse position is center, convert back to top-left
@@ -669,20 +637,6 @@ function InstanceRenderer({
   // Use effective theme or fall back to global theme
   const currentTheme = effectiveTheme ?? globalTheme;
 
-  // Resolve color from variable binding
-  const resolveColor = (
-    color: string | undefined,
-    binding?: { variableId: string },
-  ): string | undefined => {
-    if (binding) {
-      const variable = variables.find((v) => v.id === binding.variableId);
-      if (variable) {
-        return getVariableValue(variable, currentTheme);
-      }
-    }
-    return color;
-  };
-
   // Merge instance properties with component defaults (instance takes priority)
   const effectiveFill = node.fill !== undefined ? node.fill : component.fill;
   const effectiveFillBinding =
@@ -696,8 +650,8 @@ function InstanceRenderer({
   const effectiveStrokeWidth =
     node.strokeWidth !== undefined ? node.strokeWidth : component.strokeWidth;
 
-  const fillColor = resolveColor(effectiveFill, effectiveFillBinding);
-  const strokeColor = resolveColor(effectiveStroke, effectiveStrokeBinding);
+  const fillColor = resolveColor(effectiveFill, effectiveFillBinding, variables, currentTheme);
+  const strokeColor = resolveColor(effectiveStroke, effectiveStrokeBinding, variables, currentTheme);
 
   // Calculate layout for children if auto-layout is enabled
   const layoutChildren = component.layout?.autoLayout
@@ -854,22 +808,8 @@ function DescendantRenderer({
   const currentTheme = effectiveTheme ?? globalTheme;
   const selectDescendant = useSelectionStore((state) => state.selectDescendant);
 
-  // Resolve color from variable binding
-  const resolveColor = (
-    color: string | undefined,
-    binding?: { variableId: string },
-  ): string | undefined => {
-    if (binding) {
-      const variable = variables.find((v) => v.id === binding.variableId);
-      if (variable) {
-        return getVariableValue(variable, currentTheme);
-      }
-    }
-    return color;
-  };
-
-  const fillColor = resolveColor(node.fill, node.fillBinding);
-  const strokeColor = resolveColor(node.stroke, node.strokeBinding);
+  const fillColor = resolveColor(node.fill, node.fillBinding, variables, currentTheme);
+  const strokeColor = resolveColor(node.stroke, node.strokeBinding, variables, currentTheme);
 
   // Selection highlight stroke
   const selectionStroke = isSelected ? "#8B5CF6" : undefined;
@@ -1047,22 +987,8 @@ function RenderNodeWithOverrides({
   const globalTheme = useThemeStore((state) => state.activeTheme);
   const currentTheme = effectiveTheme ?? globalTheme;
 
-  // Resolve color from variable binding
-  const resolveColor = (
-    color: string | undefined,
-    binding?: { variableId: string },
-  ): string | undefined => {
-    if (binding) {
-      const variable = variables.find((v) => v.id === binding.variableId);
-      if (variable) {
-        return getVariableValue(variable, currentTheme);
-      }
-    }
-    return color;
-  };
-
-  const fillColor = resolveColor(node.fill, node.fillBinding);
-  const strokeColor = resolveColor(node.stroke, node.strokeBinding);
+  const fillColor = resolveColor(node.fill, node.fillBinding, variables, currentTheme);
+  const strokeColor = resolveColor(node.stroke, node.strokeBinding, variables, currentTheme);
 
   // Don't render if node is hidden
   if (node.visible === false || node.enabled === false) {

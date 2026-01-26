@@ -1,33 +1,18 @@
 import clsx from 'clsx'
 import { useSceneStore } from '../store/sceneStore'
-import { useSelectionStore } from '../store/selectionStore'
-import { useViewportStore } from '../store/viewportStore'
-import { getAllComponents, findNodeById } from '../utils/nodeUtils'
+import { getAllComponents } from '../utils/nodeUtils'
 import { generateId } from '../types/scene'
 import type { SceneNode, FrameNode, RefNode } from '../types/scene'
+import { useNodePlacement } from '../hooks/useNodePlacement'
 
 export function ComponentsPanel() {
   const nodes = useSceneStore((state) => state.nodes)
   const addNode = useSceneStore((state) => state.addNode)
   const addChildToFrame = useSceneStore((state) => state.addChildToFrame)
-  const { selectedIds } = useSelectionStore()
-  const { scale, x, y } = useViewportStore()
+  const { getSelectedFrame, getViewportCenter } = useNodePlacement()
 
   // Get all components from the scene
   const components = getAllComponents(nodes)
-
-  // Check if a Frame is selected (to add instance as child)
-  const getSelectedFrame = (): FrameNode | null => {
-    if (selectedIds.length !== 1) return null
-    const node = findNodeById(nodes, selectedIds[0])
-    return node?.type === 'frame' ? (node as FrameNode) : null
-  }
-
-  const getViewportCenter = () => {
-    const centerX = (window.innerWidth / 2 - x) / scale
-    const centerY = (window.innerHeight / 2 - y) / scale
-    return { centerX, centerY }
-  }
 
   const createInstance = (component: FrameNode) => {
     const { centerX, centerY } = getViewportCenter()

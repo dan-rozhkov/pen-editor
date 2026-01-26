@@ -57,6 +57,132 @@ function mapAlignItems(align: LayoutProperties["alignItems"]): number {
   }
 }
 
+/**
+ * Apply layout properties (padding, gap) to a Yoga node
+ */
+function applyLayoutProperties(
+  node: YogaNode,
+  layout: LayoutProperties | undefined,
+  Y: Yoga
+): void {
+  if (!layout?.autoLayout) return;
+
+  node.setFlexDirection(mapFlexDirection(layout.flexDirection));
+  if (layout.gap !== undefined) {
+    node.setGap(Y.GUTTER_ALL, layout.gap);
+  }
+  if (layout.paddingTop !== undefined) {
+    node.setPadding(Y.EDGE_TOP, layout.paddingTop);
+  }
+  if (layout.paddingRight !== undefined) {
+    node.setPadding(Y.EDGE_RIGHT, layout.paddingRight);
+  }
+  if (layout.paddingBottom !== undefined) {
+    node.setPadding(Y.EDGE_BOTTOM, layout.paddingBottom);
+  }
+  if (layout.paddingLeft !== undefined) {
+    node.setPadding(Y.EDGE_LEFT, layout.paddingLeft);
+  }
+  if (layout.alignItems !== undefined) {
+    node.setAlignItems(mapAlignItems(layout.alignItems));
+  }
+  if (layout.justifyContent !== undefined) {
+    node.setJustifyContent(mapJustifyContent(layout.justifyContent));
+  }
+}
+
+/**
+ * Calculate effective size for a child node considering fit_content sizing
+ */
+function calculateEffectiveSize(
+  child: SceneNode,
+  widthMode: "fixed" | "fill_container" | "fit_content",
+  heightMode: "fixed" | "fill_container" | "fit_content"
+): { width: number; height: number } {
+  let effectiveWidth = child.width;
+  let effectiveHeight = child.height;
+
+  if (child.type === "frame") {
+    const frameChild = child as FrameNode;
+    const needsIntrinsicSize =
+      (widthMode === "fit_content" || heightMode === "fit_content") &&
+      frameChild.layout?.autoLayout &&
+      frameChild.children.length > 0;
+
+    if (needsIntrinsicSize) {
+      const intrinsicSize = calculateFrameIntrinsicSizeForNested(frameChild);
+      if (widthMode === "fit_content") {
+        effectiveWidth = intrinsicSize.width;
+      }
+      if (heightMode === "fit_content") {
+        effectiveHeight = intrinsicSize.height;
+      }
+    }
+  }
+
+  return { width: effectiveWidth, height: effectiveHeight };
+}
+
+/**
+ * Apply width sizing mode to a Yoga node
+ */
+function applySizingWidth(
+  node: YogaNode,
+  widthMode: "fixed" | "fill_container" | "fit_content",
+  effectiveWidth: number,
+  isHorizontal: boolean,
+  child: SceneNode,
+  Y: Yoga
+): void {
+  if (widthMode === "fixed") {
+    node.setWidth(effectiveWidth);
+  } else if (widthMode === "fill_container") {
+    if (isHorizontal) {
+      node.setFlexGrow(1);
+      node.setFlexShrink(1);
+      node.setFlexBasis(0);
+    } else {
+      node.setAlignSelf(Y.ALIGN_STRETCH);
+    }
+  } else if (widthMode === "fit_content") {
+    // For nested auto-layout frames, use their computed intrinsic size
+    if (child.type === "frame" && (child as FrameNode).layout?.autoLayout) {
+      node.setWidth(effectiveWidth);
+    }
+    // For non-frame nodes, let Yoga calculate based on content
+  }
+}
+
+/**
+ * Apply height sizing mode to a Yoga node
+ */
+function applySizingHeight(
+  node: YogaNode,
+  heightMode: "fixed" | "fill_container" | "fit_content",
+  effectiveHeight: number,
+  isHorizontal: boolean,
+  child: SceneNode,
+  Y: Yoga
+): void {
+  if (heightMode === "fixed") {
+    node.setHeight(effectiveHeight);
+  } else if (heightMode === "fill_container") {
+    if (!isHorizontal) {
+      node.setFlexGrow(1);
+      node.setFlexShrink(1);
+      node.setFlexBasis(0);
+    } else {
+      node.setAlignSelf(Y.ALIGN_STRETCH);
+    }
+  } else if (heightMode === "fit_content") {
+    // For nested auto-layout frames, use their computed intrinsic size
+    if (child.type === "frame" && (child as FrameNode).layout?.autoLayout) {
+      node.setHeight(effectiveHeight);
+    }
+    // For non-frame nodes, let Yoga calculate based on content
+  }
+}
+
 // Map our JustifyContent to Yoga constants
 function mapJustifyContent(
   justify: LayoutProperties["justifyContent"],
@@ -108,33 +234,7 @@ export function createYogaNodeForFrame(frame: FrameNode): YogaNode {
 
   // Apply layout properties if auto-layout is enabled
   const layout = frame.layout;
-  if (layout?.autoLayout) {
-    // Flex direction
-    node.setFlexDirection(mapFlexDirection(layout.flexDirection));
-
-    // Gap
-    if (layout.gap !== undefined) {
-      node.setGap(Y.GUTTER_ALL, layout.gap);
-    }
-
-    // Padding
-    if (layout.paddingTop !== undefined) {
-      node.setPadding(Y.EDGE_TOP, layout.paddingTop);
-    }
-    if (layout.paddingRight !== undefined) {
-      node.setPadding(Y.EDGE_RIGHT, layout.paddingRight);
-    }
-    if (layout.paddingBottom !== undefined) {
-      node.setPadding(Y.EDGE_BOTTOM, layout.paddingBottom);
-    }
-    if (layout.paddingLeft !== undefined) {
-      node.setPadding(Y.EDGE_LEFT, layout.paddingLeft);
-    }
-
-    // Alignment
-    node.setAlignItems(mapAlignItems(layout.alignItems));
-    node.setJustifyContent(mapJustifyContent(layout.justifyContent));
-  }
+  applyLayoutProperties(node, layout, Y);
 
   return node;
 }
@@ -157,31 +257,12 @@ export function createYogaChildNode(
     parentLayout?.flexDirection === "row" ||
     parentLayout?.flexDirection === undefined;
 
-  // Default to explicit sizes unless fit_content requires intrinsic measurement
-  let effectiveWidth = child.width;
-  let effectiveHeight = child.height;
-
-  if (child.type === "frame") {
-    const frameChild = child as FrameNode;
-    const needsIntrinsicSize =
-      (widthMode === "fit_content" || heightMode === "fit_content") &&
-      frameChild.layout?.autoLayout &&
-      frameChild.children.length > 0;
-
-    if (needsIntrinsicSize) {
-      const intrinsicSize = calculateFrameIntrinsicSizeForNested(frameChild);
-      if (widthMode === "fit_content") {
-        effectiveWidth = intrinsicSize.width;
-      }
-      if (heightMode === "fit_content") {
-        effectiveHeight = intrinsicSize.height;
-      }
-      console.log("[Yoga] createYogaChildNode - nested frame intrinsic size", {
-        childId: child.id,
-        intrinsicSize,
-      });
-    }
-  }
+  // Calculate effective sizes
+  const { width: effectiveWidth, height: effectiveHeight } = calculateEffectiveSize(
+    child,
+    widthMode,
+    heightMode
+  );
 
   console.log("[Yoga] createYogaChildNode", {
     childId: child.id,
@@ -192,47 +273,9 @@ export function createYogaChildNode(
     effectiveHeight,
   });
 
-  // Width handling
-  if (widthMode === "fixed") {
-    node.setWidth(effectiveWidth);
-  } else if (widthMode === "fill_container") {
-    // On main axis (row): use flexGrow to fill available space
-    // On cross axis (column): use alignSelf stretch
-    if (isHorizontal) {
-      node.setFlexGrow(1);
-      node.setFlexShrink(1);
-      node.setFlexBasis(0); // Start from 0 and grow
-    } else {
-      node.setAlignSelf(Y.ALIGN_STRETCH);
-    }
-  } else if (widthMode === "fit_content") {
-    // For nested auto-layout frames, use their computed intrinsic size
-    if (child.type === "frame" && (child as FrameNode).layout?.autoLayout) {
-      node.setWidth(effectiveWidth);
-    }
-    // For non-frame nodes, let Yoga calculate based on content
-  }
-
-  // Height handling
-  if (heightMode === "fixed") {
-    node.setHeight(effectiveHeight);
-  } else if (heightMode === "fill_container") {
-    // On main axis (column): use flexGrow to fill available space
-    // On cross axis (row): use alignSelf stretch
-    if (!isHorizontal) {
-      node.setFlexGrow(1);
-      node.setFlexShrink(1);
-      node.setFlexBasis(0); // Start from 0 and grow
-    } else {
-      node.setAlignSelf(Y.ALIGN_STRETCH);
-    }
-  } else if (heightMode === "fit_content") {
-    // For nested auto-layout frames, use their computed intrinsic size
-    if (child.type === "frame" && (child as FrameNode).layout?.autoLayout) {
-      node.setHeight(effectiveHeight);
-    }
-    // For non-frame nodes, let Yoga calculate based on content
-  }
+  // Apply sizing modes
+  applySizingWidth(node, widthMode, effectiveWidth, isHorizontal, child, Y);
+  applySizingHeight(node, heightMode, effectiveHeight, isHorizontal, child, Y);
 
   return node;
 }
@@ -263,26 +306,7 @@ function calculateFrameIntrinsicSizeForNested(frame: FrameNode): {
 
   // Apply layout properties (direction, gap, padding, alignment)
   const layout = frame.layout;
-  if (layout?.autoLayout) {
-    rootNode.setFlexDirection(mapFlexDirection(layout.flexDirection));
-    if (layout.gap !== undefined) {
-      rootNode.setGap(Y.GUTTER_ALL, layout.gap);
-    }
-    if (layout.paddingTop !== undefined) {
-      rootNode.setPadding(Y.EDGE_TOP, layout.paddingTop);
-    }
-    if (layout.paddingRight !== undefined) {
-      rootNode.setPadding(Y.EDGE_RIGHT, layout.paddingRight);
-    }
-    if (layout.paddingBottom !== undefined) {
-      rootNode.setPadding(Y.EDGE_BOTTOM, layout.paddingBottom);
-    }
-    if (layout.paddingLeft !== undefined) {
-      rootNode.setPadding(Y.EDGE_LEFT, layout.paddingLeft);
-    }
-    rootNode.setAlignItems(mapAlignItems(layout.alignItems));
-    rootNode.setJustifyContent(mapJustifyContent(layout.justifyContent));
-  }
+  applyLayoutProperties(rootNode, layout, Y);
 
   // Add children with their sizes (recursive for nested frames)
   const visibleChildren = frame.children.filter((c) => c.visible !== false);
@@ -316,59 +340,16 @@ function createYogaChildNodeWithIntrinsicSize(
     parentLayout?.flexDirection === "row" ||
     parentLayout?.flexDirection === undefined;
 
-  // Default to explicit sizes unless fit_content requires intrinsic measurement
-  let effectiveWidth = child.width;
-  let effectiveHeight = child.height;
+  // Calculate effective sizes
+  const { width: effectiveWidth, height: effectiveHeight } = calculateEffectiveSize(
+    child,
+    widthMode,
+    heightMode
+  );
 
-  if (child.type === "frame") {
-    const frameChild = child as FrameNode;
-    const needsIntrinsicSize =
-      (widthMode === "fit_content" || heightMode === "fit_content") &&
-      frameChild.layout?.autoLayout &&
-      frameChild.children.length > 0;
-
-    if (needsIntrinsicSize) {
-      const intrinsicSize = calculateFrameIntrinsicSizeForNested(frameChild);
-      if (widthMode === "fit_content") {
-        effectiveWidth = intrinsicSize.width;
-      }
-      if (heightMode === "fit_content") {
-        effectiveHeight = intrinsicSize.height;
-      }
-      console.log("[Yoga] nested frame intrinsic size", {
-        childId: child.id,
-        intrinsicSize,
-      });
-    }
-  }
-
-  // Width handling
-  if (widthMode === "fixed") {
-    node.setWidth(effectiveWidth);
-  } else if (widthMode === "fill_container") {
-    if (isHorizontal) {
-      node.setFlexGrow(1);
-      node.setFlexShrink(1);
-      node.setFlexBasis(0);
-    } else {
-      node.setAlignSelf(Y.ALIGN_STRETCH);
-    }
-  }
-  // fit_content: don't set width, let Yoga compute
-
-  // Height handling
-  if (heightMode === "fixed") {
-    node.setHeight(effectiveHeight);
-  } else if (heightMode === "fill_container") {
-    if (!isHorizontal) {
-      node.setFlexGrow(1);
-      node.setFlexShrink(1);
-      node.setFlexBasis(0);
-    } else {
-      node.setAlignSelf(Y.ALIGN_STRETCH);
-    }
-  }
-  // fit_content: don't set height, let Yoga compute
+  // Apply sizing modes
+  applySizingWidth(node, widthMode, effectiveWidth, isHorizontal, child, Y);
+  applySizingHeight(node, heightMode, effectiveHeight, isHorizontal, child, Y);
 
   return node;
 }
@@ -400,24 +381,7 @@ export function calculateFrameIntrinsicSize(
 
   const layout = frame.layout;
   // Apply layout properties
-  rootNode.setFlexDirection(mapFlexDirection(layout.flexDirection));
-  if (layout.gap !== undefined) {
-    rootNode.setGap(Y.GUTTER_ALL, layout.gap);
-  }
-  if (layout.paddingTop !== undefined) {
-    rootNode.setPadding(Y.EDGE_TOP, layout.paddingTop);
-  }
-  if (layout.paddingRight !== undefined) {
-    rootNode.setPadding(Y.EDGE_RIGHT, layout.paddingRight);
-  }
-  if (layout.paddingBottom !== undefined) {
-    rootNode.setPadding(Y.EDGE_BOTTOM, layout.paddingBottom);
-  }
-  if (layout.paddingLeft !== undefined) {
-    rootNode.setPadding(Y.EDGE_LEFT, layout.paddingLeft);
-  }
-  rootNode.setAlignItems(mapAlignItems(layout.alignItems));
-  rootNode.setJustifyContent(mapJustifyContent(layout.justifyContent));
+  applyLayoutProperties(rootNode, layout, Y);
 
   // Create child nodes
   const visibleChildren = frame.children.filter((c) => c.visible !== false);

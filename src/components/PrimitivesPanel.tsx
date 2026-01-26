@@ -1,41 +1,13 @@
 import { Frame, Square, Circle, Type } from 'lucide-react'
 import { useSceneStore } from '../store/sceneStore'
-import { useSelectionStore } from '../store/selectionStore'
-import { useViewportStore } from '../store/viewportStore'
 import { generateId } from '../types/scene'
-import type { SceneNode, FrameNode } from '../types/scene'
-
-// Helper to find a node by ID recursively
-function findNodeById(nodes: SceneNode[], id: string): SceneNode | null {
-  for (const node of nodes) {
-    if (node.id === id) return node
-    if (node.type === 'frame') {
-      const found = findNodeById(node.children, id)
-      if (found) return found
-    }
-  }
-  return null
-}
+import type { SceneNode } from '../types/scene'
+import { useNodePlacement } from '../hooks/useNodePlacement'
 
 export function PrimitivesPanel() {
   const addNode = useSceneStore((state) => state.addNode)
   const addChildToFrame = useSceneStore((state) => state.addChildToFrame)
-  const nodes = useSceneStore((state) => state.nodes)
-  const { selectedIds } = useSelectionStore()
-  const { scale, x, y } = useViewportStore()
-
-  // Check if a Frame is selected
-  const getSelectedFrame = (): FrameNode | null => {
-    if (selectedIds.length !== 1) return null
-    const node = findNodeById(nodes, selectedIds[0])
-    return node?.type === 'frame' ? (node as FrameNode) : null
-  }
-
-  const getViewportCenter = () => {
-    const centerX = (window.innerWidth / 2 - x) / scale
-    const centerY = (window.innerHeight / 2 - y) / scale
-    return { centerX, centerY }
-  }
+  const { getSelectedFrame, getViewportCenter } = useNodePlacement()
 
   // Add node either to selected frame or to root
   const addNodeOrChild = (node: SceneNode) => {

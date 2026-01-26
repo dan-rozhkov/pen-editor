@@ -36,6 +36,19 @@ function getExtension(format: ExportFormat): string {
 }
 
 /**
+ * Generate export filename with scale label
+ */
+function generateFilename(
+  baseName: string,
+  format: ExportFormat,
+  scale: ExportScale
+): string {
+  const ext = getExtension(format)
+  const scaleLabel = scale > 1 ? `@${scale}x` : ''
+  return `${baseName}${scaleLabel}.${ext}`
+}
+
+/**
  * Export a specific node as an image
  */
 export function exportNodeAsImage(
@@ -63,9 +76,7 @@ export function exportNodeAsImage(
     // Generate filename
     const nodeName = (node.attrs.name as string) || node.getClassName() || 'element'
     const sanitizedName = nodeName.replace(/[^a-zA-Z0-9_-]/g, '_')
-    const ext = getExtension(format)
-    const scaleLabel = scale > 1 ? `@${scale}x` : ''
-    const finalFilename = filename || `${sanitizedName}${scaleLabel}.${ext}`
+    const finalFilename = filename || generateFilename(sanitizedName, format, scale)
 
     downloadDataUrl(dataUrl, finalFilename)
     return true
@@ -93,9 +104,7 @@ export function exportCanvasAsImage(
     })
 
     // Generate filename
-    const ext = getExtension(format)
-    const scaleLabel = scale > 1 ? `@${scale}x` : ''
-    const finalFilename = filename || `canvas${scaleLabel}.${ext}`
+    const finalFilename = filename || generateFilename('canvas', format, scale)
 
     downloadDataUrl(dataUrl, finalFilename)
     return true
@@ -122,11 +131,9 @@ export function exportImage(
     // Try to export the specific node
     const node = stage.findOne(`#${nodeId}`)
     if (node) {
-      const ext = getExtension(format)
-      const scaleLabel = scale > 1 ? `@${scale}x` : ''
       const name = nodeName || node.getClassName() || 'element'
       const sanitizedName = name.replace(/[^a-zA-Z0-9_-]/g, '_')
-      const filename = `${sanitizedName}${scaleLabel}.${ext}`
+      const filename = generateFilename(sanitizedName, format, scale)
 
       return exportNodeAsImage(stage, nodeId, { format, scale, filename })
     }

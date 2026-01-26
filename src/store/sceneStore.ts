@@ -160,6 +160,15 @@ function insertNodeRecursive(nodes: SceneNode[], nodeToInsert: SceneNode, parent
   })
 }
 
+// Generic helper to recursively process nodes in the tree
+function mapNodesRecursive(
+  nodes: SceneNode[],
+  processFn: (node: SceneNode, recurse: (children: SceneNode[]) => SceneNode[]) => SceneNode
+): SceneNode[] {
+  const recurse = (children: SceneNode[]) => mapNodesRecursive(children, processFn)
+  return nodes.map(node => processFn(node, recurse))
+}
+
 // Helper to update descendant override in a RefNode
 function updateDescendantOverrideRecursive(
   nodes: SceneNode[],
@@ -167,7 +176,7 @@ function updateDescendantOverrideRecursive(
   descendantId: string,
   updates: DescendantOverride
 ): SceneNode[] {
-  return nodes.map((node) => {
+  return mapNodesRecursive(nodes, (node, recurse) => {
     if (node.id === instanceId && node.type === 'ref') {
       const refNode = node as RefNode
       const existingOverrides = refNode.descendants || {}
@@ -184,7 +193,7 @@ function updateDescendantOverrideRecursive(
     if (node.type === 'frame') {
       return {
         ...node,
-        children: updateDescendantOverrideRecursive(node.children, instanceId, descendantId, updates),
+        children: recurse(node.children),
       } as FrameNode
     }
     return node
@@ -198,7 +207,7 @@ function resetDescendantOverrideRecursive(
   descendantId: string,
   property?: keyof DescendantOverride
 ): SceneNode[] {
-  return nodes.map((node) => {
+  return mapNodesRecursive(nodes, (node, recurse) => {
     if (node.id === instanceId && node.type === 'ref') {
       const refNode = node as RefNode
       const existingOverrides = refNode.descendants || {}
@@ -237,7 +246,7 @@ function resetDescendantOverrideRecursive(
     if (node.type === 'frame') {
       return {
         ...node,
-        children: resetDescendantOverrideRecursive(node.children, instanceId, descendantId, property),
+        children: recurse(node.children),
       } as FrameNode
     }
     return node
