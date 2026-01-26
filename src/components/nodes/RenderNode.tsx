@@ -22,7 +22,7 @@ import {
   isPointInsideRect,
   getFrameAbsoluteRectWithLayout,
 } from "../../utils/dragUtils";
-import { calculateFrameIntrinsicHeight } from "../../utils/yogaLayout";
+import { calculateFrameIntrinsicSize } from "../../utils/yogaLayout";
 
 // Figma-style hover outline color
 const HOVER_OUTLINE_COLOR = "#0d99ff";
@@ -556,11 +556,14 @@ function FrameRenderer({
     ? calculateLayoutForFrame(node)
     : node.children;
 
-  // Calculate effective height (fit_content uses intrinsic height from Yoga)
-  const effectiveHeight =
-    node.sizing?.heightMode === "fit_content" && node.layout?.autoLayout
-      ? calculateFrameIntrinsicHeight(node)
-      : node.height;
+  // Calculate effective size (fit_content uses intrinsic size from Yoga)
+  const fitWidth = node.sizing?.widthMode === "fit_content" && node.layout?.autoLayout;
+  const fitHeight = node.sizing?.heightMode === "fit_content" && node.layout?.autoLayout;
+  const intrinsicSize = (fitWidth || fitHeight)
+    ? calculateFrameIntrinsicSize(node, { fitWidth, fitHeight })
+    : { width: node.width, height: node.height };
+  const effectiveWidth = fitWidth ? intrinsicSize.width : node.width;
+  const effectiveHeight = fitHeight ? intrinsicSize.height : node.height;
 
   // If this frame has a theme override, use it for children
   const childTheme = node.themeOverride ?? effectiveTheme;
@@ -571,7 +574,7 @@ function FrameRenderer({
       name="selectable"
       x={node.x}
       y={node.y}
-      width={node.width}
+      width={effectiveWidth}
       height={effectiveHeight}
       rotation={node.rotation ?? 0}
       draggable
@@ -585,7 +588,7 @@ function FrameRenderer({
       onMouseLeave={onMouseLeave}
     >
       <Rect
-        width={node.width}
+        width={effectiveWidth}
         height={effectiveHeight}
         fill={fillColor}
         stroke={strokeColor}
@@ -598,7 +601,7 @@ function FrameRenderer({
       {/* Hover outline */}
       {isHovered && (
         <Rect
-          width={node.width}
+          width={effectiveWidth}
           height={effectiveHeight}
           stroke={HOVER_OUTLINE_COLOR}
           strokeWidth={1.5}

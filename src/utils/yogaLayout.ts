@@ -169,7 +169,7 @@ export function createYogaChildNode(
       frameChild.children.length > 0;
 
     if (needsIntrinsicSize) {
-      const intrinsicSize = calculateFrameIntrinsicSize(frameChild);
+      const intrinsicSize = calculateFrameIntrinsicSizeForNested(frameChild);
       if (widthMode === "fit_content") {
         effectiveWidth = intrinsicSize.width;
       }
@@ -248,8 +248,9 @@ export interface LayoutResult {
 /**
  * Calculate the intrinsic (fit-content) size of a frame based on its children.
  * Used for nested auto-layout frames to determine their natural size.
+ * This version calculates both width and height with no constraints.
  */
-export function calculateFrameIntrinsicSize(frame: FrameNode): {
+function calculateFrameIntrinsicSizeForNested(frame: FrameNode): {
   width: number;
   height: number;
 } {
@@ -295,11 +296,6 @@ export function calculateFrameIntrinsicSize(frame: FrameNode): {
   const computed = rootNode.getComputedLayout();
   rootNode.freeRecursive();
 
-  console.log("[Yoga] calculateFrameIntrinsicSize", {
-    frameId: frame.id,
-    width: computed.width,
-    height: computed.height,
-  });
   return { width: computed.width, height: computed.height };
 }
 
@@ -332,7 +328,7 @@ function createYogaChildNodeWithIntrinsicSize(
       frameChild.children.length > 0;
 
     if (needsIntrinsicSize) {
-      const intrinsicSize = calculateFrameIntrinsicSize(frameChild);
+      const intrinsicSize = calculateFrameIntrinsicSizeForNested(frameChild);
       if (widthMode === "fit_content") {
         effectiveWidth = intrinsicSize.width;
       }
@@ -378,20 +374,29 @@ function createYogaChildNodeWithIntrinsicSize(
 }
 
 /**
- * Calculate the intrinsic height of a Frame based on its children
- * Used when sizing.heightMode === 'fit_content'
+ * Calculate the intrinsic size of a Frame based on its children
+ * Used when sizing.widthMode or sizing.heightMode === 'fit_content'
  */
-export function calculateFrameIntrinsicHeight(frame: FrameNode): number {
+export function calculateFrameIntrinsicSize(
+  frame: FrameNode,
+  options: { fitWidth?: boolean; fitHeight?: boolean } = {}
+): { width: number; height: number } {
   if (!isYogaReady() || !frame.layout?.autoLayout) {
-    return frame.height;
+    return { width: frame.width, height: frame.height };
   }
 
+  const { fitWidth = false, fitHeight = false } = options;
   const Y = getYoga();
 
-  // Create a copy of frame node without fixed height
   const rootNode = Y.Node.create();
-  rootNode.setWidth(frame.width);
-  // Don't set height - let Yoga compute based on children
+
+  // Set dimensions - use undefined for fit_content dimensions
+  if (!fitWidth) {
+    rootNode.setWidth(frame.width);
+  }
+  if (!fitHeight) {
+    rootNode.setHeight(frame.height);
+  }
 
   const layout = frame.layout;
   // Apply layout properties
@@ -421,13 +426,28 @@ export function calculateFrameIntrinsicHeight(frame: FrameNode): number {
     rootNode.insertChild(childNode, index);
   });
 
-  // Calculate layout with undefined height (Yoga will compute based on children)
-  rootNode.calculateLayout(frame.width, undefined, Y.DIRECTION_LTR);
+  // Calculate layout
+  rootNode.calculateLayout(
+    fitWidth ? undefined : frame.width,
+    fitHeight ? undefined : frame.height,
+    Y.DIRECTION_LTR
+  );
 
-  const computedHeight = rootNode.getComputedLayout().height;
+  const computed = rootNode.getComputedLayout();
   rootNode.freeRecursive();
 
-  return computedHeight;
+  return {
+    width: fitWidth ? computed.width : frame.width,
+    height: fitHeight ? computed.height : frame.height,
+  };
+}
+
+/**
+ * Calculate the intrinsic height of a Frame based on its children
+ * Used when sizing.heightMode === 'fit_content'
+ */
+export function calculateFrameIntrinsicHeight(frame: FrameNode): number {
+  return calculateFrameIntrinsicSize(frame, { fitHeight: true }).height;
 }
 
 /**
