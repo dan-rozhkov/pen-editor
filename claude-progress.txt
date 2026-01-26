@@ -585,3 +585,20 @@
 - Feature 30: Варианты компонентов (variant refs)
 
 ---
+
+=== 2026-01-26 | Feature: Исправление позиции текстового редактора во вложенных auto-layout ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Создана функция getNodeAbsolutePositionWithLayout() в src/utils/nodeUtils.ts
+- Функция рекурсивно обходит дерево и вызывает calculateLayoutForFrame для auto-layout фреймов
+- Использует вычисленные Yoga позиции вместо сохранённых node.x/y
+- Модифицирован InlineTextEditor.tsx - добавлены props absoluteX и absoluteY
+- Обновлён Canvas.tsx - вычисляет абсолютную позицию для текстового редактора
+- E2E тест пройден: текстовый редактор корректно позиционируется внутри вложенных auto-layout фреймов
+
+Следующие шаги:
+- Feature: Создание компонента клавишей Opt+Cmd+K
+
+---

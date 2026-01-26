@@ -14,7 +14,8 @@ import { InlineNameEditor } from "./InlineNameEditor";
 import { FrameNameLabel } from "./nodes/FrameNameLabel";
 import type { TextNode, FrameNode, SceneNode } from "../types/scene";
 import { getViewportBounds, isNodeVisible } from "../utils/viewportUtils";
-import { getNodeAbsolutePosition } from "../utils/nodeUtils";
+import { getNodeAbsolutePosition, getNodeAbsolutePositionWithLayout } from "../utils/nodeUtils";
+import { useLayoutStore } from "../store/layoutStore";
 import { generateId } from "../types/scene";
 
 const ZOOM_FACTOR = 1.1;
@@ -41,6 +42,7 @@ export function Canvas() {
   const nodes = useSceneStore((state) => state.nodes);
   const addNode = useSceneStore((state) => state.addNode);
   const { copiedNode, copyNode } = useClipboardStore();
+  const calculateLayoutForFrame = useLayoutStore((state) => state.calculateLayoutForFrame);
 
   // Calculate viewport bounds and filter visible nodes
   const viewportBounds = useMemo(
@@ -165,6 +167,11 @@ export function Canvas() {
   // Get absolute position for name editor
   const editingNamePosition = editingNameNode
     ? getNodeAbsolutePosition(nodes, editingNameNode.id)
+    : null;
+
+  // Get absolute position for text editor (with layout calculation for auto-layout)
+  const editingTextPosition = editingTextNode
+    ? getNodeAbsolutePositionWithLayout(nodes, editingTextNode.id, calculateLayoutForFrame)
     : null;
 
   // Collect all frame nodes with their absolute positions for rendering labels
@@ -575,8 +582,12 @@ export function Canvas() {
         </Layer>
       </Stage>
       {/* Inline text editor overlay */}
-      {editingTextNode && editingMode === "text" && (
-        <InlineTextEditor node={editingTextNode} />
+      {editingTextNode && editingTextPosition && editingMode === "text" && (
+        <InlineTextEditor
+          node={editingTextNode}
+          absoluteX={editingTextPosition.x}
+          absoluteY={editingTextPosition.y}
+        />
       )}
       {/* Inline name editor overlay for frame names */}
       {editingNameNode && editingNamePosition && editingMode === "name" && (

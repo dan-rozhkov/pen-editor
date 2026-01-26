@@ -131,3 +131,45 @@ export function getAllComponents(nodes: SceneNode[]): FrameNode[] {
   collect(nodes)
   return components
 }
+
+/**
+ * Get absolute position of a node, taking into account Yoga layout calculations
+ * for auto-layout frames. This is necessary because children inside auto-layout
+ * frames have their positions computed by Yoga, not stored in node.x/y.
+ */
+export function getNodeAbsolutePositionWithLayout(
+  nodes: SceneNode[],
+  targetId: string,
+  calculateLayoutForFrame: (frame: FrameNode) => SceneNode[]
+): { x: number; y: number } | null {
+  function findWithPath(
+    searchNodes: SceneNode[],
+    accX: number,
+    accY: number,
+    parentFrame: FrameNode | null
+  ): { x: number; y: number } | null {
+    // If parent is an auto-layout frame, get layout-calculated positions
+    let effectiveNodes = searchNodes
+    if (parentFrame?.layout?.autoLayout) {
+      effectiveNodes = calculateLayoutForFrame(parentFrame)
+    }
+
+    for (const node of effectiveNodes) {
+      if (node.id === targetId) {
+        return { x: accX + node.x, y: accY + node.y }
+      }
+      if (node.type === 'frame') {
+        const found = findWithPath(
+          node.children,
+          accX + node.x,
+          accY + node.y,
+          node
+        )
+        if (found) return found
+      }
+    }
+    return null
+  }
+
+  return findWithPath(nodes, 0, 0, null)
+}

@@ -6,13 +6,15 @@ import { useViewportStore } from '../store/viewportStore'
 
 interface InlineTextEditorProps {
   node: TextNode
+  absoluteX: number
+  absoluteY: number
 }
 
 const MIN_WIDTH = 50
 const MIN_HEIGHT = 24
 const PADDING = 8
 
-export function InlineTextEditor({ node }: InlineTextEditorProps) {
+export function InlineTextEditor({ node, absoluteX, absoluteY }: InlineTextEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const measureRef = useRef<HTMLDivElement>(null)
   const [editText, setEditText] = useState(node.text)
@@ -21,9 +23,9 @@ export function InlineTextEditor({ node }: InlineTextEditorProps) {
   const stopEditing = useSelectionStore((state) => state.stopEditing)
   const { scale, x, y } = useViewportStore()
 
-  // Calculate screen position from world coordinates
-  const screenX = node.x * scale + x
-  const screenY = node.y * scale + y
+  // Calculate screen position from absolute world coordinates
+  const screenX = absoluteX * scale + x
+  const screenY = absoluteY * scale + y
   const screenFontSize = (node.fontSize ?? 16) * scale
   const screenLetterSpacing = (node.letterSpacing ?? 0) * scale
 

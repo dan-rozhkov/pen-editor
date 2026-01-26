@@ -282,6 +282,37 @@
     "passes": true
   },
   {
+    "category": "Phase 4.5: Bug Fixes & Shortcuts",
+    "description": "Исправление позиции текстового редактора во вложенных auto-layout",
+    "steps": [
+      "Текстовый редактор корректно позиционируется внутри auto-layout",
+      "Работает для вложенных auto-layout фреймов",
+      "Учитывает позиции, вычисленные Yoga layout"
+    ],
+    "passes": true
+  },
+  {
+    "category": "Phase 4.5: Bug Fixes & Shortcuts",
+    "description": "Создание компонента клавишей Opt+Cmd+K",
+    "steps": [
+      "Opt+Cmd+K создаёт компонент из выбранного фрейма",
+      "Работает только для фреймов (не для других типов нод)",
+      "Не применяется к уже существующим компонентам"
+    ],
+    "passes": false
+  },
+  {
+    "category": "Phase 4.5: Bug Fixes & Shortcuts",
+    "description": "Перемещение нод стрелками клавиатуры внутри auto-layout",
+    "steps": [
+      "←→ перемещают элемент в horizontal layout",
+      "↑↓ перемещают элемент в vertical layout",
+      "Стрелки игнорируются для нерелевантного направления layout",
+      "Работает только для элементов внутри auto-layout фреймов"
+    ],
+    "passes": false
+  },
+  {
     "category": "Phase 5: Components",
     "description": "Определение компонентов (reusable)",
     "steps": [
