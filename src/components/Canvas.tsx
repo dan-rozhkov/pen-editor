@@ -169,23 +169,24 @@ export function Canvas() {
 
   // Collect all frame nodes with their absolute positions for rendering labels
   const collectFrameNodes = useMemo(() => {
-    const frames: Array<{ node: FrameNode; absX: number; absY: number }> = [];
+    const frames: Array<{ node: FrameNode; absX: number; absY: number; isNested: boolean }> = [];
 
-    const traverse = (searchNodes: SceneNode[], accX: number, accY: number) => {
+    const traverse = (searchNodes: SceneNode[], accX: number, accY: number, isNested: boolean) => {
       for (const node of searchNodes) {
         if (node.type === "frame") {
           frames.push({
             node,
             absX: accX + node.x,
             absY: accY + node.y,
+            isNested,
           });
-          // Recursively collect nested frames
-          traverse(node.children, accX + node.x, accY + node.y);
+          // Recursively collect nested frames (mark them as nested)
+          traverse(node.children, accX + node.x, accY + node.y, true);
         }
       }
     };
 
-    traverse(visibleNodes, 0, 0);
+    traverse(visibleNodes, 0, 0, false);
     return frames;
   }, [visibleNodes]);
 
@@ -560,15 +561,17 @@ export function Canvas() {
             rotateEnabled={false}
           />
           {/* Frame name labels - rendered after transformer so they're not included in bounding box */}
-          {collectFrameNodes.map(({ node, absX, absY }) => (
-            <FrameNameLabel
-              key={`label-${node.id}`}
-              node={node}
-              isSelected={isSelected(node.id)}
-              absoluteX={absX}
-              absoluteY={absY}
-            />
-          ))}
+          {collectFrameNodes
+            .filter(({ isNested }) => !isNested)
+            .map(({ node, absX, absY }) => (
+              <FrameNameLabel
+                key={`label-${node.id}`}
+                node={node}
+                isSelected={isSelected(node.id)}
+                absoluteX={absX}
+                absoluteY={absY}
+              />
+            ))}
         </Layer>
       </Stage>
       {/* Inline text editor overlay */}
