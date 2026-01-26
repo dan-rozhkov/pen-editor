@@ -712,3 +712,23 @@
 - Feature: Плавный зум canvas как в Figma
 
 ---
+
+=== 2026-01-26 | Feature: Плавный зум canvas как в Figma ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Расширен viewportStore.ts с анимацией зума через requestAnimationFrame
+- Добавлены targetScale, zoomCenterX/Y, animationFrameId для состояния анимации
+- Реализована функция startSmoothZoom() с накоплением delta при быстрой прокрутке
+- Easing интерполяция: scale += (targetScale - scale) * EASING_FACTOR
+- Зум центрируется на позиции курсора во время всей анимации
+- Модифицирован handleWheel в Canvas.tsx для использования startSmoothZoom
+- Удалён неиспользуемый ZOOM_FACTOR
+- Параметры анимации: EASING_FACTOR=0.85, ZOOM_INTENSITY=0.008
+- E2E тест пройден: zoom in, zoom out, накопление delta, fitToContent работает
+
+Следующие шаги:
+- Feature: Варианты компонентов (variant refs)
+
+---

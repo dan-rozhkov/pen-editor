@@ -24,8 +24,6 @@ import {
 import { useLayoutStore } from "../store/layoutStore";
 import { generateId } from "../types/scene";
 
-const ZOOM_FACTOR = 1.1;
-
 export function Canvas() {
   const stageRef = useRef<Konva.Stage>(null);
   const transformerRef = useRef<Konva.Transformer>(null);
@@ -43,6 +41,7 @@ export function Canvas() {
     setPosition,
     setIsPanning,
     zoomAtPoint,
+    startSmoothZoom,
     fitToContent,
   } = useViewportStore();
   const nodes = useSceneStore((state) => state.nodes);
@@ -525,7 +524,7 @@ export function Canvas() {
   // Mouse wheel handler (Figma-style)
   // - Scroll = pan vertically
   // - Shift + scroll = pan horizontally
-  // - Cmd/Ctrl + scroll = zoom
+  // - Cmd/Ctrl + scroll = smooth zoom with animation
   const handleWheel = useCallback(
     (e: Konva.KonvaEventObject<WheelEvent>) => {
       e.evt.preventDefault();
@@ -533,16 +532,13 @@ export function Canvas() {
       const stage = stageRef.current;
       if (!stage) return;
 
-      // Cmd/Ctrl + scroll = zoom
+      // Cmd/Ctrl + scroll = smooth zoom
       if (e.evt.metaKey || e.evt.ctrlKey) {
         const pointerPos = stage.getPointerPosition();
         if (!pointerPos) return;
 
-        const direction = e.evt.deltaY > 0 ? -1 : 1;
-        const newScale =
-          direction > 0 ? scale * ZOOM_FACTOR : scale / ZOOM_FACTOR;
-
-        zoomAtPoint(newScale, pointerPos.x, pointerPos.y);
+        // Pass raw deltaY to startSmoothZoom for smooth accumulation
+        startSmoothZoom(e.evt.deltaY, pointerPos.x, pointerPos.y);
       } else {
         // Normal scroll = pan
         // Shift + scroll = horizontal pan
@@ -552,7 +548,7 @@ export function Canvas() {
         setPosition(x + dx, y + dy);
       }
     },
-    [scale, x, y, zoomAtPoint, setPosition],
+    [x, y, startSmoothZoom, setPosition],
   );
 
   // Pan handlers
