@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import clsx from 'clsx'
 import { useSceneStore } from '../store/sceneStore'
 import { useSelectionStore } from '../store/selectionStore'
+import { useHoverStore } from '../store/hoverStore'
 import type { SceneNode, FrameNode } from '../types/scene'
 
 // Icons for different node types
@@ -119,6 +120,7 @@ function LayerItem({
   onDrop,
 }: LayerItemProps) {
   const { selectedIds, select, addToSelection } = useSelectionStore()
+  const { hoveredNodeId, setHoveredNode } = useHoverStore()
   const toggleVisibility = useSceneStore((state) => state.toggleVisibility)
   const expandedFrameIds = useSceneStore((state) => state.expandedFrameIds)
   const toggleFrameExpanded = useSceneStore((state) => state.toggleFrameExpanded)
@@ -144,6 +146,7 @@ function LayerItem({
   const isExpanded = expandedFrameIds.has(node.id)
   const isDragging = dragState.draggedId === node.id
   const isDropTarget = dragState.dropTargetId === node.id
+  const isHovered = hoveredNodeId === node.id && !isSelected
 
   const handleClick = (e: React.MouseEvent) => {
     if (e.shiftKey) {
@@ -191,6 +194,14 @@ function LayerItem({
 
   const handleNameBlur = () => {
     handleNameSubmit()
+  }
+
+  const handleMouseEnter = () => {
+    setHoveredNode(node.id)
+  }
+
+  const handleMouseLeave = () => {
+    setHoveredNode(null)
   }
 
   const handleDragStart = (e: React.DragEvent) => {
@@ -241,6 +252,8 @@ function LayerItem({
         )}
         style={{ paddingLeft: `${12 + depth * 16}px` }}
         onClick={handleClick}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
         draggable
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
