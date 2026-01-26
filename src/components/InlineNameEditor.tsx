@@ -20,6 +20,7 @@ export function InlineNameEditor({ node, absoluteX, absoluteY }: InlineNameEdito
   const measureRef = useRef<HTMLSpanElement>(null)
   const [editName, setEditName] = useState(node.name || 'Frame')
   const [inputWidth, setInputWidth] = useState(MIN_WIDTH)
+  const editNameRef = useRef(editName) // Track current value
   const updateNode = useSceneStore((state) => state.updateNode)
   const stopEditing = useSelectionStore((state) => state.stopEditing)
   const { scale, x, y } = useViewportStore()
@@ -29,6 +30,21 @@ export function InlineNameEditor({ node, absoluteX, absoluteY }: InlineNameEdito
   const screenX = absoluteX * scale + x
   const screenY = labelWorldY * scale + y
   const screenFontSize = LABEL_FONT_SIZE * scale
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    editNameRef.current = editName
+  }, [editName])
+
+  // Save on unmount (blur/clearSelection case)
+  useEffect(() => {
+    return () => {
+      const trimmed = editNameRef.current.trim()
+      if (trimmed && trimmed !== node.name) {
+        updateNode(node.id, { name: trimmed })
+      }
+    }
+  }, [node.id, node.name, updateNode])
 
   // Measure text width and update input width
   useEffect(() => {

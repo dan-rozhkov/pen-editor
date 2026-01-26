@@ -120,7 +120,7 @@ function LayerItem({
   onDrop,
 }: LayerItemProps) {
   const { selectedIds, select, addToSelection } = useSelectionStore()
-  const { hoveredNodeId, setHoveredNode } = useHoverStore()
+  const { setHoveredNode } = useHoverStore()
   const toggleVisibility = useSceneStore((state) => state.toggleVisibility)
   const expandedFrameIds = useSceneStore((state) => state.expandedFrameIds)
   const toggleFrameExpanded = useSceneStore((state) => state.toggleFrameExpanded)
@@ -146,7 +146,6 @@ function LayerItem({
   const isExpanded = expandedFrameIds.has(node.id)
   const isDragging = dragState.draggedId === node.id
   const isDropTarget = dragState.dropTargetId === node.id
-  const isHovered = hoveredNodeId === node.id && !isSelected
 
   const handleClick = (e: React.MouseEvent) => {
     if (e.shiftKey) {
