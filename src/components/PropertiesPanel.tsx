@@ -1,5 +1,14 @@
 import { useState } from 'react'
+import {
+  AlignLeft,
+  AlignCenterHorizontal,
+  AlignRight,
+  AlignStartVertical,
+  AlignCenterVertical,
+  AlignEndVertical,
+} from 'lucide-react'
 import { useSceneStore } from '../store/sceneStore'
+import { useHistoryStore } from '../store/historyStore'
 import { useSelectionStore, type InstanceContext } from '../store/selectionStore'
 import { useVariableStore } from '../store/variableStore'
 import { useThemeStore } from '../store/themeStore'
@@ -8,6 +17,7 @@ import { exportImage, type ExportFormat, type ExportScale } from '../utils/expor
 import type { SceneNode, FrameNode, RefNode, FlexDirection, AlignItems, JustifyContent, SizingMode, TextNode, TextWidthMode, TextAlign, DescendantOverride } from '../types/scene'
 import type { ThemeName, Variable } from '../types/variable'
 import { findParentFrame, findNodeById, findComponentById, type ParentContext } from '../utils/nodeUtils'
+import { alignNodes, type AlignmentType } from '../utils/alignmentUtils'
 import {
   PropertySection,
   PropertyRow,
@@ -47,10 +57,107 @@ function EmptyState() {
   )
 }
 
-function MultiSelectState({ count }: { count: number }) {
+interface AlignmentSectionProps {
+  count: number
+  selectedIds: string[]
+  nodes: SceneNode[]
+}
+
+function AlignmentSection({ count, selectedIds, nodes }: AlignmentSectionProps) {
+  const handleAlign = (alignment: AlignmentType) => {
+    const updates = alignNodes(selectedIds, nodes, alignment)
+    if (updates.length === 0) return
+
+    // Save history before batch update
+    useHistoryStore.getState().saveHistory(nodes)
+
+    // Apply all updates at once
+    let newNodes = nodes
+    for (const update of updates) {
+      const { id, ...changes } = update
+      if (Object.keys(changes).length > 0) {
+        newNodes = applyUpdateRecursive(newNodes, id, changes)
+      }
+    }
+    useSceneStore.getState().setNodesWithoutHistory(newNodes)
+  }
+
+  // Helper to apply update recursively in the tree
+  function applyUpdateRecursive(
+    nodeList: SceneNode[],
+    id: string,
+    changes: Partial<SceneNode>
+  ): SceneNode[] {
+    return nodeList.map((node) => {
+      if (node.id === id) {
+        return { ...node, ...changes } as SceneNode
+      }
+      if (node.type === 'frame') {
+        return {
+          ...node,
+          children: applyUpdateRecursive(node.children, id, changes),
+        } as FrameNode
+      }
+      return node
+    })
+  }
+
+  const iconSize = 16
+  const buttonBaseClass = 'p-2 rounded transition-colors'
+  const buttonClass = `${buttonBaseClass} bg-surface-elevated hover:bg-surface-hover text-text-muted hover:text-text-primary`
+
   return (
-    <div className="text-text-muted text-xs text-center p-5">
-      {count} layers selected
+    <div className="flex flex-col gap-4">
+      <PropertySection title="Alignment">
+        <div className="flex gap-1">
+          <button
+            className={buttonClass}
+            onClick={() => handleAlign('left')}
+            title="Align left"
+          >
+            <AlignLeft size={iconSize} />
+          </button>
+          <button
+            className={buttonClass}
+            onClick={() => handleAlign('centerH')}
+            title="Align center horizontally"
+          >
+            <AlignCenterHorizontal size={iconSize} />
+          </button>
+          <button
+            className={buttonClass}
+            onClick={() => handleAlign('right')}
+            title="Align right"
+          >
+            <AlignRight size={iconSize} />
+          </button>
+          <div className="w-2" />
+          <button
+            className={buttonClass}
+            onClick={() => handleAlign('top')}
+            title="Align top"
+          >
+            <AlignStartVertical size={iconSize} />
+          </button>
+          <button
+            className={buttonClass}
+            onClick={() => handleAlign('centerV')}
+            title="Align center vertically"
+          >
+            <AlignCenterVertical size={iconSize} />
+          </button>
+          <button
+            className={buttonClass}
+            onClick={() => handleAlign('bottom')}
+            title="Align bottom"
+          >
+            <AlignEndVertical size={iconSize} />
+          </button>
+        </div>
+      </PropertySection>
+      <div className="text-text-muted text-xs text-center">
+        {count} layers selected
+      </div>
     </div>
   )
 }
@@ -810,7 +917,13 @@ export function PropertiesPanel() {
       <Header />
       <div className="flex-1 overflow-y-auto p-3">
         {selectedIds.length === 0 && <EmptyState />}
-        {selectedIds.length > 1 && <MultiSelectState count={selectedIds.length} />}
+        {selectedIds.length > 1 && (
+          <AlignmentSection
+            count={selectedIds.length}
+            selectedIds={selectedIds}
+            nodes={nodes}
+          />
+        )}
         {/* If editing a descendant inside an instance, show descendant editor */}
         {instanceContext && (
           <DescendantPropertyEditor

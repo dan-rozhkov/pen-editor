@@ -42,7 +42,6 @@ export function Canvas() {
     isPanning,
     setPosition,
     setIsPanning,
-    zoomAtPoint,
     startSmoothZoom,
     fitToContent,
   } = useViewportStore();
