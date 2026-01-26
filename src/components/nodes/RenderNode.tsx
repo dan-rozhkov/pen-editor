@@ -20,7 +20,7 @@ import { findParentFrame, findComponentById } from "../../utils/nodeUtils";
 import {
   calculateDropPosition,
   isPointInsideRect,
-  getFrameAbsoluteRect,
+  getFrameAbsoluteRectWithLayout,
 } from "../../utils/dragUtils";
 
 // Figma-style hover outline color
@@ -121,16 +121,25 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
   };
 
   const handleDragMove = (e: Konva.KonvaEventObject<DragEvent>) => {
+    const target = e.target
+    // Only process if this is the actual node being dragged
+    // Prevents parent Group from handling child drag events
+    if (target.id() !== node.id) return;
+
     if (!isInAutoLayout || !parentFrame) return;
 
-    const stage = e.target.getStage();
+    const stage = target.getStage();
     if (!stage) return;
 
     const pointerPos = stage.getRelativePointerPosition();
     if (!pointerPos) return;
 
     // Get absolute position of parent frame
-    const frameRect = getFrameAbsoluteRect(parentFrame, nodes);
+    const frameRect = getFrameAbsoluteRectWithLayout(
+      parentFrame,
+      nodes,
+      calculateLayoutForFrame,
+    );
 
     // Check if cursor is inside parent frame
     const isInsideParent = isPointInsideRect(pointerPos, frameRect);

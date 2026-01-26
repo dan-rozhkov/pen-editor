@@ -68,6 +68,54 @@ export function getFrameAbsoluteRect(frame: FrameNode, nodes: SceneNode[]): Rect
   return { x, y, width: frame.width, height: frame.height }
 }
 
+type LayoutCalculator = (frame: FrameNode) => SceneNode[]
+
+function getNodeAbsoluteRectWithLayout(
+  nodes: SceneNode[],
+  targetId: string,
+  calculateLayoutForFrame: LayoutCalculator
+): Rect | null {
+  function search(searchNodes: SceneNode[], accX: number, accY: number): Rect | null {
+    for (const node of searchNodes) {
+      const nodeX = accX + node.x
+      const nodeY = accY + node.y
+
+      if (node.id === targetId) {
+        return { x: nodeX, y: nodeY, width: node.width, height: node.height }
+      }
+
+      if (node.type === 'frame') {
+        const childNodes = node.layout?.autoLayout
+          ? calculateLayoutForFrame(node)
+          : node.children
+        const found = search(childNodes, nodeX, nodeY)
+        if (found) return found
+      }
+    }
+    return null
+  }
+
+  return search(nodes, 0, 0)
+}
+
+export function getFrameAbsoluteRectWithLayout(
+  frame: FrameNode,
+  nodes: SceneNode[],
+  calculateLayoutForFrame: LayoutCalculator
+): Rect {
+  const layoutRect = getNodeAbsoluteRectWithLayout(
+    nodes,
+    frame.id,
+    calculateLayoutForFrame
+  )
+
+  if (layoutRect) {
+    return layoutRect
+  }
+
+  return getFrameAbsoluteRect(frame, nodes)
+}
+
 export interface DropPositionResult {
   indicator: DropIndicatorData
   insertInfo: InsertInfo
@@ -112,13 +160,39 @@ export function calculateDropPosition(
   }
 
   let insertIndex = 0
+  const draggedChild = sourceChildren.find(c => c.id === draggedId)
+  const referenceChildWidth = draggedChild?.width ?? (children.length > 0 ? children[0].width : undefined)
+  const referenceChildHeight = draggedChild?.height ?? (children.length > 0 ? children[0].height : undefined)
+
+  const innerWidth = parentFrame.width - paddingLeft - paddingRight
+  const innerHeight = parentFrame.height - paddingTop - paddingBottom
+  const alignItems = layout.alignItems ?? 'flex-start'
+
+  const getCrossOffset = (innerSize: number, itemSize: number): number => {
+    switch (alignItems) {
+      case 'center':
+        return (innerSize - itemSize) / 2
+      case 'flex-end':
+        return innerSize - itemSize
+      case 'stretch':
+      case 'flex-start':
+      default:
+        return 0
+    }
+  }
+
   let indicatorX = frameAbsolutePos.x + paddingLeft
   let indicatorY = frameAbsolutePos.y + paddingTop
 
   // Calculate indicator position based on layout direction
   if (isHorizontal) {
     // Horizontal layout - check X positions
-    const indicatorHeight = parentFrame.height - paddingTop - paddingBottom
+    const indicatorHeight =
+      alignItems === 'stretch'
+        ? innerHeight
+        : referenceChildHeight ?? innerHeight
+    const baseIndicatorY =
+      frameAbsolutePos.y + paddingTop + getCrossOffset(innerHeight, indicatorHeight)
 
     for (let i = 0; i < children.length; i++) {
       const child = children[i]
@@ -127,21 +201,21 @@ export function calculateDropPosition(
       if (localCursor.x < childCenterX) {
         // Insert before this child
         indicatorX = frameAbsolutePos.x + child.x - gap / 2
-        indicatorY = frameAbsolutePos.y + paddingTop
+        indicatorY = baseIndicatorY
         break
       }
       insertIndex = i + 1
       // If we're past the last child, indicator goes after it
       if (i === children.length - 1) {
         indicatorX = frameAbsolutePos.x + child.x + child.width + gap / 2
-        indicatorY = frameAbsolutePos.y + paddingTop
+        indicatorY = baseIndicatorY
       }
     }
 
     // Handle empty frame or first position
     if (children.length === 0) {
       indicatorX = frameAbsolutePos.x + paddingLeft
-      indicatorY = frameAbsolutePos.y + paddingTop
+      indicatorY = baseIndicatorY
     }
 
     return {
@@ -158,7 +232,12 @@ export function calculateDropPosition(
     }
   } else {
     // Vertical layout - check Y positions
-    const indicatorWidth = parentFrame.width - paddingLeft - paddingRight
+    const indicatorWidth =
+      alignItems === 'stretch'
+        ? innerWidth
+        : referenceChildWidth ?? innerWidth
+    const baseIndicatorX =
+      frameAbsolutePos.x + paddingLeft + getCrossOffset(innerWidth, indicatorWidth)
 
     for (let i = 0; i < children.length; i++) {
       const child = children[i]
@@ -166,21 +245,21 @@ export function calculateDropPosition(
 
       if (localCursor.y < childCenterY) {
         // Insert before this child
-        indicatorX = frameAbsolutePos.x + paddingLeft
+        indicatorX = baseIndicatorX
         indicatorY = frameAbsolutePos.y + child.y - gap / 2
         break
       }
       insertIndex = i + 1
       // If we're past the last child, indicator goes after it
       if (i === children.length - 1) {
-        indicatorX = frameAbsolutePos.x + paddingLeft
+        indicatorX = baseIndicatorX
         indicatorY = frameAbsolutePos.y + child.y + child.height + gap / 2
       }
     }
 
     // Handle empty frame or first position
     if (children.length === 0) {
-      indicatorX = frameAbsolutePos.x + paddingLeft
+      indicatorX = baseIndicatorX
       indicatorY = frameAbsolutePos.y + paddingTop
     }
 
