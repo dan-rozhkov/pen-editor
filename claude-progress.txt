@@ -602,3 +602,23 @@
 - Feature: Создание компонента клавишей Opt+Cmd+K
 
 ---
+
+=== 2026-01-26 | Feature: Создание компонента клавишей Opt+Cmd+K ===
+
+Статус: PASSED ✓
+
+Выполнено:
+- Добавлен updateNode selector из sceneStore в Canvas.tsx
+- Добавлен обработчик клавиш Opt+Cmd+K (Mac) / Alt+Ctrl+K (Windows) в handleKeyDown
+- Хоткей работает только для Frame нод (не для rect, ellipse, text)
+- Хоткей не применяется к уже существующим компонентам (reusable: true)
+- Добавлен updateNode в dependency array useEffect
+- E2E тест пройден через Playwright:
+  - Opt+Cmd+K превращает Frame в компонент (иконка 4 ромба в Components Panel)
+  - Повторное нажатие ничего не меняет
+  - Rectangle не превращается в компонент
+
+Следующие шаги:
+- Feature: Перемещение нод стрелками клавиатуры внутри auto-layout
+
+---

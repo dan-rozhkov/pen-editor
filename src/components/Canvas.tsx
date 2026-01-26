@@ -55,6 +55,7 @@ export function Canvas() {
     [nodes, viewportBounds],
   );
   const deleteNode = useSceneStore((state) => state.deleteNode);
+  const updateNode = useSceneStore((state) => state.updateNode);
   const setNodesWithoutHistory = useSceneStore(
     (state) => state.setNodesWithoutHistory,
   );
@@ -314,6 +315,23 @@ export function Canvas() {
         return;
       }
 
+      // Create Component: Opt+Cmd+K (Mac) or Alt+Ctrl+K (Windows)
+      if (e.altKey && (e.metaKey || e.ctrlKey) && e.code === "KeyK") {
+        e.preventDefault();
+        const ids = useSelectionStore.getState().selectedIds;
+        if (ids.length === 1) {
+          const selectedNode = findNodeByIdGeneric(nodes, ids[0]);
+          if (selectedNode && selectedNode.type === "frame") {
+            const frameNode = selectedNode as FrameNode;
+            // Don't apply to already existing components
+            if (!frameNode.reusable) {
+              updateNode(selectedNode.id, { reusable: true });
+            }
+          }
+        }
+        return;
+      }
+
       // Spacebar panning (skip if typing)
       if (e.code === "Space" && !e.repeat) {
         if (isTyping) return;
@@ -369,6 +387,7 @@ export function Canvas() {
     isMiddleMouseDown,
     setIsPanning,
     deleteNode,
+    updateNode,
     clearSelection,
     undo,
     redo,
