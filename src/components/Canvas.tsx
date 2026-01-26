@@ -21,6 +21,7 @@ import {
   getNodeAbsolutePositionWithLayout,
   findParentFrame,
   findComponentById,
+  findNodeById,
 } from "../utils/nodeUtils";
 import { useLayoutStore } from "../store/layoutStore";
 import { calculateFrameIntrinsicSize } from "../utils/yogaLayout";
@@ -493,55 +494,94 @@ export function Canvas() {
         }
       }
 
-      // Arrow keys for reordering inside auto-layout
+      // Arrow keys for moving nodes on canvas or reordering inside auto-layout
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) {
         if (isTyping) return;
 
         const ids = useSelectionStore.getState().selectedIds;
-        if (ids.length !== 1) return; // Only for single selection
+        if (ids.length === 0) return;
 
-        const nodeId = ids[0];
         const currentNodes = useSceneStore.getState().nodes;
 
-        // Find parent frame
-        const parentContext = findParentFrame(currentNodes, nodeId);
-        if (!parentContext.isInsideAutoLayout || !parentContext.parent) return;
+        // Categorize selected nodes
+        const nodesOutsideAutoLayout: string[] = [];
+        const nodesInsideAutoLayout: string[] = [];
 
-        const parentFrame = parentContext.parent;
-        const layout = parentFrame.layout;
-        const isHorizontal = layout?.flexDirection === 'row' || layout?.flexDirection === undefined;
-
-        // Determine movement direction
-        let direction: 'prev' | 'next' | null = null;
-
-        if (isHorizontal) {
-          // Horizontal layout: only ←→
-          if (e.code === 'ArrowLeft') direction = 'prev';
-          else if (e.code === 'ArrowRight') direction = 'next';
-        } else {
-          // Vertical layout: only ↑↓
-          if (e.code === 'ArrowUp') direction = 'prev';
-          else if (e.code === 'ArrowDown') direction = 'next';
+        for (const id of ids) {
+          const parentContext = findParentFrame(currentNodes, id);
+          if (parentContext.isInsideAutoLayout) {
+            nodesInsideAutoLayout.push(id);
+          } else {
+            nodesOutsideAutoLayout.push(id);
+          }
         }
 
-        if (!direction) return; // Irrelevant arrow key for this layout direction
+        // Case 1: Move nodes on canvas (outside auto-layout)
+        if (nodesOutsideAutoLayout.length > 0) {
+          e.preventDefault();
 
-        e.preventDefault();
+          const step = e.shiftKey ? 10 : 1;
+          let dx = 0, dy = 0;
 
-        // Find current index and calculate new index
-        const currentIndex = parentFrame.children.findIndex(c => c.id === nodeId);
-        if (currentIndex === -1) return;
+          if (e.code === 'ArrowLeft') dx = -step;
+          else if (e.code === 'ArrowRight') dx = step;
+          else if (e.code === 'ArrowUp') dy = -step;
+          else if (e.code === 'ArrowDown') dy = step;
 
-        const newIndex = direction === 'prev'
-          ? Math.max(0, currentIndex - 1)
-          : Math.min(parentFrame.children.length - 1, currentIndex + 1);
+          saveHistory(currentNodes);
 
-        if (newIndex === currentIndex) return; // Already at the edge
+          for (const id of nodesOutsideAutoLayout) {
+            const node = findNodeById(currentNodes, id);
+            if (node) {
+              updateNode(id, { x: node.x + dx, y: node.y + dy });
+            }
+          }
+          return;
+        }
 
-        // Move the element
-        saveHistory(currentNodes);
-        moveNode(nodeId, parentFrame.id, newIndex);
-        return;
+        // Case 2: Reorder inside auto-layout (single selection only)
+        if (nodesInsideAutoLayout.length === 1) {
+          const nodeId = nodesInsideAutoLayout[0];
+
+          const parentContext = findParentFrame(currentNodes, nodeId);
+          if (!parentContext.parent) return;
+
+          const parentFrame = parentContext.parent;
+          const layout = parentFrame.layout;
+          const isHorizontal = layout?.flexDirection === 'row' || layout?.flexDirection === undefined;
+
+          // Determine movement direction
+          let direction: 'prev' | 'next' | null = null;
+
+          if (isHorizontal) {
+            // Horizontal layout: only ←→
+            if (e.code === 'ArrowLeft') direction = 'prev';
+            else if (e.code === 'ArrowRight') direction = 'next';
+          } else {
+            // Vertical layout: only ↑↓
+            if (e.code === 'ArrowUp') direction = 'prev';
+            else if (e.code === 'ArrowDown') direction = 'next';
+          }
+
+          if (!direction) return; // Irrelevant arrow key for this layout direction
+
+          e.preventDefault();
+
+          // Find current index and calculate new index
+          const currentIndex = parentFrame.children.findIndex(c => c.id === nodeId);
+          if (currentIndex === -1) return;
+
+          const newIndex = direction === 'prev'
+            ? Math.max(0, currentIndex - 1)
+            : Math.min(parentFrame.children.length - 1, currentIndex + 1);
+
+          if (newIndex === currentIndex) return; // Already at the edge
+
+          // Move the element
+          saveHistory(currentNodes);
+          moveNode(nodeId, parentFrame.id, newIndex);
+          return;
+        }
       }
 
       // Escape - exit instance edit mode first, then clear selection
