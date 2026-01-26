@@ -232,13 +232,17 @@ export function Canvas() {
       effectiveHeight: number;
     }> = [];
 
-    const traverse = (
-      searchNodes: SceneNode[],
-      accX: number,
-      accY: number
-    ) => {
+    const traverse = (searchNodes: SceneNode[]) => {
       for (const node of searchNodes) {
         if (selectedIds.includes(node.id)) {
+          // Get absolute position with layout calculation for auto-layout
+          const absPos = getNodeAbsolutePositionWithLayout(
+            nodes,
+            node.id,
+            calculateLayoutForFrame
+          );
+          if (!absPos) continue;
+
           // Calculate effective size for auto-layout frames with fit_content
           let effectiveWidth = node.width;
           let effectiveHeight = node.height;
@@ -255,8 +259,8 @@ export function Canvas() {
 
           result.push({
             node,
-            absX: accX + node.x,
-            absY: accY + node.y,
+            absX: absPos.x,
+            absY: absPos.y,
             effectiveWidth,
             effectiveHeight,
           });
@@ -264,14 +268,14 @@ export function Canvas() {
 
         // Recurse into frames
         if (node.type === "frame") {
-          traverse(node.children, accX + node.x, accY + node.y);
+          traverse(node.children);
         }
       }
     };
 
-    traverse(visibleNodes, 0, 0);
+    traverse(visibleNodes);
     return result;
-  }, [visibleNodes, selectedIds]);
+  }, [visibleNodes, selectedIds, nodes, calculateLayoutForFrame]);
 
   // Update transformer nodes when selection changes
   useEffect(() => {
