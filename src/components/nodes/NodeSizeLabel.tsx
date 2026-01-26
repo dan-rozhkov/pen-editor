@@ -1,4 +1,4 @@
-import { Text } from 'react-konva'
+import { Group, Rect, Text } from 'react-konva'
 import { useEffect, useRef, useState } from 'react'
 import type Konva from 'konva'
 import type { SceneNode } from '../../types/scene'
@@ -13,8 +13,12 @@ interface NodeSizeLabelProps {
 }
 
 const LABEL_FONT_SIZE = 11
-const LABEL_OFFSET_Y = 4
-const LABEL_COLOR = '#0d99ff' // Blue color for selected
+const LABEL_OFFSET_Y = 6
+const LABEL_PADDING_X = 6
+const LABEL_PADDING_Y = 3
+const LABEL_CORNER_RADIUS = 3
+const LABEL_BG_COLOR = '#0d99ff' // Blue background
+const LABEL_TEXT_COLOR = '#ffffff' // White text
 
 export function NodeSizeLabel({
   node,
@@ -25,6 +29,7 @@ export function NodeSizeLabel({
 }: NodeSizeLabelProps) {
   const { scale } = useViewportStore()
   const textRef = useRef<Konva.Text>(null)
+  const groupRef = useRef<Konva.Group>(null)
   const [textWidth, setTextWidth] = useState(0)
   const [dragState, setDragState] = useState<{
     x: number
@@ -42,7 +47,7 @@ export function NodeSizeLabel({
 
   // Track the node's real-time position and size during drag/transform
   useEffect(() => {
-    const stage = textRef.current?.getStage()
+    const stage = groupRef.current?.getStage()
     if (!stage) return
 
     const konvaNode = stage.findOne(`#${node.id}`)
@@ -101,19 +106,37 @@ export function NodeSizeLabel({
   // Format dimensions
   const displayText = `${Math.round(currentWidth)} × ${Math.round(currentHeight)}`
 
+  // Calculate background dimensions
+  const bgWidth = textWidth + LABEL_PADDING_X * 2
+  const bgHeight = LABEL_FONT_SIZE + LABEL_PADDING_Y * 2
+
   return (
-    <Text
-      ref={textRef}
+    <Group
+      ref={groupRef}
       x={labelX}
       y={labelY}
-      text={displayText}
-      fontSize={LABEL_FONT_SIZE}
       scaleX={1 / safeScale}
       scaleY={1 / safeScale}
-      fontFamily="system-ui, -apple-system, sans-serif"
-      fill={LABEL_COLOR}
-      offsetX={textWidth / 2}
+      offsetX={bgWidth / 2}
       listening={false}
-    />
+    >
+      {/* Background */}
+      <Rect
+        width={bgWidth}
+        height={bgHeight}
+        fill={LABEL_BG_COLOR}
+        cornerRadius={LABEL_CORNER_RADIUS}
+      />
+      {/* Text */}
+      <Text
+        ref={textRef}
+        x={LABEL_PADDING_X}
+        y={LABEL_PADDING_Y}
+        text={displayText}
+        fontSize={LABEL_FONT_SIZE}
+        fontFamily="system-ui, -apple-system, sans-serif"
+        fill={LABEL_TEXT_COLOR}
+      />
+    </Group>
   )
 }
