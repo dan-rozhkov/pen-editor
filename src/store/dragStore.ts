@@ -1,27 +1,32 @@
-import { create } from 'zustand'
+import { create } from "zustand";
+import { useSelectionStore } from "./selectionStore";
 
 export interface DropIndicatorData {
-  x: number
-  y: number
-  length: number
-  direction: 'horizontal' | 'vertical'
+  x: number;
+  y: number;
+  length: number;
+  direction: "horizontal" | "vertical";
 }
 
 export interface InsertInfo {
-  parentId: string
-  index: number
+  parentId: string;
+  index: number;
 }
 
 interface DragState {
-  isDragging: boolean
-  draggedNodeId: string | null
-  dropIndicator: DropIndicatorData | null
-  insertInfo: InsertInfo | null
-  isOutsideParent: boolean
+  isDragging: boolean;
+  draggedNodeId: string | null;
+  dropIndicator: DropIndicatorData | null;
+  insertInfo: InsertInfo | null;
+  isOutsideParent: boolean;
 
-  startDrag: (nodeId: string) => void
-  updateDrop: (indicator: DropIndicatorData | null, insertInfo: InsertInfo | null, isOutsideParent?: boolean) => void
-  endDrag: () => void
+  startDrag: (nodeId: string) => void;
+  updateDrop: (
+    indicator: DropIndicatorData | null,
+    insertInfo: InsertInfo | null,
+    isOutsideParent?: boolean,
+  ) => void;
+  endDrag: () => void;
 }
 
 export const useDragStore = create<DragState>((set) => ({
@@ -31,14 +36,18 @@ export const useDragStore = create<DragState>((set) => ({
   insertInfo: null,
   isOutsideParent: false,
 
-  startDrag: (nodeId) =>
+  startDrag: (nodeId) => {
+    // Select the node when starting to drag
+    useSelectionStore.getState().select(nodeId);
+
     set({
       isDragging: true,
       draggedNodeId: nodeId,
       dropIndicator: null,
       insertInfo: null,
       isOutsideParent: false,
-    }),
+    });
+  },
 
   updateDrop: (indicator, insertInfo, isOutsideParent = false) =>
     set({
@@ -55,4 +64,4 @@ export const useDragStore = create<DragState>((set) => ({
       insertInfo: null,
       isOutsideParent: false,
     }),
-}))
+}));

@@ -805,12 +805,30 @@ export function Canvas() {
               }
               return newBox;
             }}
+            keepRatio={false}
             anchorSize={8}
             anchorCornerRadius={2}
+            anchorStyleFunc={(anchor) => {
+              const name = anchor.name();
+              // Show only corner anchors
+              if (!name.includes('top-left') && 
+                  !name.includes('top-right') && 
+                  !name.includes('bottom-left') && 
+                  !name.includes('bottom-right')) {
+                // Hide middle anchors visually but make them larger for easier interaction
+                anchor.width(20);
+                anchor.height(20);
+                anchor.strokeWidth(0);
+                anchor.fill('');
+                anchor.stroke('');
+              }
+            }}
             borderStroke={transformerColor}
             anchorStroke={transformerColor}
             anchorFill="#ffffff"
             rotateEnabled={false}
+            borderStrokeWidth={1}
+            anchorStrokeWidth={1}
           />
           {/* Frame name labels - rendered after transformer so they're not included in bounding box */}
           {collectFrameNodes

@@ -103,6 +103,9 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
   const isHovered = hoveredNodeId === node.id && !selectedIds.includes(node.id);
 
   const handleDragStart = () => {
+    // Always select the node when starting to drag
+    select(node.id);
+    
     if (isInAutoLayout) {
       startDrag(node.id);
     }

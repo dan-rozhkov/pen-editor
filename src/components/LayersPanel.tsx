@@ -401,6 +401,7 @@ export function LayersPanel() {
   const nodes = useSceneStore((state) => state.nodes)
   const moveNode = useSceneStore((state) => state.moveNode)
   const setFrameExpanded = useSceneStore((state) => state.setFrameExpanded)
+  const select = useSelectionStore((state) => state.select)
 
   const [dragState, setDragState] = useState<DragState>({
     draggedId: null,
@@ -410,13 +411,16 @@ export function LayersPanel() {
   })
 
   const handleDragStart = useCallback((nodeId: string) => {
+    // Select the node when starting to drag
+    select(nodeId)
+    
     setDragState({
       draggedId: nodeId,
       dropTargetId: null,
       dropPosition: null,
       dropParentId: null,
     })
-  }, [])
+  }, [select])
 
   const handleDragOver = useCallback((nodeId: string, position: DropPosition, parentId: string | null) => {
     setDragState((prev) => ({
