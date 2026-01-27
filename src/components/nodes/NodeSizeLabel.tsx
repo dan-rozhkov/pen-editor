@@ -5,7 +5,8 @@ import type { SceneNode } from '../../types/scene'
 import { useViewportStore } from '../../store/viewportStore'
 
 interface NodeSizeLabelProps {
-  node: SceneNode
+  node?: SceneNode
+  nodeIds?: string[]
   absoluteX: number
   absoluteY: number
   effectiveWidth: number
@@ -22,6 +23,7 @@ const LABEL_TEXT_COLOR = '#ffffff' // White text
 
 export function NodeSizeLabel({
   node,
+  nodeIds,
   absoluteX,
   absoluteY,
   effectiveWidth,
@@ -38,6 +40,9 @@ export function NodeSizeLabel({
     height: number
   } | null>(null)
 
+  // Determine which node IDs to track for drag/transform
+  const trackIds = nodeIds ?? (node ? [node.id] : [])
+
   // Update text width for centering
   useEffect(() => {
     if (textRef.current) {
@@ -45,40 +50,48 @@ export function NodeSizeLabel({
     }
   })
 
-  // Track the node's real-time position and size during drag/transform
+  // Track node(s) real-time position and size during drag/transform
   useEffect(() => {
+    if (trackIds.length === 0) return
+
     const stage = groupRef.current?.getStage()
     if (!stage) return
 
-    const konvaNode = stage.findOne(`#${node.id}`)
-    if (!konvaNode) return
+    const konvaNodes: Konva.Node[] = []
+    for (const id of trackIds) {
+      const konvaNode = stage.findOne(`#${id}`)
+      if (konvaNode) {
+        konvaNodes.push(konvaNode)
+      }
+    }
+
+    if (konvaNodes.length === 0) return
 
     const updateDragState = () => {
-      const pos = konvaNode.getAbsolutePosition()
-      setDragState({
-        x: pos.x,
-        y: pos.y,
-        width: konvaNode.width() * konvaNode.scaleX(),
-        height: konvaNode.height() * konvaNode.scaleY(),
-      })
+      // Just set a non-null state to trigger hiding the label
+      setDragState({ x: 0, y: 0, width: 0, height: 0 })
     }
 
     const handleEnd = () => {
       setDragState(null)
     }
 
-    konvaNode.on('dragmove', updateDragState)
-    konvaNode.on('transform', updateDragState)
-    konvaNode.on('dragend', handleEnd)
-    konvaNode.on('transformend', handleEnd)
+    for (const konvaNode of konvaNodes) {
+      konvaNode.on('dragmove', updateDragState)
+      konvaNode.on('transform', updateDragState)
+      konvaNode.on('dragend', handleEnd)
+      konvaNode.on('transformend', handleEnd)
+    }
 
     return () => {
-      konvaNode.off('dragmove', updateDragState)
-      konvaNode.off('transform', updateDragState)
-      konvaNode.off('dragend', handleEnd)
-      konvaNode.off('transformend', handleEnd)
+      for (const konvaNode of konvaNodes) {
+        konvaNode.off('dragmove', updateDragState)
+        konvaNode.off('transform', updateDragState)
+        konvaNode.off('dragend', handleEnd)
+        konvaNode.off('transformend', handleEnd)
+      }
     }
-  }, [node.id])
+  }, [trackIds.join(',')])
 
   // Hide label during drag/transform
   if (dragState !== null) {

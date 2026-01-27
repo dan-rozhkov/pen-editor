@@ -391,6 +391,30 @@ export function Canvas() {
     return result;
   }, [visibleNodes, selectedIds, nodes, calculateLayoutForFrame]);
 
+  // Compute selection bounding box for multi-selection group label
+  const selectionBoundingBox = useMemo(() => {
+    if (collectSelectedNodes.length <= 1) return null;
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    for (const { absX, absY, effectiveWidth, effectiveHeight } of collectSelectedNodes) {
+      minX = Math.min(minX, absX);
+      minY = Math.min(minY, absY);
+      maxX = Math.max(maxX, absX + effectiveWidth);
+      maxY = Math.max(maxY, absY + effectiveHeight);
+    }
+
+    return {
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
+    };
+  }, [collectSelectedNodes]);
+
   // Update transformer nodes when selection changes
   useEffect(() => {
     const transformer = transformerRef.current;
@@ -1122,16 +1146,28 @@ export function Canvas() {
               />
             ))}
           {/* Node size labels - displayed below selected nodes */}
-          {collectSelectedNodes.map(({ node, absX, absY, effectiveWidth, effectiveHeight }) => (
+          {collectSelectedNodes.length === 1 &&
+            collectSelectedNodes.map(({ node, absX, absY, effectiveWidth, effectiveHeight }) => (
+              <NodeSizeLabel
+                key={`size-${node.id}`}
+                node={node}
+                absoluteX={absX}
+                absoluteY={absY}
+                effectiveWidth={effectiveWidth}
+                effectiveHeight={effectiveHeight}
+              />
+            ))}
+          {/* Group size label - displayed below selection bounding box for multi-selection */}
+          {selectionBoundingBox && (
             <NodeSizeLabel
-              key={`size-${node.id}`}
-              node={node}
-              absoluteX={absX}
-              absoluteY={absY}
-              effectiveWidth={effectiveWidth}
-              effectiveHeight={effectiveHeight}
+              key="size-group"
+              nodeIds={collectSelectedNodes.map(({ node }) => node.id)}
+              absoluteX={selectionBoundingBox.x}
+              absoluteY={selectionBoundingBox.y}
+              effectiveWidth={selectionBoundingBox.width}
+              effectiveHeight={selectionBoundingBox.height}
             />
-          ))}
+          )}
         </Layer>
       </Stage>
       {/* Inline text editor overlay */}
