@@ -15,6 +15,7 @@ import { InlineNameEditor } from "./InlineNameEditor";
 import { FrameNameLabel } from "./nodes/FrameNameLabel";
 import { NodeSizeLabel } from "./nodes/NodeSizeLabel";
 import type { TextNode, FrameNode, SceneNode } from "../types/scene";
+import { rectsIntersect } from "../utils/dragUtils";
 import { getViewportBounds, isNodeVisible } from "../utils/viewportUtils";
 import {
   getNodeAbsolutePosition,
@@ -35,6 +36,13 @@ export function Canvas() {
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const [isMiddleMouseDown, setIsMiddleMouseDown] = useState(false);
   const lastPointerPosition = useRef<{ x: number; y: number } | null>(null);
+
+  // Marquee selection state
+  const isMarqueeActive = useRef(false);
+  const marqueeStart = useRef<{ x: number; y: number } | null>(null);
+  const marqueeShiftHeld = useRef(false);
+  const marqueePreShiftIds = useRef<string[]>([]);
+  const [marqueeRect, setMarqueeRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
 
   const {
     scale,
@@ -71,6 +79,7 @@ export function Canvas() {
   const {
     selectedIds,
     clearSelection,
+    setSelectedIds,
     editingNodeId,
     editingMode,
     isSelected,
@@ -683,11 +692,25 @@ export function Canvas() {
           lastPointerPosition.current = stage.getPointerPosition();
         }
       } else if (e.evt.button === 0) {
-        // Left click on empty space - clear selection
+        // Left click on empty space - start marquee selection
         const clickedOnEmpty =
           e.target === e.target.getStage() || e.target.name() === "background";
         if (clickedOnEmpty) {
-          clearSelection();
+          const stage = stageRef.current;
+          if (stage) {
+            const pos = stage.getRelativePointerPosition();
+            if (pos) {
+              isMarqueeActive.current = true;
+              marqueeStart.current = pos;
+              marqueeShiftHeld.current = e.evt.shiftKey;
+              marqueePreShiftIds.current = e.evt.shiftKey
+                ? useSelectionStore.getState().selectedIds.slice()
+                : [];
+              if (!e.evt.shiftKey) {
+                clearSelection();
+              }
+            }
+          }
         }
       }
     },
@@ -695,6 +718,45 @@ export function Canvas() {
   );
 
   const handleMouseMove = useCallback(() => {
+    // Marquee selection
+    if (isMarqueeActive.current && marqueeStart.current) {
+      const stage = stageRef.current;
+      if (!stage) return;
+
+      const pos = stage.getRelativePointerPosition();
+      if (!pos) return;
+
+      const startPos = marqueeStart.current;
+      const rect = {
+        x: Math.min(startPos.x, pos.x),
+        y: Math.min(startPos.y, pos.y),
+        width: Math.abs(pos.x - startPos.x),
+        height: Math.abs(pos.y - startPos.y),
+      };
+      setMarqueeRect(rect);
+
+      // Find intersecting top-level nodes
+      const currentNodes = useSceneStore.getState().nodes;
+      const intersecting: string[] = [];
+      for (const node of currentNodes) {
+        if (node.visible === false) continue;
+        const nodeRect = { x: node.x, y: node.y, width: node.width, height: node.height };
+        if (rectsIntersect(rect, nodeRect)) {
+          intersecting.push(node.id);
+        }
+      }
+
+      // Union with pre-existing selection if Shift held
+      if (marqueeShiftHeld.current) {
+        const merged = [...new Set([...marqueePreShiftIds.current, ...intersecting])];
+        setSelectedIds(merged);
+      } else {
+        setSelectedIds(intersecting);
+      }
+      return;
+    }
+
+    // Panning
     if (!isPanning || !lastPointerPosition.current) return;
 
     const stage = stageRef.current;
@@ -708,10 +770,19 @@ export function Canvas() {
 
     setPosition(x + dx, y + dy);
     lastPointerPosition.current = pointerPos;
-  }, [isPanning, x, y, setPosition]);
+  }, [isPanning, x, y, setPosition, setSelectedIds]);
 
   const handleMouseUp = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent>) => {
+      // End marquee selection
+      if (isMarqueeActive.current) {
+        isMarqueeActive.current = false;
+        marqueeStart.current = null;
+        marqueeShiftHeld.current = false;
+        marqueePreShiftIds.current = [];
+        setMarqueeRect(null);
+      }
+
       if (e.evt.button === 1) {
         setIsMiddleMouseDown(false);
         if (!isSpacePressed) {
@@ -830,6 +901,19 @@ export function Canvas() {
             borderStrokeWidth={1}
             anchorStrokeWidth={1}
           />
+          {/* Marquee selection rectangle */}
+          {marqueeRect && (
+            <Rect
+              x={marqueeRect.x}
+              y={marqueeRect.y}
+              width={marqueeRect.width}
+              height={marqueeRect.height}
+              fill="rgba(13, 153, 255, 0.1)"
+              stroke="#0d99ff"
+              strokeWidth={1 / scale}
+              listening={false}
+            />
+          )}
           {/* Frame name labels - rendered after transformer so they're not included in bounding box */}
           {collectFrameNodes
             .filter(({ isNested }) => !isNested)

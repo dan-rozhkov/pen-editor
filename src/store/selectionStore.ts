@@ -18,6 +18,7 @@ interface SelectionState {
   instanceContext: InstanceContext | null
 
   select: (id: string) => void
+  setSelectedIds: (ids: string[]) => void
   addToSelection: (id: string) => void
   removeFromSelection: (id: string) => void
   clearSelection: () => void
@@ -43,6 +44,16 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
     // Stop editing and exit instance mode when selection changes
     set({
       selectedIds: [id],
+      editingNodeId: null,
+      editingMode: null,
+      editingInstanceId: null,
+      instanceContext: null
+    })
+  },
+
+  setSelectedIds: (ids: string[]) => {
+    set({
+      selectedIds: ids,
       editingNodeId: null,
       editingMode: null,
       editingInstanceId: null,

@@ -15,6 +15,18 @@ interface Rect {
 }
 
 /**
+ * Check if two rectangles intersect (AABB overlap)
+ */
+export function rectsIntersect(a: Rect, b: Rect): boolean {
+  return (
+    a.x < b.x + b.width &&
+    a.x + a.width > b.x &&
+    a.y < b.y + b.height &&
+    a.y + a.height > b.y
+  )
+}
+
+/**
  * Check if a point is inside a rectangle
  */
 export function isPointInsideRect(point: Point, rect: Rect): boolean {
