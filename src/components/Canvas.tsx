@@ -44,7 +44,12 @@ export function Canvas() {
   const marqueeStart = useRef<{ x: number; y: number } | null>(null);
   const marqueeShiftHeld = useRef(false);
   const marqueePreShiftIds = useRef<string[]>([]);
-  const [marqueeRect, setMarqueeRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [marqueeRect, setMarqueeRect] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
 
   const {
     scale,
@@ -60,7 +65,9 @@ export function Canvas() {
   const addNode = useSceneStore((state) => state.addNode);
   const { copiedNode, copyNode } = useClipboardStore();
   const setStageRef = useCanvasRefStore((s) => s.setStageRef);
-  const calculateLayoutForFrame = useLayoutStore((state) => state.calculateLayoutForFrame);
+  const calculateLayoutForFrame = useLayoutStore(
+    (state) => state.calculateLayoutForFrame,
+  );
 
   // Calculate viewport bounds and filter visible nodes
   const viewportBounds = useMemo(
@@ -252,7 +259,11 @@ export function Canvas() {
     for (const child of children) {
       if (child.id === targetId) return parent;
       if (child.type === "frame") {
-        const found = findParentFrameInComponent(child.children, targetId, child);
+        const found = findParentFrameInComponent(
+          child.children,
+          targetId,
+          child,
+        );
         if (found) return found;
       }
     }
@@ -293,14 +304,28 @@ export function Canvas() {
 
   // Get absolute position for text editor (with layout calculation for auto-layout)
   const editingTextPosition = editingTextNode
-    ? getNodeAbsolutePositionWithLayout(nodes, editingTextNode.id, calculateLayoutForFrame)
+    ? getNodeAbsolutePositionWithLayout(
+        nodes,
+        editingTextNode.id,
+        calculateLayoutForFrame,
+      )
     : null;
 
   // Collect all frame nodes with their absolute positions for rendering labels
   const collectFrameNodes = useMemo(() => {
-    const frames: Array<{ node: FrameNode; absX: number; absY: number; isNested: boolean }> = [];
+    const frames: Array<{
+      node: FrameNode;
+      absX: number;
+      absY: number;
+      isNested: boolean;
+    }> = [];
 
-    const traverse = (searchNodes: SceneNode[], accX: number, accY: number, isNested: boolean) => {
+    const traverse = (
+      searchNodes: SceneNode[],
+      accX: number,
+      accY: number,
+      isNested: boolean,
+    ) => {
       for (const node of searchNodes) {
         if (node.type === "frame") {
           frames.push({
@@ -336,7 +361,7 @@ export function Canvas() {
           const absPos = getNodeAbsolutePositionWithLayout(
             nodes,
             node.id,
-            calculateLayoutForFrame
+            calculateLayoutForFrame,
           );
           if (!absPos) continue;
 
@@ -348,7 +373,10 @@ export function Canvas() {
             const fitWidth = node.sizing?.widthMode === "fit_content";
             const fitHeight = node.sizing?.heightMode === "fit_content";
             if (fitWidth || fitHeight) {
-              const intrinsicSize = calculateFrameIntrinsicSize(node, { fitWidth, fitHeight });
+              const intrinsicSize = calculateFrameIntrinsicSize(node, {
+                fitWidth,
+                fitHeight,
+              });
               if (fitWidth) effectiveWidth = intrinsicSize.width;
               if (fitHeight) effectiveHeight = intrinsicSize.height;
             }
@@ -362,7 +390,9 @@ export function Canvas() {
 
             // If sizing mode is not fixed, get sizes from Yoga layout
             if (widthMode !== "fixed" || heightMode !== "fixed") {
-              const layoutChildren = calculateLayoutForFrame(parentContext.parent);
+              const layoutChildren = calculateLayoutForFrame(
+                parentContext.parent,
+              );
               const layoutNode = layoutChildren.find((n) => n.id === node.id);
               if (layoutNode) {
                 if (widthMode !== "fixed") effectiveWidth = layoutNode.width;
@@ -400,7 +430,12 @@ export function Canvas() {
     let maxX = -Infinity;
     let maxY = -Infinity;
 
-    for (const { absX, absY, effectiveWidth, effectiveHeight } of collectSelectedNodes) {
+    for (const {
+      absX,
+      absY,
+      effectiveWidth,
+      effectiveHeight,
+    } of collectSelectedNodes) {
       minX = Math.min(minX, absX);
       minY = Math.min(minY, absY);
       maxX = Math.max(maxX, absX + effectiveWidth);
@@ -466,6 +501,21 @@ export function Canvas() {
         target.tagName === "TEXTAREA" ||
         target.isContentEditable;
 
+      // Enter - edit selected text node
+      if (e.key === "Enter" && !e.shiftKey) {
+        if (isTyping) return;
+        const { selectedIds, editingNodeId, editingMode } =
+          useSelectionStore.getState();
+        if (!editingNodeId && !editingMode && selectedIds.length === 1) {
+          const selectedNode = findNodeByIdGeneric(nodes, selectedIds[0]);
+          if (selectedNode?.type === "text") {
+            e.preventDefault();
+            useSelectionStore.getState().startEditing(selectedNode.id);
+            return;
+          }
+        }
+      }
+
       // Shift+Enter - select nearest parent
       if (e.key === "Enter" && e.shiftKey) {
         if (isTyping) return;
@@ -473,7 +523,10 @@ export function Canvas() {
 
         const { selectedIds, instanceContext } = useSelectionStore.getState();
         if (instanceContext) {
-          const instance = findNodeByIdGeneric(nodes, instanceContext.instanceId);
+          const instance = findNodeByIdGeneric(
+            nodes,
+            instanceContext.instanceId,
+          );
           if (instance && instance.type === "ref") {
             const component = findComponentById(nodes, instance.componentId);
             if (component) {
@@ -488,7 +541,10 @@ export function Canvas() {
                 } else {
                   useSelectionStore
                     .getState()
-                    .selectDescendant(instanceContext.instanceId, parentFrame.id);
+                    .selectDescendant(
+                      instanceContext.instanceId,
+                      parentFrame.id,
+                    );
                 }
               }
             }
@@ -640,7 +696,9 @@ export function Canvas() {
       }
 
       // Arrow keys for moving nodes on canvas or reordering inside auto-layout
-      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) {
+      if (
+        ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)
+      ) {
         if (isTyping) return;
 
         const ids = useSelectionStore.getState().selectedIds;
@@ -666,12 +724,13 @@ export function Canvas() {
           e.preventDefault();
 
           const step = e.shiftKey ? 10 : 1;
-          let dx = 0, dy = 0;
+          let dx = 0,
+            dy = 0;
 
-          if (e.code === 'ArrowLeft') dx = -step;
-          else if (e.code === 'ArrowRight') dx = step;
-          else if (e.code === 'ArrowUp') dy = -step;
-          else if (e.code === 'ArrowDown') dy = step;
+          if (e.code === "ArrowLeft") dx = -step;
+          else if (e.code === "ArrowRight") dx = step;
+          else if (e.code === "ArrowUp") dy = -step;
+          else if (e.code === "ArrowDown") dy = step;
 
           saveHistory(currentNodes);
 
@@ -693,19 +752,21 @@ export function Canvas() {
 
           const parentFrame = parentContext.parent;
           const layout = parentFrame.layout;
-          const isHorizontal = layout?.flexDirection === 'row' || layout?.flexDirection === undefined;
+          const isHorizontal =
+            layout?.flexDirection === "row" ||
+            layout?.flexDirection === undefined;
 
           // Determine movement direction
-          let direction: 'prev' | 'next' | null = null;
+          let direction: "prev" | "next" | null = null;
 
           if (isHorizontal) {
             // Horizontal layout: only ←→
-            if (e.code === 'ArrowLeft') direction = 'prev';
-            else if (e.code === 'ArrowRight') direction = 'next';
+            if (e.code === "ArrowLeft") direction = "prev";
+            else if (e.code === "ArrowRight") direction = "next";
           } else {
             // Vertical layout: only ↑↓
-            if (e.code === 'ArrowUp') direction = 'prev';
-            else if (e.code === 'ArrowDown') direction = 'next';
+            if (e.code === "ArrowUp") direction = "prev";
+            else if (e.code === "ArrowDown") direction = "next";
           }
 
           if (!direction) return; // Irrelevant arrow key for this layout direction
@@ -713,12 +774,15 @@ export function Canvas() {
           e.preventDefault();
 
           // Find current index and calculate new index
-          const currentIndex = parentFrame.children.findIndex(c => c.id === nodeId);
+          const currentIndex = parentFrame.children.findIndex(
+            (c) => c.id === nodeId,
+          );
           if (currentIndex === -1) return;
 
-          const newIndex = direction === 'prev'
-            ? Math.max(0, currentIndex - 1)
-            : Math.min(parentFrame.children.length - 1, currentIndex + 1);
+          const newIndex =
+            direction === "prev"
+              ? Math.max(0, currentIndex - 1)
+              : Math.min(parentFrame.children.length - 1, currentIndex + 1);
 
           if (newIndex === currentIndex) return; // Already at the edge
 
@@ -908,7 +972,12 @@ export function Canvas() {
       const intersecting: string[] = [];
       for (const node of currentNodes) {
         if (node.visible === false) continue;
-        const nodeRect = { x: node.x, y: node.y, width: node.width, height: node.height };
+        const nodeRect = {
+          x: node.x,
+          y: node.y,
+          width: node.width,
+          height: node.height,
+        };
         if (rectsIntersect(rect, nodeRect)) {
           intersecting.push(node.id);
         }
@@ -916,7 +985,9 @@ export function Canvas() {
 
       // Union with pre-existing selection if Shift held
       if (marqueeShiftHeld.current) {
-        const merged = [...new Set([...marqueePreShiftIds.current, ...intersecting])];
+        const merged = [
+          ...new Set([...marqueePreShiftIds.current, ...intersecting]),
+        ];
         setSelectedIds(merged);
       } else {
         setSelectedIds(intersecting);
@@ -944,7 +1015,12 @@ export function Canvas() {
     (e: Konva.KonvaEventObject<MouseEvent>) => {
       // End drawing
       const drawState = useDrawModeStore.getState();
-      if (drawState.isDrawing && drawState.drawStart && drawState.drawCurrent && drawState.activeTool) {
+      if (
+        drawState.isDrawing &&
+        drawState.drawStart &&
+        drawState.drawCurrent &&
+        drawState.activeTool
+      ) {
         const tool = drawState.activeTool;
         const s = drawState.drawStart;
         const c = drawState.drawCurrent;
@@ -1087,16 +1163,18 @@ export function Canvas() {
             anchorStyleFunc={(anchor) => {
               const name = anchor.name();
               // Show only corner anchors
-              if (!name.includes('top-left') && 
-                  !name.includes('top-right') && 
-                  !name.includes('bottom-left') && 
-                  !name.includes('bottom-right')) {
+              if (
+                !name.includes("top-left") &&
+                !name.includes("top-right") &&
+                !name.includes("bottom-left") &&
+                !name.includes("bottom-right")
+              ) {
                 // Hide middle anchors visually but make them larger for easier interaction
                 anchor.width(20);
                 anchor.height(20);
                 anchor.strokeWidth(0);
-                anchor.fill('');
-                anchor.stroke('');
+                anchor.fill("");
+                anchor.stroke("");
               }
             }}
             borderStroke={transformerColor}
@@ -1147,16 +1225,18 @@ export function Canvas() {
             ))}
           {/* Node size labels - displayed below selected nodes */}
           {collectSelectedNodes.length === 1 &&
-            collectSelectedNodes.map(({ node, absX, absY, effectiveWidth, effectiveHeight }) => (
-              <NodeSizeLabel
-                key={`size-${node.id}`}
-                node={node}
-                absoluteX={absX}
-                absoluteY={absY}
-                effectiveWidth={effectiveWidth}
-                effectiveHeight={effectiveHeight}
-              />
-            ))}
+            collectSelectedNodes.map(
+              ({ node, absX, absY, effectiveWidth, effectiveHeight }) => (
+                <NodeSizeLabel
+                  key={`size-${node.id}`}
+                  node={node}
+                  absoluteX={absX}
+                  absoluteY={absY}
+                  effectiveWidth={effectiveWidth}
+                  effectiveHeight={effectiveHeight}
+                />
+              ),
+            )}
           {/* Group size label - displayed below selection bounding box for multi-selection */}
           {selectionBoundingBox && (
             <NodeSizeLabel
