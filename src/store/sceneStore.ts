@@ -1,6 +1,7 @@
 import { create } from 'zustand'
-import type { SceneNode, FrameNode, RefNode, DescendantOverride } from '../types/scene'
+import type { SceneNode, FrameNode, RefNode, TextNode, DescendantOverride } from '../types/scene'
 import { useHistoryStore } from './historyStore'
+import { measureTextAutoSize, measureTextFixedWidthHeight } from '../utils/textMeasure'
 
 interface SceneState {
   nodes: SceneNode[]
@@ -23,6 +24,22 @@ interface SceneState {
   resetDescendantOverride: (instanceId: string, descendantId: string, property?: keyof DescendantOverride) => void
 }
 
+// Recursively sync text node dimensions throughout the tree
+function syncAllTextDimensions(nodes: SceneNode[]): SceneNode[] {
+  return nodes.map(node => {
+    if (node.type === 'text') {
+      return syncTextDimensions(node)
+    }
+    if (node.type === 'frame') {
+      return {
+        ...node,
+        children: syncAllTextDimensions(node.children),
+      } as FrameNode
+    }
+    return node
+  })
+}
+
 // Helper to recursively add child to a frame
 function addChildToFrameRecursive(nodes: SceneNode[], frameId: string, child: SceneNode): SceneNode[] {
   return nodes.map((node) => {
@@ -42,11 +59,46 @@ function addChildToFrameRecursive(nodes: SceneNode[], frameId: string, child: Sc
   })
 }
 
+// Properties that affect text measurement
+const TEXT_MEASURE_PROPS = new Set([
+  'text', 'fontSize', 'fontFamily', 'fontWeight', 'fontStyle',
+  'letterSpacing', 'lineHeight', 'textWidthMode',
+])
+
+// Sync a text node's width/height based on its textWidthMode
+function syncTextDimensions(node: SceneNode): SceneNode {
+  if (node.type !== 'text') return node
+  const textNode = node as TextNode
+  const mode = textNode.textWidthMode
+
+  if (!mode || mode === 'auto') {
+    // Auto mode: compute both width and height from content
+    const measured = measureTextAutoSize(textNode)
+    return { ...textNode, width: measured.width, height: measured.height }
+  } else if (mode === 'fixed') {
+    // Fixed width mode: only recompute height (wrapping)
+    const measuredHeight = measureTextFixedWidthHeight(textNode)
+    return { ...textNode, height: measuredHeight }
+  }
+  // fixed-height: both are manual, no sync
+  return textNode
+}
+
+// Check if updates contain properties that affect text measurement
+function hasTextMeasureProps(updates: Partial<SceneNode>): boolean {
+  return Object.keys(updates).some(k => TEXT_MEASURE_PROPS.has(k))
+}
+
 // Helper to recursively update a node anywhere in the tree
 function updateNodeRecursive(nodes: SceneNode[], id: string, updates: Partial<SceneNode>): SceneNode[] {
   return nodes.map((node) => {
     if (node.id === id) {
-      return { ...node, ...updates } as SceneNode
+      let updated = { ...node, ...updates } as SceneNode
+      // Auto-sync text dimensions when relevant properties change
+      if (updated.type === 'text' && hasTextMeasureProps(updates)) {
+        updated = syncTextDimensions(updated)
+      }
+      return updated
     }
     if (node.type === 'frame') {
       return {
@@ -285,7 +337,8 @@ export const useSceneStore = create<SceneState>((set) => ({
 
   setNodes: (nodes) => {
     useHistoryStore.getState().saveHistory(useSceneStore.getState().nodes)
-    set({ nodes })
+    // Sync text dimensions on load to fix any stale width/height
+    set({ nodes: syncAllTextDimensions(nodes) })
   },
 
   // Set nodes without saving to history (used by undo/redo)

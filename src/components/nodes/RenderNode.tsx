@@ -4,6 +4,7 @@ import type {
   SceneNode,
   FrameNode,
   RefNode,
+  TextNode,
   DescendantOverrides,
   DescendantOverride,
 } from "../../types/scene";
@@ -27,6 +28,25 @@ import { calculateFrameIntrinsicSize } from "../../utils/yogaLayout";
 
 // Figma-style hover outline color
 const HOVER_OUTLINE_COLOR = "#0d99ff";
+
+// Build Konva fontStyle string from fontWeight + fontStyle
+// Konva accepts: 'normal', 'italic', 'bold', '500', 'italic bold', 'italic 500', etc.
+function buildKonvaFontStyle(node: TextNode): string {
+  const style = node.fontStyle ?? "normal";
+  const weight = node.fontWeight ?? "normal";
+  if (style === "normal" && weight === "normal") return "normal";
+  if (style === "normal") return weight;
+  if (weight === "normal") return style;
+  return `${style} ${weight}`;
+}
+
+// Build Konva textDecoration string from underline/strikethrough flags
+function buildTextDecoration(node: TextNode): string {
+  const parts: string[] = [];
+  if (node.underline) parts.push("underline");
+  if (node.strikethrough) parts.push("line-through");
+  return parts.join(" ") || "";
+}
 
 // Apply descendant overrides to a node
 function applyDescendantOverride(
@@ -202,13 +222,23 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
     target.scaleX(1);
     target.scaleY(1);
 
-    updateNode(node.id, {
+    const newWidth = Math.max(5, target.width() * scaleX);
+    const newHeight = Math.max(5, target.height() * scaleY);
+
+    const updates: Partial<SceneNode> = {
       x: target.x(),
       y: target.y(),
-      width: Math.max(5, target.width() * scaleX),
-      height: Math.max(5, target.height() * scaleY),
+      width: newWidth,
+      height: newHeight,
       rotation: rotation,
-    });
+    };
+
+    // When resizing a text node, switch from auto to fixed mode (like Figma)
+    if (node.type === 'text' && (node.textWidthMode === 'auto' || !node.textWidthMode)) {
+      (updates as Partial<import('../../types/scene').TextNode>).textWidthMode = 'fixed';
+    }
+
+    updateNode(node.id, updates);
   };
 
   switch (node.type) {
@@ -294,6 +324,8 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
       };
       // For auto width mode, don't set width to let Konva calculate it from text
       const textWidth = node.textWidthMode === "auto" ? undefined : node.width;
+      const textHeight = node.textWidthMode === "fixed-height" ? node.height : undefined;
+      const textDecoration = buildTextDecoration(node);
       return (
         <>
           <Text
@@ -302,13 +334,16 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
             x={node.x}
             y={node.y}
             width={textWidth}
-            height={node.height}
+            height={textHeight ?? node.height}
             rotation={node.rotation ?? 0}
             text={node.text}
             fontSize={node.fontSize ?? 16}
             fontFamily={node.fontFamily ?? "Arial"}
+            fontStyle={buildKonvaFontStyle(node)}
+            textDecoration={textDecoration}
             fill={fillColor ?? "#000000"}
             align={node.textAlign ?? "left"}
+            verticalAlign={node.textAlignVertical ?? "top"}
             lineHeight={node.lineHeight ?? 1.2}
             letterSpacing={node.letterSpacing ?? 0}
             opacity={isEditing ? 0 : 1}
@@ -878,21 +913,26 @@ function DescendantRenderer({
           )}
         </Group>
       );
-    case "text":
-      const textWidth = node.textWidthMode === "auto" ? undefined : node.width;
+    case "text": {
+      const descTextWidth = node.textWidthMode === "auto" ? undefined : node.width;
+      const descTextHeight = node.textWidthMode === "fixed-height" ? node.height : undefined;
+      const descTextDecoration = buildTextDecoration(node);
       return (
         <Group>
           <Text
             x={node.x}
             y={node.y}
-            width={textWidth}
-            height={node.height}
+            width={descTextWidth}
+            height={descTextHeight ?? node.height}
             rotation={node.rotation ?? 0}
             text={node.text}
             fontSize={node.fontSize ?? 16}
             fontFamily={node.fontFamily ?? "Arial"}
+            fontStyle={buildKonvaFontStyle(node)}
+            textDecoration={descTextDecoration}
             fill={fillColor ?? "#000000"}
             align={node.textAlign ?? "left"}
+            verticalAlign={node.textAlignVertical ?? "top"}
             lineHeight={node.lineHeight ?? 1.2}
             letterSpacing={node.letterSpacing ?? 0}
             onClick={onClick}
@@ -912,6 +952,7 @@ function DescendantRenderer({
           )}
         </Group>
       );
+    }
     case "frame":
       // For frames, recursively render children with nested overrides
       const handleChildClick =
@@ -1026,24 +1067,30 @@ function RenderNodeWithOverrides({
           strokeWidth={node.strokeWidth}
         />
       );
-    case "text":
-      const textWidth = node.textWidthMode === "auto" ? undefined : node.width;
+    case "text": {
+      const ovrTextWidth = node.textWidthMode === "auto" ? undefined : node.width;
+      const ovrTextHeight = node.textWidthMode === "fixed-height" ? node.height : undefined;
+      const ovrTextDecoration = buildTextDecoration(node);
       return (
         <Text
           x={node.x}
           y={node.y}
-          width={textWidth}
-          height={node.height}
+          width={ovrTextWidth}
+          height={ovrTextHeight ?? node.height}
           rotation={node.rotation ?? 0}
           text={node.text}
           fontSize={node.fontSize ?? 16}
           fontFamily={node.fontFamily ?? "Arial"}
+          fontStyle={buildKonvaFontStyle(node)}
+          textDecoration={ovrTextDecoration}
           fill={fillColor ?? "#000000"}
           align={node.textAlign ?? "left"}
+          verticalAlign={node.textAlignVertical ?? "top"}
           lineHeight={node.lineHeight ?? 1.2}
           letterSpacing={node.letterSpacing ?? 0}
         />
       );
+    }
     case "frame":
       // Render frame children with nested overrides
       return (

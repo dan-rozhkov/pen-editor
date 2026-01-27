@@ -74,20 +74,35 @@ export interface EllipseNode extends BaseNode {
 }
 
 // Text width mode
-export type TextWidthMode = 'auto' | 'fixed'
+// 'auto' = width follows text content (no wrapping)
+// 'fixed' = manual width, height auto (wraps text)
+// 'fixed-height' = manual width and height (wraps text, may overflow)
+export type TextWidthMode = 'auto' | 'fixed' | 'fixed-height'
 
 // Text alignment
 export type TextAlign = 'left' | 'center' | 'right'
+
+// Vertical text alignment
+export type TextAlignVertical = 'top' | 'middle' | 'bottom'
 
 export interface TextNode extends BaseNode {
   type: 'text'
   text: string
   fontSize?: number
   fontFamily?: string
-  // Text width mode: 'auto' = width follows text content, 'fixed' = manual width
+  // Font weight: "normal", "bold", or numeric "100"-"900"
+  fontWeight?: string
+  // Font style: "normal" or "italic"
+  fontStyle?: string
+  // Text decoration
+  underline?: boolean
+  strikethrough?: boolean
+  // Text width mode: 'auto' = width follows text content, 'fixed' = manual width, 'fixed-height' = manual width+height
   textWidthMode?: TextWidthMode
   // Text alignment within the text block
   textAlign?: TextAlign
+  // Vertical text alignment within the text block
+  textAlignVertical?: TextAlignVertical
   // Line height multiplier (e.g., 1.2 = 120% of font size)
   lineHeight?: number
   // Letter spacing in pixels

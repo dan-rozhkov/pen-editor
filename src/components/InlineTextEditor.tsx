@@ -1,8 +1,11 @@
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useCallback } from 'react'
 import type { TextNode } from '../types/scene'
 import { useSceneStore } from '../store/sceneStore'
 import { useSelectionStore } from '../store/selectionStore'
 import { useViewportStore } from '../store/viewportStore'
+import { useVariableStore } from '../store/variableStore'
+import { useThemeStore } from '../store/themeStore'
+import { resolveColor } from '../utils/colorUtils'
 
 interface InlineTextEditorProps {
   node: TextNode
@@ -10,18 +13,17 @@ interface InlineTextEditorProps {
   absoluteY: number
 }
 
-const MIN_WIDTH = 50
-const MIN_HEIGHT = 24
-const PADDING = 8
-
 export function InlineTextEditor({ node, absoluteX, absoluteY }: InlineTextEditorProps) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const measureRef = useRef<HTMLDivElement>(null)
-  const [editText, setEditText] = useState(node.text)
-  const [dimensions, setDimensions] = useState({ width: MIN_WIDTH, height: MIN_HEIGHT })
+  const editorRef = useRef<HTMLDivElement>(null)
+  const currentTextRef = useRef(node.text) // Track current value for unmount save
   const updateNode = useSceneStore((state) => state.updateNode)
   const stopEditing = useSelectionStore((state) => state.stopEditing)
   const { scale, x, y } = useViewportStore()
+  const variables = useVariableStore((state) => state.variables)
+  const activeTheme = useThemeStore((state) => state.activeTheme)
+
+  // Resolve the fill color (matching Konva rendering)
+  const fillColor = resolveColor(node.fill, node.fillBinding, variables, activeTheme) ?? '#000000'
 
   // Calculate screen position from absolute world coordinates
   const screenX = absoluteX * scale + x
@@ -29,102 +31,128 @@ export function InlineTextEditor({ node, absoluteX, absoluteY }: InlineTextEdito
   const screenFontSize = (node.fontSize ?? 16) * scale
   const screenLetterSpacing = (node.letterSpacing ?? 0) * scale
 
-  // For fixed width mode, use node width scaled to screen
-  const isAutoWidth = node.textWidthMode === 'auto'
+  // Width mode
+  const isAutoWidth = node.textWidthMode === 'auto' || !node.textWidthMode
+  const isFixedHeight = node.textWidthMode === 'fixed-height'
   const fixedScreenWidth = node.width * scale
+  const fixedScreenHeight = node.height * scale
 
-  // Measure content dimensions
-  useEffect(() => {
-    if (measureRef.current) {
-      const width = measureRef.current.offsetWidth + PADDING
-      const height = measureRef.current.offsetHeight + PADDING
-      setDimensions({
-        width: isAutoWidth ? Math.max(MIN_WIDTH, width) : fixedScreenWidth,
-        height: Math.max(MIN_HEIGHT, height),
-      })
+  // Build text decoration string
+  const textDecorationParts: string[] = []
+  if (node.underline) textDecorationParts.push('underline')
+  if (node.strikethrough) textDecorationParts.push('line-through')
+
+  const submit = useCallback(() => {
+    const el = editorRef.current
+    if (!el) {
+      stopEditing()
+      return
     }
-  }, [editText, screenFontSize, isAutoWidth, fixedScreenWidth])
-
-  // Auto-focus and select all text on mount
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.focus()
-      textareaRef.current.select()
-    }
-  }, [])
-
-  const handleSubmit = () => {
-    const trimmed = editText.trim()
+    // Extract plain text from contentEditable (preserving newlines from <br>/<div>)
+    const text = el.innerText ?? el.textContent ?? ''
+    const trimmed = text.trim()
     if (trimmed && trimmed !== node.text) {
       updateNode(node.id, { text: trimmed })
     }
     stopEditing()
-  }
+  }, [node.id, node.text, updateNode, stopEditing])
+
+  // Save on unmount (DOM element is already gone, so read from ref)
+  useEffect(() => {
+    return () => {
+      const trimmed = currentTextRef.current.trim()
+      if (trimmed && trimmed !== node.text) {
+        updateNode(node.id, { text: trimmed })
+      }
+    }
+  }, [node.id, node.text, updateNode])
+
+  // Focus and select all text on mount
+  useEffect(() => {
+    const el = editorRef.current
+    if (!el) return
+    el.focus()
+    // Select all text
+    const range = document.createRange()
+    range.selectNodeContents(el)
+    const sel = window.getSelection()
+    sel?.removeAllRanges()
+    sel?.addRange(range)
+  }, [])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      handleSubmit()
+      submit()
     } else if (e.key === 'Escape') {
       e.preventDefault()
       stopEditing()
     }
+    // Stop propagation so canvas shortcuts don't fire
+    e.stopPropagation()
+  }
+
+  const handleInput = () => {
+    const el = editorRef.current
+    if (el) {
+      currentTextRef.current = el.innerText ?? el.textContent ?? ''
+    }
   }
 
   const handleBlur = () => {
-    handleSubmit()
+    submit()
   }
 
-  const fontStyle = {
-    fontSize: screenFontSize,
-    fontFamily: node.fontFamily ?? 'Arial',
-    lineHeight: node.lineHeight ?? 1.2,
-    letterSpacing: screenLetterSpacing,
-    textAlign: (node.textAlign ?? 'left') as React.CSSProperties['textAlign'],
-  }
+  // Compute dimensions
+  const widthStyle: React.CSSProperties['width'] = isAutoWidth ? 'max-content' : fixedScreenWidth
+  const minWidth = isAutoWidth ? 50 : undefined
+  const heightStyle: React.CSSProperties['height'] = isFixedHeight ? fixedScreenHeight : 'auto'
+  const minHeight = isFixedHeight ? undefined : 24
 
   return (
-    <>
-      {/* Hidden div for measuring content dimensions */}
-      <div
-        ref={measureRef}
-        style={{
-          ...fontStyle,
-          position: 'absolute',
-          visibility: 'hidden',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-          pointerEvents: 'none',
-        }}
-      >
-        {editText || ' '}
-      </div>
-      <textarea
-        ref={textareaRef}
-        value={editText}
-        onChange={(e) => setEditText(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onBlur={handleBlur}
-        style={{
-          ...fontStyle,
-          position: 'absolute',
-          left: screenX,
-          top: screenY,
-          width: dimensions.width,
-          height: dimensions.height,
-          padding: 0,
-          margin: 0,
-          border: '2px solid #0d99ff',
-          borderRadius: 2,
-          outline: 'none',
-          background: 'transparent',
-          color: '#000000',
-          resize: 'none',
-          overflow: 'hidden',
-          zIndex: 100,
-          boxSizing: 'border-box',
-        }}
-      />
-    </>
+    <div
+      ref={editorRef}
+      contentEditable
+      suppressContentEditableWarning
+      onKeyDown={handleKeyDown}
+      onInput={handleInput}
+      onBlur={handleBlur}
+      style={{
+        position: 'absolute',
+        left: screenX,
+        top: screenY,
+        width: widthStyle,
+        minWidth,
+        height: heightStyle,
+        minHeight,
+        // Font styles matching Konva
+        fontSize: screenFontSize,
+        fontFamily: node.fontFamily ?? 'Arial',
+        fontWeight: (node.fontWeight ?? 'normal') as React.CSSProperties['fontWeight'],
+        fontStyle: (node.fontStyle ?? 'normal') as React.CSSProperties['fontStyle'],
+        textDecoration: textDecorationParts.join(' ') || undefined,
+        lineHeight: node.lineHeight ?? 1.2,
+        letterSpacing: screenLetterSpacing,
+        textAlign: (node.textAlign ?? 'left') as React.CSSProperties['textAlign'],
+        color: fillColor,
+        // Layout
+        padding: 0,
+        margin: 0,
+        border: 'none',
+        outline: '2px solid #0d99ff',
+        outlineOffset: 0,
+        background: 'transparent',
+        zIndex: 100,
+        boxSizing: 'content-box',
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word',
+        overflow: isFixedHeight ? 'hidden' : 'visible',
+        cursor: 'text',
+        // Reset any inherited styles
+        textIndent: 0,
+      }}
+    >
+      {node.text}
+    </div>
   )
 }

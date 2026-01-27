@@ -14,7 +14,7 @@ import { useVariableStore } from '../store/variableStore'
 import { useThemeStore } from '../store/themeStore'
 import { useCanvasRefStore } from '../store/canvasRefStore'
 import { exportImage, type ExportFormat, type ExportScale } from '../utils/exportUtils'
-import type { SceneNode, FrameNode, RefNode, FlexDirection, AlignItems, JustifyContent, SizingMode, TextNode, TextWidthMode, TextAlign, DescendantOverride } from '../types/scene'
+import type { SceneNode, FrameNode, RefNode, FlexDirection, AlignItems, JustifyContent, SizingMode, TextNode, TextWidthMode, TextAlign, TextAlignVertical, DescendantOverride } from '../types/scene'
 import type { ThemeName, Variable } from '../types/variable'
 import { findParentFrame, findNodeById, findComponentById, type ParentContext } from '../utils/nodeUtils'
 import { alignNodes, type AlignmentType } from '../utils/alignmentUtils'
@@ -587,6 +587,44 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
               value={node.fontFamily ?? 'Arial'}
               onChange={(v) => onUpdate({ fontFamily: v } as Partial<SceneNode>)}
             />
+            <SelectInput
+              label="Weight"
+              value={(node as TextNode).fontWeight ?? 'normal'}
+              options={[
+                { value: 'normal', label: 'Normal' },
+                { value: '100', label: '100 Thin' },
+                { value: '200', label: '200 Extra Light' },
+                { value: '300', label: '300 Light' },
+                { value: '400', label: '400 Regular' },
+                { value: '500', label: '500 Medium' },
+                { value: '600', label: '600 Semi Bold' },
+                { value: '700', label: '700 Bold' },
+                { value: '800', label: '800 Extra Bold' },
+                { value: '900', label: '900 Black' },
+              ]}
+              onChange={(v) => onUpdate({ fontWeight: v } as Partial<SceneNode>)}
+            />
+            <SegmentedControl
+              label="Style"
+              value={(node as TextNode).fontStyle ?? 'normal'}
+              options={[
+                { value: 'normal', label: 'Normal' },
+                { value: 'italic', label: 'Italic' },
+              ]}
+              onChange={(v) => onUpdate({ fontStyle: v } as Partial<SceneNode>)}
+            />
+          </PropertySection>
+          <PropertySection title="Decoration">
+            <CheckboxInput
+              label="Underline"
+              checked={(node as TextNode).underline ?? false}
+              onChange={(v) => onUpdate({ underline: v } as Partial<SceneNode>)}
+            />
+            <CheckboxInput
+              label="Strikethrough"
+              checked={(node as TextNode).strikethrough ?? false}
+              onChange={(v) => onUpdate({ strikethrough: v } as Partial<SceneNode>)}
+            />
           </PropertySection>
           <PropertySection title="Text Layout">
             <SegmentedControl
@@ -594,7 +632,8 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
               value={(node as TextNode).textWidthMode ?? 'fixed'}
               options={[
                 { value: 'auto', label: 'Auto' },
-                { value: 'fixed', label: 'Fixed' },
+                { value: 'fixed', label: 'Fixed W' },
+                { value: 'fixed-height', label: 'Fixed WH' },
               ]}
               onChange={(v) => onUpdate({ textWidthMode: v as TextWidthMode } as Partial<SceneNode>)}
             />
@@ -607,6 +646,16 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
                 { value: 'right', label: 'R' },
               ]}
               onChange={(v) => onUpdate({ textAlign: v as TextAlign } as Partial<SceneNode>)}
+            />
+            <SegmentedControl
+              label="V Align"
+              value={(node as TextNode).textAlignVertical ?? 'top'}
+              options={[
+                { value: 'top', label: 'T' },
+                { value: 'middle', label: 'M' },
+                { value: 'bottom', label: 'B' },
+              ]}
+              onChange={(v) => onUpdate({ textAlignVertical: v as TextAlignVertical } as Partial<SceneNode>)}
             />
             <NumberInput
               label="Line Height"

@@ -162,7 +162,9 @@ export function Canvas() {
             text: "Text",
             fontSize: 18,
             fontFamily: "Arial",
+            fontWeight: "normal",
             fill: "#333333",
+            textWidthMode: "auto",
           };
           break;
       }
@@ -456,9 +458,11 @@ export function Canvas() {
     const stage = stageRef.current;
     if (!transformer || !stage) return;
 
-    // Find selected nodes on stage
+    // Find selected nodes on stage, excluding the node being text-edited
     const selectedNodes: Konva.Node[] = [];
     selectedIds.forEach((id) => {
+      // Hide transformer for the node being inline-edited
+      if (editingNodeId === id && editingMode === "text") return;
       const node = stage.findOne(`#${id}`);
       if (node) {
         selectedNodes.push(node);
@@ -467,7 +471,7 @@ export function Canvas() {
 
     transformer.nodes(selectedNodes);
     transformer.getLayer()?.batchDraw();
-  }, [selectedIds]);
+  }, [selectedIds, editingNodeId, editingMode]);
 
   // Resize handler
   useEffect(() => {
@@ -1223,8 +1227,9 @@ export function Canvas() {
                 absoluteY={absY}
               />
             ))}
-          {/* Node size labels - displayed below selected nodes */}
+          {/* Node size labels - displayed below selected nodes (hidden during text editing) */}
           {collectSelectedNodes.length === 1 &&
+            editingMode !== "text" &&
             collectSelectedNodes.map(
               ({ node, absX, absY, effectiveWidth, effectiveHeight }) => (
                 <NodeSizeLabel
@@ -1238,7 +1243,7 @@ export function Canvas() {
               ),
             )}
           {/* Group size label - displayed below selection bounding box for multi-selection */}
-          {selectionBoundingBox && (
+          {selectionBoundingBox && editingMode !== "text" && (
             <NodeSizeLabel
               key="size-group"
               nodeIds={collectSelectedNodes.map(({ node }) => node.id)}
