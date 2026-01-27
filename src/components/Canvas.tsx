@@ -25,8 +25,10 @@ import {
   findNodeById,
 } from "../utils/nodeUtils";
 import { useLayoutStore } from "../store/layoutStore";
+import { useDrawModeStore } from "../store/drawModeStore";
 import { calculateFrameIntrinsicSize } from "../utils/yogaLayout";
 import { generateId } from "../types/scene";
+import type { DrawToolType } from "../store/drawModeStore";
 
 export function Canvas() {
   const stageRef = useRef<Konva.Stage>(null);
@@ -87,6 +89,92 @@ export function Canvas() {
   } = useSelectionStore();
   const { undo, redo, saveHistory, startBatch, endBatch } = useHistoryStore();
   const dropIndicator = useDragStore((state) => state.dropIndicator);
+  const {
+    activeTool,
+    isDrawing,
+    drawStart,
+    drawCurrent,
+    startDrawing,
+    updateDrawing,
+    endDrawing,
+    cancelDrawing,
+    toggleTool,
+  } = useDrawModeStore();
+
+  // Helper: create a node from draw tool type and bounding rect
+  const createNodeFromDraw = useCallback(
+    (tool: DrawToolType, rx: number, ry: number, rw: number, rh: number) => {
+      const id = generateId();
+      let node: SceneNode;
+      switch (tool) {
+        case "frame":
+          node = {
+            id,
+            type: "frame",
+            x: rx,
+            y: ry,
+            width: rw,
+            height: rh,
+            fill: "#ffffff",
+            stroke: "#cccccc",
+            strokeWidth: 1,
+            children: [],
+          };
+          break;
+        case "rect":
+          node = {
+            id,
+            type: "rect",
+            x: rx,
+            y: ry,
+            width: rw,
+            height: rh,
+            fill: "#4a90d9",
+            cornerRadius: 4,
+          };
+          break;
+        case "ellipse":
+          node = {
+            id,
+            type: "ellipse",
+            x: rx,
+            y: ry,
+            width: rw,
+            height: rh,
+            fill: "#d94a4a",
+          };
+          break;
+        case "text":
+          node = {
+            id,
+            type: "text",
+            x: rx,
+            y: ry,
+            width: rw,
+            height: rh,
+            text: "Text",
+            fontSize: 18,
+            fontFamily: "Arial",
+            fill: "#333333",
+          };
+          break;
+      }
+      addNode(node);
+      useSelectionStore.getState().select(id);
+    },
+    [addNode],
+  );
+
+  // Compute draw preview rect from drawStart/drawCurrent
+  const drawPreviewRect = useMemo(() => {
+    if (!isDrawing || !drawStart || !drawCurrent) return null;
+    return {
+      x: Math.min(drawStart.x, drawCurrent.x),
+      y: Math.min(drawStart.y, drawCurrent.y),
+      width: Math.abs(drawCurrent.x - drawStart.x),
+      height: Math.abs(drawCurrent.y - drawStart.y),
+    };
+  }, [isDrawing, drawStart, drawCurrent]);
 
   // Clone a node with new IDs (including nested children)
   // If node is a reusable component, create an instance (RefNode) instead of copying the component
@@ -479,6 +567,30 @@ export function Canvas() {
         return;
       }
 
+      // Tool shortcuts: F, R, O, T activate draw mode
+      if (!isTyping && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        if (e.code === "KeyF") {
+          e.preventDefault();
+          toggleTool("frame");
+          return;
+        }
+        if (e.code === "KeyR") {
+          e.preventDefault();
+          toggleTool("rect");
+          return;
+        }
+        if (e.code === "KeyO") {
+          e.preventDefault();
+          toggleTool("ellipse");
+          return;
+        }
+        if (e.code === "KeyT") {
+          e.preventDefault();
+          toggleTool("text");
+          return;
+        }
+      }
+
       // Spacebar panning (skip if typing)
       if (e.code === "Space" && !e.repeat) {
         if (isTyping) return;
@@ -593,8 +705,13 @@ export function Canvas() {
         }
       }
 
-      // Escape - exit instance edit mode first, then clear selection
+      // Escape - cancel draw mode, exit instance edit mode, or clear selection
       if (e.code === "Escape") {
+        const drawState = useDrawModeStore.getState();
+        if (drawState.activeTool || drawState.isDrawing) {
+          cancelDrawing();
+          return;
+        }
         const currentEditingInstanceId =
           useSelectionStore.getState().editingInstanceId;
         if (currentEditingInstanceId) {
@@ -641,6 +758,8 @@ export function Canvas() {
     copiedNode,
     addNode,
     moveNode,
+    toggleTool,
+    cancelDrawing,
   ]);
 
   // Mouse wheel handler (Figma-style)
@@ -692,6 +811,19 @@ export function Canvas() {
           lastPointerPosition.current = stage.getPointerPosition();
         }
       } else if (e.evt.button === 0) {
+        // If draw mode is active, start drawing
+        const currentActiveTool = useDrawModeStore.getState().activeTool;
+        if (currentActiveTool) {
+          const stage = stageRef.current;
+          if (stage) {
+            const pos = stage.getRelativePointerPosition();
+            if (pos) {
+              startDrawing(pos);
+            }
+          }
+          return;
+        }
+
         // Left click on empty space - start marquee selection
         const clickedOnEmpty =
           e.target === e.target.getStage() || e.target.name() === "background";
@@ -714,10 +846,22 @@ export function Canvas() {
         }
       }
     },
-    [isSpacePressed, setIsPanning, clearSelection],
+    [isSpacePressed, setIsPanning, clearSelection, startDrawing],
   );
 
   const handleMouseMove = useCallback(() => {
+    // Drawing mode
+    if (useDrawModeStore.getState().isDrawing) {
+      const stage = stageRef.current;
+      if (stage) {
+        const pos = stage.getRelativePointerPosition();
+        if (pos) {
+          updateDrawing(pos);
+        }
+      }
+      return;
+    }
+
     // Marquee selection
     if (isMarqueeActive.current && marqueeStart.current) {
       const stage = stageRef.current;
@@ -770,10 +914,47 @@ export function Canvas() {
 
     setPosition(x + dx, y + dy);
     lastPointerPosition.current = pointerPos;
-  }, [isPanning, x, y, setPosition, setSelectedIds]);
+  }, [isPanning, x, y, setPosition, setSelectedIds, updateDrawing]);
 
   const handleMouseUp = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent>) => {
+      // End drawing
+      const drawState = useDrawModeStore.getState();
+      if (drawState.isDrawing && drawState.drawStart && drawState.drawCurrent && drawState.activeTool) {
+        const tool = drawState.activeTool;
+        const s = drawState.drawStart;
+        const c = drawState.drawCurrent;
+        const dx = Math.abs(c.x - s.x);
+        const dy = Math.abs(c.y - s.y);
+
+        // Default sizes for click-without-drag (< 2px movement)
+        const defaults: Record<string, { w: number; h: number }> = {
+          frame: { w: 200, h: 150 },
+          rect: { w: 150, h: 100 },
+          ellipse: { w: 120, h: 120 },
+          text: { w: 100, h: 24 },
+        };
+
+        let rx: number, ry: number, rw: number, rh: number;
+        if (dx < 2 && dy < 2) {
+          // Click without drag: use defaults centered on click
+          const d = defaults[tool];
+          rw = d.w;
+          rh = d.h;
+          rx = s.x - rw / 2;
+          ry = s.y - rh / 2;
+        } else {
+          rx = Math.min(s.x, c.x);
+          ry = Math.min(s.y, c.y);
+          rw = dx;
+          rh = dy;
+        }
+
+        createNodeFromDraw(tool, rx, ry, rw, rh);
+        endDrawing();
+        return;
+      }
+
       // End marquee selection
       if (isMarqueeActive.current) {
         isMarqueeActive.current = false;
@@ -791,7 +972,7 @@ export function Canvas() {
       }
       lastPointerPosition.current = null;
     },
-    [isSpacePressed, setIsPanning],
+    [isSpacePressed, setIsPanning, createNodeFromDraw, endDrawing],
   );
 
   // Prevent context menu on middle click
@@ -809,7 +990,7 @@ export function Canvas() {
         width: "100%",
         height: "100%",
         overflow: "hidden",
-        cursor: isPanning ? "grab" : "default",
+        cursor: isPanning ? "grab" : activeTool ? "crosshair" : "default",
         background: "#f5f5f5",
         position: "relative",
       }}
@@ -911,6 +1092,20 @@ export function Canvas() {
               fill="rgba(13, 153, 255, 0.1)"
               stroke="#0d99ff"
               strokeWidth={1 / scale}
+              listening={false}
+            />
+          )}
+          {/* Drawing preview rectangle */}
+          {drawPreviewRect && (
+            <Rect
+              x={drawPreviewRect.x}
+              y={drawPreviewRect.y}
+              width={drawPreviewRect.width}
+              height={drawPreviewRect.height}
+              fill="rgba(13, 153, 255, 0.08)"
+              stroke="#0d99ff"
+              strokeWidth={1 / scale}
+              dash={[4 / scale, 4 / scale]}
               listening={false}
             />
           )}
