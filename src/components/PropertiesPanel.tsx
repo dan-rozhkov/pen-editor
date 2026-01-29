@@ -813,6 +813,23 @@ function PropertyEditor({
         </PropertySection>
       )}
 
+      {/* Convert Group↔Frame */}
+      {(node.type === "group" ||
+        (node.type === "frame" && !(node as FrameNode).reusable)) && (
+        <PropertySection title="Convert">
+          <button
+            className="w-full px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
+            onClick={() =>
+              useSceneStore.getState().convertNodeType(node.id)
+            }
+          >
+            {node.type === "group"
+              ? "Convert to Frame"
+              : "Convert to Group"}
+          </button>
+        </PropertySection>
+      )}
+
       {/* Instance info (RefNode only) */}
       {node.type === "ref" &&
         (() => {

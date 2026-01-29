@@ -50,6 +50,8 @@ interface SceneState {
   // Group/ungroup operations
   groupNodes: (ids: string[]) => string | null;
   ungroupNodes: (ids: string[]) => string[];
+  // Convert group↔frame
+  convertNodeType: (id: string) => boolean;
   // Page-level properties
   pageBackground: string;
   setPageBackground: (color: string) => void;
@@ -619,6 +621,95 @@ function ungroupNodeInTree(
   return processLevel(nodes, null);
 }
 
+// Convert a group node to frame or a non-reusable frame to group
+function convertNodeInTree(
+  nodes: SceneNode[],
+  targetId: string,
+): SceneNode[] | null {
+  const node = findNodeInTree(nodes, targetId);
+  if (!node) return null;
+
+  if (node.type === "group") {
+    // Group → Frame: keep all base props + children, set type to frame
+    const group = node as GroupNode;
+    const frame: FrameNode = {
+      id: group.id,
+      type: "frame",
+      name: group.name,
+      x: group.x,
+      y: group.y,
+      width: group.width,
+      height: group.height,
+      fill: group.fill,
+      stroke: group.stroke,
+      strokeWidth: group.strokeWidth,
+      visible: group.visible,
+      enabled: group.enabled,
+      sizing: group.sizing,
+      fillBinding: group.fillBinding,
+      strokeBinding: group.strokeBinding,
+      rotation: group.rotation,
+      opacity: group.opacity,
+      flipX: group.flipX,
+      flipY: group.flipY,
+      imageFill: group.imageFill,
+      children: group.children,
+    };
+    return replaceNodeInTree(nodes, targetId, frame);
+  }
+
+  if (node.type === "frame") {
+    const frame = node as FrameNode;
+    // Block conversion of reusable frames (components)
+    if (frame.reusable) return null;
+
+    const group: GroupNode = {
+      id: frame.id,
+      type: "group",
+      name: frame.name,
+      x: frame.x,
+      y: frame.y,
+      width: frame.width,
+      height: frame.height,
+      fill: frame.fill,
+      stroke: frame.stroke,
+      strokeWidth: frame.strokeWidth,
+      visible: frame.visible,
+      enabled: frame.enabled,
+      sizing: frame.sizing,
+      fillBinding: frame.fillBinding,
+      strokeBinding: frame.strokeBinding,
+      rotation: frame.rotation,
+      opacity: frame.opacity,
+      flipX: frame.flipX,
+      flipY: frame.flipY,
+      imageFill: frame.imageFill,
+      children: frame.children,
+    };
+    return replaceNodeInTree(nodes, targetId, group);
+  }
+
+  return null;
+}
+
+// Replace a node in tree by ID
+function replaceNodeInTree(
+  nodes: SceneNode[],
+  targetId: string,
+  replacement: SceneNode,
+): SceneNode[] {
+  return nodes.map((node) => {
+    if (node.id === targetId) return replacement;
+    if (isContainerNode(node)) {
+      return {
+        ...node,
+        children: replaceNodeInTree(node.children, targetId, replacement),
+      } as FrameNode | GroupNode;
+    }
+    return node;
+  });
+}
+
 export const useSceneStore = create<SceneState>((set) => ({
   nodes: [],
   expandedFrameIds: new Set<string>(),
@@ -776,6 +867,15 @@ export const useSceneStore = create<SceneState>((set) => ({
     }
     useSceneStore.setState({ nodes: currentNodes });
     return childIds;
+  },
+
+  convertNodeType: (id) => {
+    const state = useSceneStore.getState();
+    const result = convertNodeInTree(state.nodes, id);
+    if (!result) return false;
+    useHistoryStore.getState().saveHistory(state.nodes);
+    useSceneStore.setState({ nodes: result });
+    return true;
   },
 
   setPageBackground: (color) =>
