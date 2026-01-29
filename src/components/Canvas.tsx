@@ -161,7 +161,7 @@ export function Canvas() {
             height: rh,
             text: "Text",
             fontSize: 18,
-            fontFamily: "Arial",
+            fontFamily: "Inter",
             fontWeight: "normal",
             fill: "#333333",
             textWidthMode: "auto",

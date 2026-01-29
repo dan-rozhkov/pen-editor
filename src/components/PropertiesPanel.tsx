@@ -53,6 +53,7 @@ import {
   CheckboxInput,
   SegmentedControl,
 } from "./ui/PropertyInputs";
+import { FontCombobox } from "./ui/FontCombobox";
 
 // Helper to find a node within a component's children tree
 function findNodeInComponent(
@@ -712,7 +713,7 @@ function PropertyEditor({
               onChange={(v) => onUpdate({ fontSize: v } as Partial<SceneNode>)}
               min={1}
             />
-            <TextInput
+            <FontCombobox
               label="Family"
               value={node.fontFamily ?? "Arial"}
               onChange={(v) =>
