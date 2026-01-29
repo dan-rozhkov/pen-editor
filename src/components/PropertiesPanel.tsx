@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   AlignLeft,
   AlignCenterHorizontal,
@@ -34,6 +34,7 @@ import type {
   TextAlign,
   TextAlignVertical,
   DescendantOverride,
+  ImageFillMode,
 } from "../types/scene";
 import type { ThemeName, Variable } from "../types/variable";
 import {
@@ -232,6 +233,131 @@ function OverrideIndicator({
   );
 }
 
+// Image Fill section for rect, ellipse, frame
+function ImageFillSection({
+  imageFill,
+  onUpdate,
+}: {
+  imageFill?: { url: string; mode: ImageFillMode } | undefined;
+  onUpdate: (updates: Partial<SceneNode>) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [urlInput, setUrlInput] = useState("");
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      onUpdate({
+        imageFill: { url: dataUrl, mode: imageFill?.mode ?? "fill" },
+      } as Partial<SceneNode>);
+    };
+    reader.readAsDataURL(file);
+    // Reset so same file can be re-selected
+    e.target.value = "";
+  };
+
+  const handleUrlSubmit = () => {
+    if (!urlInput.trim()) return;
+    onUpdate({
+      imageFill: { url: urlInput.trim(), mode: imageFill?.mode ?? "fill" },
+    } as Partial<SceneNode>);
+    setUrlInput("");
+  };
+
+  const handleRemove = () => {
+    onUpdate({ imageFill: undefined } as Partial<SceneNode>);
+  };
+
+  const handleModeChange = (mode: string) => {
+    if (!imageFill) return;
+    onUpdate({
+      imageFill: { ...imageFill, mode: mode as ImageFillMode },
+    } as Partial<SceneNode>);
+  };
+
+  return (
+    <PropertySection title="Image Fill">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileSelect}
+      />
+
+      {imageFill ? (
+        <div className="flex flex-col gap-2">
+          {/* Preview */}
+          <div className="w-full h-20 rounded border border-border-light overflow-hidden bg-surface-elevated">
+            <img
+              src={imageFill.url}
+              alt="Fill preview"
+              className="w-full h-full object-cover"
+            />
+          </div>
+
+          {/* Scale mode */}
+          <SelectInput
+            label="Mode"
+            value={imageFill.mode}
+            options={[
+              { value: "fill", label: "Fill (Cover)" },
+              { value: "fit", label: "Fit (Contain)" },
+              { value: "stretch", label: "Stretch" },
+            ]}
+            onChange={handleModeChange}
+          />
+
+          {/* Actions */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex-1 px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
+            >
+              Replace
+            </button>
+            <button
+              onClick={handleRemove}
+              className="flex-1 px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-red-400 text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
+          >
+            Upload Image
+          </button>
+          <div className="flex gap-1">
+            <input
+              type="text"
+              placeholder="Or paste URL..."
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleUrlSubmit()}
+              className="flex-1 px-2 py-1 bg-surface-elevated border border-border-light rounded text-text-primary text-xs outline-none focus:border-accent-primary"
+            />
+            <button
+              onClick={handleUrlSubmit}
+              disabled={!urlInput.trim()}
+              className="px-2 py-1 bg-accent-primary border-none rounded text-white text-xs cursor-pointer transition-colors hover:bg-accent-hover disabled:opacity-50 disabled:cursor-default"
+            >
+              Set
+            </button>
+          </div>
+        </div>
+      )}
+    </PropertySection>
+  );
+}
+
 interface PropertyEditorProps {
   node: SceneNode;
   onUpdate: (updates: Partial<SceneNode>) => void;
@@ -402,6 +528,14 @@ function PropertyEditor({
           />
         </div>
       </PropertySection>
+
+      {/* Image Fill Section (for rect, ellipse, frame) */}
+      {(node.type === "rect" || node.type === "ellipse" || node.type === "frame") && (
+        <ImageFillSection
+          imageFill={node.imageFill}
+          onUpdate={onUpdate}
+        />
+      )}
 
       {/* Stroke Section */}
       <PropertySection title="Stroke">

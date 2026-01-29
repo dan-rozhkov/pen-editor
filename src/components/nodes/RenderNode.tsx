@@ -1,4 +1,4 @@
-import { Rect, Ellipse, Text, Group } from "react-konva";
+import { Rect, Ellipse, Text, Group, Image as KonvaImage } from "react-konva";
 import Konva from "konva";
 import type {
   SceneNode,
@@ -8,8 +8,10 @@ import type {
   TextNode,
   DescendantOverrides,
   DescendantOverride,
+  ImageFill,
 } from "../../types/scene";
 import { isContainerNode } from "../../types/scene";
+import { useLoadImage } from "../../hooks/useLoadImage";
 import type { ThemeName } from "../../types/variable";
 import { resolveColor } from "../../utils/colorUtils";
 import { useSceneStore } from "../../store/sceneStore";
@@ -48,6 +50,96 @@ function buildTextDecoration(node: TextNode): string {
   if (node.underline) parts.push("underline");
   if (node.strikethrough) parts.push("line-through");
   return parts.join(" ") || "";
+}
+
+// Calculate image dimensions for a given fill mode
+function calculateImageDimensions(
+  image: HTMLImageElement,
+  mode: ImageFill['mode'],
+  containerW: number,
+  containerH: number,
+): { x: number; y: number; width: number; height: number } {
+  if (mode === 'stretch') {
+    return { x: 0, y: 0, width: containerW, height: containerH }
+  }
+
+  const imgAspect = image.naturalWidth / image.naturalHeight
+  const containerAspect = containerW / containerH
+
+  let w: number, h: number
+  if (mode === 'fill') {
+    // Cover: scale to fill, crop overflow
+    if (imgAspect > containerAspect) {
+      h = containerH
+      w = containerH * imgAspect
+    } else {
+      w = containerW
+      h = containerW / imgAspect
+    }
+  } else {
+    // Fit: scale to contain, may letterbox
+    if (imgAspect > containerAspect) {
+      w = containerW
+      h = containerW / imgAspect
+    } else {
+      h = containerH
+      w = containerH * imgAspect
+    }
+  }
+
+  return {
+    x: (containerW - w) / 2,
+    y: (containerH - h) / 2,
+    width: w,
+    height: h,
+  }
+}
+
+// Render an image fill clipped to a rectangle or ellipse shape
+interface ImageFillLayerProps {
+  imageFill: ImageFill
+  width: number
+  height: number
+  x?: number
+  y?: number
+  cornerRadius?: number
+  clipType: 'rect' | 'ellipse'
+}
+
+function ImageFillLayer({ imageFill, width, height, x = 0, y = 0, cornerRadius, clipType }: ImageFillLayerProps) {
+  const image = useLoadImage(imageFill.url)
+  if (!image) return null
+
+  const dims = calculateImageDimensions(image, imageFill.mode, width, height)
+
+  return (
+    <Group
+      x={x}
+      y={y}
+      clipFunc={(ctx: CanvasRenderingContext2D) => {
+        if (clipType === 'ellipse') {
+          ctx.beginPath()
+          ctx.ellipse(width / 2, height / 2, width / 2, height / 2, 0, 0, Math.PI * 2)
+          ctx.closePath()
+        } else if (cornerRadius && cornerRadius > 0) {
+          ctx.beginPath()
+          ;(ctx as unknown as { roundRect: (x: number, y: number, w: number, h: number, r: number) => void }).roundRect(0, 0, width, height, cornerRadius)
+          ctx.closePath()
+        } else {
+          ctx.rect(0, 0, width, height)
+        }
+      }}
+      listening={false}
+    >
+      <KonvaImage
+        image={image}
+        x={dims.x}
+        y={dims.y}
+        width={dims.width}
+        height={dims.height}
+      />
+    </Group>
+  )
 }
 
 // Apply descendant overrides to a node
@@ -318,7 +410,7 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
             width={node.width}
             height={node.height}
             rotation={node.rotation ?? 0}
-            fill={fillColor}
+            fill={node.imageFill ? undefined : fillColor}
             stroke={strokeColor}
             strokeWidth={node.strokeWidth}
             cornerRadius={node.cornerRadius}
@@ -333,6 +425,17 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
           />
+          {node.imageFill && (
+            <ImageFillLayer
+              imageFill={node.imageFill}
+              x={node.x}
+              y={node.y}
+              width={node.width}
+              height={node.height}
+              cornerRadius={node.cornerRadius}
+              clipType="rect"
+            />
+          )}
           {/* Hover outline */}
           {isHovered && (
             <Rect
@@ -543,7 +646,7 @@ function EllipseRenderer({
         radiusX={node.width / 2}
         radiusY={node.height / 2}
         rotation={node.rotation ?? 0}
-        fill={fillColor}
+        fill={node.imageFill ? undefined : fillColor}
         stroke={strokeColor}
         strokeWidth={node.strokeWidth}
         opacity={node.opacity ?? 1}
@@ -557,6 +660,16 @@ function EllipseRenderer({
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
       />
+      {node.imageFill && (
+        <ImageFillLayer
+          imageFill={node.imageFill}
+          x={node.x}
+          y={node.y}
+          width={node.width}
+          height={node.height}
+          clipType="ellipse"
+        />
+      )}
       {/* Hover outline */}
       {isHovered && (
         <Ellipse
@@ -647,11 +760,20 @@ function FrameRenderer({
       <Rect
         width={effectiveWidth}
         height={effectiveHeight}
-        fill={fillColor}
+        fill={node.imageFill ? undefined : fillColor}
         stroke={strokeColor}
         strokeWidth={node.strokeWidth}
         cornerRadius={node.cornerRadius}
       />
+      {node.imageFill && (
+        <ImageFillLayer
+          imageFill={node.imageFill}
+          width={effectiveWidth}
+          height={effectiveHeight}
+          cornerRadius={node.cornerRadius}
+          clipType="rect"
+        />
+      )}
       {layoutChildren.map((child) => (
         <RenderNode key={child.id} node={child} effectiveTheme={childTheme} />
       ))}
@@ -987,7 +1109,7 @@ function DescendantRenderer({
             width={node.width}
             height={node.height}
             rotation={node.rotation ?? 0}
-            fill={fillColor}
+            fill={node.imageFill ? undefined : fillColor}
             stroke={strokeColor ?? selectionStroke}
             strokeWidth={node.strokeWidth ?? selectionStrokeWidth}
             cornerRadius={node.cornerRadius}
@@ -995,6 +1117,17 @@ function DescendantRenderer({
             onClick={onClick}
             onTap={onClick}
           />
+          {node.imageFill && (
+            <ImageFillLayer
+              imageFill={node.imageFill}
+              x={node.x}
+              y={node.y}
+              width={node.width}
+              height={node.height}
+              cornerRadius={node.cornerRadius}
+              clipType="rect"
+            />
+          )}
           {isSelected && !strokeColor && (
             <Rect
               x={node.x}
@@ -1018,13 +1151,23 @@ function DescendantRenderer({
             radiusX={node.width / 2}
             radiusY={node.height / 2}
             rotation={node.rotation ?? 0}
-            fill={fillColor}
+            fill={node.imageFill ? undefined : fillColor}
             stroke={strokeColor ?? selectionStroke}
             strokeWidth={node.strokeWidth ?? selectionStrokeWidth}
             opacity={node.opacity ?? 1}
             onClick={onClick}
             onTap={onClick}
           />
+          {node.imageFill && (
+            <ImageFillLayer
+              imageFill={node.imageFill}
+              x={node.x}
+              y={node.y}
+              width={node.width}
+              height={node.height}
+              clipType="ellipse"
+            />
+          )}
           {isSelected && !strokeColor && (
             <Ellipse
               x={node.x + node.width / 2}
@@ -1105,10 +1248,19 @@ function DescendantRenderer({
             <Rect
               width={node.width}
               height={node.height}
-              fill={fillColor}
+              fill={node.imageFill ? undefined : fillColor}
               stroke={strokeColor ?? selectionStroke}
               strokeWidth={node.strokeWidth ?? selectionStrokeWidth}
               cornerRadius={(node as FrameNode).cornerRadius}
+            />
+          )}
+          {node.type === "frame" && node.imageFill && (
+            <ImageFillLayer
+              imageFill={node.imageFill}
+              width={node.width}
+              height={node.height}
+              cornerRadius={(node as FrameNode).cornerRadius}
+              clipType="rect"
             />
           )}
           {containerChildren.map((child) => {
@@ -1175,32 +1327,57 @@ function RenderNodeWithOverrides({
   switch (node.type) {
     case "rect":
       return (
-        <Rect
-          x={node.x}
-          y={node.y}
-          width={node.width}
-          height={node.height}
-          rotation={node.rotation ?? 0}
-          fill={fillColor}
-          stroke={strokeColor}
-          strokeWidth={node.strokeWidth}
-          cornerRadius={node.cornerRadius}
-          opacity={node.opacity ?? 1}
-        />
+        <>
+          <Rect
+            x={node.x}
+            y={node.y}
+            width={node.width}
+            height={node.height}
+            rotation={node.rotation ?? 0}
+            fill={node.imageFill ? undefined : fillColor}
+            stroke={strokeColor}
+            strokeWidth={node.strokeWidth}
+            cornerRadius={node.cornerRadius}
+            opacity={node.opacity ?? 1}
+          />
+          {node.imageFill && (
+            <ImageFillLayer
+              imageFill={node.imageFill}
+              x={node.x}
+              y={node.y}
+              width={node.width}
+              height={node.height}
+              cornerRadius={node.cornerRadius}
+              clipType="rect"
+            />
+          )}
+        </>
       );
     case "ellipse":
       return (
-        <Ellipse
-          x={node.x + node.width / 2}
-          y={node.y + node.height / 2}
-          radiusX={node.width / 2}
-          radiusY={node.height / 2}
-          rotation={node.rotation ?? 0}
-          fill={fillColor}
-          stroke={strokeColor}
-          strokeWidth={node.strokeWidth}
-          opacity={node.opacity ?? 1}
-        />
+        <>
+          <Ellipse
+            x={node.x + node.width / 2}
+            y={node.y + node.height / 2}
+            radiusX={node.width / 2}
+            radiusY={node.height / 2}
+            rotation={node.rotation ?? 0}
+            fill={node.imageFill ? undefined : fillColor}
+            stroke={strokeColor}
+            strokeWidth={node.strokeWidth}
+            opacity={node.opacity ?? 1}
+          />
+          {node.imageFill && (
+            <ImageFillLayer
+              imageFill={node.imageFill}
+              x={node.x}
+              y={node.y}
+              width={node.width}
+              height={node.height}
+              clipType="ellipse"
+            />
+          )}
+        </>
       );
     case "text": {
       const ovrTextWidth = node.textWidthMode === "auto" ? undefined : node.width;
@@ -1244,10 +1421,19 @@ function RenderNodeWithOverrides({
             <Rect
               width={node.width}
               height={node.height}
-              fill={fillColor}
+              fill={node.imageFill ? undefined : fillColor}
               stroke={strokeColor}
               strokeWidth={node.strokeWidth}
               cornerRadius={(node as FrameNode).cornerRadius}
+            />
+          )}
+          {node.type === "frame" && node.imageFill && (
+            <ImageFillLayer
+              imageFill={node.imageFill}
+              width={node.width}
+              height={node.height}
+              cornerRadius={(node as FrameNode).cornerRadius}
+              clipType="rect"
             />
           )}
           {ovrChildren.map((child) => {

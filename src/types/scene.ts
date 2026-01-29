@@ -5,6 +5,14 @@ export interface ColorBinding {
   variableId: string
 }
 
+// Image fill for shapes
+export type ImageFillMode = 'fill' | 'fit' | 'stretch'
+
+export interface ImageFill {
+  url: string              // data:image/... or https://...
+  mode: ImageFillMode
+}
+
 // Sizing modes for elements inside auto-layout containers
 export type SizingMode = 'fixed' | 'fill_container' | 'fit_content'
 
@@ -35,6 +43,8 @@ export interface BaseNode {
   rotation?: number
   // Opacity (0-1, defaults to 1)
   opacity?: number
+  // Image fill (takes priority over color fill when set)
+  imageFill?: ImageFill
 }
 
 // Auto-layout properties for Frame nodes
