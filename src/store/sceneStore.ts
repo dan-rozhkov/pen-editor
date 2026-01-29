@@ -2,7 +2,9 @@ import { create } from 'zustand'
 import type { SceneNode, FrameNode, GroupNode, RefNode, TextNode, DescendantOverride } from '../types/scene'
 import { isContainerNode, generateId } from '../types/scene'
 import { useHistoryStore } from './historyStore'
+import { useLayoutStore } from './layoutStore'
 import { measureTextAutoSize, measureTextFixedWidthHeight } from '../utils/textMeasure'
+import { calculateFrameIntrinsicSize } from '../utils/yogaLayout'
 
 interface SceneState {
   nodes: SceneNode[]
@@ -315,7 +317,11 @@ function findNodeInTree(nodes: SceneNode[], id: string): SceneNode | null {
 }
 
 // Group selected nodes into a new GroupNode
-function groupNodesInTree(nodes: SceneNode[], ids: string[]): { nodes: SceneNode[]; groupId: string } | null {
+function groupNodesInTree(
+  nodes: SceneNode[],
+  ids: string[],
+  calculateLayoutForFrame?: (frame: FrameNode) => SceneNode[]
+): { nodes: SceneNode[]; groupId: string } | null {
   if (ids.length < 2) return null
 
   // Find positions of all nodes - they must all be in the same parent
@@ -331,16 +337,65 @@ function groupNodesInTree(nodes: SceneNode[], ids: string[]): { nodes: SceneNode
   const selectedNodes = ids.map(id => findNodeInTree(nodes, id)!).filter(Boolean)
   if (selectedNodes.length !== ids.length) return null
 
-  // Calculate bounding box
+  // If parent is an auto-layout frame, use Yoga-computed positions and dimensions
+  // instead of stored values (which may not reflect actual rendered layout)
+  let layoutNodes: SceneNode[] | null = null
+  if (parentId && calculateLayoutForFrame) {
+    const parentNode = findNodeInTree(nodes, parentId)
+    if (parentNode && parentNode.type === 'frame' && (parentNode as FrameNode).layout?.autoLayout) {
+      layoutNodes = calculateLayoutForFrame(parentNode as FrameNode)
+    }
+  }
+
+  // Build a map of layout-computed dimensions if available
+  const layoutMap = new Map<string, SceneNode>()
+  if (layoutNodes) {
+    for (const ln of layoutNodes) {
+      layoutMap.set(ln.id, ln)
+    }
+  }
+
+  // Helper to get effective dimensions for a node, accounting for:
+  // 1. Yoga layout-computed dimensions (for children of auto-layout parents)
+  // 2. fit_content sizing modes (for auto-layout frames with hug-contents)
+  function getEffectiveBounds(node: SceneNode): { x: number; y: number; width: number; height: number } {
+    const layoutNode = layoutMap.get(node.id)
+    const x = layoutNode?.x ?? node.x
+    const y = layoutNode?.y ?? node.y
+    let width = layoutNode?.width ?? node.width
+    let height = layoutNode?.height ?? node.height
+
+    // For auto-layout frames with fit_content sizing, compute intrinsic size
+    if (node.type === 'frame') {
+      const frame = node as FrameNode
+      if (frame.layout?.autoLayout) {
+        const fitWidth = frame.sizing?.widthMode === 'fit_content'
+        const fitHeight = frame.sizing?.heightMode === 'fit_content'
+        if (fitWidth || fitHeight) {
+          const intrinsic = calculateFrameIntrinsicSize(frame, { fitWidth, fitHeight })
+          if (fitWidth) width = intrinsic.width
+          if (fitHeight) height = intrinsic.height
+        }
+      }
+    }
+
+    return { x, y, width, height }
+  }
+
+  // Calculate bounding box using effective dimensions
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  const effectiveBoundsMap = new Map<string, { x: number; y: number; width: number; height: number }>()
   for (const node of selectedNodes) {
-    minX = Math.min(minX, node.x)
-    minY = Math.min(minY, node.y)
-    maxX = Math.max(maxX, node.x + node.width)
-    maxY = Math.max(maxY, node.y + node.height)
+    const bounds = getEffectiveBounds(node)
+    effectiveBoundsMap.set(node.id, bounds)
+    minX = Math.min(minX, bounds.x)
+    minY = Math.min(minY, bounds.y)
+    maxX = Math.max(maxX, bounds.x + bounds.width)
+    maxY = Math.max(maxY, bounds.y + bounds.height)
   }
 
   // Create group with children at relative positions
+  // Use effective positions for offset calculation
   const groupId = generateId()
   const groupNode: GroupNode = {
     id: groupId,
@@ -349,11 +404,17 @@ function groupNodesInTree(nodes: SceneNode[], ids: string[]): { nodes: SceneNode
     y: minY,
     width: maxX - minX,
     height: maxY - minY,
-    children: selectedNodes.map(node => ({
-      ...node,
-      x: node.x - minX,
-      y: node.y - minY,
-    } as SceneNode)),
+    children: selectedNodes.map(node => {
+      const bounds = effectiveBoundsMap.get(node.id)!
+      return {
+        ...node,
+        x: bounds.x - minX,
+        y: bounds.y - minY,
+        // Persist the effective dimensions so they match the visual size
+        width: bounds.width,
+        height: bounds.height,
+      } as SceneNode
+    }),
   }
 
   // Find the insertion index (smallest index among selected nodes)
@@ -535,7 +596,8 @@ export const useSceneStore = create<SceneState>((set) => ({
 
   groupNodes: (ids) => {
     const state = useSceneStore.getState()
-    const result = groupNodesInTree(state.nodes, ids)
+    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame
+    const result = groupNodesInTree(state.nodes, ids, calculateLayoutForFrame)
     if (!result) return null
     useHistoryStore.getState().saveHistory(state.nodes)
     useSceneStore.setState({ nodes: result.nodes })
