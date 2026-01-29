@@ -1,9 +1,9 @@
-import type { SceneNode, FrameNode, GroupNode } from '../types/scene'
-import { isContainerNode, getNodeChildren } from '../types/scene'
+import type { SceneNode, FrameNode, GroupNode } from "../types/scene";
+import { isContainerNode } from "../types/scene";
 
 export interface ParentContext {
-  parent: FrameNode | GroupNode | null
-  isInsideAutoLayout: boolean
+  parent: FrameNode | GroupNode | null;
+  isInsideAutoLayout: boolean;
 }
 
 /**
@@ -12,45 +12,46 @@ export interface ParentContext {
  */
 export function findParentFrame(
   nodes: SceneNode[],
-  targetId: string
+  targetId: string,
 ): ParentContext {
   // Recursive search in children
   function searchInChildren(
     children: SceneNode[],
-    parent: FrameNode | GroupNode | null
+    parent: FrameNode | GroupNode | null,
   ): ParentContext | null {
     for (const node of children) {
       if (node.id === targetId) {
         return {
           parent,
-          isInsideAutoLayout: (parent?.type === 'frame' && parent?.layout?.autoLayout) ?? false
-        }
+          isInsideAutoLayout:
+            (parent?.type === "frame" && parent?.layout?.autoLayout) ?? false,
+        };
       }
 
       if (isContainerNode(node)) {
-        const found = searchInChildren(node.children, node)
-        if (found) return found
+        const found = searchInChildren(node.children, node);
+        if (found) return found;
       }
     }
-    return null
+    return null;
   }
 
   // First check top level
   for (const node of nodes) {
     if (node.id === targetId) {
-      return { parent: null, isInsideAutoLayout: false }
+      return { parent: null, isInsideAutoLayout: false };
     }
   }
 
   // Search in container children
   for (const node of nodes) {
     if (isContainerNode(node)) {
-      const found = searchInChildren(node.children, node)
-      if (found) return found
+      const found = searchInChildren(node.children, node);
+      if (found) return found;
     }
   }
 
-  return { parent: null, isInsideAutoLayout: false }
+  return { parent: null, isInsideAutoLayout: false };
 }
 
 /**
@@ -58,13 +59,13 @@ export function findParentFrame(
  */
 export function findNodeById(nodes: SceneNode[], id: string): SceneNode | null {
   for (const node of nodes) {
-    if (node.id === id) return node
+    if (node.id === id) return node;
     if (isContainerNode(node)) {
-      const found = findNodeById(node.children, id)
-      if (found) return found
+      const found = findNodeById(node.children, id);
+      if (found) return found;
     }
   }
-  return null
+  return null;
 }
 
 /**
@@ -73,66 +74,69 @@ export function findNodeById(nodes: SceneNode[], id: string): SceneNode | null {
  */
 export function getNodeAbsolutePosition(
   nodes: SceneNode[],
-  targetId: string
+  targetId: string,
 ): { x: number; y: number } | null {
   function findWithPath(
     searchNodes: SceneNode[],
     accX: number,
-    accY: number
+    accY: number,
   ): { x: number; y: number } | null {
     for (const node of searchNodes) {
       if (node.id === targetId) {
-        return { x: accX + node.x, y: accY + node.y }
+        return { x: accX + node.x, y: accY + node.y };
       }
       if (isContainerNode(node)) {
-        const found = findWithPath(node.children, accX + node.x, accY + node.y)
-        if (found) return found
+        const found = findWithPath(node.children, accX + node.x, accY + node.y);
+        if (found) return found;
       }
     }
-    return null
+    return null;
   }
 
-  return findWithPath(nodes, 0, 0)
+  return findWithPath(nodes, 0, 0);
 }
 
 /**
  * Find a component (reusable FrameNode) by ID
  * Searches the entire tree for a FrameNode with matching ID and reusable: true
  */
-export function findComponentById(nodes: SceneNode[], id: string): FrameNode | null {
+export function findComponentById(
+  nodes: SceneNode[],
+  id: string,
+): FrameNode | null {
   for (const node of nodes) {
-    if (node.type === 'frame' && node.id === id && node.reusable) {
-      return node
+    if (node.type === "frame" && node.id === id && node.reusable) {
+      return node;
     }
     if (isContainerNode(node)) {
-      const found = findComponentById(node.children, id)
-      if (found) return found
+      const found = findComponentById(node.children, id);
+      if (found) return found;
     }
   }
-  return null
+  return null;
 }
 
 /**
  * Get all components (reusable FrameNodes) from the scene tree
  */
 export function getAllComponents(nodes: SceneNode[]): FrameNode[] {
-  const components: FrameNode[] = []
+  const components: FrameNode[] = [];
 
   function collect(searchNodes: SceneNode[]) {
     for (const node of searchNodes) {
-      if (node.type === 'frame') {
+      if (node.type === "frame") {
         if (node.reusable) {
-          components.push(node)
+          components.push(node);
         }
-        collect(node.children)
-      } else if (node.type === 'group') {
-        collect(node.children)
+        collect(node.children);
+      } else if (node.type === "group") {
+        collect(node.children);
       }
     }
   }
 
-  collect(nodes)
-  return components
+  collect(nodes);
+  return components;
 }
 
 /**
@@ -142,24 +146,24 @@ export function getAllComponents(nodes: SceneNode[]): FrameNode[] {
 export function isDescendantOf(
   nodes: SceneNode[],
   ancestorId: string,
-  targetId: string
+  targetId: string,
 ): boolean {
   // First find the ancestor node
-  const ancestor = findNodeById(nodes, ancestorId)
-  if (!ancestor || !isContainerNode(ancestor)) return false
+  const ancestor = findNodeById(nodes, ancestorId);
+  if (!ancestor || !isContainerNode(ancestor)) return false;
 
   // Then check if targetId is nested inside it
   function searchIn(children: SceneNode[]): boolean {
     for (const child of children) {
-      if (child.id === targetId) return true
+      if (child.id === targetId) return true;
       if (isContainerNode(child)) {
-        if (searchIn(child.children)) return true
+        if (searchIn(child.children)) return true;
       }
     }
-    return false
+    return false;
   }
 
-  return searchIn(ancestor.children)
+  return searchIn(ancestor.children);
 }
 
 /**
@@ -170,36 +174,36 @@ export function isDescendantOf(
 export function getNodeAbsolutePositionWithLayout(
   nodes: SceneNode[],
   targetId: string,
-  calculateLayoutForFrame: (frame: FrameNode) => SceneNode[]
+  calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
 ): { x: number; y: number } | null {
   function findWithPath(
     searchNodes: SceneNode[],
     accX: number,
     accY: number,
-    parentFrame: FrameNode | null
+    parentFrame: FrameNode | null,
   ): { x: number; y: number } | null {
     // If parent is an auto-layout frame, get layout-calculated positions
-    let effectiveNodes = searchNodes
+    let effectiveNodes = searchNodes;
     if (parentFrame?.layout?.autoLayout) {
-      effectiveNodes = calculateLayoutForFrame(parentFrame)
+      effectiveNodes = calculateLayoutForFrame(parentFrame);
     }
 
     for (const node of effectiveNodes) {
       if (node.id === targetId) {
-        return { x: accX + node.x, y: accY + node.y }
+        return { x: accX + node.x, y: accY + node.y };
       }
       if (isContainerNode(node)) {
         const found = findWithPath(
           node.children,
           accX + node.x,
           accY + node.y,
-          node.type === 'frame' ? node : null
-        )
-        if (found) return found
+          node.type === "frame" ? node : null,
+        );
+        if (found) return found;
       }
     }
-    return null
+    return null;
   }
 
-  return findWithPath(nodes, 0, 0, null)
+  return findWithPath(nodes, 0, 0, null);
 }

@@ -20,17 +20,12 @@ import { FrameIcon } from "./ui/custom-icons/frame-icon";
 // Icons for different node types
 const NodeIcon = ({
   type,
-  isSelected,
   reusable,
 }: {
   type: SceneNode["type"];
-  isSelected: boolean;
   reusable?: boolean;
 }) => {
-  const iconClass = clsx(
-    "w-4 h-4 shrink-0",
-    isSelected ? "text-white" : "text-text-muted",
-  );
+  const iconClass = clsx("w-4 h-4 shrink-0", "text-text-muted");
 
   switch (type) {
     case "frame":
@@ -56,17 +51,8 @@ const NodeIcon = ({
 };
 
 // Eye icon for visibility
-const EyeIcon = ({
-  visible,
-  isSelected,
-}: {
-  visible: boolean;
-  isSelected: boolean;
-}) => {
-  const iconClass = clsx(
-    "w-4 h-4",
-    isSelected ? "text-white" : "text-text-muted",
-  );
+const EyeIcon = ({ visible }: { visible: boolean }) => {
+  const iconClass = clsx("w-4 h-4", "text-text-muted");
 
   return visible ? (
     <EyeIconIcon size={16} className={iconClass} weight="regular" />
@@ -76,18 +62,12 @@ const EyeIcon = ({
 };
 
 // Chevron icon for expand/collapse
-const ChevronIcon = ({
-  expanded,
-  isSelected,
-}: {
-  expanded: boolean;
-  isSelected: boolean;
-}) => (
+const ChevronIcon = ({ expanded }: { expanded: boolean }) => (
   <CaretRightIcon
     size={12}
     className={clsx(
       "w-3 h-3 transition-transform duration-150",
-      isSelected ? "text-white" : "text-text-muted",
+      "text-text-muted",
       expanded && "rotate-90",
     )}
     weight="bold"
@@ -153,7 +133,8 @@ function LayerItem({
   const isSelected = selectedIds.includes(node.id);
   const isVisible = node.visible !== false;
   const isFrame = node.type === "frame" || node.type === "group";
-  const hasChildren = isFrame && (node as FrameNode | GroupNode).children.length > 0;
+  const hasChildren =
+    isFrame && (node as FrameNode | GroupNode).children.length > 0;
   const isExpanded = expandedFrameIds.has(node.id);
   const isDragging = dragState.draggedId === node.id;
   const isDropTarget = dragState.dropTargetId === node.id;
@@ -255,9 +236,9 @@ function LayerItem({
     <>
       <div
         className={clsx(
-          "flex items-center justify-between py-1.5 pr-3 cursor-pointer transition-colors duration-100",
+          "group flex items-center justify-between py-1.5 pr-3 cursor-pointer",
           isSelected
-            ? "bg-accent-primary hover:bg-accent-hover"
+            ? "bg-accent-selection hover:bg-accent-selection/80"
             : "hover:bg-surface-elevated",
           isDragging && "opacity-50",
           isDropTarget &&
@@ -268,7 +249,7 @@ function LayerItem({
             "border-b-2 border-accent-bright",
           isDropTarget &&
             dragState.dropPosition === "inside" &&
-            "bg-accent-primary/30",
+            "bg-accent-selection/50",
         )}
         style={{ paddingLeft: `${12 + depth * 16}px` }}
         onClick={handleClick}
@@ -287,15 +268,16 @@ function LayerItem({
               className="bg-transparent border-none cursor-pointer p-0.5 flex items-center justify-center rounded hover:bg-white/10"
               onClick={handleChevronClick}
             >
-              <ChevronIcon expanded={isExpanded} isSelected={isSelected} />
+              <ChevronIcon expanded={isExpanded} />
             </button>
           ) : (
             <div className="w-4" />
           )}
           <NodeIcon
             type={node.type}
-            isSelected={isSelected}
-            reusable={node.type === "frame" && (node as FrameNode).reusable === true}
+            reusable={
+              node.type === "frame" && (node as FrameNode).reusable === true
+            }
           />
           {isEditing ? (
             <input
@@ -308,14 +290,14 @@ function LayerItem({
               onClick={(e) => e.stopPropagation()}
               className={clsx(
                 "text-xs bg-transparent border border-accent-bright rounded px-1 py-0.5 outline-none min-w-0 flex-1",
-                isSelected ? "text-white" : "text-text-secondary",
+                "text-text-secondary",
               )}
             />
           ) : (
             <span
               className={clsx(
                 "text-xs whitespace-nowrap overflow-hidden text-ellipsis",
-                isSelected ? "text-white" : "text-text-secondary",
+                "text-text-secondary",
                 !isVisible && "opacity-50",
               )}
               onDoubleClick={handleDoubleClick}
@@ -326,15 +308,12 @@ function LayerItem({
         </div>
         <button
           className={clsx(
-            "bg-transparent border-none cursor-pointer p-1 flex items-center justify-center rounded transition-opacity duration-100",
-            isVisible
-              ? "opacity-60 hover:opacity-100 hover:bg-white/10"
-              : "opacity-30",
+            "bg-transparent border-none cursor-pointer p-1 flex items-center justify-center rounded group-hover:opacity-100 opacity-0",
           )}
           onClick={handleVisibilityClick}
           title={isVisible ? "Hide layer" : "Show layer"}
         >
-          <EyeIcon visible={isVisible} isSelected={isSelected} />
+          <EyeIcon visible={isVisible} />
         </button>
       </div>
 

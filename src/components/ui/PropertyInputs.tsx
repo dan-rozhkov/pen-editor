@@ -11,6 +11,9 @@ import {
   SelectValue,
 } from "./select";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "./input-group";
+import { ButtonGroup } from "./button-group";
+import { Button } from "./button";
+import { FlipHorizontalIcon, FlipVerticalIcon } from "@phosphor-icons/react";
 
 interface PropertySectionProps {
   title: string;
@@ -39,6 +42,7 @@ interface NumberInputProps {
   min?: number;
   max?: number;
   step?: number;
+  labelOutside?: boolean;
 }
 
 export function NumberInput({
@@ -48,6 +52,7 @@ export function NumberInput({
   min,
   max,
   step = 1,
+  labelOutside = false,
 }: NumberInputProps) {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseFloat(e.target.value);
@@ -55,6 +60,22 @@ export function NumberInput({
       onChange(val);
     }
   };
+
+  if (labelOutside && label) {
+    return (
+      <div className="flex-1 flex flex-col gap-1">
+        <Label className="text-[10px] font-normal">{label}</Label>
+        <Input
+          type="number"
+          value={Math.round(value * 100) / 100}
+          onChange={handleChange}
+          min={min}
+          max={max}
+          step={step}
+        />
+      </div>
+    );
+  }
 
   if (label) {
     return (
@@ -273,6 +294,7 @@ interface SelectInputProps {
   value: string;
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
+  labelOutside?: boolean;
 }
 
 export function SelectInput({
@@ -280,12 +302,33 @@ export function SelectInput({
   value,
   options,
   onChange,
+  labelOutside = false,
 }: SelectInputProps) {
   const handleChange = (val: string | null) => {
     if (val !== null) {
       onChange(val);
     }
   };
+
+  if (labelOutside && label) {
+    return (
+      <div className="flex-1 flex flex-col gap-1">
+        <Label className="text-[10px] font-normal">{label}</Label>
+        <Select value={value} onValueChange={handleChange}>
+          <SelectTrigger size="sm" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {options.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    );
+  }
 
   if (label) {
     return (
@@ -355,6 +398,7 @@ interface SegmentedControlProps {
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
   disabled?: boolean;
+  labelOutside?: boolean;
 }
 
 export function SegmentedControl({
@@ -363,7 +407,33 @@ export function SegmentedControl({
   options,
   onChange,
   disabled,
+  labelOutside = false,
 }: SegmentedControlProps) {
+  if (labelOutside && label) {
+    return (
+      <div className="flex-1 flex flex-col gap-1">
+        <Label className="text-[10px] font-normal">{label}</Label>
+        <div className="flex border border-border-light rounded overflow-hidden">
+          {options.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              className={`flex-1 px-2 py-1 text-[10px] transition-colors ${
+                value === opt.value
+                  ? "bg-accent-default text-white"
+                  : "bg-surface-elevated text-text-muted hover:bg-surface-hover"
+              } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+              onClick={() => !disabled && onChange(opt.value)}
+              disabled={disabled}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center gap-1">
       {label && (
@@ -389,5 +459,42 @@ export function SegmentedControl({
         ))}
       </div>
     </div>
+  );
+}
+
+interface FlipControlsProps {
+  flipX: boolean;
+  flipY: boolean;
+  onFlipXChange: (value: boolean) => void;
+  onFlipYChange: (value: boolean) => void;
+}
+
+export function FlipControls({
+  flipX,
+  flipY,
+  onFlipXChange,
+  onFlipYChange,
+}: FlipControlsProps) {
+  return (
+    <ButtonGroup orientation="horizontal" className="w-full">
+      <Button
+        variant="secondary"
+        size="sm"
+        className="flex-1"
+        onClick={() => onFlipXChange(!flipX)}
+        title="Flip horizontal"
+      >
+        <FlipHorizontalIcon />
+      </Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        className="flex-1"
+        onClick={() => onFlipYChange(!flipY)}
+        title="Flip vertical"
+      >
+        <FlipVerticalIcon />
+      </Button>
+    </ButtonGroup>
   );
 }

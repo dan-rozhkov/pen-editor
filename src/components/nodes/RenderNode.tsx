@@ -10,7 +10,6 @@ import type {
   DescendantOverride,
   ImageFill,
 } from "../../types/scene";
-import { isContainerNode } from "../../types/scene";
 import { useLoadImage } from "../../hooks/useLoadImage";
 import type { ThemeName } from "../../types/variable";
 import { resolveColor } from "../../utils/colorUtils";
@@ -21,7 +20,12 @@ import { useVariableStore } from "../../store/variableStore";
 import { useThemeStore } from "../../store/themeStore";
 import { useDragStore } from "../../store/dragStore";
 import { useHoverStore } from "../../store/hoverStore";
-import { findParentFrame, findComponentById, isDescendantOf, getNodeAbsolutePosition } from "../../utils/nodeUtils";
+import {
+  findParentFrame,
+  findComponentById,
+  isDescendantOf,
+  getNodeAbsolutePosition,
+} from "../../utils/nodeUtils";
 import {
   calculateDropPosition,
   isPointInsideRect,
@@ -56,41 +60,41 @@ function buildTextDecoration(node: TextNode): string {
 // For "fill" (cover) mode, uses crop to select the visible portion of the source
 // image so the rendered KonvaImage never exceeds container bounds.
 interface ImageRenderParams {
-  x: number
-  y: number
-  width: number
-  height: number
-  crop?: { x: number; y: number; width: number; height: number }
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  crop?: { x: number; y: number; width: number; height: number };
 }
 
 function calculateImageRenderParams(
   image: HTMLImageElement,
-  mode: ImageFill['mode'],
+  mode: ImageFill["mode"],
   containerW: number,
   containerH: number,
 ): ImageRenderParams {
-  if (mode === 'stretch') {
-    return { x: 0, y: 0, width: containerW, height: containerH }
+  if (mode === "stretch") {
+    return { x: 0, y: 0, width: containerW, height: containerH };
   }
 
-  const imgAspect = image.naturalWidth / image.naturalHeight
-  const containerAspect = containerW / containerH
+  const imgAspect = image.naturalWidth / image.naturalHeight;
+  const containerAspect = containerW / containerH;
 
-  if (mode === 'fill') {
+  if (mode === "fill") {
     // Cover: render at container size, crop source image to match aspect
-    let cropX: number, cropY: number, cropW: number, cropH: number
+    let cropX: number, cropY: number, cropW: number, cropH: number;
     if (imgAspect > containerAspect) {
       // Image is wider — crop sides
-      cropH = image.naturalHeight
-      cropW = image.naturalHeight * containerAspect
-      cropX = (image.naturalWidth - cropW) / 2
-      cropY = 0
+      cropH = image.naturalHeight;
+      cropW = image.naturalHeight * containerAspect;
+      cropX = (image.naturalWidth - cropW) / 2;
+      cropY = 0;
     } else {
       // Image is taller — crop top/bottom
-      cropW = image.naturalWidth
-      cropH = image.naturalWidth / containerAspect
-      cropX = 0
-      cropY = (image.naturalHeight - cropH) / 2
+      cropW = image.naturalWidth;
+      cropH = image.naturalWidth / containerAspect;
+      cropX = 0;
+      cropY = (image.naturalHeight - cropH) / 2;
     }
     return {
       x: 0,
@@ -98,17 +102,17 @@ function calculateImageRenderParams(
       width: containerW,
       height: containerH,
       crop: { x: cropX, y: cropY, width: cropW, height: cropH },
-    }
+    };
   }
 
   // Fit: scale to contain, may letterbox
-  let w: number, h: number
+  let w: number, h: number;
   if (imgAspect > containerAspect) {
-    w = containerW
-    h = containerW / imgAspect
+    w = containerW;
+    h = containerW / imgAspect;
   } else {
-    h = containerH
-    w = containerH * imgAspect
+    h = containerH;
+    w = containerH * imgAspect;
   }
 
   return {
@@ -116,41 +120,73 @@ function calculateImageRenderParams(
     y: (containerH - h) / 2,
     width: w,
     height: h,
-  }
+  };
 }
 
 // Render an image fill clipped to a rectangle or ellipse shape
 interface ImageFillLayerProps {
-  imageFill: ImageFill
-  width: number
-  height: number
-  x?: number
-  y?: number
-  cornerRadius?: number
-  clipType: 'rect' | 'ellipse'
+  imageFill: ImageFill;
+  width: number;
+  height: number;
+  x?: number;
+  y?: number;
+  cornerRadius?: number;
+  clipType: "rect" | "ellipse";
 }
 
-function ImageFillLayer({ imageFill, width, height, x = 0, y = 0, cornerRadius, clipType }: ImageFillLayerProps) {
-  const image = useLoadImage(imageFill.url)
-  if (!image) return null
+function ImageFillLayer({
+  imageFill,
+  width,
+  height,
+  x = 0,
+  y = 0,
+  cornerRadius,
+  clipType,
+}: ImageFillLayerProps) {
+  const image = useLoadImage(imageFill.url);
+  if (!image) return null;
 
-  const params = calculateImageRenderParams(image, imageFill.mode, width, height)
+  const params = calculateImageRenderParams(
+    image,
+    imageFill.mode,
+    width,
+    height,
+  );
 
   return (
     <Group
       x={x}
       y={y}
-      clipFunc={(ctx: CanvasRenderingContext2D) => {
-        if (clipType === 'ellipse') {
-          ctx.beginPath()
-          ctx.ellipse(width / 2, height / 2, width / 2, height / 2, 0, 0, Math.PI * 2)
-          ctx.closePath()
+      clipFunc={(ctx) => {
+        const ctx2d = ctx._context;
+        if (clipType === "ellipse") {
+          ctx2d.beginPath();
+          ctx2d.ellipse(
+            width / 2,
+            height / 2,
+            width / 2,
+            height / 2,
+            0,
+            0,
+            Math.PI * 2,
+          );
+          ctx2d.closePath();
         } else if (cornerRadius && cornerRadius > 0) {
-          ctx.beginPath()
-          ;(ctx as unknown as { roundRect: (x: number, y: number, w: number, h: number, r: number) => void }).roundRect(0, 0, width, height, cornerRadius)
-          ctx.closePath()
+          ctx2d.beginPath();
+          (
+            ctx2d as unknown as {
+              roundRect: (
+                x: number,
+                y: number,
+                w: number,
+                h: number,
+                r: number,
+              ) => void;
+            }
+          ).roundRect(0, 0, width, height, cornerRadius);
+          ctx2d.closePath();
         } else {
-          ctx.rect(0, 0, width, height)
+          ctx2d.rect(0, 0, width, height);
         }
       }}
       listening={false}
@@ -164,7 +200,7 @@ function ImageFillLayer({ imageFill, width, height, x = 0, y = 0, cornerRadius, 
         crop={params.crop}
       />
     </Group>
-  )
+  );
 }
 
 // Apply descendant overrides to a node
@@ -189,7 +225,11 @@ interface RenderNodeProps {
   selectOverrideId?: string; // If set, clicking this node selects this ID instead (nested selection)
 }
 
-export function RenderNode({ node, effectiveTheme, selectOverrideId }: RenderNodeProps) {
+export function RenderNode({
+  node,
+  effectiveTheme,
+  selectOverrideId,
+}: RenderNodeProps) {
   const nodes = useSceneStore((state) => state.nodes);
   const updateNode = useSceneStore((state) => state.updateNode);
   const moveNode = useSceneStore((state) => state.moveNode);
@@ -212,8 +252,18 @@ export function RenderNode({ node, effectiveTheme, selectOverrideId }: RenderNod
   const parentFrame = parentContext.parent;
 
   // Resolved colors for this node
-  const fillColor = resolveColor(node.fill, node.fillBinding, variables, currentTheme);
-  const strokeColor = resolveColor(node.stroke, node.strokeBinding, variables, currentTheme);
+  const fillColor = resolveColor(
+    node.fill,
+    node.fillBinding,
+    variables,
+    currentTheme,
+  );
+  const strokeColor = resolveColor(
+    node.stroke,
+    node.strokeBinding,
+    variables,
+    currentTheme,
+  );
 
   // Don't render if node is hidden
   if (node.visible === false) {
@@ -247,19 +297,19 @@ export function RenderNode({ node, effectiveTheme, selectOverrideId }: RenderNod
   const handleDragStart = () => {
     // Always select the node when starting to drag
     select(node.id);
-    
+
     if (isInAutoLayout) {
       startDrag(node.id);
     }
   };
 
   const handleDragMove = (e: Konva.KonvaEventObject<DragEvent>) => {
-    const target = e.target
+    const target = e.target;
     // Only process if this is the actual node being dragged
     // Prevents parent Group from handling child drag events
     if (target.id() !== node.id) return;
 
-    if (!isInAutoLayout || !parentFrame) return;
+    if (!isInAutoLayout || !parentFrame || parentFrame.type !== "frame") return;
 
     const stage = target.getStage();
     if (!stage) return;
@@ -311,7 +361,7 @@ export function RenderNode({ node, effectiveTheme, selectOverrideId }: RenderNod
 
     if (isInAutoLayout && parentFrame) {
       const { insertInfo, isOutsideParent } = useDragStore.getState();
-      
+
       handleAutoLayoutDragEnd(
         target,
         node.id,
@@ -321,9 +371,9 @@ export function RenderNode({ node, effectiveTheme, selectOverrideId }: RenderNod
         isOutsideParent,
         moveNode,
         updateNode,
-        () => ({ x: node.x, y: node.y })
+        () => ({ x: node.x, y: node.y }),
       );
-      
+
       endDrag();
     } else {
       // Normal behavior - update position
@@ -360,8 +410,12 @@ export function RenderNode({ node, effectiveTheme, selectOverrideId }: RenderNod
     };
 
     // When resizing a text node, switch from auto to fixed mode (like Figma)
-    if (node.type === 'text' && (node.textWidthMode === 'auto' || !node.textWidthMode)) {
-      (updates as Partial<import('../../types/scene').TextNode>).textWidthMode = 'fixed';
+    if (
+      node.type === "text" &&
+      (node.textWidthMode === "auto" || !node.textWidthMode)
+    ) {
+      (updates as Partial<import("../../types/scene").TextNode>).textWidthMode =
+        "fixed";
     }
 
     updateNode(node.id, updates);
@@ -478,7 +532,7 @@ export function RenderNode({ node, effectiveTheme, selectOverrideId }: RenderNod
           fillColor={fillColor}
           strokeColor={strokeColor}
           isInAutoLayout={isInAutoLayout}
-          parentFrame={parentFrame}
+          parentFrame={parentFrame?.type === "frame" ? parentFrame : null}
           isHovered={isHovered}
         />
       );
@@ -493,7 +547,8 @@ export function RenderNode({ node, effectiveTheme, selectOverrideId }: RenderNod
       };
       // For auto width mode, don't set width to let Konva calculate it from text
       const textWidth = node.textWidthMode === "auto" ? undefined : node.width;
-      const textHeight = node.textWidthMode === "fixed-height" ? node.height : undefined;
+      const textHeight =
+        node.textWidthMode === "fixed-height" ? node.height : undefined;
       const textDecoration = buildTextDecoration(node);
       return (
         <>
@@ -622,7 +677,7 @@ function EllipseRenderer({
         moveNode,
         updateNode,
         // Ellipse uses center, so adjust position
-        () => ({ x: node.x + node.width / 2, y: node.y + node.height / 2 })
+        () => ({ x: node.x + node.width / 2, y: node.y + node.height / 2 }),
       );
 
       endDrag();
@@ -764,11 +819,14 @@ function FrameRenderer({
     : node.children;
 
   // Calculate effective size (fit_content uses intrinsic size from Yoga)
-  const fitWidth = node.sizing?.widthMode === "fit_content" && node.layout?.autoLayout;
-  const fitHeight = node.sizing?.heightMode === "fit_content" && node.layout?.autoLayout;
-  const intrinsicSize = (fitWidth || fitHeight)
-    ? calculateFrameIntrinsicSize(node, { fitWidth, fitHeight })
-    : { width: node.width, height: node.height };
+  const fitWidth =
+    node.sizing?.widthMode === "fit_content" && node.layout?.autoLayout;
+  const fitHeight =
+    node.sizing?.heightMode === "fit_content" && node.layout?.autoLayout;
+  const intrinsicSize =
+    fitWidth || fitHeight
+      ? calculateFrameIntrinsicSize(node, { fitWidth, fitHeight })
+      : { width: node.width, height: node.height };
   const effectiveWidth = fitWidth ? intrinsicSize.width : node.width;
   const effectiveHeight = fitHeight ? intrinsicSize.height : node.height;
 
@@ -995,11 +1053,7 @@ function GroupRenderer({
       onMouseLeave={onMouseLeave}
     >
       {/* Invisible hitbox so clicks on empty space within the group register */}
-      <Rect
-        width={node.width}
-        height={node.height}
-        fill="transparent"
-      />
+      <Rect width={node.width} height={node.height} fill="transparent" />
       {node.children.map((child) => (
         <RenderNode
           key={child.id}
@@ -1092,8 +1146,18 @@ function InstanceRenderer({
   const effectiveStrokeWidth =
     node.strokeWidth !== undefined ? node.strokeWidth : component.strokeWidth;
 
-  const fillColor = resolveColor(effectiveFill, effectiveFillBinding, variables, currentTheme);
-  const strokeColor = resolveColor(effectiveStroke, effectiveStrokeBinding, variables, currentTheme);
+  const fillColor = resolveColor(
+    effectiveFill,
+    effectiveFillBinding,
+    variables,
+    currentTheme,
+  );
+  const strokeColor = resolveColor(
+    effectiveStroke,
+    effectiveStrokeBinding,
+    variables,
+    currentTheme,
+  );
 
   // Calculate layout for children if auto-layout is enabled
   const layoutChildren = component.layout?.autoLayout
@@ -1255,8 +1319,18 @@ function DescendantRenderer({
   const currentTheme = effectiveTheme ?? globalTheme;
   const selectDescendant = useSelectionStore((state) => state.selectDescendant);
 
-  const fillColor = resolveColor(node.fill, node.fillBinding, variables, currentTheme);
-  const strokeColor = resolveColor(node.stroke, node.strokeBinding, variables, currentTheme);
+  const fillColor = resolveColor(
+    node.fill,
+    node.fillBinding,
+    variables,
+    currentTheme,
+  );
+  const strokeColor = resolveColor(
+    node.stroke,
+    node.strokeBinding,
+    variables,
+    currentTheme,
+  );
 
   // Selection highlight stroke
   const selectionStroke = isSelected ? "#8B5CF6" : undefined;
@@ -1356,8 +1430,10 @@ function DescendantRenderer({
         </Group>
       );
     case "text": {
-      const descTextWidth = node.textWidthMode === "auto" ? undefined : node.width;
-      const descTextHeight = node.textWidthMode === "fixed-height" ? node.height : undefined;
+      const descTextWidth =
+        node.textWidthMode === "auto" ? undefined : node.width;
+      const descTextHeight =
+        node.textWidthMode === "fixed-height" ? node.height : undefined;
       const descTextDecoration = buildTextDecoration(node);
       return (
         <Group>
@@ -1501,8 +1577,18 @@ function RenderNodeWithOverrides({
   const globalTheme = useThemeStore((state) => state.activeTheme);
   const currentTheme = effectiveTheme ?? globalTheme;
 
-  const fillColor = resolveColor(node.fill, node.fillBinding, variables, currentTheme);
-  const strokeColor = resolveColor(node.stroke, node.strokeBinding, variables, currentTheme);
+  const fillColor = resolveColor(
+    node.fill,
+    node.fillBinding,
+    variables,
+    currentTheme,
+  );
+  const strokeColor = resolveColor(
+    node.stroke,
+    node.strokeBinding,
+    variables,
+    currentTheme,
+  );
 
   // Don't render if node is hidden
   if (node.visible === false || node.enabled === false) {
@@ -1571,8 +1657,10 @@ function RenderNodeWithOverrides({
         </>
       );
     case "text": {
-      const ovrTextWidth = node.textWidthMode === "auto" ? undefined : node.width;
-      const ovrTextHeight = node.textWidthMode === "fixed-height" ? node.height : undefined;
+      const ovrTextWidth =
+        node.textWidthMode === "auto" ? undefined : node.width;
+      const ovrTextHeight =
+        node.textWidthMode === "fixed-height" ? node.height : undefined;
       const ovrTextDecoration = buildTextDecoration(node);
       return (
         <Text

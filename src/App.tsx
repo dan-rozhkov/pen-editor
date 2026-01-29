@@ -1,18 +1,18 @@
-import { useEffect } from 'react'
-import { Canvas } from './components/Canvas'
-import { Toolbar } from './components/Toolbar'
-import { LeftSidebar } from './components/LeftSidebar'
-import { RightSidebar } from './components/RightSidebar'
-import { PrimitivesPanel } from './components/PrimitivesPanel'
-import { useLayoutStore } from './store/layoutStore'
+import { useEffect } from "react";
+import { Canvas } from "./components/Canvas";
+import { Toolbar } from "./components/Toolbar";
+import { LeftSidebar } from "./components/LeftSidebar";
+import { RightSidebar } from "./components/RightSidebar";
+import { PrimitivesPanel } from "./components/PrimitivesPanel";
+import { useLayoutStore } from "./store/layoutStore";
 
 function App() {
-  const initializeYoga = useLayoutStore((state) => state.initializeYoga)
+  const initializeYoga = useLayoutStore((state) => state.initializeYoga);
 
   // Initialize yoga-layout WASM module on app mount
   useEffect(() => {
-    initializeYoga()
-  }, [initializeYoga])
+    initializeYoga();
+  }, [initializeYoga]);
 
   return (
     <div className="w-full h-full flex flex-col">
@@ -26,7 +26,7 @@ function App() {
         <RightSidebar />
       </div>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;

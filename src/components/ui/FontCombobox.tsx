@@ -40,12 +40,10 @@ export function FontCombobox({ label, value, onChange }: FontComboboxProps) {
   const filteredFonts =
     normalizedSearch === ""
       ? fonts
-      : fonts.filter((f) =>
-          f.family.toLowerCase().includes(normalizedSearch)
-        );
+      : fonts.filter((f) => f.family.toLowerCase().includes(normalizedSearch));
 
   const exactMatch = fonts.some(
-    (f) => f.family.toLowerCase() === normalizedSearch
+    (f) => f.family.toLowerCase() === normalizedSearch,
   );
 
   const handleSelectFont = (font: string) => {
@@ -58,7 +56,7 @@ export function FontCombobox({ label, value, onChange }: FontComboboxProps) {
     <Combobox open={open} onOpenChange={handleOpenChange} value={value}>
       <ComboboxInput
         value={open ? searchValue : value}
-        onValueChange={setSearchValue}
+        onChange={(e) => setSearchValue(e.target.value)}
         placeholder={loading ? "Loading fonts..." : "Search fonts..."}
         showTrigger
         showClear={open}

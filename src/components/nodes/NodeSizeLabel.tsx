@@ -1,7 +1,7 @@
 import { Group, Rect, Text } from "react-konva";
 import { useEffect, useRef, useState } from "react";
 import type Konva from "konva";
-import type { SceneNode, FrameNode, RefNode } from "../../types/scene";
+import type { SceneNode, FrameNode } from "../../types/scene";
 import { useViewportStore } from "../../store/viewportStore";
 
 interface NodeSizeLabelProps {

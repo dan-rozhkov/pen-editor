@@ -53,8 +53,17 @@ import {
   SelectInput,
   CheckboxInput,
   SegmentedControl,
+  FlipControls,
 } from "./ui/PropertyInputs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
 import { FontCombobox } from "./ui/FontCombobox";
+import { Button } from "./ui/button";
 
 // Helper to find a node within a component's children tree
 function findNodeInComponent(
@@ -87,10 +96,7 @@ function PageProperties() {
     <div>
       <div className="text-text-secondary text-xs font-medium mb-2">Page</div>
       <PropertySection title="Background">
-        <ColorInput
-          value={pageBackground}
-          onChange={setPageBackground}
-        />
+        <ColorInput value={pageBackground} onChange={setPageBackground} />
       </PropertySection>
     </div>
   );
@@ -138,7 +144,11 @@ function AlignmentSection({
       if (node.type === "frame" || node.type === "group") {
         return {
           ...node,
-          children: applyUpdateRecursive((node as FrameNode).children, id, changes),
+          children: applyUpdateRecursive(
+            (node as FrameNode).children,
+            id,
+            changes,
+          ),
         } as FrameNode;
       }
       return node;
@@ -438,6 +448,26 @@ function PropertyEditor({
             onChange={(v) => onUpdate({ y: v })}
           />
         </PropertyRow>
+        <div className="flex gap-2 mt-2">
+          <div className="w-1/2">
+            <NumberInput
+              label="°"
+              value={node.rotation ?? 0}
+              onChange={(v) => onUpdate({ rotation: v })}
+              min={0}
+              max={360}
+              step={1}
+            />
+          </div>
+          <div className="w-1/2">
+            <FlipControls
+              flipX={node.flipX ?? false}
+              flipY={node.flipY ?? false}
+              onFlipXChange={(value) => onUpdate({ flipX: value })}
+              onFlipYChange={(value) => onUpdate({ flipY: value })}
+            />
+          </div>
+        </div>
       </PropertySection>
 
       {/* Size Section */}
@@ -485,48 +515,30 @@ function PropertyEditor({
         </PropertyRow>
       </PropertySection>
 
-      {/* Rotation Section */}
-      <PropertySection title="Rotation">
-        <NumberInput
-          label="°"
-          value={node.rotation ?? 0}
-          onChange={(v) => onUpdate({ rotation: v })}
-          min={0}
-          max={360}
-          step={1}
-        />
-      </PropertySection>
-
-      {/* Flip Section */}
-      <PropertySection title="Flip">
-        <div className="flex gap-1">
-          <button
-            className={`flex-1 px-2 py-1 text-xs rounded border ${node.flipX ? "bg-blue-100 border-blue-400 text-blue-700" : "border-gray-300 text-gray-600 hover:bg-gray-100"}`}
-            onClick={() => onUpdate({ flipX: !node.flipX })}
-            title="Flip horizontal"
-          >
-            ↔ Horizontal
-          </button>
-          <button
-            className={`flex-1 px-2 py-1 text-xs rounded border ${node.flipY ? "bg-blue-100 border-blue-400 text-blue-700" : "border-gray-300 text-gray-600 hover:bg-gray-100"}`}
-            onClick={() => onUpdate({ flipY: !node.flipY })}
-            title="Flip vertical"
-          >
-            ↕ Vertical
-          </button>
-        </div>
-      </PropertySection>
-
-      {/* Opacity Section */}
-      <PropertySection title="Opacity">
-        <NumberInput
-          label="%"
-          value={Math.round((node.opacity ?? 1) * 100)}
-          onChange={(v) => onUpdate({ opacity: Math.max(0, Math.min(100, v)) / 100 })}
-          min={0}
-          max={100}
-          step={1}
-        />
+      {/* Appearance Section */}
+      <PropertySection title="Appearance">
+        <PropertyRow>
+          <NumberInput
+            label="Opacity %"
+            value={Math.round((node.opacity ?? 1) * 100)}
+            onChange={(v) =>
+              onUpdate({ opacity: Math.max(0, Math.min(100, v)) / 100 })
+            }
+            min={0}
+            max={100}
+            step={1}
+            labelOutside={true}
+          />
+          {(node.type === "frame" || node.type === "rect") && (
+            <NumberInput
+              label="Radius"
+              value={node.cornerRadius ?? 0}
+              onChange={(v) => onUpdate({ cornerRadius: v })}
+              min={0}
+              labelOutside={true}
+            />
+          )}
+        </PropertyRow>
       </PropertySection>
 
       {/* Fill Section */}
@@ -550,11 +562,10 @@ function PropertyEditor({
       </PropertySection>
 
       {/* Image Fill Section (for rect, ellipse, frame) */}
-      {(node.type === "rect" || node.type === "ellipse" || node.type === "frame") && (
-        <ImageFillSection
-          imageFill={node.imageFill}
-          onUpdate={onUpdate}
-        />
+      {(node.type === "rect" ||
+        node.type === "ellipse" ||
+        node.type === "frame") && (
+        <ImageFillSection imageFill={node.imageFill} onUpdate={onUpdate} />
       )}
 
       {/* Stroke Section */}
@@ -594,18 +605,6 @@ function PropertyEditor({
           />
         </div>
       </PropertySection>
-
-      {/* Corner Radius (Frame & Rect only) */}
-      {(node.type === "frame" || node.type === "rect") && (
-        <PropertySection title="Corner Radius">
-          <NumberInput
-            label="Radius"
-            value={node.cornerRadius ?? 0}
-            onChange={(v) => onUpdate({ cornerRadius: v })}
-            min={0}
-          />
-        </PropertySection>
-      )}
 
       {/* Auto Layout (Frame only) */}
       {node.type === "frame" && (
@@ -1242,8 +1241,9 @@ interface ExportSectionProps {
 function ExportSection({ selectedNode }: ExportSectionProps) {
   const stageRef = useCanvasRefStore((s) => s.stageRef);
   const [scale, setScale] = useState<ExportScale>(1);
+  const [format, setFormat] = useState<ExportFormat>("png");
 
-  const handleExport = (format: ExportFormat) => {
+  const handleExport = () => {
     if (!stageRef) {
       console.error("Stage ref not available");
       return;
@@ -1256,39 +1256,63 @@ function ExportSection({ selectedNode }: ExportSectionProps) {
   };
 
   const scaleOptions = [
-    { value: "1", label: "1x" },
-    { value: "2", label: "2x" },
-    { value: "3", label: "3x" },
+    { value: "1", label: "1×" },
+    { value: "2", label: "2×" },
+    { value: "3", label: "3×" },
   ];
+
+  const formatOptions = [
+    { value: "png", label: "PNG" },
+    { value: "jpeg", label: "JPEG" },
+  ];
+
+  const exportName = selectedNode?.name || "Untitled";
 
   return (
     <PropertySection title="Export">
       <div className="flex flex-col gap-2">
-        <SelectInput
-          label="Scale"
-          value={String(scale)}
-          options={scaleOptions}
-          onChange={(v) => setScale(Number(v) as ExportScale)}
-        />
-        <div className="flex gap-2">
-          <button
-            onClick={() => handleExport("png")}
-            className="flex-1 px-3 py-1.5 bg-accent-primary border-none rounded text-white text-xs cursor-pointer transition-colors hover:bg-accent-hover"
-          >
-            PNG
-          </button>
-          <button
-            onClick={() => handleExport("jpeg")}
-            className="flex-1 px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
-          >
-            JPEG
-          </button>
+        <div className="flex items-center gap-2">
+          <div className="flex-1">
+            <Select
+              value={String(scale)}
+              onValueChange={(v) => setScale(Number(v) as ExportScale)}
+            >
+              <SelectTrigger size="sm" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {scaleOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex-1">
+            <Select
+              value={format}
+              onValueChange={(v) => setFormat(v as ExportFormat)}
+            >
+              <SelectTrigger size="sm" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {formatOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        <div className="text-[10px] text-text-muted">
-          {selectedNode
-            ? `Export "${selectedNode.name || selectedNode.type}"`
-            : "Export entire canvas"}
-        </div>
+        <Button
+          onClick={handleExport}
+          className="w-full px-3 py-2 bg-surface-elevated border border-border-light rounded text-text-primary text-xs font-medium cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
+        >
+          Export {exportName}
+        </Button>
       </div>
     </PropertySection>
   );

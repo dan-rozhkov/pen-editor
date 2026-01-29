@@ -139,6 +139,7 @@
   --color-accent-hover: #0055aa;
   --color-accent-bright: #0077dd;
   --color-accent-light: #0d99ff;
+  --color-accent-selection: #e5f4ff;
 }
 
 @layer base {

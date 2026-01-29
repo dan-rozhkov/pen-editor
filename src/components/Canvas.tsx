@@ -233,7 +233,9 @@ export function Canvas() {
         id: newId,
         x: node.x + 20,
         y: node.y + 20,
-        children: (node as import("../types/scene").GroupNode).children.map((child) => cloneNodeWithNewId(child)),
+        children: (node as import("../types/scene").GroupNode).children.map(
+          (child) => cloneNodeWithNewId(child),
+        ),
       } as import("../types/scene").GroupNode;
     }
 
@@ -263,7 +265,10 @@ export function Canvas() {
   ): SceneNode | null => {
     for (const node of searchNodes) {
       if (node.id === id) return node;
-      if ((node.type === "frame" || node.type === "group") && (node as any).children) {
+      if (
+        (node.type === "frame" || node.type === "group") &&
+        (node as any).children
+      ) {
         const found = findNodeByIdGeneric((node as any).children, id);
         if (found) return found;
       }
@@ -366,7 +371,12 @@ export function Canvas() {
             isNested,
           });
           // Recursively collect nested containers (mark them as nested)
-          traverse((node as FrameNode | GroupNode).children, accX + node.x, accY + node.y, true);
+          traverse(
+            (node as FrameNode | GroupNode).children,
+            accX + node.x,
+            accY + node.y,
+            true,
+          );
         }
       }
     };
@@ -415,7 +425,11 @@ export function Canvas() {
 
           // Handle nodes with fill_container inside auto-layout
           const parentContext = findParentFrame(nodes, node.id);
-          if (parentContext.isInsideAutoLayout && parentContext.parent) {
+          if (
+            parentContext.isInsideAutoLayout &&
+            parentContext.parent &&
+            parentContext.parent.type === "frame"
+          ) {
             const widthMode = node.sizing?.widthMode ?? "fixed";
             const heightMode = node.sizing?.heightMode ?? "fixed";
 
@@ -664,7 +678,12 @@ export function Canvas() {
       }
 
       // Group: Cmd+G (Mac) or Ctrl+G (Win)
-      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.code === "KeyG") {
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        !e.altKey &&
+        !e.shiftKey &&
+        e.code === "KeyG"
+      ) {
         e.preventDefault();
         const ids = useSelectionStore.getState().selectedIds;
         if (ids.length >= 2) {
@@ -677,7 +696,12 @@ export function Canvas() {
       }
 
       // Ungroup: Cmd+Shift+G (Mac) or Ctrl+Shift+G (Win)
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.code === "KeyG") {
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        e.shiftKey &&
+        !e.altKey &&
+        e.code === "KeyG"
+      ) {
         e.preventDefault();
         const ids = useSelectionStore.getState().selectedIds;
         if (ids.length >= 1) {
@@ -807,7 +831,8 @@ export function Canvas() {
           const nodeId = nodesInsideAutoLayout[0];
 
           const parentContext = findParentFrame(currentNodes, nodeId);
-          if (!parentContext.parent) return;
+          if (!parentContext.parent || parentContext.parent.type !== "frame")
+            return;
 
           const parentFrame = parentContext.parent;
           const layout = parentFrame.layout;
@@ -995,7 +1020,13 @@ export function Canvas() {
         }
       }
     },
-    [isSpacePressed, setIsPanning, clearSelection, resetContainerContext, startDrawing],
+    [
+      isSpacePressed,
+      setIsPanning,
+      clearSelection,
+      resetContainerContext,
+      startDrawing,
+    ],
   );
 
   const handleMouseMove = useCallback(() => {
