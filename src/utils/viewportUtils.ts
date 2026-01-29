@@ -29,6 +29,11 @@ export function getViewportBounds(
  * Check if a node is visible within the viewport bounds
  */
 export function isNodeVisible(node: SceneNode, bounds: ViewportBounds): boolean {
+  // Early return if node is explicitly hidden
+  if (node.visible === false) {
+    return false;
+  }
+
   const nodeRight = node.x + node.width
   const nodeBottom = node.y + node.height
 
