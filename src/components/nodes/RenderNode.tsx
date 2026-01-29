@@ -52,13 +52,23 @@ function buildTextDecoration(node: TextNode): string {
   return parts.join(" ") || "";
 }
 
-// Calculate image dimensions for a given fill mode
-function calculateImageDimensions(
+// Calculate image rendering params for a given fill mode.
+// For "fill" (cover) mode, uses crop to select the visible portion of the source
+// image so the rendered KonvaImage never exceeds container bounds.
+interface ImageRenderParams {
+  x: number
+  y: number
+  width: number
+  height: number
+  crop?: { x: number; y: number; width: number; height: number }
+}
+
+function calculateImageRenderParams(
   image: HTMLImageElement,
   mode: ImageFill['mode'],
   containerW: number,
   containerH: number,
-): { x: number; y: number; width: number; height: number } {
+): ImageRenderParams {
   if (mode === 'stretch') {
     return { x: 0, y: 0, width: containerW, height: containerH }
   }
@@ -66,25 +76,39 @@ function calculateImageDimensions(
   const imgAspect = image.naturalWidth / image.naturalHeight
   const containerAspect = containerW / containerH
 
-  let w: number, h: number
   if (mode === 'fill') {
-    // Cover: scale to fill, crop overflow
+    // Cover: render at container size, crop source image to match aspect
+    let cropX: number, cropY: number, cropW: number, cropH: number
     if (imgAspect > containerAspect) {
-      h = containerH
-      w = containerH * imgAspect
+      // Image is wider — crop sides
+      cropH = image.naturalHeight
+      cropW = image.naturalHeight * containerAspect
+      cropX = (image.naturalWidth - cropW) / 2
+      cropY = 0
     } else {
-      w = containerW
-      h = containerW / imgAspect
+      // Image is taller — crop top/bottom
+      cropW = image.naturalWidth
+      cropH = image.naturalWidth / containerAspect
+      cropX = 0
+      cropY = (image.naturalHeight - cropH) / 2
     }
+    return {
+      x: 0,
+      y: 0,
+      width: containerW,
+      height: containerH,
+      crop: { x: cropX, y: cropY, width: cropW, height: cropH },
+    }
+  }
+
+  // Fit: scale to contain, may letterbox
+  let w: number, h: number
+  if (imgAspect > containerAspect) {
+    w = containerW
+    h = containerW / imgAspect
   } else {
-    // Fit: scale to contain, may letterbox
-    if (imgAspect > containerAspect) {
-      w = containerW
-      h = containerW / imgAspect
-    } else {
-      h = containerH
-      w = containerH * imgAspect
-    }
+    h = containerH
+    w = containerH * imgAspect
   }
 
   return {
@@ -110,7 +134,7 @@ function ImageFillLayer({ imageFill, width, height, x = 0, y = 0, cornerRadius, 
   const image = useLoadImage(imageFill.url)
   if (!image) return null
 
-  const dims = calculateImageDimensions(image, imageFill.mode, width, height)
+  const params = calculateImageRenderParams(image, imageFill.mode, width, height)
 
   return (
     <Group
@@ -133,10 +157,11 @@ function ImageFillLayer({ imageFill, width, height, x = 0, y = 0, cornerRadius, 
     >
       <KonvaImage
         image={image}
-        x={dims.x}
-        y={dims.y}
-        width={dims.width}
-        height={dims.height}
+        x={params.x}
+        y={params.y}
+        width={params.width}
+        height={params.height}
+        crop={params.crop}
       />
     </Group>
   )
