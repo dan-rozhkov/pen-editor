@@ -228,9 +228,11 @@ export function createYogaNodeForFrame(frame: FrameNode): YogaNode {
   const Y = getYoga();
   const node = Y.Node.create();
 
-  // Set frame dimensions
-  node.setWidth(frame.width);
-  node.setHeight(frame.height);
+  // Only set fixed dimensions — skip for fit_content so Yoga can shrink-wrap
+  const fitWidth = frame.sizing?.widthMode === "fit_content";
+  const fitHeight = frame.sizing?.heightMode === "fit_content";
+  if (!fitWidth) node.setWidth(frame.width);
+  if (!fitHeight) node.setHeight(frame.height);
 
   // Apply layout properties if auto-layout is enabled
   const layout = frame.layout;
@@ -445,8 +447,14 @@ export function calculateFrameLayout(frame: FrameNode): LayoutResult[] {
     childNodes.push(childNode);
   });
 
-  // Calculate layout
-  rootNode.calculateLayout(frame.width, frame.height, Y.DIRECTION_LTR);
+  // Calculate layout — pass undefined for fit_content dimensions so Yoga shrink-wraps
+  const fitWidth = frame.sizing?.widthMode === "fit_content";
+  const fitHeight = frame.sizing?.heightMode === "fit_content";
+  rootNode.calculateLayout(
+    fitWidth ? undefined : frame.width,
+    fitHeight ? undefined : frame.height,
+    Y.DIRECTION_LTR
+  );
 
   // Extract computed positions for children
   visibleChildren.forEach((child, index) => {
