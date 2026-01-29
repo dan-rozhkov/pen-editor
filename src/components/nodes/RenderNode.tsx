@@ -274,6 +274,7 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
             stroke={strokeColor}
             strokeWidth={node.strokeWidth}
             cornerRadius={node.cornerRadius}
+            opacity={node.opacity ?? 1}
             draggable
             onClick={handleClick}
             onTap={handleClick}
@@ -346,7 +347,7 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
             verticalAlign={node.textAlignVertical ?? "top"}
             lineHeight={node.lineHeight ?? 1.2}
             letterSpacing={node.letterSpacing ?? 0}
-            opacity={isEditing ? 0 : 1}
+            opacity={(isEditing ? 0 : 1) * (node.opacity ?? 1)}
             draggable={!isEditing}
             onClick={handleClick}
             onTap={handleClick}
@@ -497,6 +498,7 @@ function EllipseRenderer({
         fill={fillColor}
         stroke={strokeColor}
         strokeWidth={node.strokeWidth}
+        opacity={node.opacity ?? 1}
         draggable
         onClick={onClick}
         onTap={onClick}
@@ -583,6 +585,7 @@ function FrameRenderer({
       width={effectiveWidth}
       height={effectiveHeight}
       rotation={node.rotation ?? 0}
+      opacity={node.opacity ?? 1}
       draggable
       onClick={onClick}
       onTap={onClick}
@@ -773,6 +776,7 @@ function InstanceRenderer({
       width={node.width}
       height={node.height}
       rotation={node.rotation ?? 0}
+      opacity={node.opacity ?? 1}
       draggable={!isInEditMode}
       onClick={onClick}
       onTap={onClick}
@@ -867,6 +871,7 @@ function DescendantRenderer({
             stroke={strokeColor ?? selectionStroke}
             strokeWidth={node.strokeWidth ?? selectionStrokeWidth}
             cornerRadius={node.cornerRadius}
+            opacity={node.opacity ?? 1}
             onClick={onClick}
             onTap={onClick}
           />
@@ -896,6 +901,7 @@ function DescendantRenderer({
             fill={fillColor}
             stroke={strokeColor ?? selectionStroke}
             strokeWidth={node.strokeWidth ?? selectionStrokeWidth}
+            opacity={node.opacity ?? 1}
             onClick={onClick}
             onTap={onClick}
           />
@@ -935,6 +941,7 @@ function DescendantRenderer({
             verticalAlign={node.textAlignVertical ?? "top"}
             lineHeight={node.lineHeight ?? 1.2}
             letterSpacing={node.letterSpacing ?? 0}
+            opacity={node.opacity ?? 1}
             onClick={onClick}
             onTap={onClick}
           />
@@ -968,6 +975,7 @@ function DescendantRenderer({
           width={node.width}
           height={node.height}
           rotation={node.rotation ?? 0}
+          opacity={node.opacity ?? 1}
           onClick={onClick}
           onTap={onClick}
         >
@@ -1052,6 +1060,7 @@ function RenderNodeWithOverrides({
           stroke={strokeColor}
           strokeWidth={node.strokeWidth}
           cornerRadius={node.cornerRadius}
+          opacity={node.opacity ?? 1}
         />
       );
     case "ellipse":
@@ -1065,6 +1074,7 @@ function RenderNodeWithOverrides({
           fill={fillColor}
           stroke={strokeColor}
           strokeWidth={node.strokeWidth}
+          opacity={node.opacity ?? 1}
         />
       );
     case "text": {
@@ -1088,6 +1098,7 @@ function RenderNodeWithOverrides({
           verticalAlign={node.textAlignVertical ?? "top"}
           lineHeight={node.lineHeight ?? 1.2}
           letterSpacing={node.letterSpacing ?? 0}
+          opacity={node.opacity ?? 1}
         />
       );
     }
@@ -1100,6 +1111,7 @@ function RenderNodeWithOverrides({
           width={node.width}
           height={node.height}
           rotation={node.rotation ?? 0}
+          opacity={node.opacity ?? 1}
         >
           <Rect
             width={node.width}

@@ -362,6 +362,18 @@ function PropertyEditor({
         />
       </PropertySection>
 
+      {/* Opacity Section */}
+      <PropertySection title="Opacity">
+        <NumberInput
+          label="%"
+          value={Math.round((node.opacity ?? 1) * 100)}
+          onChange={(v) => onUpdate({ opacity: Math.max(0, Math.min(100, v)) / 100 })}
+          min={0}
+          max={100}
+          step={1}
+        />
+      </PropertySection>
+
       {/* Fill Section */}
       <PropertySection title="Fill">
         <div className="flex items-center gap-1">

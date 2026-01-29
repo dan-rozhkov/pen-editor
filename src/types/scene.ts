@@ -33,6 +33,8 @@ export interface BaseNode {
   strokeBinding?: ColorBinding
   // Rotation in degrees (0-360)
   rotation?: number
+  // Opacity (0-1, defaults to 1)
+  opacity?: number
 }
 
 // Auto-layout properties for Frame nodes
