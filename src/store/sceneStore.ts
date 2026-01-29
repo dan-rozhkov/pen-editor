@@ -312,7 +312,8 @@ export const useSceneStore = create<SceneState>((set) => ({
   addNode: (node) =>
     set((state) => {
       useHistoryStore.getState().saveHistory(state.nodes)
-      return { nodes: [...state.nodes, node] }
+      const synced = node.type === 'text' ? syncTextDimensions(node) : node
+      return { nodes: [...state.nodes, synced] }
     }),
 
   addChildToFrame: (frameId, child) =>
