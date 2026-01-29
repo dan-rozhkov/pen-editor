@@ -1,23 +1,48 @@
-import { useState } from 'react'
+import { useState } from "react";
 import {
   AlignLeft,
   AlignCenterHorizontal,
   AlignRight,
-  AlignStartVertical,
+  AlignTop,
   AlignCenterVertical,
-  AlignEndVertical,
-} from 'lucide-react'
-import { useSceneStore } from '../store/sceneStore'
-import { useHistoryStore } from '../store/historyStore'
-import { useSelectionStore, type InstanceContext } from '../store/selectionStore'
-import { useVariableStore } from '../store/variableStore'
-import { useThemeStore } from '../store/themeStore'
-import { useCanvasRefStore } from '../store/canvasRefStore'
-import { exportImage, type ExportFormat, type ExportScale } from '../utils/exportUtils'
-import type { SceneNode, FrameNode, RefNode, FlexDirection, AlignItems, JustifyContent, SizingMode, TextNode, TextWidthMode, TextAlign, TextAlignVertical, DescendantOverride } from '../types/scene'
-import type { ThemeName, Variable } from '../types/variable'
-import { findParentFrame, findNodeById, findComponentById, type ParentContext } from '../utils/nodeUtils'
-import { alignNodes, type AlignmentType } from '../utils/alignmentUtils'
+  AlignBottom,
+} from "@phosphor-icons/react";
+import { useSceneStore } from "../store/sceneStore";
+import { useHistoryStore } from "../store/historyStore";
+import {
+  useSelectionStore,
+  type InstanceContext,
+} from "../store/selectionStore";
+import { useVariableStore } from "../store/variableStore";
+import { useThemeStore } from "../store/themeStore";
+import { useCanvasRefStore } from "../store/canvasRefStore";
+import {
+  exportImage,
+  type ExportFormat,
+  type ExportScale,
+} from "../utils/exportUtils";
+import type {
+  SceneNode,
+  FrameNode,
+  RefNode,
+  FlexDirection,
+  AlignItems,
+  JustifyContent,
+  SizingMode,
+  TextNode,
+  TextWidthMode,
+  TextAlign,
+  TextAlignVertical,
+  DescendantOverride,
+} from "../types/scene";
+import type { ThemeName, Variable } from "../types/variable";
+import {
+  findParentFrame,
+  findNodeById,
+  findComponentById,
+  type ParentContext,
+} from "../utils/nodeUtils";
+import { alignNodes, type AlignmentType } from "../utils/alignmentUtils";
 import {
   PropertySection,
   PropertyRow,
@@ -27,18 +52,21 @@ import {
   SelectInput,
   CheckboxInput,
   SegmentedControl,
-} from './ui/PropertyInputs'
+} from "./ui/PropertyInputs";
 
 // Helper to find a node within a component's children tree
-function findNodeInComponent(children: SceneNode[], nodeId: string): SceneNode | null {
+function findNodeInComponent(
+  children: SceneNode[],
+  nodeId: string,
+): SceneNode | null {
   for (const child of children) {
-    if (child.id === nodeId) return child
-    if (child.type === 'frame') {
-      const found = findNodeInComponent(child.children, nodeId)
-      if (found) return found
+    if (child.id === nodeId) return child;
+    if (child.type === "frame") {
+      const found = findNodeInComponent(child.children, nodeId);
+      if (found) return found;
     }
   }
-  return null
+  return null;
 }
 
 function Header() {
@@ -46,7 +74,7 @@ function Header() {
     <div className="px-4 py-3 border-b border-border-default text-xs font-semibold text-text-primary uppercase tracking-wide">
       Properties
     </div>
-  )
+  );
 }
 
 function EmptyState() {
@@ -54,57 +82,61 @@ function EmptyState() {
     <div className="text-text-disabled text-xs text-center p-5">
       Select a layer to view properties
     </div>
-  )
+  );
 }
 
 interface AlignmentSectionProps {
-  count: number
-  selectedIds: string[]
-  nodes: SceneNode[]
+  count: number;
+  selectedIds: string[];
+  nodes: SceneNode[];
 }
 
-function AlignmentSection({ count, selectedIds, nodes }: AlignmentSectionProps) {
+function AlignmentSection({
+  count,
+  selectedIds,
+  nodes,
+}: AlignmentSectionProps) {
   const handleAlign = (alignment: AlignmentType) => {
-    const updates = alignNodes(selectedIds, nodes, alignment)
-    if (updates.length === 0) return
+    const updates = alignNodes(selectedIds, nodes, alignment);
+    if (updates.length === 0) return;
 
     // Save history before batch update
-    useHistoryStore.getState().saveHistory(nodes)
+    useHistoryStore.getState().saveHistory(nodes);
 
     // Apply all updates at once
-    let newNodes = nodes
+    let newNodes = nodes;
     for (const update of updates) {
-      const { id, ...changes } = update
+      const { id, ...changes } = update;
       if (Object.keys(changes).length > 0) {
-        newNodes = applyUpdateRecursive(newNodes, id, changes)
+        newNodes = applyUpdateRecursive(newNodes, id, changes);
       }
     }
-    useSceneStore.getState().setNodesWithoutHistory(newNodes)
-  }
+    useSceneStore.getState().setNodesWithoutHistory(newNodes);
+  };
 
   // Helper to apply update recursively in the tree
   function applyUpdateRecursive(
     nodeList: SceneNode[],
     id: string,
-    changes: Partial<SceneNode>
+    changes: Partial<SceneNode>,
   ): SceneNode[] {
     return nodeList.map((node) => {
       if (node.id === id) {
-        return { ...node, ...changes } as SceneNode
+        return { ...node, ...changes } as SceneNode;
       }
-      if (node.type === 'frame') {
+      if (node.type === "frame") {
         return {
           ...node,
           children: applyUpdateRecursive(node.children, id, changes),
-        } as FrameNode
+        } as FrameNode;
       }
-      return node
-    })
+      return node;
+    });
   }
 
-  const iconSize = 16
-  const buttonBaseClass = 'p-2 rounded transition-colors'
-  const buttonClass = `${buttonBaseClass} bg-surface-elevated hover:bg-surface-hover text-text-muted hover:text-text-primary`
+  const iconSize = 16;
+  const buttonBaseClass = "p-2 rounded transition-colors";
+  const buttonClass = `${buttonBaseClass} bg-surface-elevated hover:bg-surface-hover text-text-muted hover:text-text-primary`;
 
   return (
     <div className="flex flex-col gap-4">
@@ -112,21 +144,21 @@ function AlignmentSection({ count, selectedIds, nodes }: AlignmentSectionProps) 
         <div className="flex gap-1">
           <button
             className={buttonClass}
-            onClick={() => handleAlign('left')}
+            onClick={() => handleAlign("left")}
             title="Align left"
           >
             <AlignLeft size={iconSize} />
           </button>
           <button
             className={buttonClass}
-            onClick={() => handleAlign('centerH')}
+            onClick={() => handleAlign("centerH")}
             title="Align center horizontally"
           >
             <AlignCenterHorizontal size={iconSize} />
           </button>
           <button
             className={buttonClass}
-            onClick={() => handleAlign('right')}
+            onClick={() => handleAlign("right")}
             title="Align right"
           >
             <AlignRight size={iconSize} />
@@ -134,24 +166,24 @@ function AlignmentSection({ count, selectedIds, nodes }: AlignmentSectionProps) 
           <div className="w-2" />
           <button
             className={buttonClass}
-            onClick={() => handleAlign('top')}
+            onClick={() => handleAlign("top")}
             title="Align top"
           >
-            <AlignStartVertical size={iconSize} />
+            <AlignTop size={iconSize} />
           </button>
           <button
             className={buttonClass}
-            onClick={() => handleAlign('centerV')}
+            onClick={() => handleAlign("centerV")}
             title="Align center vertically"
           >
             <AlignCenterVertical size={iconSize} />
           </button>
           <button
             className={buttonClass}
-            onClick={() => handleAlign('bottom')}
+            onClick={() => handleAlign("bottom")}
             title="Align bottom"
           >
-            <AlignEndVertical size={iconSize} />
+            <AlignBottom size={iconSize} />
           </button>
         </div>
       </PropertySection>
@@ -159,12 +191,18 @@ function AlignmentSection({ count, selectedIds, nodes }: AlignmentSectionProps) 
         {count} layers selected
       </div>
     </div>
-  )
+  );
 }
 
 // Override indicator for instance properties
-function OverrideIndicator({ isOverridden, onReset }: { isOverridden: boolean; onReset: () => void }) {
-  if (!isOverridden) return null
+function OverrideIndicator({
+  isOverridden,
+  onReset,
+}: {
+  isOverridden: boolean;
+  onReset: () => void;
+}) {
+  if (!isOverridden) return null;
   return (
     <button
       onClick={onReset}
@@ -181,61 +219,72 @@ function OverrideIndicator({ isOverridden, onReset }: { isOverridden: boolean; o
         />
       </svg>
     </button>
-  )
+  );
 }
 
 interface PropertyEditorProps {
-  node: SceneNode
-  onUpdate: (updates: Partial<SceneNode>) => void
-  parentContext: ParentContext
-  variables: Variable[]
-  activeTheme: ThemeName
-  allNodes: SceneNode[]
+  node: SceneNode;
+  onUpdate: (updates: Partial<SceneNode>) => void;
+  parentContext: ParentContext;
+  variables: Variable[];
+  activeTheme: ThemeName;
+  allNodes: SceneNode[];
 }
 
 const sizingOptions = [
-  { value: 'fixed', label: 'Fixed' },
-  { value: 'fill_container', label: 'Fill' },
-  { value: 'fit_content', label: 'Fit' },
-]
+  { value: "fixed", label: "Fixed" },
+  { value: "fill_container", label: "Fill" },
+  { value: "fit_content", label: "Fit" },
+];
 
-function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme, allNodes }: PropertyEditorProps) {
+function PropertyEditor({
+  node,
+  onUpdate,
+  parentContext,
+  variables,
+  activeTheme,
+  allNodes,
+}: PropertyEditorProps) {
   // Get component if this is an instance (RefNode)
-  const component = node.type === 'ref'
-    ? findComponentById(allNodes, (node as RefNode).componentId)
-    : null
+  const component =
+    node.type === "ref"
+      ? findComponentById(allNodes, (node as RefNode).componentId)
+      : null;
 
   // Check if a property is overridden (defined on instance and different from component)
-  const isOverridden = <T,>(instanceVal: T | undefined, componentVal: T | undefined): boolean => {
-    if (!component) return false
-    return instanceVal !== undefined && instanceVal !== componentVal
-  }
+  const isOverridden = <T,>(
+    instanceVal: T | undefined,
+    componentVal: T | undefined,
+  ): boolean => {
+    if (!component) return false;
+    return instanceVal !== undefined && instanceVal !== componentVal;
+  };
 
   // Reset an override by setting property to undefined
   const resetOverride = (property: keyof SceneNode) => {
-    onUpdate({ [property]: undefined } as Partial<SceneNode>)
-  }
+    onUpdate({ [property]: undefined } as Partial<SceneNode>);
+  };
 
   // Handler for fill variable binding
   const handleFillVariableChange = (variableId: string | undefined) => {
     if (variableId) {
-      onUpdate({ fillBinding: { variableId } })
+      onUpdate({ fillBinding: { variableId } });
     } else {
-      onUpdate({ fillBinding: undefined })
+      onUpdate({ fillBinding: undefined });
     }
-  }
+  };
 
   // Handler for stroke variable binding
   const handleStrokeVariableChange = (variableId: string | undefined) => {
     if (variableId) {
-      onUpdate({ strokeBinding: { variableId } })
+      onUpdate({ strokeBinding: { variableId } });
     } else {
-      onUpdate({ strokeBinding: undefined })
+      onUpdate({ strokeBinding: undefined });
     }
-  }
+  };
 
   // Filter only color variables
-  const colorVariables = variables.filter(v => v.type === 'color')
+  const colorVariables = variables.filter((v) => v.type === "color");
 
   return (
     <div className="flex flex-col gap-4">
@@ -258,19 +307,29 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
       {/* Size Section */}
       <PropertySection title="Size">
         {/* Show sizing mode controls when inside auto-layout OR when frame has auto-layout enabled */}
-        {(parentContext.isInsideAutoLayout || (node.type === 'frame' && (node as FrameNode).layout?.autoLayout)) && (
+        {(parentContext.isInsideAutoLayout ||
+          (node.type === "frame" &&
+            (node as FrameNode).layout?.autoLayout)) && (
           <>
             <SegmentedControl
               label="W"
-              value={node.sizing?.widthMode ?? 'fixed'}
+              value={node.sizing?.widthMode ?? "fixed"}
               options={sizingOptions}
-              onChange={(v) => onUpdate({ sizing: { ...node.sizing, widthMode: v as SizingMode } })}
+              onChange={(v) =>
+                onUpdate({
+                  sizing: { ...node.sizing, widthMode: v as SizingMode },
+                })
+              }
             />
             <SegmentedControl
               label="H"
-              value={node.sizing?.heightMode ?? 'fixed'}
+              value={node.sizing?.heightMode ?? "fixed"}
               options={sizingOptions}
-              onChange={(v) => onUpdate({ sizing: { ...node.sizing, heightMode: v as SizingMode } })}
+              onChange={(v) =>
+                onUpdate({
+                  sizing: { ...node.sizing, heightMode: v as SizingMode },
+                })
+              }
             />
           </>
         )}
@@ -307,7 +366,7 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
         <div className="flex items-center gap-1">
           <div className="flex-1">
             <ColorInput
-              value={node.fill ?? component?.fill ?? '#000000'}
+              value={node.fill ?? component?.fill ?? "#000000"}
               onChange={(v) => onUpdate({ fill: v })}
               variableId={node.fillBinding?.variableId}
               onVariableChange={handleFillVariableChange}
@@ -317,7 +376,7 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
           </div>
           <OverrideIndicator
             isOverridden={isOverridden(node.fill, component?.fill)}
-            onReset={() => resetOverride('fill')}
+            onReset={() => resetOverride("fill")}
           />
         </div>
       </PropertySection>
@@ -327,7 +386,7 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
         <div className="flex items-center gap-1">
           <div className="flex-1">
             <ColorInput
-              value={node.stroke ?? component?.stroke ?? ''}
+              value={node.stroke ?? component?.stroke ?? ""}
               onChange={(v) => onUpdate({ stroke: v || undefined })}
               variableId={node.strokeBinding?.variableId}
               onVariableChange={handleStrokeVariableChange}
@@ -337,7 +396,7 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
           </div>
           <OverrideIndicator
             isOverridden={isOverridden(node.stroke, component?.stroke)}
-            onReset={() => resetOverride('stroke')}
+            onReset={() => resetOverride("stroke")}
           />
         </div>
         <div className="flex items-center gap-1">
@@ -351,14 +410,17 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
             />
           </div>
           <OverrideIndicator
-            isOverridden={isOverridden(node.strokeWidth, component?.strokeWidth)}
-            onReset={() => resetOverride('strokeWidth')}
+            isOverridden={isOverridden(
+              node.strokeWidth,
+              component?.strokeWidth,
+            )}
+            onReset={() => resetOverride("strokeWidth")}
           />
         </div>
       </PropertySection>
 
       {/* Corner Radius (Frame & Rect only) */}
-      {(node.type === 'frame' || node.type === 'rect') && (
+      {(node.type === "frame" || node.type === "rect") && (
         <PropertySection title="Corner Radius">
           <NumberInput
             label="Radius"
@@ -370,20 +432,20 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
       )}
 
       {/* Auto Layout (Frame only) */}
-      {node.type === 'frame' && (
+      {node.type === "frame" && (
         <PropertySection title="Auto Layout">
           <CheckboxInput
             label="Enable Auto Layout"
             checked={(node as FrameNode).layout?.autoLayout ?? false}
             onChange={(v) => {
               const updates: Partial<SceneNode> = {
-                layout: { ...(node as FrameNode).layout, autoLayout: v }
+                layout: { ...(node as FrameNode).layout, autoLayout: v },
               };
               // When enabling auto-layout, set heightMode to fit_content (like Figma)
               if (v) {
                 updates.sizing = {
                   ...(node as FrameNode).sizing,
-                  heightMode: 'fit_content',
+                  heightMode: "fit_content",
                 };
               }
               onUpdate(updates);
@@ -393,17 +455,28 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
             <>
               <SelectInput
                 label="Direction"
-                value={(node as FrameNode).layout?.flexDirection ?? 'row'}
+                value={(node as FrameNode).layout?.flexDirection ?? "row"}
                 options={[
-                  { value: 'row', label: 'Horizontal' },
-                  { value: 'column', label: 'Vertical' },
+                  { value: "row", label: "Horizontal" },
+                  { value: "column", label: "Vertical" },
                 ]}
-                onChange={(v) => onUpdate({ layout: { ...(node as FrameNode).layout, flexDirection: v as FlexDirection } } as Partial<SceneNode>)}
+                onChange={(v) =>
+                  onUpdate({
+                    layout: {
+                      ...(node as FrameNode).layout,
+                      flexDirection: v as FlexDirection,
+                    },
+                  } as Partial<SceneNode>)
+                }
               />
               <NumberInput
                 label="Gap"
                 value={(node as FrameNode).layout?.gap ?? 0}
-                onChange={(v) => onUpdate({ layout: { ...(node as FrameNode).layout, gap: v } } as Partial<SceneNode>)}
+                onChange={(v) =>
+                  onUpdate({
+                    layout: { ...(node as FrameNode).layout, gap: v },
+                  } as Partial<SceneNode>)
+                }
                 min={0}
               />
               <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wide mt-2">
@@ -413,13 +486,24 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
                 <NumberInput
                   label="T"
                   value={(node as FrameNode).layout?.paddingTop ?? 0}
-                  onChange={(v) => onUpdate({ layout: { ...(node as FrameNode).layout, paddingTop: v } } as Partial<SceneNode>)}
+                  onChange={(v) =>
+                    onUpdate({
+                      layout: { ...(node as FrameNode).layout, paddingTop: v },
+                    } as Partial<SceneNode>)
+                  }
                   min={0}
                 />
                 <NumberInput
                   label="R"
                   value={(node as FrameNode).layout?.paddingRight ?? 0}
-                  onChange={(v) => onUpdate({ layout: { ...(node as FrameNode).layout, paddingRight: v } } as Partial<SceneNode>)}
+                  onChange={(v) =>
+                    onUpdate({
+                      layout: {
+                        ...(node as FrameNode).layout,
+                        paddingRight: v,
+                      },
+                    } as Partial<SceneNode>)
+                  }
                   min={0}
                 />
               </PropertyRow>
@@ -427,37 +511,64 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
                 <NumberInput
                   label="B"
                   value={(node as FrameNode).layout?.paddingBottom ?? 0}
-                  onChange={(v) => onUpdate({ layout: { ...(node as FrameNode).layout, paddingBottom: v } } as Partial<SceneNode>)}
+                  onChange={(v) =>
+                    onUpdate({
+                      layout: {
+                        ...(node as FrameNode).layout,
+                        paddingBottom: v,
+                      },
+                    } as Partial<SceneNode>)
+                  }
                   min={0}
                 />
                 <NumberInput
                   label="L"
                   value={(node as FrameNode).layout?.paddingLeft ?? 0}
-                  onChange={(v) => onUpdate({ layout: { ...(node as FrameNode).layout, paddingLeft: v } } as Partial<SceneNode>)}
+                  onChange={(v) =>
+                    onUpdate({
+                      layout: { ...(node as FrameNode).layout, paddingLeft: v },
+                    } as Partial<SceneNode>)
+                  }
                   min={0}
                 />
               </PropertyRow>
               <SelectInput
                 label="Align"
-                value={(node as FrameNode).layout?.alignItems ?? 'flex-start'}
+                value={(node as FrameNode).layout?.alignItems ?? "flex-start"}
                 options={[
-                  { value: 'flex-start', label: 'Start' },
-                  { value: 'center', label: 'Center' },
-                  { value: 'flex-end', label: 'End' },
-                  { value: 'stretch', label: 'Stretch' },
+                  { value: "flex-start", label: "Start" },
+                  { value: "center", label: "Center" },
+                  { value: "flex-end", label: "End" },
+                  { value: "stretch", label: "Stretch" },
                 ]}
-                onChange={(v) => onUpdate({ layout: { ...(node as FrameNode).layout, alignItems: v as AlignItems } } as Partial<SceneNode>)}
+                onChange={(v) =>
+                  onUpdate({
+                    layout: {
+                      ...(node as FrameNode).layout,
+                      alignItems: v as AlignItems,
+                    },
+                  } as Partial<SceneNode>)
+                }
               />
               <SelectInput
                 label="Justify"
-                value={(node as FrameNode).layout?.justifyContent ?? 'flex-start'}
+                value={
+                  (node as FrameNode).layout?.justifyContent ?? "flex-start"
+                }
                 options={[
-                  { value: 'flex-start', label: 'Start' },
-                  { value: 'center', label: 'Center' },
-                  { value: 'flex-end', label: 'End' },
-                  { value: 'space-between', label: 'Space Between' },
+                  { value: "flex-start", label: "Start" },
+                  { value: "center", label: "Center" },
+                  { value: "flex-end", label: "End" },
+                  { value: "space-between", label: "Space Between" },
                 ]}
-                onChange={(v) => onUpdate({ layout: { ...(node as FrameNode).layout, justifyContent: v as JustifyContent } } as Partial<SceneNode>)}
+                onChange={(v) =>
+                  onUpdate({
+                    layout: {
+                      ...(node as FrameNode).layout,
+                      justifyContent: v as JustifyContent,
+                    },
+                  } as Partial<SceneNode>)
+                }
               />
             </>
           )}
@@ -465,19 +576,19 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
       )}
 
       {/* Theme Override (Frame only) */}
-      {node.type === 'frame' && (
+      {node.type === "frame" && (
         <PropertySection title="Theme Override">
           <SelectInput
             label="Theme"
-            value={(node as FrameNode).themeOverride ?? 'inherit'}
+            value={(node as FrameNode).themeOverride ?? "inherit"}
             options={[
-              { value: 'inherit', label: 'Inherit' },
-              { value: 'light', label: 'Light' },
-              { value: 'dark', label: 'Dark' },
+              { value: "inherit", label: "Inherit" },
+              { value: "light", label: "Light" },
+              { value: "dark", label: "Dark" },
             ]}
             onChange={(v) =>
               onUpdate({
-                themeOverride: v === 'inherit' ? undefined : (v as ThemeName),
+                themeOverride: v === "inherit" ? undefined : (v as ThemeName),
               } as Partial<SceneNode>)
             }
           />
@@ -485,13 +596,21 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
       )}
 
       {/* Component (Frame only) */}
-      {node.type === 'frame' && (
+      {node.type === "frame" && (
         <PropertySection title="Component">
           {(node as FrameNode).reusable ? (
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-2 text-xs text-accent-primary">
                 <svg viewBox="0 0 16 16" className="w-4 h-4">
-                  <rect x="2" y="2" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                  <rect
+                    x="2"
+                    y="2"
+                    width="12"
+                    height="12"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                  />
                   <path d="M2 4 L4 2 L4 4 Z" fill="currentColor" />
                   <path d="M12 2 L14 4 L12 4 Z" fill="currentColor" />
                   <path d="M2 12 L4 14 L4 12 Z" fill="currentColor" />
@@ -501,7 +620,9 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
               </div>
               <button
                 className="px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
-                onClick={() => onUpdate({ reusable: false } as Partial<SceneNode>)}
+                onClick={() =>
+                  onUpdate({ reusable: false } as Partial<SceneNode>)
+                }
               >
                 Detach Component
               </button>
@@ -518,56 +639,65 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
       )}
 
       {/* Instance info (RefNode only) */}
-      {node.type === 'ref' && (() => {
-        const refNode = node as RefNode
-        const comp = findComponentById(allNodes, refNode.componentId)
+      {node.type === "ref" &&
+        (() => {
+          const refNode = node as RefNode;
+          const comp = findComponentById(allNodes, refNode.componentId);
 
-        // Collect overridden properties
-        const overrides: string[] = []
-        if (isOverridden(node.fill, comp?.fill)) overrides.push('Fill')
-        if (isOverridden(node.stroke, comp?.stroke)) overrides.push('Stroke')
-        if (isOverridden(node.strokeWidth, comp?.strokeWidth)) overrides.push('Stroke Width')
-        if (isOverridden(node.fillBinding, comp?.fillBinding)) overrides.push('Fill Variable')
-        if (isOverridden(node.strokeBinding, comp?.strokeBinding)) overrides.push('Stroke Variable')
+          // Collect overridden properties
+          const overrides: string[] = [];
+          if (isOverridden(node.fill, comp?.fill)) overrides.push("Fill");
+          if (isOverridden(node.stroke, comp?.stroke)) overrides.push("Stroke");
+          if (isOverridden(node.strokeWidth, comp?.strokeWidth))
+            overrides.push("Stroke Width");
+          if (isOverridden(node.fillBinding, comp?.fillBinding))
+            overrides.push("Fill Variable");
+          if (isOverridden(node.strokeBinding, comp?.strokeBinding))
+            overrides.push("Stroke Variable");
 
-        return (
-          <PropertySection title="Instance">
-            <div className="flex items-center gap-2 text-xs text-purple-400">
-              <svg viewBox="0 0 16 16" className="w-4 h-4">
-                <path d="M8 2 L14 8 L8 14 L2 8 Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
-              </svg>
-              <span>Instance of: {comp?.name || 'Component'}</span>
-            </div>
-            {overrides.length > 0 && (
-              <div className="mt-2 flex flex-col gap-2">
-                <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wide">
-                  Overrides ({overrides.length})
-                </div>
-                <div className="text-xs text-text-secondary">
-                  {overrides.join(', ')}
-                </div>
-                <button
-                  onClick={() => {
-                    onUpdate({
-                      fill: undefined,
-                      stroke: undefined,
-                      strokeWidth: undefined,
-                      fillBinding: undefined,
-                      strokeBinding: undefined,
-                    })
-                  }}
-                  className="px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
-                >
-                  Reset All Overrides
-                </button>
+          return (
+            <PropertySection title="Instance">
+              <div className="flex items-center gap-2 text-xs text-purple-400">
+                <svg viewBox="0 0 16 16" className="w-4 h-4">
+                  <path
+                    d="M8 2 L14 8 L8 14 L2 8 Z"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                  />
+                </svg>
+                <span>Instance of: {comp?.name || "Component"}</span>
               </div>
-            )}
-          </PropertySection>
-        )
-      })()}
+              {overrides.length > 0 && (
+                <div className="mt-2 flex flex-col gap-2">
+                  <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wide">
+                    Overrides ({overrides.length})
+                  </div>
+                  <div className="text-xs text-text-secondary">
+                    {overrides.join(", ")}
+                  </div>
+                  <button
+                    onClick={() => {
+                      onUpdate({
+                        fill: undefined,
+                        stroke: undefined,
+                        strokeWidth: undefined,
+                        fillBinding: undefined,
+                        strokeBinding: undefined,
+                      });
+                    }}
+                    className="px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
+                  >
+                    Reset All Overrides
+                  </button>
+                </div>
+              )}
+            </PropertySection>
+          );
+        })()}
 
       {/* Text Properties (Text only) */}
-      {node.type === 'text' && (
+      {node.type === "text" && (
         <>
           <PropertySection title="Text">
             <TextInput
@@ -584,32 +714,36 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
             />
             <TextInput
               label="Family"
-              value={node.fontFamily ?? 'Arial'}
-              onChange={(v) => onUpdate({ fontFamily: v } as Partial<SceneNode>)}
+              value={node.fontFamily ?? "Arial"}
+              onChange={(v) =>
+                onUpdate({ fontFamily: v } as Partial<SceneNode>)
+              }
             />
             <SelectInput
               label="Weight"
-              value={(node as TextNode).fontWeight ?? 'normal'}
+              value={(node as TextNode).fontWeight ?? "normal"}
               options={[
-                { value: 'normal', label: 'Normal' },
-                { value: '100', label: '100 Thin' },
-                { value: '200', label: '200 Extra Light' },
-                { value: '300', label: '300 Light' },
-                { value: '400', label: '400 Regular' },
-                { value: '500', label: '500 Medium' },
-                { value: '600', label: '600 Semi Bold' },
-                { value: '700', label: '700 Bold' },
-                { value: '800', label: '800 Extra Bold' },
-                { value: '900', label: '900 Black' },
+                { value: "normal", label: "Normal" },
+                { value: "100", label: "100 Thin" },
+                { value: "200", label: "200 Extra Light" },
+                { value: "300", label: "300 Light" },
+                { value: "400", label: "400 Regular" },
+                { value: "500", label: "500 Medium" },
+                { value: "600", label: "600 Semi Bold" },
+                { value: "700", label: "700 Bold" },
+                { value: "800", label: "800 Extra Bold" },
+                { value: "900", label: "900 Black" },
               ]}
-              onChange={(v) => onUpdate({ fontWeight: v } as Partial<SceneNode>)}
+              onChange={(v) =>
+                onUpdate({ fontWeight: v } as Partial<SceneNode>)
+              }
             />
             <SegmentedControl
               label="Style"
-              value={(node as TextNode).fontStyle ?? 'normal'}
+              value={(node as TextNode).fontStyle ?? "normal"}
               options={[
-                { value: 'normal', label: 'Normal' },
-                { value: 'italic', label: 'Italic' },
+                { value: "normal", label: "Normal" },
+                { value: "italic", label: "Italic" },
               ]}
               onChange={(v) => onUpdate({ fontStyle: v } as Partial<SceneNode>)}
             />
@@ -623,44 +757,58 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
             <CheckboxInput
               label="Strikethrough"
               checked={(node as TextNode).strikethrough ?? false}
-              onChange={(v) => onUpdate({ strikethrough: v } as Partial<SceneNode>)}
+              onChange={(v) =>
+                onUpdate({ strikethrough: v } as Partial<SceneNode>)
+              }
             />
           </PropertySection>
           <PropertySection title="Text Layout">
             <SegmentedControl
               label="Width"
-              value={(node as TextNode).textWidthMode ?? 'fixed'}
+              value={(node as TextNode).textWidthMode ?? "fixed"}
               options={[
-                { value: 'auto', label: 'Auto' },
-                { value: 'fixed', label: 'Fixed W' },
-                { value: 'fixed-height', label: 'Fixed WH' },
+                { value: "auto", label: "Auto" },
+                { value: "fixed", label: "Fixed W" },
+                { value: "fixed-height", label: "Fixed WH" },
               ]}
-              onChange={(v) => onUpdate({ textWidthMode: v as TextWidthMode } as Partial<SceneNode>)}
+              onChange={(v) =>
+                onUpdate({
+                  textWidthMode: v as TextWidthMode,
+                } as Partial<SceneNode>)
+              }
             />
             <SegmentedControl
               label="Align"
-              value={(node as TextNode).textAlign ?? 'left'}
+              value={(node as TextNode).textAlign ?? "left"}
               options={[
-                { value: 'left', label: 'L' },
-                { value: 'center', label: 'C' },
-                { value: 'right', label: 'R' },
+                { value: "left", label: "L" },
+                { value: "center", label: "C" },
+                { value: "right", label: "R" },
               ]}
-              onChange={(v) => onUpdate({ textAlign: v as TextAlign } as Partial<SceneNode>)}
+              onChange={(v) =>
+                onUpdate({ textAlign: v as TextAlign } as Partial<SceneNode>)
+              }
             />
             <SegmentedControl
               label="V Align"
-              value={(node as TextNode).textAlignVertical ?? 'top'}
+              value={(node as TextNode).textAlignVertical ?? "top"}
               options={[
-                { value: 'top', label: 'T' },
-                { value: 'middle', label: 'M' },
-                { value: 'bottom', label: 'B' },
+                { value: "top", label: "T" },
+                { value: "middle", label: "M" },
+                { value: "bottom", label: "B" },
               ]}
-              onChange={(v) => onUpdate({ textAlignVertical: v as TextAlignVertical } as Partial<SceneNode>)}
+              onChange={(v) =>
+                onUpdate({
+                  textAlignVertical: v as TextAlignVertical,
+                } as Partial<SceneNode>)
+              }
             />
             <NumberInput
               label="Line Height"
               value={(node as TextNode).lineHeight ?? 1.2}
-              onChange={(v) => onUpdate({ lineHeight: v } as Partial<SceneNode>)}
+              onChange={(v) =>
+                onUpdate({ lineHeight: v } as Partial<SceneNode>)
+              }
               min={0.5}
               max={3}
               step={0.1}
@@ -668,7 +816,9 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
             <NumberInput
               label="Spacing"
               value={(node as TextNode).letterSpacing ?? 0}
-              onChange={(v) => onUpdate({ letterSpacing: v } as Partial<SceneNode>)}
+              onChange={(v) =>
+                onUpdate({ letterSpacing: v } as Partial<SceneNode>)
+              }
               min={-5}
               max={50}
               step={0.5}
@@ -677,15 +827,15 @@ function PropertyEditor({ node, onUpdate, parentContext, variables, activeTheme,
         </>
       )}
     </div>
-  )
+  );
 }
 
 // Editor for descendant nodes inside an instance
 interface DescendantPropertyEditorProps {
-  instanceContext: InstanceContext
-  allNodes: SceneNode[]
-  variables: Variable[]
-  activeTheme: ThemeName
+  instanceContext: InstanceContext;
+  allNodes: SceneNode[];
+  variables: Variable[];
+  activeTheme: ThemeName;
 }
 
 function DescendantPropertyEditor({
@@ -694,76 +844,103 @@ function DescendantPropertyEditor({
   variables,
   activeTheme,
 }: DescendantPropertyEditorProps) {
-  const updateDescendantOverride = useSceneStore((s) => s.updateDescendantOverride)
-  const resetDescendantOverride = useSceneStore((s) => s.resetDescendantOverride)
-  const exitInstanceEditMode = useSelectionStore((s) => s.exitInstanceEditMode)
+  const updateDescendantOverride = useSceneStore(
+    (s) => s.updateDescendantOverride,
+  );
+  const resetDescendantOverride = useSceneStore(
+    (s) => s.resetDescendantOverride,
+  );
+  const exitInstanceEditMode = useSelectionStore((s) => s.exitInstanceEditMode);
 
   // Find the instance and component
-  const instance = findNodeById(allNodes, instanceContext.instanceId) as RefNode | null
-  if (!instance || instance.type !== 'ref') return null
+  const instance = findNodeById(
+    allNodes,
+    instanceContext.instanceId,
+  ) as RefNode | null;
+  if (!instance || instance.type !== "ref") return null;
 
-  const component = findComponentById(allNodes, instance.componentId)
-  if (!component) return null
+  const component = findComponentById(allNodes, instance.componentId);
+  if (!component) return null;
 
   // Find the original descendant node in the component
-  const originalNode = findNodeInComponent(component.children, instanceContext.descendantId)
-  if (!originalNode) return null
+  const originalNode = findNodeInComponent(
+    component.children,
+    instanceContext.descendantId,
+  );
+  if (!originalNode) return null;
 
   // Get current override values
-  const currentOverride = instance.descendants?.[instanceContext.descendantId] || {}
+  const currentOverride =
+    instance.descendants?.[instanceContext.descendantId] || {};
 
   // Merge original node with overrides for display
-  const displayNode = { ...originalNode, ...currentOverride } as SceneNode
+  const displayNode = { ...originalNode, ...currentOverride } as SceneNode;
 
   // Check if a property is overridden
-  const isPropertyOverridden = (property: keyof DescendantOverride): boolean => {
-    return currentOverride[property] !== undefined
-  }
+  const isPropertyOverridden = (
+    property: keyof DescendantOverride,
+  ): boolean => {
+    return currentOverride[property] !== undefined;
+  };
 
   // Handle update - save to descendants
   const handleUpdate = (updates: Partial<SceneNode>) => {
-    updateDescendantOverride(instanceContext.instanceId, instanceContext.descendantId, updates as DescendantOverride)
-  }
+    updateDescendantOverride(
+      instanceContext.instanceId,
+      instanceContext.descendantId,
+      updates as DescendantOverride,
+    );
+  };
 
   // Reset a specific property
   const handleResetProperty = (property: keyof DescendantOverride) => {
-    resetDescendantOverride(instanceContext.instanceId, instanceContext.descendantId, property)
-  }
+    resetDescendantOverride(
+      instanceContext.instanceId,
+      instanceContext.descendantId,
+      property,
+    );
+  };
 
   // Reset all overrides for this descendant
   const handleResetAll = () => {
-    resetDescendantOverride(instanceContext.instanceId, instanceContext.descendantId)
-  }
+    resetDescendantOverride(
+      instanceContext.instanceId,
+      instanceContext.descendantId,
+    );
+  };
 
   // Filter only color variables
-  const colorVariables = variables.filter(v => v.type === 'color')
+  const colorVariables = variables.filter((v) => v.type === "color");
 
   // Handler for fill variable binding
   const handleFillVariableChange = (variableId: string | undefined) => {
     if (variableId) {
-      handleUpdate({ fillBinding: { variableId } })
+      handleUpdate({ fillBinding: { variableId } });
     } else {
-      handleUpdate({ fillBinding: undefined })
+      handleUpdate({ fillBinding: undefined });
     }
-  }
+  };
 
   // Handler for stroke variable binding
   const handleStrokeVariableChange = (variableId: string | undefined) => {
     if (variableId) {
-      handleUpdate({ strokeBinding: { variableId } })
+      handleUpdate({ strokeBinding: { variableId } });
     } else {
-      handleUpdate({ strokeBinding: undefined })
+      handleUpdate({ strokeBinding: undefined });
     }
-  }
+  };
 
   // Collect overridden properties for display
-  const overriddenProperties: string[] = []
-  if (isPropertyOverridden('fill')) overriddenProperties.push('Fill')
-  if (isPropertyOverridden('stroke')) overriddenProperties.push('Stroke')
-  if (isPropertyOverridden('strokeWidth')) overriddenProperties.push('Stroke Width')
-  if (isPropertyOverridden('enabled')) overriddenProperties.push('Enabled')
-  if (isPropertyOverridden('fillBinding')) overriddenProperties.push('Fill Variable')
-  if (isPropertyOverridden('strokeBinding')) overriddenProperties.push('Stroke Variable')
+  const overriddenProperties: string[] = [];
+  if (isPropertyOverridden("fill")) overriddenProperties.push("Fill");
+  if (isPropertyOverridden("stroke")) overriddenProperties.push("Stroke");
+  if (isPropertyOverridden("strokeWidth"))
+    overriddenProperties.push("Stroke Width");
+  if (isPropertyOverridden("enabled")) overriddenProperties.push("Enabled");
+  if (isPropertyOverridden("fillBinding"))
+    overriddenProperties.push("Fill Variable");
+  if (isPropertyOverridden("strokeBinding"))
+    overriddenProperties.push("Stroke Variable");
 
   return (
     <div className="flex flex-col gap-4">
@@ -771,12 +948,17 @@ function DescendantPropertyEditor({
       <PropertySection title="Editing Descendant">
         <div className="flex items-center gap-2 text-xs text-purple-400">
           <svg viewBox="0 0 16 16" className="w-4 h-4">
-            <path d="M8 2 L14 8 L8 14 L2 8 Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
+            <path
+              d="M8 2 L14 8 L8 14 L2 8 Z"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            />
           </svg>
           <span>{originalNode.name || originalNode.type}</span>
         </div>
         <div className="text-[10px] text-text-muted mt-1">
-          In instance: {instance.name || 'Instance'}
+          In instance: {instance.name || "Instance"}
         </div>
         <button
           onClick={exitInstanceEditMode}
@@ -797,8 +979,8 @@ function DescendantPropertyEditor({
             />
           </div>
           <OverrideIndicator
-            isOverridden={isPropertyOverridden('enabled')}
-            onReset={() => handleResetProperty('enabled')}
+            isOverridden={isPropertyOverridden("enabled")}
+            onReset={() => handleResetProperty("enabled")}
           />
         </div>
       </PropertySection>
@@ -808,7 +990,7 @@ function DescendantPropertyEditor({
         <div className="flex items-center gap-1">
           <div className="flex-1">
             <ColorInput
-              value={displayNode.fill ?? originalNode.fill ?? '#000000'}
+              value={displayNode.fill ?? originalNode.fill ?? "#000000"}
               onChange={(v) => handleUpdate({ fill: v })}
               variableId={displayNode.fillBinding?.variableId}
               onVariableChange={handleFillVariableChange}
@@ -817,8 +999,8 @@ function DescendantPropertyEditor({
             />
           </div>
           <OverrideIndicator
-            isOverridden={isPropertyOverridden('fill')}
-            onReset={() => handleResetProperty('fill')}
+            isOverridden={isPropertyOverridden("fill")}
+            onReset={() => handleResetProperty("fill")}
           />
         </div>
       </PropertySection>
@@ -828,7 +1010,7 @@ function DescendantPropertyEditor({
         <div className="flex items-center gap-1">
           <div className="flex-1">
             <ColorInput
-              value={displayNode.stroke ?? originalNode.stroke ?? ''}
+              value={displayNode.stroke ?? originalNode.stroke ?? ""}
               onChange={(v) => handleUpdate({ stroke: v || undefined })}
               variableId={displayNode.strokeBinding?.variableId}
               onVariableChange={handleStrokeVariableChange}
@@ -837,8 +1019,8 @@ function DescendantPropertyEditor({
             />
           </div>
           <OverrideIndicator
-            isOverridden={isPropertyOverridden('stroke')}
-            onReset={() => handleResetProperty('stroke')}
+            isOverridden={isPropertyOverridden("stroke")}
+            onReset={() => handleResetProperty("stroke")}
           />
         </div>
         <div className="flex items-center gap-1">
@@ -852,8 +1034,8 @@ function DescendantPropertyEditor({
             />
           </div>
           <OverrideIndicator
-            isOverridden={isPropertyOverridden('strokeWidth')}
-            onReset={() => handleResetProperty('strokeWidth')}
+            isOverridden={isPropertyOverridden("strokeWidth")}
+            onReset={() => handleResetProperty("strokeWidth")}
           />
         </div>
       </PropertySection>
@@ -862,7 +1044,7 @@ function DescendantPropertyEditor({
       {overriddenProperties.length > 0 && (
         <PropertySection title="Overrides">
           <div className="text-xs text-text-secondary mb-2">
-            {overriddenProperties.join(', ')}
+            {overriddenProperties.join(", ")}
           </div>
           <button
             onClick={handleResetAll}
@@ -873,37 +1055,35 @@ function DescendantPropertyEditor({
         </PropertySection>
       )}
     </div>
-  )
+  );
 }
 
 // Export section component
 interface ExportSectionProps {
-  selectedNode: SceneNode | null
+  selectedNode: SceneNode | null;
 }
 
 function ExportSection({ selectedNode }: ExportSectionProps) {
-  const stageRef = useCanvasRefStore((s) => s.stageRef)
-  const [scale, setScale] = useState<ExportScale>(1)
+  const stageRef = useCanvasRefStore((s) => s.stageRef);
+  const [scale, setScale] = useState<ExportScale>(1);
 
   const handleExport = (format: ExportFormat) => {
     if (!stageRef) {
-      console.error('Stage ref not available')
-      return
+      console.error("Stage ref not available");
+      return;
     }
 
-    exportImage(
-      stageRef,
-      selectedNode?.id || null,
-      selectedNode?.name,
-      { format, scale }
-    )
-  }
+    exportImage(stageRef, selectedNode?.id || null, selectedNode?.name, {
+      format,
+      scale,
+    });
+  };
 
   const scaleOptions = [
-    { value: '1', label: '1x' },
-    { value: '2', label: '2x' },
-    { value: '3', label: '3x' },
-  ]
+    { value: "1", label: "1x" },
+    { value: "2", label: "2x" },
+    { value: "3", label: "3x" },
+  ];
 
   return (
     <PropertySection title="Export">
@@ -916,50 +1096,50 @@ function ExportSection({ selectedNode }: ExportSectionProps) {
         />
         <div className="flex gap-2">
           <button
-            onClick={() => handleExport('png')}
+            onClick={() => handleExport("png")}
             className="flex-1 px-3 py-1.5 bg-accent-primary border-none rounded text-white text-xs cursor-pointer transition-colors hover:bg-accent-hover"
           >
             PNG
           </button>
           <button
-            onClick={() => handleExport('jpeg')}
+            onClick={() => handleExport("jpeg")}
             className="flex-1 px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
           >
             JPEG
           </button>
         </div>
         <div className="text-[10px] text-text-muted">
-          {selectedNode ? `Export "${selectedNode.name || selectedNode.type}"` : 'Export entire canvas'}
+          {selectedNode
+            ? `Export "${selectedNode.name || selectedNode.type}"`
+            : "Export entire canvas"}
         </div>
       </div>
     </PropertySection>
-  )
+  );
 }
 
 export function PropertiesPanel() {
-  const nodes = useSceneStore((s) => s.nodes)
-  const updateNode = useSceneStore((s) => s.updateNode)
-  const { selectedIds, instanceContext } = useSelectionStore()
-  const variables = useVariableStore((s) => s.variables)
-  const activeTheme = useThemeStore((s) => s.activeTheme)
+  const nodes = useSceneStore((s) => s.nodes);
+  const updateNode = useSceneStore((s) => s.updateNode);
+  const { selectedIds, instanceContext } = useSelectionStore();
+  const variables = useVariableStore((s) => s.variables);
+  const activeTheme = useThemeStore((s) => s.activeTheme);
 
   // Find selected node (recursively search in tree)
   const selectedNode =
-    selectedIds.length === 1
-      ? findNodeById(nodes, selectedIds[0])
-      : null
+    selectedIds.length === 1 ? findNodeById(nodes, selectedIds[0]) : null;
 
   // Get parent context for sizing controls
   const parentContext: ParentContext = selectedNode
     ? findParentFrame(nodes, selectedNode.id)
-    : { parent: null, isInsideAutoLayout: false }
+    : { parent: null, isInsideAutoLayout: false };
 
   // Handle update with type-safe callback
   const handleUpdate = (updates: Partial<SceneNode>) => {
     if (selectedNode) {
-      updateNode(selectedNode.id, updates)
+      updateNode(selectedNode.id, updates);
     }
-  }
+  };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -994,10 +1174,12 @@ export function PropertiesPanel() {
           />
         )}
         {/* Export section - always visible at the bottom */}
-        <div className={selectedIds.length > 0 || instanceContext ? 'mt-4' : ''}>
+        <div
+          className={selectedIds.length > 0 || instanceContext ? "mt-4" : ""}
+        >
           <ExportSection selectedNode={selectedNode} />
         </div>
       </div>
     </div>
-  )
+  );
 }

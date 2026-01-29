@@ -1,43 +1,44 @@
-import clsx from 'clsx'
-import { useSceneStore } from '../store/sceneStore'
-import { getAllComponents } from '../utils/nodeUtils'
-import { generateId } from '../types/scene'
-import type { SceneNode, FrameNode, RefNode } from '../types/scene'
-import { useNodePlacement } from '../hooks/useNodePlacement'
+import clsx from "clsx";
+import { DiamondsFourIcon } from "@phosphor-icons/react";
+import { useSceneStore } from "../store/sceneStore";
+import { getAllComponents } from "../utils/nodeUtils";
+import { generateId } from "../types/scene";
+import type { SceneNode, FrameNode, RefNode } from "../types/scene";
+import { useNodePlacement } from "../hooks/useNodePlacement";
 
 export function ComponentsPanel() {
-  const nodes = useSceneStore((state) => state.nodes)
-  const addNode = useSceneStore((state) => state.addNode)
-  const addChildToFrame = useSceneStore((state) => state.addChildToFrame)
-  const { getSelectedFrame, getViewportCenter } = useNodePlacement()
+  const nodes = useSceneStore((state) => state.nodes);
+  const addNode = useSceneStore((state) => state.addNode);
+  const addChildToFrame = useSceneStore((state) => state.addChildToFrame);
+  const { getSelectedFrame, getViewportCenter } = useNodePlacement();
 
   // Get all components from the scene
-  const components = getAllComponents(nodes)
+  const components = getAllComponents(nodes);
 
   const createInstance = (component: FrameNode) => {
-    const { centerX, centerY } = getViewportCenter()
+    const { centerX, centerY } = getViewportCenter();
 
     const instance: RefNode = {
       id: generateId(),
-      type: 'ref',
+      type: "ref",
       componentId: component.id,
-      name: `${component.name || 'Component'} instance`,
+      name: `${component.name || "Component"} instance`,
       x: centerX - component.width / 2,
       y: centerY - component.height / 2,
       width: component.width,
       height: component.height,
       visible: true,
-    }
+    };
 
-    const selectedFrame = getSelectedFrame()
+    const selectedFrame = getSelectedFrame();
     if (selectedFrame && selectedFrame.id !== component.id) {
       // Add as child to selected frame (position relative to frame)
-      const childInstance = { ...instance, x: 10, y: 10 }
-      addChildToFrame(selectedFrame.id, childInstance as SceneNode)
+      const childInstance = { ...instance, x: 10, y: 10 };
+      addChildToFrame(selectedFrame.id, childInstance as SceneNode);
     } else {
-      addNode(instance as SceneNode)
+      addNode(instance as SceneNode);
     }
-  }
+  };
 
   if (components.length === 0) {
     return (
@@ -52,7 +53,7 @@ export function ComponentsPanel() {
           No components yet
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -69,23 +70,17 @@ export function ComponentsPanel() {
             key={component.id}
             onClick={() => createInstance(component)}
             className={clsx(
-              'w-full flex items-center gap-2 px-4 py-2 text-left',
-              'hover:bg-surface-elevated transition-colors duration-100'
+              "w-full flex items-center gap-2 px-4 py-2 text-left",
+              "hover:bg-surface-elevated transition-colors duration-100",
             )}
           >
-            {/* Component icon: 4 diamonds */}
-            <svg viewBox="0 0 16 16" className="w-4 h-4 shrink-0 text-purple-400">
-              <path d="M5 2 L8 5 L5 8 L2 5 Z" fill="currentColor" />
-              <path d="M11 2 L14 5 L11 8 L8 5 Z" fill="currentColor" />
-              <path d="M5 8 L8 11 L5 14 L2 11 Z" fill="currentColor" />
-              <path d="M11 8 L14 11 L11 14 L8 11 Z" fill="currentColor" />
-            </svg>
+            <DiamondsFourIcon size={16} className="shrink-0 text-purple-400" />
             <span className="text-xs text-text-secondary truncate">
-              {component.name || 'Component'}
+              {component.name || "Component"}
             </span>
           </button>
         ))}
       </div>
     </div>
-  )
+  );
 }

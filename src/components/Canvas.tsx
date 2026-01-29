@@ -284,15 +284,19 @@ export function Canvas() {
       ? (findNodeByIdGeneric(nodes, editingNodeId) as FrameNode | null)
       : null;
 
-  // Determine transformer color based on whether a component is selected
+  // Determine transformer color based on whether a component or instance is selected
   const transformerColor = useMemo(() => {
     const defaultColor = "#0d99ff"; // Blue
     const componentColor = "#9747ff"; // Purple (Figma component color)
 
-    // Check if any selected node is a reusable component
+    // Check if any selected node is a reusable component or an instance
     for (const id of selectedIds) {
       const node = findNodeByIdGeneric(nodes, id);
-      if (node && node.type === "frame" && (node as FrameNode).reusable) {
+      if (
+        node &&
+        ((node.type === "frame" && (node as FrameNode).reusable) ||
+          node.type === "ref")
+      ) {
         return componentColor;
       }
     }
