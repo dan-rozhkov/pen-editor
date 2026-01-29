@@ -497,6 +497,26 @@ function PropertyEditor({
         />
       </PropertySection>
 
+      {/* Flip Section */}
+      <PropertySection title="Flip">
+        <div className="flex gap-1">
+          <button
+            className={`flex-1 px-2 py-1 text-xs rounded border ${node.flipX ? "bg-blue-100 border-blue-400 text-blue-700" : "border-gray-300 text-gray-600 hover:bg-gray-100"}`}
+            onClick={() => onUpdate({ flipX: !node.flipX })}
+            title="Flip horizontal"
+          >
+            ↔ Horizontal
+          </button>
+          <button
+            className={`flex-1 px-2 py-1 text-xs rounded border ${node.flipY ? "bg-blue-100 border-blue-400 text-blue-700" : "border-gray-300 text-gray-600 hover:bg-gray-100"}`}
+            onClick={() => onUpdate({ flipY: !node.flipY })}
+            title="Flip vertical"
+          >
+            ↕ Vertical
+          </button>
+        </div>
+      </PropertySection>
+
       {/* Opacity Section */}
       <PropertySection title="Opacity">
         <NumberInput

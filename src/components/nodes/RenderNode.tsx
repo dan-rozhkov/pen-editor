@@ -340,12 +340,16 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
     const scaleY = target.scaleY();
     const rotation = target.rotation();
 
-    // Reset scale and apply to width/height
-    target.scaleX(1);
-    target.scaleY(1);
+    // Preserve flip state: use absolute scale for sizing, reset to flip sign
+    const flipSignX = node.flipX ? -1 : 1;
+    const flipSignY = node.flipY ? -1 : 1;
+    target.scaleX(flipSignX);
+    target.scaleY(flipSignY);
+    target.offsetX(node.flipX ? target.width() : 0);
+    target.offsetY(node.flipY ? target.height() : 0);
 
-    const newWidth = Math.max(5, target.width() * scaleX);
-    const newHeight = Math.max(5, target.height() * scaleY);
+    const newWidth = Math.max(5, target.width() * Math.abs(scaleX));
+    const newHeight = Math.max(5, target.height() * Math.abs(scaleY));
 
     const updates: Partial<SceneNode> = {
       x: target.x(),
@@ -435,6 +439,10 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
             width={node.width}
             height={node.height}
             rotation={node.rotation ?? 0}
+            offsetX={node.flipX ? node.width : 0}
+            offsetY={node.flipY ? node.height : 0}
+            scaleX={node.flipX ? -1 : 1}
+            scaleY={node.flipY ? -1 : 1}
             fill={node.imageFill ? undefined : fillColor}
             stroke={strokeColor}
             strokeWidth={node.strokeWidth}
@@ -469,6 +477,10 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
               width={node.width}
               height={node.height}
               rotation={node.rotation ?? 0}
+              offsetX={node.flipX ? node.width : 0}
+              offsetY={node.flipY ? node.height : 0}
+              scaleX={node.flipX ? -1 : 1}
+              scaleY={node.flipY ? -1 : 1}
               stroke={HOVER_OUTLINE_COLOR}
               strokeWidth={1.5}
               cornerRadius={node.cornerRadius}
@@ -513,6 +525,10 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
             width={textWidth}
             height={textHeight ?? node.height}
             rotation={node.rotation ?? 0}
+            offsetX={node.flipX ? node.width : 0}
+            offsetY={node.flipY ? node.height : 0}
+            scaleX={node.flipX ? -1 : 1}
+            scaleY={node.flipY ? -1 : 1}
             text={node.text}
             fontSize={node.fontSize ?? 16}
             fontFamily={node.fontFamily ?? "Arial"}
@@ -543,6 +559,10 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
               width={node.width}
               height={node.height}
               rotation={node.rotation ?? 0}
+              offsetX={node.flipX ? node.width : 0}
+              offsetY={node.flipY ? node.height : 0}
+              scaleX={node.flipX ? -1 : 1}
+              scaleY={node.flipY ? -1 : 1}
               stroke={HOVER_OUTLINE_COLOR}
               strokeWidth={1.5}
               listening={false}
@@ -641,12 +661,14 @@ function EllipseRenderer({
     const scaleY = target.scaleY();
     const rotation = target.rotation();
 
-    const newWidth = Math.max(5, target.radiusX() * 2 * scaleX);
-    const newHeight = Math.max(5, target.radiusY() * 2 * scaleY);
+    const newWidth = Math.max(5, target.radiusX() * 2 * Math.abs(scaleX));
+    const newHeight = Math.max(5, target.radiusY() * 2 * Math.abs(scaleY));
 
-    // Reset scale
-    target.scaleX(1);
-    target.scaleY(1);
+    // Reset scale, preserving flip
+    const flipSignX = node.flipX ? -1 : 1;
+    const flipSignY = node.flipY ? -1 : 1;
+    target.scaleX(flipSignX);
+    target.scaleY(flipSignY);
 
     // Update radiuses
     target.radiusX(newWidth / 2);
@@ -671,6 +693,8 @@ function EllipseRenderer({
         radiusX={node.width / 2}
         radiusY={node.height / 2}
         rotation={node.rotation ?? 0}
+        scaleX={node.flipX ? -1 : 1}
+        scaleY={node.flipY ? -1 : 1}
         fill={node.imageFill ? undefined : fillColor}
         stroke={strokeColor}
         strokeWidth={node.strokeWidth}
@@ -771,6 +795,10 @@ function FrameRenderer({
       width={effectiveWidth}
       height={effectiveHeight}
       rotation={node.rotation ?? 0}
+      offsetX={node.flipX ? effectiveWidth : 0}
+      offsetY={node.flipY ? effectiveHeight : 0}
+      scaleX={node.flipX ? -1 : 1}
+      scaleY={node.flipY ? -1 : 1}
       opacity={node.opacity ?? 1}
       draggable
       onClick={onClick}
@@ -853,6 +881,10 @@ function GroupRenderer({
       width={node.width}
       height={node.height}
       rotation={node.rotation ?? 0}
+      offsetX={node.flipX ? node.width : 0}
+      offsetY={node.flipY ? node.height : 0}
+      scaleX={node.flipX ? -1 : 1}
+      scaleY={node.flipY ? -1 : 1}
       opacity={node.opacity ?? 1}
       draggable
       onClick={onClick}
@@ -1043,6 +1075,10 @@ function InstanceRenderer({
       width={node.width}
       height={node.height}
       rotation={node.rotation ?? 0}
+      offsetX={node.flipX ? node.width : 0}
+      offsetY={node.flipY ? node.height : 0}
+      scaleX={node.flipX ? -1 : 1}
+      scaleY={node.flipY ? -1 : 1}
       opacity={node.opacity ?? 1}
       draggable={!isInEditMode}
       onClick={onClick}
@@ -1134,6 +1170,10 @@ function DescendantRenderer({
             width={node.width}
             height={node.height}
             rotation={node.rotation ?? 0}
+            offsetX={node.flipX ? node.width : 0}
+            offsetY={node.flipY ? node.height : 0}
+            scaleX={node.flipX ? -1 : 1}
+            scaleY={node.flipY ? -1 : 1}
             fill={node.imageFill ? undefined : fillColor}
             stroke={strokeColor ?? selectionStroke}
             strokeWidth={node.strokeWidth ?? selectionStrokeWidth}
@@ -1160,6 +1200,10 @@ function DescendantRenderer({
               width={node.width}
               height={node.height}
               rotation={node.rotation ?? 0}
+              offsetX={node.flipX ? node.width : 0}
+              offsetY={node.flipY ? node.height : 0}
+              scaleX={node.flipX ? -1 : 1}
+              scaleY={node.flipY ? -1 : 1}
               stroke="#8B5CF6"
               strokeWidth={2}
               listening={false}
@@ -1176,6 +1220,8 @@ function DescendantRenderer({
             radiusX={node.width / 2}
             radiusY={node.height / 2}
             rotation={node.rotation ?? 0}
+            scaleX={node.flipX ? -1 : 1}
+            scaleY={node.flipY ? -1 : 1}
             fill={node.imageFill ? undefined : fillColor}
             stroke={strokeColor ?? selectionStroke}
             strokeWidth={node.strokeWidth ?? selectionStrokeWidth}
@@ -1219,6 +1265,10 @@ function DescendantRenderer({
             width={descTextWidth}
             height={descTextHeight ?? node.height}
             rotation={node.rotation ?? 0}
+            offsetX={node.flipX ? node.width : 0}
+            offsetY={node.flipY ? node.height : 0}
+            scaleX={node.flipX ? -1 : 1}
+            scaleY={node.flipY ? -1 : 1}
             text={node.text}
             fontSize={node.fontSize ?? 16}
             fontFamily={node.fontFamily ?? "Arial"}
@@ -1240,6 +1290,10 @@ function DescendantRenderer({
               width={node.width}
               height={node.height}
               rotation={node.rotation ?? 0}
+              offsetX={node.flipX ? node.width : 0}
+              offsetY={node.flipY ? node.height : 0}
+              scaleX={node.flipX ? -1 : 1}
+              scaleY={node.flipY ? -1 : 1}
               stroke="#8B5CF6"
               strokeWidth={2}
               listening={false}
@@ -1265,6 +1319,10 @@ function DescendantRenderer({
           width={node.width}
           height={node.height}
           rotation={node.rotation ?? 0}
+          offsetX={node.flipX ? node.width : 0}
+          offsetY={node.flipY ? node.height : 0}
+          scaleX={node.flipX ? -1 : 1}
+          scaleY={node.flipY ? -1 : 1}
           opacity={node.opacity ?? 1}
           onClick={onClick}
           onTap={onClick}
@@ -1359,6 +1417,10 @@ function RenderNodeWithOverrides({
             width={node.width}
             height={node.height}
             rotation={node.rotation ?? 0}
+            offsetX={node.flipX ? node.width : 0}
+            offsetY={node.flipY ? node.height : 0}
+            scaleX={node.flipX ? -1 : 1}
+            scaleY={node.flipY ? -1 : 1}
             fill={node.imageFill ? undefined : fillColor}
             stroke={strokeColor}
             strokeWidth={node.strokeWidth}
@@ -1387,6 +1449,8 @@ function RenderNodeWithOverrides({
             radiusX={node.width / 2}
             radiusY={node.height / 2}
             rotation={node.rotation ?? 0}
+            scaleX={node.flipX ? -1 : 1}
+            scaleY={node.flipY ? -1 : 1}
             fill={node.imageFill ? undefined : fillColor}
             stroke={strokeColor}
             strokeWidth={node.strokeWidth}
@@ -1415,6 +1479,10 @@ function RenderNodeWithOverrides({
           width={ovrTextWidth}
           height={ovrTextHeight ?? node.height}
           rotation={node.rotation ?? 0}
+          offsetX={node.flipX ? node.width : 0}
+          offsetY={node.flipY ? node.height : 0}
+          scaleX={node.flipX ? -1 : 1}
+          scaleY={node.flipY ? -1 : 1}
           text={node.text}
           fontSize={node.fontSize ?? 16}
           fontFamily={node.fontFamily ?? "Arial"}
@@ -1440,6 +1508,10 @@ function RenderNodeWithOverrides({
           width={node.width}
           height={node.height}
           rotation={node.rotation ?? 0}
+          offsetX={node.flipX ? node.width : 0}
+          offsetY={node.flipY ? node.height : 0}
+          scaleX={node.flipX ? -1 : 1}
+          scaleY={node.flipY ? -1 : 1}
           opacity={node.opacity ?? 1}
         >
           {node.type === "frame" && (
