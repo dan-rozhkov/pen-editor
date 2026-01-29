@@ -15,7 +15,7 @@ export interface SizingProperties {
 
 export interface BaseNode {
   id: string
-  type: 'frame' | 'rect' | 'ellipse' | 'text' | 'ref'
+  type: 'frame' | 'group' | 'rect' | 'ellipse' | 'text' | 'ref'
   name?: string
   x: number
   y: number
@@ -130,7 +130,30 @@ export interface RefNode extends BaseNode {
   descendants?: DescendantOverrides
 }
 
-export type SceneNode = FrameNode | RectNode | EllipseNode | TextNode | RefNode
+export interface GroupNode extends BaseNode {
+  type: 'group'
+  children: SceneNode[]
+}
+
+export type SceneNode = FrameNode | GroupNode | RectNode | EllipseNode | TextNode | RefNode
+
+/** Check if a node is a container (has children array) */
+export function isContainerNode(node: SceneNode): node is FrameNode | GroupNode {
+  return node.type === 'frame' || node.type === 'group'
+}
+
+/** Get children of a container node, or empty array for leaf nodes */
+export function getNodeChildren(node: SceneNode): SceneNode[] {
+  if (node.type === 'frame' || node.type === 'group') {
+    return node.children
+  }
+  return []
+}
+
+/** Return a copy of a container node with updated children */
+export function withChildren(node: FrameNode | GroupNode, children: SceneNode[]): FrameNode | GroupNode {
+  return { ...node, children } as FrameNode | GroupNode
+}
 
 export function generateId(): string {
   return Math.random().toString(36).substring(2, 9)

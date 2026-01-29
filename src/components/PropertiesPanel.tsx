@@ -62,8 +62,8 @@ function findNodeInComponent(
 ): SceneNode | null {
   for (const child of children) {
     if (child.id === nodeId) return child;
-    if (child.type === "frame") {
-      const found = findNodeInComponent(child.children, nodeId);
+    if (child.type === "frame" || child.type === "group") {
+      const found = findNodeInComponent((child as any).children, nodeId);
       if (found) return found;
     }
   }
@@ -134,10 +134,10 @@ function AlignmentSection({
       if (node.id === id) {
         return { ...node, ...changes } as SceneNode;
       }
-      if (node.type === "frame") {
+      if (node.type === "frame" || node.type === "group") {
         return {
           ...node,
-          children: applyUpdateRecursive(node.children, id, changes),
+          children: applyUpdateRecursive((node as FrameNode).children, id, changes),
         } as FrameNode;
       }
       return node;

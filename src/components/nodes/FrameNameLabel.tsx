@@ -1,12 +1,12 @@
 import { Text } from 'react-konva'
 import { useEffect, useRef, useState } from 'react'
 import type Konva from 'konva'
-import type { FrameNode } from '../../types/scene'
+import type { FrameNode, GroupNode } from '../../types/scene'
 import { useSelectionStore } from '../../store/selectionStore'
 import { useViewportStore } from '../../store/viewportStore'
 
 interface FrameNameLabelProps {
-  node: FrameNode
+  node: FrameNode | GroupNode
   isSelected: boolean
   absoluteX: number
   absoluteY: number
@@ -69,10 +69,12 @@ export function FrameNameLabel({ node, isSelected, absoluteX, absoluteY }: Frame
     return null
   }
 
-  const displayName = node.name || 'Frame'
+  const defaultName = node.type === 'group' ? 'Group' : 'Frame'
+  const displayName = node.name || defaultName
 
   // Determine label color: purple for components, blue for selected, gray for normal
-  const labelColor = node.reusable
+  const isReusable = node.type === 'frame' && node.reusable
+  const labelColor = isReusable
     ? LABEL_COLOR_COMPONENT
     : isSelected
       ? LABEL_COLOR_SELECTED

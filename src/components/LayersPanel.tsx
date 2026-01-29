@@ -13,7 +13,8 @@ import clsx from "clsx";
 import { useSceneStore } from "../store/sceneStore";
 import { useSelectionStore } from "../store/selectionStore";
 import { useHoverStore } from "../store/hoverStore";
-import type { SceneNode, FrameNode } from "../types/scene";
+import type { SceneNode, FrameNode, GroupNode } from "../types/scene";
+import { isContainerNode } from "../types/scene";
 import { FrameIcon } from "./ui/custom-icons/frame-icon";
 
 // Icons for different node types
@@ -37,6 +38,8 @@ const NodeIcon = ({
         // Component icon: 4 diamonds in a grid pattern (like Figma)
         return <DiamondsFourIcon size={16} className={iconClass} />;
       }
+      return <FrameIcon size={16} className={iconClass} />;
+    case "group":
       return <FrameIcon size={16} className={iconClass} />;
     case "rect":
       return <RectangleIcon size={16} className={iconClass} weight="regular" />;
@@ -149,8 +152,8 @@ function LayerItem({
 
   const isSelected = selectedIds.includes(node.id);
   const isVisible = node.visible !== false;
-  const isFrame = node.type === "frame";
-  const hasChildren = isFrame && (node as FrameNode).children.length > 0;
+  const isFrame = node.type === "frame" || node.type === "group";
+  const hasChildren = isFrame && (node as FrameNode | GroupNode).children.length > 0;
   const isExpanded = expandedFrameIds.has(node.id);
   const isDragging = dragState.draggedId === node.id;
   const isDropTarget = dragState.dropTargetId === node.id;
@@ -292,7 +295,7 @@ function LayerItem({
           <NodeIcon
             type={node.type}
             isSelected={isSelected}
-            reusable={node.type === "frame" && (node as FrameNode).reusable}
+            reusable={node.type === "frame" && (node as FrameNode).reusable === true}
           />
           {isEditing ? (
             <input
@@ -335,10 +338,10 @@ function LayerItem({
         </button>
       </div>
 
-      {/* Render children if this is an expanded frame */}
+      {/* Render children if this is an expanded frame/group */}
       {isFrame && isExpanded && (
         <LayerList
-          nodes={[...(node as FrameNode).children].reverse()}
+          nodes={[...(node as FrameNode | GroupNode).children].reverse()}
           depth={depth + 1}
           parentId={node.id}
           dragState={dragState}
@@ -399,8 +402,8 @@ function LayerList({
 // Helper to count total visible nodes (for the badge)
 function countNodes(nodes: SceneNode[]): number {
   return nodes.reduce((count, node) => {
-    if (node.type === "frame") {
-      return count + 1 + countNodes((node as FrameNode).children);
+    if (isContainerNode(node)) {
+      return count + 1 + countNodes(node.children);
     }
     return count + 1;
   }, 0);
@@ -415,11 +418,11 @@ function getChildrenOfParent(
     return nodes;
   }
   for (const node of nodes) {
-    if (node.id === parentId && node.type === "frame") {
-      return (node as FrameNode).children;
+    if (node.id === parentId && isContainerNode(node)) {
+      return node.children;
     }
-    if (node.type === "frame") {
-      const found = getChildrenOfParent((node as FrameNode).children, parentId);
+    if (isContainerNode(node)) {
+      const found = getChildrenOfParent(node.children, parentId);
       if (found.length > 0 || parentId === node.id) {
         return found;
       }

@@ -1,12 +1,13 @@
-import type { SceneNode, FrameNode } from '../types/scene'
+import type { SceneNode, FrameNode, GroupNode } from '../types/scene'
+import { isContainerNode, getNodeChildren } from '../types/scene'
 
 export interface ParentContext {
-  parent: FrameNode | null
+  parent: FrameNode | GroupNode | null
   isInsideAutoLayout: boolean
 }
 
 /**
- * Find parent Frame for a node by its ID
+ * Find parent container (Frame or Group) for a node by its ID
  * Returns parent context with isInsideAutoLayout flag
  */
 export function findParentFrame(
@@ -16,17 +17,17 @@ export function findParentFrame(
   // Recursive search in children
   function searchInChildren(
     children: SceneNode[],
-    parent: FrameNode | null
+    parent: FrameNode | GroupNode | null
   ): ParentContext | null {
     for (const node of children) {
       if (node.id === targetId) {
         return {
           parent,
-          isInsideAutoLayout: parent?.layout?.autoLayout ?? false
+          isInsideAutoLayout: (parent?.type === 'frame' && parent?.layout?.autoLayout) ?? false
         }
       }
 
-      if (node.type === 'frame') {
+      if (isContainerNode(node)) {
         const found = searchInChildren(node.children, node)
         if (found) return found
       }
@@ -41,9 +42,9 @@ export function findParentFrame(
     }
   }
 
-  // Search in Frame children
+  // Search in container children
   for (const node of nodes) {
-    if (node.type === 'frame') {
+    if (isContainerNode(node)) {
       const found = searchInChildren(node.children, node)
       if (found) return found
     }
@@ -58,7 +59,7 @@ export function findParentFrame(
 export function findNodeById(nodes: SceneNode[], id: string): SceneNode | null {
   for (const node of nodes) {
     if (node.id === id) return node
-    if (node.type === 'frame') {
+    if (isContainerNode(node)) {
       const found = findNodeById(node.children, id)
       if (found) return found
     }
@@ -83,7 +84,7 @@ export function getNodeAbsolutePosition(
       if (node.id === targetId) {
         return { x: accX + node.x, y: accY + node.y }
       }
-      if (node.type === 'frame') {
+      if (isContainerNode(node)) {
         const found = findWithPath(node.children, accX + node.x, accY + node.y)
         if (found) return found
       }
@@ -103,7 +104,7 @@ export function findComponentById(nodes: SceneNode[], id: string): FrameNode | n
     if (node.type === 'frame' && node.id === id && node.reusable) {
       return node
     }
-    if (node.type === 'frame') {
+    if (isContainerNode(node)) {
       const found = findComponentById(node.children, id)
       if (found) return found
     }
@@ -123,6 +124,8 @@ export function getAllComponents(nodes: SceneNode[]): FrameNode[] {
         if (node.reusable) {
           components.push(node)
         }
+        collect(node.children)
+      } else if (node.type === 'group') {
         collect(node.children)
       }
     }
@@ -158,12 +161,12 @@ export function getNodeAbsolutePositionWithLayout(
       if (node.id === targetId) {
         return { x: accX + node.x, y: accY + node.y }
       }
-      if (node.type === 'frame') {
+      if (isContainerNode(node)) {
         const found = findWithPath(
           node.children,
           accX + node.x,
           accY + node.y,
-          node
+          node.type === 'frame' ? node : null
         )
         if (found) return found
       }

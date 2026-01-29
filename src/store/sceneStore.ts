@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import type { SceneNode, FrameNode, RefNode, TextNode, DescendantOverride } from '../types/scene'
+import type { SceneNode, FrameNode, GroupNode, RefNode, TextNode, DescendantOverride } from '../types/scene'
+import { isContainerNode, generateId } from '../types/scene'
 import { useHistoryStore } from './historyStore'
 import { measureTextAutoSize, measureTextFixedWidthHeight } from '../utils/textMeasure'
 
@@ -22,9 +23,20 @@ interface SceneState {
   // Descendant override methods for component instances
   updateDescendantOverride: (instanceId: string, descendantId: string, updates: DescendantOverride) => void
   resetDescendantOverride: (instanceId: string, descendantId: string, property?: keyof DescendantOverride) => void
+  // Group/ungroup operations
+  groupNodes: (ids: string[]) => string | null
+  ungroupNodes: (ids: string[]) => string[]
   // Page-level properties
   pageBackground: string
   setPageBackground: (color: string) => void
+}
+
+// Helper to recurse into container children
+function mapContainerChildren(node: SceneNode, mapFn: (nodes: SceneNode[]) => SceneNode[]): SceneNode {
+  if (isContainerNode(node)) {
+    return { ...node, children: mapFn(node.children) } as FrameNode | GroupNode
+  }
+  return node
 }
 
 // Recursively sync text node dimensions throughout the tree
@@ -33,30 +45,21 @@ function syncAllTextDimensions(nodes: SceneNode[]): SceneNode[] {
     if (node.type === 'text') {
       return syncTextDimensions(node)
     }
-    if (node.type === 'frame') {
-      return {
-        ...node,
-        children: syncAllTextDimensions(node.children),
-      } as FrameNode
+    if (isContainerNode(node)) {
+      return { ...node, children: syncAllTextDimensions(node.children) } as FrameNode | GroupNode
     }
     return node
   })
 }
 
-// Helper to recursively add child to a frame
+// Helper to recursively add child to a container (frame or group)
 function addChildToFrameRecursive(nodes: SceneNode[], frameId: string, child: SceneNode): SceneNode[] {
   return nodes.map((node) => {
-    if (node.id === frameId && node.type === 'frame') {
-      return {
-        ...node,
-        children: [...node.children, child],
-      } as FrameNode
+    if (node.id === frameId && isContainerNode(node)) {
+      return { ...node, children: [...node.children, child] } as FrameNode | GroupNode
     }
-    if (node.type === 'frame') {
-      return {
-        ...node,
-        children: addChildToFrameRecursive(node.children, frameId, child),
-      } as FrameNode
+    if (isContainerNode(node)) {
+      return { ...node, children: addChildToFrameRecursive(node.children, frameId, child) } as FrameNode | GroupNode
     }
     return node
   })
@@ -103,11 +106,8 @@ function updateNodeRecursive(nodes: SceneNode[], id: string, updates: Partial<Sc
       }
       return updated
     }
-    if (node.type === 'frame') {
-      return {
-        ...node,
-        children: updateNodeRecursive(node.children, id, updates),
-      } as FrameNode
+    if (isContainerNode(node)) {
+      return { ...node, children: updateNodeRecursive(node.children, id, updates) } as FrameNode | GroupNode
     }
     return node
   })
@@ -118,12 +118,9 @@ function deleteNodeRecursive(nodes: SceneNode[], id: string): SceneNode[] {
   return nodes.reduce<SceneNode[]>((acc, node) => {
     // Skip the node to delete
     if (node.id === id) return acc
-    // Recursively process frame children
-    if (node.type === 'frame') {
-      acc.push({
-        ...node,
-        children: deleteNodeRecursive(node.children, id),
-      } as FrameNode)
+    // Recursively process container children
+    if (isContainerNode(node)) {
+      acc.push({ ...node, children: deleteNodeRecursive(node.children, id) } as FrameNode | GroupNode)
     } else {
       acc.push(node)
     }
@@ -137,11 +134,8 @@ function toggleVisibilityRecursive(nodes: SceneNode[], id: string): SceneNode[] 
     if (node.id === id) {
       return { ...node, visible: node.visible === false ? true : false } as SceneNode
     }
-    if (node.type === 'frame') {
-      return {
-        ...node,
-        children: toggleVisibilityRecursive(node.children, id),
-      } as FrameNode
+    if (isContainerNode(node)) {
+      return { ...node, children: toggleVisibilityRecursive(node.children, id) } as FrameNode | GroupNode
     }
     return node
   })
@@ -153,11 +147,8 @@ function setVisibilityRecursive(nodes: SceneNode[], id: string, visible: boolean
     if (node.id === id) {
       return { ...node, visible } as SceneNode
     }
-    if (node.type === 'frame') {
-      return {
-        ...node,
-        children: setVisibilityRecursive(node.children, id, visible),
-      } as FrameNode
+    if (isContainerNode(node)) {
+      return { ...node, children: setVisibilityRecursive(node.children, id, visible) } as FrameNode | GroupNode
     }
     return node
   })
@@ -172,15 +163,12 @@ function extractNodeRecursive(nodes: SceneNode[], id: string): { node: SceneNode
       foundNode = node
       return acc
     }
-    if (node.type === 'frame') {
+    if (isContainerNode(node)) {
       const result = extractNodeRecursive(node.children, id)
       if (result.node) {
         foundNode = result.node
       }
-      acc.push({
-        ...node,
-        children: result.remaining,
-      } as FrameNode)
+      acc.push({ ...node, children: result.remaining } as FrameNode | GroupNode)
     } else {
       acc.push(node)
     }
@@ -200,16 +188,13 @@ function insertNodeRecursive(nodes: SceneNode[], nodeToInsert: SceneNode, parent
   }
 
   return nodes.map((node) => {
-    if (node.id === parentId && node.type === 'frame') {
+    if (node.id === parentId && isContainerNode(node)) {
       const newChildren = [...node.children]
       newChildren.splice(index, 0, nodeToInsert)
-      return { ...node, children: newChildren } as FrameNode
+      return { ...node, children: newChildren } as FrameNode | GroupNode
     }
-    if (node.type === 'frame') {
-      return {
-        ...node,
-        children: insertNodeRecursive(node.children, nodeToInsert, parentId, index),
-      } as FrameNode
+    if (isContainerNode(node)) {
+      return { ...node, children: insertNodeRecursive(node.children, nodeToInsert, parentId, index) } as FrameNode | GroupNode
     }
     return node
   })
@@ -245,11 +230,8 @@ function updateDescendantOverrideRecursive(
         }
       } as RefNode
     }
-    if (node.type === 'frame') {
-      return {
-        ...node,
-        children: recurse(node.children),
-      } as FrameNode
+    if (isContainerNode(node)) {
+      return { ...node, children: recurse(node.children) } as FrameNode | GroupNode
     }
     return node
   })
@@ -298,14 +280,149 @@ function resetDescendantOverrideRecursive(
         } as RefNode
       }
     }
-    if (node.type === 'frame') {
-      return {
-        ...node,
-        children: recurse(node.children),
-      } as FrameNode
+    if (isContainerNode(node)) {
+      return { ...node, children: recurse(node.children) } as FrameNode | GroupNode
     }
     return node
   })
+}
+
+// Helper to find the index and parent of a node
+function findNodePosition(nodes: SceneNode[], id: string, parentId: string | null = null): { parentId: string | null; index: number } | null {
+  for (let i = 0; i < nodes.length; i++) {
+    if (nodes[i].id === id) {
+      return { parentId, index: i }
+    }
+    const node = nodes[i]
+    if (isContainerNode(node)) {
+      const found = findNodePosition(node.children, id, node.id)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+// Helper to find a node by ID recursively
+function findNodeInTree(nodes: SceneNode[], id: string): SceneNode | null {
+  for (const node of nodes) {
+    if (node.id === id) return node
+    if (isContainerNode(node)) {
+      const found = findNodeInTree(node.children, id)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+// Group selected nodes into a new GroupNode
+function groupNodesInTree(nodes: SceneNode[], ids: string[]): { nodes: SceneNode[]; groupId: string } | null {
+  if (ids.length < 2) return null
+
+  // Find positions of all nodes - they must all be in the same parent
+  const positions = ids.map(id => findNodePosition(nodes, id))
+  if (positions.some(p => p === null)) return null
+  const validPositions = positions as { parentId: string | null; index: number }[]
+
+  // All nodes must share the same parent
+  const parentId = validPositions[0].parentId
+  if (!validPositions.every(p => p.parentId === parentId)) return null
+
+  // Get the actual node objects
+  const selectedNodes = ids.map(id => findNodeInTree(nodes, id)!).filter(Boolean)
+  if (selectedNodes.length !== ids.length) return null
+
+  // Calculate bounding box
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  for (const node of selectedNodes) {
+    minX = Math.min(minX, node.x)
+    minY = Math.min(minY, node.y)
+    maxX = Math.max(maxX, node.x + node.width)
+    maxY = Math.max(maxY, node.y + node.height)
+  }
+
+  // Create group with children at relative positions
+  const groupId = generateId()
+  const groupNode: GroupNode = {
+    id: groupId,
+    type: 'group',
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+    children: selectedNodes.map(node => ({
+      ...node,
+      x: node.x - minX,
+      y: node.y - minY,
+    } as SceneNode)),
+  }
+
+  // Find the insertion index (smallest index among selected nodes)
+  const insertIndex = Math.min(...validPositions.map(p => p.index))
+
+  // Remove selected nodes and insert group
+  const idSet = new Set(ids)
+
+  function processLevel(levelNodes: SceneNode[], levelParentId: string | null): SceneNode[] {
+    if (levelParentId !== parentId) {
+      // Not the target level, recurse into containers
+      return levelNodes.map(node => {
+        if (isContainerNode(node)) {
+          return { ...node, children: processLevel(node.children, node.id) } as FrameNode | GroupNode
+        }
+        return node
+      })
+    }
+
+    // This is the target level - remove selected nodes and insert group
+    const filtered = levelNodes.filter(n => !idSet.has(n.id))
+    const adjustedIndex = Math.min(insertIndex, filtered.length)
+    filtered.splice(adjustedIndex, 0, groupNode)
+    return filtered
+  }
+
+  return { nodes: processLevel(nodes, null), groupId }
+}
+
+// Ungroup a group node, placing its children back at the group's level
+function ungroupNodeInTree(nodes: SceneNode[], groupId: string): SceneNode[] | null {
+  const pos = findNodePosition(nodes, groupId)
+  if (!pos) return null
+
+  const groupNode = findNodeInTree(nodes, groupId)
+  if (!groupNode || groupNode.type !== 'group') return null
+
+  const group = groupNode as GroupNode
+
+  // Adjust children positions to be absolute (relative to the group's parent)
+  const absoluteChildren = group.children.map(child => ({
+    ...child,
+    x: child.x + group.x,
+    y: child.y + group.y,
+  } as SceneNode))
+
+  function processLevel(levelNodes: SceneNode[], levelParentId: string | null): SceneNode[] {
+    if (levelParentId !== pos!.parentId) {
+      return levelNodes.map(node => {
+        if (isContainerNode(node)) {
+          return { ...node, children: processLevel(node.children, node.id) } as FrameNode | GroupNode
+        }
+        return node
+      })
+    }
+
+    // Replace group with its children
+    const result: SceneNode[] = []
+    for (const node of levelNodes) {
+      if (node.id === groupId) {
+        result.push(...absoluteChildren)
+      } else {
+        result.push(node)
+      }
+    }
+    return result
+  }
+
+  return processLevel(nodes, null)
 }
 
 export const useSceneStore = create<SceneState>((set) => ({
@@ -415,6 +532,36 @@ export const useSceneStore = create<SceneState>((set) => ({
       useHistoryStore.getState().saveHistory(state.nodes)
       return { nodes: resetDescendantOverrideRecursive(state.nodes, instanceId, descendantId, property) }
     }),
+
+  groupNodes: (ids) => {
+    const state = useSceneStore.getState()
+    const result = groupNodesInTree(state.nodes, ids)
+    if (!result) return null
+    useHistoryStore.getState().saveHistory(state.nodes)
+    useSceneStore.setState({ nodes: result.nodes })
+    return result.groupId
+  },
+
+  ungroupNodes: (ids) => {
+    const state = useSceneStore.getState()
+    let currentNodes = state.nodes
+    const childIds: string[] = []
+
+    useHistoryStore.getState().saveHistory(state.nodes)
+    for (const id of ids) {
+      const node = findNodeInTree(currentNodes, id)
+      if (node && node.type === 'group') {
+        const group = node as GroupNode
+        childIds.push(...group.children.map(c => c.id))
+        const result = ungroupNodeInTree(currentNodes, id)
+        if (result) {
+          currentNodes = result
+        }
+      }
+    }
+    useSceneStore.setState({ nodes: currentNodes })
+    return childIds
+  },
 
   setPageBackground: (color) =>
     set(() => {

@@ -1,4 +1,4 @@
-import type { SceneNode, FrameNode } from '../types/scene'
+import type { SceneNode, FrameNode, GroupNode } from '../types/scene'
 import type { DropIndicatorData, InsertInfo } from '../store/dragStore'
 import type Konva from 'konva'
 
@@ -58,14 +58,15 @@ export function getFrameAbsoluteRect(frame: FrameNode, nodes: SceneNode[]): Rect
 
   function findParentPosition(searchNodes: SceneNode[], targetId: string, accX: number, accY: number): Point | null {
     for (const node of searchNodes) {
-      if (node.type === 'frame') {
+      if (node.type === 'frame' || node.type === 'group') {
+        const children = (node as FrameNode | GroupNode).children
         // Check if target is direct child
-        const isChild = node.children.some(c => c.id === targetId)
+        const isChild = children.some(c => c.id === targetId)
         if (isChild) {
           return { x: accX + node.x, y: accY + node.y }
         }
         // Recurse into children
-        const found = findParentPosition(node.children, targetId, accX + node.x, accY + node.y)
+        const found = findParentPosition(children, targetId, accX + node.x, accY + node.y)
         if (found) return found
       }
     }
@@ -102,6 +103,9 @@ function getNodeAbsoluteRectWithLayout(
           ? calculateLayoutForFrame(node)
           : node.children
         const found = search(childNodes, nodeX, nodeY)
+        if (found) return found
+      } else if (node.type === 'group') {
+        const found = search((node as GroupNode).children, nodeX, nodeY)
         if (found) return found
       }
     }

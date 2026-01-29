@@ -3,11 +3,13 @@ import Konva from "konva";
 import type {
   SceneNode,
   FrameNode,
+  GroupNode,
   RefNode,
   TextNode,
   DescendantOverrides,
   DescendantOverride,
 } from "../../types/scene";
+import { isContainerNode } from "../../types/scene";
 import type { ThemeName } from "../../types/variable";
 import { resolveColor } from "../../utils/colorUtils";
 import { useSceneStore } from "../../store/sceneStore";
@@ -102,11 +104,14 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
 
   const handleClick = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     e.cancelBubble = true;
+    // If this node is inside a group, select the group instead (Figma-like behavior)
+    // Double-click on the group will then select the child
+    const selectId = parentContext.parent?.type === 'group' ? parentContext.parent.id : node.id;
     const isShift = "shiftKey" in e.evt && e.evt.shiftKey;
     if (isShift) {
-      addToSelection(node.id);
+      addToSelection(selectId);
     } else {
-      select(node.id);
+      select(selectId);
     }
   };
 
@@ -259,6 +264,49 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
           isHovered={isHovered}
         />
       );
+    case "group": {
+      const handleGroupDblClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
+        e.cancelBubble = true;
+        // Find the child under the cursor and select it
+        const groupNode = node as GroupNode;
+        const stage = e.target.getStage();
+        if (!stage) return;
+        const pointerPos = stage.getRelativePointerPosition();
+        if (!pointerPos) return;
+        // Convert pointer to group-local coordinates
+        const localX = pointerPos.x - groupNode.x;
+        const localY = pointerPos.y - groupNode.y;
+        // Find child that contains the click point (iterate in reverse for z-order)
+        for (let i = groupNode.children.length - 1; i >= 0; i--) {
+          const child = groupNode.children[i];
+          if (child.visible === false) continue;
+          if (
+            localX >= child.x &&
+            localX <= child.x + child.width &&
+            localY >= child.y &&
+            localY <= child.y + child.height
+          ) {
+            select(child.id);
+            return;
+          }
+        }
+      };
+      return (
+        <GroupRenderer
+          node={node as GroupNode}
+          onClick={handleClick}
+          onDblClick={handleGroupDblClick}
+          onDragStart={handleDragStart}
+          onDragMove={handleDragMove}
+          onDragEnd={handleDragEnd}
+          onTransformEnd={handleTransformEnd}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          effectiveTheme={currentTheme}
+          isHovered={isHovered}
+        />
+      );
+    }
     case "rect":
       return (
         <>
@@ -622,6 +670,78 @@ function FrameRenderer({
   );
 }
 
+interface GroupRendererProps {
+  node: GroupNode;
+  onClick: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
+  onDblClick: (e: Konva.KonvaEventObject<MouseEvent>) => void;
+  onDragStart: () => void;
+  onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => void;
+  onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void;
+  onTransformEnd: (e: Konva.KonvaEventObject<Event>) => void;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+  effectiveTheme: ThemeName;
+  isHovered: boolean;
+}
+
+function GroupRenderer({
+  node,
+  onClick,
+  onDblClick,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+  onTransformEnd,
+  onMouseEnter,
+  onMouseLeave,
+  effectiveTheme,
+  isHovered,
+}: GroupRendererProps) {
+  return (
+    <Group
+      id={node.id}
+      name="selectable"
+      x={node.x}
+      y={node.y}
+      width={node.width}
+      height={node.height}
+      rotation={node.rotation ?? 0}
+      opacity={node.opacity ?? 1}
+      draggable
+      onClick={onClick}
+      onTap={onClick}
+      onDblClick={onDblClick}
+      onDragStart={onDragStart}
+      onDragMove={onDragMove}
+      onDragEnd={onDragEnd}
+      onTransformEnd={onTransformEnd}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      {/* Invisible hitbox so clicks on empty space within the group register */}
+      <Rect
+        width={node.width}
+        height={node.height}
+        fill="transparent"
+      />
+      {node.children.map((child) => (
+        <RenderNode key={child.id} node={child} effectiveTheme={effectiveTheme} />
+      ))}
+      {/* Hover outline - dashed for groups */}
+      {isHovered && (
+        <Rect
+          width={node.width}
+          height={node.height}
+          stroke={HOVER_OUTLINE_COLOR}
+          strokeWidth={1.5}
+          dash={[4, 4]}
+          listening={false}
+        />
+      )}
+    </Group>
+  );
+}
+
 interface InstanceRendererProps {
   node: RefNode;
   onClick: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
@@ -961,13 +1081,15 @@ function DescendantRenderer({
       );
     }
     case "frame":
-      // For frames, recursively render children with nested overrides
+    case "group": {
+      // For frames/groups, recursively render children with nested overrides
       const handleChildClick =
         (childId: string) =>
         (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
           e.cancelBubble = true;
           selectDescendant(instanceId, childId);
         };
+      const containerChildren = (node as FrameNode | GroupNode).children;
       return (
         <Group
           x={node.x}
@@ -979,15 +1101,17 @@ function DescendantRenderer({
           onClick={onClick}
           onTap={onClick}
         >
-          <Rect
-            width={node.width}
-            height={node.height}
-            fill={fillColor}
-            stroke={strokeColor ?? selectionStroke}
-            strokeWidth={node.strokeWidth ?? selectionStrokeWidth}
-            cornerRadius={node.cornerRadius}
-          />
-          {node.children.map((child) => {
+          {node.type === "frame" && (
+            <Rect
+              width={node.width}
+              height={node.height}
+              fill={fillColor}
+              stroke={strokeColor ?? selectionStroke}
+              strokeWidth={node.strokeWidth ?? selectionStrokeWidth}
+              cornerRadius={(node as FrameNode).cornerRadius}
+            />
+          )}
+          {containerChildren.map((child) => {
             const childOverride = descendantOverrides?.[child.id];
             if (!isNodeEnabled(childOverride)) return null;
             const overriddenChild = applyDescendantOverride(
@@ -1018,6 +1142,7 @@ function DescendantRenderer({
           )}
         </Group>
       );
+    }
     default:
       return null;
   }
@@ -1103,7 +1228,9 @@ function RenderNodeWithOverrides({
       );
     }
     case "frame":
-      // Render frame children with nested overrides
+    case "group": {
+      // Render frame/group children with nested overrides
+      const ovrChildren = (node as FrameNode | GroupNode).children;
       return (
         <Group
           x={node.x}
@@ -1113,15 +1240,17 @@ function RenderNodeWithOverrides({
           rotation={node.rotation ?? 0}
           opacity={node.opacity ?? 1}
         >
-          <Rect
-            width={node.width}
-            height={node.height}
-            fill={fillColor}
-            stroke={strokeColor}
-            strokeWidth={node.strokeWidth}
-            cornerRadius={node.cornerRadius}
-          />
-          {node.children.map((child) => {
+          {node.type === "frame" && (
+            <Rect
+              width={node.width}
+              height={node.height}
+              fill={fillColor}
+              stroke={strokeColor}
+              strokeWidth={node.strokeWidth}
+              cornerRadius={(node as FrameNode).cornerRadius}
+            />
+          )}
+          {ovrChildren.map((child) => {
             const childOverride = descendantOverrides?.[child.id];
             if (!isNodeEnabled(childOverride)) return null;
             const overriddenChild = applyDescendantOverride(
@@ -1139,6 +1268,7 @@ function RenderNodeWithOverrides({
           })}
         </Group>
       );
+    }
     default:
       return null;
   }

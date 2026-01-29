@@ -14,7 +14,7 @@ import { InlineTextEditor } from "./InlineTextEditor";
 import { InlineNameEditor } from "./InlineNameEditor";
 import { FrameNameLabel } from "./nodes/FrameNameLabel";
 import { NodeSizeLabel } from "./nodes/NodeSizeLabel";
-import type { TextNode, FrameNode, SceneNode } from "../types/scene";
+import type { TextNode, FrameNode, GroupNode, SceneNode } from "../types/scene";
 import { rectsIntersect } from "../utils/dragUtils";
 import { getViewportBounds, isNodeVisible } from "../utils/viewportUtils";
 import {
@@ -83,6 +83,8 @@ export function Canvas() {
   const deleteNode = useSceneStore((state) => state.deleteNode);
   const updateNode = useSceneStore((state) => state.updateNode);
   const moveNode = useSceneStore((state) => state.moveNode);
+  const groupNodes = useSceneStore((state) => state.groupNodes);
+  const ungroupNodes = useSceneStore((state) => state.ungroupNodes);
   const setNodesWithoutHistory = useSceneStore(
     (state) => state.setNodesWithoutHistory,
   );
@@ -220,6 +222,17 @@ export function Canvas() {
       } as FrameNode;
     }
 
+    // Clone group with all children
+    if (node.type === "group") {
+      return {
+        ...node,
+        id: newId,
+        x: node.x + 20,
+        y: node.y + 20,
+        children: (node as import("../types/scene").GroupNode).children.map((child) => cloneNodeWithNewId(child)),
+      } as import("../types/scene").GroupNode;
+    }
+
     // For ref nodes, create a new instance of the same component
     if (node.type === "ref") {
       return {
@@ -246,8 +259,8 @@ export function Canvas() {
   ): SceneNode | null => {
     for (const node of searchNodes) {
       if (node.id === id) return node;
-      if (node.type === "frame" && node.children) {
-        const found = findNodeByIdGeneric(node.children, id);
+      if ((node.type === "frame" || node.type === "group") && (node as any).children) {
+        const found = findNodeByIdGeneric((node as any).children, id);
         if (found) return found;
       }
     }
@@ -266,6 +279,13 @@ export function Canvas() {
           child.children,
           targetId,
           child,
+        );
+        if (found) return found;
+      } else if (child.type === "group") {
+        const found = findParentFrameInComponent(
+          (child as import("../types/scene").GroupNode).children,
+          targetId,
+          parent,
         );
         if (found) return found;
       }
@@ -321,7 +341,7 @@ export function Canvas() {
   // Collect all frame nodes with their absolute positions for rendering labels
   const collectFrameNodes = useMemo(() => {
     const frames: Array<{
-      node: FrameNode;
+      node: FrameNode | GroupNode;
       absX: number;
       absY: number;
       isNested: boolean;
@@ -334,15 +354,15 @@ export function Canvas() {
       isNested: boolean,
     ) => {
       for (const node of searchNodes) {
-        if (node.type === "frame") {
+        if (node.type === "frame" || node.type === "group") {
           frames.push({
-            node,
+            node: node as FrameNode | GroupNode,
             absX: accX + node.x,
             absY: accY + node.y,
             isNested,
           });
-          // Recursively collect nested frames (mark them as nested)
-          traverse(node.children, accX + node.x, accY + node.y, true);
+          // Recursively collect nested containers (mark them as nested)
+          traverse((node as FrameNode | GroupNode).children, accX + node.x, accY + node.y, true);
         }
       }
     };
@@ -417,9 +437,9 @@ export function Canvas() {
           });
         }
 
-        // Recurse into frames
-        if (node.type === "frame") {
-          traverse(node.children);
+        // Recurse into containers (frames and groups)
+        if (node.type === "frame" || node.type === "group") {
+          traverse((node as FrameNode).children);
         }
       }
     };
@@ -636,6 +656,32 @@ export function Canvas() {
         e.preventDefault();
         const currentNodes = useSceneStore.getState().nodes;
         fitToContent(currentNodes, dimensions.width, dimensions.height);
+        return;
+      }
+
+      // Group: Cmd+G (Mac) or Ctrl+G (Win)
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.code === "KeyG") {
+        e.preventDefault();
+        const ids = useSelectionStore.getState().selectedIds;
+        if (ids.length >= 2) {
+          const groupId = groupNodes(ids);
+          if (groupId) {
+            useSelectionStore.getState().select(groupId);
+          }
+        }
+        return;
+      }
+
+      // Ungroup: Cmd+Shift+G (Mac) or Ctrl+Shift+G (Win)
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.code === "KeyG") {
+        e.preventDefault();
+        const ids = useSelectionStore.getState().selectedIds;
+        if (ids.length >= 1) {
+          const childIds = ungroupNodes(ids);
+          if (childIds.length > 0) {
+            useSelectionStore.getState().setSelectedIds(childIds);
+          }
+        }
         return;
       }
 
