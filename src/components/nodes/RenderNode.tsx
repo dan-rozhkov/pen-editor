@@ -21,7 +21,7 @@ import { useVariableStore } from "../../store/variableStore";
 import { useThemeStore } from "../../store/themeStore";
 import { useDragStore } from "../../store/dragStore";
 import { useHoverStore } from "../../store/hoverStore";
-import { findParentFrame, findComponentById } from "../../utils/nodeUtils";
+import { findParentFrame, findComponentById, isDescendantOf, getNodeAbsolutePosition } from "../../utils/nodeUtils";
 import {
   calculateDropPosition,
   isPointInsideRect,
@@ -186,9 +186,10 @@ function isNodeEnabled(override?: DescendantOverride): boolean {
 interface RenderNodeProps {
   node: SceneNode;
   effectiveTheme?: ThemeName; // Theme inherited from parent or global
+  selectOverrideId?: string; // If set, clicking this node selects this ID instead (nested selection)
 }
 
-export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
+export function RenderNode({ node, effectiveTheme, selectOverrideId }: RenderNodeProps) {
   const nodes = useSceneStore((state) => state.nodes);
   const updateNode = useSceneStore((state) => state.updateNode);
   const moveNode = useSceneStore((state) => state.moveNode);
@@ -221,9 +222,8 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
 
   const handleClick = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     e.cancelBubble = true;
-    // If this node is inside a group, select the group instead (Figma-like behavior)
-    // Double-click on the group will then select the child
-    const selectId = parentContext.parent?.type === 'group' ? parentContext.parent.id : node.id;
+    // Use selectOverrideId if set (nested selection: clicking deep nodes selects their container)
+    const selectId = selectOverrideId ?? node.id;
     const isShift = "shiftKey" in e.evt && e.evt.shiftKey;
     if (isShift) {
       addToSelection(selectId);
@@ -383,40 +383,15 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
           strokeColor={strokeColor}
           effectiveTheme={currentTheme}
           isHovered={isHovered}
+          isTopLevel={parentFrame === null}
+          selectOverrideId={selectOverrideId}
         />
       );
     case "group": {
-      const handleGroupDblClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
-        e.cancelBubble = true;
-        // Find the child under the cursor and select it
-        const groupNode = node as GroupNode;
-        const stage = e.target.getStage();
-        if (!stage) return;
-        const pointerPos = stage.getRelativePointerPosition();
-        if (!pointerPos) return;
-        // Convert pointer to group-local coordinates
-        const localX = pointerPos.x - groupNode.x;
-        const localY = pointerPos.y - groupNode.y;
-        // Find child that contains the click point (iterate in reverse for z-order)
-        for (let i = groupNode.children.length - 1; i >= 0; i--) {
-          const child = groupNode.children[i];
-          if (child.visible === false) continue;
-          if (
-            localX >= child.x &&
-            localX <= child.x + child.width &&
-            localY >= child.y &&
-            localY <= child.y + child.height
-          ) {
-            select(child.id);
-            return;
-          }
-        }
-      };
       return (
         <GroupRenderer
           node={node as GroupNode}
           onClick={handleClick}
-          onDblClick={handleGroupDblClick}
           onDragStart={handleDragStart}
           onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
@@ -425,6 +400,8 @@ export function RenderNode({ node, effectiveTheme }: RenderNodeProps) {
           onMouseLeave={handleMouseLeave}
           effectiveTheme={currentTheme}
           isHovered={isHovered}
+          isTopLevel={parentFrame === null}
+          selectOverrideId={selectOverrideId}
         />
       );
     }
@@ -749,6 +726,8 @@ interface FrameRendererProps {
   strokeColor?: string;
   effectiveTheme: ThemeName;
   isHovered: boolean;
+  isTopLevel: boolean;
+  selectOverrideId?: string;
 }
 
 function FrameRenderer({
@@ -764,7 +743,14 @@ function FrameRenderer({
   strokeColor,
   effectiveTheme,
   isHovered,
+  isTopLevel,
+  selectOverrideId,
 }: FrameRendererProps) {
+  const nodes = useSceneStore((state) => state.nodes);
+  const { select, enterContainer } = useSelectionStore();
+  const enteredContainerId = useSelectionStore(
+    (state) => state.enteredContainerId,
+  );
   const calculateLayoutForFrame = useLayoutStore(
     (state) => state.calculateLayoutForFrame,
   );
@@ -786,6 +772,54 @@ function FrameRenderer({
   // If this frame has a theme override, use it for children
   const childTheme = node.themeOverride ?? effectiveTheme;
 
+  // Nested selection: determine if children are directly selectable
+  const isEntered = enteredContainerId === node.id;
+  const isAncestorOfEntered = enteredContainerId
+    ? isDescendantOf(nodes, node.id, enteredContainerId)
+    : false;
+  const childrenDirectlySelectable =
+    isTopLevel || isEntered || isAncestorOfEntered;
+
+  // Compute selectOverrideId for children
+  const childSelectOverride = selectOverrideId
+    ? selectOverrideId // propagate parent override
+    : childrenDirectlySelectable
+      ? undefined // children are directly selectable
+      : node.id; // children click → select this frame
+
+  // Double-click to enter this frame (drill down)
+  const handleDblClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    e.cancelBubble = true;
+    // Only enter if this frame is at a selectable level (not overridden)
+    if (selectOverrideId) return;
+    enterContainer(node.id);
+    // Find and select the child under the cursor
+    const stage = e.target.getStage();
+    if (!stage) return;
+    const pointerPos = stage.getRelativePointerPosition();
+    if (!pointerPos) return;
+    // Use absolute position to correctly handle nested frames
+    const absPos = getNodeAbsolutePosition(nodes, node.id);
+    if (!absPos) return;
+    const localX = pointerPos.x - absPos.x;
+    const localY = pointerPos.y - absPos.y;
+    // Use layout-calculated children for accurate hit detection
+    const hitChildren = layoutChildren;
+    for (let i = hitChildren.length - 1; i >= 0; i--) {
+      const child = hitChildren[i];
+      if (child.visible === false) continue;
+      if (
+        localX >= child.x &&
+        localX <= child.x + child.width &&
+        localY >= child.y &&
+        localY <= child.y + child.height
+      ) {
+        select(child.id);
+        return;
+      }
+    }
+  };
+
   return (
     <Group
       id={node.id}
@@ -803,6 +837,7 @@ function FrameRenderer({
       draggable
       onClick={onClick}
       onTap={onClick}
+      onDblClick={handleDblClick}
       onDragStart={onDragStart}
       onDragMove={onDragMove}
       onDragEnd={onDragEnd}
@@ -828,7 +863,12 @@ function FrameRenderer({
         />
       )}
       {layoutChildren.map((child) => (
-        <RenderNode key={child.id} node={child} effectiveTheme={childTheme} />
+        <RenderNode
+          key={child.id}
+          node={child}
+          effectiveTheme={childTheme}
+          selectOverrideId={childSelectOverride}
+        />
       ))}
       {/* Hover outline */}
       {isHovered && (
@@ -848,7 +888,6 @@ function FrameRenderer({
 interface GroupRendererProps {
   node: GroupNode;
   onClick: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
-  onDblClick: (e: Konva.KonvaEventObject<MouseEvent>) => void;
   onDragStart: () => void;
   onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void;
@@ -857,12 +896,13 @@ interface GroupRendererProps {
   onMouseLeave: () => void;
   effectiveTheme: ThemeName;
   isHovered: boolean;
+  isTopLevel: boolean;
+  selectOverrideId?: string;
 }
 
 function GroupRenderer({
   node,
   onClick,
-  onDblClick,
   onDragStart,
   onDragMove,
   onDragEnd,
@@ -871,7 +911,59 @@ function GroupRenderer({
   onMouseLeave,
   effectiveTheme,
   isHovered,
+  isTopLevel,
+  selectOverrideId,
 }: GroupRendererProps) {
+  const nodes = useSceneStore((state) => state.nodes);
+  const { select, enterContainer } = useSelectionStore();
+  const enteredContainerId = useSelectionStore(
+    (state) => state.enteredContainerId,
+  );
+
+  // Nested selection: determine if children are directly selectable
+  const isEntered = enteredContainerId === node.id;
+  const isAncestorOfEntered = enteredContainerId
+    ? isDescendantOf(nodes, node.id, enteredContainerId)
+    : false;
+  const childrenDirectlySelectable =
+    isTopLevel || isEntered || isAncestorOfEntered;
+
+  const childSelectOverride = selectOverrideId
+    ? selectOverrideId
+    : childrenDirectlySelectable
+      ? undefined
+      : node.id;
+
+  // Double-click to enter this group (drill down)
+  const handleGroupDblClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    e.cancelBubble = true;
+    if (selectOverrideId) return;
+    enterContainer(node.id);
+    // Find the child under the cursor and select it
+    const stage = e.target.getStage();
+    if (!stage) return;
+    const pointerPos = stage.getRelativePointerPosition();
+    if (!pointerPos) return;
+    // Use absolute position to correctly handle nested groups
+    const absPos = getNodeAbsolutePosition(nodes, node.id);
+    if (!absPos) return;
+    const localX = pointerPos.x - absPos.x;
+    const localY = pointerPos.y - absPos.y;
+    for (let i = node.children.length - 1; i >= 0; i--) {
+      const child = node.children[i];
+      if (child.visible === false) continue;
+      if (
+        localX >= child.x &&
+        localX <= child.x + child.width &&
+        localY >= child.y &&
+        localY <= child.y + child.height
+      ) {
+        select(child.id);
+        return;
+      }
+    }
+  };
+
   return (
     <Group
       id={node.id}
@@ -889,7 +981,7 @@ function GroupRenderer({
       draggable
       onClick={onClick}
       onTap={onClick}
-      onDblClick={onDblClick}
+      onDblClick={handleGroupDblClick}
       onDragStart={onDragStart}
       onDragMove={onDragMove}
       onDragEnd={onDragEnd}
@@ -904,7 +996,12 @@ function GroupRenderer({
         fill="transparent"
       />
       {node.children.map((child) => (
-        <RenderNode key={child.id} node={child} effectiveTheme={effectiveTheme} />
+        <RenderNode
+          key={child.id}
+          node={child}
+          effectiveTheme={effectiveTheme}
+          selectOverrideId={childSelectOverride}
+        />
       ))}
       {/* Hover outline - dashed for groups */}
       {isHovered && (

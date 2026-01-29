@@ -96,6 +96,7 @@ export function Canvas() {
     editingMode,
     isSelected,
     exitInstanceEditMode,
+    resetContainerContext,
   } = useSelectionStore();
   const { undo, redo, saveHistory, startBatch, endBatch } = useHistoryStore();
   const dropIndicator = useDragStore((state) => state.dropIndicator);
@@ -967,10 +968,12 @@ export function Canvas() {
           return;
         }
 
-        // Left click on empty space - start marquee selection
+        // Left click on empty space - start marquee selection and reset container context
         const clickedOnEmpty =
           e.target === e.target.getStage() || e.target.name() === "background";
         if (clickedOnEmpty) {
+          // Reset nested selection context when clicking empty space
+          resetContainerContext();
           const stage = stageRef.current;
           if (stage) {
             const pos = stage.getRelativePointerPosition();
@@ -989,7 +992,7 @@ export function Canvas() {
         }
       }
     },
-    [isSpacePressed, setIsPanning, clearSelection, startDrawing],
+    [isSpacePressed, setIsPanning, clearSelection, resetContainerContext, startDrawing],
   );
 
   const handleMouseMove = useCallback(() => {

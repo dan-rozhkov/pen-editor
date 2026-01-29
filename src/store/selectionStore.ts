@@ -16,6 +16,8 @@ interface SelectionState {
   editingInstanceId: string | null
   // Currently selected descendant inside an instance
   instanceContext: InstanceContext | null
+  // Nested selection: the container the user has drilled into via double-click
+  enteredContainerId: string | null
 
   select: (id: string) => void
   setSelectedIds: (ids: string[]) => void
@@ -31,6 +33,9 @@ interface SelectionState {
   exitInstanceEditMode: () => void
   selectDescendant: (instanceId: string, descendantId: string) => void
   clearDescendantSelection: () => void
+  // Nested selection methods
+  enterContainer: (containerId: string) => void
+  resetContainerContext: () => void
 }
 
 export const useSelectionStore = create<SelectionState>((set, get) => ({
@@ -39,6 +44,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   editingMode: null,
   editingInstanceId: null,
   instanceContext: null,
+  enteredContainerId: null,
 
   select: (id: string) => {
     // Stop editing and exit instance mode when selection changes
@@ -79,7 +85,8 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       editingNodeId: null,
       editingMode: null,
       editingInstanceId: null,
-      instanceContext: null
+      instanceContext: null,
+      enteredContainerId: null
     })
   },
 
@@ -136,5 +143,14 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
 
   clearDescendantSelection: () => {
     set({ instanceContext: null })
+  },
+
+  // Nested selection methods
+  enterContainer: (containerId: string) => {
+    set({ enteredContainerId: containerId })
+  },
+
+  resetContainerContext: () => {
+    set({ enteredContainerId: null })
   },
 }))

@@ -136,6 +136,33 @@ export function getAllComponents(nodes: SceneNode[]): FrameNode[] {
 }
 
 /**
+ * Check if targetId is a descendant of ancestorId anywhere in the node tree.
+ * Used for nested selection to determine if a container is an ancestor of the entered container.
+ */
+export function isDescendantOf(
+  nodes: SceneNode[],
+  ancestorId: string,
+  targetId: string
+): boolean {
+  // First find the ancestor node
+  const ancestor = findNodeById(nodes, ancestorId)
+  if (!ancestor || !isContainerNode(ancestor)) return false
+
+  // Then check if targetId is nested inside it
+  function searchIn(children: SceneNode[]): boolean {
+    for (const child of children) {
+      if (child.id === targetId) return true
+      if (isContainerNode(child)) {
+        if (searchIn(child.children)) return true
+      }
+    }
+    return false
+  }
+
+  return searchIn(ancestor.children)
+}
+
+/**
  * Get absolute position of a node, taking into account Yoga layout calculations
  * for auto-layout frames. This is necessary because children inside auto-layout
  * frames have their positions computed by Yoga, not stored in node.x/y.
