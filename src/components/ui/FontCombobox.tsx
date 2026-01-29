@@ -21,6 +21,7 @@ export function FontCombobox({ label, value, onChange }: FontComboboxProps) {
   const [fonts, setFonts] = useState<SystemFont[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [searchValue, setSearchValue] = useState("");
 
   useEffect(() => {
     getAvailableFonts()
@@ -28,30 +29,39 @@ export function FontCombobox({ label, value, onChange }: FontComboboxProps) {
       .finally(() => setLoading(false));
   }, []);
 
-  const normalizedValue = value.toLowerCase();
-  const filteredFonts = fonts.filter((f) =>
-    f.family.toLowerCase().includes(normalizedValue)
-  );
-
-  const exactMatch = fonts.some(
-    (f) => f.family.toLowerCase() === normalizedValue
-  );
-
-  const handleValueChange = (newValue: string) => {
-    if (newValue) {
-      onChange(newValue);
-      setOpen(false);
+  const handleOpenChange = (newOpen: boolean) => {
+    setOpen(newOpen);
+    if (newOpen) {
+      setSearchValue("");
     }
   };
 
+  const normalizedSearch = searchValue.toLowerCase();
+  const filteredFonts =
+    normalizedSearch === ""
+      ? fonts
+      : fonts.filter((f) =>
+          f.family.toLowerCase().includes(normalizedSearch)
+        );
+
+  const exactMatch = fonts.some(
+    (f) => f.family.toLowerCase() === normalizedSearch
+  );
+
+  const handleSelectFont = (font: string) => {
+    onChange(font);
+    setSearchValue("");
+    setOpen(false);
+  };
+
   const content = (
-    <Combobox open={open} onOpenChange={setOpen} value={value}>
+    <Combobox open={open} onOpenChange={handleOpenChange} value={value}>
       <ComboboxInput
-        value={value}
-        onValueChange={onChange}
+        value={open ? searchValue : value}
+        onValueChange={setSearchValue}
         placeholder={loading ? "Loading fonts..." : "Search fonts..."}
         showTrigger
-        showClear
+        showClear={open}
         disabled={loading}
       />
       <ComboboxContent>
@@ -61,20 +71,20 @@ export function FontCombobox({ label, value, onChange }: FontComboboxProps) {
               key={font.family}
               value={font.family}
               style={{ fontFamily: font.family }}
-              onClick={() => handleValueChange(font.family)}
+              onClick={() => handleSelectFont(font.family)}
             >
               {font.family}
             </ComboboxItem>
           ))}
-          {value && !exactMatch && (
+          {searchValue && !exactMatch && (
             <ComboboxItem
-              value={value}
-              onClick={() => handleValueChange(value)}
+              value={searchValue}
+              onClick={() => handleSelectFont(searchValue)}
             >
-              Use &quot;{value}&quot;
+              Use &quot;{searchValue}&quot;
             </ComboboxItem>
           )}
-          <ComboboxEmpty>Type to enter a custom font name</ComboboxEmpty>
+          <ComboboxEmpty>Type to search or enter custom font</ComboboxEmpty>
         </ComboboxList>
       </ComboboxContent>
     </Combobox>
