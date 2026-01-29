@@ -15,6 +15,7 @@ import { InlineNameEditor } from "./InlineNameEditor";
 import { FrameNameLabel } from "./nodes/FrameNameLabel";
 import { NodeSizeLabel } from "./nodes/NodeSizeLabel";
 import type { TextNode, FrameNode, GroupNode, SceneNode } from "../types/scene";
+import { isContainerNode } from "../types/scene";
 import { rectsIntersect } from "../utils/dragUtils";
 import { getViewportBounds, isNodeVisible } from "../utils/viewportUtils";
 import {
@@ -97,6 +98,8 @@ export function Canvas() {
     isSelected,
     exitInstanceEditMode,
     resetContainerContext,
+    enterContainer,
+    select,
   } = useSelectionStore();
   const { undo, redo, saveHistory, startBatch, endBatch } = useHistoryStore();
   const dropIndicator = useDragStore((state) => state.dropIndicator);
@@ -1140,6 +1143,61 @@ export function Canvas() {
     },
     [],
   );
+
+  // Native DOM double-click handler for nested selection drill-down.
+  // Uses native DOM events because Konva's Transformer intercepts dblclick,
+  // preventing it from reaching Konva Stage/Group handlers.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleDblClick = (e: MouseEvent) => {
+      const currentSelectedIds = useSelectionStore.getState().selectedIds;
+      const currentNodes = useSceneStore.getState().nodes;
+
+      if (currentSelectedIds.length !== 1) return;
+      const selectedNode = findNodeById(currentNodes, currentSelectedIds[0]);
+      if (!selectedNode || !isContainerNode(selectedNode)) return;
+
+      const stage = stageRef.current;
+      if (!stage) return;
+
+      // Compute scene-space pointer position from native DOM event
+      // to avoid stale Konva pointer position issues
+      const stageBox = stage.container().getBoundingClientRect();
+      const stageScale = stage.scaleX();
+      const stagePos = stage.position();
+      const sceneX = (e.clientX - stageBox.left - stagePos.x) / stageScale;
+      const sceneY = (e.clientY - stageBox.top - stagePos.y) / stageScale;
+
+      // Enter the selected container
+      enterContainer(selectedNode.id);
+
+      // Find and select the child under the cursor
+      const absPos = getNodeAbsolutePosition(currentNodes, selectedNode.id);
+      if (!absPos) return;
+      const localX = sceneX - absPos.x;
+      const localY = sceneY - absPos.y;
+
+      const children = selectedNode.children;
+      for (let i = children.length - 1; i >= 0; i--) {
+        const child = children[i];
+        if (child.visible === false) continue;
+        if (
+          localX >= child.x &&
+          localX <= child.x + child.width &&
+          localY >= child.y &&
+          localY <= child.y + child.height
+        ) {
+          select(child.id);
+          return;
+        }
+      }
+    };
+
+    container.addEventListener("dblclick", handleDblClick);
+    return () => container.removeEventListener("dblclick", handleDblClick);
+  }, [enterContainer, select]);
 
   return (
     <div

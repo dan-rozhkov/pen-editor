@@ -485,6 +485,9 @@ export function RenderNode({ node, effectiveTheme, selectOverrideId }: RenderNod
     case "text": {
       const isEditing = editingNodeId === node.id;
       const handleDblClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
+        // If this text node is not directly selectable (deep nested),
+        // don't start editing — let the event bubble to parent container
+        if (selectOverrideId) return;
         e.cancelBubble = true;
         startEditing(node.id);
       };
@@ -788,6 +791,8 @@ function FrameRenderer({
       : node.id; // children click → select this frame
 
   // Double-click to enter this frame (drill down)
+  // NOTE: This handler only fires when the Transformer is NOT active on this node.
+  // The main drill-down logic is handled at the Stage level in Canvas.tsx.
   const handleDblClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
     e.cancelBubble = true;
     // Only enter if this frame is at a selectable level (not overridden)
