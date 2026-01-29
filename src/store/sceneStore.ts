@@ -22,6 +22,9 @@ interface SceneState {
   // Descendant override methods for component instances
   updateDescendantOverride: (instanceId: string, descendantId: string, updates: DescendantOverride) => void
   resetDescendantOverride: (instanceId: string, descendantId: string, property?: keyof DescendantOverride) => void
+  // Page-level properties
+  pageBackground: string
+  setPageBackground: (color: string) => void
 }
 
 // Recursively sync text node dimensions throughout the tree
@@ -308,6 +311,7 @@ function resetDescendantOverrideRecursive(
 export const useSceneStore = create<SceneState>((set) => ({
   nodes: [],
   expandedFrameIds: new Set<string>(),
+  pageBackground: '#f5f5f5',
 
   addNode: (node) =>
     set((state) => {
@@ -410,5 +414,10 @@ export const useSceneStore = create<SceneState>((set) => ({
     set((state) => {
       useHistoryStore.getState().saveHistory(state.nodes)
       return { nodes: resetDescendantOverrideRecursive(state.nodes, instanceId, descendantId, property) }
+    }),
+
+  setPageBackground: (color) =>
+    set(() => {
+      return { pageBackground: color }
     }),
 }))

@@ -62,6 +62,7 @@ export function Canvas() {
     fitToContent,
   } = useViewportStore();
   const nodes = useSceneStore((state) => state.nodes);
+  const pageBackground = useSceneStore((state) => state.pageBackground);
   const addNode = useSceneStore((state) => state.addNode);
   const { copiedNode, copyNode } = useClipboardStore();
   const setStageRef = useCanvasRefStore((s) => s.setStageRef);
@@ -1099,7 +1100,7 @@ export function Canvas() {
         height: "100%",
         overflow: "hidden",
         cursor: isPanning ? "grab" : activeTool ? "crosshair" : "default",
-        background: "#f5f5f5",
+        background: pageBackground,
         position: "relative",
       }}
     >

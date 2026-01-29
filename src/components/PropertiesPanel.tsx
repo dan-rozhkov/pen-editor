@@ -78,10 +78,19 @@ function Header() {
   );
 }
 
-function EmptyState() {
+function PageProperties() {
+  const pageBackground = useSceneStore((s) => s.pageBackground);
+  const setPageBackground = useSceneStore((s) => s.setPageBackground);
+
   return (
-    <div className="text-text-disabled text-xs text-center p-5">
-      Select a layer to view properties
+    <div>
+      <div className="text-text-secondary text-xs font-medium mb-2">Page</div>
+      <PropertySection title="Background">
+        <ColorInput
+          value={pageBackground}
+          onChange={setPageBackground}
+        />
+      </PropertySection>
     </div>
   );
 }
@@ -1158,7 +1167,7 @@ export function PropertiesPanel() {
     <div className="flex-1 flex flex-col overflow-hidden">
       <Header />
       <div className="flex-1 overflow-y-auto p-3">
-        {selectedIds.length === 0 && <EmptyState />}
+        {selectedIds.length === 0 && <PageProperties />}
         {selectedIds.length > 1 && (
           <AlignmentSection
             count={selectedIds.length}
