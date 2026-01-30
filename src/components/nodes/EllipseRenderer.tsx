@@ -1,0 +1,152 @@
+import Konva from "konva";
+import { Ellipse } from "react-konva";
+import type { FrameNode, SceneNode } from "@/types/scene";
+import { useDragStore } from "@/store/dragStore";
+import { useSceneStore } from "@/store/sceneStore";
+import { handleAutoLayoutDragEnd } from "@/utils/dragUtils";
+import {
+  HOVER_OUTLINE_COLOR,
+  ImageFillLayer,
+  SelectionOutline,
+  getEllipseTransformProps,
+} from "./renderUtils";
+
+interface EllipseRendererProps {
+  node: SceneNode & { type: "ellipse" };
+  onClick: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
+  onDragStart: () => void;
+  onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => void;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+  fillColor?: string;
+  strokeColor?: string;
+  isInAutoLayout: boolean;
+  parentFrame: FrameNode | null;
+  isHovered: boolean;
+}
+
+export function EllipseRenderer({
+  node,
+  onClick,
+  onDragStart,
+  onDragMove,
+  onMouseEnter,
+  onMouseLeave,
+  fillColor,
+  strokeColor,
+  isInAutoLayout,
+  parentFrame,
+  isHovered,
+}: EllipseRendererProps) {
+  const updateNode = useSceneStore((state) => state.updateNode);
+  const moveNode = useSceneStore((state) => state.moveNode);
+  const { endDrag } = useDragStore();
+  const ellipseTransform = getEllipseTransformProps(node);
+
+  const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
+    const target = e.target;
+
+    // Only process if this is the actual node being dragged
+    // Prevents parent Group from handling child drag events
+    if (target.id() !== node.id) return;
+
+    if (isInAutoLayout && parentFrame) {
+      const { insertInfo, isOutsideParent } = useDragStore.getState();
+
+      handleAutoLayoutDragEnd(
+        target,
+        node.id,
+        node.width,
+        node.height,
+        insertInfo,
+        isOutsideParent,
+        moveNode,
+        updateNode,
+        // Ellipse uses center, so adjust position
+        () => ({ x: node.x + node.width / 2, y: node.y + node.height / 2 }),
+      );
+
+      endDrag();
+    } else {
+      // Ellipse position is center, convert back to top-left
+      updateNode(node.id, {
+        x: target.x() - node.width / 2,
+        y: target.y() - node.height / 2,
+      });
+    }
+  };
+
+  const handleTransformEnd = (e: Konva.KonvaEventObject<Event>) => {
+    const target = e.target as Konva.Ellipse;
+    const scaleX = target.scaleX();
+    const scaleY = target.scaleY();
+    const rotation = target.rotation();
+
+    const newWidth = Math.max(5, target.radiusX() * 2 * Math.abs(scaleX));
+    const newHeight = Math.max(5, target.radiusY() * 2 * Math.abs(scaleY));
+
+    // Reset scale, preserving flip
+    const flipSignX = node.flipX ? -1 : 1;
+    const flipSignY = node.flipY ? -1 : 1;
+    target.scaleX(flipSignX);
+    target.scaleY(flipSignY);
+
+    // Update radiuses
+    target.radiusX(newWidth / 2);
+    target.radiusY(newHeight / 2);
+
+    updateNode(node.id, {
+      x: target.x() - newWidth / 2,
+      y: target.y() - newHeight / 2,
+      width: newWidth,
+      height: newHeight,
+      rotation: rotation,
+    });
+  };
+
+  return (
+    <>
+      <Ellipse
+        id={node.id}
+        name="selectable"
+        {...ellipseTransform}
+        fill={node.imageFill ? undefined : fillColor}
+        stroke={strokeColor}
+        strokeWidth={node.strokeWidth}
+        opacity={node.opacity ?? 1}
+        draggable
+        onClick={onClick}
+        onTap={onClick}
+        onDragStart={onDragStart}
+        onDragMove={onDragMove}
+        onDragEnd={handleDragEnd}
+        onTransformEnd={handleTransformEnd}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+      />
+      {node.imageFill && (
+        <ImageFillLayer
+          imageFill={node.imageFill}
+          x={node.x}
+          y={node.y}
+          width={node.width}
+          height={node.height}
+          clipType="ellipse"
+        />
+      )}
+      {/* Hover outline */}
+      {isHovered && (
+        <SelectionOutline
+          x={node.x}
+          y={node.y}
+          width={node.width}
+          height={node.height}
+          rotation={node.rotation ?? 0}
+          shape="ellipse"
+          stroke={HOVER_OUTLINE_COLOR}
+          strokeWidth={1.5}
+        />
+      )}
+    </>
+  );
+}

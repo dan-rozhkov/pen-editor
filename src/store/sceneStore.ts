@@ -412,6 +412,38 @@ function findNodeInTree(nodes: SceneNode[], id: string): SceneNode | null {
   return null;
 }
 
+/**
+ * Generic helper to recursively process a specific level in the node tree
+ * Walks through the tree until reaching the target parent ID, then applies the callback
+ */
+function processTreeAtLevel(
+  nodes: SceneNode[],
+  targetParentId: string | null,
+  processTargetLevel: (levelNodes: SceneNode[]) => SceneNode[],
+): SceneNode[] {
+  function processLevel(
+    levelNodes: SceneNode[],
+    levelParentId: string | null,
+  ): SceneNode[] {
+    if (levelParentId !== targetParentId) {
+      // Not the target level, recurse into containers
+      return levelNodes.map((node) => {
+        if (isContainerNode(node)) {
+          return { ...node, children: processLevel(node.children, node.id) } as
+            | FrameNode
+            | GroupNode;
+        }
+        return node;
+      });
+    }
+
+    // This is the target level - apply the callback
+    return processTargetLevel(levelNodes);
+  }
+
+  return processLevel(nodes, null);
+}
+
 // Group selected nodes into a new GroupNode
 function groupNodesInTree(
   nodes: SceneNode[],
@@ -542,30 +574,15 @@ function groupNodesInTree(
   // Remove selected nodes and insert group
   const idSet = new Set(ids);
 
-  function processLevel(
-    levelNodes: SceneNode[],
-    levelParentId: string | null,
-  ): SceneNode[] {
-    if (levelParentId !== parentId) {
-      // Not the target level, recurse into containers
-      return levelNodes.map((node) => {
-        if (isContainerNode(node)) {
-          return { ...node, children: processLevel(node.children, node.id) } as
-            | FrameNode
-            | GroupNode;
-        }
-        return node;
-      });
-    }
-
+  const processedNodes = processTreeAtLevel(nodes, parentId, (levelNodes) => {
     // This is the target level - remove selected nodes and insert group
     const filtered = levelNodes.filter((n) => !idSet.has(n.id));
     const adjustedIndex = Math.min(insertIndex, filtered.length);
     filtered.splice(adjustedIndex, 0, groupNode);
     return filtered;
-  }
+  });
 
-  return { nodes: processLevel(nodes, null), groupId };
+  return { nodes: processedNodes, groupId };
 }
 
 // Ungroup a group node, placing its children back at the group's level
@@ -591,21 +608,7 @@ function ungroupNodeInTree(
       }) as SceneNode,
   );
 
-  function processLevel(
-    levelNodes: SceneNode[],
-    levelParentId: string | null,
-  ): SceneNode[] {
-    if (levelParentId !== pos!.parentId) {
-      return levelNodes.map((node) => {
-        if (isContainerNode(node)) {
-          return { ...node, children: processLevel(node.children, node.id) } as
-            | FrameNode
-            | GroupNode;
-        }
-        return node;
-      });
-    }
-
+  return processTreeAtLevel(nodes, pos.parentId, (levelNodes) => {
     // Replace group with its children
     const result: SceneNode[] = [];
     for (const node of levelNodes) {
@@ -616,9 +619,7 @@ function ungroupNodeInTree(
       }
     }
     return result;
-  }
-
-  return processLevel(nodes, null);
+  });
 }
 
 // Convert a group node to frame or a non-reusable frame to group

@@ -207,3 +207,54 @@ export function getNodeAbsolutePositionWithLayout(
 
   return findWithPath(nodes, 0, 0, null);
 }
+
+/**
+ * Find a child node at the given local coordinates (relative to parent)
+ * Returns the ID of the child at that position, or null if none found
+ * Searches from top to bottom (last child to first) for correct z-order
+ */
+export function findChildAtPosition(
+  children: SceneNode[],
+  localX: number,
+  localY: number,
+): string | null {
+  for (let i = children.length - 1; i >= 0; i--) {
+    const child = children[i];
+    if (child.visible === false) continue;
+    if (
+      localX >= child.x &&
+      localX <= child.x + child.width &&
+      localY >= child.y &&
+      localY <= child.y + child.height
+    ) {
+      return child.id;
+    }
+  }
+  return null;
+}
+
+/**
+ * Find the nearest parent frame for a node inside a component tree.
+ * Used for Shift+Enter to select the parent container in instance editing.
+ */
+export function findParentFrameInComponent(
+  children: SceneNode[],
+  targetId: string,
+  parent: FrameNode,
+): FrameNode | null {
+  for (const child of children) {
+    if (child.id === targetId) return parent;
+    if (child.type === "frame") {
+      const found = findParentFrameInComponent(child.children, targetId, child);
+      if (found) return found;
+    } else if (child.type === "group") {
+      const found = findParentFrameInComponent(
+        (child as GroupNode).children,
+        targetId,
+        parent,
+      );
+      if (found) return found;
+    }
+  }
+  return null;
+}
