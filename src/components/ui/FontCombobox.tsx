@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Combobox,
   ComboboxInput,
@@ -22,12 +22,46 @@ export function FontCombobox({ label, value, onChange }: FontComboboxProps) {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
+  const inputGroupRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     getAvailableFonts()
       .then(setFonts)
       .finally(() => setLoading(false));
   }, []);
+
+  // Force white background on input group
+  useEffect(() => {
+    const applyStyles = () => {
+      if (inputGroupRef.current) {
+        const inputGroup = inputGroupRef.current.querySelector(
+          '[data-slot="input-group"]',
+        ) as HTMLElement;
+        if (inputGroup) {
+          inputGroup.style.setProperty(
+            "background-color",
+            "white",
+            "important",
+          );
+          inputGroup.style.setProperty(
+            "border",
+            "1px solid var(--color-input)",
+            "important",
+          );
+          inputGroup.style.setProperty(
+            "border-radius",
+            "0.375rem",
+            "important",
+          );
+        }
+      }
+    };
+
+    // Apply immediately and after a short delay to catch late-rendered elements
+    applyStyles();
+    const timeoutId = setTimeout(applyStyles, 0);
+    return () => clearTimeout(timeoutId);
+  });
 
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen);
@@ -54,15 +88,17 @@ export function FontCombobox({ label, value, onChange }: FontComboboxProps) {
 
   const content = (
     <Combobox open={open} onOpenChange={handleOpenChange} value={value}>
-      <ComboboxInput
-        className="[&_[data-slot=select-trigger]]:bg-surface-elevated"
-        value={open ? searchValue : value}
-        onChange={(e) => setSearchValue(e.target.value)}
-        placeholder={loading ? "Loading fonts..." : "Search fonts..."}
-        showTrigger
-        showClear={open}
-        disabled={loading}
-      />
+      <div ref={inputGroupRef}>
+        <ComboboxInput
+          className="[&_[data-slot=input-group]]:border [&_[data-slot=input-group]]:border-input [&_[data-slot=input-group]]:rounded-md [&_[data-slot=input-group]]:focus-within:border-ring [&_[data-slot=input-group]]:focus-within:ring-ring/30 [&_[data-slot=input-group]]:focus-within:ring-[2px] [&_[data-slot=input-group]]:!bg-white"
+          value={open ? searchValue : value}
+          onChange={(e) => setSearchValue(e.target.value)}
+          placeholder={loading ? "Loading fonts..." : "Search fonts..."}
+          showTrigger
+          showClear={open}
+          disabled={loading}
+        />
+      </div>
       <ComboboxContent>
         <ComboboxList>
           {filteredFonts.map((font) => (
@@ -92,7 +128,10 @@ export function FontCombobox({ label, value, onChange }: FontComboboxProps) {
   if (label) {
     return (
       <div className="flex-1">
-        <InputGroup>
+        <InputGroup
+          className="border border-input rounded-md focus-within:border-ring focus-within:ring-ring/30 focus-within:ring-[2px]"
+          style={{ backgroundColor: "white" }}
+        >
           <InputGroupAddon align="inline-start">
             <Label className="text-[11px] w-4 shrink-0">{label}</Label>
           </InputGroupAddon>

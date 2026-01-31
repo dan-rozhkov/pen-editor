@@ -16,9 +16,11 @@ interface PropertySectionProps {
 
 export function PropertySection({ title, children }: PropertySectionProps) {
   return (
-    <div className="border-b border-border-default">
+    <div className="relative border-b border-border-default">
       <div className="flex flex-col gap-2 px-4 pt-3 pb-5">
-        <div className="text-[10px] font-semibold text-text-muted">{title}</div>
+        <div className="text-[11px] font-semibold text-text-primary">
+          {title}
+        </div>
         <div className="flex flex-col gap-2">{children}</div>
       </div>
     </div>
@@ -399,7 +401,7 @@ export function SegmentedControl({
               type="button"
               className={`flex-1 px-2 py-1 text-[10px] transition-colors ${
                 value === opt.value
-                  ? "bg-accent-default text-white"
+                  ? "bg-primary text-primary-foreground"
                   : "bg-surface-elevated text-text-muted hover:bg-surface-hover"
               } ${
                 disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
@@ -429,7 +431,7 @@ export function SegmentedControl({
             type="button"
             className={`flex-1 px-2 py-1 text-[10px] transition-colors ${
               value === opt.value
-                ? "bg-accent-default text-white"
+                ? "bg-primary text-primary-foreground"
                 : "bg-surface-elevated text-text-muted hover:bg-surface-hover"
             } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
             onClick={() => !disabled && onChange(opt.value)}

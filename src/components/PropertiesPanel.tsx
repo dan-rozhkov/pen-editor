@@ -69,6 +69,8 @@ import { Input } from "./ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "./ui/input-group";
 import { Button } from "./ui/button";
 import { ButtonGroup } from "./ui/button-group";
+import { LayoutIcon } from "@phosphor-icons/react";
+import { cn } from "@/lib/utils";
 
 // Helper to find a node within a component's children tree
 function findNodeInComponent(
@@ -593,7 +595,7 @@ function PropertyEditor({
                     size="sm"
                     className={`flex-1 ${
                       (node.sizing?.widthMode ?? "fixed") === option.value
-                        ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                        ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
                         : ""
                     }`}
                     onClick={() =>
@@ -626,7 +628,7 @@ function PropertyEditor({
                     size="sm"
                     className={`flex-1 ${
                       (node.sizing?.heightMode ?? "fixed") === option.value
-                        ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                        ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
                         : ""
                     }`}
                     onClick={() =>
@@ -660,6 +662,258 @@ function PropertyEditor({
           />
         </PropertyRow>
       </PropertySection>
+
+      {/* Auto Layout (Frame only) */}
+      {node.type === "frame" && (
+        <PropertySection title="Auto Layout">
+          <div className="relative flex justify-end -top-6 -mb-6">
+            <Button
+              variant={
+                (node as FrameNode).layout?.autoLayout ? "default" : "secondary"
+              }
+              size="icon"
+              className={cn(
+                (node as FrameNode).layout?.autoLayout
+                  ? "bg-sky-100 text-sky-600 hover:bg-sky-100/50 border-none ring-0"
+                  : "bg-background hover:bg-surface-hover",
+              )}
+              onClick={() => {
+                const v = !(node as FrameNode).layout?.autoLayout;
+                const updates: Partial<SceneNode> = {
+                  layout: { ...(node as FrameNode).layout, autoLayout: v },
+                };
+                // When enabling auto-layout, set heightMode to fit_content (like Figma)
+                if (v) {
+                  updates.sizing = {
+                    ...(node as FrameNode).sizing,
+                    heightMode: "fit_content",
+                  };
+                }
+                onUpdate(updates);
+              }}
+            >
+              <LayoutIcon size={16} />
+            </Button>
+          </div>
+          {(node as FrameNode).layout?.autoLayout && (
+            <>
+              <SelectInput
+                label="Direction"
+                labelOutside
+                value={(node as FrameNode).layout?.flexDirection ?? "row"}
+                options={[
+                  { value: "row", label: "Horizontal" },
+                  { value: "column", label: "Vertical" },
+                ]}
+                onChange={(v) =>
+                  onUpdate({
+                    layout: {
+                      ...(node as FrameNode).layout,
+                      flexDirection: v as FlexDirection,
+                    },
+                  } as Partial<SceneNode>)
+                }
+              />
+              <PropertyRow>
+                <div className="flex flex-col gap-1 flex-1">
+                  <div className="text-[10px] font-normal text-text-muted">
+                    Alignment
+                  </div>
+                  <div className="grid grid-cols-3 bg-secondary rounded-md justify-center items-center p-0.5">
+                    {Array.from({ length: 9 }).map((_, index) => {
+                      const currentDirection =
+                        (node as FrameNode).layout?.flexDirection ?? "row";
+                      const currentJustify =
+                        (node as FrameNode).layout?.justifyContent ??
+                        "flex-start";
+                      const currentAlign =
+                        (node as FrameNode).layout?.alignItems ?? "flex-start";
+
+                      const isRow = currentDirection === "row";
+                      const col = index % 3;
+                      const row = Math.floor(index / 3);
+
+                      // Map grid position to values
+                      const colValues = ["flex-start", "center", "flex-end"];
+                      const rowValues = ["flex-start", "center", "flex-end"];
+
+                      // For row: columns control justify, rows control align
+                      // For column: columns control align, rows control justify
+                      const targetAlign = isRow
+                        ? rowValues[row]
+                        : colValues[col];
+                      const targetJustify = isRow
+                        ? colValues[col]
+                        : rowValues[row];
+
+                      const isCenterColumn = col === 1;
+                      const isCenterRow = row === 1;
+
+                      // Space-between can be toggled on center column for row, center row for column
+                      const canToggleSpaceBetween = isRow
+                        ? isCenterColumn
+                        : isCenterRow;
+
+                      const isSpaceBetween = currentJustify === "space-between";
+
+                      const isActive =
+                        currentAlign === targetAlign &&
+                        (isSpaceBetween && canToggleSpaceBetween
+                          ? true
+                          : currentJustify === targetJustify);
+
+                      const handleClick = () => {
+                        onUpdate({
+                          layout: {
+                            ...(node as FrameNode).layout,
+                            alignItems: targetAlign as AlignItems,
+                            justifyContent: targetJustify as JustifyContent,
+                          },
+                        } as Partial<SceneNode>);
+                      };
+
+                      const handleDoubleClick = () => {
+                        if (canToggleSpaceBetween) {
+                          const newJustify =
+                            currentJustify === "space-between"
+                              ? "center"
+                              : "space-between";
+                          onUpdate({
+                            layout: {
+                              ...(node as FrameNode).layout,
+                              alignItems: targetAlign as AlignItems,
+                              justifyContent: newJustify as JustifyContent,
+                            },
+                          } as Partial<SceneNode>);
+                        }
+                      };
+
+                      const showSpaceBetweenIcon =
+                        canToggleSpaceBetween &&
+                        isSpaceBetween &&
+                        currentAlign === targetAlign;
+
+                      return (
+                        <button
+                          key={index}
+                          className={`h-6 rounded transition-colors flex items-center justify-center ${
+                            isActive
+                              ? "bg-accent-selection text-text-primary"
+                              : "text-text-muted hover:bg-surface-hover"
+                          } ${
+                            showSpaceBetweenIcon ? "ring-2 ring-blue-400" : ""
+                          }`}
+                          onClick={handleClick}
+                          onDoubleClick={handleDoubleClick}
+                          title={
+                            canToggleSpaceBetween
+                              ? `${isRow ? "H" : "V"}: ${targetJustify}, ${
+                                  isRow ? "V" : "H"
+                                }: ${targetAlign} (double-click for space-between)`
+                              : `${isRow ? "H" : "V"}: ${targetJustify}, ${
+                                  isRow ? "V" : "H"
+                                }: ${targetAlign}`
+                          }
+                        >
+                          {showSpaceBetweenIcon ? (
+                            <div
+                              className={`flex ${
+                                isRow ? "flex-row gap-0.5" : "flex-col gap-0.5"
+                              }`}
+                            >
+                              <div
+                                className={`${
+                                  isRow ? "w-0.5 h-3" : "w-3 h-0.5"
+                                } bg-current rounded`}
+                              />
+                              <div
+                                className={`${
+                                  isRow ? "w-0.5 h-3" : "w-3 h-0.5"
+                                } bg-current rounded`}
+                              />
+                              <div
+                                className={`${
+                                  isRow ? "w-0.5 h-3" : "w-3 h-0.5"
+                                } bg-current rounded`}
+                              />
+                            </div>
+                          ) : (
+                            <div className="w-1 h-1 rounded-full bg-primary" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <NumberInput
+                  label="Gap"
+                  value={(node as FrameNode).layout?.gap ?? 0}
+                  onChange={(v) =>
+                    onUpdate({
+                      layout: { ...(node as FrameNode).layout, gap: v },
+                    } as Partial<SceneNode>)
+                  }
+                  min={0}
+                  labelOutside={true}
+                />
+              </PropertyRow>
+              <label className="text-[10px] text-text-muted tracking-wide mt-2">
+                Padding
+              </label>
+              <PropertyRow>
+                <NumberInput
+                  label="T"
+                  value={(node as FrameNode).layout?.paddingTop ?? 0}
+                  onChange={(v) =>
+                    onUpdate({
+                      layout: { ...(node as FrameNode).layout, paddingTop: v },
+                    } as Partial<SceneNode>)
+                  }
+                  min={0}
+                />
+                <NumberInput
+                  label="R"
+                  value={(node as FrameNode).layout?.paddingRight ?? 0}
+                  onChange={(v) =>
+                    onUpdate({
+                      layout: {
+                        ...(node as FrameNode).layout,
+                        paddingRight: v,
+                      },
+                    } as Partial<SceneNode>)
+                  }
+                  min={0}
+                />
+              </PropertyRow>
+              <PropertyRow>
+                <NumberInput
+                  label="B"
+                  value={(node as FrameNode).layout?.paddingBottom ?? 0}
+                  onChange={(v) =>
+                    onUpdate({
+                      layout: {
+                        ...(node as FrameNode).layout,
+                        paddingBottom: v,
+                      },
+                    } as Partial<SceneNode>)
+                  }
+                  min={0}
+                />
+                <NumberInput
+                  label="L"
+                  value={(node as FrameNode).layout?.paddingLeft ?? 0}
+                  onChange={(v) =>
+                    onUpdate({
+                      layout: { ...(node as FrameNode).layout, paddingLeft: v },
+                    } as Partial<SceneNode>)
+                  }
+                  min={0}
+                />
+              </PropertyRow>
+            </>
+          )}
+        </PropertySection>
+      )}
 
       {/* Appearance Section */}
       <PropertySection title="Appearance">
@@ -753,155 +1007,10 @@ function PropertyEditor({
         </div>
       </PropertySection>
 
-      {/* Auto Layout (Frame only) */}
-      {node.type === "frame" && (
-        <PropertySection title="Auto Layout">
-          <CheckboxInput
-            label="Enable Auto Layout"
-            checked={(node as FrameNode).layout?.autoLayout ?? false}
-            onChange={(v) => {
-              const updates: Partial<SceneNode> = {
-                layout: { ...(node as FrameNode).layout, autoLayout: v },
-              };
-              // When enabling auto-layout, set heightMode to fit_content (like Figma)
-              if (v) {
-                updates.sizing = {
-                  ...(node as FrameNode).sizing,
-                  heightMode: "fit_content",
-                };
-              }
-              onUpdate(updates);
-            }}
-          />
-          {(node as FrameNode).layout?.autoLayout && (
-            <>
-              <SelectInput
-                label="Direction"
-                value={(node as FrameNode).layout?.flexDirection ?? "row"}
-                options={[
-                  { value: "row", label: "Horizontal" },
-                  { value: "column", label: "Vertical" },
-                ]}
-                onChange={(v) =>
-                  onUpdate({
-                    layout: {
-                      ...(node as FrameNode).layout,
-                      flexDirection: v as FlexDirection,
-                    },
-                  } as Partial<SceneNode>)
-                }
-              />
-              <NumberInput
-                label="Gap"
-                value={(node as FrameNode).layout?.gap ?? 0}
-                onChange={(v) =>
-                  onUpdate({
-                    layout: { ...(node as FrameNode).layout, gap: v },
-                  } as Partial<SceneNode>)
-                }
-                min={0}
-              />
-              <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wide mt-2">
-                Padding
-              </div>
-              <PropertyRow>
-                <NumberInput
-                  label="T"
-                  value={(node as FrameNode).layout?.paddingTop ?? 0}
-                  onChange={(v) =>
-                    onUpdate({
-                      layout: { ...(node as FrameNode).layout, paddingTop: v },
-                    } as Partial<SceneNode>)
-                  }
-                  min={0}
-                />
-                <NumberInput
-                  label="R"
-                  value={(node as FrameNode).layout?.paddingRight ?? 0}
-                  onChange={(v) =>
-                    onUpdate({
-                      layout: {
-                        ...(node as FrameNode).layout,
-                        paddingRight: v,
-                      },
-                    } as Partial<SceneNode>)
-                  }
-                  min={0}
-                />
-              </PropertyRow>
-              <PropertyRow>
-                <NumberInput
-                  label="B"
-                  value={(node as FrameNode).layout?.paddingBottom ?? 0}
-                  onChange={(v) =>
-                    onUpdate({
-                      layout: {
-                        ...(node as FrameNode).layout,
-                        paddingBottom: v,
-                      },
-                    } as Partial<SceneNode>)
-                  }
-                  min={0}
-                />
-                <NumberInput
-                  label="L"
-                  value={(node as FrameNode).layout?.paddingLeft ?? 0}
-                  onChange={(v) =>
-                    onUpdate({
-                      layout: { ...(node as FrameNode).layout, paddingLeft: v },
-                    } as Partial<SceneNode>)
-                  }
-                  min={0}
-                />
-              </PropertyRow>
-              <SelectInput
-                label="Align"
-                value={(node as FrameNode).layout?.alignItems ?? "flex-start"}
-                options={[
-                  { value: "flex-start", label: "Start" },
-                  { value: "center", label: "Center" },
-                  { value: "flex-end", label: "End" },
-                  { value: "stretch", label: "Stretch" },
-                ]}
-                onChange={(v) =>
-                  onUpdate({
-                    layout: {
-                      ...(node as FrameNode).layout,
-                      alignItems: v as AlignItems,
-                    },
-                  } as Partial<SceneNode>)
-                }
-              />
-              <SelectInput
-                label="Justify"
-                value={
-                  (node as FrameNode).layout?.justifyContent ?? "flex-start"
-                }
-                options={[
-                  { value: "flex-start", label: "Start" },
-                  { value: "center", label: "Center" },
-                  { value: "flex-end", label: "End" },
-                  { value: "space-between", label: "Space Between" },
-                ]}
-                onChange={(v) =>
-                  onUpdate({
-                    layout: {
-                      ...(node as FrameNode).layout,
-                      justifyContent: v as JustifyContent,
-                    },
-                  } as Partial<SceneNode>)
-                }
-              />
-            </>
-          )}
-        </PropertySection>
-      )}
-
       {/* Theme Override (Frame only) */}
       {node.type === "frame" && (
-        <PropertySection title="Theme Override">
+        <PropertySection title="Theme">
           <SelectInput
-            label="Theme"
             value={(node as FrameNode).themeOverride ?? "inherit"}
             options={[
               { value: "inherit", label: "Inherit" },
@@ -1023,7 +1132,7 @@ function PropertyEditor({
                   size="sm"
                   className={`flex-1 ${
                     (node as TextNode).fontStyle === "italic"
-                      ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                      ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
                       : ""
                   }`}
                   onClick={() =>
@@ -1047,7 +1156,7 @@ function PropertyEditor({
                     size="sm"
                     className={`flex-1 ${
                       (node as TextNode).underline
-                        ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                        ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
                         : ""
                     }`}
                     onClick={() =>
@@ -1065,7 +1174,7 @@ function PropertyEditor({
                     size="sm"
                     className={`flex-1 ${
                       (node as TextNode).strikethrough
-                        ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                        ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
                         : ""
                     }`}
                     onClick={() =>
@@ -1095,7 +1204,7 @@ function PropertyEditor({
                       size="sm"
                       className={`flex-1 ${
                         (node as TextNode).textAlign === "left"
-                          ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                          ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
                           : ""
                       }`}
                       onClick={() =>
@@ -1113,7 +1222,7 @@ function PropertyEditor({
                       size="sm"
                       className={`flex-1 ${
                         (node as TextNode).textAlign === "center"
-                          ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                          ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
                           : ""
                       }`}
                       onClick={() =>
@@ -1131,7 +1240,7 @@ function PropertyEditor({
                       size="sm"
                       className={`flex-1 ${
                         (node as TextNode).textAlign === "right"
-                          ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                          ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
                           : ""
                       }`}
                       onClick={() =>
@@ -1153,7 +1262,7 @@ function PropertyEditor({
                       size="sm"
                       className={`flex-1 ${
                         (node as TextNode).textAlignVertical === "top"
-                          ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                          ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
                           : ""
                       }`}
                       onClick={() =>
@@ -1173,7 +1282,7 @@ function PropertyEditor({
                       size="sm"
                       className={`flex-1 ${
                         (node as TextNode).textAlignVertical === "middle"
-                          ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                          ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
                           : ""
                       }`}
                       onClick={() =>
@@ -1193,7 +1302,7 @@ function PropertyEditor({
                       size="sm"
                       className={`flex-1 ${
                         (node as TextNode).textAlignVertical === "bottom"
-                          ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                          ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
                           : ""
                       }`}
                       onClick={() =>
@@ -1222,7 +1331,7 @@ function PropertyEditor({
                   size="sm"
                   className={`flex-1 ${
                     (node as TextNode).textWidthMode === "auto"
-                      ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                      ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
                       : ""
                   }`}
                   onClick={() =>
@@ -1240,7 +1349,7 @@ function PropertyEditor({
                   size="sm"
                   className={`flex-1 ${
                     (node as TextNode).textWidthMode === "fixed"
-                      ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                      ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
                       : ""
                   }`}
                   onClick={() =>
@@ -1258,7 +1367,7 @@ function PropertyEditor({
                   size="sm"
                   className={`flex-1 ${
                     (node as TextNode).textWidthMode === "fixed-height"
-                      ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                      ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
                       : ""
                   }`}
                   onClick={() =>

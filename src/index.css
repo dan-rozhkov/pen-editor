@@ -9,16 +9,16 @@
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.15 0 0);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --accent: oklch(0.4 0 0);
+  --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.58 0.22 27);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
@@ -142,6 +142,33 @@
   --color-accent-selection: #e5f4ff;
 }
 
+.dark {
+  /* Surface colors - dark theme */
+  --color-surface-base: #1a1a1a;
+  --color-surface-panel: #2a2a2a;
+  --color-surface-elevated: #333333;
+  --color-surface-hover: #404040;
+  --color-surface-active: #4a4a4a;
+
+  /* Border colors */
+  --color-border-default: #404040;
+  --color-border-light: #4a4a4a;
+  --color-border-hover: #555555;
+
+  /* Text colors */
+  --color-text-primary: rgba(255, 255, 255, 0.87);
+  --color-text-secondary: #cccccc;
+  --color-text-muted: #888888;
+  --color-text-disabled: #666666;
+
+  /* Accent colors */
+  --color-accent-primary: #4a9eff;
+  --color-accent-hover: #6bb3ff;
+  --color-accent-bright: #7bb8ff;
+  --color-accent-light: #8fc6ff;
+  --color-accent-selection: #1a4a7a;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -170,13 +197,8 @@
   }
 
   body {
-    font-family:
-      system-ui,
-      -apple-system,
-      BlinkMacSystemFont,
-      "Segoe UI",
-      Roboto,
-      sans-serif;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+      Roboto, sans-serif;
     line-height: 1.5;
     font-weight: 400;
     color: var(--color-text-primary);
