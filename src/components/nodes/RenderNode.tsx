@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import Konva from "konva";
 import type { GroupNode, RefNode, SceneNode, TextNode } from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
@@ -12,8 +13,10 @@ import { useHoverStore } from "@/store/hoverStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
+import { useSmartGuideStore } from "@/store/smartGuideStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useVariableStore } from "@/store/variableStore";
+import { useViewportStore } from "@/store/viewportStore";
 import { resolveColor } from "@/utils/colorUtils";
 import {
   calculateDropPosition,
@@ -21,7 +24,13 @@ import {
   handleAutoLayoutDragEnd,
   isPointInsideRect,
 } from "@/utils/dragUtils";
-import { findParentFrame } from "@/utils/nodeUtils";
+import { findParentFrame, getNodeAbsolutePosition } from "@/utils/nodeUtils";
+import {
+  collectSnapTargets,
+  getSnapEdges,
+  calculateSnap,
+  type SnapTarget,
+} from "@/utils/smartGuideUtils";
 
 interface RenderNodeProps {
   node: SceneNode;
@@ -47,6 +56,12 @@ export function RenderNode({
   const calculateLayoutForFrame = useLayoutStore(
     (state) => state.calculateLayoutForFrame,
   );
+  const { setGuides, clearGuides } = useSmartGuideStore();
+
+  // Refs for caching snap data during drag
+  const snapTargetsRef = useRef<SnapTarget[]>([]);
+  const parentOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const snapOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Use effective theme from parent, or fall back to global theme
   const currentTheme = effectiveTheme ?? globalTheme;
@@ -104,6 +119,25 @@ export function RenderNode({
 
     if (isInAutoLayout) {
       startDrag(node.id);
+    } else {
+      // Compute parent offset for absolute position calculation
+      const absPos = getNodeAbsolutePosition(nodes, node.id);
+      if (absPos) {
+        parentOffsetRef.current = {
+          x: absPos.x - node.x,
+          y: absPos.y - node.y,
+        };
+      } else {
+        parentOffsetRef.current = { x: 0, y: 0 };
+      }
+
+      // Reset snap offset
+      snapOffsetRef.current = { x: 0, y: 0 };
+
+      // Collect snap targets from all nodes except the dragged one(s)
+      const currentSelectedIds = useSelectionStore.getState().selectedIds;
+      const excludeIds = new Set(currentSelectedIds);
+      snapTargetsRef.current = collectSnapTargets(nodes, excludeIds);
     }
   };
 
@@ -113,46 +147,80 @@ export function RenderNode({
     // Prevents parent Group from handling child drag events
     if (target.id() !== node.id) return;
 
-    if (!isInAutoLayout || !parentFrame || parentFrame.type !== "frame") return;
+    if (isInAutoLayout && parentFrame && parentFrame.type === "frame") {
+      // Auto-layout drag: reordering logic (no snapping)
+      const stage = target.getStage();
+      if (!stage) return;
 
-    const stage = target.getStage();
-    if (!stage) return;
+      const pointerPos = stage.getRelativePointerPosition();
+      if (!pointerPos) return;
 
-    const pointerPos = stage.getRelativePointerPosition();
-    if (!pointerPos) return;
-
-    // Get absolute position of parent frame
-    const frameRect = getFrameAbsoluteRectWithLayout(
-      parentFrame,
-      nodes,
-      calculateLayoutForFrame,
-    );
-
-    // Check if cursor is inside parent frame
-    const isInsideParent = isPointInsideRect(pointerPos, frameRect);
-
-    if (isInsideParent) {
-      // Get layout-calculated children positions (from Yoga) for correct indicator placement
-      // This is important when justify is center/end - raw children have x=0, y=0
-      const layoutChildren = parentFrame.layout?.autoLayout
-        ? calculateLayoutForFrame(parentFrame)
-        : parentFrame.children;
-
-      // Calculate drop position for reordering
-      const dropResult = calculateDropPosition(
-        pointerPos,
+      // Get absolute position of parent frame
+      const frameRect = getFrameAbsoluteRectWithLayout(
         parentFrame,
-        { x: frameRect.x, y: frameRect.y },
-        node.id,
-        layoutChildren,
+        nodes,
+        calculateLayoutForFrame,
       );
 
-      if (dropResult) {
-        updateDrop(dropResult.indicator, dropResult.insertInfo, false);
+      // Check if cursor is inside parent frame
+      const isInsideParent = isPointInsideRect(pointerPos, frameRect);
+
+      if (isInsideParent) {
+        // Get layout-calculated children positions (from Yoga) for correct indicator placement
+        // This is important when justify is center/end - raw children have x=0, y=0
+        const layoutChildren = parentFrame.layout?.autoLayout
+          ? calculateLayoutForFrame(parentFrame)
+          : parentFrame.children;
+
+        // Calculate drop position for reordering
+        const dropResult = calculateDropPosition(
+          pointerPos,
+          parentFrame,
+          { x: frameRect.x, y: frameRect.y },
+          node.id,
+          layoutChildren,
+        );
+
+        if (dropResult) {
+          updateDrop(dropResult.indicator, dropResult.insertInfo, false);
+        }
+      } else {
+        // Outside parent - will move to root level
+        updateDrop(null, null, true);
       }
     } else {
-      // Outside parent - will move to root level
-      updateDrop(null, null, true);
+      // Free drag: apply smart guide snapping
+      const targets = snapTargetsRef.current;
+
+      // No targets to snap to — skip snap logic entirely
+      if (targets.length === 0) {
+        clearGuides();
+        return;
+      }
+
+      const scale = useViewportStore.getState().scale;
+      const threshold = 5 / scale;
+
+      // Undo previous snap offset to get the "intended" (mouse-following) position
+      const intendedX = target.x() - snapOffsetRef.current.x;
+      const intendedY = target.y() - snapOffsetRef.current.y;
+
+      const absX = intendedX + parentOffsetRef.current.x;
+      const absY = intendedY + parentOffsetRef.current.y;
+
+      const draggedEdges = getSnapEdges(absX, absY, node.width, node.height);
+      const result = calculateSnap(draggedEdges, targets, threshold);
+
+      // Apply new snap offset
+      snapOffsetRef.current = { x: result.deltaX, y: result.deltaY };
+      target.x(intendedX + result.deltaX);
+      target.y(intendedY + result.deltaY);
+
+      if (result.guides.length > 0) {
+        setGuides(result.guides);
+      } else {
+        clearGuides();
+      }
     }
   };
 
@@ -162,6 +230,9 @@ export function RenderNode({
     // Only process if this is the actual node being dragged
     // Prevents parent Group from handling child drag events
     if (target.id() !== node.id) return;
+
+    // Always clear smart guides on drag end
+    clearGuides();
 
     if (isInAutoLayout && parentFrame) {
       const { insertInfo, isOutsideParent } = useDragStore.getState();

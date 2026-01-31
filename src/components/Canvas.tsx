@@ -4,6 +4,7 @@ import Konva from "konva";
 import { DropIndicator } from "@/components/DropIndicator";
 import { InlineNameEditor } from "@/components/InlineNameEditor";
 import { InlineTextEditor } from "@/components/InlineTextEditor";
+import { SmartGuides } from "@/components/SmartGuides";
 import { FrameNameLabel } from "@/components/nodes/FrameNameLabel";
 import { NodeSizeLabel } from "@/components/nodes/NodeSizeLabel";
 import { RenderNode } from "@/components/nodes/RenderNode";
@@ -266,6 +267,8 @@ export function Canvas() {
           {visibleNodes.map((node) => (
             <RenderNode key={node.id} node={node} />
           ))}
+          {/* Smart guides for snapping during drag */}
+          <SmartGuides />
           {/* Drop indicator for auto-layout reordering */}
           {dropIndicator && <DropIndicator indicator={dropIndicator} />}
           {/* Transformer for selection */}
