@@ -56,14 +56,14 @@ export function CustomColorPicker({
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  const sizeClass = swatchSize === "sm" ? "w-5 h-5" : "w-8 h-8";
+  const sizeClass = swatchSize === "sm" ? "w-5 h-5" : "w-6 h-6";
 
   return (
-    <div className="relative" ref={containerRef}>
+    <div className="relative flex" ref={containerRef}>
       {/* Swatch trigger */}
       <button
         type="button"
-        className={`${sizeClass} rounded cursor-pointer shrink-0 border border-border-light`}
+        className={`${sizeClass} rounded-md cursor-pointer shrink-0 border border-border-light`}
         style={{ backgroundColor: safeValue }}
         onClick={() => setOpen(!open)}
         aria-label="Pick color"
@@ -92,7 +92,10 @@ export function CustomColorPicker({
             </ColorSlider>
 
             {/* Hex input */}
-            <ColorField aria-label="Hex color" className="flex items-center gap-1">
+            <ColorField
+              aria-label="Hex color"
+              className="flex items-center gap-1"
+            >
               <span className="text-[10px] text-text-muted">#</span>
               <AriaInput className="flex-1 bg-surface-elevated border border-border-light rounded px-2 py-1 text-xs text-text-primary font-mono outline-none focus:border-accent-bright" />
             </ColorField>

@@ -198,20 +198,24 @@ export function ColorInput({
     );
   }
 
-  // Normal mode: color picker + hex input + variable button
+  // Normal mode: color picker inside input + variable button
   return (
     <div className="flex items-center gap-2 relative" ref={pickerRef}>
-      <CustomColorPicker
-        value={value || "#000000"}
-        onChange={onChange}
-      />
-      <Input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="#000000"
-        className="flex-1 font-mono"
-      />
+      <InputGroup className="flex-1">
+        <InputGroupAddon align="inline-start">
+          <CustomColorPicker
+            value={value || "#000000"}
+            onChange={onChange}
+          />
+        </InputGroupAddon>
+        <InputGroupInput
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="#000000"
+          className="font-mono"
+        />
+      </InputGroup>
       {availableVariables.length > 0 && onVariableChange && (
         <button
           type="button"
