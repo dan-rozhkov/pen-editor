@@ -3,7 +3,7 @@ import clsx from 'clsx'
 import { useVariableStore } from '../store/variableStore'
 import { useThemeStore } from '../store/themeStore'
 import { generateVariableId, getVariableValue } from '../types/variable'
-import type { Variable, ThemeName } from '../types/variable'
+import type { Variable, VariableType, ThemeName } from '../types/variable'
 
 // Plus icon for Add button
 const PlusIcon = () => (
@@ -87,6 +87,139 @@ function ThemeToggle() {
   )
 }
 
+// Type badge labels and colors
+const typeBadge: Record<VariableType, { label: string; className: string }> = {
+  color: { label: 'C', className: 'bg-purple-500/20 text-purple-400' },
+  number: { label: '#', className: 'bg-blue-500/20 text-blue-400' },
+  string: { label: 'T', className: 'bg-green-500/20 text-green-400' },
+}
+
+// Color swatches for color variables
+function ColorSwatches({
+  variable,
+  activeTheme,
+  lightValue,
+  darkValue,
+  onThemeValueChange,
+}: {
+  variable: Variable
+  activeTheme: ThemeName
+  lightValue: string
+  darkValue: string
+  onThemeValueChange: (theme: ThemeName, value: string) => void
+}) {
+  return (
+    <div className="flex rounded overflow-hidden border border-border-light shrink-0">
+      <label
+        className={clsx(
+          'relative w-4 h-5 cursor-pointer',
+          activeTheme === 'light' && 'ring-1 ring-inset ring-accent-bright'
+        )}
+        title="Light theme value"
+      >
+        <div className="w-full h-full" style={{ backgroundColor: lightValue }} />
+        <input
+          type="color"
+          value={lightValue}
+          onChange={(e) => onThemeValueChange('light', e.target.value)}
+          onClick={(e) => e.stopPropagation()}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+        />
+      </label>
+      <label
+        className={clsx(
+          'relative w-4 h-5 cursor-pointer border-l border-border-light',
+          activeTheme === 'dark' && 'ring-1 ring-inset ring-accent-bright'
+        )}
+        title="Dark theme value"
+      >
+        <div className="w-full h-full" style={{ backgroundColor: darkValue }} />
+        <input
+          type="color"
+          value={darkValue}
+          onChange={(e) => onThemeValueChange('dark', e.target.value)}
+          onClick={(e) => e.stopPropagation()}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+        />
+      </label>
+    </div>
+  )
+}
+
+// Compact value display for number/string variables
+function ValuePreview({
+  variable,
+  activeTheme,
+  lightValue,
+  darkValue,
+  onThemeValueChange,
+}: {
+  variable: Variable
+  activeTheme: ThemeName
+  lightValue: string
+  darkValue: string
+  onThemeValueChange: (theme: ThemeName, value: string) => void
+}) {
+  const [editingTheme, setEditingTheme] = useState<ThemeName | null>(null)
+  const [editValue, setEditValue] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (editingTheme && inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [editingTheme])
+
+  const currentValue = activeTheme === 'light' ? lightValue : darkValue
+
+  const handleStartEdit = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setEditValue(currentValue)
+    setEditingTheme(activeTheme)
+  }
+
+  const handleSubmit = () => {
+    if (editingTheme) {
+      onThemeValueChange(editingTheme, editValue)
+    }
+    setEditingTheme(null)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSubmit()
+    } else if (e.key === 'Escape') {
+      setEditingTheme(null)
+    }
+  }
+
+  if (editingTheme) {
+    return (
+      <input
+        ref={inputRef}
+        type={variable.type === 'number' ? 'number' : 'text'}
+        value={editValue}
+        onChange={(e) => setEditValue(e.target.value)}
+        onBlur={handleSubmit}
+        onKeyDown={handleKeyDown}
+        onClick={(e) => e.stopPropagation()}
+        className="w-14 shrink-0 bg-surface-elevated border border-accent-bright rounded px-1 py-0.5 text-[10px] text-text-primary outline-none font-mono"
+      />
+    )
+  }
+
+  return (
+    <span
+      className="w-14 shrink-0 text-[10px] font-mono text-text-muted truncate cursor-pointer hover:text-text-primary"
+      onClick={handleStartEdit}
+      title={`${activeTheme}: ${currentValue} (click to edit)`}
+    >
+      {currentValue || '""'}
+    </span>
+  )
+}
+
 interface VariableItemProps {
   variable: Variable
   isSelected: boolean
@@ -141,9 +274,11 @@ function VariableItem({ variable, isSelected, onSelect }: VariableItemProps) {
     }
   }
 
-  const handleColorChange = (theme: ThemeName, value: string) => {
+  const handleThemeValueChange = (theme: ThemeName, value: string) => {
     updateVariableThemeValue(variable.id, theme, value)
   }
+
+  const badge = typeBadge[variable.type]
 
   return (
     <div
@@ -156,49 +291,29 @@ function VariableItem({ variable, isSelected, onSelect }: VariableItemProps) {
       onMouseLeave={() => setIsHovered(false)}
     >
       <div className="flex items-center gap-2 flex-1 min-w-0">
-        {/* Dual color swatches (light | dark) */}
-        <div className="flex rounded overflow-hidden border border-border-light shrink-0">
-          {/* Light theme swatch */}
-          <label
-            className={clsx(
-              'relative w-4 h-5 cursor-pointer',
-              activeTheme === 'light' && 'ring-1 ring-inset ring-accent-bright'
-            )}
-            title="Light theme value"
-          >
-            <div
-              className="w-full h-full"
-              style={{ backgroundColor: lightValue }}
-            />
-            <input
-              type="color"
-              value={lightValue}
-              onChange={(e) => handleColorChange('light', e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-            />
-          </label>
-          {/* Dark theme swatch */}
-          <label
-            className={clsx(
-              'relative w-4 h-5 cursor-pointer border-l border-border-light',
-              activeTheme === 'dark' && 'ring-1 ring-inset ring-accent-bright'
-            )}
-            title="Dark theme value"
-          >
-            <div
-              className="w-full h-full"
-              style={{ backgroundColor: darkValue }}
-            />
-            <input
-              type="color"
-              value={darkValue}
-              onChange={(e) => handleColorChange('dark', e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-            />
-          </label>
-        </div>
+        {/* Type badge */}
+        <span className={clsx('w-4 h-4 rounded text-[9px] font-bold flex items-center justify-center shrink-0', badge.className)}>
+          {badge.label}
+        </span>
+
+        {/* Type-specific preview */}
+        {variable.type === 'color' ? (
+          <ColorSwatches
+            variable={variable}
+            activeTheme={activeTheme}
+            lightValue={lightValue}
+            darkValue={darkValue}
+            onThemeValueChange={handleThemeValueChange}
+          />
+        ) : (
+          <ValuePreview
+            variable={variable}
+            activeTheme={activeTheme}
+            lightValue={lightValue}
+            darkValue={darkValue}
+            onThemeValueChange={handleThemeValueChange}
+          />
+        )}
 
         {/* Variable name (editable on double-click) */}
         {isEditingName ? (
@@ -239,25 +354,54 @@ function VariableItem({ variable, isSelected, onSelect }: VariableItemProps) {
   )
 }
 
+// Default values per variable type
+const defaultValues: Record<VariableType, string> = {
+  color: '#4a90d9',
+  number: '0',
+  string: '',
+}
+
+const defaultNames: Record<VariableType, string> = {
+  color: 'Color',
+  number: 'Number',
+  string: 'String',
+}
+
 export function VariablesPanel() {
   const variables = useVariableStore((s) => s.variables)
   const addVariable = useVariableStore((s) => s.addVariable)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [showAddMenu, setShowAddMenu] = useState(false)
+  const addMenuRef = useRef<HTMLDivElement>(null)
 
-  const handleAddVariable = () => {
-    const defaultColor = '#4a90d9'
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (addMenuRef.current && !addMenuRef.current.contains(e.target as Node)) {
+        setShowAddMenu(false)
+      }
+    }
+    if (showAddMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showAddMenu])
+
+  const handleAddVariable = (type: VariableType) => {
+    const defaultVal = defaultValues[type]
+    const count = variables.filter((v) => v.type === type).length
     const newVar: Variable = {
       id: generateVariableId(),
-      name: `Color ${variables.length + 1}`,
-      type: 'color',
-      value: defaultColor,
+      name: `${defaultNames[type]} ${count + 1}`,
+      type,
+      value: defaultVal,
       themeValues: {
-        light: defaultColor,
-        dark: defaultColor,
+        light: defaultVal,
+        dark: defaultVal,
       },
     }
     addVariable(newVar)
     setSelectedId(newVar.id)
+    setShowAddMenu(false)
   }
 
   return (
@@ -272,13 +416,42 @@ export function VariablesPanel() {
         </div>
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          <button
-            className="bg-transparent border-none cursor-pointer p-1 rounded hover:bg-surface-elevated transition-colors"
-            onClick={handleAddVariable}
-            title="Add variable"
-          >
-            <PlusIcon />
-          </button>
+          <div className="relative" ref={addMenuRef}>
+            <button
+              className="bg-transparent border-none cursor-pointer p-1 rounded hover:bg-surface-elevated transition-colors"
+              onClick={() => setShowAddMenu(!showAddMenu)}
+              title="Add variable"
+            >
+              <PlusIcon />
+            </button>
+            {showAddMenu && (
+              <div className="absolute right-0 top-full mt-1 bg-surface-default border border-border-light rounded shadow-lg z-50 min-w-[120px]">
+                <button
+                  className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-surface-hover text-left text-xs text-text-primary"
+                  onClick={() => handleAddVariable('color')}
+                >
+                  <span className={clsx('w-4 h-4 rounded text-[9px] font-bold flex items-center justify-center', typeBadge.color.className)}>C</span>
+                  Color
+                </button>
+                <button
+                  className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-surface-hover text-left text-xs text-text-primary"
+                  onClick={() => handleAddVariable('number')}
+                >
+                  <span className={clsx('w-4 h-4 rounded text-[9px] font-bold flex items-center justify-center', typeBadge.number.className)}>
+                    #
+                  </span>
+                  Number
+                </button>
+                <button
+                  className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-surface-hover text-left text-xs text-text-primary"
+                  onClick={() => handleAddVariable('string')}
+                >
+                  <span className={clsx('w-4 h-4 rounded text-[9px] font-bold flex items-center justify-center', typeBadge.string.className)}>T</span>
+                  String
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

@@ -1,4 +1,4 @@
-export type VariableType = 'color'
+export type VariableType = 'color' | 'number' | 'string'
 export type ThemeName = 'light' | 'dark'
 
 export interface ThemeValues {

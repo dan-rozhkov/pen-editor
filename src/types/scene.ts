@@ -1,9 +1,12 @@
 import type { ThemeName } from './variable'
 
-// Color binding to a variable
-export interface ColorBinding {
+// Variable binding to a variable (generic)
+export interface VariableBinding {
   variableId: string
 }
+
+// Color binding (alias for backward compatibility)
+export type ColorBinding = VariableBinding
 
 // Image fill for shapes
 export type ImageFillMode = 'fill' | 'fit' | 'stretch'
