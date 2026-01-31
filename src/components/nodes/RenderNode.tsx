@@ -93,8 +93,9 @@ export function RenderNode({
 
   const handleClick = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     e.cancelBubble = true;
-    // Use selectOverrideId if set (nested selection: clicking deep nodes selects their container)
-    const selectId = selectOverrideId ?? node.id;
+    const isMeta = "metaKey" in e.evt && (e.evt.metaKey || e.evt.ctrlKey);
+    // Cmd/Ctrl+Click bypasses selectOverrideId to deep-select the actual clicked node
+    const selectId = isMeta ? node.id : (selectOverrideId ?? node.id);
     const isShift = "shiftKey" in e.evt && e.evt.shiftKey;
     if (isShift) {
       addToSelection(selectId);
