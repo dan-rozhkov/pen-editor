@@ -44,8 +44,8 @@ export function ComponentsPanel() {
     return (
       <div className="bg-surface-panel flex flex-col select-none">
         <div className="relative border-b border-border-default">
-          <div className="flex flex-col gap-2 px-4 pt-3 pb-5">
-            <div className="text-[11px] font-semibold text-text-primary">
+          <div className="flex flex-col gap-2 pt-3">
+            <div className="text-[11px] font-semibold text-text-primary px-4">
               Components
             </div>
             <div className="text-text-disabled text-xs text-center p-5">
@@ -60,26 +60,29 @@ export function ComponentsPanel() {
   return (
     <div className="bg-surface-panel flex flex-col select-none max-h-[200px]">
       <div className="relative border-b border-border-default">
-        <div className="flex flex-col gap-2 px-4 pt-3 pb-5">
-          <div className="text-[11px] font-semibold text-text-primary">
+        <div className="flex flex-col gap-2 pt-3">
+          <div className="text-[11px] font-semibold text-text-primary px-4">
             Components
           </div>
           <div className="flex-1 overflow-y-auto py-2">
-        {components.map((component) => (
-          <button
-            key={component.id}
-            onClick={() => createInstance(component)}
-            className={clsx(
-              "w-full flex items-center gap-2 px-4 py-2 text-left",
-              "hover:bg-surface-elevated transition-colors duration-100",
-            )}
-          >
-            <DiamondsFourIcon size={16} className="shrink-0 text-purple-400" />
-            <span className="text-xs text-text-secondary truncate">
-              {component.name || "Component"}
-            </span>
-          </button>
-        ))}
+            {components.map((component) => (
+              <button
+                key={component.id}
+                onClick={() => createInstance(component)}
+                className={clsx(
+                  "w-full flex items-center gap-2 px-4 py-2 text-left",
+                  "hover:bg-surface-elevated transition-colors duration-100",
+                )}
+              >
+                <DiamondsFourIcon
+                  size={16}
+                  className="shrink-0 text-purple-400"
+                />
+                <span className="text-xs text-text-secondary truncate">
+                  {component.name || "Component"}
+                </span>
+              </button>
+            ))}
           </div>
         </div>
       </div>

@@ -2,7 +2,8 @@ import {
   SquareIcon,
   CircleIcon,
   TextTIcon,
-  CursorIcon,
+  NavigationArrowIcon,
+  type IconWeight,
 } from "@phosphor-icons/react";
 import { FrameIcon } from "./ui/custom-icons/frame-icon";
 import { useDrawModeStore, type DrawToolType } from "../store/drawModeStore";
@@ -12,12 +13,21 @@ export function PrimitivesPanel() {
   const { activeTool, toggleTool, setActiveTool } = useDrawModeStore();
 
   const tools: Array<{
-    icon: React.ComponentType<{ className?: string; size?: number }>;
+    icon: React.ComponentType<{
+      className?: string;
+      size?: number;
+      weight?: IconWeight;
+    }>;
     label: string;
     tool: DrawToolType;
     shortcut: string;
   }> = [
-    { icon: CursorIcon, label: "Select", tool: "cursor", shortcut: "V" },
+    {
+      icon: NavigationArrowIcon,
+      label: "Select",
+      tool: "cursor",
+      shortcut: "V",
+    },
     { icon: FrameIcon, label: "Frame", tool: "frame", shortcut: "F" },
     { icon: SquareIcon, label: "Rectangle", tool: "rect", shortcut: "R" },
     { icon: CircleIcon, label: "Ellipse", tool: "ellipse", shortcut: "O" },
@@ -38,14 +48,14 @@ export function PrimitivesPanel() {
               }
               title={`${label} (${shortcut})`}
               variant="ghost"
-              size="icon-lg"
-              className={`group relative ${
+              size="lg"
+              className={`group relative size-10 p-0 ${
                 isActive
                   ? "bg-[#0d99ff] text-white hover:bg-[#0d99ff] hover:text-white"
-                  : "text-text-secondary hover:text-text-primary hover:bg-surface-elevated"
+                  : "text-text-primary hover:text-text-primary hover:bg-surface-elevated"
               }`}
             >
-              <Icon size={20} />
+              <Icon size={40} className="size-6" weight="light" />
             </Button>
           );
         })}

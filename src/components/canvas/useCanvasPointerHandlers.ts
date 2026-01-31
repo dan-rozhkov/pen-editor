@@ -307,6 +307,11 @@ export function useCanvasPointerHandlers({
         const dx = Math.abs(c.x - s.x);
         const dy = Math.abs(c.y - s.y);
 
+        if (tool === 'cursor') {
+          endDrawing();
+          return;
+        }
+
         const defaults: Record<string, { w: number; h: number }> = {
           frame: { w: 200, h: 150 },
           rect: { w: 150, h: 100 },

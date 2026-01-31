@@ -7,7 +7,6 @@ const MEASURE_COLOR = "#f24822";
 const LABEL_PADDING_X = 4;
 const LABEL_PADDING_Y = 2;
 const LABEL_FONT_SIZE = 11;
-const LABEL_OFFSET = 0; // label is centered on the line
 
 function MeasureLineComponent({
   line,

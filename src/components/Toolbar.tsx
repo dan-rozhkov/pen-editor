@@ -1,9 +1,7 @@
-import { useState } from "react";
 import { useSceneStore } from "../store/sceneStore";
 import { useVariableStore } from "../store/variableStore";
 import { useThemeStore } from "../store/themeStore";
 import { downloadDocument, openFilePicker } from "../utils/fileUtils";
-import { VariablesDialog } from "./VariablesPanel";
 import { Button } from "./ui/button";
 
 export function Toolbar() {
@@ -13,7 +11,6 @@ export function Toolbar() {
   const setVariables = useVariableStore((state) => state.setVariables);
   const activeTheme = useThemeStore((state) => state.activeTheme);
   const setActiveTheme = useThemeStore((state) => state.setActiveTheme);
-  const [variablesOpen, setVariablesOpen] = useState(false);
 
   const handleSave = () => {
     downloadDocument(nodes, variables, activeTheme);
@@ -42,14 +39,6 @@ export function Toolbar() {
       <Button variant="secondary" size="sm" onClick={handleSave}>
         Save
       </Button>
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => setVariablesOpen(true)}
-      >
-        Variables
-      </Button>
-      <VariablesDialog open={variablesOpen} onOpenChange={setVariablesOpen} />
     </div>
   );
 }
