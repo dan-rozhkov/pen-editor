@@ -43,7 +43,7 @@ import {
   findComponentById,
   type ParentContext,
 } from "../utils/nodeUtils";
-import { alignNodes, type AlignmentType } from "../utils/alignmentUtils";
+import { alignNodes, calculateSpacing, distributeSpacing, type AlignmentType } from "../utils/alignmentUtils";
 import {
   PropertySection,
   PropertyRow,
@@ -63,6 +63,7 @@ import {
   SelectValue,
 } from "./ui/select";
 import { FontCombobox } from "./ui/FontCombobox";
+import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 
 // Helper to find a node within a component's children tree
@@ -208,10 +209,76 @@ function AlignmentSection({
           </button>
         </div>
       </PropertySection>
+      <SpacingInput selectedIds={selectedIds} nodes={nodes} applyUpdateRecursive={applyUpdateRecursive} />
       <div className="text-text-muted text-xs text-center">
         {count} layers selected
       </div>
     </div>
+  );
+}
+
+function SpacingInput({
+  selectedIds,
+  nodes,
+  applyUpdateRecursive,
+}: {
+  selectedIds: string[];
+  nodes: SceneNode[];
+  applyUpdateRecursive: (nodeList: SceneNode[], id: string, changes: Partial<SceneNode>) => SceneNode[];
+}) {
+  const spacing = calculateSpacing(selectedIds, nodes);
+  const [localValue, setLocalValue] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
+
+  if (spacing === null) return null;
+
+  const displayValue = isFocused ? localValue : (spacing === 'mixed' ? '' : String(Math.round(spacing)));
+  const placeholder = spacing === 'mixed' ? 'mixed' : undefined;
+
+  const handleApply = (inputValue: string) => {
+    const val = parseFloat(inputValue);
+    if (isNaN(val)) return;
+
+    const updates = distributeSpacing(selectedIds, nodes, val);
+    if (updates.length === 0) return;
+
+    useHistoryStore.getState().saveHistory(nodes);
+    let newNodes = nodes;
+    for (const update of updates) {
+      const { id, ...changes } = update;
+      if (Object.keys(changes).length > 0) {
+        newNodes = applyUpdateRecursive(newNodes, id, changes);
+      }
+    }
+    useSceneStore.getState().setNodesWithoutHistory(newNodes);
+  };
+
+  return (
+    <PropertySection title="Spacing">
+      <div className="flex-1">
+        <Input
+          type="text"
+          inputMode="numeric"
+          value={displayValue}
+          placeholder={placeholder}
+          onChange={(e) => setLocalValue(e.target.value)}
+          onFocus={() => {
+            setIsFocused(true);
+            setLocalValue(spacing === 'mixed' ? '' : String(Math.round(spacing as number)));
+          }}
+          onBlur={(e) => {
+            setIsFocused(false);
+            handleApply(e.target.value);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              handleApply((e.target as HTMLInputElement).value);
+              (e.target as HTMLInputElement).blur();
+            }
+          }}
+        />
+      </div>
+    </PropertySection>
   );
 }
 
