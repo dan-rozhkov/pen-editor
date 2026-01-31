@@ -207,16 +207,16 @@ export function Canvas() {
     return () => setStageRef(null);
   }, [setStageRef]);
 
-  // Track Ctrl/Cmd modifier key for distance measurement overlay
+  // Track Alt/Option modifier key for distance measurement overlay
   useEffect(() => {
     const { setModifierHeld, clearLines } = useMeasureStore.getState();
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Meta" || e.key === "Control") {
+      if (e.key === "Alt") {
         setModifierHeld(true);
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === "Meta" || e.key === "Control") {
+      if (e.key === "Alt") {
         setModifierHeld(false);
         clearLines();
       }
