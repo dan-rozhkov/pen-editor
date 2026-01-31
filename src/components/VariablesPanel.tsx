@@ -1,357 +1,19 @@
 import { useState, useRef, useEffect } from 'react'
 import clsx from 'clsx'
 import { useVariableStore } from '../store/variableStore'
-import { useThemeStore } from '../store/themeStore'
 import { generateVariableId, getVariableValue } from '../types/variable'
 import type { Variable, VariableType, ThemeName } from '../types/variable'
-
-// Plus icon for Add button
-const PlusIcon = () => (
-  <svg viewBox="0 0 16 16" className="w-4 h-4 text-text-muted">
-    <path d="M8 2v12M2 8h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-  </svg>
-)
-
-// Trash icon for Delete button
-const TrashIcon = () => (
-  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5">
-    <path
-      d="M4 4h8M5.5 4V3a1 1 0 011-1h3a1 1 0 011 1v1M6 6v6M8 6v6M10 6v6M4.5 4l.5 9a1 1 0 001 1h4a1 1 0 001-1l.5-9"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      strokeLinecap="round"
-    />
-  </svg>
-)
-
-// Sun icon for light theme
-const SunIcon = () => (
-  <svg viewBox="0 0 16 16" className="w-3 h-3">
-    <circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" strokeWidth="1.5" />
-    <path
-      d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.4 1.4M11.55 11.55l1.4 1.4M3.05 12.95l1.4-1.4M11.55 4.45l1.4-1.4"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-    />
-  </svg>
-)
-
-// Moon icon for dark theme
-const MoonIcon = () => (
-  <svg viewBox="0 0 16 16" className="w-3 h-3">
-    <path
-      d="M13.5 8.5a5.5 5.5 0 01-7-7 5.5 5.5 0 107 7z"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-)
-
-// Theme toggle component
-function ThemeToggle() {
-  const activeTheme = useThemeStore((s) => s.activeTheme)
-  const setActiveTheme = useThemeStore((s) => s.setActiveTheme)
-
-  return (
-    <div className="flex border border-border-light rounded overflow-hidden">
-      <button
-        className={clsx(
-          'px-1.5 py-0.5 transition-colors',
-          activeTheme === 'light'
-            ? 'bg-white text-gray-900'
-            : 'bg-surface-elevated text-text-muted hover:bg-surface-hover'
-        )}
-        onClick={() => setActiveTheme('light')}
-        title="Light theme"
-      >
-        <SunIcon />
-      </button>
-      <button
-        className={clsx(
-          'px-1.5 py-0.5 transition-colors',
-          activeTheme === 'dark'
-            ? 'bg-gray-700 text-white'
-            : 'bg-surface-elevated text-text-muted hover:bg-surface-hover'
-        )}
-        onClick={() => setActiveTheme('dark')}
-        title="Dark theme"
-      >
-        <MoonIcon />
-      </button>
-    </div>
-  )
-}
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from './ui/dialog'
 
 // Type badge labels and colors
 const typeBadge: Record<VariableType, { label: string; className: string }> = {
   color: { label: 'C', className: 'bg-purple-500/20 text-purple-400' },
   number: { label: '#', className: 'bg-blue-500/20 text-blue-400' },
   string: { label: 'T', className: 'bg-green-500/20 text-green-400' },
-}
-
-// Color swatches for color variables
-function ColorSwatches({
-  variable,
-  activeTheme,
-  lightValue,
-  darkValue,
-  onThemeValueChange,
-}: {
-  variable: Variable
-  activeTheme: ThemeName
-  lightValue: string
-  darkValue: string
-  onThemeValueChange: (theme: ThemeName, value: string) => void
-}) {
-  return (
-    <div className="flex rounded overflow-hidden border border-border-light shrink-0">
-      <label
-        className={clsx(
-          'relative w-4 h-5 cursor-pointer',
-          activeTheme === 'light' && 'ring-1 ring-inset ring-accent-bright'
-        )}
-        title="Light theme value"
-      >
-        <div className="w-full h-full" style={{ backgroundColor: lightValue }} />
-        <input
-          type="color"
-          value={lightValue}
-          onChange={(e) => onThemeValueChange('light', e.target.value)}
-          onClick={(e) => e.stopPropagation()}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-        />
-      </label>
-      <label
-        className={clsx(
-          'relative w-4 h-5 cursor-pointer border-l border-border-light',
-          activeTheme === 'dark' && 'ring-1 ring-inset ring-accent-bright'
-        )}
-        title="Dark theme value"
-      >
-        <div className="w-full h-full" style={{ backgroundColor: darkValue }} />
-        <input
-          type="color"
-          value={darkValue}
-          onChange={(e) => onThemeValueChange('dark', e.target.value)}
-          onClick={(e) => e.stopPropagation()}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-        />
-      </label>
-    </div>
-  )
-}
-
-// Compact value display for number/string variables
-function ValuePreview({
-  variable,
-  activeTheme,
-  lightValue,
-  darkValue,
-  onThemeValueChange,
-}: {
-  variable: Variable
-  activeTheme: ThemeName
-  lightValue: string
-  darkValue: string
-  onThemeValueChange: (theme: ThemeName, value: string) => void
-}) {
-  const [editingTheme, setEditingTheme] = useState<ThemeName | null>(null)
-  const [editValue, setEditValue] = useState('')
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    if (editingTheme && inputRef.current) {
-      inputRef.current.focus()
-      inputRef.current.select()
-    }
-  }, [editingTheme])
-
-  const currentValue = activeTheme === 'light' ? lightValue : darkValue
-
-  const handleStartEdit = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    setEditValue(currentValue)
-    setEditingTheme(activeTheme)
-  }
-
-  const handleSubmit = () => {
-    if (editingTheme) {
-      onThemeValueChange(editingTheme, editValue)
-    }
-    setEditingTheme(null)
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSubmit()
-    } else if (e.key === 'Escape') {
-      setEditingTheme(null)
-    }
-  }
-
-  if (editingTheme) {
-    return (
-      <input
-        ref={inputRef}
-        type={variable.type === 'number' ? 'number' : 'text'}
-        value={editValue}
-        onChange={(e) => setEditValue(e.target.value)}
-        onBlur={handleSubmit}
-        onKeyDown={handleKeyDown}
-        onClick={(e) => e.stopPropagation()}
-        className="w-14 shrink-0 bg-surface-elevated border border-accent-bright rounded px-1 py-0.5 text-[10px] text-text-primary outline-none font-mono"
-      />
-    )
-  }
-
-  return (
-    <span
-      className="w-14 shrink-0 text-[10px] font-mono text-text-muted truncate cursor-pointer hover:text-text-primary"
-      onClick={handleStartEdit}
-      title={`${activeTheme}: ${currentValue} (click to edit)`}
-    >
-      {currentValue || '""'}
-    </span>
-  )
-}
-
-interface VariableItemProps {
-  variable: Variable
-  isSelected: boolean
-  onSelect: (id: string) => void
-}
-
-function VariableItem({ variable, isSelected, onSelect }: VariableItemProps) {
-  const updateVariable = useVariableStore((s) => s.updateVariable)
-  const updateVariableThemeValue = useVariableStore((s) => s.updateVariableThemeValue)
-  const deleteVariable = useVariableStore((s) => s.deleteVariable)
-  const activeTheme = useThemeStore((s) => s.activeTheme)
-  const [isHovered, setIsHovered] = useState(false)
-  const [isEditingName, setIsEditingName] = useState(false)
-  const [editName, setEditName] = useState(variable.name)
-  const nameInputRef = useRef<HTMLInputElement>(null)
-
-  const lightValue = getVariableValue(variable, 'light')
-  const darkValue = getVariableValue(variable, 'dark')
-
-  useEffect(() => {
-    if (isEditingName && nameInputRef.current) {
-      nameInputRef.current.focus()
-      nameInputRef.current.select()
-    }
-  }, [isEditingName])
-
-  const handleDelete = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    deleteVariable(variable.id)
-  }
-
-  const handleDoubleClick = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    setEditName(variable.name)
-    setIsEditingName(true)
-  }
-
-  const handleNameSubmit = () => {
-    const trimmed = editName.trim()
-    if (trimmed && trimmed !== variable.name) {
-      updateVariable(variable.id, { name: trimmed })
-    }
-    setIsEditingName(false)
-  }
-
-  const handleNameKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleNameSubmit()
-    } else if (e.key === 'Escape') {
-      setIsEditingName(false)
-      setEditName(variable.name)
-    }
-  }
-
-  const handleThemeValueChange = (theme: ThemeName, value: string) => {
-    updateVariableThemeValue(variable.id, theme, value)
-  }
-
-  const badge = typeBadge[variable.type]
-
-  return (
-    <div
-      className={clsx(
-        'flex items-center justify-between py-1.5 px-3 cursor-pointer transition-colors duration-100',
-        isSelected ? 'bg-accent-primary hover:bg-accent-hover' : 'hover:bg-surface-elevated'
-      )}
-      onClick={() => onSelect(variable.id)}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      <div className="flex items-center gap-2 flex-1 min-w-0">
-        {/* Type badge */}
-        <span className={clsx('w-4 h-4 rounded text-[9px] font-bold flex items-center justify-center shrink-0', badge.className)}>
-          {badge.label}
-        </span>
-
-        {/* Type-specific preview */}
-        {variable.type === 'color' ? (
-          <ColorSwatches
-            variable={variable}
-            activeTheme={activeTheme}
-            lightValue={lightValue}
-            darkValue={darkValue}
-            onThemeValueChange={handleThemeValueChange}
-          />
-        ) : (
-          <ValuePreview
-            variable={variable}
-            activeTheme={activeTheme}
-            lightValue={lightValue}
-            darkValue={darkValue}
-            onThemeValueChange={handleThemeValueChange}
-          />
-        )}
-
-        {/* Variable name (editable on double-click) */}
-        {isEditingName ? (
-          <input
-            ref={nameInputRef}
-            type="text"
-            value={editName}
-            onChange={(e) => setEditName(e.target.value)}
-            onBlur={handleNameSubmit}
-            onKeyDown={handleNameKeyDown}
-            onClick={(e) => e.stopPropagation()}
-            className="flex-1 min-w-0 bg-surface-elevated border border-accent-bright rounded px-1 py-0.5 text-xs text-text-primary outline-none"
-          />
-        ) : (
-          <span
-            className={clsx(
-              'text-xs whitespace-nowrap overflow-hidden text-ellipsis',
-              isSelected ? 'text-white' : 'text-text-secondary'
-            )}
-            onDoubleClick={handleDoubleClick}
-          >
-            {variable.name}
-          </span>
-        )}
-      </div>
-
-      {/* Delete button (visible on hover) */}
-      {isHovered && !isEditingName && (
-        <button
-          className="bg-transparent border-none cursor-pointer p-1 rounded hover:bg-white/10 text-text-muted hover:text-red-400 transition-colors"
-          onClick={handleDelete}
-          title="Delete variable"
-        >
-          <TrashIcon />
-        </button>
-      )}
-    </div>
-  )
 }
 
 // Default values per variable type
@@ -367,24 +29,278 @@ const defaultNames: Record<VariableType, string> = {
   string: 'String',
 }
 
-export function VariablesPanel() {
-  const variables = useVariableStore((s) => s.variables)
-  const addVariable = useVariableStore((s) => s.addVariable)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [showAddMenu, setShowAddMenu] = useState(false)
-  const addMenuRef = useRef<HTMLDivElement>(null)
+// Inline editable text cell
+function EditableCell({
+  value,
+  onCommit,
+  className,
+  inputType = 'text',
+}: {
+  value: string
+  onCommit: (value: string) => void
+  className?: string
+  inputType?: 'text' | 'number'
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [editing])
+
+  const commit = () => {
+    const trimmed = draft.trim()
+    if (trimmed !== value) {
+      onCommit(trimmed)
+    }
+    setEditing(false)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') commit()
+    else if (e.key === 'Escape') {
+      setDraft(value)
+      setEditing(false)
+    }
+  }
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        type={inputType}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={handleKeyDown}
+        className={clsx(
+          'w-full bg-surface-elevated border border-accent-bright rounded px-2 py-1 text-xs text-text-primary outline-none',
+          className
+        )}
+      />
+    )
+  }
+
+  return (
+    <span
+      className={clsx(
+        'text-xs text-text-secondary truncate cursor-text hover:text-text-primary block px-2 py-1 rounded hover:bg-surface-elevated',
+        className
+      )}
+      onClick={() => {
+        setDraft(value)
+        setEditing(true)
+      }}
+    >
+      {value || '(empty)'}
+    </span>
+  )
+}
+
+// Color cell with swatch + hex value
+function ColorCell({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <div className="flex items-center gap-2 px-2 py-1">
+      <label className="relative w-5 h-5 rounded border border-border-light cursor-pointer shrink-0">
+        <div className="w-full h-full rounded" style={{ backgroundColor: value }} />
+        <input
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+        />
+      </label>
+      <span className="text-xs text-text-secondary font-mono truncate">
+        {value.replace('#', '').toUpperCase()}
+      </span>
+    </div>
+  )
+}
+
+// Value cell dispatcher
+function ValueCell({
+  variable,
+  theme,
+}: {
+  variable: Variable
+  theme: ThemeName
+}) {
+  const updateVariableThemeValue = useVariableStore((s) => s.updateVariableThemeValue)
+  const value = getVariableValue(variable, theme)
+
+  if (variable.type === 'color') {
+    return (
+      <ColorCell
+        value={value}
+        onChange={(v) => updateVariableThemeValue(variable.id, theme, v)}
+      />
+    )
+  }
+
+  return (
+    <EditableCell
+      value={value}
+      onCommit={(v) => updateVariableThemeValue(variable.id, theme, v)}
+      inputType={variable.type === 'number' ? 'number' : 'text'}
+    />
+  )
+}
+
+// Trash icon
+const TrashIcon = () => (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5">
+    <path
+      d="M4 4h8M5.5 4V3a1 1 0 011-1h3a1 1 0 011 1v1M6 6v6M8 6v6M10 6v6M4.5 4l.5 9a1 1 0 001 1h4a1 1 0 001-1l.5-9"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+    />
+  </svg>
+)
+
+// Plus icon
+const PlusIcon = () => (
+  <svg viewBox="0 0 16 16" className="w-4 h-4">
+    <path d="M8 2v12M2 8h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+)
+
+// Variable row in the table
+function VariableRow({ variable }: { variable: Variable }) {
+  const updateVariable = useVariableStore((s) => s.updateVariable)
+  const deleteVariable = useVariableStore((s) => s.deleteVariable)
+  const [hovered, setHovered] = useState(false)
+  const badge = typeBadge[variable.type]
+
+  return (
+    <tr
+      className="border-b border-border-light hover:bg-surface-elevated/50 transition-colors"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {/* Name */}
+      <td className="py-1 px-1">
+        <div className="flex items-center gap-2">
+          <span
+            className={clsx(
+              'w-5 h-5 rounded text-[9px] font-bold flex items-center justify-center shrink-0',
+              badge.className
+            )}
+          >
+            {badge.label}
+          </span>
+          <EditableCell
+            value={variable.name}
+            onCommit={(name) => updateVariable(variable.id, { name })}
+          />
+        </div>
+      </td>
+      {/* Light */}
+      <td className="py-1 px-1 border-l border-border-light">
+        <ValueCell variable={variable} theme="light" />
+      </td>
+      {/* Dark */}
+      <td className="py-1 px-1 border-l border-border-light">
+        <ValueCell variable={variable} theme="dark" />
+      </td>
+      {/* Actions */}
+      <td className="py-1 px-1 w-8 border-l border-border-light">
+        {hovered && (
+          <button
+            className="p-1 rounded hover:bg-white/10 text-text-muted hover:text-red-400 transition-colors"
+            onClick={() => deleteVariable(variable.id)}
+            title="Delete variable"
+          >
+            <TrashIcon />
+          </button>
+        )}
+      </td>
+    </tr>
+  )
+}
+
+interface VariablesDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+
+// Reusable dropdown for adding variables by type
+function AddVariableMenu({
+  show,
+  onToggle,
+  onAdd,
+  dropdownPosition = 'below',
+  children,
+}: {
+  show: boolean
+  onToggle: (show: boolean) => void
+  onAdd: (type: VariableType) => void
+  dropdownPosition?: 'below' | 'above'
+  children: React.ReactNode
+}) {
+  const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (addMenuRef.current && !addMenuRef.current.contains(e.target as Node)) {
-        setShowAddMenu(false)
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onToggle(false)
       }
     }
-    if (showAddMenu) {
+    if (show) {
       document.addEventListener('mousedown', handleClickOutside)
       return () => document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [showAddMenu])
+  }, [show, onToggle])
+
+  return (
+    <div className="relative" ref={ref}>
+      <div onClick={() => onToggle(!show)}>{children}</div>
+      {show && (
+        <div
+          className={clsx(
+            'absolute bg-surface-default border border-border-light rounded shadow-lg z-50 min-w-[120px]',
+            dropdownPosition === 'above' ? 'bottom-full mb-1 left-0' : 'top-full mt-1 right-0'
+          )}
+        >
+          {(['color', 'number', 'string'] as VariableType[]).map((type) => (
+            <button
+              key={type}
+              className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-surface-hover text-left text-xs text-text-primary"
+              onClick={() => onAdd(type)}
+            >
+              <span
+                className={clsx(
+                  'w-4 h-4 rounded text-[9px] font-bold flex items-center justify-center',
+                  typeBadge[type].className
+                )}
+              >
+                {typeBadge[type].label}
+              </span>
+              {type.charAt(0).toUpperCase() + type.slice(1)}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function VariablesDialog({ open, onOpenChange }: VariablesDialogProps) {
+  const variables = useVariableStore((s) => s.variables)
+  const addVariable = useVariableStore((s) => s.addVariable)
+  const [showHeaderMenu, setShowHeaderMenu] = useState(false)
+  const [showFooterMenu, setShowFooterMenu] = useState(false)
 
   const handleAddVariable = (type: VariableType) => {
     const defaultVal = defaultValues[type]
@@ -400,76 +316,67 @@ export function VariablesPanel() {
       },
     }
     addVariable(newVar)
-    setSelectedId(newVar.id)
-    setShowAddMenu(false)
+    setShowHeaderMenu(false)
+    setShowFooterMenu(false)
   }
 
   return (
-    <div className="h-[200px] shrink-0 bg-surface-panel border-b border-border-default flex flex-col select-none">
-      {/* Header */}
-      <div className="flex justify-between items-center px-4 py-3 border-b border-border-default">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-text-primary uppercase tracking-wide">Variables</span>
-          <span className="bg-border-default text-text-muted px-1.5 py-0.5 rounded text-[10px] font-medium">
-            {variables.length}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <div className="relative" ref={addMenuRef}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col gap-0 p-0" showCloseButton={false}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border-light">
+          <DialogTitle>Variables</DialogTitle>
+          <AddVariableMenu show={showHeaderMenu} onToggle={setShowHeaderMenu} onAdd={handleAddVariable}>
             <button
-              className="bg-transparent border-none cursor-pointer p-1 rounded hover:bg-surface-elevated transition-colors"
-              onClick={() => setShowAddMenu(!showAddMenu)}
+              className="p-1 rounded hover:bg-surface-elevated transition-colors text-text-muted hover:text-text-primary"
               title="Add variable"
             >
               <PlusIcon />
             </button>
-            {showAddMenu && (
-              <div className="absolute right-0 top-full mt-1 bg-surface-default border border-border-light rounded shadow-lg z-50 min-w-[120px]">
-                <button
-                  className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-surface-hover text-left text-xs text-text-primary"
-                  onClick={() => handleAddVariable('color')}
-                >
-                  <span className={clsx('w-4 h-4 rounded text-[9px] font-bold flex items-center justify-center', typeBadge.color.className)}>C</span>
-                  Color
-                </button>
-                <button
-                  className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-surface-hover text-left text-xs text-text-primary"
-                  onClick={() => handleAddVariable('number')}
-                >
-                  <span className={clsx('w-4 h-4 rounded text-[9px] font-bold flex items-center justify-center', typeBadge.number.className)}>
-                    #
-                  </span>
-                  Number
-                </button>
-                <button
-                  className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-surface-hover text-left text-xs text-text-primary"
-                  onClick={() => handleAddVariable('string')}
-                >
-                  <span className={clsx('w-4 h-4 rounded text-[9px] font-bold flex items-center justify-center', typeBadge.string.className)}>T</span>
-                  String
-                </button>
-              </div>
-            )}
-          </div>
+          </AddVariableMenu>
         </div>
-      </div>
 
-      {/* List */}
-      <div className="flex-1 overflow-y-auto py-2">
-        {variables.length === 0 ? (
-          <div className="text-text-disabled text-xs text-center p-5">No variables yet</div>
-        ) : (
-          variables.map((variable) => (
-            <VariableItem
-              key={variable.id}
-              variable={variable}
-              isSelected={selectedId === variable.id}
-              onSelect={setSelectedId}
-            />
-          ))
-        )}
-      </div>
-    </div>
+        {/* Table */}
+        <div className="flex-1 overflow-y-auto">
+          <table className="w-full border-collapse select-none">
+            <thead>
+              <tr className="border-b border-border-light bg-surface-panel sticky top-0">
+                <th className="text-left text-[11px] font-semibold text-text-muted uppercase tracking-wide px-3 py-2">
+                  Name
+                </th>
+                <th className="text-left text-[11px] font-semibold text-text-muted uppercase tracking-wide px-3 py-2 border-l border-border-light">
+                  Light
+                </th>
+                <th className="text-left text-[11px] font-semibold text-text-muted uppercase tracking-wide px-3 py-2 border-l border-border-light">
+                  Dark
+                </th>
+                <th className="w-8 border-l border-border-light" />
+              </tr>
+            </thead>
+            <tbody>
+              {variables.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="text-center text-text-disabled text-xs py-12">
+                    No variables yet
+                  </td>
+                </tr>
+              ) : (
+                variables.map((v) => <VariableRow key={v.id} variable={v} />)
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-border-light px-4 py-3">
+          <AddVariableMenu show={showFooterMenu} onToggle={setShowFooterMenu} onAdd={handleAddVariable} dropdownPosition="above">
+            <button className="flex items-center gap-2 text-xs text-text-muted hover:text-text-primary transition-colors">
+              <PlusIcon />
+              Create variable
+            </button>
+          </AddVariableMenu>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
