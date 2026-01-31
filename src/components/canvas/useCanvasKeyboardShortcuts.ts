@@ -205,6 +205,27 @@ export function useCanvasKeyboardShortcuts({
         return;
       }
 
+      if ((e.metaKey || e.ctrlKey) && e.code === "KeyA") {
+        e.preventDefault();
+        const { enteredContainerId } = useSelectionStore.getState();
+
+        if (enteredContainerId) {
+          const container = findNodeById(nodes, enteredContainerId);
+          if (container && isContainerNode(container)) {
+            const ids = container.children
+              .filter((n) => n.visible !== false)
+              .map((n) => n.id);
+            useSelectionStore.getState().setSelectedIds(ids);
+          }
+        } else {
+          const ids = nodes
+            .filter((n) => n.visible !== false)
+            .map((n) => n.id);
+          useSelectionStore.getState().setSelectedIds(ids);
+        }
+        return;
+      }
+
       if (
         (e.metaKey || e.ctrlKey) &&
         !e.altKey &&
