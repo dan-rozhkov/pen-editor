@@ -36,13 +36,46 @@ function getGroupTranslate(el: SVGElement): { tx: number; ty: number } {
   return { tx: 0, ty: 0 };
 }
 
+/** Inherited SVG style properties passed down from parent elements */
+interface InheritedStyle {
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: string;
+  strokeLinejoin?: string;
+  strokeLinecap?: string;
+}
+
+/** Resolve a color value: treat "currentColor" as black, return null for "none" */
+function resolveInheritedColor(
+  localAttr: string | null,
+  inherited: string | undefined,
+): string | undefined {
+  const raw = localAttr ?? inherited;
+  if (!raw || raw === "none") return undefined;
+  if (raw === "currentColor") return "#000000";
+  return raw;
+}
+
+/** Read style attributes from an element, falling back to inherited values */
+function getInheritedStyle(el: Element, parent: InheritedStyle): InheritedStyle {
+  return {
+    fill: el.getAttribute("fill") ?? parent.fill,
+    stroke: el.getAttribute("stroke") ?? parent.stroke,
+    strokeWidth: el.getAttribute("stroke-width") ?? parent.strokeWidth,
+    strokeLinejoin: el.getAttribute("stroke-linejoin") ?? parent.strokeLinejoin,
+    strokeLinecap: el.getAttribute("stroke-linecap") ?? parent.strokeLinecap,
+  };
+}
+
 /**
- * Recursively collect path elements from an SVG element, accumulating parent translate offsets.
+ * Recursively collect path elements from an SVG element, accumulating parent translate offsets
+ * and inheriting fill/stroke from parent elements.
  */
 function collectPaths(
   el: Element,
   offsetX: number,
   offsetY: number,
+  inherited: InheritedStyle,
 ): PathNode[] {
   const results: PathNode[] = [];
 
@@ -51,13 +84,21 @@ function collectPaths(
       const d = child.getAttribute("d");
       if (!d) continue;
 
-      const fill = child.getAttribute("fill");
-      const stroke = child.getAttribute("stroke");
-      const strokeWidth = child.getAttribute("stroke-width");
-      const strokeLinejoin = child.getAttribute("stroke-linejoin");
-      const strokeLinecap = child.getAttribute("stroke-linecap");
+      // Resolve fill and stroke with inheritance
+      const localFill = child.getAttribute("fill");
+      const localStroke = child.getAttribute("stroke");
+      const resolvedFill = resolveInheritedColor(localFill, inherited.fill);
+      const resolvedStroke = resolveInheritedColor(localStroke, inherited.stroke);
+      const resolvedStrokeWidth = child.getAttribute("stroke-width") ?? inherited.strokeWidth;
+      const resolvedLinejoin = child.getAttribute("stroke-linejoin") ?? inherited.strokeLinejoin;
+      const resolvedLinecap = child.getAttribute("stroke-linecap") ?? inherited.strokeLinecap;
+
+      // Skip fully invisible paths (no fill AND no stroke)
+      if (!resolvedFill && !resolvedStroke) continue;
 
       const bbox = getPathBBox(d);
+      // Skip zero-size paths (e.g. bounding box rectangles like "M0 0h24v24H0z")
+      if (bbox.width === 0 && bbox.height === 0) continue;
 
       const node: PathNode = {
         id: generateId(),
@@ -68,17 +109,17 @@ function collectPaths(
         width: Math.max(1, bbox.width),
         height: Math.max(1, bbox.height),
         geometry: d,
-        fill: fill && fill !== "none" ? fill : undefined,
+        fill: resolvedFill,
         geometryBounds: { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height },
       };
 
       // Add stroke info if present
-      if (stroke && stroke !== "none") {
+      if (resolvedStroke) {
         node.pathStroke = {
-          fill: stroke,
-          thickness: strokeWidth ? parseFloat(strokeWidth) : 1,
-          join: strokeLinejoin || "round",
-          cap: strokeLinecap || "round",
+          fill: resolvedStroke,
+          thickness: resolvedStrokeWidth ? parseFloat(resolvedStrokeWidth) : 1,
+          join: resolvedLinejoin || "round",
+          cap: resolvedLinecap || "round",
           align: "center",
         };
       }
@@ -86,10 +127,12 @@ function collectPaths(
       results.push(node);
     } else if (child.tagName === "g") {
       const { tx, ty } = getGroupTranslate(child as SVGElement);
-      results.push(...collectPaths(child, offsetX + tx, offsetY + ty));
+      const childStyle = getInheritedStyle(child, inherited);
+      results.push(...collectPaths(child, offsetX + tx, offsetY + ty, childStyle));
     } else {
       // Recurse into other elements (like <svg>, <defs> siblings, etc.)
-      results.push(...collectPaths(child, offsetX, offsetY));
+      const childStyle = getInheritedStyle(child, inherited);
+      results.push(...collectPaths(child, offsetX, offsetY, childStyle));
     }
   }
 
@@ -125,7 +168,16 @@ export function parseSvgToNodes(svgText: string): { node: SceneNode; svgWidth: n
     if (h) svgHeight = parseFloat(h) || 100;
   }
 
-  const pathNodes = collectPaths(svgEl, 0, 0);
+  // Build inherited style from root <svg> element attributes
+  const rootStyle: InheritedStyle = {
+    fill: svgEl.getAttribute("fill") ?? undefined,
+    stroke: svgEl.getAttribute("stroke") ?? undefined,
+    strokeWidth: svgEl.getAttribute("stroke-width") ?? undefined,
+    strokeLinejoin: svgEl.getAttribute("stroke-linejoin") ?? undefined,
+    strokeLinecap: svgEl.getAttribute("stroke-linecap") ?? undefined,
+  };
+
+  const pathNodes = collectPaths(svgEl, 0, 0, rootStyle);
   if (pathNodes.length === 0) return null;
 
   if (pathNodes.length === 1) {
