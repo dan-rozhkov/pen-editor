@@ -320,8 +320,8 @@ export function handleAutoLayoutDragEnd(
         moveNode(nodeId, null, 0)
         // Then set position in world coordinates
         updateNode(nodeId, {
-          x: pointerPos.x - nodeWidth / 2,
-          y: pointerPos.y - nodeHeight / 2,
+          x: Math.round(pointerPos.x - nodeWidth / 2),
+          y: Math.round(pointerPos.y - nodeHeight / 2),
         })
       }
     }

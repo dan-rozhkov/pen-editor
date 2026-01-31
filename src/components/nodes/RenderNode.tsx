@@ -253,8 +253,8 @@ export function RenderNode({
     } else {
       // Normal behavior - update position
       updateNode(node.id, {
-        x: target.x(),
-        y: target.y(),
+        x: Math.round(target.x()),
+        y: Math.round(target.y()),
       });
     }
   };
