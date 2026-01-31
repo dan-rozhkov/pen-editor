@@ -56,11 +56,7 @@ import {
   FlipControls,
 } from "./ui/PropertyInputs";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  SelectWithOptions,
 } from "./ui/select";
 import { FontCombobox } from "./ui/FontCombobox";
 import { Input } from "./ui/input";
@@ -319,7 +315,6 @@ function ImageFillSection({
   onUpdate: (updates: Partial<SceneNode>) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [urlInput, setUrlInput] = useState("");
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -336,13 +331,6 @@ function ImageFillSection({
     e.target.value = "";
   };
 
-  const handleUrlSubmit = () => {
-    if (!urlInput.trim()) return;
-    onUpdate({
-      imageFill: { url: urlInput.trim(), mode: imageFill?.mode ?? "fill" },
-    } as Partial<SceneNode>);
-    setUrlInput("");
-  };
 
   const handleRemove = () => {
     onUpdate({ imageFill: undefined } as Partial<SceneNode>);
@@ -405,31 +393,12 @@ function ImageFillSection({
           </div>
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="w-full px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
-          >
-            Upload Image
-          </button>
-          <div className="flex gap-1">
-            <input
-              type="text"
-              placeholder="Or paste URL..."
-              value={urlInput}
-              onChange={(e) => setUrlInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleUrlSubmit()}
-              className="flex-1 px-2 py-1 bg-surface-elevated border border-border-light rounded text-text-primary text-xs outline-none focus:border-accent-primary"
-            />
-            <button
-              onClick={handleUrlSubmit}
-              disabled={!urlInput.trim()}
-              className="px-2 py-1 bg-accent-primary border-none rounded text-white text-xs cursor-pointer transition-colors hover:bg-accent-hover disabled:opacity-50 disabled:cursor-default"
-            >
-              Set
-            </button>
-          </div>
-        </div>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="w-full px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
+        >
+          Upload Image
+        </button>
       )}
     </PropertySection>
   );
@@ -501,6 +470,25 @@ function PropertyEditor({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Convert Group↔Frame */}
+      {(node.type === "group" ||
+        (node.type === "frame" && !(node as FrameNode).reusable)) && (
+        <PropertySection title="Type">
+          <SelectInput
+            value={node.type}
+            options={[
+              { value: "frame", label: "Frame" },
+              { value: "group", label: "Group" },
+            ]}
+            onChange={(v) => {
+              if (v !== node.type) {
+                useSceneStore.getState().convertNodeType(node.id);
+              }
+            }}
+          />
+        </PropertySection>
+      )}
+
       {/* Position Section */}
       <PropertySection title="Position">
         <PropertyRow>
@@ -880,22 +868,6 @@ function PropertyEditor({
         </PropertySection>
       )}
 
-      {/* Convert Group↔Frame */}
-      {(node.type === "group" ||
-        (node.type === "frame" && !(node as FrameNode).reusable)) && (
-        <PropertySection title="Convert">
-          <button
-            className="w-full px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
-            onClick={() =>
-              useSceneStore.getState().convertNodeType(node.id)
-            }
-          >
-            {node.type === "group"
-              ? "Convert to Frame"
-              : "Convert to Group"}
-          </button>
-        </PropertySection>
-      )}
 
       {/* Instance info (RefNode only) */}
       {node.type === "ref" &&
@@ -1357,38 +1329,22 @@ function ExportSection({ selectedNode }: ExportSectionProps) {
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-2">
           <div className="flex-1">
-            <Select
+            <SelectWithOptions
               value={String(scale)}
               onValueChange={(v) => setScale(Number(v) as ExportScale)}
-            >
-              <SelectTrigger size="sm" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {scaleOptions.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              options={scaleOptions}
+              size="sm"
+              className="w-full"
+            />
           </div>
           <div className="flex-1">
-            <Select
+            <SelectWithOptions
               value={format}
               onValueChange={(v) => setFormat(v as ExportFormat)}
-            >
-              <SelectTrigger size="sm" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {formatOptions.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              options={formatOptions}
+              size="sm"
+              className="w-full"
+            />
           </div>
         </div>
         <Button

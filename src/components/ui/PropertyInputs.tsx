@@ -4,11 +4,7 @@ import { getVariableValue } from "../../types/variable";
 import { Input } from "./input";
 import { Label } from "./label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  SelectWithOptions,
 } from "./select";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "./input-group";
 import { ButtonGroup } from "./button-group";
@@ -314,18 +310,13 @@ export function SelectInput({
     return (
       <div className="flex-1 flex flex-col gap-1">
         <Label className="text-[10px] font-normal">{label}</Label>
-        <Select value={value} onValueChange={handleChange}>
-          <SelectTrigger size="sm" className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {options.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SelectWithOptions
+          value={value}
+          onValueChange={handleChange}
+          options={options}
+          size="sm"
+          className="w-full"
+        />
       </div>
     );
   }
@@ -334,36 +325,26 @@ export function SelectInput({
     return (
       <div className="flex-1 flex items-center gap-1">
         <Label className="text-[11px] w-12 shrink-0">{label}</Label>
-        <Select value={value} onValueChange={handleChange}>
-          <SelectTrigger size="sm" className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {options.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SelectWithOptions
+          value={value}
+          onValueChange={handleChange}
+          options={options}
+          size="sm"
+          className="w-full"
+        />
       </div>
     );
   }
 
   return (
     <div className="flex-1">
-      <Select value={value} onValueChange={handleChange}>
-        <SelectTrigger size="sm" className="w-full">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {options.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value}>
-              {opt.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <SelectWithOptions
+        value={value}
+        onValueChange={handleChange}
+        options={options}
+        size="sm"
+        className="w-full"
+      />
     </div>
   );
 }

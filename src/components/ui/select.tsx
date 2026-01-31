@@ -189,6 +189,44 @@ function SelectScrollDownButton({
   );
 }
 
+interface SelectWithOptionsProps {
+  value: string;
+  onValueChange: (value: string | null) => void;
+  options: { value: string; label: string }[];
+  children?: React.ReactNode;
+  className?: string;
+  size?: "sm" | "default";
+}
+
+function SelectWithOptions({
+  value,
+  onValueChange,
+  options,
+  children,
+  className,
+  size = "default",
+  ...props
+}: SelectWithOptionsProps) {
+  // Find the label for the current value
+  const currentLabel = options.find(opt => opt.value === value)?.label || value;
+
+  return (
+    <Select value={value} onValueChange={onValueChange} {...props}>
+      <SelectTrigger size={size} className={className}>
+        <SelectValue>{currentLabel}</SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((opt) => (
+          <SelectItem key={opt.value} value={opt.value}>
+            {opt.label}
+          </SelectItem>
+        ))}
+        {children}
+      </SelectContent>
+    </Select>
+  );
+}
+
 export {
   Select,
   SelectContent,
@@ -200,4 +238,5 @@ export {
   SelectSeparator,
   SelectTrigger,
   SelectValue,
+  SelectWithOptions,
 };
