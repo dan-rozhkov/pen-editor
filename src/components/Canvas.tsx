@@ -43,6 +43,7 @@ export function Canvas() {
   const nodes = useSceneStore((state) => state.nodes);
   const pageBackground = useSceneStore((state) => state.pageBackground);
   const addNode = useSceneStore((state) => state.addNode);
+  const addChildToFrame = useSceneStore((state) => state.addChildToFrame);
   const { copiedNode, copyNode } = useClipboardStore();
   const setStageRef = useCanvasRefStore((s) => s.setStageRef);
   const calculateLayoutForFrame = useLayoutStore(
@@ -109,6 +110,7 @@ export function Canvas() {
     setIsSpacePressed,
     setIsPanning,
     addNode,
+    addChildToFrame,
     deleteNode,
     updateNode,
     moveNode,

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { FrameNode, SceneNode } from "@/types/scene";
+import { isContainerNode, type FrameNode, type SceneNode } from "@/types/scene";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
@@ -19,6 +19,7 @@ interface CanvasKeyboardShortcutsParams {
   setIsSpacePressed: (value: boolean) => void;
   setIsPanning: (value: boolean) => void;
   addNode: (node: SceneNode) => void;
+  addChildToFrame: (frameId: string, child: SceneNode) => void;
   deleteNode: (id: string) => void;
   updateNode: (id: string, updates: Partial<SceneNode>) => void;
   moveNode: (nodeId: string, targetParentId: string, index: number) => void;
@@ -46,6 +47,7 @@ export function useCanvasKeyboardShortcuts({
   setIsSpacePressed,
   setIsPanning,
   addNode,
+  addChildToFrame,
   deleteNode,
   updateNode,
   moveNode,
@@ -153,7 +155,24 @@ export function useCanvasKeyboardShortcuts({
         e.preventDefault();
         if (copiedNode) {
           const clonedNode = cloneNodeWithNewId(copiedNode);
-          addNode(clonedNode);
+          const selectedIds = useSelectionStore.getState().selectedIds;
+          let targetContainerId: string | null = null;
+
+          if (selectedIds.length === 1) {
+            const selectedNode = findNodeById(nodes, selectedIds[0]);
+            if (selectedNode && isContainerNode(selectedNode)) {
+              targetContainerId = selectedNode.id;
+            }
+          }
+
+          if (targetContainerId) {
+            clonedNode.x = 20;
+            clonedNode.y = 20;
+            addChildToFrame(targetContainerId, clonedNode);
+          } else {
+            addNode(clonedNode);
+          }
+
           useSelectionStore.getState().select(clonedNode.id);
         }
         return;
@@ -401,6 +420,7 @@ export function useCanvasKeyboardShortcuts({
       window.removeEventListener("keyup", handleKeyUp);
     };
   }, [
+    addChildToFrame,
     addNode,
     cancelDrawing,
     clearSelection,
