@@ -42,29 +42,29 @@ export function ComponentsPanel() {
 
   if (components.length === 0) {
     return (
-      <div className="bg-surface-panel flex flex-col select-none border-b border-border-default">
-        <div className="flex justify-between items-center px-4 py-3 border-b border-border-default text-xs font-semibold text-text-primary uppercase tracking-wide">
-          <span>Components</span>
-          <span className="bg-border-default text-text-muted px-1.5 py-0.5 rounded text-[10px] font-medium">
-            0
-          </span>
-        </div>
-        <div className="text-text-disabled text-xs text-center p-5">
-          No components yet
+      <div className="bg-surface-panel flex flex-col select-none">
+        <div className="relative border-b border-border-default">
+          <div className="flex flex-col gap-2 px-4 pt-3 pb-5">
+            <div className="text-[11px] font-semibold text-text-primary">
+              Components
+            </div>
+            <div className="text-text-disabled text-xs text-center p-5">
+              No components yet
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-surface-panel flex flex-col select-none border-b border-border-default max-h-[200px]">
-      <div className="flex justify-between items-center px-4 py-3 border-b border-border-default text-xs font-semibold text-text-primary uppercase tracking-wide">
-        <span>Components</span>
-        <span className="bg-border-default text-text-muted px-1.5 py-0.5 rounded text-[10px] font-medium">
-          {components.length}
-        </span>
-      </div>
-      <div className="flex-1 overflow-y-auto py-2">
+    <div className="bg-surface-panel flex flex-col select-none max-h-[200px]">
+      <div className="relative border-b border-border-default">
+        <div className="flex flex-col gap-2 px-4 pt-3 pb-5">
+          <div className="text-[11px] font-semibold text-text-primary">
+            Components
+          </div>
+          <div className="flex-1 overflow-y-auto py-2">
         {components.map((component) => (
           <button
             key={component.id}
@@ -80,6 +80,8 @@ export function ComponentsPanel() {
             </span>
           </button>
         ))}
+          </div>
+        </div>
       </div>
     </div>
   );

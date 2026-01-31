@@ -378,16 +378,6 @@ function LayerList({
   );
 }
 
-// Helper to count total visible nodes (for the badge)
-function countNodes(nodes: SceneNode[]): number {
-  return nodes.reduce((count, node) => {
-    if (isContainerNode(node)) {
-      return count + 1 + countNodes(node.children);
-    }
-    return count + 1;
-  }, 0);
-}
-
 // Helper to get children array of a parent (or root nodes if parentId is null)
 function getChildrenOfParent(
   nodes: SceneNode[],
@@ -502,33 +492,33 @@ export function LayersPanel() {
 
   // Reverse the nodes array so that top items in the list appear on top visually (higher z-index)
   const reversedNodes = [...nodes].reverse();
-  const totalCount = countNodes(nodes);
 
   return (
     <div className="flex-1 bg-surface-panel flex flex-col select-none overflow-hidden">
-      <div className="flex justify-between items-center px-4 py-3 border-b border-border-default text-xs font-semibold text-text-primary uppercase tracking-wide">
-        <span>Layers</span>
-        <span className="bg-border-default text-text-muted px-1.5 py-0.5 rounded text-[10px] font-medium">
-          {totalCount}
-        </span>
-      </div>
-      <div className="flex-1 overflow-y-auto py-2" onDragEnd={handleDragEnd}>
-        {reversedNodes.length === 0 ? (
-          <div className="text-text-disabled text-xs text-center p-5">
-            No layers yet
+      <div className="relative border-b border-border-default">
+        <div className="px-4 pt-3 pb-3">
+          <div className="text-[11px] font-semibold text-text-primary">
+            Layers
           </div>
-        ) : (
-          <LayerList
-            nodes={reversedNodes}
-            depth={0}
-            parentId={null}
-            dragState={dragState}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDragEnd={handleDragEnd}
-            onDrop={handleDrop}
-          />
-        )}
+        </div>
+        <div className="flex-1 overflow-y-auto" onDragEnd={handleDragEnd}>
+          {reversedNodes.length === 0 ? (
+            <div className="text-text-disabled text-xs text-center p-5">
+              No layers yet
+            </div>
+          ) : (
+            <LayerList
+              nodes={reversedNodes}
+              depth={0}
+              parentId={null}
+              dragState={dragState}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDragEnd={handleDragEnd}
+              onDrop={handleDrop}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
