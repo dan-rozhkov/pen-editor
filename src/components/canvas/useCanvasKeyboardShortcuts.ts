@@ -3,6 +3,7 @@ import { isContainerNode, type FrameNode, type SceneNode } from "@/types/scene";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
+import { useViewportStore } from "@/store/viewportStore";
 import { cloneNodeWithNewId } from "@/utils/cloneNode";
 import {
   findComponentById,
@@ -10,6 +11,7 @@ import {
   findParentFrame,
   findParentFrameInComponent,
 } from "@/utils/nodeUtils";
+import { parseSvgToNodes } from "@/utils/svgUtils";
 
 interface CanvasKeyboardShortcutsParams {
   nodes: SceneNode[];
@@ -152,8 +154,8 @@ export function useCanvasKeyboardShortcuts({
       }
 
       if ((e.metaKey || e.ctrlKey) && e.code === "KeyV") {
-        e.preventDefault();
         if (copiedNode) {
+          e.preventDefault();
           const clonedNode = cloneNodeWithNewId(copiedNode);
           const selectedIds = useSelectionStore.getState().selectedIds;
           let targetContainerId: string | null = null;
@@ -174,7 +176,9 @@ export function useCanvasKeyboardShortcuts({
           }
 
           useSelectionStore.getState().select(clonedNode.id);
+          return;
         }
+        // Don't preventDefault — let the paste event fire for SVG clipboard content
         return;
       }
 
@@ -206,6 +210,7 @@ export function useCanvasKeyboardShortcuts({
       }
 
       if ((e.metaKey || e.ctrlKey) && e.code === "KeyA") {
+        if (isTyping) return;
         e.preventDefault();
         const { enteredContainerId } = useSelectionStore.getState();
 
@@ -434,11 +439,42 @@ export function useCanvasKeyboardShortcuts({
       }
     };
 
+    const handlePaste = (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isTyping =
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable;
+      if (isTyping) return;
+
+      const text = e.clipboardData?.getData("text/plain")?.trim();
+      if (!text) return;
+
+      // Check if clipboard content looks like SVG
+      if (text.includes("<svg") && text.includes("</svg>")) {
+        e.preventDefault();
+        const result = parseSvgToNodes(text);
+        if (!result) return;
+
+        // Place at viewport center
+        const { x: vpX, y: vpY, scale } = useViewportStore.getState();
+        const viewportCenterX = (-vpX + window.innerWidth / 2) / scale;
+        const viewportCenterY = (-vpY + window.innerHeight / 2) / scale;
+        result.node.x = viewportCenterX - result.node.width / 2;
+        result.node.y = viewportCenterY - result.node.height / 2;
+
+        addNode(result.node);
+        useSelectionStore.getState().select(result.node.id);
+      }
+    };
+
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("paste", handlePaste);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("paste", handlePaste);
     };
   }, [
     addChildToFrame,
