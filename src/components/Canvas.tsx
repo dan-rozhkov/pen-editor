@@ -299,7 +299,7 @@ export function Canvas() {
           ))}
           {/* Smart guides for snapping during drag */}
           <SmartGuides />
-          {/* Distance measurement overlay (Ctrl/Cmd + hover) */}
+          {/* Distance measurement overlay (Option + hover) */}
           <MeasureOverlay />
           {/* Drop indicator for auto-layout reordering */}
           {dropIndicator && <DropIndicator indicator={dropIndicator} />}

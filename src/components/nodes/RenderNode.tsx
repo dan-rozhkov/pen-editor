@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import Konva from "konva";
-import type { GroupNode, PathNode, RefNode, SceneNode, TextNode } from "@/types/scene";
+import type { FrameNode, GroupNode, PathNode, RefNode, SceneNode, TextNode } from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
 import { EllipseRenderer } from "@/components/nodes/EllipseRenderer";
 import { FrameRenderer } from "@/components/nodes/FrameRenderer";
@@ -34,14 +34,58 @@ import {
   findNodeById,
   findParentFrame,
   getNodeAbsolutePosition,
+  getNodeAbsolutePositionWithLayout,
   isDescendantOf,
 } from "@/utils/nodeUtils";
+import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 import {
   collectSnapTargets,
   getSnapEdges,
   calculateSnap,
   type SnapTarget,
 } from "@/utils/smartGuideUtils";
+
+/** Compute effective width/height for a node, accounting for auto-layout sizing modes */
+function getEffectiveSize(
+  nodes: SceneNode[],
+  node: SceneNode,
+  calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
+): { width: number; height: number } {
+  let width = node.width;
+  let height = node.height;
+
+  // Frame with fit_content: use intrinsic size from Yoga
+  if (node.type === "frame" && node.layout?.autoLayout) {
+    const fitWidth = node.sizing?.widthMode === "fit_content";
+    const fitHeight = node.sizing?.heightMode === "fit_content";
+    if (fitWidth || fitHeight) {
+      const intrinsic = calculateFrameIntrinsicSize(node, { fitWidth, fitHeight });
+      if (fitWidth) width = intrinsic.width;
+      if (fitHeight) height = intrinsic.height;
+    }
+  }
+
+  // Child inside auto-layout parent with non-fixed sizing: use layout-computed size
+  const parentCtx = findParentFrame(nodes, node.id);
+  if (
+    parentCtx.isInsideAutoLayout &&
+    parentCtx.parent &&
+    parentCtx.parent.type === "frame"
+  ) {
+    const wMode = node.sizing?.widthMode ?? "fixed";
+    const hMode = node.sizing?.heightMode ?? "fixed";
+    if (wMode !== "fixed" || hMode !== "fixed") {
+      const layoutChildren = calculateLayoutForFrame(parentCtx.parent);
+      const layoutNode = layoutChildren.find((n) => n.id === node.id);
+      if (layoutNode) {
+        if (wMode !== "fixed") width = layoutNode.width;
+        if (hMode !== "fixed") height = layoutNode.height;
+      }
+    }
+  }
+
+  return { width, height };
+}
 
 interface RenderNodeProps {
   node: SceneNode;
@@ -130,21 +174,19 @@ export function RenderNode({
     const selectedNode = findNodeById(nodes, selectedId);
     if (!selectedNode) return;
 
-    const selPos = getNodeAbsolutePosition(nodes, selectedId);
-    const hovPos = getNodeAbsolutePosition(nodes, node.id);
+    const selPos = getNodeAbsolutePositionWithLayout(nodes, selectedId, calculateLayoutForFrame);
+    const hovPos = getNodeAbsolutePositionWithLayout(nodes, node.id, calculateLayoutForFrame);
     if (!selPos || !hovPos) return;
 
     const selBounds = {
       x: selPos.x,
       y: selPos.y,
-      width: selectedNode.width,
-      height: selectedNode.height,
+      ...getEffectiveSize(nodes, selectedNode, calculateLayoutForFrame),
     };
     const hovBounds = {
       x: hovPos.x,
       y: hovPos.y,
-      width: node.width,
-      height: node.height,
+      ...getEffectiveSize(nodes, node, calculateLayoutForFrame),
     };
 
     // Check if hovered node is a parent of the selected node

@@ -41,7 +41,7 @@ export function PrimitivesPanel() {
               size="icon-lg"
               className={`group relative ${
                 isActive
-                  ? "bg-sky-500 text-white hover:bg-sky-500 hover:text-white"
+                  ? "bg-[#0d99ff] text-white hover:bg-[#0d99ff] hover:text-white"
                   : "text-text-secondary hover:text-text-primary hover:bg-surface-elevated"
               }`}
             >
