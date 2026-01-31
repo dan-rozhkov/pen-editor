@@ -4,6 +4,7 @@ import Konva from "konva";
 import { DropIndicator } from "@/components/DropIndicator";
 import { InlineNameEditor } from "@/components/InlineNameEditor";
 import { InlineTextEditor } from "@/components/InlineTextEditor";
+import { MeasureOverlay } from "@/components/MeasureOverlay";
 import { SmartGuides } from "@/components/SmartGuides";
 import { FrameNameLabel } from "@/components/nodes/FrameNameLabel";
 import { NodeSizeLabel } from "@/components/nodes/NodeSizeLabel";
@@ -15,6 +16,7 @@ import { useCanvasSelectionData } from "@/components/canvas/useCanvasSelectionDa
 import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { useClipboardStore } from "@/store/clipboardStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
+import { useMeasureStore } from "@/store/measureStore";
 import { useDragStore } from "@/store/dragStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { useLayoutStore } from "@/store/layoutStore";
@@ -205,6 +207,34 @@ export function Canvas() {
     return () => setStageRef(null);
   }, [setStageRef]);
 
+  // Track Ctrl/Cmd modifier key for distance measurement overlay
+  useEffect(() => {
+    const { setModifierHeld, clearLines } = useMeasureStore.getState();
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Meta" || e.key === "Control") {
+        setModifierHeld(true);
+      }
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "Meta" || e.key === "Control") {
+        setModifierHeld(false);
+        clearLines();
+      }
+    };
+    const handleBlur = () => {
+      setModifierHeld(false);
+      clearLines();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleBlur);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
+    };
+  }, []);
+
   return (
     <div
       ref={containerRef}
@@ -269,6 +299,8 @@ export function Canvas() {
           ))}
           {/* Smart guides for snapping during drag */}
           <SmartGuides />
+          {/* Distance measurement overlay (Ctrl/Cmd + hover) */}
+          <MeasureOverlay />
           {/* Drop indicator for auto-layout reordering */}
           {dropIndicator && <DropIndicator indicator={dropIndicator} />}
           {/* Transformer for selection */}

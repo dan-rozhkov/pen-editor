@@ -12,6 +12,7 @@ import { TextRenderer } from "@/components/nodes/TextRenderer";
 import { useDragStore } from "@/store/dragStore";
 import { useHoverStore } from "@/store/hoverStore";
 import { useLayoutStore } from "@/store/layoutStore";
+import { useMeasureStore } from "@/store/measureStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSmartGuideStore } from "@/store/smartGuideStore";
@@ -25,7 +26,16 @@ import {
   handleAutoLayoutDragEnd,
   isPointInsideRect,
 } from "@/utils/dragUtils";
-import { findParentFrame, getNodeAbsolutePosition } from "@/utils/nodeUtils";
+import {
+  computeParentDistances,
+  computeSiblingDistances,
+} from "@/utils/measureUtils";
+import {
+  findNodeById,
+  findParentFrame,
+  getNodeAbsolutePosition,
+  isDescendantOf,
+} from "@/utils/nodeUtils";
 import {
   collectSnapTargets,
   getSnapEdges,
@@ -106,10 +116,50 @@ export function RenderNode({
 
   const handleMouseEnter = () => {
     setHoveredNode(node.id);
+
+    // Distance measurement: if modifier is held and we have a selected node
+    const { modifierHeld, setLines } = useMeasureStore.getState();
+    if (!modifierHeld) return;
+
+    const currentSelectedIds = useSelectionStore.getState().selectedIds;
+    if (currentSelectedIds.length !== 1) return;
+
+    const selectedId = currentSelectedIds[0];
+    if (selectedId === node.id) return;
+
+    const selectedNode = findNodeById(nodes, selectedId);
+    if (!selectedNode) return;
+
+    const selPos = getNodeAbsolutePosition(nodes, selectedId);
+    const hovPos = getNodeAbsolutePosition(nodes, node.id);
+    if (!selPos || !hovPos) return;
+
+    const selBounds = {
+      x: selPos.x,
+      y: selPos.y,
+      width: selectedNode.width,
+      height: selectedNode.height,
+    };
+    const hovBounds = {
+      x: hovPos.x,
+      y: hovPos.y,
+      width: node.width,
+      height: node.height,
+    };
+
+    // Check if hovered node is a parent of the selected node
+    const isParent = isDescendantOf(nodes, node.id, selectedId);
+
+    if (isParent) {
+      setLines(computeParentDistances(selBounds, hovBounds));
+    } else {
+      setLines(computeSiblingDistances(selBounds, hovBounds));
+    }
   };
 
   const handleMouseLeave = () => {
     setHoveredNode(null);
+    useMeasureStore.getState().clearLines();
   };
 
   // Check if node is hovered (and not selected - selected takes priority)
