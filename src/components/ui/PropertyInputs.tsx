@@ -8,6 +8,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "./input-group";
 import { ButtonGroup } from "./button-group";
 import { Button } from "./button";
 import { FlipHorizontalIcon, FlipVerticalIcon } from "@phosphor-icons/react";
+import { CustomColorPicker } from "./ColorPicker";
 
 interface PropertySectionProps {
   title: string;
@@ -200,11 +201,9 @@ export function ColorInput({
   // Normal mode: color picker + hex input + variable button
   return (
     <div className="flex items-center gap-2 relative" ref={pickerRef}>
-      <input
-        type="color"
+      <CustomColorPicker
         value={value || "#000000"}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-8 h-8 rounded cursor-pointer bg-transparent"
+        onChange={onChange}
       />
       <Input
         type="text"

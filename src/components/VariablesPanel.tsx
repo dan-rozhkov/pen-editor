@@ -4,6 +4,7 @@ import { useVariableStore } from "../store/variableStore";
 import { generateVariableId, getVariableValue } from "../types/variable";
 import type { Variable, VariableType, ThemeName } from "../types/variable";
 import { Dialog, DialogContent, DialogTitle } from "./ui/dialog";
+import { CustomColorPicker } from "./ui/ColorPicker";
 
 // Type badge labels and colors
 const typeBadge: Record<VariableType, { label: string; className: string }> = {
@@ -107,18 +108,7 @@ function ColorCell({
 }) {
   return (
     <div className="flex items-center gap-2 px-2 py-1">
-      <label className="relative w-5 h-5 rounded cursor-pointer shrink-0">
-        <div
-          className="w-full h-full rounded"
-          style={{ backgroundColor: value }}
-        />
-        <input
-          type="color"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-        />
-      </label>
+      <CustomColorPicker value={value} onChange={onChange} swatchSize="sm" />
       <span className="text-xs text-text-secondary font-mono truncate">
         {value.replace("#", "").toUpperCase()}
       </span>
