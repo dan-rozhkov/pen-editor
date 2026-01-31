@@ -3,9 +3,7 @@ import type { Variable, ThemeName } from "../../types/variable";
 import { getVariableValue } from "../../types/variable";
 import { Input } from "./input";
 import { Label } from "./label";
-import {
-  SelectWithOptions,
-} from "./select";
+import { SelectWithOptions } from "./select";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "./input-group";
 import { ButtonGroup } from "./button-group";
 import { Button } from "./button";
@@ -18,11 +16,11 @@ interface PropertySectionProps {
 
 export function PropertySection({ title, children }: PropertySectionProps) {
   return (
-    <div className="flex flex-col gap-2">
-      <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wide">
-        {title}
+    <div className="border-b border-border-default">
+      <div className="flex flex-col gap-2 px-4 pt-3 pb-5">
+        <div className="text-[10px] font-semibold text-text-muted">{title}</div>
+        <div className="flex flex-col gap-2">{children}</div>
       </div>
-      <div className="flex flex-col gap-2">{children}</div>
     </div>
   );
 }
@@ -170,10 +168,10 @@ export function ColorInput({
     return (
       <div className="flex items-center gap-2">
         <div
-          className="w-8 h-8 rounded border border-border-light"
+          className="w-8 h-8 rounded"
           style={{ backgroundColor: displayColor }}
         />
-        <div className="flex-1 flex items-center gap-1 bg-surface-elevated border border-accent-default rounded px-2 py-1">
+        <div className="flex-1 flex items-center gap-1 bg-surface-elevated rounded px-2 py-1">
           <span className="flex-1 text-xs text-accent-bright truncate">
             {boundVariable.name}
           </span>
@@ -204,7 +202,7 @@ export function ColorInput({
         type="color"
         value={value || "#000000"}
         onChange={(e) => onChange(e.target.value)}
-        className="w-8 h-8 rounded border border-border-light cursor-pointer bg-transparent"
+        className="w-8 h-8 rounded cursor-pointer bg-transparent"
       />
       <Input
         type="text"
@@ -217,7 +215,7 @@ export function ColorInput({
         <button
           type="button"
           onClick={() => setShowPicker(!showPicker)}
-          className="p-1.5 rounded border border-border-light hover:border-accent-default bg-surface-elevated text-text-muted hover:text-accent-bright transition-colors"
+          className="p-1.5 rounded bg-surface-elevated text-text-muted hover:text-accent-bright transition-colors"
           title="Bind to variable"
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -233,7 +231,7 @@ export function ColorInput({
 
       {/* Variable Picker Dropdown */}
       {showPicker && availableVariables.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-surface-default border border-border-light rounded shadow-lg z-50 max-h-40 overflow-y-auto">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-surface-default rounded shadow-lg z-50 max-h-40 overflow-y-auto">
           {availableVariables.map((variable) => {
             const varColor = getVariableValue(variable, activeTheme);
             return (
@@ -244,7 +242,7 @@ export function ColorInput({
                 className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-surface-hover text-left"
               >
                 <div
-                  className="w-4 h-4 rounded border border-border-light shrink-0"
+                  className="w-4 h-4 rounded shrink-0"
                   style={{ backgroundColor: varColor }}
                 />
                 <span className="text-xs text-text-primary truncate">
@@ -366,7 +364,7 @@ export function CheckboxInput({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="w-4 h-4 rounded border border-border-light bg-surface-elevated accent-accent-bright cursor-pointer"
+        className="w-4 h-4 rounded bg-surface-elevated accent-accent-bright cursor-pointer"
       />
       <span>{label}</span>
     </Label>
@@ -394,7 +392,7 @@ export function SegmentedControl({
     return (
       <div className="flex-1 flex flex-col gap-1">
         <Label className="text-[10px] font-normal">{label}</Label>
-        <div className="flex border border-border-light rounded overflow-hidden">
+        <div className="flex rounded overflow-hidden">
           {options.map((opt) => (
             <button
               key={opt.value}
@@ -403,7 +401,9 @@ export function SegmentedControl({
                 value === opt.value
                   ? "bg-accent-default text-white"
                   : "bg-surface-elevated text-text-muted hover:bg-surface-hover"
-              } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+              } ${
+                disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
+              }`}
               onClick={() => !disabled && onChange(opt.value)}
               disabled={disabled}
             >
@@ -422,7 +422,7 @@ export function SegmentedControl({
           {label}
         </span>
       )}
-      <div className="flex-1 flex border border-border-light rounded overflow-hidden">
+      <div className="flex-1 flex rounded overflow-hidden">
         {options.map((opt) => (
           <button
             key={opt.value}

@@ -55,6 +55,7 @@ export function FontCombobox({ label, value, onChange }: FontComboboxProps) {
   const content = (
     <Combobox open={open} onOpenChange={handleOpenChange} value={value}>
       <ComboboxInput
+        className="[&_[data-slot=select-trigger]]:bg-surface-elevated"
         value={open ? searchValue : value}
         onChange={(e) => setSearchValue(e.target.value)}
         placeholder={loading ? "Loading fonts..." : "Search fonts..."}

@@ -1,4 +1,4 @@
-import type { SceneNode, FrameNode } from "@/types/scene";
+import type { SceneNode } from "@/types/scene";
 import { isContainerNode } from "@/types/scene";
 import type { GuideLine } from "@/store/smartGuideStore";
 

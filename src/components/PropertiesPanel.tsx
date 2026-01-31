@@ -1,11 +1,19 @@
 import { useState, useRef } from "react";
 import {
-  AlignLeft,
-  AlignCenterHorizontal,
-  AlignRight,
+  TextAlignLeft,
+  TextAlignCenter,
+  TextAlignRight,
   AlignTop,
   AlignCenterVertical,
   AlignBottom,
+  TextUnderline,
+  TextStrikethrough,
+  TextItalic,
+  ArrowsOut,
+  ArrowRight,
+  Article,
+  DiamondsFour,
+  ArrowClockwise,
 } from "@phosphor-icons/react";
 import { useSceneStore } from "../store/sceneStore";
 import { useHistoryStore } from "../store/historyStore";
@@ -30,9 +38,6 @@ import type {
   JustifyContent,
   SizingMode,
   TextNode,
-  TextWidthMode,
-  TextAlign,
-  TextAlignVertical,
   DescendantOverride,
   ImageFillMode,
 } from "../types/scene";
@@ -43,24 +48,27 @@ import {
   findComponentById,
   type ParentContext,
 } from "../utils/nodeUtils";
-import { alignNodes, calculateSpacing, distributeSpacing, type AlignmentType } from "../utils/alignmentUtils";
+import {
+  alignNodes,
+  calculateSpacing,
+  distributeSpacing,
+  type AlignmentType,
+} from "../utils/alignmentUtils";
 import {
   PropertySection,
   PropertyRow,
   NumberInput,
   ColorInput,
-  TextInput,
   SelectInput,
   CheckboxInput,
-  SegmentedControl,
   FlipControls,
 } from "./ui/PropertyInputs";
-import {
-  SelectWithOptions,
-} from "./ui/select";
+import { SelectWithOptions } from "./ui/select";
 import { FontCombobox } from "./ui/FontCombobox";
 import { Input } from "./ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "./ui/input-group";
 import { Button } from "./ui/button";
+import { ButtonGroup } from "./ui/button-group";
 
 // Helper to find a node within a component's children tree
 function findNodeInComponent(
@@ -75,14 +83,6 @@ function findNodeInComponent(
     }
   }
   return null;
-}
-
-function Header() {
-  return (
-    <div className="px-4 py-3 border-b border-border-default text-xs font-semibold text-text-primary uppercase tracking-wide">
-      Properties
-    </div>
-  );
 }
 
 function PageProperties() {
@@ -165,21 +165,21 @@ function AlignmentSection({
             onClick={() => handleAlign("left")}
             title="Align left"
           >
-            <AlignLeft size={iconSize} />
+            <TextAlignLeft size={iconSize} />
           </button>
           <button
             className={buttonClass}
             onClick={() => handleAlign("centerH")}
             title="Align center horizontally"
           >
-            <AlignCenterHorizontal size={iconSize} />
+            <TextAlignCenter size={iconSize} />
           </button>
           <button
             className={buttonClass}
             onClick={() => handleAlign("right")}
             title="Align right"
           >
-            <AlignRight size={iconSize} />
+            <TextAlignRight size={iconSize} />
           </button>
           <div className="w-2" />
           <button
@@ -205,7 +205,11 @@ function AlignmentSection({
           </button>
         </div>
       </PropertySection>
-      <SpacingInput selectedIds={selectedIds} nodes={nodes} applyUpdateRecursive={applyUpdateRecursive} />
+      <SpacingInput
+        selectedIds={selectedIds}
+        nodes={nodes}
+        applyUpdateRecursive={applyUpdateRecursive}
+      />
       <div className="text-text-muted text-xs text-center">
         {count} layers selected
       </div>
@@ -220,16 +224,24 @@ function SpacingInput({
 }: {
   selectedIds: string[];
   nodes: SceneNode[];
-  applyUpdateRecursive: (nodeList: SceneNode[], id: string, changes: Partial<SceneNode>) => SceneNode[];
+  applyUpdateRecursive: (
+    nodeList: SceneNode[],
+    id: string,
+    changes: Partial<SceneNode>,
+  ) => SceneNode[];
 }) {
   const spacing = calculateSpacing(selectedIds, nodes);
-  const [localValue, setLocalValue] = useState('');
+  const [localValue, setLocalValue] = useState("");
   const [isFocused, setIsFocused] = useState(false);
 
   if (spacing === null) return null;
 
-  const displayValue = isFocused ? localValue : (spacing === 'mixed' ? '' : String(Math.round(spacing)));
-  const placeholder = spacing === 'mixed' ? 'mixed' : undefined;
+  const displayValue = isFocused
+    ? localValue
+    : spacing === "mixed"
+    ? ""
+    : String(Math.round(spacing));
+  const placeholder = spacing === "mixed" ? "mixed" : undefined;
 
   const handleApply = (inputValue: string) => {
     const val = parseFloat(inputValue);
@@ -260,14 +272,16 @@ function SpacingInput({
           onChange={(e) => setLocalValue(e.target.value)}
           onFocus={() => {
             setIsFocused(true);
-            setLocalValue(spacing === 'mixed' ? '' : String(Math.round(spacing as number)));
+            setLocalValue(
+              spacing === "mixed" ? "" : String(Math.round(spacing as number)),
+            );
           }}
           onBlur={(e) => {
             setIsFocused(false);
             handleApply(e.target.value);
           }}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
+            if (e.key === "Enter") {
               handleApply((e.target as HTMLInputElement).value);
               (e.target as HTMLInputElement).blur();
             }
@@ -331,7 +345,6 @@ function ImageFillSection({
     e.target.value = "";
   };
 
-
   const handleRemove = () => {
     onUpdate({ imageFill: undefined } as Partial<SceneNode>);
   };
@@ -393,12 +406,13 @@ function ImageFillSection({
           </div>
         </div>
       ) : (
-        <button
+        <Button
           onClick={() => fileInputRef.current?.click()}
-          className="w-full px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
+          variant="secondary"
+          className="w-full"
         >
           Upload Image
-        </button>
+        </Button>
       )}
     </PropertySection>
   );
@@ -469,25 +483,46 @@ function PropertyEditor({
   const colorVariables = variables.filter((v) => v.type === "color");
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Convert Group↔Frame */}
-      {(node.type === "group" ||
-        (node.type === "frame" && !(node as FrameNode).reusable)) && (
-        <PropertySection title="Type">
-          <SelectInput
-            value={node.type}
-            options={[
-              { value: "frame", label: "Frame" },
-              { value: "group", label: "Group" },
-            ]}
-            onChange={(v) => {
-              if (v !== node.type) {
-                useSceneStore.getState().convertNodeType(node.id);
-              }
-            }}
-          />
-        </PropertySection>
-      )}
+    <div className="flex flex-col">
+      {/* Type Section */}
+      <PropertySection title="Type">
+        <div className="flex items-center gap-2">
+          {node.type === "group" ||
+          (node.type === "frame" && !(node as FrameNode).reusable) ? (
+            <>
+              <div className="flex-1">
+                <SelectInput
+                  value={node.type}
+                  options={[
+                    { value: "frame", label: "Frame" },
+                    { value: "group", label: "Group" },
+                  ]}
+                  onChange={(v) => {
+                    if (v !== node.type) {
+                      useSceneStore.getState().convertNodeType(node.id);
+                    }
+                  }}
+                />
+              </div>
+              {node.type === "frame" && !(node as FrameNode).reusable && (
+                <button
+                  className="p-1 rounded hover:bg-surface-elevated text-text-muted transition-colors"
+                  onClick={() =>
+                    onUpdate({ reusable: true } as Partial<SceneNode>)
+                  }
+                  title="Create Component"
+                >
+                  <DiamondsFour size={16} />
+                </button>
+              )}
+            </>
+          ) : (
+            <div className="text-xs text-text-secondary capitalize">
+              {node.type}
+            </div>
+          )}
+        </div>
+      </PropertySection>
 
       {/* Position Section */}
       <PropertySection title="Position">
@@ -505,14 +540,24 @@ function PropertyEditor({
         </PropertyRow>
         <div className="flex gap-2 mt-2">
           <div className="w-1/2">
-            <NumberInput
-              label="°"
-              value={node.rotation ?? 0}
-              onChange={(v) => onUpdate({ rotation: v })}
-              min={0}
-              max={360}
-              step={1}
-            />
+            <InputGroup>
+              <InputGroupAddon align="inline-start">
+                <ArrowClockwise size={14} />
+              </InputGroupAddon>
+              <InputGroupInput
+                type="number"
+                value={Math.round((node.rotation ?? 0) * 100) / 100}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  if (!isNaN(val)) {
+                    onUpdate({ rotation: val });
+                  }
+                }}
+                min={0}
+                max={360}
+                step={1}
+              />
+            </InputGroup>
           </div>
           <div className="w-1/2">
             <FlipControls
@@ -532,26 +577,72 @@ function PropertyEditor({
           (node.type === "frame" &&
             (node as FrameNode).layout?.autoLayout)) && (
           <>
-            <SegmentedControl
-              label="W"
-              value={node.sizing?.widthMode ?? "fixed"}
-              options={sizingOptions}
-              onChange={(v) =>
-                onUpdate({
-                  sizing: { ...node.sizing, widthMode: v as SizingMode },
-                })
-              }
-            />
-            <SegmentedControl
-              label="H"
-              value={node.sizing?.heightMode ?? "fixed"}
-              options={sizingOptions}
-              onChange={(v) =>
-                onUpdate({
-                  sizing: { ...node.sizing, heightMode: v as SizingMode },
-                })
-              }
-            />
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] text-text-muted w-4 shrink-0">
+                W
+              </span>
+              <ButtonGroup orientation="horizontal" className="flex-1">
+                {sizingOptions.map((option) => (
+                  <Button
+                    key={option.value}
+                    variant={
+                      (node.sizing?.widthMode ?? "fixed") === option.value
+                        ? "default"
+                        : "secondary"
+                    }
+                    size="sm"
+                    className={`flex-1 ${
+                      (node.sizing?.widthMode ?? "fixed") === option.value
+                        ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                        : ""
+                    }`}
+                    onClick={() =>
+                      onUpdate({
+                        sizing: {
+                          ...node.sizing,
+                          widthMode: option.value as SizingMode,
+                        },
+                      })
+                    }
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </ButtonGroup>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] text-text-muted w-4 shrink-0">
+                H
+              </span>
+              <ButtonGroup orientation="horizontal" className="flex-1">
+                {sizingOptions.map((option) => (
+                  <Button
+                    key={option.value}
+                    variant={
+                      (node.sizing?.heightMode ?? "fixed") === option.value
+                        ? "default"
+                        : "secondary"
+                    }
+                    size="sm"
+                    className={`flex-1 ${
+                      (node.sizing?.heightMode ?? "fixed") === option.value
+                        ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                        : ""
+                    }`}
+                    onClick={() =>
+                      onUpdate({
+                        sizing: {
+                          ...node.sizing,
+                          heightMode: option.value as SizingMode,
+                        },
+                      })
+                    }
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </ButtonGroup>
+            </div>
           </>
         )}
         <PropertyRow>
@@ -644,7 +735,8 @@ function PropertyEditor({
         <div className="flex items-center gap-1">
           <div className="flex-1">
             <NumberInput
-              label="Width"
+              label="Weight"
+              labelOutside={true}
               value={node.strokeWidth ?? component?.strokeWidth ?? 0}
               onChange={(v) => onUpdate({ strokeWidth: v })}
               min={0}
@@ -825,50 +917,6 @@ function PropertyEditor({
         </PropertySection>
       )}
 
-      {/* Component (Frame only) */}
-      {node.type === "frame" && (
-        <PropertySection title="Component">
-          {(node as FrameNode).reusable ? (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2 text-xs text-accent-primary">
-                <svg viewBox="0 0 16 16" className="w-4 h-4">
-                  <rect
-                    x="2"
-                    y="2"
-                    width="12"
-                    height="12"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                  />
-                  <path d="M2 4 L4 2 L4 4 Z" fill="currentColor" />
-                  <path d="M12 2 L14 4 L12 4 Z" fill="currentColor" />
-                  <path d="M2 12 L4 14 L4 12 Z" fill="currentColor" />
-                  <path d="M12 14 L14 12 L12 12 Z" fill="currentColor" />
-                </svg>
-                <span>This is a Component</span>
-              </div>
-              <button
-                className="px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
-                onClick={() =>
-                  onUpdate({ reusable: false } as Partial<SceneNode>)
-                }
-              >
-                Detach Component
-              </button>
-            </div>
-          ) : (
-            <button
-              className="w-full px-3 py-1.5 bg-accent-primary border-none rounded text-white text-xs cursor-pointer transition-colors hover:bg-accent-hover"
-              onClick={() => onUpdate({ reusable: true } as Partial<SceneNode>)}
-            >
-              Create Component
-            </button>
-          )}
-        </PropertySection>
-      )}
-
-
       {/* Instance info (RefNode only) */}
       {node.type === "ref" &&
         (() => {
@@ -930,130 +978,323 @@ function PropertyEditor({
       {/* Text Properties (Text only) */}
       {node.type === "text" && (
         <>
-          <PropertySection title="Text">
-            <TextInput
-              value={node.text}
-              onChange={(v) => onUpdate({ text: v } as Partial<SceneNode>)}
-            />
-          </PropertySection>
-          <PropertySection title="Font">
-            <NumberInput
-              label="Size"
-              value={node.fontSize ?? 16}
-              onChange={(v) => onUpdate({ fontSize: v } as Partial<SceneNode>)}
-              min={1}
-            />
+          <PropertySection title="Typography">
             <FontCombobox
-              label="Family"
               value={node.fontFamily ?? "Arial"}
               onChange={(v) =>
                 onUpdate({ fontFamily: v } as Partial<SceneNode>)
               }
             />
-            <SelectInput
-              label="Weight"
-              value={(node as TextNode).fontWeight ?? "normal"}
-              options={[
-                { value: "normal", label: "Normal" },
-                { value: "100", label: "100 Thin" },
-                { value: "200", label: "200 Extra Light" },
-                { value: "300", label: "300 Light" },
-                { value: "400", label: "400 Regular" },
-                { value: "500", label: "500 Medium" },
-                { value: "600", label: "600 Semi Bold" },
-                { value: "700", label: "700 Bold" },
-                { value: "800", label: "800 Extra Bold" },
-                { value: "900", label: "900 Black" },
-              ]}
-              onChange={(v) =>
-                onUpdate({ fontWeight: v } as Partial<SceneNode>)
-              }
-            />
-            <SegmentedControl
-              label="Style"
-              value={(node as TextNode).fontStyle ?? "normal"}
-              options={[
-                { value: "normal", label: "Normal" },
-                { value: "italic", label: "Italic" },
-              ]}
-              onChange={(v) => onUpdate({ fontStyle: v } as Partial<SceneNode>)}
-            />
-          </PropertySection>
-          <PropertySection title="Decoration">
-            <CheckboxInput
-              label="Underline"
-              checked={(node as TextNode).underline ?? false}
-              onChange={(v) => onUpdate({ underline: v } as Partial<SceneNode>)}
-            />
-            <CheckboxInput
-              label="Strikethrough"
-              checked={(node as TextNode).strikethrough ?? false}
-              onChange={(v) =>
-                onUpdate({ strikethrough: v } as Partial<SceneNode>)
-              }
-            />
-          </PropertySection>
-          <PropertySection title="Text Layout">
-            <SegmentedControl
-              label="Width"
-              value={(node as TextNode).textWidthMode ?? "fixed"}
-              options={[
-                { value: "auto", label: "Auto" },
-                { value: "fixed", label: "Fixed W" },
-                { value: "fixed-height", label: "Fixed WH" },
-              ]}
-              onChange={(v) =>
-                onUpdate({
-                  textWidthMode: v as TextWidthMode,
-                } as Partial<SceneNode>)
-              }
-            />
-            <SegmentedControl
-              label="Align"
-              value={(node as TextNode).textAlign ?? "left"}
-              options={[
-                { value: "left", label: "L" },
-                { value: "center", label: "C" },
-                { value: "right", label: "R" },
-              ]}
-              onChange={(v) =>
-                onUpdate({ textAlign: v as TextAlign } as Partial<SceneNode>)
-              }
-            />
-            <SegmentedControl
-              label="V Align"
-              value={(node as TextNode).textAlignVertical ?? "top"}
-              options={[
-                { value: "top", label: "T" },
-                { value: "middle", label: "M" },
-                { value: "bottom", label: "B" },
-              ]}
-              onChange={(v) =>
-                onUpdate({
-                  textAlignVertical: v as TextAlignVertical,
-                } as Partial<SceneNode>)
-              }
-            />
-            <NumberInput
-              label="Line Height"
-              value={(node as TextNode).lineHeight ?? 1.2}
-              onChange={(v) =>
-                onUpdate({ lineHeight: v } as Partial<SceneNode>)
-              }
-              min={0.5}
-              max={3}
-              step={0.1}
-            />
-            <NumberInput
-              label="Spacing"
-              value={(node as TextNode).letterSpacing ?? 0}
-              onChange={(v) =>
-                onUpdate({ letterSpacing: v } as Partial<SceneNode>)
-              }
-              min={-5}
-              max={50}
-              step={0.5}
-            />
+            <PropertyRow>
+              <NumberInput
+                value={node.fontSize ?? 16}
+                onChange={(v) =>
+                  onUpdate({ fontSize: v } as Partial<SceneNode>)
+                }
+                min={1}
+              />
+              <SelectInput
+                value={(node as TextNode).fontWeight ?? "normal"}
+                options={[
+                  { value: "normal", label: "Normal" },
+                  { value: "100", label: "100 Thin" },
+                  { value: "200", label: "200 Extra Light" },
+                  { value: "300", label: "300 Light" },
+                  { value: "400", label: "400 Regular" },
+                  { value: "500", label: "500 Medium" },
+                  { value: "600", label: "600 Semi Bold" },
+                  { value: "700", label: "700 Bold" },
+                  { value: "800", label: "800 Extra Bold" },
+                  { value: "900", label: "900 Black" },
+                ]}
+                onChange={(v) =>
+                  onUpdate({ fontWeight: v } as Partial<SceneNode>)
+                }
+              />
+            </PropertyRow>
+            <PropertyRow>
+              <div className="flex items-center gap-1 flex-1">
+                <Button
+                  variant={
+                    (node as TextNode).fontStyle === "italic"
+                      ? "default"
+                      : "secondary"
+                  }
+                  size="sm"
+                  className={`flex-1 ${
+                    (node as TextNode).fontStyle === "italic"
+                      ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                      : ""
+                  }`}
+                  onClick={() =>
+                    onUpdate({
+                      fontStyle:
+                        (node as TextNode).fontStyle === "italic"
+                          ? "normal"
+                          : "italic",
+                    } as Partial<SceneNode>)
+                  }
+                >
+                  <TextItalic size={14} />
+                </Button>
+              </div>
+              <div className="flex items-center gap-1 flex-1">
+                <ButtonGroup orientation="horizontal" className="flex-1">
+                  <Button
+                    variant={
+                      (node as TextNode).underline ? "default" : "secondary"
+                    }
+                    size="sm"
+                    className={`flex-1 ${
+                      (node as TextNode).underline
+                        ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                        : ""
+                    }`}
+                    onClick={() =>
+                      onUpdate({
+                        underline: !(node as TextNode).underline,
+                      } as Partial<SceneNode>)
+                    }
+                  >
+                    <TextUnderline size={14} />
+                  </Button>
+                  <Button
+                    variant={
+                      (node as TextNode).strikethrough ? "default" : "secondary"
+                    }
+                    size="sm"
+                    className={`flex-1 ${
+                      (node as TextNode).strikethrough
+                        ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                        : ""
+                    }`}
+                    onClick={() =>
+                      onUpdate({
+                        strikethrough: !(node as TextNode).strikethrough,
+                      } as Partial<SceneNode>)
+                    }
+                  >
+                    <TextStrikethrough size={14} />
+                  </Button>
+                </ButtonGroup>
+              </div>
+            </PropertyRow>
+            <div className="flex flex-col gap-1">
+              <div className="text-[10px] font-normal text-text-muted">
+                Alignment
+              </div>
+              <PropertyRow>
+                <div className="flex items-center gap-1 flex-1">
+                  <ButtonGroup orientation="horizontal" className="flex-1">
+                    <Button
+                      variant={
+                        (node as TextNode).textAlign === "left"
+                          ? "default"
+                          : "secondary"
+                      }
+                      size="sm"
+                      className={`flex-1 ${
+                        (node as TextNode).textAlign === "left"
+                          ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                          : ""
+                      }`}
+                      onClick={() =>
+                        onUpdate({ textAlign: "left" } as Partial<SceneNode>)
+                      }
+                    >
+                      <TextAlignLeft size={14} />
+                    </Button>
+                    <Button
+                      variant={
+                        (node as TextNode).textAlign === "center"
+                          ? "default"
+                          : "secondary"
+                      }
+                      size="sm"
+                      className={`flex-1 ${
+                        (node as TextNode).textAlign === "center"
+                          ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                          : ""
+                      }`}
+                      onClick={() =>
+                        onUpdate({ textAlign: "center" } as Partial<SceneNode>)
+                      }
+                    >
+                      <TextAlignCenter size={14} />
+                    </Button>
+                    <Button
+                      variant={
+                        (node as TextNode).textAlign === "right"
+                          ? "default"
+                          : "secondary"
+                      }
+                      size="sm"
+                      className={`flex-1 ${
+                        (node as TextNode).textAlign === "right"
+                          ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                          : ""
+                      }`}
+                      onClick={() =>
+                        onUpdate({ textAlign: "right" } as Partial<SceneNode>)
+                      }
+                    >
+                      <TextAlignRight size={14} />
+                    </Button>
+                  </ButtonGroup>
+                </div>
+                <div className="flex items-center gap-1 flex-1">
+                  <ButtonGroup orientation="horizontal" className="flex-1">
+                    <Button
+                      variant={
+                        (node as TextNode).textAlignVertical === "top"
+                          ? "default"
+                          : "secondary"
+                      }
+                      size="sm"
+                      className={`flex-1 ${
+                        (node as TextNode).textAlignVertical === "top"
+                          ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                          : ""
+                      }`}
+                      onClick={() =>
+                        onUpdate({
+                          textAlignVertical: "top",
+                        } as Partial<SceneNode>)
+                      }
+                    >
+                      <AlignTop size={14} />
+                    </Button>
+                    <Button
+                      variant={
+                        (node as TextNode).textAlignVertical === "middle"
+                          ? "default"
+                          : "secondary"
+                      }
+                      size="sm"
+                      className={`flex-1 ${
+                        (node as TextNode).textAlignVertical === "middle"
+                          ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                          : ""
+                      }`}
+                      onClick={() =>
+                        onUpdate({
+                          textAlignVertical: "middle",
+                        } as Partial<SceneNode>)
+                      }
+                    >
+                      <AlignCenterVertical size={14} />
+                    </Button>
+                    <Button
+                      variant={
+                        (node as TextNode).textAlignVertical === "bottom"
+                          ? "default"
+                          : "secondary"
+                      }
+                      size="sm"
+                      className={`flex-1 ${
+                        (node as TextNode).textAlignVertical === "bottom"
+                          ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                          : ""
+                      }`}
+                      onClick={() =>
+                        onUpdate({
+                          textAlignVertical: "bottom",
+                        } as Partial<SceneNode>)
+                      }
+                    >
+                      <AlignBottom size={14} />
+                    </Button>
+                  </ButtonGroup>
+                </div>
+              </PropertyRow>
+            </div>
+            <div className="flex flex-col gap-1">
+              <div className="text-[10px] font-normal text-text-muted">
+                Resizing
+              </div>
+              <ButtonGroup orientation="horizontal" className="w-full">
+                <Button
+                  variant={
+                    (node as TextNode).textWidthMode === "auto"
+                      ? "default"
+                      : "secondary"
+                  }
+                  size="sm"
+                  className={`flex-1 ${
+                    (node as TextNode).textWidthMode === "auto"
+                      ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                      : ""
+                  }`}
+                  onClick={() =>
+                    onUpdate({ textWidthMode: "auto" } as Partial<SceneNode>)
+                  }
+                >
+                  <ArrowsOut size={14} />
+                </Button>
+                <Button
+                  variant={
+                    (node as TextNode).textWidthMode === "fixed"
+                      ? "default"
+                      : "secondary"
+                  }
+                  size="sm"
+                  className={`flex-1 ${
+                    (node as TextNode).textWidthMode === "fixed"
+                      ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                      : ""
+                  }`}
+                  onClick={() =>
+                    onUpdate({ textWidthMode: "fixed" } as Partial<SceneNode>)
+                  }
+                >
+                  <ArrowRight size={14} />
+                </Button>
+                <Button
+                  variant={
+                    (node as TextNode).textWidthMode === "fixed-height"
+                      ? "default"
+                      : "secondary"
+                  }
+                  size="sm"
+                  className={`flex-1 ${
+                    (node as TextNode).textWidthMode === "fixed-height"
+                      ? "bg-accent-selection hover:bg-accent-selection/80 text-accent-foreground"
+                      : ""
+                  }`}
+                  onClick={() =>
+                    onUpdate({
+                      textWidthMode: "fixed-height",
+                    } as Partial<SceneNode>)
+                  }
+                >
+                  <Article size={14} />
+                </Button>
+              </ButtonGroup>
+            </div>
+            <PropertyRow>
+              <NumberInput
+                label="Line Height"
+                labelOutside={true}
+                value={(node as TextNode).lineHeight ?? 1.2}
+                onChange={(v) =>
+                  onUpdate({ lineHeight: v } as Partial<SceneNode>)
+                }
+                min={0.5}
+                max={3}
+                step={0.1}
+              />
+              <NumberInput
+                label="Letter Spacing"
+                labelOutside={true}
+                value={(node as TextNode).letterSpacing ?? 0}
+                onChange={(v) =>
+                  onUpdate({ letterSpacing: v } as Partial<SceneNode>)
+                }
+                min={-5}
+                max={50}
+                step={0.5}
+              />
+            </PropertyRow>
           </PropertySection>
         </>
       )}
@@ -1257,7 +1498,8 @@ function DescendantPropertyEditor({
         <div className="flex items-center gap-1">
           <div className="flex-1">
             <NumberInput
-              label="Width"
+              label="Weight"
+              labelOutside={true}
               value={displayNode.strokeWidth ?? originalNode.strokeWidth ?? 0}
               onChange={(v) => handleUpdate({ strokeWidth: v })}
               min={0}
@@ -1347,10 +1589,7 @@ function ExportSection({ selectedNode }: ExportSectionProps) {
             />
           </div>
         </div>
-        <Button
-          onClick={handleExport}
-          className="w-full px-3 py-2 bg-surface-elevated border border-border-light rounded text-text-primary text-xs font-medium cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
-        >
+        <Button onClick={handleExport} variant="secondary" className="w-full">
           Export {exportName}
         </Button>
       </div>
@@ -1383,8 +1622,7 @@ export function PropertiesPanel() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <Header />
-      <div className="flex-1 overflow-y-auto p-3">
+      <div className="flex-1 overflow-y-auto">
         {selectedIds.length === 0 && <PageProperties />}
         {selectedIds.length > 1 && (
           <AlignmentSection
@@ -1414,11 +1652,7 @@ export function PropertiesPanel() {
           />
         )}
         {/* Export section - always visible at the bottom */}
-        <div
-          className={selectedIds.length > 0 || instanceContext ? "mt-4" : ""}
-        >
-          <ExportSection selectedNode={selectedNode} />
-        </div>
+        <ExportSection selectedNode={selectedNode} />
       </div>
     </div>
   );
