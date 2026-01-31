@@ -4,7 +4,10 @@ import type { GroupNode } from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
-import { findChildAtPosition, getNodeAbsolutePosition } from "@/utils/nodeUtils";
+import {
+  findChildAtPosition,
+  getNodeAbsolutePosition,
+} from "@/utils/nodeUtils";
 import {
   HOVER_OUTLINE_COLOR,
   SelectionOutline,
@@ -115,7 +118,7 @@ export function GroupRenderer({
           width={node.width}
           height={node.height}
           stroke={HOVER_OUTLINE_COLOR}
-          strokeWidth={1.5}
+          strokeWidth={0.5}
           dash={[4, 4]}
         />
       )}

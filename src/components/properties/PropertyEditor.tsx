@@ -69,9 +69,7 @@ export function PropertyEditor({
   allNodes,
 }: PropertyEditorProps) {
   const component =
-    node.type === "ref"
-      ? findComponentById(allNodes, node.componentId)
-      : null;
+    node.type === "ref" ? findComponentById(allNodes, node.componentId) : null;
 
   const isOverridden = <T,>(
     instanceVal: T | undefined,
@@ -194,7 +192,9 @@ export function PropertyEditor({
           (node.type === "frame" && node.layout?.autoLayout)) && (
           <>
             <div className="flex items-center gap-1">
-              <span className="text-[11px] text-text-muted w-4 shrink-0">W</span>
+              <span className="text-[11px] text-text-muted w-4 shrink-0">
+                W
+              </span>
               <ButtonGroup orientation="horizontal" className="flex-1">
                 {sizingOptions.map((option) => (
                   <Button
@@ -225,7 +225,9 @@ export function PropertyEditor({
               </ButtonGroup>
             </div>
             <div className="flex items-center gap-1">
-              <span className="text-[11px] text-text-muted w-4 shrink-0">H</span>
+              <span className="text-[11px] text-text-muted w-4 shrink-0">
+                H
+              </span>
               <ButtonGroup orientation="horizontal" className="flex-1">
                 {sizingOptions.map((option) => (
                   <Button
@@ -327,10 +329,12 @@ export function PropertyEditor({
                   </div>
                   <div className="grid grid-cols-3 bg-secondary rounded-md justify-center items-center p-0.5">
                     {Array.from({ length: 9 }).map((_, index) => {
-                      const currentDirection = node.layout?.flexDirection ?? "row";
+                      const currentDirection =
+                        node.layout?.flexDirection ?? "row";
                       const currentJustify =
                         node.layout?.justifyContent ?? "flex-start";
-                      const currentAlign = node.layout?.alignItems ?? "flex-start";
+                      const currentAlign =
+                        node.layout?.alignItems ?? "flex-start";
 
                       const isRow = currentDirection === "row";
                       const col = index % 3;
@@ -353,8 +357,7 @@ export function PropertyEditor({
                         ? isCenterColumn
                         : isCenterRow;
 
-                      const isSpaceBetween =
-                        currentJustify === "space-between";
+                      const isSpaceBetween = currentJustify === "space-between";
 
                       const isActive =
                         currentAlign === targetAlign &&
@@ -396,7 +399,7 @@ export function PropertyEditor({
                       return (
                         <button
                           key={index}
-                          className={`h-6 rounded transition-colors flex items-center justify-center ${
+                          className={`h-6 rounded flex items-center justify-center ${
                             isActive
                               ? "bg-accent-selection text-text-primary"
                               : "text-text-muted hover:bg-surface-hover"
@@ -681,12 +684,16 @@ export function PropertyEditor({
           <PropertySection title="Typography">
             <FontCombobox
               value={node.fontFamily ?? "Arial"}
-              onChange={(v) => onUpdate({ fontFamily: v } as Partial<SceneNode>)}
+              onChange={(v) =>
+                onUpdate({ fontFamily: v } as Partial<SceneNode>)
+              }
             />
             <PropertyRow>
               <NumberInput
                 value={node.fontSize ?? 16}
-                onChange={(v) => onUpdate({ fontSize: v } as Partial<SceneNode>)}
+                onChange={(v) =>
+                  onUpdate({ fontSize: v } as Partial<SceneNode>)
+                }
                 min={1}
               />
               <SelectInput
@@ -711,7 +718,9 @@ export function PropertyEditor({
             <PropertyRow>
               <div className="flex items-center gap-1 flex-1">
                 <Button
-                  variant={node.fontStyle === "italic" ? "default" : "secondary"}
+                  variant={
+                    node.fontStyle === "italic" ? "default" : "secondary"
+                  }
                   size="sm"
                   className={`flex-1 ${
                     node.fontStyle === "italic"
@@ -720,7 +729,8 @@ export function PropertyEditor({
                   }`}
                   onClick={() =>
                     onUpdate({
-                      fontStyle: node.fontStyle === "italic" ? "normal" : "italic",
+                      fontStyle:
+                        node.fontStyle === "italic" ? "normal" : "italic",
                     } as Partial<SceneNode>)
                   }
                 >
@@ -772,7 +782,9 @@ export function PropertyEditor({
                 <div className="flex items-center gap-1 flex-1">
                   <ButtonGroup orientation="horizontal" className="flex-1">
                     <Button
-                      variant={node.textAlign === "left" ? "default" : "secondary"}
+                      variant={
+                        node.textAlign === "left" ? "default" : "secondary"
+                      }
                       size="sm"
                       className={`flex-1 ${
                         node.textAlign === "left"
@@ -786,7 +798,9 @@ export function PropertyEditor({
                       <TextAlignLeft size={14} />
                     </Button>
                     <Button
-                      variant={node.textAlign === "center" ? "default" : "secondary"}
+                      variant={
+                        node.textAlign === "center" ? "default" : "secondary"
+                      }
                       size="sm"
                       className={`flex-1 ${
                         node.textAlign === "center"
@@ -800,7 +814,9 @@ export function PropertyEditor({
                       <TextAlignCenter size={14} />
                     </Button>
                     <Button
-                      variant={node.textAlign === "right" ? "default" : "secondary"}
+                      variant={
+                        node.textAlign === "right" ? "default" : "secondary"
+                      }
                       size="sm"
                       className={`flex-1 ${
                         node.textAlign === "right"
@@ -819,7 +835,9 @@ export function PropertyEditor({
                   <ButtonGroup orientation="horizontal" className="flex-1">
                     <Button
                       variant={
-                        node.textAlignVertical === "top" ? "default" : "secondary"
+                        node.textAlignVertical === "top"
+                          ? "default"
+                          : "secondary"
                       }
                       size="sm"
                       className={`flex-1 ${
@@ -885,7 +903,9 @@ export function PropertyEditor({
               </div>
               <ButtonGroup orientation="horizontal" className="w-full">
                 <Button
-                  variant={node.textWidthMode === "auto" ? "default" : "secondary"}
+                  variant={
+                    node.textWidthMode === "auto" ? "default" : "secondary"
+                  }
                   size="sm"
                   className={`flex-1 ${
                     node.textWidthMode === "auto"
@@ -899,7 +919,9 @@ export function PropertyEditor({
                   <ArrowsOut size={14} />
                 </Button>
                 <Button
-                  variant={node.textWidthMode === "fixed" ? "default" : "secondary"}
+                  variant={
+                    node.textWidthMode === "fixed" ? "default" : "secondary"
+                  }
                   size="sm"
                   className={`flex-1 ${
                     node.textWidthMode === "fixed"
@@ -914,7 +936,9 @@ export function PropertyEditor({
                 </Button>
                 <Button
                   variant={
-                    node.textWidthMode === "fixed-height" ? "default" : "secondary"
+                    node.textWidthMode === "fixed-height"
+                      ? "default"
+                      : "secondary"
                   }
                   size="sm"
                   className={`flex-1 ${
