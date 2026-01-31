@@ -1,11 +1,12 @@
 import { useRef } from "react";
 import Konva from "konva";
-import type { GroupNode, RefNode, SceneNode, TextNode } from "@/types/scene";
+import type { GroupNode, PathNode, RefNode, SceneNode, TextNode } from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
 import { EllipseRenderer } from "@/components/nodes/EllipseRenderer";
 import { FrameRenderer } from "@/components/nodes/FrameRenderer";
 import { GroupRenderer } from "@/components/nodes/GroupRenderer";
 import { InstanceRenderer } from "@/components/nodes/InstanceRenderer";
+import { PathRenderer } from "@/components/nodes/PathRenderer";
 import { RectRenderer } from "@/components/nodes/RectRenderer";
 import { TextRenderer } from "@/components/nodes/TextRenderer";
 import { useDragStore } from "@/store/dragStore";
@@ -391,6 +392,22 @@ export function RenderNode({
         />
       );
     }
+    case "path":
+      return (
+        <PathRenderer
+          node={node as PathNode}
+          fillColor={fillColor}
+          strokeColor={strokeColor}
+          isHovered={isHovered}
+          onClick={handleClick}
+          onDragStart={handleDragStart}
+          onDragMove={handleDragMove}
+          onDragEnd={handleDragEnd}
+          onTransformEnd={handleTransformEnd}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+        />
+      );
     case "ref":
       return (
         <InstanceRenderer

@@ -24,9 +24,18 @@ export interface SizingProperties {
   heightMode?: SizingMode  // default: 'fixed'
 }
 
+// Stroke properties for path nodes (SVG-style)
+export interface PathStroke {
+  align?: string       // 'center' | 'inside' | 'outside'
+  thickness?: number   // stroke width
+  join?: string        // 'round' | 'bevel' | 'miter'
+  cap?: string         // 'round' | 'butt' | 'square'
+  fill?: string        // stroke color (may be a variable reference like "$--foreground")
+}
+
 export interface BaseNode {
   id: string
-  type: 'frame' | 'group' | 'rect' | 'ellipse' | 'text' | 'ref'
+  type: 'frame' | 'group' | 'rect' | 'ellipse' | 'text' | 'ref' | 'path'
   name?: string
   x: number
   y: number
@@ -151,7 +160,15 @@ export interface GroupNode extends BaseNode {
   children: SceneNode[]
 }
 
-export type SceneNode = FrameNode | GroupNode | RectNode | EllipseNode | TextNode | RefNode
+export interface PathNode extends BaseNode {
+  type: 'path'
+  geometry: string           // SVG path data (d attribute)
+  pathStroke?: PathStroke    // SVG-style stroke properties
+  // Bounding box origin of the raw geometry (for offsetting path rendering inside the node)
+  geometryBounds?: { x: number; y: number; width: number; height: number }
+}
+
+export type SceneNode = FrameNode | GroupNode | RectNode | EllipseNode | TextNode | RefNode | PathNode
 
 /** Check if a node is a container (has children array) */
 export function isContainerNode(node: SceneNode): node is FrameNode | GroupNode {

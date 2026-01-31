@@ -8,6 +8,7 @@ import {
   EyeIcon as EyeIconIcon,
   EyeSlashIcon,
   CaretRightIcon,
+  PenNibIcon,
 } from "@phosphor-icons/react";
 import clsx from "clsx";
 import { useSceneStore } from "../store/sceneStore";
@@ -45,6 +46,8 @@ const NodeIcon = ({
     case "ref":
       // Instance icon: single diamond (like Figma instance)
       return <DiamondIcon size={16} className={iconClass} weight="regular" />;
+    case "path":
+      return <PenNibIcon size={16} className={iconClass} weight="regular" />;
     default:
       return null;
   }
