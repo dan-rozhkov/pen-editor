@@ -1,6 +1,13 @@
 import { useRef } from "react";
 import Konva from "konva";
-import type { FrameNode, GroupNode, PathNode, RefNode, SceneNode, TextNode } from "@/types/scene";
+import type {
+  FrameNode,
+  GroupNode,
+  PathNode,
+  RefNode,
+  SceneNode,
+  TextNode,
+} from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
 import { EllipseRenderer } from "@/components/nodes/EllipseRenderer";
 import { FrameRenderer } from "@/components/nodes/FrameRenderer";
@@ -19,7 +26,7 @@ import { useSmartGuideStore } from "@/store/smartGuideStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useViewportStore } from "@/store/viewportStore";
-import { resolveColor } from "@/utils/colorUtils";
+import { resolveColor, applyOpacity } from "@/utils/colorUtils";
 import {
   calculateDropPosition,
   getFrameAbsoluteRectWithLayout,
@@ -59,7 +66,10 @@ function getEffectiveSize(
     const fitWidth = node.sizing?.widthMode === "fit_content";
     const fitHeight = node.sizing?.heightMode === "fit_content";
     if (fitWidth || fitHeight) {
-      const intrinsic = calculateFrameIntrinsicSize(node, { fitWidth, fitHeight });
+      const intrinsic = calculateFrameIntrinsicSize(node, {
+        fitWidth,
+        fitHeight,
+      });
       if (fitWidth) width = intrinsic.width;
       if (fitHeight) height = intrinsic.height;
     }
@@ -126,19 +136,21 @@ export function RenderNode({
   const isInAutoLayout = parentContext.isInsideAutoLayout;
   const parentFrame = parentContext.parent;
 
-  // Resolved colors for this node
-  const fillColor = resolveColor(
+  // Resolved colors for this node (with per-color opacity applied)
+  const rawFillColor = resolveColor(
     node.fill,
     node.fillBinding,
     variables,
     currentTheme,
   );
-  const strokeColor = resolveColor(
+  const rawStrokeColor = resolveColor(
     node.stroke,
     node.strokeBinding,
     variables,
     currentTheme,
   );
+  const fillColor = rawFillColor ? applyOpacity(rawFillColor, node.fillOpacity) : rawFillColor;
+  const strokeColor = rawStrokeColor ? applyOpacity(rawStrokeColor, node.strokeOpacity) : rawStrokeColor;
 
   // Don't render if node is hidden
   if (node.visible === false) {
@@ -148,8 +160,13 @@ export function RenderNode({
   const handleClick = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     e.cancelBubble = true;
     const isMeta = "metaKey" in e.evt && (e.evt.metaKey || e.evt.ctrlKey);
+    const isAlreadySelected = selectedIds.includes(node.id);
     // Cmd/Ctrl+Click bypasses selectOverrideId to deep-select the actual clicked node
-    const selectId = isMeta ? node.id : (selectOverrideId ?? node.id);
+    const selectId = isMeta
+      ? node.id
+      : isAlreadySelected
+        ? node.id
+        : selectOverrideId ?? node.id;
     const isShift = "shiftKey" in e.evt && e.evt.shiftKey;
     if (isShift) {
       addToSelection(selectId);
@@ -174,8 +191,16 @@ export function RenderNode({
     const selectedNode = findNodeById(nodes, selectedId);
     if (!selectedNode) return;
 
-    const selPos = getNodeAbsolutePositionWithLayout(nodes, selectedId, calculateLayoutForFrame);
-    const hovPos = getNodeAbsolutePositionWithLayout(nodes, node.id, calculateLayoutForFrame);
+    const selPos = getNodeAbsolutePositionWithLayout(
+      nodes,
+      selectedId,
+      calculateLayoutForFrame,
+    );
+    const hovPos = getNodeAbsolutePositionWithLayout(
+      nodes,
+      node.id,
+      calculateLayoutForFrame,
+    );
     if (!selPos || !hovPos) return;
 
     const selBounds = {
@@ -293,7 +318,7 @@ export function RenderNode({
       }
 
       const scale = useViewportStore.getState().scale;
-      const threshold = 5 / scale;
+      const threshold = 2 / scale;
 
       // Undo previous snap offset to get the "intended" (mouse-following) position
       const intendedX = target.x() - snapOffsetRef.current.x;
@@ -463,8 +488,9 @@ export function RenderNode({
       const isEditing = editingNodeId === node.id;
       const handleDblClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
         // If this text node is not directly selectable (deep nested),
-        // don't start editing — let the event bubble to parent container
-        if (selectOverrideId) return;
+        // don't start editing unless it's already selected via deep-select
+        const isSelected = selectedIds.includes(node.id);
+        if (selectOverrideId && !isSelected) return;
         e.cancelBubble = true;
         startEditing(node.id);
       };
@@ -520,4 +546,3 @@ export function RenderNode({
       return null;
   }
 }
-

@@ -55,6 +55,9 @@ export interface BaseNode {
   rotation?: number
   // Opacity (0-1, defaults to 1)
   opacity?: number
+  // Per-color opacity (0-1, defaults to 1)
+  fillOpacity?: number
+  strokeOpacity?: number
   // Flip (horizontal / vertical)
   flipX?: boolean
   flipY?: boolean

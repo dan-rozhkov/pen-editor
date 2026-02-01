@@ -203,10 +203,7 @@ export function ColorInput({
     <div className="flex items-center gap-2 relative" ref={pickerRef}>
       <InputGroup className="flex-1">
         <InputGroupAddon align="inline-start">
-          <CustomColorPicker
-            value={value || "#000000"}
-            onChange={onChange}
-          />
+          <CustomColorPicker value={value || "#000000"} onChange={onChange} />
         </InputGroupAddon>
         <InputGroupInput
           type="text"

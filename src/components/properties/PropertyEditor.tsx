@@ -555,6 +555,18 @@ export function PropertyEditor({
               activeTheme={activeTheme}
             />
           </div>
+          <div className="w-20">
+            <NumberInput
+              label="%"
+              value={Math.round((node.fillOpacity ?? 1) * 100)}
+              onChange={(v) =>
+                onUpdate({ fillOpacity: Math.max(0, Math.min(100, v)) / 100 })
+              }
+              min={0}
+              max={100}
+              step={1}
+            />
+          </div>
           <OverrideIndicator
             isOverridden={isOverridden(node.fill, component?.fill)}
             onReset={() => resetOverride("fill")}
@@ -578,6 +590,18 @@ export function PropertyEditor({
               onVariableChange={handleStrokeVariableChange}
               availableVariables={colorVariables}
               activeTheme={activeTheme}
+            />
+          </div>
+          <div className="w-20">
+            <NumberInput
+              label="%"
+              value={Math.round((node.strokeOpacity ?? 1) * 100)}
+              onChange={(v) =>
+                onUpdate({ strokeOpacity: Math.max(0, Math.min(100, v)) / 100 })
+              }
+              min={0}
+              max={100}
+              step={1}
             />
           </div>
           <OverrideIndicator

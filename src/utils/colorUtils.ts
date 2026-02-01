@@ -20,6 +20,28 @@ export function resolveColor(
 }
 
 /**
+ * Apply opacity to a hex color, returning an rgba() string.
+ * If opacity is 1 (or undefined), returns the original color unchanged.
+ */
+export function applyOpacity(color: string, opacity?: number): string {
+  const a = opacity ?? 1
+  if (a >= 1) return color
+  // Parse hex color
+  const hex = color.replace('#', '')
+  let r = 0, g = 0, b = 0
+  if (hex.length === 3) {
+    r = parseInt(hex[0] + hex[0], 16)
+    g = parseInt(hex[1] + hex[1], 16)
+    b = parseInt(hex[2] + hex[2], 16)
+  } else if (hex.length >= 6) {
+    r = parseInt(hex.slice(0, 2), 16)
+    g = parseInt(hex.slice(2, 4), 16)
+    b = parseInt(hex.slice(4, 6), 16)
+  }
+  return `rgba(${r},${g},${b},${a})`
+}
+
+/**
  * Resolve a generic variable value (string) from binding or use direct value
  */
 export function resolveVariableValue(

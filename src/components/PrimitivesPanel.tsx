@@ -36,7 +36,7 @@ export function PrimitivesPanel() {
 
   return (
     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50">
-      <div className="flex items-center gap-1 p-2 bg-surface-panel/95 backdrop-blur-sm border border-border-default rounded-xl shadow-lg">
+      <div className="flex items-center gap-1 p-2 bg-surface-panel/95 backdrop-blur-sm border border-border-default rounded-2xl shadow-lg">
         {tools.map(({ icon: Icon, label, tool, shortcut }) => {
           const isActive =
             tool === "cursor" ? activeTool === null : activeTool === tool;
@@ -49,7 +49,7 @@ export function PrimitivesPanel() {
               title={`${label} (${shortcut})`}
               variant="ghost"
               size="lg"
-              className={`group relative size-10 p-0 ${
+              className={`group relative size-9 p-0 rounded-lg ${
                 isActive
                   ? "bg-[#0d99ff] text-white hover:bg-[#0d99ff] hover:text-white"
                   : "text-text-primary hover:text-text-primary hover:bg-surface-elevated"

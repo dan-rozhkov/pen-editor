@@ -13,7 +13,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useVariableStore } from "@/store/variableStore";
-import { resolveColor } from "@/utils/colorUtils";
+import { resolveColor, applyOpacity } from "@/utils/colorUtils";
 import { findComponentById } from "@/utils/nodeUtils";
 import {
   HOVER_OUTLINE_COLOR,
@@ -96,19 +96,25 @@ export function InstanceRenderer({
       : component.strokeBinding;
   const effectiveStrokeWidth =
     node.strokeWidth !== undefined ? node.strokeWidth : component.strokeWidth;
+  const effectiveFillOpacity =
+    node.fillOpacity !== undefined ? node.fillOpacity : component.fillOpacity;
+  const effectiveStrokeOpacity =
+    node.strokeOpacity !== undefined ? node.strokeOpacity : component.strokeOpacity;
 
-  const fillColor = resolveColor(
+  const rawFillColor = resolveColor(
     effectiveFill,
     effectiveFillBinding,
     variables,
     currentTheme,
   );
-  const strokeColor = resolveColor(
+  const rawStrokeColor = resolveColor(
     effectiveStroke,
     effectiveStrokeBinding,
     variables,
     currentTheme,
   );
+  const fillColor = rawFillColor ? applyOpacity(rawFillColor, effectiveFillOpacity) : rawFillColor;
+  const strokeColor = rawStrokeColor ? applyOpacity(rawStrokeColor, effectiveStrokeOpacity) : rawStrokeColor;
 
   // Calculate layout for children if auto-layout is enabled
   const layoutChildren = component.layout?.autoLayout
@@ -264,18 +270,20 @@ function DescendantRenderer({
   const currentTheme = effectiveTheme ?? globalTheme;
   const selectDescendant = useSelectionStore((state) => state.selectDescendant);
 
-  const fillColor = resolveColor(
+  const rawFillColor = resolveColor(
     node.fill,
     node.fillBinding,
     variables,
     currentTheme,
   );
-  const strokeColor = resolveColor(
+  const rawStrokeColor = resolveColor(
     node.stroke,
     node.strokeBinding,
     variables,
     currentTheme,
   );
+  const fillColor = rawFillColor ? applyOpacity(rawFillColor, node.fillOpacity) : rawFillColor;
+  const strokeColor = rawStrokeColor ? applyOpacity(rawStrokeColor, node.strokeOpacity) : rawStrokeColor;
 
   // Selection highlight stroke
   const selectionStroke = isSelected ? "#8B5CF6" : undefined;
@@ -486,18 +494,20 @@ function RenderNodeWithOverrides({
   const globalTheme = useThemeStore((state) => state.activeTheme);
   const currentTheme = effectiveTheme ?? globalTheme;
 
-  const fillColor = resolveColor(
+  const rawFillColor = resolveColor(
     node.fill,
     node.fillBinding,
     variables,
     currentTheme,
   );
-  const strokeColor = resolveColor(
+  const rawStrokeColor = resolveColor(
     node.stroke,
     node.strokeBinding,
     variables,
     currentTheme,
   );
+  const fillColor = rawFillColor ? applyOpacity(rawFillColor, node.fillOpacity) : rawFillColor;
+  const strokeColor = rawStrokeColor ? applyOpacity(rawStrokeColor, node.strokeOpacity) : rawStrokeColor;
 
   // Don't render if node is hidden
   if (node.visible === false || node.enabled === false) {

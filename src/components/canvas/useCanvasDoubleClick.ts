@@ -1,13 +1,14 @@
 import { useEffect } from "react";
 import type { RefObject } from "react";
 import type Konva from "konva";
+import { useLayoutStore } from "@/store/layoutStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { isContainerNode } from "@/types/scene";
 import {
   findChildAtPosition,
   findNodeById,
-  getNodeAbsolutePosition,
+  getNodeAbsolutePositionWithLayout,
 } from "@/utils/nodeUtils";
 
 interface CanvasDoubleClickParams {
@@ -23,6 +24,10 @@ export function useCanvasDoubleClick({
   enterContainer,
   select,
 }: CanvasDoubleClickParams) {
+  const calculateLayoutForFrame = useLayoutStore(
+    (state) => state.calculateLayoutForFrame,
+  );
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -46,12 +51,20 @@ export function useCanvasDoubleClick({
 
       enterContainer(selectedNode.id);
 
-      const absPos = getNodeAbsolutePosition(currentNodes, selectedNode.id);
+      const absPos = getNodeAbsolutePositionWithLayout(
+        currentNodes,
+        selectedNode.id,
+        calculateLayoutForFrame,
+      );
       if (!absPos) return;
       const localX = sceneX - absPos.x;
       const localY = sceneY - absPos.y;
 
-      const childId = findChildAtPosition(selectedNode.children, localX, localY);
+      const hitChildren =
+        selectedNode.type === "frame" && selectedNode.layout?.autoLayout
+          ? calculateLayoutForFrame(selectedNode)
+          : selectedNode.children;
+      const childId = findChildAtPosition(hitChildren, localX, localY);
       if (childId) {
         select(childId);
       }
@@ -59,5 +72,5 @@ export function useCanvasDoubleClick({
 
     container.addEventListener("dblclick", handleDblClick);
     return () => container.removeEventListener("dblclick", handleDblClick);
-  }, [containerRef, enterContainer, select, stageRef]);
+  }, [calculateLayoutForFrame, containerRef, enterContainer, select, stageRef]);
 }

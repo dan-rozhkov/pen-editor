@@ -9,6 +9,7 @@ import {
   EyeSlashIcon,
   CaretRightIcon,
   PenNibIcon,
+  SelectionIcon,
 } from "@phosphor-icons/react";
 import clsx from "clsx";
 import { useSceneStore } from "../store/sceneStore";
@@ -36,7 +37,7 @@ const NodeIcon = ({
       }
       return <FrameIcon size={16} className={iconClass} />;
     case "group":
-      return <FrameIcon size={16} className={iconClass} />;
+      return <SelectionIcon size={16} className={iconClass} />;
     case "rect":
       return <RectangleIcon size={16} className={iconClass} weight="regular" />;
     case "ellipse":
