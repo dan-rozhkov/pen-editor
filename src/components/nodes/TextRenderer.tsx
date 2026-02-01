@@ -20,6 +20,8 @@ interface TextRendererProps {
   onDragStart: () => void;
   onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void;
+  onTransformStart: (e: Konva.KonvaEventObject<Event>) => void;
+  onTransform: (e: Konva.KonvaEventObject<Event>) => void;
   onTransformEnd: (e: Konva.KonvaEventObject<Event>) => void;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
@@ -35,6 +37,8 @@ export function TextRenderer({
   onDragStart,
   onDragMove,
   onDragEnd,
+  onTransformStart,
+  onTransform,
   onTransformEnd,
   onMouseEnter,
   onMouseLeave,
@@ -70,6 +74,8 @@ export function TextRenderer({
         onDragStart={onDragStart}
         onDragMove={onDragMove}
         onDragEnd={onDragEnd}
+        onTransformStart={onTransformStart}
+        onTransform={onTransform}
         onTransformEnd={onTransformEnd}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}

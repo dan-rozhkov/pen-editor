@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react'
 import type { TextNode } from '../types/scene'
 import { useSceneStore } from '../store/sceneStore'
+import { useHistoryStore } from '../store/historyStore'
 import { useSelectionStore } from '../store/selectionStore'
 import { useViewportStore } from '../store/viewportStore'
 import { useVariableStore } from '../store/variableStore'
@@ -16,7 +17,9 @@ interface InlineTextEditorProps {
 export function InlineTextEditor({ node, absoluteX, absoluteY }: InlineTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const currentTextRef = useRef(node.text) // Track current value for unmount save
-  const updateNode = useSceneStore((state) => state.updateNode)
+  const updateNodeWithoutHistory = useSceneStore(
+    (state) => state.updateNodeWithoutHistory,
+  )
   const stopEditing = useSelectionStore((state) => state.stopEditing)
   const { scale, x, y } = useViewportStore()
   const variables = useVariableStore((state) => state.variables)
@@ -52,25 +55,28 @@ export function InlineTextEditor({ node, absoluteX, absoluteY }: InlineTextEdito
     const text = el.innerText ?? el.textContent ?? ''
     const trimmed = text.trim()
     if (trimmed && trimmed !== node.text) {
-      updateNode(node.id, { text: trimmed })
+      updateNodeWithoutHistory(node.id, { text: trimmed })
     }
     stopEditing()
-  }, [node.id, node.text, updateNode, stopEditing])
+  }, [node.id, node.text, updateNodeWithoutHistory, stopEditing])
 
   // Save on unmount (DOM element is already gone, so read from ref)
   useEffect(() => {
     return () => {
       const trimmed = currentTextRef.current.trim()
       if (trimmed && trimmed !== node.text) {
-        updateNode(node.id, { text: trimmed })
+        updateNodeWithoutHistory(node.id, { text: trimmed })
       }
     }
-  }, [node.id, node.text, updateNode])
+  }, [node.id, node.text, updateNodeWithoutHistory])
 
   // Focus and select all text on mount
   useEffect(() => {
+    useHistoryStore.getState().saveHistory(useSceneStore.getState().nodes)
     const el = editorRef.current
     if (!el) return
+    el.innerText = node.text
+    currentTextRef.current = node.text
     el.focus()
     // Select all text
     const range = document.createRange()
@@ -79,6 +85,16 @@ export function InlineTextEditor({ node, absoluteX, absoluteY }: InlineTextEdito
     sel?.removeAllRanges()
     sel?.addRange(range)
   }, [])
+
+  // Sync external text updates without resetting caret
+  useEffect(() => {
+    const el = editorRef.current
+    if (!el) return
+    if (node.text !== currentTextRef.current) {
+      el.innerText = node.text
+      currentTextRef.current = node.text
+    }
+  }, [node.text])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -95,7 +111,11 @@ export function InlineTextEditor({ node, absoluteX, absoluteY }: InlineTextEdito
   const handleInput = () => {
     const el = editorRef.current
     if (el) {
-      currentTextRef.current = el.innerText ?? el.textContent ?? ''
+      const text = el.innerText ?? el.textContent ?? ''
+      currentTextRef.current = text
+      if (text !== node.text) {
+        updateNodeWithoutHistory(node.id, { text })
+      }
     }
   }
 
@@ -151,8 +171,6 @@ export function InlineTextEditor({ node, absoluteX, absoluteY }: InlineTextEdito
         // Reset any inherited styles
         textIndent: 0,
       }}
-    >
-      {node.text}
-    </div>
+    />
   )
 }

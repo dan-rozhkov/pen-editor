@@ -6,7 +6,6 @@ import type {
   PathNode,
   RefNode,
   SceneNode,
-  TextNode,
 } from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
 import { EllipseRenderer } from "@/components/nodes/EllipseRenderer";
@@ -18,6 +17,7 @@ import { RectRenderer } from "@/components/nodes/RectRenderer";
 import { TextRenderer } from "@/components/nodes/TextRenderer";
 import { useDragStore } from "@/store/dragStore";
 import { useHoverStore } from "@/store/hoverStore";
+import { useHistoryStore } from "@/store/historyStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useMeasureStore } from "@/store/measureStore";
 import { useSceneStore } from "@/store/sceneStore";
@@ -378,8 +378,115 @@ export function RenderNode({
     }
   };
 
+  const handleTransformStart = (e: Konva.KonvaEventObject<Event>) => {
+    if (node.type !== "frame") return;
+    if (e.target.id() !== node.id) return;
+    const history = useHistoryStore.getState();
+    history.saveHistory(nodes);
+    history.startBatch();
+    const widthMode = node.sizing?.widthMode ?? "fixed";
+    const heightMode = node.sizing?.heightMode ?? "fixed";
+    const shouldSwitchWidth =
+      widthMode === "fill_container" || widthMode === "fit_content";
+    const shouldSwitchHeight =
+      heightMode === "fill_container" || heightMode === "fit_content";
+    if (shouldSwitchWidth || shouldSwitchHeight) {
+      updateNode(node.id, {
+        sizing: {
+          widthMode: shouldSwitchWidth ? "fixed" : widthMode,
+          heightMode: shouldSwitchHeight ? "fixed" : heightMode,
+        },
+      });
+    }
+  };
+
+  const handleTextTransformStart = (e: Konva.KonvaEventObject<Event>) => {
+    if (node.type !== "text") return;
+    if (e.target.id() !== node.id) return;
+    const history = useHistoryStore.getState();
+    history.saveHistory(nodes);
+    history.startBatch();
+    if (node.textWidthMode === "auto" || !node.textWidthMode) {
+      updateNode(node.id, { textWidthMode: "fixed" });
+    }
+  };
+
+  const handleFrameTransform = (e: Konva.KonvaEventObject<Event>) => {
+    if (node.type !== "frame") return;
+    const target = e.target;
+    if (target.id() !== node.id) return;
+
+    const scaleX = target.scaleX();
+    const scaleY = target.scaleY();
+    const rotation = target.rotation();
+    const newWidth = Math.max(5, target.width() * Math.abs(scaleX));
+    const newHeight = Math.max(5, target.height() * Math.abs(scaleY));
+
+    const flipSignX = node.flipX ? -1 : 1;
+    const flipSignY = node.flipY ? -1 : 1;
+    target.scaleX(flipSignX);
+    target.scaleY(flipSignY);
+    target.offsetX(node.flipX ? newWidth : 0);
+    target.offsetY(node.flipY ? newHeight : 0);
+
+    updateNode(node.id, {
+      x: target.x(),
+      y: target.y(),
+      width: newWidth,
+      height: newHeight,
+      rotation: rotation,
+    });
+  };
+
+  const handleTextTransform = (e: Konva.KonvaEventObject<Event>) => {
+    if (node.type !== "text") return;
+    const target = e.target;
+    if (target.id() !== node.id) return;
+
+    const scaleX = target.scaleX();
+    const scaleY = target.scaleY();
+    const rotation = target.rotation();
+    const newWidth = Math.max(5, target.width() * Math.abs(scaleX));
+    const newHeight = Math.max(5, target.height() * Math.abs(scaleY));
+
+    const flipSignX = node.flipX ? -1 : 1;
+    const flipSignY = node.flipY ? -1 : 1;
+    target.scaleX(flipSignX);
+    target.scaleY(flipSignY);
+    target.offsetX(node.flipX ? newWidth : 0);
+    target.offsetY(node.flipY ? newHeight : 0);
+
+    updateNode(node.id, {
+      x: target.x(),
+      y: target.y(),
+      width: newWidth,
+      height: newHeight,
+      rotation: rotation,
+    });
+  };
+
   const handleTransformEnd = (e: Konva.KonvaEventObject<Event>) => {
     const target = e.target;
+    if (node.type === "frame") {
+      const flipSignX = node.flipX ? -1 : 1;
+      const flipSignY = node.flipY ? -1 : 1;
+      target.scaleX(flipSignX);
+      target.scaleY(flipSignY);
+      target.offsetX(node.flipX ? node.width : 0);
+      target.offsetY(node.flipY ? node.height : 0);
+      useHistoryStore.getState().endBatch();
+      return;
+    }
+    if (node.type === "text") {
+      const flipSignX = node.flipX ? -1 : 1;
+      const flipSignY = node.flipY ? -1 : 1;
+      target.scaleX(flipSignX);
+      target.scaleY(flipSignY);
+      target.offsetX(node.flipX ? node.width : 0);
+      target.offsetY(node.flipY ? node.height : 0);
+      useHistoryStore.getState().endBatch();
+      return;
+    }
     const scaleX = target.scaleX();
     const scaleY = target.scaleY();
     const rotation = target.rotation();
@@ -403,14 +510,6 @@ export function RenderNode({
       rotation: rotation,
     };
 
-    // When resizing a text node, switch from auto to fixed mode (like Figma)
-    if (
-      node.type === "text" &&
-      (node.textWidthMode === "auto" || !node.textWidthMode)
-    ) {
-      (updates as Partial<TextNode>).textWidthMode = "fixed";
-    }
-
     updateNode(node.id, updates);
   };
 
@@ -423,6 +522,8 @@ export function RenderNode({
           onDragStart={handleDragStart}
           onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
+          onTransformStart={handleTransformStart}
+          onTransform={handleFrameTransform}
           onTransformEnd={handleTransformEnd}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
@@ -505,6 +606,8 @@ export function RenderNode({
           onDragStart={handleDragStart}
           onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
+          onTransformStart={handleTextTransformStart}
+          onTransform={handleTextTransform}
           onTransformEnd={handleTransformEnd}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}

@@ -22,6 +22,7 @@ interface SceneState {
   addNode: (node: SceneNode) => void;
   addChildToFrame: (frameId: string, child: SceneNode) => void;
   updateNode: (id: string, updates: Partial<SceneNode>) => void;
+  updateNodeWithoutHistory: (id: string, updates: Partial<SceneNode>) => void;
   deleteNode: (id: string) => void;
   clearNodes: () => void;
   setNodes: (nodes: SceneNode[]) => void;
@@ -738,6 +739,11 @@ export const useSceneStore = create<SceneState>((set) => ({
       useHistoryStore.getState().saveHistory(state.nodes);
       return { nodes: updateNodeRecursive(state.nodes, id, updates) };
     }),
+
+  updateNodeWithoutHistory: (id, updates) =>
+    set((state) => ({
+      nodes: updateNodeRecursive(state.nodes, id, updates),
+    })),
 
   deleteNode: (id) =>
     set((state) => {
