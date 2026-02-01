@@ -43,9 +43,15 @@ export function PathRenderer({
   const flipX = node.flipX ?? false;
   const flipY = node.flipY ?? false;
 
+  const geometryBounds = node.geometryBounds;
+  const geometryWidth = Math.max(1, geometryBounds?.width ?? node.width);
+  const geometryHeight = Math.max(1, geometryBounds?.height ?? node.height);
+  const scaleX = geometryBounds ? node.width / geometryWidth : 1;
+  const scaleY = geometryBounds ? node.height / geometryHeight : 1;
+
   // Offset the path rendering to normalize geometry coordinates to (0,0)
-  const geoOffsetX = -(node.geometryBounds?.x ?? 0);
-  const geoOffsetY = -(node.geometryBounds?.y ?? 0);
+  const geoOffsetX = -(geometryBounds?.x ?? 0) * scaleX;
+  const geoOffsetY = -(geometryBounds?.y ?? 0) * scaleY;
 
   return (
     <>
@@ -82,6 +88,8 @@ export function PathRenderer({
         <Path
           x={geoOffsetX}
           y={geoOffsetY}
+          scaleX={scaleX}
+          scaleY={scaleY}
           data={node.geometry}
           fill={fillColor}
           stroke={pathStrokeColor}
