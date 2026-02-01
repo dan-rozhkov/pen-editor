@@ -5,6 +5,13 @@ import { generateVariableId, getVariableValue } from "../types/variable";
 import type { Variable, VariableType, ThemeName } from "../types/variable";
 import { Dialog, DialogContent, DialogTitle } from "./ui/dialog";
 import { CustomColorPicker } from "./ui/ColorPicker";
+import { PlusIcon, TrashIcon } from "@phosphor-icons/react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "./ui/dropdown-menu";
 
 // Type badge labels and colors
 const typeBadge: Record<VariableType, { label: string; className: string }> = {
@@ -147,31 +154,6 @@ function ValueCell({
   );
 }
 
-// Trash icon
-const TrashIcon = () => (
-  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5">
-    <path
-      d="M4 4h8M5.5 4V3a1 1 0 011-1h3a1 1 0 011 1v1M6 6v6M8 6v6M10 6v6M4.5 4l.5 9a1 1 0 001 1h4a1 1 0 001-1l.5-9"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      strokeLinecap="round"
-    />
-  </svg>
-);
-
-// Plus icon
-const PlusIcon = () => (
-  <svg viewBox="0 0 16 16" className="w-4 h-4">
-    <path
-      d="M8 2v12M2 8h12"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-    />
-  </svg>
-);
-
 // Variable row in the table
 function VariableRow({ variable }: { variable: Variable }) {
   const updateVariable = useVariableStore((s) => s.updateVariable);
@@ -218,7 +200,7 @@ function VariableRow({ variable }: { variable: Variable }) {
             onClick={() => deleteVariable(variable.id)}
             title="Delete variable"
           >
-            <TrashIcon />
+            <TrashIcon className="size-3.5" />
           </button>
         )}
       </td>
@@ -231,75 +213,49 @@ interface VariablesDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-// Reusable dropdown for adding variables by type
-function AddVariableMenu({
-  show,
-  onToggle,
+// Dropdown menu items for adding a variable by type
+function AddVariableDropdown({
   onAdd,
-  dropdownPosition = "below",
+  side = "bottom",
   children,
 }: {
-  show: boolean;
-  onToggle: (show: boolean) => void;
   onAdd: (type: VariableType) => void;
-  dropdownPosition?: "below" | "above";
+  side?: "bottom" | "top";
   children: React.ReactNode;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        onToggle(false);
-      }
-    };
-    if (show) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () =>
-        document.removeEventListener("mousedown", handleClickOutside);
-    }
-  }, [show, onToggle]);
-
   return (
-    <div className="relative" ref={ref}>
-      <div onClick={() => onToggle(!show)}>{children}</div>
-      {show && (
-        <div
-          className={clsx(
-            "absolute bg-surface-default border border-border-light rounded shadow-lg z-50 min-w-[120px]",
-            dropdownPosition === "above"
-              ? "bottom-full mb-1 left-0"
-              : "top-full mt-1 right-0",
-          )}
-        >
-          {(["color", "number", "string"] as VariableType[]).map((type) => (
-            <button
-              key={type}
-              className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-surface-hover text-left text-xs text-text-primary"
-              onClick={() => onAdd(type)}
+    <DropdownMenu>
+      <DropdownMenuTrigger>{children}</DropdownMenuTrigger>
+      <DropdownMenuContent
+        side={side}
+        align="end"
+        className="min-w-[120px] bg-popover text-popover-foreground ring-foreground/10 rounded-lg shadow-md ring-1"
+      >
+        {(["color", "number", "string"] as VariableType[]).map((type) => (
+          <DropdownMenuItem
+            key={type}
+            className="flex items-center gap-2 text-xs cursor-pointer"
+            onClick={() => onAdd(type)}
+          >
+            <span
+              className={clsx(
+                "w-4 h-4 rounded text-[9px] font-bold flex items-center justify-center shrink-0",
+                typeBadge[type].className,
+              )}
             >
-              <span
-                className={clsx(
-                  "w-4 h-4 rounded text-[9px] font-bold flex items-center justify-center",
-                  typeBadge[type].className,
-                )}
-              >
-                {typeBadge[type].label}
-              </span>
-              {type.charAt(0).toUpperCase() + type.slice(1)}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+              {typeBadge[type].label}
+            </span>
+            {type.charAt(0).toUpperCase() + type.slice(1)}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
 export function VariablesDialog({ open, onOpenChange }: VariablesDialogProps) {
   const variables = useVariableStore((s) => s.variables);
   const addVariable = useVariableStore((s) => s.addVariable);
-  const [showHeaderMenu, setShowHeaderMenu] = useState(false);
-  const [showFooterMenu, setShowFooterMenu] = useState(false);
 
   const handleAddVariable = (type: VariableType) => {
     const defaultVal = defaultValues[type];
@@ -315,8 +271,6 @@ export function VariablesDialog({ open, onOpenChange }: VariablesDialogProps) {
       },
     };
     addVariable(newVar);
-    setShowHeaderMenu(false);
-    setShowFooterMenu(false);
   };
 
   return (
@@ -324,22 +278,19 @@ export function VariablesDialog({ open, onOpenChange }: VariablesDialogProps) {
       <DialogContent
         className="sm:max-w-2xl max-h-[80vh] flex flex-col gap-0 p-0"
         showCloseButton={false}
+        overlayClassName="backdrop-blur-none bg-black/40"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border-light">
           <DialogTitle>Variables</DialogTitle>
-          <AddVariableMenu
-            show={showHeaderMenu}
-            onToggle={setShowHeaderMenu}
-            onAdd={handleAddVariable}
-          >
+          <AddVariableDropdown onAdd={handleAddVariable}>
             <button
               className="p-1 rounded hover:bg-surface-elevated transition-colors text-text-muted hover:text-text-primary"
               title="Add variable"
             >
-              <PlusIcon />
+              <PlusIcon className="size-4" />
             </button>
-          </AddVariableMenu>
+          </AddVariableDropdown>
         </div>
 
         {/* Table */}
@@ -378,17 +329,12 @@ export function VariablesDialog({ open, onOpenChange }: VariablesDialogProps) {
 
         {/* Footer */}
         <div className="border-t border-border-light px-4 py-3">
-          <AddVariableMenu
-            show={showFooterMenu}
-            onToggle={setShowFooterMenu}
-            onAdd={handleAddVariable}
-            dropdownPosition="above"
-          >
+          <AddVariableDropdown onAdd={handleAddVariable} side="top">
             <button className="flex items-center gap-2 text-xs text-text-muted hover:text-text-primary transition-colors">
-              <PlusIcon />
+              <PlusIcon className="size-4" weight="light" />
               Create variable
             </button>
-          </AddVariableMenu>
+          </AddVariableDropdown>
         </div>
       </DialogContent>
     </Dialog>

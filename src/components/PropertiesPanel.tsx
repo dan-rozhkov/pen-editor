@@ -18,7 +18,21 @@ import { ExportSection } from "@/components/properties/ExportSection";
 import { PageProperties } from "@/components/properties/PageProperties";
 import { PropertyEditor } from "@/components/properties/PropertyEditor";
 import { VariablesDialog } from "@/components/VariablesPanel";
-import { SlidersHorizontal } from "@phosphor-icons/react";
+import { SlidersHorizontal, CaretRightIcon } from "@phosphor-icons/react";
+import clsx from "clsx";
+
+// Chevron icon for expand/collapse
+const ChevronIcon = ({ expanded }: { expanded: boolean }) => (
+  <CaretRightIcon
+    size={12}
+    className={clsx(
+      "w-3 h-3 transition-transform duration-150",
+      "text-text-muted",
+      expanded && "rotate-90",
+    )}
+    weight="bold"
+  />
+);
 
 const FRAME_PRESETS = [
   {
@@ -60,8 +74,27 @@ const FRAME_PRESETS = [
 
 function FramePresetsPanel() {
   const addNode = useSceneStore((s) => s.addNode);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
+    new Set(["Mobile"]), // Mobile expanded by default
+  );
 
-  const handlePresetClick = (preset: { name: string; width: number; height: number }) => {
+  const toggleCategory = (category: string) => {
+    setExpandedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      return next;
+    });
+  };
+
+  const handlePresetClick = (preset: {
+    name: string;
+    width: number;
+    height: number;
+  }) => {
     const { scale, x, y } = useViewportStore.getState();
     // Estimate canvas area from DOM
     const canvasEl = document.querySelector("[data-canvas]");
@@ -93,29 +126,42 @@ function FramePresetsPanel() {
   };
 
   return (
-    <div className="px-3 py-2">
+    <div className="px-4 pt-3 pb-5 border-b border-border-default">
       <div className="text-[11px] font-semibold text-text-primary mb-2">
         Frame Presets
       </div>
-      {FRAME_PRESETS.map((group) => (
-        <div key={group.category} className="mb-3">
-          <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-1 px-1">
-            {group.category}
-          </div>
-          {group.presets.map((preset) => (
+      {FRAME_PRESETS.map((group) => {
+        const isExpanded = expandedCategories.has(group.category);
+        return (
+          <div key={group.category} className="mb-2">
             <button
-              key={`${preset.name}-${preset.width}x${preset.height}`}
-              onClick={() => handlePresetClick(preset)}
-              className="w-full flex items-center justify-between px-2 py-1.5 rounded text-[11px] hover:bg-surface-hover transition-colors text-left"
+              onClick={() => toggleCategory(group.category)}
+              className="w-full flex items-center gap-1 px-1 py-1 rounded hover:bg-surface-elevated text-left"
             >
-              <span className="text-text-primary truncate mr-2">{preset.name}</span>
-              <span className="text-text-muted whitespace-nowrap">
-                {preset.width} × {preset.height}
-              </span>
+              <ChevronIcon expanded={isExpanded} />
+              <div className="text-[11px]">{group.category}</div>
             </button>
-          ))}
-        </div>
-      ))}
+            {isExpanded && (
+              <div className="mt-1">
+                {group.presets.map((preset) => (
+                  <button
+                    key={`${preset.name}-${preset.width}x${preset.height}`}
+                    onClick={() => handlePresetClick(preset)}
+                    className="w-full flex items-center justify-between px-2 py-1.5 rounded text-[11px] hover:bg-surface-elevated text-left"
+                  >
+                    <span className="text-text-primary truncate mr-2">
+                      {preset.name}
+                    </span>
+                    <span className="text-text-muted whitespace-nowrap">
+                      {preset.width} × {preset.height}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -173,7 +219,7 @@ export function PropertiesPanel() {
           />
         )}
         {/* If editing a descendant inside an instance, show descendant editor */}
-        {instanceContext && (
+        {instanceContext && activeTool !== "frame" && (
           <DescendantPropertyEditor
             instanceContext={instanceContext}
             allNodes={nodes}
@@ -182,7 +228,7 @@ export function PropertiesPanel() {
           />
         )}
         {/* Otherwise show normal property editor */}
-        {selectedNode && !instanceContext && (
+        {selectedNode && !instanceContext && activeTool !== "frame" && (
           <PropertyEditor
             node={selectedNode}
             onUpdate={handleUpdate}

@@ -111,7 +111,10 @@ export function useCanvasKeyboardShortcuts({
                 } else {
                   useSelectionStore
                     .getState()
-                    .selectDescendant(instanceContext.instanceId, parentFrame.id);
+                    .selectDescendant(
+                      instanceContext.instanceId,
+                      parentFrame.id,
+                    );
                 }
               }
             }
@@ -223,9 +226,7 @@ export function useCanvasKeyboardShortcuts({
             useSelectionStore.getState().setSelectedIds(ids);
           }
         } else {
-          const ids = nodes
-            .filter((n) => n.visible !== false)
-            .map((n) => n.id);
+          const ids = nodes.filter((n) => n.visible !== false).map((n) => n.id);
           useSelectionStore.getState().setSelectedIds(ids);
         }
         return;
@@ -281,6 +282,11 @@ export function useCanvasKeyboardShortcuts({
       }
 
       if (!isTyping && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        if (e.code === "KeyV") {
+          e.preventDefault();
+          useDrawModeStore.getState().setActiveTool(null);
+          return;
+        }
         if (e.code === "KeyF") {
           e.preventDefault();
           toggleTool("frame");

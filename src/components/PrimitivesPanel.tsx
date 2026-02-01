@@ -49,7 +49,7 @@ export function PrimitivesPanel() {
               title={`${label} (${shortcut})`}
               variant="ghost"
               size="lg"
-              className={`group relative size-9 p-0 rounded-lg ${
+              className={`group relative size-9 p-0 rounded-lg transition-none outline-none ${
                 isActive
                   ? "bg-[#0d99ff] text-white hover:bg-[#0d99ff] hover:text-white"
                   : "text-text-primary hover:text-text-primary hover:bg-surface-elevated"
