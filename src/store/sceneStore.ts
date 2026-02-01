@@ -606,7 +606,7 @@ function ungroupNodeInTree(
         ...child,
         x: child.x + group.x,
         y: child.y + group.y,
-      }) as SceneNode,
+      } as SceneNode),
   );
 
   return processTreeAtLevel(nodes, pos.parentId, (levelNodes) => {

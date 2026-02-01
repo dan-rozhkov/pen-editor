@@ -149,8 +149,12 @@ export function RenderNode({
     variables,
     currentTheme,
   );
-  const fillColor = rawFillColor ? applyOpacity(rawFillColor, node.fillOpacity) : rawFillColor;
-  const strokeColor = rawStrokeColor ? applyOpacity(rawStrokeColor, node.strokeOpacity) : rawStrokeColor;
+  const fillColor = rawFillColor
+    ? applyOpacity(rawFillColor, node.fillOpacity)
+    : rawFillColor;
+  const strokeColor = rawStrokeColor
+    ? applyOpacity(rawStrokeColor, node.strokeOpacity)
+    : rawStrokeColor;
 
   // Don't render if node is hidden
   if (node.visible === false) {
@@ -165,8 +169,8 @@ export function RenderNode({
     const selectId = isMeta
       ? node.id
       : isAlreadySelected
-        ? node.id
-        : selectOverrideId ?? node.id;
+      ? node.id
+      : selectOverrideId ?? node.id;
     const isShift = "shiftKey" in e.evt && e.evt.shiftKey;
     if (isShift) {
       addToSelection(selectId);
