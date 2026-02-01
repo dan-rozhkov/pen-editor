@@ -238,6 +238,7 @@ export function Canvas() {
   return (
     <div
       ref={containerRef}
+      data-canvas
       style={{
         width: "100%",
         height: "100%",
