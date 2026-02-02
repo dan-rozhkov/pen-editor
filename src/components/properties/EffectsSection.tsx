@@ -4,6 +4,8 @@ import {
   NumberInput,
   PropertySection,
 } from "@/components/ui/PropertyInputs";
+import { Button } from "@/components/ui/button";
+import { MinusIcon, PlusIcon } from "@phosphor-icons/react";
 import { getDefaultShadow } from "@/utils/shadowUtils";
 
 interface EffectsSectionProps {
@@ -17,19 +19,13 @@ export function EffectsSection({ node, onUpdate }: EffectsSectionProps) {
       title="Effects"
       action={
         !node.effect ? (
-          <button
-            className="text-xs text-blue-500 hover:text-blue-400"
-            onClick={() => onUpdate({ effect: getDefaultShadow() })}
-          >
-            + Shadow
-          </button>
+          <Button variant="ghost" size="icon-sm" onClick={() => onUpdate({ effect: getDefaultShadow() })}>
+            <PlusIcon />
+          </Button>
         ) : (
-          <button
-            className="text-xs text-red-400 hover:text-red-300"
-            onClick={() => onUpdate({ effect: undefined })}
-          >
-            −
-          </button>
+          <Button variant="ghost" size="icon-sm" onClick={() => onUpdate({ effect: undefined })}>
+            <MinusIcon />
+          </Button>
         )
       }
     >

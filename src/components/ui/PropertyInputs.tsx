@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import type { Variable, ThemeName } from "../../types/variable";
 import { getVariableValue } from "../../types/variable";
 import { Input } from "./input";
@@ -17,16 +17,17 @@ interface PropertySectionProps {
 }
 
 export function PropertySection({ title, children, action }: PropertySectionProps) {
+  const hasChildren = React.Children.toArray(children).some(Boolean);
   return (
     <div className="relative border-b border-border-default">
-      <div className="flex flex-col gap-2 px-4 pt-3 pb-5">
+      <div className={`flex flex-col gap-2 px-4 pt-3 ${hasChildren ? 'pb-5' : 'pb-3'}`}>
         <div className="flex items-center justify-between">
           <div className="text-[11px] font-semibold text-text-primary">
             {title}
           </div>
           {action}
         </div>
-        <div className="flex flex-col gap-2">{children}</div>
+        {hasChildren && <div className="flex flex-col gap-2">{children}</div>}
       </div>
     </div>
   );

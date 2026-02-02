@@ -5,6 +5,8 @@ import {
   NumberInput,
   PropertySection,
 } from "@/components/ui/PropertyInputs";
+import { Button } from "@/components/ui/button";
+import { MinusIcon, PlusIcon } from "@phosphor-icons/react";
 import { OverrideIndicator } from "@/components/properties/OverrideIndicator";
 
 interface StrokeSectionProps {
@@ -54,19 +56,13 @@ export function StrokeSection({
       title="Stroke"
       action={
         !hasStroke ? (
-          <button
-            className="text-xs text-blue-500 hover:text-blue-400"
-            onClick={handleAddStroke}
-          >
-            + Stroke
-          </button>
+          <Button variant="ghost" size="icon-sm" onClick={handleAddStroke}>
+            <PlusIcon />
+          </Button>
         ) : (
-          <button
-            className="text-xs text-red-400 hover:text-red-300"
-            onClick={handleRemoveStroke}
-          >
-            −
-          </button>
+          <Button variant="ghost" size="icon-sm" onClick={handleRemoveStroke}>
+            <MinusIcon />
+          </Button>
         )
       }
     >

@@ -122,6 +122,10 @@
     },
     {
       "name": "collapsible-fill-stroke-effect",
+      "passed": true
+    },
+    {
+      "name": "fix-group-copy-selection",
       "passed": false
     }
   ]

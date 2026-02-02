@@ -6,6 +6,8 @@ import {
   PropertySection,
   SelectInput,
 } from "@/components/ui/PropertyInputs";
+import { Button } from "@/components/ui/button";
+import { MinusIcon, PlusIcon } from "@phosphor-icons/react";
 import { GradientEditor } from "@/components/properties/GradientEditor";
 import { ImageFillEditor } from "@/components/properties/ImageFillSection";
 import { OverrideIndicator } from "@/components/properties/OverrideIndicator";
@@ -73,19 +75,13 @@ export function FillSection({
       title="Fill"
       action={
         !hasFill ? (
-          <button
-            className="text-xs text-blue-500 hover:text-blue-400"
-            onClick={handleAddFill}
-          >
-            + Fill
-          </button>
+          <Button variant="ghost" size="icon-sm" onClick={handleAddFill}>
+            <PlusIcon />
+          </Button>
         ) : (
-          <button
-            className="text-xs text-red-400 hover:text-red-300"
-            onClick={handleRemoveFill}
-          >
-            −
-          </button>
+          <Button variant="ghost" size="icon-sm" onClick={handleRemoveFill}>
+            <MinusIcon />
+          </Button>
         )
       }
     >
