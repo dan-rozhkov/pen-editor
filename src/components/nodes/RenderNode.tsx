@@ -462,33 +462,6 @@ export function RenderNode({
     });
   };
 
-  const handleInstanceTransform = (e: Konva.KonvaEventObject<Event>) => {
-    if (node.type !== "ref") return;
-    const target = e.target;
-    if (target.id() !== node.id) return;
-
-    const scaleX = target.scaleX();
-    const scaleY = target.scaleY();
-    const rotation = target.rotation();
-    const newWidth = Math.max(5, target.width() * Math.abs(scaleX));
-    const newHeight = Math.max(5, target.height() * Math.abs(scaleY));
-
-    const flipSignX = node.flipX ? -1 : 1;
-    const flipSignY = node.flipY ? -1 : 1;
-    target.scaleX(flipSignX);
-    target.scaleY(flipSignY);
-    target.offsetX(node.flipX ? newWidth : 0);
-    target.offsetY(node.flipY ? newHeight : 0);
-
-    updateNode(node.id, {
-      x: target.x(),
-      y: target.y(),
-      width: newWidth,
-      height: newHeight,
-      rotation: rotation,
-    });
-  };
-
   const handleTextTransform = (e: Konva.KonvaEventObject<Event>) => {
     if (node.type !== "text") return;
     const target = e.target;
@@ -529,16 +502,6 @@ export function RenderNode({
       return;
     }
     if (node.type === "text") {
-      const flipSignX = node.flipX ? -1 : 1;
-      const flipSignY = node.flipY ? -1 : 1;
-      target.scaleX(flipSignX);
-      target.scaleY(flipSignY);
-      target.offsetX(node.flipX ? node.width : 0);
-      target.offsetY(node.flipY ? node.height : 0);
-      useHistoryStore.getState().endBatch();
-      return;
-    }
-    if (node.type === "ref") {
       const flipSignX = node.flipX ? -1 : 1;
       const flipSignY = node.flipY ? -1 : 1;
       target.scaleX(flipSignX);
@@ -758,8 +721,6 @@ export function RenderNode({
           onDragStart={handleDragStart}
           onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
-          onTransformStart={handleTransformStart}
-          onTransform={handleInstanceTransform}
           onTransformEnd={handleTransformEnd}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
