@@ -8,6 +8,8 @@ import {
   Article,
   DiamondsFour,
   LayoutIcon,
+  LinkSimple,
+  LinkSimpleBreak,
   TextAlignCenter,
   TextAlignLeft,
   TextAlignRight,
@@ -270,17 +272,26 @@ export function PropertyEditor({
             label="W"
             value={node.width}
             onChange={(v) => {
-              const updates: Partial<SceneNode> = { width: v };
+              const ratio = node.aspectRatio ?? (node.width / node.height);
+              const newH = node.aspectRatioLocked
+                ? Math.round(v / ratio)
+                : node.height;
+              const updates: Partial<SceneNode> = {
+                width: v,
+                ...(node.aspectRatioLocked ? { height: newH } : {}),
+              };
               if (node.type === "polygon") {
                 const pn = node as PolygonNode;
                 const sides = pn.sides ?? 6;
                 (updates as Partial<PolygonNode>).points =
-                  generatePolygonPoints(sides, v, node.height);
+                  generatePolygonPoints(sides, v, newH);
               } else if (node.type === "line") {
                 const scaleX = v / node.width;
+                const scaleY = node.aspectRatioLocked ? newH / node.height : 1;
                 const ln = node as unknown as { points: number[] };
                 (updates as Record<string, unknown>).points = ln.points.map(
-                  (p: number, i: number) => (i % 2 === 0 ? p * scaleX : p)
+                  (p: number, i: number) =>
+                    i % 2 === 0 ? p * scaleX : p * scaleY
                 );
               }
               onUpdate(updates);
@@ -291,23 +302,56 @@ export function PropertyEditor({
             label="H"
             value={node.height}
             onChange={(v) => {
-              const updates: Partial<SceneNode> = { height: v };
+              const ratio = node.aspectRatio ?? (node.width / node.height);
+              const newW = node.aspectRatioLocked
+                ? Math.round(v * ratio)
+                : node.width;
+              const updates: Partial<SceneNode> = {
+                height: v,
+                ...(node.aspectRatioLocked ? { width: newW } : {}),
+              };
               if (node.type === "polygon") {
                 const pn = node as PolygonNode;
                 const sides = pn.sides ?? 6;
                 (updates as Partial<PolygonNode>).points =
-                  generatePolygonPoints(sides, node.width, v);
+                  generatePolygonPoints(sides, newW, v);
               } else if (node.type === "line") {
+                const scaleX = node.aspectRatioLocked ? newW / node.width : 1;
                 const scaleY = v / node.height;
                 const ln = node as unknown as { points: number[] };
                 (updates as Record<string, unknown>).points = ln.points.map(
-                  (p: number, i: number) => (i % 2 === 1 ? p * scaleY : p)
+                  (p: number, i: number) =>
+                    i % 2 === 0 ? p * scaleX : p * scaleY
                 );
               }
               onUpdate(updates);
             }}
             min={1}
           />
+          <button
+            type="button"
+            className={cn(
+              "shrink-0 flex items-center justify-center w-6 h-6 rounded",
+              node.aspectRatioLocked
+                ? "text-sky-600 bg-sky-100 hover:bg-sky-200"
+                : "text-text-muted hover:bg-surface-hover"
+            )}
+            title={node.aspectRatioLocked ? "Unlock aspect ratio" : "Lock aspect ratio"}
+            onClick={() =>
+              onUpdate({
+                aspectRatioLocked: !node.aspectRatioLocked,
+                ...(!node.aspectRatioLocked
+                  ? { aspectRatio: node.width / node.height }
+                  : {}),
+              })
+            }
+          >
+            {node.aspectRatioLocked ? (
+              <LinkSimple size={14} weight="bold" />
+            ) : (
+              <LinkSimpleBreak size={14} />
+            )}
+          </button>
         </PropertyRow>
       </PropertySection>
 

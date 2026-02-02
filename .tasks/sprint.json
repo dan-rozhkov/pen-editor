@@ -106,7 +106,7 @@
     },
     {
       "name": "proportional-resize-lock",
-      "passed": false
+      "passed": true
     }
   ]
 }

@@ -98,6 +98,10 @@ export interface BaseNode {
   gradientFill?: GradientFill
   // Shadow effect
   effect?: ShadowEffect
+  // Aspect ratio lock for proportional resize
+  aspectRatioLocked?: boolean
+  // Stored aspect ratio (width/height) when lock is enabled
+  aspectRatio?: number
 }
 
 // Auto-layout properties for Frame nodes
