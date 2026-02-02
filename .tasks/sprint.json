@@ -107,6 +107,18 @@
     {
       "name": "proportional-resize-lock",
       "passed": true
+    },
+    {
+      "name": "fix-instance-resize-deformation",
+      "passed": true
+    },
+    {
+      "name": "drag-drop-image-svg",
+      "passed": false
+    },
+    {
+      "name": "fix-svg-clippath-import",
+      "passed": false
     }
   ]
 }
