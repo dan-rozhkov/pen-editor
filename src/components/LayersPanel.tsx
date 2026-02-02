@@ -10,6 +10,8 @@ import {
   CaretRightIcon,
   PenNibIcon,
   SelectionIcon,
+  LineSegmentIcon,
+  HexagonIcon,
 } from "@phosphor-icons/react";
 import clsx from "clsx";
 import { useSceneStore } from "../store/sceneStore";
@@ -49,6 +51,10 @@ const NodeIcon = ({
       return <DiamondIcon size={16} className={iconClass} weight="regular" />;
     case "path":
       return <PenNibIcon size={16} className={iconClass} weight="regular" />;
+    case "line":
+      return <LineSegmentIcon size={16} className={iconClass} weight="regular" />;
+    case "polygon":
+      return <HexagonIcon size={16} className={iconClass} weight="regular" />;
     default:
       return null;
   }

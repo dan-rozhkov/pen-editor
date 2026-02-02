@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type DrawToolType = 'cursor' | 'frame' | 'rect' | 'ellipse' | 'text'
+export type DrawToolType = 'cursor' | 'frame' | 'rect' | 'ellipse' | 'text' | 'line' | 'polygon'
 
 interface DrawModeState {
   activeTool: DrawToolType | null

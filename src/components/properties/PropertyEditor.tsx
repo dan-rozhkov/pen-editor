@@ -20,6 +20,7 @@ import type {
   AlignItems,
   FlexDirection,
   JustifyContent,
+  PolygonNode,
   SceneNode,
   SizingMode,
 } from "@/types/scene";
@@ -540,6 +541,28 @@ export function PropertyEditor({
               value={node.cornerRadius ?? 0}
               onChange={(v) => onUpdate({ cornerRadius: v })}
               min={0}
+              labelOutside={true}
+            />
+          )}
+          {node.type === "polygon" && (
+            <NumberInput
+              label="Sides"
+              value={(node as PolygonNode).sides ?? 6}
+              onChange={(v) => {
+                const sides = Math.max(3, Math.min(12, v));
+                const w = node.width;
+                const h = node.height;
+                const points: number[] = [];
+                for (let i = 0; i < sides; i++) {
+                  const angle = (2 * Math.PI * i) / sides - Math.PI / 2;
+                  points.push(w / 2 + (w / 2) * Math.cos(angle));
+                  points.push(h / 2 + (h / 2) * Math.sin(angle));
+                }
+                onUpdate({ sides, points } as Partial<SceneNode>);
+              }}
+              min={3}
+              max={12}
+              step={1}
               labelOutside={true}
             />
           )}

@@ -3,6 +3,8 @@ import {
   CircleIcon,
   TextTIcon,
   NavigationArrowIcon,
+  LineSegmentIcon,
+  HexagonIcon,
   type IconWeight,
 } from "@phosphor-icons/react";
 import { FrameIcon } from "./ui/custom-icons/frame-icon";
@@ -32,6 +34,8 @@ export function PrimitivesPanel() {
     { icon: SquareIcon, label: "Rectangle", tool: "rect", shortcut: "R" },
     { icon: CircleIcon, label: "Ellipse", tool: "ellipse", shortcut: "O" },
     { icon: TextTIcon, label: "Text", tool: "text", shortcut: "T" },
+    { icon: LineSegmentIcon, label: "Line", tool: "line", shortcut: "L" },
+    { icon: HexagonIcon, label: "Polygon", tool: "polygon", shortcut: "P" },
   ];
 
   return (

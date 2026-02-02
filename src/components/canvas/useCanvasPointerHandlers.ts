@@ -73,7 +73,7 @@ export function useCanvasPointerHandlers({
 
   const createNodeFromDraw = useCallback(
     (
-      tool: "frame" | "rect" | "ellipse" | "text",
+      tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon",
       rx: number,
       ry: number,
       rw: number,
@@ -135,6 +135,40 @@ export function useCanvasPointerHandlers({
             textWidthMode: "auto",
           };
           break;
+        case "line":
+          node = {
+            id,
+            type: "line",
+            x: rx,
+            y: ry,
+            width: rw,
+            height: rh,
+            stroke: "#333333",
+            strokeWidth: 2,
+            points: [0, 0, rw, rh],
+          };
+          break;
+        case "polygon": {
+          const sides = 6;
+          const points: number[] = [];
+          for (let i = 0; i < sides; i++) {
+            const angle = (2 * Math.PI * i) / sides - Math.PI / 2;
+            points.push(rw / 2 + (rw / 2) * Math.cos(angle));
+            points.push(rh / 2 + (rh / 2) * Math.sin(angle));
+          }
+          node = {
+            id,
+            type: "polygon",
+            x: rx,
+            y: ry,
+            width: rw,
+            height: rh,
+            fill: "#50b87d",
+            sides,
+            points,
+          };
+          break;
+        }
       }
       addNode(node);
       useSelectionStore.getState().select(id);
@@ -317,6 +351,8 @@ export function useCanvasPointerHandlers({
           rect: { w: 150, h: 100 },
           ellipse: { w: 120, h: 120 },
           text: { w: 100, h: 24 },
+          line: { w: 150, h: 2 },
+          polygon: { w: 120, h: 120 },
         };
 
         let rx: number;

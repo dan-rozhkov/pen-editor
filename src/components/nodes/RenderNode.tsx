@@ -3,7 +3,9 @@ import Konva from "konva";
 import type {
   FrameNode,
   GroupNode,
+  LineNode,
   PathNode,
+  PolygonNode,
   RefNode,
   SceneNode,
 } from "@/types/scene";
@@ -12,7 +14,9 @@ import { EllipseRenderer } from "@/components/nodes/EllipseRenderer";
 import { FrameRenderer } from "@/components/nodes/FrameRenderer";
 import { GroupRenderer } from "@/components/nodes/GroupRenderer";
 import { InstanceRenderer } from "@/components/nodes/InstanceRenderer";
+import { LineRenderer } from "@/components/nodes/LineRenderer";
 import { PathRenderer } from "@/components/nodes/PathRenderer";
+import { PolygonRenderer } from "@/components/nodes/PolygonRenderer";
 import { RectRenderer } from "@/components/nodes/RectRenderer";
 import { TextRenderer } from "@/components/nodes/TextRenderer";
 import { useDragStore } from "@/store/dragStore";
@@ -637,6 +641,38 @@ export function RenderNode({
       return (
         <PathRenderer
           node={node as PathNode}
+          fillColor={fillColor}
+          strokeColor={strokeColor}
+          gradientProps={gradientProps}
+          isHovered={isHovered}
+          onClick={handleClick}
+          onDragStart={handleDragStart}
+          onDragMove={handleDragMove}
+          onDragEnd={handleDragEnd}
+          onTransformEnd={handleTransformEnd}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+        />
+      );
+    case "line":
+      return (
+        <LineRenderer
+          node={node as LineNode}
+          strokeColor={strokeColor}
+          isHovered={isHovered}
+          onClick={handleClick}
+          onDragStart={handleDragStart}
+          onDragMove={handleDragMove}
+          onDragEnd={handleDragEnd}
+          onTransformEnd={handleTransformEnd}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+        />
+      );
+    case "polygon":
+      return (
+        <PolygonRenderer
+          node={node as PolygonNode}
           fillColor={fillColor}
           strokeColor={strokeColor}
           gradientProps={gradientProps}

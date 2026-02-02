@@ -57,7 +57,7 @@ export interface PathStroke {
 
 export interface BaseNode {
   id: string
-  type: 'frame' | 'group' | 'rect' | 'ellipse' | 'text' | 'ref' | 'path'
+  type: 'frame' | 'group' | 'rect' | 'ellipse' | 'text' | 'ref' | 'path' | 'line' | 'polygon'
   name?: string
   x: number
   y: number
@@ -195,7 +195,18 @@ export interface PathNode extends BaseNode {
   geometryBounds?: { x: number; y: number; width: number; height: number }
 }
 
-export type SceneNode = FrameNode | GroupNode | RectNode | EllipseNode | TextNode | RefNode | PathNode
+export interface LineNode extends BaseNode {
+  type: 'line'
+  points: number[]  // [x1, y1, x2, y2] relative to node x,y
+}
+
+export interface PolygonNode extends BaseNode {
+  type: 'polygon'
+  points: number[]  // vertices [x1,y1,x2,y2,...] relative to node x,y
+  sides?: number    // number of sides (default 6)
+}
+
+export type SceneNode = FrameNode | GroupNode | RectNode | EllipseNode | TextNode | RefNode | PathNode | LineNode | PolygonNode
 
 /** Check if a node is a container (has children array) */
 export function isContainerNode(node: SceneNode): node is FrameNode | GroupNode {

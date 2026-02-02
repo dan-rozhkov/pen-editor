@@ -34,7 +34,7 @@ interface CanvasKeyboardShortcutsParams {
   undo: (nodes: SceneNode[]) => SceneNode[] | null;
   redo: (nodes: SceneNode[]) => SceneNode[] | null;
   fitToContent: (nodes: SceneNode[], width: number, height: number) => void;
-  toggleTool: (tool: "frame" | "rect" | "ellipse" | "text") => void;
+  toggleTool: (tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon") => void;
   cancelDrawing: () => void;
   clearSelection: () => void;
   exitInstanceEditMode: () => void;
@@ -305,6 +305,16 @@ export function useCanvasKeyboardShortcuts({
         if (e.code === "KeyT") {
           e.preventDefault();
           toggleTool("text");
+          return;
+        }
+        if (e.code === "KeyL") {
+          e.preventDefault();
+          toggleTool("line");
+          return;
+        }
+        if (e.code === "KeyP") {
+          e.preventDefault();
+          toggleTool("polygon");
           return;
         }
       }
