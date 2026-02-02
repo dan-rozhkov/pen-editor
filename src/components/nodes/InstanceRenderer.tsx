@@ -35,6 +35,8 @@ interface InstanceRendererProps {
   onDragStart: () => void;
   onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void;
+  onTransformStart: (e: Konva.KonvaEventObject<Event>) => void;
+  onTransform: (e: Konva.KonvaEventObject<Event>) => void;
   onTransformEnd: (e: Konva.KonvaEventObject<Event>) => void;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
@@ -48,6 +50,8 @@ export function InstanceRenderer({
   onDragStart,
   onDragMove,
   onDragEnd,
+  onTransformStart,
+  onTransform,
   onTransformEnd,
   onMouseEnter,
   onMouseLeave,
@@ -129,10 +133,6 @@ export function InstanceRenderer({
   // If component has a theme override, use it for children
   const childTheme = component.themeOverride ?? currentTheme;
 
-  // Calculate scale to fit component content into instance size
-  const scaleX = node.width / component.width;
-  const scaleY = node.height / component.height;
-
   // Get descendant overrides
   const descendantOverrides = node.descendants || {};
 
@@ -207,6 +207,8 @@ export function InstanceRenderer({
       onDragStart={onDragStart}
       onDragMove={onDragMove}
       onDragEnd={onDragEnd}
+      onTransformStart={onTransformStart}
+      onTransform={onTransform}
       onTransformEnd={onTransformEnd}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
@@ -221,10 +223,8 @@ export function InstanceRenderer({
         strokeWidth={effectiveStrokeWidth}
         cornerRadius={component.cornerRadius}
       />
-      {/* Scaled content from component */}
-      <Group scaleX={scaleX} scaleY={scaleY}>
-        {layoutChildren.map(renderDescendant)}
-      </Group>
+      {/* Children from component (rendered at original sizes, like a frame) */}
+      {layoutChildren.map(renderDescendant)}
       {/* Instance edit mode indicator */}
       {isInEditMode && (
         <SelectionOutline
