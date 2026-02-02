@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useCallback } from "react";
 import type { RefObject } from "react";
 import type { SceneNode, RectNode } from "@/types/scene";
 import { generateId } from "@/types/scene";
@@ -70,13 +70,10 @@ function isImageFile(file: File): boolean {
 }
 
 export function useCanvasFileDrop({ containerRef, addNode }: UseCanvasFileDropOptions) {
-  const [isDragOver, setIsDragOver] = useState(false);
-
   const handleDrop = useCallback(
     async (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      setIsDragOver(false);
 
       const files = e.dataTransfer?.files;
       if (!files || files.length === 0) return;
@@ -140,8 +137,6 @@ export function useCanvasFileDrop({ containerRef, addNode }: UseCanvasFileDropOp
     const container = containerRef.current;
     if (!container) return;
 
-    let dragEnterCount = 0;
-
     const handleDragOver = (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
@@ -150,35 +145,12 @@ export function useCanvasFileDrop({ containerRef, addNode }: UseCanvasFileDropOp
       }
     };
 
-    const handleDragEnter = (e: DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      dragEnterCount++;
-      setIsDragOver(true);
-    };
-
-    const handleDragLeave = (e: DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      dragEnterCount--;
-      if (dragEnterCount <= 0) {
-        dragEnterCount = 0;
-        setIsDragOver(false);
-      }
-    };
-
     container.addEventListener("dragover", handleDragOver);
-    container.addEventListener("dragenter", handleDragEnter);
-    container.addEventListener("dragleave", handleDragLeave);
     container.addEventListener("drop", handleDrop);
 
     return () => {
       container.removeEventListener("dragover", handleDragOver);
-      container.removeEventListener("dragenter", handleDragEnter);
-      container.removeEventListener("dragleave", handleDragLeave);
       container.removeEventListener("drop", handleDrop);
     };
   }, [containerRef, handleDrop]);
-
-  return { isDragOver };
 }

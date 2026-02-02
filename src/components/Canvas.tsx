@@ -165,7 +165,7 @@ export function Canvas() {
     select,
   });
 
-  const { isDragOver } = useCanvasFileDrop({
+  useCanvasFileDrop({
     containerRef,
     addNode,
   });
@@ -428,20 +428,6 @@ export function Canvas() {
           node={editingNameNode}
           absoluteX={editingNamePosition.x}
           absoluteY={editingNamePosition.y}
-        />
-      )}
-      {/* Drop overlay when dragging files from OS */}
-      {isDragOver && (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            border: "2px dashed #0d99ff",
-            background: "rgba(13, 153, 255, 0.06)",
-            pointerEvents: "none",
-            zIndex: 50,
-            borderRadius: 4,
-          }}
         />
       )}
     </div>
