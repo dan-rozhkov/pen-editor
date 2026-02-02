@@ -129,6 +129,7 @@ export function useCanvasKeyboardShortcuts({
       }
 
       if ((e.metaKey || e.ctrlKey) && e.code === "KeyC") {
+        if (isTyping) return;
         e.preventDefault();
         const ids = useSelectionStore.getState().selectedIds;
         if (ids.length === 1) {
@@ -141,6 +142,7 @@ export function useCanvasKeyboardShortcuts({
       }
 
       if ((e.metaKey || e.ctrlKey) && e.code === "KeyX") {
+        if (isTyping) return;
         e.preventDefault();
         const ids = useSelectionStore.getState().selectedIds;
         if (ids.length === 1) {
@@ -157,6 +159,7 @@ export function useCanvasKeyboardShortcuts({
       }
 
       if ((e.metaKey || e.ctrlKey) && e.code === "KeyV") {
+        if (isTyping) return;
         if (copiedNode) {
           e.preventDefault();
           const clonedNode = cloneNodeWithNewId(copiedNode);
