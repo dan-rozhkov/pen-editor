@@ -161,8 +161,9 @@ function SpacingInput({
   const placeholder = spacing === "mixed" ? "mixed" : undefined;
 
   const handleApply = (inputValue: string) => {
-    const val = parseFloat(inputValue);
-    if (isNaN(val)) return;
+    const parsed = parseFloat(inputValue);
+    if (isNaN(parsed)) return;
+    const val = Math.max(0, parsed);
 
     const updates = distributeSpacing(selectedIds, nodes, val);
     if (updates.length === 0) return;

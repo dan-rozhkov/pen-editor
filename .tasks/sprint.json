@@ -130,6 +130,10 @@
     },
     {
       "name": "fix-spacing-property-calculation",
+      "passed": true
+    },
+    {
+      "name": "clip-content-frame",
       "passed": false
     }
   ]

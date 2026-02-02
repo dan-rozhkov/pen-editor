@@ -1,5 +1,6 @@
-import type { SceneNode } from '../types/scene'
+import type { FrameNode, SceneNode } from '../types/scene'
 import { findNodeById, findParentFrame, getNodeAbsolutePosition } from './nodeUtils'
+import { calculateFrameIntrinsicSize } from './yogaLayout'
 
 export type AlignmentType = 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom'
 
@@ -8,6 +9,8 @@ interface NodePositionInfo {
   node: SceneNode
   absX: number
   absY: number
+  effectiveWidth: number
+  effectiveHeight: number
   parentOffsetX: number
   parentOffsetY: number
 }
@@ -21,33 +24,7 @@ export function alignNodes(
   allNodes: SceneNode[],
   alignment: AlignmentType
 ): { id: string; x?: number; y?: number }[] {
-  // Gather position info for each selected node
-  const nodeInfos: NodePositionInfo[] = []
-
-  for (const id of selectedIds) {
-    const node = findNodeById(allNodes, id)
-    if (!node) continue
-
-    // Skip nodes inside auto-layout (their position is controlled by Yoga)
-    const parentContext = findParentFrame(allNodes, id)
-    if (parentContext.isInsideAutoLayout) continue
-
-    const absPos = getNodeAbsolutePosition(allNodes, id)
-    if (!absPos) continue
-
-    // Calculate parent offset (absolute position of parent frame)
-    const parentOffsetX = absPos.x - node.x
-    const parentOffsetY = absPos.y - node.y
-
-    nodeInfos.push({
-      id,
-      node,
-      absX: absPos.x,
-      absY: absPos.y,
-      parentOffsetX,
-      parentOffsetY,
-    })
-  }
+  const nodeInfos = gatherNodeInfos(selectedIds, allNodes)
 
   if (nodeInfos.length < 2) {
     return [] // Need at least 2 nodes to align
@@ -55,9 +32,9 @@ export function alignNodes(
 
   // Calculate bounding box
   const minX = Math.min(...nodeInfos.map((n) => n.absX))
-  const maxX = Math.max(...nodeInfos.map((n) => n.absX + n.node.width))
+  const maxX = Math.max(...nodeInfos.map((n) => n.absX + n.effectiveWidth))
   const minY = Math.min(...nodeInfos.map((n) => n.absY))
-  const maxY = Math.max(...nodeInfos.map((n) => n.absY + n.node.height))
+  const maxY = Math.max(...nodeInfos.map((n) => n.absY + n.effectiveHeight))
   const centerX = (minX + maxX) / 2
   const centerY = (minY + maxY) / 2
 
@@ -73,19 +50,19 @@ export function alignNodes(
         newAbsX = minX
         break
       case 'centerH':
-        newAbsX = centerX - info.node.width / 2
+        newAbsX = centerX - info.effectiveWidth / 2
         break
       case 'right':
-        newAbsX = maxX - info.node.width
+        newAbsX = maxX - info.effectiveWidth
         break
       case 'top':
         newAbsY = minY
         break
       case 'centerV':
-        newAbsY = centerY - info.node.height / 2
+        newAbsY = centerY - info.effectiveHeight / 2
         break
       case 'bottom':
-        newAbsY = maxY - info.node.height
+        newAbsY = maxY - info.effectiveHeight
         break
     }
 
@@ -111,6 +88,24 @@ export function alignNodes(
 /**
  * Gather non-auto-layout selected nodes with absolute positions
  */
+function getEffectiveDimensions(node: SceneNode): { width: number; height: number } {
+  let effectiveWidth = node.width
+  let effectiveHeight = node.height
+
+  if (node.type === 'frame' && (node as FrameNode).layout?.autoLayout) {
+    const frame = node as FrameNode
+    const fitWidth = frame.sizing?.widthMode === 'fit_content'
+    const fitHeight = frame.sizing?.heightMode === 'fit_content'
+    if (fitWidth || fitHeight) {
+      const intrinsicSize = calculateFrameIntrinsicSize(frame, { fitWidth, fitHeight })
+      if (fitWidth) effectiveWidth = intrinsicSize.width
+      if (fitHeight) effectiveHeight = intrinsicSize.height
+    }
+  }
+
+  return { width: effectiveWidth, height: effectiveHeight }
+}
+
 function gatherNodeInfos(selectedIds: string[], allNodes: SceneNode[]): NodePositionInfo[] {
   const nodeInfos: NodePositionInfo[] = []
 
@@ -126,12 +121,15 @@ function gatherNodeInfos(selectedIds: string[], allNodes: SceneNode[]): NodePosi
 
     const parentOffsetX = absPos.x - node.x
     const parentOffsetY = absPos.y - node.y
+    const { width, height } = getEffectiveDimensions(node)
 
     nodeInfos.push({
       id,
       node,
       absX: absPos.x,
       absY: absPos.y,
+      effectiveWidth: width,
+      effectiveHeight: height,
       parentOffsetX,
       parentOffsetY,
     })
@@ -145,9 +143,9 @@ function gatherNodeInfos(selectedIds: string[], allNodes: SceneNode[]): NodePosi
  */
 function getDominantAxis(nodeInfos: NodePositionInfo[]): 'horizontal' | 'vertical' {
   const minX = Math.min(...nodeInfos.map((n) => n.absX))
-  const maxX = Math.max(...nodeInfos.map((n) => n.absX + n.node.width))
+  const maxX = Math.max(...nodeInfos.map((n) => n.absX + n.effectiveWidth))
   const minY = Math.min(...nodeInfos.map((n) => n.absY))
-  const maxY = Math.max(...nodeInfos.map((n) => n.absY + n.node.height))
+  const maxY = Math.max(...nodeInfos.map((n) => n.absY + n.effectiveHeight))
 
   return (maxX - minX) >= (maxY - minY) ? 'horizontal' : 'vertical'
 }
@@ -177,9 +175,9 @@ export function calculateSpacing(
     const current = sorted[i]
     const next = sorted[i + 1]
     if (axis === 'horizontal') {
-      gaps.push(Math.round(next.absX - (current.absX + current.node.width)))
+      gaps.push(Math.max(0, Math.round(next.absX - (current.absX + current.effectiveWidth))))
     } else {
-      gaps.push(Math.round(next.absY - (current.absY + current.node.height)))
+      gaps.push(Math.max(0, Math.round(next.absY - (current.absY + current.effectiveHeight))))
     }
   }
 
@@ -204,6 +202,7 @@ export function distributeSpacing(
   const nodeInfos = gatherNodeInfos(selectedIds, allNodes)
   if (nodeInfos.length < 2) return []
 
+  const gap = Math.max(0, newGap)
   const axis = getDominantAxis(nodeInfos)
 
   // Sort by position on dominant axis
@@ -221,13 +220,13 @@ export function distributeSpacing(
 
     let newAbs: number
     if (axis === 'horizontal') {
-      newAbs = prev.absX + prev.node.width + newGap
+      newAbs = prev.absX + prev.effectiveWidth + gap
       // Update prev reference for next iteration
       sorted[i] = { ...current, absX: newAbs }
       const newX = Math.round(newAbs - current.parentOffsetX)
       updates.push({ id: current.id, x: newX })
     } else {
-      newAbs = prev.absY + prev.node.height + newGap
+      newAbs = prev.absY + prev.effectiveHeight + gap
       sorted[i] = { ...current, absY: newAbs }
       const newY = Math.round(newAbs - current.parentOffsetY)
       updates.push({ id: current.id, y: newY })
