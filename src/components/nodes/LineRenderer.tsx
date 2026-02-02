@@ -10,6 +10,7 @@ import {
 interface LineRendererProps {
   node: LineNode;
   strokeColor?: string;
+  shadowProps?: Record<string, unknown>;
   isHovered: boolean;
   onClick: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
   onDragStart: () => void;
@@ -23,6 +24,7 @@ interface LineRendererProps {
 export function LineRenderer({
   node,
   strokeColor,
+  shadowProps,
   isHovered,
   onClick,
   onDragStart,
@@ -44,6 +46,7 @@ export function LineRenderer({
         points={node.points}
         stroke={strokeColor || node.stroke || "#333333"}
         strokeWidth={node.strokeWidth ?? 2}
+        {...(shadowProps || {})}
         opacity={node.opacity ?? 1}
         rotation={rectTransform.rotation}
         offsetX={rectTransform.offsetX}

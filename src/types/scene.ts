@@ -55,6 +55,15 @@ export interface PathStroke {
   fill?: string        // stroke color (may be a variable reference like "$--foreground")
 }
 
+export interface ShadowEffect {
+  type: 'shadow'
+  shadowType: 'outer' | 'inner'  // only outer supported for now
+  color: string       // hex with alpha, e.g. '#00000040'
+  offset: { x: number; y: number }
+  blur: number
+  spread: number
+}
+
 export interface BaseNode {
   id: string
   type: 'frame' | 'group' | 'rect' | 'ellipse' | 'text' | 'ref' | 'path' | 'line' | 'polygon'
@@ -87,6 +96,8 @@ export interface BaseNode {
   imageFill?: ImageFill
   // Gradient fill (takes priority over solid fill when set)
   gradientFill?: GradientFill
+  // Shadow effect
+  effect?: ShadowEffect
 }
 
 // Auto-layout properties for Frame nodes

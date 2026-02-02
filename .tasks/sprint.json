@@ -1,0 +1,112 @@
+{
+  "tasks": [
+    {
+      "name": "fix-visibility-toggle-bug",
+      "passed": true
+    },
+    {
+      "name": "font-selection-from-system",
+      "passed": true
+    },
+    {
+      "name": "element-opacity",
+      "passed": true
+    },
+    {
+      "name": "page-background",
+      "passed": true
+    },
+    {
+      "name": "group-elements",
+      "passed": true
+    },
+    {
+      "name": "image-fill",
+      "passed": true
+    },
+    {
+      "name": "flip-horizontal-vertical",
+      "passed": true
+    },
+    {
+      "name": "nested-element-selection",
+      "passed": true
+    },
+    {
+      "name": "fix-auto-width-autolayout",
+      "passed": true
+    },
+    {
+      "name": "convert-group-to-frame",
+      "passed": true
+    },
+    {
+      "name": "fix-paste-into-selected-container",
+      "passed": true
+    },
+    {
+      "name": "expand-variable-types",
+      "passed": true
+    },
+    {
+      "name": "smart-guides-on-drag",
+      "passed": true
+    },
+    {
+      "name": "spacing-between-selected-nodes",
+      "passed": true
+    },
+    {
+      "name": "fix-integer-xy-on-drag",
+      "passed": true
+    },
+    {
+      "name": "select-all-nodes",
+      "passed": true
+    },
+    {
+      "name": "variables-panel-dialog",
+      "passed": true
+    },
+    {
+      "name": "custom-color-picker",
+      "passed": true
+    },
+    {
+      "name": "svg-insert",
+      "passed": true
+    },
+    {
+      "name": "deep-select-with-modifier",
+      "passed": true
+    },
+    {
+      "name": "distance-measurement-overlay",
+      "passed": true
+    },
+    {
+      "name": "fill-stroke-opacity",
+      "passed": true
+    },
+    {
+      "name": "frame-size-presets",
+      "passed": true
+    },
+    {
+      "name": "gradient-fill",
+      "passed": true
+    },
+    {
+      "name": "add-line-polygon-nodes",
+      "passed": true
+    },
+    {
+      "name": "box-shadow-effects",
+      "passed": true
+    },
+    {
+      "name": "proportional-resize-lock",
+      "passed": false
+    }
+  ]
+}

@@ -11,6 +11,7 @@ interface PathRendererProps {
   fillColor?: string;
   strokeColor?: string;
   gradientProps?: Record<string, unknown>;
+  shadowProps?: Record<string, unknown>;
   isHovered: boolean;
   onClick: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
   onDragStart: () => void;
@@ -26,6 +27,7 @@ export function PathRenderer({
   fillColor,
   strokeColor,
   gradientProps,
+  shadowProps,
   isHovered,
   onClick,
   onDragStart,
@@ -70,6 +72,7 @@ export function PathRenderer({
         scaleX={flipX ? -1 : 1}
         scaleY={flipY ? -1 : 1}
         opacity={node.opacity ?? 1}
+        {...(shadowProps || {})}
         draggable
         onClick={onClick}
         onTap={onClick}

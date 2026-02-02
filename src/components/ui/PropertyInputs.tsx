@@ -13,14 +13,18 @@ import { CustomColorPicker } from "./ColorPicker";
 interface PropertySectionProps {
   title: string;
   children: React.ReactNode;
+  action?: React.ReactNode;
 }
 
-export function PropertySection({ title, children }: PropertySectionProps) {
+export function PropertySection({ title, children, action }: PropertySectionProps) {
   return (
     <div className="relative border-b border-border-default">
       <div className="flex flex-col gap-2 px-4 pt-3 pb-5">
-        <div className="text-[11px] font-semibold text-text-primary">
-          {title}
+        <div className="flex items-center justify-between">
+          <div className="text-[11px] font-semibold text-text-primary">
+            {title}
+          </div>
+          {action}
         </div>
         <div className="flex flex-col gap-2">{children}</div>
       </div>

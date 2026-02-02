@@ -33,6 +33,7 @@ interface FrameRendererProps {
   fillColor?: string;
   strokeColor?: string;
   gradientProps?: Record<string, unknown>;
+  shadowProps?: Record<string, unknown>;
   effectiveTheme: ThemeName;
   isHovered: boolean;
   isTopLevel: boolean;
@@ -53,6 +54,7 @@ export function FrameRenderer({
   fillColor,
   strokeColor,
   gradientProps,
+  shadowProps,
   effectiveTheme,
   isHovered,
   isTopLevel,
@@ -156,6 +158,7 @@ export function FrameRenderer({
         height={effectiveHeight}
         fill={node.imageFill || gradientProps ? undefined : fillColor}
         {...(gradientProps && !node.imageFill ? gradientProps : {})}
+        {...(shadowProps || {})}
         stroke={strokeColor}
         strokeWidth={node.strokeWidth}
         cornerRadius={node.cornerRadius}

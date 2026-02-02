@@ -21,6 +21,7 @@ interface EllipseRendererProps {
   fillColor?: string;
   strokeColor?: string;
   gradientProps?: Record<string, unknown>;
+  shadowProps?: Record<string, unknown>;
   isInAutoLayout: boolean;
   parentFrame: FrameNode | null;
   isHovered: boolean;
@@ -36,6 +37,7 @@ export function EllipseRenderer({
   fillColor,
   strokeColor,
   gradientProps,
+  shadowProps,
   isInAutoLayout,
   parentFrame,
   isHovered,
@@ -114,6 +116,7 @@ export function EllipseRenderer({
         {...ellipseTransform}
         fill={node.imageFill || gradientProps ? undefined : fillColor}
         {...(gradientProps && !node.imageFill ? gradientProps : {})}
+        {...(shadowProps || {})}
         stroke={strokeColor}
         strokeWidth={node.strokeWidth}
         opacity={node.opacity ?? 1}

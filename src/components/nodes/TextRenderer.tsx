@@ -14,6 +14,7 @@ interface TextRendererProps {
   node: TextNode;
   fillColor?: string;
   gradientProps?: Record<string, unknown>;
+  shadowProps?: Record<string, unknown>;
   isHovered: boolean;
   isEditing: boolean;
   onClick: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
@@ -32,6 +33,7 @@ export function TextRenderer({
   node,
   fillColor,
   gradientProps,
+  shadowProps,
   isHovered,
   isEditing,
   onClick,
@@ -65,6 +67,7 @@ export function TextRenderer({
         textDecoration={textDecoration}
         fill={gradientProps ? undefined : (fillColor ?? "#000000")}
         {...(gradientProps ?? {})}
+        {...(shadowProps || {})}
         align={node.textAlign ?? "left"}
         verticalAlign={node.textAlignVertical ?? "top"}
         lineHeight={node.lineHeight ?? 1.2}

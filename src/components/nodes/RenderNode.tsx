@@ -33,6 +33,7 @@ import { useViewportStore } from "@/store/viewportStore";
 import { resolveColor, applyOpacity } from "@/utils/colorUtils";
 import { buildKonvaGradientProps } from "@/utils/gradientUtils";
 import { generatePolygonPoints } from "@/utils/polygonUtils";
+import { buildKonvaShadowProps } from "@/utils/shadowUtils";
 import {
   calculateDropPosition,
   getFrameAbsoluteRectWithLayout,
@@ -161,6 +162,9 @@ export function RenderNode({
   const strokeColor = rawStrokeColor
     ? applyOpacity(rawStrokeColor, node.strokeOpacity)
     : rawStrokeColor;
+
+  // Shadow effect props
+  const shadowProps = buildKonvaShadowProps(node.effect);
 
   // Gradient fill props (takes priority over solid fill)
   const gradientProps = node.gradientFill
@@ -565,6 +569,7 @@ export function RenderNode({
           fillColor={fillColor}
           strokeColor={strokeColor}
           gradientProps={gradientProps}
+          shadowProps={shadowProps}
           effectiveTheme={currentTheme}
           isHovered={isHovered}
           isTopLevel={parentFrame === null}
@@ -596,6 +601,7 @@ export function RenderNode({
           fillColor={fillColor}
           strokeColor={strokeColor}
           gradientProps={gradientProps}
+          shadowProps={shadowProps}
           isHovered={isHovered}
           onClick={handleClick}
           onDragStart={handleDragStart}
@@ -618,6 +624,7 @@ export function RenderNode({
           fillColor={fillColor}
           strokeColor={strokeColor}
           gradientProps={gradientProps}
+          shadowProps={shadowProps}
           isInAutoLayout={isInAutoLayout}
           parentFrame={parentFrame?.type === "frame" ? parentFrame : null}
           isHovered={isHovered}
@@ -638,6 +645,7 @@ export function RenderNode({
           node={node}
           fillColor={fillColor}
           gradientProps={gradientProps}
+          shadowProps={shadowProps}
           isHovered={isHovered}
           isEditing={isEditing}
           onClick={handleClick}
@@ -660,6 +668,7 @@ export function RenderNode({
           fillColor={fillColor}
           strokeColor={strokeColor}
           gradientProps={gradientProps}
+          shadowProps={shadowProps}
           isHovered={isHovered}
           onClick={handleClick}
           onDragStart={handleDragStart}
@@ -675,6 +684,7 @@ export function RenderNode({
         <LineRenderer
           node={node as LineNode}
           strokeColor={strokeColor}
+          shadowProps={shadowProps}
           isHovered={isHovered}
           onClick={handleClick}
           onDragStart={handleDragStart}
@@ -692,6 +702,7 @@ export function RenderNode({
           fillColor={fillColor}
           strokeColor={strokeColor}
           gradientProps={gradientProps}
+          shadowProps={shadowProps}
           isHovered={isHovered}
           onClick={handleClick}
           onDragStart={handleDragStart}

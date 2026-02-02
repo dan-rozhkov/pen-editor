@@ -12,6 +12,7 @@ interface PolygonRendererProps {
   fillColor?: string;
   strokeColor?: string;
   gradientProps?: Record<string, unknown>;
+  shadowProps?: Record<string, unknown>;
   isHovered: boolean;
   onClick: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
   onDragStart: () => void;
@@ -27,6 +28,7 @@ export function PolygonRenderer({
   fillColor,
   strokeColor,
   gradientProps,
+  shadowProps,
   isHovered,
   onClick,
   onDragStart,
@@ -49,6 +51,7 @@ export function PolygonRenderer({
         closed
         fill={gradientProps ? undefined : fillColor}
         {...(gradientProps ? gradientProps : {})}
+        {...(shadowProps || {})}
         stroke={strokeColor}
         strokeWidth={node.strokeWidth}
         opacity={node.opacity ?? 1}
