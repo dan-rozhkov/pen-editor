@@ -23,20 +23,19 @@ export function EffectsSection({ node, onUpdate }: EffectsSectionProps) {
           >
             + Shadow
           </button>
-        ) : undefined
+        ) : (
+          <button
+            className="text-xs text-red-400 hover:text-red-300"
+            onClick={() => onUpdate({ effect: undefined })}
+          >
+            −
+          </button>
+        )
       }
     >
       {node.effect && (
         <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Drop Shadow</span>
-            <button
-              className="text-xs text-red-400 hover:text-red-300"
-              onClick={() => onUpdate({ effect: undefined })}
-            >
-              Remove
-            </button>
-          </div>
+          <span className="text-xs text-muted-foreground">Drop Shadow</span>
           <ColorInput
             value={node.effect.color}
             onChange={(v) =>

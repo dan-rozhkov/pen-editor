@@ -30,12 +30,28 @@ export function FillSection({
   isOverridden,
   resetOverride,
 }: FillSectionProps) {
+  const hasFill = !!(node.fill || node.gradientFill || node.imageFill);
+
   const handleFillVariableChange = (variableId: string | undefined) => {
     if (variableId) {
       onUpdate({ fillBinding: { variableId } });
     } else {
       onUpdate({ fillBinding: undefined });
     }
+  };
+
+  const handleAddFill = () => {
+    onUpdate({ fill: "#000000" });
+  };
+
+  const handleRemoveFill = () => {
+    onUpdate({
+      fill: undefined,
+      gradientFill: undefined,
+      imageFill: undefined,
+      fillBinding: undefined,
+      fillOpacity: undefined,
+    } as Partial<SceneNode>);
   };
 
   const supportsImage =
@@ -53,87 +69,110 @@ export function FillSection({
   ];
 
   return (
-    <PropertySection title="Fill">
-      <SelectInput
-        value={fillMode}
-        options={fillOptions}
-        onChange={(v) => {
-          if (v === "image") {
-            const updates: Partial<SceneNode> = {
-              gradientFill: undefined,
-            } as Partial<SceneNode>;
-            if (!node.imageFill) {
-              (updates as Record<string, unknown>).imageFill = {
-                url: "",
-                mode: "fill",
-              };
-            }
-            onUpdate(updates);
-          } else if (v === "solid") {
-            onUpdate({
-              gradientFill: undefined,
-              imageFill: undefined,
-            } as Partial<SceneNode>);
-          } else {
-            const currentGradient = node.gradientFill;
-            const updates: Partial<SceneNode> = {
-              imageFill: undefined,
-            } as Partial<SceneNode>;
-            if (currentGradient && currentGradient.type !== v) {
-              updates.gradientFill = {
-                ...getDefaultGradient(v as GradientType),
-                stops: currentGradient.stops,
-              };
-            } else if (!currentGradient) {
-              updates.gradientFill = getDefaultGradient(
-                v as GradientType
-              );
-            }
-            onUpdate(updates);
-          }
-        }}
-      />
-      {fillMode === "image" ? (
-        <ImageFillEditor
-          imageFill={node.imageFill}
-          onUpdate={onUpdate}
-        />
-      ) : node.gradientFill ? (
-        <GradientEditor
-          gradient={node.gradientFill}
-          onChange={(g: GradientFill) => onUpdate({ gradientFill: g })}
-        />
-      ) : (
-        <div className="flex items-center gap-1">
-          <div className="flex-1">
-            <ColorInput
-              value={node.fill ?? component?.fill ?? "#000000"}
-              onChange={(v) => onUpdate({ fill: v })}
-              variableId={node.fillBinding?.variableId}
-              onVariableChange={handleFillVariableChange}
-              availableVariables={colorVariables}
-              activeTheme={activeTheme}
-            />
-          </div>
-          <div className="w-20">
-            <NumberInput
-              label="%"
-              value={Math.round((node.fillOpacity ?? 1) * 100)}
-              onChange={(v) =>
+    <PropertySection
+      title="Fill"
+      action={
+        !hasFill ? (
+          <button
+            className="text-xs text-blue-500 hover:text-blue-400"
+            onClick={handleAddFill}
+          >
+            + Fill
+          </button>
+        ) : (
+          <button
+            className="text-xs text-red-400 hover:text-red-300"
+            onClick={handleRemoveFill}
+          >
+            −
+          </button>
+        )
+      }
+    >
+      {hasFill && (
+        <>
+          <SelectInput
+            value={fillMode}
+            options={fillOptions}
+            onChange={(v) => {
+              if (v === "image") {
+                const updates: Partial<SceneNode> = {
+                  gradientFill: undefined,
+                } as Partial<SceneNode>;
+                if (!node.imageFill) {
+                  (updates as Record<string, unknown>).imageFill = {
+                    url: "",
+                    mode: "fill",
+                  };
+                }
+                onUpdate(updates);
+              } else if (v === "solid") {
                 onUpdate({
-                  fillOpacity: Math.max(0, Math.min(100, v)) / 100,
-                })
+                  gradientFill: undefined,
+                  imageFill: undefined,
+                } as Partial<SceneNode>);
+              } else {
+                const currentGradient = node.gradientFill;
+                const updates: Partial<SceneNode> = {
+                  imageFill: undefined,
+                } as Partial<SceneNode>;
+                if (currentGradient && currentGradient.type !== v) {
+                  updates.gradientFill = {
+                    ...getDefaultGradient(v as GradientType),
+                    stops: currentGradient.stops,
+                  };
+                } else if (!currentGradient) {
+                  updates.gradientFill = getDefaultGradient(
+                    v as GradientType
+                  );
+                }
+                onUpdate(updates);
               }
-              min={0}
-              max={100}
-              step={1}
-            />
-          </div>
-          <OverrideIndicator
-            isOverridden={isOverridden(node.fill, component?.fill)}
-            onReset={() => resetOverride("fill")}
+            }}
           />
-        </div>
+          {fillMode === "image" ? (
+            <ImageFillEditor
+              imageFill={node.imageFill}
+              onUpdate={onUpdate}
+            />
+          ) : node.gradientFill ? (
+            <GradientEditor
+              gradient={node.gradientFill}
+              onChange={(g: GradientFill) => onUpdate({ gradientFill: g })}
+            />
+          ) : (
+            <div className="flex items-center gap-1">
+              <div className="flex-1">
+                <ColorInput
+                  value={node.fill ?? component?.fill ?? "#000000"}
+                  onChange={(v) => onUpdate({ fill: v })}
+                  variableId={node.fillBinding?.variableId}
+                  onVariableChange={handleFillVariableChange}
+                  availableVariables={colorVariables}
+                  activeTheme={activeTheme}
+                />
+              </div>
+              <div className="w-20">
+                <NumberInput
+                  label="%"
+                  value={Math.round((node.fillOpacity ?? 1) * 100)}
+                  onChange={(v) =>
+                    onUpdate({
+                      fillOpacity: Math.max(0, Math.min(100, v)) / 100,
+                    })
+                  }
+                  min={0}
+                  max={100}
+                  step={1}
+                />
+              </div>
+              <OverrideIndicator
+                isOverridden={isOverridden(node.fill, component?.fill)}
+                onReset={() => resetOverride("fill")}
+              />
+            </div>
+          )}
+        </>
       )}
     </PropertySection>
   );
