@@ -10,6 +10,7 @@ interface PathRendererProps {
   node: PathNode;
   fillColor?: string;
   strokeColor?: string;
+  gradientProps?: Record<string, unknown>;
   isHovered: boolean;
   onClick: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
   onDragStart: () => void;
@@ -24,6 +25,7 @@ export function PathRenderer({
   node,
   fillColor,
   strokeColor,
+  gradientProps,
   isHovered,
   onClick,
   onDragStart,
@@ -91,7 +93,8 @@ export function PathRenderer({
           scaleX={scaleX}
           scaleY={scaleY}
           data={node.geometry}
-          fill={fillColor}
+          fill={gradientProps ? undefined : fillColor}
+          {...(gradientProps ?? {})}
           stroke={pathStrokeColor}
           strokeWidth={pathStrokeWidth}
           lineJoin={lineJoin}

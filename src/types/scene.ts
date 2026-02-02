@@ -16,6 +16,28 @@ export interface ImageFill {
   mode: ImageFillMode
 }
 
+// Gradient fill types
+export interface GradientColorStop {
+  color: string
+  position: number  // 0-1
+  opacity?: number  // 0-1
+}
+
+export type GradientType = 'linear' | 'radial'
+
+export interface GradientFill {
+  type: GradientType
+  stops: GradientColorStop[]
+  // Normalized 0-1 coordinates relative to bounding box
+  startX: number
+  startY: number
+  endX: number
+  endY: number
+  // Radial gradient radii (normalized)
+  startRadius?: number
+  endRadius?: number
+}
+
 // Sizing modes for elements inside auto-layout containers
 export type SizingMode = 'fixed' | 'fill_container' | 'fit_content'
 
@@ -63,6 +85,8 @@ export interface BaseNode {
   flipY?: boolean
   // Image fill (takes priority over color fill when set)
   imageFill?: ImageFill
+  // Gradient fill (takes priority over solid fill when set)
+  gradientFill?: GradientFill
 }
 
 // Auto-layout properties for Frame nodes

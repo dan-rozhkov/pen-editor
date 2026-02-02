@@ -27,6 +27,7 @@ import { useThemeStore } from "@/store/themeStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { resolveColor, applyOpacity } from "@/utils/colorUtils";
+import { buildKonvaGradientProps } from "@/utils/gradientUtils";
 import {
   calculateDropPosition,
   getFrameAbsoluteRectWithLayout,
@@ -155,6 +156,16 @@ export function RenderNode({
   const strokeColor = rawStrokeColor
     ? applyOpacity(rawStrokeColor, node.strokeOpacity)
     : rawStrokeColor;
+
+  // Gradient fill props (takes priority over solid fill)
+  const gradientProps = node.gradientFill
+    ? buildKonvaGradientProps(
+        node.gradientFill,
+        node.width,
+        node.height,
+        node.type === "ellipse",
+      )
+    : undefined;
 
   // Don't render if node is hidden
   if (node.visible === false) {
@@ -533,6 +544,7 @@ export function RenderNode({
           onMouseLeave={handleMouseLeave}
           fillColor={fillColor}
           strokeColor={strokeColor}
+          gradientProps={gradientProps}
           effectiveTheme={currentTheme}
           isHovered={isHovered}
           isTopLevel={parentFrame === null}
@@ -563,6 +575,7 @@ export function RenderNode({
           node={node}
           fillColor={fillColor}
           strokeColor={strokeColor}
+          gradientProps={gradientProps}
           isHovered={isHovered}
           onClick={handleClick}
           onDragStart={handleDragStart}
@@ -584,6 +597,7 @@ export function RenderNode({
           onMouseLeave={handleMouseLeave}
           fillColor={fillColor}
           strokeColor={strokeColor}
+          gradientProps={gradientProps}
           isInAutoLayout={isInAutoLayout}
           parentFrame={parentFrame?.type === "frame" ? parentFrame : null}
           isHovered={isHovered}
@@ -603,6 +617,7 @@ export function RenderNode({
         <TextRenderer
           node={node}
           fillColor={fillColor}
+          gradientProps={gradientProps}
           isHovered={isHovered}
           isEditing={isEditing}
           onClick={handleClick}
@@ -624,6 +639,7 @@ export function RenderNode({
           node={node as PathNode}
           fillColor={fillColor}
           strokeColor={strokeColor}
+          gradientProps={gradientProps}
           isHovered={isHovered}
           onClick={handleClick}
           onDragStart={handleDragStart}

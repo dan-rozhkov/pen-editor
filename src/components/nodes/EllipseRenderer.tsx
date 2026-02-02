@@ -20,6 +20,7 @@ interface EllipseRendererProps {
   onMouseLeave: () => void;
   fillColor?: string;
   strokeColor?: string;
+  gradientProps?: Record<string, unknown>;
   isInAutoLayout: boolean;
   parentFrame: FrameNode | null;
   isHovered: boolean;
@@ -34,6 +35,7 @@ export function EllipseRenderer({
   onMouseLeave,
   fillColor,
   strokeColor,
+  gradientProps,
   isInAutoLayout,
   parentFrame,
   isHovered,
@@ -110,7 +112,8 @@ export function EllipseRenderer({
         id={node.id}
         name="selectable"
         {...ellipseTransform}
-        fill={node.imageFill ? undefined : fillColor}
+        fill={node.imageFill || gradientProps ? undefined : fillColor}
+        {...(gradientProps && !node.imageFill ? gradientProps : {})}
         stroke={strokeColor}
         strokeWidth={node.strokeWidth}
         opacity={node.opacity ?? 1}

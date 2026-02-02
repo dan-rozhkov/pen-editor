@@ -32,6 +32,7 @@ interface FrameRendererProps {
   onMouseLeave: () => void;
   fillColor?: string;
   strokeColor?: string;
+  gradientProps?: Record<string, unknown>;
   effectiveTheme: ThemeName;
   isHovered: boolean;
   isTopLevel: boolean;
@@ -51,6 +52,7 @@ export function FrameRenderer({
   onMouseLeave,
   fillColor,
   strokeColor,
+  gradientProps,
   effectiveTheme,
   isHovered,
   isTopLevel,
@@ -152,7 +154,8 @@ export function FrameRenderer({
       <Rect
         width={effectiveWidth}
         height={effectiveHeight}
-        fill={node.imageFill ? undefined : fillColor}
+        fill={node.imageFill || gradientProps ? undefined : fillColor}
+        {...(gradientProps && !node.imageFill ? gradientProps : {})}
         stroke={strokeColor}
         strokeWidth={node.strokeWidth}
         cornerRadius={node.cornerRadius}

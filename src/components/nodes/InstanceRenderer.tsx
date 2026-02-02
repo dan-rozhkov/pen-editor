@@ -14,6 +14,7 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useVariableStore } from "@/store/variableStore";
 import { resolveColor, applyOpacity } from "@/utils/colorUtils";
+import { buildKonvaGradientProps } from "@/utils/gradientUtils";
 import { findComponentById } from "@/utils/nodeUtils";
 import {
   HOVER_OUTLINE_COLOR,
@@ -115,6 +116,10 @@ export function InstanceRenderer({
   );
   const fillColor = rawFillColor ? applyOpacity(rawFillColor, effectiveFillOpacity) : rawFillColor;
   const strokeColor = rawStrokeColor ? applyOpacity(rawStrokeColor, effectiveStrokeOpacity) : rawStrokeColor;
+  const effectiveGradientFill = node.gradientFill !== undefined ? node.gradientFill : component.gradientFill;
+  const instanceGradientProps = effectiveGradientFill
+    ? buildKonvaGradientProps(effectiveGradientFill, node.width, node.height)
+    : undefined;
 
   // Calculate layout for children if auto-layout is enabled
   const layoutChildren = component.layout?.autoLayout
@@ -210,7 +215,8 @@ export function InstanceRenderer({
       <Rect
         width={node.width}
         height={node.height}
-        fill={fillColor}
+        fill={instanceGradientProps ? undefined : fillColor}
+        {...(instanceGradientProps ?? {})}
         stroke={strokeColor}
         strokeWidth={effectiveStrokeWidth}
         cornerRadius={component.cornerRadius}
@@ -284,6 +290,9 @@ function DescendantRenderer({
   );
   const fillColor = rawFillColor ? applyOpacity(rawFillColor, node.fillOpacity) : rawFillColor;
   const strokeColor = rawStrokeColor ? applyOpacity(rawStrokeColor, node.strokeOpacity) : rawStrokeColor;
+  const gradientProps = node.gradientFill
+    ? buildKonvaGradientProps(node.gradientFill, node.width, node.height, node.type === "ellipse")
+    : undefined;
 
   // Selection highlight stroke
   const selectionStroke = isSelected ? "#8B5CF6" : undefined;
@@ -296,7 +305,8 @@ function DescendantRenderer({
         <Group>
           <Rect
             {...rectTransform}
-            fill={node.imageFill ? undefined : fillColor}
+            fill={node.imageFill || gradientProps ? undefined : fillColor}
+            {...(gradientProps && !node.imageFill ? gradientProps : {})}
             stroke={strokeColor ?? selectionStroke}
             strokeWidth={node.strokeWidth ?? selectionStrokeWidth}
             cornerRadius={node.cornerRadius}
@@ -335,7 +345,8 @@ function DescendantRenderer({
         <Group>
           <Ellipse
             {...ellipseTransform}
-            fill={node.imageFill ? undefined : fillColor}
+            fill={node.imageFill || gradientProps ? undefined : fillColor}
+            {...(gradientProps && !node.imageFill ? gradientProps : {})}
             stroke={strokeColor ?? selectionStroke}
             strokeWidth={node.strokeWidth ?? selectionStrokeWidth}
             opacity={node.opacity ?? 1}
@@ -381,7 +392,8 @@ function DescendantRenderer({
             fontFamily={node.fontFamily ?? "Arial"}
             fontStyle={buildKonvaFontStyle(node)}
             textDecoration={descTextDecoration}
-            fill={fillColor ?? "#000000"}
+            fill={gradientProps ? undefined : (fillColor ?? "#000000")}
+            {...(gradientProps ?? {})}
             align={node.textAlign ?? "left"}
             verticalAlign={node.textAlignVertical ?? "top"}
             lineHeight={node.lineHeight ?? 1.2}
@@ -425,7 +437,8 @@ function DescendantRenderer({
             <Rect
               width={node.width}
               height={node.height}
-              fill={node.imageFill ? undefined : fillColor}
+              fill={node.imageFill || gradientProps ? undefined : fillColor}
+              {...(gradientProps && !node.imageFill ? gradientProps : {})}
               stroke={strokeColor ?? selectionStroke}
               strokeWidth={node.strokeWidth ?? selectionStrokeWidth}
               cornerRadius={(node as FrameNode).cornerRadius}
@@ -508,6 +521,9 @@ function RenderNodeWithOverrides({
   );
   const fillColor = rawFillColor ? applyOpacity(rawFillColor, node.fillOpacity) : rawFillColor;
   const strokeColor = rawStrokeColor ? applyOpacity(rawStrokeColor, node.strokeOpacity) : rawStrokeColor;
+  const ovrGradientProps = node.gradientFill
+    ? buildKonvaGradientProps(node.gradientFill, node.width, node.height, node.type === "ellipse")
+    : undefined;
 
   // Don't render if node is hidden
   if (node.visible === false || node.enabled === false) {
@@ -521,7 +537,8 @@ function RenderNodeWithOverrides({
         <>
           <Rect
             {...rectTransform}
-            fill={node.imageFill ? undefined : fillColor}
+            fill={node.imageFill || ovrGradientProps ? undefined : fillColor}
+            {...(ovrGradientProps && !node.imageFill ? ovrGradientProps : {})}
             stroke={strokeColor}
             strokeWidth={node.strokeWidth}
             cornerRadius={node.cornerRadius}
@@ -547,7 +564,8 @@ function RenderNodeWithOverrides({
         <>
           <Ellipse
             {...ellipseTransform}
-            fill={node.imageFill ? undefined : fillColor}
+            fill={node.imageFill || ovrGradientProps ? undefined : fillColor}
+            {...(ovrGradientProps && !node.imageFill ? ovrGradientProps : {})}
             stroke={strokeColor}
             strokeWidth={node.strokeWidth}
             opacity={node.opacity ?? 1}
@@ -580,7 +598,8 @@ function RenderNodeWithOverrides({
           fontFamily={node.fontFamily ?? "Arial"}
           fontStyle={buildKonvaFontStyle(node)}
           textDecoration={ovrTextDecoration}
-          fill={fillColor ?? "#000000"}
+          fill={ovrGradientProps ? undefined : (fillColor ?? "#000000")}
+          {...(ovrGradientProps ?? {})}
           align={node.textAlign ?? "left"}
           verticalAlign={node.textAlignVertical ?? "top"}
           lineHeight={node.lineHeight ?? 1.2}
@@ -599,7 +618,8 @@ function RenderNodeWithOverrides({
             <Rect
               width={node.width}
               height={node.height}
-              fill={node.imageFill ? undefined : fillColor}
+              fill={node.imageFill || ovrGradientProps ? undefined : fillColor}
+              {...(ovrGradientProps && !node.imageFill ? ovrGradientProps : {})}
               stroke={strokeColor}
               strokeWidth={node.strokeWidth}
               cornerRadius={(node as FrameNode).cornerRadius}

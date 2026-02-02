@@ -12,6 +12,7 @@ interface RectRendererProps {
   node: SceneNode & { type: "rect" };
   fillColor?: string;
   strokeColor?: string;
+  gradientProps?: Record<string, unknown>;
   isHovered: boolean;
   onClick: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
   onDragStart: () => void;
@@ -26,6 +27,7 @@ export function RectRenderer({
   node,
   fillColor,
   strokeColor,
+  gradientProps,
   isHovered,
   onClick,
   onDragStart,
@@ -43,7 +45,8 @@ export function RectRenderer({
         id={node.id}
         name="selectable"
         {...rectTransform}
-        fill={node.imageFill ? undefined : fillColor}
+        fill={node.imageFill || gradientProps ? undefined : fillColor}
+        {...(gradientProps && !node.imageFill ? gradientProps : {})}
         stroke={strokeColor}
         strokeWidth={node.strokeWidth}
         cornerRadius={node.cornerRadius}
