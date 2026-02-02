@@ -118,6 +118,10 @@
     },
     {
       "name": "google-fonts-support",
+      "passed": true
+    },
+    {
+      "name": "collapsible-fill-stroke-effect",
       "passed": false
     }
   ]

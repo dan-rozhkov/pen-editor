@@ -14,6 +14,7 @@ import {
   measureTextAutoSize,
   measureTextFixedWidthHeight,
 } from "../utils/textMeasure";
+import { loadGoogleFontsFromNodes } from "../utils/fontUtils";
 import { calculateFrameIntrinsicSize } from "../utils/yogaLayout";
 
 interface SceneState {
@@ -757,6 +758,10 @@ export const useSceneStore = create<SceneState>((set) => ({
     useHistoryStore.getState().saveHistory(useSceneStore.getState().nodes);
     // Sync text dimensions on load to fix any stale width/height
     set({ nodes: syncAllTextDimensions(nodes) });
+    // Auto-load any Google Fonts used in the scene, then re-sync text dimensions
+    loadGoogleFontsFromNodes(nodes).then(() => {
+      set({ nodes: syncAllTextDimensions(useSceneStore.getState().nodes) });
+    });
   },
 
   // Set nodes without saving to history (used by undo/redo)

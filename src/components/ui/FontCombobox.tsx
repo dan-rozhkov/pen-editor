@@ -7,7 +7,7 @@ import {
   ComboboxItem,
   ComboboxEmpty,
 } from "./combobox";
-import { getAvailableFonts, type SystemFont } from "@/utils/fontUtils";
+import { getAvailableFonts, loadGoogleFont, isGoogleFont, type SystemFont } from "@/utils/fontUtils";
 import { Label } from "./label";
 import { InputGroup, InputGroupAddon } from "./input-group";
 
@@ -81,6 +81,9 @@ export function FontCombobox({ label, value, onChange }: FontComboboxProps) {
   );
 
   const handleSelectFont = (font: string) => {
+    if (isGoogleFont(font)) {
+      loadGoogleFont(font);
+    }
     onChange(font);
     setSearchValue("");
     setOpen(false);
@@ -105,10 +108,14 @@ export function FontCombobox({ label, value, onChange }: FontComboboxProps) {
             <ComboboxItem
               key={font.family}
               value={font.family}
-              style={{ fontFamily: font.family }}
               onClick={() => handleSelectFont(font.family)}
             >
-              {font.family}
+              <span className="flex items-center gap-1.5">
+                {font.family}
+                {font.isGoogleFont && (
+                  <span className="text-[9px] text-muted-foreground opacity-60">G</span>
+                )}
+              </span>
             </ComboboxItem>
           ))}
           {searchValue && !exactMatch && (
