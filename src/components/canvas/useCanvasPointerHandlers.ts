@@ -7,6 +7,7 @@ import { useDrawModeStore } from "@/store/drawModeStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { rectsIntersect } from "@/utils/dragUtils";
+import { generatePolygonPoints } from "@/utils/polygonUtils";
 
 interface CanvasPointerHandlersParams {
   stageRef: RefObject<Konva.Stage | null>;
@@ -150,12 +151,7 @@ export function useCanvasPointerHandlers({
           break;
         case "polygon": {
           const sides = 6;
-          const points: number[] = [];
-          for (let i = 0; i < sides; i++) {
-            const angle = (2 * Math.PI * i) / sides - Math.PI / 2;
-            points.push(rw / 2 + (rw / 2) * Math.cos(angle));
-            points.push(rh / 2 + (rh / 2) * Math.sin(angle));
-          }
+          const points = generatePolygonPoints(sides, rw, rh);
           node = {
             id,
             type: "polygon",

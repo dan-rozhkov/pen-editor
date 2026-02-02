@@ -20,6 +20,7 @@ import type {
   AlignItems,
   FlexDirection,
   JustifyContent,
+  LineNode,
   PolygonNode,
   SceneNode,
   SizingMode,
@@ -48,6 +49,7 @@ import { ImageFillEditor } from "@/components/properties/ImageFillSection";
 import { OverrideIndicator } from "@/components/properties/OverrideIndicator";
 import type { GradientFill, GradientType } from "@/types/scene";
 import { getDefaultGradient } from "@/utils/gradientUtils";
+import { generatePolygonPoints } from "@/utils/polygonUtils";
 
 interface PropertyEditorProps {
   node: SceneNode;
@@ -267,13 +269,37 @@ export function PropertyEditor({
           <NumberInput
             label="W"
             value={node.width}
-            onChange={(v) => onUpdate({ width: v })}
+            onChange={(v) => {
+              const updates: Partial<SceneNode> = { width: v };
+              if (node.type === "polygon") {
+                const pn = node as PolygonNode;
+                const sides = pn.sides ?? 6;
+                (updates as Partial<PolygonNode>).points = generatePolygonPoints(sides, v, node.height);
+              } else if (node.type === "line") {
+                const scaleX = v / node.width;
+                const ln = node as unknown as { points: number[] };
+                (updates as Record<string, unknown>).points = ln.points.map((p: number, i: number) => i % 2 === 0 ? p * scaleX : p);
+              }
+              onUpdate(updates);
+            }}
             min={1}
           />
           <NumberInput
             label="H"
             value={node.height}
-            onChange={(v) => onUpdate({ height: v })}
+            onChange={(v) => {
+              const updates: Partial<SceneNode> = { height: v };
+              if (node.type === "polygon") {
+                const pn = node as PolygonNode;
+                const sides = pn.sides ?? 6;
+                (updates as Partial<PolygonNode>).points = generatePolygonPoints(sides, node.width, v);
+              } else if (node.type === "line") {
+                const scaleY = v / node.height;
+                const ln = node as unknown as { points: number[] };
+                (updates as Record<string, unknown>).points = ln.points.map((p: number, i: number) => i % 2 === 1 ? p * scaleY : p);
+              }
+              onUpdate(updates);
+            }}
             min={1}
           />
         </PropertyRow>
@@ -550,14 +576,7 @@ export function PropertyEditor({
               value={(node as PolygonNode).sides ?? 6}
               onChange={(v) => {
                 const sides = Math.max(3, Math.min(12, v));
-                const w = node.width;
-                const h = node.height;
-                const points: number[] = [];
-                for (let i = 0; i < sides; i++) {
-                  const angle = (2 * Math.PI * i) / sides - Math.PI / 2;
-                  points.push(w / 2 + (w / 2) * Math.cos(angle));
-                  points.push(h / 2 + (h / 2) * Math.sin(angle));
-                }
+                const points = generatePolygonPoints(sides, node.width, node.height);
                 onUpdate({ sides, points } as Partial<SceneNode>);
               }}
               min={3}

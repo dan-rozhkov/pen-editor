@@ -32,6 +32,7 @@ import { useVariableStore } from "@/store/variableStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { resolveColor, applyOpacity } from "@/utils/colorUtils";
 import { buildKonvaGradientProps } from "@/utils/gradientUtils";
+import { generatePolygonPoints } from "@/utils/polygonUtils";
 import {
   calculateDropPosition,
   getFrameAbsoluteRectWithLayout,
@@ -528,6 +529,21 @@ export function RenderNode({
       height: newHeight,
       rotation: rotation,
     };
+
+    // Recalculate points for line/polygon nodes to match new dimensions
+    if (node.type === "line") {
+      const ln = node as LineNode;
+      const scaleFactorX = newWidth / node.width;
+      const scaleFactorY = newHeight / node.height;
+      const newPoints = ln.points.map((v, i) =>
+        i % 2 === 0 ? v * scaleFactorX : v * scaleFactorY,
+      );
+      (updates as Partial<LineNode>).points = newPoints;
+    } else if (node.type === "polygon") {
+      const pn = node as PolygonNode;
+      const sides = pn.sides ?? 6;
+      (updates as Partial<PolygonNode>).points = generatePolygonPoints(sides, newWidth, newHeight);
+    }
 
     updateNode(node.id, updates);
   };
