@@ -177,6 +177,12 @@ export async function getAvailableFonts(): Promise<SystemFont[]> {
 
 // --- Google Font loading ---
 
+let fontLoadCallback: (() => void) | null = null;
+
+export function registerFontLoadCallback(cb: () => void) {
+  fontLoadCallback = cb;
+}
+
 const loadedGoogleFonts = new Set<string>();
 const loadingGoogleFonts = new Map<string, Promise<void>>();
 
@@ -204,6 +210,7 @@ export function loadGoogleFont(family: string): Promise<void> {
         loadedGoogleFonts.add(family);
         loadingGoogleFonts.delete(family);
         resolve();
+        fontLoadCallback?.();
       });
     };
     link.onerror = () => {
