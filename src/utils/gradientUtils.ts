@@ -145,6 +145,33 @@ function applyStopOpacity(color: string, opacity: number): string {
 }
 
 /**
+ * Compute the angle (in degrees) of a linear gradient from its start/end points.
+ * 0° = left→right, 90° = top→bottom, etc.
+ */
+export function getGradientAngle(gradient: GradientFill): number {
+  const dx = gradient.endX - gradient.startX
+  const dy = gradient.endY - gradient.startY
+  const angle = Math.atan2(dy, dx) * (180 / Math.PI)
+  // Normalize to 0-360
+  return ((Math.round(angle) % 360) + 360) % 360
+}
+
+/**
+ * Set start/end points of a linear gradient from an angle (degrees).
+ * 0° = left→right, 90° = top→bottom, etc.
+ */
+export function setGradientAngle(gradient: GradientFill, angleDeg: number): GradientFill {
+  const rad = angleDeg * (Math.PI / 180)
+  return {
+    ...gradient,
+    startX: 0.5 - Math.cos(rad) * 0.5,
+    startY: 0.5 - Math.sin(rad) * 0.5,
+    endX: 0.5 + Math.cos(rad) * 0.5,
+    endY: 0.5 + Math.sin(rad) * 0.5,
+  }
+}
+
+/**
  * Build a CSS linear-gradient string for preview purposes.
  */
 export function buildCSSGradient(stops: GradientColorStop[]): string {

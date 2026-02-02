@@ -1,9 +1,9 @@
 import { useRef } from "react";
 import type { ImageFillMode, SceneNode } from "@/types/scene";
 import { Button } from "@/components/ui/button";
-import { PropertySection, SelectInput } from "@/components/ui/PropertyInputs";
+import { SelectInput } from "@/components/ui/PropertyInputs";
 
-export function ImageFillSection({
+export function ImageFillEditor({
   imageFill,
   onUpdate,
 }: {
@@ -26,10 +26,6 @@ export function ImageFillSection({
     e.target.value = "";
   };
 
-  const handleRemove = () => {
-    onUpdate({ imageFill: undefined } as Partial<SceneNode>);
-  };
-
   const handleModeChange = (mode: string) => {
     if (!imageFill) return;
     onUpdate({
@@ -38,7 +34,7 @@ export function ImageFillSection({
   };
 
   return (
-    <PropertySection title="Image Fill">
+    <>
       <input
         ref={fileInputRef}
         type="file"
@@ -47,7 +43,7 @@ export function ImageFillSection({
         onChange={handleFileSelect}
       />
 
-      {imageFill ? (
+      {imageFill?.url ? (
         <div className="flex flex-col gap-2">
           <div className="w-full h-20 rounded border border-border-light overflow-hidden bg-surface-elevated">
             <img
@@ -68,20 +64,13 @@ export function ImageFillSection({
             onChange={handleModeChange}
           />
 
-          <div className="flex gap-2">
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="flex-1 px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
-            >
-              Replace
-            </button>
-            <button
-              onClick={handleRemove}
-              className="flex-1 px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-red-400 text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
-            >
-              Remove
-            </button>
-          </div>
+          <Button
+            onClick={() => fileInputRef.current?.click()}
+            variant="secondary"
+            className="w-full"
+          >
+            Replace Image
+          </Button>
         </div>
       ) : (
         <Button
@@ -92,6 +81,6 @@ export function ImageFillSection({
           Upload Image
         </Button>
       )}
-    </PropertySection>
+    </>
   );
 }

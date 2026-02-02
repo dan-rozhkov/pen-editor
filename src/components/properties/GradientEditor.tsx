@@ -5,6 +5,7 @@ import { CustomColorPicker } from "@/components/ui/ColorPicker";
 import { NumberInput } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
 import { Minus, Plus } from "@phosphor-icons/react";
+import { getGradientAngle, setGradientAngle } from "@/utils/gradientUtils";
 
 interface GradientEditorProps {
   gradient: GradientFill;
@@ -50,6 +51,13 @@ export function GradientEditor({ gradient, onChange }: GradientEditorProps) {
     updateStop(safeIndex, { position: Math.max(0, Math.min(100, pct)) / 100 });
   };
 
+  const angle = gradient.type === "linear" ? getGradientAngle(gradient) : 0;
+
+  const handleAngleChange = (deg: number) => {
+    const normalized = ((deg % 360) + 360) % 360;
+    onChange(setGradientAngle(gradient, normalized));
+  };
+
   return (
     <div className="flex flex-col gap-2">
       <GradientBar
@@ -63,7 +71,7 @@ export function GradientEditor({ gradient, onChange }: GradientEditorProps) {
         <CustomColorPicker
           value={selectedStop?.color ?? "#000000"}
           onChange={handleColorChange}
-          swatchSize="sm"
+          swatchSize="md"
         />
         <div className="flex-1">
           <NumberInput
@@ -100,6 +108,16 @@ export function GradientEditor({ gradient, onChange }: GradientEditorProps) {
           <Minus size={12} />
         </Button>
       </div>
+      {gradient.type === "linear" && (
+        <NumberInput
+          label="Angle °"
+          value={angle}
+          onChange={handleAngleChange}
+          min={0}
+          max={359}
+          step={1}
+        />
+      )}
     </div>
   );
 }

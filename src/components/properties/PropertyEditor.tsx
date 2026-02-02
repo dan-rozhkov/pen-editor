@@ -43,7 +43,7 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { GradientEditor } from "@/components/properties/GradientEditor";
-import { ImageFillSection } from "@/components/properties/ImageFillSection";
+import { ImageFillEditor } from "@/components/properties/ImageFillSection";
 import { OverrideIndicator } from "@/components/properties/OverrideIndicator";
 import type { GradientFill, GradientType } from "@/types/scene";
 import { getDefaultGradient } from "@/utils/gradientUtils";
@@ -547,78 +547,88 @@ export function PropertyEditor({
       </PropertySection>
 
       <PropertySection title="Fill">
-        <SelectInput
-          value={node.gradientFill?.type ?? "solid"}
-          options={[
+        {(() => {
+          const supportsImage = node.type === "rect" || node.type === "ellipse" || node.type === "frame";
+          const fillMode = node.imageFill ? "image" : (node.gradientFill?.type ?? "solid");
+          const fillOptions = [
             { value: "solid", label: "Solid" },
             { value: "linear", label: "Linear" },
             { value: "radial", label: "Radial" },
-          ]}
-          onChange={(v) => {
-            if (v === "solid") {
-              onUpdate({ gradientFill: undefined });
-            } else {
-              const currentGradient = node.gradientFill;
-              if (currentGradient && currentGradient.type !== v) {
-                // Switch gradient type, keep stops
-                onUpdate({
-                  gradientFill: {
-                    ...getDefaultGradient(v as GradientType),
-                    stops: currentGradient.stops,
-                  },
-                });
-              } else if (!currentGradient) {
-                onUpdate({
-                  gradientFill: getDefaultGradient(v as GradientType),
-                });
-              }
-            }
-          }}
-        />
-        {node.gradientFill ? (
-          <GradientEditor
-            gradient={node.gradientFill}
-            onChange={(g: GradientFill) => onUpdate({ gradientFill: g })}
-          />
-        ) : (
-          <div className="flex items-center gap-1">
-            <div className="flex-1">
-              <ColorInput
-                value={node.fill ?? component?.fill ?? "#000000"}
-                onChange={(v) => onUpdate({ fill: v })}
-                variableId={node.fillBinding?.variableId}
-                onVariableChange={handleFillVariableChange}
-                availableVariables={colorVariables}
-                activeTheme={activeTheme}
+            ...(supportsImage ? [{ value: "image", label: "Image" }] : []),
+          ];
+          return (
+            <>
+              <SelectInput
+                value={fillMode}
+                options={fillOptions}
+                onChange={(v) => {
+                  if (v === "image") {
+                    // Set a placeholder imageFill so fillMode stays "image"
+                    const updates: Partial<SceneNode> = { gradientFill: undefined } as Partial<SceneNode>;
+                    if (!node.imageFill) {
+                      (updates as Record<string, unknown>).imageFill = { url: "", mode: "fill" };
+                    }
+                    onUpdate(updates);
+                  } else if (v === "solid") {
+                    onUpdate({ gradientFill: undefined, imageFill: undefined } as Partial<SceneNode>);
+                  } else {
+                    const currentGradient = node.gradientFill;
+                    const updates: Partial<SceneNode> = { imageFill: undefined } as Partial<SceneNode>;
+                    if (currentGradient && currentGradient.type !== v) {
+                      updates.gradientFill = {
+                        ...getDefaultGradient(v as GradientType),
+                        stops: currentGradient.stops,
+                      };
+                    } else if (!currentGradient) {
+                      updates.gradientFill = getDefaultGradient(v as GradientType);
+                    }
+                    onUpdate(updates);
+                  }
+                }}
               />
-            </div>
-            <div className="w-20">
-              <NumberInput
-                label="%"
-                value={Math.round((node.fillOpacity ?? 1) * 100)}
-                onChange={(v) =>
-                  onUpdate({
-                    fillOpacity: Math.max(0, Math.min(100, v)) / 100,
-                  })
-                }
-                min={0}
-                max={100}
-                step={1}
-              />
-            </div>
-            <OverrideIndicator
-              isOverridden={isOverridden(node.fill, component?.fill)}
-              onReset={() => resetOverride("fill")}
-            />
-          </div>
-        )}
+              {fillMode === "image" ? (
+                <ImageFillEditor imageFill={node.imageFill} onUpdate={onUpdate} />
+              ) : node.gradientFill ? (
+                <GradientEditor
+                  gradient={node.gradientFill}
+                  onChange={(g: GradientFill) => onUpdate({ gradientFill: g })}
+                />
+              ) : (
+                <div className="flex items-center gap-1">
+                  <div className="flex-1">
+                    <ColorInput
+                      value={node.fill ?? component?.fill ?? "#000000"}
+                      onChange={(v) => onUpdate({ fill: v })}
+                      variableId={node.fillBinding?.variableId}
+                      onVariableChange={handleFillVariableChange}
+                      availableVariables={colorVariables}
+                      activeTheme={activeTheme}
+                    />
+                  </div>
+                  <div className="w-20">
+                    <NumberInput
+                      label="%"
+                      value={Math.round((node.fillOpacity ?? 1) * 100)}
+                      onChange={(v) =>
+                        onUpdate({
+                          fillOpacity: Math.max(0, Math.min(100, v)) / 100,
+                        })
+                      }
+                      min={0}
+                      max={100}
+                      step={1}
+                    />
+                  </div>
+                  <OverrideIndicator
+                    isOverridden={isOverridden(node.fill, component?.fill)}
+                    onReset={() => resetOverride("fill")}
+                  />
+                </div>
+              )}
+            </>
+          );
+        })()}
       </PropertySection>
-
-      {(node.type === "rect" ||
-        node.type === "ellipse" ||
-        node.type === "frame") && (
-        <ImageFillSection imageFill={node.imageFill} onUpdate={onUpdate} />
-      )}
 
       <PropertySection title="Stroke">
         <div className="flex items-center gap-1">
