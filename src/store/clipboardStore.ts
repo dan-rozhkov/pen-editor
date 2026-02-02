@@ -2,15 +2,15 @@ import { create } from "zustand";
 import type { SceneNode } from "../types/scene";
 
 interface ClipboardState {
-  copiedNode: SceneNode | null;
-  copyNode: (node: SceneNode) => void;
+  copiedNodes: SceneNode[];
+  copyNodes: (nodes: SceneNode[]) => void;
   clearClipboard: () => void;
 }
 
 export const useClipboardStore = create<ClipboardState>((set) => ({
-  copiedNode: null,
+  copiedNodes: [],
 
-  copyNode: (node) => set({ copiedNode: node }),
+  copyNodes: (nodes) => set({ copiedNodes: nodes }),
 
-  clearClipboard: () => set({ copiedNode: null }),
+  clearClipboard: () => set({ copiedNodes: [] }),
 }));

@@ -15,7 +15,7 @@ import { parseSvgToNodes } from "@/utils/svgUtils";
 
 interface CanvasKeyboardShortcutsParams {
   nodes: SceneNode[];
-  copiedNode: SceneNode | null;
+  copiedNodes: SceneNode[];
   dimensions: { width: number; height: number };
   isMiddleMouseDown: boolean;
   setIsSpacePressed: (value: boolean) => void;
@@ -38,12 +38,12 @@ interface CanvasKeyboardShortcutsParams {
   cancelDrawing: () => void;
   clearSelection: () => void;
   exitInstanceEditMode: () => void;
-  copyNode: (node: SceneNode) => void;
+  copyNodes: (nodes: SceneNode[]) => void;
 }
 
 export function useCanvasKeyboardShortcuts({
   nodes,
-  copiedNode,
+  copiedNodes,
   dimensions,
   isMiddleMouseDown,
   setIsSpacePressed,
@@ -66,7 +66,7 @@ export function useCanvasKeyboardShortcuts({
   cancelDrawing,
   clearSelection,
   exitInstanceEditMode,
-  copyNode,
+  copyNodes,
 }: CanvasKeyboardShortcutsParams) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -132,10 +132,12 @@ export function useCanvasKeyboardShortcuts({
         if (isTyping) return;
         e.preventDefault();
         const ids = useSelectionStore.getState().selectedIds;
-        if (ids.length === 1) {
-          const nodeToCopy = findNodeById(nodes, ids[0]);
-          if (nodeToCopy) {
-            copyNode(nodeToCopy);
+        if (ids.length > 0) {
+          const nodesToCopy = ids
+            .map((id) => findNodeById(nodes, id))
+            .filter((n): n is SceneNode => n != null);
+          if (nodesToCopy.length > 0) {
+            copyNodes(nodesToCopy);
           }
         }
         return;
@@ -145,13 +147,17 @@ export function useCanvasKeyboardShortcuts({
         if (isTyping) return;
         e.preventDefault();
         const ids = useSelectionStore.getState().selectedIds;
-        if (ids.length === 1) {
-          const nodeToCut = findNodeById(nodes, ids[0]);
-          if (nodeToCut) {
-            copyNode(nodeToCut);
+        if (ids.length > 0) {
+          const nodesToCut = ids
+            .map((id) => findNodeById(nodes, id))
+            .filter((n): n is SceneNode => n != null);
+          if (nodesToCut.length > 0) {
+            copyNodes(nodesToCut);
             const currentNodes = useSceneStore.getState().nodes;
             saveHistory(currentNodes);
-            deleteNode(ids[0]);
+            for (const id of ids) {
+              deleteNode(id);
+            }
             clearSelection();
           }
         }
@@ -160,9 +166,9 @@ export function useCanvasKeyboardShortcuts({
 
       if ((e.metaKey || e.ctrlKey) && e.code === "KeyV") {
         if (isTyping) return;
-        if (copiedNode) {
+        if (copiedNodes.length > 0) {
           e.preventDefault();
-          const clonedNode = cloneNodeWithNewId(copiedNode);
+          const clonedNodes = copiedNodes.map((n) => cloneNodeWithNewId(n));
           const selectedIds = useSelectionStore.getState().selectedIds;
           let targetContainerId: string | null = null;
 
@@ -173,15 +179,17 @@ export function useCanvasKeyboardShortcuts({
             }
           }
 
-          if (targetContainerId) {
-            clonedNode.x = 20;
-            clonedNode.y = 20;
-            addChildToFrame(targetContainerId, clonedNode);
-          } else {
-            addNode(clonedNode);
+          for (const clonedNode of clonedNodes) {
+            if (targetContainerId) {
+              clonedNode.x = 20;
+              clonedNode.y = 20;
+              addChildToFrame(targetContainerId, clonedNode);
+            } else {
+              addNode(clonedNode);
+            }
           }
 
-          useSelectionStore.getState().select(clonedNode.id);
+          useSelectionStore.getState().setSelectedIds(clonedNodes.map((n) => n.id));
           return;
         }
         // Don't preventDefault — let the paste event fire for SVG clipboard content
@@ -500,8 +508,8 @@ export function useCanvasKeyboardShortcuts({
     addNode,
     cancelDrawing,
     clearSelection,
-    copiedNode,
-    copyNode,
+    copiedNodes,
+    copyNodes,
     deleteNode,
     dimensions.height,
     dimensions.width,

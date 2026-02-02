@@ -48,7 +48,7 @@ export function Canvas() {
   const pageBackground = useSceneStore((state) => state.pageBackground);
   const addNode = useSceneStore((state) => state.addNode);
   const addChildToFrame = useSceneStore((state) => state.addChildToFrame);
-  const { copiedNode, copyNode } = useClipboardStore();
+  const { copiedNodes, copyNodes } = useClipboardStore();
   const setStageRef = useCanvasRefStore((s) => s.setStageRef);
   const calculateLayoutForFrame = useLayoutStore(
     (state) => state.calculateLayoutForFrame,
@@ -108,7 +108,7 @@ export function Canvas() {
 
   useCanvasKeyboardShortcuts({
     nodes,
-    copiedNode,
+    copiedNodes,
     dimensions,
     isMiddleMouseDown,
     setIsSpacePressed,
@@ -131,7 +131,7 @@ export function Canvas() {
     cancelDrawing,
     clearSelection,
     exitInstanceEditMode,
-    copyNode,
+    copyNodes,
   });
 
   const {

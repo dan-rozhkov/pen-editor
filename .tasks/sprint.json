@@ -126,6 +126,10 @@
     },
     {
       "name": "fix-group-copy-selection",
+      "passed": true
+    },
+    {
+      "name": "fix-spacing-property-calculation",
       "passed": false
     }
   ]
