@@ -20,7 +20,6 @@ import type {
   AlignItems,
   FlexDirection,
   JustifyContent,
-  LineNode,
   PolygonNode,
   SceneNode,
   SizingMode,
@@ -47,7 +46,7 @@ import {
 import { GradientEditor } from "@/components/properties/GradientEditor";
 import { ImageFillEditor } from "@/components/properties/ImageFillSection";
 import { OverrideIndicator } from "@/components/properties/OverrideIndicator";
-import type { GradientFill, GradientType, ShadowEffect } from "@/types/scene";
+import type { GradientFill, GradientType } from "@/types/scene";
 import { getDefaultGradient } from "@/utils/gradientUtils";
 import { generatePolygonPoints } from "@/utils/polygonUtils";
 import { getDefaultShadow } from "@/utils/shadowUtils";
@@ -80,7 +79,7 @@ export function PropertyEditor({
 
   const isOverridden = <T,>(
     instanceVal: T | undefined,
-    componentVal: T | undefined,
+    componentVal: T | undefined
   ): boolean => {
     if (!component) return false;
     return instanceVal !== undefined && instanceVal !== componentVal;
@@ -275,11 +274,14 @@ export function PropertyEditor({
               if (node.type === "polygon") {
                 const pn = node as PolygonNode;
                 const sides = pn.sides ?? 6;
-                (updates as Partial<PolygonNode>).points = generatePolygonPoints(sides, v, node.height);
+                (updates as Partial<PolygonNode>).points =
+                  generatePolygonPoints(sides, v, node.height);
               } else if (node.type === "line") {
                 const scaleX = v / node.width;
                 const ln = node as unknown as { points: number[] };
-                (updates as Record<string, unknown>).points = ln.points.map((p: number, i: number) => i % 2 === 0 ? p * scaleX : p);
+                (updates as Record<string, unknown>).points = ln.points.map(
+                  (p: number, i: number) => (i % 2 === 0 ? p * scaleX : p)
+                );
               }
               onUpdate(updates);
             }}
@@ -293,11 +295,14 @@ export function PropertyEditor({
               if (node.type === "polygon") {
                 const pn = node as PolygonNode;
                 const sides = pn.sides ?? 6;
-                (updates as Partial<PolygonNode>).points = generatePolygonPoints(sides, node.width, v);
+                (updates as Partial<PolygonNode>).points =
+                  generatePolygonPoints(sides, node.width, v);
               } else if (node.type === "line") {
                 const scaleY = v / node.height;
                 const ln = node as unknown as { points: number[] };
-                (updates as Record<string, unknown>).points = ln.points.map((p: number, i: number) => i % 2 === 1 ? p * scaleY : p);
+                (updates as Record<string, unknown>).points = ln.points.map(
+                  (p: number, i: number) => (i % 2 === 1 ? p * scaleY : p)
+                );
               }
               onUpdate(updates);
             }}
@@ -315,7 +320,7 @@ export function PropertyEditor({
               className={cn(
                 node.layout?.autoLayout
                   ? "bg-sky-100 text-sky-600 hover:bg-sky-100/50 border-none ring-0"
-                  : "bg-background hover:bg-surface-hover",
+                  : "bg-background hover:bg-surface-hover"
               )}
               onClick={() => {
                 const v = !node.layout?.autoLayout;
@@ -577,7 +582,11 @@ export function PropertyEditor({
               value={(node as PolygonNode).sides ?? 6}
               onChange={(v) => {
                 const sides = Math.max(3, Math.min(12, v));
-                const points = generatePolygonPoints(sides, node.width, node.height);
+                const points = generatePolygonPoints(
+                  sides,
+                  node.width,
+                  node.height
+                );
                 onUpdate({ sides, points } as Partial<SceneNode>);
               }}
               min={3}
@@ -591,8 +600,13 @@ export function PropertyEditor({
 
       <PropertySection title="Fill">
         {(() => {
-          const supportsImage = node.type === "rect" || node.type === "ellipse" || node.type === "frame";
-          const fillMode = node.imageFill ? "image" : (node.gradientFill?.type ?? "solid");
+          const supportsImage =
+            node.type === "rect" ||
+            node.type === "ellipse" ||
+            node.type === "frame";
+          const fillMode = node.imageFill
+            ? "image"
+            : node.gradientFill?.type ?? "solid";
           const fillOptions = [
             { value: "solid", label: "Solid" },
             { value: "linear", label: "Linear" },
@@ -607,30 +621,45 @@ export function PropertyEditor({
                 onChange={(v) => {
                   if (v === "image") {
                     // Set a placeholder imageFill so fillMode stays "image"
-                    const updates: Partial<SceneNode> = { gradientFill: undefined } as Partial<SceneNode>;
+                    const updates: Partial<SceneNode> = {
+                      gradientFill: undefined,
+                    } as Partial<SceneNode>;
                     if (!node.imageFill) {
-                      (updates as Record<string, unknown>).imageFill = { url: "", mode: "fill" };
+                      (updates as Record<string, unknown>).imageFill = {
+                        url: "",
+                        mode: "fill",
+                      };
                     }
                     onUpdate(updates);
                   } else if (v === "solid") {
-                    onUpdate({ gradientFill: undefined, imageFill: undefined } as Partial<SceneNode>);
+                    onUpdate({
+                      gradientFill: undefined,
+                      imageFill: undefined,
+                    } as Partial<SceneNode>);
                   } else {
                     const currentGradient = node.gradientFill;
-                    const updates: Partial<SceneNode> = { imageFill: undefined } as Partial<SceneNode>;
+                    const updates: Partial<SceneNode> = {
+                      imageFill: undefined,
+                    } as Partial<SceneNode>;
                     if (currentGradient && currentGradient.type !== v) {
                       updates.gradientFill = {
                         ...getDefaultGradient(v as GradientType),
                         stops: currentGradient.stops,
                       };
                     } else if (!currentGradient) {
-                      updates.gradientFill = getDefaultGradient(v as GradientType);
+                      updates.gradientFill = getDefaultGradient(
+                        v as GradientType
+                      );
                     }
                     onUpdate(updates);
                   }
                 }}
               />
               {fillMode === "image" ? (
-                <ImageFillEditor imageFill={node.imageFill} onUpdate={onUpdate} />
+                <ImageFillEditor
+                  imageFill={node.imageFill}
+                  onUpdate={onUpdate}
+                />
               ) : node.gradientFill ? (
                 <GradientEditor
                   gradient={node.gradientFill}
@@ -716,7 +745,7 @@ export function PropertyEditor({
           <OverrideIndicator
             isOverridden={isOverridden(
               node.strokeWidth,
-              component?.strokeWidth,
+              component?.strokeWidth
             )}
             onReset={() => resetOverride("strokeWidth")}
           />
@@ -739,9 +768,7 @@ export function PropertyEditor({
         {node.effect && (
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">
-                Drop Shadow
-              </span>
+              <span className="text-xs text-muted-foreground">Drop Shadow</span>
               <button
                 className="text-xs text-red-400 hover:text-red-300"
                 onClick={() => onUpdate({ effect: undefined })}
