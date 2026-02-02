@@ -114,6 +114,10 @@
     },
     {
       "name": "drag-drop-image-svg",
+      "passed": true
+    },
+    {
+      "name": "google-fonts-support",
       "passed": false
     }
   ]

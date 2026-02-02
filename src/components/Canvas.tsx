@@ -10,6 +10,7 @@ import { FrameNameLabel } from "@/components/nodes/FrameNameLabel";
 import { NodeSizeLabel } from "@/components/nodes/NodeSizeLabel";
 import { RenderNode } from "@/components/nodes/RenderNode";
 import { useCanvasDoubleClick } from "@/components/canvas/useCanvasDoubleClick";
+import { useCanvasFileDrop } from "@/components/canvas/useCanvasFileDrop";
 import { useCanvasKeyboardShortcuts } from "@/components/canvas/useCanvasKeyboardShortcuts";
 import { useCanvasPointerHandlers } from "@/components/canvas/useCanvasPointerHandlers";
 import { useCanvasSelectionData } from "@/components/canvas/useCanvasSelectionData";
@@ -162,6 +163,11 @@ export function Canvas() {
     stageRef,
     enterContainer,
     select,
+  });
+
+  const { isDragOver } = useCanvasFileDrop({
+    containerRef,
+    addNode,
   });
 
   // Update transformer nodes when selection changes
@@ -422,6 +428,20 @@ export function Canvas() {
           node={editingNameNode}
           absoluteX={editingNamePosition.x}
           absoluteY={editingNamePosition.y}
+        />
+      )}
+      {/* Drop overlay when dragging files from OS */}
+      {isDragOver && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            border: "2px dashed #0d99ff",
+            background: "rgba(13, 153, 255, 0.06)",
+            pointerEvents: "none",
+            zIndex: 50,
+            borderRadius: 4,
+          }}
         />
       )}
     </div>
