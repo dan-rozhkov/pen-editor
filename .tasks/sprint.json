@@ -141,7 +141,15 @@
       "passed": true
     },
     {
+      "name": "fix-group-copy-children-offset",
+      "passed": true
+    },
+    {
       "name": "pixso-frame-import",
+      "passed": false
+    },
+    {
+      "name": "shift-a-autolayout-frame",
       "passed": false
     }
   ]

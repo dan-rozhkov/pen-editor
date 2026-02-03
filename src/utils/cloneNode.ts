@@ -1,8 +1,12 @@
 import type { FrameNode, GroupNode, SceneNode } from "@/types/scene";
 import { generateId } from "@/types/scene";
 
-export function cloneNodeWithNewId(node: SceneNode): SceneNode {
+export function cloneNodeWithNewId(
+  node: SceneNode,
+  applyOffset = true,
+): SceneNode {
   const newId = generateId();
+  const offset = applyOffset ? 20 : 0;
 
   if (node.type === "frame") {
     if ((node as FrameNode).reusable) {
@@ -10,8 +14,8 @@ export function cloneNodeWithNewId(node: SceneNode): SceneNode {
         id: newId,
         type: "ref",
         componentId: node.id,
-        x: node.x + 20,
-        y: node.y + 20,
+        x: node.x + offset,
+        y: node.y + offset,
         width: node.width,
         height: node.height,
         fill: node.fill,
@@ -25,9 +29,9 @@ export function cloneNodeWithNewId(node: SceneNode): SceneNode {
     return {
       ...node,
       id: newId,
-      x: node.x + 20,
-      y: node.y + 20,
-      children: node.children.map((child) => cloneNodeWithNewId(child)),
+      x: node.x + offset,
+      y: node.y + offset,
+      children: node.children.map((child) => cloneNodeWithNewId(child, false)),
     } as FrameNode;
   }
 
@@ -35,10 +39,10 @@ export function cloneNodeWithNewId(node: SceneNode): SceneNode {
     return {
       ...node,
       id: newId,
-      x: node.x + 20,
-      y: node.y + 20,
+      x: node.x + offset,
+      y: node.y + offset,
       children: (node as GroupNode).children.map((child) =>
-        cloneNodeWithNewId(child),
+        cloneNodeWithNewId(child, false),
       ),
     } as GroupNode;
   }
@@ -47,15 +51,15 @@ export function cloneNodeWithNewId(node: SceneNode): SceneNode {
     return {
       ...node,
       id: newId,
-      x: node.x + 20,
-      y: node.y + 20,
+      x: node.x + offset,
+      y: node.y + offset,
     };
   }
 
   return {
     ...node,
     id: newId,
-    x: node.x + 20,
-    y: node.y + 20,
+    x: node.x + offset,
+    y: node.y + offset,
   } as SceneNode;
 }
