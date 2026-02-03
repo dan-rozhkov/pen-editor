@@ -59,6 +59,8 @@ interface SceneState {
   ungroupNodes: (ids: string[]) => string[];
   // Convert group↔frame
   convertNodeType: (id: string) => boolean;
+  // Wrap selected nodes in auto-layout frame
+  wrapInAutoLayoutFrame: (ids: string[]) => string | null;
   // Page-level properties
   pageBackground: string;
   setPageBackground: (color: string) => void;
@@ -655,6 +657,153 @@ function groupNodesInTree(
   return { nodes: processedNodes, groupId };
 }
 
+// Wrap selected nodes into a new FrameNode with auto-layout
+function wrapNodesInAutoLayoutFrame(
+  nodes: SceneNode[],
+  ids: string[],
+  calculateLayoutForFrame?: (frame: FrameNode) => SceneNode[],
+): { nodes: SceneNode[]; frameId: string } | null {
+  if (ids.length < 1) return null;
+
+  // Find positions of all nodes - they must all be in the same parent
+  const positions = ids.map((id) => findNodePosition(nodes, id));
+  if (positions.some((p) => p === null)) return null;
+  const validPositions = positions as {
+    parentId: string | null;
+    index: number;
+  }[];
+
+  // All nodes must share the same parent
+  const parentId = validPositions[0].parentId;
+  if (!validPositions.every((p) => p.parentId === parentId)) return null;
+
+  // Get the actual node objects
+  const selectedNodes = ids
+    .map((id) => findNodeInTree(nodes, id)!)
+    .filter(Boolean);
+  if (selectedNodes.length !== ids.length) return null;
+
+  // If parent is an auto-layout frame, use Yoga-computed positions and dimensions
+  let layoutNodes: SceneNode[] | null = null;
+  if (parentId && calculateLayoutForFrame) {
+    const parentNode = findNodeInTree(nodes, parentId);
+    if (
+      parentNode &&
+      parentNode.type === "frame" &&
+      (parentNode as FrameNode).layout?.autoLayout
+    ) {
+      layoutNodes = calculateLayoutForFrame(parentNode as FrameNode);
+    }
+  }
+
+  // Build a map of layout-computed dimensions if available
+  const layoutMap = new Map<string, SceneNode>();
+  if (layoutNodes) {
+    for (const ln of layoutNodes) {
+      layoutMap.set(ln.id, ln);
+    }
+  }
+
+  // Helper to get effective dimensions for a node
+  function getEffectiveBounds(node: SceneNode): {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } {
+    const layoutNode = layoutMap.get(node.id);
+    const x = layoutNode?.x ?? node.x;
+    const y = layoutNode?.y ?? node.y;
+    let width = layoutNode?.width ?? node.width;
+    let height = layoutNode?.height ?? node.height;
+
+    // For auto-layout frames with fit_content sizing, compute intrinsic size
+    if (node.type === "frame") {
+      const frame = node as FrameNode;
+      if (frame.layout?.autoLayout) {
+        const fitWidth = frame.sizing?.widthMode === "fit_content";
+        const fitHeight = frame.sizing?.heightMode === "fit_content";
+        if (fitWidth || fitHeight) {
+          const intrinsic = calculateFrameIntrinsicSize(frame, {
+            fitWidth,
+            fitHeight,
+          });
+          if (fitWidth) width = intrinsic.width;
+          if (fitHeight) height = intrinsic.height;
+        }
+      }
+    }
+
+    return { x, y, width, height };
+  }
+
+  // Calculate bounding box using effective dimensions
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
+  const effectiveBoundsMap = new Map<
+    string,
+    { x: number; y: number; width: number; height: number }
+  >();
+  for (const node of selectedNodes) {
+    const bounds = getEffectiveBounds(node);
+    effectiveBoundsMap.set(node.id, bounds);
+    minX = Math.min(minX, bounds.x);
+    minY = Math.min(minY, bounds.y);
+    maxX = Math.max(maxX, bounds.x + bounds.width);
+    maxY = Math.max(maxY, bounds.y + bounds.height);
+  }
+
+  // Create frame with auto-layout and children at relative positions
+  const frameId = generateId();
+  const frameNode: FrameNode = {
+    id: frameId,
+    type: "frame",
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+    fill: "#ffffff",
+    stroke: "#cccccc",
+    strokeWidth: 1,
+    layout: {
+      autoLayout: true,
+      flexDirection: "column",
+      gap: 0,
+      paddingTop: 0,
+      paddingRight: 0,
+      paddingBottom: 0,
+      paddingLeft: 0,
+    },
+    children: selectedNodes.map((node) => {
+      const bounds = effectiveBoundsMap.get(node.id)!;
+      return {
+        ...node,
+        x: bounds.x - minX,
+        y: bounds.y - minY,
+        width: bounds.width,
+        height: bounds.height,
+      } as SceneNode;
+    }),
+  };
+
+  // Find the insertion index (smallest index among selected nodes)
+  const insertIndex = Math.min(...validPositions.map((p) => p.index));
+
+  // Remove selected nodes and insert frame
+  const idSet = new Set(ids);
+
+  const processedNodes = processTreeAtLevel(nodes, parentId, (levelNodes) => {
+    const filtered = levelNodes.filter((n) => !idSet.has(n.id));
+    const adjustedIndex = Math.min(insertIndex, filtered.length);
+    filtered.splice(adjustedIndex, 0, frameNode);
+    return filtered;
+  });
+
+  return { nodes: processedNodes, frameId };
+}
+
 // Ungroup a group node, placing its children back at the group's level
 function ungroupNodeInTree(
   nodes: SceneNode[],
@@ -969,6 +1118,21 @@ export const useSceneStore = create<SceneState>((set) => ({
     useHistoryStore.getState().saveHistory(state.nodes);
     useSceneStore.setState({ ...withRebuiltIndex(result) });
     return true;
+  },
+
+  wrapInAutoLayoutFrame: (ids) => {
+    const state = useSceneStore.getState();
+    const calculateLayoutForFrame =
+      useLayoutStore.getState().calculateLayoutForFrame;
+    const result = wrapNodesInAutoLayoutFrame(
+      state.nodes,
+      ids,
+      calculateLayoutForFrame,
+    );
+    if (!result) return null;
+    useHistoryStore.getState().saveHistory(state.nodes);
+    useSceneStore.setState({ ...withRebuiltIndex(result.nodes) });
+    return result.frameId;
   },
 
   setPageBackground: (color) =>

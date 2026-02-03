@@ -146,14 +146,14 @@
     },
     {
       "name": "shift-a-autolayout-frame",
+      "passed": true
+    },
+    {
+      "name": "alignment-inside-frame",
       "passed": false
     },
     {
       "name": "pixso-frame-import",
-      "passed": false
-    },
-    {
-      "name": "alignment-inside-frame",
       "passed": false
     }
   ]

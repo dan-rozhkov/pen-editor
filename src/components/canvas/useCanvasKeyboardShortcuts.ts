@@ -27,6 +27,7 @@ interface CanvasKeyboardShortcutsParams {
   moveNode: (nodeId: string, targetParentId: string, index: number) => void;
   groupNodes: (ids: string[]) => string | null;
   ungroupNodes: (ids: string[]) => string[];
+  wrapInAutoLayoutFrame: (ids: string[]) => string | null;
   setNodesWithoutHistory: (nodes: SceneNode[]) => void;
   saveHistory: (nodes: SceneNode[]) => void;
   startBatch: () => void;
@@ -55,6 +56,7 @@ export function useCanvasKeyboardShortcuts({
   moveNode,
   groupNodes,
   ungroupNodes,
+  wrapInAutoLayoutFrame,
   setNodesWithoutHistory,
   saveHistory,
   startBatch,
@@ -272,6 +274,20 @@ export function useCanvasKeyboardShortcuts({
           const childIds = ungroupNodes(ids);
           if (childIds.length > 0) {
             useSelectionStore.getState().setSelectedIds(childIds);
+          }
+        }
+        return;
+      }
+
+      // Shift+A: Wrap selection in auto-layout frame
+      if (e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && e.code === "KeyA") {
+        if (isTyping) return;
+        e.preventDefault();
+        const ids = useSelectionStore.getState().selectedIds;
+        if (ids.length >= 1) {
+          const frameId = wrapInAutoLayoutFrame(ids);
+          if (frameId) {
+            useSelectionStore.getState().select(frameId);
           }
         }
         return;
@@ -530,5 +546,6 @@ export function useCanvasKeyboardShortcuts({
     undo,
     ungroupNodes,
     updateNode,
+    wrapInAutoLayoutFrame,
   ]);
 }

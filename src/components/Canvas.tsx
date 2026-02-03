@@ -69,6 +69,9 @@ export function Canvas() {
   const moveNode = useSceneStore((state) => state.moveNode);
   const groupNodes = useSceneStore((state) => state.groupNodes);
   const ungroupNodes = useSceneStore((state) => state.ungroupNodes);
+  const wrapInAutoLayoutFrame = useSceneStore(
+    (state) => state.wrapInAutoLayoutFrame,
+  );
   const setNodesWithoutHistory = useSceneStore(
     (state) => state.setNodesWithoutHistory,
   );
@@ -120,6 +123,7 @@ export function Canvas() {
     moveNode,
     groupNodes,
     ungroupNodes,
+    wrapInAutoLayoutFrame,
     setNodesWithoutHistory,
     saveHistory,
     startBatch,
