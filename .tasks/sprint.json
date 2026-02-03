@@ -134,6 +134,14 @@
     },
     {
       "name": "clip-content-frame",
+      "passed": true
+    },
+    {
+      "name": "fix-svg-clippath-import",
+      "passed": false
+    },
+    {
+      "name": "pixso-frame-import",
       "passed": false
     }
   ]
