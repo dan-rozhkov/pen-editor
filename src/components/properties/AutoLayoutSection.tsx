@@ -1,4 +1,4 @@
-import { LayoutIcon } from "@phosphor-icons/react";
+import { MinusIcon, PlusIcon } from "@phosphor-icons/react";
 import type {
   AlignItems,
   FlexDirection,
@@ -6,7 +6,6 @@ import type {
   JustifyContent,
   SceneNode,
 } from "@/types/scene";
-import { cn } from "@/lib/utils";
 import {
   NumberInput,
   PropertyRow,
@@ -21,35 +20,41 @@ interface AutoLayoutSectionProps {
 }
 
 export function AutoLayoutSection({ node, onUpdate }: AutoLayoutSectionProps) {
+  const hasAutoLayout = !!node.layout?.autoLayout;
+
+  const enableAutoLayout = () => {
+    const updates: Partial<SceneNode> = {
+      layout: { ...node.layout, autoLayout: true },
+    };
+    updates.sizing = {
+      ...node.sizing,
+      heightMode: "fit_content",
+    };
+    onUpdate(updates);
+  };
+
+  const disableAutoLayout = () => {
+    onUpdate({
+      layout: { ...node.layout, autoLayout: false },
+    } as Partial<SceneNode>);
+  };
+
   return (
-    <PropertySection title="Auto Layout">
-      <div className="relative flex justify-end -top-6 -mb-6">
-        <Button
-          variant={node.layout?.autoLayout ? "default" : "secondary"}
-          size="icon"
-          className={cn(
-            node.layout?.autoLayout
-              ? "bg-sky-100 text-sky-600 hover:bg-sky-100/50 border-none ring-0"
-              : "bg-background hover:bg-surface-hover"
-          )}
-          onClick={() => {
-            const v = !node.layout?.autoLayout;
-            const updates: Partial<SceneNode> = {
-              layout: { ...node.layout, autoLayout: v },
-            };
-            if (v) {
-              updates.sizing = {
-                ...node.sizing,
-                heightMode: "fit_content",
-              };
-            }
-            onUpdate(updates);
-          }}
-        >
-          <LayoutIcon size={16} />
-        </Button>
-      </div>
-      {node.layout?.autoLayout && (
+    <PropertySection
+      title="Auto Layout"
+      action={
+        !hasAutoLayout ? (
+          <Button variant="ghost" size="icon-sm" onClick={enableAutoLayout}>
+            <PlusIcon />
+          </Button>
+        ) : (
+          <Button variant="ghost" size="icon-sm" onClick={disableAutoLayout}>
+            <MinusIcon />
+          </Button>
+        )
+      }
+    >
+      {hasAutoLayout && (
         <>
           <SelectInput
             label="Direction"

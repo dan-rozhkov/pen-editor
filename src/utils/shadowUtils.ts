@@ -3,7 +3,7 @@ import type { ShadowEffect } from "@/types/scene";
 /**
  * Parse hex color with optional alpha (e.g. '#00000040') into color and opacity.
  */
-function parseHexAlpha(hex: string): { color: string; opacity: number } {
+export function parseHexAlpha(hex: string): { color: string; opacity: number } {
   if (hex.length === 9) {
     // #RRGGBBAA
     const alpha = parseInt(hex.slice(7, 9), 16) / 255;
