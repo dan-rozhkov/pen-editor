@@ -108,48 +108,39 @@ export function FrameRenderer({
     flipY: node.flipY,
   });
 
-  // Store reference to the group and original getClientRect method
+  // Store reference to the group for getClientRect override
   const groupRef = useRef<Konva.Group>(null);
-  const originalGetClientRect = useRef<typeof Konva.Group.prototype.getClientRect | null>(null);
 
   // Callback ref to apply getClientRect override synchronously when Group is attached
+  // Always override to return frame bounds only (ignoring children that extend beyond)
   const setGroupRef = useCallback((group: Konva.Group | null) => {
     groupRef.current = group;
     if (!group) return;
 
-    if (node.clip) {
-      // Save original method if not already saved
-      if (!originalGetClientRect.current) {
-        originalGetClientRect.current = group.getClientRect.bind(group);
-      }
-      // Override getClientRect to return only frame dimensions (ignoring children that extend beyond)
-      group.getClientRect = (config) => {
-        if (config?.skipTransform) {
-          // Return local coordinates (relative to the node itself)
-          return {
-            x: 0,
-            y: 0,
-            width: effectiveWidth,
-            height: effectiveHeight,
-          };
-        }
-        // Return absolute coordinates
-        const absTransform = group.getAbsoluteTransform();
-        const point = absTransform.point({ x: 0, y: 0 });
-        const scale = group.getAbsoluteScale();
+    // Override getClientRect to return only frame dimensions (ignoring children that extend beyond)
+    // This ensures the Transformer always shows frame bounds, not children bounds
+    group.getClientRect = (config) => {
+      if (config?.skipTransform) {
+        // Return local coordinates (relative to the node itself)
         return {
-          x: point.x,
-          y: point.y,
-          width: effectiveWidth * scale.x,
-          height: effectiveHeight * scale.y,
+          x: 0,
+          y: 0,
+          width: effectiveWidth,
+          height: effectiveHeight,
         };
+      }
+      // Return absolute coordinates
+      const absTransform = group.getAbsoluteTransform();
+      const point = absTransform.point({ x: 0, y: 0 });
+      const scale = group.getAbsoluteScale();
+      return {
+        x: point.x,
+        y: point.y,
+        width: effectiveWidth * scale.x,
+        height: effectiveHeight * scale.y,
       };
-    } else if (originalGetClientRect.current) {
-      // Restore original method
-      group.getClientRect = originalGetClientRect.current;
-      originalGetClientRect.current = null;
-    }
-  }, [node.clip, effectiveWidth, effectiveHeight]);
+    };
+  }, [effectiveWidth, effectiveHeight]);
 
   // Re-apply override when clip/size changes (for existing groups)
   useEffect(() => {
