@@ -3,11 +3,12 @@ import type { FrameNode, PolygonNode, SceneNode, SizingMode } from "@/types/scen
 import type { ParentContext } from "@/utils/nodeUtils";
 import { cn } from "@/lib/utils";
 import {
-  CheckboxInput,
   NumberInput,
   PropertyRow,
   PropertySection,
 } from "@/components/ui/PropertyInputs";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { generatePolygonPoints } from "@/utils/polygonUtils";
@@ -185,11 +186,13 @@ export function SizeSection({ node, onUpdate, parentContext }: SizeSectionProps)
         </button>
       </PropertyRow>
       {node.type === "frame" && (
-        <CheckboxInput
-          label="Clip content"
-          checked={(node as FrameNode).clip ?? false}
-          onChange={(v) => onUpdate({ clip: v })}
-        />
+        <Label className="cursor-pointer">
+          <Checkbox
+            checked={(node as FrameNode).clip ?? false}
+            onCheckedChange={(checked) => onUpdate({ clip: !!checked })}
+          />
+          Clip content
+        </Label>
       )}
     </PropertySection>
   );
