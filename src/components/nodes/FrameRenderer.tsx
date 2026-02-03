@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useMemo } from "react";
 import Konva from "konva";
 import { Group, Rect } from "react-konva";
 import type { FrameNode } from "@/types/scene";
@@ -71,21 +71,27 @@ export function FrameRenderer({
   );
 
   // Calculate layout for children if auto-layout is enabled
-  const layoutChildren = node.layout?.autoLayout
-    ? calculateLayoutForFrame(node)
-    : node.children;
+  const layoutChildren = useMemo(
+    () =>
+      node.layout?.autoLayout ? calculateLayoutForFrame(node) : node.children,
+    [node, calculateLayoutForFrame],
+  );
 
   // Calculate effective size (fit_content uses intrinsic size from Yoga)
-  const fitWidth =
-    node.sizing?.widthMode === "fit_content" && node.layout?.autoLayout;
-  const fitHeight =
-    node.sizing?.heightMode === "fit_content" && node.layout?.autoLayout;
-  const intrinsicSize =
-    fitWidth || fitHeight
-      ? calculateFrameIntrinsicSize(node, { fitWidth, fitHeight })
-      : { width: node.width, height: node.height };
-  const effectiveWidth = fitWidth ? intrinsicSize.width : node.width;
-  const effectiveHeight = fitHeight ? intrinsicSize.height : node.height;
+  const { effectiveWidth, effectiveHeight } = useMemo(() => {
+    const fitWidth =
+      node.sizing?.widthMode === "fit_content" && node.layout?.autoLayout;
+    const fitHeight =
+      node.sizing?.heightMode === "fit_content" && node.layout?.autoLayout;
+    const intrinsicSize =
+      fitWidth || fitHeight
+        ? calculateFrameIntrinsicSize(node, { fitWidth, fitHeight })
+        : { width: node.width, height: node.height };
+    return {
+      effectiveWidth: fitWidth ? intrinsicSize.width : node.width,
+      effectiveHeight: fitHeight ? intrinsicSize.height : node.height,
+    };
+  }, [node]);
 
   // If this frame has a theme override, use it for children
   const childTheme = node.themeOverride ?? effectiveTheme;

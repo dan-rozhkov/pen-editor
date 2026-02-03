@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { memo, useRef } from "react";
 import Konva from "konva";
 import type {
   FrameNode,
@@ -110,7 +110,7 @@ interface RenderNodeProps {
   selectOverrideId?: string; // If set, clicking this node selects this ID instead (nested selection)
 }
 
-export function RenderNode({
+export const RenderNode = memo(function RenderNode({
   node,
   effectiveTheme,
   selectOverrideId,
@@ -118,13 +118,22 @@ export function RenderNode({
   const nodes = useSceneStore((state) => state.nodes);
   const updateNode = useSceneStore((state) => state.updateNode);
   const moveNode = useSceneStore((state) => state.moveNode);
-  const { select, addToSelection, startEditing, editingNodeId } =
-    useSelectionStore();
-  const { selectedIds } = useSelectionStore();
+  const select = useSelectionStore((state) => state.select);
+  const addToSelection = useSelectionStore((state) => state.addToSelection);
+  const startEditing = useSelectionStore((state) => state.startEditing);
+  const isSelected = useSelectionStore((state) =>
+    state.selectedIds.includes(node.id),
+  );
+  const isEditingText = useSelectionStore(
+    (state) => state.editingMode === "text" && state.editingNodeId === node.id,
+  );
   const variables = useVariableStore((state) => state.variables);
   const globalTheme = useThemeStore((state) => state.activeTheme);
   const { startDrag, updateDrop, endDrag } = useDragStore();
-  const { hoveredNodeId, setHoveredNode } = useHoverStore();
+  const isHovered = useHoverStore(
+    (state) => state.hoveredNodeId === node.id,
+  );
+  const setHoveredNode = useHoverStore((state) => state.setHoveredNode);
   const calculateLayoutForFrame = useLayoutStore(
     (state) => state.calculateLayoutForFrame,
   );
@@ -134,6 +143,20 @@ export function RenderNode({
   const snapTargetsRef = useRef<SnapTarget[]>([]);
   const parentOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const snapOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const transformUpdateRef = useRef<Partial<SceneNode> | null>(null);
+  const transformRafRef = useRef<number | null>(null);
+
+  const scheduleTransformUpdate = (updates: Partial<SceneNode>) => {
+    transformUpdateRef.current = updates;
+    if (transformRafRef.current !== null) return;
+    transformRafRef.current = requestAnimationFrame(() => {
+      transformRafRef.current = null;
+      const pending = transformUpdateRef.current;
+      if (pending) {
+        updateNode(node.id, pending);
+      }
+    });
+  };
 
   // Use effective theme from parent, or fall back to global theme
   const currentTheme = effectiveTheme ?? globalTheme;
@@ -184,7 +207,8 @@ export function RenderNode({
   const handleClick = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     e.cancelBubble = true;
     const isMeta = "metaKey" in e.evt && (e.evt.metaKey || e.evt.ctrlKey);
-    const isAlreadySelected = selectedIds.includes(node.id);
+    const currentSelectedIds = useSelectionStore.getState().selectedIds;
+    const isAlreadySelected = currentSelectedIds.includes(node.id);
     // Cmd/Ctrl+Click bypasses selectOverrideId to deep-select the actual clicked node
     const selectId = isMeta
       ? node.id
@@ -254,7 +278,7 @@ export function RenderNode({
   };
 
   // Check if node is hovered (and not selected - selected takes priority)
-  const isHovered = hoveredNodeId === node.id && !selectedIds.includes(node.id);
+  const isHoveredAndNotSelected = isHovered && !isSelected;
 
   const handleDragStart = () => {
     // Always select the node when starting to drag
@@ -453,7 +477,7 @@ export function RenderNode({
     target.offsetX(node.flipX ? newWidth : 0);
     target.offsetY(node.flipY ? newHeight : 0);
 
-    updateNode(node.id, {
+    scheduleTransformUpdate({
       x: target.x(),
       y: target.y(),
       width: newWidth,
@@ -519,6 +543,13 @@ export function RenderNode({
   const handleTransformEnd = (e: Konva.KonvaEventObject<Event>) => {
     const target = e.target;
     if (node.type === "frame") {
+      if (transformRafRef.current !== null) {
+        cancelAnimationFrame(transformRafRef.current);
+        transformRafRef.current = null;
+      }
+      if (transformUpdateRef.current) {
+        updateNode(node.id, transformUpdateRef.current);
+      }
       const flipSignX = node.flipX ? -1 : 1;
       const flipSignY = node.flipY ? -1 : 1;
       target.scaleX(flipSignX);
@@ -608,7 +639,7 @@ export function RenderNode({
           gradientProps={gradientProps}
           shadowProps={shadowProps}
           effectiveTheme={currentTheme}
-          isHovered={isHovered}
+          isHovered={isHoveredAndNotSelected}
           isTopLevel={parentFrame === null}
           selectOverrideId={selectOverrideId}
         />
@@ -625,7 +656,7 @@ export function RenderNode({
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
           effectiveTheme={currentTheme}
-          isHovered={isHovered}
+          isHovered={isHoveredAndNotSelected}
           isTopLevel={parentFrame === null}
           selectOverrideId={selectOverrideId}
         />
@@ -639,7 +670,7 @@ export function RenderNode({
           strokeColor={strokeColor}
           gradientProps={gradientProps}
           shadowProps={shadowProps}
-          isHovered={isHovered}
+          isHovered={isHoveredAndNotSelected}
           onClick={handleClick}
           onDragStart={handleDragStart}
           onDragMove={handleDragMove}
@@ -664,15 +695,13 @@ export function RenderNode({
           shadowProps={shadowProps}
           isInAutoLayout={isInAutoLayout}
           parentFrame={parentFrame?.type === "frame" ? parentFrame : null}
-          isHovered={isHovered}
+          isHovered={isHoveredAndNotSelected}
         />
       );
     case "text": {
-      const isEditing = editingNodeId === node.id;
       const handleDblClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
         // If this text node is not directly selectable (deep nested),
         // don't start editing unless it's already selected via deep-select
-        const isSelected = selectedIds.includes(node.id);
         if (selectOverrideId && !isSelected) return;
         e.cancelBubble = true;
         startEditing(node.id);
@@ -683,8 +712,8 @@ export function RenderNode({
           fillColor={fillColor}
           gradientProps={gradientProps}
           shadowProps={shadowProps}
-          isHovered={isHovered}
-          isEditing={isEditing}
+          isHovered={isHoveredAndNotSelected}
+          isEditing={isEditingText}
           onClick={handleClick}
           onDblClick={handleDblClick}
           onDragStart={handleDragStart}
@@ -706,7 +735,7 @@ export function RenderNode({
           strokeColor={strokeColor}
           gradientProps={gradientProps}
           shadowProps={shadowProps}
-          isHovered={isHovered}
+          isHovered={isHoveredAndNotSelected}
           onClick={handleClick}
           onDragStart={handleDragStart}
           onDragMove={handleDragMove}
@@ -722,7 +751,7 @@ export function RenderNode({
           node={node as LineNode}
           strokeColor={strokeColor}
           shadowProps={shadowProps}
-          isHovered={isHovered}
+          isHovered={isHoveredAndNotSelected}
           onClick={handleClick}
           onDragStart={handleDragStart}
           onDragMove={handleDragMove}
@@ -740,7 +769,7 @@ export function RenderNode({
           strokeColor={strokeColor}
           gradientProps={gradientProps}
           shadowProps={shadowProps}
-          isHovered={isHovered}
+          isHovered={isHoveredAndNotSelected}
           onClick={handleClick}
           onDragStart={handleDragStart}
           onDragMove={handleDragMove}
@@ -764,10 +793,10 @@ export function RenderNode({
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
           effectiveTheme={currentTheme}
-          isHovered={isHovered}
+          isHovered={isHoveredAndNotSelected}
         />
       );
     default:
       return null;
   }
-}
+});

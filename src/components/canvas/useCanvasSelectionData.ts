@@ -73,32 +73,16 @@ export function useCanvasSelectionData({
       absY: number;
       isNested: boolean;
     }> = [];
-
-    const traverse = (
-      searchNodes: SceneNode[],
-      accX: number,
-      accY: number,
-      isNested: boolean,
-    ) => {
-      for (const node of searchNodes) {
-        if (node.type === "frame" || node.type === "group") {
-          frames.push({
-            node: node as FrameNode | GroupNode,
-            absX: accX + node.x,
-            absY: accY + node.y,
-            isNested,
-          });
-          traverse(
-            (node as FrameNode | GroupNode).children,
-            accX + node.x,
-            accY + node.y,
-            true,
-          );
-        }
+    for (const node of visibleNodes) {
+      if (node.type === "frame" || node.type === "group") {
+        frames.push({
+          node: node as FrameNode | GroupNode,
+          absX: node.x,
+          absY: node.y,
+          isNested: false,
+        });
       }
-    };
-
-    traverse(visibleNodes, 0, 0, false);
+    }
     return frames;
   }, [visibleNodes]);
 
@@ -111,71 +95,64 @@ export function useCanvasSelectionData({
       effectiveHeight: number;
     }> = [];
 
-    const traverse = (searchNodes: SceneNode[]) => {
-      for (const node of searchNodes) {
-        if (selectedIds.includes(node.id)) {
-          const absPos = getNodeAbsolutePositionWithLayout(
-            nodes,
-            node.id,
-            calculateLayoutForFrame,
-          );
-          if (!absPos) continue;
+    if (selectedIds.length === 0) return result;
 
-          let effectiveWidth = node.width;
-          let effectiveHeight = node.height;
+    for (const id of selectedIds) {
+      const node = findNodeById(nodes, id);
+      if (!node) continue;
 
-          if (node.type === "frame" && node.layout?.autoLayout) {
-            const fitWidth = node.sizing?.widthMode === "fit_content";
-            const fitHeight = node.sizing?.heightMode === "fit_content";
-            if (fitWidth || fitHeight) {
-              const intrinsicSize = calculateFrameIntrinsicSize(node, {
-                fitWidth,
-                fitHeight,
-              });
-              if (fitWidth) effectiveWidth = intrinsicSize.width;
-              if (fitHeight) effectiveHeight = intrinsicSize.height;
-            }
-          }
+      const absPos = getNodeAbsolutePositionWithLayout(
+        nodes,
+        id,
+        calculateLayoutForFrame,
+      );
+      if (!absPos) continue;
 
-          const parentContext = findParentFrame(nodes, node.id);
-          if (
-            parentContext.isInsideAutoLayout &&
-            parentContext.parent &&
-            parentContext.parent.type === "frame"
-          ) {
-            const widthMode = node.sizing?.widthMode ?? "fixed";
-            const heightMode = node.sizing?.heightMode ?? "fixed";
+      let effectiveWidth = node.width;
+      let effectiveHeight = node.height;
 
-            if (widthMode !== "fixed" || heightMode !== "fixed") {
-              const layoutChildren = calculateLayoutForFrame(
-                parentContext.parent,
-              );
-              const layoutNode = layoutChildren.find((n) => n.id === node.id);
-              if (layoutNode) {
-                if (widthMode !== "fixed") effectiveWidth = layoutNode.width;
-                if (heightMode !== "fixed") effectiveHeight = layoutNode.height;
-              }
-            }
-          }
-
-          result.push({
-            node,
-            absX: absPos.x,
-            absY: absPos.y,
-            effectiveWidth,
-            effectiveHeight,
+      if (node.type === "frame" && node.layout?.autoLayout) {
+        const fitWidth = node.sizing?.widthMode === "fit_content";
+        const fitHeight = node.sizing?.heightMode === "fit_content";
+        if (fitWidth || fitHeight) {
+          const intrinsicSize = calculateFrameIntrinsicSize(node, {
+            fitWidth,
+            fitHeight,
           });
-        }
-
-        if (node.type === "frame" || node.type === "group") {
-          traverse((node as FrameNode).children);
+          if (fitWidth) effectiveWidth = intrinsicSize.width;
+          if (fitHeight) effectiveHeight = intrinsicSize.height;
         }
       }
-    };
 
-    traverse(visibleNodes);
+      const parentContext = findParentFrame(nodes, node.id);
+      if (
+        parentContext.isInsideAutoLayout &&
+        parentContext.parent &&
+        parentContext.parent.type === "frame"
+      ) {
+        const widthMode = node.sizing?.widthMode ?? "fixed";
+        const heightMode = node.sizing?.heightMode ?? "fixed";
+
+        if (widthMode !== "fixed" || heightMode !== "fixed") {
+          const layoutChildren = calculateLayoutForFrame(parentContext.parent);
+          const layoutNode = layoutChildren.find((n) => n.id === node.id);
+          if (layoutNode) {
+            if (widthMode !== "fixed") effectiveWidth = layoutNode.width;
+            if (heightMode !== "fixed") effectiveHeight = layoutNode.height;
+          }
+        }
+      }
+
+      result.push({
+        node,
+        absX: absPos.x,
+        absY: absPos.y,
+        effectiveWidth,
+        effectiveHeight,
+      });
+    }
     return result;
-  }, [visibleNodes, selectedIds, nodes, calculateLayoutForFrame]);
+  }, [selectedIds, nodes, calculateLayoutForFrame]);
 
   const selectionBoundingBox = useMemo(() => {
     if (collectSelectedNodes.length <= 1) return null;
