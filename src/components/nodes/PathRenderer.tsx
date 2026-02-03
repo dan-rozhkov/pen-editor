@@ -203,6 +203,7 @@ export function PathRenderer({
           scaleY={scaleY}
           data={node.geometry}
           fill={gradientProps ? undefined : fillColor}
+          fillRule={node.fillRule}
           {...(gradientProps ?? {})}
           stroke={pathStrokeColor}
           strokeWidth={pathStrokeWidth}

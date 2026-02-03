@@ -216,6 +216,8 @@ export interface PathNode extends BaseNode {
   // SVG clip-path geometry for clipping this path
   clipGeometry?: string
   clipBounds?: { x: number; y: number; width: number; height: number }
+  // SVG fill-rule for complex paths with holes (evenodd creates cutouts)
+  fillRule?: 'nonzero' | 'evenodd'
 }
 
 export interface LineNode extends BaseNode {

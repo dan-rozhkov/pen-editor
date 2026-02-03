@@ -230,6 +230,12 @@ function collectPaths(
         }
       }
 
+      // Add fill-rule if present (evenodd creates holes in paths)
+      const fillRule = child.getAttribute("fill-rule");
+      if (fillRule === "evenodd" || fillRule === "nonzero") {
+        node.fillRule = fillRule;
+      }
+
       // Add opacity if present
       if (resolvedOpacity) {
         node.opacity = parseFloat(resolvedOpacity);
