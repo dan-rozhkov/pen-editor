@@ -43,6 +43,9 @@ interface InheritedStyle {
   strokeWidth?: string;
   strokeLinejoin?: string;
   strokeLinecap?: string;
+  opacity?: string;
+  fillOpacity?: string;
+  strokeOpacity?: string;
 }
 
 /** Resolve a color value: treat "currentColor" as black, return null for "none" */
@@ -64,6 +67,9 @@ function getInheritedStyle(el: Element, parent: InheritedStyle): InheritedStyle 
     strokeWidth: el.getAttribute("stroke-width") ?? parent.strokeWidth,
     strokeLinejoin: el.getAttribute("stroke-linejoin") ?? parent.strokeLinejoin,
     strokeLinecap: el.getAttribute("stroke-linecap") ?? parent.strokeLinecap,
+    opacity: el.getAttribute("opacity") ?? parent.opacity,
+    fillOpacity: el.getAttribute("fill-opacity") ?? parent.fillOpacity,
+    strokeOpacity: el.getAttribute("stroke-opacity") ?? parent.strokeOpacity,
   };
 }
 
@@ -93,6 +99,14 @@ function collectPaths(
       const resolvedLinejoin = child.getAttribute("stroke-linejoin") ?? inherited.strokeLinejoin;
       const resolvedLinecap = child.getAttribute("stroke-linecap") ?? inherited.strokeLinecap;
 
+      // Resolve opacity values with inheritance
+      const localOpacity = child.getAttribute("opacity");
+      const localFillOpacity = child.getAttribute("fill-opacity");
+      const localStrokeOpacity = child.getAttribute("stroke-opacity");
+      const resolvedOpacity = localOpacity ?? inherited.opacity;
+      const resolvedFillOpacity = localFillOpacity ?? inherited.fillOpacity;
+      const resolvedStrokeOpacity = localStrokeOpacity ?? inherited.strokeOpacity;
+
       // Skip fully invisible paths (no fill AND no stroke)
       if (!resolvedFill && !resolvedStroke) continue;
 
@@ -112,6 +126,17 @@ function collectPaths(
         fill: resolvedFill,
         geometryBounds: { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height },
       };
+
+      // Add opacity if present
+      if (resolvedOpacity) {
+        node.opacity = parseFloat(resolvedOpacity);
+      }
+      if (resolvedFillOpacity) {
+        node.fillOpacity = parseFloat(resolvedFillOpacity);
+      }
+      if (resolvedStrokeOpacity) {
+        node.strokeOpacity = parseFloat(resolvedStrokeOpacity);
+      }
 
       // Add stroke info if present
       if (resolvedStroke) {
@@ -175,6 +200,9 @@ export function parseSvgToNodes(svgText: string): { node: SceneNode; svgWidth: n
     strokeWidth: svgEl.getAttribute("stroke-width") ?? undefined,
     strokeLinejoin: svgEl.getAttribute("stroke-linejoin") ?? undefined,
     strokeLinecap: svgEl.getAttribute("stroke-linecap") ?? undefined,
+    opacity: svgEl.getAttribute("opacity") ?? undefined,
+    fillOpacity: svgEl.getAttribute("fill-opacity") ?? undefined,
+    strokeOpacity: svgEl.getAttribute("stroke-opacity") ?? undefined,
   };
 
   const pathNodes = collectPaths(svgEl, 0, 0, rootStyle);

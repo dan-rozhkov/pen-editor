@@ -505,30 +505,28 @@ export function LayersPanel() {
 
   return (
     <div className="flex-1 bg-surface-panel flex flex-col select-none overflow-hidden">
-      <div className="relative border-b border-border-default">
-        <div className="px-4 pt-3 pb-3">
-          <div className="text-[11px] font-semibold text-text-primary">
-            Layers
+      <div className="px-4 pt-3 pb-3 border-b border-border-default">
+        <div className="text-[11px] font-semibold text-text-primary">
+          Layers
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto" onDragEnd={handleDragEnd}>
+        {reversedNodes.length === 0 ? (
+          <div className="text-text-disabled text-xs text-center p-5">
+            No layers yet
           </div>
-        </div>
-        <div className="flex-1 overflow-y-auto" onDragEnd={handleDragEnd}>
-          {reversedNodes.length === 0 ? (
-            <div className="text-text-disabled text-xs text-center p-5">
-              No layers yet
-            </div>
-          ) : (
-            <LayerList
-              nodes={reversedNodes}
-              depth={0}
-              parentId={null}
-              dragState={dragState}
-              onDragStart={handleDragStart}
-              onDragOver={handleDragOver}
-              onDragEnd={handleDragEnd}
-              onDrop={handleDrop}
-            />
-          )}
-        </div>
+        ) : (
+          <LayerList
+            nodes={reversedNodes}
+            depth={0}
+            parentId={null}
+            dragState={dragState}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+            onDrop={handleDrop}
+          />
+        )}
       </div>
     </div>
   );
