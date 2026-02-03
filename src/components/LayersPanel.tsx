@@ -518,7 +518,7 @@ export function LayersPanel() {
   }, [dragState, nodes, moveNode, setFrameExpanded, handleDragEnd]);
 
   // Reverse the nodes array so that top items in the list appear on top visually (higher z-index)
-  const reversedNodes = [...nodes].reverse();
+  const reversedNodes = useMemo(() => [...nodes].reverse(), [nodes]);
   const flatLayers = useMemo(
     () => flattenLayers(reversedNodes, expandedFrameIds),
     [reversedNodes, expandedFrameIds],
@@ -541,6 +541,23 @@ export function LayersPanel() {
     };
   }, []);
 
+  const handleAutoScroll = useCallback(
+    (e: React.DragEvent) => {
+      if (!dragState.draggedId) return;
+      const el = scrollRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const threshold = 32;
+      const speed = 12;
+      if (e.clientY < rect.top + threshold) {
+        el.scrollTop = Math.max(0, el.scrollTop - speed);
+      } else if (e.clientY > rect.bottom - threshold) {
+        el.scrollTop = Math.min(el.scrollHeight, el.scrollTop + speed);
+      }
+    },
+    [dragState.draggedId],
+  );
+
   const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
   const endIndex = Math.min(
     flatLayers.length,
@@ -559,6 +576,7 @@ export function LayersPanel() {
       <div
         className="flex-1 overflow-y-auto"
         onDragEnd={handleDragEnd}
+        onDragOver={handleAutoScroll}
         ref={scrollRef}
       >
         {reversedNodes.length === 0 ? (
