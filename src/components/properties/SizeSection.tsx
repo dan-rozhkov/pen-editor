@@ -1,8 +1,9 @@
 import { LinkSimple, LinkSimpleBreak } from "@phosphor-icons/react";
-import type { PolygonNode, SceneNode, SizingMode } from "@/types/scene";
+import type { FrameNode, PolygonNode, SceneNode, SizingMode } from "@/types/scene";
 import type { ParentContext } from "@/utils/nodeUtils";
 import { cn } from "@/lib/utils";
 import {
+  CheckboxInput,
   NumberInput,
   PropertyRow,
   PropertySection,
@@ -183,6 +184,13 @@ export function SizeSection({ node, onUpdate, parentContext }: SizeSectionProps)
           )}
         </button>
       </PropertyRow>
+      {node.type === "frame" && (
+        <CheckboxInput
+          label="Clip content"
+          checked={(node as FrameNode).clip ?? false}
+          onChange={(v) => onUpdate({ clip: v })}
+        />
+      )}
     </PropertySection>
   );
 }

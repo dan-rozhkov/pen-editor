@@ -125,6 +125,8 @@ export interface FrameNode extends BaseNode {
   type: 'frame'
   children: SceneNode[]
   cornerRadius?: number
+  // Clip content - when true, visually clip children to frame bounds
+  clip?: boolean
   // Auto-layout properties
   layout?: LayoutProperties
   // Theme override (light/dark) - if set, overrides global theme for this frame

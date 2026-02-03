@@ -152,6 +152,30 @@ export function FrameRenderer({
       onTransformEnd={onTransformEnd}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
+      clipFunc={
+        node.clip
+          ? (ctx) => {
+              const ctx2d = ctx._context;
+              if (node.cornerRadius && node.cornerRadius > 0) {
+                ctx2d.beginPath();
+                (
+                  ctx2d as unknown as {
+                    roundRect: (
+                      x: number,
+                      y: number,
+                      w: number,
+                      h: number,
+                      r: number,
+                    ) => void;
+                  }
+                ).roundRect(0, 0, effectiveWidth, effectiveHeight, node.cornerRadius);
+                ctx2d.closePath();
+              } else {
+                ctx2d.rect(0, 0, effectiveWidth, effectiveHeight);
+              }
+            }
+          : undefined
+      }
     >
       <Rect
         width={effectiveWidth}
