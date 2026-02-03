@@ -116,67 +116,6 @@ function withRebuiltIndex(nodes: SceneNode[]): {
   return { nodes, ...index };
 }
 
-function addSubtreeToIndex(
-  node: SceneNode,
-  parentId: string | null,
-  index: number,
-  nodesById: Record<string, SceneNode>,
-  parentById: Record<string, string | null>,
-  indexById: Record<string, number>,
-  childrenById: Record<string, string[]>,
-) {
-  nodesById[node.id] = node;
-  parentById[node.id] = parentId;
-  indexById[node.id] = index;
-
-  if (isContainerNode(node)) {
-    const childIds = node.children.map((child) => child.id);
-    childrenById[node.id] = childIds;
-    node.children.forEach((child, childIndex) => {
-      addSubtreeToIndex(
-        child,
-        node.id,
-        childIndex,
-        nodesById,
-        parentById,
-        indexById,
-        childrenById,
-      );
-    });
-  }
-}
-
-function removeSubtreeFromIndex(
-  nodeId: string,
-  nodesById: Record<string, SceneNode>,
-  parentById: Record<string, string | null>,
-  indexById: Record<string, number>,
-  childrenById: Record<string, string[]>,
-) {
-  const node = nodesById[nodeId];
-  if (!node) return;
-  if (isContainerNode(node)) {
-    const childIds = childrenById[nodeId] ?? node.children.map((child) => child.id);
-    for (const childId of childIds) {
-      removeSubtreeFromIndex(childId, nodesById, parentById, indexById, childrenById);
-    }
-    delete childrenById[nodeId];
-  }
-  delete nodesById[nodeId];
-  delete parentById[nodeId];
-  delete indexById[nodeId];
-}
-
-function updateIndicesForList(
-  ids: string[],
-  indexById: Record<string, number>,
-  startIndex = 0,
-) {
-  for (let i = startIndex; i < ids.length; i += 1) {
-    indexById[ids[i]] = i;
-  }
-}
-
 // Recursively sync text node dimensions throughout the tree
 function syncAllTextDimensions(nodes: SceneNode[]): SceneNode[] {
   return nodes.map((node) => {
@@ -286,41 +225,6 @@ function updateNodeRecursive(
 
   return { nodes, found: false };
 }
-
-function replaceNodeInTreeByIndex(
-  nodes: SceneNode[],
-  nodesById: Record<string, SceneNode>,
-  parentById: Record<string, string | null>,
-  indexById: Record<string, number>,
-  nodeId: string,
-  newNode: SceneNode,
-): { nodes: SceneNode[]; nodesById: Record<string, SceneNode> } {
-  const updatedNodesById = { ...nodesById, [nodeId]: newNode };
-  let currentId = nodeId;
-  let updatedChild = newNode;
-  let parentId = parentById[currentId];
-
-  while (parentId) {
-    const parentNode = updatedNodesById[parentId] as FrameNode | GroupNode;
-    const childIndex = indexById[currentId];
-    const nextChildren = parentNode.children.slice();
-    nextChildren[childIndex] = updatedChild;
-    const updatedParent = { ...parentNode, children: nextChildren } as
-      | FrameNode
-      | GroupNode;
-    updatedNodesById[parentId] = updatedParent;
-    updatedChild = updatedParent;
-    currentId = parentId;
-    parentId = parentById[currentId];
-  }
-
-  const rootIndex = indexById[currentId];
-  const nextNodes = nodes.slice();
-  nextNodes[rootIndex] = updatedChild;
-
-  return { nodes: nextNodes, nodesById: updatedNodesById };
-}
-
 // Helper to recursively delete a node anywhere in the tree
 function deleteNodeRecursive(nodes: SceneNode[], id: string): SceneNode[] {
   return nodes.reduce<SceneNode[]>((acc, node) => {
@@ -378,6 +282,35 @@ function setVisibilityRecursive(
     }
     return node;
   });
+}
+
+// Helper to find and extract a node from the tree (returns node and tree without it)
+function extractNodeRecursive(
+  nodes: SceneNode[],
+  id: string,
+): { node: SceneNode | null; remaining: SceneNode[] } {
+  let foundNode: SceneNode | null = null;
+
+  const remaining = nodes.reduce<SceneNode[]>((acc, node) => {
+    if (node.id === id) {
+      foundNode = node;
+      return acc;
+    }
+    if (isContainerNode(node)) {
+      const result = extractNodeRecursive(node.children, id);
+      if (result.node) {
+        foundNode = result.node;
+      }
+      acc.push({ ...node, children: result.remaining } as
+        | FrameNode
+        | GroupNode);
+    } else {
+      acc.push(node);
+    }
+    return acc;
+  }, []);
+
+  return { node: foundNode, remaining };
 }
 
 // Helper to insert a node at a specific index in a parent (or root if parentId is null)
@@ -873,173 +806,28 @@ export const useSceneStore = create<SceneState>((set) => ({
   addChildToFrame: (frameId, child) =>
     set((state) => {
       useHistoryStore.getState().saveHistory(state.nodes);
-      const parent = state.nodesById[frameId];
-      if (!parent || !isContainerNode(parent)) {
-        const nextNodes = addChildToFrameRecursive(state.nodes, frameId, child);
-        return { ...withRebuiltIndex(nextNodes) };
-      }
-
-      const newChildIndex = parent.children.length;
-      const updatedParent = {
-        ...parent,
-        children: [...parent.children, child],
-      } as FrameNode | GroupNode;
-
-      const replaced = replaceNodeInTreeByIndex(
-        state.nodes,
-        state.nodesById,
-        state.parentById,
-        state.indexById,
-        frameId,
-        updatedParent,
-      );
-
-      const nodesById = replaced.nodesById;
-      const parentById = { ...state.parentById };
-      const indexById = { ...state.indexById };
-      const childrenById = { ...state.childrenById };
-      const rootIds = state.rootIds;
-
-      const childIds = updatedParent.children.map((c) => c.id);
-      childrenById[frameId] = childIds;
-      updateIndicesForList(childIds, indexById, newChildIndex);
-      addSubtreeToIndex(
-        child,
-        frameId,
-        newChildIndex,
-        nodesById,
-        parentById,
-        indexById,
-        childrenById,
-      );
-
-      return {
-        nodes: replaced.nodes,
-        nodesById,
-        parentById,
-        indexById,
-        childrenById,
-        rootIds,
-      };
+      const nextNodes = addChildToFrameRecursive(state.nodes, frameId, child);
+      return { ...withRebuiltIndex(nextNodes) };
     }),
 
   updateNode: (id, updates) =>
     set((state) => {
       useHistoryStore.getState().saveHistory(state.nodes);
-      const existing = state.nodesById[id];
-      if (!existing) {
-        const nextNodes = updateNodeRecursive(state.nodes, id, updates).nodes;
-        return { ...withRebuiltIndex(nextNodes) };
-      }
-      let updated = { ...existing, ...updates } as SceneNode;
-      if (updated.type === "text" && hasTextMeasureProps(updates)) {
-        updated = syncTextDimensions(updated);
-      }
-      const replaced = replaceNodeInTreeByIndex(
-        state.nodes,
-        state.nodesById,
-        state.parentById,
-        state.indexById,
-        id,
-        updated,
-      );
-      return {
-        nodes: replaced.nodes,
-        nodesById: replaced.nodesById,
-        parentById: state.parentById,
-        indexById: state.indexById,
-        childrenById: state.childrenById,
-        rootIds: state.rootIds,
-      };
+      const nextNodes = updateNodeRecursive(state.nodes, id, updates).nodes;
+      return { ...withRebuiltIndex(nextNodes) };
     }),
 
   updateNodeWithoutHistory: (id, updates) =>
     set((state) => {
-      const existing = state.nodesById[id];
-      if (!existing) {
-        const nextNodes = updateNodeRecursive(state.nodes, id, updates).nodes;
-        return { ...withRebuiltIndex(nextNodes) };
-      }
-      let updated = { ...existing, ...updates } as SceneNode;
-      if (updated.type === "text" && hasTextMeasureProps(updates)) {
-        updated = syncTextDimensions(updated);
-      }
-      const replaced = replaceNodeInTreeByIndex(
-        state.nodes,
-        state.nodesById,
-        state.parentById,
-        state.indexById,
-        id,
-        updated,
-      );
-      return {
-        nodes: replaced.nodes,
-        nodesById: replaced.nodesById,
-        parentById: state.parentById,
-        indexById: state.indexById,
-        childrenById: state.childrenById,
-        rootIds: state.rootIds,
-      };
+      const nextNodes = updateNodeRecursive(state.nodes, id, updates).nodes;
+      return { ...withRebuiltIndex(nextNodes) };
     }),
 
   deleteNode: (id) =>
     set((state) => {
       useHistoryStore.getState().saveHistory(state.nodes);
-      const existing = state.nodesById[id];
-      if (!existing) {
-        const nextNodes = deleteNodeRecursive(state.nodes, id);
-        return { ...withRebuiltIndex(nextNodes) };
-      }
-
-      const parentById = { ...state.parentById };
-      const indexById = { ...state.indexById };
-      const childrenById = { ...state.childrenById };
-      const nodesById = { ...state.nodesById };
-      let rootIds = state.rootIds.slice();
-      let nextNodes = state.nodes;
-
-      const parentId = parentById[id];
-      const removeIndex = indexById[id];
-
-      if (parentId === null) {
-        const updatedNodes = state.nodes.slice();
-        updatedNodes.splice(removeIndex, 1);
-        nextNodes = updatedNodes;
-        rootIds.splice(removeIndex, 1);
-        updateIndicesForList(rootIds, indexById, removeIndex);
-      } else {
-        const parent = nodesById[parentId] as FrameNode | GroupNode;
-        const nextChildren = parent.children.slice();
-        nextChildren.splice(removeIndex, 1);
-        const updatedParent = { ...parent, children: nextChildren } as
-          | FrameNode
-          | GroupNode;
-
-        const replaced = replaceNodeInTreeByIndex(
-          state.nodes,
-          nodesById,
-          parentById,
-          indexById,
-          parentId,
-          updatedParent,
-        );
-        nextNodes = replaced.nodes;
-        Object.assign(nodesById, replaced.nodesById);
-        const childIds = nextChildren.map((c) => c.id);
-        childrenById[parentId] = childIds;
-        updateIndicesForList(childIds, indexById, removeIndex);
-      }
-
-      removeSubtreeFromIndex(id, nodesById, parentById, indexById, childrenById);
-
-      return {
-        nodes: nextNodes,
-        nodesById,
-        parentById,
-        indexById,
-        childrenById,
-        rootIds,
-      };
+      const nextNodes = deleteNodeRecursive(state.nodes, id);
+      return { ...withRebuiltIndex(nextNodes) };
     }),
 
   clearNodes: () => set({ ...withRebuiltIndex([]) }),
@@ -1103,115 +891,19 @@ export const useSceneStore = create<SceneState>((set) => ({
 
   moveNode: (nodeId, newParentId, newIndex) =>
     set((state) => {
-      const node = state.nodesById[nodeId];
+      // Extract the node from its current position
+      const { node, remaining } = extractNodeRecursive(state.nodes, nodeId);
       if (!node) return state;
 
       useHistoryStore.getState().saveHistory(state.nodes);
-
-      const parentById = { ...state.parentById };
-      const indexById = { ...state.indexById };
-      const childrenById = { ...state.childrenById };
-      const nodesById = { ...state.nodesById };
-      let rootIds = state.rootIds.slice();
-      let nextNodes = state.nodes;
-
-      const oldParentId = parentById[nodeId];
-      const oldIndex = indexById[nodeId];
-
-      // Remove from old location
-      if (oldParentId === null) {
-        const updatedNodes = nextNodes.slice();
-        updatedNodes.splice(oldIndex, 1);
-        nextNodes = updatedNodes;
-        rootIds.splice(oldIndex, 1);
-        updateIndicesForList(rootIds, indexById, oldIndex);
-      } else {
-        const oldParent = nodesById[oldParentId] as FrameNode | GroupNode;
-        const nextChildren = oldParent.children.slice();
-        nextChildren.splice(oldIndex, 1);
-        const updatedParent = { ...oldParent, children: nextChildren } as
-          | FrameNode
-          | GroupNode;
-        const replaced = replaceNodeInTreeByIndex(
-          nextNodes,
-          nodesById,
-          parentById,
-          indexById,
-          oldParentId,
-          updatedParent,
-        );
-        nextNodes = replaced.nodes;
-        Object.assign(nodesById, replaced.nodesById);
-        const childIds = nextChildren.map((c) => c.id);
-        childrenById[oldParentId] = childIds;
-        updateIndicesForList(childIds, indexById, oldIndex);
-      }
-
-      // Insert into new location
-      if (newParentId === null) {
-        const updatedNodes = nextNodes.slice();
-        updatedNodes.splice(newIndex, 0, node);
-        nextNodes = updatedNodes;
-        rootIds.splice(newIndex, 0, node.id);
-        updateIndicesForList(rootIds, indexById, newIndex);
-        addSubtreeToIndex(
-          node,
-          null,
-          newIndex,
-          nodesById,
-          parentById,
-          indexById,
-          childrenById,
-        );
-      } else {
-        const newParent = nodesById[newParentId];
-        if (!newParent || !isContainerNode(newParent)) {
-          const newNodes = insertNodeRecursive(
-            nextNodes,
-            node,
-            newParentId,
-            newIndex,
-          );
-          return { ...withRebuiltIndex(newNodes) };
-        }
-
-        const nextChildren = newParent.children.slice();
-        nextChildren.splice(newIndex, 0, node);
-        const updatedParent = { ...newParent, children: nextChildren } as
-          | FrameNode
-          | GroupNode;
-        const replaced = replaceNodeInTreeByIndex(
-          nextNodes,
-          nodesById,
-          parentById,
-          indexById,
-          newParentId,
-          updatedParent,
-        );
-        nextNodes = replaced.nodes;
-        Object.assign(nodesById, replaced.nodesById);
-        const childIds = nextChildren.map((c) => c.id);
-        childrenById[newParentId] = childIds;
-        updateIndicesForList(childIds, indexById, newIndex);
-        addSubtreeToIndex(
-          node,
-          newParentId,
-          newIndex,
-          nodesById,
-          parentById,
-          indexById,
-          childrenById,
-        );
-      }
-
-      return {
-        nodes: nextNodes,
-        nodesById,
-        parentById,
-        indexById,
-        childrenById,
-        rootIds,
-      };
+      // Insert the node at the new position
+      const newNodes = insertNodeRecursive(
+        remaining,
+        node,
+        newParentId,
+        newIndex,
+      );
+      return { ...withRebuiltIndex(newNodes) };
     }),
 
   updateDescendantOverride: (instanceId, descendantId, updates) =>
