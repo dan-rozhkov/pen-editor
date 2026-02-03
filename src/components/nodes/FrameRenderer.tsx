@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import Konva from "konva";
 import { Group, Rect } from "react-konva";
 import type { FrameNode } from "@/types/scene";
@@ -108,32 +108,55 @@ export function FrameRenderer({
     flipY: node.flipY,
   });
 
-  // Ref for the Group to override getSelfRect when clip is enabled
+  // Store reference to the group and original getClientRect method
   const groupRef = useRef<Konva.Group>(null);
+  const originalGetClientRect = useRef<typeof Konva.Group.prototype.getClientRect | null>(null);
 
-  // Override getSelfRect when clip is enabled so Transformer uses frame bounds, not children bounds
-  useEffect(() => {
-    const group = groupRef.current;
+  // Callback ref to apply getClientRect override synchronously when Group is attached
+  const setGroupRef = useCallback((group: Konva.Group | null) => {
+    groupRef.current = group;
     if (!group) return;
 
-    // Cast to access getSelfRect which exists on Konva.Node but not in TS types
-    const nodeWithRect = group as Konva.Group & {
-      getSelfRect?: () => { x: number; y: number; width: number; height: number };
-    };
-
     if (node.clip) {
-      // Override getSelfRect to return only frame dimensions (ignoring children that extend beyond)
-      nodeWithRect.getSelfRect = () => ({
-        x: 0,
-        y: 0,
-        width: effectiveWidth,
-        height: effectiveHeight,
-      });
-    } else {
-      // Remove override - use default behavior
-      delete nodeWithRect.getSelfRect;
+      // Save original method if not already saved
+      if (!originalGetClientRect.current) {
+        originalGetClientRect.current = group.getClientRect.bind(group);
+      }
+      // Override getClientRect to return only frame dimensions (ignoring children that extend beyond)
+      group.getClientRect = (config) => {
+        if (config?.skipTransform) {
+          // Return local coordinates (relative to the node itself)
+          return {
+            x: 0,
+            y: 0,
+            width: effectiveWidth,
+            height: effectiveHeight,
+          };
+        }
+        // Return absolute coordinates
+        const absTransform = group.getAbsoluteTransform();
+        const point = absTransform.point({ x: 0, y: 0 });
+        const scale = group.getAbsoluteScale();
+        return {
+          x: point.x,
+          y: point.y,
+          width: effectiveWidth * scale.x,
+          height: effectiveHeight * scale.y,
+        };
+      };
+    } else if (originalGetClientRect.current) {
+      // Restore original method
+      group.getClientRect = originalGetClientRect.current;
+      originalGetClientRect.current = null;
     }
   }, [node.clip, effectiveWidth, effectiveHeight]);
+
+  // Re-apply override when clip/size changes (for existing groups)
+  useEffect(() => {
+    if (groupRef.current) {
+      setGroupRef(groupRef.current);
+    }
+  }, [setGroupRef]);
 
   // Double-click to enter this frame (drill down)
   // NOTE: This handler only fires when the Transformer is NOT active on this node.
@@ -164,7 +187,7 @@ export function FrameRenderer({
 
   return (
     <Group
-      ref={groupRef}
+      ref={setGroupRef}
       id={node.id}
       name="selectable"
       {...frameTransform}

@@ -189,7 +189,7 @@ export function Canvas() {
 
     transformer.nodes(selectedNodes);
     transformer.getLayer()?.batchDraw();
-  }, [selectedIds, editingNodeId, editingMode]);
+  }, [selectedIds, editingNodeId, editingMode, nodes]);
 
   // Resize handler
   useEffect(() => {
