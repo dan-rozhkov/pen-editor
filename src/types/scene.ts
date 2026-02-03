@@ -202,6 +202,9 @@ export interface RefNode extends BaseNode {
 export interface GroupNode extends BaseNode {
   type: 'group'
   children: SceneNode[]
+  // SVG clip-path geometry for clipping this group
+  clipGeometry?: string
+  clipBounds?: { x: number; y: number; width: number; height: number }
 }
 
 export interface PathNode extends BaseNode {
@@ -210,6 +213,9 @@ export interface PathNode extends BaseNode {
   pathStroke?: PathStroke    // SVG-style stroke properties
   // Bounding box origin of the raw geometry (for offsetting path rendering inside the node)
   geometryBounds?: { x: number; y: number; width: number; height: number }
+  // SVG clip-path geometry for clipping this path
+  clipGeometry?: string
+  clipBounds?: { x: number; y: number; width: number; height: number }
 }
 
 export interface LineNode extends BaseNode {
