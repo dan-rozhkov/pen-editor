@@ -1,4 +1,11 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import {
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  useMemo,
+  memo,
+} from "react";
 import {
   DiamondsFourIcon,
   RectangleIcon,
@@ -108,7 +115,7 @@ interface LayerItemProps {
   onDrop: () => void;
 }
 
-function LayerItem({
+const LayerItem = memo(function LayerItem({
   node,
   depth,
   parentId,
@@ -243,10 +250,9 @@ function LayerItem({
     node.name || `${node.type.charAt(0).toUpperCase() + node.type.slice(1)}`;
 
   return (
-    <>
-      <div
+    <div
         className={clsx(
-          "group flex items-center justify-between py-1.5 pr-3 cursor-pointer",
+          "group flex items-center justify-between pr-3 cursor-pointer h-[28px]",
           isSelected
             ? "bg-accent-selection hover:bg-accent-selection/80"
             : "hover:bg-surface-elevated",
@@ -325,29 +331,38 @@ function LayerItem({
         >
           <EyeIcon visible={isVisible} />
         </button>
-      </div>
-
-      {/* Render children if this is an expanded frame/group */}
-      {isFrame && isExpanded && (
-        <LayerList
-          nodes={[...(node as FrameNode | GroupNode).children].reverse()}
-          depth={depth + 1}
-          parentId={node.id}
-          dragState={dragState}
-          onDragStart={onDragStart}
-          onDragOver={onDragOver}
-          onDragEnd={onDragEnd}
-          onDrop={onDrop}
-        />
-      )}
-    </>
+    </div>
   );
+});
+
+interface FlattenedLayer {
+  node: SceneNode;
+  depth: number;
+  parentId: string | null;
+}
+
+const ROW_HEIGHT = 28;
+const OVERSCAN = 8;
+
+function flattenLayers(
+  nodes: SceneNode[],
+  expandedFrameIds: Set<string>,
+  depth = 0,
+  parentId: string | null = null,
+  out: FlattenedLayer[] = [],
+): FlattenedLayer[] {
+  for (const node of nodes) {
+    out.push({ node, depth, parentId });
+    if (isContainerNode(node) && expandedFrameIds.has(node.id)) {
+      const children = [...node.children].reverse();
+      flattenLayers(children, expandedFrameIds, depth + 1, node.id, out);
+    }
+  }
+  return out;
 }
 
 interface LayerListProps {
-  nodes: SceneNode[];
-  depth: number;
-  parentId: string | null;
+  items: FlattenedLayer[];
   dragState: DragState;
   onDragStart: (nodeId: string) => void;
   onDragOver: (
@@ -360,9 +375,7 @@ interface LayerListProps {
 }
 
 function LayerList({
-  nodes,
-  depth,
-  parentId,
+  items,
   dragState,
   onDragStart,
   onDragOver,
@@ -371,12 +384,12 @@ function LayerList({
 }: LayerListProps) {
   return (
     <>
-      {nodes.map((node) => (
+      {items.map((item) => (
         <LayerItem
-          key={node.id}
-          node={node}
-          depth={depth}
-          parentId={parentId}
+          key={item.node.id}
+          node={item.node}
+          depth={item.depth}
+          parentId={item.parentId}
           dragState={dragState}
           onDragStart={onDragStart}
           onDragOver={onDragOver}
@@ -412,9 +425,13 @@ function getChildrenOfParent(
 
 export function LayersPanel() {
   const nodes = useSceneStore((state) => state.nodes);
+  const expandedFrameIds = useSceneStore((state) => state.expandedFrameIds);
   const moveNode = useSceneStore((state) => state.moveNode);
   const setFrameExpanded = useSceneStore((state) => state.setFrameExpanded);
   const select = useSelectionStore((state) => state.select);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
 
   const [dragState, setDragState] = useState<DragState>({
     draggedId: null,
@@ -502,6 +519,35 @@ export function LayersPanel() {
 
   // Reverse the nodes array so that top items in the list appear on top visually (higher z-index)
   const reversedNodes = [...nodes].reverse();
+  const flatLayers = useMemo(
+    () => flattenLayers(reversedNodes, expandedFrameIds),
+    [reversedNodes, expandedFrameIds],
+  );
+  const totalHeight = flatLayers.length * ROW_HEIGHT;
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const handleScroll = () => setScrollTop(el.scrollTop);
+    handleScroll();
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    const observer = new ResizeObserver(() => {
+      setViewportHeight(el.clientHeight);
+    });
+    observer.observe(el);
+    return () => {
+      el.removeEventListener("scroll", handleScroll);
+      observer.disconnect();
+    };
+  }, []);
+
+  const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
+  const endIndex = Math.min(
+    flatLayers.length,
+    Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT) + OVERSCAN,
+  );
+  const visibleItems = flatLayers.slice(startIndex, endIndex);
+  const translateY = startIndex * ROW_HEIGHT;
 
   return (
     <div className="flex-1 bg-surface-panel flex flex-col select-none overflow-hidden">
@@ -510,22 +556,28 @@ export function LayersPanel() {
           Layers
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto" onDragEnd={handleDragEnd}>
+      <div
+        className="flex-1 overflow-y-auto"
+        onDragEnd={handleDragEnd}
+        ref={scrollRef}
+      >
         {reversedNodes.length === 0 ? (
           <div className="text-text-disabled text-xs text-center p-5">
             No layers yet
           </div>
         ) : (
-          <LayerList
-            nodes={reversedNodes}
-            depth={0}
-            parentId={null}
-            dragState={dragState}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDragEnd={handleDragEnd}
-            onDrop={handleDrop}
-          />
+          <div style={{ height: totalHeight, position: "relative" }}>
+            <div style={{ transform: `translateY(${translateY}px)` }}>
+              <LayerList
+                items={visibleItems}
+                dragState={dragState}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDragEnd={handleDragEnd}
+                onDrop={handleDrop}
+              />
+            </div>
+          </div>
         )}
       </div>
     </div>

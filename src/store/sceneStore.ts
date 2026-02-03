@@ -137,24 +137,36 @@ function updateNodeRecursive(
   nodes: SceneNode[],
   id: string,
   updates: Partial<SceneNode>,
-): SceneNode[] {
-  return nodes.map((node) => {
+): { nodes: SceneNode[]; found: boolean } {
+  const nextNodes: SceneNode[] = [];
+
+  for (let i = 0; i < nodes.length; i += 1) {
+    const node = nodes[i];
     if (node.id === id) {
       let updated = { ...node, ...updates } as SceneNode;
       // Auto-sync text dimensions when relevant properties change
       if (updated.type === "text" && hasTextMeasureProps(updates)) {
         updated = syncTextDimensions(updated);
       }
-      return updated;
+      nextNodes.push(updated, ...nodes.slice(i + 1));
+      return { nodes: nextNodes, found: true };
     }
+
     if (isContainerNode(node)) {
-      return {
-        ...node,
-        children: updateNodeRecursive(node.children, id, updates),
-      } as FrameNode | GroupNode;
+      const result = updateNodeRecursive(node.children, id, updates);
+      if (result.found) {
+        nextNodes.push({ ...node, children: result.nodes } as FrameNode | GroupNode);
+        nextNodes.push(...nodes.slice(i + 1));
+        return { nodes: nextNodes, found: true };
+      }
+      nextNodes.push(node);
+      continue;
     }
-    return node;
-  });
+
+    nextNodes.push(node);
+  }
+
+  return { nodes, found: false };
 }
 
 // Helper to recursively delete a node anywhere in the tree
@@ -738,12 +750,12 @@ export const useSceneStore = create<SceneState>((set) => ({
   updateNode: (id, updates) =>
     set((state) => {
       useHistoryStore.getState().saveHistory(state.nodes);
-      return { nodes: updateNodeRecursive(state.nodes, id, updates) };
+      return { nodes: updateNodeRecursive(state.nodes, id, updates).nodes };
     }),
 
   updateNodeWithoutHistory: (id, updates) =>
     set((state) => ({
-      nodes: updateNodeRecursive(state.nodes, id, updates),
+      nodes: updateNodeRecursive(state.nodes, id, updates).nodes,
     })),
 
   deleteNode: (id) =>

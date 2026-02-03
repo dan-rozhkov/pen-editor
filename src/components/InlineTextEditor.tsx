@@ -17,6 +17,9 @@ interface InlineTextEditorProps {
 export function InlineTextEditor({ node, absoluteX, absoluteY }: InlineTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const currentTextRef = useRef(node.text) // Track current value for unmount save
+  const pendingTextRef = useRef<string | null>(null)
+  const rafIdRef = useRef<number | null>(null)
+  const lastCommittedRef = useRef(node.text)
   const updateNodeWithoutHistory = useSceneStore(
     (state) => state.updateNodeWithoutHistory,
   )
@@ -45,6 +48,46 @@ export function InlineTextEditor({ node, absoluteX, absoluteY }: InlineTextEdito
   if (node.underline) textDecorationParts.push('underline')
   if (node.strikethrough) textDecorationParts.push('line-through')
 
+  const commitText = useCallback(
+    (text: string) => {
+      if (text === lastCommittedRef.current) return
+      lastCommittedRef.current = text
+      updateNodeWithoutHistory(node.id, { text })
+    },
+    [node.id, updateNodeWithoutHistory],
+  )
+
+  const flushPendingText = useCallback(
+    (textOverride?: string) => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current)
+        rafIdRef.current = null
+      }
+      const text = textOverride ?? pendingTextRef.current
+      pendingTextRef.current = null
+      if (text !== undefined && text !== null) {
+        commitText(text)
+      }
+    },
+    [commitText],
+  )
+
+  const scheduleCommit = useCallback(
+    (text: string) => {
+      pendingTextRef.current = text
+      if (rafIdRef.current !== null) return
+      rafIdRef.current = requestAnimationFrame(() => {
+        rafIdRef.current = null
+        const pending = pendingTextRef.current
+        pendingTextRef.current = null
+        if (pending !== null) {
+          commitText(pending)
+        }
+      })
+    },
+    [commitText],
+  )
+
   const submit = useCallback(() => {
     const el = editorRef.current
     if (!el) {
@@ -55,20 +98,21 @@ export function InlineTextEditor({ node, absoluteX, absoluteY }: InlineTextEdito
     const text = el.innerText ?? el.textContent ?? ''
     const trimmed = text.trim()
     if (trimmed && trimmed !== node.text) {
-      updateNodeWithoutHistory(node.id, { text: trimmed })
+      flushPendingText(trimmed)
     }
     stopEditing()
-  }, [node.id, node.text, updateNodeWithoutHistory, stopEditing])
+  }, [node.text, stopEditing, flushPendingText])
 
   // Save on unmount (DOM element is already gone, so read from ref)
   useEffect(() => {
     return () => {
+      flushPendingText()
       const trimmed = currentTextRef.current.trim()
       if (trimmed && trimmed !== node.text) {
-        updateNodeWithoutHistory(node.id, { text: trimmed })
+        commitText(trimmed)
       }
     }
-  }, [node.id, node.text, updateNodeWithoutHistory])
+  }, [node.text, commitText, flushPendingText])
 
   // Focus and select all text on mount
   useEffect(() => {
@@ -94,6 +138,7 @@ export function InlineTextEditor({ node, absoluteX, absoluteY }: InlineTextEdito
       el.innerText = node.text
       currentTextRef.current = node.text
     }
+    lastCommittedRef.current = node.text
   }, [node.text])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -114,7 +159,7 @@ export function InlineTextEditor({ node, absoluteX, absoluteY }: InlineTextEdito
       const text = el.innerText ?? el.textContent ?? ''
       currentTextRef.current = text
       if (text !== node.text) {
-        updateNodeWithoutHistory(node.id, { text })
+        scheduleCommit(text)
       }
     }
   }
