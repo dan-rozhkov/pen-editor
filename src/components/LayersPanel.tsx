@@ -111,7 +111,6 @@ interface LayerItemProps {
     position: DropPosition,
     parentId: string | null,
   ) => void;
-  onDragEnd: () => void;
   onDrop: () => void;
 }
 
@@ -122,7 +121,6 @@ const LayerItem = memo(function LayerItem({
   dragState,
   onDragStart,
   onDragOver,
-  onDragEnd,
   onDrop,
 }: LayerItemProps) {
   const { selectedIds, select, addToSelection } = useSelectionStore();
@@ -370,7 +368,6 @@ interface LayerListProps {
     position: DropPosition,
     parentId: string | null,
   ) => void;
-  onDragEnd: () => void;
   onDrop: () => void;
 }
 
@@ -379,7 +376,6 @@ function LayerList({
   dragState,
   onDragStart,
   onDragOver,
-  onDragEnd,
   onDrop,
 }: LayerListProps) {
   return (
@@ -393,7 +389,6 @@ function LayerList({
           dragState={dragState}
           onDragStart={onDragStart}
           onDragOver={onDragOver}
-          onDragEnd={onDragEnd}
           onDrop={onDrop}
         />
       ))}
@@ -591,7 +586,6 @@ export function LayersPanel() {
                 dragState={dragState}
                 onDragStart={handleDragStart}
                 onDragOver={handleDragOver}
-                onDragEnd={handleDragEnd}
                 onDrop={handleDrop}
               />
             </div>
