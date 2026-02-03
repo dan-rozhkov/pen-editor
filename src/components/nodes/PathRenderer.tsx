@@ -163,14 +163,28 @@ export function PathRenderer({
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
         clipFunc={
-          node.clipGeometry
+          node.clipGeometry && node.clipBounds
             ? (ctx) => {
-                const ctx2d = ctx._context;
-                // Apply same transform as the main path geometry
-                ctx2d.translate(geoOffsetX, geoOffsetY);
-                ctx2d.scale(scaleX, scaleY);
-                // Trace the clip path so Konva's clip() will use it
-                traceSvgPathOnContext(ctx2d, node.clipGeometry!);
+                // The clip path is in original SVG coordinates.
+                // We need to transform it to the Group's local coordinate space.
+                // The Group is positioned at the path's geometryBounds origin,
+                // so clip origin (0,0) in SVG space = (-geometryBounds.x, -geometryBounds.y) in local space.
+                const clipOffsetX = -(geometryBounds?.x ?? 0);
+                const clipOffsetY = -(geometryBounds?.y ?? 0);
+
+                // Scale the clip to match any node resizing
+                const clipScaleX = scaleX;
+                const clipScaleY = scaleY;
+
+                // Draw a simple rect for the clip (most clip-paths are rectangles)
+                // This is more reliable than tracing complex paths
+                const cb = node.clipBounds!;
+                ctx.rect(
+                  (cb.x + clipOffsetX) * clipScaleX,
+                  (cb.y + clipOffsetY) * clipScaleY,
+                  cb.width * clipScaleX,
+                  cb.height * clipScaleY
+                );
               }
             : undefined
         }
