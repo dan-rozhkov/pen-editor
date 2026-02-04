@@ -153,11 +153,11 @@
       "passed": true
     },
     {
-      "name": "pixso-frame-import",
-      "passed": false
+      "name": "shift-range-selection-layers",
+      "passed": true
     },
     {
-      "name": "shift-range-selection-layers",
+      "name": "pixso-frame-import",
       "passed": false
     }
   ]

@@ -112,6 +112,7 @@ interface LayerItemProps {
     parentId: string | null,
   ) => void;
   onDrop: () => void;
+  flatIds: string[];
 }
 
 const LayerItem = memo(function LayerItem({
@@ -122,8 +123,9 @@ const LayerItem = memo(function LayerItem({
   onDragStart,
   onDragOver,
   onDrop,
+  flatIds,
 }: LayerItemProps) {
-  const { selectedIds, select, addToSelection } = useSelectionStore();
+  const { selectedIds, select, addToSelection, lastSelectedId, selectRange } = useSelectionStore();
   const { setHoveredNode } = useHoverStore();
   const toggleVisibility = useSceneStore((state) => state.toggleVisibility);
   const expandedFrameIds = useSceneStore((state) => state.expandedFrameIds);
@@ -155,7 +157,9 @@ const LayerItem = memo(function LayerItem({
   const isDropTarget = dragState.dropTargetId === node.id;
 
   const handleClick = (e: React.MouseEvent) => {
-    if (e.shiftKey) {
+    if (e.shiftKey && lastSelectedId) {
+      selectRange(lastSelectedId, node.id, flatIds);
+    } else if (e.shiftKey) {
       addToSelection(node.id);
     } else {
       select(node.id);
@@ -369,6 +373,7 @@ interface LayerListProps {
     parentId: string | null,
   ) => void;
   onDrop: () => void;
+  flatIds: string[];
 }
 
 function LayerList({
@@ -377,6 +382,7 @@ function LayerList({
   onDragStart,
   onDragOver,
   onDrop,
+  flatIds,
 }: LayerListProps) {
   return (
     <>
@@ -390,6 +396,7 @@ function LayerList({
           onDragStart={onDragStart}
           onDragOver={onDragOver}
           onDrop={onDrop}
+          flatIds={flatIds}
         />
       ))}
     </>
@@ -518,6 +525,10 @@ export function LayersPanel() {
     () => flattenLayers(reversedNodes, expandedFrameIds),
     [reversedNodes, expandedFrameIds],
   );
+  const flatIds = useMemo(
+    () => flatLayers.map((l) => l.node.id),
+    [flatLayers],
+  );
   const totalHeight = flatLayers.length * ROW_HEIGHT;
 
   useEffect(() => {
@@ -587,6 +598,7 @@ export function LayersPanel() {
                 onDragStart={handleDragStart}
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
+                flatIds={flatIds}
               />
             </div>
           </div>

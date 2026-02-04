@@ -18,6 +18,8 @@ interface SelectionState {
   instanceContext: InstanceContext | null
   // Nested selection: the container the user has drilled into via double-click
   enteredContainerId: string | null
+  // Last selected node ID for range selection
+  lastSelectedId: string | null
 
   select: (id: string) => void
   setSelectedIds: (ids: string[]) => void
@@ -25,6 +27,7 @@ interface SelectionState {
   removeFromSelection: (id: string) => void
   clearSelection: () => void
   isSelected: (id: string) => boolean
+  selectRange: (fromId: string, toId: string, flatIds: string[]) => void
   startEditing: (id: string) => void
   startNameEditing: (id: string) => void
   stopEditing: () => void
@@ -45,6 +48,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   editingInstanceId: null,
   instanceContext: null,
   enteredContainerId: null,
+  lastSelectedId: null,
 
   select: (id: string) => {
     // Stop editing and exit instance mode when selection changes
@@ -53,7 +57,8 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       editingNodeId: null,
       editingMode: null,
       editingInstanceId: null,
-      instanceContext: null
+      instanceContext: null,
+      lastSelectedId: id
     })
   },
 
@@ -63,7 +68,8 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       editingNodeId: null,
       editingMode: null,
       editingInstanceId: null,
-      instanceContext: null
+      instanceContext: null,
+      lastSelectedId: ids.length > 0 ? ids[ids.length - 1] : null
     })
   },
 
@@ -92,6 +98,30 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
 
   isSelected: (id: string) => {
     return get().selectedIds.includes(id)
+  },
+
+  selectRange: (fromId: string, toId: string, flatIds: string[]) => {
+    const fromIndex = flatIds.indexOf(fromId)
+    const toIndex = flatIds.indexOf(toId)
+
+    if (fromIndex === -1 || toIndex === -1) {
+      // One of the IDs not found in the flat list, fall back to single selection
+      set({ selectedIds: [toId], lastSelectedId: toId })
+      return
+    }
+
+    const minIndex = Math.min(fromIndex, toIndex)
+    const maxIndex = Math.max(fromIndex, toIndex)
+    const rangeIds = flatIds.slice(minIndex, maxIndex + 1)
+
+    set({
+      selectedIds: rangeIds,
+      editingNodeId: null,
+      editingMode: null,
+      editingInstanceId: null,
+      instanceContext: null,
+      lastSelectedId: toId
+    })
   },
 
   startEditing: (id: string) => {
