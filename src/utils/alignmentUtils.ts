@@ -1,4 +1,4 @@
-import type { FrameNode, SceneNode } from '../types/scene'
+import type { FrameNode, GroupNode, SceneNode } from '../types/scene'
 import { findNodeById, findParentFrame, getNodeAbsolutePosition } from './nodeUtils'
 import { calculateFrameIntrinsicSize } from './yogaLayout'
 
@@ -234,4 +234,56 @@ export function distributeSpacing(
   }
 
   return updates
+}
+
+/**
+ * Align a single node within its parent frame/group boundaries.
+ * Returns position update to apply.
+ */
+export function alignNodeInFrame(
+  allNodes: SceneNode[],
+  nodeId: string,
+  parentFrame: FrameNode | GroupNode,
+  alignment: AlignmentType
+): { id: string; x?: number; y?: number } | null {
+  const node = findNodeById(allNodes, nodeId)
+  if (!node) return null
+
+  const { width: nodeWidth, height: nodeHeight } = getEffectiveDimensions(node)
+  const frameWidth = parentFrame.width
+  const frameHeight = parentFrame.height
+
+  let newX = node.x
+  let newY = node.y
+
+  switch (alignment) {
+    case 'left':
+      newX = 0
+      break
+    case 'centerH':
+      newX = (frameWidth - nodeWidth) / 2
+      break
+    case 'right':
+      newX = frameWidth - nodeWidth
+      break
+    case 'top':
+      newY = 0
+      break
+    case 'centerV':
+      newY = (frameHeight - nodeHeight) / 2
+      break
+    case 'bottom':
+      newY = frameHeight - nodeHeight
+      break
+  }
+
+  const update: { id: string; x?: number; y?: number } = { id: nodeId }
+  if (alignment === 'left' || alignment === 'centerH' || alignment === 'right') {
+    update.x = Math.round(newX)
+  }
+  if (alignment === 'top' || alignment === 'centerV' || alignment === 'bottom') {
+    update.y = Math.round(newY)
+  }
+
+  return update
 }

@@ -11,11 +11,12 @@ import { useHistoryStore } from "@/store/historyStore";
 import { useSceneStore } from "@/store/sceneStore";
 import {
   alignNodes,
+  alignNodeInFrame,
   calculateSpacing,
   distributeSpacing,
   type AlignmentType,
 } from "@/utils/alignmentUtils";
-import type { FrameNode, SceneNode } from "@/types/scene";
+import type { FrameNode, GroupNode, SceneNode } from "@/types/scene";
 import { PropertySection } from "@/components/ui/PropertyInputs";
 import { Input } from "@/components/ui/input";
 
@@ -23,15 +24,27 @@ interface AlignmentSectionProps {
   count: number;
   selectedIds: string[];
   nodes: SceneNode[];
+  parentFrame?: FrameNode | GroupNode | null;
 }
 
 export function AlignmentSection({
   count,
   selectedIds,
   nodes,
+  parentFrame,
 }: AlignmentSectionProps) {
+  const isSingleNodeInFrame = count === 1 && parentFrame != null;
+
   const handleAlign = (alignment: AlignmentType) => {
-    const updates = alignNodes(selectedIds, nodes, alignment);
+    let updates: { id: string; x?: number; y?: number }[];
+
+    if (isSingleNodeInFrame) {
+      const update = alignNodeInFrame(nodes, selectedIds[0], parentFrame, alignment);
+      updates = update ? [update] : [];
+    } else {
+      updates = alignNodes(selectedIds, nodes, alignment);
+    }
+
     if (updates.length === 0) return;
 
     useHistoryStore.getState().saveHistory(nodes);
@@ -122,14 +135,18 @@ export function AlignmentSection({
           </button>
         </div>
       </PropertySection>
-      <SpacingInput
-        selectedIds={selectedIds}
-        nodes={nodes}
-        applyUpdateRecursive={applyUpdateRecursive}
-      />
-      <div className="text-text-muted text-xs text-center">
-        {count} layers selected
-      </div>
+      {!isSingleNodeInFrame && (
+        <>
+          <SpacingInput
+            selectedIds={selectedIds}
+            nodes={nodes}
+            applyUpdateRecursive={applyUpdateRecursive}
+          />
+          <div className="text-text-muted text-xs text-center">
+            {count} layers selected
+          </div>
+        </>
+      )}
     </div>
   );
 }

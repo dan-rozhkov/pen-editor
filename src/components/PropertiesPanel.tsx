@@ -211,11 +211,12 @@ export function PropertiesPanel() {
             </div>
           </div>
         )}
-        {selectedIds.length > 1 && (
+        {(selectedIds.length > 1 || (selectedIds.length === 1 && parentContext.parent && !parentContext.isInsideAutoLayout)) && (
           <AlignmentSection
             count={selectedIds.length}
             selectedIds={selectedIds}
             nodes={nodes}
+            parentFrame={parentContext.parent}
           />
         )}
         {/* If editing a descendant inside an instance, show descendant editor */}

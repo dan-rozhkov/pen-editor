@@ -150,10 +150,14 @@
     },
     {
       "name": "alignment-inside-frame",
-      "passed": false
+      "passed": true
     },
     {
       "name": "pixso-frame-import",
+      "passed": false
+    },
+    {
+      "name": "shift-range-selection-layers",
       "passed": false
     }
   ]
