@@ -12,6 +12,7 @@ import {
   findParentFrameInComponent,
 } from "@/utils/nodeUtils";
 import { parseSvgToNodes } from "@/utils/svgUtils";
+import { detectPixsoClipboard, parseAndConvertPixso } from "@/utils/pixsoUtils";
 
 interface CanvasKeyboardShortcutsParams {
   nodes: SceneNode[];
@@ -482,7 +483,7 @@ export function useCanvasKeyboardShortcuts({
       }
     };
 
-    const handlePaste = (e: ClipboardEvent) => {
+    const handlePaste = async (e: ClipboardEvent) => {
       const target = e.target as HTMLElement;
       const isTyping =
         target.tagName === "INPUT" ||
@@ -490,6 +491,69 @@ export function useCanvasKeyboardShortcuts({
         target.isContentEditable;
       if (isTyping) return;
 
+      // Try async clipboard API for text/html (Pixso/Figma format)
+      try {
+        console.log("[Paste] Attempting async clipboard read...");
+        const items = await navigator.clipboard.read();
+        console.log("[Paste] Clipboard items:", items.length);
+        for (const item of items) {
+          console.log("[Paste] Item types:", item.types);
+          if (item.types.includes("text/html")) {
+            const blob = await item.getType("text/html");
+            const html = await blob.text();
+            console.log("[Paste] Got text/html, length:", html.length);
+            console.log("[Paste] HTML content:", html.substring(0, 500));
+
+            const isPixso = detectPixsoClipboard(html);
+            console.log("[Paste] Is Pixso/Figma clipboard:", isPixso);
+
+            if (isPixso) {
+              console.log("[Paste] Detected Pixso/Figma clipboard data");
+              e.preventDefault();
+              const nodes = parseAndConvertPixso(html);
+              console.log("[Paste] Parsed nodes:", nodes.length);
+              if (nodes.length > 0) {
+                // Place at viewport center
+                const { x: vpX, y: vpY, scale } = useViewportStore.getState();
+                const viewportCenterX = (-vpX + window.innerWidth / 2) / scale;
+                const viewportCenterY = (-vpY + window.innerHeight / 2) / scale;
+
+                // Calculate bounding box of all nodes
+                const minX = Math.min(...nodes.map((n) => n.x));
+                const minY = Math.min(...nodes.map((n) => n.y));
+                const maxX = Math.max(...nodes.map((n) => n.x + n.width));
+                const maxY = Math.max(...nodes.map((n) => n.y + n.height));
+                const totalWidth = maxX - minX;
+                const totalHeight = maxY - minY;
+
+                // Offset all nodes to center them
+                const offsetX = viewportCenterX - totalWidth / 2 - minX;
+                const offsetY = viewportCenterY - totalHeight / 2 - minY;
+
+                for (const node of nodes) {
+                  node.x += offsetX;
+                  node.y += offsetY;
+                  addNode(node);
+                }
+
+                useSelectionStore.getState().setSelectedIds(nodes.map((n) => n.id));
+                return;
+              }
+            } else {
+              console.log("[Paste] Not Pixso/Figma format, checking markers...");
+              console.log("[Paste] Has pixsometa:", html.includes("pixsometa"));
+              console.log("[Paste] Has pixso):", html.includes("pixso)"));
+              console.log("[Paste] Has figmeta:", html.includes("figmeta"));
+              console.log("[Paste] Has figma):", html.includes("figma)"));
+            }
+          }
+        }
+      } catch (err) {
+        // Async clipboard not available or permission denied, fall through to sync
+        console.log("[Paste] Async clipboard failed:", err);
+      }
+
+      // Fallback: Synchronous clipboard access for SVG text/plain
       const text = e.clipboardData?.getData("text/plain")?.trim();
       if (!text) return;
 

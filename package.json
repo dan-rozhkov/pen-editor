@@ -15,6 +15,8 @@
     "@tailwindcss/vite": "^4.1.18",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "fig-kiwi": "^0.0.1",
+    "fzstd": "^0.1.1",
     "konva": "^10.2.0",
     "react": "^19.2.0",
     "react-aria-components": "^1.14.0",
