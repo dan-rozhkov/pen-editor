@@ -165,7 +165,15 @@
       "passed": true
     },
     {
+      "name": "pixso-json-import",
+      "passed": true
+    },
+    {
       "name": "component-slots",
+      "passed": false
+    },
+    {
+      "name": "dark-theme-interface",
       "passed": false
     }
   ]
