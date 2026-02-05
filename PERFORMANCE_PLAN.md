@@ -142,7 +142,7 @@ Wrap event handlers in `useCallback`. Use `useRef` for values that change freque
 
 ## Phase 4: PixiJS Migration (Konva -> WebGL)
 
-**Status**: Phases 1, 3 complete. Phase 4 core implementation complete (4.1-4.10).
+**Status**: Phases 1, 3 complete. Phase 4 complete — PixiJS is now the default renderer. Konva files remain as dead code pending cleanup.
 
 ### Architecture Overview
 
@@ -460,15 +460,16 @@ Phase 1 (Flat Map) -- FIRST, foundation for everything
   - [x] Image fills: `Sprite` + `Assets.load` with cover/fit/stretch modes, elliptical/rounded clipping
   - [x] Shadow effects: `BlurFilter` on offset shadow Graphics layer, applied via `applyShadow()` in renderers
   - [x] Transform handle dragging: resize via corner handles in `pixiInteraction.ts`, commits with history
-  - [ ] **TODO: Auto-layout drag reordering** — free drag works, auto-layout reorder not ported
+  - [x] Auto-layout drag reordering: detects auto-layout parent, shows drop indicator via `dragStore`, reorders via `moveNode()` or extracts to root
   - [x] Frame name labels: rendered in `SelectionOverlay.ts` for top-level frames and selected frames
   - [x] Node size labels: rendered below selection bounding box with blue/purple background pill
   - [x] Drawing preview rect: drawn in `OverlayRenderer.ts` via `useDrawModeStore` subscription
   - [x] Marquee selection visual: blue rect during drag via `pixiOverlayState.ts` shared state
   - [x] Theme/variable change re-render: `pixiSync.ts` subscribes to theme/variable stores, triggers full rebuild
   - [x] Frame caching: `cacheAsTexture(true)` for frames with 30+ children
+  - [x] Make PixiJS default: removed Konva `Canvas` conditional, `App.tsx` always renders `PixiCanvas`
   - [ ] **TODO: Visual regression testing** against Konva renderer
-  - [ ] **TODO: Remove Konva** — make PixiJS the default, remove `konva`/`react-konva` deps
+  - [ ] **TODO: Remove Konva files** — delete old Konva components + remove `konva`/`react-konva` deps
 - [ ] Phase 5: Advanced optimizations
 
 ## Expected Impact

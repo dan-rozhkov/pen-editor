@@ -5,7 +5,9 @@ import { useHoverStore } from "@/store/hoverStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useSmartGuideStore } from "@/store/smartGuideStore";
-import type { SceneNode } from "@/types/scene";
+import { useDragStore } from "@/store/dragStore";
+import { useLayoutStore } from "@/store/layoutStore";
+import type { SceneNode, FrameNode, FlatFrameNode } from "@/types/scene";
 import { generateId } from "@/types/scene";
 import {
   collectSnapTargets,
@@ -14,6 +16,11 @@ import {
   type SnapTarget,
 } from "@/utils/smartGuideUtils";
 import { getNodeAbsolutePosition } from "@/utils/nodeUtils";
+import {
+  calculateDropPosition,
+  isPointInsideRect,
+  getFrameAbsoluteRectWithLayout,
+} from "@/utils/dragUtils";
 import { setMarqueeRect } from "./pixiOverlayState";
 
 interface DragState {
@@ -28,6 +35,9 @@ interface DragState {
   snapTargets: SnapTarget[];
   snapOffsetX: number;
   snapOffsetY: number;
+  // Auto-layout drag reordering
+  isAutoLayoutDrag: boolean;
+  autoLayoutParentId: string | null;
 }
 
 interface PanState {
@@ -90,6 +100,8 @@ export function setupPixiInteraction(
     snapTargets: [],
     snapOffsetX: 0,
     snapOffsetY: 0,
+    isAutoLayoutDrag: false,
+    autoLayoutParentId: null,
   };
 
   const pan: PanState = {
@@ -250,6 +262,23 @@ export function setupPixiInteraction(
     }
   }
 
+  /**
+   * Find a tree-based FrameNode by ID in the tree structure.
+   */
+  function findFrameInTree(nodes: SceneNode[], frameId: string): FrameNode | null {
+    for (const node of nodes) {
+      if (node.id === frameId && node.type === "frame") return node as FrameNode;
+      if (node.type === "frame" || node.type === "group") {
+        const children = (node as FrameNode).children;
+        if (children) {
+          const found = findFrameInTree(children, frameId);
+          if (found) return found;
+        }
+      }
+    }
+    return null;
+  }
+
   // --- Wheel handler ---
 
   function handleWheel(e: WheelEvent): void {
@@ -361,6 +390,23 @@ export function setupPixiInteraction(
         drag.startNodeY = node.y;
         drag.snapOffsetX = 0;
         drag.snapOffsetY = 0;
+        drag.isAutoLayoutDrag = false;
+        drag.autoLayoutParentId = null;
+
+        // Check if node is inside an auto-layout frame
+        const parentId = state.parentById[hitId];
+        if (parentId) {
+          const parentNode = state.nodesById[parentId];
+          if (
+            parentNode &&
+            parentNode.type === "frame" &&
+            (parentNode as FlatFrameNode).layout?.autoLayout
+          ) {
+            drag.isAutoLayoutDrag = true;
+            drag.autoLayoutParentId = parentId;
+            useDragStore.getState().startDrag(hitId);
+          }
+        }
 
         // Compute parent offset for absolute position
         const nodes = state.getNodes();
@@ -373,10 +419,14 @@ export function setupPixiInteraction(
           drag.parentOffsetY = 0;
         }
 
-        // Collect snap targets
-        const selectedIds = useSelectionStore.getState().selectedIds;
-        const excludeIds = new Set(selectedIds);
-        drag.snapTargets = collectSnapTargets(nodes, excludeIds);
+        // Collect snap targets (skip for auto-layout drags)
+        if (!drag.isAutoLayoutDrag) {
+          const selectedIds = useSelectionStore.getState().selectedIds;
+          const excludeIds = new Set(selectedIds);
+          drag.snapTargets = collectSnapTargets(nodes, excludeIds);
+        } else {
+          drag.snapTargets = [];
+        }
       } else {
         // Click on background
         useSelectionStore.getState().clearSelection();
@@ -466,7 +516,38 @@ export function setupPixiInteraction(
       return;
     }
 
-    // Dragging node
+    // Auto-layout drag reordering
+    if (drag.isDragging && drag.nodeId && drag.isAutoLayoutDrag && drag.autoLayoutParentId) {
+      const state = useSceneStore.getState();
+      const nodes = state.getNodes();
+      const parentFrame = findFrameInTree(nodes, drag.autoLayoutParentId);
+      if (parentFrame) {
+        const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+        const frameRect = getFrameAbsoluteRectWithLayout(parentFrame, nodes, calculateLayoutForFrame);
+        const cursorInParent = isPointInsideRect(world, frameRect);
+
+        if (cursorInParent) {
+          const layoutChildren = calculateLayoutForFrame(parentFrame);
+          const dropResult = calculateDropPosition(
+            world,
+            parentFrame,
+            { x: frameRect.x, y: frameRect.y },
+            drag.nodeId,
+            layoutChildren,
+          );
+          if (dropResult) {
+            useDragStore.getState().updateDrop(dropResult.indicator, dropResult.insertInfo, false);
+          } else {
+            useDragStore.getState().updateDrop(null, null, false);
+          }
+        } else {
+          useDragStore.getState().updateDrop(null, null, true);
+        }
+      }
+      return;
+    }
+
+    // Dragging node (free drag)
     if (drag.isDragging && drag.nodeId) {
       const deltaX = world.x - drag.startWorldX;
       const deltaY = world.y - drag.startWorldY;
@@ -581,7 +662,38 @@ export function setupPixiInteraction(
       return;
     }
 
-    // End dragging
+    // End auto-layout drag
+    if (drag.isDragging && drag.nodeId && drag.isAutoLayoutDrag) {
+      const dragStore = useDragStore.getState();
+      const nodeId = drag.nodeId;
+      const state = useSceneStore.getState();
+      const node = state.nodesById[nodeId];
+
+      if (dragStore.isOutsideParent && node) {
+        // Dragged out of auto-layout frame - extract to root level
+        useSceneStore.getState().moveNode(nodeId, null, 0);
+        useSceneStore.getState().updateNode(nodeId, {
+          x: Math.round(world.x - node.width / 2),
+          y: Math.round(world.y - node.height / 2),
+        });
+      } else if (dragStore.insertInfo) {
+        // Reorder within the frame
+        useSceneStore.getState().moveNode(
+          nodeId,
+          dragStore.insertInfo.parentId,
+          dragStore.insertInfo.index,
+        );
+      }
+
+      dragStore.endDrag();
+      drag.isDragging = false;
+      drag.nodeId = null;
+      drag.isAutoLayoutDrag = false;
+      drag.autoLayoutParentId = null;
+      return;
+    }
+
+    // End dragging (free drag)
     if (drag.isDragging && drag.nodeId) {
       useSmartGuideStore.getState().clearGuides();
 
