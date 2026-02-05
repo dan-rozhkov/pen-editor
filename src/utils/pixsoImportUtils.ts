@@ -167,7 +167,7 @@ function extractCornerRadius(node: PixsoNode): number | undefined {
     node.topRightRadius,
     node.bottomLeftRadius,
     node.bottomRightRadius,
-  ].filter((r) => r !== undefined && r > 0);
+  ].filter((r): r is number => r !== undefined && r > 0);
   if (radii.length > 0) return Math.max(...radii);
   return undefined;
 }
