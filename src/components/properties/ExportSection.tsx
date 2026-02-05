@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
+import { useViewportStore } from "@/store/viewportStore";
 import { exportImage, type ExportFormat, type ExportScale } from "@/utils/exportUtils";
 import type { SceneNode } from "@/types/scene";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ interface ExportSectionProps {
 
 export function ExportSection({ selectedNode }: ExportSectionProps) {
   const stageRef = useCanvasRefStore((s) => s.stageRef);
+  const viewportScale = useViewportStore((s) => s.scale);
   const [scale, setScale] = useState<ExportScale>(1);
   const [format, setFormat] = useState<ExportFormat>("png");
 
@@ -24,6 +26,7 @@ export function ExportSection({ selectedNode }: ExportSectionProps) {
     exportImage(stageRef, selectedNode?.id || null, selectedNode?.name, {
       format,
       scale,
+      viewportScale,
     });
   };
 

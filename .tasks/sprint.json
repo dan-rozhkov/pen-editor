@@ -159,6 +159,14 @@
     {
       "name": "pixso-frame-import",
       "passed": true
+    },
+    {
+      "name": "fix-export-scale-bug",
+      "passed": true
+    },
+    {
+      "name": "component-slots",
+      "passed": false
     }
   ]
 }

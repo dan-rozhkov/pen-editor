@@ -6,6 +6,7 @@ export type ExportScale = 1 | 2 | 3
 interface ExportOptions {
   format: ExportFormat
   scale: ExportScale
+  viewportScale?: number
   filename?: string
 }
 
@@ -56,7 +57,7 @@ export function exportNodeAsImage(
   nodeId: string,
   options: ExportOptions
 ): boolean {
-  const { format, scale, filename } = options
+  const { format, scale, viewportScale = 1, filename } = options
 
   // Find the node by ID
   const node = stage.findOne(`#${nodeId}`)
@@ -66,9 +67,9 @@ export function exportNodeAsImage(
   }
 
   try {
-    // Get node dimensions for proper export
+    // Compensate for viewport zoom so export size matches real node dimensions
     const dataUrl = node.toDataURL({
-      pixelRatio: scale,
+      pixelRatio: scale / viewportScale,
       mimeType: getMimeType(format),
       quality: format === 'jpeg' ? 0.92 : undefined,
     })
@@ -93,12 +94,12 @@ export function exportCanvasAsImage(
   stage: Konva.Stage,
   options: ExportOptions
 ): boolean {
-  const { format, scale, filename } = options
+  const { format, scale, viewportScale = 1, filename } = options
 
   try {
-    // Export the entire stage
+    // Compensate for viewport zoom so export size matches real canvas dimensions
     const dataUrl = stage.toDataURL({
-      pixelRatio: scale,
+      pixelRatio: scale / viewportScale,
       mimeType: getMimeType(format),
       quality: format === 'jpeg' ? 0.92 : undefined,
     })
@@ -125,7 +126,7 @@ export function exportImage(
   nodeName: string | undefined,
   options: Omit<ExportOptions, 'filename'>
 ): boolean {
-  const { format, scale } = options
+  const { format, scale, viewportScale = 1 } = options
 
   if (nodeId) {
     // Try to export the specific node
@@ -135,10 +136,10 @@ export function exportImage(
       const sanitizedName = name.replace(/[^a-zA-Z0-9_-]/g, '_')
       const filename = generateFilename(sanitizedName, format, scale)
 
-      return exportNodeAsImage(stage, nodeId, { format, scale, filename })
+      return exportNodeAsImage(stage, nodeId, { format, scale, viewportScale, filename })
     }
   }
 
   // Fall back to exporting the entire canvas
-  return exportCanvasAsImage(stage, { format, scale })
+  return exportCanvasAsImage(stage, { format, scale, viewportScale })
 }
