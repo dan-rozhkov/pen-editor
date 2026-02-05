@@ -214,16 +214,20 @@ function extractGradient(fills?: PixsoPaint[]): GradientFill | undefined {
 function extractStroke(
   strokes?: PixsoPaint[],
   strokeWeight?: number
-): { stroke?: string; strokeWidth?: number } {
+): { stroke?: string; strokeWidth?: number; strokeOpacity?: number } {
   if (!strokes || !strokes.length || !strokeWeight) return {};
   const solid = strokes.find(
     (p) => p.type === "SOLID" && p.visible !== false
   ) as PixsoSolidPaint | undefined;
   if (!solid) return {};
-  return {
+  const result: { stroke: string; strokeWidth: number; strokeOpacity?: number } = {
     stroke: pixsoColorToHex(solid.color),
     strokeWidth: strokeWeight,
   };
+  if (solid.opacity !== undefined && solid.opacity < 1) {
+    result.strokeOpacity = solid.opacity;
+  }
+  return result;
 }
 
 function extractCornerRadius(node: PixsoNode): number | undefined {
@@ -412,7 +416,7 @@ export function convertPixsoNode(node: PixsoNode): SceneNode | null {
   // Extract appearance — only set properties that have actual values
   const { fill, fillOpacity } = extractFill(node.fills);
   const gradientFill = extractGradient(node.fills);
-  const { stroke, strokeWidth } = extractStroke(
+  const { stroke, strokeWidth, strokeOpacity } = extractStroke(
     node.strokes,
     node.strokeWeight
   );
@@ -422,6 +426,7 @@ export function convertPixsoNode(node: PixsoNode): SceneNode | null {
   if (gradientFill) base.gradientFill = gradientFill;
   if (stroke) base.stroke = stroke;
   if (strokeWidth) base.strokeWidth = strokeWidth;
+  if (strokeOpacity !== undefined) base.strokeOpacity = strokeOpacity;
 
   switch (node.type) {
     case "FRAME":
