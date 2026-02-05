@@ -60,6 +60,7 @@ function MeasureLineComponent({
         points={[x1, y1, x2, y2]}
         stroke={MEASURE_COLOR}
         strokeWidth={invScale}
+        perfectDrawEnabled={false}
         listening={false}
       />
       {/* End caps */}
@@ -67,12 +68,14 @@ function MeasureLineComponent({
         points={capPoints1}
         stroke={MEASURE_COLOR}
         strokeWidth={invScale}
+        perfectDrawEnabled={false}
         listening={false}
       />
       <Line
         points={capPoints2}
         stroke={MEASURE_COLOR}
         strokeWidth={invScale}
+        perfectDrawEnabled={false}
         listening={false}
       />
       {/* Label background */}
@@ -83,6 +86,7 @@ function MeasureLineComponent({
         height={boxHeight}
         fill={MEASURE_COLOR}
         cornerRadius={2 * invScale}
+        perfectDrawEnabled={false}
         listening={false}
       />
       {/* Label text */}
@@ -95,6 +99,7 @@ function MeasureLineComponent({
         fontSize={fontSize}
         fill="#ffffff"
         fontFamily="system-ui, sans-serif"
+        perfectDrawEnabled={false}
         listening={false}
       />
     </Group>

@@ -138,6 +138,7 @@ export function NodeSizeLabel({
         height={bgHeight}
         fill={labelBgColor}
         cornerRadius={LABEL_CORNER_RADIUS}
+        perfectDrawEnabled={false}
       />
       {/* Text */}
       <Text
@@ -148,6 +149,7 @@ export function NodeSizeLabel({
         fontSize={LABEL_FONT_SIZE}
         fontFamily="system-ui, -apple-system, sans-serif"
         fill={LABEL_TEXT_COLOR}
+        perfectDrawEnabled={false}
       />
     </Group>
   );

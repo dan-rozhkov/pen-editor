@@ -16,8 +16,6 @@ interface EllipseRendererProps {
   onClick: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
   onDragStart: () => void;
   onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => void;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
   fillColor?: string;
   strokeColor?: string;
   gradientProps?: Record<string, unknown>;
@@ -32,8 +30,6 @@ export function EllipseRenderer({
   onClick,
   onDragStart,
   onDragMove,
-  onMouseEnter,
-  onMouseLeave,
   fillColor,
   strokeColor,
   gradientProps,
@@ -113,6 +109,7 @@ export function EllipseRenderer({
       <Ellipse
         id={node.id}
         name="selectable"
+        perfectDrawEnabled={false}
         {...ellipseTransform}
         fill={node.imageFill || gradientProps ? undefined : fillColor}
         {...(gradientProps && !node.imageFill ? gradientProps : {})}
@@ -127,8 +124,6 @@ export function EllipseRenderer({
         onDragMove={onDragMove}
         onDragEnd={handleDragEnd}
         onTransformEnd={handleTransformEnd}
-        onMouseEnter={onMouseEnter}
-        onMouseLeave={onMouseLeave}
       />
       {node.imageFill && (
         <ImageFillLayer

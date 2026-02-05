@@ -25,8 +25,6 @@ interface TextRendererProps {
   onTransformStart: (e: Konva.KonvaEventObject<Event>) => void;
   onTransform: (e: Konva.KonvaEventObject<Event>) => void;
   onTransformEnd: (e: Konva.KonvaEventObject<Event>) => void;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
 }
 
 export function TextRenderer({
@@ -44,8 +42,6 @@ export function TextRenderer({
   onTransformStart,
   onTransform,
   onTransformEnd,
-  onMouseEnter,
-  onMouseLeave,
 }: TextRendererProps) {
   // For auto width mode, don't set width to let Konva calculate it from text
   const { width: textWidth, height: textHeight } = getTextDimensions(node);
@@ -57,6 +53,7 @@ export function TextRenderer({
       <Text
         id={node.id}
         name="selectable"
+        perfectDrawEnabled={false}
         {...textTransform}
         width={textWidth}
         height={textHeight ?? node.height}
@@ -83,8 +80,6 @@ export function TextRenderer({
         onTransformStart={onTransformStart}
         onTransform={onTransform}
         onTransformEnd={onTransformEnd}
-        onMouseEnter={onMouseEnter}
-        onMouseLeave={onMouseLeave}
       />
       {/* Hover outline */}
       {isHovered && (

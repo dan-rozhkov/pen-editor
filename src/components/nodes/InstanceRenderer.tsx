@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import Konva from "konva";
 import { Ellipse, Group, Rect, Text } from "react-konva";
 import type {
@@ -13,6 +14,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useVariableStore } from "@/store/variableStore";
+import { useDragStore } from "@/store/dragStore";
 import { resolveColor, applyOpacity } from "@/utils/colorUtils";
 import { buildKonvaGradientProps } from "@/utils/gradientUtils";
 import { findComponentById } from "@/utils/nodeUtils";
@@ -38,8 +40,6 @@ interface InstanceRendererProps {
   onTransformStart: (e: Konva.KonvaEventObject<Event>) => void;
   onTransform: (e: Konva.KonvaEventObject<Event>) => void;
   onTransformEnd: (e: Konva.KonvaEventObject<Event>) => void;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
   effectiveTheme: ThemeName;
   isHovered: boolean;
 }
@@ -53,8 +53,6 @@ export function InstanceRenderer({
   onTransformStart,
   onTransform,
   onTransformEnd,
-  onMouseEnter,
-  onMouseLeave,
   effectiveTheme,
   isHovered,
 }: InstanceRendererProps) {
@@ -64,6 +62,7 @@ export function InstanceRenderer({
   );
   const variables = useVariableStore((state) => state.variables);
   const globalTheme = useThemeStore((state) => state.activeTheme);
+  const isDragging = useDragStore((state) => state.isDragging);
 
   // Instance edit mode state
   const editingInstanceId = useSelectionStore(
@@ -129,6 +128,20 @@ export function InstanceRenderer({
   const layoutChildren = component.layout?.autoLayout
     ? calculateLayoutForFrame(component)
     : component.children;
+
+  const instanceRef = useRef<Konva.Group | null>(null);
+  const shouldCache =
+    !isDragging && !isInEditMode && layoutChildren.length >= 30;
+
+  useEffect(() => {
+    const group = instanceRef.current;
+    if (!group) return;
+    if (!shouldCache) {
+      group.clearCache();
+      return;
+    }
+    group.cache({ pixelRatio: 1 });
+  }, [shouldCache, node, layoutChildren]);
 
   // If component has a theme override, use it for children
   const childTheme = component.themeOverride ?? currentTheme;
@@ -196,6 +209,7 @@ export function InstanceRenderer({
 
   return (
     <Group
+      ref={instanceRef}
       id={node.id}
       name="selectable"
       {...getRectTransformProps(node)}
@@ -210,13 +224,12 @@ export function InstanceRenderer({
       onTransformStart={onTransformStart}
       onTransform={onTransform}
       onTransformEnd={onTransformEnd}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
     >
       {/* Background rect with merged properties (instance overrides component) */}
       <Rect
         width={node.width}
         height={node.height}
+        perfectDrawEnabled={false}
         fill={instanceGradientProps ? undefined : fillColor}
         {...(instanceGradientProps ?? {})}
         stroke={strokeColor}
@@ -305,6 +318,7 @@ function DescendantRenderer({
         <Group>
           <Rect
             {...rectTransform}
+            perfectDrawEnabled={false}
             fill={node.imageFill || gradientProps ? undefined : fillColor}
             {...(gradientProps && !node.imageFill ? gradientProps : {})}
             stroke={strokeColor ?? selectionStroke}
@@ -345,6 +359,7 @@ function DescendantRenderer({
         <Group>
           <Ellipse
             {...ellipseTransform}
+            perfectDrawEnabled={false}
             fill={node.imageFill || gradientProps ? undefined : fillColor}
             {...(gradientProps && !node.imageFill ? gradientProps : {})}
             stroke={strokeColor ?? selectionStroke}
@@ -385,6 +400,7 @@ function DescendantRenderer({
         <Group>
           <Text
             {...textTransform}
+            perfectDrawEnabled={false}
             width={descTextWidth}
             height={descTextHeight ?? node.height}
             text={node.text}
@@ -437,6 +453,7 @@ function DescendantRenderer({
             <Rect
               width={node.width}
               height={node.height}
+              perfectDrawEnabled={false}
               fill={node.imageFill || gradientProps ? undefined : fillColor}
               {...(gradientProps && !node.imageFill ? gradientProps : {})}
               stroke={strokeColor ?? selectionStroke}
@@ -537,6 +554,7 @@ function RenderNodeWithOverrides({
         <>
           <Rect
             {...rectTransform}
+            perfectDrawEnabled={false}
             fill={node.imageFill || ovrGradientProps ? undefined : fillColor}
             {...(ovrGradientProps && !node.imageFill ? ovrGradientProps : {})}
             stroke={strokeColor}
@@ -564,6 +582,7 @@ function RenderNodeWithOverrides({
         <>
           <Ellipse
             {...ellipseTransform}
+            perfectDrawEnabled={false}
             fill={node.imageFill || ovrGradientProps ? undefined : fillColor}
             {...(ovrGradientProps && !node.imageFill ? ovrGradientProps : {})}
             stroke={strokeColor}
@@ -591,6 +610,7 @@ function RenderNodeWithOverrides({
       return (
         <Text
           {...textTransform}
+          perfectDrawEnabled={false}
           width={ovrTextWidth}
           height={ovrTextHeight ?? node.height}
           text={node.text}
@@ -618,6 +638,7 @@ function RenderNodeWithOverrides({
             <Rect
               width={node.width}
               height={node.height}
+              perfectDrawEnabled={false}
               fill={node.imageFill || ovrGradientProps ? undefined : fillColor}
               {...(ovrGradientProps && !node.imageFill ? ovrGradientProps : {})}
               stroke={strokeColor}

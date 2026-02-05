@@ -20,8 +20,6 @@ interface RectRendererProps {
   onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onTransformEnd: (e: Konva.KonvaEventObject<Event>) => void;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
 }
 
 export function RectRenderer({
@@ -36,8 +34,6 @@ export function RectRenderer({
   onDragMove,
   onDragEnd,
   onTransformEnd,
-  onMouseEnter,
-  onMouseLeave,
 }: RectRendererProps) {
   const rectTransform = getRectTransformProps(node);
 
@@ -46,6 +42,7 @@ export function RectRenderer({
       <Rect
         id={node.id}
         name="selectable"
+        perfectDrawEnabled={false}
         {...rectTransform}
         fill={node.imageFill || gradientProps ? undefined : fillColor}
         {...(gradientProps && !node.imageFill ? gradientProps : {})}
@@ -61,8 +58,6 @@ export function RectRenderer({
         onDragMove={onDragMove}
         onDragEnd={onDragEnd}
         onTransformEnd={onTransformEnd}
-        onMouseEnter={onMouseEnter}
-        onMouseLeave={onMouseLeave}
       />
       {node.imageFill && (
         <ImageFillLayer

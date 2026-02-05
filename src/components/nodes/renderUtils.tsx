@@ -57,6 +57,7 @@ export function SelectionOutline({
         radiusX={width / 2}
         radiusY={height / 2}
         rotation={rotation}
+        perfectDrawEnabled={false}
         {...commonProps}
       />
     );
@@ -74,6 +75,7 @@ export function SelectionOutline({
       scaleX={flipX ? -1 : 1}
       scaleY={flipY ? -1 : 1}
       cornerRadius={cornerRadius}
+      perfectDrawEnabled={false}
       {...commonProps}
     />
   );
@@ -333,6 +335,7 @@ export function ImageFillLayer({
         width={params.width}
         height={params.height}
         crop={params.crop}
+        perfectDrawEnabled={false}
       />
     </Group>
   );

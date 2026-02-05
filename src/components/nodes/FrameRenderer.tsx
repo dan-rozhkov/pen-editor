@@ -6,10 +6,17 @@ import type { ThemeName } from "@/types/variable";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
+import { useViewportStore } from "@/store/viewportStore";
+import { useDragStore } from "@/store/dragStore";
+import { useCanvasRefStore } from "@/store/canvasRefStore";
 import {
   findChildAtPosition,
-  getNodeAbsolutePosition,
+  getNodeAbsolutePositionWithLayout,
 } from "@/utils/nodeUtils";
+import {
+  getViewportBounds,
+  isChildVisibleInViewport,
+} from "@/utils/viewportUtils";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 import {
   HOVER_OUTLINE_COLOR,
@@ -29,8 +36,6 @@ interface FrameRendererProps {
   onTransformStart: (e: Konva.KonvaEventObject<Event>) => void;
   onTransform: (e: Konva.KonvaEventObject<Event>) => void;
   onTransformEnd: (e: Konva.KonvaEventObject<Event>) => void;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
   fillColor?: string;
   strokeColor?: string;
   gradientProps?: Record<string, unknown>;
@@ -50,8 +55,6 @@ export function FrameRenderer({
   onTransformStart,
   onTransform,
   onTransformEnd,
-  onMouseEnter,
-  onMouseLeave,
   fillColor,
   strokeColor,
   gradientProps,
@@ -66,9 +69,13 @@ export function FrameRenderer({
   const enteredContainerId = useSelectionStore(
     (state) => state.enteredContainerId,
   );
+  const isDragging = useDragStore((state) => state.isDragging);
+  const stageRef = useCanvasRefStore((state) => state.stageRef);
   const calculateLayoutForFrame = useLayoutStore(
     (state) => state.calculateLayoutForFrame,
   );
+
+  const { scale: vpScale, x: vpX, y: vpY } = useViewportStore();
 
   // Calculate layout for children if auto-layout is enabled
   const layoutChildren = useMemo(
@@ -76,6 +83,26 @@ export function FrameRenderer({
       node.layout?.autoLayout ? calculateLayoutForFrame(node) : node.children,
     [node, calculateLayoutForFrame],
   );
+
+  // Viewport-cull children for frames with many children (>10)
+  // Only when the frame is NOT clipping (clipped frames are already bounded visually)
+  const visibleChildren = useMemo(() => {
+    if (layoutChildren.length <= 10) return layoutChildren;
+    // Get the frame's absolute position to compute child absolute positions
+    const absPos = getNodeAbsolutePositionWithLayout(
+      nodes,
+      node.id,
+      calculateLayoutForFrame,
+    );
+    if (!absPos) return layoutChildren;
+    // Get a stage-sized viewport estimate (use a generous default)
+    const stageW = stageRef?.width() ?? 1920;
+    const stageH = stageRef?.height() ?? 1080;
+    const bounds = getViewportBounds(vpScale, vpX, vpY, stageW, stageH);
+    return layoutChildren.filter((child) =>
+      isChildVisibleInViewport(child, absPos.x, absPos.y, bounds),
+    );
+  }, [layoutChildren, nodes, node.id, vpScale, vpX, vpY, stageRef]);
 
   // Calculate effective size (fit_content uses intrinsic size from Yoga)
   const { effectiveWidth, effectiveHeight } = useMemo(() => {
@@ -155,6 +182,21 @@ export function FrameRenderer({
     }
   }, [setGroupRef]);
 
+  const shouldCache =
+    !isDragging &&
+    layoutChildren.length >= 30 &&
+    !node.clip;
+
+  useEffect(() => {
+    const group = groupRef.current;
+    if (!group) return;
+    if (!shouldCache) {
+      group.clearCache();
+      return;
+    }
+    group.cache({ pixelRatio: 1 });
+  }, [shouldCache, node, layoutChildren]);
+
   // Double-click to enter this frame (drill down)
   // NOTE: This handler only fires when the Transformer is NOT active on this node.
   // The main drill-down logic is handled at the Stage level in Canvas.tsx.
@@ -199,8 +241,6 @@ export function FrameRenderer({
       onTransformStart={onTransformStart}
       onTransform={onTransform}
       onTransformEnd={onTransformEnd}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
       clipFunc={
         node.clip
           ? (ctx) => {
@@ -229,6 +269,7 @@ export function FrameRenderer({
       <Rect
         width={effectiveWidth}
         height={effectiveHeight}
+        perfectDrawEnabled={false}
         fill={node.imageFill || gradientProps ? undefined : fillColor}
         {...(gradientProps && !node.imageFill ? gradientProps : {})}
         {...(shadowProps || {})}
@@ -245,7 +286,7 @@ export function FrameRenderer({
           clipType="rect"
         />
       )}
-      {layoutChildren.map((child) => (
+      {visibleChildren.map((child) => (
         <RenderNode
           key={child.id}
           node={child}

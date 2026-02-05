@@ -1,5 +1,5 @@
-import { useRef, useEffect, useState, useMemo } from "react";
-import { Stage, Layer, Rect, Transformer } from "react-konva";
+import { useRef, useEffect, useState, useMemo, useDeferredValue } from "react";
+import { Stage, Layer, Rect, Transformer, FastLayer } from "react-konva";
 import Konva from "konva";
 import { DropIndicator } from "@/components/DropIndicator";
 import { InlineNameEditor } from "@/components/InlineNameEditor";
@@ -33,6 +33,7 @@ export function Canvas() {
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const [isMiddleMouseDown, setIsMiddleMouseDown] = useState(false);
+  const [fps, setFps] = useState<number | null>(null);
 
   const {
     scale,
@@ -54,15 +55,37 @@ export function Canvas() {
     (state) => state.calculateLayoutForFrame,
   );
 
-  // Calculate viewport bounds and filter visible nodes
-  const viewportBounds = useMemo(
-    () => getViewportBounds(scale, x, y, dimensions.width, dimensions.height),
-    [scale, x, y, dimensions.width, dimensions.height],
+  // Calculate viewport bounds and filter visible nodes (throttled to rAF)
+  const [viewportBounds, setViewportBounds] = useState(() =>
+    getViewportBounds(scale, x, y, dimensions.width, dimensions.height),
   );
+  const viewportRafRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (viewportRafRef.current !== null) return;
+    viewportRafRef.current = requestAnimationFrame(() => {
+      viewportRafRef.current = null;
+      const nextBounds = getViewportBounds(
+        scale,
+        x,
+        y,
+        dimensions.width,
+        dimensions.height,
+      );
+      setViewportBounds((prev) =>
+        prev.minX === nextBounds.minX &&
+        prev.minY === nextBounds.minY &&
+        prev.maxX === nextBounds.maxX &&
+        prev.maxY === nextBounds.maxY
+          ? prev
+          : nextBounds,
+      );
+    });
+  }, [scale, x, y, dimensions.width, dimensions.height]);
 
+  const deferredNodes = useDeferredValue(nodes);
   const visibleNodes = useMemo(
-    () => nodes.filter((node) => isNodeVisible(node, viewportBounds)),
-    [nodes, viewportBounds],
+    () => deferredNodes.filter((node) => isNodeVisible(node, viewportBounds)),
+    [deferredNodes, viewportBounds],
   );
   const deleteNode = useSceneStore((state) => state.deleteNode);
   const updateNode = useSceneStore((state) => state.updateNode);
@@ -90,6 +113,24 @@ export function Canvas() {
   const { undo, redo, saveHistory, startBatch, endBatch } = useHistoryStore();
   const dropIndicator = useDragStore((state) => state.dropIndicator);
   const { activeTool, cancelDrawing, toggleTool } = useDrawModeStore();
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    let rafId = 0;
+    let frames = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      frames += 1;
+      if (now - last >= 1000) {
+        setFps(Math.round((frames * 1000) / (now - last)));
+        frames = 0;
+        last = now;
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
 
   const {
     editingTextNode,
@@ -145,6 +186,7 @@ export function Canvas() {
     handleMouseDown,
     handleMouseMove,
     handleMouseUp,
+    handleMouseLeave,
     handleContextMenu,
   } = useCanvasPointerHandlers({
     stageRef,
@@ -280,6 +322,26 @@ export function Canvas() {
       >
         {Math.round(scale * 100)}%
       </div>
+      {import.meta.env.DEV && fps !== null && (
+        <div
+          style={{
+            position: "absolute",
+            top: 12,
+            left: 12,
+            background: "rgba(0, 0, 0, 0.65)",
+            padding: "4px 6px",
+            borderRadius: 4,
+            fontSize: 11,
+            fontFamily: "system-ui, sans-serif",
+            color: "#fff",
+            zIndex: 10,
+            userSelect: "none",
+          }}
+          title="FPS (dev only)"
+        >
+          {fps} fps
+        </div>
+      )}
       <Stage
         ref={stageRef}
         width={dimensions.width}
@@ -292,9 +354,11 @@ export function Canvas() {
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
         onContextMenu={handleContextMenu}
       >
-        <Layer>
+        {/* Scene layer: interactive content (nodes, transformer, background) */}
+        <Layer listening={!isPanning}>
           {/* Background rect for click detection (invisible, covers visible area) */}
           <Rect
             name="background"
@@ -302,18 +366,13 @@ export function Canvas() {
             y={viewportBounds.minY}
             width={viewportBounds.maxX - viewportBounds.minX}
             height={viewportBounds.maxY - viewportBounds.minY}
+            perfectDrawEnabled={false}
             fill="transparent"
           />
           {/* Render visible scene nodes (viewport culling) */}
           {visibleNodes.map((node) => (
             <RenderNode key={node.id} node={node} />
           ))}
-          {/* Smart guides for snapping during drag */}
-          <SmartGuides />
-          {/* Distance measurement overlay (Option + hover) */}
-          <MeasureOverlay />
-          {/* Drop indicator for auto-layout reordering */}
-          {dropIndicator && <DropIndicator indicator={dropIndicator} />}
           {/* Transformer for selection */}
           <Transformer
             ref={transformerRef}
@@ -351,6 +410,15 @@ export function Canvas() {
             borderStrokeWidth={1}
             anchorStrokeWidth={1}
           />
+        </Layer>
+        {/* Overlay layer: guides and indicators (non-interactive, fast redraw) */}
+        <FastLayer listening={false} hitGraphEnabled={false}>
+          {/* Smart guides for snapping during drag */}
+          <SmartGuides />
+          {/* Distance measurement overlay (Option + hover) */}
+          <MeasureOverlay />
+          {/* Drop indicator for auto-layout reordering */}
+          {dropIndicator && <DropIndicator indicator={dropIndicator} />}
           {/* Marquee selection rectangle */}
           {marqueeRect && (
             <Rect
@@ -378,7 +446,10 @@ export function Canvas() {
               listening={false}
             />
           )}
-          {/* Frame name labels - rendered after transformer so they're not included in bounding box */}
+        </FastLayer>
+        {/* Overlay layer: labels (interactive) */}
+        <Layer listening={!isPanning}>
+          {/* Frame name labels (interactive: click to select, dblclick to rename) */}
           {collectFrameNodes
             .filter(({ isNested }) => !isNested)
             .map(({ node, absX, absY }) => (

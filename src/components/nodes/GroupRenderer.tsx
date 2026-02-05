@@ -1,7 +1,9 @@
+import { useEffect, useRef } from "react";
 import Konva from "konva";
 import { Group, Rect } from "react-konva";
 import type { GroupNode } from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
+import { useDragStore } from "@/store/dragStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import {
@@ -23,8 +25,6 @@ interface GroupRendererProps {
   onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onTransformEnd: (e: Konva.KonvaEventObject<Event>) => void;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
   effectiveTheme: ThemeName;
   isHovered: boolean;
   isTopLevel: boolean;
@@ -38,8 +38,6 @@ export function GroupRenderer({
   onDragMove,
   onDragEnd,
   onTransformEnd,
-  onMouseEnter,
-  onMouseLeave,
   effectiveTheme,
   isHovered,
   isTopLevel,
@@ -50,6 +48,20 @@ export function GroupRenderer({
   const enteredContainerId = useSelectionStore(
     (state) => state.enteredContainerId,
   );
+  const isDragging = useDragStore((state) => state.isDragging);
+
+  const groupRef = useRef<Konva.Group | null>(null);
+  const shouldCache = !isDragging && node.children.length >= 30;
+
+  useEffect(() => {
+    const group = groupRef.current;
+    if (!group) return;
+    if (!shouldCache) {
+      group.clearCache();
+      return;
+    }
+    group.cache({ pixelRatio: 1 });
+  }, [shouldCache, node]);
 
   const childSelectOverride = getChildSelectOverride({
     nodes,
@@ -90,6 +102,7 @@ export function GroupRenderer({
 
   return (
     <Group
+      ref={groupRef}
       id={node.id}
       name="selectable"
       {...groupTransform}
@@ -102,8 +115,6 @@ export function GroupRenderer({
       onDragMove={onDragMove}
       onDragEnd={onDragEnd}
       onTransformEnd={onTransformEnd}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
       clipFunc={
         node.clipGeometry && node.clipBounds
           ? (ctx) => {
@@ -121,7 +132,12 @@ export function GroupRenderer({
       }
     >
       {/* Invisible hitbox so clicks on empty space within the group register */}
-      <Rect width={node.width} height={node.height} fill="transparent" />
+      <Rect
+        width={node.width}
+        height={node.height}
+        fill="transparent"
+        perfectDrawEnabled={false}
+      />
       {node.children.map((child) => (
         <RenderNode
           key={child.id}

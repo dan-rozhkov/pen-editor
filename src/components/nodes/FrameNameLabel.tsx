@@ -158,6 +158,7 @@ export function FrameNameLabel({ node, isSelected, absoluteX, absoluteY }: Frame
       scaleY={1 / safeScale}
       fontFamily="system-ui, -apple-system, sans-serif"
       fill={labelColor}
+      perfectDrawEnabled={false}
       listening={true}
       onClick={handleClick}
       onDblClick={handleDblClick}

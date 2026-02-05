@@ -18,8 +18,6 @@ interface PathRendererProps {
   onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onTransformEnd: (e: Konva.KonvaEventObject<Event>) => void;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
 }
 
 export function PathRenderer({
@@ -34,8 +32,6 @@ export function PathRenderer({
   onDragMove,
   onDragEnd,
   onTransformEnd,
-  onMouseEnter,
-  onMouseLeave,
 }: PathRendererProps) {
   // Resolve stroke from pathStroke or fallback to base strokeColor
   const pathStrokeColor = node.pathStroke?.fill || strokeColor;
@@ -80,8 +76,6 @@ export function PathRenderer({
         onDragMove={onDragMove}
         onDragEnd={onDragEnd}
         onTransformEnd={onTransformEnd}
-        onMouseEnter={onMouseEnter}
-        onMouseLeave={onMouseLeave}
         clipFunc={
           node.clipGeometry && node.clipBounds
             ? (ctx) => {
@@ -114,6 +108,7 @@ export function PathRenderer({
           width={node.width}
           height={node.height}
           fill="transparent"
+          perfectDrawEnabled={false}
           listening={true}
         />
         <Path
@@ -122,6 +117,7 @@ export function PathRenderer({
           scaleX={scaleX}
           scaleY={scaleY}
           data={node.geometry}
+          perfectDrawEnabled={false}
           fill={gradientProps ? undefined : fillColor}
           fillRule={node.fillRule}
           {...(gradientProps ?? {})}

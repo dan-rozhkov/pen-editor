@@ -20,6 +20,7 @@ export function DropIndicator({ indicator }: DropIndicatorProps) {
       stroke="#0d99ff"
       strokeWidth={2}
       lineCap="round"
+      perfectDrawEnabled={false}
       listening={false}
     />
   )

@@ -4,9 +4,21 @@ import type Konva from "konva";
 import type { SceneNode } from "@/types/scene";
 import { generateId } from "@/types/scene";
 import { useDrawModeStore } from "@/store/drawModeStore";
+import { useHoverStore } from "@/store/hoverStore";
+import { useMeasureStore } from "@/store/measureStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
+import { useLayoutStore } from "@/store/layoutStore";
 import { rectsIntersect } from "@/utils/dragUtils";
+import {
+  computeParentDistances,
+  computeSiblingDistances,
+} from "@/utils/measureUtils";
+import {
+  findNodeById,
+  getNodeAbsolutePositionWithLayout,
+  isDescendantOf,
+} from "@/utils/nodeUtils";
 import { generatePolygonPoints } from "@/utils/polygonUtils";
 
 interface CanvasPointerHandlersParams {
@@ -253,74 +265,182 @@ export function useCanvasPointerHandlers({
     ],
   );
 
-  const handleMouseMove = useCallback(() => {
-    if (useDrawModeStore.getState().isDrawing) {
-      const stage = stageRef.current;
-      if (stage) {
-        const pos = stage.getRelativePointerPosition();
-        if (pos) {
-          updateDrawing(pos);
+  // Track previous hover target for delegated mouseenter/mouseleave
+  const lastHoverIdRef = useRef<string | null>(null);
+
+  const lastMoveEventRef = useRef<Konva.KonvaEventObject<MouseEvent> | null>(
+    null,
+  );
+  const moveRafRef = useRef<number | null>(null);
+
+  const handleMouseMoveImpl = useCallback(
+    (e: Konva.KonvaEventObject<MouseEvent>) => {
+      const isDrawing = useDrawModeStore.getState().isDrawing;
+      const shouldProcessHover = !isPanning && !isDrawing && !isMarqueeActive.current;
+      if (shouldProcessHover) {
+        // --- Delegated hover detection ---
+        // Walk up from the Konva target to find the nearest "selectable" shape
+        let hoveredId: string | null = null;
+        let target: Konva.Node | null = e.target;
+        while (target && target !== e.target.getStage()) {
+          if (target.name() === "selectable" || target.name() === "background") {
+            break;
+          }
+          target = target.parent;
+        }
+        if (target && target.name() === "selectable") {
+          hoveredId = target.id();
+        }
+
+        if (hoveredId !== lastHoverIdRef.current) {
+          lastHoverIdRef.current = hoveredId;
+          useHoverStore.getState().setHoveredNode(hoveredId);
+
+          // Measurement distance computation
+          const { modifierHeld, setLines, clearLines } =
+            useMeasureStore.getState();
+          if (!hoveredId || !modifierHeld) {
+            clearLines();
+          } else {
+            const currentSelectedIds =
+              useSelectionStore.getState().selectedIds;
+            if (currentSelectedIds.length === 1) {
+              const selectedId = currentSelectedIds[0];
+              if (selectedId !== hoveredId) {
+                const currentNodes = useSceneStore.getState().nodes;
+                const calculateLayoutForFrame =
+                  useLayoutStore.getState().calculateLayoutForFrame;
+                const selectedNode = findNodeById(currentNodes, selectedId);
+                if (selectedNode) {
+                  const selPos = getNodeAbsolutePositionWithLayout(
+                    currentNodes,
+                    selectedId,
+                    calculateLayoutForFrame,
+                  );
+                  const hovPos = getNodeAbsolutePositionWithLayout(
+                    currentNodes,
+                    hoveredId,
+                    calculateLayoutForFrame,
+                  );
+                  if (selPos && hovPos) {
+                    const hovNode = findNodeById(currentNodes, hoveredId);
+                    const selBounds = {
+                      x: selPos.x,
+                      y: selPos.y,
+                      width: selectedNode.width,
+                      height: selectedNode.height,
+                    };
+                    const hovBounds = {
+                      x: hovPos.x,
+                      y: hovPos.y,
+                      width: hovNode?.width ?? 0,
+                      height: hovNode?.height ?? 0,
+                    };
+                    const isParent = isDescendantOf(
+                      currentNodes,
+                      hoveredId,
+                      selectedId,
+                    );
+                    if (isParent) {
+                      setLines(computeParentDistances(selBounds, hovBounds));
+                    } else {
+                      setLines(computeSiblingDistances(selBounds, hovBounds));
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
-      return;
-    }
 
-    if (isMarqueeActive.current && marqueeStart.current) {
+      // --- Drawing mode ---
+      if (useDrawModeStore.getState().isDrawing) {
+        const stage = stageRef.current;
+        if (stage) {
+          const pos = stage.getRelativePointerPosition();
+          if (pos) {
+            updateDrawing(pos);
+          }
+        }
+        return;
+      }
+
+      // --- Marquee selection ---
+      if (isMarqueeActive.current && marqueeStart.current) {
+        const stage = stageRef.current;
+        if (!stage) return;
+
+        const pos = stage.getRelativePointerPosition();
+        if (!pos) return;
+
+        const startPos = marqueeStart.current;
+        const rect = {
+          x: Math.min(startPos.x, pos.x),
+          y: Math.min(startPos.y, pos.y),
+          width: Math.abs(pos.x - startPos.x),
+          height: Math.abs(pos.y - startPos.y),
+        };
+        setMarqueeRect(rect);
+
+        const currentNodes = useSceneStore.getState().nodes;
+        const intersecting: string[] = [];
+        for (const node of currentNodes) {
+          if (node.visible === false) continue;
+          const nodeRect = {
+            x: node.x,
+            y: node.y,
+            width: node.width,
+            height: node.height,
+          };
+          if (rectsIntersect(rect, nodeRect)) {
+            intersecting.push(node.id);
+          }
+        }
+
+        if (marqueeShiftHeld.current) {
+          const merged = [
+            ...new Set([...marqueePreShiftIds.current, ...intersecting]),
+          ];
+          setSelectedIds(merged);
+        } else {
+          setSelectedIds(intersecting);
+        }
+        return;
+      }
+
+      // --- Panning ---
+      if (!isPanning || !lastPointerPosition.current) return;
+
       const stage = stageRef.current;
       if (!stage) return;
 
-      const pos = stage.getRelativePointerPosition();
-      if (!pos) return;
+      const pointerPos = stage.getPointerPosition();
+      if (!pointerPos) return;
 
-      const startPos = marqueeStart.current;
-      const rect = {
-        x: Math.min(startPos.x, pos.x),
-        y: Math.min(startPos.y, pos.y),
-        width: Math.abs(pos.x - startPos.x),
-        height: Math.abs(pos.y - startPos.y),
-      };
-      setMarqueeRect(rect);
+      const dx = pointerPos.x - lastPointerPosition.current.x;
+      const dy = pointerPos.y - lastPointerPosition.current.y;
 
-      const currentNodes = useSceneStore.getState().nodes;
-      const intersecting: string[] = [];
-      for (const node of currentNodes) {
-        if (node.visible === false) continue;
-        const nodeRect = {
-          x: node.x,
-          y: node.y,
-          width: node.width,
-          height: node.height,
-        };
-        if (rectsIntersect(rect, nodeRect)) {
-          intersecting.push(node.id);
+      setPosition(x + dx, y + dy);
+      lastPointerPosition.current = pointerPos;
+    },
+    [isPanning, setPosition, setSelectedIds, stageRef, updateDrawing, x, y],
+  );
+
+  const handleMouseMove = useCallback(
+    (e: Konva.KonvaEventObject<MouseEvent>) => {
+      lastMoveEventRef.current = e;
+      if (moveRafRef.current !== null) return;
+      moveRafRef.current = requestAnimationFrame(() => {
+        moveRafRef.current = null;
+        const evt = lastMoveEventRef.current;
+        if (evt) {
+          handleMouseMoveImpl(evt);
         }
-      }
-
-      if (marqueeShiftHeld.current) {
-        const merged = [
-          ...new Set([...marqueePreShiftIds.current, ...intersecting]),
-        ];
-        setSelectedIds(merged);
-      } else {
-        setSelectedIds(intersecting);
-      }
-      return;
-    }
-
-    if (!isPanning || !lastPointerPosition.current) return;
-
-    const stage = stageRef.current;
-    if (!stage) return;
-
-    const pointerPos = stage.getPointerPosition();
-    if (!pointerPos) return;
-
-    const dx = pointerPos.x - lastPointerPosition.current.x;
-    const dy = pointerPos.y - lastPointerPosition.current.y;
-
-    setPosition(x + dx, y + dy);
-    lastPointerPosition.current = pointerPos;
-  }, [isPanning, setPosition, setSelectedIds, stageRef, updateDrawing, x, y]);
+      });
+    },
+    [handleMouseMoveImpl],
+  );
 
   const handleMouseUp = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent>) => {
@@ -405,6 +525,12 @@ export function useCanvasPointerHandlers({
     [],
   );
 
+  const handleMouseLeave = useCallback(() => {
+    lastHoverIdRef.current = null;
+    useHoverStore.getState().setHoveredNode(null);
+    useMeasureStore.getState().clearLines();
+  }, []);
+
   return {
     drawPreviewRect,
     marqueeRect,
@@ -412,6 +538,7 @@ export function useCanvasPointerHandlers({
     handleMouseDown,
     handleMouseMove,
     handleMouseUp,
+    handleMouseLeave,
     handleContextMenu,
   };
 }

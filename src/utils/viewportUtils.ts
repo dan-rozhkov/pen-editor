@@ -46,6 +46,33 @@ export function isNodeVisible(node: SceneNode, bounds: ViewportBounds): boolean 
   )
 }
 
+/**
+ * Check if a child node (relative to a parent at parentAbsX/Y) is visible in the viewport.
+ * Includes a buffer margin to prevent pop-in when scrolling.
+ */
+const CHILD_CULL_MARGIN = 100
+
+export function isChildVisibleInViewport(
+  child: SceneNode,
+  parentAbsX: number,
+  parentAbsY: number,
+  bounds: ViewportBounds,
+): boolean {
+  if (child.visible === false) return false
+
+  const absX = parentAbsX + child.x
+  const absY = parentAbsY + child.y
+  const absRight = absX + child.width
+  const absBottom = absY + child.height
+
+  return !(
+    absRight < bounds.minX - CHILD_CULL_MARGIN ||
+    absX > bounds.maxX + CHILD_CULL_MARGIN ||
+    absBottom < bounds.minY - CHILD_CULL_MARGIN ||
+    absY > bounds.maxY + CHILD_CULL_MARGIN
+  )
+}
+
 export interface ContentBounds {
   minX: number
   maxX: number

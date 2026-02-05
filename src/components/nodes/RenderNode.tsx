@@ -1,4 +1,4 @@
-import { memo, useRef } from "react";
+import { memo, useRef, useMemo } from "react";
 import Konva from "konva";
 import type {
   FrameNode,
@@ -23,7 +23,6 @@ import { useDragStore } from "@/store/dragStore";
 import { useHoverStore } from "@/store/hoverStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { useLayoutStore } from "@/store/layoutStore";
-import { useMeasureStore } from "@/store/measureStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSmartGuideStore } from "@/store/smartGuideStore";
@@ -40,18 +39,10 @@ import {
   handleAutoLayoutDragEnd,
   isPointInsideRect,
 } from "@/utils/dragUtils";
+import type { ParentContext } from "@/utils/nodeUtils";
 import {
-  computeParentDistances,
-  computeSiblingDistances,
-} from "@/utils/measureUtils";
-import {
-  findNodeById,
-  findParentFrame,
   getNodeAbsolutePosition,
-  getNodeAbsolutePositionWithLayout,
-  isDescendantOf,
 } from "@/utils/nodeUtils";
-import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 import {
   collectSnapTargets,
   getSnapEdges,
@@ -59,50 +50,6 @@ import {
   type SnapTarget,
 } from "@/utils/smartGuideUtils";
 
-/** Compute effective width/height for a node, accounting for auto-layout sizing modes */
-function getEffectiveSize(
-  nodes: SceneNode[],
-  node: SceneNode,
-  calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
-): { width: number; height: number } {
-  let width = node.width;
-  let height = node.height;
-
-  // Frame with fit_content: use intrinsic size from Yoga
-  if (node.type === "frame" && node.layout?.autoLayout) {
-    const fitWidth = node.sizing?.widthMode === "fit_content";
-    const fitHeight = node.sizing?.heightMode === "fit_content";
-    if (fitWidth || fitHeight) {
-      const intrinsic = calculateFrameIntrinsicSize(node, {
-        fitWidth,
-        fitHeight,
-      });
-      if (fitWidth) width = intrinsic.width;
-      if (fitHeight) height = intrinsic.height;
-    }
-  }
-
-  // Child inside auto-layout parent with non-fixed sizing: use layout-computed size
-  const parentCtx = findParentFrame(nodes, node.id);
-  if (
-    parentCtx.isInsideAutoLayout &&
-    parentCtx.parent &&
-    parentCtx.parent.type === "frame"
-  ) {
-    const wMode = node.sizing?.widthMode ?? "fixed";
-    const hMode = node.sizing?.heightMode ?? "fixed";
-    if (wMode !== "fixed" || hMode !== "fixed") {
-      const layoutChildren = calculateLayoutForFrame(parentCtx.parent);
-      const layoutNode = layoutChildren.find((n) => n.id === node.id);
-      if (layoutNode) {
-        if (wMode !== "fixed") width = layoutNode.width;
-        if (hMode !== "fixed") height = layoutNode.height;
-      }
-    }
-  }
-
-  return { width, height };
-}
 
 interface RenderNodeProps {
   node: SceneNode;
@@ -133,7 +80,6 @@ export const RenderNode = memo(function RenderNode({
   const isHovered = useHoverStore(
     (state) => state.hoveredNodeId === node.id,
   );
-  const setHoveredNode = useHoverStore((state) => state.setHoveredNode);
   const calculateLayoutForFrame = useLayoutStore(
     (state) => state.calculateLayoutForFrame,
   );
@@ -161,43 +107,69 @@ export const RenderNode = memo(function RenderNode({
   // Use effective theme from parent, or fall back to global theme
   const currentTheme = effectiveTheme ?? globalTheme;
 
-  // Find parent context to check if inside auto-layout
-  const parentContext = findParentFrame(nodes, node.id);
+  // Find parent context using O(1) indexed lookup instead of O(n) tree traversal
+  const parentId = useSceneStore((state) => state.parentById[node.id] ?? null);
+  const parentNode = useSceneStore((state) =>
+    parentId ? (state.nodesById[parentId] as FrameNode | GroupNode | null) : null,
+  );
+  const parentContext: ParentContext = useMemo(() => ({
+    parent: parentNode ?? null,
+    isInsideAutoLayout:
+      (parentNode?.type === "frame" && (parentNode as FrameNode)?.layout?.autoLayout) ?? false,
+  }), [parentNode]);
   const isInAutoLayout = parentContext.isInsideAutoLayout;
   const parentFrame = parentContext.parent;
 
   // Resolved colors for this node (with per-color opacity applied)
-  const rawFillColor = resolveColor(
+  const { fillColor, strokeColor } = useMemo(() => {
+    const rawFill = resolveColor(
+      node.fill,
+      node.fillBinding,
+      variables,
+      currentTheme,
+    );
+    const rawStroke = resolveColor(
+      node.stroke,
+      node.strokeBinding,
+      variables,
+      currentTheme,
+    );
+    return {
+      fillColor: rawFill ? applyOpacity(rawFill, node.fillOpacity) : rawFill,
+      strokeColor: rawStroke
+        ? applyOpacity(rawStroke, node.strokeOpacity)
+        : rawStroke,
+    };
+  }, [
     node.fill,
     node.fillBinding,
-    variables,
-    currentTheme,
-  );
-  const rawStrokeColor = resolveColor(
+    node.fillOpacity,
     node.stroke,
     node.strokeBinding,
+    node.strokeOpacity,
     variables,
     currentTheme,
-  );
-  const fillColor = rawFillColor
-    ? applyOpacity(rawFillColor, node.fillOpacity)
-    : rawFillColor;
-  const strokeColor = rawStrokeColor
-    ? applyOpacity(rawStrokeColor, node.strokeOpacity)
-    : rawStrokeColor;
+  ]);
 
   // Shadow effect props
-  const shadowProps = buildKonvaShadowProps(node.effect);
+  const shadowProps = useMemo(
+    () => buildKonvaShadowProps(node.effect),
+    [node.effect],
+  );
 
   // Gradient fill props (takes priority over solid fill)
-  const gradientProps = node.gradientFill
-    ? buildKonvaGradientProps(
-        node.gradientFill,
-        node.width,
-        node.height,
-        node.type === "ellipse",
-      )
-    : undefined;
+  const gradientProps = useMemo(
+    () =>
+      node.gradientFill
+        ? buildKonvaGradientProps(
+            node.gradientFill,
+            node.width,
+            node.height,
+            node.type === "ellipse",
+          )
+        : undefined,
+    [node.gradientFill, node.width, node.height, node.type],
+  );
 
   // Don't render if node is hidden
   if (node.visible === false) {
@@ -223,59 +195,6 @@ export const RenderNode = memo(function RenderNode({
     }
   };
 
-  const handleMouseEnter = () => {
-    setHoveredNode(node.id);
-
-    // Distance measurement: if modifier is held and we have a selected node
-    const { modifierHeld, setLines } = useMeasureStore.getState();
-    if (!modifierHeld) return;
-
-    const currentSelectedIds = useSelectionStore.getState().selectedIds;
-    if (currentSelectedIds.length !== 1) return;
-
-    const selectedId = currentSelectedIds[0];
-    if (selectedId === node.id) return;
-
-    const selectedNode = findNodeById(nodes, selectedId);
-    if (!selectedNode) return;
-
-    const selPos = getNodeAbsolutePositionWithLayout(
-      nodes,
-      selectedId,
-      calculateLayoutForFrame,
-    );
-    const hovPos = getNodeAbsolutePositionWithLayout(
-      nodes,
-      node.id,
-      calculateLayoutForFrame,
-    );
-    if (!selPos || !hovPos) return;
-
-    const selBounds = {
-      x: selPos.x,
-      y: selPos.y,
-      ...getEffectiveSize(nodes, selectedNode, calculateLayoutForFrame),
-    };
-    const hovBounds = {
-      x: hovPos.x,
-      y: hovPos.y,
-      ...getEffectiveSize(nodes, node, calculateLayoutForFrame),
-    };
-
-    // Check if hovered node is a parent of the selected node
-    const isParent = isDescendantOf(nodes, node.id, selectedId);
-
-    if (isParent) {
-      setLines(computeParentDistances(selBounds, hovBounds));
-    } else {
-      setLines(computeSiblingDistances(selBounds, hovBounds));
-    }
-  };
-
-  const handleMouseLeave = () => {
-    setHoveredNode(null);
-    useMeasureStore.getState().clearLines();
-  };
 
   // Check if node is hovered (and not selected - selected takes priority)
   const isHoveredAndNotSelected = isHovered && !isSelected;
@@ -632,8 +551,6 @@ export const RenderNode = memo(function RenderNode({
           onTransformStart={handleTransformStart}
           onTransform={handleFrameTransform}
           onTransformEnd={handleTransformEnd}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
           fillColor={fillColor}
           strokeColor={strokeColor}
           gradientProps={gradientProps}
@@ -653,8 +570,6 @@ export const RenderNode = memo(function RenderNode({
           onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
           onTransformEnd={handleTransformEnd}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
           effectiveTheme={currentTheme}
           isHovered={isHoveredAndNotSelected}
           isTopLevel={parentFrame === null}
@@ -676,8 +591,6 @@ export const RenderNode = memo(function RenderNode({
           onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
           onTransformEnd={handleTransformEnd}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
         />
       );
     case "ellipse":
@@ -687,8 +600,6 @@ export const RenderNode = memo(function RenderNode({
           onClick={handleClick}
           onDragStart={handleDragStart}
           onDragMove={handleDragMove}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
           fillColor={fillColor}
           strokeColor={strokeColor}
           gradientProps={gradientProps}
@@ -722,8 +633,6 @@ export const RenderNode = memo(function RenderNode({
           onTransformStart={handleTextTransformStart}
           onTransform={handleTextTransform}
           onTransformEnd={handleTransformEnd}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
         />
       );
     }
@@ -741,8 +650,6 @@ export const RenderNode = memo(function RenderNode({
           onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
           onTransformEnd={handleTransformEnd}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
         />
       );
     case "line":
@@ -757,8 +664,6 @@ export const RenderNode = memo(function RenderNode({
           onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
           onTransformEnd={handleTransformEnd}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
         />
       );
     case "polygon":
@@ -775,8 +680,6 @@ export const RenderNode = memo(function RenderNode({
           onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
           onTransformEnd={handleTransformEnd}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
         />
       );
     case "ref":
@@ -790,8 +693,6 @@ export const RenderNode = memo(function RenderNode({
           onTransformStart={handleTransformStart}
           onTransform={handleInstanceTransform}
           onTransformEnd={handleTransformEnd}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
           effectiveTheme={currentTheme}
           isHovered={isHoveredAndNotSelected}
         />

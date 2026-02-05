@@ -17,8 +17,6 @@ interface LineRendererProps {
   onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onTransformEnd: (e: Konva.KonvaEventObject<Event>) => void;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
 }
 
 export function LineRenderer({
@@ -31,8 +29,6 @@ export function LineRenderer({
   onDragMove,
   onDragEnd,
   onTransformEnd,
-  onMouseEnter,
-  onMouseLeave,
 }: LineRendererProps) {
   const rectTransform = getRectTransformProps(node);
 
@@ -41,6 +37,7 @@ export function LineRenderer({
       <Line
         id={node.id}
         name="selectable"
+        perfectDrawEnabled={false}
         x={rectTransform.x}
         y={rectTransform.y}
         points={node.points}
@@ -61,8 +58,6 @@ export function LineRenderer({
         onDragMove={onDragMove}
         onDragEnd={onDragEnd}
         onTransformEnd={onTransformEnd}
-        onMouseEnter={onMouseEnter}
-        onMouseLeave={onMouseLeave}
       />
       {isHovered && (
         <SelectionOutline

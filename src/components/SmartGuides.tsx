@@ -22,6 +22,7 @@ export function SmartGuides() {
             points={points}
             stroke="#ff3366"
             strokeWidth={1 / scale}
+            perfectDrawEnabled={false}
             listening={false}
           />
         );

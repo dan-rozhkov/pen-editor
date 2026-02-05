@@ -87,6 +87,7 @@ export function Grid({ scale, x, y, viewportWidth, viewportHeight }: GridProps) 
           points={line.points}
           stroke={line.stroke}
           strokeWidth={1 / scale}
+          perfectDrawEnabled={false}
           listening={false}
         />
       ))}
@@ -97,6 +98,7 @@ export function Grid({ scale, x, y, viewportWidth, viewportHeight }: GridProps) 
           points={line.points}
           stroke={line.stroke}
           strokeWidth={1 / scale}
+          perfectDrawEnabled={false}
           listening={false}
         />
       ))}
