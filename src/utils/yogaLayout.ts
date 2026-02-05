@@ -8,7 +8,6 @@
 import type {
   SceneNode,
   FrameNode,
-  LayoutProperties,
   AlignItems,
   JustifyContent,
 } from "../types/scene";
@@ -56,15 +55,25 @@ interface ResolvedPadding {
 function resolvePadding(container: FlexContainer): ResolvedPadding {
   const [top, right, bottom, left] = container.padding;
   if (container.direction === "row") {
-    return { mainStart: left, mainEnd: right, crossStart: top, crossEnd: bottom };
+    return {
+      mainStart: left,
+      mainEnd: right,
+      crossStart: top,
+      crossEnd: bottom,
+    };
   } else {
-    return { mainStart: top, mainEnd: bottom, crossStart: left, crossEnd: right };
+    return {
+      mainStart: top,
+      mainEnd: bottom,
+      crossStart: left,
+      crossEnd: right,
+    };
   }
 }
 
 function buildContainer(
   frame: FrameNode,
-  options?: { fitWidth?: boolean; fitHeight?: boolean }
+  options?: { fitWidth?: boolean; fitHeight?: boolean },
 ): FlexContainer {
   const layout = frame.layout;
   const direction = layout?.flexDirection ?? "row";
@@ -75,11 +84,19 @@ function buildContainer(
   return {
     direction,
     mainSize: isHorizontal
-      ? (fitWidth ? undefined : frame.width)
-      : (fitHeight ? undefined : frame.height),
+      ? fitWidth
+        ? undefined
+        : frame.width
+      : fitHeight
+        ? undefined
+        : frame.height,
     crossSize: isHorizontal
-      ? (fitHeight ? undefined : frame.height)
-      : (fitWidth ? undefined : frame.width),
+      ? fitHeight
+        ? undefined
+        : frame.height
+      : fitWidth
+        ? undefined
+        : frame.width,
     gap: layout?.gap ?? 0,
     padding: [
       layout?.paddingTop ?? 0,
@@ -99,7 +116,7 @@ function buildContainer(
 function resolveEffectiveSize(
   child: SceneNode,
   widthMode: SizingMode,
-  heightMode: SizingMode
+  heightMode: SizingMode,
 ): { width: number; height: number } {
   let effectiveWidth = child.width;
   let effectiveHeight = child.height;
@@ -175,7 +192,7 @@ function buildFlexItem(child: SceneNode, container: FlexContainer): FlexItem {
  */
 function resolveMainAxisSizes(
   items: FlexItem[],
-  container: FlexContainer
+  container: FlexContainer,
 ): void {
   const pad = resolvePadding(container);
   const totalGap = items.length > 1 ? container.gap * (items.length - 1) : 0;
@@ -200,15 +217,14 @@ function resolveMainAxisSizes(
     } else if (freeSpace < 0) {
       const totalShrink = items.reduce(
         (sum, item) => sum + item.flexShrink * item.flexBasis,
-        0
+        0,
       );
       if (totalShrink > 0) {
         for (const item of items) {
-          const shrinkRatio =
-            (item.flexShrink * item.flexBasis) / totalShrink;
+          const shrinkRatio = (item.flexShrink * item.flexBasis) / totalShrink;
           item.computedMainSize = Math.max(
             0,
-            item.flexBasis + freeSpace * shrinkRatio
+            item.flexBasis + freeSpace * shrinkRatio,
           );
         }
       } else {
@@ -234,7 +250,7 @@ function resolveMainAxisSizes(
  */
 function resolveCrossAxisSizes(
   items: FlexItem[],
-  container: FlexContainer
+  container: FlexContainer,
 ): void {
   const pad = resolvePadding(container);
 
@@ -261,17 +277,14 @@ function resolveCrossAxisSizes(
 /**
  * Phase 3: Position items on the main axis (justify-content).
  */
-function positionMainAxis(
-  items: FlexItem[],
-  container: FlexContainer
-): void {
+function positionMainAxis(items: FlexItem[], container: FlexContainer): void {
   if (items.length === 0) return;
 
   const pad = resolvePadding(container);
   const totalGap = items.length > 1 ? container.gap * (items.length - 1) : 0;
   const totalItemSize = items.reduce(
     (sum, item) => sum + item.computedMainSize,
-    0
+    0,
   );
 
   let contentSpace: number;
@@ -338,10 +351,7 @@ function positionMainAxis(
 /**
  * Phase 4: Position items on the cross axis (align-items / align-self).
  */
-function positionCrossAxis(
-  items: FlexItem[],
-  container: FlexContainer
-): void {
+function positionCrossAxis(items: FlexItem[], container: FlexContainer): void {
   const pad = resolvePadding(container);
 
   let contentCrossSpace: number;
@@ -349,9 +359,7 @@ function positionCrossAxis(
     contentCrossSpace = container.crossSize - pad.crossStart - pad.crossEnd;
   } else {
     contentCrossSpace =
-      items.length > 0
-        ? Math.max(...items.map((i) => i.computedCrossSize))
-        : 0;
+      items.length > 0 ? Math.max(...items.map((i) => i.computedCrossSize)) : 0;
   }
 
   for (const item of items) {
@@ -381,7 +389,7 @@ function positionCrossAxis(
  */
 function toLayoutResults(
   items: FlexItem[],
-  direction: "row" | "column"
+  direction: "row" | "column",
 ): LayoutResult[] {
   return items.map((item) => {
     if (direction === "row") {
@@ -440,8 +448,7 @@ function computeIntrinsicSize(frame: FrameNode): {
     item.computedCrossSize = item.crossBaseSize;
   }
 
-  const totalGap =
-    items.length > 1 ? container.gap * (items.length - 1) : 0;
+  const totalGap = items.length > 1 ? container.gap * (items.length - 1) : 0;
 
   const totalMainSize =
     items.reduce((s, i) => s + i.computedMainSize, 0) +
@@ -450,9 +457,7 @@ function computeIntrinsicSize(frame: FrameNode): {
     pad.mainEnd;
 
   const maxCross =
-    items.length > 0
-      ? Math.max(...items.map((i) => i.crossBaseSize))
-      : 0;
+    items.length > 0 ? Math.max(...items.map((i) => i.crossBaseSize)) : 0;
   const totalCrossSize = maxCross + pad.crossStart + pad.crossEnd;
 
   if (container.direction === "row") {
@@ -521,7 +526,7 @@ export function calculateFrameLayout(frame: FrameNode): LayoutResult[] {
  */
 export function calculateFrameIntrinsicSize(
   frame: FrameNode,
-  options: { fitWidth?: boolean; fitHeight?: boolean } = {}
+  options: { fitWidth?: boolean; fitHeight?: boolean } = {},
 ): { width: number; height: number } {
   if (!frame.layout?.autoLayout) {
     return { width: frame.width, height: frame.height };
@@ -552,8 +557,7 @@ export function calculateFrameIntrinsicSize(
   resolveMainAxisSizes(items, container);
   resolveCrossAxisSizes(items, container);
 
-  const totalGap =
-    items.length > 1 ? container.gap * (items.length - 1) : 0;
+  const totalGap = items.length > 1 ? container.gap * (items.length - 1) : 0;
 
   const intrinsicMain =
     items.reduce((s, i) => s + i.computedMainSize, 0) +
@@ -572,10 +576,14 @@ export function calculateFrameIntrinsicSize(
 
   return {
     width: fitWidth
-      ? (isHorizontal ? intrinsicMain : intrinsicCross)
+      ? isHorizontal
+        ? intrinsicMain
+        : intrinsicCross
       : frame.width,
     height: fitHeight
-      ? (isHorizontal ? intrinsicCross : intrinsicMain)
+      ? isHorizontal
+        ? intrinsicCross
+        : intrinsicMain
       : frame.height,
   };
 }
@@ -594,7 +602,7 @@ export function calculateFrameIntrinsicHeight(frame: FrameNode): number {
  */
 export function applyLayoutToChildren(
   children: SceneNode[],
-  layoutResults: LayoutResult[]
+  layoutResults: LayoutResult[],
 ): SceneNode[] {
   const resultMap = new Map(layoutResults.map((r) => [r.id, r]));
 
