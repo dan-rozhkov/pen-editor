@@ -154,9 +154,9 @@ function extractFill(fills?: PixsoPaint[]): {
   fillOpacity?: number;
 } {
   if (!fills) return {};
-  const solid = fills.find(
-    (p) => p.type === "SOLID" && p.visible !== false
-  ) as PixsoSolidPaint | undefined;
+  const solid = fills.find((p) => p.type === "SOLID" && p.visible !== false) as
+    | PixsoSolidPaint
+    | undefined;
   if (!solid) return {};
   const result: { fill: string; fillOpacity?: number } = {
     fill: pixsoColorToHex(solid.color),
@@ -172,7 +172,7 @@ function extractGradient(fills?: PixsoPaint[]): GradientFill | undefined {
   const gradient = fills.find(
     (p) =>
       (p.type === "GRADIENT_LINEAR" || p.type === "GRADIENT_RADIAL") &&
-      p.visible !== false
+      p.visible !== false,
   ) as PixsoGradientPaint | undefined;
   if (!gradient || !gradient.gradientStops?.length) return undefined;
 
@@ -194,7 +194,7 @@ function extractGradient(fills?: PixsoPaint[]): GradientFill | undefined {
   let endY = 0.5;
 
   if (gradient.gradientTransform && gradient.gradientTransform.length >= 2) {
-    const [[a, c, e], [b, d, f]] = gradient.gradientTransform;
+    const [[a, , e], [b, , f]] = gradient.gradientTransform;
     startX = e;
     startY = f;
     endX = a + e;
@@ -213,14 +213,18 @@ function extractGradient(fills?: PixsoPaint[]): GradientFill | undefined {
 
 function extractStroke(
   strokes?: PixsoPaint[],
-  strokeWeight?: number
+  strokeWeight?: number,
 ): { stroke?: string; strokeWidth?: number; strokeOpacity?: number } {
   if (!strokes || !strokes.length || !strokeWeight) return {};
   const solid = strokes.find(
-    (p) => p.type === "SOLID" && p.visible !== false
+    (p) => p.type === "SOLID" && p.visible !== false,
   ) as PixsoSolidPaint | undefined;
   if (!solid) return {};
-  const result: { stroke: string; strokeWidth: number; strokeOpacity?: number } = {
+  const result: {
+    stroke: string;
+    strokeWidth: number;
+    strokeOpacity?: number;
+  } = {
     stroke: pixsoColorToHex(solid.color),
     strokeWidth: strokeWeight,
   };
@@ -242,9 +246,7 @@ function extractCornerRadius(node: PixsoNode): number | undefined {
   return undefined;
 }
 
-function mapJustifyContent(
-  value?: string
-): LayoutProperties["justifyContent"] {
+function mapJustifyContent(value?: string): LayoutProperties["justifyContent"] {
   switch (value) {
     case "MIN":
       return "flex-start";
@@ -309,8 +311,7 @@ function extractLayout(node: PixsoNode): {
 
   return {
     layout,
-    sizing:
-      sizing.widthMode || sizing.heightMode ? sizing : undefined,
+    sizing: sizing.widthMode || sizing.heightMode ? sizing : undefined,
   };
 }
 
@@ -376,10 +377,7 @@ function extractTextProps(node: PixsoNode): Partial<TextNode> {
       props.letterSpacing = node.letterSpacing;
     } else if (node.letterSpacing.unit === "PIXELS") {
       props.letterSpacing = node.letterSpacing.value;
-    } else if (
-      node.letterSpacing.unit === "PERCENT" &&
-      node.fontSize
-    ) {
+    } else if (node.letterSpacing.unit === "PERCENT" && node.fontSize) {
       props.letterSpacing = (node.letterSpacing.value / 100) * node.fontSize;
     }
   }
@@ -418,7 +416,7 @@ export function convertPixsoNode(node: PixsoNode): SceneNode | null {
   const gradientFill = extractGradient(node.fills);
   const { stroke, strokeWidth, strokeOpacity } = extractStroke(
     node.strokes,
-    node.strokeWeight
+    node.strokeWeight,
   );
 
   if (fill) base.fill = fill;
@@ -483,8 +481,8 @@ export function convertPixsoNode(node: PixsoNode): SceneNode | null {
     case "POLYGON":
     case "STAR": {
       const sides = node.type === "STAR" ? 10 : 6;
-      const w = (base.width as number);
-      const h = (base.height as number);
+      const w = base.width as number;
+      const h = base.height as number;
       const points = generatePolygonPoints(sides, w, h);
       const polygon: PolygonNode = {
         ...(base as Omit<PolygonNode, "type" | "points" | "sides">),
@@ -504,7 +502,7 @@ export function convertPixsoNode(node: PixsoNode): SceneNode | null {
     }
 
     case "LINE": {
-      const w = (base.width as number);
+      const w = base.width as number;
       const line: LineNode = {
         ...(base as Omit<LineNode, "type" | "points">),
         type: "line",
@@ -522,15 +520,19 @@ export function convertPixsoNode(node: PixsoNode): SceneNode | null {
       };
       // Override fill from text-specific fills (text color)
       if (textProps.fill) text.fill = textProps.fill;
-      if (textProps.fillOpacity !== undefined) text.fillOpacity = textProps.fillOpacity;
+      if (textProps.fillOpacity !== undefined)
+        text.fillOpacity = textProps.fillOpacity;
       if (textProps.fontSize) text.fontSize = textProps.fontSize;
       if (textProps.fontFamily) text.fontFamily = textProps.fontFamily;
       if (textProps.fontWeight) text.fontWeight = textProps.fontWeight;
       if (textProps.fontStyle) text.fontStyle = textProps.fontStyle;
       if (textProps.textAlign) text.textAlign = textProps.textAlign;
-      if (textProps.textAlignVertical) text.textAlignVertical = textProps.textAlignVertical;
-      if (textProps.lineHeight !== undefined) text.lineHeight = textProps.lineHeight;
-      if (textProps.letterSpacing !== undefined) text.letterSpacing = textProps.letterSpacing;
+      if (textProps.textAlignVertical)
+        text.textAlignVertical = textProps.textAlignVertical;
+      if (textProps.lineHeight !== undefined)
+        text.lineHeight = textProps.lineHeight;
+      if (textProps.letterSpacing !== undefined)
+        text.letterSpacing = textProps.letterSpacing;
       if (textProps.underline) text.underline = textProps.underline;
       if (textProps.strikethrough) text.strikethrough = textProps.strikethrough;
       return text;
