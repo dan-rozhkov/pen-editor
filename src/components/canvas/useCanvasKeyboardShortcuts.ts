@@ -182,6 +182,9 @@ export function useCanvasKeyboardShortcuts({
             }
           }
 
+          const currentNodes = useSceneStore.getState().nodes;
+          saveHistory(currentNodes);
+          startBatch();
           for (const clonedNode of clonedNodes) {
             if (targetContainerId) {
               clonedNode.x = 20;
@@ -191,6 +194,7 @@ export function useCanvasKeyboardShortcuts({
               addNode(clonedNode);
             }
           }
+          endBatch();
 
           useSelectionStore.getState().setSelectedIds(clonedNodes.map((n) => n.id));
           return;
@@ -493,25 +497,15 @@ export function useCanvasKeyboardShortcuts({
 
       // Try async clipboard API for text/html (Pixso/Figma format)
       try {
-        console.log("[Paste] Attempting async clipboard read...");
         const items = await navigator.clipboard.read();
-        console.log("[Paste] Clipboard items:", items.length);
         for (const item of items) {
-          console.log("[Paste] Item types:", item.types);
           if (item.types.includes("text/html")) {
             const blob = await item.getType("text/html");
             const html = await blob.text();
-            console.log("[Paste] Got text/html, length:", html.length);
-            console.log("[Paste] HTML content:", html.substring(0, 500));
 
-            const isPixso = detectPixsoClipboard(html);
-            console.log("[Paste] Is Pixso/Figma clipboard:", isPixso);
-
-            if (isPixso) {
-              console.log("[Paste] Detected Pixso/Figma clipboard data");
+            if (detectPixsoClipboard(html)) {
               e.preventDefault();
               const nodes = parseAndConvertPixso(html);
-              console.log("[Paste] Parsed nodes:", nodes.length);
               if (nodes.length > 0) {
                 // Place at viewport center
                 const { x: vpX, y: vpY, scale } = useViewportStore.getState();
@@ -530,27 +524,24 @@ export function useCanvasKeyboardShortcuts({
                 const offsetX = viewportCenterX - totalWidth / 2 - minX;
                 const offsetY = viewportCenterY - totalHeight / 2 - minY;
 
+                const currentNodes = useSceneStore.getState().nodes;
+                saveHistory(currentNodes);
+                startBatch();
                 for (const node of nodes) {
                   node.x += offsetX;
                   node.y += offsetY;
                   addNode(node);
                 }
+                endBatch();
 
                 useSelectionStore.getState().setSelectedIds(nodes.map((n) => n.id));
                 return;
               }
-            } else {
-              console.log("[Paste] Not Pixso/Figma format, checking markers...");
-              console.log("[Paste] Has pixsometa:", html.includes("pixsometa"));
-              console.log("[Paste] Has pixso):", html.includes("pixso)"));
-              console.log("[Paste] Has figmeta:", html.includes("figmeta"));
-              console.log("[Paste] Has figma):", html.includes("figma)"));
             }
           }
         }
-      } catch (err) {
+      } catch {
         // Async clipboard not available or permission denied, fall through to sync
-        console.log("[Paste] Async clipboard failed:", err);
       }
 
       // Fallback: Synchronous clipboard access for SVG text/plain
