@@ -43,7 +43,7 @@ export function GroupRenderer({
   isTopLevel,
   selectOverrideId,
 }: GroupRendererProps) {
-  const nodes = useSceneStore((state) => state.getNodes());
+  const parentById = useSceneStore((state) => state.parentById);
   const { select, enterContainer } = useSelectionStore();
   const enteredContainerId = useSelectionStore(
     (state) => state.enteredContainerId,
@@ -64,7 +64,7 @@ export function GroupRenderer({
   }, [shouldCache, node]);
 
   const childSelectOverride = getChildSelectOverride({
-    nodes,
+    parentById,
     nodeId: node.id,
     isTopLevel,
     selectOverrideId,
@@ -84,7 +84,7 @@ export function GroupRenderer({
     const pointerPos = stage.getRelativePointerPosition();
     if (!pointerPos) return;
     // Use absolute position to correctly handle nested groups
-    const absPos = getNodeAbsolutePosition(nodes, node.id);
+    const absPos = getNodeAbsolutePosition(useSceneStore.getState().getNodes(), node.id);
     if (!absPos) return;
     const localX = pointerPos.x - absPos.x;
     const localY = pointerPos.y - absPos.y;

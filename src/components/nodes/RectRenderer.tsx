@@ -1,3 +1,4 @@
+import { memo } from "react";
 import Konva from "konva";
 import { Rect } from "react-konva";
 import type { SceneNode } from "@/types/scene";
@@ -22,7 +23,7 @@ interface RectRendererProps {
   onTransformEnd: (e: Konva.KonvaEventObject<Event>) => void;
 }
 
-export function RectRenderer({
+export const RectRenderer = memo(function RectRenderer({
   node,
   fillColor,
   strokeColor,
@@ -87,4 +88,4 @@ export function RectRenderer({
       )}
     </>
   );
-}
+});

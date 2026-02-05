@@ -167,6 +167,23 @@ export function isDescendantOf(
 }
 
 /**
+ * Check if targetId is a descendant of ancestorId using the flat parentById map.
+ * O(depth) instead of O(n) — walks the parent chain from targetId upwards.
+ */
+export function isDescendantOfFlat(
+  parentById: Record<string, string | null>,
+  ancestorId: string,
+  targetId: string,
+): boolean {
+  let current = parentById[targetId];
+  while (current != null) {
+    if (current === ancestorId) return true;
+    current = parentById[current];
+  }
+  return false;
+}
+
+/**
  * Get absolute position of a node, taking into account Yoga layout calculations
  * for auto-layout frames. This is necessary because children inside auto-layout
  * frames have their positions computed by Yoga, not stored in node.x/y.

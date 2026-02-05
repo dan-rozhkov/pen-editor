@@ -1,3 +1,4 @@
+import { memo } from "react";
 import Konva from "konva";
 import { Text } from "react-konva";
 import type { TextNode } from "@/types/scene";
@@ -27,7 +28,7 @@ interface TextRendererProps {
   onTransformEnd: (e: Konva.KonvaEventObject<Event>) => void;
 }
 
-export function TextRenderer({
+export const TextRenderer = memo(function TextRenderer({
   node,
   fillColor,
   gradientProps,
@@ -97,4 +98,4 @@ export function TextRenderer({
       )}
     </>
   );
-}
+});

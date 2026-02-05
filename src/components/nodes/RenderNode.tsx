@@ -1,4 +1,4 @@
-import { memo, useRef, useMemo } from "react";
+import { memo, useRef, useMemo, useCallback } from "react";
 import Konva from "konva";
 import type {
   FrameNode,
@@ -62,7 +62,6 @@ export const RenderNode = memo(function RenderNode({
   effectiveTheme,
   selectOverrideId,
 }: RenderNodeProps) {
-  const nodes = useSceneStore((state) => state.getNodes());
   const updateNode = useSceneStore((state) => state.updateNode);
   const moveNode = useSceneStore((state) => state.moveNode);
   const select = useSelectionStore((state) => state.select);
@@ -76,14 +75,9 @@ export const RenderNode = memo(function RenderNode({
   );
   const variables = useVariableStore((state) => state.variables);
   const globalTheme = useThemeStore((state) => state.activeTheme);
-  const { startDrag, updateDrop, endDrag } = useDragStore();
   const isHovered = useHoverStore(
     (state) => state.hoveredNodeId === node.id,
   );
-  const calculateLayoutForFrame = useLayoutStore(
-    (state) => state.calculateLayoutForFrame,
-  );
-  const { setGuides, clearGuides } = useSmartGuideStore();
 
   // Refs for caching snap data during drag
   const snapTargetsRef = useRef<SnapTarget[]>([]);
@@ -92,17 +86,25 @@ export const RenderNode = memo(function RenderNode({
   const transformUpdateRef = useRef<Partial<SceneNode> | null>(null);
   const transformRafRef = useRef<number | null>(null);
 
-  const scheduleTransformUpdate = (updates: Partial<SceneNode>) => {
+  // Refs for stable callbacks - avoids recreating handlers on every prop change
+  const nodeRef = useRef(node);
+  nodeRef.current = node;
+  const selectOverrideIdRef = useRef(selectOverrideId);
+  selectOverrideIdRef.current = selectOverrideId;
+  const isSelectedRef = useRef(isSelected);
+  isSelectedRef.current = isSelected;
+
+  const scheduleTransformUpdate = useCallback((updates: Partial<SceneNode>) => {
     transformUpdateRef.current = updates;
     if (transformRafRef.current !== null) return;
     transformRafRef.current = requestAnimationFrame(() => {
       transformRafRef.current = null;
       const pending = transformUpdateRef.current;
       if (pending) {
-        updateNode(node.id, pending);
+        updateNode(nodeRef.current.id, pending);
       }
     });
-  };
+  }, [updateNode]);
 
   // Use effective theme from parent, or fall back to global theme
   const currentTheme = effectiveTheme ?? globalTheme;
@@ -119,6 +121,12 @@ export const RenderNode = memo(function RenderNode({
   }), [parentNode]);
   const isInAutoLayout = parentContext.isInsideAutoLayout;
   const parentFrame = parentContext.parent;
+
+  // Refs for parent context (used in drag handlers - avoids callback recreation)
+  const isInAutoLayoutRef = useRef(isInAutoLayout);
+  isInAutoLayoutRef.current = isInAutoLayout;
+  const parentFrameRef = useRef(parentFrame);
+  parentFrameRef.current = parentFrame;
 
   // Resolved colors for this node (with per-color opacity applied)
   const { fillColor, strokeColor } = useMemo(() => {
@@ -176,42 +184,47 @@ export const RenderNode = memo(function RenderNode({
     return null;
   }
 
-  const handleClick = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+  const handleClick = useCallback((e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     e.cancelBubble = true;
+    const n = nodeRef.current;
     const isMeta = "metaKey" in e.evt && (e.evt.metaKey || e.evt.ctrlKey);
     const currentSelectedIds = useSelectionStore.getState().selectedIds;
-    const isAlreadySelected = currentSelectedIds.includes(node.id);
+    const isAlreadySelected = currentSelectedIds.includes(n.id);
     // Cmd/Ctrl+Click bypasses selectOverrideId to deep-select the actual clicked node
     const selectId = isMeta
-      ? node.id
+      ? n.id
       : isAlreadySelected
-      ? node.id
-      : selectOverrideId ?? node.id;
+      ? n.id
+      : selectOverrideIdRef.current ?? n.id;
     const isShift = "shiftKey" in e.evt && e.evt.shiftKey;
     if (isShift) {
       addToSelection(selectId);
     } else {
       select(selectId);
     }
-  };
+  }, [select, addToSelection]);
 
 
   // Check if node is hovered (and not selected - selected takes priority)
   const isHoveredAndNotSelected = isHovered && !isSelected;
 
-  const handleDragStart = () => {
+  const handleDragStart = useCallback(() => {
+    const n = nodeRef.current;
     // Always select the node when starting to drag
-    select(node.id);
+    select(n.id);
 
-    if (isInAutoLayout) {
-      startDrag(node.id);
+    if (isInAutoLayoutRef.current) {
+      useDragStore.getState().startDrag(n.id);
     } else {
+      // Use imperative getState() to avoid subscribing to entire tree
+      const currentNodes = useSceneStore.getState().getNodes();
+
       // Compute parent offset for absolute position calculation
-      const absPos = getNodeAbsolutePosition(nodes, node.id);
+      const absPos = getNodeAbsolutePosition(currentNodes, n.id);
       if (absPos) {
         parentOffsetRef.current = {
-          x: absPos.x - node.x,
-          y: absPos.y - node.y,
+          x: absPos.x - n.x,
+          y: absPos.y - n.y,
         };
       } else {
         parentOffsetRef.current = { x: 0, y: 0 };
@@ -223,17 +236,19 @@ export const RenderNode = memo(function RenderNode({
       // Collect snap targets from all nodes except the dragged one(s)
       const currentSelectedIds = useSelectionStore.getState().selectedIds;
       const excludeIds = new Set(currentSelectedIds);
-      snapTargetsRef.current = collectSnapTargets(nodes, excludeIds);
+      snapTargetsRef.current = collectSnapTargets(currentNodes, excludeIds);
     }
-  };
+  }, [select]);
 
-  const handleDragMove = (e: Konva.KonvaEventObject<DragEvent>) => {
+  const handleDragMove = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
     const target = e.target;
+    const n = nodeRef.current;
     // Only process if this is the actual node being dragged
     // Prevents parent Group from handling child drag events
-    if (target.id() !== node.id) return;
+    if (target.id() !== n.id) return;
 
-    if (isInAutoLayout && parentFrame && parentFrame.type === "frame") {
+    const pFrame = parentFrameRef.current;
+    if (isInAutoLayoutRef.current && pFrame && pFrame.type === "frame") {
       // Auto-layout drag: reordering logic (no snapping)
       const stage = target.getStage();
       if (!stage) return;
@@ -241,11 +256,13 @@ export const RenderNode = memo(function RenderNode({
       const pointerPos = stage.getRelativePointerPosition();
       if (!pointerPos) return;
 
-      // Get absolute position of parent frame
+      // Get absolute position of parent frame (imperative to avoid subscription)
+      const currentNodes = useSceneStore.getState().getNodes();
+      const calcLayout = useLayoutStore.getState().calculateLayoutForFrame;
       const frameRect = getFrameAbsoluteRectWithLayout(
-        parentFrame,
-        nodes,
-        calculateLayoutForFrame,
+        pFrame,
+        currentNodes,
+        calcLayout,
       );
 
       // Check if cursor is inside parent frame
@@ -254,25 +271,25 @@ export const RenderNode = memo(function RenderNode({
       if (isInsideParent) {
         // Get layout-calculated children positions (from Yoga) for correct indicator placement
         // This is important when justify is center/end - raw children have x=0, y=0
-        const layoutChildren = parentFrame.layout?.autoLayout
-          ? calculateLayoutForFrame(parentFrame)
-          : parentFrame.children;
+        const layoutChildren = pFrame.layout?.autoLayout
+          ? calcLayout(pFrame)
+          : pFrame.children;
 
         // Calculate drop position for reordering
         const dropResult = calculateDropPosition(
           pointerPos,
-          parentFrame,
+          pFrame,
           { x: frameRect.x, y: frameRect.y },
-          node.id,
+          n.id,
           layoutChildren,
         );
 
         if (dropResult) {
-          updateDrop(dropResult.indicator, dropResult.insertInfo, false);
+          useDragStore.getState().updateDrop(dropResult.indicator, dropResult.insertInfo, false);
         }
       } else {
         // Outside parent - will move to root level
-        updateDrop(null, null, true);
+        useDragStore.getState().updateDrop(null, null, true);
       }
     } else {
       // Free drag: apply smart guide snapping
@@ -280,7 +297,7 @@ export const RenderNode = memo(function RenderNode({
 
       // No targets to snap to — skip snap logic entirely
       if (targets.length === 0) {
-        clearGuides();
+        useSmartGuideStore.getState().clearGuides();
         return;
       }
 
@@ -294,7 +311,7 @@ export const RenderNode = memo(function RenderNode({
       const absX = intendedX + parentOffsetRef.current.x;
       const absY = intendedY + parentOffsetRef.current.y;
 
-      const draggedEdges = getSnapEdges(absX, absY, node.width, node.height);
+      const draggedEdges = getSnapEdges(absX, absY, n.width, n.height);
       const result = calculateSnap(draggedEdges, targets, threshold);
 
       // Apply new snap offset
@@ -303,85 +320,89 @@ export const RenderNode = memo(function RenderNode({
       target.y(intendedY + result.deltaY);
 
       if (result.guides.length > 0) {
-        setGuides(result.guides);
+        useSmartGuideStore.getState().setGuides(result.guides);
       } else {
-        clearGuides();
+        useSmartGuideStore.getState().clearGuides();
       }
     }
-  };
+  }, []);
 
-  const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
+  const handleDragEnd = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
     const target = e.target;
+    const n = nodeRef.current;
 
     // Only process if this is the actual node being dragged
     // Prevents parent Group from handling child drag events
-    if (target.id() !== node.id) return;
+    if (target.id() !== n.id) return;
 
     // Always clear smart guides on drag end
-    clearGuides();
+    useSmartGuideStore.getState().clearGuides();
 
-    if (isInAutoLayout && parentFrame) {
+    if (isInAutoLayoutRef.current && parentFrameRef.current) {
       const { insertInfo, isOutsideParent } = useDragStore.getState();
 
       handleAutoLayoutDragEnd(
         target,
-        node.id,
-        node.width,
-        node.height,
+        n.id,
+        n.width,
+        n.height,
         insertInfo,
         isOutsideParent,
         moveNode,
         updateNode,
-        () => ({ x: node.x, y: node.y }),
+        () => ({ x: n.x, y: n.y }),
       );
 
-      endDrag();
+      useDragStore.getState().endDrag();
     } else {
       // Normal behavior - update position
-      updateNode(node.id, {
+      updateNode(n.id, {
         x: Math.round(target.x()),
         y: Math.round(target.y()),
       });
     }
-  };
+  }, [moveNode, updateNode]);
 
-  const handleTransformStart = (e: Konva.KonvaEventObject<Event>) => {
-    if (node.type !== "frame") return;
-    if (e.target.id() !== node.id) return;
+  const handleTransformStart = useCallback((e: Konva.KonvaEventObject<Event>) => {
+    const n = nodeRef.current;
+    if (n.type !== "frame") return;
+    if (e.target.id() !== n.id) return;
     const history = useHistoryStore.getState();
     history.saveHistory(createSnapshot(useSceneStore.getState()));
     history.startBatch();
-    const widthMode = node.sizing?.widthMode ?? "fixed";
-    const heightMode = node.sizing?.heightMode ?? "fixed";
+    const widthMode = n.sizing?.widthMode ?? "fixed";
+    const heightMode = n.sizing?.heightMode ?? "fixed";
     const shouldSwitchWidth =
       widthMode === "fill_container" || widthMode === "fit_content";
     const shouldSwitchHeight =
       heightMode === "fill_container" || heightMode === "fit_content";
     if (shouldSwitchWidth || shouldSwitchHeight) {
-      updateNode(node.id, {
+      updateNode(n.id, {
         sizing: {
           widthMode: shouldSwitchWidth ? "fixed" : widthMode,
           heightMode: shouldSwitchHeight ? "fixed" : heightMode,
         },
       });
     }
-  };
+  }, [updateNode]);
 
-  const handleTextTransformStart = (e: Konva.KonvaEventObject<Event>) => {
-    if (node.type !== "text") return;
-    if (e.target.id() !== node.id) return;
+  const handleTextTransformStart = useCallback((e: Konva.KonvaEventObject<Event>) => {
+    const n = nodeRef.current;
+    if (n.type !== "text") return;
+    if (e.target.id() !== n.id) return;
     const history = useHistoryStore.getState();
     history.saveHistory(createSnapshot(useSceneStore.getState()));
     history.startBatch();
-    if (node.textWidthMode === "auto" || !node.textWidthMode) {
-      updateNode(node.id, { textWidthMode: "fixed" });
+    if (n.textWidthMode === "auto" || !n.textWidthMode) {
+      updateNode(n.id, { textWidthMode: "fixed" });
     }
-  };
+  }, [updateNode]);
 
-  const handleFrameTransform = (e: Konva.KonvaEventObject<Event>) => {
-    if (node.type !== "frame") return;
+  const handleFrameTransform = useCallback((e: Konva.KonvaEventObject<Event>) => {
+    const n = nodeRef.current;
+    if (n.type !== "frame") return;
     const target = e.target;
-    if (target.id() !== node.id) return;
+    if (target.id() !== n.id) return;
 
     const scaleX = target.scaleX();
     const scaleY = target.scaleY();
@@ -389,12 +410,12 @@ export const RenderNode = memo(function RenderNode({
     const newWidth = Math.max(5, target.width() * Math.abs(scaleX));
     const newHeight = Math.max(5, target.height() * Math.abs(scaleY));
 
-    const flipSignX = node.flipX ? -1 : 1;
-    const flipSignY = node.flipY ? -1 : 1;
+    const flipSignX = n.flipX ? -1 : 1;
+    const flipSignY = n.flipY ? -1 : 1;
     target.scaleX(flipSignX);
     target.scaleY(flipSignY);
-    target.offsetX(node.flipX ? newWidth : 0);
-    target.offsetY(node.flipY ? newHeight : 0);
+    target.offsetX(n.flipX ? newWidth : 0);
+    target.offsetY(n.flipY ? newHeight : 0);
 
     scheduleTransformUpdate({
       x: target.x(),
@@ -403,12 +424,13 @@ export const RenderNode = memo(function RenderNode({
       height: newHeight,
       rotation: rotation,
     });
-  };
+  }, []);
 
-  const handleInstanceTransform = (e: Konva.KonvaEventObject<Event>) => {
-    if (node.type !== "ref") return;
+  const handleInstanceTransform = useCallback((e: Konva.KonvaEventObject<Event>) => {
+    const n = nodeRef.current;
+    if (n.type !== "ref") return;
     const target = e.target;
-    if (target.id() !== node.id) return;
+    if (target.id() !== n.id) return;
 
     const scaleX = target.scaleX();
     const scaleY = target.scaleY();
@@ -416,26 +438,27 @@ export const RenderNode = memo(function RenderNode({
     const newWidth = Math.max(5, target.width() * Math.abs(scaleX));
     const newHeight = Math.max(5, target.height() * Math.abs(scaleY));
 
-    const flipSignX = node.flipX ? -1 : 1;
-    const flipSignY = node.flipY ? -1 : 1;
+    const flipSignX = n.flipX ? -1 : 1;
+    const flipSignY = n.flipY ? -1 : 1;
     target.scaleX(flipSignX);
     target.scaleY(flipSignY);
-    target.offsetX(node.flipX ? newWidth : 0);
-    target.offsetY(node.flipY ? newHeight : 0);
+    target.offsetX(n.flipX ? newWidth : 0);
+    target.offsetY(n.flipY ? newHeight : 0);
 
-    updateNode(node.id, {
+    updateNode(n.id, {
       x: target.x(),
       y: target.y(),
       width: newWidth,
       height: newHeight,
       rotation: rotation,
     });
-  };
+  }, [updateNode]);
 
-  const handleTextTransform = (e: Konva.KonvaEventObject<Event>) => {
-    if (node.type !== "text") return;
+  const handleTextTransform = useCallback((e: Konva.KonvaEventObject<Event>) => {
+    const n = nodeRef.current;
+    if (n.type !== "text") return;
     const target = e.target;
-    if (target.id() !== node.id) return;
+    if (target.id() !== n.id) return;
 
     const scaleX = target.scaleX();
     const scaleY = target.scaleY();
@@ -443,58 +466,59 @@ export const RenderNode = memo(function RenderNode({
     const newWidth = Math.max(5, target.width() * Math.abs(scaleX));
     const newHeight = Math.max(5, target.height() * Math.abs(scaleY));
 
-    const flipSignX = node.flipX ? -1 : 1;
-    const flipSignY = node.flipY ? -1 : 1;
+    const flipSignX = n.flipX ? -1 : 1;
+    const flipSignY = n.flipY ? -1 : 1;
     target.scaleX(flipSignX);
     target.scaleY(flipSignY);
-    target.offsetX(node.flipX ? newWidth : 0);
-    target.offsetY(node.flipY ? newHeight : 0);
+    target.offsetX(n.flipX ? newWidth : 0);
+    target.offsetY(n.flipY ? newHeight : 0);
 
-    updateNode(node.id, {
+    updateNode(n.id, {
       x: target.x(),
       y: target.y(),
       width: newWidth,
       height: newHeight,
       rotation: rotation,
     });
-  };
+  }, [updateNode]);
 
-  const handleTransformEnd = (e: Konva.KonvaEventObject<Event>) => {
+  const handleTransformEnd = useCallback((e: Konva.KonvaEventObject<Event>) => {
     const target = e.target;
-    if (node.type === "frame") {
+    const n = nodeRef.current;
+    if (n.type === "frame") {
       if (transformRafRef.current !== null) {
         cancelAnimationFrame(transformRafRef.current);
         transformRafRef.current = null;
       }
       if (transformUpdateRef.current) {
-        updateNode(node.id, transformUpdateRef.current);
+        updateNode(n.id, transformUpdateRef.current);
       }
-      const flipSignX = node.flipX ? -1 : 1;
-      const flipSignY = node.flipY ? -1 : 1;
+      const flipSignX = n.flipX ? -1 : 1;
+      const flipSignY = n.flipY ? -1 : 1;
       target.scaleX(flipSignX);
       target.scaleY(flipSignY);
-      target.offsetX(node.flipX ? node.width : 0);
-      target.offsetY(node.flipY ? node.height : 0);
+      target.offsetX(n.flipX ? n.width : 0);
+      target.offsetY(n.flipY ? n.height : 0);
       useHistoryStore.getState().endBatch();
       return;
     }
-    if (node.type === "text") {
-      const flipSignX = node.flipX ? -1 : 1;
-      const flipSignY = node.flipY ? -1 : 1;
+    if (n.type === "text") {
+      const flipSignX = n.flipX ? -1 : 1;
+      const flipSignY = n.flipY ? -1 : 1;
       target.scaleX(flipSignX);
       target.scaleY(flipSignY);
-      target.offsetX(node.flipX ? node.width : 0);
-      target.offsetY(node.flipY ? node.height : 0);
+      target.offsetX(n.flipX ? n.width : 0);
+      target.offsetY(n.flipY ? n.height : 0);
       useHistoryStore.getState().endBatch();
       return;
     }
-    if (node.type === "ref") {
-      const flipSignX = node.flipX ? -1 : 1;
-      const flipSignY = node.flipY ? -1 : 1;
+    if (n.type === "ref") {
+      const flipSignX = n.flipX ? -1 : 1;
+      const flipSignY = n.flipY ? -1 : 1;
       target.scaleX(flipSignX);
       target.scaleY(flipSignY);
-      target.offsetX(node.flipX ? node.width : 0);
-      target.offsetY(node.flipY ? node.height : 0);
+      target.offsetX(n.flipX ? n.width : 0);
+      target.offsetY(n.flipY ? n.height : 0);
       useHistoryStore.getState().endBatch();
       return;
     }
@@ -503,12 +527,12 @@ export const RenderNode = memo(function RenderNode({
     const rotation = target.rotation();
 
     // Preserve flip state: use absolute scale for sizing, reset to flip sign
-    const flipSignX = node.flipX ? -1 : 1;
-    const flipSignY = node.flipY ? -1 : 1;
+    const flipSignX = n.flipX ? -1 : 1;
+    const flipSignY = n.flipY ? -1 : 1;
     target.scaleX(flipSignX);
     target.scaleY(flipSignY);
-    target.offsetX(node.flipX ? target.width() : 0);
-    target.offsetY(node.flipY ? target.height() : 0);
+    target.offsetX(n.flipX ? target.width() : 0);
+    target.offsetY(n.flipY ? target.height() : 0);
 
     const newWidth = Math.max(5, target.width() * Math.abs(scaleX));
     const newHeight = Math.max(5, target.height() * Math.abs(scaleY));
@@ -522,22 +546,30 @@ export const RenderNode = memo(function RenderNode({
     };
 
     // Recalculate points for line/polygon nodes to match new dimensions
-    if (node.type === "line") {
-      const ln = node as LineNode;
-      const scaleFactorX = newWidth / node.width;
-      const scaleFactorY = newHeight / node.height;
+    if (n.type === "line") {
+      const ln = n as LineNode;
+      const scaleFactorX = newWidth / n.width;
+      const scaleFactorY = newHeight / n.height;
       const newPoints = ln.points.map((v, i) =>
         i % 2 === 0 ? v * scaleFactorX : v * scaleFactorY,
       );
       (updates as Partial<LineNode>).points = newPoints;
-    } else if (node.type === "polygon") {
-      const pn = node as PolygonNode;
+    } else if (n.type === "polygon") {
+      const pn = n as PolygonNode;
       const sides = pn.sides ?? 6;
       (updates as Partial<PolygonNode>).points = generatePolygonPoints(sides, newWidth, newHeight);
     }
 
-    updateNode(node.id, updates);
-  };
+    updateNode(n.id, updates);
+  }, [updateNode]);
+
+  const handleTextDblClick = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
+    // If this text node is not directly selectable (deep nested),
+    // don't start editing unless it's already selected via deep-select
+    if (selectOverrideIdRef.current && !isSelectedRef.current) return;
+    e.cancelBubble = true;
+    startEditing(nodeRef.current.id);
+  }, [startEditing]);
 
   switch (node.type) {
     case "frame":
@@ -610,13 +642,6 @@ export const RenderNode = memo(function RenderNode({
         />
       );
     case "text": {
-      const handleDblClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
-        // If this text node is not directly selectable (deep nested),
-        // don't start editing unless it's already selected via deep-select
-        if (selectOverrideId && !isSelected) return;
-        e.cancelBubble = true;
-        startEditing(node.id);
-      };
       return (
         <TextRenderer
           node={node}
@@ -626,7 +651,7 @@ export const RenderNode = memo(function RenderNode({
           isHovered={isHoveredAndNotSelected}
           isEditing={isEditingText}
           onClick={handleClick}
-          onDblClick={handleDblClick}
+          onDblClick={handleTextDblClick}
           onDragStart={handleDragStart}
           onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}

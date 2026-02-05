@@ -1,3 +1,4 @@
+import { memo } from "react";
 import Konva from "konva";
 import { Line } from "react-konva";
 import type { PolygonNode } from "@/types/scene";
@@ -21,7 +22,7 @@ interface PolygonRendererProps {
   onTransformEnd: (e: Konva.KonvaEventObject<Event>) => void;
 }
 
-export function PolygonRenderer({
+export const PolygonRenderer = memo(function PolygonRenderer({
   node,
   fillColor,
   strokeColor,
@@ -80,4 +81,4 @@ export function PolygonRenderer({
       )}
     </>
   );
-}
+});

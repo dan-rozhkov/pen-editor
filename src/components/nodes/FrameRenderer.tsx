@@ -64,7 +64,7 @@ export function FrameRenderer({
   isTopLevel,
   selectOverrideId,
 }: FrameRendererProps) {
-  const nodes = useSceneStore((state) => state.getNodes());
+  const parentById = useSceneStore((state) => state.parentById);
   const { select, enterContainer } = useSelectionStore();
   const enteredContainerId = useSelectionStore(
     (state) => state.enteredContainerId,
@@ -90,7 +90,7 @@ export function FrameRenderer({
     if (layoutChildren.length <= 10) return layoutChildren;
     // Get the frame's absolute position to compute child absolute positions
     const absPos = getNodeAbsolutePositionWithLayout(
-      nodes,
+      useSceneStore.getState().getNodes(),
       node.id,
       calculateLayoutForFrame,
     );
@@ -102,7 +102,7 @@ export function FrameRenderer({
     return layoutChildren.filter((child) =>
       isChildVisibleInViewport(child, absPos.x, absPos.y, bounds),
     );
-  }, [layoutChildren, nodes, node.id, vpScale, vpX, vpY, stageRef]);
+  }, [layoutChildren, node.id, vpScale, vpX, vpY, stageRef]);
 
   // Calculate effective size (fit_content uses intrinsic size from Yoga)
   const { effectiveWidth, effectiveHeight } = useMemo(() => {
@@ -124,7 +124,7 @@ export function FrameRenderer({
   const childTheme = node.themeOverride ?? effectiveTheme;
 
   const childSelectOverride = getChildSelectOverride({
-    nodes,
+    parentById,
     nodeId: node.id,
     isTopLevel,
     selectOverrideId,
@@ -212,7 +212,7 @@ export function FrameRenderer({
     if (!pointerPos) return;
     // Use absolute position to correctly handle nested frames
     const absPos = getNodeAbsolutePositionWithLayout(
-      nodes,
+      useSceneStore.getState().getNodes(),
       node.id,
       calculateLayoutForFrame,
     );

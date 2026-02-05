@@ -6,7 +6,7 @@ import type {
   TextNode,
 } from "@/types/scene";
 import { useLoadImage } from "@/hooks/useLoadImage";
-import { isDescendantOf } from "@/utils/nodeUtils";
+import { isDescendantOfFlat } from "@/utils/nodeUtils";
 
 // Figma-style hover outline color
 export const HOVER_OUTLINE_COLOR = "#0d99ff";
@@ -170,7 +170,7 @@ export function getTextDimensions(node: TextNode) {
 }
 
 interface ChildSelectOverrideInput {
-  nodes: SceneNode[];
+  parentById: Record<string, string | null>;
   nodeId: string;
   isTopLevel: boolean;
   selectOverrideId?: string;
@@ -178,7 +178,7 @@ interface ChildSelectOverrideInput {
 }
 
 export function getChildSelectOverride({
-  nodes,
+  parentById,
   nodeId,
   isTopLevel,
   selectOverrideId,
@@ -187,7 +187,7 @@ export function getChildSelectOverride({
   if (selectOverrideId) return selectOverrideId;
   const isEntered = enteredContainerId === nodeId;
   const isAncestorOfEntered = enteredContainerId
-    ? isDescendantOf(nodes, nodeId, enteredContainerId)
+    ? isDescendantOfFlat(parentById, nodeId, enteredContainerId)
     : false;
   const childrenDirectlySelectable = isTopLevel || isEntered || isAncestorOfEntered;
   return childrenDirectlySelectable ? undefined : nodeId;

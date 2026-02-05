@@ -1,3 +1,4 @@
+import { memo } from "react";
 import Konva from "konva";
 import { Group, Path, Rect } from "react-konva";
 import type { PathNode } from "@/types/scene";
@@ -20,7 +21,7 @@ interface PathRendererProps {
   onTransformEnd: (e: Konva.KonvaEventObject<Event>) => void;
 }
 
-export function PathRenderer({
+export const PathRenderer = memo(function PathRenderer({
   node,
   fillColor,
   strokeColor,
@@ -144,4 +145,4 @@ export function PathRenderer({
       )}
     </>
   );
-}
+});

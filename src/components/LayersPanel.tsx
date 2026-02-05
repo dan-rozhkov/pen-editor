@@ -125,8 +125,8 @@ const LayerItem = memo(function LayerItem({
   onDrop,
   flatIds,
 }: LayerItemProps) {
-  const { selectedIds, select, addToSelection, lastSelectedId, selectRange } = useSelectionStore();
-  const { setHoveredNode } = useHoverStore();
+  // Granular selection subscription - only re-render when THIS node's selection state changes
+  const isSelected = useSelectionStore((s) => s.selectedIds.includes(node.id));
   const toggleVisibility = useSceneStore((state) => state.toggleVisibility);
   const expandedFrameIds = useSceneStore((state) => state.expandedFrameIds);
   const toggleFrameExpanded = useSceneStore(
@@ -147,7 +147,6 @@ const LayerItem = memo(function LayerItem({
     }
   }, [isEditing]);
 
-  const isSelected = selectedIds.includes(node.id);
   const isVisible = node.visible !== false;
   const isFrame = node.type === "frame" || node.type === "group";
   const hasChildren =
@@ -157,12 +156,13 @@ const LayerItem = memo(function LayerItem({
   const isDropTarget = dragState.dropTargetId === node.id;
 
   const handleClick = (e: React.MouseEvent) => {
-    if (e.shiftKey && lastSelectedId) {
-      selectRange(lastSelectedId, node.id, flatIds);
+    const selState = useSelectionStore.getState();
+    if (e.shiftKey && selState.lastSelectedId) {
+      selState.selectRange(selState.lastSelectedId, node.id, flatIds);
     } else if (e.shiftKey) {
-      addToSelection(node.id);
+      selState.addToSelection(node.id);
     } else {
-      select(node.id);
+      selState.select(node.id);
     }
   };
 
@@ -208,11 +208,11 @@ const LayerItem = memo(function LayerItem({
   };
 
   const handleMouseEnter = () => {
-    setHoveredNode(node.id);
+    useHoverStore.getState().setHoveredNode(node.id);
   };
 
   const handleMouseLeave = () => {
-    setHoveredNode(null);
+    useHoverStore.getState().setHoveredNode(null);
   };
 
   const handleDragStart = (e: React.DragEvent) => {

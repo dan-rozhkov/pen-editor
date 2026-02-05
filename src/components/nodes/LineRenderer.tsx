@@ -1,3 +1,4 @@
+import { memo } from "react";
 import Konva from "konva";
 import { Line } from "react-konva";
 import type { LineNode } from "@/types/scene";
@@ -19,7 +20,7 @@ interface LineRendererProps {
   onTransformEnd: (e: Konva.KonvaEventObject<Event>) => void;
 }
 
-export function LineRenderer({
+export const LineRenderer = memo(function LineRenderer({
   node,
   strokeColor,
   shadowProps,
@@ -74,4 +75,4 @@ export function LineRenderer({
       )}
     </>
   );
-}
+});

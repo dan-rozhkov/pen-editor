@@ -1,3 +1,4 @@
+import { memo } from "react";
 import Konva from "konva";
 import { Ellipse } from "react-konva";
 import type { FrameNode, SceneNode } from "@/types/scene";
@@ -25,7 +26,7 @@ interface EllipseRendererProps {
   isHovered: boolean;
 }
 
-export function EllipseRenderer({
+export const EllipseRenderer = memo(function EllipseRenderer({
   node,
   onClick,
   onDragStart,
@@ -150,4 +151,4 @@ export function EllipseRenderer({
       )}
     </>
   );
-}
+});
