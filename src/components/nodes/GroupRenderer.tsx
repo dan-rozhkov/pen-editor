@@ -43,7 +43,7 @@ export function GroupRenderer({
   isTopLevel,
   selectOverrideId,
 }: GroupRendererProps) {
-  const nodes = useSceneStore((state) => state.nodes);
+  const nodes = useSceneStore((state) => state.getNodes());
   const { select, enterContainer } = useSelectionStore();
   const enteredContainerId = useSelectionStore(
     (state) => state.enteredContainerId,

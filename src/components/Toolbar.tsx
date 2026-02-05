@@ -15,7 +15,7 @@ import {
 } from "./ui/dialog";
 
 export function Toolbar() {
-  const nodes = useSceneStore((state) => state.nodes);
+  const nodes = useSceneStore((state) => state.getNodes());
   const setNodes = useSceneStore((state) => state.setNodes);
   const addNode = useSceneStore((state) => state.addNode);
   const variables = useVariableStore((state) => state.variables);

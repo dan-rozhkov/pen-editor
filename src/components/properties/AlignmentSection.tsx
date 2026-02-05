@@ -8,7 +8,7 @@ import {
   TextAlignRight,
 } from "@phosphor-icons/react";
 import { useHistoryStore } from "@/store/historyStore";
-import { useSceneStore } from "@/store/sceneStore";
+import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import {
   alignNodes,
   alignNodeInFrame,
@@ -47,7 +47,7 @@ export function AlignmentSection({
 
     if (updates.length === 0) return;
 
-    useHistoryStore.getState().saveHistory(nodes);
+    useHistoryStore.getState().saveHistory(createSnapshot(useSceneStore.getState()));
 
     let newNodes = nodes;
     for (const update of updates) {
@@ -185,7 +185,7 @@ function SpacingInput({
     const updates = distributeSpacing(selectedIds, nodes, val);
     if (updates.length === 0) return;
 
-    useHistoryStore.getState().saveHistory(nodes);
+    useHistoryStore.getState().saveHistory(createSnapshot(useSceneStore.getState()));
     let newNodes = nodes;
     for (const update of updates) {
       const { id, ...changes } = update;

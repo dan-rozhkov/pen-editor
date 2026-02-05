@@ -34,7 +34,7 @@ export function useCanvasDoubleClick({
 
     const handleDblClick = (e: MouseEvent) => {
       const currentSelectedIds = useSelectionStore.getState().selectedIds;
-      const currentNodes = useSceneStore.getState().nodes;
+      const currentNodes = useSceneStore.getState().getNodes();
 
       if (currentSelectedIds.length !== 1) return;
       const selectedNode = findNodeById(currentNodes, currentSelectedIds[0]);

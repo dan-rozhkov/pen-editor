@@ -9,7 +9,7 @@ import type { FrameNode } from '../types/scene'
  * Used by PrimitivesPanel and ComponentsPanel
  */
 export function useNodePlacement() {
-  const nodes = useSceneStore((state) => state.nodes)
+  const nodes = useSceneStore((state) => state.getNodes())
   const { selectedIds } = useSelectionStore()
   const { scale, x, y } = useViewportStore()
 

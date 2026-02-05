@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback } from 'react'
 import type { TextNode } from '../types/scene'
-import { useSceneStore } from '../store/sceneStore'
+import { useSceneStore, createSnapshot } from '../store/sceneStore'
 import { useHistoryStore } from '../store/historyStore'
 import { useSelectionStore } from '../store/selectionStore'
 import { useViewportStore } from '../store/viewportStore'
@@ -116,7 +116,7 @@ export function InlineTextEditor({ node, absoluteX, absoluteY }: InlineTextEdito
 
   // Focus and select all text on mount
   useEffect(() => {
-    useHistoryStore.getState().saveHistory(useSceneStore.getState().nodes)
+    useHistoryStore.getState().saveHistory(createSnapshot(useSceneStore.getState()))
     const el = editorRef.current
     if (!el) return
     el.innerText = node.text

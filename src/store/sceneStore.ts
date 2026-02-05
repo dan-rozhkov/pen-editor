@@ -2,12 +2,21 @@ import { create } from "zustand";
 import type {
   SceneNode,
   FrameNode,
-  GroupNode,
   RefNode,
   TextNode,
+  FlatSceneNode,
+  FlatFrameNode,
+  FlatSnapshot,
   DescendantOverride,
 } from "../types/scene";
-import { isContainerNode, generateId } from "../types/scene";
+import {
+  isContainerNode,
+  generateId,
+  toFlatNode,
+  flattenTree,
+  buildTree,
+  collectDescendantIds,
+} from "../types/scene";
 import { useHistoryStore } from "./historyStore";
 import { useLayoutStore } from "./layoutStore";
 import {
@@ -17,14 +26,26 @@ import {
 import { loadGoogleFontsFromNodes, registerFontLoadCallback } from "../utils/fontUtils";
 import { calculateFrameIntrinsicSize } from "../utils/yogaLayout";
 
-interface SceneState {
-  nodes: SceneNode[];
-  nodesById: Record<string, SceneNode>;
+// ----- Types -----
+
+export interface SceneState {
+  // Primary flat storage
+  nodesById: Record<string, FlatSceneNode>;
   parentById: Record<string, string | null>;
-  indexById: Record<string, number>;
   childrenById: Record<string, string[]>;
   rootIds: string[];
+
+  // Backward compat: lazily cached tree
+  _cachedTree: SceneNode[] | null;
+
+  // UI state
   expandedFrameIds: Set<string>;
+  pageBackground: string;
+
+  // Get full tree (lazy, cached)
+  getNodes: () => SceneNode[];
+
+  // Mutations
   addNode: (node: SceneNode) => void;
   addChildToFrame: (frameId: string, child: SceneNode) => void;
   updateNode: (id: string, updates: Partial<SceneNode>) => void;
@@ -33,6 +54,7 @@ interface SceneState {
   clearNodes: () => void;
   setNodes: (nodes: SceneNode[]) => void;
   setNodesWithoutHistory: (nodes: SceneNode[]) => void;
+  restoreSnapshot: (snapshot: FlatSnapshot) => void;
   reorderNode: (fromIndex: number, toIndex: number) => void;
   setVisibility: (id: string, visible: boolean) => void;
   toggleVisibility: (id: string) => void;
@@ -43,7 +65,6 @@ interface SceneState {
     newParentId: string | null,
     newIndex: number,
   ) => void;
-  // Descendant override methods for component instances
   updateDescendantOverride: (
     instanceId: string,
     descendantId: string,
@@ -54,106 +75,14 @@ interface SceneState {
     descendantId: string,
     property?: keyof DescendantOverride,
   ) => void;
-  // Group/ungroup operations
   groupNodes: (ids: string[]) => string | null;
   ungroupNodes: (ids: string[]) => string[];
-  // Convert group↔frame
   convertNodeType: (id: string) => boolean;
-  // Wrap selected nodes in auto-layout frame
   wrapInAutoLayoutFrame: (ids: string[]) => string | null;
-  // Page-level properties
-  pageBackground: string;
   setPageBackground: (color: string) => void;
 }
 
-interface SceneIndex {
-  nodesById: Record<string, SceneNode>;
-  parentById: Record<string, string | null>;
-  indexById: Record<string, number>;
-  childrenById: Record<string, string[]>;
-  rootIds: string[];
-}
-
-function buildSceneIndex(nodes: SceneNode[]): SceneIndex {
-  const nodesById: Record<string, SceneNode> = {};
-  const parentById: Record<string, string | null> = {};
-  const indexById: Record<string, number> = {};
-  const childrenById: Record<string, string[]> = {};
-  const rootIds = nodes.map((node) => node.id);
-
-  const visit = (node: SceneNode, parentId: string | null, index: number) => {
-    nodesById[node.id] = node;
-    parentById[node.id] = parentId;
-    indexById[node.id] = index;
-
-    if (isContainerNode(node)) {
-      const childIds = node.children.map((child) => child.id);
-      childrenById[node.id] = childIds;
-      node.children.forEach((child, childIndex) => {
-        visit(child, node.id, childIndex);
-      });
-    }
-  };
-
-  nodes.forEach((node, index) => visit(node, null, index));
-
-  return {
-    nodesById,
-    parentById,
-    indexById,
-    childrenById,
-    rootIds,
-  };
-}
-
-function withRebuiltIndex(nodes: SceneNode[]): {
-  nodes: SceneNode[];
-  nodesById: Record<string, SceneNode>;
-  parentById: Record<string, string | null>;
-  indexById: Record<string, number>;
-  childrenById: Record<string, string[]>;
-  rootIds: string[];
-} {
-  const index = buildSceneIndex(nodes);
-  return { nodes, ...index };
-}
-
-// Recursively sync text node dimensions throughout the tree
-function syncAllTextDimensions(nodes: SceneNode[]): SceneNode[] {
-  return nodes.map((node) => {
-    if (node.type === "text") {
-      return syncTextDimensions(node);
-    }
-    if (isContainerNode(node)) {
-      return { ...node, children: syncAllTextDimensions(node.children) } as
-        | FrameNode
-        | GroupNode;
-    }
-    return node;
-  });
-}
-
-// Helper to recursively add child to a container (frame or group)
-function addChildToFrameRecursive(
-  nodes: SceneNode[],
-  frameId: string,
-  child: SceneNode,
-): SceneNode[] {
-  return nodes.map((node) => {
-    if (node.id === frameId && isContainerNode(node)) {
-      return { ...node, children: [...node.children, child] } as
-        | FrameNode
-        | GroupNode;
-    }
-    if (isContainerNode(node)) {
-      return {
-        ...node,
-        children: addChildToFrameRecursive(node.children, frameId, child),
-      } as FrameNode | GroupNode;
-    }
-    return node;
-  });
-}
+// ----- Helpers -----
 
 // Properties that affect text measurement
 const TEXT_MEASURE_PROPS = new Set([
@@ -167,853 +96,336 @@ const TEXT_MEASURE_PROPS = new Set([
   "textWidthMode",
 ]);
 
-// Sync a text node's width/height based on its textWidthMode
-function syncTextDimensions(node: SceneNode): SceneNode {
+function syncTextDimensions(node: FlatSceneNode): FlatSceneNode {
   if (node.type !== "text") return node;
   const textNode = node as TextNode;
   const mode = textNode.textWidthMode;
 
   if (!mode || mode === "auto") {
-    // Auto mode: compute both width and height from content
     const measured = measureTextAutoSize(textNode);
     return { ...textNode, width: measured.width, height: measured.height };
   } else if (mode === "fixed") {
-    // Fixed width mode: only recompute height (wrapping)
     const measuredHeight = measureTextFixedWidthHeight(textNode);
     return { ...textNode, height: measuredHeight };
   }
-  // fixed-height: both are manual, no sync
   return textNode;
 }
 
-// Check if updates contain properties that affect text measurement
 function hasTextMeasureProps(updates: Partial<SceneNode>): boolean {
   return Object.keys(updates).some((k) => TEXT_MEASURE_PROPS.has(k));
 }
 
-// Helper to recursively update a node anywhere in the tree
-function updateNodeRecursive(
-  nodes: SceneNode[],
-  id: string,
-  updates: Partial<SceneNode>,
-): { nodes: SceneNode[]; found: boolean } {
-  const nextNodes: SceneNode[] = [];
-
-  for (let i = 0; i < nodes.length; i += 1) {
-    const node = nodes[i];
-    if (node.id === id) {
-      let updated = { ...node, ...updates } as SceneNode;
-      // Auto-sync text dimensions when relevant properties change
-      if (updated.type === "text" && hasTextMeasureProps(updates)) {
-        updated = syncTextDimensions(updated);
+/** Sync text dimensions for all text nodes in the flat store */
+function syncAllTextDimensionsFlat(
+  nodesById: Record<string, FlatSceneNode>,
+): Record<string, FlatSceneNode> {
+  let changed = false;
+  const result = { ...nodesById };
+  for (const [id, node] of Object.entries(result)) {
+    if (node.type === "text") {
+      const synced = syncTextDimensions(node);
+      if (synced !== node) {
+        result[id] = synced;
+        changed = true;
       }
-      nextNodes.push(updated, ...nodes.slice(i + 1));
-      return { nodes: nextNodes, found: true };
     }
-
-    if (isContainerNode(node)) {
-      const result = updateNodeRecursive(node.children, id, updates);
-      if (result.found) {
-        nextNodes.push({ ...node, children: result.nodes } as FrameNode | GroupNode);
-        nextNodes.push(...nodes.slice(i + 1));
-        return { nodes: nextNodes, found: true };
-      }
-      nextNodes.push(node);
-      continue;
-    }
-
-    nextNodes.push(node);
   }
-
-  return { nodes, found: false };
-}
-// Helper to recursively delete a node anywhere in the tree
-function deleteNodeRecursive(nodes: SceneNode[], id: string): SceneNode[] {
-  return nodes.reduce<SceneNode[]>((acc, node) => {
-    // Skip the node to delete
-    if (node.id === id) return acc;
-    // Recursively process container children
-    if (isContainerNode(node)) {
-      acc.push({ ...node, children: deleteNodeRecursive(node.children, id) } as
-        | FrameNode
-        | GroupNode);
-    } else {
-      acc.push(node);
-    }
-    return acc;
-  }, []);
+  return changed ? result : nodesById;
 }
 
-// Helper to recursively toggle visibility of a node anywhere in the tree
-function toggleVisibilityRecursive(
-  nodes: SceneNode[],
-  id: string,
-): SceneNode[] {
-  return nodes.map((node) => {
-    if (node.id === id) {
-      return {
-        ...node,
-        visible: node.visible === false ? true : false,
-      } as SceneNode;
-    }
-    if (isContainerNode(node)) {
-      return {
-        ...node,
-        children: toggleVisibilityRecursive(node.children, id),
-      } as FrameNode | GroupNode;
-    }
-    return node;
-  });
-}
-
-// Helper to recursively set visibility of a node anywhere in the tree
-function setVisibilityRecursive(
-  nodes: SceneNode[],
-  id: string,
-  visible: boolean,
-): SceneNode[] {
-  return nodes.map((node) => {
-    if (node.id === id) {
-      return { ...node, visible } as SceneNode;
-    }
-    if (isContainerNode(node)) {
-      return {
-        ...node,
-        children: setVisibilityRecursive(node.children, id, visible),
-      } as FrameNode | GroupNode;
-    }
-    return node;
-  });
-}
-
-// Helper to find and extract a node from the tree (returns node and tree without it)
-function extractNodeRecursive(
-  nodes: SceneNode[],
-  id: string,
-): { node: SceneNode | null; remaining: SceneNode[] } {
-  let foundNode: SceneNode | null = null;
-
-  const remaining = nodes.reduce<SceneNode[]>((acc, node) => {
-    if (node.id === id) {
-      foundNode = node;
-      return acc;
-    }
-    if (isContainerNode(node)) {
-      const result = extractNodeRecursive(node.children, id);
-      if (result.node) {
-        foundNode = result.node;
-      }
-      acc.push({ ...node, children: result.remaining } as
-        | FrameNode
-        | GroupNode);
-    } else {
-      acc.push(node);
-    }
-    return acc;
-  }, []);
-
-  return { node: foundNode, remaining };
-}
-
-// Helper to insert a node at a specific index in a parent (or root if parentId is null)
-function insertNodeRecursive(
-  nodes: SceneNode[],
-  nodeToInsert: SceneNode,
+/** Insert a node and all its descendants into the flat store */
+function insertTreeIntoFlat(
+  node: SceneNode,
   parentId: string | null,
-  index: number,
-): SceneNode[] {
-  if (parentId === null) {
-    // Insert at root level
-    const newNodes = [...nodes];
-    newNodes.splice(index, 0, nodeToInsert);
-    return newNodes;
+  nodesById: Record<string, FlatSceneNode>,
+  parentById: Record<string, string | null>,
+  childrenById: Record<string, string[]>,
+): void {
+  nodesById[node.id] = toFlatNode(node);
+  parentById[node.id] = parentId;
+  if (isContainerNode(node)) {
+    childrenById[node.id] = node.children.map((c) => c.id);
+    for (const child of node.children) {
+      insertTreeIntoFlat(child, node.id, nodesById, parentById, childrenById);
+    }
   }
-
-  return nodes.map((node) => {
-    if (node.id === parentId && isContainerNode(node)) {
-      const newChildren = [...node.children];
-      newChildren.splice(index, 0, nodeToInsert);
-      return { ...node, children: newChildren } as FrameNode | GroupNode;
-    }
-    if (isContainerNode(node)) {
-      return {
-        ...node,
-        children: insertNodeRecursive(
-          node.children,
-          nodeToInsert,
-          parentId,
-          index,
-        ),
-      } as FrameNode | GroupNode;
-    }
-    return node;
-  });
 }
 
-// Generic helper to recursively process nodes in the tree
-function mapNodesRecursive(
-  nodes: SceneNode[],
-  processFn: (
-    node: SceneNode,
-    recurse: (children: SceneNode[]) => SceneNode[],
-  ) => SceneNode,
-): SceneNode[] {
-  const recurse = (children: SceneNode[]) =>
-    mapNodesRecursive(children, processFn);
-  return nodes.map((node) => processFn(node, recurse));
+/** Remove a node and all its descendants from the flat store */
+function removeNodeAndDescendants(
+  nodeId: string,
+  nodesById: Record<string, FlatSceneNode>,
+  parentById: Record<string, string | null>,
+  childrenById: Record<string, string[]>,
+): void {
+  const toDelete = collectDescendantIds(nodeId, childrenById);
+  toDelete.push(nodeId);
+  for (const id of toDelete) {
+    delete nodesById[id];
+    delete parentById[id];
+    delete childrenById[id];
+  }
 }
 
-// Helper to update descendant override in a RefNode
-function updateDescendantOverrideRecursive(
-  nodes: SceneNode[],
-  instanceId: string,
-  descendantId: string,
-  updates: DescendantOverride,
-): SceneNode[] {
-  return mapNodesRecursive(nodes, (node, recurse) => {
-    if (node.id === instanceId && node.type === "ref") {
-      const refNode = node as RefNode;
-      const existingOverrides = refNode.descendants || {};
-      const existingDescendant = existingOverrides[descendantId] || {};
-
-      return {
-        ...refNode,
-        descendants: {
-          ...existingOverrides,
-          [descendantId]: { ...existingDescendant, ...updates },
-        },
-      } as RefNode;
-    }
-    if (isContainerNode(node)) {
-      return { ...node, children: recurse(node.children) } as
-        | FrameNode
-        | GroupNode;
-    }
-    return node;
-  });
-}
-
-// Helper to reset descendant override (remove property or entire override)
-function resetDescendantOverrideRecursive(
-  nodes: SceneNode[],
-  instanceId: string,
-  descendantId: string,
-  property?: keyof DescendantOverride,
-): SceneNode[] {
-  return mapNodesRecursive(nodes, (node, recurse) => {
-    if (node.id === instanceId && node.type === "ref") {
-      const refNode = node as RefNode;
-      const existingOverrides = refNode.descendants || {};
-
-      if (!existingOverrides[descendantId]) {
-        return node;
-      }
-
-      if (property) {
-        // Reset specific property
-        const { [property]: _, ...remainingProps } =
-          existingOverrides[descendantId];
-        // If no properties left, remove the entire override
-        if (Object.keys(remainingProps).length === 0) {
-          const { [descendantId]: __, ...remainingOverrides } =
-            existingOverrides;
-          return {
-            ...refNode,
-            descendants:
-              Object.keys(remainingOverrides).length > 0
-                ? remainingOverrides
-                : undefined,
-          } as RefNode;
-        }
-        return {
-          ...refNode,
-          descendants: {
-            ...existingOverrides,
-            [descendantId]: remainingProps,
-          },
-        } as RefNode;
-      } else {
-        // Reset entire override for this descendant
-        const { [descendantId]: _, ...remainingOverrides } = existingOverrides;
-        return {
-          ...refNode,
-          descendants:
-            Object.keys(remainingOverrides).length > 0
-              ? remainingOverrides
-              : undefined,
-        } as RefNode;
-      }
-    }
-    if (isContainerNode(node)) {
-      return { ...node, children: recurse(node.children) } as
-        | FrameNode
-        | GroupNode;
-    }
-    return node;
-  });
-}
-
-// Helper to find the index and parent of a node
-function findNodePosition(
-  nodes: SceneNode[],
-  id: string,
-  parentId: string | null = null,
-): { parentId: string | null; index: number } | null {
-  for (let i = 0; i < nodes.length; i++) {
-    if (nodes[i].id === id) {
-      return { parentId, index: i };
-    }
-    const node = nodes[i];
-    if (isContainerNode(node)) {
-      const found = findNodePosition(node.children, id, node.id);
-      if (found) return found;
-    }
-  }
-  return null;
-}
-
-// Helper to find a node by ID recursively
-function findNodeInTree(nodes: SceneNode[], id: string): SceneNode | null {
-  for (const node of nodes) {
-    if (node.id === id) return node;
-    if (isContainerNode(node)) {
-      const found = findNodeInTree(node.children, id);
-      if (found) return found;
-    }
-  }
-  return null;
-}
-
-/**
- * Generic helper to recursively process a specific level in the node tree
- * Walks through the tree until reaching the target parent ID, then applies the callback
- */
-function processTreeAtLevel(
-  nodes: SceneNode[],
-  targetParentId: string | null,
-  processTargetLevel: (levelNodes: SceneNode[]) => SceneNode[],
-): SceneNode[] {
-  function processLevel(
-    levelNodes: SceneNode[],
-    levelParentId: string | null,
-  ): SceneNode[] {
-    if (levelParentId !== targetParentId) {
-      // Not the target level, recurse into containers
-      return levelNodes.map((node) => {
-        if (isContainerNode(node)) {
-          return { ...node, children: processLevel(node.children, node.id) } as
-            | FrameNode
-            | GroupNode;
-        }
-        return node;
-      });
-    }
-
-    // This is the target level - apply the callback
-    return processTargetLevel(levelNodes);
-  }
-
-  return processLevel(nodes, null);
-}
-
-// Group selected nodes into a new GroupNode
-function groupNodesInTree(
-  nodes: SceneNode[],
-  ids: string[],
-  calculateLayoutForFrame?: (frame: FrameNode) => SceneNode[],
-): { nodes: SceneNode[]; groupId: string } | null {
-  if (ids.length < 2) return null;
-
-  // Find positions of all nodes - they must all be in the same parent
-  const positions = ids.map((id) => findNodePosition(nodes, id));
-  if (positions.some((p) => p === null)) return null;
-  const validPositions = positions as {
-    parentId: string | null;
-    index: number;
-  }[];
-
-  // All nodes must share the same parent
-  const parentId = validPositions[0].parentId;
-  if (!validPositions.every((p) => p.parentId === parentId)) return null;
-
-  // Get the actual node objects
-  const selectedNodes = ids
-    .map((id) => findNodeInTree(nodes, id)!)
-    .filter(Boolean);
-  if (selectedNodes.length !== ids.length) return null;
-
-  // If parent is an auto-layout frame, use Yoga-computed positions and dimensions
-  // instead of stored values (which may not reflect actual rendered layout)
-  let layoutNodes: SceneNode[] | null = null;
-  if (parentId && calculateLayoutForFrame) {
-    const parentNode = findNodeInTree(nodes, parentId);
-    if (
-      parentNode &&
-      parentNode.type === "frame" &&
-      (parentNode as FrameNode).layout?.autoLayout
-    ) {
-      layoutNodes = calculateLayoutForFrame(parentNode as FrameNode);
-    }
-  }
-
-  // Build a map of layout-computed dimensions if available
-  const layoutMap = new Map<string, SceneNode>();
-  if (layoutNodes) {
-    for (const ln of layoutNodes) {
-      layoutMap.set(ln.id, ln);
-    }
-  }
-
-  // Helper to get effective dimensions for a node, accounting for:
-  // 1. Yoga layout-computed dimensions (for children of auto-layout parents)
-  // 2. fit_content sizing modes (for auto-layout frames with hug-contents)
-  function getEffectiveBounds(node: SceneNode): {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  } {
-    const layoutNode = layoutMap.get(node.id);
-    const x = layoutNode?.x ?? node.x;
-    const y = layoutNode?.y ?? node.y;
-    let width = layoutNode?.width ?? node.width;
-    let height = layoutNode?.height ?? node.height;
-
-    // For auto-layout frames with fit_content sizing, compute intrinsic size
-    if (node.type === "frame") {
-      const frame = node as FrameNode;
-      if (frame.layout?.autoLayout) {
-        const fitWidth = frame.sizing?.widthMode === "fit_content";
-        const fitHeight = frame.sizing?.heightMode === "fit_content";
-        if (fitWidth || fitHeight) {
-          const intrinsic = calculateFrameIntrinsicSize(frame, {
-            fitWidth,
-            fitHeight,
-          });
-          if (fitWidth) width = intrinsic.width;
-          if (fitHeight) height = intrinsic.height;
-        }
-      }
-    }
-
-    return { x, y, width, height };
-  }
-
-  // Calculate bounding box using effective dimensions
-  let minX = Infinity,
-    minY = Infinity,
-    maxX = -Infinity,
-    maxY = -Infinity;
-  const effectiveBoundsMap = new Map<
-    string,
-    { x: number; y: number; width: number; height: number }
-  >();
-  for (const node of selectedNodes) {
-    const bounds = getEffectiveBounds(node);
-    effectiveBoundsMap.set(node.id, bounds);
-    minX = Math.min(minX, bounds.x);
-    minY = Math.min(minY, bounds.y);
-    maxX = Math.max(maxX, bounds.x + bounds.width);
-    maxY = Math.max(maxY, bounds.y + bounds.height);
-  }
-
-  // Create group with children at relative positions
-  // Use effective positions for offset calculation
-  const groupId = generateId();
-  const groupNode: GroupNode = {
-    id: groupId,
-    type: "group",
-    x: minX,
-    y: minY,
-    width: maxX - minX,
-    height: maxY - minY,
-    children: selectedNodes.map((node) => {
-      const bounds = effectiveBoundsMap.get(node.id)!;
-      return {
-        ...node,
-        x: bounds.x - minX,
-        y: bounds.y - minY,
-        // Persist the effective dimensions so they match the visual size
-        width: bounds.width,
-        height: bounds.height,
-      } as SceneNode;
-    }),
+/** Create a history snapshot (shallow clone - node refs are immutable) */
+export function createSnapshot(state: {
+  nodesById: Record<string, FlatSceneNode>;
+  parentById: Record<string, string | null>;
+  childrenById: Record<string, string[]>;
+  rootIds: string[];
+}): FlatSnapshot {
+  return {
+    nodesById: { ...state.nodesById },
+    parentById: { ...state.parentById },
+    childrenById: { ...state.childrenById },
+    rootIds: [...state.rootIds],
   };
-
-  // Find the insertion index (smallest index among selected nodes)
-  const insertIndex = Math.min(...validPositions.map((p) => p.index));
-
-  // Remove selected nodes and insert group
-  const idSet = new Set(ids);
-
-  const processedNodes = processTreeAtLevel(nodes, parentId, (levelNodes) => {
-    // This is the target level - remove selected nodes and insert group
-    const filtered = levelNodes.filter((n) => !idSet.has(n.id));
-    const adjustedIndex = Math.min(insertIndex, filtered.length);
-    filtered.splice(adjustedIndex, 0, groupNode);
-    return filtered;
-  });
-
-  return { nodes: processedNodes, groupId };
 }
 
-// Wrap selected nodes into a new FrameNode with auto-layout
-function wrapNodesInAutoLayoutFrame(
-  nodes: SceneNode[],
-  ids: string[],
-  calculateLayoutForFrame?: (frame: FrameNode) => SceneNode[],
-): { nodes: SceneNode[]; frameId: string } | null {
-  if (ids.length < 1) return null;
+/** Save current state to history */
+function saveHistory(state: SceneState) {
+  useHistoryStore.getState().saveHistory(createSnapshot(state));
+}
 
-  // Find positions of all nodes - they must all be in the same parent
-  const positions = ids.map((id) => findNodePosition(nodes, id));
-  if (positions.some((p) => p === null)) return null;
-  const validPositions = positions as {
-    parentId: string | null;
-    index: number;
-  }[];
+// ----- Module-level tree cache (avoids setState in selectors) -----
+let _treeCacheRef: {
+  nodesById: Record<string, FlatSceneNode>;
+  rootIds: string[];
+  childrenById: Record<string, string[]>;
+  tree: SceneNode[];
+} | null = null;
 
-  // All nodes must share the same parent
-  const parentId = validPositions[0].parentId;
-  if (!validPositions.every((p) => p.parentId === parentId)) return null;
-
-  // Get the actual node objects
-  const selectedNodes = ids
-    .map((id) => findNodeInTree(nodes, id)!)
-    .filter(Boolean);
-  if (selectedNodes.length !== ids.length) return null;
-
-  // If parent is an auto-layout frame, use Yoga-computed positions and dimensions
-  let layoutNodes: SceneNode[] | null = null;
-  if (parentId && calculateLayoutForFrame) {
-    const parentNode = findNodeInTree(nodes, parentId);
-    if (
-      parentNode &&
-      parentNode.type === "frame" &&
-      (parentNode as FrameNode).layout?.autoLayout
-    ) {
-      layoutNodes = calculateLayoutForFrame(parentNode as FrameNode);
-    }
+function getCachedTree(state: {
+  nodesById: Record<string, FlatSceneNode>;
+  rootIds: string[];
+  childrenById: Record<string, string[]>;
+}): SceneNode[] {
+  if (
+    _treeCacheRef &&
+    _treeCacheRef.nodesById === state.nodesById &&
+    _treeCacheRef.rootIds === state.rootIds &&
+    _treeCacheRef.childrenById === state.childrenById
+  ) {
+    return _treeCacheRef.tree;
   }
-
-  // Build a map of layout-computed dimensions if available
-  const layoutMap = new Map<string, SceneNode>();
-  if (layoutNodes) {
-    for (const ln of layoutNodes) {
-      layoutMap.set(ln.id, ln);
-    }
-  }
-
-  // Helper to get effective dimensions for a node
-  function getEffectiveBounds(node: SceneNode): {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  } {
-    const layoutNode = layoutMap.get(node.id);
-    const x = layoutNode?.x ?? node.x;
-    const y = layoutNode?.y ?? node.y;
-    let width = layoutNode?.width ?? node.width;
-    let height = layoutNode?.height ?? node.height;
-
-    // For auto-layout frames with fit_content sizing, compute intrinsic size
-    if (node.type === "frame") {
-      const frame = node as FrameNode;
-      if (frame.layout?.autoLayout) {
-        const fitWidth = frame.sizing?.widthMode === "fit_content";
-        const fitHeight = frame.sizing?.heightMode === "fit_content";
-        if (fitWidth || fitHeight) {
-          const intrinsic = calculateFrameIntrinsicSize(frame, {
-            fitWidth,
-            fitHeight,
-          });
-          if (fitWidth) width = intrinsic.width;
-          if (fitHeight) height = intrinsic.height;
-        }
-      }
-    }
-
-    return { x, y, width, height };
-  }
-
-  // Calculate bounding box using effective dimensions
-  let minX = Infinity,
-    minY = Infinity,
-    maxX = -Infinity,
-    maxY = -Infinity;
-  const effectiveBoundsMap = new Map<
-    string,
-    { x: number; y: number; width: number; height: number }
-  >();
-  for (const node of selectedNodes) {
-    const bounds = getEffectiveBounds(node);
-    effectiveBoundsMap.set(node.id, bounds);
-    minX = Math.min(minX, bounds.x);
-    minY = Math.min(minY, bounds.y);
-    maxX = Math.max(maxX, bounds.x + bounds.width);
-    maxY = Math.max(maxY, bounds.y + bounds.height);
-  }
-
-  // Create frame with auto-layout and children at relative positions
-  const frameId = generateId();
-  const frameNode: FrameNode = {
-    id: frameId,
-    type: "frame",
-    x: minX,
-    y: minY,
-    width: maxX - minX,
-    height: maxY - minY,
-    fill: "#ffffff",
-    stroke: "#cccccc",
-    strokeWidth: 1,
-    layout: {
-      autoLayout: true,
-      flexDirection: "column",
-      gap: 0,
-      paddingTop: 0,
-      paddingRight: 0,
-      paddingBottom: 0,
-      paddingLeft: 0,
-    },
-    children: selectedNodes.map((node) => {
-      const bounds = effectiveBoundsMap.get(node.id)!;
-      return {
-        ...node,
-        x: bounds.x - minX,
-        y: bounds.y - minY,
-        width: bounds.width,
-        height: bounds.height,
-      } as SceneNode;
-    }),
+  const tree = buildTree(state.rootIds, state.nodesById, state.childrenById);
+  _treeCacheRef = {
+    nodesById: state.nodesById,
+    rootIds: state.rootIds,
+    childrenById: state.childrenById,
+    tree,
   };
-
-  // Find the insertion index (smallest index among selected nodes)
-  const insertIndex = Math.min(...validPositions.map((p) => p.index));
-
-  // Remove selected nodes and insert frame
-  const idSet = new Set(ids);
-
-  const processedNodes = processTreeAtLevel(nodes, parentId, (levelNodes) => {
-    const filtered = levelNodes.filter((n) => !idSet.has(n.id));
-    const adjustedIndex = Math.min(insertIndex, filtered.length);
-    filtered.splice(adjustedIndex, 0, frameNode);
-    return filtered;
-  });
-
-  return { nodes: processedNodes, frameId };
+  return tree;
 }
 
-// Ungroup a group node, placing its children back at the group's level
-function ungroupNodeInTree(
-  nodes: SceneNode[],
-  groupId: string,
-): SceneNode[] | null {
-  const pos = findNodePosition(nodes, groupId);
-  if (!pos) return null;
+// ----- Store -----
 
-  const groupNode = findNodeInTree(nodes, groupId);
-  if (!groupNode || groupNode.type !== "group") return null;
-
-  const group = groupNode as GroupNode;
-
-  // Adjust children positions to be absolute (relative to the group's parent)
-  const absoluteChildren = group.children.map(
-    (child) =>
-      ({
-        ...child,
-        x: child.x + group.x,
-        y: child.y + group.y,
-      } as SceneNode),
-  );
-
-  return processTreeAtLevel(nodes, pos.parentId, (levelNodes) => {
-    // Replace group with its children
-    const result: SceneNode[] = [];
-    for (const node of levelNodes) {
-      if (node.id === groupId) {
-        result.push(...absoluteChildren);
-      } else {
-        result.push(node);
-      }
-    }
-    return result;
-  });
-}
-
-// Convert a group node to frame or a non-reusable frame to group
-function convertNodeInTree(
-  nodes: SceneNode[],
-  targetId: string,
-): SceneNode[] | null {
-  const node = findNodeInTree(nodes, targetId);
-  if (!node) return null;
-
-  if (node.type === "group") {
-    // Group → Frame: keep all base props + children, set type to frame
-    const group = node as GroupNode;
-    const frame: FrameNode = {
-      id: group.id,
-      type: "frame",
-      name: group.name,
-      x: group.x,
-      y: group.y,
-      width: group.width,
-      height: group.height,
-      fill: group.fill,
-      stroke: group.stroke,
-      strokeWidth: group.strokeWidth,
-      visible: group.visible,
-      enabled: group.enabled,
-      sizing: group.sizing,
-      fillBinding: group.fillBinding,
-      strokeBinding: group.strokeBinding,
-      rotation: group.rotation,
-      opacity: group.opacity,
-      fillOpacity: group.fillOpacity,
-      strokeOpacity: group.strokeOpacity,
-      flipX: group.flipX,
-      flipY: group.flipY,
-      imageFill: group.imageFill,
-      children: group.children,
-    };
-    return replaceNodeInTree(nodes, targetId, frame);
-  }
-
-  if (node.type === "frame") {
-    const frame = node as FrameNode;
-    // Block conversion of reusable frames (components)
-    if (frame.reusable) return null;
-
-    const group: GroupNode = {
-      id: frame.id,
-      type: "group",
-      name: frame.name,
-      x: frame.x,
-      y: frame.y,
-      width: frame.width,
-      height: frame.height,
-      fill: frame.fill,
-      stroke: frame.stroke,
-      strokeWidth: frame.strokeWidth,
-      visible: frame.visible,
-      enabled: frame.enabled,
-      sizing: frame.sizing,
-      fillBinding: frame.fillBinding,
-      strokeBinding: frame.strokeBinding,
-      rotation: frame.rotation,
-      opacity: frame.opacity,
-      fillOpacity: frame.fillOpacity,
-      strokeOpacity: frame.strokeOpacity,
-      flipX: frame.flipX,
-      flipY: frame.flipY,
-      imageFill: frame.imageFill,
-      children: frame.children,
-    };
-    return replaceNodeInTree(nodes, targetId, group);
-  }
-
-  return null;
-}
-
-// Replace a node in tree by ID
-function replaceNodeInTree(
-  nodes: SceneNode[],
-  targetId: string,
-  replacement: SceneNode,
-): SceneNode[] {
-  return nodes.map((node) => {
-    if (node.id === targetId) return replacement;
-    if (isContainerNode(node)) {
-      return {
-        ...node,
-        children: replaceNodeInTree(node.children, targetId, replacement),
-      } as FrameNode | GroupNode;
-    }
-    return node;
-  });
-}
-
-export const useSceneStore = create<SceneState>((set) => ({
-  nodes: [],
+export const useSceneStore = create<SceneState>((set, get) => ({
   nodesById: {},
   parentById: {},
-  indexById: {},
   childrenById: {},
   rootIds: [],
+  _cachedTree: null,
   expandedFrameIds: new Set<string>(),
   pageBackground: "#f5f5f5",
 
+  // Lazy tree builder for backward compat
+  getNodes: () => getCachedTree(get()),
+
+  // ----- Mutations -----
+
   addNode: (node) =>
     set((state) => {
-      useHistoryStore.getState().saveHistory(state.nodes);
-      const synced = node.type === "text" ? syncTextDimensions(node) : node;
-      const nextNodes = [...state.nodes, synced];
-      return { ...withRebuiltIndex(nextNodes) };
+      saveHistory(state);
+      const synced = node.type === "text" ? syncTextDimensions(toFlatNode(node)) : toFlatNode(node);
+      const newNodesById = { ...state.nodesById, [node.id]: synced };
+      const newParentById = { ...state.parentById, [node.id]: null };
+      const newChildrenById = { ...state.childrenById };
+      const newRootIds = [...state.rootIds, node.id];
+
+      // If node is a container with children, insert descendants
+      if (isContainerNode(node) && node.children.length > 0) {
+        newChildrenById[node.id] = node.children.map((c) => c.id);
+        for (const child of node.children) {
+          insertTreeIntoFlat(child, node.id, newNodesById, newParentById, newChildrenById);
+        }
+      }
+
+      return {
+        nodesById: newNodesById,
+        parentById: newParentById,
+        childrenById: newChildrenById,
+        rootIds: newRootIds,
+        _cachedTree: null,
+      };
     }),
 
   addChildToFrame: (frameId, child) =>
     set((state) => {
-      useHistoryStore.getState().saveHistory(state.nodes);
-      const nextNodes = addChildToFrameRecursive(state.nodes, frameId, child);
-      return { ...withRebuiltIndex(nextNodes) };
+      saveHistory(state);
+      const newNodesById = { ...state.nodesById };
+      const newParentById = { ...state.parentById };
+      const newChildrenById = { ...state.childrenById };
+
+      // Insert the child (and its subtree) into flat storage
+      insertTreeIntoFlat(child, frameId, newNodesById, newParentById, newChildrenById);
+
+      // Update parent's children list
+      const existingChildren = newChildrenById[frameId] ?? [];
+      newChildrenById[frameId] = [...existingChildren, child.id];
+
+      return {
+        nodesById: newNodesById,
+        parentById: newParentById,
+        childrenById: newChildrenById,
+        _cachedTree: null,
+      };
     }),
 
   updateNode: (id, updates) =>
     set((state) => {
-      useHistoryStore.getState().saveHistory(state.nodes);
-      const nextNodes = updateNodeRecursive(state.nodes, id, updates).nodes;
-      return { ...withRebuiltIndex(nextNodes) };
+      const existing = state.nodesById[id];
+      if (!existing) return state;
+      saveHistory(state);
+
+      let updated = { ...existing, ...updates } as FlatSceneNode;
+      if (updated.type === "text" && hasTextMeasureProps(updates)) {
+        updated = syncTextDimensions(updated);
+      }
+
+      return {
+        nodesById: { ...state.nodesById, [id]: updated },
+        _cachedTree: null,
+      };
     }),
 
   updateNodeWithoutHistory: (id, updates) =>
     set((state) => {
-      const nextNodes = updateNodeRecursive(state.nodes, id, updates).nodes;
-      return { ...withRebuiltIndex(nextNodes) };
+      const existing = state.nodesById[id];
+      if (!existing) return state;
+
+      let updated = { ...existing, ...updates } as FlatSceneNode;
+      if (updated.type === "text" && hasTextMeasureProps(updates)) {
+        updated = syncTextDimensions(updated);
+      }
+
+      return {
+        nodesById: { ...state.nodesById, [id]: updated },
+        _cachedTree: null,
+      };
     }),
 
   deleteNode: (id) =>
     set((state) => {
-      useHistoryStore.getState().saveHistory(state.nodes);
-      const nextNodes = deleteNodeRecursive(state.nodes, id);
-      return { ...withRebuiltIndex(nextNodes) };
+      if (!state.nodesById[id]) return state;
+      saveHistory(state);
+
+      const parentId = state.parentById[id];
+      const newNodesById = { ...state.nodesById };
+      const newParentById = { ...state.parentById };
+      const newChildrenById = { ...state.childrenById };
+
+      // Remove from parent's children list
+      if (parentId !== null && parentId !== undefined) {
+        newChildrenById[parentId] = (newChildrenById[parentId] ?? []).filter(
+          (cid) => cid !== id,
+        );
+      }
+
+      // Remove node and all descendants
+      removeNodeAndDescendants(id, newNodesById, newParentById, newChildrenById);
+
+      // Update rootIds if root node
+      const newRootIds = parentId === null || parentId === undefined
+        ? state.rootIds.filter((rid) => rid !== id)
+        : state.rootIds;
+
+      return {
+        nodesById: newNodesById,
+        parentById: newParentById,
+        childrenById: newChildrenById,
+        rootIds: newRootIds,
+        _cachedTree: null,
+      };
     }),
 
-  clearNodes: () => set({ ...withRebuiltIndex([]) }),
+  clearNodes: () =>
+    set({
+      nodesById: {},
+      parentById: {},
+      childrenById: {},
+      rootIds: [],
+      _cachedTree: null,
+    }),
 
   setNodes: (nodes) => {
-    useHistoryStore.getState().saveHistory(useSceneStore.getState().nodes);
-    // Sync text dimensions on load to fix any stale width/height
-    set({ ...withRebuiltIndex(syncAllTextDimensions(nodes)) });
-    // Auto-load any Google Fonts used in the scene
-    // (the global fontLoadCallback will re-sync dimensions after each font loads)
+    const state = get();
+    saveHistory(state);
+    const flat = flattenTree(nodes);
+    const synced = syncAllTextDimensionsFlat(flat.nodesById);
+    set({
+      nodesById: synced,
+      parentById: flat.parentById,
+      childrenById: flat.childrenById,
+      rootIds: flat.rootIds,
+      _cachedTree: null,
+    });
     loadGoogleFontsFromNodes(nodes);
   },
 
-  // Set nodes without saving to history (used by undo/redo)
-  setNodesWithoutHistory: (nodes) => set({ ...withRebuiltIndex(nodes) }),
+  setNodesWithoutHistory: (nodes) => {
+    const flat = flattenTree(nodes);
+    set({
+      nodesById: flat.nodesById,
+      parentById: flat.parentById,
+      childrenById: flat.childrenById,
+      rootIds: flat.rootIds,
+      _cachedTree: null,
+    });
+  },
+
+  restoreSnapshot: (snapshot) => {
+    set({
+      nodesById: snapshot.nodesById,
+      parentById: snapshot.parentById,
+      childrenById: snapshot.childrenById,
+      rootIds: snapshot.rootIds,
+      _cachedTree: null,
+    });
+  },
 
   reorderNode: (fromIndex, toIndex) =>
     set((state) => {
-      useHistoryStore.getState().saveHistory(state.nodes);
-      const newNodes = [...state.nodes];
-      const [removed] = newNodes.splice(fromIndex, 1);
-      newNodes.splice(toIndex, 0, removed);
-      return { ...withRebuiltIndex(newNodes) };
+      saveHistory(state);
+      const newRootIds = [...state.rootIds];
+      const [removed] = newRootIds.splice(fromIndex, 1);
+      newRootIds.splice(toIndex, 0, removed);
+      return { rootIds: newRootIds, _cachedTree: null };
     }),
 
   setVisibility: (id, visible) =>
     set((state) => {
-      useHistoryStore.getState().saveHistory(state.nodes);
-      const nextNodes = setVisibilityRecursive(state.nodes, id, visible);
-      return { ...withRebuiltIndex(nextNodes) };
+      const existing = state.nodesById[id];
+      if (!existing) return state;
+      saveHistory(state);
+      return {
+        nodesById: { ...state.nodesById, [id]: { ...existing, visible } },
+        _cachedTree: null,
+      };
     }),
 
   toggleVisibility: (id) =>
     set((state) => {
-      useHistoryStore.getState().saveHistory(state.nodes);
-      const nextNodes = toggleVisibilityRecursive(state.nodes, id);
-      return { ...withRebuiltIndex(nextNodes) };
+      const existing = state.nodesById[id];
+      if (!existing) return state;
+      saveHistory(state);
+      return {
+        nodesById: {
+          ...state.nodesById,
+          [id]: { ...existing, visible: existing.visible === false ? true : false },
+        },
+        _cachedTree: null,
+      };
     }),
 
   toggleFrameExpanded: (id) =>
@@ -1040,99 +452,519 @@ export const useSceneStore = create<SceneState>((set) => ({
 
   moveNode: (nodeId, newParentId, newIndex) =>
     set((state) => {
-      // Extract the node from its current position
-      const { node, remaining } = extractNodeRecursive(state.nodes, nodeId);
+      const node = state.nodesById[nodeId];
       if (!node) return state;
 
-      useHistoryStore.getState().saveHistory(state.nodes);
-      // Insert the node at the new position
-      const newNodes = insertNodeRecursive(
-        remaining,
-        node,
-        newParentId,
-        newIndex,
-      );
-      return { ...withRebuiltIndex(newNodes) };
+      const oldParentId = state.parentById[nodeId];
+      saveHistory(state);
+
+      const newParentById = { ...state.parentById, [nodeId]: newParentId };
+      const newChildrenById = { ...state.childrenById };
+      let newRootIds = [...state.rootIds];
+
+      // Remove from old parent
+      if (oldParentId !== null && oldParentId !== undefined) {
+        newChildrenById[oldParentId] = (newChildrenById[oldParentId] ?? []).filter(
+          (cid) => cid !== nodeId,
+        );
+      } else {
+        newRootIds = newRootIds.filter((rid) => rid !== nodeId);
+      }
+
+      // Insert into new parent
+      if (newParentId !== null) {
+        const siblings = [...(newChildrenById[newParentId] ?? [])];
+        siblings.splice(newIndex, 0, nodeId);
+        newChildrenById[newParentId] = siblings;
+      } else {
+        newRootIds.splice(newIndex, 0, nodeId);
+      }
+
+      return {
+        parentById: newParentById,
+        childrenById: newChildrenById,
+        rootIds: newRootIds,
+        _cachedTree: null,
+      };
     }),
 
   updateDescendantOverride: (instanceId, descendantId, updates) =>
     set((state) => {
-      useHistoryStore.getState().saveHistory(state.nodes);
-      const nextNodes = updateDescendantOverrideRecursive(
-        state.nodes,
-        instanceId,
-        descendantId,
-        updates,
-      );
-      return { ...withRebuiltIndex(nextNodes) };
+      const existing = state.nodesById[instanceId];
+      if (!existing || existing.type !== "ref") return state;
+      saveHistory(state);
+
+      const refNode = existing as RefNode;
+      const existingOverrides = refNode.descendants || {};
+      const existingDescendant = existingOverrides[descendantId] || {};
+
+      const updated: RefNode = {
+        ...refNode,
+        descendants: {
+          ...existingOverrides,
+          [descendantId]: { ...existingDescendant, ...updates },
+        },
+      };
+
+      return {
+        nodesById: { ...state.nodesById, [instanceId]: updated },
+        _cachedTree: null,
+      };
     }),
 
   resetDescendantOverride: (instanceId, descendantId, property) =>
     set((state) => {
-      useHistoryStore.getState().saveHistory(state.nodes);
-      const nextNodes = resetDescendantOverrideRecursive(
-        state.nodes,
-        instanceId,
-        descendantId,
-        property,
-      );
-      return { ...withRebuiltIndex(nextNodes) };
+      const existing = state.nodesById[instanceId];
+      if (!existing || existing.type !== "ref") return state;
+
+      const refNode = existing as RefNode;
+      const existingOverrides = refNode.descendants || {};
+      if (!existingOverrides[descendantId]) return state;
+
+      saveHistory(state);
+
+      let updated: RefNode;
+      if (property) {
+        const { [property]: _, ...remainingProps } = existingOverrides[descendantId];
+        if (Object.keys(remainingProps).length === 0) {
+          const { [descendantId]: __, ...remainingOverrides } = existingOverrides;
+          updated = {
+            ...refNode,
+            descendants:
+              Object.keys(remainingOverrides).length > 0
+                ? remainingOverrides
+                : undefined,
+          };
+        } else {
+          updated = {
+            ...refNode,
+            descendants: {
+              ...existingOverrides,
+              [descendantId]: remainingProps,
+            },
+          };
+        }
+      } else {
+        const { [descendantId]: _, ...remainingOverrides } = existingOverrides;
+        updated = {
+          ...refNode,
+          descendants:
+            Object.keys(remainingOverrides).length > 0
+              ? remainingOverrides
+              : undefined,
+        };
+      }
+
+      return {
+        nodesById: { ...state.nodesById, [instanceId]: updated },
+        _cachedTree: null,
+      };
     }),
 
   groupNodes: (ids) => {
-    const state = useSceneStore.getState();
+    const state = get();
+    if (ids.length < 2) return null;
+
     const calculateLayoutForFrame =
       useLayoutStore.getState().calculateLayoutForFrame;
-    const result = groupNodesInTree(state.nodes, ids, calculateLayoutForFrame);
-    if (!result) return null;
-    useHistoryStore.getState().saveHistory(state.nodes);
-    useSceneStore.setState({ ...withRebuiltIndex(result.nodes) });
-    return result.groupId;
-  },
 
-  ungroupNodes: (ids) => {
-    const state = useSceneStore.getState();
-    let currentNodes = state.nodes;
-    const childIds: string[] = [];
+    // All nodes must share the same parent
+    const parentId = state.parentById[ids[0]];
+    if (!ids.every((id) => state.parentById[id] === parentId)) return null;
 
-    useHistoryStore.getState().saveHistory(state.nodes);
-    for (const id of ids) {
-      const node = findNodeInTree(currentNodes, id);
-      if (node && node.type === "group") {
-        const group = node as GroupNode;
-        childIds.push(...group.children.map((c) => c.id));
-        const result = ungroupNodeInTree(currentNodes, id);
-        if (result) {
-          currentNodes = result;
+    // Get the actual nodes
+    const selectedNodes = ids.map((id) => state.nodesById[id]).filter(Boolean);
+    if (selectedNodes.length !== ids.length) return null;
+
+    // If parent is an auto-layout frame, use Yoga-computed positions
+    let layoutMap = new Map<string, { x: number; y: number; width: number; height: number }>();
+    if (parentId) {
+      const parentNode = state.nodesById[parentId];
+      if (
+        parentNode &&
+        parentNode.type === "frame" &&
+        (parentNode as FlatFrameNode).layout?.autoLayout
+      ) {
+        // Build a temporary tree node for Yoga calculation
+        const parentTree = buildTree([parentId], state.nodesById, state.childrenById)[0] as FrameNode;
+        const layoutNodes = calculateLayoutForFrame(parentTree);
+        for (const ln of layoutNodes) {
+          layoutMap.set(ln.id, { x: ln.x, y: ln.y, width: ln.width, height: ln.height });
         }
       }
     }
-    useSceneStore.setState({ ...withRebuiltIndex(currentNodes) });
+
+    // Get effective bounds for each node
+    function getEffectiveBounds(node: FlatSceneNode): { x: number; y: number; width: number; height: number } {
+      const layoutNode = layoutMap.get(node.id);
+      const x = layoutNode?.x ?? node.x;
+      const y = layoutNode?.y ?? node.y;
+      let width = layoutNode?.width ?? node.width;
+      let height = layoutNode?.height ?? node.height;
+
+      if (node.type === "frame") {
+        const frame = node as FlatFrameNode;
+        if (frame.layout?.autoLayout) {
+          const fitWidth = frame.sizing?.widthMode === "fit_content";
+          const fitHeight = frame.sizing?.heightMode === "fit_content";
+          if (fitWidth || fitHeight) {
+            const frameTree = buildTree([node.id], state.nodesById, state.childrenById)[0] as FrameNode;
+            const intrinsic = calculateFrameIntrinsicSize(frameTree, { fitWidth, fitHeight });
+            if (fitWidth) width = intrinsic.width;
+            if (fitHeight) height = intrinsic.height;
+          }
+        }
+      }
+
+      return { x, y, width, height };
+    }
+
+    // Calculate bounding box
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const boundsMap = new Map<string, { x: number; y: number; width: number; height: number }>();
+    for (const node of selectedNodes) {
+      const bounds = getEffectiveBounds(node);
+      boundsMap.set(node.id, bounds);
+      minX = Math.min(minX, bounds.x);
+      minY = Math.min(minY, bounds.y);
+      maxX = Math.max(maxX, bounds.x + bounds.width);
+      maxY = Math.max(maxY, bounds.y + bounds.height);
+    }
+
+    saveHistory(state);
+
+    const groupId = generateId();
+    const groupNode: FlatSceneNode = {
+      id: groupId,
+      type: "group" as const,
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
+    };
+
+    // Find insertion index in parent's children
+    const parentChildren = parentId !== null && parentId !== undefined
+      ? (state.childrenById[parentId] ?? [])
+      : state.rootIds;
+    const insertIndex = Math.min(
+      ...ids.map((id) => parentChildren.indexOf(id)).filter((i) => i >= 0),
+    );
+
+    // Build new state
+    const newNodesById = { ...state.nodesById, [groupId]: groupNode };
+    const newParentById = { ...state.parentById, [groupId]: parentId };
+    const newChildrenById = { ...state.childrenById };
+    const idSet = new Set(ids);
+
+    // Update each moved node: adjust position relative to group, set parent to group
+    for (const id of ids) {
+      const bounds = boundsMap.get(id)!;
+      const existingNode = newNodesById[id];
+      newNodesById[id] = { ...existingNode, x: bounds.x - minX, y: bounds.y - minY, width: bounds.width, height: bounds.height } as FlatSceneNode;
+      newParentById[id] = groupId;
+    }
+
+    // Set group's children
+    newChildrenById[groupId] = ids;
+
+    // Update parent's children: remove grouped nodes, insert group
+    let newRootIds = state.rootIds;
+    if (parentId !== null && parentId !== undefined) {
+      const filtered = (state.childrenById[parentId] ?? []).filter((cid) => !idSet.has(cid));
+      filtered.splice(Math.min(insertIndex, filtered.length), 0, groupId);
+      newChildrenById[parentId] = filtered;
+    } else {
+      const filtered = state.rootIds.filter((rid) => !idSet.has(rid));
+      filtered.splice(Math.min(insertIndex, filtered.length), 0, groupId);
+      newRootIds = filtered;
+    }
+
+    useSceneStore.setState({
+      nodesById: newNodesById,
+      parentById: newParentById,
+      childrenById: newChildrenById,
+      rootIds: newRootIds,
+      _cachedTree: null,
+    });
+    return groupId;
+  },
+
+  ungroupNodes: (ids) => {
+    const state = get();
+    const childIds: string[] = [];
+
+    saveHistory(state);
+
+    const newNodesById = { ...state.nodesById };
+    const newParentById = { ...state.parentById };
+    const newChildrenById = { ...state.childrenById };
+    let newRootIds = [...state.rootIds];
+
+    for (const id of ids) {
+      const node = state.nodesById[id];
+      if (!node || node.type !== "group") continue;
+      const group = node;
+
+      const groupParentId = state.parentById[id];
+      const groupChildIds = state.childrenById[id] ?? [];
+
+      // Adjust children positions to be absolute
+      for (const childId of groupChildIds) {
+        const child = newNodesById[childId];
+        if (child) {
+          newNodesById[childId] = {
+            ...child,
+            x: child.x + group.x,
+            y: child.y + group.y,
+          } as FlatSceneNode;
+          newParentById[childId] = groupParentId;
+          childIds.push(childId);
+        }
+      }
+
+      // Replace group with its children in parent
+      if (groupParentId !== null && groupParentId !== undefined) {
+        const parentChildList = newChildrenById[groupParentId] ?? [];
+        const idx = parentChildList.indexOf(id);
+        if (idx >= 0) {
+          const updated = [...parentChildList];
+          updated.splice(idx, 1, ...groupChildIds);
+          newChildrenById[groupParentId] = updated;
+        }
+      } else {
+        const idx = newRootIds.indexOf(id);
+        if (idx >= 0) {
+          newRootIds.splice(idx, 1, ...groupChildIds);
+        }
+      }
+
+      // Remove the group node itself
+      delete newNodesById[id];
+      delete newParentById[id];
+      delete newChildrenById[id];
+    }
+
+    useSceneStore.setState({
+      nodesById: newNodesById,
+      parentById: newParentById,
+      childrenById: newChildrenById,
+      rootIds: newRootIds,
+      _cachedTree: null,
+    });
     return childIds;
   },
 
   convertNodeType: (id) => {
-    const state = useSceneStore.getState();
-    const result = convertNodeInTree(state.nodes, id);
-    if (!result) return false;
-    useHistoryStore.getState().saveHistory(state.nodes);
-    useSceneStore.setState({ ...withRebuiltIndex(result) });
-    return true;
+    const state = get();
+    const node = state.nodesById[id];
+    if (!node) return false;
+
+    saveHistory(state);
+
+    if (node.type === "group") {
+      // Group -> Frame
+      const frame: FlatSceneNode = {
+        id: node.id,
+        type: "frame" as const,
+        name: node.name,
+        x: node.x,
+        y: node.y,
+        width: node.width,
+        height: node.height,
+        fill: node.fill,
+        stroke: node.stroke,
+        strokeWidth: node.strokeWidth,
+        visible: node.visible,
+        enabled: node.enabled,
+        sizing: node.sizing,
+        fillBinding: node.fillBinding,
+        strokeBinding: node.strokeBinding,
+        rotation: node.rotation,
+        opacity: node.opacity,
+        fillOpacity: node.fillOpacity,
+        strokeOpacity: node.strokeOpacity,
+        flipX: node.flipX,
+        flipY: node.flipY,
+        imageFill: node.imageFill,
+      };
+      useSceneStore.setState({
+        nodesById: { ...state.nodesById, [id]: frame },
+        _cachedTree: null,
+      });
+      return true;
+    }
+
+    if (node.type === "frame") {
+      const frame = node as FlatFrameNode;
+      if (frame.reusable) return false;
+
+      const group: FlatSceneNode = {
+        id: node.id,
+        type: "group" as const,
+        name: node.name,
+        x: node.x,
+        y: node.y,
+        width: node.width,
+        height: node.height,
+        fill: node.fill,
+        stroke: node.stroke,
+        strokeWidth: node.strokeWidth,
+        visible: node.visible,
+        enabled: node.enabled,
+        sizing: node.sizing,
+        fillBinding: node.fillBinding,
+        strokeBinding: node.strokeBinding,
+        rotation: node.rotation,
+        opacity: node.opacity,
+        fillOpacity: node.fillOpacity,
+        strokeOpacity: node.strokeOpacity,
+        flipX: node.flipX,
+        flipY: node.flipY,
+        imageFill: node.imageFill,
+      };
+      useSceneStore.setState({
+        nodesById: { ...state.nodesById, [id]: group },
+        _cachedTree: null,
+      });
+      return true;
+    }
+
+    return false;
   },
 
   wrapInAutoLayoutFrame: (ids) => {
-    const state = useSceneStore.getState();
+    const state = get();
+    if (ids.length < 1) return null;
+
     const calculateLayoutForFrame =
       useLayoutStore.getState().calculateLayoutForFrame;
-    const result = wrapNodesInAutoLayoutFrame(
-      state.nodes,
-      ids,
-      calculateLayoutForFrame,
+
+    // All nodes must share the same parent
+    const parentId = state.parentById[ids[0]];
+    if (!ids.every((id) => state.parentById[id] === parentId)) return null;
+
+    const selectedNodes = ids.map((id) => state.nodesById[id]).filter(Boolean);
+    if (selectedNodes.length !== ids.length) return null;
+
+    // If parent is an auto-layout frame, use Yoga-computed positions
+    let layoutMap = new Map<string, { x: number; y: number; width: number; height: number }>();
+    if (parentId) {
+      const parentNode = state.nodesById[parentId];
+      if (
+        parentNode &&
+        parentNode.type === "frame" &&
+        (parentNode as FlatFrameNode).layout?.autoLayout
+      ) {
+        const parentTree = buildTree([parentId], state.nodesById, state.childrenById)[0] as FrameNode;
+        const layoutNodes = calculateLayoutForFrame(parentTree);
+        for (const ln of layoutNodes) {
+          layoutMap.set(ln.id, { x: ln.x, y: ln.y, width: ln.width, height: ln.height });
+        }
+      }
+    }
+
+    function getEffectiveBounds(node: FlatSceneNode): { x: number; y: number; width: number; height: number } {
+      const layoutNode = layoutMap.get(node.id);
+      const x = layoutNode?.x ?? node.x;
+      const y = layoutNode?.y ?? node.y;
+      let width = layoutNode?.width ?? node.width;
+      let height = layoutNode?.height ?? node.height;
+
+      if (node.type === "frame") {
+        const frame = node as FlatFrameNode;
+        if (frame.layout?.autoLayout) {
+          const fitWidth = frame.sizing?.widthMode === "fit_content";
+          const fitHeight = frame.sizing?.heightMode === "fit_content";
+          if (fitWidth || fitHeight) {
+            const frameTree = buildTree([node.id], state.nodesById, state.childrenById)[0] as FrameNode;
+            const intrinsic = calculateFrameIntrinsicSize(frameTree, { fitWidth, fitHeight });
+            if (fitWidth) width = intrinsic.width;
+            if (fitHeight) height = intrinsic.height;
+          }
+        }
+      }
+
+      return { x, y, width, height };
+    }
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const boundsMap = new Map<string, { x: number; y: number; width: number; height: number }>();
+    for (const node of selectedNodes) {
+      const bounds = getEffectiveBounds(node);
+      boundsMap.set(node.id, bounds);
+      minX = Math.min(minX, bounds.x);
+      minY = Math.min(minY, bounds.y);
+      maxX = Math.max(maxX, bounds.x + bounds.width);
+      maxY = Math.max(maxY, bounds.y + bounds.height);
+    }
+
+    saveHistory(state);
+
+    const frameId = generateId();
+    const frameNode: FlatSceneNode = {
+      id: frameId,
+      type: "frame" as const,
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
+      fill: "#ffffff",
+      stroke: "#cccccc",
+      strokeWidth: 1,
+      layout: {
+        autoLayout: true,
+        flexDirection: "column",
+        gap: 0,
+        paddingTop: 0,
+        paddingRight: 0,
+        paddingBottom: 0,
+        paddingLeft: 0,
+      },
+    };
+
+    // Find insertion index
+    const parentChildren = parentId !== null && parentId !== undefined
+      ? (state.childrenById[parentId] ?? [])
+      : state.rootIds;
+    const insertIndex = Math.min(
+      ...ids.map((id) => parentChildren.indexOf(id)).filter((i) => i >= 0),
     );
-    if (!result) return null;
-    useHistoryStore.getState().saveHistory(state.nodes);
-    useSceneStore.setState({ ...withRebuiltIndex(result.nodes) });
-    return result.frameId;
+
+    const newNodesById = { ...state.nodesById, [frameId]: frameNode };
+    const newParentById = { ...state.parentById, [frameId]: parentId };
+    const newChildrenById = { ...state.childrenById };
+    const idSet = new Set(ids);
+
+    // Update each wrapped node
+    for (const id of ids) {
+      const bounds = boundsMap.get(id)!;
+      const existingNode = newNodesById[id];
+      newNodesById[id] = { ...existingNode, x: bounds.x - minX, y: bounds.y - minY, width: bounds.width, height: bounds.height } as FlatSceneNode;
+      newParentById[id] = frameId;
+    }
+
+    newChildrenById[frameId] = ids;
+
+    let newRootIds = state.rootIds;
+    if (parentId !== null && parentId !== undefined) {
+      const filtered = (state.childrenById[parentId] ?? []).filter((cid) => !idSet.has(cid));
+      filtered.splice(Math.min(insertIndex, filtered.length), 0, frameId);
+      newChildrenById[parentId] = filtered;
+    } else {
+      const filtered = state.rootIds.filter((rid) => !idSet.has(rid));
+      filtered.splice(Math.min(insertIndex, filtered.length), 0, frameId);
+      newRootIds = filtered;
+    }
+
+    useSceneStore.setState({
+      nodesById: newNodesById,
+      parentById: newParentById,
+      childrenById: newChildrenById,
+      rootIds: newRootIds,
+      _cachedTree: null,
+    });
+    return frameId;
   },
 
   setPageBackground: (color) =>
@@ -1144,6 +976,8 @@ export const useSceneStore = create<SceneState>((set) => ({
 // Re-sync text dimensions whenever a Google Font finishes loading
 registerFontLoadCallback(() => {
   const state = useSceneStore.getState();
-  const synced = syncAllTextDimensions(state.nodes);
-  useSceneStore.setState({ ...withRebuiltIndex(synced) });
+  const synced = syncAllTextDimensionsFlat(state.nodesById);
+  if (synced !== state.nodesById) {
+    useSceneStore.setState({ nodesById: synced, _cachedTree: null });
+  }
 });

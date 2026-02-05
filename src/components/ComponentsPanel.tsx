@@ -7,7 +7,7 @@ import type { SceneNode, FrameNode, RefNode } from "../types/scene";
 import { useNodePlacement } from "../hooks/useNodePlacement";
 
 export function ComponentsPanel() {
-  const nodes = useSceneStore((state) => state.nodes);
+  const nodes = useSceneStore((state) => state.getNodes());
   const addNode = useSceneStore((state) => state.addNode);
   const addChildToFrame = useSceneStore((state) => state.addChildToFrame);
   const { getSelectedFrame, getViewportCenter } = useNodePlacement();

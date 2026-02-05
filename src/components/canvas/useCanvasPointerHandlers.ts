@@ -307,7 +307,7 @@ export function useCanvasPointerHandlers({
             if (currentSelectedIds.length === 1) {
               const selectedId = currentSelectedIds[0];
               if (selectedId !== hoveredId) {
-                const currentNodes = useSceneStore.getState().nodes;
+                const currentNodes = useSceneStore.getState().getNodes();
                 const calculateLayoutForFrame =
                   useLayoutStore.getState().calculateLayoutForFrame;
                 const selectedNode = findNodeById(currentNodes, selectedId);
@@ -383,7 +383,7 @@ export function useCanvasPointerHandlers({
         };
         setMarqueeRect(rect);
 
-        const currentNodes = useSceneStore.getState().nodes;
+        const currentNodes = useSceneStore.getState().getNodes();
         const intersecting: string[] = [];
         for (const node of currentNodes) {
           if (node.visible === false) continue;

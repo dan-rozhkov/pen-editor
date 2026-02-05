@@ -167,7 +167,7 @@ function FramePresetsPanel() {
 }
 
 export function PropertiesPanel() {
-  const nodes = useSceneStore((s) => s.nodes);
+  const nodes = useSceneStore((s) => s.getNodes());
   const updateNode = useSceneStore((s) => s.updateNode);
   const { selectedIds, instanceContext } = useSelectionStore();
   const variables = useVariableStore((s) => s.variables);

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
-import { isContainerNode, type FrameNode, type SceneNode } from "@/types/scene";
+import { isContainerNode, type FrameNode, type SceneNode, type FlatSnapshot } from "@/types/scene";
 import { useDrawModeStore } from "@/store/drawModeStore";
-import { useSceneStore } from "@/store/sceneStore";
+import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { cloneNodeWithNewId } from "@/utils/cloneNode";
@@ -28,12 +28,12 @@ interface CanvasKeyboardShortcutsParams {
   groupNodes: (ids: string[]) => string | null;
   ungroupNodes: (ids: string[]) => string[];
   wrapInAutoLayoutFrame: (ids: string[]) => string | null;
-  setNodesWithoutHistory: (nodes: SceneNode[]) => void;
-  saveHistory: (nodes: SceneNode[]) => void;
+  restoreSnapshot: (snapshot: FlatSnapshot) => void;
+  saveHistory: (snapshot: FlatSnapshot) => void;
   startBatch: () => void;
   endBatch: () => void;
-  undo: (nodes: SceneNode[]) => SceneNode[] | null;
-  redo: (nodes: SceneNode[]) => SceneNode[] | null;
+  undo: (snapshot: FlatSnapshot) => FlatSnapshot | null;
+  redo: (snapshot: FlatSnapshot) => FlatSnapshot | null;
   fitToContent: (nodes: SceneNode[], width: number, height: number) => void;
   toggleTool: (tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon") => void;
   cancelDrawing: () => void;
@@ -57,7 +57,7 @@ export function useCanvasKeyboardShortcuts({
   groupNodes,
   ungroupNodes,
   wrapInAutoLayoutFrame,
-  setNodesWithoutHistory,
+  restoreSnapshot,
   saveHistory,
   startBatch,
   endBatch,
@@ -155,8 +155,7 @@ export function useCanvasKeyboardShortcuts({
             .filter((n): n is SceneNode => n != null);
           if (nodesToCut.length > 0) {
             copyNodes(nodesToCut);
-            const currentNodes = useSceneStore.getState().nodes;
-            saveHistory(currentNodes);
+            saveHistory(createSnapshot(useSceneStore.getState()));
             for (const id of ids) {
               deleteNode(id);
             }
@@ -171,27 +170,27 @@ export function useCanvasKeyboardShortcuts({
 
       if ((e.metaKey || e.ctrlKey) && e.code === "KeyZ" && !e.shiftKey) {
         e.preventDefault();
-        const currentNodes = useSceneStore.getState().nodes;
-        const prevState = undo(currentNodes);
-        if (prevState) {
-          setNodesWithoutHistory(prevState);
+        const snapshot = createSnapshot(useSceneStore.getState());
+        const prevSnapshot = undo(snapshot);
+        if (prevSnapshot) {
+          restoreSnapshot(prevSnapshot);
         }
         return;
       }
 
       if ((e.metaKey || e.ctrlKey) && e.code === "KeyZ" && e.shiftKey) {
         e.preventDefault();
-        const currentNodes = useSceneStore.getState().nodes;
-        const nextState = redo(currentNodes);
-        if (nextState) {
-          setNodesWithoutHistory(nextState);
+        const snapshot = createSnapshot(useSceneStore.getState());
+        const nextSnapshot = redo(snapshot);
+        if (nextSnapshot) {
+          restoreSnapshot(nextSnapshot);
         }
         return;
       }
 
       if ((e.metaKey || e.ctrlKey) && e.code === "Digit0") {
         e.preventDefault();
-        const currentNodes = useSceneStore.getState().nodes;
+        const currentNodes = useSceneStore.getState().getNodes();
         fitToContent(currentNodes, dimensions.width, dimensions.height);
         return;
       }
@@ -329,8 +328,7 @@ export function useCanvasKeyboardShortcuts({
         e.preventDefault();
         const ids = useSelectionStore.getState().selectedIds;
         if (ids.length > 0) {
-          const currentNodes = useSceneStore.getState().nodes;
-          saveHistory(currentNodes);
+          saveHistory(createSnapshot(useSceneStore.getState()));
           startBatch();
           ids.forEach((id) => deleteNode(id));
           endBatch();
@@ -346,7 +344,7 @@ export function useCanvasKeyboardShortcuts({
         const ids = useSelectionStore.getState().selectedIds;
         if (ids.length === 0) return;
 
-        const currentNodes = useSceneStore.getState().nodes;
+        const currentNodes = useSceneStore.getState().getNodes();
 
         const nodesOutsideAutoLayout: string[] = [];
         const nodesInsideAutoLayout: string[] = [];
@@ -372,7 +370,7 @@ export function useCanvasKeyboardShortcuts({
           else if (e.code === "ArrowUp") dy = -step;
           else if (e.code === "ArrowDown") dy = step;
 
-          saveHistory(currentNodes);
+          saveHistory(createSnapshot(useSceneStore.getState()));
 
           for (const id of nodesOutsideAutoLayout) {
             const node = findNodeById(currentNodes, id);
@@ -422,7 +420,7 @@ export function useCanvasKeyboardShortcuts({
 
           if (newIndex === currentIndex) return;
 
-          saveHistory(currentNodes);
+          saveHistory(createSnapshot(useSceneStore.getState()));
           moveNode(nodeId, parentFrame.id, newIndex);
           return;
         }
@@ -494,8 +492,7 @@ export function useCanvasKeyboardShortcuts({
           }
         }
 
-        const currentNodes = useSceneStore.getState().nodes;
-        saveHistory(currentNodes);
+        saveHistory(createSnapshot(useSceneStore.getState()));
         startBatch();
         for (const clonedNode of clonedNodes) {
           if (targetContainerId) {
@@ -538,10 +535,10 @@ export function useCanvasKeyboardShortcuts({
     moveNode,
     nodes,
     redo,
+    restoreSnapshot,
     saveHistory,
     setIsPanning,
     setIsSpacePressed,
-    setNodesWithoutHistory,
     startBatch,
     toggleTool,
     undo,

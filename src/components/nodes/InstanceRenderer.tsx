@@ -56,7 +56,7 @@ export function InstanceRenderer({
   effectiveTheme,
   isHovered,
 }: InstanceRendererProps) {
-  const nodes = useSceneStore((state) => state.nodes);
+  const nodes = useSceneStore((state) => state.getNodes());
   const calculateLayoutForFrame = useLayoutStore(
     (state) => state.calculateLayoutForFrame,
   );

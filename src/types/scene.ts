@@ -233,8 +233,24 @@ export interface PolygonNode extends BaseNode {
 
 export type SceneNode = FrameNode | GroupNode | RectNode | EllipseNode | TextNode | RefNode | PathNode | LineNode | PolygonNode
 
+// --- Flat node types (no children arrays - structure lives in store indices) ---
+
+/** FrameNode without children array - used in flat storage */
+export type FlatFrameNode = Omit<FrameNode, 'children'>
+
+/** GroupNode without children array - used in flat storage */
+export type FlatGroupNode = Omit<GroupNode, 'children'>
+
+/** Union of all node types in flat storage (containers have no children property) */
+export type FlatSceneNode = FlatFrameNode | FlatGroupNode | RectNode | EllipseNode | TextNode | RefNode | PathNode | LineNode | PolygonNode
+
 /** Check if a node is a container (has children array) */
 export function isContainerNode(node: SceneNode): node is FrameNode | GroupNode {
+  return node.type === 'frame' || node.type === 'group'
+}
+
+/** Check if a flat node is a container type (frame or group) */
+export function isFlatContainerType(node: FlatSceneNode): node is FlatFrameNode | FlatGroupNode {
   return node.type === 'frame' || node.type === 'group'
 }
 
@@ -249,6 +265,90 @@ export function getNodeChildren(node: SceneNode): SceneNode[] {
 /** Return a copy of a container node with updated children */
 export function withChildren(node: FrameNode | GroupNode, children: SceneNode[]): FrameNode | GroupNode {
   return { ...node, children } as FrameNode | GroupNode
+}
+
+/** Strip children from a SceneNode to create a FlatSceneNode */
+export function toFlatNode(node: SceneNode): FlatSceneNode {
+  if (isContainerNode(node)) {
+    const { children: _, ...flat } = node
+    return flat as FlatSceneNode
+  }
+  return node
+}
+
+/** Flatten a nested tree into flat storage maps */
+export function flattenTree(nodes: SceneNode[]): {
+  nodesById: Record<string, FlatSceneNode>
+  parentById: Record<string, string | null>
+  childrenById: Record<string, string[]>
+  rootIds: string[]
+} {
+  const nodesById: Record<string, FlatSceneNode> = {}
+  const parentById: Record<string, string | null> = {}
+  const childrenById: Record<string, string[]> = {}
+  const rootIds: string[] = []
+
+  function visit(node: SceneNode, parentId: string | null) {
+    nodesById[node.id] = toFlatNode(node)
+    parentById[node.id] = parentId
+    if (isContainerNode(node)) {
+      childrenById[node.id] = node.children.map(c => c.id)
+      for (const child of node.children) {
+        visit(child, node.id)
+      }
+    }
+  }
+
+  for (const node of nodes) {
+    rootIds.push(node.id)
+    visit(node, null)
+  }
+
+  return { nodesById, parentById, childrenById, rootIds }
+}
+
+/** Rebuild a nested tree from flat storage */
+export function buildTree(
+  rootIds: string[],
+  nodesById: Record<string, FlatSceneNode>,
+  childrenById: Record<string, string[]>,
+): SceneNode[] {
+  function buildNode(id: string): SceneNode {
+    const flat = nodesById[id]
+    if (!flat) throw new Error(`Node not found: ${id}`)
+    if (isFlatContainerType(flat)) {
+      const childIds = childrenById[id] ?? []
+      const children = childIds.map(buildNode)
+      return { ...flat, children } as SceneNode
+    }
+    return flat as SceneNode
+  }
+
+  return rootIds.map(buildNode)
+}
+
+/** Collect all descendant IDs recursively from flat storage */
+export function collectDescendantIds(
+  nodeId: string,
+  childrenById: Record<string, string[]>,
+): string[] {
+  const result: string[] = []
+  const childIds = childrenById[nodeId]
+  if (childIds) {
+    for (const childId of childIds) {
+      result.push(childId)
+      result.push(...collectDescendantIds(childId, childrenById))
+    }
+  }
+  return result
+}
+
+/** Snapshot of flat scene state (used by history) */
+export interface FlatSnapshot {
+  nodesById: Record<string, FlatSceneNode>
+  parentById: Record<string, string | null>
+  childrenById: Record<string, string[]>
+  rootIds: string[]
 }
 
 export function generateId(): string {

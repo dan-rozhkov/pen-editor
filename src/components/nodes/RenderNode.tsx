@@ -23,7 +23,7 @@ import { useDragStore } from "@/store/dragStore";
 import { useHoverStore } from "@/store/hoverStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { useLayoutStore } from "@/store/layoutStore";
-import { useSceneStore } from "@/store/sceneStore";
+import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSmartGuideStore } from "@/store/smartGuideStore";
 import { useThemeStore } from "@/store/themeStore";
@@ -62,7 +62,7 @@ export const RenderNode = memo(function RenderNode({
   effectiveTheme,
   selectOverrideId,
 }: RenderNodeProps) {
-  const nodes = useSceneStore((state) => state.nodes);
+  const nodes = useSceneStore((state) => state.getNodes());
   const updateNode = useSceneStore((state) => state.updateNode);
   const moveNode = useSceneStore((state) => state.moveNode);
   const select = useSelectionStore((state) => state.select);
@@ -349,7 +349,7 @@ export const RenderNode = memo(function RenderNode({
     if (node.type !== "frame") return;
     if (e.target.id() !== node.id) return;
     const history = useHistoryStore.getState();
-    history.saveHistory(nodes);
+    history.saveHistory(createSnapshot(useSceneStore.getState()));
     history.startBatch();
     const widthMode = node.sizing?.widthMode ?? "fixed";
     const heightMode = node.sizing?.heightMode ?? "fixed";
@@ -371,7 +371,7 @@ export const RenderNode = memo(function RenderNode({
     if (node.type !== "text") return;
     if (e.target.id() !== node.id) return;
     const history = useHistoryStore.getState();
-    history.saveHistory(nodes);
+    history.saveHistory(createSnapshot(useSceneStore.getState()));
     history.startBatch();
     if (node.textWidthMode === "auto" || !node.textWidthMode) {
       updateNode(node.id, { textWidthMode: "fixed" });

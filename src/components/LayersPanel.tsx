@@ -426,7 +426,7 @@ function getChildrenOfParent(
 }
 
 export function LayersPanel() {
-  const nodes = useSceneStore((state) => state.nodes);
+  const nodes = useSceneStore((state) => state.getNodes());
   const expandedFrameIds = useSceneStore((state) => state.expandedFrameIds);
   const moveNode = useSceneStore((state) => state.moveNode);
   const setFrameExpanded = useSceneStore((state) => state.setFrameExpanded);

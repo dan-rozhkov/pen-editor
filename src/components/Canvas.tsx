@@ -45,7 +45,7 @@ export function Canvas() {
     startSmoothZoom,
     fitToContent,
   } = useViewportStore();
-  const nodes = useSceneStore((state) => state.nodes);
+  const nodes = useSceneStore((state) => state.getNodes());
   const pageBackground = useSceneStore((state) => state.pageBackground);
   const addNode = useSceneStore((state) => state.addNode);
   const addChildToFrame = useSceneStore((state) => state.addChildToFrame);
@@ -95,8 +95,8 @@ export function Canvas() {
   const wrapInAutoLayoutFrame = useSceneStore(
     (state) => state.wrapInAutoLayoutFrame,
   );
-  const setNodesWithoutHistory = useSceneStore(
-    (state) => state.setNodesWithoutHistory,
+  const restoreSnapshot = useSceneStore(
+    (state) => state.restoreSnapshot,
   );
   const {
     selectedIds,
@@ -165,7 +165,7 @@ export function Canvas() {
     groupNodes,
     ungroupNodes,
     wrapInAutoLayoutFrame,
-    setNodesWithoutHistory,
+    restoreSnapshot,
     saveHistory,
     startBatch,
     endBatch,
