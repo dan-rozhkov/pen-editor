@@ -1,286 +1,468 @@
-import { loadYoga } from "yoga-layout/load";
-import type { Yoga, Node as YogaNode } from "yoga-layout/load";
-import type { SceneNode, FrameNode, LayoutProperties } from "../types/scene";
-
-// Yoga instance (loaded asynchronously)
-let yogaInstance: Yoga | null = null;
-let isInitialized = false;
-let initPromise: Promise<void> | null = null;
-
 /**
- * Initialize yoga-layout WASM module
+ * Pure TypeScript flexbox layout engine.
+ * Replaces yoga-layout (WASM) with a zero-dependency implementation
+ * supporting: direction, gap, padding, align-items, justify-content,
+ * flex-grow/shrink, and sizing modes (fixed, fill_container, fit_content).
  */
-export async function initYoga(): Promise<void> {
-  if (isInitialized) return;
-  if (initPromise) return initPromise;
 
-  initPromise = (async () => {
-    yogaInstance = await loadYoga();
-    isInitialized = true;
-    console.log("[Yoga] WASM module loaded successfully");
-  })();
+import type {
+  SceneNode,
+  FrameNode,
+  LayoutProperties,
+  AlignItems,
+  JustifyContent,
+} from "../types/scene";
 
-  return initPromise;
+// ── Internal types ──────────────────────────────────────────────────────────
+
+type SizingMode = "fixed" | "fill_container" | "fit_content";
+
+interface FlexItem {
+  id: string;
+  mainSizeMode: SizingMode;
+  crossSizeMode: SizingMode;
+  mainBaseSize: number;
+  crossBaseSize: number;
+  flexGrow: number;
+  flexShrink: number;
+  flexBasis: number;
+  alignSelf: AlignItems | null;
+  // Computed output
+  computedMainSize: number;
+  computedCrossSize: number;
+  mainPos: number;
+  crossPos: number;
 }
 
-/**
- * Check if yoga is ready to use
- */
-export function isYogaReady(): boolean {
-  return isInitialized && yogaInstance !== null;
+interface FlexContainer {
+  direction: "row" | "column";
+  mainSize: number | undefined; // undefined = shrink-to-fit
+  crossSize: number | undefined;
+  gap: number;
+  padding: [number, number, number, number]; // [top, right, bottom, left]
+  alignItems: AlignItems;
+  justifyContent: JustifyContent;
 }
 
-/**
- * Get the Yoga instance (throws if not initialized)
- */
-export function getYoga(): Yoga {
-  if (!yogaInstance) {
-    throw new Error("Yoga not initialized. Call initYoga() first.");
-  }
-  return yogaInstance;
+interface ResolvedPadding {
+  mainStart: number;
+  mainEnd: number;
+  crossStart: number;
+  crossEnd: number;
 }
 
-// Map our AlignItems to Yoga constants
-function mapAlignItems(align: LayoutProperties["alignItems"]): number {
-  const Y = getYoga();
-  switch (align) {
-    case "flex-start":
-      return Y.ALIGN_FLEX_START;
-    case "center":
-      return Y.ALIGN_CENTER;
-    case "flex-end":
-      return Y.ALIGN_FLEX_END;
-    case "stretch":
-      return Y.ALIGN_STRETCH;
-    default:
-      return Y.ALIGN_FLEX_START;
-  }
-}
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
-/**
- * Apply layout properties (padding, gap) to a Yoga node
- */
-function applyLayoutProperties(
-  node: YogaNode,
-  layout: LayoutProperties | undefined,
-  Y: Yoga
-): void {
-  if (!layout?.autoLayout) return;
-
-  node.setFlexDirection(mapFlexDirection(layout.flexDirection));
-  if (layout.gap !== undefined) {
-    node.setGap(Y.GUTTER_ALL, layout.gap);
-  }
-  if (layout.paddingTop !== undefined) {
-    node.setPadding(Y.EDGE_TOP, layout.paddingTop);
-  }
-  if (layout.paddingRight !== undefined) {
-    node.setPadding(Y.EDGE_RIGHT, layout.paddingRight);
-  }
-  if (layout.paddingBottom !== undefined) {
-    node.setPadding(Y.EDGE_BOTTOM, layout.paddingBottom);
-  }
-  if (layout.paddingLeft !== undefined) {
-    node.setPadding(Y.EDGE_LEFT, layout.paddingLeft);
-  }
-  if (layout.alignItems !== undefined) {
-    node.setAlignItems(mapAlignItems(layout.alignItems));
-  }
-  if (layout.justifyContent !== undefined) {
-    node.setJustifyContent(mapJustifyContent(layout.justifyContent));
+function resolvePadding(container: FlexContainer): ResolvedPadding {
+  const [top, right, bottom, left] = container.padding;
+  if (container.direction === "row") {
+    return { mainStart: left, mainEnd: right, crossStart: top, crossEnd: bottom };
+  } else {
+    return { mainStart: top, mainEnd: bottom, crossStart: left, crossEnd: right };
   }
 }
 
+function buildContainer(
+  frame: FrameNode,
+  options?: { fitWidth?: boolean; fitHeight?: boolean }
+): FlexContainer {
+  const layout = frame.layout;
+  const direction = layout?.flexDirection ?? "row";
+  const isHorizontal = direction === "row";
+  const fitWidth = options?.fitWidth ?? false;
+  const fitHeight = options?.fitHeight ?? false;
+
+  return {
+    direction,
+    mainSize: isHorizontal
+      ? (fitWidth ? undefined : frame.width)
+      : (fitHeight ? undefined : frame.height),
+    crossSize: isHorizontal
+      ? (fitHeight ? undefined : frame.height)
+      : (fitWidth ? undefined : frame.width),
+    gap: layout?.gap ?? 0,
+    padding: [
+      layout?.paddingTop ?? 0,
+      layout?.paddingRight ?? 0,
+      layout?.paddingBottom ?? 0,
+      layout?.paddingLeft ?? 0,
+    ],
+    alignItems: layout?.alignItems ?? "flex-start",
+    justifyContent: layout?.justifyContent ?? "flex-start",
+  };
+}
+
 /**
- * Calculate effective size for a child node considering fit_content sizing
+ * Resolve effective size for a child, handling fit_content recursion
+ * for nested auto-layout frames.
  */
-function calculateEffectiveSize(
+function resolveEffectiveSize(
   child: SceneNode,
-  widthMode: "fixed" | "fill_container" | "fit_content",
-  heightMode: "fixed" | "fill_container" | "fit_content"
+  widthMode: SizingMode,
+  heightMode: SizingMode
 ): { width: number; height: number } {
   let effectiveWidth = child.width;
   let effectiveHeight = child.height;
 
   if (child.type === "frame") {
-    const frameChild = child as FrameNode;
-    const needsIntrinsicSize =
+    const frame = child as FrameNode;
+    const needsIntrinsic =
       (widthMode === "fit_content" || heightMode === "fit_content") &&
-      frameChild.layout?.autoLayout &&
-      frameChild.children.length > 0;
+      frame.layout?.autoLayout &&
+      frame.children.length > 0;
 
-    if (needsIntrinsicSize) {
-      const intrinsicSize = calculateFrameIntrinsicSizeForNested(frameChild);
-      if (widthMode === "fit_content") {
-        effectiveWidth = intrinsicSize.width;
-      }
-      if (heightMode === "fit_content") {
-        effectiveHeight = intrinsicSize.height;
-      }
+    if (needsIntrinsic) {
+      const intrinsic = computeIntrinsicSize(frame);
+      if (widthMode === "fit_content") effectiveWidth = intrinsic.width;
+      if (heightMode === "fit_content") effectiveHeight = intrinsic.height;
     }
   }
 
   return { width: effectiveWidth, height: effectiveHeight };
 }
 
+function buildFlexItem(child: SceneNode, container: FlexContainer): FlexItem {
+  const isHorizontal = container.direction === "row";
+
+  const widthMode: SizingMode = child.sizing?.widthMode ?? "fixed";
+  const heightMode: SizingMode = child.sizing?.heightMode ?? "fixed";
+
+  const mainSizeMode = isHorizontal ? widthMode : heightMode;
+  const crossSizeMode = isHorizontal ? heightMode : widthMode;
+
+  const { width: effectiveWidth, height: effectiveHeight } =
+    resolveEffectiveSize(child, widthMode, heightMode);
+
+  const mainBaseSize = isHorizontal ? effectiveWidth : effectiveHeight;
+  const crossBaseSize = isHorizontal ? effectiveHeight : effectiveWidth;
+
+  let flexGrow = 0;
+  let flexShrink = 0;
+  let flexBasis = mainBaseSize;
+  let alignSelf: AlignItems | null = null;
+
+  if (mainSizeMode === "fill_container") {
+    flexGrow = 1;
+    flexShrink = 1;
+    flexBasis = 0;
+  }
+
+  if (crossSizeMode === "fill_container") {
+    alignSelf = "stretch";
+  }
+
+  return {
+    id: child.id,
+    mainSizeMode,
+    crossSizeMode,
+    mainBaseSize,
+    crossBaseSize,
+    flexGrow,
+    flexShrink,
+    flexBasis,
+    alignSelf,
+    computedMainSize: 0,
+    computedCrossSize: 0,
+    mainPos: 0,
+    crossPos: 0,
+  };
+}
+
+// ── Algorithm phases ────────────────────────────────────────────────────────
+
 /**
- * Apply width sizing mode to a Yoga node
+ * Phase 1: Resolve main-axis sizes via flex-grow / flex-shrink distribution.
  */
-function applySizingWidth(
-  node: YogaNode,
-  widthMode: "fixed" | "fill_container" | "fit_content",
-  effectiveWidth: number,
-  isHorizontal: boolean,
-  child: SceneNode,
-  Y: Yoga
+function resolveMainAxisSizes(
+  items: FlexItem[],
+  container: FlexContainer
 ): void {
-  if (widthMode === "fixed") {
-    node.setWidth(effectiveWidth);
-  } else if (widthMode === "fill_container") {
-    if (isHorizontal) {
-      node.setFlexGrow(1);
-      node.setFlexShrink(1);
-      node.setFlexBasis(0);
+  const pad = resolvePadding(container);
+  const totalGap = items.length > 1 ? container.gap * (items.length - 1) : 0;
+
+  if (container.mainSize !== undefined) {
+    const contentSpace = container.mainSize - pad.mainStart - pad.mainEnd;
+    const totalBasis = items.reduce((sum, item) => sum + item.flexBasis, 0);
+    const freeSpace = contentSpace - totalBasis - totalGap;
+
+    if (freeSpace > 0) {
+      const totalGrow = items.reduce((sum, item) => sum + item.flexGrow, 0);
+      if (totalGrow > 0) {
+        const growUnit = freeSpace / totalGrow;
+        for (const item of items) {
+          item.computedMainSize = item.flexBasis + item.flexGrow * growUnit;
+        }
+      } else {
+        for (const item of items) {
+          item.computedMainSize = item.flexBasis;
+        }
+      }
+    } else if (freeSpace < 0) {
+      const totalShrink = items.reduce(
+        (sum, item) => sum + item.flexShrink * item.flexBasis,
+        0
+      );
+      if (totalShrink > 0) {
+        for (const item of items) {
+          const shrinkRatio =
+            (item.flexShrink * item.flexBasis) / totalShrink;
+          item.computedMainSize = Math.max(
+            0,
+            item.flexBasis + freeSpace * shrinkRatio
+          );
+        }
+      } else {
+        for (const item of items) {
+          item.computedMainSize = item.flexBasis;
+        }
+      }
     } else {
-      node.setAlignSelf(Y.ALIGN_STRETCH);
+      for (const item of items) {
+        item.computedMainSize = item.flexBasis;
+      }
     }
-  } else if (widthMode === "fit_content") {
-    // For nested auto-layout frames, use their computed intrinsic size
-    if (child.type === "frame" && (child as FrameNode).layout?.autoLayout) {
-      node.setWidth(effectiveWidth);
+  } else {
+    // Intrinsic mode: each item gets its basis
+    for (const item of items) {
+      item.computedMainSize = item.flexBasis;
     }
-    // For non-frame nodes, let Yoga calculate based on content
   }
 }
 
 /**
- * Apply height sizing mode to a Yoga node
+ * Phase 2: Resolve cross-axis sizes (stretch vs base size).
  */
-function applySizingHeight(
-  node: YogaNode,
-  heightMode: "fixed" | "fill_container" | "fit_content",
-  effectiveHeight: number,
-  isHorizontal: boolean,
-  child: SceneNode,
-  Y: Yoga
+function resolveCrossAxisSizes(
+  items: FlexItem[],
+  container: FlexContainer
 ): void {
-  if (heightMode === "fixed") {
-    node.setHeight(effectiveHeight);
-  } else if (heightMode === "fill_container") {
-    if (!isHorizontal) {
-      node.setFlexGrow(1);
-      node.setFlexShrink(1);
-      node.setFlexBasis(0);
-    } else {
-      node.setAlignSelf(Y.ALIGN_STRETCH);
-    }
-  } else if (heightMode === "fit_content") {
-    // For nested auto-layout frames, use their computed intrinsic size
-    if (child.type === "frame" && (child as FrameNode).layout?.autoLayout) {
-      node.setHeight(effectiveHeight);
-    }
-    // For non-frame nodes, let Yoga calculate based on content
-  }
-}
+  const pad = resolvePadding(container);
 
-// Map our JustifyContent to Yoga constants
-function mapJustifyContent(
-  justify: LayoutProperties["justifyContent"],
-): number {
-  const Y = getYoga();
-  switch (justify) {
-    case "flex-start":
-      return Y.JUSTIFY_FLEX_START;
-    case "center":
-      return Y.JUSTIFY_CENTER;
-    case "flex-end":
-      return Y.JUSTIFY_FLEX_END;
-    case "space-between":
-      return Y.JUSTIFY_SPACE_BETWEEN;
-    case "space-around":
-      return Y.JUSTIFY_SPACE_AROUND;
-    case "space-evenly":
-      return Y.JUSTIFY_SPACE_EVENLY;
-    default:
-      return Y.JUSTIFY_FLEX_START;
-  }
-}
+  if (container.crossSize !== undefined) {
+    const contentCrossSpace =
+      container.crossSize - pad.crossStart - pad.crossEnd;
 
-// Map our FlexDirection to Yoga constants
-function mapFlexDirection(
-  direction: LayoutProperties["flexDirection"],
-): number {
-  const Y = getYoga();
-  switch (direction) {
-    case "row":
-      return Y.FLEX_DIRECTION_ROW;
-    case "column":
-      return Y.FLEX_DIRECTION_COLUMN;
-    default:
-      return Y.FLEX_DIRECTION_ROW;
+    for (const item of items) {
+      const effectiveAlign = item.alignSelf ?? container.alignItems;
+      if (effectiveAlign === "stretch") {
+        item.computedCrossSize = contentCrossSpace;
+      } else {
+        item.computedCrossSize = item.crossBaseSize;
+      }
+    }
+  } else {
+    // Intrinsic mode: no stretching
+    for (const item of items) {
+      item.computedCrossSize = item.crossBaseSize;
+    }
   }
 }
 
 /**
- * Create a Yoga node for a Frame with layout properties
+ * Phase 3: Position items on the main axis (justify-content).
  */
-export function createYogaNodeForFrame(frame: FrameNode): YogaNode {
-  const Y = getYoga();
-  const node = Y.Node.create();
+function positionMainAxis(
+  items: FlexItem[],
+  container: FlexContainer
+): void {
+  if (items.length === 0) return;
 
-  // Only set fixed dimensions — skip for fit_content so Yoga can shrink-wrap
-  const fitWidth = frame.sizing?.widthMode === "fit_content";
-  const fitHeight = frame.sizing?.heightMode === "fit_content";
-  if (!fitWidth) node.setWidth(frame.width);
-  if (!fitHeight) node.setHeight(frame.height);
-
-  // Apply layout properties if auto-layout is enabled
-  const layout = frame.layout;
-  applyLayoutProperties(node, layout, Y);
-
-  return node;
-}
-
-/**
- * Create a Yoga child node for any scene node
- * Supports sizing modes: fixed, fill_container, fit_content
- * Handles nested auto-layout frames by computing their intrinsic size
- */
-export function createYogaChildNode(
-  child: SceneNode,
-  parentLayout?: LayoutProperties,
-): YogaNode {
-  const Y = getYoga();
-  const node = Y.Node.create();
-
-  const widthMode = child.sizing?.widthMode ?? "fixed";
-  const heightMode = child.sizing?.heightMode ?? "fixed";
-  const isHorizontal =
-    parentLayout?.flexDirection === "row" ||
-    parentLayout?.flexDirection === undefined;
-
-  // Calculate effective sizes
-  const { width: effectiveWidth, height: effectiveHeight } = calculateEffectiveSize(
-    child,
-    widthMode,
-    heightMode
+  const pad = resolvePadding(container);
+  const totalGap = items.length > 1 ? container.gap * (items.length - 1) : 0;
+  const totalItemSize = items.reduce(
+    (sum, item) => sum + item.computedMainSize,
+    0
   );
 
-  console.log("[Yoga] createYogaChildNode", {
-    childId: child.id,
-    widthMode,
-    heightMode,
-    isHorizontal,
-    effectiveWidth,
-    effectiveHeight,
-  });
+  let contentSpace: number;
+  if (container.mainSize !== undefined) {
+    contentSpace = container.mainSize - pad.mainStart - pad.mainEnd;
+  } else {
+    contentSpace = totalItemSize + totalGap;
+  }
 
-  // Apply sizing modes
-  applySizingWidth(node, widthMode, effectiveWidth, isHorizontal, child, Y);
-  applySizingHeight(node, heightMode, effectiveHeight, isHorizontal, child, Y);
+  const freeSpace = Math.max(0, contentSpace - totalItemSize - totalGap);
+  const gapCount = Math.max(0, items.length - 1);
 
-  return node;
+  let initialOffset = 0;
+  let extraPerGap = 0;
+
+  switch (container.justifyContent) {
+    case "flex-start":
+      break;
+    case "flex-end":
+      initialOffset = freeSpace;
+      break;
+    case "center":
+      initialOffset = freeSpace / 2;
+      break;
+    case "space-between":
+      if (gapCount > 0) {
+        extraPerGap = freeSpace / gapCount;
+      }
+      break;
+    case "space-around": {
+      const totalSlots = items.length;
+      if (totalSlots > 0) {
+        const perSlot = freeSpace / totalSlots;
+        initialOffset = perSlot / 2;
+        if (gapCount > 0) {
+          extraPerGap = perSlot;
+        }
+      }
+      break;
+    }
+    case "space-evenly": {
+      const totalSlots = items.length + 1;
+      if (totalSlots > 0) {
+        const perSlot = freeSpace / totalSlots;
+        initialOffset = perSlot;
+        if (gapCount > 0) {
+          extraPerGap = perSlot;
+        }
+      }
+      break;
+    }
+  }
+
+  let cursor = pad.mainStart + initialOffset;
+  for (let i = 0; i < items.length; i++) {
+    items[i].mainPos = cursor;
+    cursor += items[i].computedMainSize;
+    if (i < items.length - 1) {
+      cursor += container.gap + extraPerGap;
+    }
+  }
 }
+
+/**
+ * Phase 4: Position items on the cross axis (align-items / align-self).
+ */
+function positionCrossAxis(
+  items: FlexItem[],
+  container: FlexContainer
+): void {
+  const pad = resolvePadding(container);
+
+  let contentCrossSpace: number;
+  if (container.crossSize !== undefined) {
+    contentCrossSpace = container.crossSize - pad.crossStart - pad.crossEnd;
+  } else {
+    contentCrossSpace =
+      items.length > 0
+        ? Math.max(...items.map((i) => i.computedCrossSize))
+        : 0;
+  }
+
+  for (const item of items) {
+    const effectiveAlign = item.alignSelf ?? container.alignItems;
+
+    switch (effectiveAlign) {
+      case "flex-start":
+      case "stretch":
+        item.crossPos = pad.crossStart;
+        break;
+      case "center":
+        item.crossPos =
+          pad.crossStart + (contentCrossSpace - item.computedCrossSize) / 2;
+        break;
+      case "flex-end":
+        item.crossPos =
+          pad.crossStart + contentCrossSpace - item.computedCrossSize;
+        break;
+      default:
+        item.crossPos = pad.crossStart;
+    }
+  }
+}
+
+/**
+ * Convert abstract main/cross coordinates to x/y.
+ */
+function toLayoutResults(
+  items: FlexItem[],
+  direction: "row" | "column"
+): LayoutResult[] {
+  return items.map((item) => {
+    if (direction === "row") {
+      return {
+        id: item.id,
+        x: item.mainPos,
+        y: item.crossPos,
+        width: item.computedMainSize,
+        height: item.computedCrossSize,
+      };
+    } else {
+      return {
+        id: item.id,
+        x: item.crossPos,
+        y: item.mainPos,
+        width: item.computedCrossSize,
+        height: item.computedMainSize,
+      };
+    }
+  });
+}
+
+// ── Intrinsic size computation (recursive) ──────────────────────────────────
+
+/**
+ * Compute the intrinsic (shrink-wrap) size of a frame based on its children.
+ * Used for fit_content sizing of nested auto-layout frames.
+ */
+function computeIntrinsicSize(frame: FrameNode): {
+  width: number;
+  height: number;
+} {
+  if (!frame.layout?.autoLayout || frame.children.length === 0) {
+    return { width: frame.width, height: frame.height };
+  }
+
+  const container = buildContainer(frame, {
+    fitWidth: true,
+    fitHeight: true,
+  });
+  const pad = resolvePadding(container);
+
+  const visibleChildren = frame.children.filter((c) => c.visible !== false);
+  if (visibleChildren.length === 0) {
+    return {
+      width: container.padding[3] + container.padding[1],
+      height: container.padding[0] + container.padding[2],
+    };
+  }
+
+  const items = visibleChildren.map((child) => buildFlexItem(child, container));
+
+  // In intrinsic mode items keep their basis (fill_container items get 0)
+  for (const item of items) {
+    item.computedMainSize = item.flexBasis;
+    item.computedCrossSize = item.crossBaseSize;
+  }
+
+  const totalGap =
+    items.length > 1 ? container.gap * (items.length - 1) : 0;
+
+  const totalMainSize =
+    items.reduce((s, i) => s + i.computedMainSize, 0) +
+    totalGap +
+    pad.mainStart +
+    pad.mainEnd;
+
+  const maxCross =
+    items.length > 0
+      ? Math.max(...items.map((i) => i.crossBaseSize))
+      : 0;
+  const totalCrossSize = maxCross + pad.crossStart + pad.crossEnd;
+
+  if (container.direction === "row") {
+    return { width: totalMainSize, height: totalCrossSize };
+  } else {
+    return { width: totalCrossSize, height: totalMainSize };
+  }
+}
+
+// ── Public API ──────────────────────────────────────────────────────────────
 
 export interface LayoutResult {
   id: string;
@@ -291,197 +473,128 @@ export interface LayoutResult {
 }
 
 /**
- * Calculate the intrinsic (fit-content) size of a frame based on its children.
- * Used for nested auto-layout frames to determine their natural size.
- * This version calculates both width and height with no constraints.
+ * Initialize layout engine (no-op — pure TS, always ready).
  */
-function calculateFrameIntrinsicSizeForNested(frame: FrameNode): {
-  width: number;
-  height: number;
-} {
-  if (!isYogaReady()) {
-    return { width: frame.width, height: frame.height };
+export async function initYoga(): Promise<void> {
+  // No-op: pure TypeScript engine requires no initialization
+}
+
+/**
+ * Check if layout engine is ready (always true).
+ */
+export function isYogaReady(): boolean {
+  return true;
+}
+
+/**
+ * Calculate layout for a Frame and its children.
+ * Returns updated positions for all visible children.
+ */
+export function calculateFrameLayout(frame: FrameNode): LayoutResult[] {
+  if (!frame.layout?.autoLayout) {
+    return [];
   }
 
-  const Y = getYoga();
-  const rootNode = Y.Node.create();
+  const fitWidth = frame.sizing?.widthMode === "fit_content";
+  const fitHeight = frame.sizing?.heightMode === "fit_content";
 
-  // Apply layout properties (direction, gap, padding, alignment)
-  const layout = frame.layout;
-  applyLayoutProperties(rootNode, layout, Y);
-
-  // Add children with their sizes (recursive for nested frames)
+  const container = buildContainer(frame, { fitWidth, fitHeight });
   const visibleChildren = frame.children.filter((c) => c.visible !== false);
-  visibleChildren.forEach((child, index) => {
-    const childNode = createYogaChildNodeWithIntrinsicSize(child, layout);
-    rootNode.insertChild(childNode, index);
-  });
 
-  // Calculate layout without fixed dimensions to get intrinsic size
-  rootNode.calculateLayout(undefined, undefined, Y.DIRECTION_LTR);
-  const computed = rootNode.getComputedLayout();
-  rootNode.freeRecursive();
+  if (visibleChildren.length === 0) {
+    return [];
+  }
 
-  return { width: computed.width, height: computed.height };
+  const items = visibleChildren.map((child) => buildFlexItem(child, container));
+
+  resolveMainAxisSizes(items, container);
+  resolveCrossAxisSizes(items, container);
+  positionMainAxis(items, container);
+  positionCrossAxis(items, container);
+
+  return toLayoutResults(items, container.direction);
 }
 
 /**
- * Create a Yoga child node that accounts for nested auto-layout frames.
- * For nested frames with autoLayout, recursively calculates their intrinsic size.
- */
-function createYogaChildNodeWithIntrinsicSize(
-  child: SceneNode,
-  parentLayout?: LayoutProperties,
-): YogaNode {
-  const Y = getYoga();
-  const node = Y.Node.create();
-
-  const widthMode = child.sizing?.widthMode ?? "fixed";
-  const heightMode = child.sizing?.heightMode ?? "fixed";
-  const isHorizontal =
-    parentLayout?.flexDirection === "row" ||
-    parentLayout?.flexDirection === undefined;
-
-  // Calculate effective sizes
-  const { width: effectiveWidth, height: effectiveHeight } = calculateEffectiveSize(
-    child,
-    widthMode,
-    heightMode
-  );
-
-  // Apply sizing modes
-  applySizingWidth(node, widthMode, effectiveWidth, isHorizontal, child, Y);
-  applySizingHeight(node, heightMode, effectiveHeight, isHorizontal, child, Y);
-
-  return node;
-}
-
-/**
- * Calculate the intrinsic size of a Frame based on its children
- * Used when sizing.widthMode or sizing.heightMode === 'fit_content'
+ * Calculate the intrinsic size of a Frame based on its children.
+ * Used when sizing.widthMode or sizing.heightMode === 'fit_content'.
  */
 export function calculateFrameIntrinsicSize(
   frame: FrameNode,
   options: { fitWidth?: boolean; fitHeight?: boolean } = {}
 ): { width: number; height: number } {
-  if (!isYogaReady() || !frame.layout?.autoLayout) {
+  if (!frame.layout?.autoLayout) {
     return { width: frame.width, height: frame.height };
   }
 
   const { fitWidth = false, fitHeight = false } = options;
-  const Y = getYoga();
 
-  const rootNode = Y.Node.create();
-
-  // Set dimensions - use undefined for fit_content dimensions
-  if (!fitWidth) {
-    rootNode.setWidth(frame.width);
-  }
-  if (!fitHeight) {
-    rootNode.setHeight(frame.height);
+  if (!fitWidth && !fitHeight) {
+    return { width: frame.width, height: frame.height };
   }
 
-  const layout = frame.layout;
-  // Apply layout properties
-  applyLayoutProperties(rootNode, layout, Y);
-
-  // Create child nodes
+  const container = buildContainer(frame, { fitWidth, fitHeight });
+  const pad = resolvePadding(container);
   const visibleChildren = frame.children.filter((c) => c.visible !== false);
-  visibleChildren.forEach((child, index) => {
-    const childNode = createYogaChildNode(child, frame.layout);
-    rootNode.insertChild(childNode, index);
-  });
 
-  // Calculate layout
-  rootNode.calculateLayout(
-    fitWidth ? undefined : frame.width,
-    fitHeight ? undefined : frame.height,
-    Y.DIRECTION_LTR
-  );
+  if (visibleChildren.length === 0) {
+    const pw = container.padding[3] + container.padding[1];
+    const ph = container.padding[0] + container.padding[2];
+    return {
+      width: fitWidth ? pw : frame.width,
+      height: fitHeight ? ph : frame.height,
+    };
+  }
 
-  const computed = rootNode.getComputedLayout();
-  rootNode.freeRecursive();
+  const items = visibleChildren.map((child) => buildFlexItem(child, container));
+
+  // Run sizing phases to get accurate sizes
+  resolveMainAxisSizes(items, container);
+  resolveCrossAxisSizes(items, container);
+
+  const totalGap =
+    items.length > 1 ? container.gap * (items.length - 1) : 0;
+
+  const intrinsicMain =
+    items.reduce((s, i) => s + i.computedMainSize, 0) +
+    totalGap +
+    pad.mainStart +
+    pad.mainEnd;
+
+  const intrinsicCross =
+    (items.length > 0
+      ? Math.max(...items.map((i) => i.computedCrossSize))
+      : 0) +
+    pad.crossStart +
+    pad.crossEnd;
+
+  const isHorizontal = container.direction === "row";
 
   return {
-    width: fitWidth ? computed.width : frame.width,
-    height: fitHeight ? computed.height : frame.height,
+    width: fitWidth
+      ? (isHorizontal ? intrinsicMain : intrinsicCross)
+      : frame.width,
+    height: fitHeight
+      ? (isHorizontal ? intrinsicCross : intrinsicMain)
+      : frame.height,
   };
 }
 
 /**
- * Calculate the intrinsic height of a Frame based on its children
- * Used when sizing.heightMode === 'fit_content'
+ * Calculate the intrinsic height of a Frame based on its children.
+ * Used when sizing.heightMode === 'fit_content'.
  */
 export function calculateFrameIntrinsicHeight(frame: FrameNode): number {
   return calculateFrameIntrinsicSize(frame, { fitHeight: true }).height;
 }
 
 /**
- * Calculate layout for a Frame and its children
- * Returns updated positions for all children
- */
-export function calculateFrameLayout(frame: FrameNode): LayoutResult[] {
-  if (!isYogaReady()) {
-    console.warn("[Yoga] Not initialized, skipping layout calculation");
-    return [];
-  }
-
-  // Only calculate if auto-layout is enabled
-  if (!frame.layout?.autoLayout) {
-    return [];
-  }
-
-  const Y = getYoga();
-  const results: LayoutResult[] = [];
-
-  // Create root yoga node for the frame
-  const rootNode = createYogaNodeForFrame(frame);
-
-  // Create yoga nodes for visible children
-  const visibleChildren = frame.children.filter((c) => c.visible !== false);
-  const childNodes: YogaNode[] = [];
-
-  visibleChildren.forEach((child, index) => {
-    const childNode = createYogaChildNode(child, frame.layout);
-    rootNode.insertChild(childNode, index);
-    childNodes.push(childNode);
-  });
-
-  // Calculate layout — pass undefined for fit_content dimensions so Yoga shrink-wraps
-  const fitWidth = frame.sizing?.widthMode === "fit_content";
-  const fitHeight = frame.sizing?.heightMode === "fit_content";
-  rootNode.calculateLayout(
-    fitWidth ? undefined : frame.width,
-    fitHeight ? undefined : frame.height,
-    Y.DIRECTION_LTR
-  );
-
-  // Extract computed positions for children
-  visibleChildren.forEach((child, index) => {
-    const computed = childNodes[index].getComputedLayout();
-    console.log("[Yoga] computed layout for", child.id, computed);
-    results.push({
-      id: child.id,
-      x: computed.left,
-      y: computed.top,
-      width: computed.width,
-      height: computed.height,
-    });
-  });
-
-  // Clean up yoga nodes
-  rootNode.freeRecursive();
-
-  return results;
-}
-
-/**
- * Apply layout results to scene nodes
- * Returns a new array with updated positions and sizes based on sizing mode
+ * Apply layout results to scene nodes.
+ * Returns a new array with updated positions and sizes based on sizing mode.
  */
 export function applyLayoutToChildren(
   children: SceneNode[],
-  layoutResults: LayoutResult[],
+  layoutResults: LayoutResult[]
 ): SceneNode[] {
   const resultMap = new Map(layoutResults.map((r) => [r.id, r]));
 
@@ -493,18 +606,6 @@ export function applyLayoutToChildren(
 
       const newWidth = widthMode !== "fixed" ? result.width : child.width;
       const newHeight = heightMode !== "fixed" ? result.height : child.height;
-
-      console.log("[Yoga] applyLayoutToChildren", {
-        id: child.id,
-        widthMode,
-        heightMode,
-        originalWidth: child.width,
-        computedWidth: result.width,
-        newWidth,
-        originalHeight: child.height,
-        computedHeight: result.height,
-        newHeight,
-      });
 
       return {
         ...child,

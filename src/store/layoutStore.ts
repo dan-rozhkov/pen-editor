@@ -1,33 +1,21 @@
 import { create } from 'zustand'
-import { initYoga, isYogaReady, calculateFrameLayout, applyLayoutToChildren } from '../utils/yogaLayout'
+import { calculateFrameLayout, applyLayoutToChildren } from '../utils/yogaLayout'
 import type { FrameNode, SceneNode } from '../types/scene'
 
 interface LayoutState {
   isYogaInitialized: boolean
-  initializeYoga: () => Promise<void>
+  initializeYoga: () => void
   calculateLayoutForFrame: (frame: FrameNode) => SceneNode[]
 }
 
 export const useLayoutStore = create<LayoutState>((set, get) => ({
-  isYogaInitialized: false,
+  isYogaInitialized: true,
 
-  initializeYoga: async () => {
-    if (get().isYogaInitialized) return
-
-    try {
-      await initYoga()
-      set({ isYogaInitialized: true })
-      console.log('[LayoutStore] Yoga initialized successfully')
-    } catch (error) {
-      console.error('[LayoutStore] Failed to initialize Yoga:', error)
-    }
+  initializeYoga: () => {
+    // No-op: pure TypeScript layout engine is always ready
   },
 
   calculateLayoutForFrame: (frame: FrameNode): SceneNode[] => {
-    if (!isYogaReady()) {
-      return frame.children
-    }
-
     if (!frame.layout?.autoLayout) {
       return frame.children
     }

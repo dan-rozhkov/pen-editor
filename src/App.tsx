@@ -1,18 +1,9 @@
-import { useEffect } from "react";
 import { Canvas } from "./components/Canvas";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { RightSidebar } from "./components/RightSidebar";
 import { PrimitivesPanel } from "./components/PrimitivesPanel";
-import { useLayoutStore } from "./store/layoutStore";
 
 function App() {
-  const initializeYoga = useLayoutStore((state) => state.initializeYoga);
-
-  // Initialize yoga-layout WASM module on app mount
-  useEffect(() => {
-    initializeYoga();
-  }, [initializeYoga]);
-
   return (
     <div className="w-full h-full flex flex-col">
       <div className="flex-1 flex flex-row overflow-hidden">
