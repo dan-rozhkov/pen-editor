@@ -1,8 +1,10 @@
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useHoverStore } from "@/store/hoverStore";
+import { useLayoutStore } from "@/store/layoutStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
+import { getNodeAbsolutePositionWithLayout, getNodeEffectiveSize } from "@/utils/nodeUtils";
 import type { FlatFrameNode, FlatGroupNode } from "@/types/scene";
 
 const SELECTION_COLOR = 0x0d99ff;
@@ -58,22 +60,9 @@ export function createSelectionOverlay(
   selectionContainer.addChild(sizeLabelsContainer);
 
   function getAbsolutePosition(nodeId: string): { x: number; y: number } | null {
-    const state = useSceneStore.getState();
-    const node = state.nodesById[nodeId];
-    if (!node) return null;
-
-    let absX = node.x;
-    let absY = node.y;
-    let current = state.parentById[nodeId];
-    while (current) {
-      const parentNode = state.nodesById[current];
-      if (parentNode) {
-        absX += parentNode.x;
-        absY += parentNode.y;
-      }
-      current = state.parentById[current];
-    }
-    return { x: absX, y: absY };
+    const nodes = useSceneStore.getState().getNodes();
+    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+    return getNodeAbsolutePositionWithLayout(nodes, nodeId, calculateLayoutForFrame);
   }
 
   function getSelectionColor(nodeId: string): number {
@@ -127,17 +116,23 @@ export function createSelectionOverlay(
       const absPos = getAbsolutePosition(id);
       if (!absPos) continue;
 
+      // Get effective size (may differ from node.width/height for layout children)
+      const nodes = useSceneStore.getState().getNodes();
+      const effectiveSize = getNodeEffectiveSize(nodes, id, useLayoutStore.getState().calculateLayoutForFrame);
+      const width = effectiveSize?.width ?? node.width;
+      const height = effectiveSize?.height ?? node.height;
+
       const color = getSelectionColor(id);
       const outline = new Graphics();
-      outline.rect(absPos.x, absPos.y, node.width, node.height);
+      outline.rect(absPos.x, absPos.y, width, height);
       outline.stroke({ color, width: strokeWidth });
       outlinesContainer.addChild(outline);
 
       // Track bounding box for handles
       minX = Math.min(minX, absPos.x);
       minY = Math.min(minY, absPos.y);
-      maxX = Math.max(maxX, absPos.x + node.width);
-      maxY = Math.max(maxY, absPos.y + node.height);
+      maxX = Math.max(maxX, absPos.x + width);
+      maxY = Math.max(maxY, absPos.y + height);
     }
 
     totalW = maxX - minX;
@@ -145,6 +140,14 @@ export function createSelectionOverlay(
 
     // Draw transform handles at corners of bounding box
     if (minX !== Infinity) {
+      // For multi-selection, draw a single transformer bbox outline.
+      if (selectedIds.length > 1 && totalW > 0 && totalH > 0) {
+        const multiOutline = new Graphics();
+        multiOutline.rect(minX, minY, totalW, totalH);
+        multiOutline.stroke({ color: SELECTION_COLOR, width: strokeWidth });
+        outlinesContainer.addChild(multiOutline);
+      }
+
       const handleSizeWorld = HANDLE_SIZE / scale;
       const halfHandle = handleSizeWorld / 2;
 
@@ -167,6 +170,7 @@ export function createSelectionOverlay(
         handle.stroke({ color: SELECTION_COLOR, width: strokeWidth });
         handlesContainer.addChild(handle);
       }
+
 
       // Draw size label below the selection bounding box
       if (totalW > 0 && totalH > 0) {
@@ -307,10 +311,16 @@ export function createSelectionOverlay(
     const absPos = getAbsolutePosition(hoveredNodeId);
     if (!absPos) return;
 
+    // Get effective size
+    const nodes = useSceneStore.getState().getNodes();
+    const effectiveSize = getNodeEffectiveSize(nodes, hoveredNodeId, useLayoutStore.getState().calculateLayoutForFrame);
+    const width = effectiveSize?.width ?? node.width;
+    const height = effectiveSize?.height ?? node.height;
+
     const scale = useViewportStore.getState().scale;
     const strokeWidth = 1 / scale;
 
-    hovOutline.rect(absPos.x, absPos.y, node.width, node.height);
+    hovOutline.rect(absPos.x, absPos.y, width, height);
     hovOutline.stroke({ color: HOVER_COLOR, width: strokeWidth });
   }
 

@@ -14,6 +14,28 @@ interface InlineTextEditorProps {
   absoluteY: number
 }
 
+function toCssFontFamily(fontFamily: string): string {
+  return fontFamily
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const isQuoted =
+        (part.startsWith('"') && part.endsWith('"')) ||
+        (part.startsWith("'") && part.endsWith("'"))
+      const isGeneric =
+        part === 'serif' ||
+        part === 'sans-serif' ||
+        part === 'monospace' ||
+        part === 'cursive' ||
+        part === 'fantasy' ||
+        part === 'system-ui'
+      if (isQuoted || isGeneric || !/\s/.test(part)) return part
+      return `"${part}"`
+    })
+    .join(', ')
+}
+
 export function InlineTextEditor({ node, absoluteX, absoluteY }: InlineTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const currentTextRef = useRef(node.text) // Track current value for unmount save
@@ -31,11 +53,16 @@ export function InlineTextEditor({ node, absoluteX, absoluteY }: InlineTextEdito
   // Resolve the fill color (matching Konva rendering)
   const fillColor = resolveColor(node.fill, node.fillBinding, variables, activeTheme) ?? '#000000'
 
-  // Calculate screen position from absolute world coordinates
-  const screenX = absoluteX * scale + x
-  const screenY = absoluteY * scale + y
+  // Calculate screen position from absolute world coordinates and snap to device pixels.
+  const dpr = window.devicePixelRatio || 1
+  const screenX = Math.round((absoluteX * scale + x) * dpr) / dpr
+  const screenY = Math.round((absoluteY * scale + y) * dpr) / dpr
   const screenFontSize = (node.fontSize ?? 16) * scale
   const screenLetterSpacing = (node.letterSpacing ?? 0) * scale
+  const fontStyle = node.fontStyle ?? 'normal'
+  const fontWeight = String(node.fontWeight ?? 'normal')
+  const fontFamily = toCssFontFamily(node.fontFamily ?? 'Arial')
+  const editorFontShorthand = `${fontStyle} normal ${fontWeight} ${screenFontSize}px ${fontFamily}`
 
   // Width mode
   const isAutoWidth = node.textWidthMode === 'auto' || !node.textWidthMode
@@ -134,6 +161,12 @@ export function InlineTextEditor({ node, absoluteX, absoluteY }: InlineTextEdito
   useEffect(() => {
     const el = editorRef.current
     if (!el) return
+    if (document.activeElement === el) {
+      // While user is actively typing, avoid forcing innerText from store
+      // to prevent cursor jumping to start.
+      lastCommittedRef.current = node.text
+      return
+    }
     if (node.text !== currentTextRef.current) {
       el.innerText = node.text
       currentTextRef.current = node.text
@@ -191,10 +224,8 @@ export function InlineTextEditor({ node, absoluteX, absoluteY }: InlineTextEdito
         height: heightStyle,
         minHeight,
         // Font styles matching Konva
-        fontSize: screenFontSize,
-        fontFamily: node.fontFamily ?? 'Arial',
-        fontWeight: (node.fontWeight ?? 'normal') as React.CSSProperties['fontWeight'],
-        fontStyle: (node.fontStyle ?? 'normal') as React.CSSProperties['fontStyle'],
+        font: editorFontShorthand,
+        fontSynthesis: 'none',
         textDecoration: textDecorationParts.join(' ') || undefined,
         lineHeight: node.lineHeight ?? 1.2,
         letterSpacing: screenLetterSpacing,

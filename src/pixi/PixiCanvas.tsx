@@ -7,10 +7,12 @@ import { useCanvasFileDrop } from "@/components/canvas/useCanvasFileDrop";
 import { useClipboardStore } from "@/store/clipboardStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useHistoryStore } from "@/store/historyStore";
+import { useLayoutStore } from "@/store/layoutStore";
 import { useMeasureStore } from "@/store/measureStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
+import { getNodeAbsolutePositionWithLayout } from "@/utils/nodeUtils";
 import { createPixiSync } from "./pixiSync";
 import { setupPixiViewport } from "./pixiViewport";
 import { setupPixiInteraction } from "./pixiInteraction";
@@ -61,28 +63,16 @@ export function PixiCanvas() {
     ? useSceneStore.getState().nodesById[editingNodeId]
     : null;
 
-  // Calculate editing positions using viewport transform
+  // Calculate editing positions in world coordinates.
+  // Inline editors apply viewport transform internally.
   const getEditingPosition = useCallback((nodeId: string) => {
-    const state = useSceneStore.getState();
-    const node = state.nodesById[nodeId];
-    if (!node) return null;
-    // Walk up the parent chain to get absolute position
-    let absX = node.x;
-    let absY = node.y;
-    let current = state.parentById[nodeId];
-    while (current) {
-      const parentNode = state.nodesById[current];
-      if (parentNode) {
-        absX += parentNode.x;
-        absY += parentNode.y;
-      }
-      current = state.parentById[current];
-    }
-    const vs = useViewportStore.getState();
-    return {
-      x: absX * vs.scale + vs.x,
-      y: absY * vs.scale + vs.y,
-    };
+    const nodesTree = useSceneStore.getState().getNodes();
+    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+    return getNodeAbsolutePositionWithLayout(
+      nodesTree,
+      nodeId,
+      calculateLayoutForFrame,
+    );
   }, []);
 
   const editingTextPosition = editingNodeId && editingMode === "text"
@@ -140,6 +130,8 @@ export function PixiCanvas() {
       .init({
         resizeTo: container,
         antialias: true,
+        // Improve SVG path curve tessellation quality (default 0.5 is too coarse).
+        bezierSmoothness: 0.9,
         backgroundAlpha: 0,
         resolution: window.devicePixelRatio || 1,
         autoDensity: true,

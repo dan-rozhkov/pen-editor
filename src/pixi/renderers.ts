@@ -1,8 +1,10 @@
-import { Container, Graphics, Text, TextStyle, FillGradient, Sprite, Texture, Assets, BlurFilter } from "pixi.js";
+import { Container, Graphics, Text, TextStyle, FillGradient, Sprite, Texture, Assets, BlurFilter, GraphicsPath } from "pixi.js";
 import type {
   FlatSceneNode,
   FlatFrameNode,
   FlatGroupNode,
+  FrameNode,
+  SceneNode,
   TextNode,
   RectNode,
   EllipseNode,
@@ -16,7 +18,9 @@ import type {
 } from "@/types/scene";
 import { useVariableStore } from "@/store/variableStore";
 import { useThemeStore } from "@/store/themeStore";
+import { useLayoutStore } from "@/store/layoutStore";
 import { resolveColor, applyOpacity } from "@/utils/colorUtils";
+import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 
 // --- Color helpers ---
 
@@ -65,6 +69,14 @@ function parseAlpha(color: string): number {
     return parseInt(color.slice(7, 9), 16) / 255;
   }
   return 1;
+}
+
+function escapeXmlAttr(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 // --- Gradient helpers ---
@@ -439,6 +451,8 @@ export function createNodeContainer(
 
   // Common properties
   container.label = node.id;
+  // Position will be set by applyAutoLayoutPositions for auto-layout children
+  // For now, set it from node (will be overwritten if in auto-layout)
   container.position.set(node.x, node.y);
   container.alpha = node.opacity ?? 1;
   container.visible = node.visible !== false;
@@ -470,9 +484,10 @@ export function updateNodeContainer(
   prev: FlatSceneNode,
   nodesById: Record<string, FlatSceneNode>,
   childrenById: Record<string, string[]>,
+  skipPosition?: boolean,
 ): void {
-  // Position
-  if (node.x !== prev.x || node.y !== prev.y) {
+  // Position - skip for auto-layout children (handled by applyAutoLayoutPositions)
+  if (!skipPosition && (node.x !== prev.x || node.y !== prev.y)) {
     container.position.set(node.x, node.y);
   }
 
@@ -552,6 +567,60 @@ export function updateNodeContainer(
         childrenById,
       );
       break;
+  }
+}
+
+/**
+ * Apply layout-computed size to a container's graphics.
+ * Used for fill_container children in auto-layout frames.
+ */
+export function applyLayoutSize(
+  container: Container,
+  node: FlatSceneNode,
+  layoutWidth: number,
+  layoutHeight: number,
+): void {
+  // Skip if size hasn't changed
+  if (node.width === layoutWidth && node.height === layoutHeight) return;
+
+  switch (node.type) {
+    case "rect": {
+      const gfx = container.getChildByLabel("rect-bg") as Graphics;
+      if (gfx) {
+        gfx.clear();
+        drawRect(gfx, { ...node, width: layoutWidth, height: layoutHeight } as RectNode);
+      }
+      break;
+    }
+    case "ellipse": {
+      const gfx = container.getChildByLabel("ellipse-bg") as Graphics;
+      if (gfx) {
+        gfx.clear();
+        drawEllipse(gfx, { ...node, width: layoutWidth, height: layoutHeight } as EllipseNode);
+      }
+      break;
+    }
+    case "frame": {
+      const bg = container.getChildByLabel("frame-bg") as Graphics;
+      if (bg) {
+        bg.clear();
+        drawFrameBackground(bg, node as FlatFrameNode, layoutWidth, layoutHeight);
+      }
+      // Update mask if present
+      const mask = container.getChildByLabel("frame-mask") as Graphics;
+      if (mask && (node as FlatFrameNode).clip) {
+        mask.clear();
+        const frameNode = node as FlatFrameNode;
+        if (frameNode.cornerRadius) {
+          mask.roundRect(0, 0, layoutWidth, layoutHeight, frameNode.cornerRadius);
+        } else {
+          mask.rect(0, 0, layoutWidth, layoutHeight);
+        }
+        mask.fill(0xffffff);
+      }
+      break;
+    }
+    // Text and other types don't need size updates for layout
   }
 }
 
@@ -721,6 +790,7 @@ function createTextContainer(node: TextNode): Container {
     style: buildTextStyle(node),
   });
   text.label = "text-content";
+  text.anchor.set(0, 0);
   container.addChild(text);
   return container;
 }
@@ -762,21 +832,20 @@ function updateTextContainer(
 function buildTextStyle(node: TextNode): TextStyle {
   const fillColor = getResolvedFill(node) ?? "#000000";
   const isWrapped = node.textWidthMode === "fixed" || node.textWidthMode === "fixed-height";
+  const fontSize = node.fontSize ?? 16;
+  const lineHeightMultiplier = node.lineHeight ?? 1.2;
 
   return new TextStyle({
-    fontFamily: node.fontFamily || "Inter, system-ui, sans-serif",
-    fontSize: node.fontSize || 14,
+    fontFamily: node.fontFamily || "Arial",
+    fontSize: fontSize,
     fontWeight: (node.fontWeight as TextStyle["fontWeight"]) ?? "normal",
     fontStyle: (node.fontStyle as TextStyle["fontStyle"]) ?? "normal",
     fill: fillColor,
     wordWrap: isWrapped,
     wordWrapWidth: isWrapped ? node.width : undefined,
     align: node.textAlign ?? "left",
-    lineHeight: node.lineHeight
-      ? (node.fontSize || 14) * node.lineHeight
-      : undefined,
+    lineHeight: fontSize * lineHeightMultiplier,
     letterSpacing: node.letterSpacing ?? 0,
-    textBaseline: "top",
   });
 }
 
@@ -931,6 +1000,10 @@ function drawPath(gfx: Graphics, node: PathNode): void {
 
   if (!node.geometry) return;
 
+  // Reset transform first to avoid carrying stale values across redraws.
+  gfx.scale.set(1, 1);
+  gfx.position.set(0, 0);
+
   // Apply scale transform if geometry has bounds different from node size
   const gb = node.geometryBounds;
   if (gb) {
@@ -940,9 +1013,26 @@ function drawPath(gfx: Graphics, node: PathNode): void {
     gfx.position.set(-gb.x * scaleX, -gb.y * scaleY);
   }
 
-  // PixiJS v8 svg() method to parse SVG path data
+  // Parse SVG path-data directly (node.geometry is "d" string, not full <svg> markup).
   try {
-    gfx.svg(node.geometry);
+    const pathStroke = node.pathStroke;
+    const useSvgParserForEvenOdd = node.fillRule === "evenodd" && !node.gradientFill;
+
+    if (useSvgParserForEvenOdd) {
+      // Pixi's SVG parser handles complex even-odd paths (holes) more consistently.
+      const fillAttr = fillColor ? ` fill="${escapeXmlAttr(fillColor)}"` : ` fill="none"`;
+      const strokeAttrColor = pathStroke?.fill ?? strokeColor;
+      const strokeAttr = strokeAttrColor
+        ? ` stroke="${escapeXmlAttr(strokeAttrColor)}" stroke-width="${pathStroke?.thickness ?? node.strokeWidth ?? 1}" stroke-linecap="${pathStroke?.cap ?? "butt"}" stroke-linejoin="${pathStroke?.join ?? "miter"}"`
+        : ` stroke="none"`;
+      const svgMarkup = `<svg xmlns="http://www.w3.org/2000/svg"><path d="${escapeXmlAttr(node.geometry)}" fill-rule="evenodd"${fillAttr}${strokeAttr}/></svg>`;
+      gfx.svg(svgMarkup);
+      return;
+    }
+
+    const useEvenOdd = node.fillRule ? node.fillRule === "evenodd" : true;
+    const path = new GraphicsPath(node.geometry, useEvenOdd);
+    gfx.path(path);
   } catch {
     // Fallback: draw a rect placeholder if SVG parsing fails
     gfx.rect(0, 0, node.width, node.height);
@@ -969,6 +1059,55 @@ function drawPath(gfx: Graphics, node: PathNode): void {
 
 // --- Frame ---
 
+/**
+ * Convert flat frame to tree frame for layout calculations
+ */
+function flatToTreeFrame(
+  node: FlatFrameNode,
+  nodesById: Record<string, FlatSceneNode>,
+  childrenById: Record<string, string[]>,
+): FrameNode {
+  const childIds = childrenById[node.id] ?? [];
+  const children: SceneNode[] = [];
+
+  for (const childId of childIds) {
+    const childNode = nodesById[childId];
+    if (!childNode) continue;
+
+    if (childNode.type === "frame") {
+      children.push(flatToTreeFrame(childNode as FlatFrameNode, nodesById, childrenById));
+    } else {
+      children.push(childNode as SceneNode);
+    }
+  }
+
+  return { ...node, children } as FrameNode;
+}
+
+/**
+ * Calculate effective width/height for frames with fit_content sizing
+ */
+function getFrameEffectiveSize(
+  node: FlatFrameNode,
+  nodesById: Record<string, FlatSceneNode>,
+  childrenById: Record<string, string[]>,
+): { width: number; height: number } {
+  const fitWidth = node.sizing?.widthMode === "fit_content" && node.layout?.autoLayout;
+  const fitHeight = node.sizing?.heightMode === "fit_content" && node.layout?.autoLayout;
+
+  if (!fitWidth && !fitHeight) {
+    return { width: node.width, height: node.height };
+  }
+
+  const treeFrame = flatToTreeFrame(node, nodesById, childrenById);
+  const intrinsicSize = calculateFrameIntrinsicSize(treeFrame, { fitWidth, fitHeight });
+
+  return {
+    width: fitWidth ? intrinsicSize.width : node.width,
+    height: fitHeight ? intrinsicSize.height : node.height,
+  };
+}
+
 function createFrameContainer(
   node: FlatFrameNode,
   nodesById: Record<string, FlatSceneNode>,
@@ -976,15 +1115,22 @@ function createFrameContainer(
 ): Container {
   const container = new Container();
 
+  // Calculate effective size for fit_content frames
+  const { width: effectiveWidth, height: effectiveHeight } = getFrameEffectiveSize(node, nodesById, childrenById);
+
+  // Store effective size for later use
+  (container as any)._effectiveWidth = effectiveWidth;
+  (container as any)._effectiveHeight = effectiveHeight;
+
   // Background
   const bg = new Graphics();
   bg.label = "frame-bg";
-  drawFrameBackground(bg, node);
+  drawFrameBackground(bg, node, effectiveWidth, effectiveHeight);
   container.addChild(bg);
 
   // Image fill
   if (node.imageFill) {
-    applyImageFill(container, node.imageFill, node.width, node.height, node.cornerRadius);
+    applyImageFill(container, node.imageFill, effectiveWidth, effectiveHeight, node.cornerRadius);
   }
 
   // Clipping mask
@@ -992,9 +1138,9 @@ function createFrameContainer(
     const mask = new Graphics();
     mask.label = "frame-mask";
     if (node.cornerRadius) {
-      mask.roundRect(0, 0, node.width, node.height, node.cornerRadius);
+      mask.roundRect(0, 0, effectiveWidth, effectiveHeight, node.cornerRadius);
     } else {
-      mask.rect(0, 0, node.width, node.height);
+      mask.rect(0, 0, effectiveWidth, effectiveHeight);
     }
     mask.fill(0xffffff);
     container.addChild(mask);
@@ -1032,9 +1178,16 @@ function updateFrameContainer(
   container: Container,
   node: FlatFrameNode,
   prev: FlatFrameNode,
-  _nodesById: Record<string, FlatSceneNode>,
-  _childrenById: Record<string, string[]>,
+  nodesById: Record<string, FlatSceneNode>,
+  childrenById: Record<string, string[]>,
 ): void {
+  // Calculate effective size for fit_content frames
+  const { width: effectiveWidth, height: effectiveHeight } = getFrameEffectiveSize(node, nodesById, childrenById);
+
+  // Store effective size for later use
+  (container as any)._effectiveWidth = effectiveWidth;
+  (container as any)._effectiveHeight = effectiveHeight;
+
   // Update background
   if (
     node.width !== prev.width ||
@@ -1047,12 +1200,14 @@ function updateFrameContainer(
     node.strokeOpacity !== prev.strokeOpacity ||
     node.strokeWidth !== prev.strokeWidth ||
     node.cornerRadius !== prev.cornerRadius ||
-    node.gradientFill !== prev.gradientFill
+    node.gradientFill !== prev.gradientFill ||
+    node.sizing !== prev.sizing ||
+    node.layout !== prev.layout
   ) {
     const bg = container.getChildByLabel("frame-bg") as Graphics;
     if (bg) {
       bg.clear();
-      drawFrameBackground(bg, node);
+      drawFrameBackground(bg, node, effectiveWidth, effectiveHeight);
     }
   }
 
@@ -1060,9 +1215,11 @@ function updateFrameContainer(
   if (
     node.imageFill !== prev.imageFill ||
     node.width !== prev.width ||
-    node.height !== prev.height
+    node.height !== prev.height ||
+    node.sizing !== prev.sizing ||
+    node.layout !== prev.layout
   ) {
-    applyImageFill(container, node.imageFill, node.width, node.height, node.cornerRadius);
+    applyImageFill(container, node.imageFill, effectiveWidth, effectiveHeight, node.cornerRadius);
   }
 
   // Update clip mask
@@ -1070,7 +1227,9 @@ function updateFrameContainer(
     node.clip !== prev.clip ||
     node.width !== prev.width ||
     node.height !== prev.height ||
-    node.cornerRadius !== prev.cornerRadius
+    node.cornerRadius !== prev.cornerRadius ||
+    node.sizing !== prev.sizing ||
+    node.layout !== prev.layout
   ) {
     const existingMask = container.getChildByLabel("frame-mask") as Graphics;
     if (node.clip) {
@@ -1078,9 +1237,9 @@ function updateFrameContainer(
       mask.label = "frame-mask";
       mask.clear();
       if (node.cornerRadius) {
-        mask.roundRect(0, 0, node.width, node.height, node.cornerRadius);
+        mask.roundRect(0, 0, effectiveWidth, effectiveHeight, node.cornerRadius);
       } else {
-        mask.rect(0, 0, node.width, node.height);
+        mask.rect(0, 0, effectiveWidth, effectiveHeight);
       }
       mask.fill(0xffffff);
       if (!existingMask) {
@@ -1095,23 +1254,29 @@ function updateFrameContainer(
   }
 }
 
-function drawFrameBackground(gfx: Graphics, node: FlatFrameNode): void {
+function drawFrameBackground(
+  gfx: Graphics,
+  node: FlatFrameNode,
+  effectiveWidth?: number,
+  effectiveHeight?: number,
+): void {
+  const width = effectiveWidth ?? node.width;
+  const height = effectiveHeight ?? node.height;
   const fillColor = getResolvedFill(node);
   const strokeColor = getResolvedStroke(node);
 
+  if (node.cornerRadius) {
+    gfx.roundRect(0, 0, width, height, node.cornerRadius);
+  } else {
+    gfx.rect(0, 0, width, height);
+  }
+
   if (node.gradientFill) {
-    const gradient = buildPixiGradient(node.gradientFill, node.width, node.height);
+    const gradient = buildPixiGradient(node.gradientFill, width, height);
     gfx.fill(gradient);
   } else if (fillColor) {
     gfx.fill({ color: parseColor(fillColor), alpha: parseAlpha(fillColor) });
   }
-
-  if (node.cornerRadius) {
-    gfx.roundRect(0, 0, node.width, node.height, node.cornerRadius);
-  } else {
-    gfx.rect(0, 0, node.width, node.height);
-  }
-  gfx.fill();
 
   if (strokeColor && node.strokeWidth) {
     gfx.stroke({
@@ -1161,6 +1326,7 @@ function createRefContainer(
   childrenById: Record<string, string[]>,
 ): Container {
   const container = new Container();
+  const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
 
   // Find the component
   const component = nodesById[node.componentId];
@@ -1176,14 +1342,16 @@ function createRefContainer(
   }
 
   // Render the component tree with overrides
-  const componentChildren = childrenById[node.componentId] ?? [];
   const childrenContainer = new Container();
   childrenContainer.label = "ref-children";
 
-  // Scale from component size to instance size
-  const scaleX = node.width / component.width;
-  const scaleY = node.height / component.height;
-  childrenContainer.scale.set(scaleX, scaleY);
+  const componentTree = component.type === "frame"
+    ? flatToTreeFrame(component as FlatFrameNode, nodesById, childrenById)
+    : null;
+  const layoutChildren = componentTree?.layout?.autoLayout
+    ? calculateLayoutForFrame(componentTree)
+    : null;
+  const renderedChildren = layoutChildren ?? componentTree?.children ?? [];
 
   // Draw component background
   if (component.type === "frame") {
@@ -1195,31 +1363,37 @@ function createRefContainer(
       bg.fill({ color: parseColor(fillColor), alpha: parseAlpha(fillColor) });
     }
     if (frame.cornerRadius) {
-      bg.roundRect(0, 0, component.width, component.height, frame.cornerRadius);
+      bg.roundRect(0, 0, node.width, node.height, frame.cornerRadius);
     } else {
-      bg.rect(0, 0, component.width, component.height);
+      bg.rect(0, 0, node.width, node.height);
     }
     bg.fill();
     childrenContainer.addChild(bg);
   }
 
-  for (const childId of componentChildren) {
-    const childNode = nodesById[childId];
-    if (childNode) {
-      // Apply descendant overrides
-      let resolved = childNode;
-      if (node.descendants?.[childId]) {
-        const override = node.descendants[childId];
-        const { descendants: _, ...overrideProps } = override;
-        resolved = { ...childNode, ...overrideProps } as FlatSceneNode;
-      }
-      const childContainer = createNodeContainer(
-        resolved,
-        nodesById,
-        childrenById,
-      );
-      childrenContainer.addChild(childContainer);
+  for (const child of renderedChildren) {
+    const childOverride = node.descendants?.[child.id];
+    if (childOverride?.enabled === false) continue;
+
+    const sourceNode = nodesById[child.id];
+    if (!sourceNode) continue;
+
+    const overrideProps = childOverride ? { ...childOverride } : {};
+    if ("descendants" in overrideProps) {
+      delete overrideProps.descendants;
     }
+    const resolved = {
+      ...(sourceNode as FlatSceneNode),
+      ...(child as Partial<SceneNode>),
+      ...overrideProps,
+    } as FlatSceneNode;
+
+    const childContainer = createNodeContainer(
+      resolved,
+      nodesById,
+      childrenById,
+    );
+    childrenContainer.addChild(childContainer);
   }
 
   container.addChild(childrenContainer);

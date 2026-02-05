@@ -1,5 +1,6 @@
 import type { SceneNode, FrameNode, GroupNode } from "../types/scene";
 import { isContainerNode } from "../types/scene";
+import { calculateFrameIntrinsicSize } from "./yogaLayout";
 
 export interface ParentContext {
   parent: FrameNode | GroupNode | null;
@@ -223,6 +224,58 @@ export function getNodeAbsolutePositionWithLayout(
   }
 
   return findWithPath(nodes, 0, 0, null);
+}
+
+/**
+ * Get effective size of a node, taking into account Yoga layout calculations.
+ * For nodes inside auto-layout frames, width/height may be computed by Yoga.
+ * For fit_content frames, intrinsic size is calculated.
+ */
+export function getNodeEffectiveSize(
+  nodes: SceneNode[],
+  targetId: string,
+  calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
+): { width: number; height: number } | null {
+  function findWithPath(
+    searchNodes: SceneNode[],
+    parentFrame: FrameNode | null,
+  ): { width: number; height: number } | null {
+    // If parent is an auto-layout frame, get layout-calculated sizes
+    let effectiveNodes = searchNodes;
+    if (parentFrame?.layout?.autoLayout) {
+      effectiveNodes = calculateLayoutForFrame(parentFrame);
+    }
+
+    for (const node of effectiveNodes) {
+      if (node.id === targetId) {
+        let width = node.width;
+        let height = node.height;
+
+        // Root/non-auto-layout fit_content frames must use intrinsic Yoga size.
+        if (node.type === "frame" && node.layout?.autoLayout) {
+          const fitWidth = node.sizing?.widthMode === "fit_content";
+          const fitHeight = node.sizing?.heightMode === "fit_content";
+          if (fitWidth || fitHeight) {
+            const intrinsic = calculateFrameIntrinsicSize(node, { fitWidth, fitHeight });
+            if (fitWidth) width = intrinsic.width;
+            if (fitHeight) height = intrinsic.height;
+          }
+        }
+
+        return { width, height };
+      }
+      if (isContainerNode(node)) {
+        const found = findWithPath(
+          node.children,
+          node.type === "frame" ? node : null,
+        );
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  return findWithPath(nodes, null);
 }
 
 /**

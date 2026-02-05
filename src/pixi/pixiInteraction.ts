@@ -6,6 +6,7 @@ import { useViewportStore } from "@/store/viewportStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useSmartGuideStore } from "@/store/smartGuideStore";
 import { useDragStore } from "@/store/dragStore";
+import { useMeasureStore } from "@/store/measureStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import type { SceneNode, FrameNode, FlatFrameNode } from "@/types/scene";
 import { generateId } from "@/types/scene";
@@ -15,7 +16,18 @@ import {
   calculateSnap,
   type SnapTarget,
 } from "@/utils/smartGuideUtils";
-import { getNodeAbsolutePosition } from "@/utils/nodeUtils";
+import {
+  getNodeAbsolutePosition,
+  getNodeAbsolutePositionWithLayout,
+  getNodeEffectiveSize,
+  findNodeById,
+  findChildAtPosition,
+  isDescendantOf,
+} from "@/utils/nodeUtils";
+import {
+  computeParentDistances,
+  computeSiblingDistances,
+} from "@/utils/measureUtils";
 import {
   calculateDropPosition,
   isPointInsideRect,
@@ -61,11 +73,13 @@ interface MarqueeState {
 }
 
 type HandleCorner = "tl" | "tr" | "bl" | "br";
+type HandleSide = "l" | "r" | "t" | "b";
+type TransformHandle = HandleCorner | HandleSide;
 
 interface TransformState {
   isTransforming: boolean;
   nodeId: string | null;
-  corner: HandleCorner | null;
+  corner: TransformHandle | null;
   startNodeX: number;
   startNodeY: number;
   startNodeW: number;
@@ -150,15 +164,81 @@ export function setupPixiInteraction(
     };
   }
 
-  function findNodeAtPoint(worldX: number, worldY: number): string | null {
+  function findNodeAtPoint(
+    worldX: number,
+    worldY: number,
+    options?: { deepSelect?: boolean },
+  ): string | null {
+    if (options?.deepSelect) {
+      return findDeepestNodeAtPoint(worldX, worldY);
+    }
+
     const state = useSceneStore.getState();
 
     // Walk rootIds in reverse (top-most first)
     for (let i = state.rootIds.length - 1; i >= 0; i--) {
-      const hit = hitTestNode(state.rootIds[i], worldX, worldY, 0, 0, state);
+      const hit = hitTestNode(
+        state.rootIds[i],
+        worldX,
+        worldY,
+        0,
+        0,
+        state,
+        false,
+      );
       if (hit) return hit;
     }
     return null;
+  }
+
+  /**
+   * Deep-select hit test used for Cmd/Ctrl+Click.
+   * Returns the deepest node under cursor using layout-aware child positions.
+   */
+  function findDeepestNodeAtPoint(worldX: number, worldY: number): string | null {
+    const state = useSceneStore.getState();
+    const sceneNodes = state.getNodes();
+    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+
+    const hitInList = (
+      nodes: SceneNode[],
+      parentAbsX: number,
+      parentAbsY: number,
+    ): string | null => {
+      for (let i = nodes.length - 1; i >= 0; i--) {
+        const node = nodes[i];
+        if (node.visible === false) continue;
+
+        const absX = parentAbsX + node.x;
+        const absY = parentAbsY + node.y;
+        const effectiveSize = getNodeEffectiveSize(sceneNodes, node.id, calculateLayoutForFrame);
+        const width = effectiveSize?.width ?? node.width;
+        const height = effectiveSize?.height ?? node.height;
+
+        if (
+          worldX < absX ||
+          worldX > absX + width ||
+          worldY < absY ||
+          worldY > absY + height
+        ) {
+          continue;
+        }
+
+        if (node.type === "frame" || node.type === "group") {
+          const childList =
+            node.type === "frame" && node.layout?.autoLayout
+              ? calculateLayoutForFrame(node)
+              : node.children;
+          const childHit = hitInList(childList, absX, absY);
+          if (childHit) return childHit;
+        }
+
+        return node.id;
+      }
+      return null;
+    };
+
+    return hitInList(sceneNodes, 0, 0);
   }
 
   function hitTestNode(
@@ -168,6 +248,7 @@ export function setupPixiInteraction(
     parentAbsX: number,
     parentAbsY: number,
     state: typeof useSceneStore extends { getState: () => infer S } ? S : never,
+    deepSelect: boolean,
   ): string | null {
     const node = state.nodesById[nodeId];
     if (!node || node.visible === false) return null;
@@ -188,8 +269,17 @@ export function setupPixiInteraction(
     // Check children first (deeper elements have priority)
     const childIds = state.childrenById[nodeId] ?? [];
     for (let i = childIds.length - 1; i >= 0; i--) {
-      const childHit = hitTestNode(childIds[i], worldX, worldY, absX, absY, state);
+      const childHit = hitTestNode(
+        childIds[i],
+        worldX,
+        worldY,
+        absX,
+        absY,
+        state,
+        deepSelect,
+      );
       if (childHit) {
+        if (deepSelect) return childHit;
         // Nested selection logic: check if we should select the child or the parent
         const enteredContainerId = useSelectionStore.getState().enteredContainerId;
         if (enteredContainerId === nodeId) {
@@ -209,13 +299,15 @@ export function setupPixiInteraction(
 
   /**
    * Check if a world-space point is near a transform handle of the current selection.
-   * Returns the corner identifier or null.
+   * Returns the active transform handle identifier or null.
    */
   function hitTestTransformHandle(worldX: number, worldY: number): {
-    corner: HandleCorner;
+    corner: TransformHandle;
     nodeId: string;
     absX: number;
     absY: number;
+    width: number;
+    height: number;
   } | null {
     const { selectedIds } = useSelectionStore.getState();
     if (selectedIds.length !== 1) return null;
@@ -225,40 +317,80 @@ export function setupPixiInteraction(
     const node = state.nodesById[nodeId];
     if (!node) return null;
 
-    // Get absolute position
-    let absX = node.x;
-    let absY = node.y;
-    let pid = state.parentById[nodeId];
-    while (pid) {
-      const p = state.nodesById[pid];
-      if (p) { absX += p.x; absY += p.y; }
-      pid = state.parentById[pid];
-    }
+    const treeNodes = state.getNodes();
+    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+    const absPos = getNodeAbsolutePositionWithLayout(treeNodes, nodeId, calculateLayoutForFrame);
+    if (!absPos) return null;
+    const effectiveSize = getNodeEffectiveSize(treeNodes, nodeId, calculateLayoutForFrame);
+    const width = effectiveSize?.width ?? node.width;
+    const height = effectiveSize?.height ?? node.height;
+    const absX = absPos.x;
+    const absY = absPos.y;
 
     const scale = useViewportStore.getState().scale;
     const handleRadius = 6 / scale; // Hit area slightly larger than visual handle
 
     const corners: Array<{ corner: HandleCorner; cx: number; cy: number }> = [
       { corner: "tl", cx: absX, cy: absY },
-      { corner: "tr", cx: absX + node.width, cy: absY },
-      { corner: "bl", cx: absX, cy: absY + node.height },
-      { corner: "br", cx: absX + node.width, cy: absY + node.height },
+      { corner: "tr", cx: absX + width, cy: absY },
+      { corner: "bl", cx: absX, cy: absY + height },
+      { corner: "br", cx: absX + width, cy: absY + height },
     ];
 
     for (const { corner, cx, cy } of corners) {
       const dx = worldX - cx;
       const dy = worldY - cy;
       if (Math.abs(dx) <= handleRadius && Math.abs(dy) <= handleRadius) {
-        return { corner, nodeId, absX, absY };
+        return { corner, nodeId, absX, absY, width, height };
       }
     }
+
+    // Side handles (skip corner zones to avoid ambiguity)
+    const sideTolerance = handleRadius;
+    const cornerExclusion = handleRadius * 2;
+    const distLeft = Math.abs(worldX - absX);
+    const distRight = Math.abs(worldX - (absX + width));
+    const distTop = Math.abs(worldY - absY);
+    const distBottom = Math.abs(worldY - (absY + height));
+
+    if (
+      distLeft <= sideTolerance &&
+      worldY >= absY + cornerExclusion &&
+      worldY <= absY + height - cornerExclusion
+    ) {
+      return { corner: "l", nodeId, absX, absY, width, height };
+    }
+    if (
+      distRight <= sideTolerance &&
+      worldY >= absY + cornerExclusion &&
+      worldY <= absY + height - cornerExclusion
+    ) {
+      return { corner: "r", nodeId, absX, absY, width, height };
+    }
+    if (
+      distTop <= sideTolerance &&
+      worldX >= absX + cornerExclusion &&
+      worldX <= absX + width - cornerExclusion
+    ) {
+      return { corner: "t", nodeId, absX, absY, width, height };
+    }
+    if (
+      distBottom <= sideTolerance &&
+      worldX >= absX + cornerExclusion &&
+      worldX <= absX + width - cornerExclusion
+    ) {
+      return { corner: "b", nodeId, absX, absY, width, height };
+    }
+
     return null;
   }
 
-  function getResizeCursor(corner: HandleCorner): string {
+  function getResizeCursor(corner: TransformHandle): string {
     switch (corner) {
       case "tl": case "br": return "nwse-resize";
       case "tr": case "bl": return "nesw-resize";
+      case "l": case "r": return "ew-resize";
+      case "t": case "b": return "ns-resize";
     }
   }
 
@@ -290,10 +422,13 @@ export function setupPixiInteraction(
 
     if (e.ctrlKey || e.metaKey) {
       // Pinch-to-zoom
-      useViewportStore.getState().startSmoothZoom(-e.deltaY * 3, centerX, centerY);
-    } else {
-      // Scroll-to-zoom
       useViewportStore.getState().startSmoothZoom(e.deltaY, centerX, centerY);
+    } else {
+      // Two-finger scroll = pan (matches Konva behavior)
+      const vs = useViewportStore.getState();
+      const dx = e.shiftKey ? -e.deltaY : -e.deltaX;
+      const dy = e.shiftKey ? 0 : -e.deltaY;
+      vs.setPosition(vs.x + dx, vs.y + dy);
     }
   }
 
@@ -343,8 +478,8 @@ export function setupPixiInteraction(
           transform.corner = handleHit.corner;
           transform.startNodeX = node.x;
           transform.startNodeY = node.y;
-          transform.startNodeW = node.width;
-          transform.startNodeH = node.height;
+          transform.startNodeW = handleHit.width;
+          transform.startNodeH = handleHit.height;
           transform.absX = handleHit.absX;
           transform.absY = handleHit.absY;
           transform.parentOffsetX = handleHit.absX - node.x;
@@ -367,7 +502,8 @@ export function setupPixiInteraction(
 
     // Left button click
     if (e.button === 0) {
-      const hitId = findNodeAtPoint(world.x, world.y);
+      const deepSelect = e.metaKey || e.ctrlKey;
+      const hitId = findNodeAtPoint(world.x, world.y, { deepSelect });
 
       if (hitId) {
         // Start drag
@@ -505,6 +641,20 @@ export function setupPixiInteraction(
         newH = newBottom - newTop;
         newX = transform.startNodeX + (newLeft - origLeft);
         newY = transform.startNodeY + (newTop - origTop);
+      } else if (corner === "r") {
+        newW = Math.max(MIN_SIZE, absWorldX - origLeft);
+      } else if (corner === "l") {
+        const newRight = origRight;
+        const newLeft = Math.min(absWorldX, newRight - MIN_SIZE);
+        newW = newRight - newLeft;
+        newX = transform.startNodeX + (newLeft - origLeft);
+      } else if (corner === "b") {
+        newH = Math.max(MIN_SIZE, absWorldY - origTop);
+      } else if (corner === "t") {
+        const newBottom = origBottom;
+        const newTop = Math.min(absWorldY, newBottom - MIN_SIZE);
+        newH = newBottom - newTop;
+        newY = transform.startNodeY + (newTop - origTop);
       }
 
       useSceneStore.getState().updateNodeWithoutHistory(transform.nodeId, {
@@ -599,8 +749,72 @@ export function setupPixiInteraction(
     }
 
     // Hover detection
-    const hitId = findNodeAtPoint(world.x, world.y);
+    const hitId = findNodeAtPoint(world.x, world.y, { deepSelect: true });
     useHoverStore.getState().setHoveredNode(hitId);
+
+    // Measurement distance computation (Option/Alt + hover)
+    const { modifierHeld, setLines, clearLines } = useMeasureStore.getState();
+    if (!hitId || !modifierHeld) {
+      clearLines();
+    } else {
+      const currentSelectedIds = useSelectionStore.getState().selectedIds;
+      if (currentSelectedIds.length === 1) {
+        const selectedId = currentSelectedIds[0];
+        if (selectedId !== hitId) {
+          const currentNodes = useSceneStore.getState().getNodes();
+          const calculateLayoutForFrame =
+            useLayoutStore.getState().calculateLayoutForFrame;
+          const selectedNode = findNodeById(currentNodes, selectedId);
+          const hoveredNode = findNodeById(currentNodes, hitId);
+          const selectedPos = getNodeAbsolutePositionWithLayout(
+            currentNodes,
+            selectedId,
+            calculateLayoutForFrame,
+          );
+          const hoveredPos = getNodeAbsolutePositionWithLayout(
+            currentNodes,
+            hitId,
+            calculateLayoutForFrame,
+          );
+          if (selectedNode && hoveredNode && selectedPos && hoveredPos) {
+            const selectedSize = getNodeEffectiveSize(
+              currentNodes,
+              selectedId,
+              calculateLayoutForFrame,
+            );
+            const hoveredSize = getNodeEffectiveSize(
+              currentNodes,
+              hitId,
+              calculateLayoutForFrame,
+            );
+            const selectedBounds = {
+              x: selectedPos.x,
+              y: selectedPos.y,
+              width: selectedSize?.width ?? selectedNode.width,
+              height: selectedSize?.height ?? selectedNode.height,
+            };
+            const hoveredBounds = {
+              x: hoveredPos.x,
+              y: hoveredPos.y,
+              width: hoveredSize?.width ?? hoveredNode.width,
+              height: hoveredSize?.height ?? hoveredNode.height,
+            };
+            const isParent = isDescendantOf(currentNodes, hitId, selectedId);
+            if (isParent) {
+              setLines(computeParentDistances(selectedBounds, hoveredBounds));
+            } else {
+              setLines(computeSiblingDistances(selectedBounds, hoveredBounds));
+            }
+          } else {
+            clearLines();
+          }
+        } else {
+          clearLines();
+        }
+      } else {
+        clearLines();
+      }
+    }
 
     // Update cursor for transform handles
     const handleHit = hitTestTransformHandle(world.x, world.y);
@@ -749,7 +963,39 @@ export function setupPixiInteraction(
     const screenY = e.clientY - rect.top;
     const world = screenToWorld(screenX, screenY);
 
-    const hitId = findNodeAtPoint(world.x, world.y);
+    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+    const currentSelectedIds = useSelectionStore.getState().selectedIds;
+    const currentNodes = useSceneStore.getState().getNodes();
+
+    // Match Konva behavior: drill down from currently selected container.
+    if (currentSelectedIds.length === 1) {
+      const selectedNode = findNodeById(currentNodes, currentSelectedIds[0]);
+      if (selectedNode && (selectedNode.type === "frame" || selectedNode.type === "group")) {
+        useSelectionStore.getState().enterContainer(selectedNode.id);
+
+        const absPos = getNodeAbsolutePositionWithLayout(
+          currentNodes,
+          selectedNode.id,
+          calculateLayoutForFrame,
+        );
+        if (!absPos) return;
+
+        const localX = world.x - absPos.x;
+        const localY = world.y - absPos.y;
+        const hitChildren =
+          selectedNode.type === "frame" && selectedNode.layout?.autoLayout
+            ? calculateLayoutForFrame(selectedNode)
+            : selectedNode.children;
+        const childId = findChildAtPosition(hitChildren, localX, localY);
+        if (childId) {
+          useSelectionStore.getState().select(childId);
+        }
+        return;
+      }
+    }
+
+    const deepSelect = e.metaKey || e.ctrlKey;
+    const hitId = findNodeAtPoint(world.x, world.y, { deepSelect });
     if (!hitId) return;
 
     const state = useSceneStore.getState();
@@ -760,7 +1006,7 @@ export function setupPixiInteraction(
       // Enter text editing mode
       useSelectionStore.getState().startEditing(hitId);
     } else if (node.type === "frame" || node.type === "group") {
-      // Enter container
+      // Enter container (fallback when no selected container context)
       useSelectionStore.getState().enterContainer(hitId);
     }
   }
