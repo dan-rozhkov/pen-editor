@@ -211,7 +211,11 @@ export function FrameRenderer({
     const pointerPos = stage.getRelativePointerPosition();
     if (!pointerPos) return;
     // Use absolute position to correctly handle nested frames
-    const absPos = getNodeAbsolutePosition(nodes, node.id);
+    const absPos = getNodeAbsolutePositionWithLayout(
+      nodes,
+      node.id,
+      calculateLayoutForFrame,
+    );
     if (!absPos) return;
     const localX = pointerPos.x - absPos.x;
     const localY = pointerPos.y - absPos.y;
