@@ -12,7 +12,6 @@ import {
   findParentFrameInComponent,
 } from "@/utils/nodeUtils";
 import { parseSvgToNodes } from "@/utils/svgUtils";
-import { detectPixsoClipboard, parseAndConvertPixso } from "@/utils/pixsoUtils";
 
 interface CanvasKeyboardShortcutsParams {
   nodes: SceneNode[];
@@ -167,41 +166,8 @@ export function useCanvasKeyboardShortcuts({
         return;
       }
 
-      if ((e.metaKey || e.ctrlKey) && e.code === "KeyV") {
-        if (isTyping) return;
-        if (copiedNodes.length > 0) {
-          e.preventDefault();
-          const clonedNodes = copiedNodes.map((n) => cloneNodeWithNewId(n));
-          const selectedIds = useSelectionStore.getState().selectedIds;
-          let targetContainerId: string | null = null;
-
-          if (selectedIds.length === 1) {
-            const selectedNode = findNodeById(nodes, selectedIds[0]);
-            if (selectedNode && isContainerNode(selectedNode)) {
-              targetContainerId = selectedNode.id;
-            }
-          }
-
-          const currentNodes = useSceneStore.getState().nodes;
-          saveHistory(currentNodes);
-          startBatch();
-          for (const clonedNode of clonedNodes) {
-            if (targetContainerId) {
-              clonedNode.x = 20;
-              clonedNode.y = 20;
-              addChildToFrame(targetContainerId, clonedNode);
-            } else {
-              addNode(clonedNode);
-            }
-          }
-          endBatch();
-
-          useSelectionStore.getState().setSelectedIds(clonedNodes.map((n) => n.id));
-          return;
-        }
-        // Don't preventDefault — let the paste event fire for SVG clipboard content
-        return;
-      }
+      // Cmd/Ctrl+V: Don't handle here — let the paste event fire.
+      // All paste logic (internal, SVG) is in handlePaste.
 
       if ((e.metaKey || e.ctrlKey) && e.code === "KeyZ" && !e.shiftKey) {
         e.preventDefault();
@@ -487,7 +453,7 @@ export function useCanvasKeyboardShortcuts({
       }
     };
 
-    const handlePaste = async (e: ClipboardEvent) => {
+    const handlePaste = (e: ClipboardEvent) => {
       const target = e.target as HTMLElement;
       const isTyping =
         target.tagName === "INPUT" ||
@@ -495,74 +461,54 @@ export function useCanvasKeyboardShortcuts({
         target.isContentEditable;
       if (isTyping) return;
 
-      // Try async clipboard API for text/html (Pixso/Figma format)
-      try {
-        const items = await navigator.clipboard.read();
-        for (const item of items) {
-          if (item.types.includes("text/html")) {
-            const blob = await item.getType("text/html");
-            const html = await blob.text();
+      const syncText = e.clipboardData?.getData("text/plain")?.trim() ?? "";
 
-            if (detectPixsoClipboard(html)) {
-              e.preventDefault();
-              const nodes = parseAndConvertPixso(html);
-              if (nodes.length > 0) {
-                // Place at viewport center
-                const { x: vpX, y: vpY, scale } = useViewportStore.getState();
-                const viewportCenterX = (-vpX + window.innerWidth / 2) / scale;
-                const viewportCenterY = (-vpY + window.innerHeight / 2) / scale;
+      // 1. Try SVG from text/plain
+      if (syncText && syncText.includes("<svg") && syncText.includes("</svg>")) {
+        e.preventDefault();
+        const result = parseSvgToNodes(syncText);
+        if (result) {
+          const { x: vpX, y: vpY, scale } = useViewportStore.getState();
+          const viewportCenterX = (-vpX + window.innerWidth / 2) / scale;
+          const viewportCenterY = (-vpY + window.innerHeight / 2) / scale;
+          result.node.x = viewportCenterX - result.node.width / 2;
+          result.node.y = viewportCenterY - result.node.height / 2;
 
-                // Calculate bounding box of all nodes
-                const minX = Math.min(...nodes.map((n) => n.x));
-                const minY = Math.min(...nodes.map((n) => n.y));
-                const maxX = Math.max(...nodes.map((n) => n.x + n.width));
-                const maxY = Math.max(...nodes.map((n) => n.y + n.height));
-                const totalWidth = maxX - minX;
-                const totalHeight = maxY - minY;
-
-                // Offset all nodes to center them
-                const offsetX = viewportCenterX - totalWidth / 2 - minX;
-                const offsetY = viewportCenterY - totalHeight / 2 - minY;
-
-                const currentNodes = useSceneStore.getState().nodes;
-                saveHistory(currentNodes);
-                startBatch();
-                for (const node of nodes) {
-                  node.x += offsetX;
-                  node.y += offsetY;
-                  addNode(node);
-                }
-                endBatch();
-
-                useSelectionStore.getState().setSelectedIds(nodes.map((n) => n.id));
-                return;
-              }
-            }
-          }
+          addNode(result.node);
+          useSelectionStore.getState().select(result.node.id);
+          return;
         }
-      } catch {
-        // Async clipboard not available or permission denied, fall through to sync
       }
 
-      // Fallback: Synchronous clipboard access for SVG text/plain
-      const text = e.clipboardData?.getData("text/plain")?.trim();
-      if (!text) return;
-
-      // Check if clipboard content looks like SVG
-      if (text.includes("<svg") && text.includes("</svg>")) {
+      // 2. Internal clipboard (copiedNodes) — fallback when no external data matched
+      if (copiedNodes.length > 0) {
         e.preventDefault();
-        const result = parseSvgToNodes(text);
-        if (!result) return;
+        const clonedNodes = copiedNodes.map((n) => cloneNodeWithNewId(n));
+        const selectedIds = useSelectionStore.getState().selectedIds;
+        let targetContainerId: string | null = null;
 
-        // Place at viewport center
-        const { x: vpX, y: vpY, scale } = useViewportStore.getState();
-        const viewportCenterX = (-vpX + window.innerWidth / 2) / scale;
-        const viewportCenterY = (-vpY + window.innerHeight / 2) / scale;
-        result.node.x = viewportCenterX - result.node.width / 2;
-        result.node.y = viewportCenterY - result.node.height / 2;
+        if (selectedIds.length === 1) {
+          const selectedNode = findNodeById(nodes, selectedIds[0]);
+          if (selectedNode && isContainerNode(selectedNode)) {
+            targetContainerId = selectedNode.id;
+          }
+        }
 
-        addNode(result.node);
-        useSelectionStore.getState().select(result.node.id);
+        const currentNodes = useSceneStore.getState().nodes;
+        saveHistory(currentNodes);
+        startBatch();
+        for (const clonedNode of clonedNodes) {
+          if (targetContainerId) {
+            clonedNode.x = 20;
+            clonedNode.y = 20;
+            addChildToFrame(targetContainerId, clonedNode);
+          } else {
+            addNode(clonedNode);
+          }
+        }
+        endBatch();
+
+        useSelectionStore.getState().setSelectedIds(clonedNodes.map((n) => n.id));
       }
     };
 
