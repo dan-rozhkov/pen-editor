@@ -15,6 +15,7 @@ import type {
   GradientFill,
   ShadowEffect,
   ImageFill,
+  PerSideStroke,
 } from "@/types/scene";
 import { useVariableStore } from "@/store/variableStore";
 import { useThemeStore } from "@/store/themeStore";
@@ -77,6 +78,54 @@ function escapeXmlAttr(value: string): string {
     .replace(/"/g, "&quot;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+// --- Per-side stroke helpers ---
+
+function hasPerSideStroke(strokeWidthPerSide?: PerSideStroke): boolean {
+  if (!strokeWidthPerSide) return false;
+  const { top, right, bottom, left } = strokeWidthPerSide;
+  return !!(top || right || bottom || left);
+}
+
+function drawPerSideStroke(
+  gfx: Graphics,
+  width: number,
+  height: number,
+  strokeColor: string,
+  perSide: PerSideStroke,
+): void {
+  const color = parseColor(strokeColor);
+  const alpha = parseAlpha(strokeColor);
+  const { top = 0, right = 0, bottom = 0, left = 0 } = perSide;
+
+  // Top border
+  if (top > 0) {
+    gfx.moveTo(0, top / 2);
+    gfx.lineTo(width, top / 2);
+    gfx.stroke({ color, alpha, width: top });
+  }
+
+  // Right border
+  if (right > 0) {
+    gfx.moveTo(width - right / 2, 0);
+    gfx.lineTo(width - right / 2, height);
+    gfx.stroke({ color, alpha, width: right });
+  }
+
+  // Bottom border
+  if (bottom > 0) {
+    gfx.moveTo(width, height - bottom / 2);
+    gfx.lineTo(0, height - bottom / 2);
+    gfx.stroke({ color, alpha, width: bottom });
+  }
+
+  // Left border
+  if (left > 0) {
+    gfx.moveTo(left / 2, height);
+    gfx.lineTo(left / 2, 0);
+    gfx.stroke({ color, alpha, width: left });
+  }
 }
 
 // --- Gradient helpers ---
@@ -657,6 +706,7 @@ function updateRectContainer(
     node.strokeBinding !== prev.strokeBinding ||
     node.strokeOpacity !== prev.strokeOpacity ||
     node.strokeWidth !== prev.strokeWidth ||
+    node.strokeWidthPerSide !== prev.strokeWidthPerSide ||
     node.cornerRadius !== prev.cornerRadius ||
     node.gradientFill !== prev.gradientFill
   ) {
@@ -680,6 +730,7 @@ function updateRectContainer(
 function drawRect(gfx: Graphics, node: RectNode): void {
   const fillColor = getResolvedFill(node);
   const strokeColor = getResolvedStroke(node);
+  const usePerSideStroke = hasPerSideStroke(node.strokeWidthPerSide);
 
   // Fill
   if (node.gradientFill) {
@@ -698,7 +749,28 @@ function drawRect(gfx: Graphics, node: RectNode): void {
   gfx.fill();
 
   // Stroke
-  if (strokeColor && node.strokeWidth) {
+  if (usePerSideStroke && strokeColor && node.strokeWidthPerSide) {
+    // Per-side stroke (only for rectangles without corner radius)
+    if (!node.cornerRadius) {
+      drawPerSideStroke(gfx, node.width, node.height, strokeColor, node.strokeWidthPerSide);
+    } else {
+      // Fall back to max stroke width for rounded corners
+      const maxWidth = Math.max(
+        node.strokeWidthPerSide.top ?? 0,
+        node.strokeWidthPerSide.right ?? 0,
+        node.strokeWidthPerSide.bottom ?? 0,
+        node.strokeWidthPerSide.left ?? 0,
+      );
+      if (maxWidth > 0) {
+        gfx.stroke({
+          color: parseColor(strokeColor),
+          alpha: parseAlpha(strokeColor),
+          width: maxWidth,
+        });
+      }
+    }
+  } else if (strokeColor && node.strokeWidth) {
+    // Unified stroke
     gfx.stroke({
       color: parseColor(strokeColor),
       alpha: parseAlpha(strokeColor),
@@ -1210,6 +1282,7 @@ function updateFrameContainer(
     node.strokeBinding !== prev.strokeBinding ||
     node.strokeOpacity !== prev.strokeOpacity ||
     node.strokeWidth !== prev.strokeWidth ||
+    node.strokeWidthPerSide !== prev.strokeWidthPerSide ||
     node.cornerRadius !== prev.cornerRadius ||
     node.gradientFill !== prev.gradientFill ||
     node.sizing !== prev.sizing ||
@@ -1275,6 +1348,7 @@ function drawFrameBackground(
   const height = effectiveHeight ?? node.height;
   const fillColor = getResolvedFill(node);
   const strokeColor = getResolvedStroke(node);
+  const usePerSideStroke = hasPerSideStroke(node.strokeWidthPerSide);
 
   if (node.cornerRadius) {
     gfx.roundRect(0, 0, width, height, node.cornerRadius);
@@ -1289,7 +1363,29 @@ function drawFrameBackground(
     gfx.fill({ color: parseColor(fillColor), alpha: parseAlpha(fillColor) });
   }
 
-  if (strokeColor && node.strokeWidth) {
+  // Stroke
+  if (usePerSideStroke && strokeColor && node.strokeWidthPerSide) {
+    // Per-side stroke (only for frames without corner radius)
+    if (!node.cornerRadius) {
+      drawPerSideStroke(gfx, width, height, strokeColor, node.strokeWidthPerSide);
+    } else {
+      // Fall back to max stroke width for rounded corners
+      const maxWidth = Math.max(
+        node.strokeWidthPerSide.top ?? 0,
+        node.strokeWidthPerSide.right ?? 0,
+        node.strokeWidthPerSide.bottom ?? 0,
+        node.strokeWidthPerSide.left ?? 0,
+      );
+      if (maxWidth > 0) {
+        gfx.stroke({
+          color: parseColor(strokeColor),
+          alpha: parseAlpha(strokeColor),
+          width: maxWidth,
+        });
+      }
+    }
+  } else if (strokeColor && node.strokeWidth) {
+    // Unified stroke
     gfx.stroke({
       color: parseColor(strokeColor),
       alpha: parseAlpha(strokeColor),
