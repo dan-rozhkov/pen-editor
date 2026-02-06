@@ -1016,22 +1016,33 @@ function drawPath(gfx: Graphics, node: PathNode): void {
   // Parse SVG path-data directly (node.geometry is "d" string, not full <svg> markup).
   try {
     const pathStroke = node.pathStroke;
-    const useSvgParserForEvenOdd = node.fillRule === "evenodd" && !node.gradientFill;
 
-    if (useSvgParserForEvenOdd) {
-      // Pixi's SVG parser handles complex even-odd paths (holes) more consistently.
+    // Check if compound path (multiple subpaths) - needs evenodd for proper hole rendering
+    const isCompoundPath = (node.geometry.match(/[Mm]/g)?.length ?? 0) > 1;
+
+    // Use evenodd for compound paths (PixiJS requires explicit fill-rule for holes)
+    const effectiveFillRule = node.fillRule ?? (isCompoundPath ? "evenodd" : "nonzero");
+
+    // For solid fills, use SVG parser (respects fill-rule properly since PixiJS 8.8+)
+    if (!node.gradientFill) {
       const fillAttr = fillColor ? ` fill="${escapeXmlAttr(fillColor)}"` : ` fill="none"`;
       const strokeAttrColor = pathStroke?.fill ?? strokeColor;
       const strokeAttr = strokeAttrColor
         ? ` stroke="${escapeXmlAttr(strokeAttrColor)}" stroke-width="${pathStroke?.thickness ?? node.strokeWidth ?? 1}" stroke-linecap="${pathStroke?.cap ?? "butt"}" stroke-linejoin="${pathStroke?.join ?? "miter"}"`
         : ` stroke="none"`;
-      const svgMarkup = `<svg xmlns="http://www.w3.org/2000/svg"><path d="${escapeXmlAttr(node.geometry)}" fill-rule="evenodd"${fillAttr}${strokeAttr}/></svg>`;
+      const svgMarkup = `<svg xmlns="http://www.w3.org/2000/svg"><path d="${escapeXmlAttr(node.geometry)}" fill-rule="${effectiveFillRule}"${fillAttr}${strokeAttr}/></svg>`;
+
+      // Debug log - full SVG for first compound path only
+      if (isCompoundPath && node.id === "e3lrktq") {
+        console.log(`[path-debug] FULL SVG for comet:`, svgMarkup);
+      }
+
       gfx.svg(svgMarkup);
       return;
     }
 
-    const useEvenOdd = node.fillRule ? node.fillRule === "evenodd" : true;
-    const path = new GraphicsPath(node.geometry, useEvenOdd);
+    // Gradient paths: use GraphicsPath (SVG parser doesn't support gradients)
+    const path = new GraphicsPath(node.geometry, effectiveFillRule === "evenodd");
     gfx.path(path);
   } catch {
     // Fallback: draw a rect placeholder if SVG parsing fails

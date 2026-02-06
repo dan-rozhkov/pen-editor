@@ -1,5 +1,11 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import { Application, Container } from "pixi.js";
+import * as PIXI from "pixi.js";
+
+// Expose PIXI for debugging
+if (typeof window !== "undefined") {
+  (window as any).PIXI = PIXI;
+}
 import { InlineNameEditor } from "@/components/InlineNameEditor";
 import { InlineTextEditor } from "@/components/InlineTextEditor";
 import { useCanvasKeyboardShortcuts } from "@/components/canvas/useCanvasKeyboardShortcuts";
@@ -144,6 +150,8 @@ export function PixiCanvas() {
 
         container.appendChild(app.canvas as HTMLCanvasElement);
         appRef.current = app;
+        // Expose for debugging
+        (window as any).__PIXI_APP__ = app;
 
         // Scene graph structure:
         // app.stage

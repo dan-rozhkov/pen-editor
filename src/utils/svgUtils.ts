@@ -46,6 +46,7 @@ interface InheritedStyle {
   opacity?: string;
   fillOpacity?: string;
   strokeOpacity?: string;
+  fillRule?: string;
 }
 
 /** Resolve a color value: treat "currentColor" as black, return null for "none" */
@@ -60,16 +61,29 @@ function resolveInheritedColor(
 }
 
 /** Read style attributes from an element, falling back to inherited values */
+function getStyleProp(el: Element, prop: string): string | null {
+  const inlineStyle = el.getAttribute("style");
+  if (!inlineStyle) return null;
+  const re = new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`, "i");
+  const m = inlineStyle.match(re);
+  return m ? m[1].trim() : null;
+}
+
+function getAttrOrStyle(el: Element, attr: string, styleProp: string = attr): string | null {
+  return el.getAttribute(attr) ?? getStyleProp(el, styleProp);
+}
+
 function getInheritedStyle(el: Element, parent: InheritedStyle): InheritedStyle {
   return {
-    fill: el.getAttribute("fill") ?? parent.fill,
-    stroke: el.getAttribute("stroke") ?? parent.stroke,
-    strokeWidth: el.getAttribute("stroke-width") ?? parent.strokeWidth,
-    strokeLinejoin: el.getAttribute("stroke-linejoin") ?? parent.strokeLinejoin,
-    strokeLinecap: el.getAttribute("stroke-linecap") ?? parent.strokeLinecap,
-    opacity: el.getAttribute("opacity") ?? parent.opacity,
-    fillOpacity: el.getAttribute("fill-opacity") ?? parent.fillOpacity,
-    strokeOpacity: el.getAttribute("stroke-opacity") ?? parent.strokeOpacity,
+    fill: getAttrOrStyle(el, "fill") ?? parent.fill,
+    stroke: getAttrOrStyle(el, "stroke") ?? parent.stroke,
+    strokeWidth: getAttrOrStyle(el, "stroke-width") ?? parent.strokeWidth,
+    strokeLinejoin: getAttrOrStyle(el, "stroke-linejoin") ?? parent.strokeLinejoin,
+    strokeLinecap: getAttrOrStyle(el, "stroke-linecap") ?? parent.strokeLinecap,
+    opacity: getAttrOrStyle(el, "opacity") ?? parent.opacity,
+    fillOpacity: getAttrOrStyle(el, "fill-opacity") ?? parent.fillOpacity,
+    strokeOpacity: getAttrOrStyle(el, "stroke-opacity") ?? parent.strokeOpacity,
+    fillRule: getAttrOrStyle(el, "fill-rule") ?? parent.fillRule,
   };
 }
 
@@ -185,21 +199,22 @@ function collectPaths(
       if (!d) continue;
 
       // Resolve fill and stroke with inheritance
-      const localFill = child.getAttribute("fill");
-      const localStroke = child.getAttribute("stroke");
+      const localFill = getAttrOrStyle(child, "fill");
+      const localStroke = getAttrOrStyle(child, "stroke");
       const resolvedFill = resolveInheritedColor(localFill, inherited.fill);
       const resolvedStroke = resolveInheritedColor(localStroke, inherited.stroke);
-      const resolvedStrokeWidth = child.getAttribute("stroke-width") ?? inherited.strokeWidth;
-      const resolvedLinejoin = child.getAttribute("stroke-linejoin") ?? inherited.strokeLinejoin;
-      const resolvedLinecap = child.getAttribute("stroke-linecap") ?? inherited.strokeLinecap;
+      const resolvedStrokeWidth = getAttrOrStyle(child, "stroke-width") ?? inherited.strokeWidth;
+      const resolvedLinejoin = getAttrOrStyle(child, "stroke-linejoin") ?? inherited.strokeLinejoin;
+      const resolvedLinecap = getAttrOrStyle(child, "stroke-linecap") ?? inherited.strokeLinecap;
 
       // Resolve opacity values with inheritance
-      const localOpacity = child.getAttribute("opacity");
-      const localFillOpacity = child.getAttribute("fill-opacity");
-      const localStrokeOpacity = child.getAttribute("stroke-opacity");
+      const localOpacity = getAttrOrStyle(child, "opacity");
+      const localFillOpacity = getAttrOrStyle(child, "fill-opacity");
+      const localStrokeOpacity = getAttrOrStyle(child, "stroke-opacity");
       const resolvedOpacity = localOpacity ?? inherited.opacity;
       const resolvedFillOpacity = localFillOpacity ?? inherited.fillOpacity;
       const resolvedStrokeOpacity = localStrokeOpacity ?? inherited.strokeOpacity;
+      const resolvedFillRule = getAttrOrStyle(child, "fill-rule") ?? inherited.fillRule;
 
       // Skip fully invisible paths (no fill AND no stroke)
       if (!resolvedFill && !resolvedStroke) continue;
@@ -231,9 +246,8 @@ function collectPaths(
       }
 
       // Add fill-rule if present (evenodd creates holes in paths)
-      const fillRule = child.getAttribute("fill-rule");
-      if (fillRule === "evenodd" || fillRule === "nonzero") {
-        node.fillRule = fillRule;
+      if (resolvedFillRule === "evenodd" || resolvedFillRule === "nonzero") {
+        node.fillRule = resolvedFillRule;
       }
 
       // Add opacity if present
@@ -304,14 +318,15 @@ export function parseSvgToNodes(svgText: string): { node: SceneNode; svgWidth: n
 
   // Build inherited style from root <svg> element attributes
   const rootStyle: InheritedStyle = {
-    fill: svgEl.getAttribute("fill") ?? undefined,
-    stroke: svgEl.getAttribute("stroke") ?? undefined,
-    strokeWidth: svgEl.getAttribute("stroke-width") ?? undefined,
-    strokeLinejoin: svgEl.getAttribute("stroke-linejoin") ?? undefined,
-    strokeLinecap: svgEl.getAttribute("stroke-linecap") ?? undefined,
-    opacity: svgEl.getAttribute("opacity") ?? undefined,
-    fillOpacity: svgEl.getAttribute("fill-opacity") ?? undefined,
-    strokeOpacity: svgEl.getAttribute("stroke-opacity") ?? undefined,
+    fill: getAttrOrStyle(svgEl, "fill") ?? undefined,
+    stroke: getAttrOrStyle(svgEl, "stroke") ?? undefined,
+    strokeWidth: getAttrOrStyle(svgEl, "stroke-width") ?? undefined,
+    strokeLinejoin: getAttrOrStyle(svgEl, "stroke-linejoin") ?? undefined,
+    strokeLinecap: getAttrOrStyle(svgEl, "stroke-linecap") ?? undefined,
+    opacity: getAttrOrStyle(svgEl, "opacity") ?? undefined,
+    fillOpacity: getAttrOrStyle(svgEl, "fill-opacity") ?? undefined,
+    strokeOpacity: getAttrOrStyle(svgEl, "stroke-opacity") ?? undefined,
+    fillRule: getAttrOrStyle(svgEl, "fill-rule") ?? undefined,
   };
 
   // Collect clip-path definitions from <defs>
