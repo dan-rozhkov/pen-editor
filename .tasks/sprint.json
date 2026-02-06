@@ -169,6 +169,14 @@
       "passed": true
     },
     {
+      "name": "per-side-stroke",
+      "passed": false
+    },
+    {
+      "name": "fix-pixso-svg-import",
+      "passed": false
+    },
+    {
       "name": "component-slots",
       "passed": false
     },
