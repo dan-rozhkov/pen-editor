@@ -170,7 +170,7 @@
     },
     {
       "name": "per-side-stroke",
-      "passed": false
+      "passed": true
     },
     {
       "name": "fix-pixso-svg-import",
