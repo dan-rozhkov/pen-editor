@@ -1,7 +1,8 @@
-import { Ellipse, Group, Image as KonvaImage, Rect } from "react-konva";
+import { Ellipse, Group, Image as KonvaImage, Line, Rect } from "react-konva";
 import type {
   DescendantOverride,
   ImageFill,
+  PerSideStroke,
   SceneNode,
   TextNode,
 } from "@/types/scene";
@@ -355,4 +356,98 @@ export function applyDescendantOverride(
 // Check if a node should be rendered (considering enabled property)
 export function isNodeEnabled(override?: DescendantOverride): boolean {
   return override?.enabled !== false;
+}
+
+// Per-side stroke rendering using 4 separate lines
+interface PerSideStrokeLinesProps {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  strokeColor: string;
+  strokeWidthPerSide: PerSideStroke;
+  rotation?: number;
+  flipX?: boolean;
+  flipY?: boolean;
+}
+
+export function PerSideStrokeLines({
+  x,
+  y,
+  width,
+  height,
+  strokeColor,
+  strokeWidthPerSide,
+  rotation = 0,
+  flipX = false,
+  flipY = false,
+}: PerSideStrokeLinesProps) {
+  const { top = 0, right = 0, bottom = 0, left = 0 } = strokeWidthPerSide;
+
+  // Calculate offsets for flip transforms
+  const offsetX = flipX ? width : 0;
+  const offsetY = flipY ? height : 0;
+  const scaleX = flipX ? -1 : 1;
+  const scaleY = flipY ? -1 : 1;
+
+  return (
+    <Group
+      x={x}
+      y={y}
+      rotation={rotation}
+      offsetX={offsetX}
+      offsetY={offsetY}
+      scaleX={scaleX}
+      scaleY={scaleY}
+      listening={false}
+    >
+      {/* Top border */}
+      {top > 0 && (
+        <Line
+          points={[0, top / 2, width, top / 2]}
+          stroke={strokeColor}
+          strokeWidth={top}
+          lineCap="butt"
+          perfectDrawEnabled={false}
+        />
+      )}
+      {/* Right border */}
+      {right > 0 && (
+        <Line
+          points={[width - right / 2, 0, width - right / 2, height]}
+          stroke={strokeColor}
+          strokeWidth={right}
+          lineCap="butt"
+          perfectDrawEnabled={false}
+        />
+      )}
+      {/* Bottom border */}
+      {bottom > 0 && (
+        <Line
+          points={[width, height - bottom / 2, 0, height - bottom / 2]}
+          stroke={strokeColor}
+          strokeWidth={bottom}
+          lineCap="butt"
+          perfectDrawEnabled={false}
+        />
+      )}
+      {/* Left border */}
+      {left > 0 && (
+        <Line
+          points={[left / 2, height, left / 2, 0]}
+          stroke={strokeColor}
+          strokeWidth={left}
+          lineCap="butt"
+          perfectDrawEnabled={false}
+        />
+      )}
+    </Group>
+  );
+}
+
+// Helper to check if node has per-side stroke
+export function hasPerSideStroke(strokeWidthPerSide?: PerSideStroke): boolean {
+  if (!strokeWidthPerSide) return false;
+  const { top, right, bottom, left } = strokeWidthPerSide;
+  return !!(top || right || bottom || left);
 }

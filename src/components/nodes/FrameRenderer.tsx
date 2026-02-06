@@ -21,9 +21,11 @@ import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 import {
   HOVER_OUTLINE_COLOR,
   ImageFillLayer,
+  PerSideStrokeLines,
   SelectionOutline,
   getChildSelectOverride,
   getRectTransformProps,
+  hasPerSideStroke,
 } from "./renderUtils";
 import { RenderNode } from "./RenderNode";
 
@@ -277,10 +279,21 @@ export function FrameRenderer({
         fill={node.imageFill || gradientProps ? undefined : fillColor}
         {...(gradientProps && !node.imageFill ? gradientProps : {})}
         {...(shadowProps || {})}
-        stroke={strokeColor}
-        strokeWidth={node.strokeWidth}
+        stroke={hasPerSideStroke(node.strokeWidthPerSide) ? undefined : strokeColor}
+        strokeWidth={hasPerSideStroke(node.strokeWidthPerSide) ? undefined : node.strokeWidth}
         cornerRadius={node.cornerRadius}
       />
+      {/* Per-side stroke for frames */}
+      {hasPerSideStroke(node.strokeWidthPerSide) && strokeColor && node.strokeWidthPerSide && (
+        <PerSideStrokeLines
+          x={0}
+          y={0}
+          width={effectiveWidth}
+          height={effectiveHeight}
+          strokeColor={strokeColor}
+          strokeWidthPerSide={node.strokeWidthPerSide}
+        />
+      )}
       {node.imageFill && (
         <ImageFillLayer
           imageFill={node.imageFill}

@@ -5,8 +5,10 @@ import type { SceneNode } from "@/types/scene";
 import {
   HOVER_OUTLINE_COLOR,
   ImageFillLayer,
+  PerSideStrokeLines,
   SelectionOutline,
   getRectTransformProps,
+  hasPerSideStroke,
 } from "./renderUtils";
 
 interface RectRendererProps {
@@ -37,6 +39,7 @@ export const RectRenderer = memo(function RectRenderer({
   onTransformEnd,
 }: RectRendererProps) {
   const rectTransform = getRectTransformProps(node);
+  const usePerSideStroke = hasPerSideStroke(node.strokeWidthPerSide);
 
   return (
     <>
@@ -48,8 +51,8 @@ export const RectRenderer = memo(function RectRenderer({
         fill={node.imageFill || gradientProps ? undefined : fillColor}
         {...(gradientProps && !node.imageFill ? gradientProps : {})}
         {...(shadowProps || {})}
-        stroke={strokeColor}
-        strokeWidth={node.strokeWidth}
+        stroke={usePerSideStroke ? undefined : strokeColor}
+        strokeWidth={usePerSideStroke ? undefined : node.strokeWidth}
         cornerRadius={node.cornerRadius}
         opacity={node.opacity ?? 1}
         draggable
@@ -60,6 +63,20 @@ export const RectRenderer = memo(function RectRenderer({
         onDragEnd={onDragEnd}
         onTransformEnd={onTransformEnd}
       />
+      {/* Per-side stroke */}
+      {usePerSideStroke && strokeColor && node.strokeWidthPerSide && (
+        <PerSideStrokeLines
+          x={node.x}
+          y={node.y}
+          width={node.width}
+          height={node.height}
+          strokeColor={strokeColor}
+          strokeWidthPerSide={node.strokeWidthPerSide}
+          rotation={node.rotation}
+          flipX={node.flipX}
+          flipY={node.flipY}
+        />
+      )}
       {node.imageFill && (
         <ImageFillLayer
           imageFill={node.imageFill}

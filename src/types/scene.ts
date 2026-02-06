@@ -64,6 +64,14 @@ export interface ShadowEffect {
   spread: number
 }
 
+// Per-side stroke widths (like CSS border-top, border-right, etc.)
+export interface PerSideStroke {
+  top?: number
+  right?: number
+  bottom?: number
+  left?: number
+}
+
 export interface BaseNode {
   id: string
   type: 'frame' | 'group' | 'rect' | 'ellipse' | 'text' | 'ref' | 'path' | 'line' | 'polygon'
@@ -75,6 +83,8 @@ export interface BaseNode {
   fill?: string
   stroke?: string
   strokeWidth?: number
+  // Per-side stroke widths (takes precedence over strokeWidth when set)
+  strokeWidthPerSide?: PerSideStroke
   visible?: boolean // defaults to true
   enabled?: boolean // defaults to true, false hides node (used for instance overrides)
   // Sizing mode (used when node is inside auto-layout container)
