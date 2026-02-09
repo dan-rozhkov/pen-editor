@@ -177,11 +177,11 @@
       "passed": true
     },
     {
-      "name": "component-slots",
-      "passed": false
+      "name": "dark-theme-interface",
+      "passed": true
     },
     {
-      "name": "dark-theme-interface",
+      "name": "component-slots",
       "passed": false
     }
   ]

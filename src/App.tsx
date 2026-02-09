@@ -4,6 +4,7 @@ import { LeftSidebar } from "./components/LeftSidebar";
 import { RightSidebar } from "./components/RightSidebar";
 import { PrimitivesPanel } from "./components/PrimitivesPanel";
 import { PixiCanvas } from "./pixi/PixiCanvas";
+import "./store/uiThemeStore"; // Initialize UI theme (applies .dark class before first render)
 
 export type RendererMode = "konva" | "pixi";
 

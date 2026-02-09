@@ -22,7 +22,6 @@ export function Toolbar() {
   const setVariables = useVariableStore((state) => state.setVariables);
   const activeTheme = useThemeStore((state) => state.activeTheme);
   const setActiveTheme = useThemeStore((state) => state.setActiveTheme);
-
   const [importOpen, setImportOpen] = useState(false);
   const [jsonText, setJsonText] = useState("");
   const [error, setError] = useState<string | null>(null);
