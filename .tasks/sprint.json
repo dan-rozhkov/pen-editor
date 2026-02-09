@@ -182,7 +182,7 @@
     },
     {
       "name": "fix-tree-expand-on-selection",
-      "passed": false
+      "passed": true
     },
     {
       "name": "multi-select-shared-properties",

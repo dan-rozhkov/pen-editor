@@ -171,31 +171,19 @@ export function setupPixiInteraction(
 
   function findFrameLabelAtPoint(worldX: number, worldY: number): string | null {
     const scene = useSceneStore.getState();
-    const { selectedIds, editingNodeId, editingMode } = useSelectionStore.getState();
+    const { editingNodeId, editingMode } = useSelectionStore.getState();
     const scale = useViewportStore.getState().scale || 1;
     const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
     const treeNodes = scene.getNodes();
 
     const frameIds: string[] = [];
-    const seen = new Set<string>();
 
-    // Match overlay visibility: top-level frames/groups always show labels.
+    // Match overlay visibility: top-level frames/groups only (same as Konva).
     for (const rootId of scene.rootIds) {
       const node = scene.nodesById[rootId];
       if (!node || node.visible === false) continue;
       if (node.type !== "frame" && node.type !== "group") continue;
       frameIds.push(rootId);
-      seen.add(rootId);
-    }
-
-    // Selected frames/groups also show labels.
-    for (const id of selectedIds) {
-      const node = scene.nodesById[id];
-      if (!node) continue;
-      if (node.type !== "frame" && node.type !== "group") continue;
-      if (seen.has(id)) continue;
-      frameIds.push(id);
-      seen.add(id);
     }
 
     // Hit-test from top-most drawn label to bottom-most.

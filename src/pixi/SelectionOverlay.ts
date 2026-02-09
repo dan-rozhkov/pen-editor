@@ -235,7 +235,7 @@ export function createSelectionOverlay(
     const { selectedIds, editingNodeId, editingMode } = useSelectionStore.getState();
     const scale = useViewportStore.getState().scale;
 
-    // Show frame names for: top-level frames/groups, and any selected frames
+    // Show frame names for top-level frames/groups only (to match Konva).
     const selectedSet = new Set(selectedIds);
 
     // Collect frame IDs to show names for
@@ -246,14 +246,6 @@ export function createSelectionOverlay(
       const node = state.nodesById[rootId];
       if (node && (node.type === "frame" || node.type === "group") && node.visible !== false) {
         frameIds.add(rootId);
-      }
-    }
-
-    // Selected frames also show names
-    for (const id of selectedIds) {
-      const node = state.nodesById[id];
-      if (node && (node.type === "frame" || node.type === "group")) {
-        frameIds.add(id);
       }
     }
 
