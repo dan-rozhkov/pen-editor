@@ -22,7 +22,7 @@ import { useViewportStore } from "@/store/viewportStore";
 import { getNodeAbsolutePositionWithLayout } from "@/utils/nodeUtils";
 import { createPixiSync } from "./pixiSync";
 import { setupPixiViewport } from "./pixiViewport";
-import { setupPixiInteraction } from "./pixiInteraction";
+import { setupPixiInteraction } from "./interaction";
 import { createSelectionOverlay } from "./SelectionOverlay";
 import { createOverlayRenderer } from "./OverlayRenderer";
 

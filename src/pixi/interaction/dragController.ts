@@ -1,0 +1,246 @@
+import { useSceneStore } from "@/store/sceneStore";
+import { useSelectionStore } from "@/store/selectionStore";
+import { useViewportStore } from "@/store/viewportStore";
+import { useSmartGuideStore } from "@/store/smartGuideStore";
+import { useDragStore } from "@/store/dragStore";
+import { useLayoutStore } from "@/store/layoutStore";
+import type { FlatFrameNode } from "@/types/scene";
+import {
+  collectSnapTargets,
+  getSnapEdges,
+  calculateSnap,
+} from "@/utils/smartGuideUtils";
+import { getNodeAbsolutePosition } from "@/utils/nodeUtils";
+import {
+  calculateDropPosition,
+  isPointInsideRect,
+  getFrameAbsoluteRectWithLayout,
+} from "@/utils/dragUtils";
+import type { InteractionContext, DragState } from "./types";
+import { findFrameInTree } from "./hitTesting";
+
+export interface DragController {
+  handlePointerDown(e: PointerEvent, world: { x: number; y: number }, hitId: string | null): boolean;
+  handlePointerMove(e: PointerEvent, world: { x: number; y: number }): boolean;
+  handlePointerUp(e: PointerEvent, world: { x: number; y: number }): boolean;
+  isDragging: () => boolean;
+}
+
+export function createDragController(_context: InteractionContext): DragController {
+  const state: DragState = {
+    isDragging: false,
+    nodeId: null,
+    startWorldX: 0,
+    startWorldY: 0,
+    startNodeX: 0,
+    startNodeY: 0,
+    parentOffsetX: 0,
+    parentOffsetY: 0,
+    snapTargets: [],
+    snapOffsetX: 0,
+    snapOffsetY: 0,
+    isAutoLayoutDrag: false,
+    autoLayoutParentId: null,
+  };
+
+  return {
+    handlePointerDown(e: PointerEvent, world: { x: number; y: number }, hitId: string | null): boolean {
+      if (e.button === 0 && hitId) {
+        const sceneState = useSceneStore.getState();
+        const node = sceneState.nodesById[hitId];
+        if (!node) return false;
+
+        // Select
+        if (e.shiftKey) {
+          useSelectionStore.getState().addToSelection(hitId);
+        } else {
+          useSelectionStore.getState().select(hitId);
+        }
+
+        // Match Konva behavior: modifier clicks are selection gestures, not drag start.
+        if (e.shiftKey || e.metaKey || e.ctrlKey) {
+          return false;
+        }
+
+        state.isDragging = true;
+        state.nodeId = hitId;
+        state.startWorldX = world.x;
+        state.startWorldY = world.y;
+        state.startNodeX = node.x;
+        state.startNodeY = node.y;
+        state.snapOffsetX = 0;
+        state.snapOffsetY = 0;
+        state.isAutoLayoutDrag = false;
+        state.autoLayoutParentId = null;
+
+        // Check if node is inside an auto-layout frame
+        const parentId = sceneState.parentById[hitId];
+        if (parentId) {
+          const parentNode = sceneState.nodesById[parentId];
+          if (
+            parentNode &&
+            parentNode.type === "frame" &&
+            (parentNode as FlatFrameNode).layout?.autoLayout
+          ) {
+            state.isAutoLayoutDrag = true;
+            state.autoLayoutParentId = parentId;
+            useDragStore.getState().startDrag(hitId);
+          }
+        }
+
+        // Compute parent offset for absolute position
+        const nodes = sceneState.getNodes();
+        const absPos = getNodeAbsolutePosition(nodes, hitId);
+        if (absPos) {
+          state.parentOffsetX = absPos.x - node.x;
+          state.parentOffsetY = absPos.y - node.y;
+        } else {
+          state.parentOffsetX = 0;
+          state.parentOffsetY = 0;
+        }
+
+        // Collect snap targets (skip for auto-layout drags)
+        if (!state.isAutoLayoutDrag) {
+          const selectedIds = useSelectionStore.getState().selectedIds;
+          const excludeIds = new Set(selectedIds);
+          state.snapTargets = collectSnapTargets(nodes, excludeIds);
+        } else {
+          state.snapTargets = [];
+        }
+        return true;
+      }
+      return false;
+    },
+
+    handlePointerMove(_e: PointerEvent, world: { x: number; y: number }): boolean {
+      // Auto-layout drag reordering
+      if (state.isDragging && state.nodeId && state.isAutoLayoutDrag && state.autoLayoutParentId) {
+        const sceneState = useSceneStore.getState();
+        const nodes = sceneState.getNodes();
+        const parentFrame = findFrameInTree(nodes, state.autoLayoutParentId);
+        if (parentFrame) {
+          const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+          const frameRect = getFrameAbsoluteRectWithLayout(parentFrame, nodes, calculateLayoutForFrame);
+          const cursorInParent = isPointInsideRect(world, frameRect);
+
+          if (cursorInParent) {
+            const layoutChildren = calculateLayoutForFrame(parentFrame);
+            const dropResult = calculateDropPosition(
+              world,
+              parentFrame,
+              { x: frameRect.x, y: frameRect.y },
+              state.nodeId,
+              layoutChildren,
+            );
+            if (dropResult) {
+              useDragStore.getState().updateDrop(dropResult.indicator, dropResult.insertInfo, false);
+            } else {
+              useDragStore.getState().updateDrop(null, null, false);
+            }
+          } else {
+            useDragStore.getState().updateDrop(null, null, true);
+          }
+        }
+        return true;
+      }
+
+      // Dragging node (free drag)
+      if (state.isDragging && state.nodeId) {
+        const deltaX = world.x - state.startWorldX;
+        const deltaY = world.y - state.startWorldY;
+
+        let newX = state.startNodeX + deltaX;
+        let newY = state.startNodeY + deltaY;
+
+        // Smart guide snapping
+        if (state.snapTargets.length > 0) {
+          const sceneState = useSceneStore.getState();
+          const node = sceneState.nodesById[state.nodeId];
+          if (node) {
+            const scale = useViewportStore.getState().scale;
+            const threshold = 2 / scale;
+
+            const absX = newX + state.parentOffsetX;
+            const absY = newY + state.parentOffsetY;
+
+            const draggedEdges = getSnapEdges(absX, absY, node.width, node.height);
+            const result = calculateSnap(draggedEdges, state.snapTargets, threshold);
+
+            newX += result.deltaX;
+            newY += result.deltaY;
+
+            if (result.guides.length > 0) {
+              useSmartGuideStore.getState().setGuides(result.guides);
+            } else {
+              useSmartGuideStore.getState().clearGuides();
+            }
+          }
+        }
+
+        // Update node position without history (history saved on drag end)
+        useSceneStore.getState().updateNodeWithoutHistory(state.nodeId, {
+          x: Math.round(newX),
+          y: Math.round(newY),
+        });
+        return true;
+      }
+      return false;
+    },
+
+    handlePointerUp(_e: PointerEvent, world: { x: number; y: number }): boolean {
+      // End auto-layout drag
+      if (state.isDragging && state.nodeId && state.isAutoLayoutDrag) {
+        const dragStore = useDragStore.getState();
+        const nodeId = state.nodeId;
+        const sceneState = useSceneStore.getState();
+        const node = sceneState.nodesById[nodeId];
+
+        if (dragStore.isOutsideParent && node) {
+          // Dragged out of auto-layout frame - extract to root level
+          useSceneStore.getState().moveNode(nodeId, null, 0);
+          useSceneStore.getState().updateNode(nodeId, {
+            x: Math.round(world.x - node.width / 2),
+            y: Math.round(world.y - node.height / 2),
+          });
+        } else if (dragStore.insertInfo) {
+          // Reorder within the frame
+          useSceneStore.getState().moveNode(
+            nodeId,
+            dragStore.insertInfo.parentId,
+            dragStore.insertInfo.index,
+          );
+        }
+
+        dragStore.endDrag();
+        state.isDragging = false;
+        state.nodeId = null;
+        state.isAutoLayoutDrag = false;
+        state.autoLayoutParentId = null;
+        return true;
+      }
+
+      // End dragging (free drag)
+      if (state.isDragging && state.nodeId) {
+        useSmartGuideStore.getState().clearGuides();
+
+        // Save history with the position change
+        const sceneState = useSceneStore.getState();
+        const node = sceneState.nodesById[state.nodeId];
+        if (node && (node.x !== state.startNodeX || node.y !== state.startNodeY)) {
+          // Commit the move with history
+          useSceneStore.getState().updateNode(state.nodeId, {
+            x: node.x,
+            y: node.y,
+          });
+        }
+
+        state.isDragging = false;
+        state.nodeId = null;
+        return true;
+      }
+      return false;
+    },
+
+    isDragging: () => state.isDragging,
+  };
+}
