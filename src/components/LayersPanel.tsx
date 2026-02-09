@@ -27,6 +27,10 @@ import { useHoverStore } from "../store/hoverStore";
 import type { SceneNode, FrameNode, GroupNode } from "../types/scene";
 import { isContainerNode } from "../types/scene";
 import { FrameIcon } from "./ui/custom-icons/frame-icon";
+import { getAncestorIds } from "../utils/nodeUtils";
+
+// Module-level flag so LayerItem can set it without a ref prop
+let _selectionFromLayers = false;
 
 // Icons for different node types
 const NodeIcon = ({
@@ -156,6 +160,7 @@ const LayerItem = memo(function LayerItem({
   const isDropTarget = dragState.dropTargetId === node.id;
 
   const handleClick = (e: React.MouseEvent) => {
+    _selectionFromLayers = true;
     const selState = useSelectionStore.getState();
     if (e.shiftKey && selState.lastSelectedId) {
       selState.selectRange(selState.lastSelectedId, node.id, flatIds);
@@ -253,6 +258,7 @@ const LayerItem = memo(function LayerItem({
 
   return (
     <div
+        data-node-id={node.id}
         className={clsx(
           "group flex items-center justify-between pr-3 cursor-pointer h-[28px]",
           isSelected
@@ -430,10 +436,42 @@ export function LayersPanel() {
   const expandedFrameIds = useSceneStore((state) => state.expandedFrameIds);
   const moveNode = useSceneStore((state) => state.moveNode);
   const setFrameExpanded = useSceneStore((state) => state.setFrameExpanded);
+  const expandAncestors = useSceneStore((state) => state.expandAncestors);
+  const parentById = useSceneStore((state) => state.parentById);
+  const selectedIds = useSelectionStore((state) => state.selectedIds);
   const select = useSelectionStore((state) => state.select);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
+
+  // Auto-expand ancestors when selection changes (e.g. from canvas click)
+  useEffect(() => {
+    if (_selectionFromLayers) {
+      _selectionFromLayers = false;
+      return;
+    }
+    if (selectedIds.length === 0) return;
+
+    const idsToExpand: string[] = [];
+    for (const id of selectedIds) {
+      for (const ancestor of getAncestorIds(parentById, id)) {
+        if (!expandedFrameIds.has(ancestor)) {
+          idsToExpand.push(ancestor);
+        }
+      }
+    }
+    if (idsToExpand.length > 0) {
+      expandAncestors(idsToExpand);
+    }
+
+    // Scroll first selected node into view after DOM updates
+    requestAnimationFrame(() => {
+      const el = scrollRef.current?.querySelector(
+        `[data-node-id="${selectedIds[0]}"]`,
+      );
+      el?.scrollIntoView({ block: "nearest" });
+    });
+  }, [selectedIds, parentById, expandedFrameIds, expandAncestors]);
 
   const [dragState, setDragState] = useState<DragState>({
     draggedId: null,

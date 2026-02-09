@@ -168,6 +168,23 @@ export function isDescendantOf(
 }
 
 /**
+ * Get all ancestor IDs for a node by walking the parent chain upwards.
+ * Returns ancestors from immediate parent to root (bottom-up order).
+ */
+export function getAncestorIds(
+  parentById: Record<string, string | null>,
+  nodeId: string,
+): string[] {
+  const ancestors: string[] = [];
+  let current = parentById[nodeId];
+  while (current != null) {
+    ancestors.push(current);
+    current = parentById[current];
+  }
+  return ancestors;
+}
+
+/**
  * Check if targetId is a descendant of ancestorId using the flat parentById map.
  * O(depth) instead of O(n) — walks the parent chain from targetId upwards.
  */

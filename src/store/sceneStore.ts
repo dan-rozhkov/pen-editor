@@ -60,6 +60,7 @@ export interface SceneState {
   toggleVisibility: (id: string) => void;
   toggleFrameExpanded: (id: string) => void;
   setFrameExpanded: (id: string, expanded: boolean) => void;
+  expandAncestors: (ids: string[]) => void;
   moveNode: (
     nodeId: string,
     newParentId: string | null,
@@ -462,6 +463,15 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       } else {
         newSet.delete(id);
       }
+      return { expandedFrameIds: newSet };
+    }),
+
+  expandAncestors: (ids) =>
+    set((state) => {
+      const allExpanded = ids.every((id) => state.expandedFrameIds.has(id));
+      if (allExpanded) return state;
+      const newSet = new Set(state.expandedFrameIds);
+      for (const id of ids) newSet.add(id);
       return { expandedFrameIds: newSet };
     }),
 
