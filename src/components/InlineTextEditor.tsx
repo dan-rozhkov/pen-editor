@@ -12,6 +12,7 @@ interface InlineTextEditorProps {
   node: TextNode
   absoluteX: number
   absoluteY: number
+  onUpdateText?: (text: string) => void
 }
 
 function toCssFontFamily(fontFamily: string): string {
@@ -36,7 +37,7 @@ function toCssFontFamily(fontFamily: string): string {
     .join(', ')
 }
 
-export function InlineTextEditor({ node, absoluteX, absoluteY }: InlineTextEditorProps) {
+export function InlineTextEditor({ node, absoluteX, absoluteY, onUpdateText }: InlineTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const currentTextRef = useRef(node.text) // Track current value for unmount save
   const pendingTextRef = useRef<string | null>(null)
@@ -79,9 +80,13 @@ export function InlineTextEditor({ node, absoluteX, absoluteY }: InlineTextEdito
     (text: string) => {
       if (text === lastCommittedRef.current) return
       lastCommittedRef.current = text
-      updateNodeWithoutHistory(node.id, { text })
+      if (onUpdateText) {
+        onUpdateText(text)
+      } else {
+        updateNodeWithoutHistory(node.id, { text })
+      }
     },
-    [node.id, updateNodeWithoutHistory],
+    [node.id, updateNodeWithoutHistory, onUpdateText],
   )
 
   const flushPendingText = useCallback(

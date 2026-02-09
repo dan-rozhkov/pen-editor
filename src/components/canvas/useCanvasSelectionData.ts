@@ -1,12 +1,15 @@
 import { useMemo } from "react";
-import type { FrameNode, GroupNode, SceneNode, TextNode } from "@/types/scene";
+import type { FrameNode, GroupNode, RefNode, SceneNode, TextNode } from "@/types/scene";
+import type { InstanceContext } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import {
+  findComponentById,
   findNodeById,
   findParentFrame,
   getNodeAbsolutePosition,
   getNodeAbsolutePositionWithLayout,
 } from "@/utils/nodeUtils";
+import { applyDescendantOverride } from "@/components/nodes/renderUtils";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 
 interface CanvasSelectionDataParams {
@@ -15,7 +18,36 @@ interface CanvasSelectionDataParams {
   selectedIds: string[];
   editingNodeId: string | null;
   editingMode: "text" | "name" | null;
+  instanceContext: InstanceContext | null;
   calculateLayoutForFrame: (frame: FrameNode) => SceneNode[];
+}
+
+/** Compute local position of a descendant within a component tree, accumulating parent offsets. */
+function getDescendantLocalPosition(
+  children: SceneNode[],
+  descendantId: string,
+  calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
+): { x: number; y: number } | null {
+  for (const child of children) {
+    if (child.id === descendantId) {
+      return { x: child.x, y: child.y };
+    }
+    if (child.type === "frame" || child.type === "group") {
+      const childChildren =
+        child.type === "frame" && (child as FrameNode).layout?.autoLayout
+          ? calculateLayoutForFrame(child as FrameNode)
+          : (child as FrameNode | GroupNode).children;
+      const pos = getDescendantLocalPosition(
+        childChildren,
+        descendantId,
+        calculateLayoutForFrame,
+      );
+      if (pos) {
+        return { x: child.x + pos.x, y: child.y + pos.y };
+      }
+    }
+  }
+  return null;
 }
 
 export function useCanvasSelectionData({
@@ -24,6 +56,7 @@ export function useCanvasSelectionData({
   selectedIds,
   editingNodeId,
   editingMode,
+  instanceContext,
   calculateLayoutForFrame,
 }: CanvasSelectionDataParams) {
   const editingTextNode = useMemo(() => {
@@ -76,6 +109,60 @@ export function useCanvasSelectionData({
       calculateLayoutForFrame,
     );
   }, [editingTextNode, nodes, calculateLayoutForFrame]);
+
+  // Descendant text editing: compute the effective text node and its absolute position
+  const editingDescendantTextNode = useMemo(() => {
+    if (editingMode !== "text" || !instanceContext) return null;
+    const instance = findNodeById(nodes, instanceContext.instanceId);
+    if (!instance || instance.type !== "ref") return null;
+    const refNode = instance as RefNode;
+    const component = findComponentById(nodes, refNode.componentId);
+    if (!component) return null;
+
+    // Check for slot replacement
+    const isSlot = component.slot?.includes(instanceContext.descendantId);
+    const slotContent = isSlot
+      ? refNode.slotContent?.[instanceContext.descendantId]
+      : undefined;
+    if (slotContent && slotContent.type === "text") {
+      return slotContent as TextNode;
+    }
+
+    // Find original descendant and apply override
+    const original = findNodeById(
+      component.children,
+      instanceContext.descendantId,
+    );
+    if (!original || original.type !== "text") return null;
+    const override = refNode.descendants?.[instanceContext.descendantId];
+    return (override ? applyDescendantOverride(original, override) : original) as TextNode;
+  }, [editingMode, instanceContext, nodes]);
+
+  const editingDescendantTextPosition = useMemo(() => {
+    if (!editingDescendantTextNode || !instanceContext) return null;
+    const instanceAbsPos = getNodeAbsolutePositionWithLayout(
+      nodes,
+      instanceContext.instanceId,
+      calculateLayoutForFrame,
+    );
+    if (!instanceAbsPos) return null;
+    const instance = findNodeById(nodes, instanceContext.instanceId);
+    if (!instance || instance.type !== "ref") return null;
+    const component = findComponentById(nodes, (instance as RefNode).componentId);
+    if (!component) return null;
+    const localPos = getDescendantLocalPosition(
+      component.layout?.autoLayout
+        ? calculateLayoutForFrame(component)
+        : component.children,
+      instanceContext.descendantId,
+      calculateLayoutForFrame,
+    );
+    if (!localPos) return null;
+    return {
+      x: instanceAbsPos.x + localPos.x,
+      y: instanceAbsPos.y + localPos.y,
+    };
+  }, [editingDescendantTextNode, instanceContext, nodes, calculateLayoutForFrame]);
 
   const collectFrameNodes = useMemo(() => {
     const frames: Array<{
@@ -198,6 +285,8 @@ export function useCanvasSelectionData({
     editingNameNode,
     editingTextPosition,
     editingNamePosition,
+    editingDescendantTextNode,
+    editingDescendantTextPosition,
     transformerColor,
     collectFrameNodes,
     collectSelectedNodes,

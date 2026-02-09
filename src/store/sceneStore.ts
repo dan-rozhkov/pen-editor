@@ -82,6 +82,7 @@ export interface SceneState {
   replaceSlotContent: (instanceId: string, slotChildId: string, newNode: SceneNode) => void;
   resetSlotContent: (instanceId: string, slotChildId: string) => void;
   updateSlotContentNode: (instanceId: string, slotChildId: string, updates: Partial<SceneNode>) => void;
+  updateDescendantTextWithoutHistory: (instanceId: string, descendantId: string, text: string) => void;
   groupNodes: (ids: string[]) => string | null;
   ungroupNodes: (ids: string[]) => string[];
   convertNodeType: (id: string) => boolean;
@@ -694,6 +695,44 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         },
       };
 
+      return {
+        nodesById: { ...state.nodesById, [instanceId]: updated },
+        _cachedTree: null,
+      };
+    }),
+
+  updateDescendantTextWithoutHistory: (instanceId, descendantId, text) =>
+    set((state) => {
+      const existing = state.nodesById[instanceId];
+      if (!existing || existing.type !== "ref") return state;
+      const refNode = existing as RefNode;
+
+      // Check if descendant has slot content replacement
+      if (refNode.slotContent?.[descendantId]) {
+        const slotNode = refNode.slotContent[descendantId];
+        const updated: RefNode = {
+          ...refNode,
+          slotContent: {
+            ...refNode.slotContent,
+            [descendantId]: { ...slotNode, text } as SceneNode,
+          },
+        };
+        return {
+          nodesById: { ...state.nodesById, [instanceId]: updated },
+          _cachedTree: null,
+        };
+      }
+
+      // Otherwise update descendant override
+      const descendants = refNode.descendants || {};
+      const override = descendants[descendantId] || {};
+      const updated: RefNode = {
+        ...refNode,
+        descendants: {
+          ...descendants,
+          [descendantId]: { ...override, text },
+        },
+      };
       return {
         nodesById: { ...state.nodesById, [instanceId]: updated },
         _cachedTree: null,

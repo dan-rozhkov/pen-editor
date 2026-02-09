@@ -16,6 +16,7 @@ import type {
   ShadowEffect,
   ImageFill,
   PerSideStroke,
+  DescendantOverride,
 } from "@/types/scene";
 import { toFlatNode } from "@/types/scene";
 import { useVariableStore } from "@/store/variableStore";
@@ -1428,6 +1429,76 @@ function createGroupContainer(
 
 // --- Ref (Instance) ---
 
+function applyOverrideRecursively(
+  node: SceneNode,
+  override?: DescendantOverride,
+): SceneNode {
+  if (!override) return node;
+  const { descendants: nestedOverrides, ...overrideProps } = override;
+  const merged = { ...node, ...overrideProps } as SceneNode;
+
+  if (merged.type === "frame" || merged.type === "group") {
+    const children = merged.children.map((child) =>
+      applyOverrideRecursively(child, nestedOverrides?.[child.id]),
+    );
+    return { ...merged, children } as SceneNode;
+  }
+
+  return merged;
+}
+
+function applyAutoLayoutRecursively(
+  node: SceneNode,
+  calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
+): SceneNode {
+  if (node.type === "frame") {
+    const preparedChildren = node.children.map((child) =>
+      applyAutoLayoutRecursively(child, calculateLayoutForFrame),
+    );
+    const preparedFrame: FrameNode = { ...node, children: preparedChildren };
+
+    if (!preparedFrame.layout?.autoLayout) {
+      return preparedFrame;
+    }
+
+    const laidOutChildren = calculateLayoutForFrame(preparedFrame).map((child) =>
+      applyAutoLayoutRecursively(child, calculateLayoutForFrame),
+    );
+
+    return { ...preparedFrame, children: laidOutChildren };
+  }
+
+  if (node.type === "group") {
+    return {
+      ...node,
+      children: node.children.map((child) =>
+        applyAutoLayoutRecursively(child, calculateLayoutForFrame),
+      ),
+    };
+  }
+
+  return node;
+}
+
+function flattenSceneSubtree(root: SceneNode): {
+  nodesById: Record<string, FlatSceneNode>;
+  childrenById: Record<string, string[]>;
+} {
+  const nodesById: Record<string, FlatSceneNode> = {};
+  const childrenById: Record<string, string[]> = {};
+
+  const visit = (node: SceneNode) => {
+    nodesById[node.id] = toFlatNode(node);
+    if (node.type === "frame" || node.type === "group") {
+      childrenById[node.id] = node.children.map((child) => child.id);
+      node.children.forEach(visit);
+    }
+  };
+
+  visit(root);
+  return { nodesById, childrenById };
+}
+
 function createRefContainer(
   node: RefNode,
   nodesById: Record<string, FlatSceneNode>,
@@ -1456,10 +1527,10 @@ function createRefContainer(
   const componentTree = component.type === "frame"
     ? flatToTreeFrame(component as FlatFrameNode, nodesById, childrenById)
     : null;
-  const layoutChildren = componentTree?.layout?.autoLayout
-    ? calculateLayoutForFrame(componentTree)
+  const preparedComponent = componentTree
+    ? (applyAutoLayoutRecursively(componentTree, calculateLayoutForFrame) as FrameNode)
     : null;
-  const renderedChildren = layoutChildren ?? componentTree?.children ?? [];
+  const renderedChildren = preparedComponent?.children ?? [];
 
   // Draw component background
   if (component.type === "frame") {
@@ -1491,30 +1562,30 @@ function createRefContainer(
     const slotReplacement = isSlot ? node.slotContent?.[child.id] : undefined;
 
     if (slotReplacement) {
-      // Render the replacement node using toFlatNode()
-      const flatReplacement = toFlatNode(slotReplacement);
-      const childContainer = createNodeContainer(flatReplacement, nodesById, childrenById);
+      const laidOutReplacement = applyAutoLayoutRecursively(
+        slotReplacement,
+        calculateLayoutForFrame,
+      );
+      const replacementFlat = flattenSceneSubtree(laidOutReplacement);
+      const childContainer = createNodeContainer(
+        replacementFlat.nodesById[laidOutReplacement.id],
+        replacementFlat.nodesById,
+        replacementFlat.childrenById,
+      );
       childrenContainer.addChild(childContainer);
       continue;
     }
 
-    const sourceNode = nodesById[child.id];
-    if (!sourceNode) continue;
-
-    const overrideProps = childOverride ? { ...childOverride } : {};
-    if ("descendants" in overrideProps) {
-      delete overrideProps.descendants;
-    }
-    const resolved = {
-      ...(sourceNode as FlatSceneNode),
-      ...(child as Partial<SceneNode>),
-      ...overrideProps,
-    } as FlatSceneNode;
-
+    const overriddenChild = applyOverrideRecursively(child, childOverride);
+    const laidOutChild = applyAutoLayoutRecursively(
+      overriddenChild,
+      calculateLayoutForFrame,
+    );
+    const flatSubtree = flattenSceneSubtree(laidOutChild);
     const childContainer = createNodeContainer(
-      resolved,
-      nodesById,
-      childrenById,
+      flatSubtree.nodesById[laidOutChild.id],
+      flatSubtree.nodesById,
+      flatSubtree.childrenById,
     );
     childrenContainer.addChild(childContainer);
   }

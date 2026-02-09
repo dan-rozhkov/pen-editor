@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/PropertyInputs";
 import { OverrideIndicator } from "@/components/properties/OverrideIndicator";
 
+
 interface DescendantPropertyEditorProps {
   instanceContext: InstanceContext;
   allNodes: SceneNode[];

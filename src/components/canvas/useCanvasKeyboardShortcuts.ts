@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { isContainerNode, type FrameNode, type SceneNode, type FlatSnapshot } from "@/types/scene";
+import { isContainerNode, type FrameNode, type RefNode, type SceneNode, type FlatSnapshot } from "@/types/scene";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
@@ -80,8 +80,25 @@ export function useCanvasKeyboardShortcuts({
 
       if (e.key === "Enter" && !e.shiftKey) {
         if (isTyping) return;
-        const { selectedIds, editingNodeId, editingMode } =
+        const { selectedIds, editingNodeId, editingMode, instanceContext } =
           useSelectionStore.getState();
+
+        // Descendant text editing: Enter on a text descendant in instance edit mode
+        if (!editingMode && instanceContext) {
+          const instance = findNodeById(nodes, instanceContext.instanceId);
+          if (instance && instance.type === "ref") {
+            const component = findComponentById(nodes, (instance as RefNode).componentId);
+            if (component) {
+              const descendant = findNodeById(component.children, instanceContext.descendantId);
+              if (descendant?.type === "text") {
+                e.preventDefault();
+                useSelectionStore.getState().startDescendantEditing();
+                return;
+              }
+            }
+          }
+        }
+
         if (!editingNodeId && !editingMode && selectedIds.length === 1) {
           const selectedNode = findNodeById(nodes, selectedIds[0]);
           if (selectedNode?.type === "text") {

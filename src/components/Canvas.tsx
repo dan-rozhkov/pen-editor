@@ -104,6 +104,7 @@ export function Canvas() {
     setSelectedIds,
     editingNodeId,
     editingMode,
+    instanceContext,
     isSelected,
     exitInstanceEditMode,
     resetContainerContext,
@@ -138,6 +139,8 @@ export function Canvas() {
     editingNameNode,
     editingTextPosition,
     editingNamePosition,
+    editingDescendantTextNode,
+    editingDescendantTextPosition,
     transformerColor,
     collectFrameNodes,
     collectSelectedNodes,
@@ -148,8 +151,20 @@ export function Canvas() {
     selectedIds,
     editingNodeId,
     editingMode,
+    instanceContext,
     calculateLayoutForFrame,
   });
+
+  // Callback for inline text editing of instance descendants (no history per keystroke)
+  const handleDescendantTextUpdate = useMemo(() => {
+    if (!instanceContext) return undefined;
+    const { instanceId, descendantId } = instanceContext;
+    return (text: string) => {
+      useSceneStore
+        .getState()
+        .updateDescendantTextWithoutHistory(instanceId, descendantId, text);
+    };
+  }, [instanceContext]);
 
   useCanvasKeyboardShortcuts({
     nodes,
@@ -499,6 +514,17 @@ export function Canvas() {
           absoluteY={editingTextPosition.y}
         />
       )}
+      {/* Inline text editor for instance descendant text */}
+      {editingDescendantTextNode &&
+        editingDescendantTextPosition &&
+        editingMode === "text" && (
+          <InlineTextEditor
+            node={editingDescendantTextNode}
+            absoluteX={editingDescendantTextPosition.x}
+            absoluteY={editingDescendantTextPosition.y}
+            onUpdateText={handleDescendantTextUpdate}
+          />
+        )}
       {/* Inline name editor overlay for frame names */}
       {editingNameNode && editingNamePosition && editingMode === "name" && (
         <InlineNameEditor

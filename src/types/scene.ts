@@ -195,6 +195,8 @@ export interface TextNode extends BaseNode {
 // Descendant overrides for instance nodes
 // Maps child node IDs to their overridden properties
 export type DescendantOverride = Partial<Omit<BaseNode, 'id' | 'type'>> & {
+  // Text content override (for text node descendants)
+  text?: string
   // For nested frames with their own children
   descendants?: DescendantOverrides
 }

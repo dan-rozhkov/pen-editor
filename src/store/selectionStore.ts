@@ -35,6 +35,7 @@ interface SelectionState {
   enterInstanceEditMode: (instanceId: string) => void
   exitInstanceEditMode: () => void
   selectDescendant: (instanceId: string, descendantId: string) => void
+  startDescendantEditing: () => void
   clearDescendantSelection: () => void
   // Nested selection methods
   enterContainer: (containerId: string) => void
@@ -169,6 +170,13 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       selectedIds: [instanceId],
       editingInstanceId: instanceId
     })
+  },
+
+  startDescendantEditing: () => {
+    const { instanceContext } = get()
+    if (instanceContext) {
+      set({ editingMode: 'text' })
+    }
   },
 
   clearDescendantSelection: () => {

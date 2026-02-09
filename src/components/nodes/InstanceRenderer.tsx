@@ -31,6 +31,41 @@ import {
   isNodeEnabled,
 } from "./renderUtils";
 
+function applyAutoLayoutRecursively(
+  node: SceneNode,
+  calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
+): SceneNode {
+  if (node.type === "frame") {
+    const frameNode = node as FrameNode;
+    const preparedChildren = frameNode.children.map((child) =>
+      applyAutoLayoutRecursively(child, calculateLayoutForFrame),
+    );
+    const preparedFrame: FrameNode = { ...frameNode, children: preparedChildren };
+
+    if (!preparedFrame.layout?.autoLayout) {
+      return preparedFrame;
+    }
+
+    const laidOutChildren = calculateLayoutForFrame(preparedFrame).map((child) =>
+      applyAutoLayoutRecursively(child, calculateLayoutForFrame),
+    );
+
+    return { ...preparedFrame, children: laidOutChildren };
+  }
+
+  if (node.type === "group") {
+    const groupNode = node as GroupNode;
+    return {
+      ...groupNode,
+      children: groupNode.children.map((child) =>
+        applyAutoLayoutRecursively(child, calculateLayoutForFrame),
+      ),
+    };
+  }
+
+  return node;
+}
+
 interface InstanceRendererProps {
   node: RefNode;
   onClick: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
@@ -125,9 +160,11 @@ export function InstanceRenderer({
     : undefined;
 
   // Calculate layout for children if auto-layout is enabled
-  const layoutChildren = component.layout?.autoLayout
-    ? calculateLayoutForFrame(component)
-    : component.children;
+  const preparedComponent = applyAutoLayoutRecursively(
+    component,
+    calculateLayoutForFrame,
+  ) as FrameNode;
+  const layoutChildren = preparedComponent.children;
 
   const instanceRef = useRef<Konva.Group | null>(null);
   const shouldCache =
@@ -178,6 +215,10 @@ export function InstanceRenderer({
 
     // If slot has replacement, render it instead (no property overrides)
     const overriddenChild = slotReplacement ?? applyDescendantOverride(child, override);
+    const laidOutChild = applyAutoLayoutRecursively(
+      overriddenChild,
+      calculateLayoutForFrame,
+    );
 
     // Check if this descendant is selected
     const isSelected =
@@ -189,7 +230,7 @@ export function InstanceRenderer({
       return (
         <Group key={`${node.id}-${child.id}`}>
           <DescendantRenderer
-            node={overriddenChild}
+            node={laidOutChild}
             onClick={handleDescendantClick(child.id)}
             isSelected={isSelected}
             effectiveTheme={childTheme}
@@ -204,7 +245,7 @@ export function InstanceRenderer({
     return (
       <RenderNodeWithOverrides
         key={`${node.id}-${child.id}`}
-        node={overriddenChild}
+        node={laidOutChild}
         effectiveTheme={childTheme}
         descendantOverrides={override?.descendants}
       />
@@ -290,8 +331,12 @@ function DescendantRenderer({
 }: DescendantRendererProps) {
   const variables = useVariableStore((state) => state.variables);
   const globalTheme = useThemeStore((state) => state.activeTheme);
+  const calculateLayoutForFrame = useLayoutStore(
+    (state) => state.calculateLayoutForFrame,
+  );
   const currentTheme = effectiveTheme ?? globalTheme;
   const selectDescendant = useSelectionStore((state) => state.selectDescendant);
+  const startDescendantEditing = useSelectionStore((state) => state.startDescendantEditing);
 
   const rawFillColor = resolveColor(
     node.fill,
@@ -421,6 +466,10 @@ function DescendantRenderer({
             opacity={node.opacity ?? 1}
             onClick={onClick}
             onTap={onClick}
+            onDblClick={(e: Konva.KonvaEventObject<MouseEvent>) => {
+              e.cancelBubble = true;
+              startDescendantEditing();
+            }}
           />
           {isSelected && (
             <SelectionOutline
@@ -481,11 +530,15 @@ function DescendantRenderer({
               child,
               childOverride,
             );
+            const laidOutChild = applyAutoLayoutRecursively(
+              overriddenChild,
+              calculateLayoutForFrame,
+            );
             const childIsSelected = false; // Nested selection not yet supported
             return (
               <DescendantRenderer
                 key={child.id}
-                node={overriddenChild}
+                node={laidOutChild}
                 onClick={handleChildClick(child.id)}
                 isSelected={childIsSelected}
                 effectiveTheme={effectiveTheme}
@@ -526,6 +579,9 @@ function RenderNodeWithOverrides({
 }: RenderNodeWithOverridesProps) {
   const variables = useVariableStore((state) => state.variables);
   const globalTheme = useThemeStore((state) => state.activeTheme);
+  const calculateLayoutForFrame = useLayoutStore(
+    (state) => state.calculateLayoutForFrame,
+  );
   const currentTheme = effectiveTheme ?? globalTheme;
 
   const rawFillColor = resolveColor(
@@ -666,10 +722,14 @@ function RenderNodeWithOverrides({
               child,
               childOverride,
             );
+            const laidOutChild = applyAutoLayoutRecursively(
+              overriddenChild,
+              calculateLayoutForFrame,
+            );
             return (
               <RenderNodeWithOverrides
                 key={child.id}
-                node={overriddenChild}
+                node={laidOutChild}
                 effectiveTheme={effectiveTheme}
                 descendantOverrides={childOverride?.descendants}
               />
