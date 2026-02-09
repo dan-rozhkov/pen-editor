@@ -33,6 +33,7 @@ export function NodeSizeLabel({
   const { scale } = useViewportStore();
   const textRef = useRef<Konva.Text>(null);
   const groupRef = useRef<Konva.Group>(null);
+  const endRafRef = useRef<number | null>(null);
   const [textWidth, setTextWidth] = useState(0);
   const [dragState, setDragState] = useState<{
     x: number;
@@ -74,7 +75,15 @@ export function NodeSizeLabel({
     };
 
     const handleEnd = () => {
-      setDragState(null);
+      // Wait one animation frame so node absolute position in store can catch up.
+      // Prevents a 1-frame flash at the previous position on drag/transform end.
+      if (endRafRef.current !== null) {
+        cancelAnimationFrame(endRafRef.current);
+      }
+      endRafRef.current = requestAnimationFrame(() => {
+        setDragState(null);
+        endRafRef.current = null;
+      });
     };
 
     for (const konvaNode of konvaNodes) {
@@ -85,6 +94,10 @@ export function NodeSizeLabel({
     }
 
     return () => {
+      if (endRafRef.current !== null) {
+        cancelAnimationFrame(endRafRef.current);
+        endRafRef.current = null;
+      }
       for (const konvaNode of konvaNodes) {
         konvaNode.off("dragmove", updateDragState);
         konvaNode.off("transform", updateDragState);

@@ -30,6 +30,26 @@
 - Stores: camelCase with `Store` suffix (e.g., `layoutStore.ts`)
 - Utils: camelCase (e.g., `colorUtils.ts`)
 
+### Canvas Rendering
+
+The editor supports two rendering backends, switchable via dropdown in the right sidebar:
+
+- **Konva** (default) — React-based renderer using `react-konva`
+  - Entry point: `src/components/Canvas.tsx`
+  - Per-node renderers: `src/components/nodes/` (e.g., `FrameRenderer.tsx`, `TextRenderer.tsx`)
+  - Uses React component tree with Konva `Stage` / `Layer`
+
+- **PixiJS** (in development, future replacement) — Imperative renderer using PixiJS
+  - Entry point: `src/pixi/PixiCanvas.tsx`
+  - Rendering logic: `src/pixi/renderers.ts`
+  - State sync: `src/pixi/pixiSync.ts` (subscribes to Zustand stores and updates PixiJS containers)
+  - Viewport: `src/pixi/pixiViewport.ts`, Interaction: `src/pixi/pixiInteraction.ts`
+  - Overlays: `src/pixi/SelectionOverlay.ts`, `src/pixi/OverlayRenderer.ts`
+
+Both renderers share the same Zustand stores (scene, viewport, selection, etc.), so switching preserves all state. The mode is persisted in `localStorage` (`"use-pixi"` key). The switch happens via conditional rendering in `src/App.tsx`.
+
+When implementing rendering features, ensure both renderers are updated (or at minimum the one being actively worked on is noted in the commit).
+
 ### State Management
 - Use **Zustand** for global state (see `src/store/`)
 - Prefer local state when possible

@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useState, useCallback, useEffect } from "react";
 import Konva from "konva";
 import { Rect } from "react-konva";
 import type { SceneNode } from "@/types/scene";
@@ -40,6 +40,32 @@ export const RectRenderer = memo(function RectRenderer({
 }: RectRendererProps) {
   const rectTransform = getRectTransformProps(node);
   const usePerSideStroke = hasPerSideStroke(node.strokeWidthPerSide);
+  const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
+
+  const renderX = dragPosition?.x ?? node.x;
+  const renderY = dragPosition?.y ?? node.y;
+
+  useEffect(() => {
+    if (!dragPosition) return;
+    if (dragPosition.x === node.x && dragPosition.y === node.y) {
+      setDragPosition(null);
+    }
+  }, [dragPosition, node.x, node.y]);
+
+  const handleDragStartInternal = useCallback(() => {
+    setDragPosition({ x: node.x, y: node.y });
+    onDragStart();
+  }, [node.x, node.y, onDragStart]);
+
+  const handleDragMoveInternal = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
+    onDragMove(e);
+    setDragPosition({ x: e.target.x(), y: e.target.y() });
+  }, [onDragMove]);
+
+  const handleDragEndInternal = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
+    setDragPosition({ x: e.target.x(), y: e.target.y() });
+    onDragEnd(e);
+  }, [onDragEnd]);
 
   return (
     <>
@@ -58,16 +84,16 @@ export const RectRenderer = memo(function RectRenderer({
         draggable
         onClick={onClick}
         onTap={onClick}
-        onDragStart={onDragStart}
-        onDragMove={onDragMove}
-        onDragEnd={onDragEnd}
+        onDragStart={handleDragStartInternal}
+        onDragMove={handleDragMoveInternal}
+        onDragEnd={handleDragEndInternal}
         onTransformEnd={onTransformEnd}
       />
       {/* Per-side stroke */}
       {usePerSideStroke && strokeColor && node.strokeWidthPerSide && (
         <PerSideStrokeLines
-          x={node.x}
-          y={node.y}
+          x={renderX}
+          y={renderY}
           width={node.width}
           height={node.height}
           strokeColor={strokeColor}
@@ -80,8 +106,8 @@ export const RectRenderer = memo(function RectRenderer({
       {node.imageFill && (
         <ImageFillLayer
           imageFill={node.imageFill}
-          x={node.x}
-          y={node.y}
+          x={renderX}
+          y={renderY}
           width={node.width}
           height={node.height}
           cornerRadius={node.cornerRadius}
@@ -91,8 +117,8 @@ export const RectRenderer = memo(function RectRenderer({
       {/* Hover outline */}
       {isHovered && (
         <SelectionOutline
-          x={node.x}
-          y={node.y}
+          x={renderX}
+          y={renderY}
           width={node.width}
           height={node.height}
           rotation={node.rotation ?? 0}
