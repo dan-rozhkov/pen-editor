@@ -2,10 +2,10 @@ import type { Variable, ThemeName } from '../types/variable'
 import { getVariableValue } from '../types/variable'
 
 /**
- * Resolve color from variable binding or use direct value
+ * Resolve a generic variable value (string) from binding or use direct value
  */
-export function resolveColor(
-  color: string | undefined,
+export function resolveVariableValue(
+  directValue: string | undefined,
   binding: { variableId: string } | undefined,
   variables: Variable[],
   currentTheme: ThemeName
@@ -16,7 +16,19 @@ export function resolveColor(
       return getVariableValue(variable, currentTheme)
     }
   }
-  return color
+  return directValue
+}
+
+/**
+ * Resolve color from variable binding or use direct value
+ */
+export function resolveColor(
+  color: string | undefined,
+  binding: { variableId: string } | undefined,
+  variables: Variable[],
+  currentTheme: ThemeName
+): string | undefined {
+  return resolveVariableValue(color, binding, variables, currentTheme)
 }
 
 /**
@@ -39,24 +51,6 @@ export function applyOpacity(color: string, opacity?: number): string {
     b = parseInt(hex.slice(4, 6), 16)
   }
   return `rgba(${r},${g},${b},${a})`
-}
-
-/**
- * Resolve a generic variable value (string) from binding or use direct value
- */
-export function resolveVariableValue(
-  directValue: string | undefined,
-  binding: { variableId: string } | undefined,
-  variables: Variable[],
-  currentTheme: ThemeName
-): string | undefined {
-  if (binding) {
-    const variable = variables.find((v) => v.id === binding.variableId)
-    if (variable) {
-      return getVariableValue(variable, currentTheme)
-    }
-  }
-  return directValue
 }
 
 /**

@@ -265,21 +265,7 @@ export function getNodeEffectiveSize(
 
     for (const node of effectiveNodes) {
       if (node.id === targetId) {
-        let width = node.width;
-        let height = node.height;
-
-        // Root/non-auto-layout fit_content frames must use intrinsic Yoga size.
-        if (node.type === "frame" && node.layout?.autoLayout) {
-          const fitWidth = node.sizing?.widthMode === "fit_content";
-          const fitHeight = node.sizing?.heightMode === "fit_content";
-          if (fitWidth || fitHeight) {
-            const intrinsic = calculateFrameIntrinsicSize(node, { fitWidth, fitHeight });
-            if (fitWidth) width = intrinsic.width;
-            if (fitHeight) height = intrinsic.height;
-          }
-        }
-
-        return { width, height };
+        return getNodeHitSize(node);
       }
       if (isContainerNode(node)) {
         const found = findWithPath(

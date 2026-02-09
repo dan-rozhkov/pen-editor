@@ -78,7 +78,6 @@ export interface SceneState {
     descendantId: string,
     property?: keyof DescendantOverride,
   ) => void;
-  toggleSlot: (frameId: string, childId: string) => void;
   replaceSlotContent: (instanceId: string, slotChildId: string, newNode: SceneNode) => void;
   resetSlotContent: (instanceId: string, slotChildId: string) => void;
   updateSlotContentNode: (instanceId: string, slotChildId: string, updates: Partial<SceneNode>) => void;
@@ -606,32 +605,6 @@ export const useSceneStore = create<SceneState>((set, get) => ({
 
       return {
         nodesById: { ...state.nodesById, [instanceId]: updated },
-        _cachedTree: null,
-      };
-    }),
-
-  toggleSlot: (frameId, childId) =>
-    set((state) => {
-      const existing = state.nodesById[frameId];
-      if (!existing || existing.type !== "frame") return state;
-      const frame = existing as FlatFrameNode;
-      if (!frame.reusable) return state;
-      const childIds = state.childrenById[frameId] ?? [];
-      if (!childIds.includes(childId)) return state;
-      saveHistory(state);
-
-      const currentSlots = frame.slot ?? [];
-      const newSlots = currentSlots.includes(childId)
-        ? currentSlots.filter((id) => id !== childId)
-        : [...currentSlots, childId];
-
-      const updated: FlatFrameNode = {
-        ...frame,
-        slot: newSlots.length > 0 ? newSlots : undefined,
-      };
-
-      return {
-        nodesById: { ...state.nodesById, [frameId]: updated as FlatSceneNode },
         _cachedTree: null,
       };
     }),

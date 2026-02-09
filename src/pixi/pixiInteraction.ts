@@ -516,21 +516,8 @@ export function setupPixiInteraction(
     const screenY = e.clientY - rect.top;
     const world = screenToWorld(screenX, screenY);
 
-    // Middle mouse button -> pan
-    if (e.button === 1) {
-      pan.isPanning = true;
-      pan.startX = e.clientX;
-      pan.startY = e.clientY;
-      const vs = useViewportStore.getState();
-      pan.startViewX = vs.x;
-      pan.startViewY = vs.y;
-      useViewportStore.getState().setIsPanning(true);
-      canvas.style.cursor = "grabbing";
-      return;
-    }
-
-    // Space+click -> pan
-    if (isSpaceHeld && e.button === 0) {
+    // Middle mouse button or Space+click -> pan
+    if (e.button === 1 || (isSpaceHeld && e.button === 0)) {
       pan.isPanning = true;
       pan.startX = e.clientX;
       pan.startY = e.clientY;

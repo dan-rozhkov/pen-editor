@@ -119,8 +119,9 @@ export function useCanvasSelectionData({
     const component = findComponentById(nodes, refNode.componentId);
     if (!component) return null;
 
-    // Check for slot replacement
-    const isSlot = component.slot?.includes(instanceContext.descendantId);
+    // Components inside components are automatically slots
+    const descendant = findNodeById(component.children, instanceContext.descendantId);
+    const isSlot = descendant?.type === 'ref';
     const slotContent = isSlot
       ? refNode.slotContent?.[instanceContext.descendantId]
       : undefined;

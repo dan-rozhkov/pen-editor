@@ -20,6 +20,45 @@ import type { FrameNode, GroupNode, SceneNode } from "@/types/scene";
 import { PropertySection } from "@/components/ui/PropertyInputs";
 import { Input } from "@/components/ui/input";
 
+function applyUpdateRecursive(
+  nodeList: SceneNode[],
+  id: string,
+  changes: Partial<SceneNode>,
+): SceneNode[] {
+  return nodeList.map((node) => {
+    if (node.id === id) {
+      return { ...node, ...changes } as SceneNode;
+    }
+    if (node.type === "frame" || node.type === "group") {
+      return {
+        ...node,
+        children: applyUpdateRecursive(
+          (node as FrameNode).children,
+          id,
+          changes,
+        ),
+      } as FrameNode;
+    }
+    return node;
+  });
+}
+
+/** Save history, apply position updates, and set nodes */
+function applyNodeUpdates(
+  nodes: SceneNode[],
+  updates: { id: string; x?: number; y?: number }[],
+) {
+  useHistoryStore.getState().saveHistory(createSnapshot(useSceneStore.getState()));
+  let newNodes = nodes;
+  for (const update of updates) {
+    const { id, ...changes } = update;
+    if (Object.keys(changes).length > 0) {
+      newNodes = applyUpdateRecursive(newNodes, id, changes);
+    }
+  }
+  useSceneStore.getState().setNodesWithoutHistory(newNodes);
+}
+
 interface AlignmentSectionProps {
   count: number;
   selectedIds: string[];
@@ -46,41 +85,8 @@ export function AlignmentSection({
     }
 
     if (updates.length === 0) return;
-
-    useHistoryStore.getState().saveHistory(createSnapshot(useSceneStore.getState()));
-
-    let newNodes = nodes;
-    for (const update of updates) {
-      const { id, ...changes } = update;
-      if (Object.keys(changes).length > 0) {
-        newNodes = applyUpdateRecursive(newNodes, id, changes);
-      }
-    }
-    useSceneStore.getState().setNodesWithoutHistory(newNodes);
+    applyNodeUpdates(nodes, updates);
   };
-
-  function applyUpdateRecursive(
-    nodeList: SceneNode[],
-    id: string,
-    changes: Partial<SceneNode>,
-  ): SceneNode[] {
-    return nodeList.map((node) => {
-      if (node.id === id) {
-        return { ...node, ...changes } as SceneNode;
-      }
-      if (node.type === "frame" || node.type === "group") {
-        return {
-          ...node,
-          children: applyUpdateRecursive(
-            (node as FrameNode).children,
-            id,
-            changes,
-          ),
-        } as FrameNode;
-      }
-      return node;
-    });
-  }
 
   const iconSize = 16;
   const buttonBaseClass = "p-2 rounded transition-colors";
@@ -140,7 +146,6 @@ export function AlignmentSection({
           <SpacingInput
             selectedIds={selectedIds}
             nodes={nodes}
-            applyUpdateRecursive={applyUpdateRecursive}
           />
           <div className="text-text-muted text-xs text-center">
             {count} layers selected
@@ -154,15 +159,9 @@ export function AlignmentSection({
 function SpacingInput({
   selectedIds,
   nodes,
-  applyUpdateRecursive,
 }: {
   selectedIds: string[];
   nodes: SceneNode[];
-  applyUpdateRecursive: (
-    nodeList: SceneNode[],
-    id: string,
-    changes: Partial<SceneNode>,
-  ) => SceneNode[];
 }) {
   const spacing = calculateSpacing(selectedIds, nodes);
   const [localValue, setLocalValue] = useState("");
@@ -184,16 +183,7 @@ function SpacingInput({
 
     const updates = distributeSpacing(selectedIds, nodes, val);
     if (updates.length === 0) return;
-
-    useHistoryStore.getState().saveHistory(createSnapshot(useSceneStore.getState()));
-    let newNodes = nodes;
-    for (const update of updates) {
-      const { id, ...changes } = update;
-      if (Object.keys(changes).length > 0) {
-        newNodes = applyUpdateRecursive(newNodes, id, changes);
-      }
-    }
-    useSceneStore.getState().setNodesWithoutHistory(newNodes);
+    applyNodeUpdates(nodes, updates);
   };
 
   return (

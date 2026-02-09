@@ -10,11 +10,12 @@ import { InlineNameEditor } from "@/components/InlineNameEditor";
 import { InlineTextEditor } from "@/components/InlineTextEditor";
 import { useCanvasKeyboardShortcuts } from "@/components/canvas/useCanvasKeyboardShortcuts";
 import { useCanvasFileDrop } from "@/components/canvas/useCanvasFileDrop";
+import { useFpsCounter, useCanvasResize, useAltKeyMeasurement } from "@/hooks/useCanvasEffects";
+import { ZoomIndicator, FpsDisplay } from "@/components/canvas/CanvasOverlays";
 import { useClipboardStore } from "@/store/clipboardStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { useLayoutStore } from "@/store/layoutStore";
-import { useMeasureStore } from "@/store/measureStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
@@ -220,65 +221,9 @@ export function PixiCanvas() {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Resize handler
-  useEffect(() => {
-    const updateDimensions = () => {
-      if (containerRef.current) {
-        setDimensions({
-          width: containerRef.current.clientWidth,
-          height: containerRef.current.clientHeight,
-        });
-      }
-    };
-    updateDimensions();
-    window.addEventListener("resize", updateDimensions);
-    return () => window.removeEventListener("resize", updateDimensions);
-  }, []);
-
-  // FPS counter in dev mode
-  useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    let rafId = 0;
-    let frames = 0;
-    let last = performance.now();
-    const tick = (now: number) => {
-      frames += 1;
-      if (now - last >= 1000) {
-        setFps(Math.round((frames * 1000) / (now - last)));
-        frames = 0;
-        last = now;
-      }
-      rafId = requestAnimationFrame(tick);
-    };
-    rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
-  }, []);
-
-  // Track Alt/Option modifier key for distance measurement overlay
-  useEffect(() => {
-    const { setModifierHeld, clearLines } = useMeasureStore.getState();
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Alt") setModifierHeld(true);
-    };
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === "Alt") {
-        setModifierHeld(false);
-        clearLines();
-      }
-    };
-    const handleBlur = () => {
-      setModifierHeld(false);
-      clearLines();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
-    window.addEventListener("blur", handleBlur);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
-      window.removeEventListener("blur", handleBlur);
-    };
-  }, []);
+  useCanvasResize(containerRef, setDimensions);
+  useFpsCounter(setFps);
+  useAltKeyMeasurement();
 
   return (
     <div
@@ -293,48 +238,8 @@ export function PixiCanvas() {
         position: "relative",
       }}
     >
-      {/* Zoom indicator */}
-      <div
-        onClick={() => fitToContent(nodes, dimensions.width, dimensions.height)}
-        style={{
-          position: "absolute",
-          bottom: 12,
-          left: 12,
-          background: "rgba(255, 255, 255, 0.9)",
-          padding: "4px 8px",
-          borderRadius: 4,
-          fontSize: 12,
-          fontFamily: "system-ui, sans-serif",
-          color: "#666",
-          zIndex: 10,
-          cursor: "pointer",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-          userSelect: "none",
-        }}
-        title="Click to fit all (Cmd/Ctrl+0)"
-      >
-        {Math.round(scale * 100)}%
-      </div>
-      {import.meta.env.DEV && fps !== null && (
-        <div
-          style={{
-            position: "absolute",
-            top: 12,
-            left: 12,
-            background: "rgba(0, 0, 0, 0.65)",
-            padding: "4px 6px",
-            borderRadius: 4,
-            fontSize: 11,
-            fontFamily: "system-ui, sans-serif",
-            color: "#fff",
-            zIndex: 10,
-            userSelect: "none",
-          }}
-          title="FPS (dev only)"
-        >
-          {fps} fps
-        </div>
-      )}
+      <ZoomIndicator scale={scale} onFitToContent={() => fitToContent(nodes, dimensions.width, dimensions.height)} />
+      <FpsDisplay fps={fps} />
       {/* PixiJS renderer badge */}
       <div
         style={{

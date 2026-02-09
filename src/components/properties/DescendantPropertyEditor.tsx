@@ -1,6 +1,6 @@
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore, type InstanceContext } from "@/store/selectionStore";
-import type { SceneNode, DescendantOverride, RefNode, FrameNode } from "@/types/scene";
+import type { SceneNode, DescendantOverride, RefNode } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
 import { findComponentById, findNodeById } from "@/utils/nodeUtils";
 import {
@@ -65,8 +65,8 @@ export function DescendantPropertyEditor({
   );
   if (!originalNode) return null;
 
-  // Slot detection
-  const isSlot = (component as FrameNode).slot?.includes(instanceContext.descendantId) ?? false;
+  // Slot detection — components (ref nodes) inside components are automatically slots
+  const isSlot = originalNode.type === 'ref';
   const slotContentNode = instance.slotContent?.[instanceContext.descendantId];
   const isSlotReplaced = isSlot && !!slotContentNode;
 
@@ -120,6 +120,27 @@ export function DescendantPropertyEditor({
   };
 
   const handleReplaceSlot = () => {
+    if (originalNode.type === "ref") {
+      const slotComponent = findComponentById(allNodes, originalNode.componentId);
+      if (slotComponent) {
+        replaceSlotContent(
+          instanceContext.instanceId,
+          instanceContext.descendantId,
+          {
+            ...slotComponent,
+            id: originalNode.id,
+            name: originalNode.name ?? slotComponent.name,
+            x: originalNode.x,
+            y: originalNode.y,
+            width: originalNode.width,
+            height: originalNode.height,
+            reusable: false,
+          },
+        );
+        return;
+      }
+    }
+
     replaceSlotContent(
       instanceContext.instanceId,
       instanceContext.descendantId,

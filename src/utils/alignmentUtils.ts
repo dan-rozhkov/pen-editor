@@ -150,6 +150,23 @@ function getDominantAxis(nodeInfos: NodePositionInfo[]): 'horizontal' | 'vertica
   return (maxX - minX) >= (maxY - minY) ? 'horizontal' : 'vertical'
 }
 
+/** Gather node infos, determine dominant axis, and return sorted array (or null if < 2) */
+function getSortedNodeInfos(
+  selectedIds: string[],
+  allNodes: SceneNode[],
+): { sorted: NodePositionInfo[]; axis: 'horizontal' | 'vertical' } | null {
+  const nodeInfos = gatherNodeInfos(selectedIds, allNodes)
+  if (nodeInfos.length < 2) return null
+
+  const axis = getDominantAxis(nodeInfos)
+  const sorted = [...nodeInfos].sort((a, b) => {
+    if (axis === 'horizontal') return a.absX - b.absX
+    return a.absY - b.absY
+  })
+
+  return { sorted, axis }
+}
+
 /**
  * Calculate the spacing (gap) between selected nodes.
  * Returns a number if all gaps are equal, 'mixed' if they differ, or null if < 2 valid nodes.
@@ -158,16 +175,9 @@ export function calculateSpacing(
   selectedIds: string[],
   allNodes: SceneNode[]
 ): number | 'mixed' | null {
-  const nodeInfos = gatherNodeInfos(selectedIds, allNodes)
-  if (nodeInfos.length < 2) return null
-
-  const axis = getDominantAxis(nodeInfos)
-
-  // Sort by position on dominant axis
-  const sorted = [...nodeInfos].sort((a, b) => {
-    if (axis === 'horizontal') return a.absX - b.absX
-    return a.absY - b.absY
-  })
+  const result = getSortedNodeInfos(selectedIds, allNodes)
+  if (!result) return null
+  const { sorted, axis } = result
 
   // Calculate gaps between consecutive bounding boxes
   const gaps: number[] = []
@@ -199,18 +209,11 @@ export function distributeSpacing(
   allNodes: SceneNode[],
   newGap: number
 ): { id: string; x?: number; y?: number }[] {
-  const nodeInfos = gatherNodeInfos(selectedIds, allNodes)
-  if (nodeInfos.length < 2) return []
+  const result = getSortedNodeInfos(selectedIds, allNodes)
+  if (!result) return []
+  const { sorted, axis } = result
 
   const gap = Math.max(0, newGap)
-  const axis = getDominantAxis(nodeInfos)
-
-  // Sort by position on dominant axis
-  const sorted = [...nodeInfos].sort((a, b) => {
-    if (axis === 'horizontal') return a.absX - b.absX
-    return a.absY - b.absY
-  })
-
   const updates: { id: string; x?: number; y?: number }[] = []
 
   // First node stays fixed, reposition the rest

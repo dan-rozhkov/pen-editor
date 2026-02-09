@@ -27,9 +27,10 @@ export function InstanceSection({
   if (isOverridden(node.strokeBinding, comp?.strokeBinding))
     overrides.push("Stroke Variable");
 
-  // Slot status
-  const slotIds = comp?.slot ?? [];
+  // Slot status — components (ref nodes) inside components are automatically slots
   const refNode = node as RefNode;
+  const slotChildren = comp?.children?.filter((c) => c.type === 'ref') ?? [];
+  const slotIds = slotChildren.map((c) => c.id);
   const replacedSlots = slotIds.filter((id) => refNode.slotContent?.[id]);
 
   return (

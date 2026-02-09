@@ -161,55 +161,37 @@ export function calculateSnap(
     centerY: draggedEdges.centerY + deltaY,
   };
 
-  // Generate vertical guide lines (X-axis matches)
-  if (deltaX !== 0 || (Math.abs(bestDx) <= threshold && bestDx === 0)) {
-    // Group matches by position
+  // Generate guide lines from axis matches
+  function buildGuideLines(
+    matches: typeof xMatches,
+    orientation: "vertical" | "horizontal",
+    snappedMin: number,
+    snappedMax: number,
+    getMin: (e: SnapEdges) => number,
+    getMax: (e: SnapEdges) => number,
+  ): void {
     const byPosition = new Map<number, SnapEdges[]>();
-    for (const m of xMatches) {
+    for (const m of matches) {
       const list = byPosition.get(m.position) || [];
       list.push(m.targetEdges);
       byPosition.set(m.position, list);
     }
-
     for (const [position, edgesList] of byPosition) {
-      let minY = snappedDragged.top;
-      let maxY = snappedDragged.bottom;
+      let min = snappedMin;
+      let max = snappedMax;
       for (const edges of edgesList) {
-        minY = Math.min(minY, edges.top);
-        maxY = Math.max(maxY, edges.bottom);
+        min = Math.min(min, getMin(edges));
+        max = Math.max(max, getMax(edges));
       }
-      guides.push({
-        orientation: "vertical",
-        position,
-        start: minY,
-        end: maxY,
-      });
+      guides.push({ orientation, position, start: min, end: max });
     }
   }
 
-  // Generate horizontal guide lines (Y-axis matches)
+  if (deltaX !== 0 || (Math.abs(bestDx) <= threshold && bestDx === 0)) {
+    buildGuideLines(xMatches, "vertical", snappedDragged.top, snappedDragged.bottom, (e) => e.top, (e) => e.bottom);
+  }
   if (deltaY !== 0 || (Math.abs(bestDy) <= threshold && bestDy === 0)) {
-    const byPosition = new Map<number, SnapEdges[]>();
-    for (const m of yMatches) {
-      const list = byPosition.get(m.position) || [];
-      list.push(m.targetEdges);
-      byPosition.set(m.position, list);
-    }
-
-    for (const [position, edgesList] of byPosition) {
-      let minX = snappedDragged.left;
-      let maxX = snappedDragged.right;
-      for (const edges of edgesList) {
-        minX = Math.min(minX, edges.left);
-        maxX = Math.max(maxX, edges.right);
-      }
-      guides.push({
-        orientation: "horizontal",
-        position,
-        start: minX,
-        end: maxX,
-      });
-    }
+    buildGuideLines(yMatches, "horizontal", snappedDragged.left, snappedDragged.right, (e) => e.left, (e) => e.right);
   }
 
   return { deltaX, deltaY, guides };

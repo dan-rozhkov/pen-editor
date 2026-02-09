@@ -138,13 +138,13 @@ const LayerItem = memo(function LayerItem({
   );
   const updateNode = useSceneStore((state) => state.updateNode);
 
-  // Check if this node is a slot child of a reusable parent
+  // Components (ref nodes) inside reusable frames are automatically slots
   const isSlotChild = useSceneStore((state) => {
-    if (!parentId) return false;
+    if (!parentId || node.type !== "ref") return false;
     const parentNode = state.nodesById[parentId];
     if (!parentNode || parentNode.type !== "frame") return false;
     const frame = parentNode as FlatFrameNode;
-    return !!(frame.reusable && frame.slot?.includes(node.id));
+    return !!frame.reusable;
   });
 
   // Inline editing state

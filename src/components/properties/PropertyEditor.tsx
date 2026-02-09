@@ -1,4 +1,4 @@
-import type { SceneNode, FrameNode } from "@/types/scene";
+import type { SceneNode } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
 import { findComponentById, type ParentContext } from "@/utils/nodeUtils";
 import { TypeSection } from "@/components/properties/TypeSection";
@@ -12,7 +12,7 @@ import { EffectsSection } from "@/components/properties/EffectsSection";
 import { ThemeSection } from "@/components/properties/ThemeSection";
 import { InstanceSection } from "@/components/properties/InstanceSection";
 import { TypographySection } from "@/components/properties/TypographySection";
-import { SlotsSection } from "@/components/properties/SlotsSection";
+
 
 interface PropertyEditorProps {
   node: SceneNode;
@@ -79,13 +79,7 @@ export function PropertyEditor({
       {node.type === "frame" && (
         <ThemeSection node={node} onUpdate={onUpdate} />
       )}
-      {node.type === "frame" && (node as FrameNode).reusable && (
-        <SlotsSection
-          node={node as FrameNode}
-          childNodes={(node as FrameNode).children}
-        />
-      )}
-      {node.type === "ref" && (
+{node.type === "ref" && (
         <InstanceSection
           node={node}
           onUpdate={onUpdate}

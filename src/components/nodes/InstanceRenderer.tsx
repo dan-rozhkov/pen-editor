@@ -17,6 +17,7 @@ import { useVariableStore } from "@/store/variableStore";
 import { useDragStore } from "@/store/dragStore";
 import { resolveColor, applyOpacity } from "@/utils/colorUtils";
 import { buildKonvaGradientProps } from "@/utils/gradientUtils";
+import { applyAutoLayoutRecursively } from "@/utils/autoLayoutUtils";
 import { findComponentById } from "@/utils/nodeUtils";
 import {
   COMPONENT_HOVER_OUTLINE_COLOR,
@@ -31,39 +32,58 @@ import {
   isNodeEnabled,
 } from "./renderUtils";
 
-function applyAutoLayoutRecursively(
-  node: SceneNode,
-  calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
-): SceneNode {
-  if (node.type === "frame") {
-    const frameNode = node as FrameNode;
-    const preparedChildren = frameNode.children.map((child) =>
-      applyAutoLayoutRecursively(child, calculateLayoutForFrame),
-    );
-    const preparedFrame: FrameNode = { ...frameNode, children: preparedChildren };
+/**
+ * Resolve a RefNode to a FrameNode for rendering within a descendant context.
+ * Merges instance overrides with component defaults and resolves children.
+ */
+function resolveRefToFrame(
+  refNode: RefNode,
+  allNodes: SceneNode[],
+): FrameNode | null {
+  const component = findComponentById(allNodes, refNode.componentId);
+  if (!component) return null;
 
-    if (!preparedFrame.layout?.autoLayout) {
-      return preparedFrame;
-    }
+  const resolvedChildren = component.children.map((child) => {
+    const slotRepl =
+      child.type === "ref" ? refNode.slotContent?.[child.id] : undefined;
+    const descOverride = refNode.descendants?.[child.id];
+    return slotRepl ?? applyDescendantOverride(child, descOverride);
+  });
 
-    const laidOutChildren = calculateLayoutForFrame(preparedFrame).map((child) =>
-      applyAutoLayoutRecursively(child, calculateLayoutForFrame),
-    );
-
-    return { ...preparedFrame, children: laidOutChildren };
-  }
-
-  if (node.type === "group") {
-    const groupNode = node as GroupNode;
-    return {
-      ...groupNode,
-      children: groupNode.children.map((child) =>
-        applyAutoLayoutRecursively(child, calculateLayoutForFrame),
-      ),
-    };
-  }
-
-  return node;
+  return {
+    ...component,
+    id: refNode.id,
+    name: refNode.name ?? component.name,
+    x: refNode.x,
+    y: refNode.y,
+    width: refNode.width,
+    height: refNode.height,
+    ...(refNode.fill !== undefined && { fill: refNode.fill }),
+    ...(refNode.fillBinding !== undefined && {
+      fillBinding: refNode.fillBinding,
+    }),
+    ...(refNode.fillOpacity !== undefined && {
+      fillOpacity: refNode.fillOpacity,
+    }),
+    ...(refNode.stroke !== undefined && { stroke: refNode.stroke }),
+    ...(refNode.strokeBinding !== undefined && {
+      strokeBinding: refNode.strokeBinding,
+    }),
+    ...(refNode.strokeWidth !== undefined && {
+      strokeWidth: refNode.strokeWidth,
+    }),
+    ...(refNode.strokeOpacity !== undefined && {
+      strokeOpacity: refNode.strokeOpacity,
+    }),
+    ...(refNode.gradientFill !== undefined && {
+      gradientFill: refNode.gradientFill,
+    }),
+    ...(refNode.opacity !== undefined && { opacity: refNode.opacity }),
+    ...(refNode.imageFill !== undefined && { imageFill: refNode.imageFill }),
+    type: "frame" as const,
+    reusable: false,
+    children: resolvedChildren,
+  };
 }
 
 interface InstanceRendererProps {
@@ -209,12 +229,18 @@ export function InstanceRenderer({
       return null;
     }
 
-    // Check if this child is a slot with replacement content
-    const isSlot = component.slot?.includes(child.id);
+    // Components inside components are automatically slots (replaceable in instances)
+    const isSlot = child.type === 'ref';
     const slotReplacement = isSlot ? node.slotContent?.[child.id] : undefined;
 
     // If slot has replacement, render it instead (no property overrides)
-    const overriddenChild = slotReplacement ?? applyDescendantOverride(child, override);
+    let overriddenChild = slotReplacement ?? applyDescendantOverride(child, override);
+
+    // Resolve ref nodes (component instances) to frames for rendering
+    if (overriddenChild.type === 'ref') {
+      overriddenChild = resolveRefToFrame(overriddenChild as RefNode, nodes) ?? overriddenChild;
+    }
+
     const laidOutChild = applyAutoLayoutRecursively(
       overriddenChild,
       calculateLayoutForFrame,
@@ -235,6 +261,8 @@ export function InstanceRenderer({
             isSelected={isSelected}
             effectiveTheme={childTheme}
             descendantOverrides={override?.descendants}
+            rootDescendantOverrides={descendantOverrides}
+            slotContent={node.slotContent}
             instanceId={node.id}
           />
         </Group>
@@ -248,6 +276,8 @@ export function InstanceRenderer({
         node={laidOutChild}
         effectiveTheme={childTheme}
         descendantOverrides={override?.descendants}
+        rootDescendantOverrides={descendantOverrides}
+        slotContent={node.slotContent}
       />
     );
   };
@@ -318,17 +348,22 @@ interface DescendantRendererProps {
   isSelected: boolean;
   effectiveTheme: ThemeName;
   descendantOverrides?: DescendantOverrides;
+  rootDescendantOverrides?: DescendantOverrides;
+  slotContent?: Record<string, SceneNode>;
   instanceId: string;
 }
 
 function DescendantRenderer({
-  node,
+  node: rawNode,
   onClick,
   isSelected,
   effectiveTheme,
   descendantOverrides,
+  rootDescendantOverrides,
+  slotContent,
   instanceId,
 }: DescendantRendererProps) {
+  const allNodes = useSceneStore((state) => state.getNodes());
   const variables = useVariableStore((state) => state.variables);
   const globalTheme = useThemeStore((state) => state.activeTheme);
   const calculateLayoutForFrame = useLayoutStore(
@@ -337,6 +372,11 @@ function DescendantRenderer({
   const currentTheme = effectiveTheme ?? globalTheme;
   const selectDescendant = useSelectionStore((state) => state.selectDescendant);
   const startDescendantEditing = useSelectionStore((state) => state.startDescendantEditing);
+
+  // Resolve ref nodes to frames for rendering
+  const node = rawNode.type === 'ref'
+    ? resolveRefToFrame(rawNode as RefNode, allNodes) ?? rawNode
+    : rawNode;
 
   const rawFillColor = resolveColor(
     node.fill,
@@ -524,12 +564,19 @@ function DescendantRenderer({
             />
           )}
           {containerChildren.map((child) => {
-            const childOverride = descendantOverrides?.[child.id];
+            const childOverride =
+              descendantOverrides?.[child.id] ??
+              rootDescendantOverrides?.[child.id];
             if (!isNodeEnabled(childOverride)) return null;
-            const overriddenChild = applyDescendantOverride(
-              child,
-              childOverride,
-            );
+            const slotReplacement =
+              child.type === "ref" ? slotContent?.[child.id] : undefined;
+            let overriddenChild =
+              slotReplacement ?? applyDescendantOverride(child, childOverride);
+            if (overriddenChild.type === "ref") {
+              overriddenChild =
+                resolveRefToFrame(overriddenChild as RefNode, allNodes) ??
+                overriddenChild;
+            }
             const laidOutChild = applyAutoLayoutRecursively(
               overriddenChild,
               calculateLayoutForFrame,
@@ -543,6 +590,8 @@ function DescendantRenderer({
                 isSelected={childIsSelected}
                 effectiveTheme={effectiveTheme}
                 descendantOverrides={childOverride?.descendants}
+                rootDescendantOverrides={rootDescendantOverrides}
+                slotContent={slotContent}
                 instanceId={instanceId}
               />
             );
@@ -570,19 +619,29 @@ interface RenderNodeWithOverridesProps {
   node: SceneNode;
   effectiveTheme: ThemeName;
   descendantOverrides?: DescendantOverrides;
+  rootDescendantOverrides?: DescendantOverrides;
+  slotContent?: Record<string, SceneNode>;
 }
 
 function RenderNodeWithOverrides({
-  node,
+  node: rawNode,
   effectiveTheme,
   descendantOverrides,
+  rootDescendantOverrides,
+  slotContent,
 }: RenderNodeWithOverridesProps) {
+  const allNodes = useSceneStore((state) => state.getNodes());
   const variables = useVariableStore((state) => state.variables);
   const globalTheme = useThemeStore((state) => state.activeTheme);
   const calculateLayoutForFrame = useLayoutStore(
     (state) => state.calculateLayoutForFrame,
   );
   const currentTheme = effectiveTheme ?? globalTheme;
+
+  // Resolve ref nodes to frames for rendering
+  const node = rawNode.type === 'ref'
+    ? resolveRefToFrame(rawNode as RefNode, allNodes) ?? rawNode
+    : rawNode;
 
   const rawFillColor = resolveColor(
     node.fill,
@@ -716,12 +775,19 @@ function RenderNodeWithOverrides({
             />
           )}
           {ovrChildren.map((child) => {
-            const childOverride = descendantOverrides?.[child.id];
+            const childOverride =
+              descendantOverrides?.[child.id] ??
+              rootDescendantOverrides?.[child.id];
             if (!isNodeEnabled(childOverride)) return null;
-            const overriddenChild = applyDescendantOverride(
-              child,
-              childOverride,
-            );
+            const slotReplacement =
+              child.type === "ref" ? slotContent?.[child.id] : undefined;
+            let overriddenChild =
+              slotReplacement ?? applyDescendantOverride(child, childOverride);
+            if (overriddenChild.type === "ref") {
+              overriddenChild =
+                resolveRefToFrame(overriddenChild as RefNode, allNodes) ??
+                overriddenChild;
+            }
             const laidOutChild = applyAutoLayoutRecursively(
               overriddenChild,
               calculateLayoutForFrame,
@@ -732,6 +798,8 @@ function RenderNodeWithOverrides({
                 node={laidOutChild}
                 effectiveTheme={effectiveTheme}
                 descendantOverrides={childOverride?.descendants}
+                rootDescendantOverrides={rootDescendantOverrides}
+                slotContent={slotContent}
               />
             );
           })}
