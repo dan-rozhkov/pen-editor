@@ -190,7 +190,7 @@
     },
     {
       "name": "component-slots",
-      "passed": false
+      "passed": true
     }
   ]
 }
