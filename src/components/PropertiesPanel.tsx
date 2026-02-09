@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useThemeStore } from "@/store/themeStore";
@@ -15,6 +15,7 @@ import {
 import { AlignmentSection } from "@/components/properties/AlignmentSection";
 import { DescendantPropertyEditor } from "@/components/properties/DescendantPropertyEditor";
 import { ExportSection } from "@/components/properties/ExportSection";
+import { MultiSelectPropertyEditor } from "@/components/properties/MultiSelectPropertyEditor";
 import { PageProperties } from "@/components/properties/PageProperties";
 import { PropertyEditor } from "@/components/properties/PropertyEditor";
 import { VariablesDialog } from "@/components/VariablesPanel";
@@ -178,6 +179,14 @@ export function PropertiesPanel() {
   const selectedNode =
     selectedIds.length === 1 ? findNodeById(nodes, selectedIds[0]) : null;
 
+  const nodesById = useSceneStore((s) => s.nodesById);
+  const selectedNodes = useMemo(() => {
+    if (selectedIds.length <= 1) return [];
+    return selectedIds
+      .map((id) => nodesById[id])
+      .filter(Boolean) as SceneNode[];
+  }, [selectedIds, nodesById]);
+
   const parentContext: ParentContext = selectedNode
     ? findParentFrame(nodes, selectedNode.id)
     : { parent: null, isInsideAutoLayout: false };
@@ -217,6 +226,14 @@ export function PropertiesPanel() {
             selectedIds={selectedIds}
             nodes={nodes}
             parentFrame={parentContext.parent}
+          />
+        )}
+        {/* Multi-select property editor */}
+        {selectedNodes.length > 1 && activeTool !== "frame" && (
+          <MultiSelectPropertyEditor
+            selectedNodes={selectedNodes}
+            variables={variables}
+            activeTheme={activeTheme}
           />
         )}
         {/* If editing a descendant inside an instance, show descendant editor */}

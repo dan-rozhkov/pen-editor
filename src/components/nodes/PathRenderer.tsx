@@ -3,8 +3,8 @@ import Konva from "konva";
 import { Group, Path, Rect } from "react-konva";
 import type { PathNode } from "@/types/scene";
 import {
-  HOVER_OUTLINE_COLOR,
   SelectionOutline,
+  getHoverOutlineColor,
 } from "./renderUtils";
 
 interface PathRendererProps {
@@ -139,7 +139,7 @@ export const PathRenderer = memo(function PathRenderer({
           rotation={rotation}
           flipX={flipX}
           flipY={flipY}
-          stroke={HOVER_OUTLINE_COLOR}
+          stroke={getHoverOutlineColor(node.id)}
           strokeWidth={1.5}
         />
       )}

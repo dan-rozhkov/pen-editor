@@ -3,10 +3,10 @@ import Konva from "konva";
 import { Text } from "react-konva";
 import type { TextNode } from "@/types/scene";
 import {
-  HOVER_OUTLINE_COLOR,
   SelectionOutline,
   buildKonvaFontStyle,
   buildTextDecoration,
+  getHoverOutlineColor,
   getRectTransformProps,
   getTextDimensions,
 } from "./renderUtils";
@@ -92,7 +92,7 @@ export const TextRenderer = memo(function TextRenderer({
           rotation={node.rotation ?? 0}
           flipX={node.flipX}
           flipY={node.flipY}
-          stroke={HOVER_OUTLINE_COLOR}
+          stroke={getHoverOutlineColor(node.id)}
           strokeWidth={1.5}
         />
       )}

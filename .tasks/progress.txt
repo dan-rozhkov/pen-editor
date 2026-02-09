@@ -1,3 +1,5 @@
+[2026-02-09] Fixed Pixi multi-select parity with Konva for modifier clicks. Updated pixiInteraction.ts so Cmd/Ctrl/Shift-modified clicks are treated as selection gestures (no immediate drag start), which restores reliable Cmd+Shift additive selection behavior. Also aligned nested hit-testing with Konva by returning already-selected child nodes before parent override logic. Tested: npm run build passes; pixi-konva-multiselect.spec.mjs passes in both renderers (Cmd+Shift click and marquee additive selection).
+
 [2026-01-29] Fixed visibility toggle bug by adding node.visible check in viewportUtils.isNodeVisible() function. Canvas content no longer disappears when toggling node visibility.
 
 [2026-01-29] Implemented system font selection feature for text nodes. Created fontUtils.ts with Font Access API (fallback to common fonts), built FontCombobox component with search/filter and live preview, updated PropertiesPanel to use the new selector. Default font set to Arial. Shows all 300+ system fonts immediately on open, filters as user types. All tests passed: font selection, search, custom font entry, API fallback, text measurement updates.

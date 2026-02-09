@@ -67,24 +67,29 @@ export function createSelectionOverlay(
 
   function getSelectionColor(nodeId: string): number {
     const state = useSceneStore.getState();
-    const node = state.nodesById[nodeId];
-    if (node?.type === "ref") return COMPONENT_SELECTION_COLOR;
-    const parentId = state.parentById[nodeId];
-    if (parentId) {
-      const parent = state.nodesById[parentId];
-      if (parent?.type === "frame" && (parent as any).reusable) {
+    let currentId: string | null = nodeId;
+    while (currentId) {
+      const node = state.nodesById[currentId];
+      if (!node) break;
+      if (node.type === "ref") return COMPONENT_SELECTION_COLOR;
+      if (node.type === "frame" && (node as FlatFrameNode).reusable) {
         return COMPONENT_SELECTION_COLOR;
       }
+      currentId = state.parentById[currentId] ?? null;
     }
     return SELECTION_COLOR;
   }
 
   function isComponentOrInstance(nodeId: string): boolean {
     const state = useSceneStore.getState();
-    const node = state.nodesById[nodeId];
-    if (!node) return false;
-    if (node.type === "ref") return true;
-    if (node.type === "frame" && (node as FlatFrameNode).reusable) return true;
+    let currentId: string | null = nodeId;
+    while (currentId) {
+      const node = state.nodesById[currentId];
+      if (!node) break;
+      if (node.type === "ref") return true;
+      if (node.type === "frame" && (node as FlatFrameNode).reusable) return true;
+      currentId = state.parentById[currentId] ?? null;
+    }
     return false;
   }
 
@@ -137,6 +142,9 @@ export function createSelectionOverlay(
 
     totalW = maxX - minX;
     totalH = maxY - minY;
+    const transformerColor = selectedIds.some((id) => isComponentOrInstance(id))
+      ? COMPONENT_SELECTION_COLOR
+      : SELECTION_COLOR;
 
     // Draw transform handles at corners of bounding box
     if (minX !== Infinity) {
@@ -144,7 +152,7 @@ export function createSelectionOverlay(
       if (selectedIds.length > 1 && totalW > 0 && totalH > 0) {
         const multiOutline = new Graphics();
         multiOutline.rect(minX, minY, totalW, totalH);
-        multiOutline.stroke({ color: SELECTION_COLOR, width: strokeWidth });
+        multiOutline.stroke({ color: transformerColor, width: strokeWidth });
         outlinesContainer.addChild(multiOutline);
       }
 
@@ -167,7 +175,7 @@ export function createSelectionOverlay(
           handleSizeWorld,
         );
         handle.fill(HANDLE_FILL);
-        handle.stroke({ color: SELECTION_COLOR, width: strokeWidth });
+        handle.stroke({ color: transformerColor, width: strokeWidth });
         handlesContainer.addChild(handle);
       }
 
@@ -313,7 +321,10 @@ export function createSelectionOverlay(
     const strokeWidth = 1 / scale;
 
     hovOutline.rect(absPos.x, absPos.y, width, height);
-    hovOutline.stroke({ color: HOVER_COLOR, width: strokeWidth });
+    const hoverColor = isComponentOrInstance(hoveredNodeId)
+      ? COMPONENT_SELECTION_COLOR
+      : HOVER_COLOR;
+    hovOutline.stroke({ color: hoverColor, width: strokeWidth });
   }
 
   // Subscribe to stores

@@ -21,6 +21,7 @@ interface FillSectionProps {
   activeTheme: ThemeName;
   isOverridden: <T>(instanceVal: T | undefined, componentVal: T | undefined) => boolean;
   resetOverride: (property: keyof SceneNode) => void;
+  mixedKeys?: Set<string>;
 }
 
 export function FillSection({
@@ -31,6 +32,7 @@ export function FillSection({
   activeTheme,
   isOverridden,
   resetOverride,
+  mixedKeys,
 }: FillSectionProps) {
   const hasFill = !!(node.fill || node.gradientFill || node.imageFill);
 
@@ -146,6 +148,7 @@ export function FillSection({
                   onVariableChange={handleFillVariableChange}
                   availableVariables={colorVariables}
                   activeTheme={activeTheme}
+                  isMixed={mixedKeys?.has("fill")}
                 />
               </div>
               <div className="w-20">
@@ -160,6 +163,7 @@ export function FillSection({
                   min={0}
                   max={100}
                   step={1}
+                  isMixed={mixedKeys?.has("fillOpacity")}
                 />
               </div>
               <OverrideIndicator

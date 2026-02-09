@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { FrameNode, GroupNode, SceneNode, TextNode } from "@/types/scene";
+import { useSceneStore } from "@/store/sceneStore";
 import {
   findNodeById,
   findParentFrame,
@@ -35,22 +36,32 @@ export function useCanvasSelectionData({
     return findNodeById(nodes, editingNodeId) as FrameNode | null;
   }, [editingNodeId, editingMode, nodes]);
 
+  const parentById = useSceneStore((state) => state.parentById);
+  const nodesById = useSceneStore((state) => state.nodesById);
+
   const transformerColor = useMemo(() => {
     const defaultColor = "#0d99ff";
     const componentColor = "#9747ff";
 
+    const isInComponentContext = (nodeId: string): boolean => {
+      let currentId: string | null = nodeId;
+      while (currentId) {
+        const currentNode = nodesById[currentId];
+        if (!currentNode) break;
+        if (currentNode.type === "ref") return true;
+        if (currentNode.type === "frame" && currentNode.reusable) return true;
+        currentId = parentById[currentId] ?? null;
+      }
+      return false;
+    };
+
     for (const id of selectedIds) {
-      const node = findNodeById(nodes, id);
-      if (
-        node &&
-        ((node.type === "frame" && (node as FrameNode).reusable) ||
-          node.type === "ref")
-      ) {
+      if (isInComponentContext(id)) {
         return componentColor;
       }
     }
     return defaultColor;
-  }, [selectedIds, nodes]);
+  }, [selectedIds, nodesById, parentById]);
 
   const editingNamePosition = useMemo(() => {
     if (!editingNameNode) return null;

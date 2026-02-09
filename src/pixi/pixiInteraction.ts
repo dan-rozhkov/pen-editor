@@ -70,6 +70,8 @@ interface MarqueeState {
   isActive: boolean;
   startWorldX: number;
   startWorldY: number;
+  shiftHeld: boolean;
+  preShiftIds: string[];
 }
 
 type HandleCorner = "tl" | "tr" | "bl" | "br";
@@ -141,6 +143,8 @@ export function setupPixiInteraction(
     isActive: false,
     startWorldX: 0,
     startWorldY: 0,
+    shiftHeld: false,
+    preShiftIds: [],
   };
 
   const transform: TransformState = {
@@ -347,6 +351,10 @@ export function setupPixiInteraction(
       );
       if (childHit) {
         if (deepSelect) return childHit;
+        const selectedIds = useSelectionStore.getState().selectedIds;
+        if (selectedIds.includes(childHit)) {
+          return childHit;
+        }
         // Nested selection logic: check if we should select the child or the parent
         const enteredContainerId = useSelectionStore.getState().enteredContainerId;
         if (enteredContainerId === nodeId) {
@@ -581,6 +589,11 @@ export function setupPixiInteraction(
           useSelectionStore.getState().select(labelHitId);
         }
 
+        // Match Konva behavior: modifier clicks are selection gestures, not drag start.
+        if (e.shiftKey || e.metaKey || e.ctrlKey) {
+          return;
+        }
+
         drag.isDragging = true;
         drag.nodeId = labelHitId;
         drag.startWorldX = world.x;
@@ -622,6 +635,11 @@ export function setupPixiInteraction(
           useSelectionStore.getState().addToSelection(hitId);
         } else {
           useSelectionStore.getState().select(hitId);
+        }
+
+        // Match Konva behavior: modifier clicks are selection gestures, not drag start.
+        if (e.shiftKey || e.metaKey || e.ctrlKey) {
+          return;
         }
 
         drag.isDragging = true;
@@ -671,8 +689,14 @@ export function setupPixiInteraction(
         }
       } else {
         // Click on background
-        useSelectionStore.getState().clearSelection();
         useSelectionStore.getState().resetContainerContext();
+        marquee.shiftHeld = e.shiftKey;
+        marquee.preShiftIds = e.shiftKey
+          ? useSelectionStore.getState().selectedIds.slice()
+          : [];
+        if (!e.shiftKey) {
+          useSelectionStore.getState().clearSelection();
+        }
 
         // Start marquee selection
         marquee.isActive = true;
@@ -1056,10 +1080,16 @@ export function setupPixiInteraction(
             ids.push(rootId);
           }
         }
-        if (ids.length > 0) {
+        if (marquee.shiftHeld) {
+          const merged = [...new Set([...marquee.preShiftIds, ...ids])];
+          useSelectionStore.getState().setSelectedIds(merged);
+        } else if (ids.length > 0) {
           useSelectionStore.getState().setSelectedIds(ids);
         }
       }
+
+      marquee.shiftHeld = false;
+      marquee.preShiftIds = [];
     }
   }
 

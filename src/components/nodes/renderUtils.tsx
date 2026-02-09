@@ -7,10 +7,33 @@ import type {
   TextNode,
 } from "@/types/scene";
 import { useLoadImage } from "@/hooks/useLoadImage";
+import { useSceneStore } from "@/store/sceneStore";
 import { isDescendantOfFlat } from "@/utils/nodeUtils";
 
 // Figma-style hover outline color
 export const HOVER_OUTLINE_COLOR = "#0d99ff";
+export const COMPONENT_HOVER_OUTLINE_COLOR = "#8B5CF6";
+
+export function getHoverOutlineColor(nodeId: string): string {
+  const { nodesById, parentById } = useSceneStore.getState();
+  let currentId: string | null = nodeId;
+
+  while (currentId) {
+    const currentNode = nodesById[currentId];
+    if (!currentNode) break;
+
+    if (currentNode.type === "ref") {
+      return COMPONENT_HOVER_OUTLINE_COLOR;
+    }
+    if (currentNode.type === "frame" && currentNode.reusable) {
+      return COMPONENT_HOVER_OUTLINE_COLOR;
+    }
+
+    currentId = parentById[currentId] ?? null;
+  }
+
+  return HOVER_OUTLINE_COLOR;
+}
 
 interface SelectionOutlineProps {
   x: number;

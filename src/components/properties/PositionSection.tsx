@@ -15,9 +15,10 @@ import {
 interface PositionSectionProps {
   node: SceneNode;
   onUpdate: (updates: Partial<SceneNode>) => void;
+  mixedKeys?: Set<string>;
 }
 
-export function PositionSection({ node, onUpdate }: PositionSectionProps) {
+export function PositionSection({ node, onUpdate, mixedKeys }: PositionSectionProps) {
   return (
     <PropertySection title="Position">
       <PropertyRow>
@@ -25,11 +26,13 @@ export function PositionSection({ node, onUpdate }: PositionSectionProps) {
           label="X"
           value={node.x}
           onChange={(v) => onUpdate({ x: v })}
+          isMixed={mixedKeys?.has("x")}
         />
         <NumberInput
           label="Y"
           value={node.y}
           onChange={(v) => onUpdate({ y: v })}
+          isMixed={mixedKeys?.has("y")}
         />
       </PropertyRow>
       <div className="flex gap-2 mt-2">
@@ -40,7 +43,7 @@ export function PositionSection({ node, onUpdate }: PositionSectionProps) {
             </InputGroupAddon>
             <InputGroupInput
               type="number"
-              value={Math.round((node.rotation ?? 0) * 100) / 100}
+              value={mixedKeys?.has("rotation") ? "" : Math.round((node.rotation ?? 0) * 100) / 100}
               onChange={(e) => {
                 const val = parseFloat(e.target.value);
                 if (!isNaN(val)) {
@@ -50,6 +53,7 @@ export function PositionSection({ node, onUpdate }: PositionSectionProps) {
               min={0}
               max={360}
               step={1}
+              placeholder={mixedKeys?.has("rotation") ? "Mixed" : undefined}
             />
           </InputGroup>
         </div>

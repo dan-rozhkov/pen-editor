@@ -19,10 +19,10 @@ import {
 } from "@/utils/viewportUtils";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 import {
-  HOVER_OUTLINE_COLOR,
   ImageFillLayer,
   PerSideStrokeLines,
   SelectionOutline,
+  getHoverOutlineColor,
   getChildSelectOverride,
   getRectTransformProps,
   hasPerSideStroke,
@@ -318,7 +318,7 @@ export function FrameRenderer({
           y={0}
           width={effectiveWidth}
           height={effectiveHeight}
-          stroke={HOVER_OUTLINE_COLOR}
+          stroke={getHoverOutlineColor(node.id)}
           strokeWidth={1.5}
           cornerRadius={node.cornerRadius}
         />

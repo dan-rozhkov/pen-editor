@@ -23,12 +23,14 @@ interface SizeSectionProps {
   node: SceneNode;
   onUpdate: (updates: Partial<SceneNode>) => void;
   parentContext: ParentContext;
+  mixedKeys?: Set<string>;
+  isMultiSelect?: boolean;
 }
 
-export function SizeSection({ node, onUpdate, parentContext }: SizeSectionProps) {
+export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiSelect }: SizeSectionProps) {
   return (
     <PropertySection title="Size">
-      {(parentContext.isInsideAutoLayout ||
+      {!isMultiSelect && (parentContext.isInsideAutoLayout ||
         (node.type === "frame" && node.layout?.autoLayout)) && (
         <>
           <div className="flex items-center gap-1">
@@ -103,6 +105,7 @@ export function SizeSection({ node, onUpdate, parentContext }: SizeSectionProps)
         <NumberInput
           label="W"
           value={node.width}
+          isMixed={mixedKeys?.has("width")}
           onChange={(v) => {
             const ratio = node.aspectRatio ?? (node.width / node.height);
             const newH = node.aspectRatioLocked
@@ -133,6 +136,7 @@ export function SizeSection({ node, onUpdate, parentContext }: SizeSectionProps)
         <NumberInput
           label="H"
           value={node.height}
+          isMixed={mixedKeys?.has("height")}
           onChange={(v) => {
             const ratio = node.aspectRatio ?? (node.width / node.height);
             const newW = node.aspectRatioLocked
@@ -160,7 +164,7 @@ export function SizeSection({ node, onUpdate, parentContext }: SizeSectionProps)
           }}
           min={1}
         />
-        <button
+        {!isMultiSelect && <button
           type="button"
           className={cn(
             "shrink-0 flex items-center justify-center w-6 h-6 rounded",
@@ -183,7 +187,7 @@ export function SizeSection({ node, onUpdate, parentContext }: SizeSectionProps)
           ) : (
             <LinkSimpleBreak size={14} />
           )}
-        </button>
+        </button>}
       </PropertyRow>
       {node.type === "frame" && (
         <Label className="cursor-pointer">

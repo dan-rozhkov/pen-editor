@@ -19,6 +19,7 @@ interface StrokeSectionProps {
   activeTheme: ThemeName;
   isOverridden: <T>(instanceVal: T | undefined, componentVal: T | undefined) => boolean;
   resetOverride: (property: keyof SceneNode) => void;
+  mixedKeys?: Set<string>;
 }
 
 type StrokeMode = "unified" | "per-side";
@@ -39,6 +40,7 @@ export function StrokeSection({
   activeTheme,
   isOverridden,
   resetOverride,
+  mixedKeys,
 }: StrokeSectionProps) {
   const hasStroke = !!(
     node.stroke ||
@@ -143,6 +145,7 @@ export function StrokeSection({
                 onVariableChange={handleStrokeVariableChange}
                 availableVariables={colorVariables}
                 activeTheme={activeTheme}
+                isMixed={mixedKeys?.has("stroke")}
               />
             </div>
             <div className="w-20">
@@ -155,6 +158,7 @@ export function StrokeSection({
                 min={0}
                 max={100}
                 step={1}
+                isMixed={mixedKeys?.has("strokeOpacity")}
               />
             </div>
             <OverrideIndicator
@@ -188,6 +192,7 @@ export function StrokeSection({
                   onChange={(v) => onUpdate({ strokeWidth: v })}
                   min={0}
                   step={0.5}
+                  isMixed={mixedKeys?.has("strokeWidth")}
                 />
               </div>
               <OverrideIndicator

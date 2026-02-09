@@ -3,8 +3,8 @@ import Konva from "konva";
 import { Line } from "react-konva";
 import type { PolygonNode } from "@/types/scene";
 import {
-  HOVER_OUTLINE_COLOR,
   SelectionOutline,
+  getHoverOutlineColor,
   getRectTransformProps,
 } from "./renderUtils";
 
@@ -75,7 +75,7 @@ export const PolygonRenderer = memo(function PolygonRenderer({
           rotation={node.rotation ?? 0}
           flipX={node.flipX}
           flipY={node.flipY}
-          stroke={HOVER_OUTLINE_COLOR}
+          stroke={getHoverOutlineColor(node.id)}
           strokeWidth={1.5}
         />
       )}

@@ -3,10 +3,10 @@ import Konva from "konva";
 import { Rect } from "react-konva";
 import type { SceneNode } from "@/types/scene";
 import {
-  HOVER_OUTLINE_COLOR,
   ImageFillLayer,
   PerSideStrokeLines,
   SelectionOutline,
+  getHoverOutlineColor,
   getRectTransformProps,
   hasPerSideStroke,
 } from "./renderUtils";
@@ -124,7 +124,7 @@ export const RectRenderer = memo(function RectRenderer({
           rotation={node.rotation ?? 0}
           flipX={node.flipX}
           flipY={node.flipY}
-          stroke={HOVER_OUTLINE_COLOR}
+          stroke={getHoverOutlineColor(node.id)}
           strokeWidth={1.5}
           cornerRadius={node.cornerRadius}
         />

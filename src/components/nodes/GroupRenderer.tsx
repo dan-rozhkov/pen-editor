@@ -11,8 +11,8 @@ import {
   getNodeAbsolutePosition,
 } from "@/utils/nodeUtils";
 import {
-  HOVER_OUTLINE_COLOR,
   SelectionOutline,
+  getHoverOutlineColor,
   getChildSelectOverride,
   getRectTransformProps,
 } from "./renderUtils";
@@ -153,7 +153,7 @@ export function GroupRenderer({
           y={0}
           width={node.width}
           height={node.height}
-          stroke={HOVER_OUTLINE_COLOR}
+          stroke={getHoverOutlineColor(node.id)}
           strokeWidth={0.5}
           dash={[4, 4]}
         />

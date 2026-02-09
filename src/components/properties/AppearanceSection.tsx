@@ -1,4 +1,4 @@
-import type { PolygonNode, SceneNode } from "@/types/scene";
+import type { FrameNode, PolygonNode, SceneNode } from "@/types/scene";
 import {
   NumberInput,
   PropertyRow,
@@ -9,9 +9,15 @@ import { generatePolygonPoints } from "@/utils/polygonUtils";
 interface AppearanceSectionProps {
   node: SceneNode;
   onUpdate: (updates: Partial<SceneNode>) => void;
+  mixedKeys?: Set<string>;
+  allTypesSupport?: { cornerRadius: boolean };
 }
 
-export function AppearanceSection({ node, onUpdate }: AppearanceSectionProps) {
+export function AppearanceSection({ node, onUpdate, mixedKeys, allTypesSupport }: AppearanceSectionProps) {
+  const showCornerRadius = allTypesSupport
+    ? allTypesSupport.cornerRadius
+    : (node.type === "frame" || node.type === "rect");
+
   return (
     <PropertySection title="Appearance">
       <PropertyRow>
@@ -25,14 +31,16 @@ export function AppearanceSection({ node, onUpdate }: AppearanceSectionProps) {
           max={100}
           step={1}
           labelOutside={true}
+          isMixed={mixedKeys?.has("opacity")}
         />
-        {(node.type === "frame" || node.type === "rect") && (
+        {showCornerRadius && (
           <NumberInput
             label="Radius"
-            value={node.cornerRadius ?? 0}
-            onChange={(v) => onUpdate({ cornerRadius: v })}
+            value={(node as FrameNode).cornerRadius ?? 0}
+            onChange={(v) => onUpdate({ cornerRadius: v } as Partial<SceneNode>)}
             min={0}
             labelOutside={true}
+            isMixed={mixedKeys?.has("cornerRadius")}
           />
         )}
         {node.type === "polygon" && (

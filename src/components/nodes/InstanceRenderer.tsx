@@ -19,7 +19,7 @@ import { resolveColor, applyOpacity } from "@/utils/colorUtils";
 import { buildKonvaGradientProps } from "@/utils/gradientUtils";
 import { findComponentById } from "@/utils/nodeUtils";
 import {
-  HOVER_OUTLINE_COLOR,
+  COMPONENT_HOVER_OUTLINE_COLOR,
   ImageFillLayer,
   SelectionOutline,
   applyDescendantOverride,
@@ -257,7 +257,7 @@ export function InstanceRenderer({
           y={0}
           width={node.width}
           height={node.height}
-          stroke={HOVER_OUTLINE_COLOR}
+          stroke={COMPONENT_HOVER_OUTLINE_COLOR}
           strokeWidth={1.5}
           cornerRadius={component.cornerRadius}
         />

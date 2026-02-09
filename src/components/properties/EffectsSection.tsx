@@ -13,9 +13,10 @@ import { getDefaultShadow, parseHexAlpha } from "@/utils/shadowUtils";
 interface EffectsSectionProps {
   node: SceneNode;
   onUpdate: (updates: Partial<SceneNode>) => void;
+  mixedKeys?: Set<string>;
 }
 
-export function EffectsSection({ node, onUpdate }: EffectsSectionProps) {
+export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProps) {
   return (
     <PropertySection
       title="Effects"
@@ -46,6 +47,7 @@ export function EffectsSection({ node, onUpdate }: EffectsSectionProps) {
             <div className="flex-1">
               <ColorInput
                 value={node.effect.color}
+                isMixed={mixedKeys?.has("effect")}
                 onChange={(v) =>
                   onUpdate({
                     effect: { ...node.effect!, color: v || "#00000040" },

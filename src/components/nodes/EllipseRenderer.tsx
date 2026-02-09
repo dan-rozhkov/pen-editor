@@ -6,9 +6,9 @@ import { useDragStore } from "@/store/dragStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { handleAutoLayoutDragEnd } from "@/utils/dragUtils";
 import {
-  HOVER_OUTLINE_COLOR,
   ImageFillLayer,
   SelectionOutline,
+  getHoverOutlineColor,
   getEllipseTransformProps,
 } from "./renderUtils";
 
@@ -145,7 +145,7 @@ export const EllipseRenderer = memo(function EllipseRenderer({
           height={node.height}
           rotation={node.rotation ?? 0}
           shape="ellipse"
-          stroke={HOVER_OUTLINE_COLOR}
+          stroke={getHoverOutlineColor(node.id)}
           strokeWidth={1.5}
         />
       )}

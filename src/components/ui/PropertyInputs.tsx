@@ -45,6 +45,7 @@ interface NumberInputProps {
   max?: number;
   step?: number;
   labelOutside?: boolean;
+  isMixed?: boolean;
 }
 
 export function NumberInput({
@@ -55,6 +56,7 @@ export function NumberInput({
   max,
   step = 1,
   labelOutside = false,
+  isMixed = false,
 }: NumberInputProps) {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseFloat(e.target.value);
@@ -63,17 +65,21 @@ export function NumberInput({
     }
   };
 
+  const displayValue = isMixed ? "" : Math.round(value * 100) / 100;
+  const mixedProps = isMixed ? { placeholder: "Mixed" } : {};
+
   if (labelOutside && label) {
     return (
       <div className="flex-1 flex flex-col gap-1">
         <Label className="text-[10px] font-normal">{label}</Label>
         <Input
           type="number"
-          value={Math.round(value * 100) / 100}
+          value={displayValue}
           onChange={handleChange}
           min={min}
           max={max}
           step={step}
+          {...mixedProps}
         />
       </div>
     );
@@ -88,11 +94,12 @@ export function NumberInput({
           </InputGroupAddon>
           <InputGroupInput
             type="number"
-            value={Math.round(value * 100) / 100}
+            value={displayValue}
             onChange={handleChange}
             min={min}
             max={max}
             step={step}
+            {...mixedProps}
           />
         </InputGroup>
       </div>
@@ -103,11 +110,12 @@ export function NumberInput({
     <div className="flex-1">
       <Input
         type="number"
-        value={Math.round(value * 100) / 100}
+        value={displayValue}
         onChange={handleChange}
         min={min}
         max={max}
         step={step}
+        {...mixedProps}
       />
     </div>
   );
@@ -120,6 +128,7 @@ interface ColorInputProps {
   onVariableChange?: (variableId: string | undefined) => void;
   availableVariables?: Variable[];
   activeTheme?: ThemeName;
+  isMixed?: boolean;
 }
 
 export function ColorInput({
@@ -129,6 +138,7 @@ export function ColorInput({
   onVariableChange,
   availableVariables = [],
   activeTheme = "light",
+  isMixed = false,
 }: ColorInputProps) {
   const [showPicker, setShowPicker] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -199,6 +209,22 @@ export function ColorInput({
             </svg>
           </button>
         </div>
+      </div>
+    );
+  }
+
+  // Mixed mode: show hatched swatch + "Mixed" text
+  if (isMixed) {
+    return (
+      <div className="flex items-center gap-2">
+        <div
+          className="w-8 h-8 rounded border border-border-default"
+          style={{
+            background:
+              "repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 50% / 8px 8px",
+          }}
+        />
+        <span className="flex-1 text-xs text-text-muted italic">Mixed</span>
       </div>
     );
   }
@@ -296,6 +322,7 @@ interface SelectInputProps {
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
   labelOutside?: boolean;
+  isMixed?: boolean;
 }
 
 export function SelectInput({
@@ -304,6 +331,7 @@ export function SelectInput({
   options,
   onChange,
   labelOutside = false,
+  isMixed = false,
 }: SelectInputProps) {
   const handleChange = (val: string | null) => {
     if (val !== null) {
@@ -311,14 +339,19 @@ export function SelectInput({
     }
   };
 
+  const selectOptions = isMixed
+    ? [{ value: "__mixed__", label: "Mixed" }, ...options]
+    : options;
+  const selectValue = isMixed ? "__mixed__" : value;
+
   if (labelOutside && label) {
     return (
       <div className="flex-1 flex flex-col gap-1">
         <Label className="text-[10px] font-normal">{label}</Label>
         <SelectWithOptions
-          value={value}
+          value={selectValue}
           onValueChange={handleChange}
-          options={options}
+          options={selectOptions}
           size="sm"
           className="w-full"
         />
@@ -331,9 +364,9 @@ export function SelectInput({
       <div className="flex-1 flex items-center gap-1">
         <Label className="text-[11px] w-12 shrink-0">{label}</Label>
         <SelectWithOptions
-          value={value}
+          value={selectValue}
           onValueChange={handleChange}
-          options={options}
+          options={selectOptions}
           size="sm"
           className="w-full"
         />
@@ -344,9 +377,9 @@ export function SelectInput({
   return (
     <div className="flex-1">
       <SelectWithOptions
-        value={value}
+        value={selectValue}
         onValueChange={handleChange}
-        options={options}
+        options={selectOptions}
         size="sm"
         className="w-full"
       />

@@ -49,6 +49,7 @@ export interface SceneState {
   addNode: (node: SceneNode) => void;
   addChildToFrame: (frameId: string, child: SceneNode) => void;
   updateNode: (id: string, updates: Partial<SceneNode>) => void;
+  updateMultipleNodes: (ids: string[], updates: Partial<SceneNode>) => void;
   updateNodeWithoutHistory: (id: string, updates: Partial<SceneNode>) => void;
   deleteNode: (id: string) => void;
   clearNodes: () => void;
@@ -306,6 +307,23 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         nodesById: { ...state.nodesById, [id]: updated },
         _cachedTree: null,
       };
+    }),
+
+  updateMultipleNodes: (ids, updates) =>
+    set((state) => {
+      saveHistory(state);
+      const newNodesById = { ...state.nodesById };
+      const needsTextSync = hasTextMeasureProps(updates);
+      for (const id of ids) {
+        const existing = newNodesById[id];
+        if (!existing) continue;
+        let updated = { ...existing, ...updates } as FlatSceneNode;
+        if (updated.type === "text" && needsTextSync) {
+          updated = syncTextDimensions(updated);
+        }
+        newNodesById[id] = updated;
+      }
+      return { nodesById: newNodesById, _cachedTree: null };
     }),
 
   updateNodeWithoutHistory: (id, updates) =>
