@@ -181,6 +181,14 @@
       "passed": true
     },
     {
+      "name": "fix-tree-expand-on-selection",
+      "passed": false
+    },
+    {
+      "name": "multi-select-shared-properties",
+      "passed": false
+    },
+    {
       "name": "component-slots",
       "passed": false
     }

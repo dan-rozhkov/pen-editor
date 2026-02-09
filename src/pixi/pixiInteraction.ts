@@ -1,4 +1,4 @@
-import { Application, Container } from "pixi.js";
+import { Application, CanvasTextMetrics, Container, TextStyle } from "pixi.js";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useHoverStore } from "@/store/hoverStore";
@@ -91,6 +91,11 @@ interface TransformState {
   parentOffsetY: number;
 }
 
+const LABEL_FONT_SIZE = 11;
+const LABEL_OFFSET_Y = 4;
+const LABEL_HIT_PADDING = 2;
+const LABEL_FONT_FAMILY = "system-ui, -apple-system, sans-serif";
+
 /**
  * Set up all pointer interaction handlers on the PixiJS canvas.
  * Returns a cleanup function.
@@ -162,6 +167,80 @@ export function setupPixiInteraction(
       x: (screenX - vs.x) / vs.scale,
       y: (screenY - vs.y) / vs.scale,
     };
+  }
+
+  function findFrameLabelAtPoint(worldX: number, worldY: number): string | null {
+    const scene = useSceneStore.getState();
+    const { selectedIds, editingNodeId, editingMode } = useSelectionStore.getState();
+    const scale = useViewportStore.getState().scale || 1;
+    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+    const treeNodes = scene.getNodes();
+
+    const frameIds: string[] = [];
+    const seen = new Set<string>();
+
+    // Match overlay visibility: top-level frames/groups always show labels.
+    for (const rootId of scene.rootIds) {
+      const node = scene.nodesById[rootId];
+      if (!node || node.visible === false) continue;
+      if (node.type !== "frame" && node.type !== "group") continue;
+      frameIds.push(rootId);
+      seen.add(rootId);
+    }
+
+    // Selected frames/groups also show labels.
+    for (const id of selectedIds) {
+      const node = scene.nodesById[id];
+      if (!node) continue;
+      if (node.type !== "frame" && node.type !== "group") continue;
+      if (seen.has(id)) continue;
+      frameIds.push(id);
+      seen.add(id);
+    }
+
+    // Hit-test from top-most drawn label to bottom-most.
+    for (let i = frameIds.length - 1; i >= 0; i--) {
+      const frameId = frameIds[i];
+
+      // Hidden while editing this exact name.
+      if (editingNodeId === frameId && editingMode === "name") continue;
+
+      const node = scene.nodesById[frameId];
+      if (!node) continue;
+
+      const absPos = getNodeAbsolutePositionWithLayout(
+        treeNodes,
+        frameId,
+        calculateLayoutForFrame,
+      );
+      if (!absPos) continue;
+
+      const defaultName = node.type === "group" ? "Group" : "Frame";
+      const displayName = node.name || defaultName;
+
+      const worldOffsetY = (LABEL_FONT_SIZE + LABEL_OFFSET_Y) / scale;
+      const labelX = absPos.x;
+      const labelY = absPos.y - worldOffsetY;
+      const textStyle = new TextStyle({
+        fontFamily: LABEL_FONT_FAMILY,
+        fontSize: LABEL_FONT_SIZE,
+      });
+      const textMetrics = CanvasTextMetrics.measureText(displayName, textStyle);
+      const labelW = textMetrics.width / scale;
+      const labelH = LABEL_FONT_SIZE / scale;
+      const padding = LABEL_HIT_PADDING / scale;
+
+      if (
+        worldX >= labelX - padding &&
+        worldX <= labelX + labelW + padding &&
+        worldY >= labelY - padding &&
+        worldY <= labelY + labelH + padding
+      ) {
+        return frameId;
+      }
+    }
+
+    return null;
   }
 
   function findNodeAtPoint(
@@ -502,6 +581,45 @@ export function setupPixiInteraction(
 
     // Left button click
     if (e.button === 0) {
+      const labelHitId = findFrameLabelAtPoint(world.x, world.y);
+      if (labelHitId) {
+        const state = useSceneStore.getState();
+        const node = state.nodesById[labelHitId];
+        if (!node) return;
+
+        if (e.shiftKey) {
+          useSelectionStore.getState().addToSelection(labelHitId);
+        } else {
+          useSelectionStore.getState().select(labelHitId);
+        }
+
+        drag.isDragging = true;
+        drag.nodeId = labelHitId;
+        drag.startWorldX = world.x;
+        drag.startWorldY = world.y;
+        drag.startNodeX = node.x;
+        drag.startNodeY = node.y;
+        drag.snapOffsetX = 0;
+        drag.snapOffsetY = 0;
+        drag.isAutoLayoutDrag = false;
+        drag.autoLayoutParentId = null;
+
+        const nodes = state.getNodes();
+        const absPos = getNodeAbsolutePosition(nodes, labelHitId);
+        if (absPos) {
+          drag.parentOffsetX = absPos.x - node.x;
+          drag.parentOffsetY = absPos.y - node.y;
+        } else {
+          drag.parentOffsetX = 0;
+          drag.parentOffsetY = 0;
+        }
+
+        const selectedIds = useSelectionStore.getState().selectedIds;
+        const excludeIds = new Set(selectedIds);
+        drag.snapTargets = collectSnapTargets(nodes, excludeIds);
+        return;
+      }
+
       const deepSelect = e.metaKey || e.ctrlKey;
       const hitId = findNodeAtPoint(world.x, world.y, { deepSelect });
 
@@ -966,6 +1084,13 @@ export function setupPixiInteraction(
     const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
     const currentSelectedIds = useSelectionStore.getState().selectedIds;
     const currentNodes = useSceneStore.getState().getNodes();
+
+    const frameLabelHitId = findFrameLabelAtPoint(world.x, world.y);
+    if (frameLabelHitId) {
+      useSelectionStore.getState().select(frameLabelHitId);
+      useSelectionStore.getState().startNameEditing(frameLabelHitId);
+      return;
+    }
 
     // Match Konva behavior: drill down from currently selected container.
     if (currentSelectedIds.length === 1) {

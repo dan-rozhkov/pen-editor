@@ -3,6 +3,8 @@ import { useSceneStore } from "../store/sceneStore";
 import { useSelectionStore } from "../store/selectionStore";
 import { useVariableStore } from "../store/variableStore";
 import { useThemeStore } from "../store/themeStore";
+import { useViewportStore } from "../store/viewportStore";
+import type { SceneNode } from "../types/scene";
 import { downloadDocument, openFilePicker } from "../utils/fileUtils";
 import { parsePixsoJson } from "../utils/pixsoImportUtils";
 import { Button } from "./ui/button";
@@ -26,6 +28,15 @@ export function Toolbar() {
   const [jsonText, setJsonText] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  const focusViewportOnNodes = (targetNodes: SceneNode[]) => {
+    const canvasEl = document.querySelector("[data-canvas]");
+    const viewportWidth = canvasEl?.clientWidth ?? window.innerWidth - 480;
+    const viewportHeight = canvasEl?.clientHeight ?? window.innerHeight;
+    useViewportStore
+      .getState()
+      .fitToContent(targetNodes, viewportWidth, viewportHeight);
+  };
+
   const handleSave = () => {
     downloadDocument(nodes, variables, activeTheme);
   };
@@ -40,6 +51,7 @@ export function Toolbar() {
       setNodes(loadedNodes);
       setVariables(loadedVariables);
       setActiveTheme(loadedTheme);
+      focusViewportOnNodes(loadedNodes);
     } catch (err) {
       console.error("Failed to open file:", err);
     }
@@ -55,6 +67,7 @@ export function Toolbar() {
       const node = parsePixsoJson(jsonText);
       addNode(node);
       useSelectionStore.getState().select(node.id);
+      focusViewportOnNodes([node]);
       setImportOpen(false);
       setJsonText("");
       setError(null);

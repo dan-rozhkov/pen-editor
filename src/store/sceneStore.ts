@@ -133,6 +133,14 @@ function syncAllTextDimensionsFlat(
   return changed ? result : nodesById;
 }
 
+function resyncAllTextNodeDimensionsInStore(): void {
+  const state = useSceneStore.getState();
+  const synced = syncAllTextDimensionsFlat(state.nodesById);
+  if (synced !== state.nodesById) {
+    useSceneStore.setState({ nodesById: synced, _cachedTree: null });
+  }
+}
+
 /** Insert a node and all its descendants into the flat store */
 function insertTreeIntoFlat(
   node: SceneNode,
@@ -371,6 +379,13 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       _cachedTree: null,
     });
     loadGoogleFontsFromNodes(nodes);
+    // Re-sync once the browser finishes loading any in-flight fonts
+    // (covers custom @font-face fonts, not only Google Fonts).
+    if (typeof document !== "undefined" && "fonts" in document) {
+      document.fonts.ready.then(() => {
+        resyncAllTextNodeDimensionsInStore();
+      });
+    }
   },
 
   setNodesWithoutHistory: (nodes) => {
@@ -975,9 +990,13 @@ export const useSceneStore = create<SceneState>((set, get) => ({
 
 // Re-sync text dimensions whenever a Google Font finishes loading
 registerFontLoadCallback(() => {
-  const state = useSceneStore.getState();
-  const synced = syncAllTextDimensionsFlat(state.nodesById);
-  if (synced !== state.nodesById) {
-    useSceneStore.setState({ nodesById: synced, _cachedTree: null });
-  }
+  resyncAllTextNodeDimensionsInStore();
 });
+
+// Re-sync text dimensions for any font load completion in the document
+// (custom local/web fonts loaded outside loadGoogleFont()).
+if (typeof document !== "undefined" && "fonts" in document) {
+  document.fonts.addEventListener("loadingdone", () => {
+    resyncAllTextNodeDimensionsInStore();
+  });
+}
