@@ -4,7 +4,7 @@ import { generateId } from "@/types/scene";
 /**
  * Measure bounding box of an SVG path data string using an offscreen SVG element.
  */
-function getPathBBox(pathData: string): { x: number; y: number; width: number; height: number } {
+export function getPathBBox(pathData: string): { x: number; y: number; width: number; height: number } {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.style.position = "absolute";
   svg.style.left = "-9999px";

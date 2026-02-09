@@ -8,12 +8,14 @@ import {
   type TextNode,
   type LineNode,
   type PolygonNode,
+  type PathNode,
   type LayoutProperties,
   type SizingProperties,
   type GradientFill,
   type GradientColorStop,
 } from "../types/scene";
 import { generatePolygonPoints } from "./polygonUtils";
+import { getPathBBox } from "./svgUtils";
 
 // --- Pixso JSON types (matching exportTypes_upd.ts) ---
 
@@ -75,6 +77,11 @@ interface PixsoLetterSpacing {
   unit: "PIXELS" | "PERCENT";
 }
 
+interface PixsoGeometry {
+  path: string;
+  windingRule?: "NONZERO" | "EVENODD";
+}
+
 interface PixsoNode {
   id: string;
   name: string;
@@ -126,6 +133,10 @@ interface PixsoNode {
   letterSpacing?: PixsoLetterSpacing | number;
   textCase?: string;
   textDecoration?: string;
+
+  // Vector geometry (VECTOR nodes)
+  fillGeometry?: PixsoGeometry[];
+  strokeGeometry?: PixsoGeometry[];
 
   // Component/instance props
   componentProperties?: Record<string, unknown>;
@@ -494,11 +505,101 @@ export function convertPixsoNode(node: PixsoNode): SceneNode | null {
     }
 
     case "VECTOR": {
-      const rect: RectNode = {
-        ...(base as Omit<RectNode, "type">),
-        type: "rect",
+      // Build pathStroke from the VECTOR node's stroke properties
+      const pathStroke: PathNode["pathStroke"] =
+        stroke || strokeWidth
+          ? {
+              fill: stroke,
+              thickness: strokeWidth,
+              join: "round",
+              cap: "round",
+              align: node.strokeAlign === "INSIDE"
+                ? "inside"
+                : node.strokeAlign === "OUTSIDE"
+                  ? "outside"
+                  : "center",
+            }
+          : undefined;
+
+      const geometries = node.fillGeometry;
+      if (!geometries || geometries.length === 0) {
+        // Fallback: no geometry data → rectangle
+        const rect: RectNode = {
+          ...(base as Omit<RectNode, "type">),
+          type: "rect",
+        };
+        return rect;
+      }
+
+      // Build PathNode(s) from fillGeometry entries
+      const pathNodes: PathNode[] = [];
+      for (const geo of geometries) {
+        if (!geo.path) continue;
+        const bbox = getPathBBox(geo.path);
+        if (bbox.width <= 0 || bbox.height <= 0) continue;
+
+        const pathNode: PathNode = {
+          id: generateId(),
+          type: "path",
+          x: 0,
+          y: 0,
+          width: bbox.width,
+          height: bbox.height,
+          geometry: geo.path,
+          geometryBounds: bbox,
+        };
+        if (node.name) pathNode.name = node.name;
+        if (node.visible === false) pathNode.visible = false;
+        if (fill) pathNode.fill = fill;
+        if (fillOpacity !== undefined) pathNode.fillOpacity = fillOpacity;
+        if (gradientFill) pathNode.gradientFill = gradientFill;
+        if (pathStroke) pathNode.pathStroke = pathStroke;
+        if (geo.windingRule === "EVENODD") pathNode.fillRule = "evenodd";
+
+        pathNodes.push(pathNode);
+      }
+
+      if (pathNodes.length === 0) {
+        // All paths were empty/zero-size → fallback to rectangle
+        const rect: RectNode = {
+          ...(base as Omit<RectNode, "type">),
+          type: "rect",
+        };
+        return rect;
+      }
+
+      if (pathNodes.length === 1) {
+        // Single path: use the VECTOR node's position/size directly
+        const single = pathNodes[0];
+        single.x = base.x as number;
+        single.y = base.y as number;
+        single.width = base.width as number;
+        single.height = base.height as number;
+        if (base.rotation) single.rotation = base.rotation as number;
+        return single;
+      }
+
+      // Multiple paths: wrap in a GroupNode
+      const groupX = base.x as number;
+      const groupY = base.y as number;
+      for (const p of pathNodes) {
+        // Offset children relative to group origin using their geometry bounds
+        p.x = (p.geometryBounds?.x ?? 0) - (pathNodes[0].geometryBounds?.x ?? 0);
+        p.y = (p.geometryBounds?.y ?? 0) - (pathNodes[0].geometryBounds?.y ?? 0);
+      }
+      const group: GroupNode = {
+        id: base.id as string,
+        type: "group",
+        x: groupX,
+        y: groupY,
+        width: base.width as number,
+        height: base.height as number,
+        children: pathNodes,
       };
-      return rect;
+      if (node.name) group.name = node.name;
+      if (node.visible === false) group.visible = false;
+      if (base.rotation) group.rotation = base.rotation as number;
+      return group;
     }
 
     case "LINE": {
