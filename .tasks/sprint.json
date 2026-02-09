@@ -186,7 +186,7 @@
     },
     {
       "name": "multi-select-shared-properties",
-      "passed": false
+      "passed": true
     },
     {
       "name": "component-slots",
