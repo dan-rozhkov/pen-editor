@@ -191,6 +191,10 @@
     {
       "name": "component-slots",
       "passed": true
+    },
+    {
+      "name": "shift-axis-lock-drag",
+      "passed": false
     }
   ]
 }

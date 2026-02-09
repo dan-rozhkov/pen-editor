@@ -8,6 +8,7 @@ export function createTextContainer(node: TextNode): Container {
     text: node.text,
     style: buildTextStyle(node),
   });
+  text.resolution = window.devicePixelRatio || 1;
   text.label = "text-content";
   text.anchor.set(0, 0);
   container.addChild(text);

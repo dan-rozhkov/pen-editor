@@ -1,4 +1,4 @@
-import { Container } from "pixi.js";
+import { Container, Text } from "pixi.js";
 import { useSceneStore, type SceneState } from "@/store/sceneStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useThemeStore } from "@/store/themeStore";
@@ -74,6 +74,7 @@ function flatToTreeFrame(
  */
 export function createPixiSync(sceneRoot: Container): () => void {
   const registry = new Map<string, RegistryEntry>();
+  let appliedTextResolution = 0;
 
   function applyTextEditingVisibility(): void {
     const { editingNodeId, editingMode } = useSelectionStore.getState();
@@ -155,6 +156,51 @@ export function createPixiSync(sceneRoot: Container): () => void {
     }
   }
 
+  function getTargetTextResolution(scale: number): number {
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    // Quantize and cap resolution changes to avoid expensive text re-rasterization on every zoom tick.
+    const quantizedScale = Math.max(1, Math.round(scale));
+    const maxResolution = Math.ceil(devicePixelRatio * 2);
+    return Math.min(maxResolution, quantizedScale * devicePixelRatio);
+  }
+
+  function applyTextResolution(resolution: number): void {
+    if (appliedTextResolution === resolution) return;
+    appliedTextResolution = resolution;
+
+    for (const entry of registry.values()) {
+      if (entry.node.type !== "text") continue;
+      const textObj = entry.container.getChildByLabel("text-content") as Text | undefined;
+      if (!textObj) continue;
+      if (textObj.resolution !== resolution) {
+        textObj.resolution = resolution;
+      }
+    }
+  }
+
+  function snapToPixelGrid(value: number, scale: number, resolution: number): number {
+    const safeScale = scale > 0 ? scale : 1;
+    const safeResolution = resolution > 0 ? resolution : 1;
+    return Math.round(value * safeScale * safeResolution) / (safeScale * safeResolution);
+  }
+
+  function snapTextContainerPosition(entry: RegistryEntry, scale: number): void {
+    if (entry.node.type !== "text") return;
+    const textObj = entry.container.getChildByLabel("text-content") as Text | undefined;
+    const resolution = textObj?.resolution ?? (window.devicePixelRatio || 1);
+    entry.container.position.set(
+      snapToPixelGrid(entry.container.x, scale, resolution),
+      snapToPixelGrid(entry.container.y, scale, resolution),
+    );
+  }
+
+  function snapAllTextContainerPositions(): void {
+    const scale = useViewportStore.getState().scale;
+    for (const entry of registry.values()) {
+      snapTextContainerPosition(entry, scale);
+    }
+  }
+
   /**
    * Full rebuild - used on initial load.
    */
@@ -171,7 +217,9 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
     // Apply auto-layout positions
     applyAutoLayoutPositions(state);
-    updateTextResolution(useViewportStore.getState().scale);
+    appliedTextResolution = 0;
+    applyTextResolution(getTargetTextResolution(useViewportStore.getState().scale));
+    snapAllTextContainerPositions();
     applyTextEditingVisibility();
   }
 
@@ -273,6 +321,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
             isInAutoLayout, // skipPosition for auto-layout children
           );
           entry.node = node;
+          snapTextContainerPosition(entry, useViewportStore.getState().scale);
         }
       }
     }
@@ -284,7 +333,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
     // Always reapply auto-layout positions after any update
     applyAutoLayoutPositions(state);
-    updateTextResolution(useViewportStore.getState().scale);
     applyTextEditingVisibility();
   }
 
@@ -322,6 +370,14 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
     // Register any nested children
     registerChildrenRecursive(id, state.nodesById, state.childrenById, container);
+
+    if (node.type === "text") {
+      const textObj = container.getChildByLabel("text-content") as Text | undefined;
+      if (textObj && textObj.resolution !== appliedTextResolution) {
+        textObj.resolution = appliedTextResolution;
+      }
+      snapTextContainerPosition({ container, node }, useViewportStore.getState().scale);
+    }
   }
 
   /**
@@ -342,7 +398,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
   function reconcileChildren(state: SceneState, prev: SceneState): void {
     // Reconcile root level
     if (state.rootIds !== prev.rootIds) {
-      reconcileChildList(state.rootIds, sceneRoot, "root");
+      reconcileChildList(state.rootIds, sceneRoot);
     }
 
     // Reconcile changed parent containers
@@ -358,7 +414,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
             reconcileChildList(
               state.childrenById[id],
               childrenHost as Container,
-              id,
             );
           }
         }
@@ -372,7 +427,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
   function reconcileChildList(
     expectedIds: string[],
     parent: Container,
-    _debugLabel: string,
   ): void {
     for (let i = 0; i < expectedIds.length; i++) {
       const id = expectedIds[i];
@@ -394,40 +448,29 @@ export function createPixiSync(sceneRoot: Container): () => void {
     }
   }
 
-  // Update text resolution when viewport scale changes for crisp rendering
+  // Update text resolution only after zoom settles to avoid repeated costly updates.
   let lastScale = useViewportStore.getState().scale;
-  const devicePixelRatio = window.devicePixelRatio || 1;
+  let textResolutionUpdateTimer: ReturnType<typeof setTimeout> | null = null;
 
-  function updateTextResolution(scale: number): void {
-    // Keep at least DPR even when zoomed out, otherwise text gets blurry on initial fit.
-    const targetResolution = Math.max(
-      devicePixelRatio,
-      Math.ceil(scale * devicePixelRatio),
-    );
-
-    function updateContainerTexts(container: Container): void {
-      for (const child of container.children) {
-        if (child.label === "text-content" && "resolution" in child) {
-          const text = child as unknown as { resolution: number };
-          if (text.resolution !== targetResolution) {
-            text.resolution = targetResolution;
-          }
-        } else if (child instanceof Container) {
-          updateContainerTexts(child);
-        }
-      }
+  function scheduleTextResolutionUpdate(scale: number): void {
+    if (textResolutionUpdateTimer) {
+      clearTimeout(textResolutionUpdateTimer);
     }
-
-    updateContainerTexts(sceneRoot);
+    textResolutionUpdateTimer = setTimeout(() => {
+      textResolutionUpdateTimer = null;
+      applyTextResolution(getTargetTextResolution(scale));
+      snapAllTextContainerPositions();
+    }, 120);
   }
 
   // Initial text resolution
-  updateTextResolution(lastScale);
+  applyTextResolution(getTargetTextResolution(lastScale));
 
   const unsubViewport = useViewportStore.subscribe((state) => {
     if (state.scale !== lastScale) {
       lastScale = state.scale;
-      updateTextResolution(state.scale);
+      snapAllTextContainerPositions();
+      scheduleTextResolutionUpdate(state.scale);
     }
   });
 
@@ -462,6 +505,10 @@ export function createPixiSync(sceneRoot: Container): () => void {
     unsubVariables();
     unsubSelection();
     unsubViewport();
+    if (textResolutionUpdateTimer) {
+      clearTimeout(textResolutionUpdateTimer);
+      textResolutionUpdateTimer = null;
+    }
     // Clean up all containers
     for (const entry of registry.values()) {
       entry.container.destroy({ children: true });
