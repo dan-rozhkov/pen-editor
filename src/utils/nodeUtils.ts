@@ -320,6 +320,97 @@ export function findChildAtPosition(
   return null;
 }
 
+interface AbsoluteRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface FrameHitResult {
+  frame: FrameNode;
+  absoluteX: number;
+  absoluteY: number;
+}
+
+function rectsIntersect(a: AbsoluteRect, b: AbsoluteRect): boolean {
+  return (
+    a.x < b.x + b.width &&
+    a.x + a.width > b.x &&
+    a.y < b.y + b.height &&
+    a.y + a.height > b.y
+  );
+}
+
+function getNodeHitSize(node: SceneNode): { width: number; height: number } {
+  let width = node.width;
+  let height = node.height;
+
+  if (node.type === "frame" && node.layout?.autoLayout) {
+    const fitWidth = node.sizing?.widthMode === "fit_content";
+    const fitHeight = node.sizing?.heightMode === "fit_content";
+    if (fitWidth || fitHeight) {
+      const intrinsic = calculateFrameIntrinsicSize(node, { fitWidth, fitHeight });
+      if (fitWidth) width = intrinsic.width;
+      if (fitHeight) height = intrinsic.height;
+    }
+  }
+
+  return { width, height };
+}
+
+/**
+ * Find the top-most/deepest frame that intersects with a world-space rectangle.
+ * Useful for inserting freshly created nodes into a frame under them.
+ */
+export function findTopmostFrameIntersectingRectWithLayout(
+  nodes: SceneNode[],
+  targetRect: AbsoluteRect,
+  calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
+): FrameHitResult | null {
+  function search(
+    searchNodes: SceneNode[],
+    accX: number,
+    accY: number,
+    parentFrame: FrameNode | null,
+  ): FrameHitResult | null {
+    let effectiveNodes = searchNodes;
+    if (parentFrame?.layout?.autoLayout) {
+      effectiveNodes = calculateLayoutForFrame(parentFrame);
+    }
+
+    for (let i = effectiveNodes.length - 1; i >= 0; i--) {
+      const node = effectiveNodes[i];
+      if (node.visible === false) continue;
+
+      const { width, height } = getNodeHitSize(node);
+      const absX = accX + node.x;
+      const absY = accY + node.y;
+      const nodeRect: AbsoluteRect = { x: absX, y: absY, width, height };
+
+      if (!rectsIntersect(targetRect, nodeRect)) continue;
+
+      if (isContainerNode(node)) {
+        const childHit = search(
+          node.children,
+          absX,
+          absY,
+          node.type === "frame" ? node : null,
+        );
+        if (childHit) return childHit;
+      }
+
+      if (node.type === "frame") {
+        return { frame: node, absoluteX: absX, absoluteY: absY };
+      }
+    }
+
+    return null;
+  }
+
+  return search(nodes, 0, 0, null);
+}
+
 /**
  * Find the nearest parent frame for a node inside a component tree.
  * Used for Shift+Enter to select the parent container in instance editing.

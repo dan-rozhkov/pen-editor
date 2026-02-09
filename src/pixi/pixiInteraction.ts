@@ -17,6 +17,7 @@ import {
   type SnapTarget,
 } from "@/utils/smartGuideUtils";
 import {
+  findTopmostFrameIntersectingRectWithLayout,
   getNodeAbsolutePosition,
   getNodeAbsolutePositionWithLayout,
   getNodeEffectiveSize,
@@ -1246,7 +1247,24 @@ export function setupPixiInteraction(
         return;
     }
 
-    useSceneStore.getState().addNode(node);
+    const sceneState = useSceneStore.getState();
+    const currentNodes = sceneState.getNodes();
+    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+    const targetFrame = findTopmostFrameIntersectingRectWithLayout(
+      currentNodes,
+      { x, y, width, height },
+      calculateLayoutForFrame,
+    );
+
+    if (targetFrame) {
+      sceneState.addChildToFrame(targetFrame.frame.id, {
+        ...node,
+        x: x - targetFrame.absoluteX,
+        y: y - targetFrame.absoluteY,
+      });
+    } else {
+      sceneState.addNode(node);
+    }
     useSelectionStore.getState().select(id);
   }
 

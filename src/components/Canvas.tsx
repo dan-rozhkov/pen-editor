@@ -113,6 +113,7 @@ export function Canvas() {
   const { undo, redo, saveHistory, startBatch, endBatch } = useHistoryStore();
   const dropIndicator = useDragStore((state) => state.dropIndicator);
   const { activeTool, cancelDrawing, toggleTool } = useDrawModeStore();
+  const isDrawToolActive = activeTool !== null && activeTool !== "cursor";
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -202,6 +203,7 @@ export function Canvas() {
     resetContainerContext,
     setSelectedIds,
     addNode,
+    addChildToFrame,
   });
 
   useCanvasDoubleClick({
@@ -295,7 +297,7 @@ export function Canvas() {
         width: "100%",
         height: "100%",
         overflow: "hidden",
-        cursor: isPanning ? "grab" : activeTool ? "crosshair" : "default",
+        cursor: isPanning ? "grab" : isDrawToolActive ? "crosshair" : "default",
         background: pageBackground,
         position: "relative",
       }}
@@ -358,7 +360,7 @@ export function Canvas() {
         onContextMenu={handleContextMenu}
       >
         {/* Scene layer: interactive content (nodes, transformer, background) */}
-        <Layer listening={!isPanning}>
+        <Layer listening={!isPanning && !isDrawToolActive}>
           {/* Background rect for click detection (invisible, covers visible area) */}
           <Rect
             name="background"
@@ -448,7 +450,7 @@ export function Canvas() {
           )}
         </FastLayer>
         {/* Overlay layer: labels (interactive) */}
-        <Layer listening={!isPanning}>
+        <Layer listening={!isPanning && !isDrawToolActive}>
           {/* Frame name labels (interactive: click to select, dblclick to rename) */}
           {collectFrameNodes
             .filter(({ isNested }) => !isNested)

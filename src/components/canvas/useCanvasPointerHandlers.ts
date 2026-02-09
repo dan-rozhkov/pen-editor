@@ -15,6 +15,7 @@ import {
   computeSiblingDistances,
 } from "@/utils/measureUtils";
 import {
+  findTopmostFrameIntersectingRectWithLayout,
   findNodeById,
   getNodeAbsolutePositionWithLayout,
   isDescendantOf,
@@ -35,6 +36,7 @@ interface CanvasPointerHandlersParams {
   resetContainerContext: () => void;
   setSelectedIds: (ids: string[]) => void;
   addNode: (node: SceneNode) => void;
+  addChildToFrame: (frameId: string, child: SceneNode) => void;
 }
 
 export function useCanvasPointerHandlers({
@@ -51,6 +53,7 @@ export function useCanvasPointerHandlers({
   resetContainerContext,
   setSelectedIds,
   addNode,
+  addChildToFrame,
 }: CanvasPointerHandlersParams) {
   const lastPointerPosition = useRef<{ x: number; y: number } | null>(null);
   const isMarqueeActive = useRef(false);
@@ -178,10 +181,27 @@ export function useCanvasPointerHandlers({
           break;
         }
       }
-      addNode(node);
+      const currentNodes = useSceneStore.getState().getNodes();
+      const calculateLayoutForFrame =
+        useLayoutStore.getState().calculateLayoutForFrame;
+      const targetFrame = findTopmostFrameIntersectingRectWithLayout(
+        currentNodes,
+        { x: rx, y: ry, width: rw, height: rh },
+        calculateLayoutForFrame,
+      );
+
+      if (targetFrame) {
+        addChildToFrame(targetFrame.frame.id, {
+          ...node,
+          x: rx - targetFrame.absoluteX,
+          y: ry - targetFrame.absoluteY,
+        });
+      } else {
+        addNode(node);
+      }
       useSelectionStore.getState().select(id);
     },
-    [addNode],
+    [addNode, addChildToFrame],
   );
 
   const handleWheel = useCallback(

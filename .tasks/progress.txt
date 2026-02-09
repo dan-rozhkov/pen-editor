@@ -1,3 +1,7 @@
+[2026-02-09] Implemented auto-parenting for newly drawn nodes into frames (Konva + Pixi). Added findTopmostFrameIntersectingRectWithLayout() in nodeUtils.ts to locate the top-most/deepest intersecting frame by world-space bounds with layout-aware positions. Updated draw node creation in useCanvasPointerHandlers.ts and pixiInteraction.ts to insert the new node via addChildToFrame with coordinates converted to frame-local space. Tested: npm run build passes.
+
+[2026-02-09] Fixed draw-mode hit passthrough on Konva canvas. While a draw tool is active, interactive Konva layers now set listening=false, so existing nodes and frame labels under the cursor no longer receive click/drag/selection events during drawing. Updated Canvas.tsx to gate both scene and labels layers with !isDrawToolActive. Tested: npm run build passes.
+
 [2026-02-09] Fixed Pixi multi-select parity with Konva for modifier clicks. Updated pixiInteraction.ts so Cmd/Ctrl/Shift-modified clicks are treated as selection gestures (no immediate drag start), which restores reliable Cmd+Shift additive selection behavior. Also aligned nested hit-testing with Konva by returning already-selected child nodes before parent override logic. Tested: npm run build passes; pixi-konva-multiselect.spec.mjs passes in both renderers (Cmd+Shift click and marquee additive selection).
 
 [2026-01-29] Fixed visibility toggle bug by adding node.visible check in viewportUtils.isNodeVisible() function. Canvas content no longer disappears when toggling node visibility.
