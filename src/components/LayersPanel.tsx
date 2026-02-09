@@ -24,7 +24,7 @@ import clsx from "clsx";
 import { useSceneStore } from "../store/sceneStore";
 import { useSelectionStore } from "../store/selectionStore";
 import { useHoverStore } from "../store/hoverStore";
-import type { SceneNode, FrameNode, GroupNode } from "../types/scene";
+import type { SceneNode, FrameNode, FlatFrameNode, GroupNode } from "../types/scene";
 import { isContainerNode } from "../types/scene";
 import { FrameIcon } from "./ui/custom-icons/frame-icon";
 import { getAncestorIds } from "../utils/nodeUtils";
@@ -137,6 +137,15 @@ const LayerItem = memo(function LayerItem({
     (state) => state.toggleFrameExpanded,
   );
   const updateNode = useSceneStore((state) => state.updateNode);
+
+  // Check if this node is a slot child of a reusable parent
+  const isSlotChild = useSceneStore((state) => {
+    if (!parentId) return false;
+    const parentNode = state.nodesById[parentId];
+    if (!parentNode || parentNode.type !== "frame") return false;
+    const frame = parentNode as FlatFrameNode;
+    return !!(frame.reusable && frame.slot?.includes(node.id));
+  });
 
   // Inline editing state
   const [isEditing, setIsEditing] = useState(false);
@@ -318,16 +327,21 @@ const LayerItem = memo(function LayerItem({
               )}
             />
           ) : (
-            <span
-              className={clsx(
-                "text-xs whitespace-nowrap overflow-hidden text-ellipsis",
-                "text-text-secondary",
-                !isVisible && "opacity-50",
+            <>
+              <span
+                className={clsx(
+                  "text-xs whitespace-nowrap overflow-hidden text-ellipsis",
+                  "text-text-secondary",
+                  !isVisible && "opacity-50",
+                )}
+                onDoubleClick={handleDoubleClick}
+              >
+                {displayName}
+              </span>
+              {isSlotChild && (
+                <span className="text-[9px] text-purple-400 font-medium ml-1">S</span>
               )}
-              onDoubleClick={handleDoubleClick}
-            >
-              {displayName}
-            </span>
+            </>
           )}
         </div>
         <button

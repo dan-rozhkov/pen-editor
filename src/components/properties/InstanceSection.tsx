@@ -1,4 +1,4 @@
-import type { SceneNode } from "@/types/scene";
+import type { SceneNode, RefNode } from "@/types/scene";
 import { findComponentById } from "@/utils/nodeUtils";
 import { PropertySection } from "@/components/ui/PropertyInputs";
 
@@ -27,6 +27,11 @@ export function InstanceSection({
   if (isOverridden(node.strokeBinding, comp?.strokeBinding))
     overrides.push("Stroke Variable");
 
+  // Slot status
+  const slotIds = comp?.slot ?? [];
+  const refNode = node as RefNode;
+  const replacedSlots = slotIds.filter((id) => refNode.slotContent?.[id]);
+
   return (
     <PropertySection title="Instance">
       <div className="flex items-center gap-2 text-xs text-purple-400">
@@ -40,6 +45,11 @@ export function InstanceSection({
         </svg>
         <span>Instance of: {comp?.name || "Component"}</span>
       </div>
+      {slotIds.length > 0 && (
+        <div className="mt-2 text-xs text-text-secondary">
+          Slots: {replacedSlots.length}/{slotIds.length} replaced
+        </div>
+      )}
       {overrides.length > 0 && (
         <div className="mt-2 flex flex-col gap-2">
           <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wide">

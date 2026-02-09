@@ -1,6 +1,23 @@
 import type { FrameNode, GroupNode, SceneNode } from "@/types/scene";
 import { generateId } from "@/types/scene";
 
+/** Deep clone a node tree preserving original IDs (for slot content) */
+export function deepCloneNode(node: SceneNode): SceneNode {
+  if (node.type === "frame") {
+    return {
+      ...node,
+      children: node.children.map((child) => deepCloneNode(child)),
+    } as FrameNode;
+  }
+  if (node.type === "group") {
+    return {
+      ...node,
+      children: (node as GroupNode).children.map((child) => deepCloneNode(child)),
+    } as GroupNode;
+  }
+  return { ...node } as SceneNode;
+}
+
 export function cloneNodeWithNewId(
   node: SceneNode,
   applyOffset = true,

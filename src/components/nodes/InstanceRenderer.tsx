@@ -172,8 +172,12 @@ export function InstanceRenderer({
       return null;
     }
 
-    // Apply overrides to the child node
-    const overriddenChild = applyDescendantOverride(child, override);
+    // Check if this child is a slot with replacement content
+    const isSlot = component.slot?.includes(child.id);
+    const slotReplacement = isSlot ? node.slotContent?.[child.id] : undefined;
+
+    // If slot has replacement, render it instead (no property overrides)
+    const overriddenChild = slotReplacement ?? applyDescendantOverride(child, override);
 
     // Check if this descendant is selected
     const isSelected =

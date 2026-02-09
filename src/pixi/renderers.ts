@@ -17,6 +17,7 @@ import type {
   ImageFill,
   PerSideStroke,
 } from "@/types/scene";
+import { toFlatNode } from "@/types/scene";
 import { useVariableStore } from "@/store/variableStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useLayoutStore } from "@/store/layoutStore";
@@ -1478,9 +1479,24 @@ function createRefContainer(
     childrenContainer.addChild(bg);
   }
 
+  const componentFrame = component as FlatFrameNode;
+  const slotIds = componentFrame.slot ?? [];
+
   for (const child of renderedChildren) {
     const childOverride = node.descendants?.[child.id];
     if (childOverride?.enabled === false) continue;
+
+    // Check for slot replacement
+    const isSlot = slotIds.includes(child.id);
+    const slotReplacement = isSlot ? node.slotContent?.[child.id] : undefined;
+
+    if (slotReplacement) {
+      // Render the replacement node using toFlatNode()
+      const flatReplacement = toFlatNode(slotReplacement);
+      const childContainer = createNodeContainer(flatReplacement, nodesById, childrenById);
+      childrenContainer.addChild(childContainer);
+      continue;
+    }
 
     const sourceNode = nodesById[child.id];
     if (!sourceNode) continue;
@@ -1514,10 +1530,11 @@ function updateRefContainer(
   nodesById: Record<string, FlatSceneNode>,
   childrenById: Record<string, string[]>,
 ): void {
-  // For ref nodes, we rebuild entirely if the component or overrides changed
+  // For ref nodes, we rebuild entirely if the component, overrides, or slot content changed
   if (
     node.componentId !== prev.componentId ||
     node.descendants !== prev.descendants ||
+    node.slotContent !== prev.slotContent ||
     node.width !== prev.width ||
     node.height !== prev.height
   ) {

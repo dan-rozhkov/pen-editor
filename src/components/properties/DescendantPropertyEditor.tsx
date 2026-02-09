@@ -1,6 +1,6 @@
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore, type InstanceContext } from "@/store/selectionStore";
-import type { SceneNode, DescendantOverride, RefNode } from "@/types/scene";
+import type { SceneNode, DescendantOverride, RefNode, FrameNode } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
 import { findComponentById, findNodeById } from "@/utils/nodeUtils";
 import {
@@ -44,6 +44,9 @@ export function DescendantPropertyEditor({
   const resetDescendantOverride = useSceneStore(
     (s) => s.resetDescendantOverride,
   );
+  const replaceSlotContent = useSceneStore((s) => s.replaceSlotContent);
+  const resetSlotContent = useSceneStore((s) => s.resetSlotContent);
+  const updateSlotContentNode = useSceneStore((s) => s.updateSlotContentNode);
   const exitInstanceEditMode = useSelectionStore((s) => s.exitInstanceEditMode);
 
   const instance = findNodeById(
@@ -61,10 +64,18 @@ export function DescendantPropertyEditor({
   );
   if (!originalNode) return null;
 
+  // Slot detection
+  const isSlot = (component as FrameNode).slot?.includes(instanceContext.descendantId) ?? false;
+  const slotContentNode = instance.slotContent?.[instanceContext.descendantId];
+  const isSlotReplaced = isSlot && !!slotContentNode;
+
   const currentOverride =
     instance.descendants?.[instanceContext.descendantId] || {};
 
-  const displayNode = { ...originalNode, ...currentOverride } as SceneNode;
+  // If slot is replaced, display the replacement node; otherwise apply overrides
+  const displayNode = isSlotReplaced
+    ? slotContentNode!
+    : ({ ...originalNode, ...currentOverride } as SceneNode);
 
   const isPropertyOverridden = (
     property: keyof DescendantOverride,
@@ -73,11 +84,19 @@ export function DescendantPropertyEditor({
   };
 
   const handleUpdate = (updates: Partial<SceneNode>) => {
-    updateDescendantOverride(
-      instanceContext.instanceId,
-      instanceContext.descendantId,
-      updates as DescendantOverride,
-    );
+    if (isSlotReplaced) {
+      updateSlotContentNode(
+        instanceContext.instanceId,
+        instanceContext.descendantId,
+        updates,
+      );
+    } else {
+      updateDescendantOverride(
+        instanceContext.instanceId,
+        instanceContext.descendantId,
+        updates as DescendantOverride,
+      );
+    }
   };
 
   const handleResetProperty = (property: keyof DescendantOverride) => {
@@ -89,9 +108,21 @@ export function DescendantPropertyEditor({
   };
 
   const handleResetAll = () => {
-    resetDescendantOverride(
+    if (isSlotReplaced) {
+      resetSlotContent(instanceContext.instanceId, instanceContext.descendantId);
+    } else {
+      resetDescendantOverride(
+        instanceContext.instanceId,
+        instanceContext.descendantId,
+      );
+    }
+  };
+
+  const handleReplaceSlot = () => {
+    replaceSlotContent(
       instanceContext.instanceId,
       instanceContext.descendantId,
+      originalNode,
     );
   };
 
@@ -137,10 +168,31 @@ export function DescendantPropertyEditor({
             />
           </svg>
           <span>{originalNode.name || originalNode.type}</span>
+          {isSlot && (
+            <span className="text-[9px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded font-medium">
+              Slot
+            </span>
+          )}
         </div>
         <div className="text-[10px] text-text-muted mt-1">
           In instance: {instance.name || "Instance"}
         </div>
+        {isSlot && !isSlotReplaced && (
+          <button
+            onClick={handleReplaceSlot}
+            className="mt-2 px-3 py-1.5 bg-purple-500/20 border border-purple-500/30 rounded text-purple-400 text-xs cursor-pointer transition-colors hover:bg-purple-500/30"
+          >
+            Replace Slot
+          </button>
+        )}
+        {isSlotReplaced && (
+          <button
+            onClick={handleResetAll}
+            className="mt-2 px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
+          >
+            Reset Slot
+          </button>
+        )}
         <button
           onClick={exitInstanceEditMode}
           className="mt-2 px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
@@ -219,7 +271,7 @@ export function DescendantPropertyEditor({
         </div>
       </PropertySection>
 
-      {overriddenProperties.length > 0 && (
+      {!isSlotReplaced && overriddenProperties.length > 0 && (
         <PropertySection title="Overrides">
           <div className="text-xs text-text-secondary mb-2">
             {overriddenProperties.join(", ")}

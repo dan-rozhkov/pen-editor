@@ -143,6 +143,8 @@ export interface FrameNode extends BaseNode {
   themeOverride?: ThemeName
   // Reusable component flag - when true, this frame is a component that can be instantiated
   reusable?: boolean
+  // IDs of direct children that are slot nodes (replaceable in instances)
+  slot?: string[]
 }
 
 export interface RectNode extends BaseNode {
@@ -207,6 +209,8 @@ export interface RefNode extends BaseNode {
   componentId: string  // ID of the component (FrameNode with reusable: true)
   // Overrides for descendant nodes within the component
   descendants?: DescendantOverrides
+  // Slot content replacements: maps slot child ID to replacement node tree
+  slotContent?: Record<string, SceneNode>
 }
 
 export interface GroupNode extends BaseNode {

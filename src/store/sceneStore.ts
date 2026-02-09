@@ -9,6 +9,7 @@ import type {
   FlatSnapshot,
   DescendantOverride,
 } from "../types/scene";
+import { deepCloneNode } from "../utils/cloneNode";
 import {
   isContainerNode,
   generateId,
@@ -77,6 +78,10 @@ export interface SceneState {
     descendantId: string,
     property?: keyof DescendantOverride,
   ) => void;
+  toggleSlot: (frameId: string, childId: string) => void;
+  replaceSlotContent: (instanceId: string, slotChildId: string, newNode: SceneNode) => void;
+  resetSlotContent: (instanceId: string, slotChildId: string) => void;
+  updateSlotContentNode: (instanceId: string, slotChildId: string, updates: Partial<SceneNode>) => void;
   groupNodes: (ids: string[]) => string | null;
   ungroupNodes: (ids: string[]) => string[];
   convertNodeType: (id: string) => boolean;
@@ -597,6 +602,97 @@ export const useSceneStore = create<SceneState>((set, get) => ({
               : undefined,
         };
       }
+
+      return {
+        nodesById: { ...state.nodesById, [instanceId]: updated },
+        _cachedTree: null,
+      };
+    }),
+
+  toggleSlot: (frameId, childId) =>
+    set((state) => {
+      const existing = state.nodesById[frameId];
+      if (!existing || existing.type !== "frame") return state;
+      const frame = existing as FlatFrameNode;
+      if (!frame.reusable) return state;
+      const childIds = state.childrenById[frameId] ?? [];
+      if (!childIds.includes(childId)) return state;
+      saveHistory(state);
+
+      const currentSlots = frame.slot ?? [];
+      const newSlots = currentSlots.includes(childId)
+        ? currentSlots.filter((id) => id !== childId)
+        : [...currentSlots, childId];
+
+      const updated: FlatFrameNode = {
+        ...frame,
+        slot: newSlots.length > 0 ? newSlots : undefined,
+      };
+
+      return {
+        nodesById: { ...state.nodesById, [frameId]: updated as FlatSceneNode },
+        _cachedTree: null,
+      };
+    }),
+
+  replaceSlotContent: (instanceId, slotChildId, newNode) =>
+    set((state) => {
+      const existing = state.nodesById[instanceId];
+      if (!existing || existing.type !== "ref") return state;
+      saveHistory(state);
+
+      const refNode = existing as RefNode;
+      const updated: RefNode = {
+        ...refNode,
+        slotContent: {
+          ...refNode.slotContent,
+          [slotChildId]: deepCloneNode(newNode),
+        },
+      };
+
+      return {
+        nodesById: { ...state.nodesById, [instanceId]: updated },
+        _cachedTree: null,
+      };
+    }),
+
+  resetSlotContent: (instanceId, slotChildId) =>
+    set((state) => {
+      const existing = state.nodesById[instanceId];
+      if (!existing || existing.type !== "ref") return state;
+      const refNode = existing as RefNode;
+      if (!refNode.slotContent?.[slotChildId]) return state;
+      saveHistory(state);
+
+      const { [slotChildId]: _, ...remaining } = refNode.slotContent!;
+      const updated: RefNode = {
+        ...refNode,
+        slotContent: Object.keys(remaining).length > 0 ? remaining : undefined,
+      };
+
+      return {
+        nodesById: { ...state.nodesById, [instanceId]: updated },
+        _cachedTree: null,
+      };
+    }),
+
+  updateSlotContentNode: (instanceId, slotChildId, updates) =>
+    set((state) => {
+      const existing = state.nodesById[instanceId];
+      if (!existing || existing.type !== "ref") return state;
+      const refNode = existing as RefNode;
+      const slotNode = refNode.slotContent?.[slotChildId];
+      if (!slotNode) return state;
+      saveHistory(state);
+
+      const updatedSlotNode = { ...slotNode, ...updates } as SceneNode;
+      const updated: RefNode = {
+        ...refNode,
+        slotContent: {
+          ...refNode.slotContent,
+          [slotChildId]: updatedSlotNode,
+        },
+      };
 
       return {
         nodesById: { ...state.nodesById, [instanceId]: updated },
