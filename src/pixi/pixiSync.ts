@@ -271,7 +271,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
     // Handle removed nodes
     for (const id of Object.keys(prev.nodesById)) {
       if (!state.nodesById[id]) {
-        removeNode(id);
+        removeNode(id, prev.childrenById);
       }
     }
 
@@ -315,8 +315,15 @@ export function createPixiSync(sceneRoot: Container): () => void {
    * Create a new node and attach it to its parent.
    */
   function createAndAttachNode(id: string, state: SceneState): void {
+    if (registry.has(id)) return;
+
     const node = state.nodesById[id];
     if (!node) return;
+
+    const parentId = state.parentById[id];
+    // Parent containers create/register their subtree in one go.
+    // If parent isn't ready yet, avoid creating a duplicate detached child container.
+    if (parentId && !registry.has(parentId)) return;
 
     const container = createNodeContainer(
       node,
@@ -326,7 +333,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
     registry.set(id, { container, node });
 
     // Find parent and attach
-    const parentId = state.parentById[id];
     if (parentId) {
       const parentEntry = registry.get(parentId);
       if (parentEntry) {
@@ -357,13 +363,23 @@ export function createPixiSync(sceneRoot: Container): () => void {
   /**
    * Remove a node from the scene.
    */
-  function removeNode(id: string): void {
+  function removeNode(
+    id: string,
+    prevChildrenById: Record<string, string[]>,
+  ): void {
+    const childIds = prevChildrenById[id] ?? [];
+    for (const childId of childIds) {
+      removeNode(childId, prevChildrenById);
+    }
+
     const entry = registry.get(id);
-    if (entry) {
+    if (!entry) return;
+
+    if (!entry.container.destroyed) {
       entry.container.parent?.removeChild(entry.container);
       entry.container.destroy({ children: true });
-      registry.delete(id);
     }
+    registry.delete(id);
   }
 
   /**
