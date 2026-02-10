@@ -1,6 +1,9 @@
+import { useMemo } from "react";
 import { LinkSimple, LinkSimpleBreak } from "@phosphor-icons/react";
 import type { FrameNode, PolygonNode, SceneNode, SizingMode } from "@/types/scene";
 import type { ParentContext } from "@/utils/nodeUtils";
+import { useLayoutStore } from "@/store/layoutStore";
+import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 import { cn } from "@/lib/utils";
 import {
   NumberInput,
@@ -19,6 +22,57 @@ const sizingOptions = [
   { value: "fit_content", label: "Fit" },
 ];
 
+/**
+ * Compute the effective size a node would have in a given sizing mode.
+ * Returns undefined when the mode is "fixed" or computation isn't applicable.
+ */
+function computeSizeForMode(
+  node: SceneNode,
+  parentContext: ParentContext,
+  mode: SizingMode,
+  dimension: "width" | "height",
+  calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
+): number | undefined {
+  if (mode === "fixed") return undefined;
+
+  if (mode === "fit_content" && node.type === "frame") {
+    const frame = node as FrameNode;
+    const intrinsic = calculateFrameIntrinsicSize(frame, {
+      fitWidth: dimension === "width",
+      fitHeight: dimension === "height",
+    });
+    return dimension === "width" ? intrinsic.width : intrinsic.height;
+  }
+
+  if (
+    mode === "fill_container" &&
+    parentContext.isInsideAutoLayout &&
+    parentContext.parent &&
+    parentContext.parent.type === "frame"
+  ) {
+    const parent = parentContext.parent as FrameNode;
+    const sizingKey = dimension === "width" ? "widthMode" : "heightMode";
+    const modifiedChildren = parent.children.map((child) => {
+      if (child.id !== node.id) return child;
+      return {
+        ...child,
+        sizing: {
+          ...child.sizing,
+          [sizingKey]: "fill_container" as SizingMode,
+        },
+      };
+    });
+    const modifiedParent = { ...parent, children: modifiedChildren } as FrameNode;
+    const layoutChildren = calculateLayoutForFrame(modifiedParent);
+    const layoutNode = layoutChildren.find((n) => n.id === node.id);
+    if (layoutNode) {
+      return dimension === "width" ? layoutNode.width : layoutNode.height;
+    }
+  }
+
+  return undefined;
+}
+
 interface SizeSectionProps {
   node: SceneNode;
   onUpdate: (updates: Partial<SceneNode>) => void;
@@ -28,6 +82,48 @@ interface SizeSectionProps {
 }
 
 export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiSelect }: SizeSectionProps) {
+  const calculateLayoutForFrame = useLayoutStore((s) => s.calculateLayoutForFrame);
+
+  const { effectiveWidth, effectiveHeight } = useMemo(() => {
+    let ew = node.width;
+    let eh = node.height;
+
+    // For fit_content frames: compute intrinsic size
+    if (node.type === "frame" && (node as FrameNode).layout?.autoLayout) {
+      const frame = node as FrameNode;
+      const fitWidth = frame.sizing?.widthMode === "fit_content";
+      const fitHeight = frame.sizing?.heightMode === "fit_content";
+      if (fitWidth || fitHeight) {
+        const intrinsicSize = calculateFrameIntrinsicSize(frame, {
+          fitWidth,
+          fitHeight,
+        });
+        if (fitWidth) ew = intrinsicSize.width;
+        if (fitHeight) eh = intrinsicSize.height;
+      }
+    }
+
+    // For nodes in auto-layout parent with non-fixed sizing mode
+    if (
+      parentContext.isInsideAutoLayout &&
+      parentContext.parent &&
+      parentContext.parent.type === "frame"
+    ) {
+      const widthMode = node.sizing?.widthMode ?? "fixed";
+      const heightMode = node.sizing?.heightMode ?? "fixed";
+      if (widthMode !== "fixed" || heightMode !== "fixed") {
+        const layoutChildren = calculateLayoutForFrame(parentContext.parent as FrameNode);
+        const layoutNode = layoutChildren.find((n) => n.id === node.id);
+        if (layoutNode) {
+          if (widthMode !== "fixed") ew = layoutNode.width;
+          if (heightMode !== "fixed") eh = layoutNode.height;
+        }
+      }
+    }
+
+    return { effectiveWidth: ew, effectiveHeight: eh };
+  }, [node, parentContext, calculateLayoutForFrame]);
+
   return (
     <PropertySection title="Size">
       {!isMultiSelect && (parentContext.isInsideAutoLayout ||
@@ -52,14 +148,23 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
                       ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
                       : ""
                   }`}
-                  onClick={() =>
+                  onClick={() => {
+                    const newMode = option.value as SizingMode;
+                    const computedWidth = computeSizeForMode(
+                      node,
+                      parentContext,
+                      newMode,
+                      "width",
+                      calculateLayoutForFrame,
+                    );
                     onUpdate({
                       sizing: {
                         ...node.sizing,
-                        widthMode: option.value as SizingMode,
+                        widthMode: newMode,
                       },
-                    })
-                  }
+                      ...(computedWidth !== undefined ? { width: computedWidth } : {}),
+                    });
+                  }}
                 >
                   {option.label}
                 </Button>
@@ -85,14 +190,23 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
                       ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
                       : ""
                   }`}
-                  onClick={() =>
+                  onClick={() => {
+                    const newMode = option.value as SizingMode;
+                    const computedHeight = computeSizeForMode(
+                      node,
+                      parentContext,
+                      newMode,
+                      "height",
+                      calculateLayoutForFrame,
+                    );
                     onUpdate({
                       sizing: {
                         ...node.sizing,
-                        heightMode: option.value as SizingMode,
+                        heightMode: newMode,
                       },
-                    })
-                  }
+                      ...(computedHeight !== undefined ? { height: computedHeight } : {}),
+                    });
+                  }}
                 >
                   {option.label}
                 </Button>
@@ -104,10 +218,10 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
       <PropertyRow>
         <NumberInput
           label="W"
-          value={node.width}
+          value={effectiveWidth}
           isMixed={mixedKeys?.has("width")}
           onChange={(v) => {
-            const ratio = node.aspectRatio ?? (node.width / node.height);
+            const ratio = node.aspectRatio ?? (effectiveWidth / effectiveHeight);
             const newH = node.aspectRatioLocked
               ? Math.round(v / ratio)
               : node.height;
@@ -121,8 +235,8 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
               (updates as Partial<PolygonNode>).points =
                 generatePolygonPoints(sides, v, newH);
             } else if (node.type === "line") {
-              const scaleX = v / node.width;
-              const scaleY = node.aspectRatioLocked ? newH / node.height : 1;
+              const scaleX = v / effectiveWidth;
+              const scaleY = node.aspectRatioLocked ? newH / effectiveHeight : 1;
               const ln = node as unknown as { points: number[] };
               (updates as Record<string, unknown>).points = ln.points.map(
                 (p: number, i: number) =>
@@ -135,10 +249,10 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
         />
         <NumberInput
           label="H"
-          value={node.height}
+          value={effectiveHeight}
           isMixed={mixedKeys?.has("height")}
           onChange={(v) => {
-            const ratio = node.aspectRatio ?? (node.width / node.height);
+            const ratio = node.aspectRatio ?? (effectiveWidth / effectiveHeight);
             const newW = node.aspectRatioLocked
               ? Math.round(v * ratio)
               : node.width;
@@ -152,8 +266,8 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
               (updates as Partial<PolygonNode>).points =
                 generatePolygonPoints(sides, newW, v);
             } else if (node.type === "line") {
-              const scaleX = node.aspectRatioLocked ? newW / node.width : 1;
-              const scaleY = v / node.height;
+              const scaleX = node.aspectRatioLocked ? newW / effectiveWidth : 1;
+              const scaleY = v / effectiveHeight;
               const ln = node as unknown as { points: number[] };
               (updates as Record<string, unknown>).points = ln.points.map(
                 (p: number, i: number) =>
@@ -177,7 +291,7 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
             onUpdate({
               aspectRatioLocked: !node.aspectRatioLocked,
               ...(!node.aspectRatioLocked
-                ? { aspectRatio: node.width / node.height }
+                ? { aspectRatio: effectiveWidth / effectiveHeight }
                 : {}),
             })
           }
