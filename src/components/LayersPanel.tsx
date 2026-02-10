@@ -269,7 +269,7 @@ const LayerItem = memo(function LayerItem({
     <div
         data-node-id={node.id}
         className={clsx(
-          "group flex items-center justify-between pr-3 cursor-pointer h-[28px]",
+          "group flex items-center cursor-pointer h-[28px]",
           isSelected
             ? "bg-accent-selection hover:bg-accent-selection/80"
             : "hover:bg-surface-elevated",
@@ -294,7 +294,7 @@ const LayerItem = memo(function LayerItem({
         onDragLeave={() => {}}
         onDrop={handleDrop}
       >
-        <div className="flex items-center gap-1 flex-1 min-w-0">
+        <div className="flex items-center gap-1 flex-1">
           {/* Chevron for frames with children */}
           {hasChildren ? (
             <button
@@ -330,7 +330,7 @@ const LayerItem = memo(function LayerItem({
             <>
               <span
                 className={clsx(
-                  "text-xs whitespace-nowrap overflow-hidden text-ellipsis",
+                  "text-xs whitespace-nowrap",
                   "text-text-secondary",
                   !isVisible && "opacity-50",
                 )}
@@ -344,15 +344,20 @@ const LayerItem = memo(function LayerItem({
             </>
           )}
         </div>
-        <button
-          className={clsx(
-            "bg-transparent border-none cursor-pointer p-1 flex items-center justify-center rounded group-hover:opacity-100 opacity-0",
-          )}
-          onClick={handleVisibilityClick}
-          title={isVisible ? "Hide layer" : "Show layer"}
+        <div
+          className="sticky right-0 shrink-0 flex items-center pl-2 pr-3"
+          style={{ backgroundColor: "inherit" }}
         >
-          <EyeIcon visible={isVisible} />
-        </button>
+          <button
+            className={clsx(
+              "bg-transparent border-none cursor-pointer p-1 flex items-center justify-center rounded group-hover:opacity-100 opacity-0",
+            )}
+            onClick={handleVisibilityClick}
+            title={isVisible ? "Hide layer" : "Show layer"}
+          >
+            <EyeIcon visible={isVisible} />
+          </button>
+        </div>
     </div>
   );
 });
@@ -483,7 +488,7 @@ export function LayersPanel() {
       const el = scrollRef.current?.querySelector(
         `[data-node-id="${selectedIds[0]}"]`,
       );
-      el?.scrollIntoView({ block: "nearest" });
+      el?.scrollIntoView({ block: "nearest", inline: "nearest" });
     });
   }, [selectedIds, parentById, expandedFrameIds, expandAncestors]);
 
@@ -599,6 +604,20 @@ export function LayersPanel() {
     };
   }, []);
 
+  // Shift+wheel → horizontal scroll
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const handleWheel = (e: WheelEvent) => {
+      if (e.shiftKey && e.deltaY && !e.deltaX) {
+        e.preventDefault();
+        el.scrollLeft += e.deltaY;
+      }
+    };
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
+  }, []);
+
   const handleAutoScroll = useCallback(
     (e: React.DragEvent) => {
       if (!dragState.draggedId) return;
@@ -627,7 +646,7 @@ export function LayersPanel() {
   return (
     <div className="h-full bg-surface-panel flex flex-col select-none overflow-hidden">
       <div
-        className="flex-1 overflow-y-auto"
+        className="flex-1 overflow-auto"
         onDragEnd={handleDragEnd}
         onDragOver={handleAutoScroll}
         ref={scrollRef}
@@ -637,7 +656,7 @@ export function LayersPanel() {
             No layers yet
           </div>
         ) : (
-          <div style={{ height: totalHeight, position: "relative" }}>
+          <div style={{ height: totalHeight, position: "relative", display: "inline-block", minWidth: "100%" }}>
             <div style={{ transform: `translateY(${translateY}px)` }}>
               <LayerList
                 items={visibleItems}
