@@ -9,6 +9,7 @@ import { ButtonGroup } from "./button-group";
 import { Button } from "./button";
 import { FlipHorizontalIcon, FlipVerticalIcon } from "@phosphor-icons/react";
 import { CustomColorPicker } from "./ColorPicker";
+import { useScrubLabel } from "@/hooks/useScrubLabel";
 
 interface PropertySectionProps {
   title: string;
@@ -58,6 +59,8 @@ export function NumberInput({
   labelOutside = false,
   isMixed = false,
 }: NumberInputProps) {
+  const scrub = useScrubLabel({ value, onChange, step, min, max });
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseFloat(e.target.value);
     if (!isNaN(val)) {
@@ -71,7 +74,7 @@ export function NumberInput({
   if (labelOutside && label) {
     return (
       <div className="flex-1 flex flex-col gap-1">
-        <Label className="text-[10px] font-normal">{label}</Label>
+        <Label className="text-[10px] font-normal" onMouseDown={scrub.onMouseDown} style={scrub.style}>{label}</Label>
         <Input
           type="number"
           value={displayValue}
@@ -90,7 +93,7 @@ export function NumberInput({
       <div className="flex-1">
         <InputGroup>
           <InputGroupAddon align="inline-start">
-            <Label className="text-[11px] w-4 shrink-0">{label}</Label>
+            <Label className="text-[11px] w-4 shrink-0" onMouseDown={scrub.onMouseDown} style={scrub.style}>{label}</Label>
           </InputGroupAddon>
           <InputGroupInput
             type="number"
