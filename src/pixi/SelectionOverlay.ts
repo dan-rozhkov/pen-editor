@@ -182,7 +182,7 @@ export function createSelectionOverlay(
 
       // Draw size label below the selection bounding box
       if (totalW > 0 && totalH > 0) {
-        const isComp = selectedIds.length === 1 && isComponentOrInstance(selectedIds[0]);
+        const isComp = selectedIds.some((id) => isComponentOrInstance(id));
         drawSizeLabel(
           minX + totalW / 2,
           maxY,

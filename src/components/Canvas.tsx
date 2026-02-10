@@ -387,10 +387,18 @@ export function Canvas() {
           {collectSelectedNodes.length === 1 &&
             editingMode !== "text" &&
             collectSelectedNodes.map(
-              ({ node, absX, absY, effectiveWidth, effectiveHeight }) => (
+              ({
+                node,
+                absX,
+                absY,
+                effectiveWidth,
+                effectiveHeight,
+                isInComponentContext,
+              }) => (
                 <NodeSizeLabel
                   key={`size-${node.id}`}
                   node={node}
+                  forceComponentStyle={isInComponentContext}
                   absoluteX={absX}
                   absoluteY={absY}
                   effectiveWidth={effectiveWidth}
@@ -403,6 +411,7 @@ export function Canvas() {
             <NodeSizeLabel
               key="size-group"
               nodeIds={collectSelectedNodes.map(({ node }) => node.id)}
+              forceComponentStyle={selectionBoundingBox.isInComponentContext}
               absoluteX={selectionBoundingBox.x}
               absoluteY={selectionBoundingBox.y}
               effectiveWidth={selectionBoundingBox.width}

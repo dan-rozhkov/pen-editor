@@ -7,6 +7,7 @@ import { useViewportStore } from "../../store/viewportStore";
 interface NodeSizeLabelProps {
   node?: SceneNode;
   nodeIds?: string[];
+  forceComponentStyle?: boolean;
   absoluteX: number;
   absoluteY: number;
   effectiveWidth: number;
@@ -25,6 +26,7 @@ const LABEL_TEXT_COLOR = "#ffffff"; // White text
 export function NodeSizeLabel({
   node,
   nodeIds,
+  forceComponentStyle = false,
   absoluteX,
   absoluteY,
   effectiveWidth,
@@ -125,6 +127,7 @@ export function NodeSizeLabel({
   // Determine label color based on node type
   // Use purple for components (reusable frames) and instances (ref nodes)
   const isComponentOrInstance =
+    forceComponentStyle ||
     (node?.type === "frame" && (node as FrameNode).reusable) ||
     node?.type === "ref";
   const labelBgColor = isComponentOrInstance

@@ -71,12 +71,8 @@ export function useCanvasSelectionData({
 
   const parentById = useSceneStore((state) => state.parentById);
   const nodesById = useSceneStore((state) => state.nodesById);
-
-  const transformerColor = useMemo(() => {
-    const defaultColor = "#0d99ff";
-    const componentColor = "#9747ff";
-
-    const isInComponentContext = (nodeId: string): boolean => {
+  const isInComponentContext = useMemo(
+    () => (nodeId: string): boolean => {
       let currentId: string | null = nodeId;
       while (currentId) {
         const currentNode = nodesById[currentId];
@@ -86,7 +82,13 @@ export function useCanvasSelectionData({
         currentId = parentById[currentId] ?? null;
       }
       return false;
-    };
+    },
+    [nodesById, parentById],
+  );
+
+  const transformerColor = useMemo(() => {
+    const defaultColor = "#0d99ff";
+    const componentColor = "#9747ff";
 
     for (const id of selectedIds) {
       if (isInComponentContext(id)) {
@@ -94,7 +96,7 @@ export function useCanvasSelectionData({
       }
     }
     return defaultColor;
-  }, [selectedIds, nodesById, parentById]);
+  }, [selectedIds, isInComponentContext]);
 
   const editingNamePosition = useMemo(() => {
     if (!editingNameNode) return null;
@@ -192,9 +194,62 @@ export function useCanvasSelectionData({
       absY: number;
       effectiveWidth: number;
       effectiveHeight: number;
+      isInComponentContext: boolean;
     }> = [];
 
     if (selectedIds.length === 0) return result;
+
+    if (instanceContext) {
+      const instance = findNodeById(nodes, instanceContext.instanceId);
+      if (instance && instance.type === "ref") {
+        const refNode = instance as RefNode;
+        const component = findComponentById(nodes, refNode.componentId);
+        if (component) {
+          const originalDescendant = findNodeById(
+            component.children,
+            instanceContext.descendantId,
+          );
+          const slotContent =
+            originalDescendant?.type === "ref"
+              ? refNode.slotContent?.[instanceContext.descendantId]
+              : undefined;
+          const descendantNode = slotContent
+            ? slotContent
+            : originalDescendant
+              ? applyDescendantOverride(
+                  originalDescendant,
+                  refNode.descendants?.[instanceContext.descendantId],
+                )
+              : null;
+
+          if (descendantNode) {
+            const instanceAbsPos = getNodeAbsolutePositionWithLayout(
+              nodes,
+              instanceContext.instanceId,
+              calculateLayoutForFrame,
+            );
+            const localPos = getDescendantLocalPosition(
+              component.layout?.autoLayout
+                ? calculateLayoutForFrame(component)
+                : component.children,
+              instanceContext.descendantId,
+              calculateLayoutForFrame,
+            );
+            if (instanceAbsPos && localPos) {
+              result.push({
+                node: descendantNode,
+                absX: instanceAbsPos.x + localPos.x,
+                absY: instanceAbsPos.y + localPos.y,
+                effectiveWidth: descendantNode.width,
+                effectiveHeight: descendantNode.height,
+                isInComponentContext: true,
+              });
+              return result;
+            }
+          }
+        }
+      }
+    }
 
     for (const id of selectedIds) {
       const node = findNodeById(nodes, id);
@@ -248,10 +303,11 @@ export function useCanvasSelectionData({
         absY: absPos.y,
         effectiveWidth,
         effectiveHeight,
+        isInComponentContext: isInComponentContext(id),
       });
     }
     return result;
-  }, [selectedIds, nodes, calculateLayoutForFrame]);
+  }, [selectedIds, nodes, calculateLayoutForFrame, instanceContext, isInComponentContext]);
 
   const selectionBoundingBox = useMemo(() => {
     if (collectSelectedNodes.length <= 1) return null;
@@ -278,6 +334,9 @@ export function useCanvasSelectionData({
       y: minY,
       width: maxX - minX,
       height: maxY - minY,
+      isInComponentContext: collectSelectedNodes.some(
+        ({ isInComponentContext: inComponent }) => inComponent,
+      ),
     };
   }, [collectSelectedNodes]);
 
