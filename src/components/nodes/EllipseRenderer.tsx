@@ -15,7 +15,7 @@ import {
 interface EllipseRendererProps {
   node: SceneNode & { type: "ellipse" };
   onClick: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
-  onDragStart: () => void;
+  onDragStart: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => void;
   fillColor?: string;
   strokeColor?: string;

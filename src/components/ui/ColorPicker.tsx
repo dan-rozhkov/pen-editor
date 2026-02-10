@@ -5,6 +5,7 @@ import {
   useCallback,
   useLayoutEffect,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   ColorPicker as AriaColorPicker,
   ColorArea,
@@ -29,6 +30,7 @@ export function CustomColorPicker({
   swatchSize = "md",
 }: CustomColorPickerProps) {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
@@ -69,14 +71,18 @@ export function CustomColorPicker({
     setPopoverStyle({ position: "fixed", top, left });
   }, [open]);
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   // Close on click outside
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
-      ) {
+      const target = e.target as Node;
+      const clickedTrigger = containerRef.current?.contains(target);
+      const clickedPopover = popoverRef.current?.contains(target);
+      if (!clickedTrigger && !clickedPopover) {
         setOpen(false);
       }
     };
@@ -100,21 +106,23 @@ export function CustomColorPicker({
     };
   }, [open, updatePopoverPosition]);
 
-  const sizeClass = swatchSize === "sm" ? "w-2 h-2" : "w-4 h-4";
+  const sizeClass = swatchSize === "sm" ? "w-3 h-3" : "w-4 h-4";
 
   return (
     <div className="relative flex cursor-default" ref={containerRef}>
       {/* Swatch trigger */}
       <button
         type="button"
-        className={`${sizeClass} rounded cursor-pointer shrink-0`}
+        className={`${sizeClass} rounded-sm cursor-pointer shrink-0`}
         style={{ backgroundColor: safeValue }}
         onClick={() => setOpen(!open)}
         aria-label="Pick color"
       />
 
       {/* Popover */}
-      {open && (
+      {open &&
+        mounted &&
+        createPortal(
         <div
           ref={popoverRef}
           style={popoverStyle}
@@ -148,7 +156,7 @@ export function CustomColorPicker({
             </ColorField>
           </AriaColorPicker>
         </div>
-      )}
+      , document.body)}
     </div>
   );
 }

@@ -169,6 +169,12 @@
   --color-accent-selection: #1a4a7a;
 }
 
+html.disable-theme-transitions *,
+html.disable-theme-transitions *::before,
+html.disable-theme-transitions *::after {
+  transition: none !important;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

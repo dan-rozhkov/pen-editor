@@ -11,10 +11,20 @@ import { Button } from "./ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
-  DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "./ui/dropdown-menu";
+import {
+  FolderOpenIcon,
+  FloppyDiskIcon,
+  DownloadSimpleIcon,
+  CaretDownIcon,
+} from "@phosphor-icons/react";
 
 export function Toolbar() {
   const nodes = useSceneStore((state) => state.getNodes());
@@ -77,42 +87,62 @@ export function Toolbar() {
   };
 
   return (
-    <div className="flex flex-row items-center gap-2 px-3 py-2 bg-surface-panel border-b border-border-default h-[44px]">
-      <Button variant="secondary" size="sm" onClick={handleOpen}>
-        Open
-      </Button>
-      <Button variant="secondary" size="sm" onClick={handleSave}>
-        Save
-      </Button>
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => {
-          setImportOpen(true);
-          setError(null);
-        }}
-      >
-        Import JSON
-      </Button>
+    <div className="flex flex-row items-center gap-2 px-1 py-2 bg-surface-panel border-b border-border-default">
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={<Button variant="ghost" size="sm" />}
+        >
+          File
+          <CaretDownIcon className="size-3 text-muted-foreground" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" sideOffset={4}>
+          <DropdownMenuItem onClick={handleOpen}>
+            <FolderOpenIcon className="size-3.5" />
+            Open
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={handleSave}>
+            <FloppyDiskIcon className="size-3.5" />
+            Save
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              setImportOpen(true);
+              setError(null);
+            }}
+          >
+            <DownloadSimpleIcon className="size-3.5" />
+            Import JSON
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
+        <DialogContent
+          className="sm:max-w-xl max-h-[80vh] flex flex-col gap-0 p-0"
+          showCloseButton={false}
+          overlayClassName="backdrop-blur-none bg-black/40"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3">
             <DialogTitle>Import Pixso JSON</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-2 px-6 pb-2">
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 flex flex-col gap-2 px-4 py-3 overflow-y-auto">
             <textarea
               value={jsonText}
               onChange={(e) => setJsonText(e.target.value)}
               placeholder="Paste Pixso JSON here..."
-              className="w-full h-64 rounded-md border border-border-default bg-surface-input p-3 text-xs font-mono text-text-primary resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+              className="w-full h-64 bg-secondary text-secondary-foreground rounded-md px-2 py-1.5 text-xs font-mono resize-none outline-none focus-visible:ring-1 focus-visible:ring-[#0d99ff] placeholder:text-muted-foreground"
               spellCheck={false}
             />
             {error && (
               <p className="text-red-500 text-xs">{error}</p>
             )}
           </div>
-          <DialogFooter className="px-6 pb-4">
+
+          {/* Footer */}
+          <div className="flex items-center justify-end gap-2 px-4 py-3">
             <Button
               variant="secondary"
               size="sm"
@@ -123,7 +153,7 @@ export function Toolbar() {
             <Button size="sm" onClick={handleImport}>
               Import
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

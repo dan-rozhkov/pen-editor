@@ -19,6 +19,8 @@ import {
 import type { InteractionContext, DragState } from "./types";
 import { findFrameInTree } from "./hitTesting";
 
+const AXIS_LOCK_THRESHOLD = 8; // pixels
+
 export interface DragController {
   handlePointerDown(e: PointerEvent, world: { x: number; y: number }, hitId: string | null): boolean;
   handlePointerMove(e: PointerEvent, world: { x: number; y: number }): boolean;
@@ -41,6 +43,10 @@ export function createDragController(_context: InteractionContext): DragControll
     snapOffsetY: 0,
     isAutoLayoutDrag: false,
     autoLayoutParentId: null,
+    isShiftHeld: false,
+    axisLock: null,
+    cumulativeDeltaX: 0,
+    cumulativeDeltaY: 0,
   };
 
   return {
@@ -57,8 +63,9 @@ export function createDragController(_context: InteractionContext): DragControll
           useSelectionStore.getState().select(hitId);
         }
 
-        // Match Konva behavior: modifier clicks are selection gestures, not drag start.
-        if (e.shiftKey || e.metaKey || e.ctrlKey) {
+        // Cmd/Ctrl are selection modifiers - prevent drag
+        // Shift is axis-lock modifier - allow drag
+        if (e.metaKey || e.ctrlKey) {
           return false;
         }
 
@@ -72,6 +79,10 @@ export function createDragController(_context: InteractionContext): DragControll
         state.snapOffsetY = 0;
         state.isAutoLayoutDrag = false;
         state.autoLayoutParentId = null;
+        state.isShiftHeld = e.shiftKey;
+        state.axisLock = null;
+        state.cumulativeDeltaX = 0;
+        state.cumulativeDeltaY = 0;
 
         // Check if node is inside an auto-layout frame
         const parentId = sceneState.parentById[hitId];
@@ -152,6 +163,34 @@ export function createDragController(_context: InteractionContext): DragControll
         let newX = state.startNodeX + deltaX;
         let newY = state.startNodeY + deltaY;
 
+        // Apply axis lock if Shift was held at drag start (only for free drag, not auto-layout)
+        if (state.isShiftHeld && !state.isAutoLayoutDrag) {
+          state.cumulativeDeltaX = deltaX;
+          state.cumulativeDeltaY = deltaY;
+
+          const absDeltaX = Math.abs(deltaX);
+          const absDeltaY = Math.abs(deltaY);
+          const totalMovement = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+          // Below threshold: don't move element at all (prevents jitter)
+          if (totalMovement < AXIS_LOCK_THRESHOLD) {
+            newX = state.startNodeX;
+            newY = state.startNodeY;
+          } else {
+            // Above threshold: determine dominant axis (only once)
+            if (state.axisLock === null) {
+              state.axisLock = absDeltaX >= absDeltaY ? "x" : "y";
+            }
+
+            // Lock to dominant axis
+            if (state.axisLock === "x") {
+              newY = state.startNodeY; // Lock Y, allow X
+            } else {
+              newX = state.startNodeX; // Lock X, allow Y
+            }
+          }
+        }
+
         // Smart guide snapping
         if (state.snapTargets.length > 0) {
           const sceneState = useSceneStore.getState();
@@ -166,11 +205,26 @@ export function createDragController(_context: InteractionContext): DragControll
             const draggedEdges = getSnapEdges(absX, absY, node.width, node.height);
             const result = calculateSnap(draggedEdges, state.snapTargets, threshold);
 
-            newX += result.deltaX;
-            newY += result.deltaY;
+            // Filter snap deltas based on axis lock
+            let snapDeltaX = result.deltaX;
+            let snapDeltaY = result.deltaY;
+            let filteredGuides = result.guides;
 
-            if (result.guides.length > 0) {
-              useSmartGuideStore.getState().setGuides(result.guides);
+            if (state.isShiftHeld && state.axisLock !== null) {
+              if (state.axisLock === "x") {
+                snapDeltaY = 0; // Don't snap locked Y axis
+                filteredGuides = result.guides.filter(g => g.orientation === "horizontal");
+              } else {
+                snapDeltaX = 0; // Don't snap locked X axis
+                filteredGuides = result.guides.filter(g => g.orientation === "vertical");
+              }
+            }
+
+            newX += snapDeltaX;
+            newY += snapDeltaY;
+
+            if (filteredGuides.length > 0) {
+              useSmartGuideStore.getState().setGuides(filteredGuides);
             } else {
               useSmartGuideStore.getState().clearGuides();
             }
@@ -234,8 +288,13 @@ export function createDragController(_context: InteractionContext): DragControll
           });
         }
 
+        // Reset axis lock state
         state.isDragging = false;
         state.nodeId = null;
+        state.isShiftHeld = false;
+        state.axisLock = null;
+        state.cumulativeDeltaX = 0;
+        state.cumulativeDeltaY = 0;
         return true;
       }
       return false;

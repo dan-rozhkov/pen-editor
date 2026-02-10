@@ -5,6 +5,14 @@ import { generateVariableId, getVariableValue } from "../types/variable";
 import type { Variable, VariableType, ThemeName } from "../types/variable";
 import { Dialog, DialogContent, DialogTitle } from "./ui/dialog";
 import { CustomColorPicker } from "./ui/ColorPicker";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "./ui/table";
 import { PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import {
   DropdownMenu,
@@ -114,8 +122,8 @@ function ColorCell({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-2 px-2 py-1">
-      <CustomColorPicker value={value} onChange={onChange} swatchSize="sm" />
+    <div className="flex items-center gap-2">
+      <CustomColorPicker value={value} onChange={onChange} />
       <span className="text-xs text-text-secondary font-mono truncate">
         {value.replace("#", "").toUpperCase()}
       </span>
@@ -146,11 +154,13 @@ function ValueCell({
   }
 
   return (
-    <EditableCell
-      value={value}
-      onCommit={(v) => updateVariableThemeValue(variable.id, theme, v)}
-      inputType={variable.type === "number" ? "number" : "text"}
-    />
+    <div className="min-w-0 overflow-hidden">
+      <EditableCell
+        value={value}
+        onCommit={(v) => updateVariableThemeValue(variable.id, theme, v)}
+        inputType={variable.type === "number" ? "number" : "text"}
+      />
+    </div>
   );
 }
 
@@ -162,14 +172,14 @@ function VariableRow({ variable }: { variable: Variable }) {
   const badge = typeBadge[variable.type];
 
   return (
-    <tr
-      className="border-b border-border-light hover:bg-surface-elevated/50 transition-colors"
+    <TableRow
+      className="border-border-light hover:bg-surface-elevated/50"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       {/* Name */}
-      <td className="py-1 px-1">
-        <div className="flex items-center gap-2">
+      <TableCell className="py-2 px-3">
+        <div className="flex items-center gap-2 min-w-0">
           <span
             className={clsx(
               "w-5 h-5 rounded text-[9px] font-bold flex items-center justify-center shrink-0",
@@ -178,22 +188,24 @@ function VariableRow({ variable }: { variable: Variable }) {
           >
             {badge.label}
           </span>
-          <EditableCell
-            value={variable.name}
-            onCommit={(name) => updateVariable(variable.id, { name })}
-          />
+          <div className="min-w-0 flex-1">
+            <EditableCell
+              value={variable.name}
+              onCommit={(name) => updateVariable(variable.id, { name })}
+            />
+          </div>
         </div>
-      </td>
+      </TableCell>
       {/* Light */}
-      <td className="py-1 px-1 border-l border-border-light">
+      <TableCell className="py-2 px-3 border-l border-border-light">
         <ValueCell variable={variable} theme="light" />
-      </td>
+      </TableCell>
       {/* Dark */}
-      <td className="py-1 px-1 border-l border-border-light">
+      <TableCell className="py-2 px-3 border-l border-border-light">
         <ValueCell variable={variable} theme="dark" />
-      </td>
+      </TableCell>
       {/* Actions */}
-      <td className="py-1 px-1 w-8 border-l border-border-light">
+      <TableCell className="py-2 px-3 border-l border-border-light">
         {hovered && (
           <button
             className="p-1 rounded hover:bg-white/10 text-text-muted hover:text-red-400 transition-colors"
@@ -203,8 +215,8 @@ function VariableRow({ variable }: { variable: Variable }) {
             <TrashIcon className="size-3.5" />
           </button>
         )}
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -295,36 +307,36 @@ export function VariablesDialog({ open, onOpenChange }: VariablesDialogProps) {
 
         {/* Table */}
         <div className="flex-1 overflow-y-auto">
-          <table className="w-full border-collapse select-none">
-            <thead>
-              <tr className="border-b border-border-light bg-surface-panel sticky top-0">
-                <th className="text-left text-[11px] font-semibold text-text-muted uppercase tracking-wide px-3 py-2">
+          <Table className="border-collapse select-none table-fixed">
+            <TableHeader>
+              <TableRow className="border-border-light bg-surface-panel sticky top-0 hover:bg-surface-panel">
+                <TableHead className="w-[40%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto">
                   Name
-                </th>
-                <th className="text-left text-[11px] font-semibold text-text-muted uppercase tracking-wide px-3 py-2 border-l border-border-light">
+                </TableHead>
+                <TableHead className="w-[25%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
                   Light
-                </th>
-                <th className="text-left text-[11px] font-semibold text-text-muted uppercase tracking-wide px-3 py-2 border-l border-border-light">
+                </TableHead>
+                <TableHead className="w-[25%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
                   Dark
-                </th>
-                <th className="w-8 border-l border-border-light" />
-              </tr>
-            </thead>
-            <tbody>
+                </TableHead>
+                <TableHead className="w-[10%] h-auto border-l border-border-light" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {variables.length === 0 ? (
-                <tr>
-                  <td
+                <TableRow className="hover:bg-transparent">
+                  <TableCell
                     colSpan={4}
                     className="text-center text-text-disabled text-xs py-12"
                   >
                     No variables yet
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
                 variables.map((v) => <VariableRow key={v.id} variable={v} />)
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
 
         {/* Footer */}

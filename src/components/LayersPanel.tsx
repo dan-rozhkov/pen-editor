@@ -625,12 +625,7 @@ export function LayersPanel() {
   const translateY = startIndex * ROW_HEIGHT;
 
   return (
-    <div className="flex-1 bg-surface-panel flex flex-col select-none overflow-hidden">
-      <div className="px-4 pt-3 pb-3 border-b border-border-default">
-        <div className="text-[11px] font-semibold text-text-primary">
-          Layers
-        </div>
-      </div>
+    <div className="h-full bg-surface-panel flex flex-col select-none overflow-hidden">
       <div
         className="flex-1 overflow-y-auto"
         onDragEnd={handleDragEnd}

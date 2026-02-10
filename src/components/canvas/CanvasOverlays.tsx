@@ -7,21 +7,7 @@ export function ZoomIndicator({ scale, onFitToContent }: ZoomIndicatorProps) {
   return (
     <div
       onClick={onFitToContent}
-      style={{
-        position: "absolute",
-        bottom: 12,
-        left: 12,
-        background: "rgba(255, 255, 255, 0.9)",
-        padding: "4px 8px",
-        borderRadius: 4,
-        fontSize: 12,
-        fontFamily: "system-ui, sans-serif",
-        color: "#666",
-        zIndex: 10,
-        cursor: "pointer",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-        userSelect: "none",
-      }}
+      className="absolute bottom-3 left-3 z-10 cursor-pointer select-none rounded bg-surface-panel/90 px-2 py-1 text-xs text-text-muted"
       title="Click to fit all (Cmd/Ctrl+0)"
     >
       {Math.round(scale * 100)}%

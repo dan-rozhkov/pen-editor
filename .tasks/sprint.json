@@ -194,7 +194,7 @@
     },
     {
       "name": "shift-axis-lock-drag",
-      "passed": false
+      "passed": true
     }
   ]
 }

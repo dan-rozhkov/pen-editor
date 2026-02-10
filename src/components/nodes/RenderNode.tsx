@@ -50,6 +50,7 @@ import {
   type SnapTarget,
 } from "@/utils/smartGuideUtils";
 
+const AXIS_LOCK_THRESHOLD = 8; // pixels
 
 interface RenderNodeProps {
   node: SceneNode;
@@ -85,6 +86,19 @@ export const RenderNode = memo(function RenderNode({
   const snapOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const transformUpdateRef = useRef<Partial<SceneNode> | null>(null);
   const transformRafRef = useRef<number | null>(null);
+
+  // Axis lock state
+  const axisLockStateRef = useRef<{
+    isShiftHeld: boolean;
+    axisLock: "x" | "y" | null;
+    dragStartX: number;
+    dragStartY: number;
+  }>({
+    isShiftHeld: false,
+    axisLock: null,
+    dragStartX: 0,
+    dragStartY: 0,
+  });
 
   // Refs for stable callbacks - avoids recreating handlers on every prop change
   const nodeRef = useRef(node);
@@ -208,10 +222,20 @@ export const RenderNode = memo(function RenderNode({
   // Check if node is hovered (and not selected - selected takes priority)
   const isHoveredAndNotSelected = isHovered && !isSelected;
 
-  const handleDragStart = useCallback(() => {
+  const handleDragStart = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
     const n = nodeRef.current;
+    const target = e.target;
+
     // Always select the node when starting to drag
     select(n.id);
+
+    // Capture Shift state and initial position
+    axisLockStateRef.current = {
+      isShiftHeld: e.evt.shiftKey,
+      axisLock: null,
+      dragStartX: target.x(),
+      dragStartY: target.y(),
+    };
 
     if (isInAutoLayoutRef.current) {
       useDragStore.getState().startDrag(n.id);
@@ -305,8 +329,35 @@ export const RenderNode = memo(function RenderNode({
       const threshold = 2 / scale;
 
       // Undo previous snap offset to get the "intended" (mouse-following) position
-      const intendedX = target.x() - snapOffsetRef.current.x;
-      const intendedY = target.y() - snapOffsetRef.current.y;
+      let intendedX = target.x() - snapOffsetRef.current.x;
+      let intendedY = target.y() - snapOffsetRef.current.y;
+
+      // Apply axis lock BEFORE snapping
+      const axisLock = axisLockStateRef.current;
+      if (axisLock.isShiftHeld) {
+        const deltaX = intendedX - axisLock.dragStartX;
+        const deltaY = intendedY - axisLock.dragStartY;
+        const absDeltaX = Math.abs(deltaX);
+        const absDeltaY = Math.abs(deltaY);
+        const totalMovement = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+        // Below threshold: freeze at start position
+        if (totalMovement < AXIS_LOCK_THRESHOLD) {
+          intendedX = axisLock.dragStartX;
+          intendedY = axisLock.dragStartY;
+        } else {
+          // Above threshold: determine and lock to dominant axis
+          if (axisLock.axisLock === null) {
+            axisLock.axisLock = absDeltaX >= absDeltaY ? "x" : "y";
+          }
+
+          if (axisLock.axisLock === "x") {
+            intendedY = axisLock.dragStartY; // Lock Y
+          } else {
+            intendedX = axisLock.dragStartX; // Lock X
+          }
+        }
+      }
 
       const absX = intendedX + parentOffsetRef.current.x;
       const absY = intendedY + parentOffsetRef.current.y;
@@ -314,13 +365,28 @@ export const RenderNode = memo(function RenderNode({
       const draggedEdges = getSnapEdges(absX, absY, n.width, n.height);
       const result = calculateSnap(draggedEdges, targets, threshold);
 
-      // Apply new snap offset
-      snapOffsetRef.current = { x: result.deltaX, y: result.deltaY };
-      target.x(intendedX + result.deltaX);
-      target.y(intendedY + result.deltaY);
+      // Filter snap deltas and guides based on axis lock
+      let snapDeltaX = result.deltaX;
+      let snapDeltaY = result.deltaY;
+      let filteredGuides = result.guides;
 
-      if (result.guides.length > 0) {
-        useSmartGuideStore.getState().setGuides(result.guides);
+      if (axisLock.isShiftHeld && axisLock.axisLock !== null) {
+        if (axisLock.axisLock === "x") {
+          snapDeltaY = 0; // Don't snap locked Y axis
+          filteredGuides = result.guides.filter(g => g.orientation === "horizontal");
+        } else {
+          snapDeltaX = 0; // Don't snap locked X axis
+          filteredGuides = result.guides.filter(g => g.orientation === "vertical");
+        }
+      }
+
+      // Apply new snap offset
+      snapOffsetRef.current = { x: snapDeltaX, y: snapDeltaY };
+      target.x(intendedX + snapDeltaX);
+      target.y(intendedY + snapDeltaY);
+
+      if (filteredGuides.length > 0) {
+        useSmartGuideStore.getState().setGuides(filteredGuides);
       } else {
         useSmartGuideStore.getState().clearGuides();
       }
@@ -337,6 +403,14 @@ export const RenderNode = memo(function RenderNode({
 
     // Always clear smart guides on drag end
     useSmartGuideStore.getState().clearGuides();
+
+    // Reset axis lock state
+    axisLockStateRef.current = {
+      isShiftHeld: false,
+      axisLock: null,
+      dragStartX: 0,
+      dragStartY: 0,
+    };
 
     if (isInAutoLayoutRef.current && parentFrameRef.current) {
       const { insertInfo, isOutsideParent } = useDragStore.getState();

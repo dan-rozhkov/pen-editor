@@ -22,6 +22,15 @@ function applyTheme(theme: UITheme) {
   }
 }
 
+function applyThemeWithoutTransitions(theme: UITheme) {
+  const root = document.documentElement
+  root.classList.add('disable-theme-transitions')
+  applyTheme(theme)
+  requestAnimationFrame(() => {
+    root.classList.remove('disable-theme-transitions')
+  })
+}
+
 interface UIThemeState {
   uiTheme: UITheme
   setUITheme: (theme: UITheme) => void
@@ -51,7 +60,11 @@ export const useUIThemeStore = create<UIThemeState>((set, get) => {
 })
 
 useUIThemeStore.subscribe((state, prev) => {
-  applyTheme(state.uiTheme)
+  if (state.uiTheme !== prev.uiTheme) {
+    applyThemeWithoutTransitions(state.uiTheme)
+  } else {
+    applyTheme(state.uiTheme)
+  }
   localStorage.setItem(STORAGE_KEY, state.uiTheme)
   if (state.uiTheme !== prev.uiTheme) {
     const scene = useSceneStore.getState()

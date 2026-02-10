@@ -178,29 +178,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
     }
   }
 
-  function snapToPixelGrid(value: number, scale: number, resolution: number): number {
-    const safeScale = scale > 0 ? scale : 1;
-    const safeResolution = resolution > 0 ? resolution : 1;
-    return Math.round(value * safeScale * safeResolution) / (safeScale * safeResolution);
-  }
-
-  function snapTextContainerPosition(entry: RegistryEntry, scale: number): void {
-    if (entry.node.type !== "text") return;
-    const textObj = entry.container.getChildByLabel("text-content") as Text | undefined;
-    const resolution = textObj?.resolution ?? (window.devicePixelRatio || 1);
-    entry.container.position.set(
-      snapToPixelGrid(entry.container.x, scale, resolution),
-      snapToPixelGrid(entry.container.y, scale, resolution),
-    );
-  }
-
-  function snapAllTextContainerPositions(): void {
-    const scale = useViewportStore.getState().scale;
-    for (const entry of registry.values()) {
-      snapTextContainerPosition(entry, scale);
-    }
-  }
-
   /**
    * Full rebuild - used on initial load.
    */
@@ -219,7 +196,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
     applyAutoLayoutPositions(state);
     appliedTextResolution = 0;
     applyTextResolution(getTargetTextResolution(useViewportStore.getState().scale));
-    snapAllTextContainerPositions();
     applyTextEditingVisibility();
   }
 
@@ -321,7 +297,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
             isInAutoLayout, // skipPosition for auto-layout children
           );
           entry.node = node;
-          snapTextContainerPosition(entry, useViewportStore.getState().scale);
         }
       }
     }
@@ -376,7 +351,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
       if (textObj && textObj.resolution !== appliedTextResolution) {
         textObj.resolution = appliedTextResolution;
       }
-      snapTextContainerPosition({ container, node }, useViewportStore.getState().scale);
     }
   }
 
@@ -398,7 +372,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
   function reconcileChildren(state: SceneState, prev: SceneState): void {
     // Reconcile root level
     if (state.rootIds !== prev.rootIds) {
-      reconcileChildList(state.rootIds, sceneRoot);
+      reconcileChildList(state.rootIds, sceneRoot, "root");
     }
 
     // Reconcile changed parent containers
@@ -414,6 +388,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
             reconcileChildList(
               state.childrenById[id],
               childrenHost as Container,
+              id,
             );
           }
         }
@@ -427,6 +402,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
   function reconcileChildList(
     expectedIds: string[],
     parent: Container,
+    _debugLabel: string,
   ): void {
     for (let i = 0; i < expectedIds.length; i++) {
       const id = expectedIds[i];
@@ -459,7 +435,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
     textResolutionUpdateTimer = setTimeout(() => {
       textResolutionUpdateTimer = null;
       applyTextResolution(getTargetTextResolution(scale));
-      snapAllTextContainerPositions();
     }, 120);
   }
 
@@ -469,7 +444,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
   const unsubViewport = useViewportStore.subscribe((state) => {
     if (state.scale !== lastScale) {
       lastScale = state.scale;
-      snapAllTextContainerPositions();
       scheduleTextResolutionUpdate(state.scale);
     }
   });

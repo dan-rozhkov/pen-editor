@@ -19,6 +19,11 @@ export interface DragState {
   // Auto-layout drag reordering
   isAutoLayoutDrag: boolean;
   autoLayoutParentId: string | null;
+  // Axis lock state
+  isShiftHeld: boolean;
+  axisLock: "x" | "y" | null;
+  cumulativeDeltaX: number;
+  cumulativeDeltaY: number;
 }
 
 export interface PanState {

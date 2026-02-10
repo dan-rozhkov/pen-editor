@@ -19,7 +19,7 @@ interface RectRendererProps {
   shadowProps?: Record<string, unknown>;
   isHovered: boolean;
   onClick: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
-  onDragStart: () => void;
+  onDragStart: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onTransformEnd: (e: Konva.KonvaEventObject<Event>) => void;
@@ -52,9 +52,9 @@ export const RectRenderer = memo(function RectRenderer({
     }
   }, [dragPosition, node.x, node.y]);
 
-  const handleDragStartInternal = useCallback(() => {
+  const handleDragStartInternal = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
     setDragPosition({ x: node.x, y: node.y });
-    onDragStart();
+    onDragStart(e);
   }, [node.x, node.y, onDragStart]);
 
   const handleDragMoveInternal = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {

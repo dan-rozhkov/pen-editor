@@ -89,7 +89,7 @@ function resolveRefToFrame(
 interface InstanceRendererProps {
   node: RefNode;
   onClick: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
-  onDragStart: () => void;
+  onDragStart: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onTransformStart: (e: Konva.KonvaEventObject<Event>) => void;

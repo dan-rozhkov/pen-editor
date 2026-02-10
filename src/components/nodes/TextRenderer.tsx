@@ -20,7 +20,7 @@ interface TextRendererProps {
   isEditing: boolean;
   onClick: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
   onDblClick: (e: Konva.KonvaEventObject<MouseEvent>) => void;
-  onDragStart: () => void;
+  onDragStart: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onTransformStart: (e: Konva.KonvaEventObject<Event>) => void;
