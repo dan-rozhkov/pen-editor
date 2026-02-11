@@ -405,6 +405,19 @@ function extractTextProps(node: PixsoNode): Partial<TextNode> {
   return props;
 }
 
+function selectVectorGeometries(node: PixsoNode): {
+  geometries: PixsoGeometry[];
+  source: "fillGeometry" | "strokeGeometry" | null;
+} {
+  if (node.fillGeometry && node.fillGeometry.length > 0) {
+    return { geometries: node.fillGeometry, source: "fillGeometry" };
+  }
+  if (node.strokeGeometry && node.strokeGeometry.length > 0) {
+    return { geometries: node.strokeGeometry, source: "strokeGeometry" };
+  }
+  return { geometries: [], source: null };
+}
+
 // --- Main conversion ---
 
 export function convertPixsoNode(node: PixsoNode): SceneNode | null {
@@ -521,9 +534,12 @@ export function convertPixsoNode(node: PixsoNode): SceneNode | null {
             }
           : undefined;
 
-      const geometries = node.fillGeometry;
+      const { geometries, source } = selectVectorGeometries(node);
       if (!geometries || geometries.length === 0) {
         // Fallback: no geometry data → rectangle
+        console.warn(
+          `[pixso-import] VECTOR node "${node.name}" (${node.id}) has no fillGeometry/strokeGeometry; falling back to rect`,
+        );
         const rect: RectNode = {
           ...(base as Omit<RectNode, "type">),
           type: "rect",
@@ -536,23 +552,25 @@ export function convertPixsoNode(node: PixsoNode): SceneNode | null {
       for (const geo of geometries) {
         if (!geo.path) continue;
         const bbox = getPathBBox(geo.path);
-        if (bbox.width <= 0 || bbox.height <= 0) continue;
+        // Keep line-like paths where one axis can be 0.
+        if (bbox.width <= 0 && bbox.height <= 0) continue;
 
         const pathNode: PathNode = {
           id: generateId(),
           type: "path",
           x: 0,
           y: 0,
-          width: bbox.width,
-          height: bbox.height,
+          width: Math.max(1, bbox.width),
+          height: Math.max(1, bbox.height),
           geometry: geo.path,
           geometryBounds: bbox,
         };
         if (node.name) pathNode.name = node.name;
         if (node.visible === false) pathNode.visible = false;
-        if (fill) pathNode.fill = fill;
+        if (fill && source !== "strokeGeometry") pathNode.fill = fill;
         if (fillOpacity !== undefined) pathNode.fillOpacity = fillOpacity;
-        if (gradientFill) pathNode.gradientFill = gradientFill;
+        if (gradientFill && source !== "strokeGeometry")
+          pathNode.gradientFill = gradientFill;
         if (pathStroke) pathNode.pathStroke = pathStroke;
         if (geo.windingRule === "EVENODD") pathNode.fillRule = "evenodd";
 

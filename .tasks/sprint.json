@@ -202,15 +202,15 @@
     },
     {
       "name": "collapse-all-layers",
-      "passed": false
+      "passed": true
     },
     {
       "name": "eyedropper-color-picker",
-      "passed": false
+      "passed": true
     },
     {
       "name": "pixel-grid-on-zoom",
-      "passed": false
+      "passed": true
     }
   ]
 }
