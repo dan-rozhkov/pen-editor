@@ -646,7 +646,7 @@ export function LayersPanel() {
   return (
     <div className="h-full bg-surface-panel flex flex-col select-none overflow-hidden">
       <div
-        className="flex-1 overflow-auto"
+        className="layers-scrollbar flex-1 overflow-auto"
         onDragEnd={handleDragEnd}
         onDragOver={handleAutoScroll}
         ref={scrollRef}

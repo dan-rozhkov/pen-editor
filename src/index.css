@@ -215,3 +215,40 @@ html.disable-theme-transitions *::after {
     -moz-osx-font-smoothing: grayscale;
   }
 }
+
+.layers-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(190, 190, 190, 0.55) transparent;
+}
+
+.layers-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.layers-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.layers-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(190, 190, 190, 0.55);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.layers-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(168, 168, 168, 0.7);
+}
+
+.dark .layers-scrollbar {
+  scrollbar-color: rgba(210, 210, 210, 0.4) transparent;
+}
+
+.dark .layers-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(210, 210, 210, 0.4);
+}
+
+.dark .layers-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(225, 225, 225, 0.58);
+}
