@@ -5,6 +5,7 @@ import { DropIndicator } from "@/components/DropIndicator";
 import { InlineNameEditor } from "@/components/InlineNameEditor";
 import { InlineTextEditor } from "@/components/InlineTextEditor";
 import { MeasureOverlay } from "@/components/MeasureOverlay";
+import { PixelGrid } from "@/components/PixelGrid";
 import { SmartGuides } from "@/components/SmartGuides";
 import { FrameNameLabel } from "@/components/nodes/FrameNameLabel";
 import { NodeSizeLabel } from "@/components/nodes/NodeSizeLabel";
@@ -335,6 +336,8 @@ export function Canvas() {
         </Layer>
         {/* Overlay layer: guides and indicators (non-interactive, fast redraw) */}
         <FastLayer listening={false} hitGraphEnabled={false}>
+          {/* Pixel grid overlay (visible at 800%+ zoom) */}
+          <PixelGrid viewportWidth={dimensions.width} viewportHeight={dimensions.height} />
           {/* Smart guides for snapping during drag */}
           <SmartGuides />
           {/* Distance measurement overlay (Option + hover) */}

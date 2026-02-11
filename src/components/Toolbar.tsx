@@ -4,6 +4,9 @@ import { useSelectionStore } from "../store/selectionStore";
 import { useVariableStore } from "../store/variableStore";
 import { useThemeStore } from "../store/themeStore";
 import { useViewportStore } from "../store/viewportStore";
+import { useUIThemeStore } from "../store/uiThemeStore";
+import { usePixelGridStore } from "../store/pixelGridStore";
+import { useRendererStore } from "../store/rendererStore";
 import type { SceneNode } from "../types/scene";
 import { downloadDocument, openFilePicker } from "../utils/fileUtils";
 import { parsePixsoJson } from "../utils/pixsoImportUtils";
@@ -18,11 +21,13 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuCheckboxItem,
 } from "./ui/dropdown-menu";
 import {
-  FolderOpenIcon,
-  FloppyDiskIcon,
-  DownloadSimpleIcon,
   CaretDownIcon,
 } from "@phosphor-icons/react";
 
@@ -34,6 +39,11 @@ export function Toolbar() {
   const setVariables = useVariableStore((state) => state.setVariables);
   const activeTheme = useThemeStore((state) => state.activeTheme);
   const setActiveTheme = useThemeStore((state) => state.setActiveTheme);
+  const uiTheme = useUIThemeStore((s) => s.uiTheme);
+  const showPixelGrid = usePixelGridStore((s) => s.showPixelGrid);
+  const togglePixelGrid = usePixelGridStore((s) => s.togglePixelGrid);
+  const rendererMode = useRendererStore((s) => s.rendererMode);
+  const setRendererMode = useRendererStore((s) => s.setRendererMode);
   const [importOpen, setImportOpen] = useState(false);
   const [jsonText, setJsonText] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -97,11 +107,9 @@ export function Toolbar() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" sideOffset={4}>
           <DropdownMenuItem onClick={handleOpen}>
-            <FolderOpenIcon className="size-3.5" />
             Open
           </DropdownMenuItem>
           <DropdownMenuItem onClick={handleSave}>
-            <FloppyDiskIcon className="size-3.5" />
             Save
           </DropdownMenuItem>
           <DropdownMenuItem
@@ -110,9 +118,32 @@ export function Toolbar() {
               setError(null);
             }}
           >
-            <DownloadSimpleIcon className="size-3.5" />
             Import JSON
           </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              Settings
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuCheckboxItem checked={uiTheme === "light"} onCheckedChange={() => useUIThemeStore.getState().setUITheme("light")}>
+                Light theme
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={uiTheme === "dark"} onCheckedChange={() => useUIThemeStore.getState().setUITheme("dark")}>
+                Dark theme
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={showPixelGrid} onCheckedChange={togglePixelGrid}>
+                Pixel grid
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem checked={rendererMode === "konva"} onCheckedChange={() => setRendererMode("konva")}>
+                Konva
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={rendererMode === "pixi"} onCheckedChange={() => setRendererMode("pixi")}>
+                Pixi
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
         </DropdownMenuContent>
       </DropdownMenu>
 

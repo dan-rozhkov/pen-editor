@@ -1,23 +1,15 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense } from "react";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { RightSidebar } from "./components/RightSidebar";
 import { PrimitivesPanel } from "./components/PrimitivesPanel";
+import { useRendererStore } from "./store/rendererStore";
 import "./store/uiThemeStore"; // Initialize UI theme (applies .dark class before first render)
 
-export type RendererMode = "konva" | "pixi";
-
-const RENDERER_STORAGE_KEY = "use-pixi";
 const Canvas = lazy(() => import("./components/Canvas").then((m) => ({ default: m.Canvas })));
 const PixiCanvas = lazy(() => import("./pixi/PixiCanvas").then((m) => ({ default: m.PixiCanvas })));
 
 function App() {
-  const [rendererMode, setRendererMode] = useState<RendererMode>(() =>
-    localStorage.getItem(RENDERER_STORAGE_KEY) === "1" ? "pixi" : "konva"
-  );
-
-  useEffect(() => {
-    localStorage.setItem(RENDERER_STORAGE_KEY, rendererMode === "pixi" ? "1" : "0");
-  }, [rendererMode]);
+  const rendererMode = useRendererStore((s) => s.rendererMode);
 
   return (
     <div className="w-full h-full flex flex-col">
@@ -29,10 +21,7 @@ function App() {
           </Suspense>
           <PrimitivesPanel />
         </div>
-        <RightSidebar
-          rendererMode={rendererMode}
-          onRendererModeChange={setRendererMode}
-        />
+        <RightSidebar />
       </div>
     </div>
   );
