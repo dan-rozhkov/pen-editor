@@ -195,6 +195,22 @@
     {
       "name": "shift-axis-lock-drag",
       "passed": true
+    },
+    {
+      "name": "horizontal-scroll-layers",
+      "passed": true
+    },
+    {
+      "name": "collapse-all-layers",
+      "passed": false
+    },
+    {
+      "name": "eyedropper-color-picker",
+      "passed": false
+    },
+    {
+      "name": "pixel-grid-on-zoom",
+      "passed": false
     }
   ]
 }

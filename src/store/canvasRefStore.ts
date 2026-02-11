@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import Konva from 'konva'
+import type Konva from 'konva'
 
 interface CanvasRefStore {
   stageRef: Konva.Stage | null

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React from "react";
 import type { Variable, ThemeName } from "../../types/variable";
 import { getVariableValue } from "../../types/variable";
 import { Input } from "./input";
@@ -7,6 +7,12 @@ import { SelectWithOptions } from "./select";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "./input-group";
 import { ButtonGroup } from "./button-group";
 import { Button } from "./button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "./dropdown-menu";
 import { FlipHorizontalIcon, FlipVerticalIcon } from "@phosphor-icons/react";
 import { CustomColorPicker } from "./ColorPicker";
 import { useScrubLabel } from "@/hooks/useScrubLabel";
@@ -143,22 +149,6 @@ export function ColorInput({
   activeTheme = "light",
   isMixed = false,
 }: ColorInputProps) {
-  const [showPicker, setShowPicker] = useState(false);
-  const pickerRef = useRef<HTMLDivElement>(null);
-
-  // Close picker when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
-        setShowPicker(false);
-      }
-    };
-    if (showPicker) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () =>
-        document.removeEventListener("mousedown", handleClickOutside);
-    }
-  }, [showPicker]);
 
   // Find bound variable
   const boundVariable = variableId
@@ -174,7 +164,6 @@ export function ColorInput({
     if (onVariableChange) {
       onVariableChange(varId);
     }
-    setShowPicker(false);
   };
 
   const handleUnbind = (e: React.MouseEvent) => {
@@ -188,30 +177,34 @@ export function ColorInput({
   if (boundVariable) {
     return (
       <div className="flex items-center gap-2">
-        <div
-          className="w-8 h-8 rounded"
-          style={{ backgroundColor: displayColor }}
-        />
-        <div className="flex-1 flex items-center gap-1 bg-surface-elevated rounded px-2 py-1">
-          <span className="flex-1 text-xs text-accent-bright truncate">
+        <InputGroup className="flex-1">
+          <InputGroupAddon align="inline-start">
+            <div
+              className="w-4 h-4 rounded"
+              style={{ backgroundColor: displayColor }}
+            />
+          </InputGroupAddon>
+          <span className="flex-1 text-xs text-text-primary truncate px-1.5 py-0.5">
             {boundVariable.name}
           </span>
-          <button
-            type="button"
-            onClick={handleUnbind}
-            className="text-text-muted hover:text-text-primary text-xs"
-            title="Unbind variable"
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path
-                d="M3 3L9 9M9 3L3 9"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-        </div>
+          <InputGroupAddon align="inline-end">
+            <button
+              type="button"
+              onClick={handleUnbind}
+              className="text-text-muted hover:text-text-primary mr-0.5"
+              title="Unbind variable"
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path
+                  d="M3 3L9 9M9 3L3 9"
+                  stroke="currentColor"
+                  strokeWidth="1"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+          </InputGroupAddon>
+        </InputGroup>
       </div>
     );
   }
@@ -219,22 +212,24 @@ export function ColorInput({
   // Mixed mode: show hatched swatch + "Mixed" text
   if (isMixed) {
     return (
-      <div className="flex items-center gap-2">
-        <div
-          className="w-8 h-8 rounded border border-border-default"
-          style={{
-            background:
-              "repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 50% / 8px 8px",
-          }}
-        />
-        <span className="flex-1 text-xs text-text-muted italic">Mixed</span>
-      </div>
+      <InputGroup className="flex-1">
+        <InputGroupAddon align="inline-start">
+          <div
+            className="w-4 h-4 rounded border border-border-default"
+            style={{
+              background:
+                "repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 50% / 8px 8px",
+            }}
+          />
+        </InputGroupAddon>
+        <span className="flex-1 text-xs text-text-muted italic px-1.5 py-0.5">Mixed</span>
+      </InputGroup>
     );
   }
 
   // Normal mode: color picker inside input + variable button
   return (
-    <div className="flex items-center gap-2 relative" ref={pickerRef}>
+    <div className="flex items-center gap-2">
       <InputGroup className="flex-1">
         <InputGroupAddon align="inline-start">
           <CustomColorPicker value={value || "#000000"} onChange={onChange} />
@@ -248,46 +243,38 @@ export function ColorInput({
         />
       </InputGroup>
       {availableVariables.length > 0 && onVariableChange && (
-        <button
-          type="button"
-          onClick={() => setShowPicker(!showPicker)}
-          className="p-1.5 rounded bg-surface-elevated text-text-muted hover:text-accent-bright transition-colors"
-          title="Bind to variable"
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path
-              d="M2 5h10M2 9h10M5 2v10M9 2v10"
-              stroke="currentColor"
-              strokeWidth="1.2"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
-      )}
-
-      {/* Variable Picker Dropdown */}
-      {showPicker && availableVariables.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-surface-default rounded shadow-lg z-50 max-h-40 overflow-y-auto">
-          {availableVariables.map((variable) => {
-            const varColor = getVariableValue(variable, activeTheme);
-            return (
-              <button
-                key={variable.id}
-                type="button"
-                onClick={() => handleVariableSelect(variable.id)}
-                className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-surface-hover text-left"
-              >
-                <div
-                  className="w-4 h-4 rounded shrink-0"
-                  style={{ backgroundColor: varColor }}
-                />
-                <span className="text-xs text-text-primary truncate">
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className="h-6 w-6 flex items-center justify-center rounded bg-surface-elevated text-text-muted hover:text-text-primary transition-colors"
+            title="Bind to variable"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path
+                d="M2 5h10M2 9h10M5 2v10M9 2v10"
+                stroke="currentColor"
+                strokeWidth="0.8"
+                strokeLinecap="round"
+              />
+            </svg>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" side="bottom">
+            {availableVariables.map((variable) => {
+              const varColor = getVariableValue(variable, activeTheme);
+              return (
+                <DropdownMenuItem
+                  key={variable.id}
+                  onClick={() => handleVariableSelect(variable.id)}
+                >
+                  <div
+                    className="w-3 h-3 rounded shrink-0"
+                    style={{ backgroundColor: varColor }}
+                  />
                   {variable.name}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
     </div>
   );

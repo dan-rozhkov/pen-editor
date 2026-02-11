@@ -1,14 +1,14 @@
-import { useEffect, useState } from "react";
-import { Canvas } from "./components/Canvas";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { RightSidebar } from "./components/RightSidebar";
 import { PrimitivesPanel } from "./components/PrimitivesPanel";
-import { PixiCanvas } from "./pixi/PixiCanvas";
 import "./store/uiThemeStore"; // Initialize UI theme (applies .dark class before first render)
 
 export type RendererMode = "konva" | "pixi";
 
 const RENDERER_STORAGE_KEY = "use-pixi";
+const Canvas = lazy(() => import("./components/Canvas").then((m) => ({ default: m.Canvas })));
+const PixiCanvas = lazy(() => import("./pixi/PixiCanvas").then((m) => ({ default: m.PixiCanvas })));
 
 function App() {
   const [rendererMode, setRendererMode] = useState<RendererMode>(() =>
@@ -24,7 +24,9 @@ function App() {
       <div className="flex-1 flex flex-row overflow-hidden">
         <LeftSidebar />
         <div className="flex-1 h-full overflow-hidden relative">
-          {rendererMode === "pixi" ? <PixiCanvas /> : <Canvas />}
+          <Suspense fallback={null}>
+            {rendererMode === "pixi" ? <PixiCanvas /> : <Canvas />}
+          </Suspense>
           <PrimitivesPanel />
         </div>
         <RightSidebar

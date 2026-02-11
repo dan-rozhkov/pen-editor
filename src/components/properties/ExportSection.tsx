@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { useViewportStore } from "@/store/viewportStore";
-import { exportImage, type ExportFormat, type ExportScale } from "@/utils/exportUtils";
+import type { ExportFormat, ExportScale } from "@/utils/exportUtils";
 import type { SceneNode } from "@/types/scene";
 import { Button } from "@/components/ui/button";
 import { SelectWithOptions } from "@/components/ui/select";
@@ -17,12 +17,13 @@ export function ExportSection({ selectedNode }: ExportSectionProps) {
   const [scale, setScale] = useState<ExportScale>(1);
   const [format, setFormat] = useState<ExportFormat>("png");
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (!stageRef) {
       console.error("Stage ref not available");
       return;
     }
 
+    const { exportImage } = await import("@/utils/exportUtils");
     exportImage(stageRef, selectedNode?.id || null, selectedNode?.name, {
       format,
       scale,
