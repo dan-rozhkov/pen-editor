@@ -17,6 +17,9 @@ import {
   parseColor,
   type Color,
 } from "react-aria-components";
+import { Eyedropper } from "@phosphor-icons/react";
+
+const supportsEyeDropper = typeof window !== "undefined" && "EyeDropper" in window;
 
 interface CustomColorPickerProps {
   value: string;
@@ -147,13 +150,33 @@ export function CustomColorPicker({
               </SliderTrack>
             </ColorSlider>
 
-            {/* Hex input */}
-            <ColorField
-              aria-label="Hex color"
-              className="flex items-center gap-1"
-            >
-              <Input className="bg-secondary text-secondary-foreground focus-visible:ring-1 focus-visible:ring-[#0d99ff] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 h-6 rounded-md px-2 py-0.5 text-sm transition-colors aria-invalid:ring-[2px] md:text-xs/relaxed placeholder:text-muted-foreground w-full min-w-0 outline-none" />
-            </ColorField>
+            {/* Hex input + eyedropper */}
+            <div className="flex items-center gap-1">
+              <ColorField
+                aria-label="Hex color"
+                className="flex items-center gap-1 flex-1 min-w-0"
+              >
+                <Input className="bg-secondary text-secondary-foreground focus-visible:ring-1 focus-visible:ring-[#0d99ff] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 h-6 rounded-md px-2 py-0.5 text-sm transition-colors aria-invalid:ring-[2px] md:text-xs/relaxed placeholder:text-muted-foreground w-full min-w-0 outline-none" />
+              </ColorField>
+              {supportsEyeDropper && (
+                <button
+                  type="button"
+                  className="h-6 w-6 flex items-center justify-center rounded-md text-text-secondary hover:bg-surface-hover hover:text-text-primary cursor-pointer shrink-0"
+                  aria-label="Pick color from screen"
+                  onClick={async () => {
+                    try {
+                      const result = await new EyeDropper().open();
+                      onChange(result.sRGBHex);
+                      setOpen(false);
+                    } catch {
+                      // User cancelled (Escape) — do nothing
+                    }
+                  }}
+                >
+                  <Eyedropper size={14} />
+                </button>
+              )}
+            </div>
           </AriaColorPicker>
         </div>
       , document.body)}
