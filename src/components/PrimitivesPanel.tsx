@@ -5,12 +5,13 @@ import {
   NavigationArrowIcon,
   LineSegmentIcon,
   HexagonIcon,
+  HashStraight,
   type IconWeight,
   CaretDownIcon,
 } from "@phosphor-icons/react";
-import { FrameIcon } from "./ui/custom-icons/frame-icon";
 import { useDrawModeStore, type DrawToolType } from "../store/drawModeStore";
 import { Button } from "./ui/button";
+import { ButtonGroup } from "./ui/button-group";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,7 +22,7 @@ import {
 export function PrimitivesPanel() {
   const { activeTool, toggleTool, setActiveTool } = useDrawModeStore();
 
-  const mainTools: Array<{
+  const leadingTools: Array<{
     icon: React.ComponentType<{
       className?: string;
       size?: number;
@@ -37,8 +38,19 @@ export function PrimitivesPanel() {
       tool: "cursor",
       shortcut: "V",
     },
-    { icon: FrameIcon, label: "Frame", tool: "frame", shortcut: "F" },
-    { icon: SquareIcon, label: "Rectangle", tool: "rect", shortcut: "R" },
+    { icon: HashStraight, label: "Frame", tool: "frame", shortcut: "F" },
+  ];
+
+  const trailingTools: Array<{
+    icon: React.ComponentType<{
+      className?: string;
+      size?: number;
+      weight?: IconWeight;
+    }>;
+    label: string;
+    tool: DrawToolType;
+    shortcut: string;
+  }> = [
     { icon: CircleIcon, label: "Ellipse", tool: "ellipse", shortcut: "O" },
     { icon: TextTIcon, label: "Text", tool: "text", shortcut: "T" },
   ];
@@ -58,11 +70,14 @@ export function PrimitivesPanel() {
   ];
 
   const isRectSubToolActive = rectSubTools.some((t) => t.tool === activeTool);
+  const isRectangleActive = activeTool === "rect";
+  const toolButtonBaseClass =
+    "group relative size-9 p-0 rounded-lg transition-none outline-none";
 
   return (
     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50">
       <div className="flex items-center gap-1 p-2 bg-surface-panel/95 backdrop-blur-sm border border-border-default rounded-2xl shadow-lg">
-        {mainTools.map(({ icon: Icon, label, tool, shortcut }) => {
+        {leadingTools.map(({ icon: Icon, label, tool, shortcut }) => {
           const isActive =
             tool === "cursor" ? activeTool === null : activeTool === tool;
           return (
@@ -74,7 +89,7 @@ export function PrimitivesPanel() {
               title={`${label} (${shortcut})`}
               variant="ghost"
               size="lg"
-              className={`group relative size-9 p-0 rounded-lg transition-none outline-none ${
+              className={`${toolButtonBaseClass} ${
                 isActive
                   ? "bg-[#0d99ff] text-white hover:bg-[#0d99ff] hover:text-white"
                   : "text-text-primary hover:text-text-primary hover:bg-surface-elevated"
@@ -85,22 +100,38 @@ export function PrimitivesPanel() {
           );
         })}
 
-        {/* Dropdown for Line and Polygon under Rectangle */}
         <DropdownMenu>
-          <DropdownMenuTrigger>
+          <ButtonGroup orientation="horizontal" className="gap-0">
             <Button
               variant="ghost"
               size="lg"
-              title="Line, Polygon"
-              className={`group relative size-9 p-0 rounded-lg transition-none outline-none ${
-                isRectSubToolActive
+              title="Rectangle (R)"
+              onClick={() => toggleTool("rect")}
+              className={`${toolButtonBaseClass} ${
+                isRectangleActive
                   ? "bg-[#0d99ff] text-white hover:bg-[#0d99ff] hover:text-white"
                   : "text-text-primary hover:text-text-primary hover:bg-surface-elevated"
               }`}
             >
-              <CaretDownIcon size={16} className="size-4" weight="bold" />
+              <SquareIcon size={40} className="size-6" weight="light" />
             </Button>
-          </DropdownMenuTrigger>
+
+            <DropdownMenuTrigger>
+              <Button
+                variant="ghost"
+                size="lg"
+                title="Line, Polygon"
+                className={`${toolButtonBaseClass} w-6 justify-center ${
+                  isRectSubToolActive
+                    ? "bg-[#0d99ff] text-white hover:bg-[#0d99ff] hover:text-white"
+                    : "text-text-primary hover:text-text-primary hover:bg-surface-elevated"
+                }`}
+              >
+                <CaretDownIcon size={12} className="size-3" weight="bold" />
+              </Button>
+            </DropdownMenuTrigger>
+          </ButtonGroup>
+
           <DropdownMenuContent align="center" sideOffset={8}>
             {rectSubTools.map(({ icon: Icon, label, tool, shortcut }) => {
               const isActive = activeTool === tool;
@@ -122,6 +153,26 @@ export function PrimitivesPanel() {
             })}
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {trailingTools.map(({ icon: Icon, label, tool, shortcut }) => {
+          const isActive = activeTool === tool;
+          return (
+            <Button
+              key={label}
+              onClick={() => toggleTool(tool)}
+              title={`${label} (${shortcut})`}
+              variant="ghost"
+              size="lg"
+              className={`${toolButtonBaseClass} ${
+                isActive
+                  ? "bg-[#0d99ff] text-white hover:bg-[#0d99ff] hover:text-white"
+                  : "text-text-primary hover:text-text-primary hover:bg-surface-elevated"
+              }`}
+            >
+              <Icon size={40} className="size-6" weight="light" />
+            </Button>
+          );
+        })}
       </div>
     </div>
   );

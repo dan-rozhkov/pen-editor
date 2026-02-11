@@ -19,6 +19,7 @@ import {
   SelectionIcon,
   LineSegmentIcon,
   HexagonIcon,
+  HashStraight,
 } from "@phosphor-icons/react";
 import clsx from "clsx";
 import { useSceneStore } from "../store/sceneStore";
@@ -26,7 +27,6 @@ import { useSelectionStore } from "../store/selectionStore";
 import { useHoverStore } from "../store/hoverStore";
 import type { SceneNode, FrameNode, FlatFrameNode, GroupNode } from "../types/scene";
 import { isContainerNode } from "../types/scene";
-import { FrameIcon } from "./ui/custom-icons/frame-icon";
 import { getAncestorIds } from "../utils/nodeUtils";
 
 // Module-level flag so LayerItem can set it without a ref prop
@@ -48,7 +48,7 @@ const NodeIcon = ({
         // Component icon: 4 diamonds in a grid pattern (like Figma)
         return <DiamondsFourIcon size={16} className={iconClass} />;
       }
-      return <FrameIcon size={16} className={iconClass} />;
+      return <HashStraight size={16} className={iconClass} weight="regular" />;
     case "group":
       return <SelectionIcon size={16} className={iconClass} />;
     case "rect":
