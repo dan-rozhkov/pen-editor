@@ -297,6 +297,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       return { expandedFrameIds: newSet };
     }),
 
+  collapseAllFrames: () => set({ expandedFrameIds: new Set<string>() }),
+
   moveNode: (nodeId, newParentId, newIndex) =>
     set((state) => {
       const node = state.nodesById[nodeId];

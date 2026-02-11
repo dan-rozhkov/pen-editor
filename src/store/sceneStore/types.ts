@@ -41,6 +41,7 @@ export interface SceneState {
   toggleFrameExpanded: (id: string) => void;
   setFrameExpanded: (id: string, expanded: boolean) => void;
   expandAncestors: (ids: string[]) => void;
+  collapseAllFrames: () => void;
   moveNode: (
     nodeId: string,
     newParentId: string | null,
