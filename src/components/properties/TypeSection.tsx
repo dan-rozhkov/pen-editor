@@ -1,14 +1,26 @@
 import { DiamondsFour } from "@phosphor-icons/react";
 import { useSceneStore } from "@/store/sceneStore";
 import type { SceneNode } from "@/types/scene";
+import { findComponentById } from "@/utils/nodeUtils";
 import { PropertySection, SelectInput } from "@/components/ui/PropertyInputs";
 
 interface TypeSectionProps {
   node: SceneNode;
   onUpdate: (updates: Partial<SceneNode>) => void;
+  allNodes?: SceneNode[];
 }
 
-export function TypeSection({ node, onUpdate }: TypeSectionProps) {
+export function TypeSection({ node, onUpdate, allNodes }: TypeSectionProps) {
+  const comp =
+    node.type === "ref" && allNodes
+      ? findComponentById(allNodes, node.componentId)
+      : null;
+
+  const typeLabel =
+    node.type === "ref"
+      ? comp?.name || "Component"
+      : node.type;
+
   return (
     <PropertySection title="Type">
       <div className="flex items-center gap-2">
@@ -43,7 +55,7 @@ export function TypeSection({ node, onUpdate }: TypeSectionProps) {
           </>
         ) : (
           <div className="text-xs text-text-secondary capitalize">
-            {node.type}
+            {typeLabel}
           </div>
         )}
       </div>

@@ -4,12 +4,13 @@ import type { SceneNode, DescendantOverride, RefNode } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
 import { findComponentById, findNodeById, getAllComponents } from "@/utils/nodeUtils";
 import {
-  CheckboxInput,
   ColorInput,
   NumberInput,
   PropertySection,
 } from "@/components/ui/PropertyInputs";
-import { OverrideIndicator } from "@/components/properties/OverrideIndicator";
+
+import { Eye, EyeSlash } from "@phosphor-icons/react";
+import { Button } from "@/components/ui/button";
 
 
 interface DescendantPropertyEditorProps {
@@ -180,26 +181,10 @@ export function DescendantPropertyEditor({
     overriddenProperties.push("Stroke Variable");
 
   return (
-    <div className="flex flex-col gap-4">
-      <PropertySection title="Editing Descendant">
-        <div className="flex items-center gap-2 text-xs text-purple-400">
-          <svg viewBox="0 0 16 16" className="w-4 h-4">
-            <path
-              d="M8 2 L14 8 L8 14 L2 8 Z"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-            />
-          </svg>
-          <span>{originalNode.name || originalNode.type}</span>
-          {isSlot && (
-            <span className="text-[9px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded font-medium">
-              Slot
-            </span>
-          )}
-        </div>
-        <div className="text-[10px] text-text-muted mt-1">
-          In instance: {instance.name || "Instance"}
+    <div className="flex flex-col">
+      <PropertySection title="Type">
+        <div className="text-xs text-text-secondary capitalize">
+          {originalNode.name || originalNode.type}
         </div>
         {/* Component swap dropdown for ref/slot descendants */}
         {isSlot && availableComponents.length > 0 && (
@@ -242,7 +227,7 @@ export function DescendantPropertyEditor({
                 );
               }
             }}
-            className="mt-2 px-3 py-1.5 bg-purple-500/20 border border-purple-500/30 rounded text-purple-400 text-xs cursor-pointer transition-colors hover:bg-purple-500/30"
+            className="mt-2 px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
           >
             Replace Slot
           </button>
@@ -257,74 +242,63 @@ export function DescendantPropertyEditor({
         )}
       </PropertySection>
 
-      <PropertySection title="Visibility">
-        <div className="flex items-center gap-1">
+      <PropertySection title="Appearance">
+        <div className="flex items-end gap-1">
           <div className="flex-1">
-            <CheckboxInput
-              label="Enabled"
-              checked={displayNode.enabled !== false}
-              onChange={(v) => handleUpdate({ enabled: v ? undefined : false })}
+            <NumberInput
+              label="Opacity %"
+              value={Math.round((displayNode.opacity ?? 1) * 100)}
+              onChange={(v) =>
+                handleUpdate({ opacity: Math.max(0, Math.min(100, v)) / 100 })
+              }
+              min={0}
+              max={100}
+              step={1}
+              labelOutside={true}
             />
           </div>
-          <OverrideIndicator
-            isOverridden={isPropertyOverridden("enabled")}
-            onReset={() => handleResetProperty("enabled")}
-          />
+          <button
+            onClick={() => handleUpdate({ enabled: displayNode.enabled === false ? undefined : false })}
+            className={`h-6 w-6 flex items-center justify-center rounded bg-surface-elevated transition-colors ${displayNode.enabled !== false ? "text-text-muted hover:text-text-primary" : "text-text-muted opacity-50 hover:text-text-primary"}`}
+            title={displayNode.enabled !== false ? "Hide" : "Show"}
+          >
+            {displayNode.enabled !== false ? (
+              <Eye size={14} weight="regular" />
+            ) : (
+              <EyeSlash size={14} weight="regular" />
+            )}
+          </button>
         </div>
       </PropertySection>
 
       <PropertySection title="Fill">
-        <div className="flex items-center gap-1">
-          <div className="flex-1">
-            <ColorInput
-              value={displayNode.fill ?? originalNode.fill ?? "#000000"}
-              onChange={(v) => handleUpdate({ fill: v })}
-              variableId={displayNode.fillBinding?.variableId}
-              onVariableChange={handleFillVariableChange}
-              availableVariables={colorVariables}
-              activeTheme={activeTheme}
-            />
-          </div>
-          <OverrideIndicator
-            isOverridden={isPropertyOverridden("fill")}
-            onReset={() => handleResetProperty("fill")}
-          />
-        </div>
+        <ColorInput
+          value={displayNode.fill ?? originalNode.fill ?? "#000000"}
+          onChange={(v) => handleUpdate({ fill: v })}
+          variableId={displayNode.fillBinding?.variableId}
+          onVariableChange={handleFillVariableChange}
+          availableVariables={colorVariables}
+          activeTheme={activeTheme}
+        />
       </PropertySection>
 
       <PropertySection title="Stroke">
-        <div className="flex items-center gap-1">
-          <div className="flex-1">
-            <ColorInput
-              value={displayNode.stroke ?? originalNode.stroke ?? ""}
-              onChange={(v) => handleUpdate({ stroke: v || undefined })}
-              variableId={displayNode.strokeBinding?.variableId}
-              onVariableChange={handleStrokeVariableChange}
-              availableVariables={colorVariables}
-              activeTheme={activeTheme}
-            />
-          </div>
-          <OverrideIndicator
-            isOverridden={isPropertyOverridden("stroke")}
-            onReset={() => handleResetProperty("stroke")}
-          />
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="flex-1">
-            <NumberInput
-              label="Weight"
-              labelOutside={true}
-              value={displayNode.strokeWidth ?? originalNode.strokeWidth ?? 0}
-              onChange={(v) => handleUpdate({ strokeWidth: v })}
-              min={0}
-              step={0.5}
-            />
-          </div>
-          <OverrideIndicator
-            isOverridden={isPropertyOverridden("strokeWidth")}
-            onReset={() => handleResetProperty("strokeWidth")}
-          />
-        </div>
+        <ColorInput
+          value={displayNode.stroke ?? originalNode.stroke ?? ""}
+          onChange={(v) => handleUpdate({ stroke: v || undefined })}
+          variableId={displayNode.strokeBinding?.variableId}
+          onVariableChange={handleStrokeVariableChange}
+          availableVariables={colorVariables}
+          activeTheme={activeTheme}
+        />
+        <NumberInput
+          label="Weight"
+          labelOutside={true}
+          value={displayNode.strokeWidth ?? originalNode.strokeWidth ?? 0}
+          onChange={(v) => handleUpdate({ strokeWidth: v })}
+          min={0}
+          step={0.5}
+        />
       </PropertySection>
 
       {!isSlotReplaced && overriddenProperties.length > 0 && (
@@ -332,12 +306,9 @@ export function DescendantPropertyEditor({
           <div className="text-xs text-text-secondary mb-2">
             {overriddenProperties.join(", ")}
           </div>
-          <button
-            onClick={handleResetAll}
-            className="px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
-          >
+          <Button onClick={handleResetAll} variant="secondary" className="w-full">
             Reset All Overrides
-          </button>
+          </Button>
         </PropertySection>
       )}
     </div>
