@@ -14,6 +14,9 @@ interface RegistryEntry {
   node: FlatSceneNode;
 }
 
+const TEXT_RESOLUTION_SHARPNESS_BOOST = 1.35;
+const TEXT_RESOLUTION_MAX_MULTIPLIER = 3;
+
 type NodeLayoutOverride = {
   x?: number;
   y?: number;
@@ -90,6 +93,18 @@ export function createPixiSync(sceneRoot: Container): () => void {
   const registry = new Map<string, RegistryEntry>();
   let appliedTextResolution = 0;
   let rebuildScheduled = false;
+
+  function applyTextResolutionRecursive(container: Container, resolution: number): void {
+    for (const child of container.children) {
+      if (child instanceof Text) {
+        if (child.resolution !== resolution) {
+          child.resolution = resolution;
+        }
+      } else if (child instanceof Container) {
+        applyTextResolutionRecursive(child, resolution);
+      }
+    }
+  }
 
   function applyTextEditingVisibility(): void {
     const { editingNodeId, editingMode, instanceContext } = useSelectionStore.getState();
@@ -241,24 +256,21 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
   function getTargetTextResolution(scale: number): number {
     const devicePixelRatio = window.devicePixelRatio || 1;
-    // Quantize and cap resolution changes to avoid expensive text re-rasterization on every zoom tick.
-    const quantizedScale = Math.max(1, Math.round(scale));
-    const maxResolution = Math.ceil(devicePixelRatio * 2);
-    return Math.min(maxResolution, quantizedScale * devicePixelRatio);
+    // Match text texture resolution to current zoom for crisp rendering.
+    // Keep minimum at 1x to avoid blur when zoomed out.
+    const effectiveScale = Math.max(1, scale);
+    const maxResolution = Math.ceil(
+      devicePixelRatio * TEXT_RESOLUTION_MAX_MULTIPLIER,
+    );
+    const boostedResolution =
+      effectiveScale * devicePixelRatio * TEXT_RESOLUTION_SHARPNESS_BOOST;
+    return Math.min(maxResolution, boostedResolution);
   }
 
   function applyTextResolution(resolution: number): void {
     if (appliedTextResolution === resolution) return;
     appliedTextResolution = resolution;
-
-    for (const entry of registry.values()) {
-      if (entry.node.type !== "text") continue;
-      const textObj = entry.container.getChildByLabel("text-content") as Text | undefined;
-      if (!textObj) continue;
-      if (textObj.resolution !== resolution) {
-        textObj.resolution = resolution;
-      }
-    }
+    applyTextResolutionRecursive(sceneRoot, resolution);
   }
 
   /**
@@ -583,7 +595,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
     }
   }
 
-  // Update text resolution only after zoom settles to avoid repeated costly updates.
   let lastScale = useViewportStore.getState().scale;
   let textResolutionUpdateTimer: ReturnType<typeof setTimeout> | null = null;
 
