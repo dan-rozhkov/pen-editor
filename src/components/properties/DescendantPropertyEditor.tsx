@@ -1,8 +1,8 @@
 import { useSceneStore } from "@/store/sceneStore";
-import { useSelectionStore, type InstanceContext } from "@/store/selectionStore";
+import type { InstanceContext } from "@/store/selectionStore";
 import type { SceneNode, DescendantOverride, RefNode } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
-import { findComponentById, findNodeById } from "@/utils/nodeUtils";
+import { findComponentById, findNodeById, getAllComponents } from "@/utils/nodeUtils";
 import {
   CheckboxInput,
   ColorInput,
@@ -48,8 +48,6 @@ export function DescendantPropertyEditor({
   const replaceSlotContent = useSceneStore((s) => s.replaceSlotContent);
   const resetSlotContent = useSceneStore((s) => s.resetSlotContent);
   const updateSlotContentNode = useSceneStore((s) => s.updateSlotContentNode);
-  const exitInstanceEditMode = useSelectionStore((s) => s.exitInstanceEditMode);
-
   const instance = findNodeById(
     allNodes,
     instanceContext.instanceId,
@@ -119,32 +117,36 @@ export function DescendantPropertyEditor({
     }
   };
 
-  const handleReplaceSlot = () => {
-    if (originalNode.type === "ref") {
-      const slotComponent = findComponentById(allNodes, originalNode.componentId);
-      if (slotComponent) {
-        replaceSlotContent(
-          instanceContext.instanceId,
-          instanceContext.descendantId,
-          {
-            ...slotComponent,
-            id: originalNode.id,
-            name: originalNode.name ?? slotComponent.name,
-            x: originalNode.x,
-            y: originalNode.y,
-            width: originalNode.width,
-            height: originalNode.height,
-            reusable: false,
-          },
-        );
-        return;
-      }
+  // Component swap for ref/slot descendants
+  const availableComponents = isSlot ? getAllComponents(allNodes) : [];
+
+  // Get current component ID for the slot
+  const currentSlotComponentId = isSlotReplaced
+    ? (slotContentNode?.type === 'ref' ? (slotContentNode as RefNode).componentId : null)
+    : (originalNode as RefNode).componentId;
+
+  const handleComponentSwap = (newComponentId: string) => {
+    if (newComponentId === '__reset__') {
+      resetSlotContent(instanceContext.instanceId, instanceContext.descendantId);
+      return;
     }
+
+    const newComponent = findComponentById(allNodes, newComponentId);
+    if (!newComponent) return;
 
     replaceSlotContent(
       instanceContext.instanceId,
       instanceContext.descendantId,
-      originalNode,
+      {
+        ...newComponent,
+        id: originalNode.id,
+        name: originalNode.name ?? newComponent.name,
+        x: originalNode.x,
+        y: originalNode.y,
+        width: originalNode.width,
+        height: originalNode.height,
+        reusable: false,
+      },
     );
   };
 
@@ -199,15 +201,53 @@ export function DescendantPropertyEditor({
         <div className="text-[10px] text-text-muted mt-1">
           In instance: {instance.name || "Instance"}
         </div>
-        {isSlot && !isSlotReplaced && (
+        {/* Component swap dropdown for ref/slot descendants */}
+        {isSlot && availableComponents.length > 0 && (
+          <div className="mt-2">
+            <label className="text-[10px] text-text-muted block mb-1">Component</label>
+            <select
+              value={currentSlotComponentId ?? ''}
+              onChange={(e) => handleComponentSwap(e.target.value)}
+              className="w-full text-xs bg-surface-elevated border border-border-light rounded px-2 py-1.5 text-text-primary cursor-pointer transition-colors hover:border-border-hover focus:outline-none focus:border-purple-500"
+            >
+              {availableComponents.map((comp) => (
+                <option key={comp.id} value={comp.id}>
+                  {comp.name || comp.id}
+                </option>
+              ))}
+              {isSlotReplaced && (
+                <option value="__reset__">Reset to original</option>
+              )}
+            </select>
+          </div>
+        )}
+        {isSlot && !isSlotReplaced && availableComponents.length === 0 && (
           <button
-            onClick={handleReplaceSlot}
+            onClick={() => {
+              const slotComponent = findComponentById(allNodes, (originalNode as RefNode).componentId);
+              if (slotComponent) {
+                replaceSlotContent(
+                  instanceContext.instanceId,
+                  instanceContext.descendantId,
+                  {
+                    ...slotComponent,
+                    id: originalNode.id,
+                    name: originalNode.name ?? slotComponent.name,
+                    x: originalNode.x,
+                    y: originalNode.y,
+                    width: originalNode.width,
+                    height: originalNode.height,
+                    reusable: false,
+                  },
+                );
+              }
+            }}
             className="mt-2 px-3 py-1.5 bg-purple-500/20 border border-purple-500/30 rounded text-purple-400 text-xs cursor-pointer transition-colors hover:bg-purple-500/30"
           >
             Replace Slot
           </button>
         )}
-        {isSlotReplaced && (
+        {isSlotReplaced && availableComponents.length === 0 && (
           <button
             onClick={handleResetAll}
             className="mt-2 px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
@@ -215,12 +255,6 @@ export function DescendantPropertyEditor({
             Reset Slot
           </button>
         )}
-        <button
-          onClick={exitInstanceEditMode}
-          className="mt-2 px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
-        >
-          Exit Edit Mode
-        </button>
       </PropertySection>
 
       <PropertySection title="Visibility">

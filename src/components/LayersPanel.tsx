@@ -25,9 +25,10 @@ import clsx from "clsx";
 import { useSceneStore } from "../store/sceneStore";
 import { useSelectionStore } from "../store/selectionStore";
 import { useHoverStore } from "../store/hoverStore";
-import type { SceneNode, FrameNode, FlatFrameNode, GroupNode, LayoutProperties } from "../types/scene";
+import type { SceneNode, FrameNode, FlatFrameNode, GroupNode, LayoutProperties, RefNode } from "../types/scene";
 import { isContainerNode } from "../types/scene";
 import { getAncestorIds } from "../utils/nodeUtils";
+import { resolveRefToFrame } from "./nodes/instanceUtils";
 
 // Module-level flag so LayerItem can set it without a ref prop
 let _selectionFromLayers = false;
@@ -176,9 +177,9 @@ const EyeIcon = ({ visible }: { visible: boolean }) => {
 // Chevron icon for expand/collapse
 const ChevronIcon = ({ expanded }: { expanded: boolean }) => (
   <CaretRightIcon
-    size={12}
+    size={10}
     className={clsx(
-      "w-3 h-3 transition-transform duration-150",
+      "w-2.5 h-2.5",
       "text-text-muted",
       expanded && "rotate-90",
     )}
@@ -208,6 +209,8 @@ interface LayerItemProps {
   ) => void;
   onDrop: () => void;
   flatIds: string[];
+  instanceId?: string;
+  refChildCount?: number;
 }
 
 const LayerItem = memo(function LayerItem({
@@ -219,9 +222,14 @@ const LayerItem = memo(function LayerItem({
   onDragOver,
   onDrop,
   flatIds,
+  instanceId,
+  refChildCount,
 }: LayerItemProps) {
   // Granular selection subscription - only re-render when THIS node's selection state changes
   const isSelected = useSelectionStore((s) => s.selectedIds.includes(node.id));
+  const isDescendantSelected = useSelectionStore(
+    (s) => !!instanceId && s.instanceContext?.instanceId === instanceId && s.instanceContext?.descendantId === node.id,
+  );
   const toggleVisibility = useSceneStore((state) => state.toggleVisibility);
   const expandedFrameIds = useSceneStore((state) => state.expandedFrameIds);
   const toggleFrameExpanded = useSceneStore(
@@ -254,7 +262,8 @@ const LayerItem = memo(function LayerItem({
   const isVisible = node.visible !== false;
   const isFrame = node.type === "frame" || node.type === "group";
   const hasChildren =
-    isFrame && (node as FrameNode | GroupNode).children.length > 0;
+    (isFrame && (node as FrameNode | GroupNode).children.length > 0) ||
+    (node.type === "ref" && (refChildCount ?? 0) > 0);
   const isExpanded = expandedFrameIds.has(node.id);
   const isDragging = dragState.draggedId === node.id;
   const isDropTarget = dragState.dropTargetId === node.id;
@@ -262,6 +271,10 @@ const LayerItem = memo(function LayerItem({
   const handleClick = (e: React.MouseEvent) => {
     _selectionFromLayers = true;
     const selState = useSelectionStore.getState();
+    if (instanceId) {
+      selState.selectDescendant(instanceId, node.id);
+      return;
+    }
     if (e.shiftKey && selState.lastSelectedId) {
       selState.selectRange(selState.lastSelectedId, node.id, flatIds);
     } else if (e.shiftKey) {
@@ -389,7 +402,7 @@ const LayerItem = memo(function LayerItem({
           {/* Chevron for frames with children */}
           {hasChildren ? (
             <button
-              className="bg-transparent border-none cursor-pointer p-0.5 flex items-center justify-center rounded hover:bg-white/10"
+              className="bg-transparent border-none cursor-pointer p-0.5 flex items-center justify-center rounded hover:bg-white/10 opacity-0 group-hover/layers:opacity-100"
               onClick={handleChevronClick}
             >
               <ChevronIcon expanded={isExpanded} />
@@ -738,7 +751,7 @@ export function LayersPanel() {
   const translateY = startIndex * ROW_HEIGHT;
 
   return (
-    <div className="h-full bg-surface-panel flex flex-col select-none overflow-hidden">
+    <div className="group/layers h-full bg-surface-panel flex flex-col select-none overflow-hidden">
       <div
         className="layers-scrollbar flex-1 overflow-auto"
         onDragEnd={handleDragEnd}
@@ -750,7 +763,7 @@ export function LayersPanel() {
             No layers yet
           </div>
         ) : (
-          <div style={{ height: totalHeight, position: "relative", display: "inline-block", minWidth: "100%" }}>
+          <div style={{ height: totalHeight + 8, position: "relative", display: "inline-block", minWidth: "100%", paddingTop: 8 }}>
             <div style={{ transform: `translateY(${translateY}px)` }}>
               <LayerList
                 items={visibleItems}

@@ -108,7 +108,7 @@ export function Canvas() {
     editingMode,
     instanceContext,
     isSelected,
-    exitInstanceEditMode,
+    clearInstanceContext,
     resetContainerContext,
     enterContainer,
     select,
@@ -177,7 +177,7 @@ export function Canvas() {
     toggleTool,
     cancelDrawing,
     clearSelection,
-    exitInstanceEditMode,
+    clearInstanceContext,
     copyNodes,
   });
 

@@ -38,7 +38,7 @@ interface CanvasKeyboardShortcutsParams {
   toggleTool: (tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon") => void;
   cancelDrawing: () => void;
   clearSelection: () => void;
-  exitInstanceEditMode: () => void;
+  clearInstanceContext: () => void;
   copyNodes: (nodes: SceneNode[]) => void;
 }
 
@@ -67,7 +67,7 @@ export function useCanvasKeyboardShortcuts({
   toggleTool,
   cancelDrawing,
   clearSelection,
-  exitInstanceEditMode,
+  clearInstanceContext,
   copyNodes,
 }: CanvasKeyboardShortcutsParams) {
   useEffect(() => {
@@ -449,10 +449,10 @@ export function useCanvasKeyboardShortcuts({
           cancelDrawing();
           return;
         }
-        const currentEditingInstanceId =
-          useSelectionStore.getState().editingInstanceId;
-        if (currentEditingInstanceId) {
-          exitInstanceEditMode();
+        const currentInstanceContext =
+          useSelectionStore.getState().instanceContext;
+        if (currentInstanceContext) {
+          clearInstanceContext();
         } else {
           clearSelection();
         }
@@ -545,7 +545,7 @@ export function useCanvasKeyboardShortcuts({
     dimensions.height,
     dimensions.width,
     endBatch,
-    exitInstanceEditMode,
+    clearInstanceContext,
     fitToContent,
     groupNodes,
     isMiddleMouseDown,

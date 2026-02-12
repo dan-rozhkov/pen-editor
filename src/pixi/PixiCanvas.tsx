@@ -10,7 +10,11 @@ import { InlineNameEditor } from "@/components/InlineNameEditor";
 import { InlineTextEditor } from "@/components/InlineTextEditor";
 import { useCanvasKeyboardShortcuts } from "@/components/canvas/useCanvasKeyboardShortcuts";
 import { useCanvasFileDrop } from "@/components/canvas/useCanvasFileDrop";
-import { useFpsCounter, useCanvasResize, useAltKeyMeasurement } from "@/hooks/useCanvasEffects";
+import {
+  useFpsCounter,
+  useCanvasResize,
+  useAltKeyMeasurement,
+} from "@/hooks/useCanvasEffects";
 import { ZoomIndicator, FpsDisplay } from "@/components/canvas/CanvasOverlays";
 import { useClipboardStore } from "@/store/clipboardStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
@@ -53,28 +57,27 @@ export function PixiCanvas() {
   );
   const restoreSnapshot = useSceneStore((state) => state.restoreSnapshot);
   const { copiedNodes, copyNodes } = useClipboardStore();
-  const {
-    clearSelection,
-    editingNodeId,
-    editingMode,
-    exitInstanceEditMode,
-  } = useSelectionStore();
+  const { clearSelection, editingNodeId, editingMode, clearInstanceContext } =
+    useSelectionStore();
   const { undo, redo, saveHistory, startBatch, endBatch } = useHistoryStore();
   const { activeTool, cancelDrawing, toggleTool } = useDrawModeStore();
 
   // Selection data for inline editors
-  const editingTextNode = editingMode === "text" && editingNodeId
-    ? useSceneStore.getState().nodesById[editingNodeId]
-    : null;
-  const editingNameNode = editingMode === "name" && editingNodeId
-    ? useSceneStore.getState().nodesById[editingNodeId]
-    : null;
+  const editingTextNode =
+    editingMode === "text" && editingNodeId
+      ? useSceneStore.getState().nodesById[editingNodeId]
+      : null;
+  const editingNameNode =
+    editingMode === "name" && editingNodeId
+      ? useSceneStore.getState().nodesById[editingNodeId]
+      : null;
 
   // Calculate editing positions in world coordinates.
   // Inline editors apply viewport transform internally.
   const getEditingPosition = useCallback((nodeId: string) => {
     const nodesTree = useSceneStore.getState().getNodes();
-    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+    const calculateLayoutForFrame =
+      useLayoutStore.getState().calculateLayoutForFrame;
     return getNodeAbsolutePositionWithLayout(
       nodesTree,
       nodeId,
@@ -82,12 +85,14 @@ export function PixiCanvas() {
     );
   }, []);
 
-  const editingTextPosition = editingNodeId && editingMode === "text"
-    ? getEditingPosition(editingNodeId)
-    : null;
-  const editingNamePosition = editingNodeId && editingMode === "name"
-    ? getEditingPosition(editingNodeId)
-    : null;
+  const editingTextPosition =
+    editingNodeId && editingMode === "text"
+      ? getEditingPosition(editingNodeId)
+      : null;
+  const editingNamePosition =
+    editingNodeId && editingMode === "name"
+      ? getEditingPosition(editingNodeId)
+      : null;
 
   // Keyboard shortcuts (reuse existing hook)
   useCanvasKeyboardShortcuts({
@@ -115,7 +120,7 @@ export function PixiCanvas() {
     toggleTool,
     cancelDrawing,
     clearSelection,
-    exitInstanceEditMode,
+    clearInstanceContext,
     copyNodes,
   });
 
@@ -238,7 +243,12 @@ export function PixiCanvas() {
         position: "relative",
       }}
     >
-      <ZoomIndicator scale={scale} onFitToContent={() => fitToContent(nodes, dimensions.width, dimensions.height)} />
+      <ZoomIndicator
+        scale={scale}
+        onFitToContent={() =>
+          fitToContent(nodes, dimensions.width, dimensions.height)
+        }
+      />
       <FpsDisplay fps={fps} />
       {/* PixiJS renderer badge */}
       <div
