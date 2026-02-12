@@ -18,7 +18,9 @@ import { useDragStore } from "@/store/dragStore";
 import { resolveColor, applyOpacity } from "@/utils/colorUtils";
 import { buildKonvaGradientProps } from "@/utils/gradientUtils";
 import { applyAutoLayoutRecursively } from "@/utils/autoLayoutUtils";
-import { findComponentById } from "@/utils/nodeUtils";
+import {
+  findDeepestChildAtPosition,
+} from "@/utils/nodeUtils";
 import {
   COMPONENT_HOVER_OUTLINE_COLOR,
   ImageFillLayer,
@@ -31,60 +33,7 @@ import {
   getTextDimensions,
   isNodeEnabled,
 } from "./renderUtils";
-
-/**
- * Resolve a RefNode to a FrameNode for rendering within a descendant context.
- * Merges instance overrides with component defaults and resolves children.
- */
-function resolveRefToFrame(
-  refNode: RefNode,
-  allNodes: SceneNode[],
-): FrameNode | null {
-  const component = findComponentById(allNodes, refNode.componentId);
-  if (!component) return null;
-
-  const resolvedChildren = component.children.map((child) => {
-    const slotRepl =
-      child.type === "ref" ? refNode.slotContent?.[child.id] : undefined;
-    const descOverride = refNode.descendants?.[child.id];
-    return slotRepl ?? applyDescendantOverride(child, descOverride);
-  });
-
-  return {
-    ...component,
-    id: refNode.id,
-    name: refNode.name ?? component.name,
-    x: refNode.x,
-    y: refNode.y,
-    width: refNode.width,
-    height: refNode.height,
-    ...(refNode.fill !== undefined && { fill: refNode.fill }),
-    ...(refNode.fillBinding !== undefined && {
-      fillBinding: refNode.fillBinding,
-    }),
-    ...(refNode.fillOpacity !== undefined && {
-      fillOpacity: refNode.fillOpacity,
-    }),
-    ...(refNode.stroke !== undefined && { stroke: refNode.stroke }),
-    ...(refNode.strokeBinding !== undefined && {
-      strokeBinding: refNode.strokeBinding,
-    }),
-    ...(refNode.strokeWidth !== undefined && {
-      strokeWidth: refNode.strokeWidth,
-    }),
-    ...(refNode.strokeOpacity !== undefined && {
-      strokeOpacity: refNode.strokeOpacity,
-    }),
-    ...(refNode.gradientFill !== undefined && {
-      gradientFill: refNode.gradientFill,
-    }),
-    ...(refNode.opacity !== undefined && { opacity: refNode.opacity }),
-    ...(refNode.imageFill !== undefined && { imageFill: refNode.imageFill }),
-    type: "frame" as const,
-    reusable: false,
-    children: resolvedChildren,
-  };
-}
+import { prepareInstanceNode, resolveRefToFrame } from "./instanceUtils";
 
 interface InstanceRendererProps {
   node: RefNode;
@@ -119,26 +68,27 @@ export function InstanceRenderer({
   const globalTheme = useThemeStore((state) => state.activeTheme);
   const isDragging = useDragStore((state) => state.isDragging);
 
-  // Instance edit mode state
-  const editingInstanceId = useSelectionStore(
-    (state) => state.editingInstanceId,
-  );
+  // Instance interaction state
   const instanceContext = useSelectionStore((state) => state.instanceContext);
-  const enterInstanceEditMode = useSelectionStore(
-    (state) => state.enterInstanceEditMode,
-  );
   const selectDescendant = useSelectionStore((state) => state.selectDescendant);
 
-  // Check if we are in edit mode for this instance
-  const isInEditMode = editingInstanceId === node.id;
+  // Whether a descendant of THIS instance is currently selected
+  const hasSelectedDescendant = instanceContext?.instanceId === node.id;
 
-  // Find the component this instance references
-  const component = findComponentById(nodes, node.componentId);
-
-  // Don't render if component not found
-  if (!component) {
+  const preparedInstance = prepareInstanceNode(
+    node,
+    nodes,
+    calculateLayoutForFrame,
+  );
+  if (!preparedInstance) {
     return null;
   }
+  const {
+    component,
+    layoutChildren,
+    effectiveWidth,
+    effectiveHeight,
+  } = preparedInstance;
 
   // Use effective theme or fall back to global theme
   const currentTheme = effectiveTheme ?? globalTheme;
@@ -159,6 +109,7 @@ export function InstanceRenderer({
     node.fillOpacity !== undefined ? node.fillOpacity : component.fillOpacity;
   const effectiveStrokeOpacity =
     node.strokeOpacity !== undefined ? node.strokeOpacity : component.strokeOpacity;
+  const effectiveGradientFill = node.gradientFill !== undefined ? node.gradientFill : component.gradientFill;
 
   const rawFillColor = resolveColor(
     effectiveFill,
@@ -174,21 +125,18 @@ export function InstanceRenderer({
   );
   const fillColor = rawFillColor ? applyOpacity(rawFillColor, effectiveFillOpacity) : rawFillColor;
   const strokeColor = rawStrokeColor ? applyOpacity(rawStrokeColor, effectiveStrokeOpacity) : rawStrokeColor;
-  const effectiveGradientFill = node.gradientFill !== undefined ? node.gradientFill : component.gradientFill;
-  const instanceGradientProps = effectiveGradientFill
-    ? buildKonvaGradientProps(effectiveGradientFill, node.width, node.height)
-    : undefined;
 
-  // Calculate layout for children if auto-layout is enabled
-  const preparedComponent = applyAutoLayoutRecursively(
-    component,
-    calculateLayoutForFrame,
-  ) as FrameNode;
-  const layoutChildren = preparedComponent.children;
+  const instanceGradientProps = effectiveGradientFill
+    ? buildKonvaGradientProps(
+        effectiveGradientFill,
+        effectiveWidth,
+        effectiveHeight,
+      )
+    : undefined;
 
   const instanceRef = useRef<Konva.Group | null>(null);
   const shouldCache =
-    !isDragging && !isInEditMode && layoutChildren.length >= 30;
+    !isDragging && !hasSelectedDescendant && layoutChildren.length >= 30;
 
   useEffect(() => {
     const group = instanceRef.current;
@@ -203,16 +151,48 @@ export function InstanceRenderer({
   // If component has a theme override, use it for children
   const childTheme = component.themeOverride ?? currentTheme;
 
-  // Get descendant overrides
-  const descendantOverrides = node.descendants || {};
-
-  // Handle double-click to enter instance edit mode
-  const handleDblClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    e.cancelBubble = true;
-    enterInstanceEditMode(node.id);
+  // Find child at pointer position in local coordinates
+  const findChildAtPointer = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>): string | null => {
+    const stage = e.target.getStage();
+    if (!stage) return null;
+    const pointer = stage.getPointerPosition();
+    if (!pointer) return null;
+    const group = instanceRef.current;
+    if (!group) return null;
+    const transform = group.getAbsoluteTransform().copy().invert();
+    const localPos = transform.point(pointer);
+    return findDeepestChildAtPosition(layoutChildren, localPos.x, localPos.y);
   };
 
-  // Handle click on descendant (only in edit mode)
+  // Handle click: Cmd/Ctrl+click deep-selects a descendant (like frames)
+  const handleClick = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+    const isMeta = "metaKey" in e.evt && (e.evt.metaKey || e.evt.ctrlKey);
+    if (isMeta) {
+      e.cancelBubble = true;
+      const childId = findChildAtPointer(e);
+      if (childId) {
+        selectDescendant(node.id, childId);
+      }
+      return;
+    }
+    onClick(e);
+  };
+
+  // Handle double-click: enter instance and select child at position
+  const handleDblClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    // If a descendant is already selected, let descendant handlers take over (e.g. inline text editing)
+    if (hasSelectedDescendant) return;
+
+    e.cancelBubble = true;
+    const childId = findChildAtPointer(e);
+    if (childId) {
+      selectDescendant(node.id, childId);
+    } else if (layoutChildren.length > 0) {
+      selectDescendant(node.id, layoutChildren[0].id);
+    }
+  };
+
+  // Handle click on descendant (when a descendant is selected, for switching between them)
   const handleDescendantClick =
     (childId: string) =>
     (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
@@ -222,62 +202,37 @@ export function InstanceRenderer({
 
   // Render a descendant with overrides applied
   const renderDescendant = (child: SceneNode) => {
-    const override = descendantOverrides[child.id];
-
     // Check if this descendant is disabled (hidden via override)
-    if (!isNodeEnabled(override)) {
+    if (child.enabled === false) {
       return null;
     }
 
-    // Components inside components are automatically slots (replaceable in instances)
-    const isSlot = child.type === 'ref';
-    const slotReplacement = isSlot ? node.slotContent?.[child.id] : undefined;
+    const selectedDescendantId =
+      instanceContext?.instanceId === node.id
+        ? instanceContext.descendantId
+        : null;
 
-    // If slot has replacement, render it instead (no property overrides)
-    let overriddenChild = slotReplacement ?? applyDescendantOverride(child, override);
-
-    // Resolve ref nodes (component instances) to frames for rendering
-    if (overriddenChild.type === 'ref') {
-      overriddenChild = resolveRefToFrame(overriddenChild as RefNode, nodes) ?? overriddenChild;
-    }
-
-    const laidOutChild = applyAutoLayoutRecursively(
-      overriddenChild,
-      calculateLayoutForFrame,
-    );
-
-    // Check if this descendant is selected
-    const isSelected =
-      instanceContext?.instanceId === node.id &&
-      instanceContext?.descendantId === child.id;
-
-    if (isInEditMode) {
-      // In edit mode: render with click handlers and selection highlight
+    if (hasSelectedDescendant) {
+      // When entered: render with click handlers and selection highlight
       return (
         <Group key={`${node.id}-${child.id}`}>
           <DescendantRenderer
-            node={laidOutChild}
+            node={child}
             onClick={handleDescendantClick(child.id)}
-            isSelected={isSelected}
+            selectedDescendantId={selectedDescendantId}
             effectiveTheme={childTheme}
-            descendantOverrides={override?.descendants}
-            rootDescendantOverrides={descendantOverrides}
-            slotContent={node.slotContent}
             instanceId={node.id}
           />
         </Group>
       );
     }
 
-    // Not in edit mode: render normally with overrides
+    // Not entered: render normally with overrides
     return (
       <RenderNodeWithOverrides
         key={`${node.id}-${child.id}`}
-        node={laidOutChild}
+        node={child}
         effectiveTheme={childTheme}
-        descendantOverrides={override?.descendants}
-        rootDescendantOverrides={descendantOverrides}
-        slotContent={node.slotContent}
       />
     );
   };
@@ -287,11 +242,15 @@ export function InstanceRenderer({
       ref={instanceRef}
       id={node.id}
       name="selectable"
-      {...getRectTransformProps(node)}
+      {...getRectTransformProps({
+        ...node,
+        width: effectiveWidth,
+        height: effectiveHeight,
+      })}
       opacity={node.opacity ?? 1}
-      draggable={!isInEditMode}
-      onClick={onClick}
-      onTap={onClick}
+      draggable={!hasSelectedDescendant}
+      onClick={handleClick}
+      onTap={handleClick}
       onDblClick={handleDblClick}
       onDragStart={onDragStart}
       onDragMove={onDragMove}
@@ -302,8 +261,9 @@ export function InstanceRenderer({
     >
       {/* Background rect with merged properties (instance overrides component) */}
       <Rect
-        width={node.width}
-        height={node.height}
+        name="instance-bg"
+        width={effectiveWidth}
+        height={effectiveHeight}
         perfectDrawEnabled={false}
         fill={instanceGradientProps ? undefined : fillColor}
         {...(instanceGradientProps ?? {})}
@@ -313,25 +273,13 @@ export function InstanceRenderer({
       />
       {/* Children from component (rendered at original sizes, like a frame) */}
       {layoutChildren.map(renderDescendant)}
-      {/* Instance edit mode indicator */}
-      {isInEditMode && (
-        <SelectionOutline
-          x={0}
-          y={0}
-          width={node.width}
-          height={node.height}
-          stroke="#8B5CF6"
-          strokeWidth={2}
-          dash={[4, 4]}
-        />
-      )}
       {/* Hover outline */}
-      {isHovered && !isInEditMode && (
+      {isHovered && !hasSelectedDescendant && (
         <SelectionOutline
           x={0}
           y={0}
-          width={node.width}
-          height={node.height}
+          width={effectiveWidth}
+          height={effectiveHeight}
           stroke={COMPONENT_HOVER_OUTLINE_COLOR}
           strokeWidth={1.5}
           cornerRadius={component.cornerRadius}
@@ -345,38 +293,26 @@ export function InstanceRenderer({
 interface DescendantRendererProps {
   node: SceneNode;
   onClick: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
-  isSelected: boolean;
+  selectedDescendantId: string | null;
   effectiveTheme: ThemeName;
-  descendantOverrides?: DescendantOverrides;
-  rootDescendantOverrides?: DescendantOverrides;
-  slotContent?: Record<string, SceneNode>;
   instanceId: string;
 }
 
 function DescendantRenderer({
   node: rawNode,
   onClick,
-  isSelected,
+  selectedDescendantId,
   effectiveTheme,
-  descendantOverrides,
-  rootDescendantOverrides,
-  slotContent,
   instanceId,
 }: DescendantRendererProps) {
-  const allNodes = useSceneStore((state) => state.getNodes());
   const variables = useVariableStore((state) => state.variables);
   const globalTheme = useThemeStore((state) => state.activeTheme);
-  const calculateLayoutForFrame = useLayoutStore(
-    (state) => state.calculateLayoutForFrame,
-  );
   const currentTheme = effectiveTheme ?? globalTheme;
   const selectDescendant = useSelectionStore((state) => state.selectDescendant);
   const startDescendantEditing = useSelectionStore((state) => state.startDescendantEditing);
 
-  // Resolve ref nodes to frames for rendering
-  const node = rawNode.type === 'ref'
-    ? resolveRefToFrame(rawNode as RefNode, allNodes) ?? rawNode
-    : rawNode;
+  const node = rawNode;
+  const isSelected = selectedDescendantId === node.id;
 
   const rawFillColor = resolveColor(
     node.fill,
@@ -527,7 +463,7 @@ function DescendantRenderer({
     }
     case "frame":
     case "group": {
-      // For frames/groups, recursively render children with nested overrides
+      // For frames/groups, recursively render children
       const handleChildClick =
         (childId: string) =>
         (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
@@ -547,7 +483,11 @@ function DescendantRenderer({
               width={node.width}
               height={node.height}
               perfectDrawEnabled={false}
-              fill={node.imageFill || gradientProps ? undefined : fillColor}
+              fill={
+                node.imageFill || gradientProps
+                  ? undefined
+                  : (fillColor ?? "rgba(0,0,0,0.001)")
+              }
               {...(gradientProps && !node.imageFill ? gradientProps : {})}
               stroke={strokeColor ?? selectionStroke}
               strokeWidth={node.strokeWidth ?? selectionStrokeWidth}
@@ -564,39 +504,19 @@ function DescendantRenderer({
             />
           )}
           {containerChildren.map((child) => {
-            const childOverride =
-              descendantOverrides?.[child.id] ??
-              rootDescendantOverrides?.[child.id];
-            if (!isNodeEnabled(childOverride)) return null;
-            const slotReplacement =
-              child.type === "ref" ? slotContent?.[child.id] : undefined;
-            let overriddenChild =
-              slotReplacement ?? applyDescendantOverride(child, childOverride);
-            if (overriddenChild.type === "ref") {
-              overriddenChild =
-                resolveRefToFrame(overriddenChild as RefNode, allNodes) ??
-                overriddenChild;
-            }
-            const laidOutChild = applyAutoLayoutRecursively(
-              overriddenChild,
-              calculateLayoutForFrame,
-            );
-            const childIsSelected = false; // Nested selection not yet supported
+            if (child.enabled === false) return null;
             return (
               <DescendantRenderer
                 key={child.id}
-                node={laidOutChild}
+                node={child}
                 onClick={handleChildClick(child.id)}
-                isSelected={childIsSelected}
+                selectedDescendantId={selectedDescendantId}
                 effectiveTheme={effectiveTheme}
-                descendantOverrides={childOverride?.descendants}
-                rootDescendantOverrides={rootDescendantOverrides}
-                slotContent={slotContent}
                 instanceId={instanceId}
               />
             );
           })}
-          {isSelected && !strokeColor && (
+          {isSelected && (
             <SelectionOutline
               x={0}
               y={0}

@@ -1,6 +1,7 @@
 import type { SceneNode, FrameNode, GroupNode } from "../types/scene";
 import { isContainerNode } from "../types/scene";
-import { calculateFrameIntrinsicSize } from "./yogaLayout";
+import { findComponentById as findComponentByIdImpl, getAllComponents as getAllComponentsImpl } from "./componentUtils";
+import { getPreparedNodeEffectiveSize, prepareFrameNode } from "@/components/nodes/instanceUtils";
 
 export interface ParentContext {
   parent: FrameNode | GroupNode | null;
@@ -105,39 +106,14 @@ export function findComponentById(
   nodes: SceneNode[],
   id: string,
 ): FrameNode | null {
-  for (const node of nodes) {
-    if (node.type === "frame" && node.id === id && node.reusable) {
-      return node;
-    }
-    if (isContainerNode(node)) {
-      const found = findComponentById(node.children, id);
-      if (found) return found;
-    }
-  }
-  return null;
+  return findComponentByIdImpl(nodes, id);
 }
 
 /**
  * Get all components (reusable FrameNodes) from the scene tree
  */
 export function getAllComponents(nodes: SceneNode[]): FrameNode[] {
-  const components: FrameNode[] = [];
-
-  function collect(searchNodes: SceneNode[]) {
-    for (const node of searchNodes) {
-      if (node.type === "frame") {
-        if (node.reusable) {
-          components.push(node);
-        }
-        collect(node.children);
-      } else if (node.type === "group") {
-        collect(node.children);
-      }
-    }
-  }
-
-  collect(nodes);
-  return components;
+  return getAllComponentsImpl(nodes);
 }
 
 /**
@@ -217,10 +193,10 @@ export function getNodeAbsolutePositionWithLayout(
     accY: number,
     parentFrame: FrameNode | null,
   ): { x: number; y: number } | null {
-    // If parent is an auto-layout frame, get layout-calculated positions
+    // If parent is an auto-layout frame, use prepared children for consistent layout resolution.
     let effectiveNodes = searchNodes;
     if (parentFrame?.layout?.autoLayout) {
-      effectiveNodes = calculateLayoutForFrame(parentFrame);
+      effectiveNodes = prepareFrameNode(parentFrame, calculateLayoutForFrame).layoutChildren;
     }
 
     for (const node of effectiveNodes) {
@@ -257,15 +233,15 @@ export function getNodeEffectiveSize(
     searchNodes: SceneNode[],
     parentFrame: FrameNode | null,
   ): { width: number; height: number } | null {
-    // If parent is an auto-layout frame, get layout-calculated sizes
+    // If parent is an auto-layout frame, use prepared children for consistent layout resolution.
     let effectiveNodes = searchNodes;
     if (parentFrame?.layout?.autoLayout) {
-      effectiveNodes = calculateLayoutForFrame(parentFrame);
+      effectiveNodes = prepareFrameNode(parentFrame, calculateLayoutForFrame).layoutChildren;
     }
 
     for (const node of effectiveNodes) {
       if (node.id === targetId) {
-        return getNodeHitSize(node);
+        return getPreparedNodeEffectiveSize(node, nodes, calculateLayoutForFrame);
       }
       if (isContainerNode(node)) {
         const found = findWithPath(
@@ -306,6 +282,38 @@ export function findChildAtPosition(
   return null;
 }
 
+/**
+ * Find the deepest (most nested) child node at the given local coordinates.
+ * Coordinates are relative to the current parent node.
+ */
+export function findDeepestChildAtPosition(
+  children: SceneNode[],
+  localX: number,
+  localY: number,
+): string | null {
+  for (let i = children.length - 1; i >= 0; i--) {
+    const child = children[i];
+    if (child.visible === false) continue;
+    if (
+      localX >= child.x &&
+      localX <= child.x + child.width &&
+      localY >= child.y &&
+      localY <= child.y + child.height
+    ) {
+      if (isContainerNode(child)) {
+        const nestedId = findDeepestChildAtPosition(
+          child.children,
+          localX - child.x,
+          localY - child.y,
+        );
+        if (nestedId) return nestedId;
+      }
+      return child.id;
+    }
+  }
+  return null;
+}
+
 interface AbsoluteRect {
   x: number;
   y: number;
@@ -328,23 +336,6 @@ function rectsIntersect(a: AbsoluteRect, b: AbsoluteRect): boolean {
   );
 }
 
-function getNodeHitSize(node: SceneNode): { width: number; height: number } {
-  let width = node.width;
-  let height = node.height;
-
-  if (node.type === "frame" && node.layout?.autoLayout) {
-    const fitWidth = node.sizing?.widthMode === "fit_content";
-    const fitHeight = node.sizing?.heightMode === "fit_content";
-    if (fitWidth || fitHeight) {
-      const intrinsic = calculateFrameIntrinsicSize(node, { fitWidth, fitHeight });
-      if (fitWidth) width = intrinsic.width;
-      if (fitHeight) height = intrinsic.height;
-    }
-  }
-
-  return { width, height };
-}
-
 /**
  * Find the top-most/deepest frame that intersects with a world-space rectangle.
  * Useful for inserting freshly created nodes into a frame under them.
@@ -362,14 +353,18 @@ export function findTopmostFrameIntersectingRectWithLayout(
   ): FrameHitResult | null {
     let effectiveNodes = searchNodes;
     if (parentFrame?.layout?.autoLayout) {
-      effectiveNodes = calculateLayoutForFrame(parentFrame);
+      effectiveNodes = prepareFrameNode(parentFrame, calculateLayoutForFrame).layoutChildren;
     }
 
     for (let i = effectiveNodes.length - 1; i >= 0; i--) {
       const node = effectiveNodes[i];
       if (node.visible === false) continue;
 
-      const { width, height } = getNodeHitSize(node);
+      const { width, height } = getPreparedNodeEffectiveSize(
+        node,
+        nodes,
+        calculateLayoutForFrame,
+      );
       const absX = accX + node.x;
       const absY = accY + node.y;
       const nodeRect: AbsoluteRect = { x: absX, y: absY, width, height };

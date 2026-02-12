@@ -21,6 +21,7 @@ import {
   isDescendantOf,
 } from "@/utils/nodeUtils";
 import { generatePolygonPoints } from "@/utils/polygonUtils";
+import { getPreparedNodeEffectiveSize } from "@/components/nodes/instanceUtils";
 
 interface CanvasPointerHandlersParams {
   stageRef: RefObject<Konva.Stage | null>;
@@ -344,17 +345,29 @@ export function useCanvasPointerHandlers({
                   );
                   if (selPos && hovPos) {
                     const hovNode = findNodeById(currentNodes, hoveredId);
+                    const selectedSize = getPreparedNodeEffectiveSize(
+                      selectedNode,
+                      currentNodes,
+                      calculateLayoutForFrame,
+                    );
+                    const hoveredSize = hovNode
+                      ? getPreparedNodeEffectiveSize(
+                          hovNode,
+                          currentNodes,
+                          calculateLayoutForFrame,
+                        )
+                      : { width: 0, height: 0 };
                     const selBounds = {
                       x: selPos.x,
                       y: selPos.y,
-                      width: selectedNode.width,
-                      height: selectedNode.height,
+                      width: selectedSize.width,
+                      height: selectedSize.height,
                     };
                     const hovBounds = {
                       x: hovPos.x,
                       y: hovPos.y,
-                      width: hovNode?.width ?? 0,
-                      height: hovNode?.height ?? 0,
+                      width: hoveredSize.width,
+                      height: hoveredSize.height,
                     };
                     const isParent = isDescendantOf(
                       currentNodes,
@@ -404,14 +417,21 @@ export function useCanvasPointerHandlers({
         setMarqueeRect(rect);
 
         const currentNodes = useSceneStore.getState().getNodes();
+        const calculateLayoutForFrame =
+          useLayoutStore.getState().calculateLayoutForFrame;
         const intersecting: string[] = [];
         for (const node of currentNodes) {
           if (node.visible === false) continue;
+          const effectiveSize = getPreparedNodeEffectiveSize(
+            node,
+            currentNodes,
+            calculateLayoutForFrame,
+          );
           const nodeRect = {
             x: node.x,
             y: node.y,
-            width: node.width,
-            height: node.height,
+            width: effectiveSize.width,
+            height: effectiveSize.height,
           };
           if (rectsIntersect(rect, nodeRect)) {
             intersecting.push(node.id);

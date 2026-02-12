@@ -10,14 +10,13 @@ import { useViewportStore } from "@/store/viewportStore";
 import { useDragStore } from "@/store/dragStore";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
 import {
-  findChildAtPosition,
+  findDeepestChildAtPosition,
   getNodeAbsolutePositionWithLayout,
 } from "@/utils/nodeUtils";
 import {
   getViewportBounds,
   isChildVisibleInViewport,
 } from "@/utils/viewportUtils";
-import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 import {
   ImageFillLayer,
   PerSideStrokeLines,
@@ -27,6 +26,7 @@ import {
   getRectTransformProps,
   hasPerSideStroke,
 } from "./renderUtils";
+import { prepareFrameNode } from "./instanceUtils";
 import { RenderNode } from "./RenderNode";
 
 interface FrameRendererProps {
@@ -79,12 +79,12 @@ export function FrameRenderer({
 
   const { scale: vpScale, x: vpX, y: vpY } = useViewportStore();
 
-  // Calculate layout for children if auto-layout is enabled
-  const layoutChildren = useMemo(
-    () =>
-      node.layout?.autoLayout ? calculateLayoutForFrame(node) : node.children,
+  // Calculate layout children and effective frame size using shared prepared pipeline
+  const preparedFrame = useMemo(
+    () => prepareFrameNode(node, calculateLayoutForFrame),
     [node, calculateLayoutForFrame],
   );
+  const { layoutChildren, effectiveWidth, effectiveHeight } = preparedFrame;
 
   // Viewport-cull children for frames with many children (>10)
   // Only when the frame is NOT clipping (clipped frames are already bounded visually)
@@ -105,22 +105,6 @@ export function FrameRenderer({
       isChildVisibleInViewport(child, absPos.x, absPos.y, bounds),
     );
   }, [layoutChildren, node.id, vpScale, vpX, vpY, stageRef]);
-
-  // Calculate effective size (fit_content uses intrinsic size from Yoga)
-  const { effectiveWidth, effectiveHeight } = useMemo(() => {
-    const fitWidth =
-      node.sizing?.widthMode === "fit_content" && node.layout?.autoLayout;
-    const fitHeight =
-      node.sizing?.heightMode === "fit_content" && node.layout?.autoLayout;
-    const intrinsicSize =
-      fitWidth || fitHeight
-        ? calculateFrameIntrinsicSize(node, { fitWidth, fitHeight })
-        : { width: node.width, height: node.height };
-    return {
-      effectiveWidth: fitWidth ? intrinsicSize.width : node.width,
-      effectiveHeight: fitHeight ? intrinsicSize.height : node.height,
-    };
-  }, [node]);
 
   // If this frame has a theme override, use it for children
   const childTheme = node.themeOverride ?? effectiveTheme;
@@ -223,7 +207,7 @@ export function FrameRenderer({
     const localY = pointerPos.y - absPos.y;
     // Use layout-calculated children for accurate hit detection
     const hitChildren = layoutChildren;
-    const childId = findChildAtPosition(hitChildren, localX, localY);
+    const childId = findDeepestChildAtPosition(hitChildren, localX, localY);
     if (childId) {
       select(childId);
       return;

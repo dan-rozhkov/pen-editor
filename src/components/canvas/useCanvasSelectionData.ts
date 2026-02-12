@@ -1,16 +1,24 @@
 import { useMemo } from "react";
-import type { FrameNode, GroupNode, RefNode, SceneNode, TextNode } from "@/types/scene";
+import type {
+  FrameNode,
+  GroupNode,
+  RefNode,
+  SceneNode,
+  TextNode,
+} from "@/types/scene";
 import type { InstanceContext } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import {
-  findComponentById,
   findNodeById,
   findParentFrame,
   getNodeAbsolutePosition,
   getNodeAbsolutePositionWithLayout,
 } from "@/utils/nodeUtils";
-import { applyDescendantOverride } from "@/components/nodes/renderUtils";
-import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
+import {
+  findDescendantLocalPosition,
+  getPreparedNodeEffectiveSize,
+  prepareInstanceNode,
+} from "@/components/nodes/instanceUtils";
 
 interface CanvasSelectionDataParams {
   nodes: SceneNode[];
@@ -20,34 +28,6 @@ interface CanvasSelectionDataParams {
   editingMode: "text" | "name" | null;
   instanceContext: InstanceContext | null;
   calculateLayoutForFrame: (frame: FrameNode) => SceneNode[];
-}
-
-/** Compute local position of a descendant within a component tree, accumulating parent offsets. */
-function getDescendantLocalPosition(
-  children: SceneNode[],
-  descendantId: string,
-  calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
-): { x: number; y: number } | null {
-  for (const child of children) {
-    if (child.id === descendantId) {
-      return { x: child.x, y: child.y };
-    }
-    if (child.type === "frame" || child.type === "group") {
-      const childChildren =
-        child.type === "frame" && (child as FrameNode).layout?.autoLayout
-          ? calculateLayoutForFrame(child as FrameNode)
-          : (child as FrameNode | GroupNode).children;
-      const pos = getDescendantLocalPosition(
-        childChildren,
-        descendantId,
-        calculateLayoutForFrame,
-      );
-      if (pos) {
-        return { x: child.x + pos.x, y: child.y + pos.y };
-      }
-    }
-  }
-  return null;
 }
 
 export function useCanvasSelectionData({
@@ -117,28 +97,19 @@ export function useCanvasSelectionData({
     if (editingMode !== "text" || !instanceContext) return null;
     const instance = findNodeById(nodes, instanceContext.instanceId);
     if (!instance || instance.type !== "ref") return null;
-    const refNode = instance as RefNode;
-    const component = findComponentById(nodes, refNode.componentId);
-    if (!component) return null;
+    const preparedInstance = prepareInstanceNode(
+      instance as RefNode,
+      nodes,
+      calculateLayoutForFrame,
+    );
+    if (!preparedInstance) return null;
 
-    // Components inside components are automatically slots
-    const descendant = findNodeById(component.children, instanceContext.descendantId);
-    const isSlot = descendant?.type === 'ref';
-    const slotContent = isSlot
-      ? refNode.slotContent?.[instanceContext.descendantId]
-      : undefined;
-    if (slotContent && slotContent.type === "text") {
-      return slotContent as TextNode;
-    }
-
-    // Find original descendant and apply override
-    const original = findNodeById(
-      component.children,
+    const descendantNode = findNodeById(
+      preparedInstance.layoutChildren,
       instanceContext.descendantId,
     );
-    if (!original || original.type !== "text") return null;
-    const override = refNode.descendants?.[instanceContext.descendantId];
-    return (override ? applyDescendantOverride(original, override) : original) as TextNode;
+    if (!descendantNode || descendantNode.type !== "text") return null;
+    return descendantNode as TextNode;
   }, [editingMode, instanceContext, nodes]);
 
   const editingDescendantTextPosition = useMemo(() => {
@@ -151,14 +122,16 @@ export function useCanvasSelectionData({
     if (!instanceAbsPos) return null;
     const instance = findNodeById(nodes, instanceContext.instanceId);
     if (!instance || instance.type !== "ref") return null;
-    const component = findComponentById(nodes, (instance as RefNode).componentId);
-    if (!component) return null;
-    const localPos = getDescendantLocalPosition(
-      component.layout?.autoLayout
-        ? calculateLayoutForFrame(component)
-        : component.children,
-      instanceContext.descendantId,
+    const preparedInstance = prepareInstanceNode(
+      instance as RefNode,
+      nodes,
       calculateLayoutForFrame,
+    );
+    if (!preparedInstance) return null;
+
+    const localPos = findDescendantLocalPosition(
+      preparedInstance.layoutChildren,
+      instanceContext.descendantId,
     );
     if (!localPos) return null;
     return {
@@ -203,24 +176,16 @@ export function useCanvasSelectionData({
       const instance = findNodeById(nodes, instanceContext.instanceId);
       if (instance && instance.type === "ref") {
         const refNode = instance as RefNode;
-        const component = findComponentById(nodes, refNode.componentId);
-        if (component) {
-          const originalDescendant = findNodeById(
-            component.children,
+        const preparedInstance = prepareInstanceNode(
+          refNode,
+          nodes,
+          calculateLayoutForFrame,
+        );
+        if (preparedInstance) {
+          const descendantNode = findNodeById(
+            preparedInstance.layoutChildren,
             instanceContext.descendantId,
           );
-          const slotContent =
-            originalDescendant?.type === "ref"
-              ? refNode.slotContent?.[instanceContext.descendantId]
-              : undefined;
-          const descendantNode = slotContent
-            ? slotContent
-            : originalDescendant
-              ? applyDescendantOverride(
-                  originalDescendant,
-                  refNode.descendants?.[instanceContext.descendantId],
-                )
-              : null;
 
           if (descendantNode) {
             const instanceAbsPos = getNodeAbsolutePositionWithLayout(
@@ -228,12 +193,9 @@ export function useCanvasSelectionData({
               instanceContext.instanceId,
               calculateLayoutForFrame,
             );
-            const localPos = getDescendantLocalPosition(
-              component.layout?.autoLayout
-                ? calculateLayoutForFrame(component)
-                : component.children,
+            const localPos = findDescendantLocalPosition(
+              preparedInstance.layoutChildren,
               instanceContext.descendantId,
-              calculateLayoutForFrame,
             );
             if (instanceAbsPos && localPos) {
               result.push({
@@ -262,21 +224,8 @@ export function useCanvasSelectionData({
       );
       if (!absPos) continue;
 
-      let effectiveWidth = node.width;
-      let effectiveHeight = node.height;
-
-      if (node.type === "frame" && node.layout?.autoLayout) {
-        const fitWidth = node.sizing?.widthMode === "fit_content";
-        const fitHeight = node.sizing?.heightMode === "fit_content";
-        if (fitWidth || fitHeight) {
-          const intrinsicSize = calculateFrameIntrinsicSize(node, {
-            fitWidth,
-            fitHeight,
-          });
-          if (fitWidth) effectiveWidth = intrinsicSize.width;
-          if (fitHeight) effectiveHeight = intrinsicSize.height;
-        }
-      }
+      let { width: effectiveWidth, height: effectiveHeight } =
+        getPreparedNodeEffectiveSize(node, nodes, calculateLayoutForFrame);
 
       const parentContext = findParentFrame(nodes, node.id);
       if (

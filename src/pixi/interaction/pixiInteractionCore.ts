@@ -4,7 +4,11 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useHoverStore } from "@/store/hoverStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useLayoutStore } from "@/store/layoutStore";
-import { findNodeById, findChildAtPosition, getNodeAbsolutePositionWithLayout } from "@/utils/nodeUtils";
+import {
+  findNodeById,
+  findDeepestChildAtPosition,
+  getNodeAbsolutePositionWithLayout,
+} from "@/utils/nodeUtils";
 import type { InteractionContext } from "./types";
 import { screenToWorld, findNodeAtPoint, findFrameLabelAtPoint, hitTestTransformHandle, getResizeCursor } from "./hitTesting";
 import { createPanController } from "./panController";
@@ -13,6 +17,36 @@ import { createDrawController } from "./drawController";
 import { createDragController } from "./dragController";
 import { createMarqueeController } from "./marqueeController";
 import { createMeasurementController } from "./measurementController";
+import { prepareFrameNode, prepareInstanceNode } from "@/components/nodes/instanceUtils";
+
+function findInstanceDescendantAtWorldPoint(
+  instanceId: string,
+  worldX: number,
+  worldY: number,
+  currentNodes: ReturnType<typeof useSceneStore.getState>["getNodes"] extends () => infer T ? T : never,
+  calculateLayoutForFrame: ReturnType<typeof useLayoutStore.getState>["calculateLayoutForFrame"],
+): string | null {
+  const instanceNode = findNodeById(currentNodes, instanceId);
+  if (!instanceNode || instanceNode.type !== "ref") return null;
+
+  const absPos = getNodeAbsolutePositionWithLayout(
+    currentNodes,
+    instanceId,
+    calculateLayoutForFrame,
+  );
+  if (!absPos) return null;
+
+  const preparedInstance = prepareInstanceNode(
+    instanceNode,
+    currentNodes,
+    calculateLayoutForFrame,
+  );
+  if (!preparedInstance) return null;
+
+  const localX = worldX - absPos.x;
+  const localY = worldY - absPos.y;
+  return findDeepestChildAtPosition(preparedInstance.layoutChildren, localX, localY);
+}
 
 /**
  * Set up all pointer interaction handlers on the PixiJS canvas.
@@ -84,6 +118,34 @@ export function setupPixiInteraction(
 
       const deepSelect = e.metaKey || e.ctrlKey;
       const hitId = findNodeAtPoint(world.x, world.y, { deepSelect });
+      const selectionState = useSelectionStore.getState();
+      const currentNodes = useSceneStore.getState().getNodes();
+      const calculateLayoutForFrame =
+        useLayoutStore.getState().calculateLayoutForFrame;
+
+      // Instance descendant selection (like Konva):
+      // - Cmd/Ctrl+click on instance deep-selects descendant
+      // - while already in instance context, plain click switches descendant
+      if (hitId) {
+        const hitNode = findNodeById(currentNodes, hitId);
+        const activeInstanceId = selectionState.instanceContext?.instanceId;
+        const shouldDeepSelectInInstance =
+          (deepSelect && hitNode?.type === "ref") ||
+          (!!activeInstanceId && activeInstanceId === hitId);
+        if (shouldDeepSelectInInstance) {
+          const descendantId = findInstanceDescendantAtWorldPoint(
+            hitId,
+            world.x,
+            world.y,
+            currentNodes,
+            calculateLayoutForFrame,
+          );
+          if (descendantId) {
+            useSelectionStore.getState().selectDescendant(hitId, descendantId);
+            return;
+          }
+        }
+      }
 
       if (drag.handlePointerDown(e, world, hitId)) return;
 
@@ -156,6 +218,26 @@ export function setupPixiInteraction(
     // Match Konva behavior: drill down from currently selected container.
     if (currentSelectedIds.length === 1) {
       const selectedNode = findNodeById(currentNodes, currentSelectedIds[0]);
+      if (selectedNode && selectedNode.type === "ref") {
+        const descendantId = findInstanceDescendantAtWorldPoint(
+          selectedNode.id,
+          world.x,
+          world.y,
+          currentNodes,
+          calculateLayoutForFrame,
+        );
+        if (descendantId) {
+          useSelectionStore.getState().selectDescendant(selectedNode.id, descendantId);
+          const descendantNode = findNodeById(
+            prepareInstanceNode(selectedNode, currentNodes, calculateLayoutForFrame)?.layoutChildren ?? [],
+            descendantId,
+          );
+          if (descendantNode?.type === "text") {
+            useSelectionStore.getState().startDescendantEditing();
+          }
+        }
+        return;
+      }
       if (selectedNode && (selectedNode.type === "frame" || selectedNode.type === "group")) {
         useSelectionStore.getState().enterContainer(selectedNode.id);
 
@@ -170,9 +252,9 @@ export function setupPixiInteraction(
         const localY = world.y - absPos.y;
         const hitChildren =
           selectedNode.type === "frame" && selectedNode.layout?.autoLayout
-            ? calculateLayoutForFrame(selectedNode)
+            ? prepareFrameNode(selectedNode, calculateLayoutForFrame).layoutChildren
             : selectedNode.children;
-        const childId = findChildAtPosition(hitChildren, localX, localY);
+        const childId = findDeepestChildAtPosition(hitChildren, localX, localY);
         if (childId) {
           useSelectionStore.getState().select(childId);
         }
@@ -191,6 +273,24 @@ export function setupPixiInteraction(
     if (node.type === "text") {
       // Enter text editing mode
       useSelectionStore.getState().startEditing(hitId);
+    } else if (node.type === "ref") {
+      const descendantId = findInstanceDescendantAtWorldPoint(
+        hitId,
+        world.x,
+        world.y,
+        currentNodes,
+        calculateLayoutForFrame,
+      );
+      if (descendantId) {
+        useSelectionStore.getState().selectDescendant(hitId, descendantId);
+        const descendantNode = findNodeById(
+          prepareInstanceNode(node, currentNodes, calculateLayoutForFrame)?.layoutChildren ?? [],
+          descendantId,
+        );
+        if (descendantNode?.type === "text") {
+          useSelectionStore.getState().startDescendantEditing();
+        }
+      }
     } else if (node.type === "frame" || node.type === "group") {
       // Enter container (fallback when no selected container context)
       useSelectionStore.getState().enterContainer(hitId);

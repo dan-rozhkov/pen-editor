@@ -6,7 +6,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { isContainerNode } from "@/types/scene";
 import {
-  findChildAtPosition,
+  findDeepestChildAtPosition,
   findNodeById,
   getNodeAbsolutePositionWithLayout,
 } from "@/utils/nodeUtils";
@@ -64,7 +64,7 @@ export function useCanvasDoubleClick({
         selectedNode.type === "frame" && selectedNode.layout?.autoLayout
           ? calculateLayoutForFrame(selectedNode)
           : selectedNode.children;
-      const childId = findChildAtPosition(hitChildren, localX, localY);
+      const childId = findDeepestChildAtPosition(hitChildren, localX, localY);
       if (childId) {
         select(childId);
       }

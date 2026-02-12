@@ -9,6 +9,10 @@ import type {
 import { useLoadImage } from "@/hooks/useLoadImage";
 import { useSceneStore } from "@/store/sceneStore";
 import { isDescendantOfFlat } from "@/utils/nodeUtils";
+import {
+  measureTextAutoSize,
+  measureTextFixedWidthHeight,
+} from "@/utils/textMeasure";
 
 // Figma-style hover outline color
 export const HOVER_OUTLINE_COLOR = "#0d99ff";
@@ -373,7 +377,39 @@ export function applyDescendantOverride(
   if (!override) return node;
   // Apply override properties (excluding nested descendants)
   const { descendants: _, ...overrideProps } = override;
-  return { ...node, ...overrideProps } as SceneNode;
+  const mergedNode = { ...node, ...overrideProps } as SceneNode;
+
+  if (mergedNode.type !== "text") {
+    return mergedNode;
+  }
+
+  const affectsTextMeasure = [
+    "text",
+    "fontSize",
+    "fontFamily",
+    "fontWeight",
+    "fontStyle",
+    "letterSpacing",
+    "lineHeight",
+    "textWidthMode",
+    "width",
+  ].some((key) => key in overrideProps);
+
+  if (!affectsTextMeasure) {
+    return mergedNode;
+  }
+
+  const textNode = mergedNode as TextNode;
+  const mode = textNode.textWidthMode;
+  if (!mode || mode === "auto") {
+    const measured = measureTextAutoSize(textNode);
+    return { ...textNode, width: measured.width, height: measured.height };
+  }
+  if (mode === "fixed") {
+    const measuredHeight = measureTextFixedWidthHeight(textNode);
+    return { ...textNode, height: measuredHeight };
+  }
+  return textNode;
 }
 
 // Check if a node should be rendered (considering enabled property)
