@@ -32,6 +32,9 @@ export interface PanState {
   startY: number;
   startViewX: number;
   startViewY: number;
+  lastClientX: number;
+  lastClientY: number;
+  panRafId: number | null;
 }
 
 export interface DrawState {

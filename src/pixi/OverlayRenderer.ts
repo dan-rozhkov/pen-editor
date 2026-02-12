@@ -4,6 +4,8 @@ import { useDragStore } from "@/store/dragStore";
 import { useMeasureStore } from "@/store/measureStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
+import { usePixelGridStore } from "@/store/pixelGridStore";
+import { useUIThemeStore } from "@/store/uiThemeStore";
 import { getMarqueeRect, subscribeOverlayState } from "./pixiOverlayState";
 
 const GUIDE_COLOR = 0xff3366;
@@ -20,13 +22,25 @@ const MARQUEE_STROKE = 0x0d99ff;
 const DRAW_PREVIEW_FILL = 0xcccccc;
 const DRAW_PREVIEW_FILL_ALPHA = 0.3;
 const DRAW_PREVIEW_STROKE = 0x0d99ff;
+const PIXEL_GRID_MIN_SCALE = 8;
+const PIXEL_GRID_FADE_SCALE = 10;
+const PIXEL_GRID_BASE_OPACITY = 0.03;
+const PIXEL_GRID_LIGHT_COLOR = 0x000000;
+const PIXEL_GRID_DARK_COLOR = 0xffffff;
 
 /**
  * Create overlay renderer for smart guides, drop indicators, measure lines,
  * drawing preview, and marquee selection.
  * Returns a cleanup function.
  */
-export function createOverlayRenderer(overlayContainer: Container): () => void {
+export function createOverlayRenderer(
+  overlayContainer: Container,
+  getViewportSize: () => { width: number; height: number },
+): () => void {
+  const pixelGridGfx = new Graphics();
+  pixelGridGfx.label = "pixel-grid";
+  overlayContainer.addChild(pixelGridGfx);
+
   const guidesGfx = new Graphics();
   guidesGfx.label = "smart-guides";
   overlayContainer.addChild(guidesGfx);
@@ -50,6 +64,53 @@ export function createOverlayRenderer(overlayContainer: Container): () => void {
   const marqueeGfx = new Graphics();
   marqueeGfx.label = "marquee-selection";
   overlayContainer.addChild(marqueeGfx);
+
+  function redrawPixelGrid(): void {
+    pixelGridGfx.clear();
+
+    const { showPixelGrid } = usePixelGridStore.getState();
+    const { uiTheme } = useUIThemeStore.getState();
+    const { scale, x, y } = useViewportStore.getState();
+    if (!showPixelGrid || scale < PIXEL_GRID_MIN_SCALE) return;
+
+    const { width: viewportWidth, height: viewportHeight } = getViewportSize();
+    if (viewportWidth <= 0 || viewportHeight <= 0) return;
+
+    const t = Math.min(
+      1,
+      (scale - PIXEL_GRID_MIN_SCALE) /
+        (PIXEL_GRID_FADE_SCALE - PIXEL_GRID_MIN_SCALE),
+    );
+    const alpha = PIXEL_GRID_BASE_OPACITY * t;
+    if (alpha <= 0) return;
+
+    const color =
+      uiTheme === "dark" ? PIXEL_GRID_DARK_COLOR : PIXEL_GRID_LIGHT_COLOR;
+
+    const worldMinX = -x / scale;
+    const worldMaxX = (-x + viewportWidth) / scale;
+    const worldMinY = -y / scale;
+    const worldMaxY = (-y + viewportHeight) / scale;
+
+    const startX = Math.floor(worldMinX);
+    const endX = Math.ceil(worldMaxX);
+    const startY = Math.floor(worldMinY);
+    const endY = Math.ceil(worldMaxY);
+
+    const strokeWidth = 1 / scale;
+
+    for (let wx = startX; wx <= endX; wx++) {
+      pixelGridGfx.moveTo(wx, worldMinY);
+      pixelGridGfx.lineTo(wx, worldMaxY);
+      pixelGridGfx.stroke({ color, width: strokeWidth, alpha });
+    }
+
+    for (let wy = startY; wy <= endY; wy++) {
+      pixelGridGfx.moveTo(worldMinX, wy);
+      pixelGridGfx.lineTo(worldMaxX, wy);
+      pixelGridGfx.stroke({ color, width: strokeWidth, alpha });
+    }
+  }
 
   function redrawGuides(): void {
     guidesGfx.clear();
@@ -200,12 +261,15 @@ export function createOverlayRenderer(overlayContainer: Container): () => void {
   }
 
   // Subscribe to stores
+  const unsubPixelGrid = usePixelGridStore.subscribe(redrawPixelGrid);
+  const unsubUITheme = useUIThemeStore.subscribe(redrawPixelGrid);
   const unsubGuides = useSmartGuideStore.subscribe(redrawGuides);
   const unsubDrop = useDragStore.subscribe(redrawDropIndicator);
   const unsubMeasure = useMeasureStore.subscribe(redrawMeasureLines);
   const unsubDrawMode = useDrawModeStore.subscribe(redrawDrawPreview);
   const unsubMarquee = subscribeOverlayState(redrawMarquee);
   const unsubViewport = useViewportStore.subscribe(() => {
+    redrawPixelGrid();
     redrawGuides();
     redrawDropIndicator();
     redrawMeasureLines();
@@ -214,6 +278,7 @@ export function createOverlayRenderer(overlayContainer: Container): () => void {
   });
 
   // Initial draw
+  redrawPixelGrid();
   redrawGuides();
   redrawDropIndicator();
   redrawMeasureLines();
@@ -221,12 +286,15 @@ export function createOverlayRenderer(overlayContainer: Container): () => void {
   redrawMarquee();
 
   return () => {
+    unsubPixelGrid();
+    unsubUITheme();
     unsubGuides();
     unsubDrop();
     unsubMeasure();
     unsubDrawMode();
     unsubMarquee();
     unsubViewport();
+    pixelGridGfx.destroy();
     guidesGfx.destroy();
     dropGfx.destroy();
     measureGfx.destroy();

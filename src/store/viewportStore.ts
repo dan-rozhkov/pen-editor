@@ -30,7 +30,7 @@ interface ViewportState {
 }
 
 const MIN_SCALE = 0.1;
-const MAX_SCALE = 10;
+const MAX_SCALE = 20;
 
 // Smooth zoom animation constants
 const EASING_FACTOR = 0.9; // Interpolation speed (higher = faster, max ~0.9)

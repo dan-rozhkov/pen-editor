@@ -227,7 +227,10 @@ export function PixiCanvas() {
         );
 
         // Set up overlay rendering (guides, drop indicator, marquee)
-        const overlayCleanup = createOverlayRenderer(overlayContainer);
+        const overlayCleanup = createOverlayRenderer(overlayContainer, () => ({
+          width: app.screen.width,
+          height: app.screen.height,
+        }));
 
         // Set up interaction handlers
         const interactionCleanup = setupPixiInteraction(
@@ -281,24 +284,6 @@ export function PixiCanvas() {
         }
       />
       <FpsDisplay fps={fps} />
-      {/* PixiJS renderer badge */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 12,
-          right: 12,
-          background: "rgba(0, 128, 0, 0.75)",
-          padding: "2px 6px",
-          borderRadius: 4,
-          fontSize: 10,
-          fontFamily: "system-ui, sans-serif",
-          color: "#fff",
-          zIndex: 10,
-          userSelect: "none",
-        }}
-      >
-        PixiJS
-      </div>
       {/* Inline text editor overlay */}
       {editingTextNode && editingTextPosition && editingMode === "text" && (
         <InlineTextEditor

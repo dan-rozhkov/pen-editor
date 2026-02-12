@@ -16,7 +16,7 @@ interface RegistryEntry {
 }
 
 const TEXT_RESOLUTION_SHARPNESS_BOOST = 1.35;
-const TEXT_RESOLUTION_MAX_MULTIPLIER = 3;
+const TEXT_RESOLUTION_MAX_MULTIPLIER = 16;
 
 type NodeLayoutOverride = {
   x?: number;
