@@ -25,20 +25,108 @@ import clsx from "clsx";
 import { useSceneStore } from "../store/sceneStore";
 import { useSelectionStore } from "../store/selectionStore";
 import { useHoverStore } from "../store/hoverStore";
-import type { SceneNode, FrameNode, FlatFrameNode, GroupNode } from "../types/scene";
+import type { SceneNode, FrameNode, FlatFrameNode, GroupNode, LayoutProperties } from "../types/scene";
 import { isContainerNode } from "../types/scene";
 import { getAncestorIds } from "../utils/nodeUtils";
 
 // Module-level flag so LayerItem can set it without a ref prop
 let _selectionFromLayers = false;
 
+// Auto-layout alignment icon — shows 3 outlined bars positioned according to layout settings
+const AutoLayoutIcon = ({ layout }: { layout: LayoutProperties }) => {
+  const direction = layout.flexDirection ?? "row";
+  const alignItems = layout.alignItems ?? "flex-start";
+  const justifyContent = layout.justifyContent ?? "flex-start";
+  const isRow = direction === "row";
+
+  // 2 bars of different sizes to visually represent child items
+  const sizes = [7, 5];
+  const thick = 3.5;
+  const sw = 1; // stroke width
+  const pad = 2.5;
+  const area = 11; // 16 - 2*pad
+
+  // Main-axis positions for the 2 bars
+  const gap = 2;
+  const totalMain = thick * 2 + gap;
+  let mainPositions: number[];
+  switch (justifyContent) {
+    case "center": {
+      const s = pad + (area - totalMain) / 2;
+      mainPositions = [s, s + thick + gap];
+      break;
+    }
+    case "flex-end": {
+      const s = pad + area - totalMain;
+      mainPositions = [s, s + thick + gap];
+      break;
+    }
+    case "space-between":
+    case "space-around":
+    case "space-evenly":
+      mainPositions = [pad, pad + area - thick];
+      break;
+    default: // flex-start
+      mainPositions = [pad, pad + thick + gap];
+  }
+
+  // Cross-axis position for each bar based on alignItems
+  const crossPositions = sizes.map((size) => {
+    switch (alignItems) {
+      case "center":
+        return pad + (area - size) / 2;
+      case "flex-end":
+        return pad + area - size;
+      case "stretch":
+        return pad;
+      default: // flex-start
+        return pad;
+    }
+  });
+
+  const stretchedSizes = sizes.map((size) =>
+    alignItems === "stretch" ? area : size,
+  );
+
+  const bars = stretchedSizes.map((size, i) =>
+    isRow
+      ? { x: mainPositions[i], y: crossPositions[i], width: thick, height: size }
+      : { x: crossPositions[i], y: mainPositions[i], width: size, height: thick },
+  );
+
+  return (
+    <svg
+      width={16}
+      height={16}
+      viewBox="0 0 16 16"
+      className="w-4 h-4 shrink-0 text-text-muted"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={sw}
+    >
+      {bars.map((bar, i) => (
+        <rect
+          key={i}
+          x={bar.x}
+          y={bar.y}
+          width={bar.width}
+          height={bar.height}
+          rx={0.5}
+        />
+      ))}
+    </svg>
+  );
+};
+
 // Icons for different node types
 const NodeIcon = ({
   type,
   reusable,
+  layout,
 }: {
   type: SceneNode["type"];
   reusable?: boolean;
+  layout?: LayoutProperties;
 }) => {
   const iconClass = clsx("w-4 h-4 shrink-0", "text-text-muted");
 
@@ -47,6 +135,9 @@ const NodeIcon = ({
       if (reusable) {
         // Component icon: 4 diamonds in a grid pattern (like Figma)
         return <DiamondsFourIcon size={16} className={iconClass} />;
+      }
+      if (layout?.autoLayout) {
+        return <AutoLayoutIcon layout={layout} />;
       }
       return <HashStraight size={16} className={iconClass} weight="regular" />;
     case "group":
@@ -310,6 +401,9 @@ const LayerItem = memo(function LayerItem({
             type={node.type}
             reusable={
               node.type === "frame" && (node as FrameNode).reusable === true
+            }
+            layout={
+              node.type === "frame" ? (node as FrameNode).layout : undefined
             }
           />
           {isEditing ? (
