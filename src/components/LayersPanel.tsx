@@ -226,7 +226,7 @@ const LayerItem = memo(function LayerItem({
   refChildCount,
 }: LayerItemProps) {
   // Granular selection subscription - only re-render when THIS node's selection state changes
-  const isSelected = useSelectionStore((s) => s.selectedIds.includes(node.id));
+  const isSelected = useSelectionStore((s) => !instanceId && s.selectedIds.includes(node.id));
   const isDescendantSelected = useSelectionStore(
     (s) => !!instanceId && s.instanceContext?.instanceId === instanceId && s.instanceContext?.descendantId === node.id,
   );
