@@ -5,7 +5,8 @@ import { useLayoutStore } from "@/store/layoutStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { getNodeAbsolutePositionWithLayout, getNodeEffectiveSize } from "@/utils/nodeUtils";
-import type { FlatFrameNode, FlatGroupNode } from "@/types/scene";
+import type { FlatFrameNode, FlatGroupNode, RefNode } from "@/types/scene";
+import { findDescendantLocalRect, prepareInstanceNode } from "@/components/nodes/instanceUtils";
 
 const SELECTION_COLOR = 0x0d99ff;
 const HOVER_COLOR = 0x0d99ff;
@@ -297,14 +298,44 @@ export function createSelectionOverlay(
   function redrawHover(): void {
     hovOutline.clear();
 
-    const { hoveredNodeId } = useHoverStore.getState();
+    const { hoveredNodeId, hoveredInstanceId } = useHoverStore.getState();
     if (!hoveredNodeId) return;
 
     // Don't show hover on selected nodes
     const { selectedIds } = useSelectionStore.getState();
-    if (selectedIds.includes(hoveredNodeId)) return;
 
     const state = useSceneStore.getState();
+    const scale = useViewportStore.getState().scale;
+    const strokeWidth = 1 / scale;
+
+    // Instance descendant hover
+    if (hoveredInstanceId) {
+      if (selectedIds.includes(hoveredInstanceId)) {
+        const { instanceContext } = useSelectionStore.getState();
+        if (instanceContext?.instanceId === hoveredInstanceId && instanceContext?.descendantId === hoveredNodeId) return;
+      }
+
+      const instanceNode = state.nodesById[hoveredInstanceId];
+      if (!instanceNode || instanceNode.type !== "ref") return;
+
+      const instanceAbsPos = getAbsolutePosition(hoveredInstanceId);
+      if (!instanceAbsPos) return;
+
+      const nodes = state.getNodes();
+      const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+      const prepared = prepareInstanceNode(instanceNode as unknown as RefNode, nodes, calculateLayoutForFrame);
+      if (!prepared) return;
+
+      const rect = findDescendantLocalRect(prepared.layoutChildren, hoveredNodeId);
+      if (!rect) return;
+
+      hovOutline.rect(instanceAbsPos.x + rect.x, instanceAbsPos.y + rect.y, rect.width, rect.height);
+      hovOutline.stroke({ color: COMPONENT_SELECTION_COLOR, width: strokeWidth });
+      return;
+    }
+
+    if (selectedIds.includes(hoveredNodeId)) return;
+
     const node = state.nodesById[hoveredNodeId];
     if (!node) return;
 
@@ -316,9 +347,6 @@ export function createSelectionOverlay(
     const effectiveSize = getNodeEffectiveSize(nodes, hoveredNodeId, useLayoutStore.getState().calculateLayoutForFrame);
     const width = effectiveSize?.width ?? node.width;
     const height = effectiveSize?.height ?? node.height;
-
-    const scale = useViewportStore.getState().scale;
-    const strokeWidth = 1 / scale;
 
     hovOutline.rect(absPos.x, absPos.y, width, height);
     const hoverColor = isComponentOrInstance(hoveredNodeId)

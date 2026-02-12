@@ -223,3 +223,24 @@ export function findDescendantLocalPosition(
   }
   return null;
 }
+
+export function findDescendantLocalRect(
+  children: SceneNode[],
+  descendantId: string,
+): { x: number; y: number; width: number; height: number } | null {
+  for (const child of children) {
+    if (child.id === descendantId) {
+      return { x: child.x, y: child.y, width: child.width, height: child.height };
+    }
+    if (child.type === "frame" || child.type === "group") {
+      const rect = findDescendantLocalRect(
+        (child as FrameNode | GroupNode).children,
+        descendantId,
+      );
+      if (rect) {
+        return { x: child.x + rect.x, y: child.y + rect.y, width: rect.width, height: rect.height };
+      }
+    }
+  }
+  return null;
+}

@@ -326,7 +326,7 @@ const LayerItem = memo(function LayerItem({
   };
 
   const handleMouseEnter = () => {
-    useHoverStore.getState().setHoveredNode(node.id);
+    useHoverStore.getState().setHoveredNode(node.id, instanceId);
   };
 
   const handleMouseLeave = () => {
@@ -369,12 +369,15 @@ const LayerItem = memo(function LayerItem({
   const displayName =
     node.name || `${node.type.charAt(0).toUpperCase() + node.type.slice(1)}`;
 
+  const isHighlighted = isSelected || isDescendantSelected;
+
   return (
     <div
         data-node-id={node.id}
+        data-instance-id={instanceId}
         className={clsx(
           "group flex items-center cursor-pointer h-[28px]",
-          isSelected
+          isHighlighted
             ? "bg-accent-selection hover:bg-accent-selection/80"
             : "hover:bg-surface-elevated",
           isDragging && "opacity-50",
@@ -392,14 +395,14 @@ const LayerItem = memo(function LayerItem({
         onClick={handleClick}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        draggable
+        draggable={!instanceId}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragLeave={() => {}}
         onDrop={handleDrop}
       >
         <div className="flex items-center gap-1 flex-1">
-          {/* Chevron for frames with children */}
+          {/* Chevron for frames/instances with children */}
           {hasChildren ? (
             <button
               className="bg-transparent border-none cursor-pointer p-0.5 flex items-center justify-center rounded hover:bg-white/10 opacity-0 group-hover/layers:opacity-100"
@@ -438,10 +441,10 @@ const LayerItem = memo(function LayerItem({
               <span
                 className={clsx(
                   "text-xs whitespace-nowrap",
-                  "text-text-secondary",
+                  instanceId ? "text-text-muted" : "text-text-secondary",
                   !isVisible && "opacity-50",
                 )}
-                onDoubleClick={handleDoubleClick}
+                onDoubleClick={instanceId ? undefined : handleDoubleClick}
               >
                 {displayName}
               </span>
@@ -455,15 +458,17 @@ const LayerItem = memo(function LayerItem({
           className="sticky right-0 shrink-0 flex items-center pl-2 pr-3"
           style={{ backgroundColor: "inherit" }}
         >
-          <button
-            className={clsx(
-              "bg-transparent border-none cursor-pointer p-1 flex items-center justify-center rounded group-hover:opacity-100 opacity-0",
-            )}
-            onClick={handleVisibilityClick}
-            title={isVisible ? "Hide layer" : "Show layer"}
-          >
-            <EyeIcon visible={isVisible} />
-          </button>
+          {!instanceId && (
+            <button
+              className={clsx(
+                "bg-transparent border-none cursor-pointer p-1 flex items-center justify-center rounded group-hover:opacity-100 opacity-0",
+              )}
+              onClick={handleVisibilityClick}
+              title={isVisible ? "Hide layer" : "Show layer"}
+            >
+              <EyeIcon visible={isVisible} />
+            </button>
+          )}
         </div>
     </div>
   );
@@ -473,6 +478,8 @@ interface FlattenedLayer {
   node: SceneNode;
   depth: number;
   parentId: string | null;
+  instanceId?: string;
+  refChildCount?: number;
 }
 
 const ROW_HEIGHT = 28;
@@ -481,15 +488,37 @@ const OVERSCAN = 8;
 function flattenLayers(
   nodes: SceneNode[],
   expandedFrameIds: Set<string>,
+  allNodes: SceneNode[],
   depth = 0,
   parentId: string | null = null,
+  instanceId: string | null = null,
   out: FlattenedLayer[] = [],
 ): FlattenedLayer[] {
   for (const node of nodes) {
-    out.push({ node, depth, parentId });
-    if (isContainerNode(node) && expandedFrameIds.has(node.id)) {
+    let refChildCount: number | undefined;
+    let resolvedChildren: SceneNode[] | undefined;
+    if (node.type === "ref") {
+      const resolved = resolveRefToFrame(node as RefNode, allNodes);
+      if (resolved && resolved.children.length > 0) {
+        resolvedChildren = resolved.children;
+        refChildCount = resolved.children.length;
+      }
+    }
+
+    out.push({
+      node,
+      depth,
+      parentId,
+      ...(instanceId ? { instanceId } : {}),
+      ...(refChildCount !== undefined ? { refChildCount } : {}),
+    });
+
+    if (node.type === "ref" && expandedFrameIds.has(node.id) && resolvedChildren) {
+      const children = [...resolvedChildren].reverse();
+      flattenLayers(children, expandedFrameIds, allNodes, depth + 1, node.id, instanceId ?? node.id, out);
+    } else if (isContainerNode(node) && expandedFrameIds.has(node.id)) {
       const children = [...node.children].reverse();
-      flattenLayers(children, expandedFrameIds, depth + 1, node.id, out);
+      flattenLayers(children, expandedFrameIds, allNodes, depth + 1, node.id, instanceId, out);
     }
   }
   return out;
@@ -520,7 +549,7 @@ function LayerList({
     <>
       {items.map((item) => (
         <LayerItem
-          key={item.node.id}
+          key={item.instanceId ? `${item.instanceId}/${item.node.id}` : item.node.id}
           node={item.node}
           depth={item.depth}
           parentId={item.parentId}
@@ -529,6 +558,8 @@ function LayerList({
           onDragOver={onDragOver}
           onDrop={onDrop}
           flatIds={flatIds}
+          instanceId={item.instanceId}
+          refChildCount={item.refChildCount}
         />
       ))}
     </>
@@ -565,6 +596,7 @@ export function LayersPanel() {
   const expandAncestors = useSceneStore((state) => state.expandAncestors);
   const parentById = useSceneStore((state) => state.parentById);
   const selectedIds = useSelectionStore((state) => state.selectedIds);
+  const instanceContext = useSelectionStore((state) => state.instanceContext);
   const select = useSelectionStore((state) => state.select);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -586,18 +618,32 @@ export function LayersPanel() {
         }
       }
     }
+
+    // Auto-expand instance when a descendant is selected from the canvas
+    if (instanceContext && !expandedFrameIds.has(instanceContext.instanceId)) {
+      idsToExpand.push(instanceContext.instanceId);
+    }
+
     if (idsToExpand.length > 0) {
       expandAncestors(idsToExpand);
     }
 
     // Scroll first selected node into view after DOM updates
     requestAnimationFrame(() => {
-      const el = scrollRef.current?.querySelector(
-        `[data-node-id="${selectedIds[0]}"]`,
-      );
+      let el: Element | null | undefined;
+      if (instanceContext) {
+        el = scrollRef.current?.querySelector(
+          `[data-instance-id="${instanceContext.instanceId}"][data-node-id="${instanceContext.descendantId}"]`,
+        );
+      }
+      if (!el) {
+        el = scrollRef.current?.querySelector(
+          `[data-node-id="${selectedIds[0]}"]`,
+        );
+      }
       el?.scrollIntoView({ block: "nearest", inline: "nearest" });
     });
-  }, [selectedIds, parentById, expandedFrameIds, expandAncestors]);
+  }, [selectedIds, instanceContext, parentById, expandedFrameIds, expandAncestors]);
 
   const [dragState, setDragState] = useState<DragState>({
     draggedId: null,
@@ -686,8 +732,8 @@ export function LayersPanel() {
   // Reverse the nodes array so that top items in the list appear on top visually (higher z-index)
   const reversedNodes = useMemo(() => [...nodes].reverse(), [nodes]);
   const flatLayers = useMemo(
-    () => flattenLayers(reversedNodes, expandedFrameIds),
-    [reversedNodes, expandedFrameIds],
+    () => flattenLayers(reversedNodes, expandedFrameIds, nodes),
+    [reversedNodes, expandedFrameIds, nodes],
   );
   const flatIds = useMemo(
     () => flatLayers.map((l) => l.node.id),

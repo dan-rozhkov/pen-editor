@@ -9,6 +9,7 @@ import type {
   SceneNode,
 } from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
+import { useHoverStore } from "@/store/hoverStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
@@ -33,7 +34,7 @@ import {
   getTextDimensions,
   isNodeEnabled,
 } from "./renderUtils";
-import { prepareInstanceNode, resolveRefToFrame } from "./instanceUtils";
+import { findDescendantLocalRect, prepareInstanceNode, resolveRefToFrame } from "./instanceUtils";
 
 interface InstanceRendererProps {
   node: RefNode;
@@ -74,6 +75,11 @@ export function InstanceRenderer({
 
   // Whether a descendant of THIS instance is currently selected
   const hasSelectedDescendant = instanceContext?.instanceId === node.id;
+
+  // Hover state for descendants of this instance (from layers panel)
+  const hoveredDescendantId = useHoverStore((state) =>
+    state.hoveredInstanceId === node.id ? state.hoveredNodeId : null,
+  );
 
   const preparedInstance = prepareInstanceNode(
     node,
@@ -273,8 +279,23 @@ export function InstanceRenderer({
       />
       {/* Children from component (rendered at original sizes, like a frame) */}
       {layoutChildren.map(renderDescendant)}
+      {/* Descendant hover outline (from layers panel) */}
+      {hoveredDescendantId && (() => {
+        const rect = findDescendantLocalRect(layoutChildren, hoveredDescendantId);
+        if (!rect) return null;
+        return (
+          <SelectionOutline
+            x={rect.x}
+            y={rect.y}
+            width={rect.width}
+            height={rect.height}
+            stroke={COMPONENT_HOVER_OUTLINE_COLOR}
+            strokeWidth={1.5}
+          />
+        );
+      })()}
       {/* Hover outline */}
-      {isHovered && !hasSelectedDescendant && (
+      {isHovered && !hasSelectedDescendant && !hoveredDescendantId && (
         <SelectionOutline
           x={0}
           y={0}

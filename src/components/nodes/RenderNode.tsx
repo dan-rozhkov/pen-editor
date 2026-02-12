@@ -77,7 +77,7 @@ export const RenderNode = memo(function RenderNode({
   const variables = useVariableStore((state) => state.variables);
   const globalTheme = useThemeStore((state) => state.activeTheme);
   const isHovered = useHoverStore(
-    (state) => state.hoveredNodeId === node.id,
+    (state) => state.hoveredNodeId === node.id && !state.hoveredInstanceId,
   );
 
   // Refs for caching snap data during drag
