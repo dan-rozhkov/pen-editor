@@ -53,10 +53,8 @@ export function updateEllipseContainer(
 }
 
 export function drawEllipse(gfx: Graphics, node: EllipseNode): void {
-  applyFill(gfx, node, node.width, node.height);
-
   gfx.ellipse(node.width / 2, node.height / 2, node.width / 2, node.height / 2);
-  gfx.fill();
+  applyFill(gfx, node, node.width, node.height);
 
   applyStroke(gfx, node, node.width, node.height);
 }

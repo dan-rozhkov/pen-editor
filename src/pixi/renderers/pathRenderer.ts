@@ -4,6 +4,12 @@ import type { PathNode } from "@/types/scene";
 import { getResolvedFill, getResolvedStroke, parseColor, parseAlpha, escapeXmlAttr } from "./colorHelpers";
 import { buildPixiGradient } from "./fillStrokeHelpers";
 
+function colorToHex(color: string): string {
+  const n = parseColor(color);
+  if (!Number.isFinite(n)) return "#000000";
+  return `#${Math.max(0, Math.min(0xffffff, n)).toString(16).padStart(6, "0")}`;
+}
+
 export function createPathContainer(node: PathNode): Container {
   const container = new Container();
   const gfx = new Graphics();
@@ -71,10 +77,12 @@ export function drawPath(gfx: Graphics, node: PathNode): void {
 
     // For solid fills, use SVG parser (respects fill-rule properly since PixiJS 8.8+)
     if (!node.gradientFill) {
-      const fillAttr = fillColor ? ` fill="${escapeXmlAttr(fillColor)}"` : ` fill="none"`;
+      const fillAttr = fillColor
+        ? ` fill="${colorToHex(fillColor)}" fill-opacity="${parseAlpha(fillColor)}"`
+        : ` fill="none"`;
       const strokeAttrColor = pathStroke?.fill ?? strokeColor;
       const strokeAttr = strokeAttrColor
-        ? ` stroke="${escapeXmlAttr(strokeAttrColor)}" stroke-width="${pathStroke?.thickness ?? node.strokeWidth ?? 1}" stroke-linecap="${pathStroke?.cap ?? "butt"}" stroke-linejoin="${pathStroke?.join ?? "miter"}"`
+        ? ` stroke="${colorToHex(strokeAttrColor)}" stroke-opacity="${parseAlpha(strokeAttrColor)}" stroke-width="${pathStroke?.thickness ?? node.strokeWidth ?? 1}" stroke-linecap="${pathStroke?.cap ?? "butt"}" stroke-linejoin="${pathStroke?.join ?? "miter"}"`
         : ` stroke="none"`;
       const svgMarkup = `<svg xmlns="http://www.w3.org/2000/svg"><path d="${escapeXmlAttr(node.geometry)}" fill-rule="${effectiveFillRule}"${fillAttr}${strokeAttr}/></svg>`;
 

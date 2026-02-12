@@ -81,7 +81,7 @@ export function buildPixiGradient(
   return g;
 }
 
-/** Apply gradient or solid fill to a Graphics object. Must call gfx.fill() after drawing the shape. */
+/** Fill the current path using node solid/gradient fill settings. */
 export function applyFill(gfx: Graphics, node: FlatSceneNode, width: number, height: number): void {
   if (node.gradientFill) {
     const gradient = buildPixiGradient(node.gradientFill, width, height);

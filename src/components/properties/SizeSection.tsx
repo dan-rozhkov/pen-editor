@@ -36,6 +36,9 @@ function computeSizeForMode(
   if (mode === "fixed") return undefined;
 
   if (mode === "fit_content" && node.type === "frame") {
+    if (!("children" in node) || !Array.isArray((node as any).children)) {
+      return undefined;
+    }
     const frame = node as FrameNode;
     const intrinsic = calculateFrameIntrinsicSize(frame, {
       fitWidth: dimension === "width",
@@ -89,7 +92,12 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
     let eh = node.height;
 
     // For fit_content frames: compute intrinsic size
-    if (node.type === "frame" && (node as FrameNode).layout?.autoLayout) {
+    if (
+      node.type === "frame" &&
+      ("children" in node) &&
+      Array.isArray((node as any).children) &&
+      (node as FrameNode).layout?.autoLayout
+    ) {
       const frame = node as FrameNode;
       const fitWidth = frame.sizing?.widthMode === "fit_content";
       const fitHeight = frame.sizing?.heightMode === "fit_content";

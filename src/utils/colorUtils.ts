@@ -32,25 +32,53 @@ export function resolveColor(
 }
 
 /**
- * Apply opacity to a hex color, returning an rgba() string.
+ * Apply opacity to hex/rgb/rgba colors, returning an rgba() string when needed.
  * If opacity is 1 (or undefined), returns the original color unchanged.
  */
 export function applyOpacity(color: string, opacity?: number): string {
-  const a = opacity ?? 1
+  const a = Math.max(0, Math.min(1, opacity ?? 1))
   if (a >= 1) return color
-  // Parse hex color
+
+  // rgb()/rgba()
+  if (color.startsWith('rgb(') || color.startsWith('rgba(')) {
+    const parts = color.match(/[\d.]+/g)
+    if (parts && parts.length >= 3) {
+      const r = Number(parts[0])
+      const g = Number(parts[1])
+      const b = Number(parts[2])
+      const baseAlpha = parts.length >= 4 ? Number(parts[3]) : 1
+      const outAlpha = Math.max(0, Math.min(1, baseAlpha * a))
+      return `rgba(${r},${g},${b},${outAlpha})`
+    }
+    return color
+  }
+
+  // Hex: #RGB, #RGBA, #RRGGBB, #RRGGBBAA
   const hex = color.replace('#', '')
-  let r = 0, g = 0, b = 0
-  if (hex.length === 3) {
+  let r = 0
+  let g = 0
+  let b = 0
+  let baseAlpha = 1
+  if (hex.length === 3 || hex.length === 4) {
     r = parseInt(hex[0] + hex[0], 16)
     g = parseInt(hex[1] + hex[1], 16)
     b = parseInt(hex[2] + hex[2], 16)
-  } else if (hex.length >= 6) {
+    if (hex.length === 4) {
+      baseAlpha = parseInt(hex[3] + hex[3], 16) / 255
+    }
+  } else if (hex.length === 6 || hex.length === 8) {
     r = parseInt(hex.slice(0, 2), 16)
     g = parseInt(hex.slice(2, 4), 16)
     b = parseInt(hex.slice(4, 6), 16)
+    if (hex.length === 8) {
+      baseAlpha = parseInt(hex.slice(6, 8), 16) / 255
+    }
+  } else {
+    return color
   }
-  return `rgba(${r},${g},${b},${a})`
+
+  const outAlpha = Math.max(0, Math.min(1, baseAlpha * a))
+  return `rgba(${r},${g},${b},${outAlpha})`
 }
 
 /**

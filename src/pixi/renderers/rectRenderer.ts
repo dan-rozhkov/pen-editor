@@ -56,14 +56,12 @@ export function updateRectContainer(
 }
 
 export function drawRect(gfx: Graphics, node: RectNode): void {
-  applyFill(gfx, node, node.width, node.height);
-
   if (node.cornerRadius) {
     gfx.roundRect(0, 0, node.width, node.height, node.cornerRadius);
   } else {
     gfx.rect(0, 0, node.width, node.height);
   }
-  gfx.fill();
+  applyFill(gfx, node, node.width, node.height);
 
   applyStroke(gfx, node, node.width, node.height, node.cornerRadius);
 }

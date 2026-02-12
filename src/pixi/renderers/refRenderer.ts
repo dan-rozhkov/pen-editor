@@ -165,16 +165,15 @@ export function createRefContainer(
     const bg = new Graphics();
     bg.label = "ref-bg";
     const frame = component as FlatFrameNode;
-    const fillColor = getResolvedFill(frame);
-    if (fillColor) {
-      bg.fill({ color: parseColor(fillColor), alpha: parseAlpha(fillColor) });
-    }
     if (frame.cornerRadius) {
       bg.roundRect(0, 0, effectiveWidth, effectiveHeight, frame.cornerRadius);
     } else {
       bg.rect(0, 0, effectiveWidth, effectiveHeight);
     }
-    bg.fill();
+    const fillColor = getResolvedFill(frame);
+    if (fillColor) {
+      bg.fill({ color: parseColor(fillColor), alpha: parseAlpha(fillColor) });
+    }
     childrenContainer.addChild(bg);
   }
 

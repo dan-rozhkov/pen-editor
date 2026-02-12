@@ -41,10 +41,8 @@ export function drawPolygon(gfx: Graphics, node: PolygonNode): void {
   const points = node.points;
   if (!points || points.length < 6) return;
 
-  applyFill(gfx, node, node.width, node.height);
-
   gfx.poly(points, true);
-  gfx.fill();
+  applyFill(gfx, node, node.width, node.height);
 
   applyStroke(gfx, node, node.width, node.height);
 }
