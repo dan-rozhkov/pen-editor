@@ -5,4 +5,4 @@ dist
 .playwright-mcp
 .claude
 .idea
-.tasks
+.tasks/
