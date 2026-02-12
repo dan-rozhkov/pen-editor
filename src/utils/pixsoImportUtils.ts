@@ -13,6 +13,7 @@ import {
   type SizingProperties,
   type GradientFill,
   type GradientColorStop,
+  type PerSideStroke,
 } from "../types/scene";
 import { generatePolygonPoints } from "./polygonUtils";
 import { getPathBBox } from "./svgUtils";
@@ -82,6 +83,13 @@ interface PixsoGeometry {
   windingRule?: "NONZERO" | "EVENODD";
 }
 
+interface PixsoIndividualStrokeWeights {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
 interface PixsoNode {
   id: string;
   name: string;
@@ -99,6 +107,12 @@ interface PixsoNode {
   strokes?: PixsoPaint[];
   strokeWeight?: number;
   strokeAlign?: string;
+  // Per-side stroke widths (Pixso/Figma-like API fields)
+  individualStrokeWeights?: PixsoIndividualStrokeWeights;
+  strokeTopWeight?: number;
+  strokeRightWeight?: number;
+  strokeBottomWeight?: number;
+  strokeLeftWeight?: number;
   cornerRadius?: number;
   topLeftRadius?: number;
   topRightRadius?: number;
@@ -243,6 +257,34 @@ function extractStroke(
     result.strokeOpacity = solid.opacity;
   }
   return result;
+}
+
+function extractPerSideStroke(node: PixsoNode): PerSideStroke | undefined {
+  const fromObject = node.individualStrokeWeights;
+  if (fromObject) {
+    return {
+      top: fromObject.top,
+      right: fromObject.right,
+      bottom: fromObject.bottom,
+      left: fromObject.left,
+    };
+  }
+
+  const top = node.strokeTopWeight;
+  const right = node.strokeRightWeight;
+  const bottom = node.strokeBottomWeight;
+  const left = node.strokeLeftWeight;
+
+  if (
+    top === undefined &&
+    right === undefined &&
+    bottom === undefined &&
+    left === undefined
+  ) {
+    return undefined;
+  }
+
+  return { top, right, bottom, left };
 }
 
 function extractCornerRadius(node: PixsoNode): number | undefined {
@@ -442,12 +484,14 @@ export function convertPixsoNode(node: PixsoNode): SceneNode | null {
     node.strokes,
     node.strokeWeight,
   );
+  const strokeWidthPerSide = extractPerSideStroke(node);
 
   if (fill) base.fill = fill;
   if (fillOpacity !== undefined) base.fillOpacity = fillOpacity;
   if (gradientFill) base.gradientFill = gradientFill;
   if (stroke) base.stroke = stroke;
   if (strokeWidth) base.strokeWidth = strokeWidth;
+  if (strokeWidthPerSide) base.strokeWidthPerSide = strokeWidthPerSide;
   if (strokeOpacity !== undefined) base.strokeOpacity = strokeOpacity;
 
   switch (node.type) {

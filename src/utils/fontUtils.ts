@@ -96,6 +96,13 @@ export const GOOGLE_FONTS = [
 
 const googleFontsSet = new Set(GOOGLE_FONTS);
 
+function normalizeFontFamilyName(family: string): string {
+  // Keep only first family from CSS-like lists: `"Inter", sans-serif` -> `Inter`
+  const primary = family.split(",")[0]?.trim() ?? "";
+  // Strip matching single/double quotes
+  return primary.replace(/^["']|["']$/g, "");
+}
+
 export interface SystemFont {
   family: string;
   isSystemFont: boolean;
@@ -109,7 +116,7 @@ export function isFontAccessSupported(): boolean {
 }
 
 export function isGoogleFont(family: string): boolean {
-  return googleFontsSet.has(family);
+  return googleFontsSet.has(normalizeFontFamilyName(family));
 }
 
 async function querySystemFonts(): Promise<SystemFont[]> {
@@ -187,16 +194,21 @@ const loadedGoogleFonts = new Set<string>();
 const loadingGoogleFonts = new Map<string, Promise<void>>();
 
 export function loadGoogleFont(family: string): Promise<void> {
-  if (loadedGoogleFonts.has(family)) {
+  const normalizedFamily = normalizeFontFamilyName(family);
+  if (!normalizedFamily) {
     return Promise.resolve();
   }
 
-  const existing = loadingGoogleFonts.get(family);
+  if (loadedGoogleFonts.has(normalizedFamily)) {
+    return Promise.resolve();
+  }
+
+  const existing = loadingGoogleFonts.get(normalizedFamily);
   if (existing) {
     return existing;
   }
 
-  const encodedFamily = family.replace(/ /g, '+');
+  const encodedFamily = normalizedFamily.replace(/ /g, '+');
   const url = `https://fonts.googleapis.com/css2?family=${encodedFamily}:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap`;
 
   const link = document.createElement('link');
@@ -207,20 +219,20 @@ export function loadGoogleFont(family: string): Promise<void> {
     link.onload = () => {
       // Wait for the font faces to actually be ready
       document.fonts.ready.then(() => {
-        loadedGoogleFonts.add(family);
-        loadingGoogleFonts.delete(family);
+        loadedGoogleFonts.add(normalizedFamily);
+        loadingGoogleFonts.delete(normalizedFamily);
         resolve();
         fontLoadCallback?.();
       });
     };
     link.onerror = () => {
-      console.warn(`Failed to load Google Font: ${family}`);
-      loadingGoogleFonts.delete(family);
+      console.warn(`Failed to load Google Font: ${normalizedFamily}`);
+      loadingGoogleFonts.delete(normalizedFamily);
       resolve(); // resolve anyway to not block
     };
   });
 
-  loadingGoogleFonts.set(family, promise);
+  loadingGoogleFonts.set(normalizedFamily, promise);
   document.head.appendChild(link);
 
   return promise;

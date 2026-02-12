@@ -45,7 +45,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
 
   // ----- Basic Mutations -----
 
-  addNode: (node) =>
+  addNode: (node) => {
     set((state) => {
       saveHistory(state);
       const synced = node.type === "text" ? syncTextDimensions(toFlatNode(node)) : toFlatNode(node);
@@ -69,9 +69,11 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         rootIds: newRootIds,
         _cachedTree: null,
       };
-    }),
+    });
+    loadGoogleFontsFromNodes([node]);
+  },
 
-  addChildToFrame: (frameId, child) =>
+  addChildToFrame: (frameId, child) => {
     set((state) => {
       saveHistory(state);
       const newNodesById = { ...state.nodesById };
@@ -91,7 +93,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         childrenById: newChildrenById,
         _cachedTree: null,
       };
-    }),
+    });
+    loadGoogleFontsFromNodes([child]);
+  },
 
   updateNode: (id, updates) =>
     set((state) => {
