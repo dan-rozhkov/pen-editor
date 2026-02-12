@@ -1,18 +1,40 @@
 import type { FlatSceneNode } from "@/types/scene";
+import type { ThemeName } from "@/types/variable";
 import { useVariableStore } from "@/store/variableStore";
 import { useThemeStore } from "@/store/themeStore";
 import { resolveColor, applyOpacity } from "@/utils/colorUtils";
 
+/**
+ * Render-time theme context stack.
+ * Frames with `themeOverride` push their override before rendering children
+ * and pop it afterwards, matching the Konva renderer's behaviour.
+ */
+const themeStack: ThemeName[] = [];
+
+export function pushRenderTheme(theme: ThemeName): void {
+  themeStack.push(theme);
+}
+
+export function popRenderTheme(): void {
+  themeStack.pop();
+}
+
+function getEffectiveTheme(): ThemeName {
+  return themeStack.length > 0
+    ? themeStack[themeStack.length - 1]
+    : useThemeStore.getState().activeTheme;
+}
+
 export function getResolvedFill(node: FlatSceneNode): string | undefined {
   const variables = useVariableStore.getState().variables;
-  const theme = useThemeStore.getState().activeTheme;
+  const theme = getEffectiveTheme();
   const raw = resolveColor(node.fill, node.fillBinding, variables, theme);
   return raw ? applyOpacity(raw, node.fillOpacity) : raw;
 }
 
 export function getResolvedStroke(node: FlatSceneNode): string | undefined {
   const variables = useVariableStore.getState().variables;
-  const theme = useThemeStore.getState().activeTheme;
+  const theme = getEffectiveTheme();
   const raw = resolveColor(node.stroke, node.strokeBinding, variables, theme);
   return raw ? applyOpacity(raw, node.strokeOpacity) : raw;
 }

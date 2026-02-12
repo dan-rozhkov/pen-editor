@@ -2,19 +2,17 @@ import { Container, Graphics } from "pixi.js";
 import type {
   FlatSceneNode,
   FlatFrameNode,
-  FrameNode,
   SceneNode,
   RefNode,
   DescendantOverride,
 } from "@/types/scene";
 import { toFlatNode } from "@/types/scene";
 import { useLayoutStore } from "@/store/layoutStore";
-import { applyAutoLayoutRecursively } from "@/utils/autoLayoutUtils";
+import { useSceneStore } from "@/store/sceneStore";
 import { measureTextAutoSize, measureTextFixedWidthHeight } from "@/utils/textMeasure";
-import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
-import { getResolvedFill, parseColor, parseAlpha } from "./colorHelpers";
-import { flatToTreeFrame } from "./frameRenderer";
+import { getResolvedFill, parseColor, parseAlpha, pushRenderTheme, popRenderTheme } from "./colorHelpers";
 import { createNodeContainer } from "./index";
+import { prepareInstanceNode } from "@/components/nodes/instanceUtils";
 
 function syncTextDimensionsInNode(node: SceneNode): SceneNode {
   if (node.type === "text") {
@@ -131,6 +129,7 @@ export function createRefContainer(
 ): Container {
   const container = new Container();
   const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+  const allNodes = useSceneStore.getState().getNodes();
 
   // Find the component
   const component = nodesById[node.componentId];
@@ -145,46 +144,21 @@ export function createRefContainer(
     return container;
   }
 
-  // Render the component tree with overrides
+  // Render the component tree using the same preparation pipeline as Konva.
   const childrenContainer = new Container();
   childrenContainer.label = "ref-children";
+  const prepared = prepareInstanceNode(node, allNodes, calculateLayoutForFrame);
+  const renderedChildren = prepared?.layoutChildren ?? [];
+  const effectiveWidth = prepared?.effectiveWidth ?? node.width;
+  const effectiveHeight = prepared?.effectiveHeight ?? node.height;
 
-  const componentTree = component.type === "frame"
-    ? flatToTreeFrame(component as FlatFrameNode, nodesById, childrenById)
-    : null;
-  const resolvedComponent = componentTree
-    ? ({
-        ...componentTree,
-        children: componentTree.children.map((child) =>
-          applyOverrideRecursively(
-            child,
-            node.descendants?.[child.id],
-            node.slotContent,
-            node.descendants,
-          ),
-        ),
-      } as FrameNode)
-    : null;
-  const preparedComponent = resolvedComponent
-    ? (applyAutoLayoutRecursively(
-        resolvedComponent,
-        calculateLayoutForFrame,
-      ) as FrameNode)
-    : null;
-  const renderedChildren = preparedComponent?.children ?? [];
-
-  const effectiveWidthMode =
-    node.sizing?.widthMode ?? preparedComponent?.sizing?.widthMode ?? "fixed";
-  const effectiveHeightMode =
-    node.sizing?.heightMode ?? preparedComponent?.sizing?.heightMode ?? "fixed";
-  const fitWidth = effectiveWidthMode === "fit_content";
-  const fitHeight = effectiveHeightMode === "fit_content";
-  const intrinsicSize =
-    preparedComponent?.layout?.autoLayout && (fitWidth || fitHeight)
-      ? calculateFrameIntrinsicSize(preparedComponent, { fitWidth, fitHeight })
-      : null;
-  const effectiveWidth = fitWidth && intrinsicSize ? intrinsicSize.width : node.width;
-  const effectiveHeight = fitHeight && intrinsicSize ? intrinsicSize.height : node.height;
+  // If the component frame overrides the theme, push it for bg + children
+  const compThemeOverride = component.type === "frame"
+    ? (component as FlatFrameNode).themeOverride
+    : undefined;
+  if (compThemeOverride) {
+    pushRenderTheme(compThemeOverride);
+  }
 
   // Draw component background
   if (component.type === "frame") {
@@ -204,18 +178,34 @@ export function createRefContainer(
     childrenContainer.addChild(bg);
   }
 
-  for (const child of renderedChildren) {
+  // Merge flattened override subtrees once to avoid O(n^2) map spreading
+  // for large instances.
+  const mergedNodesById: Record<string, FlatSceneNode> = { ...nodesById };
+  const mergedChildrenById: Record<string, string[]> = { ...childrenById };
+  const childSubtrees = renderedChildren.map((child) => ({
+    child,
+    flatSubtree: flattenSceneSubtree(child),
+  }));
+  for (const { flatSubtree } of childSubtrees) {
+    Object.assign(mergedNodesById, flatSubtree.nodesById);
+    Object.assign(mergedChildrenById, flatSubtree.childrenById);
+  }
+
+  for (const { child, flatSubtree } of childSubtrees) {
     if (child.enabled === false) continue;
-    const flatSubtree = flattenSceneSubtree(child);
-    // Merge global store so nested ref nodes can find their components
+    if (child.visible === false) continue;
     const childContainer = createNodeContainer(
       flatSubtree.nodesById[child.id],
-      { ...nodesById, ...flatSubtree.nodesById },
-      { ...childrenById, ...flatSubtree.childrenById },
+      mergedNodesById,
+      mergedChildrenById,
     );
     // Recursively label all descendant containers so they can be found for text editing visibility
     labelDescendantsInSubtree(childContainer, child.id, flatSubtree.childrenById);
     childrenContainer.addChild(childContainer);
+  }
+
+  if (compThemeOverride) {
+    popRenderTheme();
   }
 
   container.addChild(childrenContainer);

@@ -83,7 +83,7 @@ export function createNodeContainer(
   // For now, set it from node (will be overwritten if in auto-layout)
   container.position.set(node.x, node.y);
   container.alpha = node.opacity ?? 1;
-  container.visible = node.visible !== false;
+  container.visible = node.visible !== false && node.enabled !== false;
 
   // Rotation (convert degrees to radians)
   if (node.rotation) {
@@ -126,8 +126,8 @@ export function updateNodeContainer(
   }
 
   // Visibility
-  if (node.visible !== prev.visible) {
-    container.visible = node.visible !== false;
+  if (node.visible !== prev.visible || node.enabled !== prev.enabled) {
+    container.visible = node.visible !== false && node.enabled !== false;
   }
 
   // Rotation

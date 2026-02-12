@@ -8,6 +8,7 @@ import type {
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 import { applyFill, applyStroke } from "./fillStrokeHelpers";
 import { applyImageFill } from "./imageFillHelpers";
+import { pushRenderTheme, popRenderTheme } from "./colorHelpers";
 import { createNodeContainer } from "./index";
 
 /**
@@ -103,6 +104,11 @@ export function createFrameContainer(
   childrenContainer.label = "frame-children";
   container.addChild(childrenContainer);
 
+  // If this frame overrides the theme, push it for children
+  if (node.themeOverride) {
+    pushRenderTheme(node.themeOverride);
+  }
+
   // Render children
   const childIds = childrenById[node.id] ?? [];
   for (const childId of childIds) {
@@ -117,10 +123,13 @@ export function createFrameContainer(
     }
   }
 
-  // Cache as texture for frames with many children (performance optimization)
-  if (childIds.length >= 30) {
-    container.cacheAsTexture(true);
+  if (node.themeOverride) {
+    popRenderTheme();
   }
+
+  // Disabled for now: cacheAsTexture can leave stale visual artifacts
+  // after structural reparent/move operations (ghost copies on canvas).
+  container.cacheAsTexture(false);
 
   return container;
 }

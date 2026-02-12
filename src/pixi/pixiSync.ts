@@ -8,6 +8,7 @@ import { useSelectionStore } from "@/store/selectionStore";
 import type { FlatSceneNode, FlatFrameNode, FrameNode, SceneNode } from "@/types/scene";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 import { createNodeContainer, updateNodeContainer, applyLayoutSize } from "./renderers";
+import { pushRenderTheme, popRenderTheme } from "./renderers/colorHelpers";
 
 interface RegistryEntry {
   container: Container;
@@ -35,6 +36,32 @@ function isDescendantOf(
     current = parentById[current];
   }
   return false;
+}
+
+/**
+ * Push ancestor theme overrides onto the render theme stack (outermost first).
+ * Returns the number of themes pushed so the caller can pop them.
+ */
+function pushAncestorThemes(
+  nodeId: string,
+  parentById: Record<string, string | null>,
+  nodesById: Record<string, FlatSceneNode>,
+): number {
+  // Collect ancestor theme overrides from root to parent
+  const overrides: string[] = [];
+  let cur = parentById[nodeId] ?? null;
+  while (cur != null) {
+    const n = nodesById[cur];
+    if (n?.type === "frame" && (n as FlatFrameNode).themeOverride) {
+      overrides.push((n as FlatFrameNode).themeOverride!);
+    }
+    cur = parentById[cur] ?? null;
+  }
+  // Push from outermost ancestor to innermost (so innermost wins)
+  for (let i = overrides.length - 1; i >= 0; i--) {
+    pushRenderTheme(overrides[i] as "light" | "dark");
+  }
+  return overrides.length;
 }
 
 /**
@@ -93,6 +120,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
   const registry = new Map<string, RegistryEntry>();
   let appliedTextResolution = 0;
   let rebuildScheduled = false;
+  let hiddenEditingDescContainer: Container | null = null;
 
   function applyTextResolutionRecursive(container: Container, resolution: number): void {
     for (const child of container.children) {
@@ -111,19 +139,17 @@ export function createPixiSync(sceneRoot: Container): () => void {
     const isTextEditing = editingMode === "text" && editingNodeId != null;
 
     for (const [id, entry] of registry) {
-      const baseVisible = entry.node.visible !== false;
+      const baseVisible = entry.node.visible !== false && entry.node.enabled !== false;
       const hideWhileEditing =
         isTextEditing && entry.node.type === "text" && editingNodeId === id;
       entry.container.visible = baseVisible && !hideWhileEditing;
     }
 
-    // Reset descendant visibility for all instances before applying current edit hide rule.
-    for (const entry of registry.values()) {
-      if (entry.node.type !== "ref") continue;
-      const refChildren = entry.container.getChildByLabel("ref-children") as Container | null;
-      if (refChildren) {
-        setDescendantVisibility(refChildren, true);
-      }
+    // Restore only the descendant container that was hidden for text editing previously.
+    // Do not force-show all descendants: that breaks true hidden state from node props.
+    if (hiddenEditingDescContainer) {
+      hiddenEditingDescContainer.visible = true;
+      hiddenEditingDescContainer = null;
     }
 
     // Hide descendant text inside instance during editing
@@ -136,7 +162,13 @@ export function createPixiSync(sceneRoot: Container): () => void {
           // Search recursively for the labeled descendant container
           const descContainer = findDescendantContainer(refChildren, descendantId);
           if (descContainer) {
-            descContainer.visible = false;
+            // Hide only text descendants (to avoid accidentally hiding full frame/group trees
+            // when instanceContext points to a non-text node).
+            const textNode = descContainer.getChildByLabel("text-content");
+            if (textNode) {
+              descContainer.visible = false;
+              hiddenEditingDescContainer = descContainer;
+            }
           }
         }
       }
@@ -153,16 +185,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
       }
     }
     return null;
-  }
-
-  function setDescendantVisibility(parent: Container, visible: boolean): void {
-    for (const child of parent.children) {
-      if (!(child instanceof Container)) continue;
-      if (typeof child.label === "string" && child.label.startsWith("desc-")) {
-        child.visible = visible;
-      }
-      setDescendantVisibility(child, visible);
-    }
   }
 
   /**
@@ -356,6 +378,21 @@ export function createPixiSync(sceneRoot: Container): () => void {
       return; // No scene changes
     }
 
+    // If any frame's themeOverride changed, fall back to full rebuild
+    // because all descendants need their colors re-resolved.
+    for (const id of Object.keys(state.nodesById)) {
+      const node = state.nodesById[id];
+      const prevNode = prev.nodesById[id];
+      if (
+        node && prevNode && node !== prevNode &&
+        node.type === "frame" &&
+        (node as FlatFrameNode).themeOverride !== (prevNode as FlatFrameNode).themeOverride
+      ) {
+        fullRebuild(state);
+        return;
+      }
+    }
+
     const changedIds = new Set<string>();
 
     for (const id of Object.keys(state.nodesById)) {
@@ -480,11 +517,17 @@ export function createPixiSync(sceneRoot: Container): () => void {
     // If parent isn't ready yet, avoid creating a duplicate detached child container.
     if (parentId && !registry.has(parentId)) return;
 
+    // Push ancestor theme overrides so colors resolve correctly
+    const pushed = pushAncestorThemes(id, state.parentById, state.nodesById);
+
     const container = createNodeContainer(
       node,
       state.nodesById,
       state.childrenById,
     );
+
+    for (let i = 0; i < pushed; i++) popRenderTheme();
+
     registry.set(id, { container, node });
 
     // Find parent and attach
@@ -575,10 +618,12 @@ export function createPixiSync(sceneRoot: Container): () => void {
     parent: Container,
     _debugLabel: string,
   ): void {
+    const expectedContainers = new Set<Container>();
     for (let i = 0; i < expectedIds.length; i++) {
       const id = expectedIds[i];
       const entry = registry.get(id);
       if (!entry) continue;
+      expectedContainers.add(entry.container);
 
       const currentParent = entry.container.parent;
       if (currentParent !== parent) {
@@ -591,6 +636,15 @@ export function createPixiSync(sceneRoot: Container): () => void {
         if (currentIndex !== i && i < parent.children.length) {
           parent.setChildIndex(entry.container, Math.min(i, parent.children.length - 1));
         }
+      }
+    }
+
+    // Remove stale/duplicate children that are not expected in this host.
+    // This prevents ghost copies after move/reparent operations.
+    for (let i = parent.children.length - 1; i >= 0; i--) {
+      const child = parent.children[i] as Container;
+      if (!expectedContainers.has(child)) {
+        parent.removeChild(child);
       }
     }
   }

@@ -1,10 +1,11 @@
 import { useEffect, useRef } from "react";
 import Konva from "konva";
-import { Ellipse, Group, Rect, Text } from "react-konva";
+import { Ellipse, Group, Path, Rect, Text } from "react-konva";
 import type {
   DescendantOverrides,
   FrameNode,
   GroupNode,
+  PathNode,
   RefNode,
   SceneNode,
 } from "@/types/scene";
@@ -208,8 +209,8 @@ export function InstanceRenderer({
 
   // Render a descendant with overrides applied
   const renderDescendant = (child: SceneNode) => {
-    // Check if this descendant is disabled (hidden via override)
-    if (child.enabled === false) {
+    // Respect both enabled and visible flags for descendants in instance rendering
+    if (child.enabled === false || child.visible === false) {
       return null;
     }
 
@@ -333,6 +334,9 @@ function DescendantRenderer({
   const startDescendantEditing = useSelectionStore((state) => state.startDescendantEditing);
 
   const node = rawNode;
+  if (node.enabled === false || node.visible === false) {
+    return null;
+  }
   const isSelected = selectedDescendantId === node.id;
 
   const rawFillColor = resolveColor(
@@ -482,6 +486,94 @@ function DescendantRenderer({
         </Group>
       );
     }
+    case "path": {
+      const pathNode = node as PathNode;
+      const pathStrokeColor = pathNode.pathStroke?.fill || strokeColor;
+      const pathStrokeWidth =
+        pathNode.pathStroke?.thickness ?? pathNode.strokeWidth;
+      const lineJoin = (pathNode.pathStroke?.join as CanvasLineJoin) ?? "round";
+      const lineCap = (pathNode.pathStroke?.cap as CanvasLineCap) ?? "round";
+      const rotation = pathNode.rotation ?? 0;
+      const geometryBounds = pathNode.geometryBounds;
+      const geometryWidth = Math.max(1, geometryBounds?.width ?? pathNode.width);
+      const geometryHeight = Math.max(
+        1,
+        geometryBounds?.height ?? pathNode.height,
+      );
+      const scaleX = geometryBounds ? pathNode.width / geometryWidth : 1;
+      const scaleY = geometryBounds ? pathNode.height / geometryHeight : 1;
+      const geoOffsetX = -(geometryBounds?.x ?? 0) * scaleX;
+      const geoOffsetY = -(geometryBounds?.y ?? 0) * scaleY;
+
+      return (
+        <Group>
+          <Group
+            x={pathNode.x}
+            y={pathNode.y}
+            width={pathNode.width}
+            height={pathNode.height}
+            rotation={rotation}
+            offsetX={pathNode.flipX ? pathNode.width : 0}
+            offsetY={pathNode.flipY ? pathNode.height : 0}
+            scaleX={pathNode.flipX ? -1 : 1}
+            scaleY={pathNode.flipY ? -1 : 1}
+            opacity={pathNode.opacity ?? 1}
+            onClick={onClick}
+            onTap={onClick}
+            clipFunc={
+              pathNode.clipGeometry && pathNode.clipBounds
+                ? (ctx) => {
+                    const clipOffsetX = -(geometryBounds?.x ?? 0);
+                    const clipOffsetY = -(geometryBounds?.y ?? 0);
+                    const cb = pathNode.clipBounds!;
+                    ctx.rect(
+                      (cb.x + clipOffsetX) * scaleX,
+                      (cb.y + clipOffsetY) * scaleY,
+                      cb.width * scaleX,
+                      cb.height * scaleY,
+                    );
+                  }
+                : undefined
+            }
+          >
+            <Rect
+              width={pathNode.width}
+              height={pathNode.height}
+              fill="transparent"
+              perfectDrawEnabled={false}
+              listening={true}
+            />
+            <Path
+              x={geoOffsetX}
+              y={geoOffsetY}
+              scaleX={scaleX}
+              scaleY={scaleY}
+              data={pathNode.geometry}
+              perfectDrawEnabled={false}
+              fill={gradientProps ? undefined : fillColor}
+              fillRule={pathNode.fillRule}
+              {...(gradientProps ?? {})}
+              stroke={pathStrokeColor}
+              strokeWidth={pathStrokeWidth}
+              lineJoin={lineJoin}
+              lineCap={lineCap}
+              listening={false}
+            />
+          </Group>
+          {isSelected && (
+            <SelectionOutline
+              x={pathNode.x}
+              y={pathNode.y}
+              width={pathNode.width}
+              height={pathNode.height}
+              rotation={rotation}
+              flipX={pathNode.flipX}
+              flipY={pathNode.flipY}
+            />
+          )}
+        </Group>
+      );
+    }
     case "frame":
     case "group": {
       // For frames/groups, recursively render children
@@ -525,7 +617,7 @@ function DescendantRenderer({
             />
           )}
           {containerChildren.map((child) => {
-            if (child.enabled === false) return null;
+            if (child.enabled === false || child.visible === false) return null;
             return (
               <DescendantRenderer
                 key={child.id}
@@ -686,6 +778,71 @@ function RenderNodeWithOverrides({
           letterSpacing={node.letterSpacing ?? 0}
           opacity={node.opacity ?? 1}
         />
+      );
+    }
+    case "path": {
+      const pathNode = node as PathNode;
+      const pathStrokeColor = pathNode.pathStroke?.fill || strokeColor;
+      const pathStrokeWidth =
+        pathNode.pathStroke?.thickness ?? pathNode.strokeWidth;
+      const lineJoin = (pathNode.pathStroke?.join as CanvasLineJoin) ?? "round";
+      const lineCap = (pathNode.pathStroke?.cap as CanvasLineCap) ?? "round";
+      const rotation = pathNode.rotation ?? 0;
+      const geometryBounds = pathNode.geometryBounds;
+      const geometryWidth = Math.max(1, geometryBounds?.width ?? pathNode.width);
+      const geometryHeight = Math.max(
+        1,
+        geometryBounds?.height ?? pathNode.height,
+      );
+      const scaleX = geometryBounds ? pathNode.width / geometryWidth : 1;
+      const scaleY = geometryBounds ? pathNode.height / geometryHeight : 1;
+      const geoOffsetX = -(geometryBounds?.x ?? 0) * scaleX;
+      const geoOffsetY = -(geometryBounds?.y ?? 0) * scaleY;
+
+      return (
+        <Group
+          x={pathNode.x}
+          y={pathNode.y}
+          width={pathNode.width}
+          height={pathNode.height}
+          rotation={rotation}
+          offsetX={pathNode.flipX ? pathNode.width : 0}
+          offsetY={pathNode.flipY ? pathNode.height : 0}
+          scaleX={pathNode.flipX ? -1 : 1}
+          scaleY={pathNode.flipY ? -1 : 1}
+          opacity={pathNode.opacity ?? 1}
+          clipFunc={
+            pathNode.clipGeometry && pathNode.clipBounds
+              ? (ctx) => {
+                  const clipOffsetX = -(geometryBounds?.x ?? 0);
+                  const clipOffsetY = -(geometryBounds?.y ?? 0);
+                  const cb = pathNode.clipBounds!;
+                  ctx.rect(
+                    (cb.x + clipOffsetX) * scaleX,
+                    (cb.y + clipOffsetY) * scaleY,
+                    cb.width * scaleX,
+                    cb.height * scaleY,
+                  );
+                }
+              : undefined
+          }
+        >
+          <Path
+            x={geoOffsetX}
+            y={geoOffsetY}
+            scaleX={scaleX}
+            scaleY={scaleY}
+            data={pathNode.geometry}
+            perfectDrawEnabled={false}
+            fill={ovrGradientProps ? undefined : fillColor}
+            fillRule={pathNode.fillRule}
+            {...(ovrGradientProps ?? {})}
+            stroke={pathStrokeColor}
+            strokeWidth={pathStrokeWidth}
+            lineJoin={lineJoin}
+            lineCap={lineCap}
+          />
+        </Group>
       );
     }
     case "frame":
