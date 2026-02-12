@@ -1,7 +1,8 @@
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { Application, Container } from "pixi.js";
 import { InlineNameEditor} from "@/components/InlineNameEditor";
 import { InlineTextEditor } from "@/components/InlineTextEditor";
+import type { RefNode, TextNode } from "@/types/scene";
 import { useCanvasKeyboardShortcuts } from "@/components/canvas/useCanvasKeyboardShortcuts";
 import { useCanvasFileDrop } from "@/components/canvas/useCanvasFileDrop";
 import {
@@ -17,7 +18,8 @@ import { useLayoutStore } from "@/store/layoutStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
-import { getNodeAbsolutePositionWithLayout } from "@/utils/nodeUtils";
+import { findNodeById, getNodeAbsolutePositionWithLayout } from "@/utils/nodeUtils";
+import { findDescendantLocalPosition, prepareInstanceNode } from "@/components/nodes/instanceUtils";
 import { createPixiSync } from "./pixiSync";
 import { setupPixiViewport } from "./pixiViewport";
 import { setupPixiInteraction } from "./interaction";
@@ -51,7 +53,7 @@ export function PixiCanvas() {
   );
   const restoreSnapshot = useSceneStore((state) => state.restoreSnapshot);
   const { copiedNodes, copyNodes } = useClipboardStore();
-  const { clearSelection, editingNodeId, editingMode, clearInstanceContext } =
+  const { clearSelection, editingNodeId, editingMode, instanceContext, clearInstanceContext } =
     useSelectionStore();
   const { undo, redo, saveHistory, startBatch, endBatch } = useHistoryStore();
   const { activeTool, cancelDrawing, toggleTool } = useDrawModeStore();
@@ -87,6 +89,43 @@ export function PixiCanvas() {
     editingNodeId && editingMode === "name"
       ? getEditingPosition(editingNodeId)
       : null;
+
+  // Descendant text editing support
+  const editingDescendantTextNode = useMemo(() => {
+    if (editingMode !== "text" || !instanceContext) return null;
+    const allNodes = useSceneStore.getState().getNodes();
+    const instance = findNodeById(allNodes, instanceContext.instanceId);
+    if (!instance || instance.type !== "ref") return null;
+    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+    const prepared = prepareInstanceNode(instance as RefNode, allNodes, calculateLayoutForFrame);
+    if (!prepared) return null;
+    const descendant = findNodeById(prepared.layoutChildren, instanceContext.descendantId);
+    if (!descendant || descendant.type !== "text") return null;
+    return descendant as TextNode;
+  }, [editingMode, instanceContext, nodes]);
+
+  const editingDescendantTextPosition = useMemo(() => {
+    if (!editingDescendantTextNode || !instanceContext) return null;
+    const allNodes = useSceneStore.getState().getNodes();
+    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+    const instanceAbsPos = getNodeAbsolutePositionWithLayout(allNodes, instanceContext.instanceId, calculateLayoutForFrame);
+    if (!instanceAbsPos) return null;
+    const instance = findNodeById(allNodes, instanceContext.instanceId);
+    if (!instance || instance.type !== "ref") return null;
+    const prepared = prepareInstanceNode(instance as RefNode, allNodes, calculateLayoutForFrame);
+    if (!prepared) return null;
+    const localPos = findDescendantLocalPosition(prepared.layoutChildren, instanceContext.descendantId);
+    if (!localPos) return null;
+    return { x: instanceAbsPos.x + localPos.x, y: instanceAbsPos.y + localPos.y };
+  }, [editingDescendantTextNode, instanceContext, nodes]);
+
+  const handleDescendantTextUpdate = useMemo(() => {
+    if (!instanceContext) return undefined;
+    const { instanceId, descendantId } = instanceContext;
+    return (text: string) => {
+      useSceneStore.getState().updateDescendantTextWithoutHistory(instanceId, descendantId, text);
+    };
+  }, [instanceContext]);
 
   // Keyboard shortcuts (reuse existing hook)
   useCanvasKeyboardShortcuts({
@@ -266,6 +305,15 @@ export function PixiCanvas() {
           node={editingTextNode as any}
           absoluteX={editingTextPosition.x}
           absoluteY={editingTextPosition.y}
+        />
+      )}
+      {/* Inline text editor for instance descendant text */}
+      {editingDescendantTextNode && editingDescendantTextPosition && editingMode === "text" && (
+        <InlineTextEditor
+          node={editingDescendantTextNode}
+          absoluteX={editingDescendantTextPosition.x}
+          absoluteY={editingDescendantTextPosition.y}
+          onUpdateText={handleDescendantTextUpdate}
         />
       )}
       {/* Inline name editor overlay */}

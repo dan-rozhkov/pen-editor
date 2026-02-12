@@ -7,6 +7,7 @@ import { useViewportStore } from "@/store/viewportStore";
 import { getNodeAbsolutePositionWithLayout, getNodeEffectiveSize } from "@/utils/nodeUtils";
 import type { FlatFrameNode, FlatGroupNode, RefNode } from "@/types/scene";
 import { findDescendantLocalRect, prepareInstanceNode } from "@/components/nodes/instanceUtils";
+import { findNodeById } from "@/utils/nodeUtils";
 
 const SELECTION_COLOR = 0x0d99ff;
 const HOVER_COLOR = 0x0d99ff;
@@ -95,7 +96,7 @@ export function createSelectionOverlay(
   }
 
   function redrawSelection(): void {
-    const { selectedIds, editingNodeId, editingMode } = useSelectionStore.getState();
+    const { selectedIds, editingNodeId, editingMode, instanceContext } = useSelectionStore.getState();
     const scale = useViewportStore.getState().scale;
     const strokeWidth = 1 / scale;
 
@@ -107,6 +108,58 @@ export function createSelectionOverlay(
     if (selectedIds.length === 0) return;
 
     const state = useSceneStore.getState();
+
+    // Instance descendant selection: draw outline at descendant position
+    if (instanceContext) {
+      const { instanceId, descendantId } = instanceContext;
+      // Skip drawing if descendant text is being edited
+      if (editingMode === "text") return;
+
+      const instanceAbsPos = getAbsolutePosition(instanceId);
+      if (!instanceAbsPos) return;
+
+      const allNodes = state.getNodes();
+      const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+      const instanceNode = findNodeById(allNodes, instanceId);
+      if (!instanceNode || instanceNode.type !== "ref") return;
+
+      const prepared = prepareInstanceNode(instanceNode as unknown as RefNode, allNodes, calculateLayoutForFrame);
+      if (!prepared) return;
+
+      const rect = findDescendantLocalRect(prepared.layoutChildren, descendantId);
+      if (!rect) return;
+
+      const absX = instanceAbsPos.x + rect.x;
+      const absY = instanceAbsPos.y + rect.y;
+      const { width, height } = rect;
+
+      // Draw descendant outline
+      const outline = new Graphics();
+      outline.rect(absX, absY, width, height);
+      outline.stroke({ color: COMPONENT_SELECTION_COLOR, width: strokeWidth });
+      outlinesContainer.addChild(outline);
+
+      // Draw transform handles at descendant corners
+      const handleSizeWorld = HANDLE_SIZE / scale;
+      const halfHandle = handleSizeWorld / 2;
+      const corners = [
+        { x: absX, y: absY },
+        { x: absX + width, y: absY },
+        { x: absX, y: absY + height },
+        { x: absX + width, y: absY + height },
+      ];
+      for (const corner of corners) {
+        const handle = new Graphics();
+        handle.rect(corner.x - halfHandle, corner.y - halfHandle, handleSizeWorld, handleSizeWorld);
+        handle.fill(HANDLE_FILL);
+        handle.stroke({ color: COMPONENT_SELECTION_COLOR, width: strokeWidth });
+        handlesContainer.addChild(handle);
+      }
+
+      // Draw size label for descendant
+      drawSizeLabel(absX + width / 2, absY + height, width, height, scale, true);
+      return;
+    }
 
     // Draw outline for each selected node
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;

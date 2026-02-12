@@ -99,14 +99,6 @@ export function DescendantPropertyEditor({
     }
   };
 
-  const handleResetProperty = (property: keyof DescendantOverride) => {
-    resetDescendantOverride(
-      instanceContext.instanceId,
-      instanceContext.descendantId,
-      property,
-    );
-  };
-
   const handleResetAll = () => {
     if (isSlotReplaced) {
       resetSlotContent(instanceContext.instanceId, instanceContext.descendantId);

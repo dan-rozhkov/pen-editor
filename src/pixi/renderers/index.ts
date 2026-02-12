@@ -113,6 +113,7 @@ export function updateNodeContainer(
   nodesById: Record<string, FlatSceneNode>,
   childrenById: Record<string, string[]>,
   skipPosition?: boolean,
+  forceRefRebuild?: boolean,
 ): void {
   // Position - skip for auto-layout children (handled by applyAutoLayoutPositions)
   if (!skipPosition && (node.x !== prev.x || node.y !== prev.y)) {
@@ -193,6 +194,7 @@ export function updateNodeContainer(
         prev as RefNode,
         nodesById,
         childrenById,
+        forceRefRebuild,
       );
       break;
   }

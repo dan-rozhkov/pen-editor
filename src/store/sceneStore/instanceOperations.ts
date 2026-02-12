@@ -2,10 +2,28 @@ import type {
   SceneNode,
   RefNode,
   DescendantOverride,
+  TextNode,
 } from "../../types/scene";
 import { deepCloneNode } from "../../utils/cloneNode";
+import { measureTextAutoSize, measureTextFixedWidthHeight } from "../../utils/textMeasure";
 import { saveHistory } from "./helpers/history";
 import type { SceneState } from "./types";
+
+function syncTextNodeDimensions(node: SceneNode): SceneNode {
+  if (node.type !== "text") return node;
+  const textNode = node as TextNode;
+  const mode = textNode.textWidthMode;
+
+  if (!mode || mode === "auto") {
+    const measured = measureTextAutoSize(textNode);
+    return { ...textNode, width: measured.width, height: measured.height };
+  }
+  if (mode === "fixed") {
+    const measuredHeight = measureTextFixedWidthHeight(textNode);
+    return { ...textNode, height: measuredHeight };
+  }
+  return textNode;
+}
 
 export function createInstanceOperations(
   _get: () => SceneState,
@@ -175,11 +193,15 @@ export function createInstanceOperations(
         // Check if descendant has slot content replacement
         if (refNode.slotContent?.[descendantId]) {
           const slotNode = refNode.slotContent[descendantId];
+          const updatedSlotNode = syncTextNodeDimensions({
+            ...slotNode,
+            text,
+          } as SceneNode);
           const updated: RefNode = {
             ...refNode,
             slotContent: {
               ...refNode.slotContent,
-              [descendantId]: { ...slotNode, text } as SceneNode,
+              [descendantId]: updatedSlotNode,
             },
           };
           return {

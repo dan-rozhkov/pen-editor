@@ -6,6 +6,7 @@ import { useVariableStore } from "@/store/variableStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import type { FlatSceneNode, FlatFrameNode, FrameNode, SceneNode } from "@/types/scene";
+import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 import { createNodeContainer, updateNodeContainer, applyLayoutSize } from "./renderers";
 
 interface RegistryEntry {
@@ -19,6 +20,19 @@ type NodeLayoutOverride = {
   width?: number;
   height?: number;
 };
+
+function isDescendantOf(
+  parentById: Record<string, string | null>,
+  ancestorId: string,
+  targetId: string,
+): boolean {
+  let current = parentById[targetId];
+  while (current != null) {
+    if (current === ancestorId) return true;
+    current = parentById[current];
+  }
+  return false;
+}
 
 /**
  * Convert flat frame to tree frame for layout calculation
@@ -75,9 +89,10 @@ function flatToTreeFrame(
 export function createPixiSync(sceneRoot: Container): () => void {
   const registry = new Map<string, RegistryEntry>();
   let appliedTextResolution = 0;
+  let rebuildScheduled = false;
 
   function applyTextEditingVisibility(): void {
-    const { editingNodeId, editingMode } = useSelectionStore.getState();
+    const { editingNodeId, editingMode, instanceContext } = useSelectionStore.getState();
     const isTextEditing = editingMode === "text" && editingNodeId != null;
 
     for (const [id, entry] of registry) {
@@ -85,6 +100,53 @@ export function createPixiSync(sceneRoot: Container): () => void {
       const hideWhileEditing =
         isTextEditing && entry.node.type === "text" && editingNodeId === id;
       entry.container.visible = baseVisible && !hideWhileEditing;
+    }
+
+    // Reset descendant visibility for all instances before applying current edit hide rule.
+    for (const entry of registry.values()) {
+      if (entry.node.type !== "ref") continue;
+      const refChildren = entry.container.getChildByLabel("ref-children") as Container | null;
+      if (refChildren) {
+        setDescendantVisibility(refChildren, true);
+      }
+    }
+
+    // Hide descendant text inside instance during editing
+    if (editingMode === "text" && instanceContext) {
+      const { instanceId, descendantId } = instanceContext;
+      const instanceEntry = registry.get(instanceId);
+      if (instanceEntry) {
+        const refChildren = instanceEntry.container.getChildByLabel("ref-children") as Container | null;
+        if (refChildren) {
+          // Search recursively for the labeled descendant container
+          const descContainer = findDescendantContainer(refChildren, descendantId);
+          if (descContainer) {
+            descContainer.visible = false;
+          }
+        }
+      }
+    }
+  }
+
+  function findDescendantContainer(parent: Container, descendantId: string): Container | null {
+    const label = `desc-${descendantId}`;
+    for (const child of parent.children) {
+      if (child.label === label) return child as Container;
+      if (child instanceof Container) {
+        const found = findDescendantContainer(child, descendantId);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  function setDescendantVisibility(parent: Container, visible: boolean): void {
+    for (const child of parent.children) {
+      if (!(child instanceof Container)) continue;
+      if (typeof child.label === "string" && child.label.startsWith("desc-")) {
+        child.visible = visible;
+      }
+      setDescendantVisibility(child, visible);
     }
   }
 
@@ -112,6 +174,27 @@ export function createPixiSync(sceneRoot: Container): () => void {
         );
 
         if (treeFrame) {
+          // Keep frame background/mask in sync for fit_content frames even when
+          // only descendants changed (e.g. text metrics after font load).
+          const fitWidth = frameNode.sizing?.widthMode === "fit_content";
+          const fitHeight = frameNode.sizing?.heightMode === "fit_content";
+          let frameWidth = frameNode.width;
+          let frameHeight = frameNode.height;
+
+          if (fitWidth || fitHeight) {
+            const intrinsicSize = calculateFrameIntrinsicSize(treeFrame as FrameNode, {
+              fitWidth,
+              fitHeight,
+            });
+            if (fitWidth) frameWidth = intrinsicSize.width;
+            if (fitHeight) frameHeight = intrinsicSize.height;
+          }
+
+          const frameEntry = registry.get(frameId);
+          if (frameEntry) {
+            applyLayoutSize(frameEntry.container, frameEntry.node, frameWidth, frameHeight);
+          }
+
           // Calculate layout
           const layoutChildren = calculateLayoutForFrame(treeFrame);
 
@@ -261,6 +344,29 @@ export function createPixiSync(sceneRoot: Container): () => void {
       return; // No scene changes
     }
 
+    const changedIds = new Set<string>();
+
+    for (const id of Object.keys(state.nodesById)) {
+      if (state.nodesById[id] !== prev.nodesById[id]) {
+        changedIds.add(id);
+      }
+    }
+    for (const id of Object.keys(prev.nodesById)) {
+      if (!state.nodesById[id]) {
+        changedIds.add(id);
+      }
+    }
+    for (const id of Object.keys(state.childrenById)) {
+      if (state.childrenById[id] !== prev.childrenById[id]) {
+        changedIds.add(id);
+      }
+    }
+    for (const id of Object.keys(prev.childrenById)) {
+      if (!state.childrenById[id]) {
+        changedIds.add(id);
+      }
+    }
+
     // Handle added nodes
     for (const id of Object.keys(state.nodesById)) {
       if (!prev.nodesById[id]) {
@@ -298,6 +404,43 @@ export function createPixiSync(sceneRoot: Container): () => void {
           );
           entry.node = node;
         }
+      }
+    }
+
+    // Rebuild instances whose source component/subtree changed even if ref node itself didn't.
+    if (changedIds.size > 0) {
+      for (const [id, node] of Object.entries(state.nodesById)) {
+        if (node.type !== "ref") continue;
+        const entry = registry.get(id);
+        if (!entry) continue;
+
+        const componentId = node.componentId;
+        let shouldRebuild = changedIds.has(componentId);
+
+        if (!shouldRebuild) {
+          for (const changedId of changedIds) {
+            if (
+              isDescendantOf(state.parentById, componentId, changedId) ||
+              isDescendantOf(prev.parentById, componentId, changedId)
+            ) {
+              shouldRebuild = true;
+              break;
+            }
+          }
+        }
+
+        if (!shouldRebuild) continue;
+
+        updateNodeContainer(
+          entry.container,
+          node,
+          node,
+          state.nodesById,
+          state.childrenById,
+          false,
+          true,
+        );
+        entry.node = node;
       }
     }
 
@@ -474,6 +617,20 @@ export function createPixiSync(sceneRoot: Container): () => void {
     prevState = state;
   });
 
+  const rebuildFromCurrentState = (): void => {
+    fullRebuild(useSceneStore.getState());
+    prevState = useSceneStore.getState();
+  };
+
+  const scheduleRebuildFromFonts = (): void => {
+    if (rebuildScheduled) return;
+    rebuildScheduled = true;
+    requestAnimationFrame(() => {
+      rebuildScheduled = false;
+      rebuildFromCurrentState();
+    });
+  };
+
   // Re-render all nodes when theme or variables change (colors need re-resolution)
   const unsubTheme = useThemeStore.subscribe(() => {
     fullRebuild(useSceneStore.getState());
@@ -489,6 +646,21 @@ export function createPixiSync(sceneRoot: Container): () => void {
     applyTextEditingVisibility();
   });
 
+  let removeFontsListener: (() => void) | null = null;
+  if (typeof document !== "undefined" && "fonts" in document) {
+    const fonts = document.fonts;
+    fonts.ready.then(() => {
+      scheduleRebuildFromFonts();
+    });
+    const onLoadingDone = () => {
+      scheduleRebuildFromFonts();
+    };
+    fonts.addEventListener("loadingdone", onLoadingDone);
+    removeFontsListener = () => {
+      fonts.removeEventListener("loadingdone", onLoadingDone);
+    };
+  }
+
   return () => {
     unsubScene();
     unsubTheme();
@@ -499,6 +671,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
       clearTimeout(textResolutionUpdateTimer);
       textResolutionUpdateTimer = null;
     }
+    removeFontsListener?.();
     // Clean up all containers
     for (const entry of registry.values()) {
       entry.container.destroy({ children: true });

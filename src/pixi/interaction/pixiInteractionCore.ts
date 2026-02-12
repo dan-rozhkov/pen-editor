@@ -169,7 +169,27 @@ export function setupPixiInteraction(
 
     // Hover detection
     const hitId = findNodeAtPoint(world.x, world.y, { deepSelect: true });
-    useHoverStore.getState().setHoveredNode(hitId);
+    const selectionState = useSelectionStore.getState();
+    const activeInstanceId = selectionState.instanceContext?.instanceId;
+    if (activeInstanceId && hitId === activeInstanceId) {
+      // When inside an instance context, resolve descendant under pointer for hover
+      const currentNodes = useSceneStore.getState().getNodes();
+      const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+      const descendantId = findInstanceDescendantAtWorldPoint(
+        activeInstanceId,
+        world.x,
+        world.y,
+        currentNodes,
+        calculateLayoutForFrame,
+      );
+      if (descendantId) {
+        useHoverStore.getState().setHoveredNode(descendantId, activeInstanceId);
+      } else {
+        useHoverStore.getState().setHoveredNode(hitId);
+      }
+    } else {
+      useHoverStore.getState().setHoveredNode(hitId);
+    }
 
     // Measurement (Alt+hover)
     measurement.handlePointerMove(e, world, hitId);
