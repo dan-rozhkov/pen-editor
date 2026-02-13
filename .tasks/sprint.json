@@ -13,11 +13,11 @@
   },
   {
     "name": "design-agent-ai-integration",
-    "passed": false
+    "passed": true
   },
   {
     "name": "design-agent-read-tools",
-    "passed": false
+    "passed": true
   },
   {
     "name": "design-agent-batch-design",

@@ -19,3 +19,12 @@
   - Tool calls: collapsible indicator with spinner/check/x per status
   - Auto-resize textarea, Enter to send, Shift+Enter for newline
   - Tested in browser: messages render, shortcuts don't fire while typing, canvas click-through works
+
+2026-02-13: design-agent-read-tools — Implemented 5 client-side tool handlers for Design Agent.
+  - get_editor_state: returns roots, selection, reusable components, viewport state
+  - batch_get: pattern search (type/name/reusable), nodeId lookup, readDepth/searchDepth, parentId scoping, resolveVariables
+  - snapshot_layout: absolute position layout rects, maxDepth, problemsOnly (clipped detection)
+  - get_variables: serializes all variables with theme values
+  - get_screenshot: Konva toDataURL with pixelRatio:2, PixiJS extract.base64 fallback
+  - All handlers registered in toolRegistry replacing stubs
+  - Tested in browser: all tools verified with programmatic node creation, variable binding, reusable flag
