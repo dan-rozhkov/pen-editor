@@ -10,6 +10,7 @@ import {
   SelectionOutline,
   getHoverOutlineColor,
   getEllipseTransformProps,
+  makeEllipseSceneFunc,
 } from "./renderUtils";
 
 interface EllipseRendererProps {
@@ -105,6 +106,16 @@ export const EllipseRenderer = memo(function EllipseRenderer({
     });
   };
 
+  const align = node.strokeAlign ?? 'center';
+  const useAlignedStroke = align !== 'center';
+  const alignedSceneFunc = useAlignedStroke
+    ? makeEllipseSceneFunc(
+        node.width, node.height,
+        (node.imageFill || gradientProps) ? undefined : fillColor,
+        strokeColor, node.strokeWidth, align,
+      )
+    : undefined;
+
   return (
     <>
       <Ellipse
@@ -112,12 +123,13 @@ export const EllipseRenderer = memo(function EllipseRenderer({
         name="selectable"
         perfectDrawEnabled={false}
         {...ellipseTransform}
-        fill={node.imageFill || gradientProps ? undefined : fillColor}
-        {...(gradientProps && !node.imageFill ? gradientProps : {})}
+        fill={useAlignedStroke ? undefined : (node.imageFill || gradientProps ? undefined : fillColor)}
+        {...(!useAlignedStroke && gradientProps && !node.imageFill ? gradientProps : {})}
         {...(shadowProps || {})}
-        stroke={strokeColor}
-        strokeWidth={node.strokeWidth}
+        stroke={useAlignedStroke ? undefined : strokeColor}
+        strokeWidth={useAlignedStroke ? undefined : node.strokeWidth}
         opacity={node.opacity ?? 1}
+        sceneFunc={alignedSceneFunc}
         draggable
         onClick={onClick}
         onTap={onClick}

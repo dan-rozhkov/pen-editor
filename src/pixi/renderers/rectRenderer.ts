@@ -34,6 +34,7 @@ export function updateRectContainer(
     node.strokeBinding !== prev.strokeBinding ||
     node.strokeOpacity !== prev.strokeOpacity ||
     node.strokeWidth !== prev.strokeWidth ||
+    node.strokeAlign !== prev.strokeAlign ||
     node.strokeWidthPerSide !== prev.strokeWidthPerSide ||
     node.cornerRadius !== prev.cornerRadius ||
     node.gradientFill !== prev.gradientFill

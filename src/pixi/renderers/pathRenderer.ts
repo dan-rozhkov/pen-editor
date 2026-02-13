@@ -35,6 +35,7 @@ export function updatePathContainer(
     node.strokeBinding !== prev.strokeBinding ||
     node.strokeOpacity !== prev.strokeOpacity ||
     node.strokeWidth !== prev.strokeWidth ||
+    node.strokeAlign !== prev.strokeAlign ||
     node.pathStroke !== prev.pathStroke ||
     node.gradientFill !== prev.gradientFill
   ) {
@@ -108,11 +109,14 @@ export function drawPath(gfx: Graphics, node: PathNode): void {
   const pathStroke = node.pathStroke;
   if (pathStroke?.fill || strokeColor) {
     const sColor = pathStroke?.fill ?? strokeColor ?? "#000000";
+    const align = node.strokeAlign ?? 'center';
+    const alignment = align === 'inside' ? 1 : align === 'outside' ? 0 : 0.5;
     gfx.stroke({
       color: parseColor(sColor),
       width: pathStroke?.thickness ?? node.strokeWidth ?? 1,
       cap: (pathStroke?.cap as any) ?? "butt",
       join: (pathStroke?.join as any) ?? "miter",
+      alignment,
     });
   }
 }

@@ -27,6 +27,7 @@ export function updatePolygonContainer(
     node.strokeBinding !== prev.strokeBinding ||
     node.strokeOpacity !== prev.strokeOpacity ||
     node.strokeWidth !== prev.strokeWidth ||
+    node.strokeAlign !== prev.strokeAlign ||
     node.gradientFill !== prev.gradientFill
   ) {
     const gfx = container.getChildByLabel("polygon-gfx") as Graphics;

@@ -33,6 +33,7 @@ export function updateEllipseContainer(
     node.strokeBinding !== prev.strokeBinding ||
     node.strokeOpacity !== prev.strokeOpacity ||
     node.strokeWidth !== prev.strokeWidth ||
+    node.strokeAlign !== prev.strokeAlign ||
     node.gradientFill !== prev.gradientFill
   ) {
     const gfx = container.getChildByLabel("ellipse-bg") as Graphics;

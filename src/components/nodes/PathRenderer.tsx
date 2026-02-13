@@ -5,6 +5,7 @@ import type { PathNode } from "@/types/scene";
 import {
   SelectionOutline,
   getHoverOutlineColor,
+  makePathSceneFunc,
 } from "./renderUtils";
 
 interface PathRendererProps {
@@ -53,6 +54,17 @@ export const PathRenderer = memo(function PathRenderer({
   // Offset the path rendering to normalize geometry coordinates to (0,0)
   const geoOffsetX = -(geometryBounds?.x ?? 0) * scaleX;
   const geoOffsetY = -(geometryBounds?.y ?? 0) * scaleY;
+
+  const align = node.strokeAlign ?? 'center';
+  const useAlignedStroke = align !== 'center' && !!node.geometry;
+  const alignedSceneFunc = useAlignedStroke
+    ? makePathSceneFunc(
+        node.geometry!, scaleX, scaleY, geoOffsetX, geoOffsetY,
+        gradientProps ? undefined : fillColor,
+        pathStrokeColor, pathStrokeWidth, align,
+        lineJoin, lineCap, node.fillRule,
+      )
+    : undefined;
 
   return (
     <>
@@ -112,22 +124,33 @@ export const PathRenderer = memo(function PathRenderer({
           perfectDrawEnabled={false}
           listening={true}
         />
-        <Path
-          x={geoOffsetX}
-          y={geoOffsetY}
-          scaleX={scaleX}
-          scaleY={scaleY}
-          data={node.geometry}
-          perfectDrawEnabled={false}
-          fill={gradientProps ? undefined : fillColor}
-          fillRule={node.fillRule}
-          {...(gradientProps ?? {})}
-          stroke={pathStrokeColor}
-          strokeWidth={pathStrokeWidth}
-          lineJoin={lineJoin}
-          lineCap={lineCap}
-          listening={false}
-        />
+        {useAlignedStroke ? (
+          <Rect
+            width={node.width}
+            height={node.height}
+            fill="transparent"
+            perfectDrawEnabled={false}
+            listening={false}
+            sceneFunc={alignedSceneFunc}
+          />
+        ) : (
+          <Path
+            x={geoOffsetX}
+            y={geoOffsetY}
+            scaleX={scaleX}
+            scaleY={scaleY}
+            data={node.geometry}
+            perfectDrawEnabled={false}
+            fill={gradientProps ? undefined : fillColor}
+            fillRule={node.fillRule}
+            {...(gradientProps ?? {})}
+            stroke={pathStrokeColor}
+            strokeWidth={pathStrokeWidth}
+            lineJoin={lineJoin}
+            lineCap={lineCap}
+            listening={false}
+          />
+        )}
       </Group>
       {/* Hover outline */}
       {isHovered && (

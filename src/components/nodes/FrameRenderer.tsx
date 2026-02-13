@@ -25,6 +25,7 @@ import {
   getChildSelectOverride,
   getRectTransformProps,
   hasPerSideStroke,
+  makeRectSceneFunc,
 } from "./renderUtils";
 import { prepareFrameNode } from "./instanceUtils";
 import { RenderNode } from "./RenderNode";
@@ -256,17 +257,32 @@ export function FrameRenderer({
           : undefined
       }
     >
-      <Rect
-        width={effectiveWidth}
-        height={effectiveHeight}
-        perfectDrawEnabled={false}
-        fill={node.imageFill || gradientProps ? undefined : fillColor}
-        {...(gradientProps && !node.imageFill ? gradientProps : {})}
-        {...(shadowProps || {})}
-        stroke={hasPerSideStroke(node.strokeWidthPerSide) ? undefined : strokeColor}
-        strokeWidth={hasPerSideStroke(node.strokeWidthPerSide) ? undefined : node.strokeWidth}
-        cornerRadius={node.cornerRadius}
-      />
+      {(() => {
+        const usePerSide = hasPerSideStroke(node.strokeWidthPerSide);
+        const align = node.strokeAlign ?? 'center';
+        const useAligned = align !== 'center' && !usePerSide;
+        const sf = useAligned
+          ? makeRectSceneFunc(
+              effectiveWidth, effectiveHeight, node.cornerRadius,
+              (node.imageFill || gradientProps) ? undefined : fillColor,
+              strokeColor, node.strokeWidth, align,
+            )
+          : undefined;
+        return (
+          <Rect
+            width={effectiveWidth}
+            height={effectiveHeight}
+            perfectDrawEnabled={false}
+            fill={useAligned ? undefined : (node.imageFill || gradientProps ? undefined : fillColor)}
+            {...(!useAligned && gradientProps && !node.imageFill ? gradientProps : {})}
+            {...(shadowProps || {})}
+            stroke={usePerSide || useAligned ? undefined : strokeColor}
+            strokeWidth={usePerSide || useAligned ? undefined : node.strokeWidth}
+            cornerRadius={useAligned ? undefined : node.cornerRadius}
+            sceneFunc={sf}
+          />
+        );
+      })()}
       {/* Per-side stroke for frames */}
       {hasPerSideStroke(node.strokeWidthPerSide) && strokeColor && node.strokeWidthPerSide && (
         <PerSideStrokeLines
@@ -276,6 +292,7 @@ export function FrameRenderer({
           height={effectiveHeight}
           strokeColor={strokeColor}
           strokeWidthPerSide={node.strokeWidthPerSide}
+          strokeAlign={node.strokeAlign}
         />
       )}
       {node.imageFill && (

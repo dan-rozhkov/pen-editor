@@ -6,6 +6,7 @@ import {
   SelectionOutline,
   getHoverOutlineColor,
   getRectTransformProps,
+  makePolygonSceneFunc,
 } from "./renderUtils";
 
 interface PolygonRendererProps {
@@ -36,6 +37,14 @@ export const PolygonRenderer = memo(function PolygonRenderer({
   onTransformEnd,
 }: PolygonRendererProps) {
   const rectTransform = getRectTransformProps(node);
+  const align = node.strokeAlign ?? 'center';
+  const useAlignedStroke = align !== 'center';
+  const alignedSceneFunc = useAlignedStroke
+    ? makePolygonSceneFunc(
+        node.points, gradientProps ? undefined : fillColor,
+        strokeColor, node.strokeWidth, align,
+      )
+    : undefined;
 
   return (
     <>
@@ -45,19 +54,20 @@ export const PolygonRenderer = memo(function PolygonRenderer({
         perfectDrawEnabled={false}
         x={rectTransform.x}
         y={rectTransform.y}
-        points={node.points}
-        closed
-        fill={gradientProps ? undefined : fillColor}
-        {...(gradientProps ? gradientProps : {})}
+        points={useAlignedStroke ? undefined : node.points}
+        closed={useAlignedStroke ? undefined : true}
+        fill={useAlignedStroke ? undefined : (gradientProps ? undefined : fillColor)}
+        {...(!useAlignedStroke && gradientProps ? gradientProps : {})}
         {...(shadowProps || {})}
-        stroke={strokeColor}
-        strokeWidth={node.strokeWidth}
+        stroke={useAlignedStroke ? undefined : strokeColor}
+        strokeWidth={useAlignedStroke ? undefined : node.strokeWidth}
         opacity={node.opacity ?? 1}
         rotation={rectTransform.rotation}
         offsetX={rectTransform.offsetX}
         offsetY={rectTransform.offsetY}
         scaleX={rectTransform.scaleX}
         scaleY={rectTransform.scaleY}
+        sceneFunc={alignedSceneFunc}
         draggable
         onClick={onClick}
         onTap={onClick}

@@ -73,6 +73,7 @@ export function StrokeSection({
     onUpdate({
       stroke: undefined,
       strokeWidth: undefined,
+      strokeAlign: undefined,
       strokeBinding: undefined,
       strokeOpacity: undefined,
       strokeWidthPerSide: undefined,
@@ -167,19 +168,37 @@ export function StrokeSection({
             />
           </div>
 
-          {/* Mode selector (only for non-ellipse shapes) */}
-          {canUsePerSide && (
-            <SelectInput
-              label="Mode"
-              labelOutside
-              value={strokeMode}
-              options={[
-                { value: "unified", label: "Unified" },
-                { value: "per-side", label: "Per Side" },
-              ]}
-              onChange={handleModeChange}
-            />
-          )}
+          {/* Mode + Align row */}
+          <div className="flex items-center gap-1">
+            {canUsePerSide && (
+              <div className="flex-1">
+                <SelectInput
+                  label="Mode"
+                  labelOutside
+                  value={strokeMode}
+                  options={[
+                    { value: "unified", label: "Unified" },
+                    { value: "per-side", label: "Per Side" },
+                  ]}
+                  onChange={handleModeChange}
+                />
+              </div>
+            )}
+            <div className="flex-1">
+              <SelectInput
+                label="Align"
+                labelOutside
+                value={mixedKeys?.has("strokeAlign") ? "" : (node.strokeAlign ?? "center")}
+                options={[
+                  { value: "inside", label: "Inside" },
+                  { value: "center", label: "Center" },
+                  { value: "outside", label: "Outside" },
+                ]}
+                onChange={(v) => onUpdate({ strokeAlign: v as 'center' | 'inside' | 'outside' })}
+                isMixed={mixedKeys?.has("strokeAlign")}
+              />
+            </div>
+          </div>
 
           {/* Unified weight input */}
           {strokeMode === "unified" && (

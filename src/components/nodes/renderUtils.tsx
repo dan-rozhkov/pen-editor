@@ -425,9 +425,24 @@ interface PerSideStrokeLinesProps {
   height: number;
   strokeColor: string;
   strokeWidthPerSide: PerSideStroke;
+  strokeAlign?: 'center' | 'inside' | 'outside';
   rotation?: number;
   flipX?: boolean;
   flipY?: boolean;
+}
+
+/**
+ * Get the Y position for a horizontal per-side stroke line based on alignment.
+ * - center: strokeWidth/2 from edge (default)
+ * - inside: strokeWidth from edge (fully inside)
+ * - outside: 0 from edge (fully outside, extends outward)
+ */
+function getPerSideOffset(strokeWidth: number, align: 'center' | 'inside' | 'outside'): number {
+  switch (align) {
+    case 'inside': return strokeWidth / 2;
+    case 'outside': return -strokeWidth / 2;
+    default: return 0; // center: stroke centered on edge
+  }
 }
 
 export function PerSideStrokeLines({
@@ -437,6 +452,7 @@ export function PerSideStrokeLines({
   height,
   strokeColor,
   strokeWidthPerSide,
+  strokeAlign = 'center',
   rotation = 0,
   flipX = false,
   flipY = false,
@@ -448,6 +464,12 @@ export function PerSideStrokeLines({
   const offsetY = flipY ? height : 0;
   const scaleX = flipX ? -1 : 1;
   const scaleY = flipY ? -1 : 1;
+
+  // Per-side offset adjustments based on alignment
+  const topOff = getPerSideOffset(top, strokeAlign);
+  const rightOff = getPerSideOffset(right, strokeAlign);
+  const bottomOff = getPerSideOffset(bottom, strokeAlign);
+  const leftOff = getPerSideOffset(left, strokeAlign);
 
   return (
     <Group
@@ -463,7 +485,7 @@ export function PerSideStrokeLines({
       {/* Top border */}
       {top > 0 && (
         <Line
-          points={[0, top / 2, width, top / 2]}
+          points={[0, top / 2 + topOff, width, top / 2 + topOff]}
           stroke={strokeColor}
           strokeWidth={top}
           lineCap="butt"
@@ -473,7 +495,7 @@ export function PerSideStrokeLines({
       {/* Right border */}
       {right > 0 && (
         <Line
-          points={[width - right / 2, 0, width - right / 2, height]}
+          points={[width - right / 2 - rightOff, 0, width - right / 2 - rightOff, height]}
           stroke={strokeColor}
           strokeWidth={right}
           lineCap="butt"
@@ -483,7 +505,7 @@ export function PerSideStrokeLines({
       {/* Bottom border */}
       {bottom > 0 && (
         <Line
-          points={[width, height - bottom / 2, 0, height - bottom / 2]}
+          points={[width, height - bottom / 2 - bottomOff, 0, height - bottom / 2 - bottomOff]}
           stroke={strokeColor}
           strokeWidth={bottom}
           lineCap="butt"
@@ -493,7 +515,7 @@ export function PerSideStrokeLines({
       {/* Left border */}
       {left > 0 && (
         <Line
-          points={[left / 2, height, left / 2, 0]}
+          points={[left / 2 + leftOff, height, left / 2 + leftOff, 0]}
           stroke={strokeColor}
           strokeWidth={left}
           lineCap="butt"
@@ -504,9 +526,274 @@ export function PerSideStrokeLines({
   );
 }
 
+/**
+ * Create a Konva sceneFunc for a Path that handles inside/outside stroke alignment.
+ * Uses Path2D for SVG path data.
+ */
+export function makePathSceneFunc(
+  geometry: string,
+  scaleX: number,
+  scaleY: number,
+  geoOffsetX: number,
+  geoOffsetY: number,
+  fillColor: string | undefined,
+  strokeColor: string | undefined,
+  strokeWidth: number | undefined,
+  strokeAlign: 'center' | 'inside' | 'outside',
+  lineJoin: string,
+  lineCap: string,
+  fillRule?: string,
+): ((ctx: any, shape: any) => void) | undefined {
+  if (strokeAlign === 'center' || !strokeColor || !strokeWidth) return undefined;
+
+  return (ctx: any, _shape: any) => {
+    ctx.save();
+    ctx.translate(geoOffsetX, geoOffsetY);
+    ctx.scale(scaleX, scaleY);
+
+    const path2d = new Path2D(geometry);
+
+    if (fillColor) {
+      ctx.fillStyle = fillColor;
+      ctx.fill(path2d, fillRule === 'evenodd' ? 'evenodd' : 'nonzero');
+    }
+
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = (strokeWidth * 2) / Math.min(scaleX, scaleY);
+    ctx.lineJoin = lineJoin;
+    ctx.lineCap = lineCap;
+
+    if (strokeAlign === 'inside') {
+      ctx.save();
+      ctx.clip(path2d, fillRule === 'evenodd' ? 'evenodd' : 'nonzero');
+      ctx.stroke(path2d);
+      ctx.restore();
+    } else {
+      // outside
+      ctx.save();
+      // Large clip rect that excludes the shape interior
+      const pad = strokeWidth * 4 / Math.min(scaleX, scaleY);
+      const clipPath = new Path2D();
+      clipPath.rect(-pad, -pad, (1 / scaleX) * 10000, (1 / scaleY) * 10000);
+      clipPath.addPath(path2d);
+      ctx.clip(clipPath, 'evenodd');
+      ctx.stroke(path2d);
+      ctx.restore();
+    }
+
+    ctx.restore();
+  };
+}
+
 // Helper to check if node has per-side stroke
 export function hasPerSideStroke(strokeWidthPerSide?: PerSideStroke): boolean {
   if (!strokeWidthPerSide) return false;
   const { top, right, bottom, left } = strokeWidthPerSide;
   return !!(top || right || bottom || left);
+}
+
+/**
+ * Create a Konva sceneFunc for a Rect/Frame that handles inside/outside stroke alignment.
+ * For 'center' alignment, returns undefined (use default Konva rendering).
+ */
+export function makeRectSceneFunc(
+  width: number,
+  height: number,
+  cornerRadius: number | undefined,
+  fillColor: string | undefined,
+  strokeColor: string | undefined,
+  strokeWidth: number | undefined,
+  strokeAlign: 'center' | 'inside' | 'outside',
+): ((ctx: any, shape: any) => void) | undefined {
+  if (strokeAlign === 'center' || !strokeColor || !strokeWidth) return undefined;
+
+  return (ctx: any, _shape: any) => {
+    // Draw the rect path
+    const cr = cornerRadius ?? 0;
+    if (cr > 0) {
+      ctx.beginPath();
+      ctx.moveTo(cr, 0);
+      ctx.lineTo(width - cr, 0);
+      ctx.arcTo(width, 0, width, cr, cr);
+      ctx.lineTo(width, height - cr);
+      ctx.arcTo(width, height, width - cr, height, cr);
+      ctx.lineTo(cr, height);
+      ctx.arcTo(0, height, 0, height - cr, cr);
+      ctx.lineTo(0, cr);
+      ctx.arcTo(0, 0, cr, 0, cr);
+      ctx.closePath();
+    } else {
+      ctx.beginPath();
+      ctx.rect(0, 0, width, height);
+    }
+
+    // Fill
+    if (fillColor) {
+      ctx.fillStyle = fillColor;
+      ctx.fill();
+    }
+
+    // Stroke with alignment
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = strokeWidth * 2;
+
+    if (strokeAlign === 'inside') {
+      ctx.save();
+      ctx.clip();
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      // outside
+      ctx.save();
+      // Clip to outside of shape: draw a large rect, then the shape in reverse (evenodd)
+      ctx.beginPath();
+      const pad = strokeWidth * 2;
+      ctx.rect(-pad, -pad, width + pad * 2, height + pad * 2);
+      // Re-draw shape path in reverse for cutout
+      if (cr > 0) {
+        ctx.moveTo(cr, 0);
+        ctx.lineTo(width - cr, 0);
+        ctx.arcTo(width, 0, width, cr, cr);
+        ctx.lineTo(width, height - cr);
+        ctx.arcTo(width, height, width - cr, height, cr);
+        ctx.lineTo(cr, height);
+        ctx.arcTo(0, height, 0, height - cr, cr);
+        ctx.lineTo(0, cr);
+        ctx.arcTo(0, 0, cr, 0, cr);
+        ctx.closePath();
+      } else {
+        ctx.rect(0, 0, width, height);
+      }
+      ctx.clip('evenodd');
+      // Now re-draw the shape and stroke
+      if (cr > 0) {
+        ctx.beginPath();
+        ctx.moveTo(cr, 0);
+        ctx.lineTo(width - cr, 0);
+        ctx.arcTo(width, 0, width, cr, cr);
+        ctx.lineTo(width, height - cr);
+        ctx.arcTo(width, height, width - cr, height, cr);
+        ctx.lineTo(cr, height);
+        ctx.arcTo(0, height, 0, height - cr, cr);
+        ctx.lineTo(0, cr);
+        ctx.arcTo(0, 0, cr, 0, cr);
+        ctx.closePath();
+      } else {
+        ctx.beginPath();
+        ctx.rect(0, 0, width, height);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+  };
+}
+
+/**
+ * Create a Konva sceneFunc for an Ellipse that handles inside/outside stroke alignment.
+ */
+export function makeEllipseSceneFunc(
+  width: number,
+  height: number,
+  fillColor: string | undefined,
+  strokeColor: string | undefined,
+  strokeWidth: number | undefined,
+  strokeAlign: 'center' | 'inside' | 'outside',
+): ((ctx: any, shape: any) => void) | undefined {
+  if (strokeAlign === 'center' || !strokeColor || !strokeWidth) return undefined;
+
+  const rx = width / 2;
+  const ry = height / 2;
+
+  return (ctx: any, _shape: any) => {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+    ctx.closePath();
+
+    if (fillColor) {
+      ctx.fillStyle = fillColor;
+      ctx.fill();
+    }
+
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = strokeWidth * 2;
+
+    if (strokeAlign === 'inside') {
+      ctx.save();
+      ctx.clip();
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      // outside
+      ctx.save();
+      ctx.beginPath();
+      const pad = strokeWidth * 2;
+      ctx.rect(-rx - pad, -ry - pad, width + pad * 2, height + pad * 2);
+      ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+      ctx.clip('evenodd');
+      ctx.beginPath();
+      ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  };
+}
+
+/**
+ * Create a Konva sceneFunc for a closed polygon (Line with closed=true) with stroke alignment.
+ */
+export function makePolygonSceneFunc(
+  points: number[],
+  fillColor: string | undefined,
+  strokeColor: string | undefined,
+  strokeWidth: number | undefined,
+  strokeAlign: 'center' | 'inside' | 'outside',
+): ((ctx: any, shape: any) => void) | undefined {
+  if (strokeAlign === 'center' || !strokeColor || !strokeWidth || points.length < 6) return undefined;
+
+  return (ctx: any, _shape: any) => {
+    // Draw polygon path
+    const drawPoly = () => {
+      ctx.beginPath();
+      ctx.moveTo(points[0], points[1]);
+      for (let i = 2; i < points.length; i += 2) {
+        ctx.lineTo(points[i], points[i + 1]);
+      }
+      ctx.closePath();
+    };
+
+    drawPoly();
+    if (fillColor) {
+      ctx.fillStyle = fillColor;
+      ctx.fill();
+    }
+
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = strokeWidth * 2;
+
+    if (strokeAlign === 'inside') {
+      ctx.save();
+      ctx.clip();
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      // outside
+      ctx.save();
+      // Compute bounding rect for clip
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (let i = 0; i < points.length; i += 2) {
+        if (points[i] < minX) minX = points[i];
+        if (points[i] > maxX) maxX = points[i];
+        if (points[i + 1] < minY) minY = points[i + 1];
+        if (points[i + 1] > maxY) maxY = points[i + 1];
+      }
+      const pad = strokeWidth * 2;
+      ctx.beginPath();
+      ctx.rect(minX - pad, minY - pad, maxX - minX + pad * 2, maxY - minY + pad * 2);
+      drawPoly();
+      ctx.clip('evenodd');
+      drawPoly();
+      ctx.stroke();
+      ctx.restore();
+    }
+  };
 }

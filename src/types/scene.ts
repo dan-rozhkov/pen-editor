@@ -83,6 +83,8 @@ export interface BaseNode {
   fill?: string
   stroke?: string
   strokeWidth?: number
+  // Stroke alignment: center (default canvas behavior), inside, or outside
+  strokeAlign?: 'center' | 'inside' | 'outside'
   // Per-side stroke widths (takes precedence over strokeWidth when set)
   strokeWidthPerSide?: PerSideStroke
   visible?: boolean // defaults to true

@@ -9,6 +9,7 @@ import {
   getHoverOutlineColor,
   getRectTransformProps,
   hasPerSideStroke,
+  makeRectSceneFunc,
 } from "./renderUtils";
 
 interface RectRendererProps {
@@ -67,6 +68,16 @@ export const RectRenderer = memo(function RectRenderer({
     onDragEnd(e);
   }, [onDragEnd]);
 
+  const align = node.strokeAlign ?? 'center';
+  const useAlignedStroke = align !== 'center' && !usePerSideStroke;
+  const alignedSceneFunc = useAlignedStroke
+    ? makeRectSceneFunc(
+        node.width, node.height, node.cornerRadius,
+        (node.imageFill || gradientProps) ? undefined : fillColor,
+        strokeColor, node.strokeWidth, align,
+      )
+    : undefined;
+
   return (
     <>
       <Rect
@@ -74,13 +85,14 @@ export const RectRenderer = memo(function RectRenderer({
         name="selectable"
         perfectDrawEnabled={false}
         {...rectTransform}
-        fill={node.imageFill || gradientProps ? undefined : fillColor}
-        {...(gradientProps && !node.imageFill ? gradientProps : {})}
+        fill={useAlignedStroke ? undefined : (node.imageFill || gradientProps ? undefined : fillColor)}
+        {...(!useAlignedStroke && gradientProps && !node.imageFill ? gradientProps : {})}
         {...(shadowProps || {})}
-        stroke={usePerSideStroke ? undefined : strokeColor}
-        strokeWidth={usePerSideStroke ? undefined : node.strokeWidth}
-        cornerRadius={node.cornerRadius}
+        stroke={usePerSideStroke || useAlignedStroke ? undefined : strokeColor}
+        strokeWidth={usePerSideStroke || useAlignedStroke ? undefined : node.strokeWidth}
+        cornerRadius={useAlignedStroke ? undefined : node.cornerRadius}
         opacity={node.opacity ?? 1}
+        sceneFunc={alignedSceneFunc}
         draggable
         onClick={onClick}
         onTap={onClick}
@@ -98,6 +110,7 @@ export const RectRenderer = memo(function RectRenderer({
           height={node.height}
           strokeColor={strokeColor}
           strokeWidthPerSide={node.strokeWidthPerSide}
+          strokeAlign={node.strokeAlign}
           rotation={node.rotation}
           flipX={node.flipX}
           flipY={node.flipY}
