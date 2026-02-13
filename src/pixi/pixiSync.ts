@@ -64,6 +64,20 @@ function pushAncestorThemes(
   return overrides.length;
 }
 
+function withAncestorThemes(
+  nodeId: string,
+  parentById: Record<string, string | null>,
+  nodesById: Record<string, FlatSceneNode>,
+  fn: () => void,
+): void {
+  const pushed = pushAncestorThemes(nodeId, parentById, nodesById);
+  try {
+    fn();
+  } finally {
+    for (let i = 0; i < pushed; i++) popRenderTheme();
+  }
+}
+
 /**
  * Convert flat frame to tree frame for layout calculation
  */
@@ -229,7 +243,19 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
           const frameEntry = registry.get(frameId);
           if (frameEntry) {
-            applyLayoutSize(frameEntry.container, frameEntry.node, frameWidth, frameHeight);
+            withAncestorThemes(
+              frameId,
+              state.parentById,
+              state.nodesById,
+              () => {
+                applyLayoutSize(
+                  frameEntry.container,
+                  frameEntry.node,
+                  frameWidth,
+                  frameHeight,
+                );
+              },
+            );
           }
 
           // Calculate layout
@@ -247,11 +273,18 @@ export function createPixiSync(sceneRoot: Container): () => void {
             const childEntry = registry.get(layoutChild.id);
             if (childEntry) {
               childEntry.container.position.set(layoutChild.x, layoutChild.y);
-              applyLayoutSize(
-                childEntry.container,
-                childEntry.node,
-                layoutChild.width,
-                layoutChild.height,
+              withAncestorThemes(
+                layoutChild.id,
+                state.parentById,
+                state.nodesById,
+                () => {
+                  applyLayoutSize(
+                    childEntry.container,
+                    childEntry.node,
+                    layoutChild.width,
+                    layoutChild.height,
+                  );
+                },
               );
             }
           }
@@ -443,14 +476,16 @@ export function createPixiSync(sceneRoot: Container): () => void {
           const isInAutoLayout = parentNode?.type === "frame" &&
             (parentNode as FlatFrameNode).layout?.autoLayout;
 
-          updateNodeContainer(
-            entry.container,
-            node,
-            entry.node,
-            state.nodesById,
-            state.childrenById,
-            isInAutoLayout, // skipPosition for auto-layout children
-          );
+          withAncestorThemes(id, state.parentById, state.nodesById, () => {
+            updateNodeContainer(
+              entry.container,
+              node,
+              entry.node,
+              state.nodesById,
+              state.childrenById,
+              isInAutoLayout, // skipPosition for auto-layout children
+            );
+          });
           entry.node = node;
         }
       }
@@ -480,15 +515,17 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
         if (!shouldRebuild) continue;
 
-        updateNodeContainer(
-          entry.container,
-          node,
-          node,
-          state.nodesById,
-          state.childrenById,
-          false,
-          true,
-        );
+        withAncestorThemes(id, state.parentById, state.nodesById, () => {
+          updateNodeContainer(
+            entry.container,
+            node,
+            node,
+            state.nodesById,
+            state.childrenById,
+            false,
+            true,
+          );
+        });
         entry.node = node;
       }
     }
@@ -518,17 +555,18 @@ export function createPixiSync(sceneRoot: Container): () => void {
     if (parentId && !registry.has(parentId)) return;
 
     // Push ancestor theme overrides so colors resolve correctly
-    const pushed = pushAncestorThemes(id, state.parentById, state.nodesById);
+    let container: Container;
+    withAncestorThemes(id, state.parentById, state.nodesById, () => {
+      container = createNodeContainer(
+        node,
+        state.nodesById,
+        state.childrenById,
+      );
+    });
+    // createNodeContainer is always assigned inside withAncestorThemes callback
+    const createdContainer = container!;
 
-    const container = createNodeContainer(
-      node,
-      state.nodesById,
-      state.childrenById,
-    );
-
-    for (let i = 0; i < pushed; i++) popRenderTheme();
-
-    registry.set(id, { container, node });
+    registry.set(id, { container: createdContainer, node });
 
     // Find parent and attach
     if (parentId) {
@@ -539,19 +577,19 @@ export function createPixiSync(sceneRoot: Container): () => void {
           parentEntry.container.getChildByLabel("group-children") ??
           parentEntry.container.getChildByLabel("ref-children");
         if (childrenHost) {
-          (childrenHost as Container).addChild(container);
+          (childrenHost as Container).addChild(createdContainer);
         }
       }
     } else {
       // Root node
-      sceneRoot.addChild(container);
+      sceneRoot.addChild(createdContainer);
     }
 
     // Register any nested children
-    registerChildrenRecursive(id, state.nodesById, state.childrenById, container);
+    registerChildrenRecursive(id, state.nodesById, state.childrenById, createdContainer);
 
     if (node.type === "text") {
-      const textObj = container.getChildByLabel("text-content") as Text | undefined;
+      const textObj = createdContainer.getChildByLabel("text-content") as Text | undefined;
       if (textObj && textObj.resolution !== appliedTextResolution) {
         textObj.resolution = appliedTextResolution;
       }
