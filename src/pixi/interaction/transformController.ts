@@ -1,6 +1,8 @@
 import { useSceneStore } from "@/store/sceneStore";
 import type { InteractionContext, TransformState } from "./types";
 import { hitTestTransformHandle, getResizeCursor } from "./hitTesting";
+import { generatePolygonPoints } from "@/utils/polygonUtils";
+import type { PolygonNode, LineNode } from "@/types/scene";
 
 export interface TransformController {
   handlePointerDown(e: PointerEvent, world: { x: number; y: number }): boolean;
@@ -22,6 +24,7 @@ export function createTransformController(context: InteractionContext): Transfor
     absY: 0,
     parentOffsetX: 0,
     parentOffsetY: 0,
+    startLinePoints: null,
   };
 
   return {
@@ -43,6 +46,7 @@ export function createTransformController(context: InteractionContext): Transfor
             state.absY = handleHit.absY;
             state.parentOffsetX = handleHit.absX - node.x;
             state.parentOffsetY = handleHit.absY - node.y;
+            state.startLinePoints = node.type === "line" ? [...(node as LineNode).points] : null;
             context.canvas.style.cursor = getResizeCursor(handleHit.corner);
             return true;
           }
@@ -109,12 +113,29 @@ export function createTransformController(context: InteractionContext): Transfor
           newY = state.startNodeY + (newTop - origTop);
         }
 
-        useSceneStore.getState().updateNodeWithoutHistory(state.nodeId, {
+        const roundedW = Math.round(newW);
+        const roundedH = Math.round(newH);
+        const updates: Record<string, unknown> = {
           x: Math.round(newX),
           y: Math.round(newY),
-          width: Math.round(newW),
-          height: Math.round(newH),
-        });
+          width: roundedW,
+          height: roundedH,
+        };
+
+        // Regenerate points for polygon/line nodes
+        const node = useSceneStore.getState().nodesById[state.nodeId];
+        if (node?.type === "polygon") {
+          const sides = (node as PolygonNode).sides ?? 6;
+          updates.points = generatePolygonPoints(sides, roundedW, roundedH);
+        } else if (node?.type === "line" && state.startLinePoints) {
+          const scaleFactorX = roundedW / state.startNodeW;
+          const scaleFactorY = roundedH / state.startNodeH;
+          updates.points = state.startLinePoints.map((v, i) =>
+            i % 2 === 0 ? v * scaleFactorX : v * scaleFactorY,
+          );
+        }
+
+        useSceneStore.getState().updateNodeWithoutHistory(state.nodeId, updates);
         return true;
       }
       return false;
@@ -126,12 +147,18 @@ export function createTransformController(context: InteractionContext): Transfor
         const node = sceneState.nodesById[state.nodeId];
         if (node) {
           // Commit the resize with history
-          useSceneStore.getState().updateNode(state.nodeId, {
+          const commitUpdates: Record<string, unknown> = {
             x: node.x,
             y: node.y,
             width: node.width,
             height: node.height,
-          });
+          };
+          if (node.type === "polygon") {
+            commitUpdates.points = (node as PolygonNode).points;
+          } else if (node.type === "line") {
+            commitUpdates.points = (node as LineNode).points;
+          }
+          useSceneStore.getState().updateNode(state.nodeId, commitUpdates);
         }
         state.isTransforming = false;
         state.nodeId = null;

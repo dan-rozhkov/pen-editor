@@ -64,6 +64,8 @@ export interface TransformState {
   absY: number;
   parentOffsetX: number;
   parentOffsetY: number;
+  /** Original line points at drag start (for scaling during resize) */
+  startLinePoints: number[] | null;
 }
 
 export interface InteractionContext {
