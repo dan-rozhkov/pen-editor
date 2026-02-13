@@ -142,12 +142,14 @@ function gatherNodeInfos(selectedIds: string[], allNodes: SceneNode[]): NodePosi
  * Determine dominant axis: 'horizontal' if nodes spread wider than tall, else 'vertical'
  */
 function getDominantAxis(nodeInfos: NodePositionInfo[]): 'horizontal' | 'vertical' {
-  const minX = Math.min(...nodeInfos.map((n) => n.absX))
-  const maxX = Math.max(...nodeInfos.map((n) => n.absX + n.effectiveWidth))
-  const minY = Math.min(...nodeInfos.map((n) => n.absY))
-  const maxY = Math.max(...nodeInfos.map((n) => n.absY + n.effectiveHeight))
+  // Use center-point spread to detect arrangement direction.
+  // Bounding-box dimensions can be misleading for tall/wide nodes.
+  const centerX = nodeInfos.map((n) => n.absX + n.effectiveWidth / 2)
+  const centerY = nodeInfos.map((n) => n.absY + n.effectiveHeight / 2)
+  const spreadX = Math.max(...centerX) - Math.min(...centerX)
+  const spreadY = Math.max(...centerY) - Math.min(...centerY)
 
-  return (maxX - minX) >= (maxY - minY) ? 'horizontal' : 'vertical'
+  return spreadX >= spreadY ? 'horizontal' : 'vertical'
 }
 
 /** Gather node infos, determine dominant axis, and return sorted array (or null if < 2) */
