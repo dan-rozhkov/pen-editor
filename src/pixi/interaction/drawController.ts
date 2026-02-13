@@ -5,6 +5,7 @@ import { useLayoutStore } from "@/store/layoutStore";
 import type { SceneNode } from "@/types/scene";
 import { generateId } from "@/types/scene";
 import { findTopmostFrameIntersectingRectWithLayout } from "@/utils/nodeUtils";
+import { generatePolygonPoints } from "@/utils/polygonUtils";
 import type { InteractionContext, DrawState } from "./types";
 
 export interface DrawController {
@@ -78,7 +79,9 @@ export function createDrawController(_context: InteractionContext): DrawControll
           points: [0, 0, width, height],
         };
         break;
-      case "polygon":
+      case "polygon": {
+        const sides = 6;
+        const points = generatePolygonPoints(sides, width, height);
         node = {
           id,
           type: "polygon",
@@ -86,11 +89,12 @@ export function createDrawController(_context: InteractionContext): DrawControll
           y,
           width,
           height,
-          fill: "#cccccc",
-          sides: 6,
-          points: [],
+          fill: "#50b87d",
+          sides,
+          points,
         };
         break;
+      }
       default:
         return;
     }
