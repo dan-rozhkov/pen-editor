@@ -18,6 +18,7 @@ import { useLayoutStore } from "@/store/layoutStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
+import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { findNodeById, getNodeAbsolutePositionWithLayout } from "@/utils/nodeUtils";
 import { findDescendantLocalPosition, prepareInstanceNode } from "@/components/nodes/instanceUtils";
 import { createPixiSync } from "./pixiSync";
@@ -57,6 +58,7 @@ export function PixiCanvas() {
     useSelectionStore();
   const { undo, redo, saveHistory, startBatch, endBatch } = useHistoryStore();
   const { activeTool, cancelDrawing, toggleTool } = useDrawModeStore();
+  const setPixiRefs = useCanvasRefStore((s) => s.setPixiRefs);
 
   // Selection data for inline editors
   const editingTextNode =
@@ -239,6 +241,14 @@ export function PixiCanvas() {
           sceneRoot,
         );
 
+        setPixiRefs({
+          app,
+          viewport,
+          sceneRoot,
+          overlayContainer,
+          selectionContainer,
+        });
+
         // Store cleanup functions
         (app as any)._pixiCleanup = () => {
           viewportCleanup();
@@ -251,6 +261,7 @@ export function PixiCanvas() {
 
     return () => {
       destroyed = true;
+      setPixiRefs(null);
       const a = appRef.current;
       if (a) {
         (a as any)._pixiCleanup?.();
@@ -258,7 +269,7 @@ export function PixiCanvas() {
         appRef.current = null;
       }
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [setPixiRefs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useCanvasResize(containerRef, setDimensions);
   useFpsCounter(setFps);

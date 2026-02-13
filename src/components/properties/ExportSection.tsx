@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
+import { useRendererStore } from "@/store/rendererStore";
 import { useViewportStore } from "@/store/viewportStore";
 import type { ExportFormat, ExportScale } from "@/utils/exportUtils";
 import type { SceneNode } from "@/types/scene";
@@ -13,22 +14,36 @@ interface ExportSectionProps {
 
 export function ExportSection({ selectedNode }: ExportSectionProps) {
   const stageRef = useCanvasRefStore((s) => s.stageRef);
+  const pixiRefs = useCanvasRefStore((s) => s.pixiRefs);
+  const rendererMode = useRendererStore((s) => s.rendererMode);
   const viewportScale = useViewportStore((s) => s.scale);
   const [scale, setScale] = useState<ExportScale>(1);
   const [format, setFormat] = useState<ExportFormat>("png");
 
   const handleExport = async () => {
+    const nodeId = selectedNode?.id || null;
+    const nodeName = selectedNode?.name;
+
+    if (rendererMode === "pixi") {
+      if (!pixiRefs) {
+        console.error("Pixi refs are not available");
+        return;
+      }
+      const { exportImageFromPixi } = await import("@/utils/exportUtils");
+      exportImageFromPixi(pixiRefs, nodeId, nodeName, {
+        format,
+        scale,
+        viewportScale,
+      });
+      return;
+    }
+
     if (!stageRef) {
       console.error("Stage ref not available");
       return;
     }
-
     const { exportImage } = await import("@/utils/exportUtils");
-    exportImage(stageRef, selectedNode?.id || null, selectedNode?.name, {
-      format,
-      scale,
-      viewportScale,
-    });
+    exportImage(stageRef, nodeId, nodeName, { format, scale, viewportScale });
   };
 
   const scaleOptions = [
