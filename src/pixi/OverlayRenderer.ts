@@ -27,6 +27,17 @@ const PIXEL_GRID_FADE_SCALE = 10;
 const PIXEL_GRID_BASE_OPACITY = 0.03;
 const PIXEL_GRID_LIGHT_COLOR = 0x000000;
 const PIXEL_GRID_DARK_COLOR = 0xffffff;
+const MEASURE_LABEL_STYLE = new TextStyle({
+  fontFamily: "system-ui, -apple-system, sans-serif",
+  fontSize: MEASURE_LABEL_FONT_SIZE,
+  fill: MEASURE_LABEL_TEXT_COLOR,
+});
+
+type MeasureLabelEntry = {
+  group: Container;
+  bg: Graphics;
+  text: Text;
+};
 
 /**
  * Create overlay renderer for smart guides, drop indicators, measure lines,
@@ -64,6 +75,29 @@ export function createOverlayRenderer(
   const marqueeGfx = new Graphics();
   marqueeGfx.label = "marquee-selection";
   overlayContainer.addChild(marqueeGfx);
+  const measureLabelPool: MeasureLabelEntry[] = [];
+  const activeMeasureLabels: MeasureLabelEntry[] = [];
+  let lastViewport = useViewportStore.getState();
+
+  function recycleMeasureLabels(): void {
+    while (activeMeasureLabels.length > 0) {
+      const entry = activeMeasureLabels.pop();
+      if (!entry) break;
+      measureLabels.removeChild(entry.group);
+      measureLabelPool.push(entry);
+    }
+  }
+
+  function getMeasureLabelEntry(): MeasureLabelEntry {
+    const pooled = measureLabelPool.pop();
+    if (pooled) return pooled;
+    const group = new Container();
+    const bg = new Graphics();
+    const text = new Text({ text: "", style: MEASURE_LABEL_STYLE });
+    group.addChild(bg);
+    group.addChild(text);
+    return { group, bg, text };
+  }
 
   function redrawPixelGrid(): void {
     pixelGridGfx.clear();
@@ -152,7 +186,7 @@ export function createOverlayRenderer(
 
   function redrawMeasureLines(): void {
     measureGfx.clear();
-    measureLabels.removeChildren().forEach((child) => child.destroy({ children: true }));
+    recycleMeasureLabels();
 
     const { lines } = useMeasureStore.getState();
     if (lines.length === 0) return;
@@ -200,28 +234,18 @@ export function createOverlayRenderer(
       // Centered label block (fixed screen size via inverse scaling).
       const centerX = (x1 + x2) / 2;
       const centerY = (y1 + y2) / 2;
-      const labelGroup = new Container();
-      labelGroup.position.set(centerX, centerY);
-      labelGroup.scale.set(invScale);
-
-      const textStyle = new TextStyle({
-        fontFamily: "system-ui, -apple-system, sans-serif",
-        fontSize: MEASURE_LABEL_FONT_SIZE,
-        fill: MEASURE_LABEL_TEXT_COLOR,
-      });
-      const text = new Text({ text: line.label, style: textStyle });
-      const bgWidth = text.width + MEASURE_LABEL_PADDING_X * 2;
+      const entry = getMeasureLabelEntry();
+      entry.group.position.set(centerX, centerY);
+      entry.group.scale.set(invScale);
+      entry.text.text = line.label;
+      const bgWidth = entry.text.width + MEASURE_LABEL_PADDING_X * 2;
       const bgHeight = MEASURE_LABEL_FONT_SIZE + MEASURE_LABEL_PADDING_Y * 2;
-
-      const bg = new Graphics();
-      bg.roundRect(-bgWidth / 2, -bgHeight / 2, bgWidth, bgHeight, MEASURE_LABEL_RADIUS);
-      bg.fill(MEASURE_COLOR);
-
-      text.position.set(-text.width / 2, -bgHeight / 2 + MEASURE_LABEL_PADDING_Y);
-
-      labelGroup.addChild(bg);
-      labelGroup.addChild(text);
-      measureLabels.addChild(labelGroup);
+      entry.bg.clear();
+      entry.bg.roundRect(-bgWidth / 2, -bgHeight / 2, bgWidth, bgHeight, MEASURE_LABEL_RADIUS);
+      entry.bg.fill(MEASURE_COLOR);
+      entry.text.position.set(-entry.text.width / 2, -bgHeight / 2 + MEASURE_LABEL_PADDING_Y);
+      measureLabels.addChild(entry.group);
+      activeMeasureLabels.push(entry);
     }
   }
 
@@ -268,13 +292,20 @@ export function createOverlayRenderer(
   const unsubMeasure = useMeasureStore.subscribe(redrawMeasureLines);
   const unsubDrawMode = useDrawModeStore.subscribe(redrawDrawPreview);
   const unsubMarquee = subscribeOverlayState(redrawMarquee);
-  const unsubViewport = useViewportStore.subscribe(() => {
-    redrawPixelGrid();
-    redrawGuides();
-    redrawDropIndicator();
-    redrawMeasureLines();
-    redrawDrawPreview();
-    redrawMarquee();
+  const unsubViewport = useViewportStore.subscribe((state) => {
+    const scaleChanged = state.scale !== lastViewport.scale;
+    const panChanged = state.x !== lastViewport.x || state.y !== lastViewport.y;
+    lastViewport = state;
+    if (panChanged || scaleChanged) {
+      redrawPixelGrid();
+    }
+    if (scaleChanged) {
+      redrawGuides();
+      redrawDropIndicator();
+      redrawMeasureLines();
+      redrawDrawPreview();
+      redrawMarquee();
+    }
   });
 
   // Initial draw
@@ -298,6 +329,12 @@ export function createOverlayRenderer(
     guidesGfx.destroy();
     dropGfx.destroy();
     measureGfx.destroy();
+    recycleMeasureLabels();
+    while (measureLabelPool.length > 0) {
+      const entry = measureLabelPool.pop();
+      if (!entry) break;
+      entry.group.destroy({ children: true });
+    }
     measureLabels.destroy({ children: true });
     drawPreviewGfx.destroy();
     marqueeGfx.destroy();

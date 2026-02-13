@@ -31,6 +31,26 @@ const SIZE_LABEL_CORNER_RADIUS = 3;
 const SIZE_LABEL_BG_DEFAULT = 0x0d99ff;
 const SIZE_LABEL_BG_COMPONENT = 0x9747ff;
 const SIZE_LABEL_TEXT_COLOR = "#ffffff";
+const SIZE_LABEL_STYLE = new TextStyle({
+  fontFamily: "system-ui, -apple-system, sans-serif",
+  fontSize: SIZE_LABEL_FONT_SIZE,
+  fill: SIZE_LABEL_TEXT_COLOR,
+});
+const FRAME_NAME_STYLE_NORMAL = new TextStyle({
+  fontFamily: "system-ui, -apple-system, sans-serif",
+  fontSize: LABEL_FONT_SIZE,
+  fill: LABEL_COLOR_NORMAL,
+});
+const FRAME_NAME_STYLE_SELECTED = new TextStyle({
+  fontFamily: "system-ui, -apple-system, sans-serif",
+  fontSize: LABEL_FONT_SIZE,
+  fill: LABEL_COLOR_SELECTED,
+});
+const FRAME_NAME_STYLE_COMPONENT = new TextStyle({
+  fontFamily: "system-ui, -apple-system, sans-serif",
+  fontSize: LABEL_FONT_SIZE,
+  fill: LABEL_COLOR_COMPONENT,
+});
 
 /**
  * Create the selection overlay that draws selection outlines, transform handles,
@@ -60,6 +80,7 @@ export function createSelectionOverlay(
   const sizeLabelsContainer = new Container();
   sizeLabelsContainer.label = "size-labels";
   selectionContainer.addChild(sizeLabelsContainer);
+  let lastScale = useViewportStore.getState().scale;
 
   function getAbsolutePosition(nodeId: string): { x: number; y: number } | null {
     const nodes = useSceneStore.getState().getNodes();
@@ -108,6 +129,8 @@ export function createSelectionOverlay(
     if (selectedIds.length === 0) return;
 
     const state = useSceneStore.getState();
+    const sceneNodes = state.getNodes();
+    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
 
     // Instance descendant selection: draw outline at descendant position
     if (instanceContext) {
@@ -172,12 +195,11 @@ export function createSelectionOverlay(
       const node = state.nodesById[id];
       if (!node) continue;
 
-      const absPos = getAbsolutePosition(id);
+      const absPos = getNodeAbsolutePositionWithLayout(sceneNodes, id, calculateLayoutForFrame);
       if (!absPos) continue;
 
       // Get effective size (may differ from node.width/height for layout children)
-      const nodes = useSceneStore.getState().getNodes();
-      const effectiveSize = getNodeEffectiveSize(nodes, id, useLayoutStore.getState().calculateLayoutForFrame);
+      const effectiveSize = getNodeEffectiveSize(sceneNodes, id, calculateLayoutForFrame);
       const width = effectiveSize?.width ?? node.width;
       const height = effectiveSize?.height ?? node.height;
 
@@ -260,13 +282,7 @@ export function createSelectionOverlay(
     const worldOffsetY = SIZE_LABEL_OFFSET_Y / scale;
     const displayText = `${Math.round(width)} × ${Math.round(height)}`;
 
-    const textStyle = new TextStyle({
-      fontFamily: "system-ui, -apple-system, sans-serif",
-      fontSize: SIZE_LABEL_FONT_SIZE,
-      fill: SIZE_LABEL_TEXT_COLOR,
-    });
-
-    const text = new Text({ text: displayText, style: textStyle });
+    const text = new Text({ text: displayText, style: SIZE_LABEL_STYLE });
     const textWidth = text.width;
 
     const bgWidth = textWidth + SIZE_LABEL_PADDING_X * 2;
@@ -318,8 +334,9 @@ export function createSelectionOverlay(
       const node = state.nodesById[frameId] as FlatFrameNode | FlatGroupNode;
       if (!node) continue;
 
-      const absPos = getAbsolutePosition(frameId);
-      if (!absPos) continue;
+      // We only show names for root-level frames/groups.
+      // Their absolute position matches root-space x/y directly.
+      const absPos = { x: node.x, y: node.y };
 
       const isSelected = selectedSet.has(frameId);
       const isReusable = node.type === "frame" && (node as FlatFrameNode).reusable;
@@ -334,13 +351,13 @@ export function createSelectionOverlay(
 
       const worldOffsetY = (LABEL_FONT_SIZE + LABEL_OFFSET_Y) / scale;
 
-      const textStyle = new TextStyle({
-        fontFamily: "system-ui, -apple-system, sans-serif",
-        fontSize: LABEL_FONT_SIZE,
-        fill: labelColor,
-      });
-
-      const text = new Text({ text: displayName, style: textStyle });
+      const style =
+        labelColor === LABEL_COLOR_COMPONENT
+          ? FRAME_NAME_STYLE_COMPONENT
+          : labelColor === LABEL_COLOR_SELECTED
+            ? FRAME_NAME_STYLE_SELECTED
+            : FRAME_NAME_STYLE_NORMAL;
+      const text = new Text({ text: displayName, style });
       text.position.set(absPos.x, absPos.y - worldOffsetY);
       text.scale.set(1 / scale);
 
@@ -427,6 +444,9 @@ export function createSelectionOverlay(
 
   // Redraw when viewport changes (stroke width compensation)
   const unsubViewport = useViewportStore.subscribe(() => {
+    const currentScale = useViewportStore.getState().scale;
+    if (currentScale === lastScale) return;
+    lastScale = currentScale;
     redrawSelection();
     redrawFrameNames();
     redrawHover();

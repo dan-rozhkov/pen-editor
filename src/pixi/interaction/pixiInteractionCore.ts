@@ -19,6 +19,8 @@ import { createMarqueeController } from "./marqueeController";
 import { createMeasurementController } from "./measurementController";
 import { prepareFrameNode, prepareInstanceNode } from "@/components/nodes/instanceUtils";
 
+const EMPTY_POINTER_EVENT = {} as PointerEvent;
+
 function findInstanceDescendantAtWorldPoint(
   instanceId: string,
   worldX: number,
@@ -60,6 +62,8 @@ export function setupPixiInteraction(
   const canvas = app.canvas as HTMLCanvasElement;
 
   let isSpaceHeld = false;
+  let hoverRafId: number | null = null;
+  let pendingHoverWorld: { x: number; y: number } | null = null;
 
   // Create interaction context
   const context: InteractionContext = {
@@ -77,6 +81,55 @@ export function setupPixiInteraction(
   const measurement = createMeasurementController(context);
 
   // --- Pointer handlers ---
+
+  function runHoverPass(world: { x: number; y: number }): void {
+    const hitId = findNodeAtPoint(world.x, world.y, { deepSelect: true });
+    const selectionState = useSelectionStore.getState();
+    const activeInstanceId = selectionState.instanceContext?.instanceId;
+    if (activeInstanceId && hitId === activeInstanceId) {
+      // When inside an instance context, resolve descendant under pointer for hover
+      const currentNodes = useSceneStore.getState().getNodes();
+      const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+      const descendantId = findInstanceDescendantAtWorldPoint(
+        activeInstanceId,
+        world.x,
+        world.y,
+        currentNodes,
+        calculateLayoutForFrame,
+      );
+      if (descendantId) {
+        useHoverStore.getState().setHoveredNode(descendantId, activeInstanceId);
+      } else {
+        useHoverStore.getState().setHoveredNode(hitId);
+      }
+    } else {
+      useHoverStore.getState().setHoveredNode(hitId);
+    }
+
+    // Measurement (Alt+hover)
+    measurement.handlePointerMove(EMPTY_POINTER_EVENT, world, hitId);
+
+    // Update cursor for transform handles
+    const handleHit = hitTestTransformHandle(world.x, world.y);
+    if (handleHit) {
+      canvas.style.cursor = getResizeCursor(handleHit.corner);
+    } else if (!drag.isDragging() && !pan.isPanning()) {
+      const { activeTool } = useDrawModeStore.getState();
+      canvas.style.cursor = activeTool && activeTool !== "cursor" ? "crosshair" : "";
+    }
+  }
+
+  function scheduleHoverPass(world: { x: number; y: number }): void {
+    pendingHoverWorld = world;
+    if (hoverRafId !== null) return;
+    hoverRafId = requestAnimationFrame(() => {
+      hoverRafId = null;
+      const latest = pendingHoverWorld;
+      pendingHoverWorld = null;
+      if (!latest) return;
+      runHoverPass(latest);
+    });
+  }
 
   function handlePointerDown(e: PointerEvent): void {
     const rect = canvas.getBoundingClientRect();
@@ -167,41 +220,8 @@ export function setupPixiInteraction(
     if (drag.handlePointerMove(e, world)) return;
     if (marquee.handlePointerMove(e, world)) return;
 
-    // Hover detection
-    const hitId = findNodeAtPoint(world.x, world.y, { deepSelect: true });
-    const selectionState = useSelectionStore.getState();
-    const activeInstanceId = selectionState.instanceContext?.instanceId;
-    if (activeInstanceId && hitId === activeInstanceId) {
-      // When inside an instance context, resolve descendant under pointer for hover
-      const currentNodes = useSceneStore.getState().getNodes();
-      const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-      const descendantId = findInstanceDescendantAtWorldPoint(
-        activeInstanceId,
-        world.x,
-        world.y,
-        currentNodes,
-        calculateLayoutForFrame,
-      );
-      if (descendantId) {
-        useHoverStore.getState().setHoveredNode(descendantId, activeInstanceId);
-      } else {
-        useHoverStore.getState().setHoveredNode(hitId);
-      }
-    } else {
-      useHoverStore.getState().setHoveredNode(hitId);
-    }
-
-    // Measurement (Alt+hover)
-    measurement.handlePointerMove(e, world, hitId);
-
-    // Update cursor for transform handles
-    const handleHit = hitTestTransformHandle(world.x, world.y);
-    if (handleHit) {
-      canvas.style.cursor = getResizeCursor(handleHit.corner);
-    } else if (!drag.isDragging() && !pan.isPanning()) {
-      const { activeTool } = useDrawModeStore.getState();
-      canvas.style.cursor = activeTool && activeTool !== "cursor" ? "crosshair" : "";
-    }
+    // Hover/hit-test path is expensive on big scenes; run at most once per frame.
+    scheduleHoverPass(world);
   }
 
   function handlePointerUp(e: PointerEvent): void {
@@ -349,6 +369,11 @@ export function setupPixiInteraction(
   window.addEventListener("keyup", handleKeyUp);
 
   return () => {
+    if (hoverRafId !== null) {
+      cancelAnimationFrame(hoverRafId);
+      hoverRafId = null;
+    }
+    pendingHoverWorld = null;
     canvas.removeEventListener("wheel", handleWheel);
     canvas.removeEventListener("pointerdown", handlePointerDown);
     canvas.removeEventListener("pointermove", handlePointerMove);

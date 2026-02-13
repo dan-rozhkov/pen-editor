@@ -19,6 +19,19 @@ const LABEL_FONT_SIZE = 11;
 const LABEL_OFFSET_Y = 4;
 const LABEL_HIT_PADDING = 2;
 const LABEL_FONT_FAMILY = "system-ui, -apple-system, sans-serif";
+const LABEL_TEXT_STYLE = new TextStyle({
+  fontFamily: LABEL_FONT_FAMILY,
+  fontSize: LABEL_FONT_SIZE,
+});
+const labelWidthCache = new Map<string, number>();
+
+function getLabelWidth(text: string): number {
+  const cached = labelWidthCache.get(text);
+  if (cached !== undefined) return cached;
+  const measured = CanvasTextMetrics.measureText(text, LABEL_TEXT_STYLE).width;
+  labelWidthCache.set(text, measured);
+  return measured;
+}
 
 /**
  * Convert screen coordinates to world coordinates
@@ -39,8 +52,6 @@ export function findFrameLabelAtPoint(worldX: number, worldY: number): string | 
   const scene = useSceneStore.getState();
   const { editingNodeId, editingMode } = useSelectionStore.getState();
   const scale = useViewportStore.getState().scale || 1;
-  const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-  const treeNodes = scene.getNodes();
 
   const frameIds: string[] = [];
 
@@ -62,33 +73,25 @@ export function findFrameLabelAtPoint(worldX: number, worldY: number): string | 
     const node = scene.nodesById[frameId];
     if (!node) continue;
 
-    const absPos = getNodeAbsolutePositionWithLayout(
-      treeNodes,
-      frameId,
-      calculateLayoutForFrame,
-    );
-    if (!absPos) continue;
+    // We only draw labels for top-level frames/groups.
+    // Their absolute position is the local x/y in root space.
+    const labelX = node.x;
+    const labelY = node.y;
 
     const defaultName = node.type === "group" ? "Group" : "Frame";
     const displayName = node.name || defaultName;
 
     const worldOffsetY = (LABEL_FONT_SIZE + LABEL_OFFSET_Y) / scale;
-    const labelX = absPos.x;
-    const labelY = absPos.y - worldOffsetY;
-    const textStyle = new TextStyle({
-      fontFamily: LABEL_FONT_FAMILY,
-      fontSize: LABEL_FONT_SIZE,
-    });
-    const textMetrics = CanvasTextMetrics.measureText(displayName, textStyle);
-    const labelW = textMetrics.width / scale;
+    const labelWorldY = labelY - worldOffsetY;
+    const labelW = getLabelWidth(displayName) / scale;
     const labelH = LABEL_FONT_SIZE / scale;
     const padding = LABEL_HIT_PADDING / scale;
 
     if (
       worldX >= labelX - padding &&
       worldX <= labelX + labelW + padding &&
-      worldY >= labelY - padding &&
-      worldY <= labelY + labelH + padding
+      worldY >= labelWorldY - padding &&
+      worldY <= labelWorldY + labelH + padding
     ) {
       return frameId;
     }
