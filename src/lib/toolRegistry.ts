@@ -1,3 +1,9 @@
+import { getEditorState } from "./tools/getEditorState";
+import { batchGet } from "./tools/batchGet";
+import { snapshotLayout } from "./tools/snapshotLayout";
+import { getVariables } from "./tools/getVariables";
+import { getScreenshot } from "./tools/getScreenshot";
+
 export type ToolHandler = (
   args: Record<string, unknown>
 ) => Promise<string>;
@@ -8,12 +14,12 @@ const stub =
     JSON.stringify({ error: `Tool "${name}" not implemented yet` });
 
 export const toolHandlers: Record<string, ToolHandler> = {
-  get_editor_state: stub("get_editor_state"),
+  get_editor_state: getEditorState,
   open_document: stub("open_document"),
-  batch_get: stub("batch_get"),
-  snapshot_layout: stub("snapshot_layout"),
-  get_screenshot: stub("get_screenshot"),
-  get_variables: stub("get_variables"),
+  batch_get: batchGet,
+  snapshot_layout: snapshotLayout,
+  get_screenshot: getScreenshot,
+  get_variables: getVariables,
   batch_design: stub("batch_design"),
   set_variables: stub("set_variables"),
   replace_all_matching_properties: stub("replace_all_matching_properties"),
