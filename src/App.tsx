@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { RightSidebar } from "./components/RightSidebar";
 import { PrimitivesPanel } from "./components/PrimitivesPanel";
+import { ChatPanel } from "./components/chat/ChatPanel";
 import { useRendererStore } from "./store/rendererStore";
 import "./store/uiThemeStore"; // Initialize UI theme (applies .dark class before first render)
 
@@ -20,6 +21,7 @@ function App() {
             {rendererMode === "pixi" ? <PixiCanvas /> : <Canvas />}
           </Suspense>
           <PrimitivesPanel />
+          <ChatPanel />
         </div>
         <RightSidebar />
       </div>
