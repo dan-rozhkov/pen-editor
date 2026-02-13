@@ -9,3 +9,13 @@
   - Fix: import generatePolygonPoints() and call it at creation time, matching Konva handler
   - Also aligned default fill color to #50b87d (was #cccccc)
   - Tested in browser: polygon renders correctly with fill and stroke in PixiJS, matches Konva output
+
+2026-02-13: design-agent-chat-ui — Added floating Design Agent chat panel UI.
+  - Types: ChatMessage, ToolCall, MessageRole, ToolCallStatus in src/types/chat.ts
+  - Store: chatStore with messages, streaming state, tool call management
+  - Components: ChatPanel, MessageList, ChatInput, SimpleMarkdown, ToolCallIndicator
+  - SparkleIcon toggle button in bottom toolbar (PrimitivesPanel) with active highlight
+  - Markdown: bold, inline code, fenced code blocks, bullet/ordered lists
+  - Tool calls: collapsible indicator with spinner/check/x per status
+  - Auto-resize textarea, Enter to send, Shift+Enter for newline
+  - Tested in browser: messages render, shortcuts don't fire while typing, canvas click-through works

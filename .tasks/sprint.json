@@ -6,5 +6,29 @@
   {
     "name": "pixi-polygon-not-working",
     "passed": true
+  },
+  {
+    "name": "design-agent-chat-ui",
+    "passed": true
+  },
+  {
+    "name": "design-agent-ai-integration",
+    "passed": false
+  },
+  {
+    "name": "design-agent-read-tools",
+    "passed": false
+  },
+  {
+    "name": "design-agent-batch-design",
+    "passed": false
+  },
+  {
+    "name": "design-agent-mutation-tools",
+    "passed": false
+  },
+  {
+    "name": "design-agent-backend-update",
+    "passed": false
   }
 ]
