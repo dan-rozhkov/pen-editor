@@ -3,3 +3,9 @@
   - Konva: sceneFunc with clip/evenodd for inside/outside on rect, frame, ellipse, polygon, path
   - PixiJS: native alignment parameter (0/0.5/1) for unified strokes; per-side offset for per-side strokes
   - Tested in browser: UI renders, center/inside alignment visually verified on rect
+
+2026-02-13: pixi-polygon-not-working — Fixed polygon not rendering in PixiJS backend.
+  - Root cause: PixiJS drawController created polygon nodes with empty points array (points: [])
+  - Fix: import generatePolygonPoints() and call it at creation time, matching Konva handler
+  - Also aligned default fill color to #50b87d (was #cccccc)
+  - Tested in browser: polygon renders correctly with fill and stroke in PixiJS, matches Konva output

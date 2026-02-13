@@ -5,6 +5,6 @@
   },
   {
     "name": "pixi-polygon-not-working",
-    "passed": false
+    "passed": true
   }
 ]
