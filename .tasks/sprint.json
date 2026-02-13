@@ -1,0 +1,10 @@
+[
+  {
+    "name": "stroke-align",
+    "passed": true
+  },
+  {
+    "name": "pixi-polygon-not-working",
+    "passed": false
+  }
+]
