@@ -5,11 +5,11 @@ import { ToolCallIndicator } from "./ToolCallIndicator";
 
 function StreamingIndicator() {
   return (
-    <div className="flex items-center gap-1 px-3 py-2">
+    <div className="h-5 flex items-center gap-1">
       {[0, 1, 2].map((i) => (
         <span
           key={i}
-          className="w-1.5 h-1.5 rounded-full bg-text-muted animate-bounce"
+          className="w-1 h-1 rounded-full bg-text-muted animate-bounce"
           style={{ animationDelay: `${i * 150}ms` }}
         />
       ))}
@@ -102,7 +102,13 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
         );
       })}
 
-      {showTrailingIndicator && <StreamingIndicator />}
+      {showTrailingIndicator && (
+        <div className="flex justify-start">
+          <div className="max-w-[85%] rounded-xl px-3 py-2 text-text-primary">
+            <StreamingIndicator />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

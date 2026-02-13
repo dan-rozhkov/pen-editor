@@ -26,7 +26,7 @@ export function ChatPanel() {
 
   return (
     <div className="absolute top-0 right-0 bottom-0 z-40 pointer-events-none">
-      <div className="pointer-events-auto w-[360px] h-full bg-surface-panel/95 backdrop-blur-sm border-l border-border-default flex flex-col">
+      <div className="pointer-events-auto w-[360px] h-full bg-surface-panel border-l border-border-default flex flex-col">
         {/* Header */}
         <div className="flex items-center gap-2 px-3 py-2 border-b border-border-default shrink-0">
           <span className="text-sm font-medium text-text-primary flex-1">

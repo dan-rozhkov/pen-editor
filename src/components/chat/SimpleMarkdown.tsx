@@ -91,7 +91,7 @@ function renderLines(text: string): React.ReactNode[] {
         i++;
       }
       nodes.push(
-        <ul key={key++} className="list-disc pl-4 space-y-0.5">
+        <ul key={key++} className="m-0 list-disc pl-4 space-y-0.5">
           {items.map((item, j) => (
             <li key={j}>{renderInline(item)}</li>
           ))}
@@ -104,7 +104,7 @@ function renderLines(text: string): React.ReactNode[] {
         i++;
       }
       nodes.push(
-        <ol key={key++} className="list-decimal pl-4 space-y-0.5">
+        <ol key={key++} className="m-0 list-decimal pl-4 space-y-0.5">
           {items.map((item, j) => (
             <li key={j}>{renderInline(item)}</li>
           ))}
@@ -114,7 +114,11 @@ function renderLines(text: string): React.ReactNode[] {
       nodes.push(<br key={key++} />);
       i++;
     } else {
-      nodes.push(<p key={key++}>{renderInline(line)}</p>);
+      nodes.push(
+        <p key={key++} className="m-0">
+          {renderInline(line)}
+        </p>
+      );
       i++;
     }
   }
@@ -129,7 +133,7 @@ export function SimpleMarkdown({ content }: SimpleMarkdownProps) {
         return (
           <pre
             key={i}
-            className="rounded bg-surface-elevated p-2 overflow-x-auto text-xs font-mono"
+            className="m-0 rounded bg-surface-elevated p-2 overflow-x-auto text-xs font-mono"
           >
             <code>{block.text}</code>
           </pre>
