@@ -1,13 +1,24 @@
 import { XIcon, TrashIcon } from "@phosphor-icons/react";
 import { useChatStore } from "@/store/chatStore";
+import { useDesignChat } from "@/hooks/useDesignChat";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
 
 export function ChatPanel() {
   const isOpen = useChatStore((s) => s.isOpen);
   const close = useChatStore((s) => s.close);
-  const clearMessages = useChatStore((s) => s.clearMessages);
-  const messageCount = useChatStore((s) => s.messages.length);
+
+  const {
+    messages,
+    input,
+    setInput,
+    sendMessage,
+    isLoading,
+    stop,
+    error,
+    clearError,
+    setMessages,
+  } = useDesignChat();
 
   if (!isOpen) {
     return null;
@@ -21,9 +32,9 @@ export function ChatPanel() {
           <span className="text-sm font-medium text-text-primary flex-1">
             Design Agent
           </span>
-          {messageCount > 0 && (
+          {messages.length > 0 && (
             <button
-              onClick={clearMessages}
+              onClick={() => setMessages([])}
               className="p-1 rounded-lg hover:bg-surface-hover text-text-muted transition-colors"
               title="Clear messages"
             >
@@ -39,11 +50,32 @@ export function ChatPanel() {
           </button>
         </div>
 
+        {/* Error banner */}
+        {error && (
+          <div className="px-3 py-2 bg-red-500/10 border-b border-red-500/20 text-xs text-red-400 flex items-center gap-2">
+            <span className="flex-1 truncate">
+              {error.message || "Something went wrong"}
+            </span>
+            <button
+              onClick={clearError}
+              className="shrink-0 text-red-300 hover:text-red-100 underline"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {/* Messages */}
-        <MessageList />
+        <MessageList messages={messages} isLoading={isLoading} />
 
         {/* Input */}
-        <ChatInput />
+        <ChatInput
+          input={input}
+          setInput={setInput}
+          onSubmit={sendMessage}
+          isLoading={isLoading}
+          stop={stop}
+        />
       </div>
     </div>
   );

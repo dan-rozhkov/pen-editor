@@ -1,18 +1,2 @@
-export type MessageRole = "user" | "assistant";
-export type ToolCallStatus = "running" | "completed" | "error";
-
-export interface ToolCall {
-  id: string;
-  toolName: string;
-  status: ToolCallStatus;
-  result?: string;
-  error?: string;
-}
-
-export interface ChatMessage {
-  id: string;
-  role: MessageRole;
-  content: string;
-  timestamp: number;
-  toolCalls?: ToolCall[];
-}
+// Chat types are now provided by the `ai` package (Message, ToolInvocation).
+// This file is kept as a placeholder for any future app-specific chat types.

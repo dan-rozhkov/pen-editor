@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from "react";
-import { useChatStore } from "@/store/chatStore";
+import type { UIMessage, DynamicToolUIPart } from "ai";
 import { SimpleMarkdown } from "./SimpleMarkdown";
 import { ToolCallIndicator } from "./ToolCallIndicator";
 
@@ -17,11 +17,12 @@ function StreamingIndicator() {
   );
 }
 
-export function MessageList() {
-  const messages = useChatStore((s) => s.messages);
-  const isStreaming = useChatStore((s) => s.isStreaming);
-  const streamingMessageId = useChatStore((s) => s.streamingMessageId);
+interface MessageListProps {
+  messages: UIMessage[];
+  isLoading: boolean;
+}
 
+export function MessageList({ messages, isLoading }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isAutoScrollRef = useRef(true);
 
@@ -38,7 +39,11 @@ export function MessageList() {
     if (el) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [messages.length, isStreaming]);
+  }, [messages, isLoading]);
+
+  const lastMessage = messages[messages.length - 1];
+  const showTrailingIndicator =
+    isLoading && (!lastMessage || lastMessage.role === "user");
 
   return (
     <div
@@ -55,8 +60,27 @@ export function MessageList() {
 
       {messages.map((msg) => {
         const isUser = msg.role === "user";
-        const isCurrentStreaming =
-          isStreaming && msg.id === streamingMessageId;
+
+        const textContent = msg.parts
+          .filter(
+            (p): p is { type: "text"; text: string } => p.type === "text"
+          )
+          .map((p) => p.text)
+          .join("");
+
+        const toolParts = msg.parts.filter(
+          (p): p is DynamicToolUIPart => p.type === "dynamic-tool"
+        );
+        const hasContent = textContent.length > 0;
+        const hasTools = toolParts.length > 0;
+
+        // Show streaming indicator for assistant messages that are empty and still loading
+        const isEmptyStreaming =
+          isLoading &&
+          msg === lastMessage &&
+          msg.role === "assistant" &&
+          !hasContent &&
+          !hasTools;
 
         return (
           <div
@@ -66,21 +90,19 @@ export function MessageList() {
             <div
               className={`max-w-[85%] rounded-xl px-3 py-2 ${
                 isUser
-                  ? "bg-accent-primary text-white"
-                  : "bg-surface-elevated text-text-primary"
+                  ? "rounded-md bg-secondary text-secondary-foreground transition-colors"
+                  : "text-text-primary"
               }`}
             >
-              <SimpleMarkdown content={msg.content} />
-              {msg.toolCalls && msg.toolCalls.length > 0 && (
-                <ToolCallIndicator toolCalls={msg.toolCalls} />
-              )}
-              {isCurrentStreaming && !msg.content && <StreamingIndicator />}
+              {hasContent && <SimpleMarkdown content={textContent} />}
+              {hasTools && <ToolCallIndicator toolParts={toolParts} />}
+              {isEmptyStreaming && <StreamingIndicator />}
             </div>
           </div>
         );
       })}
 
-      {isStreaming && !streamingMessageId && <StreamingIndicator />}
+      {showTrailingIndicator && <StreamingIndicator />}
     </div>
   );
 }
