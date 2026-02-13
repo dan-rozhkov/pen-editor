@@ -5,11 +5,6 @@ import { useViewportStore } from "@/store/viewportStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import type { SceneNode, FrameNode } from "@/types/scene";
 import {
-  findNodeById,
-  getNodeAbsolutePositionWithLayout,
-  getNodeEffectiveSize,
-} from "@/utils/nodeUtils";
-import {
   getPreparedNodeEffectiveSize,
   prepareFrameNode,
 } from "@/components/nodes/instanceUtils";
@@ -109,23 +104,66 @@ export function findNodeAtPoint(
   worldY: number,
   options?: { deepSelect?: boolean },
 ): string | null {
-  if (options?.deepSelect) {
-    return findDeepestNodeAtPoint(worldX, worldY);
-  }
-
   const state = useSceneStore.getState();
+  const sceneNodes = state.getNodes();
+  const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+  const deepSelect = options?.deepSelect === true;
+  const selectedSet = deepSelect
+    ? null
+    : new Set(useSelectionStore.getState().selectedIds);
+  const enteredContainerId = deepSelect
+    ? null
+    : useSelectionStore.getState().enteredContainerId;
 
-  // Walk rootIds in reverse (top-most first)
-  for (let i = state.rootIds.length - 1; i >= 0; i--) {
-    const hit = hitTestNode(
-      state.rootIds[i],
-      worldX,
-      worldY,
-      0,
-      0,
-      state,
-      false,
+  const hitNode = (
+    node: SceneNode,
+    parentAbsX: number,
+    parentAbsY: number,
+  ): string | null => {
+    if (node.visible === false) return null;
+
+    const absX = parentAbsX + node.x;
+    const absY = parentAbsY + node.y;
+    const { width, height } = getPreparedNodeEffectiveSize(
+      node,
+      sceneNodes,
+      calculateLayoutForFrame,
     );
+
+    if (
+      worldX < absX ||
+      worldX > absX + width ||
+      worldY < absY ||
+      worldY > absY + height
+    ) {
+      return null;
+    }
+
+    const childNodes =
+      node.type === "frame" && node.layout?.autoLayout
+        ? prepareFrameNode(node, calculateLayoutForFrame).layoutChildren
+        : node.type === "frame" || node.type === "group"
+          ? node.children
+          : [];
+
+    for (let i = childNodes.length - 1; i >= 0; i--) {
+      const child = childNodes[i];
+      const childHit = hitNode(child, absX, absY);
+      if (!childHit) continue;
+
+      if (deepSelect) return childHit;
+      if (selectedSet?.has(childHit)) return childHit;
+      if (enteredContainerId === node.id) return childHit;
+      if (state.parentById[node.id] === null) return node.id;
+      return node.id;
+    }
+
+    return node.id;
+  };
+
+  // Walk root nodes in reverse (top-most first).
+  for (let i = sceneNodes.length - 1; i >= 0; i--) {
+    const hit = hitNode(sceneNodes[i], 0, 0);
     if (hit) return hit;
   }
   return null;
@@ -136,136 +174,7 @@ export function findNodeAtPoint(
  * Returns the deepest node under cursor using layout-aware child positions.
  */
 export function findDeepestNodeAtPoint(worldX: number, worldY: number): string | null {
-  const state = useSceneStore.getState();
-  const sceneNodes = state.getNodes();
-  const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-
-  const hitInList = (
-    nodes: SceneNode[],
-    parentAbsX: number,
-    parentAbsY: number,
-  ): string | null => {
-    for (let i = nodes.length - 1; i >= 0; i--) {
-      const node = nodes[i];
-      if (node.visible === false) continue;
-
-      const absX = parentAbsX + node.x;
-      const absY = parentAbsY + node.y;
-      const { width, height } = getPreparedNodeEffectiveSize(
-        node,
-        sceneNodes,
-        calculateLayoutForFrame,
-      );
-
-      if (
-        worldX < absX ||
-        worldX > absX + width ||
-        worldY < absY ||
-        worldY > absY + height
-      ) {
-        continue;
-      }
-
-      if (node.type === "frame" || node.type === "group") {
-        const childList =
-          node.type === "frame" && node.layout?.autoLayout
-            ? prepareFrameNode(node, calculateLayoutForFrame).layoutChildren
-            : node.children;
-        const childHit = hitInList(childList, absX, absY);
-        if (childHit) return childHit;
-      }
-
-      return node.id;
-    }
-    return null;
-  };
-
-  return hitInList(sceneNodes, 0, 0);
-}
-
-/**
- * Recursive hit test for a node and its children.
- */
-export function hitTestNode(
-  nodeId: string,
-  worldX: number,
-  worldY: number,
-  _parentAbsX: number,
-  _parentAbsY: number,
-  state: typeof useSceneStore extends { getState: () => infer S } ? S : never,
-  deepSelect: boolean,
-): string | null {
-  const sceneNodes = state.getNodes();
-  const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-  const treeNode = findNodeById(sceneNodes, nodeId);
-  const node = state.nodesById[nodeId];
-  if (!node || !treeNode || node.visible === false) return null;
-
-  const absPos = getNodeAbsolutePositionWithLayout(
-    sceneNodes,
-    nodeId,
-    calculateLayoutForFrame,
-  );
-  if (!absPos) return null;
-  const absX = absPos.x;
-  const absY = absPos.y;
-  const effectiveSize = getNodeEffectiveSize(
-    sceneNodes,
-    nodeId,
-    calculateLayoutForFrame,
-  );
-  const width = effectiveSize?.width ?? node.width;
-  const height = effectiveSize?.height ?? node.height;
-
-  // Check if point is within bounds
-  if (
-    worldX < absX ||
-    worldX > absX + width ||
-    worldY < absY ||
-    worldY > absY + height
-  ) {
-    return null;
-  }
-
-  // Check children first (deeper elements have priority)
-  const childNodes =
-    treeNode.type === "frame" && treeNode.layout?.autoLayout
-      ? prepareFrameNode(treeNode, calculateLayoutForFrame).layoutChildren
-      : treeNode.type === "frame" || treeNode.type === "group"
-        ? treeNode.children
-        : [];
-  for (let i = childNodes.length - 1; i >= 0; i--) {
-    const childId = childNodes[i].id;
-    const childHit = hitTestNode(
-      childId,
-      worldX,
-      worldY,
-      absX,
-      absY,
-      state,
-      deepSelect,
-    );
-    if (childHit) {
-      if (deepSelect) return childHit;
-      const selectedIds = useSelectionStore.getState().selectedIds;
-      if (selectedIds.includes(childHit)) {
-        return childHit;
-      }
-      // Nested selection logic: check if we should select the child or the parent
-      const enteredContainerId = useSelectionStore.getState().enteredContainerId;
-      if (enteredContainerId === nodeId) {
-        return childHit;
-      }
-      // If this is a top-level frame, select the frame itself (not children)
-      // unless user has entered the container via double-click
-      if (state.parentById[nodeId] === null) {
-        return nodeId;
-      }
-      return nodeId;
-    }
-  }
-
-  return nodeId;
+  return findNodeAtPoint(worldX, worldY, { deepSelect: true });
 }
 
 /**
@@ -285,18 +194,41 @@ export function hitTestTransformHandle(worldX: number, worldY: number): {
 
   const state = useSceneStore.getState();
   const nodeId = selectedIds[0];
-  const node = state.nodesById[nodeId];
-  if (!node) return null;
-
   const treeNodes = state.getNodes();
   const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-  const absPos = getNodeAbsolutePositionWithLayout(treeNodes, nodeId, calculateLayoutForFrame);
-  if (!absPos) return null;
-  const effectiveSize = getNodeEffectiveSize(treeNodes, nodeId, calculateLayoutForFrame);
-  const width = effectiveSize?.width ?? node.width;
-  const height = effectiveSize?.height ?? node.height;
-  const absX = absPos.x;
-  const absY = absPos.y;
+  let bounds: { x: number; y: number; width: number; height: number } | null = null;
+
+  const findBounds = (
+    nodes: SceneNode[],
+    parentAbsX: number,
+    parentAbsY: number,
+  ): boolean => {
+    for (const n of nodes) {
+      const absX = parentAbsX + n.x;
+      const absY = parentAbsY + n.y;
+      const { width, height } = getPreparedNodeEffectiveSize(
+        n,
+        treeNodes,
+        calculateLayoutForFrame,
+      );
+      if (n.id === nodeId) {
+        bounds = { x: absX, y: absY, width, height };
+        return true;
+      }
+
+      const children =
+        n.type === "frame" && n.layout?.autoLayout
+          ? prepareFrameNode(n, calculateLayoutForFrame).layoutChildren
+          : n.type === "frame" || n.type === "group"
+            ? n.children
+            : null;
+      if (children && findBounds(children, absX, absY)) return true;
+    }
+    return false;
+  };
+
+  if (!findBounds(treeNodes, 0, 0) || !bounds) return null;
+  const { x: absX, y: absY, width, height } = bounds;
 
   const scale = useViewportStore.getState().scale;
   const handleRadius = 6 / scale; // Hit area slightly larger than visual handle

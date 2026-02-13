@@ -25,6 +25,8 @@ type NodeLayoutOverride = {
   height?: number;
 };
 
+type AutoLayoutFrameSet = Set<string>;
+
 function isDescendantOf(
   parentById: Record<string, string | null>,
   ancestorId: string,
@@ -204,7 +206,49 @@ export function createPixiSync(sceneRoot: Container): () => void {
   /**
    * Apply auto-layout positions to frame children
    */
-  function applyAutoLayoutPositions(state: SceneState): void {
+  function collectDirtyAutoLayoutFrames(
+    state: SceneState,
+    changedIds: Set<string>,
+  ): AutoLayoutFrameSet {
+    const dirty = new Set<string>();
+
+    const markAutoLayoutAncestors = (startId: string): void => {
+      let current: string | null = startId;
+      while (current != null) {
+        const n = state.nodesById[current];
+        if (n?.type === "frame" && (n as FlatFrameNode).layout?.autoLayout) {
+          dirty.add(current);
+        }
+        current = state.parentById[current] ?? null;
+      }
+    };
+
+    for (const id of changedIds) {
+      markAutoLayoutAncestors(id);
+    }
+
+    // Keep only top-most dirty auto-layout frames.
+    const minimal = new Set<string>();
+    for (const frameId of dirty) {
+      let hasDirtyAncestor = false;
+      let cur = state.parentById[frameId] ?? null;
+      while (cur != null) {
+        if (dirty.has(cur)) {
+          hasDirtyAncestor = true;
+          break;
+        }
+        cur = state.parentById[cur] ?? null;
+      }
+      if (!hasDirtyAncestor) minimal.add(frameId);
+    }
+
+    return minimal;
+  }
+
+  function applyAutoLayoutPositions(
+    state: SceneState,
+    dirtyFrames?: AutoLayoutFrameSet,
+  ): void {
     const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
     const layoutOverrides = new Map<string, NodeLayoutOverride>();
 
@@ -300,7 +344,14 @@ export function createPixiSync(sceneRoot: Container): () => void {
       }
     };
 
-    // Process from roots to guarantee parent overrides are known before children.
+    if (dirtyFrames && dirtyFrames.size > 0) {
+      for (const frameId of dirtyFrames) {
+        applyFrameLayoutRecursively(frameId);
+      }
+      return;
+    }
+
+    // Full pass from roots.
     for (const rootId of state.rootIds) {
       const rootNode = state.nodesById[rootId];
       if (rootNode?.type === "frame") {
@@ -535,8 +586,11 @@ export function createPixiSync(sceneRoot: Container): () => void {
       reconcileChildren(state, prev);
     }
 
-    // Always reapply auto-layout positions after any update
-    applyAutoLayoutPositions(state);
+    // Reapply only affected auto-layout frame chains.
+    const dirtyAutoLayoutFrames = collectDirtyAutoLayoutFrames(state, changedIds);
+    if (dirtyAutoLayoutFrames.size > 0) {
+      applyAutoLayoutPositions(state, dirtyAutoLayoutFrames);
+    }
     applyTextEditingVisibility();
   }
 
