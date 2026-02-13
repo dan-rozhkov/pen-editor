@@ -1,4 +1,5 @@
 import type { SceneNode, FrameNode, GroupNode } from "../types/scene";
+import type { ThemeName } from "../types/variable";
 import { isContainerNode } from "../types/scene";
 import { findComponentById as findComponentByIdImpl, getAllComponents as getAllComponentsImpl } from "./componentUtils";
 import { getPreparedNodeEffectiveSize, prepareFrameNode } from "@/components/nodes/instanceUtils";
@@ -158,6 +159,58 @@ export function getAncestorIds(
     current = parentById[current];
   }
   return ancestors;
+}
+
+/**
+ * Resolve effective theme for a node by walking ancestor frames.
+ * Frame `themeOverride` affects descendants, not the frame itself.
+ */
+export function getThemeFromAncestorFrames(
+  parentById: Record<string, string | null>,
+  nodesById: Record<string, { type: string; themeOverride?: ThemeName }>,
+  nodeId: string,
+  fallbackTheme: ThemeName,
+): ThemeName {
+  const ancestors = getAncestorIds(parentById, nodeId);
+  let theme: ThemeName = fallbackTheme;
+
+  // Apply from root ancestor down to immediate parent.
+  for (let i = ancestors.length - 1; i >= 0; i--) {
+    const ancestor = nodesById[ancestors[i]];
+    if (ancestor?.type === "frame" && ancestor.themeOverride) {
+      theme = ancestor.themeOverride;
+    }
+  }
+
+  return theme;
+}
+
+/**
+ * Resolve effective theme for a target node inside an arbitrary scene subtree.
+ */
+export function findEffectiveThemeInTree(
+  nodes: SceneNode[],
+  targetId: string,
+  fallbackTheme: ThemeName,
+): ThemeName | null {
+  const search = (items: SceneNode[], inheritedTheme: ThemeName): ThemeName | null => {
+    for (const node of items) {
+      if (node.id === targetId) {
+        return inheritedTheme;
+      }
+      if (isContainerNode(node)) {
+        const childTheme =
+          node.type === "frame" && node.themeOverride
+            ? node.themeOverride
+            : inheritedTheme;
+        const found = search(node.children, childTheme);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  return search(nodes, fallbackTheme);
 }
 
 /**

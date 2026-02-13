@@ -8,9 +8,12 @@ import type {
 } from "@/types/scene";
 import type { InstanceContext } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
+import { useThemeStore } from "@/store/themeStore";
 import {
+  findEffectiveThemeInTree,
   findNodeById,
   findParentFrame,
+  getThemeFromAncestorFrames,
   getNodeAbsolutePosition,
   getNodeAbsolutePositionWithLayout,
 } from "@/utils/nodeUtils";
@@ -51,6 +54,7 @@ export function useCanvasSelectionData({
 
   const parentById = useSceneStore((state) => state.parentById);
   const nodesById = useSceneStore((state) => state.nodesById);
+  const activeTheme = useThemeStore((state) => state.activeTheme);
   const isInComponentContext = useMemo(
     () => (nodeId: string): boolean => {
       let currentId: string | null = nodeId;
@@ -91,6 +95,16 @@ export function useCanvasSelectionData({
       calculateLayoutForFrame,
     );
   }, [editingTextNode, nodes, calculateLayoutForFrame]);
+
+  const editingTextTheme = useMemo(() => {
+    if (!editingTextNode) return null;
+    return getThemeFromAncestorFrames(
+      parentById,
+      nodesById,
+      editingTextNode.id,
+      activeTheme,
+    );
+  }, [editingTextNode, parentById, nodesById, activeTheme]);
 
   // Descendant text editing: compute the effective text node and its absolute position
   const editingDescendantTextNode = useMemo(() => {
@@ -139,6 +153,40 @@ export function useCanvasSelectionData({
       y: instanceAbsPos.y + localPos.y,
     };
   }, [editingDescendantTextNode, instanceContext, nodes, calculateLayoutForFrame]);
+
+  const editingDescendantTextTheme = useMemo(() => {
+    if (!editingDescendantTextNode || !instanceContext) return null;
+    const instanceTheme = getThemeFromAncestorFrames(
+      parentById,
+      nodesById,
+      instanceContext.instanceId,
+      activeTheme,
+    );
+    const instance = findNodeById(nodes, instanceContext.instanceId);
+    if (!instance || instance.type !== "ref") return instanceTheme;
+    const preparedInstance = prepareInstanceNode(
+      instance as RefNode,
+      nodes,
+      calculateLayoutForFrame,
+    );
+    if (!preparedInstance) return instanceTheme;
+    const baseTheme = preparedInstance.component.themeOverride ?? instanceTheme;
+    return (
+      findEffectiveThemeInTree(
+        preparedInstance.layoutChildren,
+        instanceContext.descendantId,
+        baseTheme,
+      ) ?? baseTheme
+    );
+  }, [
+    editingDescendantTextNode,
+    instanceContext,
+    parentById,
+    nodesById,
+    activeTheme,
+    nodes,
+    calculateLayoutForFrame,
+  ]);
 
   const collectFrameNodes = useMemo(() => {
     const frames: Array<{
@@ -293,9 +341,11 @@ export function useCanvasSelectionData({
     editingTextNode,
     editingNameNode,
     editingTextPosition,
+    editingTextTheme,
     editingNamePosition,
     editingDescendantTextNode,
     editingDescendantTextPosition,
+    editingDescendantTextTheme,
     transformerColor,
     collectFrameNodes,
     collectSelectedNodes,

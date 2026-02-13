@@ -17,9 +17,15 @@ import { useHistoryStore } from "@/store/historyStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
+import { useThemeStore } from "@/store/themeStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
-import { findNodeById, getNodeAbsolutePositionWithLayout } from "@/utils/nodeUtils";
+import {
+  findEffectiveThemeInTree,
+  findNodeById,
+  getNodeAbsolutePositionWithLayout,
+  getThemeFromAncestorFrames,
+} from "@/utils/nodeUtils";
 import { findDescendantLocalPosition, prepareInstanceNode } from "@/components/nodes/instanceUtils";
 import { createPixiSync } from "./pixiSync";
 import { setupPixiViewport } from "./pixiViewport";
@@ -41,7 +47,10 @@ export function PixiCanvas() {
   const setIsPanning = useViewportStore((s) => s.setIsPanning);
   const fitToContent = useViewportStore((s) => s.fitToContent);
   const nodes = useSceneStore((state) => state.getNodes());
+  const nodesById = useSceneStore((state) => state.nodesById);
+  const parentById = useSceneStore((state) => state.parentById);
   const pageBackground = useSceneStore((state) => state.pageBackground);
+  const activeTheme = useThemeStore((state) => state.activeTheme);
   const addNode = useSceneStore((state) => state.addNode);
   const addChildToFrame = useSceneStore((state) => state.addChildToFrame);
   const deleteNode = useSceneStore((state) => state.deleteNode);
@@ -87,6 +96,15 @@ export function PixiCanvas() {
     editingNodeId && editingMode === "text"
       ? getEditingPosition(editingNodeId)
       : null;
+  const editingTextTheme = useMemo(() => {
+    if (!editingNodeId || editingMode !== "text") return null;
+    return getThemeFromAncestorFrames(
+      parentById,
+      nodesById,
+      editingNodeId,
+      activeTheme,
+    );
+  }, [editingNodeId, editingMode, parentById, nodesById, activeTheme]);
   const editingNamePosition =
     editingNodeId && editingMode === "name"
       ? getEditingPosition(editingNodeId)
@@ -120,6 +138,37 @@ export function PixiCanvas() {
     if (!localPos) return null;
     return { x: instanceAbsPos.x + localPos.x, y: instanceAbsPos.y + localPos.y };
   }, [editingDescendantTextNode, instanceContext, nodes]);
+
+  const editingDescendantTextTheme = useMemo(() => {
+    if (!editingDescendantTextNode || !instanceContext) return null;
+    const instanceTheme = getThemeFromAncestorFrames(
+      parentById,
+      nodesById,
+      instanceContext.instanceId,
+      activeTheme,
+    );
+    const allNodes = useSceneStore.getState().getNodes();
+    const instance = findNodeById(allNodes, instanceContext.instanceId);
+    if (!instance || instance.type !== "ref") return instanceTheme;
+    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+    const prepared = prepareInstanceNode(instance as RefNode, allNodes, calculateLayoutForFrame);
+    if (!prepared) return instanceTheme;
+    const baseTheme = prepared.component.themeOverride ?? instanceTheme;
+    return (
+      findEffectiveThemeInTree(
+        prepared.layoutChildren,
+        instanceContext.descendantId,
+        baseTheme,
+      ) ?? baseTheme
+    );
+  }, [
+    editingDescendantTextNode,
+    instanceContext,
+    parentById,
+    nodesById,
+    activeTheme,
+    nodes,
+  ]);
 
   const handleDescendantTextUpdate = useMemo(() => {
     if (!instanceContext) return undefined;
@@ -301,6 +350,7 @@ export function PixiCanvas() {
           node={editingTextNode as any}
           absoluteX={editingTextPosition.x}
           absoluteY={editingTextPosition.y}
+          effectiveTheme={editingTextTheme ?? undefined}
         />
       )}
       {/* Inline text editor for instance descendant text */}
@@ -309,6 +359,7 @@ export function PixiCanvas() {
           node={editingDescendantTextNode}
           absoluteX={editingDescendantTextPosition.x}
           absoluteY={editingDescendantTextPosition.y}
+          effectiveTheme={editingDescendantTextTheme ?? undefined}
           onUpdateText={handleDescendantTextUpdate}
         />
       )}

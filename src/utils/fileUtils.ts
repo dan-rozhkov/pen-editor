@@ -38,7 +38,7 @@ export function deserializeDocument(json: string): DocumentData {
   return {
     nodes: doc.nodes,
     variables: migratedVariables,
-    activeTheme: doc.activeTheme ?? 'dark',
+    activeTheme: doc.activeTheme ?? 'light',
   }
 }
 

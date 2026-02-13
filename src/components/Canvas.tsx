@@ -124,9 +124,11 @@ export function Canvas() {
     editingTextNode,
     editingNameNode,
     editingTextPosition,
+    editingTextTheme,
     editingNamePosition,
     editingDescendantTextNode,
     editingDescendantTextPosition,
+    editingDescendantTextTheme,
     transformerColor,
     collectFrameNodes,
     collectSelectedNodes,
@@ -429,6 +431,7 @@ export function Canvas() {
           node={editingTextNode}
           absoluteX={editingTextPosition.x}
           absoluteY={editingTextPosition.y}
+          effectiveTheme={editingTextTheme ?? undefined}
         />
       )}
       {/* Inline text editor for instance descendant text */}
@@ -439,6 +442,7 @@ export function Canvas() {
             node={editingDescendantTextNode}
             absoluteX={editingDescendantTextPosition.x}
             absoluteY={editingDescendantTextPosition.y}
+            effectiveTheme={editingDescendantTextTheme ?? undefined}
             onUpdateText={handleDescendantTextUpdate}
           />
         )}
