@@ -24,15 +24,15 @@
     "passed": true
   },
   {
+    "name": "design-agent-tool-display-names",
+    "passed": true
+  },
+  {
     "name": "design-agent-mutation-tools",
     "passed": false
   },
   {
     "name": "design-agent-backend-update",
-    "passed": false
-  },
-  {
-    "name": "design-agent-tool-display-names",
     "passed": false
   }
 ]
