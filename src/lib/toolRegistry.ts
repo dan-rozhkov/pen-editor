@@ -4,29 +4,30 @@ import { batchDesign } from "./tools/batchDesign";
 import { snapshotLayout } from "./tools/snapshotLayout";
 import { getVariables } from "./tools/getVariables";
 import { getScreenshot } from "./tools/getScreenshot";
+import { setVariables } from "./tools/setVariables";
+import { replaceAllMatchingProperties } from "./tools/replaceAllMatchingProperties";
+import { searchAllUniqueProperties } from "./tools/searchAllUniqueProperties";
+import { findEmptySpace } from "./tools/findEmptySpace";
+import { openDocument } from "./tools/openDocument";
+import { getGuidelines, getStyleGuideTags, getStyleGuide } from "./tools/staticTools";
 
 export type ToolHandler = (
   args: Record<string, unknown>
 ) => Promise<string>;
 
-const stub =
-  (name: string): ToolHandler =>
-  async () =>
-    JSON.stringify({ error: `Tool "${name}" not implemented yet` });
-
 export const toolHandlers: Record<string, ToolHandler> = {
   get_editor_state: getEditorState,
-  open_document: stub("open_document"),
+  open_document: openDocument,
   batch_get: batchGet,
   snapshot_layout: snapshotLayout,
   get_screenshot: getScreenshot,
   get_variables: getVariables,
   batch_design: batchDesign,
-  set_variables: stub("set_variables"),
-  replace_all_matching_properties: stub("replace_all_matching_properties"),
-  find_empty_space_on_canvas: stub("find_empty_space_on_canvas"),
-  search_all_unique_properties: stub("search_all_unique_properties"),
-  get_guidelines: stub("get_guidelines"),
-  get_style_guide_tags: stub("get_style_guide_tags"),
-  get_style_guide: stub("get_style_guide"),
+  set_variables: setVariables,
+  replace_all_matching_properties: replaceAllMatchingProperties,
+  find_empty_space_on_canvas: findEmptySpace,
+  search_all_unique_properties: searchAllUniqueProperties,
+  get_guidelines: getGuidelines,
+  get_style_guide_tags: getStyleGuideTags,
+  get_style_guide: getStyleGuide,
 };
