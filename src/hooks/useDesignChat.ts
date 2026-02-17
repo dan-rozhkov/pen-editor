@@ -7,6 +7,7 @@ import {
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
+import { useChatStore } from "@/store/chatStore";
 import { toolHandlers } from "@/lib/toolRegistry";
 
 function buildCanvasContext(): object {
@@ -34,7 +35,9 @@ function buildCanvasContext(): object {
     };
   });
 
-  return { canvasContext: JSON.stringify({ roots, selectedIds, selectedNodes, activeTheme }) };
+  const { model } = useChatStore.getState();
+
+  return { canvasContext: JSON.stringify({ roots, selectedIds, selectedNodes, activeTheme }), model };
 }
 
 async function executeToolCall(
