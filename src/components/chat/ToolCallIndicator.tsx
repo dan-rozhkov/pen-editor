@@ -27,21 +27,13 @@ function getToolStatus(part: AnyToolPart): ToolStatus {
 function StatusIcon({ status }: { status: ToolStatus }) {
   switch (status) {
     case "running":
-      return (
-        <SpinnerIcon size={14} className="animate-spin text-accent-primary" />
-      );
+      return <SpinnerIcon size={14} className="animate-spin" />;
     case "completed":
       return (
-        <CheckCircleIcon
-          size={14}
-          weight="fill"
-          className="text-green-500"
-        />
+        <CheckCircleIcon size={14} weight="fill" className="text-green-500" />
       );
     case "error":
-      return (
-        <XCircleIcon size={14} weight="fill" className="text-red-500" />
-      );
+      return <XCircleIcon size={14} weight="fill" className="text-red-500" />;
   }
 }
 
