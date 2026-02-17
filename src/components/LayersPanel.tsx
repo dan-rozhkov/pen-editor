@@ -208,7 +208,8 @@ interface LayerItemProps {
     parentId: string | null,
   ) => void;
   onDrop: () => void;
-  flatIds: string[];
+  selectableFlatIds: string[];
+  instanceFlatIds: string[];
   instanceId?: string;
   refChildCount?: number;
 }
@@ -221,14 +222,18 @@ const LayerItem = memo(function LayerItem({
   onDragStart,
   onDragOver,
   onDrop,
-  flatIds,
+  selectableFlatIds,
+  instanceFlatIds,
   instanceId,
   refChildCount,
 }: LayerItemProps) {
   // Granular selection subscription - only re-render when THIS node's selection state changes
   const isSelected = useSelectionStore((s) => !instanceId && s.selectedIds.includes(node.id));
   const isDescendantSelected = useSelectionStore(
-    (s) => !!instanceId && s.instanceContext?.instanceId === instanceId && s.instanceContext?.descendantId === node.id,
+    (s) =>
+      !!instanceId &&
+      s.instanceContext?.instanceId === instanceId &&
+      s.selectedDescendantIds.includes(node.id),
   );
   const toggleVisibility = useSceneStore((state) => state.toggleVisibility);
   const expandedFrameIds = useSceneStore((state) => state.expandedFrameIds);
@@ -272,11 +277,34 @@ const LayerItem = memo(function LayerItem({
     _selectionFromLayers = true;
     const selState = useSelectionStore.getState();
     if (instanceId) {
-      selState.selectDescendant(instanceId, node.id);
+      if (e.shiftKey) {
+        const sameInstance =
+          selState.instanceContext?.instanceId === instanceId &&
+          selState.selectedDescendantIds.length > 0;
+        if (sameInstance) {
+          const fromDescendantId = selState.instanceContext!.descendantId;
+          selState.selectDescendantRange(
+            instanceId,
+            fromDescendantId,
+            node.id,
+            instanceFlatIds,
+          );
+        } else if (selState.lastSelectedId) {
+          selState.selectRange(
+            selState.lastSelectedId,
+            instanceId,
+            selectableFlatIds,
+          );
+        } else {
+          selState.addToSelection(instanceId);
+        }
+      } else {
+        selState.selectDescendant(instanceId, node.id);
+      }
       return;
     }
     if (e.shiftKey && selState.lastSelectedId) {
-      selState.selectRange(selState.lastSelectedId, node.id, flatIds);
+      selState.selectRange(selState.lastSelectedId, node.id, selectableFlatIds);
     } else if (e.shiftKey) {
       selState.addToSelection(node.id);
     } else {
@@ -534,7 +562,8 @@ interface LayerListProps {
     parentId: string | null,
   ) => void;
   onDrop: () => void;
-  flatIds: string[];
+  selectableFlatIds: string[];
+  descendantFlatIdsByInstance: Record<string, string[]>;
 }
 
 function LayerList({
@@ -543,7 +572,8 @@ function LayerList({
   onDragStart,
   onDragOver,
   onDrop,
-  flatIds,
+  selectableFlatIds,
+  descendantFlatIdsByInstance,
 }: LayerListProps) {
   return (
     <>
@@ -557,7 +587,8 @@ function LayerList({
           onDragStart={onDragStart}
           onDragOver={onDragOver}
           onDrop={onDrop}
-          flatIds={flatIds}
+          selectableFlatIds={selectableFlatIds}
+          instanceFlatIds={item.instanceId ? (descendantFlatIdsByInstance[item.instanceId] ?? []) : []}
           instanceId={item.instanceId}
           refChildCount={item.refChildCount}
         />
@@ -735,10 +766,21 @@ export function LayersPanel() {
     () => flattenLayers(reversedNodes, expandedFrameIds, nodes),
     [reversedNodes, expandedFrameIds, nodes],
   );
-  const flatIds = useMemo(
-    () => flatLayers.map((l) => l.node.id),
+  const selectableFlatIds = useMemo(
+    () => flatLayers.filter((l) => !l.instanceId).map((l) => l.node.id),
     [flatLayers],
   );
+  const descendantFlatIdsByInstance = useMemo(() => {
+    const byInstance: Record<string, string[]> = {};
+    for (const layer of flatLayers) {
+      if (!layer.instanceId) continue;
+      if (!byInstance[layer.instanceId]) {
+        byInstance[layer.instanceId] = [];
+      }
+      byInstance[layer.instanceId].push(layer.node.id);
+    }
+    return byInstance;
+  }, [flatLayers]);
   const totalHeight = flatLayers.length * ROW_HEIGHT;
 
   useEffect(() => {
@@ -817,7 +859,8 @@ export function LayersPanel() {
                 onDragStart={handleDragStart}
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
-                flatIds={flatIds}
+                selectableFlatIds={selectableFlatIds}
+                descendantFlatIdsByInstance={descendantFlatIdsByInstance}
               />
             </div>
           </div>

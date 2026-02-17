@@ -14,6 +14,8 @@ interface SelectionState {
   editingMode: EditingMode
   // Currently selected descendant inside an instance
   instanceContext: InstanceContext | null
+  // Range selection of descendants inside current instance context
+  selectedDescendantIds: string[]
   // Nested selection: the container the user has drilled into via double-click
   enteredContainerId: string | null
   // Last selected node ID for range selection
@@ -31,6 +33,12 @@ interface SelectionState {
   stopEditing: () => void
   // Instance interaction methods
   selectDescendant: (instanceId: string, descendantId: string) => void
+  selectDescendantRange: (
+    instanceId: string,
+    fromDescendantId: string,
+    toDescendantId: string,
+    flatDescendantIds: string[],
+  ) => void
   startDescendantEditing: () => void
   clearDescendantSelection: () => void
   clearInstanceContext: () => void
@@ -44,6 +52,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   editingNodeId: null,
   editingMode: null,
   instanceContext: null,
+  selectedDescendantIds: [],
   enteredContainerId: null,
   lastSelectedId: null,
 
@@ -54,6 +63,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       editingNodeId: null,
       editingMode: null,
       instanceContext: null,
+      selectedDescendantIds: [],
       lastSelectedId: id
     })
   },
@@ -64,6 +74,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       editingNodeId: null,
       editingMode: null,
       instanceContext: null,
+      selectedDescendantIds: [],
       lastSelectedId: ids.length > 0 ? ids[ids.length - 1] : null
     })
   },
@@ -86,6 +97,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       editingNodeId: null,
       editingMode: null,
       instanceContext: null,
+      selectedDescendantIds: [],
       enteredContainerId: null
     })
   },
@@ -113,6 +125,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       editingNodeId: null,
       editingMode: null,
       instanceContext: null,
+      selectedDescendantIds: [],
       lastSelectedId: toId
     })
   },
@@ -141,6 +154,39 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
     set({
       instanceContext: { instanceId, descendantId },
       selectedIds: [instanceId],
+      selectedDescendantIds: [descendantId],
+      lastSelectedId: instanceId,
+    })
+  },
+
+  selectDescendantRange: (
+    instanceId: string,
+    fromDescendantId: string,
+    toDescendantId: string,
+    flatDescendantIds: string[],
+  ) => {
+    const fromIndex = flatDescendantIds.indexOf(fromDescendantId)
+    const toIndex = flatDescendantIds.indexOf(toDescendantId)
+
+    if (fromIndex === -1 || toIndex === -1) {
+      set({
+        instanceContext: { instanceId, descendantId: toDescendantId },
+        selectedIds: [instanceId],
+        selectedDescendantIds: [toDescendantId],
+        lastSelectedId: instanceId,
+      })
+      return
+    }
+
+    const minIndex = Math.min(fromIndex, toIndex)
+    const maxIndex = Math.max(fromIndex, toIndex)
+    const rangeIds = flatDescendantIds.slice(minIndex, maxIndex + 1)
+
+    set({
+      instanceContext: { instanceId, descendantId: toDescendantId },
+      selectedIds: [instanceId],
+      selectedDescendantIds: rangeIds,
+      lastSelectedId: instanceId,
     })
   },
 
@@ -152,7 +198,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   },
 
   clearDescendantSelection: () => {
-    set({ instanceContext: null })
+    set({ instanceContext: null, selectedDescendantIds: [] })
   },
 
   clearInstanceContext: () => {
@@ -160,6 +206,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
     // Clear instance context and keep instance selected
     set({
       instanceContext: null,
+      selectedDescendantIds: [],
       selectedIds: instanceContext ? [instanceContext.instanceId] : []
     })
   },
