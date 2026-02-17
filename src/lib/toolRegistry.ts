@@ -1,5 +1,6 @@
 import { getEditorState } from "./tools/getEditorState";
 import { batchGet } from "./tools/batchGet";
+import { batchDesign } from "./tools/batchDesign";
 import { snapshotLayout } from "./tools/snapshotLayout";
 import { getVariables } from "./tools/getVariables";
 import { getScreenshot } from "./tools/getScreenshot";
@@ -20,7 +21,7 @@ export const toolHandlers: Record<string, ToolHandler> = {
   snapshot_layout: snapshotLayout,
   get_screenshot: getScreenshot,
   get_variables: getVariables,
-  batch_design: stub("batch_design"),
+  batch_design: batchDesign,
   set_variables: stub("set_variables"),
   replace_all_matching_properties: stub("replace_all_matching_properties"),
   find_empty_space_on_canvas: stub("find_empty_space_on_canvas"),

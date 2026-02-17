@@ -1,0 +1,652 @@
+import type { FlatSceneNode, SceneNode, RefNode, DescendantOverrides } from "@/types/scene";
+import {
+  toFlatNode,
+  isContainerNode,
+  buildTree,
+} from "@/types/scene";
+import { insertTreeIntoFlat, removeNodeAndDescendants } from "@/store/sceneStore/helpers/flatStoreHelpers";
+import { syncTextDimensions } from "@/store/sceneStore/helpers/textSync";
+import { cloneNodeWithNewId } from "@/utils/cloneNode";
+import type { ParsedArg, ParsedOperation, ExecutionContext } from "./types";
+import {
+  createNodeFromAiData,
+  mapNodeData,
+  mapDescendantOverride,
+} from "./nodeMapper";
+
+const DOCUMENT_BINDING = "__document__";
+
+/**
+ * Resolve a ParsedArg to its string value using the execution context bindings.
+ */
+function resolveArg(arg: ParsedArg, ctx: ExecutionContext): string {
+  switch (arg.kind) {
+    case "string":
+      return arg.value;
+    case "binding": {
+      const resolved = ctx.bindings.get(arg.name);
+      if (resolved === undefined) {
+        throw new Error(`Unresolved binding: "${arg.name}"`);
+      }
+      return resolved;
+    }
+    case "concat": {
+      const base = ctx.bindings.get(arg.bindingName);
+      if (base === undefined) {
+        throw new Error(`Unresolved binding: "${arg.bindingName}"`);
+      }
+      return base + arg.pathSuffix;
+    }
+    case "number":
+      return String(arg.value);
+    case "json":
+      throw new Error("Cannot resolve JSON arg as string");
+  }
+}
+
+/**
+ * Resolve a ParsedArg that could be a JSON object.
+ */
+function resolveJsonArg(arg: ParsedArg): Record<string, unknown> {
+  if (arg.kind === "json") return arg.value as Record<string, unknown>;
+  throw new Error(`Expected JSON argument, got ${arg.kind}`);
+}
+
+/**
+ * Resolve a parent argument. Returns the parent node ID, or null for document root.
+ */
+function resolveParent(
+  arg: ParsedArg,
+  ctx: ExecutionContext
+): string | null {
+  const resolved = resolveArg(arg, ctx);
+  if (resolved === DOCUMENT_BINDING) return null;
+
+  // Verify parent exists (could be a path like "instanceId/slotId")
+  const baseId = resolved.includes("/") ? resolved.split("/")[0] : resolved;
+  if (!ctx.nodesById[baseId]) {
+    throw new Error(`Parent node not found: "${resolved}"`);
+  }
+  return resolved;
+}
+
+/**
+ * Execute a single Insert operation.
+ * I(parent, nodeData)
+ */
+function executeInsert(op: ParsedOperation, ctx: ExecutionContext): void {
+  if (op.args.length < 2) {
+    throw new Error(`Line ${op.line}: I() requires at least 2 arguments (parent, nodeData)`);
+  }
+
+  const parentResolved = resolveParent(op.args[0], ctx);
+  const nodeData = resolveJsonArg(op.args[1]);
+
+  // Handle parent paths with "/" for slot insertion
+  let actualParentId: string | null;
+  if (parentResolved && parentResolved.includes("/")) {
+    // Inserting into an instance slot - not supported for Insert, use the base parent
+    actualParentId = parentResolved.split("/")[0];
+  } else {
+    actualParentId = parentResolved;
+  }
+
+  const node = createNodeFromAiData(nodeData);
+
+  // Insert into flat storage
+  insertTreeIntoFlat(
+    node,
+    actualParentId,
+    ctx.nodesById,
+    ctx.parentById,
+    ctx.childrenById
+  );
+
+  // Update parent's children list or rootIds
+  if (actualParentId === null) {
+    ctx.rootIds.push(node.id);
+  } else {
+    if (!ctx.childrenById[actualParentId]) {
+      ctx.childrenById[actualParentId] = [];
+    }
+    ctx.childrenById[actualParentId].push(node.id);
+  }
+
+  ctx.createdNodeIds.push(node.id);
+
+  // Save binding
+  if (op.binding) {
+    ctx.bindings.set(op.binding, node.id);
+  }
+}
+
+/**
+ * Execute a Copy operation.
+ * C(sourceId, parent, copyData?)
+ */
+function executeCopy(op: ParsedOperation, ctx: ExecutionContext): void {
+  if (op.args.length < 2) {
+    throw new Error(`Line ${op.line}: C() requires at least 2 arguments (sourceId, parent)`);
+  }
+
+  const sourceId = resolveArg(op.args[0], ctx);
+  const parentResolved = resolveParent(op.args[1], ctx);
+  const copyData = op.args.length >= 3 ? resolveJsonArg(op.args[2]) : {};
+
+  // Resolve actual parent (strip "/" paths)
+  let actualParentId: string | null;
+  if (parentResolved && parentResolved.includes("/")) {
+    actualParentId = parentResolved.split("/")[0];
+  } else {
+    actualParentId = parentResolved;
+  }
+
+  // Build source subtree
+  const sourceNode = ctx.nodesById[sourceId];
+  if (!sourceNode) {
+    throw new Error(`Line ${op.line}: Source node not found: "${sourceId}"`);
+  }
+
+  const sourceTree = buildTree(
+    [sourceId],
+    ctx.nodesById,
+    ctx.childrenById
+  )[0];
+
+  // Clone with new IDs
+  const cloned = cloneNodeWithNewId(sourceTree, false);
+
+  // Apply copyData overrides (name, width, height, fill, etc.)
+  const {
+    descendants: descendantsOverrides,
+    positionDirection,
+    positionPadding,
+    ...directOverrides
+  } = copyData;
+
+  // Map direct overrides through nodeMapper
+  if (Object.keys(directOverrides).length > 0) {
+    const mapped = mapNodeData(
+      directOverrides as Record<string, unknown>,
+      "update",
+      toFlatNode(cloned)
+    );
+    delete (mapped as Record<string, unknown>)._children;
+    Object.assign(cloned, mapped);
+  }
+
+  // Handle descendants overrides for ref nodes
+  if (descendantsOverrides && cloned.type === "ref") {
+    const refClone = cloned as RefNode;
+    const mappedOverrides: DescendantOverrides = {};
+    for (const [path, override] of Object.entries(
+      descendantsOverrides as Record<string, Record<string, unknown>>
+    )) {
+      mappedOverrides[path] = mapDescendantOverride(override);
+    }
+    refClone.descendants = {
+      ...refClone.descendants,
+      ...mappedOverrides,
+    };
+  }
+
+  // Handle descendants overrides for non-ref clones by building old→new ID map
+  if (descendantsOverrides && cloned.type !== "ref") {
+    const oldToNew = buildIdMap(sourceTree, cloned);
+    for (const [oldPath, override] of Object.entries(
+      descendantsOverrides as Record<string, Record<string, unknown>>
+    )) {
+      // Remap the path from old IDs to new IDs
+      const newPath = remapPath(oldPath, oldToNew);
+      const newNode = ctx.nodesById[newPath];
+      if (newNode) {
+        const mapped = mapNodeData(
+          override as Record<string, unknown>,
+          "update",
+          newNode
+        );
+        delete (mapped as Record<string, unknown>)._children;
+        Object.assign(newNode, mapped);
+      }
+    }
+  }
+
+  // Handle positioning
+  if (positionDirection || positionPadding) {
+    const pad = (positionPadding as number) ?? 50;
+    const dir = (positionDirection as string) ?? "right";
+    switch (dir) {
+      case "right":
+        cloned.x = sourceNode.x + sourceNode.width + pad;
+        cloned.y = sourceNode.y;
+        break;
+      case "left":
+        cloned.x = sourceNode.x - cloned.width - pad;
+        cloned.y = sourceNode.y;
+        break;
+      case "bottom":
+        cloned.x = sourceNode.x;
+        cloned.y = sourceNode.y + sourceNode.height + pad;
+        break;
+      case "top":
+        cloned.x = sourceNode.x;
+        cloned.y = sourceNode.y - cloned.height - pad;
+        break;
+    }
+  }
+
+  // Insert cloned tree into flat storage
+  insertTreeIntoFlat(
+    cloned,
+    actualParentId,
+    ctx.nodesById,
+    ctx.parentById,
+    ctx.childrenById
+  );
+
+  if (actualParentId === null) {
+    ctx.rootIds.push(cloned.id);
+  } else {
+    if (!ctx.childrenById[actualParentId]) {
+      ctx.childrenById[actualParentId] = [];
+    }
+    ctx.childrenById[actualParentId].push(cloned.id);
+  }
+
+  ctx.createdNodeIds.push(cloned.id);
+
+  if (op.binding) {
+    ctx.bindings.set(op.binding, cloned.id);
+  }
+}
+
+/**
+ * Build a map from old IDs to new IDs by walking source and clone trees in parallel.
+ */
+function buildIdMap(
+  source: SceneNode,
+  clone: SceneNode
+): Map<string, string> {
+  const map = new Map<string, string>();
+  map.set(source.id, clone.id);
+
+  if (isContainerNode(source) && isContainerNode(clone)) {
+    const srcChildren = source.children;
+    const clnChildren = clone.children;
+    for (let i = 0; i < srcChildren.length && i < clnChildren.length; i++) {
+      const childMap = buildIdMap(srcChildren[i], clnChildren[i]);
+      for (const [k, v] of childMap) map.set(k, v);
+    }
+  }
+
+  return map;
+}
+
+/**
+ * Remap a "/" separated path from old IDs to new IDs.
+ */
+function remapPath(path: string, idMap: Map<string, string>): string {
+  return path
+    .split("/")
+    .map((segment) => idMap.get(segment) ?? segment)
+    .join("/");
+}
+
+/**
+ * Execute an Update operation.
+ * U(path, updateData)
+ */
+function executeUpdate(op: ParsedOperation, ctx: ExecutionContext): void {
+  if (op.args.length < 2) {
+    throw new Error(`Line ${op.line}: U() requires 2 arguments (path, updateData)`);
+  }
+
+  const path = resolveArg(op.args[0], ctx);
+  const updateData = resolveJsonArg(op.args[1]);
+
+  if (path.includes("/")) {
+    // Instance descendant override: instanceId/descendantPath
+    const slashIdx = path.indexOf("/");
+    const instanceId = path.slice(0, slashIdx);
+    const descendantPath = path.slice(slashIdx + 1);
+
+    const instanceNode = ctx.nodesById[instanceId];
+    if (!instanceNode) {
+      throw new Error(
+        `Line ${op.line}: Instance node not found: "${instanceId}"`
+      );
+    }
+    if (instanceNode.type !== "ref") {
+      throw new Error(
+        `Line ${op.line}: Node "${instanceId}" is not a ref node (type: ${instanceNode.type})`
+      );
+    }
+
+    const refNode = { ...instanceNode } as RefNode;
+    const mapped = mapDescendantOverride(updateData);
+
+    refNode.descendants = {
+      ...refNode.descendants,
+      [descendantPath]: {
+        ...(refNode.descendants?.[descendantPath] ?? {}),
+        ...mapped,
+      },
+    };
+
+    ctx.nodesById[instanceId] = refNode;
+  } else {
+    // Direct node update
+    const node = ctx.nodesById[path];
+    if (!node) {
+      throw new Error(`Line ${op.line}: Node not found: "${path}"`);
+    }
+
+    const mapped = mapNodeData(updateData, "update", node);
+    delete (mapped as Record<string, unknown>)._children;
+
+    let updated = { ...node, ...mapped } as FlatSceneNode;
+
+    // Sync text dimensions if text node
+    if (updated.type === "text") {
+      updated = syncTextDimensions(updated);
+    }
+
+    ctx.nodesById[path] = updated;
+  }
+}
+
+/**
+ * Execute a Replace operation.
+ * R(path, nodeData)
+ */
+function executeReplace(op: ParsedOperation, ctx: ExecutionContext): void {
+  if (op.args.length < 2) {
+    throw new Error(`Line ${op.line}: R() requires 2 arguments (path, nodeData)`);
+  }
+
+  const path = resolveArg(op.args[0], ctx);
+  const nodeData = resolveJsonArg(op.args[1]);
+
+  if (path.includes("/")) {
+    // Slot content replacement: instanceId/slotChildId
+    const slashIdx = path.indexOf("/");
+    const instanceId = path.slice(0, slashIdx);
+    const slotChildId = path.slice(slashIdx + 1);
+
+    const instanceNode = ctx.nodesById[instanceId];
+    if (!instanceNode) {
+      throw new Error(
+        `Line ${op.line}: Instance node not found: "${instanceId}"`
+      );
+    }
+    if (instanceNode.type !== "ref") {
+      throw new Error(
+        `Line ${op.line}: Node "${instanceId}" is not a ref node`
+      );
+    }
+
+    const refNode = { ...instanceNode } as RefNode;
+    const newNode = createNodeFromAiData(nodeData);
+    refNode.slotContent = {
+      ...refNode.slotContent,
+      [slotChildId]: newNode,
+    };
+
+    ctx.nodesById[instanceId] = refNode;
+    ctx.createdNodeIds.push(newNode.id);
+
+    if (op.binding) {
+      ctx.bindings.set(op.binding, newNode.id);
+    }
+  } else {
+    // Direct node replacement
+    const existingNode = ctx.nodesById[path];
+    if (!existingNode) {
+      throw new Error(`Line ${op.line}: Node not found: "${path}"`);
+    }
+
+    const parentId = ctx.parentById[path];
+    const newNode = createNodeFromAiData(nodeData);
+
+    // Find position in parent's children
+    if (parentId !== null && parentId !== undefined) {
+      const siblings = ctx.childrenById[parentId] ?? [];
+      const idx = siblings.indexOf(path);
+      if (idx !== -1) {
+        siblings[idx] = newNode.id;
+        ctx.childrenById[parentId] = [...siblings];
+      }
+    } else {
+      const idx = ctx.rootIds.indexOf(path);
+      if (idx !== -1) {
+        ctx.rootIds[idx] = newNode.id;
+      }
+    }
+
+    // Remove old node and descendants
+    removeNodeAndDescendants(
+      path,
+      ctx.nodesById,
+      ctx.parentById,
+      ctx.childrenById
+    );
+
+    // Insert new node
+    insertTreeIntoFlat(
+      newNode,
+      parentId ?? null,
+      ctx.nodesById,
+      ctx.parentById,
+      ctx.childrenById
+    );
+
+    ctx.createdNodeIds.push(newNode.id);
+
+    if (op.binding) {
+      ctx.bindings.set(op.binding, newNode.id);
+    }
+  }
+}
+
+/**
+ * Execute a Move operation.
+ * M(nodeId, parent, index?)
+ */
+function executeMove(op: ParsedOperation, ctx: ExecutionContext): void {
+  if (op.args.length < 2) {
+    throw new Error(`Line ${op.line}: M() requires at least 2 arguments (nodeId, parent)`);
+  }
+
+  const nodeId = resolveArg(op.args[0], ctx);
+  const parentResolved = op.args[1].kind === "json" && op.args[1].value === undefined
+    ? null
+    : resolveArg(op.args[1], ctx);
+  const newParentId =
+    parentResolved === DOCUMENT_BINDING ? null : parentResolved;
+  const newIndex =
+    op.args.length >= 3
+      ? op.args[2].kind === "number"
+        ? op.args[2].value
+        : Number(resolveArg(op.args[2], ctx))
+      : undefined;
+
+  const node = ctx.nodesById[nodeId];
+  if (!node) {
+    throw new Error(`Line ${op.line}: Node not found: "${nodeId}"`);
+  }
+
+  const oldParentId = ctx.parentById[nodeId];
+
+  // Remove from old parent
+  if (oldParentId !== null && oldParentId !== undefined) {
+    ctx.childrenById[oldParentId] = (
+      ctx.childrenById[oldParentId] ?? []
+    ).filter((cid) => cid !== nodeId);
+  } else {
+    ctx.rootIds = ctx.rootIds.filter((rid) => rid !== nodeId);
+  }
+
+  // Set new parent
+  ctx.parentById[nodeId] = newParentId;
+
+  // Insert at new position
+  if (newParentId !== null) {
+    const siblings = ctx.childrenById[newParentId] ?? [];
+    const idx = newIndex !== undefined ? newIndex : siblings.length;
+    siblings.splice(idx, 0, nodeId);
+    ctx.childrenById[newParentId] = siblings;
+  } else {
+    const idx = newIndex !== undefined ? newIndex : ctx.rootIds.length;
+    ctx.rootIds.splice(idx, 0, nodeId);
+  }
+}
+
+/**
+ * Execute a Delete operation.
+ * D(nodeId)
+ */
+function executeDelete(op: ParsedOperation, ctx: ExecutionContext): void {
+  if (op.args.length < 1) {
+    throw new Error(`Line ${op.line}: D() requires 1 argument (nodeId)`);
+  }
+
+  const nodeId = resolveArg(op.args[0], ctx);
+
+  if (!ctx.nodesById[nodeId]) {
+    throw new Error(`Line ${op.line}: Node not found: "${nodeId}"`);
+  }
+
+  const parentId = ctx.parentById[nodeId];
+
+  // Remove from parent's children list
+  if (parentId !== null && parentId !== undefined) {
+    ctx.childrenById[parentId] = (
+      ctx.childrenById[parentId] ?? []
+    ).filter((cid) => cid !== nodeId);
+  } else {
+    ctx.rootIds = ctx.rootIds.filter((rid) => rid !== nodeId);
+  }
+
+  // Remove node and all descendants
+  removeNodeAndDescendants(
+    nodeId,
+    ctx.nodesById,
+    ctx.parentById,
+    ctx.childrenById
+  );
+}
+
+/**
+ * Execute a Generate Image operation (stub).
+ * G(nodeId, type, prompt)
+ */
+function executeGenerate(
+  op: ParsedOperation,
+  ctx: ExecutionContext
+): void {
+  if (op.args.length < 3) {
+    throw new Error(
+      `Line ${op.line}: G() requires 3 arguments (nodeId, type, prompt)`
+    );
+  }
+
+  const nodeId = resolveArg(op.args[0], ctx);
+  resolveArg(op.args[1], ctx); // "ai" or "stock" — consumed but unused in stub
+  const prompt = resolveArg(op.args[2], ctx);
+
+  const node = ctx.nodesById[nodeId];
+  if (!node) {
+    throw new Error(`Line ${op.line}: Node not found: "${nodeId}"`);
+  }
+
+  // Stub: apply placeholder image fill
+  ctx.nodesById[nodeId] = {
+    ...node,
+    imageFill: {
+      url: `https://placehold.co/600x400?text=${encodeURIComponent(prompt.slice(0, 30))}`,
+      mode: "fill",
+    },
+    name: node.name ?? `Image: ${prompt.slice(0, 50)}`,
+  } as FlatSceneNode;
+
+  ctx.issues.push(
+    `G operation on line ${op.line}: Image generation is a placeholder. Prompt: "${prompt}"`
+  );
+}
+
+/**
+ * Execute a single parsed operation against the execution context.
+ */
+export function executeOperation(
+  op: ParsedOperation,
+  ctx: ExecutionContext
+): void {
+  switch (op.op) {
+    case "I":
+      return executeInsert(op, ctx);
+    case "C":
+      return executeCopy(op, ctx);
+    case "U":
+      return executeUpdate(op, ctx);
+    case "R":
+      return executeReplace(op, ctx);
+    case "M":
+      return executeMove(op, ctx);
+    case "D":
+      return executeDelete(op, ctx);
+    case "G":
+      return executeGenerate(op, ctx);
+    default:
+      throw new Error(`Line ${op.line}: Unknown operation: ${op.op}`);
+  }
+}
+
+/**
+ * Serialize created nodes for the response (depth 2).
+ */
+export function serializeCreatedNodes(
+  ctx: ExecutionContext
+): Record<string, unknown>[] {
+  const results: Record<string, unknown>[] = [];
+  const seen = new Set<string>();
+
+  for (const nodeId of ctx.createdNodeIds) {
+    if (seen.has(nodeId) || !ctx.nodesById[nodeId]) continue;
+    seen.add(nodeId);
+    results.push(
+      serializeNodeWithDepth(nodeId, ctx, 2)
+    );
+  }
+
+  return results;
+}
+
+function serializeNodeWithDepth(
+  nodeId: string,
+  ctx: ExecutionContext,
+  depth: number
+): Record<string, unknown> {
+  const node = ctx.nodesById[nodeId];
+  if (!node) return { id: nodeId, error: "not found" };
+
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(node)) {
+    if (value !== undefined) {
+      result[key] = value;
+    }
+  }
+
+  // Add children for container types
+  const childIds = ctx.childrenById[nodeId];
+  if (childIds && childIds.length > 0) {
+    if (depth <= 0) {
+      result.children = "...";
+    } else {
+      result.children = childIds
+        .map((cid) => serializeNodeWithDepth(cid, ctx, depth - 1))
+        .filter(Boolean);
+    }
+  }
+
+  return result;
+}
