@@ -1,4 +1,5 @@
 import type { OpType, ParsedArg, ParsedOperation } from "./types";
+import JSON5 from "json5";
 
 const OP_TYPES = new Set<string>(["I", "C", "U", "R", "M", "D", "G"]);
 const MAX_OPERATIONS = 25;
@@ -172,16 +173,23 @@ function tokenizeArgs(argsStr: string, lineNum: number): ParsedArg[] {
  * Classify a token into one of the ParsedArg kinds.
  */
 function classifyToken(token: string, lineNum: number): ParsedArg {
+  if (token === "undefined") {
+    return { kind: "json", value: undefined };
+  }
+
   // String literal: "..."
-  if (token.startsWith('"') && token.endsWith('"')) {
-    const inner = token.slice(1, -1);
-    // Decode HTML entities commonly used in MCP
-    const decoded = inner
-      .replace(/&quot;/g, '"')
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">");
-    return { kind: "string", value: decoded };
+  if (
+    (token.startsWith('"') && token.endsWith('"')) ||
+    (token.startsWith("'") && token.endsWith("'"))
+  ) {
+    try {
+      const decoded = JSON5.parse(token);
+      if (typeof decoded === "string") {
+        return { kind: "string", value: decodeHtmlEntities(decoded) };
+      }
+    } catch {
+      throw new Error(`Line ${lineNum}: Invalid string literal: ${token}`);
+    }
   }
 
   // JSON object or array: {...} or [...]
@@ -190,7 +198,7 @@ function classifyToken(token: string, lineNum: number): ParsedArg {
     (token.startsWith("[") && token.endsWith("]"))
   ) {
     try {
-      return { kind: "json", value: JSON.parse(token) };
+      return { kind: "json", value: parseJsonLike(token) };
     } catch {
       throw new Error(
         `Line ${lineNum}: Invalid JSON: ${token.slice(0, 60)}...`
@@ -216,8 +224,8 @@ function classifyToken(token: string, lineNum: number): ParsedArg {
   }
 
   // Boolean true/false — treat as JSON
-  if (token === "true" || token === "false") {
-    return { kind: "json", value: JSON.parse(token) };
+  if (token === "true" || token === "false" || token === "null") {
+    return { kind: "json", value: JSON5.parse(token) };
   }
 
   // Bare identifier → binding reference
@@ -228,4 +236,20 @@ function classifyToken(token: string, lineNum: number): ParsedArg {
   throw new Error(
     `Line ${lineNum}: Cannot classify argument: "${token}"`
   );
+}
+
+function parseJsonLike(token: string): unknown {
+  try {
+    return JSON.parse(token);
+  } catch {
+    return JSON5.parse(token);
+  }
+}
+
+function decodeHtmlEntities(input: string): string {
+  return input
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
 }

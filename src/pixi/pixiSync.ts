@@ -257,6 +257,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
       if (!frameNode || frameNode.type !== "frame") return;
 
       const childIds = state.childrenById[frameId] ?? [];
+      const frameOverride = layoutOverrides.get(frameId);
 
       if ((frameNode as FlatFrameNode).layout?.autoLayout) {
         // Convert to tree structure for layout calculation, including overrides
@@ -273,8 +274,10 @@ export function createPixiSync(sceneRoot: Container): () => void {
           // only descendants changed (e.g. text metrics after font load).
           const fitWidth = frameNode.sizing?.widthMode === "fit_content";
           const fitHeight = frameNode.sizing?.heightMode === "fit_content";
-          let frameWidth = frameNode.width;
-          let frameHeight = frameNode.height;
+          // Respect size computed by parent auto-layout when this frame is a child
+          // (e.g. fill_container). Fallback to stored node size for roots/standalone.
+          let frameWidth = frameOverride?.width ?? frameNode.width;
+          let frameHeight = frameOverride?.height ?? frameNode.height;
 
           if (fitWidth || fitHeight) {
             const intrinsicSize = calculateFrameIntrinsicSize(treeFrame as FrameNode, {

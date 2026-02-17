@@ -47,16 +47,19 @@ export function parseColor(color: string): number {
       const r = parseInt(m[0]);
       const g = parseInt(m[1]);
       const b = parseInt(m[2]);
-      return (r << 16) | (g << 8) | b;
+      const rgb = (r << 16) | (g << 8) | b;
+      return Number.isNaN(rgb) ? 0x000000 : rgb;
     }
   }
   // Handle hex
   const hex = color.replace("#", "");
   if (hex.length === 3) {
-    return parseInt(hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2], 16);
+    const parsed = parseInt(hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2], 16);
+    return Number.isNaN(parsed) ? 0x000000 : parsed;
   }
   // For 8-char hex (#RRGGBBAA), strip the alpha
-  return parseInt(hex.slice(0, 6), 16);
+  const parsed = parseInt(hex.slice(0, 6), 16);
+  return Number.isNaN(parsed) ? 0x000000 : parsed;
 }
 
 export function parseAlpha(color: string): number {

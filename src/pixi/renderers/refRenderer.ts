@@ -10,7 +10,8 @@ import { toFlatNode } from "@/types/scene";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { measureTextAutoSize, measureTextFixedWidthHeight } from "@/utils/textMeasure";
-import { getResolvedFill, parseColor, parseAlpha, pushRenderTheme, popRenderTheme } from "./colorHelpers";
+import { pushRenderTheme, popRenderTheme } from "./colorHelpers";
+import { applyFill, applyStroke } from "./fillStrokeHelpers";
 import { createNodeContainer } from "./index";
 import { prepareInstanceNode } from "@/components/nodes/instanceUtils";
 
@@ -165,15 +166,33 @@ export function createRefContainer(
     const bg = new Graphics();
     bg.label = "ref-bg";
     const frame = component as FlatFrameNode;
+    const effectiveFrameStyle: FlatFrameNode = {
+      ...frame,
+      fill: node.fill !== undefined ? node.fill : frame.fill,
+      fillBinding: node.fillBinding !== undefined ? node.fillBinding : frame.fillBinding,
+      fillOpacity: node.fillOpacity !== undefined ? node.fillOpacity : frame.fillOpacity,
+      gradientFill:
+        node.gradientFill !== undefined ? node.gradientFill : frame.gradientFill,
+      stroke: node.stroke !== undefined ? node.stroke : frame.stroke,
+      strokeBinding:
+        node.strokeBinding !== undefined ? node.strokeBinding : frame.strokeBinding,
+      strokeWidth: node.strokeWidth !== undefined ? node.strokeWidth : frame.strokeWidth,
+      strokeOpacity:
+        node.strokeOpacity !== undefined ? node.strokeOpacity : frame.strokeOpacity,
+      strokeAlign:
+        node.strokeAlign !== undefined ? node.strokeAlign : frame.strokeAlign,
+      strokeWidthPerSide:
+        node.strokeWidthPerSide !== undefined
+          ? node.strokeWidthPerSide
+          : frame.strokeWidthPerSide,
+    };
     if (frame.cornerRadius) {
       bg.roundRect(0, 0, effectiveWidth, effectiveHeight, frame.cornerRadius);
     } else {
       bg.rect(0, 0, effectiveWidth, effectiveHeight);
     }
-    const fillColor = getResolvedFill(frame);
-    if (fillColor) {
-      bg.fill({ color: parseColor(fillColor), alpha: parseAlpha(fillColor) });
-    }
+    applyFill(bg, effectiveFrameStyle, effectiveWidth, effectiveHeight);
+    applyStroke(bg, effectiveFrameStyle, effectiveWidth, effectiveHeight, frame.cornerRadius);
     childrenContainer.addChild(bg);
   }
 
@@ -225,6 +244,16 @@ export function updateRefContainer(
     node.componentId !== prev.componentId ||
     node.descendants !== prev.descendants ||
     node.slotContent !== prev.slotContent ||
+    node.fill !== prev.fill ||
+    node.fillBinding !== prev.fillBinding ||
+    node.fillOpacity !== prev.fillOpacity ||
+    node.gradientFill !== prev.gradientFill ||
+    node.stroke !== prev.stroke ||
+    node.strokeBinding !== prev.strokeBinding ||
+    node.strokeOpacity !== prev.strokeOpacity ||
+    node.strokeWidth !== prev.strokeWidth ||
+    node.strokeAlign !== prev.strokeAlign ||
+    node.strokeWidthPerSide !== prev.strokeWidthPerSide ||
     node.width !== prev.width ||
     node.height !== prev.height
   ) {

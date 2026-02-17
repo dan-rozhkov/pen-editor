@@ -17,6 +17,10 @@ import { FlipHorizontalIcon, FlipVerticalIcon } from "@phosphor-icons/react";
 import { CustomColorPicker } from "./ColorPicker";
 import { useScrubLabel } from "@/hooks/useScrubLabel";
 
+function formatVariableNameForDisplay(name: string): string {
+  return name.trim().replace(/^\$/, "");
+}
+
 interface PropertySectionProps {
   title: string;
   children: React.ReactNode;
@@ -175,6 +179,7 @@ export function ColorInput({
 
   // If variable is bound, show variable name with unbind button
   if (boundVariable) {
+    const variableDisplayName = formatVariableNameForDisplay(boundVariable.name);
     return (
       <div className="flex items-center gap-2">
         <InputGroup className="flex-1">
@@ -185,7 +190,7 @@ export function ColorInput({
             />
           </InputGroupAddon>
           <span className="flex-1 text-xs text-text-primary truncate px-1.5 py-0.5">
-            {boundVariable.name}
+            {variableDisplayName}
           </span>
           <InputGroupAddon align="inline-end">
             <button

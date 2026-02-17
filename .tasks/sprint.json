@@ -29,10 +29,10 @@
   },
   {
     "name": "design-agent-mutation-tools",
-    "passed": false
+    "passed": true
   },
   {
-    "name": "design-agent-backend-update",
+    "name": "design-agent-thinking",
     "passed": false
   }
 ]

@@ -6,7 +6,7 @@ export type ParsedArg =
   | { kind: "string"; value: string }
   | { kind: "binding"; name: string }
   | { kind: "concat"; bindingName: string; pathSuffix: string }
-  | { kind: "json"; value: Record<string, unknown> }
+  | { kind: "json"; value: unknown }
   | { kind: "number"; value: number };
 
 export interface ParsedOperation {

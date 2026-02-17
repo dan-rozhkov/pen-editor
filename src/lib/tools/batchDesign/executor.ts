@@ -48,7 +48,14 @@ function resolveArg(arg: ParsedArg, ctx: ExecutionContext): string {
  * Resolve a ParsedArg that could be a JSON object.
  */
 function resolveJsonArg(arg: ParsedArg): Record<string, unknown> {
-  if (arg.kind === "json") return arg.value as Record<string, unknown>;
+  if (
+    arg.kind === "json" &&
+    arg.value !== null &&
+    typeof arg.value === "object" &&
+    !Array.isArray(arg.value)
+  ) {
+    return arg.value as Record<string, unknown>;
+  }
   throw new Error(`Expected JSON argument, got ${arg.kind}`);
 }
 

@@ -17,6 +17,7 @@
     "ai": "^6.0.85",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "json5": "^2.2.3",
     "konva": "^10.2.0",
     "pixi.js": "^8.16.0",
     "react": "^19.2.0",

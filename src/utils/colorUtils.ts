@@ -1,6 +1,10 @@
 import type { Variable, ThemeName } from '../types/variable'
 import { getVariableValue } from '../types/variable'
 
+function normalizeVariableRefName(name: string): string {
+  return name.trim().replace(/^\$/, '')
+}
+
 /**
  * Resolve a generic variable value (string) from binding or use direct value
  */
@@ -16,6 +20,23 @@ export function resolveVariableValue(
       return getVariableValue(variable, currentTheme)
     }
   }
+
+  // Fallback: support direct "$varName" references even without explicit bindings.
+  if (typeof directValue === 'string' && directValue.trim().startsWith('$')) {
+    const refName = normalizeVariableRefName(directValue)
+    const variable = variables.find((v) => {
+      const normalizedVarName = normalizeVariableRefName(v.name)
+      return (
+        v.name === directValue ||
+        v.name === refName ||
+        normalizedVarName === refName
+      )
+    })
+    if (variable) {
+      return getVariableValue(variable, currentTheme)
+    }
+  }
+
   return directValue
 }
 
