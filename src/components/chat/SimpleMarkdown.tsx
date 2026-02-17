@@ -73,6 +73,24 @@ function renderInline(text: string): React.ReactNode[] {
   return parts;
 }
 
+function isTableSeparatorLine(line: string): boolean {
+  return /^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$/.test(line);
+}
+
+function isTableRowLine(line: string): boolean {
+  const trimmed = line.trim();
+  return trimmed.length > 0 && trimmed.startsWith("|") && trimmed.endsWith("|");
+}
+
+function parseTableRow(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
 function renderLines(text: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
   const lines = text.split("\n");
@@ -83,8 +101,54 @@ function renderLines(text: string): React.ReactNode[] {
     const line = lines[i];
     const ulMatch = line.match(/^[-*]\s+(.+)/);
     const olMatch = line.match(/^\d+\.\s+(.+)/);
+    const isTableStart =
+      isTableRowLine(line) &&
+      i + 1 < lines.length &&
+      isTableSeparatorLine(lines[i + 1]);
 
-    if (ulMatch) {
+    if (isTableStart) {
+      const header = parseTableRow(line);
+      i += 2; // skip header + separator
+      const rows: string[][] = [];
+
+      while (i < lines.length && isTableRowLine(lines[i])) {
+        rows.push(parseTableRow(lines[i]));
+        i++;
+      }
+
+      nodes.push(
+        <div key={key++} className="overflow-x-auto">
+          <table className="w-full border-collapse leading-snug">
+            <thead>
+              <tr className="border-b border-border-default">
+                {header.map((cell, j) => (
+                  <th
+                    key={j}
+                    className="px-1.5 py-1 text-left align-top font-semibold"
+                  >
+                    {renderInline(cell)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, rowIndex) => (
+                <tr
+                  key={rowIndex}
+                  className="border-b border-border-default last:border-b-0"
+                >
+                  {row.map((cell, j) => (
+                    <td key={j} className="px-1.5 py-1 align-top">
+                      {renderInline(cell)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    } else if (ulMatch) {
       const items: string[] = [];
       while (i < lines.length && lines[i].match(/^[-*]\s+/)) {
         items.push(lines[i].replace(/^[-*]\s+/, ""));
