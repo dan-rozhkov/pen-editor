@@ -56,3 +56,16 @@ npm run dev
 npm run build
 npm run preview
 ```
+
+## Design Agent Backend URL
+
+Configure backend URL at build time via Vite env variables:
+
+- `VITE_AI_API_URL` - full chat endpoint URL (example: `https://api.example.com/api/chat`)
+- `VITE_DESIGN_AGENT_BACKEND_URL` - backend base URL; app will call `${BASE_URL}/api/chat`
+
+Example:
+
+```bash
+VITE_DESIGN_AGENT_BACKEND_URL=https://api.example.com npm run build
+```

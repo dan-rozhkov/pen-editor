@@ -10,6 +10,20 @@ import { useThemeStore } from "@/store/themeStore";
 import { useChatStore } from "@/store/chatStore";
 import { toolHandlers } from "@/lib/toolRegistry";
 
+function resolveChatApiUrl(): string {
+  const explicitApiUrl = import.meta.env.VITE_AI_API_URL as string | undefined;
+  if (explicitApiUrl) {
+    return explicitApiUrl;
+  }
+
+  const backendUrl = import.meta.env.VITE_DESIGN_AGENT_BACKEND_URL as string | undefined;
+  if (backendUrl) {
+    return `${backendUrl.replace(/\/$/, "")}/api/chat`;
+  }
+
+  return "/api/chat";
+}
+
 function buildCanvasContext(): object {
   const { selectedIds } = useSelectionStore.getState();
   const { rootIds, nodesById } = useSceneStore.getState();
@@ -72,9 +86,7 @@ export function useDesignChat() {
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
-        api:
-          import.meta.env.VITE_AI_API_URL ||
-          "http://localhost:3001/api/chat",
+        api: resolveChatApiUrl(),
         body: () => buildCanvasContext(),
       }),
     []
