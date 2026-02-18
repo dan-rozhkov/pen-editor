@@ -18,6 +18,7 @@ import { createDragController } from "./dragController";
 import { createMarqueeController } from "./marqueeController";
 import { createMeasurementController } from "./measurementController";
 import { prepareFrameNode, prepareInstanceNode } from "@/components/nodes/instanceUtils";
+import type { SceneNode } from "@/types/scene";
 
 const EMPTY_POINTER_EVENT = {} as PointerEvent;
 
@@ -48,6 +49,21 @@ function findInstanceDescendantAtWorldPoint(
   const localX = worldX - absPos.x;
   const localY = worldY - absPos.y;
   return findDeepestChildAtPosition(preparedInstance.layoutChildren, localX, localY);
+}
+
+function flattenVisibleDescendantIds(children: SceneNode[]): string[] {
+  const ids: string[] = [];
+  const walk = (nodes: SceneNode[]) => {
+    for (const node of nodes) {
+      if (node.visible === false || node.enabled === false) continue;
+      ids.push(node.id);
+      if (node.type === "frame" || node.type === "group") {
+        walk(node.children);
+      }
+    }
+  };
+  walk(children);
+  return ids;
 }
 
 /**
@@ -194,7 +210,33 @@ export function setupPixiInteraction(
             calculateLayoutForFrame,
           );
           if (descendantId) {
-            useSelectionStore.getState().selectDescendant(hitId, descendantId);
+            const selState = useSelectionStore.getState();
+            const sameInstance =
+              selState.instanceContext?.instanceId === hitId &&
+              selState.selectedDescendantIds.length > 0;
+            if (e.shiftKey && sameInstance) {
+              const instanceNode = findNodeById(currentNodes, hitId);
+              if (instanceNode && instanceNode.type === "ref") {
+                const preparedInstance = prepareInstanceNode(
+                  instanceNode,
+                  currentNodes,
+                  calculateLayoutForFrame,
+                );
+                if (preparedInstance) {
+                  const flatIds = flattenVisibleDescendantIds(
+                    preparedInstance.layoutChildren,
+                  );
+                  selState.selectDescendantRange(
+                    hitId,
+                    selState.instanceContext!.descendantId,
+                    descendantId,
+                    flatIds,
+                  );
+                  return;
+                }
+              }
+            }
+            selState.selectDescendant(hitId, descendantId);
             return;
           }
         }

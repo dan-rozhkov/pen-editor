@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import Konva from "konva";
 import { Ellipse, Group, Path, Rect, Text } from "react-konva";
 import type {
@@ -72,7 +72,16 @@ export function InstanceRenderer({
 
   // Instance interaction state
   const instanceContext = useSelectionStore((state) => state.instanceContext);
+  const selectedDescendantIds = useSelectionStore(
+    (state) =>
+      state.instanceContext?.instanceId === node.id
+        ? state.selectedDescendantIds
+        : [],
+  );
   const selectDescendant = useSelectionStore((state) => state.selectDescendant);
+  const selectDescendantRange = useSelectionStore(
+    (state) => state.selectDescendantRange,
+  );
 
   // Whether a descendant of THIS instance is currently selected
   const hasSelectedDescendant = instanceContext?.instanceId === node.id;
@@ -158,6 +167,21 @@ export function InstanceRenderer({
   // If component has a theme override, use it for children
   const childTheme = component.themeOverride ?? currentTheme;
 
+  const flatDescendantIds = useMemo(() => {
+    const result: string[] = [];
+    const walk = (items: SceneNode[]) => {
+      for (const item of items) {
+        if (item.visible === false || item.enabled === false) continue;
+        result.push(item.id);
+        if (item.type === "frame" || item.type === "group") {
+          walk(item.children);
+        }
+      }
+    };
+    walk(layoutChildren);
+    return result;
+  }, [layoutChildren]);
+
   // Find child at pointer position in local coordinates
   const findChildAtPointer = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>): string | null => {
     const stage = e.target.getStage();
@@ -200,12 +224,27 @@ export function InstanceRenderer({
   };
 
   // Handle click on descendant (when a descendant is selected, for switching between them)
-  const handleDescendantClick =
-    (childId: string) =>
-    (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
-      e.cancelBubble = true;
-      selectDescendant(node.id, childId);
-    };
+  const handleDescendantClick = (
+    childId: string,
+    e: Konva.KonvaEventObject<MouseEvent | TouchEvent>,
+  ) => {
+    e.cancelBubble = true;
+    const isShift = "shiftKey" in e.evt && e.evt.shiftKey;
+    if (
+      isShift &&
+      instanceContext?.instanceId === node.id &&
+      selectedDescendantIds.length > 0
+    ) {
+      selectDescendantRange(
+        node.id,
+        instanceContext.descendantId,
+        childId,
+        flatDescendantIds,
+      );
+      return;
+    }
+    selectDescendant(node.id, childId);
+  };
 
   // Render a descendant with overrides applied
   const renderDescendant = (child: SceneNode) => {
@@ -214,10 +253,7 @@ export function InstanceRenderer({
       return null;
     }
 
-    const selectedDescendantId =
-      instanceContext?.instanceId === node.id
-        ? instanceContext.descendantId
-        : null;
+    const selectedDescendantIdSet = new Set(selectedDescendantIds);
 
     if (hasSelectedDescendant) {
       // When entered: render with click handlers and selection highlight
@@ -225,10 +261,11 @@ export function InstanceRenderer({
         <Group key={`${node.id}-${child.id}`}>
           <DescendantRenderer
             node={child}
-            onClick={handleDescendantClick(child.id)}
-            selectedDescendantId={selectedDescendantId}
+            onClick={(e) => handleDescendantClick(child.id, e)}
+            selectedDescendantIds={selectedDescendantIdSet}
             effectiveTheme={childTheme}
             instanceId={node.id}
+            onSelectDescendant={handleDescendantClick}
           />
         </Group>
       );
@@ -315,29 +352,33 @@ export function InstanceRenderer({
 interface DescendantRendererProps {
   node: SceneNode;
   onClick: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
-  selectedDescendantId: string | null;
+  selectedDescendantIds: Set<string>;
   effectiveTheme: ThemeName;
   instanceId: string;
+  onSelectDescendant: (
+    childId: string,
+    e: Konva.KonvaEventObject<MouseEvent | TouchEvent>,
+  ) => void;
 }
 
 function DescendantRenderer({
   node: rawNode,
   onClick,
-  selectedDescendantId,
+  selectedDescendantIds,
   effectiveTheme,
   instanceId,
+  onSelectDescendant,
 }: DescendantRendererProps) {
   const variables = useVariableStore((state) => state.variables);
   const globalTheme = useThemeStore((state) => state.activeTheme);
   const currentTheme = effectiveTheme ?? globalTheme;
-  const selectDescendant = useSelectionStore((state) => state.selectDescendant);
   const startDescendantEditing = useSelectionStore((state) => state.startDescendantEditing);
 
   const node = rawNode;
   if (node.enabled === false || node.visible === false) {
     return null;
   }
-  const isSelected = selectedDescendantId === node.id;
+  const isSelected = selectedDescendantIds.has(node.id);
 
   const rawFillColor = resolveColor(
     node.fill,
@@ -365,7 +406,7 @@ function DescendantRenderer({
     case "rect": {
       const rectTransform = getRectTransformProps(node);
       return (
-        <Group>
+        <Group id={node.id} name="instance-descendant" dataDescendantId={node.id}>
           <Rect
             {...rectTransform}
             perfectDrawEnabled={false}
@@ -406,7 +447,7 @@ function DescendantRenderer({
     case "ellipse": {
       const ellipseTransform = getEllipseTransformProps(node);
       return (
-        <Group>
+        <Group id={node.id} name="instance-descendant" dataDescendantId={node.id}>
           <Ellipse
             {...ellipseTransform}
             perfectDrawEnabled={false}
@@ -447,7 +488,7 @@ function DescendantRenderer({
       const textTransform = getRectTransformProps(node);
       const descTextDecoration = buildTextDecoration(node);
       return (
-        <Group>
+        <Group id={node.id} name="instance-descendant" dataDescendantId={node.id}>
           <Text
             {...textTransform}
             perfectDrawEnabled={false}
@@ -506,7 +547,7 @@ function DescendantRenderer({
       const geoOffsetY = -(geometryBounds?.y ?? 0) * scaleY;
 
       return (
-        <Group>
+        <Group id={node.id} name="instance-descendant" dataDescendantId={node.id}>
           <Group
             x={pathNode.x}
             y={pathNode.y}
@@ -581,11 +622,14 @@ function DescendantRenderer({
         (childId: string) =>
         (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
           e.cancelBubble = true;
-          selectDescendant(instanceId, childId);
+          onSelectDescendant(childId, e);
         };
       const containerChildren = (node as FrameNode | GroupNode).children;
       return (
         <Group
+          id={node.id}
+          name="instance-descendant"
+          dataDescendantId={node.id}
           {...getRectTransformProps(node)}
           opacity={node.opacity ?? 1}
           onClick={onClick}
@@ -623,9 +667,10 @@ function DescendantRenderer({
                 key={child.id}
                 node={child}
                 onClick={handleChildClick(child.id)}
-                selectedDescendantId={selectedDescendantId}
+                selectedDescendantIds={selectedDescendantIds}
                 effectiveTheme={effectiveTheme}
                 instanceId={instanceId}
+                onSelectDescendant={onSelectDescendant}
               />
             );
           })}

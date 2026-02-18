@@ -167,7 +167,7 @@ export function calculateDropPosition(
 
   // Get visible children excluding the dragged one
   const children = sourceChildren.filter(
-    (c) => c.id !== draggedId && c.visible !== false
+    (c) => c.id !== draggedId && c.visible !== false && c.enabled !== false
   )
 
   // Convert cursor to local frame coordinates

@@ -193,8 +193,8 @@ export const RenderNode = memo(function RenderNode({
     [node.gradientFill, node.width, node.height, node.type],
   );
 
-  // Don't render if node is hidden
-  if (node.visible === false) {
+  // Don't render if node is hidden/disabled
+  if (node.visible === false || node.enabled === false) {
     return null;
   }
 

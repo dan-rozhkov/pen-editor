@@ -432,7 +432,9 @@ function computeIntrinsicSize(frame: FrameNode): {
   });
   const pad = resolvePadding(container);
 
-  const visibleChildren = frame.children.filter((c) => c.visible !== false);
+  const visibleChildren = frame.children.filter(
+    (c) => c.visible !== false && c.enabled !== false,
+  );
   if (visibleChildren.length === 0) {
     return {
       width: container.padding[3] + container.padding[1],
@@ -505,7 +507,9 @@ export function calculateFrameLayout(frame: FrameNode): LayoutResult[] {
 
   const container = buildContainer(frame, { fitWidth, fitHeight });
   const children = Array.isArray((frame as any).children) ? frame.children : [];
-  const visibleChildren = children.filter((c) => c.visible !== false);
+  const visibleChildren = children.filter(
+    (c) => c.visible !== false && c.enabled !== false,
+  );
 
   if (visibleChildren.length === 0) {
     return [];
@@ -542,7 +546,9 @@ export function calculateFrameIntrinsicSize(
   const container = buildContainer(frame, { fitWidth, fitHeight });
   const pad = resolvePadding(container);
   const children = Array.isArray((frame as any).children) ? frame.children : [];
-  const visibleChildren = children.filter((c) => c.visible !== false);
+  const visibleChildren = children.filter(
+    (c) => c.visible !== false && c.enabled !== false,
+  );
 
   if (visibleChildren.length === 0) {
     const pw = container.padding[3] + container.padding[1];

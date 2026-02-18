@@ -117,7 +117,13 @@ export function createSelectionOverlay(
   }
 
   function redrawSelection(): void {
-    const { selectedIds, editingNodeId, editingMode, instanceContext } = useSelectionStore.getState();
+    const {
+      selectedIds,
+      selectedDescendantIds,
+      editingNodeId,
+      editingMode,
+      instanceContext,
+    } = useSelectionStore.getState();
     const scale = useViewportStore.getState().scale;
     const strokeWidth = 1 / scale;
 
@@ -149,27 +155,56 @@ export function createSelectionOverlay(
       const prepared = prepareInstanceNode(instanceNode as unknown as RefNode, allNodes, calculateLayoutForFrame);
       if (!prepared) return;
 
-      const rect = findDescendantLocalRect(prepared.layoutChildren, descendantId);
-      if (!rect) return;
+      const descendantIds =
+        selectedDescendantIds.length > 0
+          ? selectedDescendantIds
+          : [descendantId];
+      const rects = descendantIds
+        .map((id) => findDescendantLocalRect(prepared.layoutChildren, id))
+        .filter((rect): rect is NonNullable<typeof rect> => rect != null);
+      if (rects.length === 0) return;
 
-      const absX = instanceAbsPos.x + rect.x;
-      const absY = instanceAbsPos.y + rect.y;
-      const { width, height } = rect;
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
 
-      // Draw descendant outline
-      const outline = new Graphics();
-      outline.rect(absX, absY, width, height);
-      outline.stroke({ color: COMPONENT_SELECTION_COLOR, width: strokeWidth });
-      outlinesContainer.addChild(outline);
+      for (const rect of rects) {
+        const absX = instanceAbsPos.x + rect.x;
+        const absY = instanceAbsPos.y + rect.y;
+        const { width, height } = rect;
+        minX = Math.min(minX, absX);
+        minY = Math.min(minY, absY);
+        maxX = Math.max(maxX, absX + width);
+        maxY = Math.max(maxY, absY + height);
+
+        // Draw per-descendant outline
+        const outline = new Graphics();
+        outline.rect(absX, absY, width, height);
+        outline.stroke({ color: COMPONENT_SELECTION_COLOR, width: strokeWidth });
+        outlinesContainer.addChild(outline);
+      }
+
+      const width = maxX - minX;
+      const height = maxY - minY;
+      if (width <= 0 || height <= 0) return;
+
+      // Draw multi-selection bbox outline for descendants
+      if (rects.length > 1) {
+        const multiOutline = new Graphics();
+        multiOutline.rect(minX, minY, width, height);
+        multiOutline.stroke({ color: COMPONENT_SELECTION_COLOR, width: strokeWidth });
+        outlinesContainer.addChild(multiOutline);
+      }
 
       // Draw transform handles at descendant corners
       const handleSizeWorld = HANDLE_SIZE / scale;
       const halfHandle = handleSizeWorld / 2;
       const corners = [
-        { x: absX, y: absY },
-        { x: absX + width, y: absY },
-        { x: absX, y: absY + height },
-        { x: absX + width, y: absY + height },
+        { x: minX, y: minY },
+        { x: minX + width, y: minY },
+        { x: minX, y: minY + height },
+        { x: minX + width, y: minY + height },
       ];
       for (const corner of corners) {
         const handle = new Graphics();
@@ -180,7 +215,7 @@ export function createSelectionOverlay(
       }
 
       // Draw size label for descendant
-      drawSizeLabel(absX + width / 2, absY + height, width, height, scale, true);
+      drawSizeLabel(minX + width / 2, minY + height, width, height, scale, true);
       return;
     }
 
@@ -322,7 +357,12 @@ export function createSelectionOverlay(
     // Top-level frames always show names
     for (const rootId of state.rootIds) {
       const node = state.nodesById[rootId];
-      if (node && (node.type === "frame" || node.type === "group") && node.visible !== false) {
+      if (
+        node &&
+        (node.type === "frame" || node.type === "group") &&
+        node.visible !== false &&
+        node.enabled !== false
+      ) {
         frameIds.add(rootId);
       }
     }
@@ -381,8 +421,15 @@ export function createSelectionOverlay(
     // Instance descendant hover
     if (hoveredInstanceId) {
       if (selectedIds.includes(hoveredInstanceId)) {
-        const { instanceContext } = useSelectionStore.getState();
-        if (instanceContext?.instanceId === hoveredInstanceId && instanceContext?.descendantId === hoveredNodeId) return;
+        const { instanceContext, selectedDescendantIds } = useSelectionStore.getState();
+        if (
+          instanceContext?.instanceId === hoveredInstanceId &&
+          (selectedDescendantIds.length > 0
+            ? selectedDescendantIds.includes(hoveredNodeId)
+            : instanceContext?.descendantId === hoveredNodeId)
+        ) {
+          return;
+        }
       }
 
       const instanceNode = state.nodesById[hoveredInstanceId];

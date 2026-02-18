@@ -69,7 +69,7 @@ export function createMarqueeController(_context: InteractionContext): MarqueeCo
           const ids: string[] = [];
           for (const rootId of sceneState.rootIds) {
             const node = sceneState.nodesById[rootId];
-            if (!node || node.visible === false) continue;
+            if (!node || node.visible === false || node.enabled === false) continue;
             const nodeRight = node.x + node.width;
             const nodeBottom = node.y + node.height;
             if (node.x < x2 && nodeRight > x1 && node.y < y2 && nodeBottom > y1) {

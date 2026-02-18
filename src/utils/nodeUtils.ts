@@ -322,7 +322,7 @@ export function findChildAtPosition(
 ): string | null {
   for (let i = children.length - 1; i >= 0; i--) {
     const child = children[i];
-    if (child.visible === false) continue;
+    if (child.visible === false || child.enabled === false) continue;
     if (
       localX >= child.x &&
       localX <= child.x + child.width &&
@@ -346,7 +346,7 @@ export function findDeepestChildAtPosition(
 ): string | null {
   for (let i = children.length - 1; i >= 0; i--) {
     const child = children[i];
-    if (child.visible === false) continue;
+    if (child.visible === false || child.enabled === false) continue;
     if (
       localX >= child.x &&
       localX <= child.x + child.width &&
@@ -411,7 +411,7 @@ export function findTopmostFrameIntersectingRectWithLayout(
 
     for (let i = effectiveNodes.length - 1; i >= 0; i--) {
       const node = effectiveNodes[i];
-      if (node.visible === false) continue;
+      if (node.visible === false || node.enabled === false) continue;
 
       const { width, height } = getPreparedNodeEffectiveSize(
         node,

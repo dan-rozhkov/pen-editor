@@ -30,7 +30,7 @@ export function getViewportBounds(
  */
 export function isNodeVisible(node: SceneNode, bounds: ViewportBounds): boolean {
   // Early return if node is explicitly hidden
-  if (node.visible === false) {
+  if (node.visible === false || node.enabled === false) {
     return false;
   }
 
@@ -58,7 +58,7 @@ export function isChildVisibleInViewport(
   parentAbsY: number,
   bounds: ViewportBounds,
 ): boolean {
-  if (child.visible === false) return false
+  if (child.visible === false || child.enabled === false) return false
 
   const absX = parentAbsX + child.x
   const absY = parentAbsY + child.y

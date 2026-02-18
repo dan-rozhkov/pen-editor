@@ -53,7 +53,7 @@ export function findFrameLabelAtPoint(worldX: number, worldY: number): string | 
   // Match overlay visibility: top-level frames/groups only (same as Konva).
   for (const rootId of scene.rootIds) {
     const node = scene.nodesById[rootId];
-    if (!node || node.visible === false) continue;
+    if (!node || node.visible === false || node.enabled === false) continue;
     if (node.type !== "frame" && node.type !== "group") continue;
     frameIds.push(rootId);
   }
@@ -120,7 +120,7 @@ export function findNodeAtPoint(
     parentAbsX: number,
     parentAbsY: number,
   ): string | null => {
-    if (node.visible === false) return null;
+    if (node.visible === false || node.enabled === false) return null;
 
     const absX = parentAbsX + node.x;
     const absY = parentAbsY + node.y;

@@ -27,6 +27,7 @@ interface CanvasSelectionDataParams {
   nodes: SceneNode[];
   visibleNodes: SceneNode[];
   selectedIds: string[];
+  selectedDescendantIds: string[];
   editingNodeId: string | null;
   editingMode: "text" | "name" | null;
   instanceContext: InstanceContext | null;
@@ -37,6 +38,7 @@ export function useCanvasSelectionData({
   nodes,
   visibleNodes,
   selectedIds,
+  selectedDescendantIds,
   editingNodeId,
   editingMode,
   instanceContext,
@@ -230,33 +232,38 @@ export function useCanvasSelectionData({
           calculateLayoutForFrame,
         );
         if (preparedInstance) {
-          const descendantNode = findNodeById(
-            preparedInstance.layoutChildren,
-            instanceContext.descendantId,
+          const instanceAbsPos = getNodeAbsolutePositionWithLayout(
+            nodes,
+            instanceContext.instanceId,
+            calculateLayoutForFrame,
           );
+          if (!instanceAbsPos) return result;
 
-          if (descendantNode) {
-            const instanceAbsPos = getNodeAbsolutePositionWithLayout(
-              nodes,
-              instanceContext.instanceId,
-              calculateLayoutForFrame,
+          const descendantIds =
+            selectedDescendantIds.length > 0
+              ? selectedDescendantIds
+              : [instanceContext.descendantId];
+
+          for (const descendantId of descendantIds) {
+            const descendantNode = findNodeById(
+              preparedInstance.layoutChildren,
+              descendantId,
             );
             const localPos = findDescendantLocalPosition(
               preparedInstance.layoutChildren,
-              instanceContext.descendantId,
+              descendantId,
             );
-            if (instanceAbsPos && localPos) {
-              result.push({
-                node: descendantNode,
-                absX: instanceAbsPos.x + localPos.x,
-                absY: instanceAbsPos.y + localPos.y,
-                effectiveWidth: descendantNode.width,
-                effectiveHeight: descendantNode.height,
-                isInComponentContext: true,
-              });
-              return result;
-            }
+            if (!descendantNode || !localPos) continue;
+            result.push({
+              node: descendantNode,
+              absX: instanceAbsPos.x + localPos.x,
+              absY: instanceAbsPos.y + localPos.y,
+              effectiveWidth: descendantNode.width,
+              effectiveHeight: descendantNode.height,
+              isInComponentContext: true,
+            });
           }
+          if (result.length > 0) return result;
         }
       }
     }
@@ -304,7 +311,14 @@ export function useCanvasSelectionData({
       });
     }
     return result;
-  }, [selectedIds, nodes, calculateLayoutForFrame, instanceContext, isInComponentContext]);
+  }, [
+    selectedIds,
+    selectedDescendantIds,
+    nodes,
+    calculateLayoutForFrame,
+    instanceContext,
+    isInComponentContext,
+  ]);
 
   const selectionBoundingBox = useMemo(() => {
     if (collectSelectedNodes.length <= 1) return null;

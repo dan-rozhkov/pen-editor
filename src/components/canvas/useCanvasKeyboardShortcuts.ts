@@ -343,7 +343,31 @@ export function useCanvasKeyboardShortcuts({
       if (e.code === "Delete" || e.code === "Backspace") {
         if (isTyping) return;
         e.preventDefault();
-        const ids = useSelectionStore.getState().selectedIds;
+        const selectionState = useSelectionStore.getState();
+        const { selectedIds: ids, instanceContext, selectedDescendantIds } =
+          selectionState;
+
+        if (instanceContext) {
+          const descendantIds =
+            selectedDescendantIds.length > 0
+              ? selectedDescendantIds
+              : [instanceContext.descendantId];
+          if (descendantIds.length > 0) {
+            saveHistory(createSnapshot(useSceneStore.getState()));
+            startBatch();
+            const updateDescendantOverride =
+              useSceneStore.getState().updateDescendantOverride;
+            descendantIds.forEach((descendantId) => {
+              updateDescendantOverride(instanceContext.instanceId, descendantId, {
+                enabled: false,
+              });
+            });
+            endBatch();
+            clearSelection();
+          }
+          return;
+        }
+
         if (ids.length > 0) {
           saveHistory(createSnapshot(useSceneStore.getState()));
           startBatch();

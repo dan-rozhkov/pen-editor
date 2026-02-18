@@ -43,7 +43,7 @@ export function collectSnapTargets(
   const targets: SnapTarget[] = [];
 
   for (const node of nodes) {
-    if (node.visible === false) continue;
+    if (node.visible === false || node.enabled === false) continue;
 
     const absX = offsetX + node.x;
     const absY = offsetY + node.y;

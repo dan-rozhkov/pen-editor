@@ -26,6 +26,8 @@ import { useLayoutStore } from "@/store/layoutStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
+import type { RefNode } from "@/types/scene";
+import { findComponentById, findNodeById } from "@/utils/nodeUtils";
 import { getViewportBounds, isNodeVisible } from "@/utils/viewportUtils";
 
 export function Canvas() {
@@ -102,6 +104,7 @@ export function Canvas() {
   );
   const {
     selectedIds,
+    selectedDescendantIds,
     clearSelection,
     setSelectedIds,
     editingNodeId,
@@ -137,6 +140,7 @@ export function Canvas() {
     nodes,
     visibleNodes,
     selectedIds,
+    selectedDescendantIds,
     editingNodeId,
     editingMode,
     instanceContext,
@@ -227,6 +231,39 @@ export function Canvas() {
     const stage = stageRef.current;
     if (!transformer || !stage) return;
 
+    if (instanceContext && selectedDescendantIds.length > 0) {
+      const instanceGroup = stage.findOne(
+        `#${instanceContext.instanceId}`,
+      ) as Konva.Group | null;
+      if (!instanceGroup) {
+        transformer.nodes([]);
+        transformer.getLayer()?.batchDraw();
+        return;
+      }
+
+      const descendantNodesInInstance = instanceGroup.find((node: Konva.Node) => {
+        return (
+          node.getAttr("dataDescendantId") !== undefined
+        );
+      }) as Konva.Node[];
+      const descendantNodeById = new Map<string, Konva.Node>();
+      descendantNodesInInstance.forEach((node) => {
+        const descendantId = node.getAttr("dataDescendantId");
+        if (typeof descendantId === "string" && !descendantNodeById.has(descendantId)) {
+          descendantNodeById.set(descendantId, node);
+        }
+      });
+
+      const selectedDescendantNodes: Konva.Node[] = [];
+      selectedDescendantIds.forEach((id) => {
+        const node = descendantNodeById.get(id);
+        if (node) selectedDescendantNodes.push(node);
+      });
+      transformer.nodes(selectedDescendantNodes);
+      transformer.getLayer()?.batchDraw();
+      return;
+    }
+
     // Find selected nodes on stage, excluding the node being text-edited
     const selectedNodes: Konva.Node[] = [];
     selectedIds.forEach((id) => {
@@ -240,7 +277,14 @@ export function Canvas() {
 
     transformer.nodes(selectedNodes);
     transformer.getLayer()?.batchDraw();
-  }, [selectedIds, editingNodeId, editingMode, nodes]);
+  }, [
+    selectedIds,
+    selectedDescendantIds,
+    instanceContext,
+    editingNodeId,
+    editingMode,
+    nodes,
+  ]);
 
   useCanvasResize(containerRef, setDimensions);
 
@@ -251,6 +295,61 @@ export function Canvas() {
   }, [setStageRef]);
 
   useAltKeyMeasurement();
+
+  // Reset selection/transformer when current target becomes hidden/disabled.
+  useEffect(() => {
+    if (selectedIds.length === 0 && !instanceContext) return;
+
+    const shouldResetSelection = selectedIds.some((id) => {
+      const selectedNode = findNodeById(nodes, id);
+      return (
+        !selectedNode ||
+        selectedNode.visible === false ||
+        selectedNode.enabled === false
+      );
+    });
+    if (shouldResetSelection) {
+      clearSelection();
+      return;
+    }
+
+    if (!instanceContext) return;
+    const instanceNode = findNodeById(nodes, instanceContext.instanceId);
+    if (!instanceNode || instanceNode.type !== "ref") {
+      clearSelection();
+      return;
+    }
+
+    const refNode = instanceNode as RefNode;
+    if (refNode.visible === false || refNode.enabled === false) {
+      clearSelection();
+      return;
+    }
+
+    const descendantOverride = refNode.descendants?.[instanceContext.descendantId];
+    if (descendantOverride?.enabled === false || descendantOverride?.visible === false) {
+      clearSelection();
+      return;
+    }
+
+    const slotDescendant = refNode.slotContent?.[instanceContext.descendantId];
+    if (slotDescendant && (slotDescendant.enabled === false || slotDescendant.visible === false)) {
+      clearSelection();
+      return;
+    }
+
+    const component = findComponentById(nodes, refNode.componentId);
+    const originalDescendant = component
+      ? findNodeById(component.children, instanceContext.descendantId)
+      : null;
+    if (!originalDescendant) {
+      clearSelection();
+      return;
+    }
+    if (originalDescendant.visible === false || originalDescendant.enabled === false) {
+      clearSelection();
+    }
+  }, [selectedIds, instanceContext, nodes, clearSelection]);
 
   return (
     <div
