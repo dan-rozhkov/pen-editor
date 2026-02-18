@@ -1,6 +1,7 @@
 import { useSceneStore } from "@/store/sceneStore";
 import type { FlatSceneNode } from "@/types/scene";
 import type { ToolHandler } from "../toolRegistry";
+import { getAbsolutePositionFlat } from "@/utils/nodeUtils";
 
 interface LayoutRect {
   id: string;
@@ -11,30 +12,6 @@ interface LayoutRect {
   width: number;
   height: number;
   children?: LayoutRect[] | "...";
-}
-
-/**
- * Compute absolute position by walking up the parent chain.
- */
-function getAbsolutePosition(
-  nodeId: string,
-  nodesById: Record<string, FlatSceneNode>,
-  parentById: Record<string, string | null>
-): { x: number; y: number } {
-  let absX = 0;
-  let absY = 0;
-  let currentId: string | null = nodeId;
-
-  while (currentId) {
-    const node = nodesById[currentId];
-    if (node) {
-      absX += node.x;
-      absY += node.y;
-    }
-    currentId = parentById[currentId] ?? null;
-  }
-
-  return { x: absX, y: absY };
 }
 
 /**
@@ -65,7 +42,7 @@ function buildLayoutTree(
   if (!node) return null;
   if (node.visible === false) return null;
 
-  const abs = getAbsolutePosition(nodeId, nodesById, parentById);
+  const abs = getAbsolutePositionFlat(nodeId, nodesById, parentById);
   const rect: LayoutRect = {
     id: node.id,
     name: node.name,
@@ -124,7 +101,7 @@ function buildLayoutTree(
     if (parentId) {
       const parentNode = nodesById[parentId];
       if (parentNode) {
-        const parentAbs = getAbsolutePosition(parentId, nodesById, parentById);
+        const parentAbs = getAbsolutePositionFlat(parentId, nodesById, parentById);
         const parentBounds = { x: parentAbs.x, y: parentAbs.y, width: parentNode.width, height: parentNode.height };
         if (!isClipped({ x: abs.x, y: abs.y, width: node.width, height: node.height }, parentBounds)) {
           return null;

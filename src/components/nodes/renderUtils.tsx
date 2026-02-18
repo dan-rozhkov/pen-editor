@@ -593,6 +593,56 @@ export function hasPerSideStroke(strokeWidthPerSide?: PerSideStroke): boolean {
 }
 
 /**
+ * Apply fill and stroke with inside/outside alignment using callbacks.
+ *
+ * Call this after the shape path has been set up. `drawShape` draws the full
+ * shape path (including beginPath). `appendShapePath` appends the shape path
+ * to an existing path (no beginPath). `outerClipRect` draws the outer bounding
+ * rect for the evenodd outside-clip region.
+ */
+function applyStrokeAlignment(
+  ctx: any,
+  opts: {
+    fillColor: string | undefined;
+    strokeColor: string;
+    strokeWidth: number;
+    strokeAlign: 'inside' | 'outside';
+    drawShape: (ctx: any) => void;
+    appendShapePath: (ctx: any) => void;
+    outerClipRect: (ctx: any, pad: number) => void;
+  },
+): void {
+  const { fillColor, strokeColor, strokeWidth, strokeAlign, drawShape, appendShapePath, outerClipRect } = opts;
+
+  drawShape(ctx);
+
+  if (fillColor) {
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+  }
+
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth = strokeWidth * 2;
+
+  if (strokeAlign === 'inside') {
+    ctx.save();
+    ctx.clip();
+    ctx.stroke();
+    ctx.restore();
+  } else {
+    const pad = strokeWidth * 2;
+    ctx.save();
+    ctx.beginPath();
+    outerClipRect(ctx, pad);
+    appendShapePath(ctx);
+    ctx.clip('evenodd');
+    drawShape(ctx);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/**
  * Create a Konva sceneFunc for a Rect/Frame that handles inside/outside stroke alignment.
  * For 'center' alignment, returns undefined (use default Konva rendering).
  */
@@ -607,84 +657,38 @@ export function makeRectSceneFunc(
 ): ((ctx: any, shape: any) => void) | undefined {
   if (strokeAlign === 'center' || !strokeColor || !strokeWidth) return undefined;
 
+  const cr = cornerRadius ?? 0;
+
+  const drawRoundRectPath = (ctx: any) => {
+    ctx.moveTo(cr, 0);
+    ctx.lineTo(width - cr, 0);
+    ctx.arcTo(width, 0, width, cr, cr);
+    ctx.lineTo(width, height - cr);
+    ctx.arcTo(width, height, width - cr, height, cr);
+    ctx.lineTo(cr, height);
+    ctx.arcTo(0, height, 0, height - cr, cr);
+    ctx.lineTo(0, cr);
+    ctx.arcTo(0, 0, cr, 0, cr);
+    ctx.closePath();
+  };
+
+  const drawShape = (ctx: any) => {
+    ctx.beginPath();
+    if (cr > 0) drawRoundRectPath(ctx);
+    else ctx.rect(0, 0, width, height);
+  };
+
+  const appendShapePath = (ctx: any) => {
+    if (cr > 0) drawRoundRectPath(ctx);
+    else ctx.rect(0, 0, width, height);
+  };
+
+  const outerClipRect = (ctx: any, pad: number) => {
+    ctx.rect(-pad, -pad, width + pad * 2, height + pad * 2);
+  };
+
   return (ctx: any, _shape: any) => {
-    // Draw the rect path
-    const cr = cornerRadius ?? 0;
-    if (cr > 0) {
-      ctx.beginPath();
-      ctx.moveTo(cr, 0);
-      ctx.lineTo(width - cr, 0);
-      ctx.arcTo(width, 0, width, cr, cr);
-      ctx.lineTo(width, height - cr);
-      ctx.arcTo(width, height, width - cr, height, cr);
-      ctx.lineTo(cr, height);
-      ctx.arcTo(0, height, 0, height - cr, cr);
-      ctx.lineTo(0, cr);
-      ctx.arcTo(0, 0, cr, 0, cr);
-      ctx.closePath();
-    } else {
-      ctx.beginPath();
-      ctx.rect(0, 0, width, height);
-    }
-
-    // Fill
-    if (fillColor) {
-      ctx.fillStyle = fillColor;
-      ctx.fill();
-    }
-
-    // Stroke with alignment
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = strokeWidth * 2;
-
-    if (strokeAlign === 'inside') {
-      ctx.save();
-      ctx.clip();
-      ctx.stroke();
-      ctx.restore();
-    } else {
-      // outside
-      ctx.save();
-      // Clip to outside of shape: draw a large rect, then the shape in reverse (evenodd)
-      ctx.beginPath();
-      const pad = strokeWidth * 2;
-      ctx.rect(-pad, -pad, width + pad * 2, height + pad * 2);
-      // Re-draw shape path in reverse for cutout
-      if (cr > 0) {
-        ctx.moveTo(cr, 0);
-        ctx.lineTo(width - cr, 0);
-        ctx.arcTo(width, 0, width, cr, cr);
-        ctx.lineTo(width, height - cr);
-        ctx.arcTo(width, height, width - cr, height, cr);
-        ctx.lineTo(cr, height);
-        ctx.arcTo(0, height, 0, height - cr, cr);
-        ctx.lineTo(0, cr);
-        ctx.arcTo(0, 0, cr, 0, cr);
-        ctx.closePath();
-      } else {
-        ctx.rect(0, 0, width, height);
-      }
-      ctx.clip('evenodd');
-      // Now re-draw the shape and stroke
-      if (cr > 0) {
-        ctx.beginPath();
-        ctx.moveTo(cr, 0);
-        ctx.lineTo(width - cr, 0);
-        ctx.arcTo(width, 0, width, cr, cr);
-        ctx.lineTo(width, height - cr);
-        ctx.arcTo(width, height, width - cr, height, cr);
-        ctx.lineTo(cr, height);
-        ctx.arcTo(0, height, 0, height - cr, cr);
-        ctx.lineTo(0, cr);
-        ctx.arcTo(0, 0, cr, 0, cr);
-        ctx.closePath();
-      } else {
-        ctx.beginPath();
-        ctx.rect(0, 0, width, height);
-      }
-      ctx.stroke();
-      ctx.restore();
-    }
+    applyStrokeAlignment(ctx, { fillColor, strokeColor, strokeWidth, strokeAlign, drawShape, appendShapePath, outerClipRect });
   };
 }
 
@@ -704,37 +708,22 @@ export function makeEllipseSceneFunc(
   const rx = width / 2;
   const ry = height / 2;
 
-  return (ctx: any, _shape: any) => {
+  const drawShape = (ctx: any) => {
     ctx.beginPath();
     ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
     ctx.closePath();
+  };
 
-    if (fillColor) {
-      ctx.fillStyle = fillColor;
-      ctx.fill();
-    }
+  const appendShapePath = (ctx: any) => {
+    ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+  };
 
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = strokeWidth * 2;
+  const outerClipRect = (ctx: any, pad: number) => {
+    ctx.rect(-rx - pad, -ry - pad, width + pad * 2, height + pad * 2);
+  };
 
-    if (strokeAlign === 'inside') {
-      ctx.save();
-      ctx.clip();
-      ctx.stroke();
-      ctx.restore();
-    } else {
-      // outside
-      ctx.save();
-      ctx.beginPath();
-      const pad = strokeWidth * 2;
-      ctx.rect(-rx - pad, -ry - pad, width + pad * 2, height + pad * 2);
-      ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
-      ctx.clip('evenodd');
-      ctx.beginPath();
-      ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
+  return (ctx: any, _shape: any) => {
+    applyStrokeAlignment(ctx, { fillColor, strokeColor, strokeWidth, strokeAlign, drawShape, appendShapePath, outerClipRect });
   };
 }
 
@@ -750,50 +739,37 @@ export function makePolygonSceneFunc(
 ): ((ctx: any, shape: any) => void) | undefined {
   if (strokeAlign === 'center' || !strokeColor || !strokeWidth || points.length < 6) return undefined;
 
+  // Precompute bounding rect for outside clip
+  let polyMinX = Infinity, polyMinY = Infinity, polyMaxX = -Infinity, polyMaxY = -Infinity;
+  for (let i = 0; i < points.length; i += 2) {
+    if (points[i] < polyMinX) polyMinX = points[i];
+    if (points[i] > polyMaxX) polyMaxX = points[i];
+    if (points[i + 1] < polyMinY) polyMinY = points[i + 1];
+    if (points[i + 1] > polyMaxY) polyMaxY = points[i + 1];
+  }
+
+  const drawPolyPath = (ctx: any) => {
+    ctx.moveTo(points[0], points[1]);
+    for (let i = 2; i < points.length; i += 2) {
+      ctx.lineTo(points[i], points[i + 1]);
+    }
+    ctx.closePath();
+  };
+
+  const drawShape = (ctx: any) => {
+    ctx.beginPath();
+    drawPolyPath(ctx);
+  };
+
+  const appendShapePath = (ctx: any) => {
+    drawPolyPath(ctx);
+  };
+
+  const outerClipRect = (ctx: any, pad: number) => {
+    ctx.rect(polyMinX - pad, polyMinY - pad, polyMaxX - polyMinX + pad * 2, polyMaxY - polyMinY + pad * 2);
+  };
+
   return (ctx: any, _shape: any) => {
-    // Draw polygon path
-    const drawPoly = () => {
-      ctx.beginPath();
-      ctx.moveTo(points[0], points[1]);
-      for (let i = 2; i < points.length; i += 2) {
-        ctx.lineTo(points[i], points[i + 1]);
-      }
-      ctx.closePath();
-    };
-
-    drawPoly();
-    if (fillColor) {
-      ctx.fillStyle = fillColor;
-      ctx.fill();
-    }
-
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = strokeWidth * 2;
-
-    if (strokeAlign === 'inside') {
-      ctx.save();
-      ctx.clip();
-      ctx.stroke();
-      ctx.restore();
-    } else {
-      // outside
-      ctx.save();
-      // Compute bounding rect for clip
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      for (let i = 0; i < points.length; i += 2) {
-        if (points[i] < minX) minX = points[i];
-        if (points[i] > maxX) maxX = points[i];
-        if (points[i + 1] < minY) minY = points[i + 1];
-        if (points[i + 1] > maxY) maxY = points[i + 1];
-      }
-      const pad = strokeWidth * 2;
-      ctx.beginPath();
-      ctx.rect(minX - pad, minY - pad, maxX - minX + pad * 2, maxY - minY + pad * 2);
-      drawPoly();
-      ctx.clip('evenodd');
-      drawPoly();
-      ctx.stroke();
-      ctx.restore();
-    }
+    applyStrokeAlignment(ctx, { fillColor, strokeColor, strokeWidth, strokeAlign, drawShape, appendShapePath, outerClipRect });
   };
 }

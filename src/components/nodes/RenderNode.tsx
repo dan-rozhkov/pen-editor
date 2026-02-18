@@ -52,6 +52,18 @@ import {
 
 const AXIS_LOCK_THRESHOLD = 8; // pixels
 
+/** Reset the Konva target's scale/offset to reflect flip state, then end the history batch. */
+function applyFlipTransform(
+  target: Konva.Node,
+  node: { flipX?: boolean; flipY?: boolean; width: number; height: number },
+): void {
+  target.scaleX(node.flipX ? -1 : 1);
+  target.scaleY(node.flipY ? -1 : 1);
+  target.offsetX(node.flipX ? node.width : 0);
+  target.offsetY(node.flipY ? node.height : 0);
+  useHistoryStore.getState().endBatch();
+}
+
 interface RenderNodeProps {
   node: SceneNode;
   effectiveTheme?: ThemeName; // Theme inherited from parent or global
@@ -567,33 +579,11 @@ export const RenderNode = memo(function RenderNode({
       if (transformUpdateRef.current) {
         updateNode(n.id, transformUpdateRef.current);
       }
-      const flipSignX = n.flipX ? -1 : 1;
-      const flipSignY = n.flipY ? -1 : 1;
-      target.scaleX(flipSignX);
-      target.scaleY(flipSignY);
-      target.offsetX(n.flipX ? n.width : 0);
-      target.offsetY(n.flipY ? n.height : 0);
-      useHistoryStore.getState().endBatch();
+      applyFlipTransform(target, n);
       return;
     }
-    if (n.type === "text") {
-      const flipSignX = n.flipX ? -1 : 1;
-      const flipSignY = n.flipY ? -1 : 1;
-      target.scaleX(flipSignX);
-      target.scaleY(flipSignY);
-      target.offsetX(n.flipX ? n.width : 0);
-      target.offsetY(n.flipY ? n.height : 0);
-      useHistoryStore.getState().endBatch();
-      return;
-    }
-    if (n.type === "ref") {
-      const flipSignX = n.flipX ? -1 : 1;
-      const flipSignY = n.flipY ? -1 : 1;
-      target.scaleX(flipSignX);
-      target.scaleY(flipSignY);
-      target.offsetX(n.flipX ? n.width : 0);
-      target.offsetY(n.flipY ? n.height : 0);
-      useHistoryStore.getState().endBatch();
+    if (n.type === "text" || n.type === "ref") {
+      applyFlipTransform(target, n);
       return;
     }
     const scaleX = target.scaleX();

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import Konva from "konva";
 import { Group, Rect } from "react-konva";
 import type { GroupNode } from "@/types/scene";
@@ -17,6 +17,7 @@ import {
   getRectTransformProps,
 } from "./renderUtils";
 import { RenderNode } from "./RenderNode";
+import { useKonvaGroupCaching } from "@/hooks/useKonvaGroupCaching";
 
 interface GroupRendererProps {
   node: GroupNode;
@@ -53,15 +54,7 @@ export function GroupRenderer({
   const groupRef = useRef<Konva.Group | null>(null);
   const shouldCache = !isDragging && node.children.length >= 30;
 
-  useEffect(() => {
-    const group = groupRef.current;
-    if (!group) return;
-    if (!shouldCache) {
-      group.clearCache();
-      return;
-    }
-    group.cache({ pixelRatio: 1 });
-  }, [shouldCache, node]);
+  useKonvaGroupCaching(groupRef, shouldCache, [node]);
 
   const childSelectOverride = getChildSelectOverride({
     parentById,

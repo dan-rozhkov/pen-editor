@@ -1,5 +1,6 @@
 import { useSceneStore } from "@/store/sceneStore";
 import type { ToolHandler } from "../toolRegistry";
+import { getAbsolutePositionFlat } from "@/utils/nodeUtils";
 
 export const findEmptySpace: ToolHandler = async (args) => {
   const width = args.width as number;
@@ -22,7 +23,7 @@ export const findEmptySpace: ToolHandler = async (args) => {
     if (!node) {
       return JSON.stringify({ error: `Node "${nodeId}" not found` });
     }
-    const abs = getAbsolutePosition(nodeId, nodesById, parentById);
+    const abs = getAbsolutePositionFlat(nodeId, nodesById, parentById);
     bounds = {
       minX: abs.x,
       minY: abs.y,
@@ -83,23 +84,3 @@ export const findEmptySpace: ToolHandler = async (args) => {
   return JSON.stringify({ x: Math.round(x), y: Math.round(y) });
 };
 
-function getAbsolutePosition(
-  nodeId: string,
-  nodesById: Record<string, { x: number; y: number }>,
-  parentById: Record<string, string | null>
-): { x: number; y: number } {
-  let absX = 0;
-  let absY = 0;
-  let currentId: string | null = nodeId;
-
-  while (currentId) {
-    const node = nodesById[currentId];
-    if (node) {
-      absX += node.x;
-      absY += node.y;
-    }
-    currentId = parentById[currentId] ?? null;
-  }
-
-  return { x: absX, y: absY };
-}

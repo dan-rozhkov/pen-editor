@@ -1,10 +1,8 @@
 import { useSceneStore } from "@/store/sceneStore";
-import { useVariableStore } from "@/store/variableStore";
-import { useThemeStore } from "@/store/themeStore";
 import { createSnapshot, saveHistory } from "@/store/sceneStore/helpers/history";
 import type { FlatSceneNode, LayoutProperties } from "@/types/scene";
-import { getVariableValue } from "@/types/variable";
 import type { ToolHandler } from "../toolRegistry";
+import { resolveVariableReference } from "@/lib/tools/variableResolutionUtils";
 
 interface ReplacementRule {
   from: unknown;
@@ -24,44 +22,10 @@ interface PropertyRules {
   gap?: ReplacementRule[];
 }
 
-function normalizeVariableRefName(name: string): string {
-  return name.trim().replace(/^\$/, "");
-}
-
-function resolveVariableColorReference(
-  value: unknown
-): { variableId: string; variableValue: string } | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  if (!trimmed.startsWith("$")) return null;
-
-  const referenceName = normalizeVariableRefName(trimmed);
-  if (!referenceName) return null;
-
-  const { variables } = useVariableStore.getState();
-  const { activeTheme } = useThemeStore.getState();
-
-  const variable = variables.find((v) => {
-    const normalizedVarName = normalizeVariableRefName(v.name);
-    return (
-      v.name === trimmed ||
-      v.name === referenceName ||
-      normalizedVarName === referenceName
-    );
-  });
-
-  if (!variable) return null;
-
-  return {
-    variableId: variable.id,
-    variableValue: getVariableValue(variable, activeTheme),
-  };
-}
-
 function getColorReplacement(
   value: unknown
 ): { colorValue: unknown; binding: { variableId: string } | undefined } {
-  const variable = resolveVariableColorReference(value);
+  const variable = resolveVariableReference(value);
   if (variable) {
     return {
       colorValue: variable.variableValue,

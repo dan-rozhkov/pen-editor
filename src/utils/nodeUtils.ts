@@ -214,6 +214,31 @@ export function findEffectiveThemeInTree(
 }
 
 /**
+ * Compute absolute position of a node by walking up the flat parent chain.
+ * Works with the flat store representation (nodesById / parentById).
+ */
+export function getAbsolutePositionFlat(
+  nodeId: string,
+  nodesById: Record<string, { x: number; y: number }>,
+  parentById: Record<string, string | null>,
+): { x: number; y: number } {
+  let absX = 0;
+  let absY = 0;
+  let currentId: string | null = nodeId;
+
+  while (currentId) {
+    const node = nodesById[currentId];
+    if (node) {
+      absX += node.x;
+      absY += node.y;
+    }
+    currentId = parentById[currentId] ?? null;
+  }
+
+  return { x: absX, y: absY };
+}
+
+/**
  * Check if targetId is a descendant of ancestorId using the flat parentById map.
  * O(depth) instead of O(n) — walks the parent chain from targetId upwards.
  */

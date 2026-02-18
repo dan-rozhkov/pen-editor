@@ -9,6 +9,131 @@ import { calculateFrameIntrinsicSize } from "../../utils/yogaLayout";
 import { saveHistory } from "./helpers/history";
 import type { SceneState } from "./types";
 
+type Bounds = { x: number; y: number; width: number; height: number };
+
+/** Build a map of Yoga-computed positions for children of an auto-layout parent. */
+function buildLayoutMap(
+  parentId: string | null | undefined,
+  state: SceneState,
+): Map<string, Bounds> {
+  const layoutMap = new Map<string, Bounds>();
+  if (!parentId) return layoutMap;
+
+  const parentNode = state.nodesById[parentId];
+  if (
+    parentNode &&
+    parentNode.type === "frame" &&
+    (parentNode as FlatFrameNode).layout?.autoLayout
+  ) {
+    const calculateLayoutForFrame =
+      useLayoutStore.getState().calculateLayoutForFrame;
+    const parentTree = buildTree([parentId], state.nodesById, state.childrenById)[0] as FrameNode;
+    const layoutNodes = calculateLayoutForFrame(parentTree);
+    for (const ln of layoutNodes) {
+      layoutMap.set(ln.id, { x: ln.x, y: ln.y, width: ln.width, height: ln.height });
+    }
+  }
+  return layoutMap;
+}
+
+/** Get effective bounds for a node, accounting for auto-layout and fit-content frames. */
+function getEffectiveBounds(
+  node: FlatSceneNode,
+  layoutMap: Map<string, Bounds>,
+  state: SceneState,
+): Bounds {
+  const layoutNode = layoutMap.get(node.id);
+  const x = layoutNode?.x ?? node.x;
+  const y = layoutNode?.y ?? node.y;
+  let width = layoutNode?.width ?? node.width;
+  let height = layoutNode?.height ?? node.height;
+
+  if (node.type === "frame") {
+    const frame = node as FlatFrameNode;
+    if (frame.layout?.autoLayout) {
+      const fitWidth = frame.sizing?.widthMode === "fit_content";
+      const fitHeight = frame.sizing?.heightMode === "fit_content";
+      if (fitWidth || fitHeight) {
+        const frameTree = buildTree([node.id], state.nodesById, state.childrenById)[0] as FrameNode;
+        const intrinsic = calculateFrameIntrinsicSize(frameTree, { fitWidth, fitHeight });
+        if (fitWidth) width = intrinsic.width;
+        if (fitHeight) height = intrinsic.height;
+      }
+    }
+  }
+
+  return { x, y, width, height };
+}
+
+/** Compute bounding box + boundsMap + insertIndex for a set of nodes being wrapped. */
+function computeWrappingData(
+  ids: string[],
+  selectedNodes: FlatSceneNode[],
+  parentId: string | null | undefined,
+  state: SceneState,
+  layoutMap: Map<string, Bounds>,
+): { boundsMap: Map<string, Bounds>; minX: number; minY: number; maxX: number; maxY: number; insertIndex: number } {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const boundsMap = new Map<string, Bounds>();
+  for (const node of selectedNodes) {
+    const bounds = getEffectiveBounds(node, layoutMap, state);
+    boundsMap.set(node.id, bounds);
+    minX = Math.min(minX, bounds.x);
+    minY = Math.min(minY, bounds.y);
+    maxX = Math.max(maxX, bounds.x + bounds.width);
+    maxY = Math.max(maxY, bounds.y + bounds.height);
+  }
+
+  const parentChildren = parentId !== null && parentId !== undefined
+    ? (state.childrenById[parentId] ?? [])
+    : state.rootIds;
+  const insertIndex = Math.min(
+    ...ids.map((id) => parentChildren.indexOf(id)).filter((i) => i >= 0),
+  );
+
+  return { boundsMap, minX, minY, maxX, maxY, insertIndex };
+}
+
+/** Rebuild nodesById/parentById/childrenById/rootIds after wrapping ids into a new container. */
+function applyContainerWrapping(
+  ids: string[],
+  containerId: string,
+  containerNode: FlatSceneNode,
+  parentId: string | null | undefined,
+  boundsMap: Map<string, Bounds>,
+  minX: number,
+  minY: number,
+  insertIndex: number,
+  state: SceneState,
+): { newNodesById: Record<string, FlatSceneNode>; newParentById: Record<string, string | null>; newChildrenById: Record<string, string[]>; newRootIds: string[] } {
+  const newNodesById = { ...state.nodesById, [containerId]: containerNode };
+  const newParentById = { ...state.parentById, [containerId]: parentId ?? null };
+  const newChildrenById = { ...state.childrenById };
+  const idSet = new Set(ids);
+
+  for (const id of ids) {
+    const bounds = boundsMap.get(id)!;
+    const existingNode = newNodesById[id];
+    newNodesById[id] = { ...existingNode, x: bounds.x - minX, y: bounds.y - minY, width: bounds.width, height: bounds.height } as FlatSceneNode;
+    newParentById[id] = containerId;
+  }
+
+  newChildrenById[containerId] = ids;
+
+  let newRootIds = state.rootIds;
+  if (parentId !== null && parentId !== undefined) {
+    const filtered = (state.childrenById[parentId] ?? []).filter((cid) => !idSet.has(cid));
+    filtered.splice(Math.min(insertIndex, filtered.length), 0, containerId);
+    newChildrenById[parentId] = filtered;
+  } else {
+    const filtered = state.rootIds.filter((rid) => !idSet.has(rid));
+    filtered.splice(Math.min(insertIndex, filtered.length), 0, containerId);
+    newRootIds = filtered;
+  }
+
+  return { newNodesById, newParentById, newChildrenById, newRootIds };
+}
+
 export function createComplexOperations(
   get: () => SceneState,
   setState: (state: Partial<SceneState>) => void,
@@ -18,9 +143,6 @@ export function createComplexOperations(
       const state = get();
       if (ids.length < 2) return null;
 
-      const calculateLayoutForFrame =
-        useLayoutStore.getState().calculateLayoutForFrame;
-
       // All nodes must share the same parent
       const parentId = state.parentById[ids[0]];
       if (!ids.every((id) => state.parentById[id] === parentId)) return null;
@@ -29,60 +151,9 @@ export function createComplexOperations(
       const selectedNodes = ids.map((id) => state.nodesById[id]).filter(Boolean);
       if (selectedNodes.length !== ids.length) return null;
 
-      // If parent is an auto-layout frame, use Yoga-computed positions
-      let layoutMap = new Map<string, { x: number; y: number; width: number; height: number }>();
-      if (parentId) {
-        const parentNode = state.nodesById[parentId];
-        if (
-          parentNode &&
-          parentNode.type === "frame" &&
-          (parentNode as FlatFrameNode).layout?.autoLayout
-        ) {
-          // Build a temporary tree node for Yoga calculation
-          const parentTree = buildTree([parentId], state.nodesById, state.childrenById)[0] as FrameNode;
-          const layoutNodes = calculateLayoutForFrame(parentTree);
-          for (const ln of layoutNodes) {
-            layoutMap.set(ln.id, { x: ln.x, y: ln.y, width: ln.width, height: ln.height });
-          }
-        }
-      }
-
-      // Get effective bounds for each node
-      function getEffectiveBounds(node: FlatSceneNode): { x: number; y: number; width: number; height: number } {
-        const layoutNode = layoutMap.get(node.id);
-        const x = layoutNode?.x ?? node.x;
-        const y = layoutNode?.y ?? node.y;
-        let width = layoutNode?.width ?? node.width;
-        let height = layoutNode?.height ?? node.height;
-
-        if (node.type === "frame") {
-          const frame = node as FlatFrameNode;
-          if (frame.layout?.autoLayout) {
-            const fitWidth = frame.sizing?.widthMode === "fit_content";
-            const fitHeight = frame.sizing?.heightMode === "fit_content";
-            if (fitWidth || fitHeight) {
-              const frameTree = buildTree([node.id], state.nodesById, state.childrenById)[0] as FrameNode;
-              const intrinsic = calculateFrameIntrinsicSize(frameTree, { fitWidth, fitHeight });
-              if (fitWidth) width = intrinsic.width;
-              if (fitHeight) height = intrinsic.height;
-            }
-          }
-        }
-
-        return { x, y, width, height };
-      }
-
-      // Calculate bounding box
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      const boundsMap = new Map<string, { x: number; y: number; width: number; height: number }>();
-      for (const node of selectedNodes) {
-        const bounds = getEffectiveBounds(node);
-        boundsMap.set(node.id, bounds);
-        minX = Math.min(minX, bounds.x);
-        minY = Math.min(minY, bounds.y);
-        maxX = Math.max(maxX, bounds.x + bounds.width);
-        maxY = Math.max(maxY, bounds.y + bounds.height);
-      }
+      const layoutMap = buildLayoutMap(parentId, state);
+      const { boundsMap, minX, minY, maxX, maxY, insertIndex } =
+        computeWrappingData(ids, selectedNodes, parentId, state, layoutMap);
 
       saveHistory(state);
 
@@ -96,42 +167,8 @@ export function createComplexOperations(
         height: maxY - minY,
       };
 
-      // Find insertion index in parent's children
-      const parentChildren = parentId !== null && parentId !== undefined
-        ? (state.childrenById[parentId] ?? [])
-        : state.rootIds;
-      const insertIndex = Math.min(
-        ...ids.map((id) => parentChildren.indexOf(id)).filter((i) => i >= 0),
-      );
-
-      // Build new state
-      const newNodesById = { ...state.nodesById, [groupId]: groupNode };
-      const newParentById = { ...state.parentById, [groupId]: parentId };
-      const newChildrenById = { ...state.childrenById };
-      const idSet = new Set(ids);
-
-      // Update each moved node: adjust position relative to group, set parent to group
-      for (const id of ids) {
-        const bounds = boundsMap.get(id)!;
-        const existingNode = newNodesById[id];
-        newNodesById[id] = { ...existingNode, x: bounds.x - minX, y: bounds.y - minY, width: bounds.width, height: bounds.height } as FlatSceneNode;
-        newParentById[id] = groupId;
-      }
-
-      // Set group's children
-      newChildrenById[groupId] = ids;
-
-      // Update parent's children: remove grouped nodes, insert group
-      let newRootIds = state.rootIds;
-      if (parentId !== null && parentId !== undefined) {
-        const filtered = (state.childrenById[parentId] ?? []).filter((cid) => !idSet.has(cid));
-        filtered.splice(Math.min(insertIndex, filtered.length), 0, groupId);
-        newChildrenById[parentId] = filtered;
-      } else {
-        const filtered = state.rootIds.filter((rid) => !idSet.has(rid));
-        filtered.splice(Math.min(insertIndex, filtered.length), 0, groupId);
-        newRootIds = filtered;
-      }
+      const { newNodesById, newParentById, newChildrenById, newRootIds } =
+        applyContainerWrapping(ids, groupId, groupNode, parentId, boundsMap, minX, minY, insertIndex, state);
 
       setState({
         nodesById: newNodesById,
@@ -290,9 +327,6 @@ export function createComplexOperations(
       const state = get();
       if (ids.length < 1) return null;
 
-      const calculateLayoutForFrame =
-        useLayoutStore.getState().calculateLayoutForFrame;
-
       // All nodes must share the same parent
       const parentId = state.parentById[ids[0]];
       if (!ids.every((id) => state.parentById[id] === parentId)) return null;
@@ -300,57 +334,9 @@ export function createComplexOperations(
       const selectedNodes = ids.map((id) => state.nodesById[id]).filter(Boolean);
       if (selectedNodes.length !== ids.length) return null;
 
-      // If parent is an auto-layout frame, use Yoga-computed positions
-      let layoutMap = new Map<string, { x: number; y: number; width: number; height: number }>();
-      if (parentId) {
-        const parentNode = state.nodesById[parentId];
-        if (
-          parentNode &&
-          parentNode.type === "frame" &&
-          (parentNode as FlatFrameNode).layout?.autoLayout
-        ) {
-          const parentTree = buildTree([parentId], state.nodesById, state.childrenById)[0] as FrameNode;
-          const layoutNodes = calculateLayoutForFrame(parentTree);
-          for (const ln of layoutNodes) {
-            layoutMap.set(ln.id, { x: ln.x, y: ln.y, width: ln.width, height: ln.height });
-          }
-        }
-      }
-
-      function getEffectiveBounds(node: FlatSceneNode): { x: number; y: number; width: number; height: number } {
-        const layoutNode = layoutMap.get(node.id);
-        const x = layoutNode?.x ?? node.x;
-        const y = layoutNode?.y ?? node.y;
-        let width = layoutNode?.width ?? node.width;
-        let height = layoutNode?.height ?? node.height;
-
-        if (node.type === "frame") {
-          const frame = node as FlatFrameNode;
-          if (frame.layout?.autoLayout) {
-            const fitWidth = frame.sizing?.widthMode === "fit_content";
-            const fitHeight = frame.sizing?.heightMode === "fit_content";
-            if (fitWidth || fitHeight) {
-              const frameTree = buildTree([node.id], state.nodesById, state.childrenById)[0] as FrameNode;
-              const intrinsic = calculateFrameIntrinsicSize(frameTree, { fitWidth, fitHeight });
-              if (fitWidth) width = intrinsic.width;
-              if (fitHeight) height = intrinsic.height;
-            }
-          }
-        }
-
-        return { x, y, width, height };
-      }
-
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      const boundsMap = new Map<string, { x: number; y: number; width: number; height: number }>();
-      for (const node of selectedNodes) {
-        const bounds = getEffectiveBounds(node);
-        boundsMap.set(node.id, bounds);
-        minX = Math.min(minX, bounds.x);
-        minY = Math.min(minY, bounds.y);
-        maxX = Math.max(maxX, bounds.x + bounds.width);
-        maxY = Math.max(maxY, bounds.y + bounds.height);
-      }
+      const layoutMap = buildLayoutMap(parentId, state);
+      const { boundsMap, minX, minY, maxX, maxY, insertIndex } =
+        computeWrappingData(ids, selectedNodes, parentId, state, layoutMap);
 
       saveHistory(state);
 
@@ -376,39 +362,8 @@ export function createComplexOperations(
         },
       };
 
-      // Find insertion index
-      const parentChildren = parentId !== null && parentId !== undefined
-        ? (state.childrenById[parentId] ?? [])
-        : state.rootIds;
-      const insertIndex = Math.min(
-        ...ids.map((id) => parentChildren.indexOf(id)).filter((i) => i >= 0),
-      );
-
-      const newNodesById = { ...state.nodesById, [frameId]: frameNode };
-      const newParentById = { ...state.parentById, [frameId]: parentId };
-      const newChildrenById = { ...state.childrenById };
-      const idSet = new Set(ids);
-
-      // Update each wrapped node
-      for (const id of ids) {
-        const bounds = boundsMap.get(id)!;
-        const existingNode = newNodesById[id];
-        newNodesById[id] = { ...existingNode, x: bounds.x - minX, y: bounds.y - minY, width: bounds.width, height: bounds.height } as FlatSceneNode;
-        newParentById[id] = frameId;
-      }
-
-      newChildrenById[frameId] = ids;
-
-      let newRootIds = state.rootIds;
-      if (parentId !== null && parentId !== undefined) {
-        const filtered = (state.childrenById[parentId] ?? []).filter((cid) => !idSet.has(cid));
-        filtered.splice(Math.min(insertIndex, filtered.length), 0, frameId);
-        newChildrenById[parentId] = filtered;
-      } else {
-        const filtered = state.rootIds.filter((rid) => !idSet.has(rid));
-        filtered.splice(Math.min(insertIndex, filtered.length), 0, frameId);
-        newRootIds = filtered;
-      }
+      const { newNodesById, newParentById, newChildrenById, newRootIds } =
+        applyContainerWrapping(ids, frameId, frameNode, parentId, boundsMap, minX, minY, insertIndex, state);
 
       setState({
         nodesById: newNodesById,

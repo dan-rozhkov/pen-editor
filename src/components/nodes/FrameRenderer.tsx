@@ -29,6 +29,7 @@ import {
 } from "./renderUtils";
 import { prepareFrameNode } from "./instanceUtils";
 import { RenderNode } from "./RenderNode";
+import { useKonvaGroupCaching } from "@/hooks/useKonvaGroupCaching";
 
 interface FrameRendererProps {
   node: FrameNode;
@@ -174,15 +175,7 @@ export function FrameRenderer({
     layoutChildren.length >= 30 &&
     !node.clip;
 
-  useEffect(() => {
-    const group = groupRef.current;
-    if (!group) return;
-    if (!shouldCache) {
-      group.clearCache();
-      return;
-    }
-    group.cache({ pixelRatio: 1 });
-  }, [shouldCache, node, layoutChildren]);
+  useKonvaGroupCaching(groupRef, shouldCache, [node, layoutChildren]);
 
   // Double-click to enter this frame (drill down)
   // NOTE: This handler only fires when the Transformer is NOT active on this node.

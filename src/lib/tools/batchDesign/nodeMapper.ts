@@ -7,9 +7,7 @@ import type {
 } from "@/types/scene";
 import { generateId } from "@/types/scene";
 import { syncTextDimensions } from "@/store/sceneStore/helpers/textSync";
-import { useVariableStore } from "@/store/variableStore";
-import { useThemeStore } from "@/store/themeStore";
-import { getVariableValue } from "@/types/variable";
+import { resolveVariableReference } from "@/lib/tools/variableResolutionUtils";
 
 /** AI node data as received from the operations script */
 type AiNodeData = Record<string, unknown>;
@@ -23,39 +21,6 @@ function mapNodeType(mcpType: string): string {
   return TYPE_MAP[mcpType] ?? mcpType;
 }
 
-function normalizeVariableRefName(name: string): string {
-  return name.trim().replace(/^\$/, "");
-}
-
-function resolveVariableByReference(
-  value: unknown
-): { variableId: string; variableValue: string } | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  if (!trimmed.startsWith("$")) return null;
-
-  const referenceName = normalizeVariableRefName(trimmed);
-  if (!referenceName) return null;
-
-  const { variables } = useVariableStore.getState();
-  const { activeTheme } = useThemeStore.getState();
-
-  const variable = variables.find((v) => {
-    const normalizedVarName = normalizeVariableRefName(v.name);
-    return (
-      v.name === trimmed ||
-      v.name === referenceName ||
-      normalizedVarName === referenceName
-    );
-  });
-
-  if (!variable) return null;
-
-  return {
-    variableId: variable.id,
-    variableValue: getVariableValue(variable, activeTheme),
-  };
-}
 
 /**
  * Parse a sizing string like "fill_container" or "fill_container(500)".
@@ -118,7 +83,7 @@ export function mapNodeData(
       // Color variable references in AI format, e.g. "$color"
       case "fill":
       case "stroke": {
-        const resolvedVariable = resolveVariableByReference(value);
+        const resolvedVariable = resolveVariableReference(value);
         if (resolvedVariable) {
           result[`${key}Binding`] = { variableId: resolvedVariable.variableId };
           // Keep concrete value as fallback for contexts that don't resolve bindings.
@@ -306,7 +271,7 @@ export function mapDescendantOverride(
     if (key === "content") {
       result.text = String(value);
     } else if (key === "fill" || key === "stroke") {
-      const resolvedVariable = resolveVariableByReference(value);
+      const resolvedVariable = resolveVariableReference(value);
       if (resolvedVariable) {
         result[`${key}Binding`] = { variableId: resolvedVariable.variableId };
         result[key] = resolvedVariable.variableValue;
