@@ -50,7 +50,9 @@ export function PropertyEditor({
 
   return (
     <div className="flex flex-col">
-      <TypeSection node={node} onUpdate={onUpdate} allNodes={allNodes} />
+      {node.type !== "ref" && (
+        <TypeSection node={node} onUpdate={onUpdate} allNodes={allNodes} />
+      )}
       {node.type === "ref" && (
         <InstanceSection
           node={node}
