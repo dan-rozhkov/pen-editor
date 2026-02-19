@@ -22,6 +22,22 @@ function mapNodeType(mcpType: string): string {
   return TYPE_MAP[mcpType] ?? mcpType;
 }
 
+/** Resolve a color variable reference (e.g. "$color") and set both value and binding. */
+function applyColorVariable(
+  result: Record<string, unknown>,
+  key: string,
+  value: unknown,
+  theme?: ThemeName,
+): void {
+  const resolvedVariable = resolveVariableReference(value, theme);
+  if (resolvedVariable) {
+    result[`${key}Binding`] = { variableId: resolvedVariable.variableId };
+    result[key] = resolvedVariable.variableValue;
+  } else {
+    result[key] = value;
+  }
+}
+
 
 /**
  * Parse a sizing string like "fill_container" or "fill_container(500)".
@@ -85,14 +101,7 @@ export function mapNodeData(
       // Color variable references in AI format, e.g. "$color"
       case "fill":
       case "stroke": {
-        const resolvedVariable = resolveVariableReference(value, options?.theme);
-        if (resolvedVariable) {
-          result[`${key}Binding`] = { variableId: resolvedVariable.variableId };
-          // Keep concrete value as fallback for contexts that don't resolve bindings.
-          result[key] = resolvedVariable.variableValue;
-        } else {
-          result[key] = value;
-        }
+        applyColorVariable(result, key, value, options?.theme);
         break;
       }
 
@@ -307,13 +316,7 @@ export function mapDescendantOverride(
     if (key === "content") {
       result.text = String(value);
     } else if (key === "fill" || key === "stroke") {
-      const resolvedVariable = resolveVariableReference(value, options?.theme);
-      if (resolvedVariable) {
-        result[`${key}Binding`] = { variableId: resolvedVariable.variableId };
-        result[key] = resolvedVariable.variableValue;
-      } else {
-        result[key] = value;
-      }
+      applyColorVariable(result, key, value, options?.theme);
     } else if (key === "ref" || key === "placeholder") {
       // skip
     } else {

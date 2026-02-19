@@ -21,6 +21,7 @@ import {
   mapNodeData,
   mapDescendantOverride,
 } from "./nodeMapper";
+import { serializeNodeToDepth } from "../serializeUtils";
 
 const DOCUMENT_BINDING = "__document__";
 
@@ -407,6 +408,40 @@ function setDescendantOverrideByPath(
  * Execute an Update operation.
  * U(path, updateData)
  */
+/** Parse a slash-separated instance path, validate, and return the ref node clone + metadata. */
+function resolveInstancePath(
+  path: string,
+  op: ParsedOperation,
+  ctx: ExecutionContext,
+): { instanceId: string; subPath: string; refNode: RefNode; theme: ThemeName } {
+  const slashIdx = path.indexOf("/");
+  const instanceId = path.slice(0, slashIdx);
+  const subPath = path.slice(slashIdx + 1);
+
+  const instanceNode = ctx.nodesById[instanceId];
+  if (!instanceNode) {
+    throw new Error(
+      `Line ${op.line}: Instance node not found: "${instanceId}"`
+    );
+  }
+  if (instanceNode.type !== "ref") {
+    throw new Error(
+      `Line ${op.line}: Node "${instanceId}" is not a ref node (type: ${instanceNode.type})`
+    );
+  }
+
+  return {
+    instanceId,
+    subPath,
+    refNode: { ...instanceNode } as RefNode,
+    theme: resolveInheritedTheme(
+      ctx.parentById[instanceId] ?? null,
+      ctx.nodesById,
+      ctx.parentById,
+    ),
+  };
+}
+
 function executeUpdate(op: ParsedOperation, ctx: ExecutionContext): void {
   if (op.args.length < 2) {
     throw new Error(`Line ${op.line}: U() requires 2 arguments (path, updateData)`);
@@ -416,35 +451,12 @@ function executeUpdate(op: ParsedOperation, ctx: ExecutionContext): void {
   const updateData = resolveJsonArg(op.args[1]);
 
   if (path.includes("/")) {
-    // Instance descendant override: instanceId/descendantPath
-    const slashIdx = path.indexOf("/");
-    const instanceId = path.slice(0, slashIdx);
-    const descendantPath = path.slice(slashIdx + 1);
-
-    const instanceNode = ctx.nodesById[instanceId];
-    if (!instanceNode) {
-      throw new Error(
-        `Line ${op.line}: Instance node not found: "${instanceId}"`
-      );
-    }
-    if (instanceNode.type !== "ref") {
-      throw new Error(
-        `Line ${op.line}: Node "${instanceId}" is not a ref node (type: ${instanceNode.type})`
-      );
-    }
-
-    const refNode = { ...instanceNode } as RefNode;
-    const mapped = mapDescendantOverride(updateData, {
-      theme: resolveInheritedTheme(
-        ctx.parentById[instanceId] ?? null,
-        ctx.nodesById,
-        ctx.parentById,
-      ),
-    });
+    const { instanceId, subPath, refNode, theme } = resolveInstancePath(path, op, ctx);
+    const mapped = mapDescendantOverride(updateData, { theme });
 
     refNode.descendants = setDescendantOverrideByPath(
       refNode.descendants,
-      descendantPath,
+      subPath,
       mapped,
     );
 
@@ -489,32 +501,8 @@ function executeReplace(op: ParsedOperation, ctx: ExecutionContext): void {
   const nodeData = resolveJsonArg(op.args[1]);
 
   if (path.includes("/")) {
-    // Slot content replacement: instanceId/slotChildId
-    const slashIdx = path.indexOf("/");
-    const instanceId = path.slice(0, slashIdx);
-    const slotChildId = path.slice(slashIdx + 1);
-
-    const instanceNode = ctx.nodesById[instanceId];
-    if (!instanceNode) {
-      throw new Error(
-        `Line ${op.line}: Instance node not found: "${instanceId}"`
-      );
-    }
-    if (instanceNode.type !== "ref") {
-      throw new Error(
-        `Line ${op.line}: Node "${instanceId}" is not a ref node`
-      );
-    }
-
-    const refNode = { ...instanceNode } as RefNode;
-    const newNode = createNodeFromAiDataWithTheme(
-      nodeData,
-      resolveInheritedTheme(
-        ctx.parentById[instanceId] ?? null,
-        ctx.nodesById,
-        ctx.parentById,
-      ),
-    );
+    const { instanceId, subPath: slotChildId, refNode, theme } = resolveInstancePath(path, op, ctx);
+    const newNode = createNodeFromAiDataWithTheme(nodeData, theme);
     refNode.slotContent = {
       ...refNode.slotContent,
       [slotChildId]: newNode,
@@ -757,27 +745,6 @@ function serializeNodeWithDepth(
   ctx: ExecutionContext,
   depth: number
 ): Record<string, unknown> {
-  const node = ctx.nodesById[nodeId];
-  if (!node) return { id: nodeId, error: "not found" };
-
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(node)) {
-    if (value !== undefined) {
-      result[key] = value;
-    }
-  }
-
-  // Add children for container types
-  const childIds = ctx.childrenById[nodeId];
-  if (childIds && childIds.length > 0) {
-    if (depth <= 0) {
-      result.children = "...";
-    } else {
-      result.children = childIds
-        .map((cid) => serializeNodeWithDepth(cid, ctx, depth - 1))
-        .filter(Boolean);
-    }
-  }
-
-  return result;
+  return serializeNodeToDepth(nodeId, ctx.nodesById, ctx.childrenById, depth)
+    ?? { id: nodeId, error: "not found" };
 }

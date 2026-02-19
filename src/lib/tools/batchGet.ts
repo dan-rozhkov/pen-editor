@@ -4,63 +4,12 @@ import { useThemeStore } from "@/store/themeStore";
 import { getVariableValue } from "@/types/variable";
 import type { FlatSceneNode } from "@/types/scene";
 import type { ToolHandler } from "../toolRegistry";
+import { serializeNodeToDepth } from "./serializeUtils";
 
 interface SearchPattern {
   type?: string;
   name?: string;
   reusable?: boolean;
-}
-
-/**
- * Serialize a flat node into a JSON-friendly object with children up to readDepth.
- */
-function serializeNode(
-  nodeId: string,
-  nodesById: Record<string, FlatSceneNode>,
-  childrenById: Record<string, string[]>,
-  depth: number,
-  resolveVars: boolean,
-  variableLookup: Record<string, string>
-): Record<string, unknown> | null {
-  const node = nodesById[nodeId];
-  if (!node) return null;
-
-  const result: Record<string, unknown> = {};
-  // Copy all non-undefined properties from the node
-  for (const [key, value] of Object.entries(node)) {
-    if (value !== undefined) {
-      result[key] = value;
-    }
-  }
-
-  // Resolve variable bindings if requested
-  if (resolveVars) {
-    const rec = node as unknown as Record<string, unknown>;
-    const fillBinding = rec.fillBinding as { variableId: string } | undefined;
-    if (fillBinding?.variableId && variableLookup[fillBinding.variableId]) {
-      result.fill = variableLookup[fillBinding.variableId];
-    }
-    const strokeBinding = rec.strokeBinding as { variableId: string } | undefined;
-    if (strokeBinding?.variableId && variableLookup[strokeBinding.variableId]) {
-      result.stroke = variableLookup[strokeBinding.variableId];
-    }
-  }
-
-  // Add children for container types
-  const childIds = childrenById[nodeId];
-  if (childIds && childIds.length > 0) {
-    if (depth <= 0) {
-      result.children = "...";
-    } else {
-      result.children = childIds
-        .map((cid) =>
-          serializeNode(cid, nodesById, childrenById, depth - 1, resolveVars, variableLookup)
-        )
-        .filter(Boolean);
-    }
-  }
-
-  return result;
 }
 
 /**
@@ -166,7 +115,10 @@ export const batchGet: ToolHandler = async (args) => {
   // Serialize results with readDepth
   const results = resultIds
     .map((id) =>
-      serializeNode(id, nodesById, childrenById, readDepth, !!resolveVariables, variableLookup)
+      serializeNodeToDepth(id, nodesById, childrenById, readDepth, {
+        resolveVars: !!resolveVariables,
+        variableLookup,
+      })
     )
     .filter(Boolean);
 

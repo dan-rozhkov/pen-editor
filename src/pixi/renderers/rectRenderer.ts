@@ -1,6 +1,6 @@
 import { Container, Graphics } from "pixi.js";
 import type { RectNode } from "@/types/scene";
-import { applyFill, applyStroke } from "./fillStrokeHelpers";
+import { applyFill, applyStroke, hasVisualPropsChanged } from "./fillStrokeHelpers";
 import { applyImageFill } from "./imageFillHelpers";
 
 export function createRectContainer(node: RectNode): Container {
@@ -24,21 +24,7 @@ export function updateRectContainer(
   prev: RectNode,
 ): void {
   // Check if visual properties changed
-  if (
-    node.width !== prev.width ||
-    node.height !== prev.height ||
-    node.fill !== prev.fill ||
-    node.fillBinding !== prev.fillBinding ||
-    node.fillOpacity !== prev.fillOpacity ||
-    node.stroke !== prev.stroke ||
-    node.strokeBinding !== prev.strokeBinding ||
-    node.strokeOpacity !== prev.strokeOpacity ||
-    node.strokeWidth !== prev.strokeWidth ||
-    node.strokeAlign !== prev.strokeAlign ||
-    node.strokeWidthPerSide !== prev.strokeWidthPerSide ||
-    node.cornerRadius !== prev.cornerRadius ||
-    node.gradientFill !== prev.gradientFill
-  ) {
+  if (hasVisualPropsChanged(node, prev)) {
     const gfx = container.getChildByLabel("rect-bg") as Graphics;
     if (gfx) {
       gfx.clear();

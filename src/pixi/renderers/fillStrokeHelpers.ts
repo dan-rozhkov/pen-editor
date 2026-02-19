@@ -101,6 +101,29 @@ export function buildPixiGradient(
   });
 }
 
+/** Check if any shared visual properties (fill, stroke, size, cornerRadius) changed. */
+export function hasVisualPropsChanged(
+  node: FlatSceneNode,
+  prev: FlatSceneNode,
+): boolean {
+  return (
+    node.width !== prev.width ||
+    node.height !== prev.height ||
+    node.fill !== prev.fill ||
+    node.fillBinding !== prev.fillBinding ||
+    node.fillOpacity !== prev.fillOpacity ||
+    node.stroke !== prev.stroke ||
+    node.strokeBinding !== prev.strokeBinding ||
+    node.strokeOpacity !== prev.strokeOpacity ||
+    node.strokeWidth !== prev.strokeWidth ||
+    node.strokeAlign !== prev.strokeAlign ||
+    node.strokeWidthPerSide !== prev.strokeWidthPerSide ||
+    (node as { cornerRadius?: number }).cornerRadius !==
+      (prev as { cornerRadius?: number }).cornerRadius ||
+    node.gradientFill !== prev.gradientFill
+  );
+}
+
 /** Fill the current path using node solid/gradient fill settings. */
 export function applyFill(gfx: Graphics, node: FlatSceneNode, width: number, height: number): void {
   if (node.gradientFill) {

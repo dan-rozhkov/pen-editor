@@ -131,6 +131,43 @@ function findAncestorContainerIds(
 }
 
 /**
+ * Expand an instance and its ancestor containers, then select a descendant.
+ * Shared by pointerDown and dblClick handlers.
+ */
+function expandAndSelectDescendant(
+  instanceId: string,
+  descendantHit: DescendantHit,
+  currentNodes: SceneNode[],
+  calculateLayoutForFrame: (frame: import("@/types/scene").FrameNode) => SceneNode[],
+): void {
+  useSceneStore.getState().setFrameExpanded(instanceId, true);
+  const instanceNode = findNodeById(currentNodes, instanceId);
+  if (instanceNode && instanceNode.type === "ref") {
+    const preparedInstance = prepareInstanceNode(
+      instanceNode,
+      currentNodes,
+      calculateLayoutForFrame,
+    );
+    if (preparedInstance) {
+      const ancestorIds = findAncestorContainerIds(
+        preparedInstance.layoutChildren,
+        descendantHit.id,
+      );
+      if (ancestorIds && ancestorIds.length > 0) {
+        ancestorIds.forEach((id) =>
+          useSceneStore.getState().setFrameExpanded(id, true),
+        );
+      }
+    }
+  }
+  useSelectionStore.getState().selectDescendant(
+    instanceId,
+    descendantHit.id,
+    descendantHit.path,
+  );
+}
+
+/**
  * Set up all pointer interaction handlers on the PixiJS canvas.
  * Returns a cleanup function.
  */
@@ -315,31 +352,7 @@ export function setupPixiInteraction(
                 }
               }
             }
-            useSceneStore.getState().setFrameExpanded(hitId, true);
-            const instanceNode = findNodeById(currentNodes, hitId);
-            if (instanceNode && instanceNode.type === "ref") {
-              const preparedInstance = prepareInstanceNode(
-                instanceNode,
-                currentNodes,
-                calculateLayoutForFrame,
-              );
-              if (preparedInstance) {
-                const ancestorIds = findAncestorContainerIds(
-                  preparedInstance.layoutChildren,
-                  descendantHit.id,
-                );
-                if (ancestorIds && ancestorIds.length > 0) {
-                  ancestorIds.forEach((id) =>
-                    useSceneStore.getState().setFrameExpanded(id, true),
-                  );
-                }
-              }
-            }
-            selState.selectDescendant(
-              hitId,
-              descendantHit.id,
-              descendantHit.path,
-            );
+            expandAndSelectDescendant(hitId, descendantHit, currentNodes, calculateLayoutForFrame);
             return;
           }
         }
@@ -412,30 +425,10 @@ export function setupPixiInteraction(
           calculateLayoutForFrame,
         );
         if (descendantHit) {
-          useSceneStore.getState().setFrameExpanded(selectedNode.id, true);
-          const preparedInstance = prepareInstanceNode(
-            selectedNode,
-            currentNodes,
-            calculateLayoutForFrame,
-          );
-          if (preparedInstance) {
-            const ancestorIds = findAncestorContainerIds(
-              preparedInstance.layoutChildren,
-              descendantHit.id,
-            );
-            if (ancestorIds && ancestorIds.length > 0) {
-              ancestorIds.forEach((id) =>
-                useSceneStore.getState().setFrameExpanded(id, true),
-              );
-            }
-          }
-          useSelectionStore.getState().selectDescendant(
-            selectedNode.id,
-            descendantHit.id,
-            descendantHit.path,
-          );
+          expandAndSelectDescendant(selectedNode.id, descendantHit, currentNodes, calculateLayoutForFrame);
+          const preparedInstance = prepareInstanceNode(selectedNode, currentNodes, calculateLayoutForFrame);
           const descendantNode = findNodeById(
-            prepareInstanceNode(selectedNode, currentNodes, calculateLayoutForFrame)?.layoutChildren ?? [],
+            preparedInstance?.layoutChildren ?? [],
             descendantHit.id,
           );
           if (descendantNode?.type === "text") {
@@ -488,30 +481,10 @@ export function setupPixiInteraction(
         calculateLayoutForFrame,
       );
       if (descendantHit) {
-        useSceneStore.getState().setFrameExpanded(hitId, true);
-        const preparedInstance = prepareInstanceNode(
-          node,
-          currentNodes,
-          calculateLayoutForFrame,
-        );
-        if (preparedInstance) {
-          const ancestorIds = findAncestorContainerIds(
-            preparedInstance.layoutChildren,
-            descendantHit.id,
-          );
-          if (ancestorIds && ancestorIds.length > 0) {
-            ancestorIds.forEach((id) =>
-              useSceneStore.getState().setFrameExpanded(id, true),
-            );
-          }
-        }
-        useSelectionStore.getState().selectDescendant(
-          hitId,
-          descendantHit.id,
-          descendantHit.path,
-        );
+        expandAndSelectDescendant(hitId, descendantHit, currentNodes, calculateLayoutForFrame);
+        const preparedInstance = prepareInstanceNode(node, currentNodes, calculateLayoutForFrame);
         const descendantNode = findNodeById(
-          prepareInstanceNode(node, currentNodes, calculateLayoutForFrame)?.layoutChildren ?? [],
+          preparedInstance?.layoutChildren ?? [],
           descendantHit.id,
         );
         if (descendantNode?.type === "text") {

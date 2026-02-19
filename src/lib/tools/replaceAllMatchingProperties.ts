@@ -68,43 +68,36 @@ export const replaceAllMatchingProperties: ToolHandler = async (args) => {
 
     let updated: FlatSceneNode | null = null;
 
-    // fillColor → fill (all nodes)
-    if (rules.fillColor) {
-      for (const rule of rules.fillColor) {
-        if (isColorEqual(node.fill, rule.from)) {
+    function applyColorRules(
+      colorRules: ReplacementRule[],
+      sourceField: "fill" | "stroke",
+      bindingField: "fillBinding" | "strokeBinding",
+    ) {
+      const currentValue = (node as unknown as Record<string, unknown>)[sourceField] as string | undefined;
+      for (const rule of colorRules) {
+        if (isColorEqual(currentValue, rule.from)) {
           const replacement = getColorReplacement(rule.to);
           updated = updated ?? { ...node };
-          (updated as unknown as Record<string, unknown>).fill = replacement.colorValue;
-          (updated as unknown as Record<string, unknown>).fillBinding = replacement.binding;
+          (updated as unknown as Record<string, unknown>)[sourceField] = replacement.colorValue;
+          (updated as unknown as Record<string, unknown>)[bindingField] = replacement.binding;
           replacements++;
         }
       }
+    }
+
+    // fillColor → fill (all nodes)
+    if (rules.fillColor) {
+      applyColorRules(rules.fillColor, "fill", "fillBinding");
     }
 
     // textColor → fill (text nodes only)
     if (rules.textColor && node.type === "text") {
-      for (const rule of rules.textColor) {
-        if (isColorEqual(node.fill, rule.from)) {
-          const replacement = getColorReplacement(rule.to);
-          updated = updated ?? { ...node };
-          (updated as unknown as Record<string, unknown>).fill = replacement.colorValue;
-          (updated as unknown as Record<string, unknown>).fillBinding = replacement.binding;
-          replacements++;
-        }
-      }
+      applyColorRules(rules.textColor, "fill", "fillBinding");
     }
 
     // strokeColor → stroke
     if (rules.strokeColor) {
-      for (const rule of rules.strokeColor) {
-        if (isColorEqual(node.stroke, rule.from)) {
-          const replacement = getColorReplacement(rule.to);
-          updated = updated ?? { ...node };
-          (updated as unknown as Record<string, unknown>).stroke = replacement.colorValue;
-          (updated as unknown as Record<string, unknown>).strokeBinding = replacement.binding;
-          replacements++;
-        }
-      }
+      applyColorRules(rules.strokeColor, "stroke", "strokeBinding");
     }
 
     // strokeThickness → strokeWidth

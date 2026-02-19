@@ -6,7 +6,7 @@ import type {
   SceneNode,
 } from "@/types/scene";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
-import { applyFill, applyStroke } from "./fillStrokeHelpers";
+import { applyFill, applyStroke, hasVisualPropsChanged } from "./fillStrokeHelpers";
 import { applyImageFill } from "./imageFillHelpers";
 import { pushRenderTheme, popRenderTheme } from "./colorHelpers";
 import { createNodeContainer } from "./index";
@@ -151,19 +151,7 @@ export function updateFrameContainer(
 
   // Update background
   if (
-    node.width !== prev.width ||
-    node.height !== prev.height ||
-    node.fill !== prev.fill ||
-    node.fillBinding !== prev.fillBinding ||
-    node.fillOpacity !== prev.fillOpacity ||
-    node.stroke !== prev.stroke ||
-    node.strokeBinding !== prev.strokeBinding ||
-    node.strokeOpacity !== prev.strokeOpacity ||
-    node.strokeWidth !== prev.strokeWidth ||
-    node.strokeAlign !== prev.strokeAlign ||
-    node.strokeWidthPerSide !== prev.strokeWidthPerSide ||
-    node.cornerRadius !== prev.cornerRadius ||
-    node.gradientFill !== prev.gradientFill ||
+    hasVisualPropsChanged(node, prev) ||
     node.sizing !== prev.sizing ||
     node.layout !== prev.layout
   ) {

@@ -424,14 +424,24 @@ function rectContains(outer: AbsoluteRect, inner: AbsoluteRect): boolean {
 }
 
 /**
- * Find the top-most/deepest frame that intersects with a world-space rectangle.
- * Useful for inserting freshly created nodes into a frame under them.
+ * Generic frame-tree search that walks nodes in reverse z-order,
+ * resolving auto-layout positions, and delegates hit-testing to callbacks.
  */
-export function findTopmostFrameIntersectingRectWithLayout(
+function searchFrameTree(
   nodes: SceneNode[],
   targetRect: AbsoluteRect,
   calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
+  options: {
+    /** Return true to skip this node before computing its rect. */
+    skipNode?: (node: SceneNode) => boolean;
+    /** Return true if the node should be considered a candidate (pre-recursion check). */
+    testRect: (nodeRect: AbsoluteRect, targetRect: AbsoluteRect) => boolean;
+    /** Return true if a frame node should be returned as a hit (post-recursion check). */
+    acceptFrame?: (nodeRect: AbsoluteRect, targetRect: AbsoluteRect) => boolean;
+  },
 ): FrameHitResult | null {
+  const { skipNode, testRect, acceptFrame } = options;
+
   function search(
     searchNodes: SceneNode[],
     accX: number,
@@ -446,6 +456,7 @@ export function findTopmostFrameIntersectingRectWithLayout(
     for (let i = effectiveNodes.length - 1; i >= 0; i--) {
       const node = effectiveNodes[i];
       if (node.visible === false || node.enabled === false) continue;
+      if (skipNode?.(node)) continue;
 
       const { width, height } = getPreparedNodeEffectiveSize(
         node,
@@ -456,7 +467,7 @@ export function findTopmostFrameIntersectingRectWithLayout(
       const absY = accY + node.y;
       const nodeRect: AbsoluteRect = { x: absX, y: absY, width, height };
 
-      if (!rectsIntersect(targetRect, nodeRect)) continue;
+      if (!testRect(nodeRect, targetRect)) continue;
 
       if (isContainerNode(node)) {
         const childHit = search(
@@ -469,7 +480,12 @@ export function findTopmostFrameIntersectingRectWithLayout(
       }
 
       if (node.type === "frame") {
-        return { frame: node, absoluteX: absX, absoluteY: absY };
+        const shouldAccept = acceptFrame
+          ? acceptFrame(nodeRect, targetRect)
+          : true;
+        if (shouldAccept) {
+          return { frame: node, absoluteX: absX, absoluteY: absY };
+        }
       }
     }
 
@@ -477,6 +493,20 @@ export function findTopmostFrameIntersectingRectWithLayout(
   }
 
   return search(nodes, 0, 0, null);
+}
+
+/**
+ * Find the top-most/deepest frame that intersects with a world-space rectangle.
+ * Useful for inserting freshly created nodes into a frame under them.
+ */
+export function findTopmostFrameIntersectingRectWithLayout(
+  nodes: SceneNode[],
+  targetRect: AbsoluteRect,
+  calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
+): FrameHitResult | null {
+  return searchFrameTree(nodes, targetRect, calculateLayoutForFrame, {
+    testRect: (nodeRect, target) => rectsIntersect(target, nodeRect),
+  });
 }
 
 /**
@@ -488,50 +518,10 @@ export function findTopmostFrameContainingRectWithLayout(
   targetRect: AbsoluteRect,
   calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
 ): FrameHitResult | null {
-  function search(
-    searchNodes: SceneNode[],
-    accX: number,
-    accY: number,
-    parentFrame: FrameNode | null,
-  ): FrameHitResult | null {
-    let effectiveNodes = searchNodes;
-    if (parentFrame?.layout?.autoLayout) {
-      effectiveNodes = prepareFrameNode(parentFrame, calculateLayoutForFrame).layoutChildren;
-    }
-
-    for (let i = effectiveNodes.length - 1; i >= 0; i--) {
-      const node = effectiveNodes[i];
-      if (node.visible === false || node.enabled === false) continue;
-      if (node.type !== "frame" && node.type !== "group") continue;
-
-      const { width, height } = getPreparedNodeEffectiveSize(
-        node,
-        nodes,
-        calculateLayoutForFrame,
-      );
-      const absX = accX + node.x;
-      const absY = accY + node.y;
-      const nodeRect: AbsoluteRect = { x: absX, y: absY, width, height };
-
-      if (!rectContains(nodeRect, targetRect)) continue;
-
-      const childHit = search(
-        node.children,
-        absX,
-        absY,
-        node.type === "frame" ? node : null,
-      );
-      if (childHit) return childHit;
-
-      if (node.type === "frame") {
-        return { frame: node, absoluteX: absX, absoluteY: absY };
-      }
-    }
-
-    return null;
-  }
-
-  return search(nodes, 0, 0, null);
+  return searchFrameTree(nodes, targetRect, calculateLayoutForFrame, {
+    skipNode: (node) => node.type !== "frame" && node.type !== "group",
+    testRect: (nodeRect, target) => rectContains(nodeRect, target),
+  });
 }
 
 /**
@@ -543,51 +533,10 @@ export function findTopmostFrameContainedByRectWithLayout(
   targetRect: AbsoluteRect,
   calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
 ): FrameHitResult | null {
-  function search(
-    searchNodes: SceneNode[],
-    accX: number,
-    accY: number,
-    parentFrame: FrameNode | null,
-  ): FrameHitResult | null {
-    let effectiveNodes = searchNodes;
-    if (parentFrame?.layout?.autoLayout) {
-      effectiveNodes = prepareFrameNode(parentFrame, calculateLayoutForFrame).layoutChildren;
-    }
-
-    for (let i = effectiveNodes.length - 1; i >= 0; i--) {
-      const node = effectiveNodes[i];
-      if (node.visible === false || node.enabled === false) continue;
-
-      const { width, height } = getPreparedNodeEffectiveSize(
-        node,
-        nodes,
-        calculateLayoutForFrame,
-      );
-      const absX = accX + node.x;
-      const absY = accY + node.y;
-      const nodeRect: AbsoluteRect = { x: absX, y: absY, width, height };
-
-      if (!rectsIntersect(targetRect, nodeRect)) continue;
-
-      if (isContainerNode(node)) {
-        const childHit = search(
-          node.children,
-          absX,
-          absY,
-          node.type === "frame" ? node : null,
-        );
-        if (childHit) return childHit;
-      }
-
-      if (node.type === "frame" && rectContains(targetRect, nodeRect)) {
-        return { frame: node, absoluteX: absX, absoluteY: absY };
-      }
-    }
-
-    return null;
-  }
-
-  return search(nodes, 0, 0, null);
+  return searchFrameTree(nodes, targetRect, calculateLayoutForFrame, {
+    testRect: (nodeRect, target) => rectsIntersect(target, nodeRect),
+    acceptFrame: (nodeRect, target) => rectContains(target, nodeRect),
+  });
 }
 
 /**
