@@ -116,6 +116,55 @@ interface SizeSectionProps {
 export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiSelect }: SizeSectionProps) {
   const calculateLayoutForFrame = useLayoutStore((s) => s.calculateLayoutForFrame);
   const allNodes = useSceneStore((s) => s.getNodes());
+  const updateNodeWithoutHistory = useSceneStore((s) => s.updateNodeWithoutHistory);
+
+  const reflowAutoLayoutSiblings = (
+    dimension: "width" | "height",
+    newMode: SizingMode,
+    computedSize?: number,
+  ) => {
+    if (
+      !parentContext.isInsideAutoLayout ||
+      !parentContext.parent ||
+      parentContext.parent.type !== "frame"
+    ) {
+      return;
+    }
+
+    const parent = parentContext.parent as FrameNode;
+    const sizingKey = dimension === "width" ? "widthMode" : "heightMode";
+    const modifiedChildren = parent.children.map((child) => {
+      if (child.id !== node.id) return child;
+      return {
+        ...child,
+        sizing: {
+          ...child.sizing,
+          [sizingKey]: newMode,
+        },
+        ...(computedSize !== undefined ? { [dimension]: computedSize } : {}),
+      };
+    });
+    const modifiedParent = { ...parent, children: modifiedChildren } as FrameNode;
+    const layoutChildren = calculateLayoutForFrame(modifiedParent);
+    const childById = new Map(modifiedChildren.map((child) => [child.id, child]));
+
+    for (const laidOutChild of layoutChildren) {
+      const sourceChild = childById.get(laidOutChild.id);
+      if (!sourceChild) continue;
+      const widthMode = sourceChild.sizing?.widthMode ?? "fixed";
+      const heightMode = sourceChild.sizing?.heightMode ?? "fixed";
+      const updates: Partial<SceneNode> = {};
+      if (widthMode !== "fixed" && sourceChild.width !== laidOutChild.width) {
+        updates.width = laidOutChild.width;
+      }
+      if (heightMode !== "fixed" && sourceChild.height !== laidOutChild.height) {
+        updates.height = laidOutChild.height;
+      }
+      if (updates.width !== undefined || updates.height !== undefined) {
+        updateNodeWithoutHistory(laidOutChild.id, updates);
+      }
+    }
+  };
 
   const { effectiveWidth, effectiveHeight } = useMemo(() => {
     let ew = node.width;
@@ -203,6 +252,7 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
                       },
                       ...(computedWidth !== undefined ? { width: computedWidth } : {}),
                     });
+                    reflowAutoLayoutSiblings("width", newMode, computedWidth);
                   }}
                 >
                   {option.label}
@@ -246,6 +296,7 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
                       },
                       ...(computedHeight !== undefined ? { height: computedHeight } : {}),
                     });
+                    reflowAutoLayoutSiblings("height", newMode, computedHeight);
                   }}
                 >
                   {option.label}

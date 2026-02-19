@@ -194,6 +194,27 @@ export function createRefContainer(
     applyFill(bg, effectiveFrameStyle, effectiveWidth, effectiveHeight);
     applyStroke(bg, effectiveFrameStyle, effectiveWidth, effectiveHeight, frame.cornerRadius);
     childrenContainer.addChild(bg);
+
+    // In auto-layout siblings, outside stroke should not visually bleed
+    // into neighbors. Clip only the instance background to its own bounds.
+    const parentId = useSceneStore.getState().parentById[node.id];
+    const parentNode = parentId ? nodesById[parentId] : undefined;
+    const isInAutoLayoutParent =
+      parentNode?.type === "frame" &&
+      (parentNode as FlatFrameNode).layout?.autoLayout;
+    const effectiveStrokeAlign = effectiveFrameStyle.strokeAlign ?? "center";
+    if (isInAutoLayoutParent && effectiveStrokeAlign === "outside") {
+      const bgMask = new Graphics();
+      bgMask.label = "ref-bg-mask";
+      if (frame.cornerRadius) {
+        bgMask.roundRect(0, 0, effectiveWidth, effectiveHeight, frame.cornerRadius);
+      } else {
+        bgMask.rect(0, 0, effectiveWidth, effectiveHeight);
+      }
+      bgMask.fill(0xffffff);
+      childrenContainer.addChild(bgMask);
+      bg.mask = bgMask;
+    }
   }
 
   // Merge flattened override subtrees once to avoid O(n^2) map spreading
