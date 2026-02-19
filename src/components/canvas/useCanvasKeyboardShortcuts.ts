@@ -280,14 +280,17 @@ export function useCanvasKeyboardShortcuts({
         return;
       }
 
-      if (e.altKey && (e.metaKey || e.ctrlKey) && e.code === "KeyK") {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.code === "KeyK") {
         e.preventDefault();
         const ids = useSelectionStore.getState().selectedIds;
         if (ids.length === 1) {
           const selectedNode = findNodeById(nodes, ids[0]);
-          if (selectedNode && selectedNode.type === "frame") {
+          if (selectedNode?.type === "frame") {
             const frameNode = selectedNode as FrameNode;
-            if (!frameNode.reusable) {
+            if (!frameNode.reusable) updateNode(selectedNode.id, { reusable: true });
+          } else if (selectedNode?.type === "group") {
+            const converted = useSceneStore.getState().convertNodeType(selectedNode.id);
+            if (converted) {
               updateNode(selectedNode.id, { reusable: true });
             }
           }
