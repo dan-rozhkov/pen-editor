@@ -28,3 +28,9 @@
   - get_screenshot: Konva toDataURL with pixelRatio:2, PixiJS extract.base64 fallback
   - All handlers registered in toolRegistry replacing stubs
   - Tested in browser: all tools verified with programmatic node creation, variable binding, reusable flag
+
+2026-02-19: detach-component — Added "Detach Component" button for ref node instances.
+  - Store: detachInstance() in instanceOperations.ts — resolves ref via resolveRefToFrame(), clones children with new IDs, flattens into store
+  - UI: InstanceSection now rendered in PropertyEditor for ref nodes, with "Detach Component" button
+  - History: saveHistory() called before mutation, undo fully restores ref node
+  - Tested in browser: created component + instance, verified detach converts ref→frame, overrides preserved, children get new IDs, undo restores ref, original component unchanged

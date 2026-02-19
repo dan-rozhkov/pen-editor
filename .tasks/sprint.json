@@ -32,6 +32,10 @@
     "passed": true
   },
   {
+    "name": "detach-component",
+    "passed": true
+  },
+  {
     "name": "design-agent-thinking",
     "passed": false
   }
