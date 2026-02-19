@@ -57,42 +57,48 @@ export function drawPerSideStroke(
   }
 }
 
+function applyStopOpacity(color: string, opacity?: number): string {
+  if (opacity === undefined || opacity >= 1) return color;
+  const hex = color.replace('#', '');
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${opacity})`;
+}
+
 export function buildPixiGradient(
   gradient: GradientFill,
-  width: number,
-  height: number,
+  _width: number,
+  _height: number,
 ): FillGradient {
   const sorted = [...gradient.stops].sort((a, b) => a.position - b.position);
 
   if (gradient.type === "linear") {
-    const x0 = gradient.startX * width;
-    const y0 = gradient.startY * height;
-    const x1 = gradient.endX * width;
-    const y1 = gradient.endY * height;
-
-    const g = new FillGradient({
+    return new FillGradient({
       type: "linear",
-      start: { x: x0, y: y0 },
-      end: { x: x1, y: y1 },
+      start: { x: gradient.startX, y: gradient.startY },
+      end: { x: gradient.endX, y: gradient.endY },
+      textureSpace: "local",
       colorStops: sorted.map((s) => ({
         offset: s.position,
-        color: s.color,
+        color: applyStopOpacity(s.color, s.opacity),
       })),
     });
-    return g;
   }
 
-  // Radial - approximate with linear for now (PixiJS v8 FillGradient has limited radial support)
-  const g = new FillGradient({
-    type: "linear",
-    start: { x: gradient.startX * width, y: gradient.startY * height },
-    end: { x: gradient.endX * width, y: gradient.endY * height },
+  // Radial gradient
+  return new FillGradient({
+    type: "radial",
+    center: { x: gradient.startX, y: gradient.startY },
+    innerRadius: gradient.startRadius ?? 0,
+    outerCenter: { x: gradient.endX, y: gradient.endY },
+    outerRadius: gradient.endRadius ?? 0.5,
+    textureSpace: "local",
     colorStops: sorted.map((s) => ({
       offset: s.position,
-      color: s.color,
+      color: applyStopOpacity(s.color, s.opacity),
     })),
   });
-  return g;
 }
 
 /** Fill the current path using node solid/gradient fill settings. */
