@@ -386,6 +386,13 @@ export function createPixiSync(sceneRoot: Container): () => void {
     applyTextResolutionRecursive(sceneRoot, resolution);
   }
 
+  function refreshTextResolution(): void {
+    const resolution =
+      appliedTextResolution ||
+      getTargetTextResolution(useViewportStore.getState().scale);
+    applyTextResolutionRecursive(sceneRoot, resolution);
+  }
+
   /**
    * Full rebuild - used on initial load.
    */
@@ -598,6 +605,9 @@ export function createPixiSync(sceneRoot: Container): () => void {
     if (dirtyAutoLayoutFrames.size > 0) {
       applyAutoLayoutPositions(state, dirtyAutoLayoutFrames);
     }
+    // New text nodes can appear during incremental subtree rebuilds (e.g. instance edits).
+    // Re-apply current resolution so they don't stay at the default and look blurry.
+    refreshTextResolution();
     applyTextEditingVisibility();
   }
 

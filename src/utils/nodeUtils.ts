@@ -414,6 +414,15 @@ function rectsIntersect(a: AbsoluteRect, b: AbsoluteRect): boolean {
   );
 }
 
+function rectContains(outer: AbsoluteRect, inner: AbsoluteRect): boolean {
+  return (
+    inner.x >= outer.x &&
+    inner.y >= outer.y &&
+    inner.x + inner.width <= outer.x + outer.width &&
+    inner.y + inner.height <= outer.y + outer.height
+  );
+}
+
 /**
  * Find the top-most/deepest frame that intersects with a world-space rectangle.
  * Useful for inserting freshly created nodes into a frame under them.
@@ -460,6 +469,117 @@ export function findTopmostFrameIntersectingRectWithLayout(
       }
 
       if (node.type === "frame") {
+        return { frame: node, absoluteX: absX, absoluteY: absY };
+      }
+    }
+
+    return null;
+  }
+
+  return search(nodes, 0, 0, null);
+}
+
+/**
+ * Find the top-most/deepest frame that fully contains a world-space rectangle.
+ * Use this when deciding whether a newly drawn node should become a child.
+ */
+export function findTopmostFrameContainingRectWithLayout(
+  nodes: SceneNode[],
+  targetRect: AbsoluteRect,
+  calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
+): FrameHitResult | null {
+  function search(
+    searchNodes: SceneNode[],
+    accX: number,
+    accY: number,
+    parentFrame: FrameNode | null,
+  ): FrameHitResult | null {
+    let effectiveNodes = searchNodes;
+    if (parentFrame?.layout?.autoLayout) {
+      effectiveNodes = prepareFrameNode(parentFrame, calculateLayoutForFrame).layoutChildren;
+    }
+
+    for (let i = effectiveNodes.length - 1; i >= 0; i--) {
+      const node = effectiveNodes[i];
+      if (node.visible === false || node.enabled === false) continue;
+      if (node.type !== "frame" && node.type !== "group") continue;
+
+      const { width, height } = getPreparedNodeEffectiveSize(
+        node,
+        nodes,
+        calculateLayoutForFrame,
+      );
+      const absX = accX + node.x;
+      const absY = accY + node.y;
+      const nodeRect: AbsoluteRect = { x: absX, y: absY, width, height };
+
+      if (!rectContains(nodeRect, targetRect)) continue;
+
+      const childHit = search(
+        node.children,
+        absX,
+        absY,
+        node.type === "frame" ? node : null,
+      );
+      if (childHit) return childHit;
+
+      if (node.type === "frame") {
+        return { frame: node, absoluteX: absX, absoluteY: absY };
+      }
+    }
+
+    return null;
+  }
+
+  return search(nodes, 0, 0, null);
+}
+
+/**
+ * Find the top-most/deepest frame that is fully contained by a world-space rectangle.
+ * Useful when a newly drawn frame should become parent of an existing frame under it.
+ */
+export function findTopmostFrameContainedByRectWithLayout(
+  nodes: SceneNode[],
+  targetRect: AbsoluteRect,
+  calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
+): FrameHitResult | null {
+  function search(
+    searchNodes: SceneNode[],
+    accX: number,
+    accY: number,
+    parentFrame: FrameNode | null,
+  ): FrameHitResult | null {
+    let effectiveNodes = searchNodes;
+    if (parentFrame?.layout?.autoLayout) {
+      effectiveNodes = prepareFrameNode(parentFrame, calculateLayoutForFrame).layoutChildren;
+    }
+
+    for (let i = effectiveNodes.length - 1; i >= 0; i--) {
+      const node = effectiveNodes[i];
+      if (node.visible === false || node.enabled === false) continue;
+
+      const { width, height } = getPreparedNodeEffectiveSize(
+        node,
+        nodes,
+        calculateLayoutForFrame,
+      );
+      const absX = accX + node.x;
+      const absY = accY + node.y;
+      const nodeRect: AbsoluteRect = { x: absX, y: absY, width, height };
+
+      if (!rectsIntersect(targetRect, nodeRect)) continue;
+
+      if (isContainerNode(node)) {
+        const childHit = search(
+          node.children,
+          absX,
+          absY,
+          node.type === "frame" ? node : null,
+        );
+        if (childHit) return childHit;
+      }
+
+      if (node.type === "frame" && rectContains(targetRect, nodeRect)) {
         return { frame: node, absoluteX: absX, absoluteY: absY };
       }
     }

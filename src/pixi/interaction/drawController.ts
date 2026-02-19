@@ -4,7 +4,10 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import type { SceneNode } from "@/types/scene";
 import { generateId } from "@/types/scene";
-import { findTopmostFrameIntersectingRectWithLayout } from "@/utils/nodeUtils";
+import {
+  findTopmostFrameContainedByRectWithLayout,
+  findTopmostFrameContainingRectWithLayout,
+} from "@/utils/nodeUtils";
 import { generatePolygonPoints } from "@/utils/polygonUtils";
 import type { InteractionContext, DrawState } from "./types";
 
@@ -102,9 +105,10 @@ export function createDrawController(_context: InteractionContext): DrawControll
     const sceneState = useSceneStore.getState();
     const currentNodes = sceneState.getNodes();
     const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-    const targetFrame = findTopmostFrameIntersectingRectWithLayout(
+    const targetRect = { x, y, width, height };
+    const targetFrame = findTopmostFrameContainingRectWithLayout(
       currentNodes,
-      { x, y, width, height },
+      targetRect,
       calculateLayoutForFrame,
     );
 
@@ -116,6 +120,20 @@ export function createDrawController(_context: InteractionContext): DrawControll
       });
     } else {
       sceneState.addNode(node);
+      if (tool === "frame") {
+        const wrappedFrame = findTopmostFrameContainedByRectWithLayout(
+          currentNodes,
+          targetRect,
+          calculateLayoutForFrame,
+        );
+        if (wrappedFrame && wrappedFrame.frame.id !== id) {
+          sceneState.updateNodeWithoutHistory(wrappedFrame.frame.id, {
+            x: wrappedFrame.absoluteX - x,
+            y: wrappedFrame.absoluteY - y,
+          });
+          sceneState.moveNode(wrappedFrame.frame.id, id, 0);
+        }
+      }
     }
     useSelectionStore.getState().select(id);
   }

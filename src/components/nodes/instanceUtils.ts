@@ -69,6 +69,7 @@ export function resolveRefToFrame(
     y: refNode.y,
     width: refNode.width,
     height: refNode.height,
+    ...(refNode.sizing !== undefined && { sizing: refNode.sizing }),
     ...(refNode.fill !== undefined && { fill: refNode.fill }),
     ...(refNode.fillBinding !== undefined && {
       fillBinding: refNode.fillBinding,

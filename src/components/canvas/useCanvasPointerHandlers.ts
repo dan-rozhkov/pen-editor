@@ -15,7 +15,8 @@ import {
   computeSiblingDistances,
 } from "@/utils/measureUtils";
 import {
-  findTopmostFrameIntersectingRectWithLayout,
+  findTopmostFrameContainingRectWithLayout,
+  findTopmostFrameContainedByRectWithLayout,
   findNodeById,
   getNodeAbsolutePositionWithLayout,
   isDescendantOf,
@@ -183,11 +184,13 @@ export function useCanvasPointerHandlers({
         }
       }
       const currentNodes = useSceneStore.getState().getNodes();
+      const sceneState = useSceneStore.getState();
       const calculateLayoutForFrame =
         useLayoutStore.getState().calculateLayoutForFrame;
-      const targetFrame = findTopmostFrameIntersectingRectWithLayout(
+      const targetRect = { x: rx, y: ry, width: rw, height: rh };
+      const targetFrame = findTopmostFrameContainingRectWithLayout(
         currentNodes,
-        { x: rx, y: ry, width: rw, height: rh },
+        targetRect,
         calculateLayoutForFrame,
       );
 
@@ -199,6 +202,20 @@ export function useCanvasPointerHandlers({
         });
       } else {
         addNode(node);
+        if (tool === "frame") {
+          const wrappedFrame = findTopmostFrameContainedByRectWithLayout(
+            currentNodes,
+            targetRect,
+            calculateLayoutForFrame,
+          );
+          if (wrappedFrame && wrappedFrame.frame.id !== id) {
+            sceneState.updateNodeWithoutHistory(wrappedFrame.frame.id, {
+              x: wrappedFrame.absoluteX - rx,
+              y: wrappedFrame.absoluteY - ry,
+            });
+            sceneState.moveNode(wrappedFrame.frame.id, id, 0);
+          }
+        }
       }
       useSelectionStore.getState().select(id);
     },
