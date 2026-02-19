@@ -242,6 +242,7 @@ export function updateRefContainer(
   if (
     forceRebuild ||
     node.componentId !== prev.componentId ||
+    node.sizing !== prev.sizing ||
     node.descendants !== prev.descendants ||
     node.slotContent !== prev.slotContent ||
     node.fill !== prev.fill ||

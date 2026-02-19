@@ -138,9 +138,22 @@ export function prepareInstanceNode(
   const component = findComponentById(allNodes, instanceNode.componentId);
   if (!component) return null;
 
+  const effectiveWidthMode =
+    instanceNode.sizing?.widthMode ?? component.sizing?.widthMode ?? "fixed";
+  const effectiveHeightMode =
+    instanceNode.sizing?.heightMode ?? component.sizing?.heightMode ?? "fixed";
+
   const descendantOverrides = instanceNode.descendants || {};
   const resolvedComponentForLayout: FrameNode = {
     ...component,
+    // Instance geometry/sizing must drive internal auto-layout.
+    // Without this, fill-sized instances keep child layout from base component width.
+    width: instanceNode.width,
+    height: instanceNode.height,
+    sizing: {
+      ...component.sizing,
+      ...instanceNode.sizing,
+    },
     children: component.children.map((child) =>
       resolveNodeWithInstanceOverrides(
         child,
@@ -157,10 +170,6 @@ export function prepareInstanceNode(
   ) as FrameNode;
   const layoutChildren = preparedComponent.children;
 
-  const effectiveWidthMode =
-    instanceNode.sizing?.widthMode ?? preparedComponent.sizing?.widthMode ?? "fixed";
-  const effectiveHeightMode =
-    instanceNode.sizing?.heightMode ?? preparedComponent.sizing?.heightMode ?? "fixed";
   const fitWidth = effectiveWidthMode === "fit_content";
   const fitHeight = effectiveHeightMode === "fit_content";
   const intrinsicSize =

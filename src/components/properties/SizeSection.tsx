@@ -1,9 +1,17 @@
 import { useMemo } from "react";
 import { LinkSimple, LinkSimpleBreak } from "@phosphor-icons/react";
-import type { FrameNode, PolygonNode, SceneNode, SizingMode } from "@/types/scene";
+import type {
+  FrameNode,
+  PolygonNode,
+  RefNode,
+  SceneNode,
+  SizingMode,
+} from "@/types/scene";
 import type { ParentContext } from "@/utils/nodeUtils";
 import { useLayoutStore } from "@/store/layoutStore";
+import { useSceneStore } from "@/store/sceneStore";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
+import { prepareInstanceNode } from "@/components/nodes/instanceUtils";
 import { cn } from "@/lib/utils";
 import {
   NumberInput,
@@ -32,6 +40,7 @@ function computeSizeForMode(
   mode: SizingMode,
   dimension: "width" | "height",
   calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
+  allNodes: SceneNode[],
 ): number | undefined {
   if (mode === "fixed") return undefined;
 
@@ -45,6 +54,26 @@ function computeSizeForMode(
       fitHeight: dimension === "height",
     });
     return dimension === "width" ? intrinsic.width : intrinsic.height;
+  }
+
+  if (mode === "fit_content" && node.type === "ref") {
+    const sizingKey = dimension === "width" ? "widthMode" : "heightMode";
+    const previewNode: RefNode = {
+      ...(node as RefNode),
+      sizing: {
+        ...(node.sizing ?? {}),
+        [sizingKey]: mode,
+      },
+    };
+    const prepared = prepareInstanceNode(
+      previewNode,
+      allNodes,
+      calculateLayoutForFrame,
+    );
+    if (!prepared) return undefined;
+    return dimension === "width"
+      ? prepared.effectiveWidth
+      : prepared.effectiveHeight;
   }
 
   if (
@@ -86,6 +115,7 @@ interface SizeSectionProps {
 
 export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiSelect }: SizeSectionProps) {
   const calculateLayoutForFrame = useLayoutStore((s) => s.calculateLayoutForFrame);
+  const allNodes = useSceneStore((s) => s.getNodes());
 
   const { effectiveWidth, effectiveHeight } = useMemo(() => {
     let ew = node.width;
@@ -164,6 +194,7 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
                       newMode,
                       "width",
                       calculateLayoutForFrame,
+                      allNodes,
                     );
                     onUpdate({
                       sizing: {
@@ -206,6 +237,7 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
                       newMode,
                       "height",
                       calculateLayoutForFrame,
+                      allNodes,
                     );
                     onUpdate({
                       sizing: {
