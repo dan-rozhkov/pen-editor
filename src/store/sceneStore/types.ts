@@ -61,6 +61,7 @@ export interface SceneState {
   resetSlotContent: (instanceId: string, slotChildId: string) => void;
   updateSlotContentNode: (instanceId: string, slotChildId: string, updates: Partial<SceneNode>) => void;
   updateDescendantTextWithoutHistory: (instanceId: string, descendantId: string, text: string) => void;
+  detachInstance: (instanceId: string) => void;
   groupNodes: (ids: string[]) => string | null;
   ungroupNodes: (ids: string[]) => string[];
   convertNodeType: (id: string) => boolean;

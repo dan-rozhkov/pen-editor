@@ -11,6 +11,7 @@ import { StrokeSection } from "@/components/properties/StrokeSection";
 import { EffectsSection } from "@/components/properties/EffectsSection";
 import { ThemeSection } from "@/components/properties/ThemeSection";
 import { TypographySection } from "@/components/properties/TypographySection";
+import { InstanceSection } from "@/components/properties/InstanceSection";
 
 
 interface PropertyEditorProps {
@@ -50,6 +51,14 @@ export function PropertyEditor({
   return (
     <div className="flex flex-col">
       <TypeSection node={node} onUpdate={onUpdate} allNodes={allNodes} />
+      {node.type === "ref" && (
+        <InstanceSection
+          node={node}
+          onUpdate={onUpdate}
+          allNodes={allNodes}
+          isOverridden={isOverridden}
+        />
+      )}
       <PositionSection node={node} onUpdate={onUpdate} />
       <SizeSection node={node} onUpdate={onUpdate} parentContext={parentContext} />
       {node.type === "frame" && (

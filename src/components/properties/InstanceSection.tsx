@@ -1,6 +1,7 @@
 import type { SceneNode, RefNode } from "@/types/scene";
 import { findComponentById } from "@/utils/nodeUtils";
 import { PropertySection } from "@/components/ui/PropertyInputs";
+import { useSceneStore } from "@/store/sceneStore";
 
 interface InstanceSectionProps {
   node: SceneNode;
@@ -33,6 +34,8 @@ export function InstanceSection({
   const slotIds = slotChildren.map((c) => c.id);
   const replacedSlots = slotIds.filter((id) => refNode.slotContent?.[id]);
 
+  const detachInstance = useSceneStore((s) => s.detachInstance);
+
   return (
     <PropertySection title="Instance">
       <div className="flex items-center gap-2 text-xs text-purple-400">
@@ -46,6 +49,12 @@ export function InstanceSection({
         </svg>
         <span>Instance of: {comp?.name || "Component"}</span>
       </div>
+      <button
+        onClick={() => detachInstance(node.id)}
+        className="mt-2 w-full px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
+      >
+        Detach Component
+      </button>
       {slotIds.length > 0 && (
         <div className="mt-2 text-xs text-text-secondary">
           Slots: {replacedSlots.length}/{slotIds.length} replaced

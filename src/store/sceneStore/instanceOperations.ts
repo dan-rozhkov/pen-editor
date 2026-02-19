@@ -1,13 +1,43 @@
 import type {
   SceneNode,
   RefNode,
+  FrameNode,
+  GroupNode,
   DescendantOverride,
   TextNode,
 } from "../../types/scene";
+import { generateId, buildTree } from "../../types/scene";
 import { deepCloneNode } from "../../utils/cloneNode";
+import { resolveRefToFrame } from "../../components/nodes/instanceUtils";
+import { insertTreeIntoFlat } from "./helpers/flatStoreHelpers";
 import { measureTextAutoSize, measureTextFixedWidthHeight } from "../../utils/textMeasure";
 import { saveHistory } from "./helpers/history";
 import type { SceneState } from "./types";
+
+/** Clone a tree node giving all descendants new IDs but keeping the root ID */
+function cloneChildrenWithNewIds(node: SceneNode): SceneNode {
+  if (node.type === "frame" || node.type === "group") {
+    const container = node as FrameNode | GroupNode;
+    return {
+      ...container,
+      children: container.children.map((child) => cloneChildWithNewId(child)),
+    } as SceneNode;
+  }
+  return { ...node } as SceneNode;
+}
+
+function cloneChildWithNewId(node: SceneNode): SceneNode {
+  const newId = generateId();
+  if (node.type === "frame" || node.type === "group") {
+    const container = node as FrameNode | GroupNode;
+    return {
+      ...container,
+      id: newId,
+      children: container.children.map((child) => cloneChildWithNewId(child)),
+    } as SceneNode;
+  }
+  return { ...node, id: newId } as SceneNode;
+}
 
 function syncTextNodeDimensions(node: SceneNode): SceneNode {
   if (node.type !== "text") return node;
@@ -222,6 +252,56 @@ export function createInstanceOperations(
         };
         return {
           nodesById: { ...state.nodesById, [instanceId]: updated },
+          _cachedTree: null,
+        };
+      }),
+
+    detachInstance: (instanceId: string) =>
+      set((state) => {
+        const existing = state.nodesById[instanceId];
+        if (!existing || existing.type !== "ref") return state;
+        saveHistory(state);
+
+        const refNode = existing as RefNode;
+
+        // Build tree to resolve the ref
+        const allNodes = buildTree(
+          state.rootIds,
+          state.nodesById,
+          state.childrenById,
+        );
+
+        // Resolve ref into a frame with overrides applied
+        const resolvedFrame = resolveRefToFrame(refNode, allNodes);
+        if (!resolvedFrame) return state;
+
+        // Clone children with new IDs (the frame keeps the ref's ID)
+        const detachedFrame = cloneChildrenWithNewIds(resolvedFrame) as FrameNode;
+
+        // Remove old ref node from flat store
+        const newNodesById = { ...state.nodesById };
+        const newParentById = { ...state.parentById };
+        const newChildrenById = { ...state.childrenById };
+
+        delete newNodesById[instanceId];
+        delete newChildrenById[instanceId];
+        // parentById[instanceId] stays the same
+
+        // Insert the detached frame tree into flat store
+        const parentId = state.parentById[instanceId];
+        insertTreeIntoFlat(
+          detachedFrame,
+          parentId,
+          newNodesById,
+          newParentById,
+          newChildrenById,
+        );
+
+        // rootIds: replace if it was a root node (no change needed since ID stays the same)
+        return {
+          nodesById: newNodesById,
+          parentById: newParentById,
+          childrenById: newChildrenById,
           _cachedTree: null,
         };
       }),
