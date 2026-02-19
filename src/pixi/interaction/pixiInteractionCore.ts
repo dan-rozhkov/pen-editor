@@ -17,7 +17,7 @@ import { createDrawController } from "./drawController";
 import { createDragController } from "./dragController";
 import { createMarqueeController } from "./marqueeController";
 import { createMeasurementController } from "./measurementController";
-import { prepareFrameNode, prepareInstanceNode } from "@/components/nodes/instanceUtils";
+import { prepareFrameNode, prepareInstanceNode } from "@/utils/instanceUtils";
 import type { SceneNode } from "@/types/scene";
 
 const EMPTY_POINTER_EVENT = {} as PointerEvent;

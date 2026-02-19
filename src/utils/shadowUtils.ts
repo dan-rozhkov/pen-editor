@@ -17,26 +17,6 @@ export function parseHexAlpha(hex: string): { color: string; opacity: number } {
   return { color: hex, opacity: 1 };
 }
 
-/**
- * Build Konva shadow props from a ShadowEffect.
- * Konva doesn't support 'spread' natively — we emulate by adding spread to blur.
- */
-export function buildKonvaShadowProps(effect: ShadowEffect | undefined) {
-  if (!effect) return {};
-
-  const { color, opacity } = parseHexAlpha(effect.color);
-
-  return {
-    shadowColor: color,
-    shadowBlur: effect.blur + effect.spread,
-    shadowOffsetX: effect.offset.x,
-    shadowOffsetY: effect.offset.y,
-    shadowOpacity: opacity,
-    shadowEnabled: true,
-    shadowForStrokeEnabled: false,
-  };
-}
-
 export function getDefaultShadow(): ShadowEffect {
   return {
     type: "shadow",

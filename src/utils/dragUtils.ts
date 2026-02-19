@@ -1,6 +1,5 @@
 import type { SceneNode, FrameNode, GroupNode } from '../types/scene'
 import type { DropIndicatorData, InsertInfo } from '../store/dragStore'
-import type Konva from 'konva'
 
 interface Point {
   x: number
@@ -295,46 +294,3 @@ export function calculateDropPosition(
   }
 }
 
-/**
- * Handle drag end for nodes in auto-layout frames
- * Centralizes the logic for moving nodes out of or within auto-layout frames
- */
-export function handleAutoLayoutDragEnd(
-  target: Konva.Node,
-  nodeId: string,
-  nodeWidth: number,
-  nodeHeight: number,
-  insertInfo: InsertInfo | null,
-  isOutsideParent: boolean,
-  moveNode: (nodeId: string, parentId: string | null, index: number) => void,
-  updateNode: (nodeId: string, updates: Partial<SceneNode>) => void,
-  getPositionFromTarget?: (target: Konva.Node) => Point
-): void {
-  if (isOutsideParent) {
-    // Drag out of auto-layout frame - move to root level
-    const stage = target.getStage()
-    if (stage) {
-      const pointerPos = stage.getRelativePointerPosition()
-      if (pointerPos) {
-        // Move to root level first
-        moveNode(nodeId, null, 0)
-        // Then set position in world coordinates
-        updateNode(nodeId, {
-          x: Math.round(pointerPos.x - nodeWidth / 2),
-          y: Math.round(pointerPos.y - nodeHeight / 2),
-        })
-      }
-    }
-    // Don't reset position - updateNode already set the new position
-  } else if (insertInfo) {
-    // Reorder within the frame
-    moveNode(nodeId, insertInfo.parentId, insertInfo.index)
-  }
-
-  // Reset Konva target position to let React re-render with layout-calculated positions
-  if (getPositionFromTarget) {
-    const pos = getPositionFromTarget(target)
-    target.x(pos.x)
-    target.y(pos.y)
-  }
-}

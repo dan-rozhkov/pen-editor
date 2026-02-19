@@ -21,7 +21,7 @@ import {
   findDescendantLocalPosition,
   getPreparedNodeEffectiveSize,
   prepareInstanceNode,
-} from "@/components/nodes/instanceUtils";
+} from "@/utils/instanceUtils";
 
 interface CanvasSelectionDataParams {
   nodes: SceneNode[];

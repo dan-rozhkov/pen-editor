@@ -13,7 +13,7 @@ import { measureTextAutoSize, measureTextFixedWidthHeight } from "@/utils/textMe
 import { pushRenderTheme, popRenderTheme } from "./colorHelpers";
 import { applyFill, applyStroke } from "./fillStrokeHelpers";
 import { createNodeContainer } from "./index";
-import { prepareInstanceNode } from "@/components/nodes/instanceUtils";
+import { prepareInstanceNode } from "@/utils/instanceUtils";
 
 function syncTextDimensionsInNode(node: SceneNode): SceneNode {
   if (node.type === "text") {

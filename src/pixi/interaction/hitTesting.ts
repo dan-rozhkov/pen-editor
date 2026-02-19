@@ -7,7 +7,7 @@ import type { SceneNode, FrameNode } from "@/types/scene";
 import {
   getPreparedNodeEffectiveSize,
   prepareFrameNode,
-} from "@/components/nodes/instanceUtils";
+} from "@/utils/instanceUtils";
 import type { TransformHandle } from "./types";
 
 const LABEL_FONT_SIZE = 11;

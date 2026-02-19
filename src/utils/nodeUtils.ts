@@ -2,7 +2,7 @@ import type { SceneNode, FrameNode, GroupNode } from "../types/scene";
 import type { ThemeName } from "../types/variable";
 import { isContainerNode } from "../types/scene";
 import { findComponentById as findComponentByIdImpl, getAllComponents as getAllComponentsImpl } from "./componentUtils";
-import { getPreparedNodeEffectiveSize, prepareFrameNode } from "@/components/nodes/instanceUtils";
+import { getPreparedNodeEffectiveSize, prepareFrameNode } from "@/utils/instanceUtils";
 
 export interface ParentContext {
   parent: FrameNode | GroupNode | null;

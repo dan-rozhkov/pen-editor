@@ -59,7 +59,7 @@ export function ComponentsPanel() {
             onClick={() => createInstance(component)}
             className={clsx(
               "w-full flex items-center gap-2 px-4 py-2 text-left",
-              "hover:bg-surface-elevated transition-colors duration-100",
+              "hover:bg-surface-elevated",
             )}
           >
             <DiamondsFourIcon

@@ -28,7 +28,7 @@ import { useHoverStore } from "../store/hoverStore";
 import type { SceneNode, FrameNode, FlatFrameNode, GroupNode, LayoutProperties, RefNode } from "../types/scene";
 import { isContainerNode } from "../types/scene";
 import { getAncestorIds } from "../utils/nodeUtils";
-import { resolveRefToFrame } from "./nodes/instanceUtils";
+import { resolveRefToFrame } from "@/utils/instanceUtils";
 
 // Module-level flag so LayerItem can set it without a ref prop
 let _selectionFromLayers = false;

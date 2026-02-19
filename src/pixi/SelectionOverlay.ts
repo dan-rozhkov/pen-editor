@@ -11,7 +11,7 @@ import type {
   RefNode,
   TextNode,
 } from "@/types/scene";
-import { findDescendantLocalRect, prepareInstanceNode } from "@/components/nodes/instanceUtils";
+import { findDescendantLocalRect, prepareInstanceNode } from "@/utils/instanceUtils";
 import { findNodeById } from "@/utils/nodeUtils";
 import { findDescendantByPath, findDescendantRectByPath } from "@/utils/instancePathUtils";
 import { buildTextStyle } from "@/pixi/renderers/textRenderer";

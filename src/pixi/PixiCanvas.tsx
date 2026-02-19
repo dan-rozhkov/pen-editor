@@ -26,7 +26,7 @@ import {
   getNodeAbsolutePositionWithLayout,
   getThemeFromAncestorFrames,
 } from "@/utils/nodeUtils";
-import { findDescendantLocalPosition, prepareInstanceNode } from "@/components/nodes/instanceUtils";
+import { findDescendantLocalPosition, prepareInstanceNode } from "@/utils/instanceUtils";
 import { findDescendantByPath, findDescendantPositionByPath } from "@/utils/instancePathUtils";
 import { createPixiSync } from "./pixiSync";
 import { setupPixiViewport } from "./pixiViewport";

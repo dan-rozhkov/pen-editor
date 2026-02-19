@@ -1,6 +1,6 @@
 import { Graphics, FillGradient } from "pixi.js";
 import type { FlatSceneNode, GradientFill, PerSideStroke } from "@/types/scene";
-import { hasPerSideStroke } from "@/components/nodes/renderUtils";
+import { hasPerSideStroke } from "@/utils/renderUtils";
 import { getResolvedFill, getResolvedStroke, parseColor, parseAlpha } from "./colorHelpers";
 
 function perSideOffset(strokeWidth: number, align: 'center' | 'inside' | 'outside'): number {

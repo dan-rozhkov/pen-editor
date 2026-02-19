@@ -8,7 +8,7 @@ import type {
 import { applyAutoLayoutRecursively } from "@/utils/autoLayoutUtils";
 import { findComponentById } from "@/utils/componentUtils";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
-import { applyDescendantOverride } from "./renderUtils";
+import { applyDescendantOverride } from "@/utils/renderUtils";
 
 export interface PreparedInstanceNode {
   component: FrameNode;

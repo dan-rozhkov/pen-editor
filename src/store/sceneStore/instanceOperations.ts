@@ -8,7 +8,7 @@ import type {
 } from "../../types/scene";
 import { generateId, buildTree } from "../../types/scene";
 import { deepCloneNode } from "../../utils/cloneNode";
-import { resolveRefToFrame } from "../../components/nodes/instanceUtils";
+import { resolveRefToFrame } from "@/utils/instanceUtils";
 import { insertTreeIntoFlat } from "./helpers/flatStoreHelpers";
 import { measureTextAutoSize, measureTextFixedWidthHeight } from "../../utils/textMeasure";
 import { saveHistory } from "./helpers/history";

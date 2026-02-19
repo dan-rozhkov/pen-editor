@@ -14,24 +14,6 @@ export const getScreenshot: ToolHandler = async (args) => {
     return JSON.stringify({ error: `Node not found: ${nodeId}` });
   }
 
-  // Try Konva first
-  const { stageRef } = useCanvasRefStore.getState();
-  if (stageRef) {
-    const konvaNode = stageRef.findOne(`#${nodeId}`);
-    if (konvaNode) {
-      try {
-        const dataUrl = konvaNode.toDataURL({ pixelRatio: 2 });
-        return JSON.stringify({ imageData: dataUrl });
-      } catch (e) {
-        return JSON.stringify({
-          error: `Screenshot failed: ${e instanceof Error ? e.message : "unknown error"}`,
-        });
-      }
-    }
-    return JSON.stringify({ error: `Node "${nodeId}" not found in Konva stage` });
-  }
-
-  // Try PixiJS
   const { pixiRefs } = useCanvasRefStore.getState();
   if (pixiRefs) {
     const { app, sceneRoot } = pixiRefs;

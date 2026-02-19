@@ -2,11 +2,12 @@ import { useState } from "react";
 import { useSceneStore } from "../store/sceneStore";
 import { useSelectionStore } from "../store/selectionStore";
 import { useVariableStore } from "../store/variableStore";
+
 import { useThemeStore } from "../store/themeStore";
 import { useViewportStore } from "../store/viewportStore";
 import { useUIThemeStore } from "../store/uiThemeStore";
 import { usePixelGridStore } from "../store/pixelGridStore";
-import { useRendererStore } from "../store/rendererStore";
+
 import type { SceneNode } from "../types/scene";
 import { downloadDocument, openFilePicker } from "../utils/fileUtils";
 import { parsePixsoJson } from "../utils/pixsoImportUtils";
@@ -37,14 +38,13 @@ export function Toolbar() {
   const addNode = useSceneStore((state) => state.addNode);
   const variables = useVariableStore((state) => state.variables);
   const setVariables = useVariableStore((state) => state.setVariables);
-  const activeTheme = useThemeStore((state) => state.activeTheme);
 
+  const activeTheme = useThemeStore((state) => state.activeTheme);
   const uiTheme = useUIThemeStore((s) => s.uiTheme);
   const setUITheme = useUIThemeStore((s) => s.setUITheme);
   const showPixelGrid = usePixelGridStore((s) => s.showPixelGrid);
   const togglePixelGrid = usePixelGridStore((s) => s.togglePixelGrid);
-  const rendererMode = useRendererStore((s) => s.rendererMode);
-  const setRendererMode = useRendererStore((s) => s.setRendererMode);
+
   const [importOpen, setImportOpen] = useState(false);
   const [jsonText, setJsonText] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -134,27 +134,8 @@ export function Toolbar() {
                 Dark theme
               </DropdownMenuCheckboxItem>
               <DropdownMenuSeparator />
-              <DropdownMenuCheckboxItem
-                checked={activeTheme === "light"}
-                onCheckedChange={() => setUITheme("light")}
-              >
-                Variable theme: Light
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem
-                checked={activeTheme === "dark"}
-                onCheckedChange={() => setUITheme("dark")}
-              >
-                Variable theme: Dark
-              </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem checked={showPixelGrid} onCheckedChange={togglePixelGrid}>
                 Pixel grid
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuCheckboxItem checked={rendererMode === "konva"} onCheckedChange={() => setRendererMode("konva")}>
-                Konva
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem checked={rendererMode === "pixi"} onCheckedChange={() => setRendererMode("pixi")}>
-                Pixi
               </DropdownMenuCheckboxItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>

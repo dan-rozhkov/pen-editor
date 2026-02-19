@@ -11,7 +11,7 @@ import type { ParentContext } from "@/utils/nodeUtils";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
-import { prepareInstanceNode } from "@/components/nodes/instanceUtils";
+import { prepareInstanceNode } from "@/utils/instanceUtils";
 import { cn } from "@/lib/utils";
 import {
   NumberInput,
