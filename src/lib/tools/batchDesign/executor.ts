@@ -1,20 +1,53 @@
-import type { FlatSceneNode, SceneNode, RefNode, DescendantOverrides } from "@/types/scene";
+import type {
+  FlatSceneNode,
+  SceneNode,
+  RefNode,
+  DescendantOverrides,
+  FlatFrameNode,
+} from "@/types/scene";
+import type { ThemeName } from "@/types/variable";
 import {
   toFlatNode,
   isContainerNode,
   buildTree,
 } from "@/types/scene";
+import { useThemeStore } from "@/store/themeStore";
 import { insertTreeIntoFlat, removeNodeAndDescendants } from "@/store/sceneStore/helpers/flatStoreHelpers";
 import { syncTextDimensions } from "@/store/sceneStore/helpers/textSync";
 import { cloneNodeWithNewId } from "@/utils/cloneNode";
 import type { ParsedArg, ParsedOperation, ExecutionContext } from "./types";
 import {
-  createNodeFromAiData,
+  createNodeFromAiDataWithTheme,
   mapNodeData,
   mapDescendantOverride,
 } from "./nodeMapper";
 
 const DOCUMENT_BINDING = "__document__";
+
+function resolveInheritedTheme(
+  parentId: string | null,
+  nodesById: Record<string, FlatSceneNode>,
+  parentById: Record<string, string | null>,
+): ThemeName {
+  const { activeTheme } = useThemeStore.getState();
+  let theme: ThemeName = activeTheme;
+  let current = parentId;
+
+  const chain: string[] = [];
+  while (current) {
+    chain.push(current);
+    current = parentById[current] ?? null;
+  }
+
+  for (let i = chain.length - 1; i >= 0; i--) {
+    const node = nodesById[chain[i]];
+    if (node?.type === "frame" && (node as FlatFrameNode).themeOverride) {
+      theme = (node as FlatFrameNode).themeOverride as ThemeName;
+    }
+  }
+
+  return theme;
+}
 
 function applyRefDefaultsFromComponent(
   node: SceneNode,
@@ -121,7 +154,12 @@ function executeInsert(op: ParsedOperation, ctx: ExecutionContext): void {
     actualParentId = parentResolved;
   }
 
-  const createdNode = createNodeFromAiData(nodeData);
+  const inheritedTheme = resolveInheritedTheme(
+    actualParentId,
+    ctx.nodesById,
+    ctx.parentById,
+  );
+  const createdNode = createNodeFromAiDataWithTheme(nodeData, inheritedTheme);
   const node = applyRefDefaultsFromComponent(createdNode, nodeData, ctx.nodesById);
 
   // Insert into flat storage
@@ -197,10 +235,16 @@ function executeCopy(op: ParsedOperation, ctx: ExecutionContext): void {
 
   // Map direct overrides through nodeMapper
   if (Object.keys(directOverrides).length > 0) {
+    const inheritedTheme = resolveInheritedTheme(
+      actualParentId,
+      ctx.nodesById,
+      ctx.parentById,
+    );
     const mapped = mapNodeData(
       directOverrides as Record<string, unknown>,
       "update",
-      toFlatNode(cloned)
+      toFlatNode(cloned),
+      { theme: inheritedTheme },
     );
     delete (mapped as Record<string, unknown>)._children;
     Object.assign(cloned, mapped);
@@ -213,7 +257,9 @@ function executeCopy(op: ParsedOperation, ctx: ExecutionContext): void {
     for (const [path, override] of Object.entries(
       descendantsOverrides as Record<string, Record<string, unknown>>
     )) {
-      mappedOverrides[path] = mapDescendantOverride(override);
+      mappedOverrides[path] = mapDescendantOverride(override, {
+        theme: resolveInheritedTheme(actualParentId, ctx.nodesById, ctx.parentById),
+      });
     }
     refClone.descendants = {
       ...refClone.descendants,
@@ -234,7 +280,14 @@ function executeCopy(op: ParsedOperation, ctx: ExecutionContext): void {
         const mapped = mapNodeData(
           override as Record<string, unknown>,
           "update",
-          newNode
+          newNode,
+          {
+            theme: resolveInheritedTheme(
+              ctx.parentById[newPath] ?? null,
+              ctx.nodesById,
+              ctx.parentById,
+            ),
+          },
         );
         delete (mapped as Record<string, unknown>)._children;
         Object.assign(newNode, mapped);
@@ -381,7 +434,13 @@ function executeUpdate(op: ParsedOperation, ctx: ExecutionContext): void {
     }
 
     const refNode = { ...instanceNode } as RefNode;
-    const mapped = mapDescendantOverride(updateData);
+    const mapped = mapDescendantOverride(updateData, {
+      theme: resolveInheritedTheme(
+        ctx.parentById[instanceId] ?? null,
+        ctx.nodesById,
+        ctx.parentById,
+      ),
+    });
 
     refNode.descendants = setDescendantOverrideByPath(
       refNode.descendants,
@@ -397,7 +456,13 @@ function executeUpdate(op: ParsedOperation, ctx: ExecutionContext): void {
       throw new Error(`Line ${op.line}: Node not found: "${path}"`);
     }
 
-    const mapped = mapNodeData(updateData, "update", node);
+    const mapped = mapNodeData(updateData, "update", node, {
+      theme: resolveInheritedTheme(
+        ctx.parentById[path] ?? null,
+        ctx.nodesById,
+        ctx.parentById,
+      ),
+    });
     delete (mapped as Record<string, unknown>)._children;
 
     let updated = { ...node, ...mapped } as FlatSceneNode;
@@ -442,7 +507,14 @@ function executeReplace(op: ParsedOperation, ctx: ExecutionContext): void {
     }
 
     const refNode = { ...instanceNode } as RefNode;
-    const newNode = createNodeFromAiData(nodeData);
+    const newNode = createNodeFromAiDataWithTheme(
+      nodeData,
+      resolveInheritedTheme(
+        ctx.parentById[instanceId] ?? null,
+        ctx.nodesById,
+        ctx.parentById,
+      ),
+    );
     refNode.slotContent = {
       ...refNode.slotContent,
       [slotChildId]: newNode,
@@ -462,7 +534,10 @@ function executeReplace(op: ParsedOperation, ctx: ExecutionContext): void {
     }
 
     const parentId = ctx.parentById[path];
-    const newNode = createNodeFromAiData(nodeData);
+    const newNode = createNodeFromAiDataWithTheme(
+      nodeData,
+      resolveInheritedTheme(parentId ?? null, ctx.nodesById, ctx.parentById),
+    );
 
     // Find position in parent's children
     if (parentId !== null && parentId !== undefined) {

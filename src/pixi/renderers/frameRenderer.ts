@@ -108,23 +108,24 @@ export function createFrameContainer(
   if (node.themeOverride) {
     pushRenderTheme(node.themeOverride);
   }
-
-  // Render children
-  const childIds = childrenById[node.id] ?? [];
-  for (const childId of childIds) {
-    const childNode = nodesById[childId];
-    if (childNode) {
-      const childContainer = createNodeContainer(
-        childNode,
-        nodesById,
-        childrenById,
-      );
-      childrenContainer.addChild(childContainer);
+  try {
+    // Render children
+    const childIds = childrenById[node.id] ?? [];
+    for (const childId of childIds) {
+      const childNode = nodesById[childId];
+      if (childNode) {
+        const childContainer = createNodeContainer(
+          childNode,
+          nodesById,
+          childrenById,
+        );
+        childrenContainer.addChild(childContainer);
+      }
     }
-  }
-
-  if (node.themeOverride) {
-    popRenderTheme();
+  } finally {
+    if (node.themeOverride) {
+      popRenderTheme();
+    }
   }
 
   // Disabled for now: cacheAsTexture can leave stale visual artifacts

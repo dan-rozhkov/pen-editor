@@ -14,6 +14,12 @@ if (import.meta.env.DEV) {
   import('@/store/historyStore').then(({ useHistoryStore }) => {
     (window as unknown as Record<string, unknown>).__historyStore = useHistoryStore;
   });
+  import('@/store/themeStore').then(({ useThemeStore }) => {
+    (window as unknown as Record<string, unknown>).__themeStore = useThemeStore;
+  });
+  import('@/store/variableStore').then(({ useVariableStore }) => {
+    (window as unknown as Record<string, unknown>).__variableStore = useVariableStore;
+  });
 }
 
 createRoot(document.getElementById('root')!).render(

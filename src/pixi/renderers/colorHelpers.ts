@@ -19,6 +19,14 @@ export function popRenderTheme(): void {
   themeStack.pop();
 }
 
+export function resetRenderThemeStack(): void {
+  themeStack.length = 0;
+}
+
+export function getRenderThemeStackDepth(): number {
+  return themeStack.length;
+}
+
 function getEffectiveTheme(): ThemeName {
   return themeStack.length > 0
     ? themeStack[themeStack.length - 1]

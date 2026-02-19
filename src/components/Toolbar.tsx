@@ -38,8 +38,9 @@ export function Toolbar() {
   const variables = useVariableStore((state) => state.variables);
   const setVariables = useVariableStore((state) => state.setVariables);
   const activeTheme = useThemeStore((state) => state.activeTheme);
-  const setActiveTheme = useThemeStore((state) => state.setActiveTheme);
+
   const uiTheme = useUIThemeStore((s) => s.uiTheme);
+  const setUITheme = useUIThemeStore((s) => s.setUITheme);
   const showPixelGrid = usePixelGridStore((s) => s.showPixelGrid);
   const togglePixelGrid = usePixelGridStore((s) => s.togglePixelGrid);
   const rendererMode = useRendererStore((s) => s.rendererMode);
@@ -70,7 +71,7 @@ export function Toolbar() {
       } = await openFilePicker();
       setNodes(loadedNodes);
       setVariables(loadedVariables);
-      setActiveTheme(loadedTheme);
+      setUITheme(loadedTheme);
       focusViewportOnNodes(loadedNodes);
     } catch (err) {
       console.error("Failed to open file:", err);
@@ -131,6 +132,19 @@ export function Toolbar() {
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem checked={uiTheme === "dark"} onCheckedChange={() => useUIThemeStore.getState().setUITheme("dark")}>
                 Dark theme
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem
+                checked={activeTheme === "light"}
+                onCheckedChange={() => setUITheme("light")}
+              >
+                Variable theme: Light
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={activeTheme === "dark"}
+                onCheckedChange={() => setUITheme("dark")}
+              >
+                Variable theme: Dark
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem checked={showPixelGrid} onCheckedChange={togglePixelGrid}>
                 Pixel grid

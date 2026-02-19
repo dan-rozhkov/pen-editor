@@ -5,6 +5,7 @@ import type {
   SceneNode,
   ImageFill,
 } from "@/types/scene";
+import type { ThemeName } from "@/types/variable";
 import { generateId } from "@/types/scene";
 import { syncTextDimensions } from "@/store/sceneStore/helpers/textSync";
 import { resolveVariableReference } from "@/lib/tools/variableResolutionUtils";
@@ -48,11 +49,12 @@ function parseSizingValue(
 export function mapNodeData(
   data: AiNodeData,
   mode: "insert" | "update",
-  existingNode?: FlatSceneNode
+  existingNode?: FlatSceneNode,
+  options?: { theme?: ThemeName }
 ): Partial<FlatSceneNode> & { _children?: AiNodeData[] } {
   const result: Record<string, unknown> = {};
-  let layout: Partial<LayoutProperties> = {};
-  let sizing: Partial<SizingProperties> = {};
+  const layout: Partial<LayoutProperties> = {};
+  const sizing: Partial<SizingProperties> = {};
   let hasLayout = false;
   let hasSizing = false;
   let children: AiNodeData[] | undefined;
@@ -83,13 +85,33 @@ export function mapNodeData(
       // Color variable references in AI format, e.g. "$color"
       case "fill":
       case "stroke": {
-        const resolvedVariable = resolveVariableReference(value);
+        const resolvedVariable = resolveVariableReference(value, options?.theme);
         if (resolvedVariable) {
           result[`${key}Binding`] = { variableId: resolvedVariable.variableId };
           // Keep concrete value as fallback for contexts that don't resolve bindings.
           result[key] = resolvedVariable.variableValue;
         } else {
           result[key] = value;
+        }
+        break;
+      }
+
+      // Theme shorthand
+      case "theme":
+      case "themeOverride": {
+        if (value === "inherit" || value == null) {
+          result.themeOverride = undefined;
+        } else if (value === "light" || value === "dark") {
+          result.themeOverride = value;
+        } else if (typeof value === "object" && value !== null) {
+          // Handle object format from .pen files, e.g. {"Mode": "Light"}
+          const vals = Object.values(value as Record<string, string>);
+          if (vals.length > 0) {
+            const themeVal = String(vals[vals.length - 1]).toLowerCase();
+            if (themeVal === "light" || themeVal === "dark") {
+              result.themeOverride = themeVal;
+            }
+          }
         }
         break;
       }
@@ -220,8 +242,17 @@ export function mapNodeData(
  * Recursively creates children.
  */
 export function createNodeFromAiData(data: AiNodeData): SceneNode {
+  return createNodeFromAiDataWithTheme(data);
+}
+
+export function createNodeFromAiDataWithTheme(
+  data: AiNodeData,
+  inheritedTheme?: ThemeName,
+): SceneNode {
   const type = mapNodeType((data.type as string) ?? "frame");
-  const mapped = mapNodeData(data, "insert");
+  const mapped = mapNodeData(data, "insert", undefined, {
+    theme: inheritedTheme,
+  });
   const childrenData = mapped._children;
   delete (mapped as Record<string, unknown>)._children;
 
@@ -240,9 +271,13 @@ export function createNodeFromAiData(data: AiNodeData): SceneNode {
 
   if (type === "frame" || type === "group") {
     const children: SceneNode[] = [];
+    const thisTheme =
+      type === "frame"
+        ? ((base as { themeOverride?: ThemeName }).themeOverride ?? inheritedTheme)
+        : inheritedTheme;
     if (childrenData) {
       for (const childData of childrenData) {
-        children.push(createNodeFromAiData(childData));
+        children.push(createNodeFromAiDataWithTheme(childData, thisTheme));
       }
     }
     return { ...base, children } as SceneNode;
@@ -264,14 +299,15 @@ export function createNodeFromAiData(data: AiNodeData): SceneNode {
  * Converts content→text and other AI shorthands.
  */
 export function mapDescendantOverride(
-  data: AiNodeData
+  data: AiNodeData,
+  options?: { theme?: ThemeName },
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(data)) {
     if (key === "content") {
       result.text = String(value);
     } else if (key === "fill" || key === "stroke") {
-      const resolvedVariable = resolveVariableReference(value);
+      const resolvedVariable = resolveVariableReference(value, options?.theme);
       if (resolvedVariable) {
         result[`${key}Binding`] = { variableId: resolvedVariable.variableId };
         result[key] = resolvedVariable.variableValue;

@@ -8,7 +8,12 @@ import { useSelectionStore } from "@/store/selectionStore";
 import type { FlatSceneNode, FlatFrameNode, FrameNode, SceneNode } from "@/types/scene";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 import { createNodeContainer, updateNodeContainer, applyLayoutSize } from "./renderers";
-import { pushRenderTheme, popRenderTheme } from "./renderers/colorHelpers";
+import {
+  pushRenderTheme,
+  popRenderTheme,
+  resetRenderThemeStack,
+  getRenderThemeStackDepth,
+} from "./renderers/colorHelpers";
 
 interface RegistryEntry {
   container: Container;
@@ -72,11 +77,19 @@ function withAncestorThemes(
   nodesById: Record<string, FlatSceneNode>,
   fn: () => void,
 ): void {
+  // Guard against leaked render theme context from previous operations.
+  if (getRenderThemeStackDepth() !== 0) {
+    resetRenderThemeStack();
+  }
   const pushed = pushAncestorThemes(nodeId, parentById, nodesById);
   try {
     fn();
   } finally {
     for (let i = 0; i < pushed; i++) popRenderTheme();
+    // Keep stack invariant strict between operations.
+    if (getRenderThemeStackDepth() !== 0) {
+      resetRenderThemeStack();
+    }
   }
 }
 

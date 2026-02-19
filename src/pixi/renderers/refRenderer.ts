@@ -160,91 +160,92 @@ export function createRefContainer(
   if (compThemeOverride) {
     pushRenderTheme(compThemeOverride);
   }
-
-  // Draw component background
-  if (component.type === "frame") {
-    const bg = new Graphics();
-    bg.label = "ref-bg";
-    const frame = component as FlatFrameNode;
-    const effectiveFrameStyle: FlatFrameNode = {
-      ...frame,
-      fill: node.fill !== undefined ? node.fill : frame.fill,
-      fillBinding: node.fillBinding !== undefined ? node.fillBinding : frame.fillBinding,
-      fillOpacity: node.fillOpacity !== undefined ? node.fillOpacity : frame.fillOpacity,
-      gradientFill:
-        node.gradientFill !== undefined ? node.gradientFill : frame.gradientFill,
-      stroke: node.stroke !== undefined ? node.stroke : frame.stroke,
-      strokeBinding:
-        node.strokeBinding !== undefined ? node.strokeBinding : frame.strokeBinding,
-      strokeWidth: node.strokeWidth !== undefined ? node.strokeWidth : frame.strokeWidth,
-      strokeOpacity:
-        node.strokeOpacity !== undefined ? node.strokeOpacity : frame.strokeOpacity,
-      strokeAlign:
-        node.strokeAlign !== undefined ? node.strokeAlign : frame.strokeAlign,
-      strokeWidthPerSide:
-        node.strokeWidthPerSide !== undefined
-          ? node.strokeWidthPerSide
-          : frame.strokeWidthPerSide,
-    };
-    if (frame.cornerRadius) {
-      bg.roundRect(0, 0, effectiveWidth, effectiveHeight, frame.cornerRadius);
-    } else {
-      bg.rect(0, 0, effectiveWidth, effectiveHeight);
-    }
-    applyFill(bg, effectiveFrameStyle, effectiveWidth, effectiveHeight);
-    applyStroke(bg, effectiveFrameStyle, effectiveWidth, effectiveHeight, frame.cornerRadius);
-    childrenContainer.addChild(bg);
-
-    // In auto-layout siblings, outside stroke should not visually bleed
-    // into neighbors. Clip only the instance background to its own bounds.
-    const parentId = useSceneStore.getState().parentById[node.id];
-    const parentNode = parentId ? nodesById[parentId] : undefined;
-    const isInAutoLayoutParent =
-      parentNode?.type === "frame" &&
-      (parentNode as FlatFrameNode).layout?.autoLayout;
-    const effectiveStrokeAlign = effectiveFrameStyle.strokeAlign ?? "center";
-    if (isInAutoLayoutParent && effectiveStrokeAlign === "outside") {
-      const bgMask = new Graphics();
-      bgMask.label = "ref-bg-mask";
+  try {
+    // Draw component background
+    if (component.type === "frame") {
+      const bg = new Graphics();
+      bg.label = "ref-bg";
+      const frame = component as FlatFrameNode;
+      const effectiveFrameStyle: FlatFrameNode = {
+        ...frame,
+        fill: node.fill !== undefined ? node.fill : frame.fill,
+        fillBinding: node.fillBinding !== undefined ? node.fillBinding : frame.fillBinding,
+        fillOpacity: node.fillOpacity !== undefined ? node.fillOpacity : frame.fillOpacity,
+        gradientFill:
+          node.gradientFill !== undefined ? node.gradientFill : frame.gradientFill,
+        stroke: node.stroke !== undefined ? node.stroke : frame.stroke,
+        strokeBinding:
+          node.strokeBinding !== undefined ? node.strokeBinding : frame.strokeBinding,
+        strokeWidth: node.strokeWidth !== undefined ? node.strokeWidth : frame.strokeWidth,
+        strokeOpacity:
+          node.strokeOpacity !== undefined ? node.strokeOpacity : frame.strokeOpacity,
+        strokeAlign:
+          node.strokeAlign !== undefined ? node.strokeAlign : frame.strokeAlign,
+        strokeWidthPerSide:
+          node.strokeWidthPerSide !== undefined
+            ? node.strokeWidthPerSide
+            : frame.strokeWidthPerSide,
+      };
       if (frame.cornerRadius) {
-        bgMask.roundRect(0, 0, effectiveWidth, effectiveHeight, frame.cornerRadius);
+        bg.roundRect(0, 0, effectiveWidth, effectiveHeight, frame.cornerRadius);
       } else {
-        bgMask.rect(0, 0, effectiveWidth, effectiveHeight);
+        bg.rect(0, 0, effectiveWidth, effectiveHeight);
       }
-      bgMask.fill(0xffffff);
-      childrenContainer.addChild(bgMask);
-      bg.mask = bgMask;
+      applyFill(bg, effectiveFrameStyle, effectiveWidth, effectiveHeight);
+      applyStroke(bg, effectiveFrameStyle, effectiveWidth, effectiveHeight, frame.cornerRadius);
+      childrenContainer.addChild(bg);
+
+      // In auto-layout siblings, outside stroke should not visually bleed
+      // into neighbors. Clip only the instance background to its own bounds.
+      const parentId = useSceneStore.getState().parentById[node.id];
+      const parentNode = parentId ? nodesById[parentId] : undefined;
+      const isInAutoLayoutParent =
+        parentNode?.type === "frame" &&
+        (parentNode as FlatFrameNode).layout?.autoLayout;
+      const effectiveStrokeAlign = effectiveFrameStyle.strokeAlign ?? "center";
+      if (isInAutoLayoutParent && effectiveStrokeAlign === "outside") {
+        const bgMask = new Graphics();
+        bgMask.label = "ref-bg-mask";
+        if (frame.cornerRadius) {
+          bgMask.roundRect(0, 0, effectiveWidth, effectiveHeight, frame.cornerRadius);
+        } else {
+          bgMask.rect(0, 0, effectiveWidth, effectiveHeight);
+        }
+        bgMask.fill(0xffffff);
+        childrenContainer.addChild(bgMask);
+        bg.mask = bgMask;
+      }
     }
-  }
 
-  // Merge flattened override subtrees once to avoid O(n^2) map spreading
-  // for large instances.
-  const mergedNodesById: Record<string, FlatSceneNode> = { ...nodesById };
-  const mergedChildrenById: Record<string, string[]> = { ...childrenById };
-  const childSubtrees = renderedChildren.map((child) => ({
-    child,
-    flatSubtree: flattenSceneSubtree(child),
-  }));
-  for (const { flatSubtree } of childSubtrees) {
-    Object.assign(mergedNodesById, flatSubtree.nodesById);
-    Object.assign(mergedChildrenById, flatSubtree.childrenById);
-  }
+    // Merge flattened override subtrees once to avoid O(n^2) map spreading
+    // for large instances.
+    const mergedNodesById: Record<string, FlatSceneNode> = { ...nodesById };
+    const mergedChildrenById: Record<string, string[]> = { ...childrenById };
+    const childSubtrees = renderedChildren.map((child) => ({
+      child,
+      flatSubtree: flattenSceneSubtree(child),
+    }));
+    for (const { flatSubtree } of childSubtrees) {
+      Object.assign(mergedNodesById, flatSubtree.nodesById);
+      Object.assign(mergedChildrenById, flatSubtree.childrenById);
+    }
 
-  for (const { child, flatSubtree } of childSubtrees) {
-    if (child.enabled === false) continue;
-    if (child.visible === false) continue;
-    const childContainer = createNodeContainer(
-      flatSubtree.nodesById[child.id],
-      mergedNodesById,
-      mergedChildrenById,
-    );
-    // Recursively label all descendant containers so they can be found for text editing visibility
-    labelDescendantsInSubtree(childContainer, child.id, flatSubtree.childrenById);
-    childrenContainer.addChild(childContainer);
-  }
-
-  if (compThemeOverride) {
-    popRenderTheme();
+    for (const { child, flatSubtree } of childSubtrees) {
+      if (child.enabled === false) continue;
+      if (child.visible === false) continue;
+      const childContainer = createNodeContainer(
+        flatSubtree.nodesById[child.id],
+        mergedNodesById,
+        mergedChildrenById,
+      );
+      // Recursively label all descendant containers so they can be found for text editing visibility
+      labelDescendantsInSubtree(childContainer, child.id, flatSubtree.childrenById);
+      childrenContainer.addChild(childContainer);
+    }
+  } finally {
+    if (compThemeOverride) {
+      popRenderTheme();
+    }
   }
 
   container.addChild(childrenContainer);

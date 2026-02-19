@@ -2,6 +2,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { useSelectionStore } from "@/store/selectionStore";
+import { useUIThemeStore } from "@/store/uiThemeStore";
 import type { ToolHandler } from "../toolRegistry";
 
 export const openDocument: ToolHandler = async (args) => {
@@ -15,6 +16,7 @@ export const openDocument: ToolHandler = async (args) => {
     // Clear all state for a new document
     useSceneStore.getState().clearNodes();
     useVariableStore.getState().setVariables([]);
+    useUIThemeStore.getState().setUITheme("light");
     useHistoryStore.getState().clear();
     useSelectionStore.getState().clearSelection();
 

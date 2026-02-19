@@ -1,6 +1,7 @@
 import { useVariableStore } from "@/store/variableStore";
 import { useThemeStore } from "@/store/themeStore";
 import { getVariableValue } from "@/types/variable";
+import type { ThemeName } from "@/types/variable";
 
 export function normalizeVariableRefName(name: string): string {
   return name.trim().replace(/^\$/, "");
@@ -8,6 +9,7 @@ export function normalizeVariableRefName(name: string): string {
 
 export function resolveVariableReference(
   value: unknown,
+  theme?: ThemeName,
 ): { variableId: string; variableValue: string } | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -18,6 +20,7 @@ export function resolveVariableReference(
 
   const { variables } = useVariableStore.getState();
   const { activeTheme } = useThemeStore.getState();
+  const effectiveTheme = theme ?? activeTheme;
 
   const variable = variables.find((v) => {
     const normalizedVarName = normalizeVariableRefName(v.name);
@@ -32,6 +35,6 @@ export function resolveVariableReference(
 
   return {
     variableId: variable.id,
-    variableValue: getVariableValue(variable, activeTheme),
+    variableValue: getVariableValue(variable, effectiveTheme),
   };
 }
