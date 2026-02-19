@@ -6,6 +6,8 @@ type EditingMode = 'text' | 'name' | null
 export interface InstanceContext {
   instanceId: string    // ID of the instance (RefNode)
   descendantId: string  // ID of the descendant node being edited
+  // Optional unique path inside resolved instance tree (used by Pixi to disambiguate duplicate IDs)
+  descendantPath?: string
 }
 
 interface SelectionState {
@@ -32,7 +34,7 @@ interface SelectionState {
   startNameEditing: (id: string) => void
   stopEditing: () => void
   // Instance interaction methods
-  selectDescendant: (instanceId: string, descendantId: string) => void
+  selectDescendant: (instanceId: string, descendantId: string, descendantPath?: string) => void
   selectDescendantRange: (
     instanceId: string,
     fromDescendantId: string,
@@ -149,10 +151,14 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   },
 
   // Instance interaction methods
-  selectDescendant: (instanceId: string, descendantId: string) => {
+  selectDescendant: (instanceId: string, descendantId: string, descendantPath?: string) => {
     // Select a descendant node inside an instance
     set({
-      instanceContext: { instanceId, descendantId },
+      instanceContext: {
+        instanceId,
+        descendantId,
+        descendantPath,
+      },
       selectedIds: [instanceId],
       selectedDescendantIds: [descendantId],
       lastSelectedId: instanceId,

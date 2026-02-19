@@ -55,6 +55,47 @@ function syncTextNodeDimensions(node: SceneNode): SceneNode {
   return textNode;
 }
 
+function getOverrideByPath(
+  overrides: Record<string, DescendantOverride>,
+  pathSegments: string[],
+): DescendantOverride | undefined {
+  let cursor: Record<string, DescendantOverride> = overrides;
+  let current: DescendantOverride | undefined;
+  for (let i = 0; i < pathSegments.length; i++) {
+    current = cursor[pathSegments[i]];
+    if (!current) return undefined;
+    if (i < pathSegments.length - 1) {
+      cursor = current.descendants ?? {};
+    }
+  }
+  return current;
+}
+
+function setOverrideByPath(
+  overrides: Record<string, DescendantOverride>,
+  pathSegments: string[],
+  patch: DescendantOverride,
+): Record<string, DescendantOverride> {
+  const next: Record<string, DescendantOverride> = { ...overrides };
+  if (pathSegments.length === 0) return next;
+
+  let cursor = next;
+  for (let i = 0; i < pathSegments.length - 1; i++) {
+    const segment = pathSegments[i];
+    const current = cursor[segment] ?? {};
+    const descendants = { ...(current.descendants ?? {}) };
+    cursor[segment] = { ...current, descendants };
+    cursor = descendants;
+  }
+
+  const leaf = pathSegments[pathSegments.length - 1];
+  cursor[leaf] = {
+    ...(cursor[leaf] ?? {}),
+    ...patch,
+  };
+  return next;
+}
+
 export function createInstanceOperations(
   _get: () => SceneState,
   set: (partial: Partial<SceneState> | ((state: SceneState) => Partial<SceneState>)) => void,
@@ -214,15 +255,21 @@ export function createInstanceOperations(
       instanceId: string,
       descendantId: string,
       text: string,
+      descendantPath?: string,
     ) =>
       set((state) => {
         const existing = state.nodesById[instanceId];
         if (!existing || existing.type !== "ref") return state;
         const refNode = existing as RefNode;
+        const pathSegments = (descendantPath ?? descendantId)
+          .split("/")
+          .filter(Boolean);
+        if (pathSegments.length === 0) return state;
+        const leafId = pathSegments[pathSegments.length - 1];
 
         // Check if descendant has slot content replacement
-        if (refNode.slotContent?.[descendantId]) {
-          const slotNode = refNode.slotContent[descendantId];
+        if (pathSegments.length === 1 && refNode.slotContent?.[leafId]) {
+          const slotNode = refNode.slotContent[leafId];
           const updatedSlotNode = syncTextNodeDimensions({
             ...slotNode,
             text,
@@ -231,7 +278,7 @@ export function createInstanceOperations(
             ...refNode,
             slotContent: {
               ...refNode.slotContent,
-              [descendantId]: updatedSlotNode,
+              [leafId]: updatedSlotNode,
             },
           };
           return {
@@ -242,13 +289,14 @@ export function createInstanceOperations(
 
         // Otherwise update descendant override
         const descendants = refNode.descendants || {};
-        const override = descendants[descendantId] || {};
+        const override =
+          getOverrideByPath(descendants, pathSegments) || {};
         const updated: RefNode = {
           ...refNode,
-          descendants: {
-            ...descendants,
-            [descendantId]: { ...override, text },
-          },
+          descendants: setOverrideByPath(descendants, pathSegments, {
+            ...override,
+            text,
+          }),
         };
         return {
           nodesById: { ...state.nodesById, [instanceId]: updated },

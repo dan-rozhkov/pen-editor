@@ -183,13 +183,14 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
     // Hide descendant text inside instance during editing
     if (editingMode === "text" && instanceContext) {
-      const { instanceId, descendantId } = instanceContext;
+      const { instanceId, descendantId, descendantPath } = instanceContext;
       const instanceEntry = registry.get(instanceId);
       if (instanceEntry) {
         const refChildren = instanceEntry.container.getChildByLabel("ref-children") as Container | null;
         if (refChildren) {
-          // Search recursively for the labeled descendant container
-          const descContainer = findDescendantContainer(refChildren, descendantId);
+          const descContainer = descendantPath
+            ? findDescendantContainerByPath(refChildren, descendantPath)
+            : findDescendantContainer(refChildren, descendantId);
           if (descContainer) {
             // Hide only text descendants (to avoid accidentally hiding full frame/group trees
             // when instanceContext points to a non-text node).
@@ -214,6 +215,40 @@ export function createPixiSync(sceneRoot: Container): () => void {
       }
     }
     return null;
+  }
+
+  function findDescendantContainerByPath(
+    refChildren: Container,
+    path: string,
+  ): Container | null {
+    const segments = path.split("/").filter((segment) => segment.length > 0);
+    if (segments.length === 0) return null;
+
+    let currentHost: Container | null = refChildren;
+    let currentNode: Container | null = null;
+
+    for (const segment of segments) {
+      if (!currentHost) return null;
+      const descendantChildren = currentHost.children.filter(
+        (child) =>
+          child instanceof Container &&
+          typeof child.label === "string" &&
+          child.label.startsWith("desc-"),
+      ) as Container[];
+      const nextNode = descendantChildren.find(
+        (child) => child.label === `desc-${segment}`,
+      );
+      if (!nextNode) {
+        return null;
+      }
+      currentNode = nextNode;
+      if (!(currentNode instanceof Container)) return null;
+      const nextHost = currentNode.getChildByLabel("frame-children")
+        ?? currentNode.getChildByLabel("group-children");
+      currentHost = (nextHost as Container | null) ?? null;
+    }
+
+    return currentNode;
   }
 
   /**

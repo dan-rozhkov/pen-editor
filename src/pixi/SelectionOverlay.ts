@@ -5,9 +5,15 @@ import { useLayoutStore } from "@/store/layoutStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { getNodeAbsolutePositionWithLayout, getNodeEffectiveSize } from "@/utils/nodeUtils";
-import type { FlatFrameNode, FlatGroupNode, RefNode, TextNode } from "@/types/scene";
+import type {
+  FlatFrameNode,
+  FlatGroupNode,
+  RefNode,
+  TextNode,
+} from "@/types/scene";
 import { findDescendantLocalRect, prepareInstanceNode } from "@/components/nodes/instanceUtils";
 import { findNodeById } from "@/utils/nodeUtils";
+import { findDescendantByPath, findDescendantRectByPath } from "@/utils/instancePathUtils";
 import { buildTextStyle } from "@/pixi/renderers/textRenderer";
 
 const SELECTION_COLOR = 0x0d99ff;
@@ -197,7 +203,7 @@ export function createSelectionOverlay(
 
     // Instance descendant selection: draw outline at descendant position
     if (instanceContext) {
-      const { instanceId, descendantId } = instanceContext;
+      const { instanceId, descendantId, descendantPath } = instanceContext;
       // Skip drawing if descendant text is being edited
       if (editingMode === "text") return;
 
@@ -217,9 +223,12 @@ export function createSelectionOverlay(
           ? selectedDescendantIds
           : [descendantId];
       const rectEntries = descendantIds
-        .map((id) => ({
+        .map((id, index) => ({
           id,
-          rect: findDescendantLocalRect(prepared.layoutChildren, id),
+          rect:
+            index === 0 && descendantPath
+              ? findDescendantRectByPath(prepared.layoutChildren, descendantPath)
+              : findDescendantLocalRect(prepared.layoutChildren, id),
         }))
         .filter(
           (
@@ -251,7 +260,10 @@ export function createSelectionOverlay(
         outline.stroke({ color: COMPONENT_SELECTION_COLOR, width: strokeWidth });
         outlinesContainer.addChild(outline);
 
-        const descendant = findNodeById(prepared.layoutChildren, descendantId);
+        const descendant =
+          descendantPath && descendantId === instanceContext.descendantId
+            ? findDescendantByPath(prepared.layoutChildren, descendantPath)
+            : findNodeById(prepared.layoutChildren, descendantId);
         if (descendant?.type === "text") {
           drawTextBaselines(
             selectionTextBaselines,

@@ -22,13 +22,53 @@ import type { SceneNode } from "@/types/scene";
 
 const EMPTY_POINTER_EVENT = {} as PointerEvent;
 
+interface DescendantHit {
+  id: string;
+  path: string;
+}
+
+function findDeepestVisibleChildHit(
+  children: SceneNode[],
+  localX: number,
+  localY: number,
+  pathPrefix = "",
+): DescendantHit | null {
+  const visibleChildren = children.filter(
+    (child) => child.visible !== false && child.enabled !== false,
+  );
+  for (let i = visibleChildren.length - 1; i >= 0; i--) {
+    const child = visibleChildren[i];
+    if (
+      localX < child.x ||
+      localX > child.x + child.width ||
+      localY < child.y ||
+      localY > child.y + child.height
+    ) {
+      continue;
+    }
+
+    const nextPath = pathPrefix ? `${pathPrefix}/${child.id}` : child.id;
+    if (child.type === "frame" || child.type === "group") {
+      const nested = findDeepestVisibleChildHit(
+        child.children,
+        localX - child.x,
+        localY - child.y,
+        nextPath,
+      );
+      if (nested) return nested;
+    }
+    return { id: child.id, path: nextPath };
+  }
+  return null;
+}
+
 function findInstanceDescendantAtWorldPoint(
   instanceId: string,
   worldX: number,
   worldY: number,
   currentNodes: ReturnType<typeof useSceneStore.getState>["getNodes"] extends () => infer T ? T : never,
   calculateLayoutForFrame: ReturnType<typeof useLayoutStore.getState>["calculateLayoutForFrame"],
-): string | null {
+): DescendantHit | null {
   const instanceNode = findNodeById(currentNodes, instanceId);
   if (!instanceNode || instanceNode.type !== "ref") return null;
 
@@ -48,7 +88,11 @@ function findInstanceDescendantAtWorldPoint(
 
   const localX = worldX - absPos.x;
   const localY = worldY - absPos.y;
-  return findDeepestChildAtPosition(preparedInstance.layoutChildren, localX, localY);
+  return findDeepestVisibleChildHit(
+    preparedInstance.layoutChildren,
+    localX,
+    localY,
+  );
 }
 
 function flattenVisibleDescendantIds(children: SceneNode[]): string[] {
@@ -134,7 +178,7 @@ export function setupPixiInteraction(
         calculateLayoutForFrame,
       );
       if (descendantId) {
-        useHoverStore.getState().setHoveredNode(descendantId, activeInstanceId);
+        useHoverStore.getState().setHoveredNode(descendantId.id, activeInstanceId);
       } else {
         useHoverStore.getState().setHoveredNode(hitId);
       }
@@ -227,14 +271,14 @@ export function setupPixiInteraction(
           (!!activeInstanceId && activeInstanceId === hitId) ||
           isSingleSelectedRef;
         if (shouldDeepSelectInInstance) {
-          const descendantId = findInstanceDescendantAtWorldPoint(
+          const descendantHit = findInstanceDescendantAtWorldPoint(
             hitId,
             world.x,
             world.y,
             currentNodes,
             calculateLayoutForFrame,
           );
-          if (descendantId) {
+          if (descendantHit) {
             const selState = useSelectionStore.getState();
             const sameInstance =
               selState.instanceContext?.instanceId === hitId &&
@@ -254,7 +298,7 @@ export function setupPixiInteraction(
                   useSceneStore.getState().setFrameExpanded(hitId, true);
                   const ancestorIds = findAncestorContainerIds(
                     preparedInstance.layoutChildren,
-                    descendantId,
+                    descendantHit.id,
                   );
                   if (ancestorIds && ancestorIds.length > 0) {
                     ancestorIds.forEach((id) =>
@@ -264,7 +308,7 @@ export function setupPixiInteraction(
                   selState.selectDescendantRange(
                     hitId,
                     selState.instanceContext!.descendantId,
-                    descendantId,
+                    descendantHit.id,
                     flatIds,
                   );
                   return;
@@ -282,7 +326,7 @@ export function setupPixiInteraction(
               if (preparedInstance) {
                 const ancestorIds = findAncestorContainerIds(
                   preparedInstance.layoutChildren,
-                  descendantId,
+                  descendantHit.id,
                 );
                 if (ancestorIds && ancestorIds.length > 0) {
                   ancestorIds.forEach((id) =>
@@ -291,7 +335,11 @@ export function setupPixiInteraction(
                 }
               }
             }
-            selState.selectDescendant(hitId, descendantId);
+            selState.selectDescendant(
+              hitId,
+              descendantHit.id,
+              descendantHit.path,
+            );
             return;
           }
         }
@@ -356,14 +404,14 @@ export function setupPixiInteraction(
     if (currentSelectedIds.length === 1) {
       const selectedNode = findNodeById(currentNodes, currentSelectedIds[0]);
       if (selectedNode && selectedNode.type === "ref") {
-        const descendantId = findInstanceDescendantAtWorldPoint(
+        const descendantHit = findInstanceDescendantAtWorldPoint(
           selectedNode.id,
           world.x,
           world.y,
           currentNodes,
           calculateLayoutForFrame,
         );
-        if (descendantId) {
+        if (descendantHit) {
           useSceneStore.getState().setFrameExpanded(selectedNode.id, true);
           const preparedInstance = prepareInstanceNode(
             selectedNode,
@@ -373,7 +421,7 @@ export function setupPixiInteraction(
           if (preparedInstance) {
             const ancestorIds = findAncestorContainerIds(
               preparedInstance.layoutChildren,
-              descendantId,
+              descendantHit.id,
             );
             if (ancestorIds && ancestorIds.length > 0) {
               ancestorIds.forEach((id) =>
@@ -381,10 +429,14 @@ export function setupPixiInteraction(
               );
             }
           }
-          useSelectionStore.getState().selectDescendant(selectedNode.id, descendantId);
+          useSelectionStore.getState().selectDescendant(
+            selectedNode.id,
+            descendantHit.id,
+            descendantHit.path,
+          );
           const descendantNode = findNodeById(
             prepareInstanceNode(selectedNode, currentNodes, calculateLayoutForFrame)?.layoutChildren ?? [],
-            descendantId,
+            descendantHit.id,
           );
           if (descendantNode?.type === "text") {
             useSelectionStore.getState().startDescendantEditing();
@@ -428,14 +480,14 @@ export function setupPixiInteraction(
       // Enter text editing mode
       useSelectionStore.getState().startEditing(hitId);
     } else if (node.type === "ref") {
-      const descendantId = findInstanceDescendantAtWorldPoint(
+      const descendantHit = findInstanceDescendantAtWorldPoint(
         hitId,
         world.x,
         world.y,
         currentNodes,
         calculateLayoutForFrame,
       );
-      if (descendantId) {
+      if (descendantHit) {
         useSceneStore.getState().setFrameExpanded(hitId, true);
         const preparedInstance = prepareInstanceNode(
           node,
@@ -445,7 +497,7 @@ export function setupPixiInteraction(
         if (preparedInstance) {
           const ancestorIds = findAncestorContainerIds(
             preparedInstance.layoutChildren,
-            descendantId,
+            descendantHit.id,
           );
           if (ancestorIds && ancestorIds.length > 0) {
             ancestorIds.forEach((id) =>
@@ -453,10 +505,14 @@ export function setupPixiInteraction(
             );
           }
         }
-        useSelectionStore.getState().selectDescendant(hitId, descendantId);
+        useSelectionStore.getState().selectDescendant(
+          hitId,
+          descendantHit.id,
+          descendantHit.path,
+        );
         const descendantNode = findNodeById(
           prepareInstanceNode(node, currentNodes, calculateLayoutForFrame)?.layoutChildren ?? [],
-          descendantId,
+          descendantHit.id,
         );
         if (descendantNode?.type === "text") {
           useSelectionStore.getState().startDescendantEditing();

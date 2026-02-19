@@ -96,18 +96,34 @@ export function flattenSceneSubtree(root: SceneNode): {
   return { nodesById, childrenById };
 }
 
+function cloneSceneTreeWithRenderIds(
+  node: SceneNode,
+  path: string,
+): SceneNode {
+  const renderId = `${path}/${node.id}`;
+  if (node.type === "frame" || node.type === "group") {
+    return {
+      ...node,
+      id: renderId,
+      children: node.children.map((child, index) =>
+        cloneSceneTreeWithRenderIds(child, `${renderId}:${index}`),
+      ),
+    } as SceneNode;
+  }
+  return { ...node, id: renderId } as SceneNode;
+}
+
 /**
  * Recursively label all containers in a subtree with `desc-{nodeId}` so they
  * can be looked up later (e.g., to hide descendant text during editing).
  */
-function labelDescendantsInSubtree(
+function labelDescendantsFromSourceTree(
   container: Container,
-  nodeId: string,
-  childrenById: Record<string, string[]>,
+  sourceNode: SceneNode,
 ): void {
-  container.label = `desc-${nodeId}`;
-  const childIds = childrenById[nodeId] ?? [];
-  if (childIds.length === 0) return;
+  container.label = `desc-${sourceNode.id}`;
+  if (sourceNode.type !== "frame" && sourceNode.type !== "group") return;
+  if (sourceNode.children.length === 0) return;
 
   const childrenHost =
     container.getChildByLabel("frame-children") ??
@@ -115,10 +131,10 @@ function labelDescendantsInSubtree(
   if (!childrenHost) return;
 
   const hostContainer = childrenHost as Container;
-  for (let i = 0; i < childIds.length; i++) {
+  for (let i = 0; i < sourceNode.children.length; i++) {
     const child = hostContainer.children[i] as Container | undefined;
     if (child) {
-      labelDescendantsInSubtree(child, childIds[i], childrenById);
+      labelDescendantsFromSourceTree(child, sourceNode.children[i]);
     }
   }
 }
@@ -126,7 +142,7 @@ function labelDescendantsInSubtree(
 export function createRefContainer(
   node: RefNode,
   nodesById: Record<string, FlatSceneNode>,
-  childrenById: Record<string, string[]>,
+  _childrenById: Record<string, string[]>,
 ): Container {
   const container = new Container();
   const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
@@ -217,29 +233,27 @@ export function createRefContainer(
       }
     }
 
-    // Merge flattened override subtrees once to avoid O(n^2) map spreading
-    // for large instances.
-    const mergedNodesById: Record<string, FlatSceneNode> = { ...nodesById };
-    const mergedChildrenById: Record<string, string[]> = { ...childrenById };
-    const childSubtrees = renderedChildren.map((child) => ({
-      child,
-      flatSubtree: flattenSceneSubtree(child),
-    }));
-    for (const { flatSubtree } of childSubtrees) {
-      Object.assign(mergedNodesById, flatSubtree.nodesById);
-      Object.assign(mergedChildrenById, flatSubtree.childrenById);
-    }
-
-    for (const { child, flatSubtree } of childSubtrees) {
+    for (let childIndex = 0; childIndex < renderedChildren.length; childIndex++) {
+      const child = renderedChildren[childIndex];
       if (child.enabled === false) continue;
       if (child.visible === false) continue;
-      const childContainer = createNodeContainer(
-        flatSubtree.nodesById[child.id],
-        mergedNodesById,
-        mergedChildrenById,
+
+      // Render instance descendants from an isolated flat map with unique IDs.
+      // This avoids key collisions when the same component is instantiated
+      // multiple times inside one instance (their inner node IDs are identical).
+      const renderTree = cloneSceneTreeWithRenderIds(
+        child,
+        `ref-${node.id}:${childIndex}`,
       );
-      // Recursively label all descendant containers so they can be found for text editing visibility
-      labelDescendantsInSubtree(childContainer, child.id, flatSubtree.childrenById);
+      const flatSubtree = flattenSceneSubtree(renderTree);
+      const childContainer = createNodeContainer(
+        flatSubtree.nodesById[renderTree.id],
+        flatSubtree.nodesById,
+        flatSubtree.childrenById,
+      );
+      // Re-apply labels from the original (non-render-cloned) tree so
+      // interaction still targets source descendant IDs.
+      labelDescendantsFromSourceTree(childContainer, child);
       childrenContainer.addChild(childContainer);
     }
   } finally {

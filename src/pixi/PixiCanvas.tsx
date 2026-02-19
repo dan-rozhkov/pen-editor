@@ -27,6 +27,7 @@ import {
   getThemeFromAncestorFrames,
 } from "@/utils/nodeUtils";
 import { findDescendantLocalPosition, prepareInstanceNode } from "@/components/nodes/instanceUtils";
+import { findDescendantByPath, findDescendantPositionByPath } from "@/utils/instancePathUtils";
 import { createPixiSync } from "./pixiSync";
 import { setupPixiViewport } from "./pixiViewport";
 import { setupPixiInteraction } from "./interaction";
@@ -119,7 +120,9 @@ export function PixiCanvas() {
     const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
     const prepared = prepareInstanceNode(instance as RefNode, allNodes, calculateLayoutForFrame);
     if (!prepared) return null;
-    const descendant = findNodeById(prepared.layoutChildren, instanceContext.descendantId);
+    const descendant = instanceContext.descendantPath
+      ? findDescendantByPath(prepared.layoutChildren, instanceContext.descendantPath)
+      : findNodeById(prepared.layoutChildren, instanceContext.descendantId);
     if (!descendant || descendant.type !== "text") return null;
     return descendant as TextNode;
   }, [editingMode, instanceContext, nodes]);
@@ -134,7 +137,15 @@ export function PixiCanvas() {
     if (!instance || instance.type !== "ref") return null;
     const prepared = prepareInstanceNode(instance as RefNode, allNodes, calculateLayoutForFrame);
     if (!prepared) return null;
-    const localPos = findDescendantLocalPosition(prepared.layoutChildren, instanceContext.descendantId);
+    const localPos = instanceContext.descendantPath
+      ? findDescendantPositionByPath(
+          prepared.layoutChildren,
+          instanceContext.descendantPath,
+        )
+      : findDescendantLocalPosition(
+          prepared.layoutChildren,
+          instanceContext.descendantId,
+        );
     if (!localPos) return null;
     return { x: instanceAbsPos.x + localPos.x, y: instanceAbsPos.y + localPos.y };
   }, [editingDescendantTextNode, instanceContext, nodes]);
@@ -172,9 +183,14 @@ export function PixiCanvas() {
 
   const handleDescendantTextUpdate = useMemo(() => {
     if (!instanceContext) return undefined;
-    const { instanceId, descendantId } = instanceContext;
+    const { instanceId, descendantId, descendantPath } = instanceContext;
     return (text: string) => {
-      useSceneStore.getState().updateDescendantTextWithoutHistory(instanceId, descendantId, text);
+      useSceneStore.getState().updateDescendantTextWithoutHistory(
+        instanceId,
+        descendantId,
+        text,
+        descendantPath,
+      );
     };
   }, [instanceContext]);
 

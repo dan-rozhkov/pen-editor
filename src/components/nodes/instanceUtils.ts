@@ -107,11 +107,14 @@ export function resolveNodeWithInstanceOverrides(
   slotContent: Record<string, SceneNode> | undefined,
   allNodes: SceneNode[],
   localDescendantOverrides?: DescendantOverrides,
+  allowRootFallback = true,
 ): SceneNode {
   const override =
-    localDescendantOverrides?.[node.id] ?? rootDescendantOverrides[node.id];
+    localDescendantOverrides?.[node.id] ??
+    (allowRootFallback ? rootDescendantOverrides[node.id] : undefined);
   const slotReplacement =
     node.type === "ref" ? slotContent?.[node.id] : undefined;
+  const wasRefNode = node.type === "ref";
 
   let resolvedNode = slotReplacement ?? applyDescendantOverride(node, override);
   if (resolvedNode.type === "ref") {
@@ -126,6 +129,7 @@ export function resolveNodeWithInstanceOverrides(
         slotContent,
         allNodes,
         override?.descendants,
+        wasRefNode ? false : allowRootFallback,
       ),
     );
     return { ...resolvedNode, children } as SceneNode;
