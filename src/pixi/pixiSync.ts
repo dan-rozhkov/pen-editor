@@ -300,6 +300,8 @@ export function createPixiSync(sceneRoot: Container): () => void {
                   frameEntry.node,
                   frameWidth,
                   frameHeight,
+                  state.nodesById,
+                  state.childrenById,
                 );
               },
             );
@@ -330,6 +332,8 @@ export function createPixiSync(sceneRoot: Container): () => void {
                     childEntry.node,
                     layoutChild.width,
                     layoutChild.height,
+                    state.nodesById,
+                    state.childrenById,
                   );
                 },
               );

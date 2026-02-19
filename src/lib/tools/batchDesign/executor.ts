@@ -16,6 +16,29 @@ import {
 
 const DOCUMENT_BINDING = "__document__";
 
+function applyRefDefaultsFromComponent(
+  node: SceneNode,
+  nodeData: Record<string, unknown>,
+  nodesById: Record<string, FlatSceneNode>,
+): SceneNode {
+  if (node.type !== "ref") return node;
+
+  const refNode = node as RefNode;
+  const component = nodesById[refNode.componentId];
+  if (!component || component.type !== "frame") return node;
+
+  const hasWidth = Object.prototype.hasOwnProperty.call(nodeData, "width");
+  const hasHeight = Object.prototype.hasOwnProperty.call(nodeData, "height");
+  const hasSizing = Object.prototype.hasOwnProperty.call(nodeData, "sizing");
+
+  return {
+    ...refNode,
+    width: hasWidth ? refNode.width : component.width,
+    height: hasHeight ? refNode.height : component.height,
+    sizing: hasSizing ? refNode.sizing : component.sizing,
+  } as SceneNode;
+}
+
 /**
  * Resolve a ParsedArg to its string value using the execution context bindings.
  */
@@ -98,7 +121,8 @@ function executeInsert(op: ParsedOperation, ctx: ExecutionContext): void {
     actualParentId = parentResolved;
   }
 
-  const node = createNodeFromAiData(nodeData);
+  const createdNode = createNodeFromAiData(nodeData);
+  const node = applyRefDefaultsFromComponent(createdNode, nodeData, ctx.nodesById);
 
   // Insert into flat storage
   insertTreeIntoFlat(
@@ -299,6 +323,33 @@ function remapPath(path: string, idMap: Map<string, string>): string {
     .join("/");
 }
 
+function setDescendantOverrideByPath(
+  existingOverrides: DescendantOverrides | undefined,
+  descendantPath: string,
+  mappedOverride: Record<string, unknown>,
+): DescendantOverrides {
+  const segments = descendantPath.split("/").filter(Boolean);
+  const next: DescendantOverrides = { ...(existingOverrides ?? {}) };
+  if (segments.length === 0) return next;
+
+  let cursor = next;
+  for (let i = 0; i < segments.length - 1; i++) {
+    const segment = segments[i];
+    const current = cursor[segment] ?? {};
+    const descendants = { ...(current.descendants ?? {}) };
+    cursor[segment] = { ...current, descendants };
+    cursor = descendants;
+  }
+
+  const leaf = segments[segments.length - 1];
+  cursor[leaf] = {
+    ...(cursor[leaf] ?? {}),
+    ...mappedOverride,
+  };
+
+  return next;
+}
+
 /**
  * Execute an Update operation.
  * U(path, updateData)
@@ -332,13 +383,11 @@ function executeUpdate(op: ParsedOperation, ctx: ExecutionContext): void {
     const refNode = { ...instanceNode } as RefNode;
     const mapped = mapDescendantOverride(updateData);
 
-    refNode.descendants = {
-      ...refNode.descendants,
-      [descendantPath]: {
-        ...(refNode.descendants?.[descendantPath] ?? {}),
-        ...mapped,
-      },
-    };
+    refNode.descendants = setDescendantOverrideByPath(
+      refNode.descendants,
+      descendantPath,
+      mapped,
+    );
 
     ctx.nodesById[instanceId] = refNode;
   } else {

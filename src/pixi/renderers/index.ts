@@ -209,6 +209,8 @@ export function applyLayoutSize(
   node: FlatSceneNode,
   layoutWidth: number,
   layoutHeight: number,
+  nodesById?: Record<string, FlatSceneNode>,
+  childrenById?: Record<string, string[]>,
 ): void {
   // Skip if size hasn't changed
   if (node.width === layoutWidth && node.height === layoutHeight) return;
@@ -248,6 +250,22 @@ export function applyLayoutSize(
         }
         mask.fill(0xffffff);
       }
+      break;
+    }
+    case "ref": {
+      if (!nodesById || !childrenById) break;
+      const layoutSizedRef: RefNode = {
+        ...(node as RefNode),
+        width: layoutWidth,
+        height: layoutHeight,
+      };
+      updateRefContainer(
+        container,
+        layoutSizedRef,
+        node as RefNode,
+        nodesById,
+        childrenById,
+      );
       break;
     }
     // Text and other types don't need size updates for layout
