@@ -200,6 +200,10 @@ export function createSelectionOverlay(
     const state = useSceneStore.getState();
     const sceneNodes = state.getNodes();
     const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+    const hasComponentSelection = selectedIds.some((id) => isComponentOrInstance(id));
+    const selectionBaselineColor = hasComponentSelection
+      ? COMPONENT_SELECTION_COLOR
+      : TEXT_BASELINE_COLOR;
 
     // Instance descendant selection: draw outline at descendant position
     if (instanceContext) {
@@ -272,7 +276,7 @@ export function createSelectionOverlay(
             absY,
             width,
             scale,
-            TEXT_BASELINE_COLOR,
+            selectionBaselineColor,
           );
         }
       }
@@ -344,7 +348,7 @@ export function createSelectionOverlay(
           absPos.y,
           width,
           scale,
-          TEXT_BASELINE_COLOR,
+          selectionBaselineColor,
         );
       }
 
@@ -357,7 +361,7 @@ export function createSelectionOverlay(
 
     totalW = maxX - minX;
     totalH = maxY - minY;
-    const transformerColor = selectedIds.some((id) => isComponentOrInstance(id))
+    const transformerColor = hasComponentSelection
       ? COMPONENT_SELECTION_COLOR
       : SELECTION_COLOR;
 
@@ -522,6 +526,11 @@ export function createSelectionOverlay(
     const state = useSceneStore.getState();
     const scale = useViewportStore.getState().scale;
     const strokeWidth = 1 / scale;
+    const hoverBaselineColor = hoveredInstanceId
+      ? COMPONENT_SELECTION_COLOR
+      : isComponentOrInstance(hoveredNodeId)
+        ? COMPONENT_SELECTION_COLOR
+        : TEXT_BASELINE_COLOR;
 
     // Instance descendant hover
     if (hoveredInstanceId) {
@@ -563,7 +572,7 @@ export function createSelectionOverlay(
           instanceAbsPos.y + rect.y,
           rect.width,
           scale,
-          TEXT_BASELINE_COLOR,
+          hoverBaselineColor,
         );
       }
       return;
@@ -597,7 +606,7 @@ export function createSelectionOverlay(
         absPos.y,
         width,
         scale,
-        TEXT_BASELINE_COLOR,
+        hoverBaselineColor,
       );
     }
   }
