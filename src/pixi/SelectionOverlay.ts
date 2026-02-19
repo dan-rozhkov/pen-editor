@@ -1,17 +1,19 @@
-import { Container, Graphics, Text, TextStyle } from "pixi.js";
+import { CanvasTextMetrics, Container, Graphics, Text, TextStyle } from "pixi.js";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useHoverStore } from "@/store/hoverStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { getNodeAbsolutePositionWithLayout, getNodeEffectiveSize } from "@/utils/nodeUtils";
-import type { FlatFrameNode, FlatGroupNode, RefNode } from "@/types/scene";
+import type { FlatFrameNode, FlatGroupNode, RefNode, TextNode } from "@/types/scene";
 import { findDescendantLocalRect, prepareInstanceNode } from "@/components/nodes/instanceUtils";
 import { findNodeById } from "@/utils/nodeUtils";
+import { buildTextStyle } from "@/pixi/renderers/textRenderer";
 
 const SELECTION_COLOR = 0x0d99ff;
 const HOVER_COLOR = 0x0d99ff;
 const COMPONENT_SELECTION_COLOR = 0x8b5cf6;
+const TEXT_BASELINE_COLOR = 0x0d99ff;
 const HANDLE_SIZE = 8;
 const HANDLE_FILL = 0xffffff;
 
@@ -69,6 +71,14 @@ export function createSelectionOverlay(
   hovOutline.label = "hover-outline";
   selectionContainer.addChild(hovOutline);
 
+  const selectionTextBaselines = new Graphics();
+  selectionTextBaselines.label = "selection-text-baselines";
+  selectionContainer.addChild(selectionTextBaselines);
+
+  const hoverTextBaselines = new Graphics();
+  hoverTextBaselines.label = "hover-text-baselines";
+  selectionContainer.addChild(hoverTextBaselines);
+
   const handlesContainer = new Container();
   handlesContainer.label = "transform-handles";
   selectionContainer.addChild(handlesContainer);
@@ -116,6 +126,52 @@ export function createSelectionOverlay(
     return false;
   }
 
+  function drawTextBaselines(
+    gfx: Graphics,
+    node: TextNode,
+    absX: number,
+    absY: number,
+    width: number,
+    scale: number,
+    color: number,
+  ): void {
+    const style = buildTextStyle(node);
+    const metrics = CanvasTextMetrics.measureText(node.text ?? "", style);
+    const lineWidths = metrics.lineWidths ?? [];
+    const lineCount = Math.max(1, metrics.lines?.length ?? 0);
+    const lineHeight =
+      metrics.lineHeight || (node.fontSize ?? 16) * (node.lineHeight ?? 1.2);
+    const fontAscent = metrics.fontProperties?.ascent ?? (node.fontSize ?? 16) * 0.8;
+    const fontPixelSize =
+      metrics.fontProperties?.fontSize ?? (node.fontSize ?? 16);
+    // Pixi renders extra leading around glyphs when lineHeight > fontSize.
+    // Baseline should include the top half of that leading to match visual text position.
+    const baselineOffset = fontAscent + Math.max(0, (lineHeight - fontPixelSize) / 2);
+    const textAlign = node.textAlign ?? "left";
+    const maxLineWidth = lineWidths.length > 0 ? Math.max(...lineWidths) : width;
+    const textBoxWidth =
+      node.textWidthMode === "fixed" || node.textWidthMode === "fixed-height"
+        ? width
+        : maxLineWidth;
+
+    for (let i = 0; i < lineCount; i++) {
+      const lineWidth = lineWidths[i] ?? 0;
+      if (lineWidth <= 0) continue;
+
+      let lineX = absX;
+      if (textAlign === "center") {
+        lineX += (textBoxWidth - lineWidth) / 2;
+      } else if (textAlign === "right") {
+        lineX += textBoxWidth - lineWidth;
+      }
+
+      const lineY = absY + i * lineHeight + baselineOffset;
+      gfx.moveTo(lineX, lineY);
+      gfx.lineTo(lineX + lineWidth, lineY);
+      gfx.stroke({ color, width: 1 / scale });
+    }
+  }
+
   function redrawSelection(): void {
     const {
       selectedIds,
@@ -131,6 +187,7 @@ export function createSelectionOverlay(
     outlinesContainer.removeChildren();
     handlesContainer.removeChildren();
     sizeLabelsContainer.removeChildren();
+    selectionTextBaselines.clear();
 
     if (selectedIds.length === 0) return;
 
@@ -159,9 +216,18 @@ export function createSelectionOverlay(
         selectedDescendantIds.length > 0
           ? selectedDescendantIds
           : [descendantId];
-      const rects = descendantIds
-        .map((id) => findDescendantLocalRect(prepared.layoutChildren, id))
-        .filter((rect): rect is NonNullable<typeof rect> => rect != null);
+      const rectEntries = descendantIds
+        .map((id) => ({
+          id,
+          rect: findDescendantLocalRect(prepared.layoutChildren, id),
+        }))
+        .filter(
+          (
+            entry,
+          ): entry is { id: string; rect: NonNullable<typeof entry.rect> } =>
+            entry.rect != null,
+        );
+      const rects = rectEntries.map((entry) => entry.rect);
       if (rects.length === 0) return;
 
       let minX = Infinity;
@@ -169,7 +235,8 @@ export function createSelectionOverlay(
       let maxX = -Infinity;
       let maxY = -Infinity;
 
-      for (const rect of rects) {
+      for (const entry of rectEntries) {
+        const { id: descendantId, rect } = entry;
         const absX = instanceAbsPos.x + rect.x;
         const absY = instanceAbsPos.y + rect.y;
         const { width, height } = rect;
@@ -183,6 +250,19 @@ export function createSelectionOverlay(
         outline.rect(absX, absY, width, height);
         outline.stroke({ color: COMPONENT_SELECTION_COLOR, width: strokeWidth });
         outlinesContainer.addChild(outline);
+
+        const descendant = findNodeById(prepared.layoutChildren, descendantId);
+        if (descendant?.type === "text") {
+          drawTextBaselines(
+            selectionTextBaselines,
+            descendant as TextNode,
+            absX,
+            absY,
+            width,
+            scale,
+            TEXT_BASELINE_COLOR,
+          );
+        }
       }
 
       const width = maxX - minX;
@@ -243,6 +323,18 @@ export function createSelectionOverlay(
       outline.rect(absPos.x, absPos.y, width, height);
       outline.stroke({ color, width: strokeWidth });
       outlinesContainer.addChild(outline);
+
+      if (node.type === "text") {
+        drawTextBaselines(
+          selectionTextBaselines,
+          node as TextNode,
+          absPos.x,
+          absPos.y,
+          width,
+          scale,
+          TEXT_BASELINE_COLOR,
+        );
+      }
 
       // Track bounding box for handles
       minX = Math.min(minX, absPos.x);
@@ -407,6 +499,7 @@ export function createSelectionOverlay(
 
   function redrawHover(): void {
     hovOutline.clear();
+    hoverTextBaselines.clear();
 
     const { hoveredNodeId, hoveredInstanceId } = useHoverStore.getState();
     if (!hoveredNodeId) return;
@@ -448,6 +541,19 @@ export function createSelectionOverlay(
 
       hovOutline.rect(instanceAbsPos.x + rect.x, instanceAbsPos.y + rect.y, rect.width, rect.height);
       hovOutline.stroke({ color: COMPONENT_SELECTION_COLOR, width: strokeWidth });
+
+      const descendant = findNodeById(prepared.layoutChildren, hoveredNodeId);
+      if (descendant?.type === "text") {
+        drawTextBaselines(
+          hoverTextBaselines,
+          descendant as TextNode,
+          instanceAbsPos.x + rect.x,
+          instanceAbsPos.y + rect.y,
+          rect.width,
+          scale,
+          TEXT_BASELINE_COLOR,
+        );
+      }
       return;
     }
 
@@ -470,6 +576,18 @@ export function createSelectionOverlay(
       ? COMPONENT_SELECTION_COLOR
       : HOVER_COLOR;
     hovOutline.stroke({ color: hoverColor, width: strokeWidth });
+
+    if (node.type === "text") {
+      drawTextBaselines(
+        hoverTextBaselines,
+        node as TextNode,
+        absPos.x,
+        absPos.y,
+        width,
+        scale,
+        TEXT_BASELINE_COLOR,
+      );
+    }
   }
 
   // Subscribe to stores
@@ -511,6 +629,8 @@ export function createSelectionOverlay(
     unsubViewport();
     outlinesContainer.destroy({ children: true });
     hovOutline.destroy();
+    selectionTextBaselines.destroy();
+    hoverTextBaselines.destroy();
     handlesContainer.destroy({ children: true });
     frameNamesContainer.destroy({ children: true });
     sizeLabelsContainer.destroy({ children: true });
