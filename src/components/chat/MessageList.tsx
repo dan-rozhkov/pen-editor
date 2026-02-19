@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from "react";
 import type { UIMessage } from "ai";
 import { SimpleMarkdown } from "./SimpleMarkdown";
 import { ToolCallIndicator, isToolUIPart } from "./ToolCallIndicator";
+import { ThinkingIndicator } from "./ThinkingIndicator";
 
 function StreamingIndicator() {
   return (
@@ -80,7 +81,7 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
 
         // Assistant: render parts inline in order
         const hasAnyContent = msg.parts.some(
-          (p) => (p.type === "text" && p.text) || isToolUIPart(p)
+          (p) => (p.type === "text" && p.text) || p.type === "reasoning" || isToolUIPart(p)
         );
         const isEmptyStreaming =
           isLoading &&
@@ -93,6 +94,9 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
               {msg.parts.map((part, i) => {
                 if (part.type === "text" && part.text) {
                   return <SimpleMarkdown key={i} content={part.text} />;
+                }
+                if (part.type === "reasoning" && part.text) {
+                  return <ThinkingIndicator key={`reasoning-${i}`} part={part} />;
                 }
                 if (isToolUIPart(part)) {
                   const tp = part as { toolCallId: string };
