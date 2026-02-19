@@ -66,6 +66,26 @@ function flattenVisibleDescendantIds(children: SceneNode[]): string[] {
   return ids;
 }
 
+function findAncestorContainerIds(
+  nodes: SceneNode[],
+  targetId: string,
+  path: string[] = [],
+): string[] | null {
+  for (const node of nodes) {
+    if (node.id === targetId) {
+      return path;
+    }
+    if (node.type === "frame" || node.type === "group") {
+      const result = findAncestorContainerIds(node.children, targetId, [
+        ...path,
+        node.id,
+      ]);
+      if (result) return result;
+    }
+  }
+  return null;
+}
+
 /**
  * Set up all pointer interaction handlers on the PixiJS canvas.
  * Returns a cleanup function.
@@ -198,9 +218,14 @@ export function setupPixiInteraction(
       if (hitId) {
         const hitNode = findNodeById(currentNodes, hitId);
         const activeInstanceId = selectionState.instanceContext?.instanceId;
+        const isSingleSelectedRef =
+          hitNode?.type === "ref" &&
+          selectionState.selectedIds.length === 1 &&
+          selectionState.selectedIds[0] === hitId;
         const shouldDeepSelectInInstance =
           (deepSelect && hitNode?.type === "ref") ||
-          (!!activeInstanceId && activeInstanceId === hitId);
+          (!!activeInstanceId && activeInstanceId === hitId) ||
+          isSingleSelectedRef;
         if (shouldDeepSelectInInstance) {
           const descendantId = findInstanceDescendantAtWorldPoint(
             hitId,
@@ -226,6 +251,16 @@ export function setupPixiInteraction(
                   const flatIds = flattenVisibleDescendantIds(
                     preparedInstance.layoutChildren,
                   );
+                  useSceneStore.getState().setFrameExpanded(hitId, true);
+                  const ancestorIds = findAncestorContainerIds(
+                    preparedInstance.layoutChildren,
+                    descendantId,
+                  );
+                  if (ancestorIds && ancestorIds.length > 0) {
+                    ancestorIds.forEach((id) =>
+                      useSceneStore.getState().setFrameExpanded(id, true),
+                    );
+                  }
                   selState.selectDescendantRange(
                     hitId,
                     selState.instanceContext!.descendantId,
@@ -233,6 +268,26 @@ export function setupPixiInteraction(
                     flatIds,
                   );
                   return;
+                }
+              }
+            }
+            useSceneStore.getState().setFrameExpanded(hitId, true);
+            const instanceNode = findNodeById(currentNodes, hitId);
+            if (instanceNode && instanceNode.type === "ref") {
+              const preparedInstance = prepareInstanceNode(
+                instanceNode,
+                currentNodes,
+                calculateLayoutForFrame,
+              );
+              if (preparedInstance) {
+                const ancestorIds = findAncestorContainerIds(
+                  preparedInstance.layoutChildren,
+                  descendantId,
+                );
+                if (ancestorIds && ancestorIds.length > 0) {
+                  ancestorIds.forEach((id) =>
+                    useSceneStore.getState().setFrameExpanded(id, true),
+                  );
                 }
               }
             }
@@ -309,6 +364,23 @@ export function setupPixiInteraction(
           calculateLayoutForFrame,
         );
         if (descendantId) {
+          useSceneStore.getState().setFrameExpanded(selectedNode.id, true);
+          const preparedInstance = prepareInstanceNode(
+            selectedNode,
+            currentNodes,
+            calculateLayoutForFrame,
+          );
+          if (preparedInstance) {
+            const ancestorIds = findAncestorContainerIds(
+              preparedInstance.layoutChildren,
+              descendantId,
+            );
+            if (ancestorIds && ancestorIds.length > 0) {
+              ancestorIds.forEach((id) =>
+                useSceneStore.getState().setFrameExpanded(id, true),
+              );
+            }
+          }
           useSelectionStore.getState().selectDescendant(selectedNode.id, descendantId);
           const descendantNode = findNodeById(
             prepareInstanceNode(selectedNode, currentNodes, calculateLayoutForFrame)?.layoutChildren ?? [],
@@ -364,6 +436,23 @@ export function setupPixiInteraction(
         calculateLayoutForFrame,
       );
       if (descendantId) {
+        useSceneStore.getState().setFrameExpanded(hitId, true);
+        const preparedInstance = prepareInstanceNode(
+          node,
+          currentNodes,
+          calculateLayoutForFrame,
+        );
+        if (preparedInstance) {
+          const ancestorIds = findAncestorContainerIds(
+            preparedInstance.layoutChildren,
+            descendantId,
+          );
+          if (ancestorIds && ancestorIds.length > 0) {
+            ancestorIds.forEach((id) =>
+              useSceneStore.getState().setFrameExpanded(id, true),
+            );
+          }
+        }
         useSelectionStore.getState().selectDescendant(hitId, descendantId);
         const descendantNode = findNodeById(
           prepareInstanceNode(node, currentNodes, calculateLayoutForFrame)?.layoutChildren ?? [],

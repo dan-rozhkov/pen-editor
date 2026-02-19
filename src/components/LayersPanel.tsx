@@ -235,7 +235,22 @@ const LayerItem = memo(function LayerItem({
       s.instanceContext?.instanceId === instanceId &&
       s.selectedDescendantIds.includes(node.id),
   );
+  const isInstanceRootWithDescendantSelection = useSelectionStore(
+    (s) =>
+      !instanceId &&
+      s.instanceContext?.instanceId === node.id &&
+      s.selectedDescendantIds.length > 0,
+  );
   const toggleVisibility = useSceneStore((state) => state.toggleVisibility);
+  const updateDescendantOverride = useSceneStore(
+    (state) => state.updateDescendantOverride,
+  );
+  const updateSlotContentNode = useSceneStore(
+    (state) => state.updateSlotContentNode,
+  );
+  const instanceNode = useSceneStore((state) =>
+    instanceId ? (state.nodesById[instanceId] as RefNode | undefined) : undefined,
+  );
   const expandedFrameIds = useSceneStore((state) => state.expandedFrameIds);
   const toggleFrameExpanded = useSceneStore(
     (state) => state.toggleFrameExpanded,
@@ -264,7 +279,11 @@ const LayerItem = memo(function LayerItem({
     }
   }, [isEditing]);
 
-  const isVisible = node.visible !== false;
+  const slotContentNode = instanceNode?.slotContent?.[node.id];
+  const descendantOverride = instanceNode?.descendants?.[node.id];
+  const isVisible = slotContentNode
+    ? slotContentNode.visible !== false
+    : descendantOverride?.visible ?? node.visible !== false;
   const isFrame = node.type === "frame" || node.type === "group";
   const hasChildren =
     (isFrame && (node as FrameNode | GroupNode).children.length > 0) ||
@@ -314,6 +333,14 @@ const LayerItem = memo(function LayerItem({
 
   const handleVisibilityClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (instanceId) {
+      if (slotContentNode) {
+        updateSlotContentNode(instanceId, node.id, { visible: !isVisible });
+      } else {
+        updateDescendantOverride(instanceId, node.id, { visible: !isVisible });
+      }
+      return;
+    }
     toggleVisibility(node.id);
   };
 
@@ -397,7 +424,9 @@ const LayerItem = memo(function LayerItem({
   const displayName =
     node.name || `${node.type.charAt(0).toUpperCase() + node.type.slice(1)}`;
 
-  const isHighlighted = isSelected || isDescendantSelected;
+  const isHighlighted =
+    isDescendantSelected ||
+    (isSelected && !isInstanceRootWithDescendantSelection);
 
   return (
     <div
@@ -486,17 +515,15 @@ const LayerItem = memo(function LayerItem({
           className="sticky right-0 shrink-0 flex items-center pl-2 pr-3"
           style={{ backgroundColor: "inherit" }}
         >
-          {!instanceId && (
-            <button
-              className={clsx(
-                "bg-transparent border-none cursor-pointer p-1 flex items-center justify-center rounded group-hover:opacity-100 opacity-0",
-              )}
-              onClick={handleVisibilityClick}
-              title={isVisible ? "Hide layer" : "Show layer"}
-            >
-              <EyeIcon visible={isVisible} />
-            </button>
-          )}
+          <button
+            className={clsx(
+              "bg-transparent border-none cursor-pointer p-1 flex items-center justify-center rounded group-hover:opacity-100 opacity-0",
+            )}
+            onClick={handleVisibilityClick}
+            title={isVisible ? "Hide layer" : "Show layer"}
+          >
+            <EyeIcon visible={isVisible} />
+          </button>
         </div>
     </div>
   );
