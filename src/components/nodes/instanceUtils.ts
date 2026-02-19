@@ -54,12 +54,15 @@ export function resolveRefToFrame(
   const component = findComponentById(allNodes, refNode.componentId);
   if (!component) return null;
 
-  const resolvedChildren = component.children.map((child) => {
-    const slotRepl =
-      child.type === "ref" ? refNode.slotContent?.[child.id] : undefined;
-    const descOverride = refNode.descendants?.[child.id];
-    return slotRepl ?? applyDescendantOverride(child, descOverride);
-  });
+  const descendantOverrides = refNode.descendants || {};
+  const resolvedChildren = component.children.map((child) =>
+    resolveNodeWithInstanceOverrides(
+      child,
+      descendantOverrides,
+      refNode.slotContent,
+      allNodes,
+    ),
+  );
 
   return {
     ...component,
