@@ -7,6 +7,7 @@ import { useViewportStore } from "@/store/viewportStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import type { FlatSceneNode, FlatFrameNode, FrameNode, SceneNode } from "@/types/scene";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
+import { isDescendantOfFlat } from "@/utils/nodeUtils";
 import { createNodeContainer, updateNodeContainer, applyLayoutSize } from "./renderers";
 import {
   pushRenderTheme,
@@ -31,19 +32,6 @@ type NodeLayoutOverride = {
 };
 
 type AutoLayoutFrameSet = Set<string>;
-
-function isDescendantOf(
-  parentById: Record<string, string | null>,
-  ancestorId: string,
-  targetId: string,
-): boolean {
-  let current = parentById[targetId];
-  while (current != null) {
-    if (current === ancestorId) return true;
-    current = parentById[current];
-  }
-  return false;
-}
 
 /**
  * Push ancestor theme overrides onto the render theme stack (outermost first).
@@ -617,8 +605,8 @@ export function createPixiSync(sceneRoot: Container): () => void {
         if (!shouldRebuild) {
           for (const changedId of changedIds) {
             if (
-              isDescendantOf(state.parentById, componentId, changedId) ||
-              isDescendantOf(prev.parentById, componentId, changedId)
+              isDescendantOfFlat(state.parentById, componentId, changedId) ||
+              isDescendantOfFlat(prev.parentById, componentId, changedId)
             ) {
               shouldRebuild = true;
               break;

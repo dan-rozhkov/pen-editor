@@ -3,6 +3,7 @@ import type { ThemeName } from "../types/variable";
 import { isContainerNode } from "../types/scene";
 import { findComponentById as findComponentByIdImpl, getAllComponents as getAllComponentsImpl } from "./componentUtils";
 import { getPreparedNodeEffectiveSize, prepareFrameNode } from "@/utils/instanceUtils";
+import { rectsIntersect } from "@/utils/dragUtils";
 
 export interface ParentContext {
   parent: FrameNode | GroupNode | null;
@@ -403,15 +404,6 @@ interface FrameHitResult {
   frame: FrameNode;
   absoluteX: number;
   absoluteY: number;
-}
-
-function rectsIntersect(a: AbsoluteRect, b: AbsoluteRect): boolean {
-  return (
-    a.x < b.x + b.width &&
-    a.x + a.width > b.x &&
-    a.y < b.y + b.height &&
-    a.y + a.height > b.y
-  );
 }
 
 function rectContains(outer: AbsoluteRect, inner: AbsoluteRect): boolean {

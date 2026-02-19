@@ -1,4 +1,5 @@
 import type {
+  DescendantOverride,
   DescendantOverrides,
   FrameNode,
   GroupNode,
@@ -260,4 +261,33 @@ export function findDescendantLocalRect(
     }
   }
   return null;
+}
+
+/**
+ * Set an override value at a nested path within a DescendantOverrides tree.
+ * Path segments navigate through the `descendants` maps at each level.
+ */
+export function setOverrideByPath(
+  overrides: DescendantOverrides,
+  pathSegments: string[],
+  patch: DescendantOverride,
+): DescendantOverrides {
+  const next: DescendantOverrides = { ...overrides };
+  if (pathSegments.length === 0) return next;
+
+  let cursor = next;
+  for (let i = 0; i < pathSegments.length - 1; i++) {
+    const segment = pathSegments[i];
+    const current = cursor[segment] ?? {};
+    const descendants = { ...(current.descendants ?? {}) };
+    cursor[segment] = { ...current, descendants };
+    cursor = descendants;
+  }
+
+  const leaf = pathSegments[pathSegments.length - 1];
+  cursor[leaf] = {
+    ...(cursor[leaf] ?? {}),
+    ...patch,
+  };
+  return next;
 }

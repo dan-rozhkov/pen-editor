@@ -2,12 +2,8 @@ import type {
   DescendantOverride,
   PerSideStroke,
   SceneNode,
-  TextNode,
 } from "@/types/scene";
-import {
-  measureTextAutoSize,
-  measureTextFixedWidthHeight,
-} from "@/utils/textMeasure";
+import { syncTextDimensions } from "@/store/sceneStore/helpers/textSync";
 
 // Apply descendant overrides to a node
 export function applyDescendantOverride(
@@ -39,17 +35,7 @@ export function applyDescendantOverride(
     return mergedNode;
   }
 
-  const textNode = mergedNode as TextNode;
-  const mode = textNode.textWidthMode;
-  if (!mode || mode === "auto") {
-    const measured = measureTextAutoSize(textNode);
-    return { ...textNode, width: measured.width, height: measured.height };
-  }
-  if (mode === "fixed") {
-    const measuredHeight = measureTextFixedWidthHeight(textNode);
-    return { ...textNode, height: measuredHeight };
-  }
-  return textNode;
+  return syncTextDimensions(mergedNode);
 }
 
 // Check if a node should be rendered (considering enabled property)

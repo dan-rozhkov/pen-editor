@@ -5,7 +5,9 @@ import {
 } from "../../../utils/textMeasure";
 import { TEXT_MEASURE_PROPS } from "../types";
 
-export function syncTextDimensions(node: FlatSceneNode): FlatSceneNode {
+export function syncTextDimensions(node: SceneNode): SceneNode;
+export function syncTextDimensions(node: FlatSceneNode): FlatSceneNode;
+export function syncTextDimensions(node: FlatSceneNode | SceneNode): FlatSceneNode | SceneNode {
   if (node.type !== "text") return node;
   const textNode = node as TextNode;
   const mode = textNode.textWidthMode;

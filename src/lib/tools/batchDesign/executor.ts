@@ -15,6 +15,7 @@ import { useThemeStore } from "@/store/themeStore";
 import { insertTreeIntoFlat, removeNodeAndDescendants } from "@/store/sceneStore/helpers/flatStoreHelpers";
 import { syncTextDimensions } from "@/store/sceneStore/helpers/textSync";
 import { cloneNodeWithNewId } from "@/utils/cloneNode";
+import { setOverrideByPath } from "@/utils/instanceUtils";
 import type { ParsedArg, ParsedOperation, ExecutionContext } from "./types";
 import {
   createNodeFromAiDataWithTheme,
@@ -24,6 +25,14 @@ import {
 import { serializeNodeToDepth } from "../serializeUtils";
 
 const DOCUMENT_BINDING = "__document__";
+
+/** Strip slash-separated paths to get the root parent ID. */
+function resolveActualParentId(parentResolved: string | null): string | null {
+  if (parentResolved && parentResolved.includes("/")) {
+    return parentResolved.split("/")[0];
+  }
+  return parentResolved;
+}
 
 function resolveInheritedTheme(
   parentId: string | null,
@@ -147,13 +156,7 @@ function executeInsert(op: ParsedOperation, ctx: ExecutionContext): void {
   const nodeData = resolveJsonArg(op.args[1]);
 
   // Handle parent paths with "/" for slot insertion
-  let actualParentId: string | null;
-  if (parentResolved && parentResolved.includes("/")) {
-    // Inserting into an instance slot - not supported for Insert, use the base parent
-    actualParentId = parentResolved.split("/")[0];
-  } else {
-    actualParentId = parentResolved;
-  }
+  const actualParentId = resolveActualParentId(parentResolved);
 
   const inheritedTheme = resolveInheritedTheme(
     actualParentId,
@@ -204,12 +207,7 @@ function executeCopy(op: ParsedOperation, ctx: ExecutionContext): void {
   const copyData = op.args.length >= 3 ? resolveJsonArg(op.args[2]) : {};
 
   // Resolve actual parent (strip "/" paths)
-  let actualParentId: string | null;
-  if (parentResolved && parentResolved.includes("/")) {
-    actualParentId = parentResolved.split("/")[0];
-  } else {
-    actualParentId = parentResolved;
-  }
+  const actualParentId = resolveActualParentId(parentResolved);
 
   // Build source subtree
   const sourceNode = ctx.nodesById[sourceId];
@@ -383,25 +381,7 @@ function setDescendantOverrideByPath(
   mappedOverride: Record<string, unknown>,
 ): DescendantOverrides {
   const segments = descendantPath.split("/").filter(Boolean);
-  const next: DescendantOverrides = { ...(existingOverrides ?? {}) };
-  if (segments.length === 0) return next;
-
-  let cursor = next;
-  for (let i = 0; i < segments.length - 1; i++) {
-    const segment = segments[i];
-    const current = cursor[segment] ?? {};
-    const descendants = { ...(current.descendants ?? {}) };
-    cursor[segment] = { ...current, descendants };
-    cursor = descendants;
-  }
-
-  const leaf = segments[segments.length - 1];
-  cursor[leaf] = {
-    ...(cursor[leaf] ?? {}),
-    ...mappedOverride,
-  };
-
-  return next;
+  return setOverrideByPath(existingOverrides ?? {}, segments, mappedOverride);
 }
 
 /**

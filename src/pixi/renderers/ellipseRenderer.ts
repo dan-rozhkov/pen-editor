@@ -1,6 +1,6 @@
 import { Container, Graphics } from "pixi.js";
 import type { EllipseNode } from "@/types/scene";
-import { applyFill, applyStroke } from "./fillStrokeHelpers";
+import { applyFill, applyStroke, hasVisualPropsChanged } from "./fillStrokeHelpers";
 import { applyImageFillEllipse } from "./imageFillHelpers";
 
 export function createEllipseContainer(node: EllipseNode): Container {
@@ -23,19 +23,7 @@ export function updateEllipseContainer(
   node: EllipseNode,
   prev: EllipseNode,
 ): void {
-  if (
-    node.width !== prev.width ||
-    node.height !== prev.height ||
-    node.fill !== prev.fill ||
-    node.fillBinding !== prev.fillBinding ||
-    node.fillOpacity !== prev.fillOpacity ||
-    node.stroke !== prev.stroke ||
-    node.strokeBinding !== prev.strokeBinding ||
-    node.strokeOpacity !== prev.strokeOpacity ||
-    node.strokeWidth !== prev.strokeWidth ||
-    node.strokeAlign !== prev.strokeAlign ||
-    node.gradientFill !== prev.gradientFill
-  ) {
+  if (hasVisualPropsChanged(node, prev)) {
     const gfx = container.getChildByLabel("ellipse-bg") as Graphics;
     if (gfx) {
       gfx.clear();

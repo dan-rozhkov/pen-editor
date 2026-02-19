@@ -4,13 +4,12 @@ import type {
   FrameNode,
   GroupNode,
   DescendantOverride,
-  TextNode,
 } from "../../types/scene";
 import { generateId, buildTree } from "../../types/scene";
 import { deepCloneNode } from "../../utils/cloneNode";
-import { resolveRefToFrame } from "@/utils/instanceUtils";
+import { resolveRefToFrame, setOverrideByPath } from "@/utils/instanceUtils";
 import { insertTreeIntoFlat } from "./helpers/flatStoreHelpers";
-import { measureTextAutoSize, measureTextFixedWidthHeight } from "../../utils/textMeasure";
+import { syncTextDimensions } from "./helpers/textSync";
 import { saveHistory } from "./helpers/history";
 import type { SceneState } from "./types";
 
@@ -39,22 +38,6 @@ function cloneChildWithNewId(node: SceneNode): SceneNode {
   return { ...node, id: newId } as SceneNode;
 }
 
-function syncTextNodeDimensions(node: SceneNode): SceneNode {
-  if (node.type !== "text") return node;
-  const textNode = node as TextNode;
-  const mode = textNode.textWidthMode;
-
-  if (!mode || mode === "auto") {
-    const measured = measureTextAutoSize(textNode);
-    return { ...textNode, width: measured.width, height: measured.height };
-  }
-  if (mode === "fixed") {
-    const measuredHeight = measureTextFixedWidthHeight(textNode);
-    return { ...textNode, height: measuredHeight };
-  }
-  return textNode;
-}
-
 function getOverrideByPath(
   overrides: Record<string, DescendantOverride>,
   pathSegments: string[],
@@ -69,31 +52,6 @@ function getOverrideByPath(
     }
   }
   return current;
-}
-
-function setOverrideByPath(
-  overrides: Record<string, DescendantOverride>,
-  pathSegments: string[],
-  patch: DescendantOverride,
-): Record<string, DescendantOverride> {
-  const next: Record<string, DescendantOverride> = { ...overrides };
-  if (pathSegments.length === 0) return next;
-
-  let cursor = next;
-  for (let i = 0; i < pathSegments.length - 1; i++) {
-    const segment = pathSegments[i];
-    const current = cursor[segment] ?? {};
-    const descendants = { ...(current.descendants ?? {}) };
-    cursor[segment] = { ...current, descendants };
-    cursor = descendants;
-  }
-
-  const leaf = pathSegments[pathSegments.length - 1];
-  cursor[leaf] = {
-    ...(cursor[leaf] ?? {}),
-    ...patch,
-  };
-  return next;
 }
 
 export function createInstanceOperations(
@@ -270,7 +228,7 @@ export function createInstanceOperations(
         // Check if descendant has slot content replacement
         if (pathSegments.length === 1 && refNode.slotContent?.[leafId]) {
           const slotNode = refNode.slotContent[leafId];
-          const updatedSlotNode = syncTextNodeDimensions({
+          const updatedSlotNode = syncTextDimensions({
             ...slotNode,
             text,
           } as SceneNode);
