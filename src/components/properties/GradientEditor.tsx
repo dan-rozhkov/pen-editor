@@ -1,8 +1,7 @@
 import { useState } from "react";
 import type { GradientFill, GradientColorStop } from "@/types/scene";
 import { GradientBar } from "@/components/ui/GradientBar";
-import { CustomColorPicker } from "@/components/ui/ColorPicker";
-import { NumberInput } from "@/components/ui/PropertyInputs";
+import { ColorInput, NumberInput } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
 import { Minus, Plus } from "@phosphor-icons/react";
 import { getGradientAngle, setGradientAngle } from "@/utils/gradientUtils";
@@ -67,15 +66,15 @@ export function GradientEditor({ gradient, onChange }: GradientEditorProps) {
         onMoveStop={handleMoveStop}
         onAddStop={handleAddStop}
       />
-      <div className="flex items-center gap-1">
-        <CustomColorPicker
-          value={selectedStop?.color ?? "#000000"}
-          onChange={handleColorChange}
-          swatchSize="md"
-        />
+      <div className="flex items-end gap-1">
+        <div className="w-24">
+          <ColorInput
+            value={selectedStop?.color ?? "#000000"}
+            onChange={handleColorChange}
+          />
+        </div>
         <div className="flex-1">
           <NumberInput
-            label="Pos %"
             value={Math.round((selectedStop?.position ?? 0) * 100)}
             onChange={handlePositionChange}
             min={0}
@@ -86,7 +85,7 @@ export function GradientEditor({ gradient, onChange }: GradientEditorProps) {
         <Button
           variant="secondary"
           size="icon"
-          className="h-7 w-7"
+          className="h-6 w-7"
           onClick={() => {
             const pos = gradient.stops.length > 0
               ? (gradient.stops[gradient.stops.length - 1].position + (gradient.stops[0]?.position ?? 0)) / 2
@@ -100,7 +99,7 @@ export function GradientEditor({ gradient, onChange }: GradientEditorProps) {
         <Button
           variant="secondary"
           size="icon"
-          className="h-7 w-7"
+          className="h-6 w-7"
           onClick={handleRemoveStop}
           disabled={gradient.stops.length <= 2}
           title="Remove stop"
@@ -110,7 +109,8 @@ export function GradientEditor({ gradient, onChange }: GradientEditorProps) {
       </div>
       {gradient.type === "linear" && (
         <NumberInput
-          label="Angle °"
+          label="Angle"
+          labelOutside
           value={angle}
           onChange={handleAngleChange}
           min={0}

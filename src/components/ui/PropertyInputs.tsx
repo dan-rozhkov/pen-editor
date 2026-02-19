@@ -181,15 +181,15 @@ export function ColorInput({
   if (boundVariable) {
     const variableDisplayName = formatVariableNameForDisplay(boundVariable.name);
     return (
-      <div className="flex items-center gap-2">
-        <InputGroup className="flex-1">
+      <div className="flex min-w-0 items-center gap-2">
+        <InputGroup className="min-w-0 flex-1">
           <InputGroupAddon align="inline-start">
             <div
               className="w-4 h-4 rounded"
               style={{ backgroundColor: displayColor }}
             />
           </InputGroupAddon>
-          <span className="flex-1 text-xs text-text-primary truncate px-1.5 py-0.5">
+          <span className="min-w-0 flex-1 truncate px-1.5 py-0.5 text-xs text-text-primary">
             {variableDisplayName}
           </span>
           <InputGroupAddon align="inline-end">

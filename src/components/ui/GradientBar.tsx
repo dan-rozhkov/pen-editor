@@ -88,13 +88,13 @@ export function GradientBar({
         <div
           key={index}
           data-stop-marker="true"
-          className={`absolute top-0 w-3 h-full cursor-grab active:cursor-grabbing ${
+          className={`absolute top-0 w-2.5 h-full cursor-grab active:cursor-grabbing ${
             index === selectedIndex
-              ? "ring-2 ring-blue-500 z-10"
+              ? "ring-2 ring-[var(--color-accent-light)] z-10"
               : "ring-1 ring-white/60"
           }`}
           style={{
-            left: `calc(${stop.position * 100}% - 6px)`,
+            left: `clamp(0px, calc(${stop.position * 100}% - 5px), calc(100% - 10px))`,
             backgroundColor: stop.color,
             borderRadius: 2,
           }}

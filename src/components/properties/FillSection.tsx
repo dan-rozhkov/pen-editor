@@ -140,7 +140,7 @@ export function FillSection({
             />
           ) : (
             <div className="flex items-center gap-1">
-              <div className="flex-1">
+              <div className="min-w-0 flex-1">
                 <ColorInput
                   value={node.fill ?? component?.fill ?? "#000000"}
                   onChange={(v) => onUpdate({ fill: v })}

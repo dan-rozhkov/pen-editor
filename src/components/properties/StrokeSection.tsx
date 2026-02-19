@@ -138,7 +138,7 @@ export function StrokeSection({
         <>
           {/* Color and opacity row */}
           <div className="flex items-center gap-1">
-            <div className="flex-1">
+            <div className="min-w-0 flex-1">
               <ColorInput
                 value={node.stroke ?? component?.stroke ?? "#000000"}
                 onChange={(v) => onUpdate({ stroke: v || undefined })}
