@@ -73,3 +73,8 @@
   - pixiSync: scene-store updates are now coalesced to one incremental sync per animation frame (requestAnimationFrame), reducing rebuild storms during rapid property changes
   - pixiSync: pending scene updates are cleared before forced full rebuilds (theme/variables/fonts) to avoid duplicate work
   - Tested: npm run build passes
+
+2026-02-20: component-instance-autolayout-reflow — Fixed missing parent auto-layout reflow after component edits.
+  - pixiSync: track rebuilt instance IDs during component-driven ref rebuild
+  - include rebuilt instance IDs into auto-layout dirty set so parent auto-layout recomputes positions
+  - Tested: npm run build passes

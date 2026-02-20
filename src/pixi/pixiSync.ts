@@ -626,6 +626,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
     }
 
     // Rebuild instances whose source component/subtree changed even if ref node itself didn't.
+    const rebuiltInstanceIds = new Set<string>();
     if (changedIds.size > 0) {
       const affectedComponentIds = collectChangedComponentIds(
         changedIds,
@@ -654,6 +655,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
           );
         });
         entry.node = node;
+        rebuiltInstanceIds.add(id);
       }
       }
     }
@@ -664,7 +666,16 @@ export function createPixiSync(sceneRoot: Container): () => void {
     }
 
     // Reapply only affected auto-layout frame chains.
-    const dirtyAutoLayoutFrames = collectDirtyAutoLayoutFrames(state, changedIds);
+    // When component changes rebuild instances, their auto-layout parents must be
+    // reflowed too (even if the ref node object itself didn't change in store).
+    const autoLayoutChangedIds =
+      rebuiltInstanceIds.size > 0
+        ? new Set<string>([...changedIds, ...rebuiltInstanceIds])
+        : changedIds;
+    const dirtyAutoLayoutFrames = collectDirtyAutoLayoutFrames(
+      state,
+      autoLayoutChangedIds,
+    );
     if (dirtyAutoLayoutFrames.size > 0) {
       applyAutoLayoutPositions(state, dirtyAutoLayoutFrames);
     }
