@@ -34,3 +34,10 @@
   - UI: InstanceSection now rendered in PropertyEditor for ref nodes, with "Detach Component" button
   - History: saveHistory() called before mutation, undo fully restores ref node
   - Tested in browser: created component + instance, verified detach converts ref→frame, overrides preserved, children get new IDs, undo restores ref, original component unchanged
+
+2026-02-20: auto-layout-multi-select — Show Auto Layout section in multi-select property editor.
+  - AutoLayoutSection: added optional mixedKeys prop, isMixed helper for layout sub-properties (direction, gap, padding, alignment)
+  - MultiSelectPropertyEditor: filters frames with autoLayout enabled, computes layout-specific mixed keys, routes updates only to auto-layout frames
+  - Section shows when any selected node is a frame with auto-layout; hidden when none have it
+  - Mixed values displayed for direction (SelectInput), gap (NumberInput), padding (NumberInput), alignment grid (no active cell)
+  - Tested in browser: single frame AL works, multi-select with AL frames shows section with mixed, multi-select without AL hides section, gap change applies to all AL frames

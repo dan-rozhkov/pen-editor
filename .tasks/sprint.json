@@ -38,5 +38,13 @@
   {
     "name": "design-agent-thinking",
     "passed": true
+  },
+  {
+    "name": "auto-layout-multi-select",
+    "passed": true
+  },
+  {
+    "name": "absolute-position-in-auto-layout",
+    "passed": false
   }
 ]
