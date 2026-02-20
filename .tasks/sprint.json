@@ -46,5 +46,13 @@
   {
     "name": "absolute-position-in-auto-layout",
     "passed": true
+  },
+  {
+    "name": "pixi-stroke-per-side-zero-width",
+    "passed": true
+  },
+  {
+    "name": "option-measure-badges-over-size-badge",
+    "passed": true
   }
 ]

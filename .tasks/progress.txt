@@ -50,3 +50,14 @@
   - PositionSection: "Absolute position" checkbox shown when node is inside auto-layout parent
   - PropertyEditor: passes parentContext to PositionSection
   - Tested in browser: created AL frame with 3 rects, enabled absolute on Rect 2, verified exclusion from flow, moved freely to (150,100), verified other children reflow, unchecked returns to flow
+
+2026-02-20: pixi-stroke-per-side-zero-width — Fixed per-side stroke width 0 hiding entire stroke section.
+  - Root cause: hasStroke in StrokeSection.tsx used truthiness check (0 is falsy) instead of != null for strokeWidthPerSide values
+  - Fix: changed to != null checks so 0 is recognized as a valid set value
+  - Tested in browser: created rect, added stroke, switched to per-side, set T to 0 (section stays visible), set all sides to 0 (section stays visible), set B to 3 (only bottom stroke renders)
+
+2026-02-20: option-measure-badges-over-size-badge — Render measure badges above size badge while holding Option/Alt.
+  - PixiCanvas: pass selectionContainer into createOverlayRenderer so measure labels can render in selection layer
+  - OverlayRenderer: measure-labels container now mounts into selectionContainer instead of overlayContainer
+  - Keeps measurement lines in overlay layer but guarantees label badges are visually above size labels
+  - Tested: npm run build (TypeScript + Vite production build) passes
