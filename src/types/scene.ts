@@ -114,6 +114,8 @@ export interface BaseNode {
   aspectRatioLocked?: boolean
   // Stored aspect ratio (width/height) when lock is enabled
   aspectRatio?: number
+  // Absolute position inside auto-layout parent (excluded from flex flow)
+  absolutePosition?: boolean
 }
 
 // Auto-layout properties for Frame nodes

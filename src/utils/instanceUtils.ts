@@ -29,9 +29,17 @@ export function prepareFrameNode(
   frameNode: FrameNode,
   calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
 ): PreparedFrameNode {
-  const layoutChildren = frameNode.layout?.autoLayout
-    ? calculateLayoutForFrame(frameNode)
-    : frameNode.children;
+  let layoutChildren: SceneNode[];
+  if (frameNode.layout?.autoLayout) {
+    const flowChildren = calculateLayoutForFrame(frameNode);
+    // Include absolute-positioned children as-is (they keep their own x/y)
+    const absoluteChildren = frameNode.children.filter(
+      (c) => c.absolutePosition && c.visible !== false && c.enabled !== false,
+    );
+    layoutChildren = [...flowChildren, ...absoluteChildren];
+  } else {
+    layoutChildren = frameNode.children;
+  }
   const fitWidth =
     frameNode.layout?.autoLayout && frameNode.sizing?.widthMode === "fit_content";
   const fitHeight =

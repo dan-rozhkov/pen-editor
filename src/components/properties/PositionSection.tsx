@@ -1,5 +1,6 @@
 import { ArrowClockwise } from "@phosphor-icons/react";
 import type { SceneNode } from "@/types/scene";
+import type { ParentContext } from "@/utils/nodeUtils";
 import {
   FlipControls,
   NumberInput,
@@ -11,14 +12,19 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 
 interface PositionSectionProps {
   node: SceneNode;
   onUpdate: (updates: Partial<SceneNode>) => void;
   mixedKeys?: Set<string>;
+  parentContext?: ParentContext;
 }
 
-export function PositionSection({ node, onUpdate, mixedKeys }: PositionSectionProps) {
+export function PositionSection({ node, onUpdate, mixedKeys, parentContext }: PositionSectionProps) {
+  const isInsideAutoLayout = parentContext?.isInsideAutoLayout ?? false;
+
   return (
     <PropertySection title="Position">
       <PropertyRow>
@@ -35,6 +41,17 @@ export function PositionSection({ node, onUpdate, mixedKeys }: PositionSectionPr
           isMixed={mixedKeys?.has("y")}
         />
       </PropertyRow>
+      {isInsideAutoLayout && (
+        <Label className="cursor-pointer">
+          <Checkbox
+            checked={node.absolutePosition ?? false}
+            onCheckedChange={(checked) =>
+              onUpdate({ absolutePosition: !!checked })
+            }
+          />
+          Absolute position
+        </Label>
+      )}
       <div className="flex gap-2 mt-2">
         <div className="w-1/2">
           <InputGroup>

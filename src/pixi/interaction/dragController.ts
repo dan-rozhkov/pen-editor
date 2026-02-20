@@ -84,9 +84,9 @@ export function createDragController(_context: InteractionContext): DragControll
         state.cumulativeDeltaX = 0;
         state.cumulativeDeltaY = 0;
 
-        // Check if node is inside an auto-layout frame
+        // Check if node is inside an auto-layout frame (skip for absolute-positioned nodes)
         const parentId = sceneState.parentById[hitId];
-        if (parentId) {
+        if (parentId && !node.absolutePosition) {
           const parentNode = sceneState.nodesById[parentId];
           if (
             parentNode &&

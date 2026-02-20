@@ -61,7 +61,7 @@ export function PropertyEditor({
           isOverridden={isOverridden}
         />
       )}
-      <PositionSection node={node} onUpdate={onUpdate} />
+      <PositionSection node={node} onUpdate={onUpdate} parentContext={parentContext} />
       <SizeSection node={node} onUpdate={onUpdate} parentContext={parentContext} />
       {node.type === "frame" && (
         <AutoLayoutSection node={node} onUpdate={onUpdate} />
