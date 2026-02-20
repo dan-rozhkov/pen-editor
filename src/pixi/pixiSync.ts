@@ -7,7 +7,6 @@ import { useViewportStore } from "@/store/viewportStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import type { FlatSceneNode, FlatFrameNode, FrameNode, SceneNode } from "@/types/scene";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
-import { isDescendantOfFlat } from "@/utils/nodeUtils";
 import { createNodeContainer, updateNodeContainer, applyLayoutSize } from "./renderers";
 import {
   pushRenderTheme,
@@ -32,6 +31,40 @@ type NodeLayoutOverride = {
 };
 
 type AutoLayoutFrameSet = Set<string>;
+
+function isReusableFrame(node: FlatSceneNode | undefined): node is FlatFrameNode {
+  return node?.type === "frame" && (node as FlatFrameNode).reusable === true;
+}
+
+function collectChangedComponentIds(
+  changedIds: Set<string>,
+  state: SceneState,
+  prev: SceneState,
+): Set<string> {
+  const affected = new Set<string>();
+
+  const markAncestors = (
+    startId: string,
+    nodesById: Record<string, FlatSceneNode>,
+    parentById: Record<string, string | null>,
+  ): void => {
+    let current: string | null = startId;
+    while (current != null) {
+      const currentNode = nodesById[current];
+      if (isReusableFrame(currentNode)) {
+        affected.add(current);
+      }
+      current = parentById[current] ?? null;
+    }
+  };
+
+  for (const changedId of changedIds) {
+    markAncestors(changedId, state.nodesById, state.parentById);
+    markAncestors(changedId, prev.nodesById, prev.parentById);
+  }
+
+  return affected;
+}
 
 /**
  * Push ancestor theme overrides onto the render theme stack (outermost first).
@@ -594,27 +627,20 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
     // Rebuild instances whose source component/subtree changed even if ref node itself didn't.
     if (changedIds.size > 0) {
+      const affectedComponentIds = collectChangedComponentIds(
+        changedIds,
+        state,
+        prev,
+      );
+      if (affectedComponentIds.size === 0) {
+        // Continue with structural/layout/text updates below.
+      } else {
       for (const [id, node] of Object.entries(state.nodesById)) {
         if (node.type !== "ref") continue;
         const entry = registry.get(id);
         if (!entry) continue;
 
-        const componentId = node.componentId;
-        let shouldRebuild = changedIds.has(componentId);
-
-        if (!shouldRebuild) {
-          for (const changedId of changedIds) {
-            if (
-              isDescendantOfFlat(state.parentById, componentId, changedId) ||
-              isDescendantOfFlat(prev.parentById, componentId, changedId)
-            ) {
-              shouldRebuild = true;
-              break;
-            }
-          }
-        }
-
-        if (!shouldRebuild) continue;
+        if (!affectedComponentIds.has(node.componentId)) continue;
 
         withAncestorThemes(id, state.parentById, state.nodesById, () => {
           updateNodeContainer(
@@ -628,6 +654,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
           );
         });
         entry.node = node;
+      }
       }
     }
 
@@ -822,12 +849,38 @@ export function createPixiSync(sceneRoot: Container): () => void {
   fullRebuild(initialState);
 
   let prevState = initialState;
+  let pendingSceneState: SceneState | null = null;
+  let sceneUpdateFrameId: number | null = null;
+
+  const flushSceneUpdate = (): void => {
+    sceneUpdateFrameId = null;
+    if (!pendingSceneState) return;
+    const nextState = pendingSceneState;
+    pendingSceneState = null;
+    incrementalUpdate(nextState, prevState);
+    prevState = nextState;
+  };
+
+  const scheduleSceneUpdate = (state: SceneState): void => {
+    pendingSceneState = state;
+    if (sceneUpdateFrameId != null) return;
+    sceneUpdateFrameId = requestAnimationFrame(flushSceneUpdate);
+  };
+
+  const clearPendingSceneUpdate = (): void => {
+    pendingSceneState = null;
+    if (sceneUpdateFrameId != null) {
+      cancelAnimationFrame(sceneUpdateFrameId);
+      sceneUpdateFrameId = null;
+    }
+  };
+
   const unsubScene = useSceneStore.subscribe((state) => {
-    incrementalUpdate(state, prevState);
-    prevState = state;
+    scheduleSceneUpdate(state);
   });
 
   const rebuildFromCurrentState = (): void => {
+    clearPendingSceneUpdate();
     fullRebuild(useSceneStore.getState());
     prevState = useSceneStore.getState();
   };
@@ -881,6 +934,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
       clearTimeout(textResolutionUpdateTimer);
       textResolutionUpdateTimer = null;
     }
+    clearPendingSceneUpdate();
     removeFontsListener?.();
     // Clean up all containers
     for (const entry of registry.values()) {

@@ -67,3 +67,9 @@
   - Fix: compute side anchor on actual shape edge for center, and offset +/- half width only for inside/outside
   - Updated drawPerSideStroke() coordinate math in src/pixi/renderers/fillStrokeHelpers.ts
   - Tested: npm run build passes
+
+2026-02-20: component-instance-update-performance — Optimized Pixi instance updates when component properties change.
+  - pixiSync: replaced O(refs × changedIds × depth) instance invalidation with affected-component detection by ancestor walk (collectChangedComponentIds)
+  - pixiSync: scene-store updates are now coalesced to one incremental sync per animation frame (requestAnimationFrame), reducing rebuild storms during rapid property changes
+  - pixiSync: pending scene updates are cleared before forced full rebuilds (theme/variables/fonts) to avoid duplicate work
+  - Tested: npm run build passes
