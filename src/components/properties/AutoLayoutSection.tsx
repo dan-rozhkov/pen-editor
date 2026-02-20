@@ -17,9 +17,10 @@ import { Button } from "@/components/ui/button";
 interface AutoLayoutSectionProps {
   node: FrameNode;
   onUpdate: (updates: Partial<SceneNode>) => void;
+  mixedKeys?: Set<string>;
 }
 
-export function AutoLayoutSection({ node, onUpdate }: AutoLayoutSectionProps) {
+export function AutoLayoutSection({ node, onUpdate, mixedKeys }: AutoLayoutSectionProps) {
   const hasAutoLayout = !!node.layout?.autoLayout;
 
   const enableAutoLayout = () => {
@@ -38,6 +39,8 @@ export function AutoLayoutSection({ node, onUpdate }: AutoLayoutSectionProps) {
       layout: { ...node.layout, autoLayout: false },
     } as Partial<SceneNode>);
   };
+
+  const isMixed = (key: string) => mixedKeys?.has(key) ?? false;
 
   return (
     <PropertySection
@@ -72,6 +75,7 @@ export function AutoLayoutSection({ node, onUpdate }: AutoLayoutSectionProps) {
                 },
               } as Partial<SceneNode>)
             }
+            isMixed={isMixed("layout.flexDirection")}
           />
           <PropertyRow>
             <div className="flex flex-col gap-1 flex-1">
@@ -110,7 +114,10 @@ export function AutoLayoutSection({ node, onUpdate }: AutoLayoutSectionProps) {
 
                   const isSpaceBetween = currentJustify === "space-between";
 
+                  const alignmentMixed = isMixed("layout.alignItems") || isMixed("layout.justifyContent");
+
                   const isActive =
+                    !alignmentMixed &&
                     currentAlign === targetAlign &&
                     (isSpaceBetween && canToggleSpaceBetween
                       ? true
@@ -143,6 +150,7 @@ export function AutoLayoutSection({ node, onUpdate }: AutoLayoutSectionProps) {
                   };
 
                   const showSpaceBetweenIcon =
+                    !alignmentMixed &&
                     canToggleSpaceBetween &&
                     isSpaceBetween &&
                     currentAlign === targetAlign;
@@ -209,6 +217,7 @@ export function AutoLayoutSection({ node, onUpdate }: AutoLayoutSectionProps) {
               }
               min={0}
               labelOutside={true}
+              isMixed={isMixed("layout.gap")}
             />
           </PropertyRow>
           <label className="text-[10px] text-text-muted tracking-wide mt-2">
@@ -224,6 +233,7 @@ export function AutoLayoutSection({ node, onUpdate }: AutoLayoutSectionProps) {
                 } as Partial<SceneNode>)
               }
               min={0}
+              isMixed={isMixed("layout.paddingTop")}
             />
             <NumberInput
               label="R"
@@ -237,6 +247,7 @@ export function AutoLayoutSection({ node, onUpdate }: AutoLayoutSectionProps) {
                 } as Partial<SceneNode>)
               }
               min={0}
+              isMixed={isMixed("layout.paddingRight")}
             />
           </PropertyRow>
           <PropertyRow>
@@ -252,6 +263,7 @@ export function AutoLayoutSection({ node, onUpdate }: AutoLayoutSectionProps) {
                 } as Partial<SceneNode>)
               }
               min={0}
+              isMixed={isMixed("layout.paddingBottom")}
             />
             <NumberInput
               label="L"
@@ -262,6 +274,7 @@ export function AutoLayoutSection({ node, onUpdate }: AutoLayoutSectionProps) {
                 } as Partial<SceneNode>)
               }
               min={0}
+              isMixed={isMixed("layout.paddingLeft")}
             />
           </PropertyRow>
         </>

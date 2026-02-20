@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { SceneNode } from "@/types/scene";
+import type { FrameNode, SceneNode } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
 import { useSceneStore } from "@/store/sceneStore";
 import {
@@ -12,6 +12,7 @@ import { AppearanceSection } from "@/components/properties/AppearanceSection";
 import { FillSection } from "@/components/properties/FillSection";
 import { StrokeSection } from "@/components/properties/StrokeSection";
 import { EffectsSection } from "@/components/properties/EffectsSection";
+import { AutoLayoutSection } from "@/components/properties/AutoLayoutSection";
 
 interface MultiSelectPropertyEditorProps {
   selectedNodes: SceneNode[];
@@ -21,6 +22,18 @@ interface MultiSelectPropertyEditorProps {
 
 // Types that support cornerRadius
 const CORNER_RADIUS_TYPES = new Set(["frame", "rect"]);
+
+// Layout sub-properties to compare for mixed detection
+const LAYOUT_SUB_KEYS = [
+  "flexDirection",
+  "gap",
+  "paddingTop",
+  "paddingRight",
+  "paddingBottom",
+  "paddingLeft",
+  "alignItems",
+  "justifyContent",
+] as const;
 
 export function MultiSelectPropertyEditor({
   selectedNodes,
@@ -97,6 +110,50 @@ export function MultiSelectPropertyEditor({
 
   const neutralParentContext = { parent: null, isInsideAutoLayout: false };
 
+  // Auto-layout: show if any selected node is a frame with auto-layout enabled
+  const autoLayoutFrames = useMemo(
+    () => selectedNodes.filter(
+      (n): n is FrameNode => n.type === "frame" && !!n.layout?.autoLayout,
+    ),
+    [selectedNodes],
+  );
+
+  const showAutoLayout = autoLayoutFrames.length > 0;
+
+  // Compute a synthetic FrameNode and layout-specific mixed keys for auto-layout section
+  const autoLayoutData = useMemo(() => {
+    if (!showAutoLayout) return null;
+
+    const baseFrame = autoLayoutFrames[0];
+    const layoutMixedKeys = new Set<string>();
+
+    // Compare layout sub-properties across all auto-layout frames
+    for (const key of LAYOUT_SUB_KEYS) {
+      const baseVal = baseFrame.layout?.[key];
+      for (let i = 1; i < autoLayoutFrames.length; i++) {
+        const otherVal = autoLayoutFrames[i].layout?.[key];
+        if (baseVal !== otherVal) {
+          layoutMixedKeys.add(`layout.${key}`);
+          break;
+        }
+      }
+    }
+
+    return {
+      node: baseFrame,
+      mixedKeys: layoutMixedKeys,
+      frameIds: autoLayoutFrames.map((n) => n.id),
+    };
+  }, [autoLayoutFrames, showAutoLayout]);
+
+  // Update handler for auto-layout that only targets frame nodes with auto-layout
+  const handleAutoLayoutUpdate = useMemo(() => {
+    if (!autoLayoutData) return handleUpdate;
+    return (updates: Partial<SceneNode>) => {
+      updateMultipleNodes(autoLayoutData.frameIds, updates);
+    };
+  }, [autoLayoutData, updateMultipleNodes, handleUpdate]);
+
   return (
     <div className="flex flex-col">
       {sharedSections.has("position") && (
@@ -113,6 +170,13 @@ export function MultiSelectPropertyEditor({
           parentContext={neutralParentContext}
           mixedKeys={merged.mixedKeys}
           isMultiSelect
+        />
+      )}
+      {showAutoLayout && autoLayoutData && (
+        <AutoLayoutSection
+          node={autoLayoutData.node}
+          onUpdate={handleAutoLayoutUpdate}
+          mixedKeys={autoLayoutData.mixedKeys}
         />
       )}
       {sharedSections.has("appearance") && (
