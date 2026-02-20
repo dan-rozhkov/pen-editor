@@ -66,6 +66,40 @@ function collectChangedComponentIds(
   return affected;
 }
 
+function findContainerByLabelRecursive(
+  root: Container,
+  label: string,
+): Container | null {
+  for (const child of root.children) {
+    if (child instanceof Container) {
+      if (child.label === label) return child;
+      const found = findContainerByLabelRecursive(child, label);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function getRenderedRefSize(
+  refContainer: Container,
+  fallback: { width: number; height: number },
+): { width: number; height: number } {
+  const refBg = findContainerByLabelRecursive(refContainer, "ref-bg");
+  const target = refBg ?? findContainerByLabelRecursive(refContainer, "ref-children");
+  if (!target) return fallback;
+
+  const bounds = target.getLocalBounds();
+  if (!Number.isFinite(bounds.width) || !Number.isFinite(bounds.height)) {
+    return fallback;
+  }
+  if (bounds.width <= 0 || bounds.height <= 0) return fallback;
+
+  return {
+    width: bounds.width,
+    height: bounds.height,
+  };
+}
+
 /**
  * Push ancestor theme overrides onto the render theme stack (outermost first).
  * Returns the number of themes pushed so the caller can pop them.
@@ -327,6 +361,25 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
       const childIds = state.childrenById[frameId] ?? [];
       const frameOverride = layoutOverrides.get(frameId);
+
+      // For ref children, prefer the currently rendered size (it already reflects
+      // component updates). Store size overrides so parent auto-layout positions
+      // are computed from up-to-date instance bounds.
+      for (const childId of childIds) {
+        const childNode = state.nodesById[childId];
+        if (!childNode || childNode.type !== "ref") continue;
+        const childEntry = registry.get(childId);
+        if (!childEntry) continue;
+        const renderedSize = getRenderedRefSize(childEntry.container, {
+          width: childNode.width,
+          height: childNode.height,
+        });
+        layoutOverrides.set(childId, {
+          ...(layoutOverrides.get(childId) ?? {}),
+          width: renderedSize.width,
+          height: renderedSize.height,
+        });
+      }
 
       if ((frameNode as FlatFrameNode).layout?.autoLayout) {
         // Convert to tree structure for layout calculation, including overrides

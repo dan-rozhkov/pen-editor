@@ -67,7 +67,7 @@ const FRAME_NAME_STYLE_COMPONENT = new TextStyle({
  */
 export function createSelectionOverlay(
   selectionContainer: Container,
-  _sceneRoot: Container,
+  sceneRoot: Container,
 ): () => void {
   const outlinesContainer = new Container();
   outlinesContainer.label = "selection-outlines";
@@ -98,7 +98,44 @@ export function createSelectionOverlay(
   selectionContainer.addChild(sizeLabelsContainer);
   let lastScale = useViewportStore.getState().scale;
 
+  function findNodeContainerById(
+    root: Container,
+    nodeId: string,
+  ): Container | null {
+    for (const child of root.children) {
+      if (!(child instanceof Container)) continue;
+      if (child.label === nodeId) return child;
+      const found = findNodeContainerById(child, nodeId);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  function getRenderedNodeRect(
+    nodeId: string,
+  ): { x: number; y: number; width: number; height: number } | null {
+    const nodeContainer = findNodeContainerById(sceneRoot, nodeId);
+    if (!nodeContainer) return null;
+    const b = nodeContainer.getBounds();
+    if (!Number.isFinite(b.x) || !Number.isFinite(b.y) || !Number.isFinite(b.width) || !Number.isFinite(b.height)) {
+      return null;
+    }
+    const { x: viewportX, y: viewportY, scale } = useViewportStore.getState();
+    const safeScale = scale || 1;
+    return {
+      x: (b.x - viewportX) / safeScale,
+      y: (b.y - viewportY) / safeScale,
+      width: b.width / safeScale,
+      height: b.height / safeScale,
+    };
+  }
+
   function getAbsolutePosition(nodeId: string): { x: number; y: number } | null {
+    const flatNode = useSceneStore.getState().nodesById[nodeId];
+    if (flatNode?.type === "ref") {
+      const renderedRect = getRenderedNodeRect(nodeId);
+      if (renderedRect) return { x: renderedRect.x, y: renderedRect.y };
+    }
     const nodes = useSceneStore.getState().getNodes();
     const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
     return getNodeAbsolutePositionWithLayout(nodes, nodeId, calculateLayoutForFrame);
@@ -326,11 +363,16 @@ export function createSelectionOverlay(
       const node = state.nodesById[id];
       if (!node) continue;
 
-      const absPos = getNodeAbsolutePositionWithLayout(sceneNodes, id, calculateLayoutForFrame);
+      const renderedRect = node.type === "ref" ? getRenderedNodeRect(id) : null;
+      const absPos = renderedRect
+        ? { x: renderedRect.x, y: renderedRect.y }
+        : getNodeAbsolutePositionWithLayout(sceneNodes, id, calculateLayoutForFrame);
       if (!absPos) continue;
 
       // Get effective size (may differ from node.width/height for layout children)
-      const effectiveSize = getNodeEffectiveSize(sceneNodes, id, calculateLayoutForFrame);
+      const effectiveSize = renderedRect
+        ? { width: renderedRect.width, height: renderedRect.height }
+        : getNodeEffectiveSize(sceneNodes, id, calculateLayoutForFrame);
       const width = effectiveSize?.width ?? node.width;
       const height = effectiveSize?.height ?? node.height;
 
@@ -583,12 +625,17 @@ export function createSelectionOverlay(
     const node = state.nodesById[hoveredNodeId];
     if (!node) return;
 
-    const absPos = getAbsolutePosition(hoveredNodeId);
+    const renderedRect = node.type === "ref" ? getRenderedNodeRect(hoveredNodeId) : null;
+    const absPos = renderedRect
+      ? { x: renderedRect.x, y: renderedRect.y }
+      : getAbsolutePosition(hoveredNodeId);
     if (!absPos) return;
 
     // Get effective size
     const nodes = useSceneStore.getState().getNodes();
-    const effectiveSize = getNodeEffectiveSize(nodes, hoveredNodeId, useLayoutStore.getState().calculateLayoutForFrame);
+    const effectiveSize = renderedRect
+      ? { width: renderedRect.width, height: renderedRect.height }
+      : getNodeEffectiveSize(nodes, hoveredNodeId, useLayoutStore.getState().calculateLayoutForFrame);
     const width = effectiveSize?.width ?? node.width;
     const height = effectiveSize?.height ?? node.height;
 
