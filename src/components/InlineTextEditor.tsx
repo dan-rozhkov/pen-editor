@@ -42,8 +42,6 @@ function toCssFontFamily(fontFamily: string): string {
 export function InlineTextEditor({ node, absoluteX, absoluteY, effectiveTheme, onUpdateText }: InlineTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const currentTextRef = useRef(node.text) // Track current value for unmount save
-  const pendingTextRef = useRef<string | null>(null)
-  const rafIdRef = useRef<number | null>(null)
   const lastCommittedRef = useRef(node.text)
   const updateNodeWithoutHistory = useSceneStore(
     (state) => state.updateNodeWithoutHistory,
@@ -74,6 +72,7 @@ export function InlineTextEditor({ node, absoluteX, absoluteY, effectiveTheme, o
 
   // Width mode
   const isAutoWidth = node.textWidthMode === 'auto' || !node.textWidthMode
+  const isWrappedWidth = !isAutoWidth
   const isFixedHeight = node.textWidthMode === 'fixed-height'
   const fixedScreenWidth = node.width * scale
   const fixedScreenHeight = node.height * scale
@@ -96,37 +95,6 @@ export function InlineTextEditor({ node, absoluteX, absoluteY, effectiveTheme, o
     [node.id, updateNodeWithoutHistory, onUpdateText],
   )
 
-  const flushPendingText = useCallback(
-    (textOverride?: string) => {
-      if (rafIdRef.current !== null) {
-        cancelAnimationFrame(rafIdRef.current)
-        rafIdRef.current = null
-      }
-      const text = textOverride ?? pendingTextRef.current
-      pendingTextRef.current = null
-      if (text !== undefined && text !== null) {
-        commitText(text)
-      }
-    },
-    [commitText],
-  )
-
-  const scheduleCommit = useCallback(
-    (text: string) => {
-      pendingTextRef.current = text
-      if (rafIdRef.current !== null) return
-      rafIdRef.current = requestAnimationFrame(() => {
-        rafIdRef.current = null
-        const pending = pendingTextRef.current
-        pendingTextRef.current = null
-        if (pending !== null) {
-          commitText(pending)
-        }
-      })
-    },
-    [commitText],
-  )
-
   const submit = useCallback(() => {
     const el = editorRef.current
     if (!el) {
@@ -137,21 +105,20 @@ export function InlineTextEditor({ node, absoluteX, absoluteY, effectiveTheme, o
     const text = el.innerText ?? el.textContent ?? ''
     const trimmed = text.trim()
     if (trimmed && trimmed !== node.text) {
-      flushPendingText(trimmed)
+      commitText(trimmed)
     }
     stopEditing()
-  }, [node.text, stopEditing, flushPendingText])
+  }, [node.text, stopEditing, commitText])
 
   // Save on unmount (DOM element is already gone, so read from ref)
   useEffect(() => {
     return () => {
-      flushPendingText()
       const trimmed = currentTextRef.current.trim()
       if (trimmed && trimmed !== node.text) {
         commitText(trimmed)
       }
     }
-  }, [node.text, commitText, flushPendingText])
+  }, [node.text, commitText])
 
   // Focus and select all text on mount
   useEffect(() => {
@@ -203,9 +170,6 @@ export function InlineTextEditor({ node, absoluteX, absoluteY, effectiveTheme, o
     if (el) {
       const text = el.innerText ?? el.textContent ?? ''
       currentTextRef.current = text
-      if (text !== node.text) {
-        scheduleCommit(text)
-      }
     }
   }
 
@@ -214,10 +178,9 @@ export function InlineTextEditor({ node, absoluteX, absoluteY, effectiveTheme, o
   }
 
   // Compute dimensions
-  const widthStyle: React.CSSProperties['width'] = isAutoWidth ? 'max-content' : fixedScreenWidth
-  const minWidth = isAutoWidth ? 50 : undefined
-  const heightStyle: React.CSSProperties['height'] = isFixedHeight ? fixedScreenHeight : 'auto'
-  const minHeight = isFixedHeight ? undefined : 24
+  const widthStyle: React.CSSProperties['width'] = fixedScreenWidth
+  const heightStyle: React.CSSProperties['height'] = fixedScreenHeight
+  const lineHeightPx = `${(node.lineHeight ?? 1.2) * screenFontSize}px`
 
   return (
     <div
@@ -232,14 +195,12 @@ export function InlineTextEditor({ node, absoluteX, absoluteY, effectiveTheme, o
         left: screenX,
         top: screenY,
         width: widthStyle,
-        minWidth,
         height: heightStyle,
-        minHeight,
         // Font styles matching Konva
         font: editorFontShorthand,
         fontSynthesis: 'none',
         textDecoration: textDecorationParts.join(' ') || undefined,
-        lineHeight: node.lineHeight ?? 1.2,
+        lineHeight: lineHeightPx,
         letterSpacing: screenLetterSpacing,
         textAlign: (node.textAlign ?? 'left') as React.CSSProperties['textAlign'],
         color: fillColor,
@@ -252,8 +213,9 @@ export function InlineTextEditor({ node, absoluteX, absoluteY, effectiveTheme, o
         background: 'transparent',
         zIndex: 100,
         boxSizing: 'content-box',
-        whiteSpace: 'pre-wrap',
-        wordBreak: 'break-word',
+        display: 'inline-block',
+        whiteSpace: isWrappedWidth ? 'pre-wrap' : 'pre',
+        wordBreak: isWrappedWidth ? 'break-word' : 'normal',
         overflow: isFixedHeight ? 'hidden' : 'visible',
         cursor: 'text',
         // Reset any inherited styles
