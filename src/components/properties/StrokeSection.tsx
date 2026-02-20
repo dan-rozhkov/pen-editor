@@ -46,10 +46,10 @@ export function StrokeSection({
     node.stroke ||
     (node.strokeWidth && node.strokeWidth > 0) ||
     (node.strokeWidthPerSide &&
-      (node.strokeWidthPerSide.top ||
-        node.strokeWidthPerSide.right ||
-        node.strokeWidthPerSide.bottom ||
-        node.strokeWidthPerSide.left))
+      (node.strokeWidthPerSide.top != null ||
+        node.strokeWidthPerSide.right != null ||
+        node.strokeWidthPerSide.bottom != null ||
+        node.strokeWidthPerSide.left != null))
   );
 
   const strokeMode = getStrokeMode(node);
