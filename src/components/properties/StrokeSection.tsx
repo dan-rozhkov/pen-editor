@@ -26,7 +26,7 @@ type StrokeMode = "unified" | "per-side";
 
 function getStrokeMode(node: SceneNode): StrokeMode {
   const perSide = node.strokeWidthPerSide;
-  if (perSide && (perSide.top || perSide.right || perSide.bottom || perSide.left)) {
+  if (perSide && (perSide.top != null || perSide.right != null || perSide.bottom != null || perSide.left != null)) {
     return "per-side";
   }
   return "unified";

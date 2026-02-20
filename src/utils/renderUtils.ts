@@ -47,5 +47,5 @@ export function isNodeEnabled(override?: DescendantOverride): boolean {
 export function hasPerSideStroke(strokeWidthPerSide?: PerSideStroke): boolean {
   if (!strokeWidthPerSide) return false;
   const { top, right, bottom, left } = strokeWidthPerSide;
-  return !!(top || right || bottom || left);
+  return top != null || right != null || bottom != null || left != null;
 }
