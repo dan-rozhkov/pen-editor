@@ -61,3 +61,9 @@
   - OverlayRenderer: measure-labels container now mounts into selectionContainer instead of overlayContainer
   - Keeps measurement lines in overlay layer but guarantees label badges are visually above size labels
   - Tested: npm run build (TypeScript + Vite production build) passes
+
+2026-02-20: pixi-per-side-stroke-position — Fixed incorrect per-side stroke placement in PixiJS (center/inside/outside).
+  - Root cause: per-side lines were always shifted inward by strokeWidth/2, so center behaved like inside
+  - Fix: compute side anchor on actual shape edge for center, and offset +/- half width only for inside/outside
+  - Updated drawPerSideStroke() coordinate math in src/pixi/renderers/fillStrokeHelpers.ts
+  - Tested: npm run build passes

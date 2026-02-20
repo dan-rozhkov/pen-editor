@@ -3,11 +3,32 @@ import type { FlatSceneNode, GradientFill, PerSideStroke } from "@/types/scene";
 import { hasPerSideStroke } from "@/utils/renderUtils";
 import { getResolvedFill, getResolvedStroke, parseColor, parseAlpha } from "./colorHelpers";
 
-function perSideOffset(strokeWidth: number, align: 'center' | 'inside' | 'outside'): number {
-  switch (align) {
-    case 'inside': return strokeWidth / 2;
-    case 'outside': return -strokeWidth / 2;
-    default: return 0;
+function getSidePosition(
+  side: 'top' | 'right' | 'bottom' | 'left',
+  strokeWidth: number,
+  width: number,
+  height: number,
+  align: 'center' | 'inside' | 'outside',
+): number {
+  const half = strokeWidth / 2;
+
+  switch (side) {
+    case 'top':
+      if (align === 'inside') return half;
+      if (align === 'outside') return -half;
+      return 0;
+    case 'right':
+      if (align === 'inside') return width - half;
+      if (align === 'outside') return width + half;
+      return width;
+    case 'bottom':
+      if (align === 'inside') return height - half;
+      if (align === 'outside') return height + half;
+      return height;
+    case 'left':
+      if (align === 'inside') return half;
+      if (align === 'outside') return -half;
+      return 0;
   }
 }
 
@@ -23,36 +44,35 @@ export function drawPerSideStroke(
   const alpha = parseAlpha(strokeColor);
   const { top = 0, right = 0, bottom = 0, left = 0 } = perSide;
 
-  const topOff = perSideOffset(top, align);
-  const rightOff = perSideOffset(right, align);
-  const bottomOff = perSideOffset(bottom, align);
-  const leftOff = perSideOffset(left, align);
-
   // Top border
   if (top > 0) {
-    gfx.moveTo(0, top / 2 + topOff);
-    gfx.lineTo(width, top / 2 + topOff);
+    const y = getSidePosition('top', top, width, height, align);
+    gfx.moveTo(0, y);
+    gfx.lineTo(width, y);
     gfx.stroke({ color, alpha, width: top });
   }
 
   // Right border
   if (right > 0) {
-    gfx.moveTo(width - right / 2 - rightOff, 0);
-    gfx.lineTo(width - right / 2 - rightOff, height);
+    const x = getSidePosition('right', right, width, height, align);
+    gfx.moveTo(x, 0);
+    gfx.lineTo(x, height);
     gfx.stroke({ color, alpha, width: right });
   }
 
   // Bottom border
   if (bottom > 0) {
-    gfx.moveTo(width, height - bottom / 2 - bottomOff);
-    gfx.lineTo(0, height - bottom / 2 - bottomOff);
+    const y = getSidePosition('bottom', bottom, width, height, align);
+    gfx.moveTo(width, y);
+    gfx.lineTo(0, y);
     gfx.stroke({ color, alpha, width: bottom });
   }
 
   // Left border
   if (left > 0) {
-    gfx.moveTo(left / 2 + leftOff, height);
-    gfx.lineTo(left / 2 + leftOff, 0);
+    const x = getSidePosition('left', left, width, height, align);
+    gfx.moveTo(x, height);
+    gfx.lineTo(x, 0);
     gfx.stroke({ color, alpha, width: left });
   }
 }

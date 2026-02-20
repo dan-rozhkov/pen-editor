@@ -294,10 +294,14 @@ export function PixiCanvas() {
         );
 
         // Set up overlay rendering (guides, drop indicator, marquee)
-        const overlayCleanup = createOverlayRenderer(overlayContainer, () => ({
-          width: app.screen.width,
-          height: app.screen.height,
-        }));
+        const overlayCleanup = createOverlayRenderer(
+          overlayContainer,
+          selectionContainer,
+          () => ({
+            width: app.screen.width,
+            height: app.screen.height,
+          }),
+        );
 
         // Set up interaction handlers
         const interactionCleanup = setupPixiInteraction(

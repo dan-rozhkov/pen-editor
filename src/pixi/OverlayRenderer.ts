@@ -46,6 +46,7 @@ type MeasureLabelEntry = {
  */
 export function createOverlayRenderer(
   overlayContainer: Container,
+  measureLabelContainer: Container,
   getViewportSize: () => { width: number; height: number },
 ): () => void {
   const pixelGridGfx = new Graphics();
@@ -66,7 +67,7 @@ export function createOverlayRenderer(
 
   const measureLabels = new Container();
   measureLabels.label = "measure-labels";
-  overlayContainer.addChild(measureLabels);
+  measureLabelContainer.addChild(measureLabels);
 
   const drawPreviewGfx = new Graphics();
   drawPreviewGfx.label = "draw-preview";
