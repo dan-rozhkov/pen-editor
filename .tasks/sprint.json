@@ -45,6 +45,6 @@
   },
   {
     "name": "absolute-position-in-auto-layout",
-    "passed": false
+    "passed": true
   }
 ]

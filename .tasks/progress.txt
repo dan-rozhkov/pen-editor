@@ -41,3 +41,12 @@
   - Section shows when any selected node is a frame with auto-layout; hidden when none have it
   - Mixed values displayed for direction (SelectInput), gap (NumberInput), padding (NumberInput), alignment grid (no active cell)
   - Tested in browser: single frame AL works, multi-select with AL frames shows section with mixed, multi-select without AL hides section, gap change applies to all AL frames
+
+2026-02-20: absolute-position-in-auto-layout — Added absolutePosition property for children inside auto-layout frames.
+  - BaseNode: added absolutePosition?: boolean to types/scene.ts
+  - yogaLayout: filter out absolutePosition children from calculateFrameLayout, computeIntrinsicSize, calculateFrameIntrinsicSize
+  - instanceUtils: prepareFrameNode includes absolute children alongside layout children
+  - dragController: absolutePosition children use free drag instead of auto-layout reorder drag
+  - PositionSection: "Absolute position" checkbox shown when node is inside auto-layout parent
+  - PropertyEditor: passes parentContext to PositionSection
+  - Tested in browser: created AL frame with 3 rects, enabled absolute on Rect 2, verified exclusion from flow, moved freely to (150,100), verified other children reflow, unchecked returns to flow
