@@ -148,8 +148,9 @@ export function MultiSelectPropertyEditor({
   }, [autoLayoutFrames, showAutoLayout]);
 
   // Update handler for auto-layout that only targets frame nodes with auto-layout.
-  // Merges layout sub-properties per-node so that changing e.g. gap doesn't
-  // overwrite each node's own flexDirection with the first node's value.
+  // Extracts only the actually-changed layout properties (by diffing against the
+  // base node's layout) so that changing e.g. gap doesn't overwrite each node's
+  // own flexDirection with the first node's value.
   const handleAutoLayoutUpdate = useMemo(() => {
     if (!autoLayoutData) return handleUpdate;
     return (updates: Partial<SceneNode>) => {
@@ -160,14 +161,28 @@ export function MultiSelectPropertyEditor({
         return;
       }
 
-      // For layout updates, merge into each node's existing layout
+      // AutoLayoutSection spreads `...node.layout` into every update, so we need
+      // to diff the incoming layout against the base node's layout to find only
+      // the properties the user actually changed.
+      const baseLayout = autoLayoutData.node.layout ?? {};
+      const changedProps: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(layoutUpdate)) {
+        if ((baseLayout as Record<string, unknown>)[key] !== value) {
+          changedProps[key] = value;
+        }
+      }
+
+      // If nothing actually changed, skip
+      if (Object.keys(changedProps).length === 0) return;
+
+      // Merge only the changed properties into each node's existing layout
       useSceneStore.setState((state) => {
         saveHistory(state);
         const newNodesById = { ...state.nodesById };
         for (const id of autoLayoutData.frameIds) {
           const existing = newNodesById[id];
           if (!existing || existing.type !== "frame") continue;
-          const mergedLayout = { ...(existing as FrameNode).layout, ...layoutUpdate };
+          const mergedLayout = { ...(existing as FrameNode).layout, ...changedProps };
           newNodesById[id] = { ...existing, layout: mergedLayout };
         }
         return { nodesById: newNodesById, _cachedTree: null };

@@ -41,17 +41,6 @@ export function PositionSection({ node, onUpdate, mixedKeys, parentContext }: Po
           isMixed={mixedKeys?.has("y")}
         />
       </PropertyRow>
-      {isInsideAutoLayout && (
-        <Label className="cursor-pointer">
-          <Checkbox
-            checked={node.absolutePosition ?? false}
-            onCheckedChange={(checked) =>
-              onUpdate({ absolutePosition: !!checked })
-            }
-          />
-          Absolute position
-        </Label>
-      )}
       <div className="flex gap-2 mt-2">
         <div className="w-1/2">
           <InputGroup>
@@ -83,6 +72,17 @@ export function PositionSection({ node, onUpdate, mixedKeys, parentContext }: Po
           />
         </div>
       </div>
+      {isInsideAutoLayout && (
+        <Label className="cursor-pointer mt-1">
+          <Checkbox
+            checked={node.absolutePosition ?? false}
+            onCheckedChange={(checked) =>
+              onUpdate({ absolutePosition: !!checked })
+            }
+          />
+          Absolute position
+        </Label>
+      )}
     </PropertySection>
   );
 }
