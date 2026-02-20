@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import type { FrameNode, SceneNode } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
 import { useSceneStore } from "@/store/sceneStore";
+import { saveHistory } from "@/store/sceneStore/helpers/history";
 import {
   computeMergedProperties,
   getSharedSections,
@@ -146,11 +147,31 @@ export function MultiSelectPropertyEditor({
     };
   }, [autoLayoutFrames, showAutoLayout]);
 
-  // Update handler for auto-layout that only targets frame nodes with auto-layout
+  // Update handler for auto-layout that only targets frame nodes with auto-layout.
+  // Merges layout sub-properties per-node so that changing e.g. gap doesn't
+  // overwrite each node's own flexDirection with the first node's value.
   const handleAutoLayoutUpdate = useMemo(() => {
     if (!autoLayoutData) return handleUpdate;
     return (updates: Partial<SceneNode>) => {
-      updateMultipleNodes(autoLayoutData.frameIds, updates);
+      const layoutUpdate = (updates as Partial<FrameNode>).layout;
+      if (!layoutUpdate) {
+        // Non-layout update (e.g. sizing) — apply as-is
+        updateMultipleNodes(autoLayoutData.frameIds, updates);
+        return;
+      }
+
+      // For layout updates, merge into each node's existing layout
+      useSceneStore.setState((state) => {
+        saveHistory(state);
+        const newNodesById = { ...state.nodesById };
+        for (const id of autoLayoutData.frameIds) {
+          const existing = newNodesById[id];
+          if (!existing || existing.type !== "frame") continue;
+          const mergedLayout = { ...(existing as FrameNode).layout, ...layoutUpdate };
+          newNodesById[id] = { ...existing, layout: mergedLayout };
+        }
+        return { nodesById: newNodesById, _cachedTree: null };
+      });
     };
   }, [autoLayoutData, updateMultipleNodes, handleUpdate]);
 
