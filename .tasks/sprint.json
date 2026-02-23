@@ -58,5 +58,13 @@
   {
     "name": "component-instance-update-performance",
     "passed": true
+  },
+  {
+    "name": "toolbar-hover-dark-theme",
+    "passed": false
+  },
+  {
+    "name": "node-size-badge-fill-fit-label",
+    "passed": false
   }
 ]
