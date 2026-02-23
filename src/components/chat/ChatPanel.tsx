@@ -5,6 +5,8 @@ import { useDesignChat } from "@/hooks/useDesignChat";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
 import { SelectInput } from "@/components/ui/PropertyInputs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 
 const MODEL_OPTIONS = [
   { value: "moonshotai/kimi-k2.5", label: "Kimi K2.5" },
@@ -22,44 +24,46 @@ function TabBar() {
   const createTab = useChatStore((s) => s.createTab);
 
   return (
-    <div className="flex items-center border-b border-border-default shrink-0 overflow-x-auto">
-      {tabs.map((tab: ChatTab) => {
-        const isActive = tab.id === activeTabId;
-        return (
-          <div
-            key={tab.id}
-            data-testid={`chat-tab-${tab.id}`}
-            className={`group flex items-center gap-1 px-3 py-1.5 text-xs cursor-pointer border-r border-border-default select-none shrink-0 ${
-              isActive
-                ? "bg-surface-panel text-text-primary border-b-2 border-b-blue-500"
-                : "bg-surface-panel/50 text-text-muted hover:bg-surface-hover"
-            }`}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            <span className="truncate max-w-[80px]">{tab.title}</span>
-            <button
-              data-testid={`close-tab-${tab.id}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                closeTab(tab.id);
-              }}
-              className="p-0.5 rounded hover:bg-surface-hover text-text-muted opacity-0 group-hover:opacity-100 transition-opacity"
-              title="Close tab"
+    <Tabs
+      value={activeTabId}
+      onValueChange={(value) => setActiveTab(value as string)}
+      className="shrink-0 gap-0"
+    >
+      <div className="px-1 pt-1 pb-1 flex items-center overflow-x-auto">
+        <TabsList variant="pill" className="flex-1 w-0 [&>*]:flex-1">
+          {tabs.map((tab: ChatTab) => (
+            <TabsTrigger
+              key={tab.id}
+              value={tab.id}
+              data-testid={`chat-tab-${tab.id}`}
+              className="group/tab relative w-full pr-5"
             >
-              <XIcon size={10} />
-            </button>
-          </div>
-        );
-      })}
-      <button
-        data-testid="create-tab-button"
-        onClick={() => createTab()}
-        className="px-2 py-1.5 text-text-muted hover:bg-surface-hover transition-colors shrink-0"
-        title="New chat"
-      >
-        <PlusIcon size={14} />
-      </button>
-    </div>
+              <span className="truncate max-w-[80px]">{tab.title}</span>
+              <button
+                data-testid={`close-tab-${tab.id}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeTab(tab.id);
+                }}
+                className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-surface-hover text-text-muted transition-opacity"
+                title="Close tab"
+              >
+                <XIcon size={10} />
+              </button>
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        <Button
+          data-testid="create-tab-button"
+          variant="ghost"
+          size="icon"
+          onClick={() => createTab()}
+          title="New chat"
+        >
+          <PlusIcon />
+        </Button>
+      </div>
+    </Tabs>
   );
 }
 
