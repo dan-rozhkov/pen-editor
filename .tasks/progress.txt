@@ -78,3 +78,9 @@
   - pixiSync: track rebuilt instance IDs during component-driven ref rebuild
   - include rebuilt instance IDs into auto-layout dirty set so parent auto-layout recomputes positions
   - Tested: npm run build passes
+
+2026-02-23: toolbar-hover-dark-theme — Improved toolbar hover visibility in dark theme.
+  - CSS: bumped dark surface-elevated #333→#383838, surface-hover #404040→#4a4a4a, surface-active #4a4a4a→#555555
+  - PrimitivesPanel: changed toolbar buttons from hover:bg-surface-elevated to hover:bg-surface-hover with dark: variant override
+  - Root cause: ghost button variant's dark:hover:bg-muted/50 was overriding hover:bg-surface-elevated due to specificity
+  - Tested in browser: verified hover bg computes to rgb(74,74,74) on all toolbar buttons in dark mode, light theme unaffected
