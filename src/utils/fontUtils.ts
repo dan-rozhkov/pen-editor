@@ -50,7 +50,7 @@ export const GOOGLE_FONTS = [
   'Gelasio', 'Gloria Hallelujah', 'Gothic A1', 'Great Vibes', 'Gruppo',
   'Heebo', 'Hind', 'Hind Madurai', 'Hind Siliguri',
   'IBM Plex Mono', 'IBM Plex Sans', 'IBM Plex Sans Condensed',
-  'IBM Plex Serif', 'Inconsolata', 'Indie Flower', 'Inter Tight',
+  'IBM Plex Serif', 'Inconsolata', 'Indie Flower', 'Inter', 'Inter Tight',
   'Istok Web',
   'Jost', 'Josefin Sans', 'Josefin Slab',
   'Kalam', 'Kanit', 'Karla', 'Kaushan Script', 'Khand',
