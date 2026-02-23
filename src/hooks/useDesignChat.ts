@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
@@ -80,7 +80,11 @@ async function executeToolCall(
   }
 }
 
-export function useDesignChat() {
+interface UseDesignChatOptions {
+  sessionId: string;
+}
+
+export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   const [input, setInput] = useState("");
 
   const transport = useMemo(
@@ -93,6 +97,7 @@ export function useDesignChat() {
   );
 
   const chat = useChat({
+    id: sessionId,
     transport,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onToolCall: async ({ toolCall }) => {
@@ -104,6 +109,30 @@ export function useDesignChat() {
       });
     },
   });
+
+  // Register/unregister abort capability for this session
+  const registerAbortController = useChatStore((s) => s.registerAbortController);
+  const unregisterAbortController = useChatStore((s) => s.unregisterAbortController);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    // Create an AbortController that calls chat.stop() when aborted
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    const onAbort = () => {
+      chat.stop();
+    };
+    controller.signal.addEventListener("abort", onAbort);
+
+    registerAbortController(sessionId, controller);
+
+    return () => {
+      controller.signal.removeEventListener("abort", onAbort);
+      unregisterAbortController(sessionId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, registerAbortController, unregisterAbortController]);
 
   const sendMessage = useCallback(
     (e?: React.FormEvent) => {
