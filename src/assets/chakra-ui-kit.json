@@ -1,0 +1,3259 @@
+{
+  "version": "1.0",
+  "activeTheme": "light",
+  "variables": [
+    {
+      "id": "ck_bg",
+      "name": "--ck-background",
+      "type": "color",
+      "value": "#ffffff",
+      "themeValues": {
+        "light": "#ffffff",
+        "dark": "#1A202C"
+      }
+    },
+    {
+      "id": "ck_fg",
+      "name": "--ck-foreground",
+      "type": "color",
+      "value": "#1A202C",
+      "themeValues": {
+        "light": "#1A202C",
+        "dark": "#E2E8F0"
+      }
+    },
+    {
+      "id": "ck_blue_500",
+      "name": "--ck-blue-500",
+      "type": "color",
+      "value": "#3182CE",
+      "themeValues": {
+        "light": "#3182CE",
+        "dark": "#63B3ED"
+      }
+    },
+    {
+      "id": "ck_blue_600",
+      "name": "--ck-blue-600",
+      "type": "color",
+      "value": "#2B6CB0",
+      "themeValues": {
+        "light": "#2B6CB0",
+        "dark": "#4299E1"
+      }
+    },
+    {
+      "id": "ck_blue_50",
+      "name": "--ck-blue-50",
+      "type": "color",
+      "value": "#EBF8FF",
+      "themeValues": {
+        "light": "#EBF8FF",
+        "dark": "#1A365D"
+      }
+    },
+    {
+      "id": "ck_gray_50",
+      "name": "--ck-gray-50",
+      "type": "color",
+      "value": "#F7FAFC",
+      "themeValues": {
+        "light": "#F7FAFC",
+        "dark": "#2D3748"
+      }
+    },
+    {
+      "id": "ck_gray_100",
+      "name": "--ck-gray-100",
+      "type": "color",
+      "value": "#EDF2F7",
+      "themeValues": {
+        "light": "#EDF2F7",
+        "dark": "#4A5568"
+      }
+    },
+    {
+      "id": "ck_gray_200",
+      "name": "--ck-gray-200",
+      "type": "color",
+      "value": "#E2E8F0",
+      "themeValues": {
+        "light": "#E2E8F0",
+        "dark": "#4A5568"
+      }
+    },
+    {
+      "id": "ck_gray_300",
+      "name": "--ck-gray-300",
+      "type": "color",
+      "value": "#CBD5E0",
+      "themeValues": {
+        "light": "#CBD5E0",
+        "dark": "#718096"
+      }
+    },
+    {
+      "id": "ck_gray_500",
+      "name": "--ck-gray-500",
+      "type": "color",
+      "value": "#718096",
+      "themeValues": {
+        "light": "#718096",
+        "dark": "#A0AEC0"
+      }
+    },
+    {
+      "id": "ck_gray_600",
+      "name": "--ck-gray-600",
+      "type": "color",
+      "value": "#4A5568",
+      "themeValues": {
+        "light": "#4A5568",
+        "dark": "#CBD5E0"
+      }
+    },
+    {
+      "id": "ck_gray_700",
+      "name": "--ck-gray-700",
+      "type": "color",
+      "value": "#2D3748",
+      "themeValues": {
+        "light": "#2D3748",
+        "dark": "#E2E8F0"
+      }
+    },
+    {
+      "id": "ck_green_500",
+      "name": "--ck-green-500",
+      "type": "color",
+      "value": "#38A169",
+      "themeValues": {
+        "light": "#38A169",
+        "dark": "#68D391"
+      }
+    },
+    {
+      "id": "ck_green_50",
+      "name": "--ck-green-50",
+      "type": "color",
+      "value": "#F0FFF4",
+      "themeValues": {
+        "light": "#F0FFF4",
+        "dark": "#22543D"
+      }
+    },
+    {
+      "id": "ck_red_500",
+      "name": "--ck-red-500",
+      "type": "color",
+      "value": "#E53E3E",
+      "themeValues": {
+        "light": "#E53E3E",
+        "dark": "#FC8181"
+      }
+    },
+    {
+      "id": "ck_red_50",
+      "name": "--ck-red-50",
+      "type": "color",
+      "value": "#FFF5F5",
+      "themeValues": {
+        "light": "#FFF5F5",
+        "dark": "#742A2A"
+      }
+    },
+    {
+      "id": "ck_orange_500",
+      "name": "--ck-orange-500",
+      "type": "color",
+      "value": "#DD6B20",
+      "themeValues": {
+        "light": "#DD6B20",
+        "dark": "#F6AD55"
+      }
+    },
+    {
+      "id": "ck_orange_50",
+      "name": "--ck-orange-50",
+      "type": "color",
+      "value": "#FFFAF0",
+      "themeValues": {
+        "light": "#FFFAF0",
+        "dark": "#7B341E"
+      }
+    },
+    {
+      "id": "ck_teal_500",
+      "name": "--ck-teal-500",
+      "type": "color",
+      "value": "#319795",
+      "themeValues": {
+        "light": "#319795",
+        "dark": "#4FD1C5"
+      }
+    },
+    {
+      "id": "ck_teal_50",
+      "name": "--ck-teal-50",
+      "type": "color",
+      "value": "#E6FFFA",
+      "themeValues": {
+        "light": "#E6FFFA",
+        "dark": "#234E52"
+      }
+    },
+    {
+      "id": "ck_white",
+      "name": "--ck-white",
+      "type": "color",
+      "value": "#ffffff",
+      "themeValues": {
+        "light": "#ffffff",
+        "dark": "#1A202C"
+      }
+    },
+    {
+      "id": "ck_border",
+      "name": "--ck-border",
+      "type": "color",
+      "value": "#E2E8F0",
+      "themeValues": {
+        "light": "#E2E8F0",
+        "dark": "#4A5568"
+      }
+    }
+  ],
+  "nodes": [
+    {
+      "type": "frame",
+      "id": "chakra-showcase",
+      "name": "Chakra UI Design System",
+      "x": 0,
+      "y": 0,
+      "width": 1800,
+      "height": 2800,
+      "fill": "#ffffff",
+      "fillBinding": {
+        "variableId": "ck_bg"
+      },
+      "layout": {
+        "autoLayout": true,
+        "flexDirection": "column",
+        "gap": 60,
+        "paddingTop": 60,
+        "paddingRight": 60,
+        "paddingBottom": 60,
+        "paddingLeft": 60,
+        "alignItems": "flex-start"
+      },
+      "children": [
+        {
+          "type": "text",
+          "id": "ck-title",
+          "name": "Title",
+          "x": 0,
+          "y": 0,
+          "width": 600,
+          "height": 48,
+          "text": "Chakra UI Components",
+          "fontSize": 36,
+          "fontFamily": "Inter",
+          "fontWeight": "700",
+          "fill": "#1A202C",
+          "fillBinding": {
+            "variableId": "ck_fg"
+          }
+        },
+        {
+          "type": "frame",
+          "id": "ck-section-buttons",
+          "name": "Buttons Section",
+          "x": 0,
+          "y": 0,
+          "width": 1680,
+          "height": 200,
+          "layout": {
+            "autoLayout": true,
+            "flexDirection": "column",
+            "gap": 16,
+            "alignItems": "flex-start"
+          },
+          "children": [
+            {
+              "type": "text",
+              "id": "ck-label-buttons",
+              "name": "Section Label",
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 24,
+              "text": "Button",
+              "fontSize": 14,
+              "fontFamily": "Inter",
+              "fontWeight": "500",
+              "fill": "#718096",
+              "fillBinding": {
+                "variableId": "ck_gray_500"
+              }
+            },
+            {
+              "type": "frame",
+              "id": "ck-buttons-row-1",
+              "name": "Buttons Row - Variants",
+              "x": 0,
+              "y": 0,
+              "width": 1680,
+              "height": 40,
+              "layout": {
+                "autoLayout": true,
+                "flexDirection": "row",
+                "gap": 16,
+                "alignItems": "center"
+              },
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ck-btn-solid",
+                  "name": "Button/Solid",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 120,
+                  "height": 40,
+                  "fill": "#3182CE",
+                  "fillBinding": {
+                    "variableId": "ck_blue_500"
+                  },
+                  "cornerRadius": 6,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "gap": 8,
+                    "paddingTop": 8,
+                    "paddingRight": 16,
+                    "paddingBottom": 8,
+                    "paddingLeft": 16,
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "effect": {
+                    "type": "shadow",
+                    "shadowType": "outer",
+                    "color": "#3182CE33",
+                    "offset": {
+                      "x": 0,
+                      "y": 1
+                    },
+                    "blur": 3,
+                    "spread": 0
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-btn-solid-text",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 60,
+                      "height": 20,
+                      "text": "Solid",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "600",
+                      "fill": "#ffffff"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-btn-outline",
+                  "name": "Button/Outline",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 120,
+                  "height": 40,
+                  "stroke": "#3182CE",
+                  "strokeWidth": 1,
+                  "strokeAlign": "inside",
+                  "strokeBinding": {
+                    "variableId": "ck_blue_500"
+                  },
+                  "cornerRadius": 6,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "gap": 8,
+                    "paddingTop": 8,
+                    "paddingRight": 16,
+                    "paddingBottom": 8,
+                    "paddingLeft": 16,
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-btn-outline-text",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 60,
+                      "height": 20,
+                      "text": "Outline",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "600",
+                      "fill": "#3182CE",
+                      "fillBinding": {
+                        "variableId": "ck_blue_500"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-btn-ghost",
+                  "name": "Button/Ghost",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 100,
+                  "height": 40,
+                  "cornerRadius": 6,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "gap": 8,
+                    "paddingTop": 8,
+                    "paddingRight": 16,
+                    "paddingBottom": 8,
+                    "paddingLeft": 16,
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-btn-ghost-text",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 50,
+                      "height": 20,
+                      "text": "Ghost",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "600",
+                      "fill": "#3182CE",
+                      "fillBinding": {
+                        "variableId": "ck_blue_500"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-btn-subtle",
+                  "name": "Button/Subtle",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 110,
+                  "height": 40,
+                  "fill": "#EBF8FF",
+                  "fillBinding": {
+                    "variableId": "ck_blue_50"
+                  },
+                  "cornerRadius": 6,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "gap": 8,
+                    "paddingTop": 8,
+                    "paddingRight": 16,
+                    "paddingBottom": 8,
+                    "paddingLeft": 16,
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-btn-subtle-text",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 60,
+                      "height": 20,
+                      "text": "Subtle",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "600",
+                      "fill": "#3182CE",
+                      "fillBinding": {
+                        "variableId": "ck_blue_500"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-btn-surface",
+                  "name": "Button/Surface",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 120,
+                  "height": 40,
+                  "fill": "#EBF8FF",
+                  "fillBinding": {
+                    "variableId": "ck_blue_50"
+                  },
+                  "stroke": "#3182CE",
+                  "strokeWidth": 1,
+                  "strokeAlign": "inside",
+                  "strokeBinding": {
+                    "variableId": "ck_blue_500"
+                  },
+                  "cornerRadius": 6,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "gap": 8,
+                    "paddingTop": 8,
+                    "paddingRight": 16,
+                    "paddingBottom": 8,
+                    "paddingLeft": 16,
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-btn-surface-text",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 60,
+                      "height": 20,
+                      "text": "Surface",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "600",
+                      "fill": "#3182CE",
+                      "fillBinding": {
+                        "variableId": "ck_blue_500"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-btn-plain",
+                  "name": "Button/Plain",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 80,
+                  "height": 40,
+                  "cornerRadius": 6,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "gap": 8,
+                    "paddingTop": 8,
+                    "paddingRight": 16,
+                    "paddingBottom": 8,
+                    "paddingLeft": 16,
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-btn-plain-text",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 40,
+                      "height": 20,
+                      "text": "Plain",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "600",
+                      "fill": "#3182CE",
+                      "fillBinding": {
+                        "variableId": "ck_blue_500"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "ck-buttons-row-2",
+              "name": "Buttons Row - Color Schemes",
+              "x": 0,
+              "y": 0,
+              "width": 1680,
+              "height": 40,
+              "layout": {
+                "autoLayout": true,
+                "flexDirection": "row",
+                "gap": 16,
+                "alignItems": "center"
+              },
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ck-btn-blue",
+                  "name": "Button/Blue",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 100,
+                  "height": 40,
+                  "fill": "#3182CE",
+                  "fillBinding": {
+                    "variableId": "ck_blue_500"
+                  },
+                  "cornerRadius": 6,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "paddingTop": 8,
+                    "paddingRight": 16,
+                    "paddingBottom": 8,
+                    "paddingLeft": 16,
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-btn-blue-text",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 50,
+                      "height": 20,
+                      "text": "Blue",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "600",
+                      "fill": "#ffffff"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-btn-green",
+                  "name": "Button/Green",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 100,
+                  "height": 40,
+                  "fill": "#38A169",
+                  "fillBinding": {
+                    "variableId": "ck_green_500"
+                  },
+                  "cornerRadius": 6,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "paddingTop": 8,
+                    "paddingRight": 16,
+                    "paddingBottom": 8,
+                    "paddingLeft": 16,
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-btn-green-text",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 50,
+                      "height": 20,
+                      "text": "Green",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "600",
+                      "fill": "#ffffff"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-btn-red",
+                  "name": "Button/Red",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 100,
+                  "height": 40,
+                  "fill": "#E53E3E",
+                  "fillBinding": {
+                    "variableId": "ck_red_500"
+                  },
+                  "cornerRadius": 6,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "paddingTop": 8,
+                    "paddingRight": 16,
+                    "paddingBottom": 8,
+                    "paddingLeft": 16,
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-btn-red-text",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 50,
+                      "height": 20,
+                      "text": "Red",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "600",
+                      "fill": "#ffffff"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-btn-orange",
+                  "name": "Button/Orange",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 110,
+                  "height": 40,
+                  "fill": "#DD6B20",
+                  "fillBinding": {
+                    "variableId": "ck_orange_500"
+                  },
+                  "cornerRadius": 6,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "paddingTop": 8,
+                    "paddingRight": 16,
+                    "paddingBottom": 8,
+                    "paddingLeft": 16,
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-btn-orange-text",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 60,
+                      "height": 20,
+                      "text": "Orange",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "600",
+                      "fill": "#ffffff"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-btn-teal",
+                  "name": "Button/Teal",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 100,
+                  "height": 40,
+                  "fill": "#319795",
+                  "fillBinding": {
+                    "variableId": "ck_teal_500"
+                  },
+                  "cornerRadius": 6,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "paddingTop": 8,
+                    "paddingRight": 16,
+                    "paddingBottom": 8,
+                    "paddingLeft": 16,
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-btn-teal-text",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 40,
+                      "height": 20,
+                      "text": "Teal",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "600",
+                      "fill": "#ffffff"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-btn-gray",
+                  "name": "Button/Gray",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 100,
+                  "height": 40,
+                  "fill": "#EDF2F7",
+                  "fillBinding": {
+                    "variableId": "ck_gray_100"
+                  },
+                  "cornerRadius": 6,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "paddingTop": 8,
+                    "paddingRight": 16,
+                    "paddingBottom": 8,
+                    "paddingLeft": 16,
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-btn-gray-text",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 50,
+                      "height": 20,
+                      "text": "Gray",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "600",
+                      "fill": "#1A202C",
+                      "fillBinding": {
+                        "variableId": "ck_fg"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "ck-section-input",
+          "name": "Input Section",
+          "x": 0,
+          "y": 0,
+          "width": 1680,
+          "height": 180,
+          "layout": {
+            "autoLayout": true,
+            "flexDirection": "column",
+            "gap": 16,
+            "alignItems": "flex-start"
+          },
+          "children": [
+            {
+              "type": "text",
+              "id": "ck-label-input",
+              "name": "Section Label",
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 24,
+              "text": "Input",
+              "fontSize": 14,
+              "fontFamily": "Inter",
+              "fontWeight": "500",
+              "fill": "#718096",
+              "fillBinding": {
+                "variableId": "ck_gray_500"
+              }
+            },
+            {
+              "type": "frame",
+              "id": "ck-inputs-row",
+              "name": "Inputs Row",
+              "x": 0,
+              "y": 0,
+              "width": 1680,
+              "height": 120,
+              "layout": {
+                "autoLayout": true,
+                "flexDirection": "row",
+                "gap": 24,
+                "alignItems": "flex-start"
+              },
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ck-input-outline",
+                  "name": "Input/Outline",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 300,
+                  "height": 40,
+                  "fill": "#ffffff",
+                  "fillBinding": {
+                    "variableId": "ck_bg"
+                  },
+                  "stroke": "#E2E8F0",
+                  "strokeWidth": 1,
+                  "strokeAlign": "inside",
+                  "strokeBinding": {
+                    "variableId": "ck_border"
+                  },
+                  "cornerRadius": 6,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "paddingTop": 8,
+                    "paddingRight": 16,
+                    "paddingBottom": 8,
+                    "paddingLeft": 16,
+                    "alignItems": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-input-outline-text",
+                      "name": "Placeholder",
+                      "x": 0,
+                      "y": 0,
+                      "width": 260,
+                      "height": 20,
+                      "text": "Outline input",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "400",
+                      "fill": "#A0AEC0"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-input-filled",
+                  "name": "Input/Filled",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 300,
+                  "height": 40,
+                  "fill": "#EDF2F7",
+                  "fillBinding": {
+                    "variableId": "ck_gray_100"
+                  },
+                  "cornerRadius": 6,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "paddingTop": 8,
+                    "paddingRight": 16,
+                    "paddingBottom": 8,
+                    "paddingLeft": 16,
+                    "alignItems": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-input-filled-text",
+                      "name": "Placeholder",
+                      "x": 0,
+                      "y": 0,
+                      "width": 260,
+                      "height": 20,
+                      "text": "Filled input",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "400",
+                      "fill": "#A0AEC0"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-input-flushed",
+                  "name": "Input/Flushed",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 300,
+                  "height": 40,
+                  "fill": "#ffffff",
+                  "fillBinding": {
+                    "variableId": "ck_bg"
+                  },
+                  "stroke": "#E2E8F0",
+                  "strokeWidth": 1,
+                  "strokeAlign": "inside",
+                  "strokeBinding": {
+                    "variableId": "ck_border"
+                  },
+                  "strokePerSide": {
+                    "top": 0,
+                    "right": 0,
+                    "bottom": 1,
+                    "left": 0
+                  },
+                  "cornerRadius": 0,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "paddingTop": 8,
+                    "paddingRight": 0,
+                    "paddingBottom": 8,
+                    "paddingLeft": 0,
+                    "alignItems": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-input-flushed-text",
+                      "name": "Placeholder",
+                      "x": 0,
+                      "y": 0,
+                      "width": 260,
+                      "height": 20,
+                      "text": "Flushed input",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "400",
+                      "fill": "#A0AEC0"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "ck-section-badges",
+          "name": "Badge Section",
+          "x": 0,
+          "y": 0,
+          "width": 1680,
+          "height": 80,
+          "layout": {
+            "autoLayout": true,
+            "flexDirection": "column",
+            "gap": 16,
+            "alignItems": "flex-start"
+          },
+          "children": [
+            {
+              "type": "text",
+              "id": "ck-label-badges",
+              "name": "Section Label",
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 24,
+              "text": "Badge",
+              "fontSize": 14,
+              "fontFamily": "Inter",
+              "fontWeight": "500",
+              "fill": "#718096",
+              "fillBinding": {
+                "variableId": "ck_gray_500"
+              }
+            },
+            {
+              "type": "frame",
+              "id": "ck-badges-row",
+              "name": "Badges Row",
+              "x": 0,
+              "y": 0,
+              "width": 1000,
+              "height": 24,
+              "layout": {
+                "autoLayout": true,
+                "flexDirection": "row",
+                "gap": 12,
+                "alignItems": "center"
+              },
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ck-badge-subtle-blue",
+                  "name": "Badge/Subtle/Blue",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 70,
+                  "height": 24,
+                  "fill": "#EBF8FF",
+                  "fillBinding": {
+                    "variableId": "ck_blue_50"
+                  },
+                  "cornerRadius": 4,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "paddingTop": 2,
+                    "paddingRight": 8,
+                    "paddingBottom": 2,
+                    "paddingLeft": 8,
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-badge-subtle-blue-text",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 40,
+                      "height": 18,
+                      "text": "New",
+                      "fontSize": 12,
+                      "fontFamily": "Inter",
+                      "fontWeight": "700",
+                      "fill": "#3182CE",
+                      "fillBinding": {
+                        "variableId": "ck_blue_500"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-badge-solid-green",
+                  "name": "Badge/Solid/Green",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 80,
+                  "height": 24,
+                  "fill": "#38A169",
+                  "fillBinding": {
+                    "variableId": "ck_green_500"
+                  },
+                  "cornerRadius": 4,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "paddingTop": 2,
+                    "paddingRight": 8,
+                    "paddingBottom": 2,
+                    "paddingLeft": 8,
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-badge-solid-green-text",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 60,
+                      "height": 18,
+                      "text": "Success",
+                      "fontSize": 12,
+                      "fontFamily": "Inter",
+                      "fontWeight": "700",
+                      "fill": "#ffffff"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-badge-solid-red",
+                  "name": "Badge/Solid/Red",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 70,
+                  "height": 24,
+                  "fill": "#E53E3E",
+                  "fillBinding": {
+                    "variableId": "ck_red_500"
+                  },
+                  "cornerRadius": 4,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "paddingTop": 2,
+                    "paddingRight": 8,
+                    "paddingBottom": 2,
+                    "paddingLeft": 8,
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-badge-solid-red-text",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 50,
+                      "height": 18,
+                      "text": "Error",
+                      "fontSize": 12,
+                      "fontFamily": "Inter",
+                      "fontWeight": "700",
+                      "fill": "#ffffff"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-badge-outline-orange",
+                  "name": "Badge/Outline/Orange",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 80,
+                  "height": 24,
+                  "stroke": "#DD6B20",
+                  "strokeWidth": 1,
+                  "strokeAlign": "inside",
+                  "strokeBinding": {
+                    "variableId": "ck_orange_500"
+                  },
+                  "cornerRadius": 4,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "paddingTop": 2,
+                    "paddingRight": 8,
+                    "paddingBottom": 2,
+                    "paddingLeft": 8,
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-badge-outline-orange-text",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 60,
+                      "height": 18,
+                      "text": "Warning",
+                      "fontSize": 12,
+                      "fontFamily": "Inter",
+                      "fontWeight": "700",
+                      "fill": "#DD6B20",
+                      "fillBinding": {
+                        "variableId": "ck_orange_500"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-badge-subtle-teal",
+                  "name": "Badge/Subtle/Teal",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 60,
+                  "height": 24,
+                  "fill": "#E6FFFA",
+                  "fillBinding": {
+                    "variableId": "ck_teal_50"
+                  },
+                  "cornerRadius": 4,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "paddingTop": 2,
+                    "paddingRight": 8,
+                    "paddingBottom": 2,
+                    "paddingLeft": 8,
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-badge-subtle-teal-text",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 40,
+                      "height": 18,
+                      "text": "Info",
+                      "fontSize": 12,
+                      "fontFamily": "Inter",
+                      "fontWeight": "700",
+                      "fill": "#319795",
+                      "fillBinding": {
+                        "variableId": "ck_teal_500"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "ck-section-card",
+          "name": "Card Section",
+          "x": 0,
+          "y": 0,
+          "width": 1680,
+          "height": 280,
+          "layout": {
+            "autoLayout": true,
+            "flexDirection": "column",
+            "gap": 16,
+            "alignItems": "flex-start"
+          },
+          "children": [
+            {
+              "type": "text",
+              "id": "ck-label-card",
+              "name": "Section Label",
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 24,
+              "text": "Card",
+              "fontSize": 14,
+              "fontFamily": "Inter",
+              "fontWeight": "500",
+              "fill": "#718096",
+              "fillBinding": {
+                "variableId": "ck_gray_500"
+              }
+            },
+            {
+              "type": "frame",
+              "id": "ck-card-default",
+              "name": "Card",
+              "reusable": true,
+              "x": 0,
+              "y": 0,
+              "width": 380,
+              "height": 240,
+              "fill": "#ffffff",
+              "fillBinding": {
+                "variableId": "ck_bg"
+              },
+              "stroke": "#E2E8F0",
+              "strokeWidth": 1,
+              "strokeAlign": "inside",
+              "strokeBinding": {
+                "variableId": "ck_border"
+              },
+              "cornerRadius": 8,
+              "effect": {
+                "type": "shadow",
+                "shadowType": "outer",
+                "color": "#0000001A",
+                "offset": {
+                  "x": 0,
+                  "y": 1
+                },
+                "blur": 3,
+                "spread": 0
+              },
+              "layout": {
+                "autoLayout": true,
+                "flexDirection": "column",
+                "gap": 0,
+                "alignItems": "stretch"
+              },
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ck-card-header",
+                  "name": "Card Header",
+                  "x": 0,
+                  "y": 0,
+                  "width": 380,
+                  "height": 80,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "column",
+                    "gap": 4,
+                    "paddingTop": 20,
+                    "paddingRight": 20,
+                    "paddingBottom": 0,
+                    "paddingLeft": 20,
+                    "alignItems": "flex-start"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-card-title",
+                      "name": "Card Title",
+                      "x": 0,
+                      "y": 0,
+                      "width": 340,
+                      "height": 28,
+                      "text": "Card Title",
+                      "fontSize": 18,
+                      "fontFamily": "Inter",
+                      "fontWeight": "600",
+                      "lineHeight": 1.4,
+                      "fill": "#1A202C",
+                      "fillBinding": {
+                        "variableId": "ck_fg"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "ck-card-description",
+                      "name": "Card Description",
+                      "x": 0,
+                      "y": 0,
+                      "width": 340,
+                      "height": 20,
+                      "text": "This is a card description text.",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "400",
+                      "fill": "#718096",
+                      "fillBinding": {
+                        "variableId": "ck_gray_500"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-card-body",
+                  "name": "Card Body",
+                  "x": 0,
+                  "y": 0,
+                  "width": 380,
+                  "height": 80,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "column",
+                    "gap": 8,
+                    "paddingTop": 12,
+                    "paddingRight": 20,
+                    "paddingBottom": 12,
+                    "paddingLeft": 20,
+                    "alignItems": "flex-start"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-card-body-text",
+                      "name": "Body Text",
+                      "x": 0,
+                      "y": 0,
+                      "width": 340,
+                      "height": 40,
+                      "text": "The card body contains the main content. You can place any component here.",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "400",
+                      "lineHeight": 1.5,
+                      "fill": "#4A5568",
+                      "fillBinding": {
+                        "variableId": "ck_gray_600"
+                      },
+                      "textWidthMode": "fixed"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-card-footer",
+                  "name": "Card Footer",
+                  "x": 0,
+                  "y": 0,
+                  "width": 380,
+                  "height": 64,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "gap": 8,
+                    "paddingTop": 12,
+                    "paddingRight": 20,
+                    "paddingBottom": 20,
+                    "paddingLeft": 20,
+                    "alignItems": "center",
+                    "justifyContent": "flex-end"
+                  },
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "ck-card-footer-btn",
+                      "name": "Button",
+                      "x": 0,
+                      "y": 0,
+                      "width": 100,
+                      "height": 36,
+                      "fill": "#3182CE",
+                      "fillBinding": {
+                        "variableId": "ck_blue_500"
+                      },
+                      "cornerRadius": 6,
+                      "layout": {
+                        "autoLayout": true,
+                        "flexDirection": "row",
+                        "paddingTop": 8,
+                        "paddingRight": 16,
+                        "paddingBottom": 8,
+                        "paddingLeft": 16,
+                        "alignItems": "center",
+                        "justifyContent": "center"
+                      },
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "ck-card-footer-btn-text",
+                          "name": "Label",
+                          "x": 0,
+                          "y": 0,
+                          "width": 50,
+                          "height": 20,
+                          "text": "Submit",
+                          "fontSize": 14,
+                          "fontFamily": "Inter",
+                          "fontWeight": "600",
+                          "fill": "#ffffff"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "ck-section-checkbox",
+          "name": "Checkbox Section",
+          "x": 0,
+          "y": 0,
+          "width": 1680,
+          "height": 80,
+          "layout": {
+            "autoLayout": true,
+            "flexDirection": "column",
+            "gap": 16,
+            "alignItems": "flex-start"
+          },
+          "children": [
+            {
+              "type": "text",
+              "id": "ck-label-checkbox",
+              "name": "Section Label",
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 24,
+              "text": "Checkbox",
+              "fontSize": 14,
+              "fontFamily": "Inter",
+              "fontWeight": "500",
+              "fill": "#718096",
+              "fillBinding": {
+                "variableId": "ck_gray_500"
+              }
+            },
+            {
+              "type": "frame",
+              "id": "ck-checkbox-row",
+              "name": "Checkboxes Row",
+              "x": 0,
+              "y": 0,
+              "width": 600,
+              "height": 24,
+              "layout": {
+                "autoLayout": true,
+                "flexDirection": "row",
+                "gap": 32,
+                "alignItems": "center"
+              },
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ck-checkbox-unchecked",
+                  "name": "Checkbox/Unchecked",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 180,
+                  "height": 20,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "gap": 8,
+                    "alignItems": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "rect",
+                      "id": "ck-checkbox-unchecked-box",
+                      "name": "Box",
+                      "x": 0,
+                      "y": 0,
+                      "width": 18,
+                      "height": 18,
+                      "fill": "#ffffff",
+                      "fillBinding": {
+                        "variableId": "ck_bg"
+                      },
+                      "stroke": "#CBD5E0",
+                      "strokeWidth": 2,
+                      "strokeAlign": "inside",
+                      "strokeBinding": {
+                        "variableId": "ck_gray_300"
+                      },
+                      "cornerRadius": 4
+                    },
+                    {
+                      "type": "text",
+                      "id": "ck-checkbox-unchecked-label",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 140,
+                      "height": 20,
+                      "text": "Accept terms",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "400",
+                      "fill": "#1A202C",
+                      "fillBinding": {
+                        "variableId": "ck_fg"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-checkbox-checked",
+                  "name": "Checkbox/Checked",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 180,
+                  "height": 20,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "gap": 8,
+                    "alignItems": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "rect",
+                      "id": "ck-checkbox-checked-box",
+                      "name": "Box",
+                      "x": 0,
+                      "y": 0,
+                      "width": 18,
+                      "height": 18,
+                      "fill": "#3182CE",
+                      "fillBinding": {
+                        "variableId": "ck_blue_500"
+                      },
+                      "cornerRadius": 4
+                    },
+                    {
+                      "type": "text",
+                      "id": "ck-checkbox-checked-label",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 140,
+                      "height": 20,
+                      "text": "Remember me",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "400",
+                      "fill": "#1A202C",
+                      "fillBinding": {
+                        "variableId": "ck_fg"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "ck-section-select",
+          "name": "Select Section",
+          "x": 0,
+          "y": 0,
+          "width": 1680,
+          "height": 100,
+          "layout": {
+            "autoLayout": true,
+            "flexDirection": "column",
+            "gap": 16,
+            "alignItems": "flex-start"
+          },
+          "children": [
+            {
+              "type": "text",
+              "id": "ck-label-select",
+              "name": "Section Label",
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 24,
+              "text": "Select",
+              "fontSize": 14,
+              "fontFamily": "Inter",
+              "fontWeight": "500",
+              "fill": "#718096",
+              "fillBinding": {
+                "variableId": "ck_gray_500"
+              }
+            },
+            {
+              "type": "frame",
+              "id": "ck-select-default",
+              "name": "Select",
+              "reusable": true,
+              "x": 0,
+              "y": 0,
+              "width": 300,
+              "height": 40,
+              "fill": "#ffffff",
+              "fillBinding": {
+                "variableId": "ck_bg"
+              },
+              "stroke": "#E2E8F0",
+              "strokeWidth": 1,
+              "strokeAlign": "inside",
+              "strokeBinding": {
+                "variableId": "ck_border"
+              },
+              "cornerRadius": 6,
+              "layout": {
+                "autoLayout": true,
+                "flexDirection": "row",
+                "paddingTop": 8,
+                "paddingRight": 12,
+                "paddingBottom": 8,
+                "paddingLeft": 16,
+                "alignItems": "center",
+                "justifyContent": "space-between"
+              },
+              "children": [
+                {
+                  "type": "text",
+                  "id": "ck-select-placeholder",
+                  "name": "Placeholder",
+                  "x": 0,
+                  "y": 0,
+                  "width": 220,
+                  "height": 20,
+                  "text": "Select an option",
+                  "fontSize": 14,
+                  "fontFamily": "Inter",
+                  "fontWeight": "400",
+                  "fill": "#A0AEC0"
+                },
+                {
+                  "type": "text",
+                  "id": "ck-select-chevron",
+                  "name": "Chevron",
+                  "x": 0,
+                  "y": 0,
+                  "width": 16,
+                  "height": 20,
+                  "text": "▾",
+                  "fontSize": 14,
+                  "fontFamily": "Inter",
+                  "fontWeight": "400",
+                  "fill": "#718096",
+                  "fillBinding": {
+                    "variableId": "ck_gray_500"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "ck-section-switch",
+          "name": "Switch Section",
+          "x": 0,
+          "y": 0,
+          "width": 1680,
+          "height": 80,
+          "layout": {
+            "autoLayout": true,
+            "flexDirection": "column",
+            "gap": 16,
+            "alignItems": "flex-start"
+          },
+          "children": [
+            {
+              "type": "text",
+              "id": "ck-label-switch",
+              "name": "Section Label",
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 24,
+              "text": "Switch",
+              "fontSize": 14,
+              "fontFamily": "Inter",
+              "fontWeight": "500",
+              "fill": "#718096",
+              "fillBinding": {
+                "variableId": "ck_gray_500"
+              }
+            },
+            {
+              "type": "frame",
+              "id": "ck-switch-row",
+              "name": "Switch Row",
+              "x": 0,
+              "y": 0,
+              "width": 600,
+              "height": 24,
+              "layout": {
+                "autoLayout": true,
+                "flexDirection": "row",
+                "gap": 32,
+                "alignItems": "center"
+              },
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ck-switch-off",
+                  "name": "Switch/Off",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 200,
+                  "height": 24,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "gap": 12,
+                    "alignItems": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "ck-switch-off-track",
+                      "name": "Track",
+                      "x": 0,
+                      "y": 0,
+                      "width": 44,
+                      "height": 24,
+                      "fill": "#CBD5E0",
+                      "fillBinding": {
+                        "variableId": "ck_gray_300"
+                      },
+                      "cornerRadius": 12,
+                      "clip": true,
+                      "layout": {
+                        "autoLayout": true,
+                        "flexDirection": "row",
+                        "paddingTop": 2,
+                        "paddingRight": 2,
+                        "paddingBottom": 2,
+                        "paddingLeft": 2,
+                        "alignItems": "center",
+                        "justifyContent": "flex-start"
+                      },
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "ck-switch-off-thumb",
+                          "name": "Thumb",
+                          "x": 0,
+                          "y": 0,
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#ffffff",
+                          "effect": {
+                            "type": "shadow",
+                            "shadowType": "outer",
+                            "color": "#00000026",
+                            "offset": {
+                              "x": 0,
+                              "y": 1
+                            },
+                            "blur": 2,
+                            "spread": 0
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "ck-switch-off-label",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 140,
+                      "height": 20,
+                      "text": "Notifications",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "400",
+                      "fill": "#1A202C",
+                      "fillBinding": {
+                        "variableId": "ck_fg"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-switch-on",
+                  "name": "Switch/On",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 200,
+                  "height": 24,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "gap": 12,
+                    "alignItems": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "ck-switch-on-track",
+                      "name": "Track",
+                      "x": 0,
+                      "y": 0,
+                      "width": 44,
+                      "height": 24,
+                      "fill": "#3182CE",
+                      "fillBinding": {
+                        "variableId": "ck_blue_500"
+                      },
+                      "cornerRadius": 12,
+                      "clip": true,
+                      "layout": {
+                        "autoLayout": true,
+                        "flexDirection": "row",
+                        "paddingTop": 2,
+                        "paddingRight": 2,
+                        "paddingBottom": 2,
+                        "paddingLeft": 2,
+                        "alignItems": "center",
+                        "justifyContent": "flex-end"
+                      },
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "ck-switch-on-thumb",
+                          "name": "Thumb",
+                          "x": 0,
+                          "y": 0,
+                          "width": 20,
+                          "height": 20,
+                          "fill": "#ffffff",
+                          "effect": {
+                            "type": "shadow",
+                            "shadowType": "outer",
+                            "color": "#00000026",
+                            "offset": {
+                              "x": 0,
+                              "y": 1
+                            },
+                            "blur": 2,
+                            "spread": 0
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "ck-switch-on-label",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 140,
+                      "height": 20,
+                      "text": "Dark Mode",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "400",
+                      "fill": "#1A202C",
+                      "fillBinding": {
+                        "variableId": "ck_fg"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "ck-section-avatar",
+          "name": "Avatar Section",
+          "x": 0,
+          "y": 0,
+          "width": 1680,
+          "height": 100,
+          "layout": {
+            "autoLayout": true,
+            "flexDirection": "column",
+            "gap": 16,
+            "alignItems": "flex-start"
+          },
+          "children": [
+            {
+              "type": "text",
+              "id": "ck-label-avatar",
+              "name": "Section Label",
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 24,
+              "text": "Avatar",
+              "fontSize": 14,
+              "fontFamily": "Inter",
+              "fontWeight": "500",
+              "fill": "#718096",
+              "fillBinding": {
+                "variableId": "ck_gray_500"
+              }
+            },
+            {
+              "type": "frame",
+              "id": "ck-avatar-row",
+              "name": "Avatar Row",
+              "x": 0,
+              "y": 0,
+              "width": 500,
+              "height": 56,
+              "layout": {
+                "autoLayout": true,
+                "flexDirection": "row",
+                "gap": 16,
+                "alignItems": "center"
+              },
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ck-avatar-sm",
+                  "name": "Avatar/Small",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 32,
+                  "height": 32,
+                  "fill": "#3182CE",
+                  "fillBinding": {
+                    "variableId": "ck_blue_500"
+                  },
+                  "cornerRadius": 16,
+                  "clip": true,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-avatar-sm-initials",
+                      "name": "Initials",
+                      "x": 0,
+                      "y": 0,
+                      "width": 20,
+                      "height": 16,
+                      "text": "AB",
+                      "fontSize": 12,
+                      "fontFamily": "Inter",
+                      "fontWeight": "600",
+                      "fill": "#ffffff",
+                      "textAlign": "center"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-avatar-md",
+                  "name": "Avatar/Medium",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 40,
+                  "height": 40,
+                  "fill": "#38A169",
+                  "fillBinding": {
+                    "variableId": "ck_green_500"
+                  },
+                  "cornerRadius": 20,
+                  "clip": true,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-avatar-md-initials",
+                      "name": "Initials",
+                      "x": 0,
+                      "y": 0,
+                      "width": 24,
+                      "height": 20,
+                      "text": "CN",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "600",
+                      "fill": "#ffffff",
+                      "textAlign": "center"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-avatar-lg",
+                  "name": "Avatar/Large",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 56,
+                  "height": 56,
+                  "fill": "#DD6B20",
+                  "fillBinding": {
+                    "variableId": "ck_orange_500"
+                  },
+                  "cornerRadius": 28,
+                  "clip": true,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-avatar-lg-initials",
+                      "name": "Initials",
+                      "x": 0,
+                      "y": 0,
+                      "width": 28,
+                      "height": 24,
+                      "text": "JD",
+                      "fontSize": 18,
+                      "fontFamily": "Inter",
+                      "fontWeight": "600",
+                      "fill": "#ffffff",
+                      "textAlign": "center"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-avatar-group",
+                  "name": "Avatar/Group",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 120,
+                  "height": 40,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "gap": -12,
+                    "alignItems": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "ck-avatar-g1",
+                      "name": "Avatar 1",
+                      "x": 0,
+                      "y": 0,
+                      "width": 40,
+                      "height": 40,
+                      "fill": "#3182CE",
+                      "fillBinding": {
+                        "variableId": "ck_blue_500"
+                      },
+                      "cornerRadius": 20,
+                      "stroke": "#ffffff",
+                      "strokeWidth": 2,
+                      "strokeAlign": "outside",
+                      "clip": true,
+                      "layout": {
+                        "autoLayout": true,
+                        "flexDirection": "row",
+                        "alignItems": "center",
+                        "justifyContent": "center"
+                      },
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "ck-avatar-g1-text",
+                          "name": "Initials",
+                          "x": 0,
+                          "y": 0,
+                          "width": 24,
+                          "height": 20,
+                          "text": "AB",
+                          "fontSize": 14,
+                          "fontFamily": "Inter",
+                          "fontWeight": "600",
+                          "fill": "#ffffff",
+                          "textAlign": "center"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ck-avatar-g2",
+                      "name": "Avatar 2",
+                      "x": 0,
+                      "y": 0,
+                      "width": 40,
+                      "height": 40,
+                      "fill": "#E53E3E",
+                      "fillBinding": {
+                        "variableId": "ck_red_500"
+                      },
+                      "cornerRadius": 20,
+                      "stroke": "#ffffff",
+                      "strokeWidth": 2,
+                      "strokeAlign": "outside",
+                      "clip": true,
+                      "layout": {
+                        "autoLayout": true,
+                        "flexDirection": "row",
+                        "alignItems": "center",
+                        "justifyContent": "center"
+                      },
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "ck-avatar-g2-text",
+                          "name": "Initials",
+                          "x": 0,
+                          "y": 0,
+                          "width": 24,
+                          "height": 20,
+                          "text": "CD",
+                          "fontSize": 14,
+                          "fontFamily": "Inter",
+                          "fontWeight": "600",
+                          "fill": "#ffffff",
+                          "textAlign": "center"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ck-avatar-g3",
+                      "name": "Avatar 3",
+                      "x": 0,
+                      "y": 0,
+                      "width": 40,
+                      "height": 40,
+                      "fill": "#319795",
+                      "fillBinding": {
+                        "variableId": "ck_teal_500"
+                      },
+                      "cornerRadius": 20,
+                      "stroke": "#ffffff",
+                      "strokeWidth": 2,
+                      "strokeAlign": "outside",
+                      "clip": true,
+                      "layout": {
+                        "autoLayout": true,
+                        "flexDirection": "row",
+                        "alignItems": "center",
+                        "justifyContent": "center"
+                      },
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "ck-avatar-g3-text",
+                          "name": "Initials",
+                          "x": 0,
+                          "y": 0,
+                          "width": 24,
+                          "height": 20,
+                          "text": "EF",
+                          "fontSize": 14,
+                          "fontFamily": "Inter",
+                          "fontWeight": "600",
+                          "fill": "#ffffff",
+                          "textAlign": "center"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "ck-section-alert",
+          "name": "Alert Section",
+          "x": 0,
+          "y": 0,
+          "width": 1680,
+          "height": 400,
+          "layout": {
+            "autoLayout": true,
+            "flexDirection": "column",
+            "gap": 16,
+            "alignItems": "flex-start"
+          },
+          "children": [
+            {
+              "type": "text",
+              "id": "ck-label-alert",
+              "name": "Section Label",
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 24,
+              "text": "Alert",
+              "fontSize": 14,
+              "fontFamily": "Inter",
+              "fontWeight": "500",
+              "fill": "#718096",
+              "fillBinding": {
+                "variableId": "ck_gray_500"
+              }
+            },
+            {
+              "type": "frame",
+              "id": "ck-alert-info",
+              "name": "Alert/Info",
+              "reusable": true,
+              "x": 0,
+              "y": 0,
+              "width": 450,
+              "height": 80,
+              "fill": "#EBF8FF",
+              "fillBinding": {
+                "variableId": "ck_blue_50"
+              },
+              "cornerRadius": 8,
+              "layout": {
+                "autoLayout": true,
+                "flexDirection": "row",
+                "gap": 12,
+                "paddingTop": 16,
+                "paddingRight": 16,
+                "paddingBottom": 16,
+                "paddingLeft": 16,
+                "alignItems": "flex-start"
+              },
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ck-alert-info-icon",
+                  "name": "Icon",
+                  "x": 0,
+                  "y": 0,
+                  "width": 20,
+                  "height": 20,
+                  "fill": "#3182CE",
+                  "fillBinding": {
+                    "variableId": "ck_blue_500"
+                  },
+                  "cornerRadius": 10,
+                  "children": []
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-alert-info-content",
+                  "name": "Content",
+                  "x": 0,
+                  "y": 0,
+                  "width": 380,
+                  "height": 48,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "column",
+                    "gap": 4,
+                    "alignItems": "flex-start"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-alert-info-title",
+                      "name": "Title",
+                      "x": 0,
+                      "y": 0,
+                      "width": 380,
+                      "height": 20,
+                      "text": "Information",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "700",
+                      "fill": "#3182CE",
+                      "fillBinding": {
+                        "variableId": "ck_blue_500"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "ck-alert-info-desc",
+                      "name": "Description",
+                      "x": 0,
+                      "y": 0,
+                      "width": 380,
+                      "height": 20,
+                      "text": "Your account has been updated successfully.",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "400",
+                      "fill": "#2B6CB0",
+                      "fillBinding": {
+                        "variableId": "ck_blue_600"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "ck-alert-success",
+              "name": "Alert/Success",
+              "reusable": true,
+              "x": 0,
+              "y": 0,
+              "width": 450,
+              "height": 80,
+              "fill": "#F0FFF4",
+              "fillBinding": {
+                "variableId": "ck_green_50"
+              },
+              "cornerRadius": 8,
+              "layout": {
+                "autoLayout": true,
+                "flexDirection": "row",
+                "gap": 12,
+                "paddingTop": 16,
+                "paddingRight": 16,
+                "paddingBottom": 16,
+                "paddingLeft": 16,
+                "alignItems": "flex-start"
+              },
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ck-alert-success-icon",
+                  "name": "Icon",
+                  "x": 0,
+                  "y": 0,
+                  "width": 20,
+                  "height": 20,
+                  "fill": "#38A169",
+                  "fillBinding": {
+                    "variableId": "ck_green_500"
+                  },
+                  "cornerRadius": 10,
+                  "children": []
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-alert-success-content",
+                  "name": "Content",
+                  "x": 0,
+                  "y": 0,
+                  "width": 380,
+                  "height": 48,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "column",
+                    "gap": 4,
+                    "alignItems": "flex-start"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-alert-success-title",
+                      "name": "Title",
+                      "x": 0,
+                      "y": 0,
+                      "width": 380,
+                      "height": 20,
+                      "text": "Success",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "700",
+                      "fill": "#38A169",
+                      "fillBinding": {
+                        "variableId": "ck_green_500"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "ck-alert-success-desc",
+                      "name": "Description",
+                      "x": 0,
+                      "y": 0,
+                      "width": 380,
+                      "height": 20,
+                      "text": "Your changes have been saved.",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "400",
+                      "fill": "#2F855A"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "ck-alert-warning",
+              "name": "Alert/Warning",
+              "reusable": true,
+              "x": 0,
+              "y": 0,
+              "width": 450,
+              "height": 80,
+              "fill": "#FFFAF0",
+              "fillBinding": {
+                "variableId": "ck_orange_50"
+              },
+              "cornerRadius": 8,
+              "layout": {
+                "autoLayout": true,
+                "flexDirection": "row",
+                "gap": 12,
+                "paddingTop": 16,
+                "paddingRight": 16,
+                "paddingBottom": 16,
+                "paddingLeft": 16,
+                "alignItems": "flex-start"
+              },
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ck-alert-warning-icon",
+                  "name": "Icon",
+                  "x": 0,
+                  "y": 0,
+                  "width": 20,
+                  "height": 20,
+                  "fill": "#DD6B20",
+                  "fillBinding": {
+                    "variableId": "ck_orange_500"
+                  },
+                  "cornerRadius": 10,
+                  "children": []
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-alert-warning-content",
+                  "name": "Content",
+                  "x": 0,
+                  "y": 0,
+                  "width": 380,
+                  "height": 48,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "column",
+                    "gap": 4,
+                    "alignItems": "flex-start"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-alert-warning-title",
+                      "name": "Title",
+                      "x": 0,
+                      "y": 0,
+                      "width": 380,
+                      "height": 20,
+                      "text": "Warning",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "700",
+                      "fill": "#DD6B20",
+                      "fillBinding": {
+                        "variableId": "ck_orange_500"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "ck-alert-warning-desc",
+                      "name": "Description",
+                      "x": 0,
+                      "y": 0,
+                      "width": 380,
+                      "height": 20,
+                      "text": "Your storage is almost full.",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "400",
+                      "fill": "#C05621"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "ck-alert-error",
+              "name": "Alert/Error",
+              "reusable": true,
+              "x": 0,
+              "y": 0,
+              "width": 450,
+              "height": 80,
+              "fill": "#FFF5F5",
+              "fillBinding": {
+                "variableId": "ck_red_50"
+              },
+              "cornerRadius": 8,
+              "layout": {
+                "autoLayout": true,
+                "flexDirection": "row",
+                "gap": 12,
+                "paddingTop": 16,
+                "paddingRight": 16,
+                "paddingBottom": 16,
+                "paddingLeft": 16,
+                "alignItems": "flex-start"
+              },
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ck-alert-error-icon",
+                  "name": "Icon",
+                  "x": 0,
+                  "y": 0,
+                  "width": 20,
+                  "height": 20,
+                  "fill": "#E53E3E",
+                  "fillBinding": {
+                    "variableId": "ck_red_500"
+                  },
+                  "cornerRadius": 10,
+                  "children": []
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-alert-error-content",
+                  "name": "Content",
+                  "x": 0,
+                  "y": 0,
+                  "width": 380,
+                  "height": 48,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "column",
+                    "gap": 4,
+                    "alignItems": "flex-start"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-alert-error-title",
+                      "name": "Title",
+                      "x": 0,
+                      "y": 0,
+                      "width": 380,
+                      "height": 20,
+                      "text": "Error",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "700",
+                      "fill": "#E53E3E",
+                      "fillBinding": {
+                        "variableId": "ck_red_500"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "ck-alert-error-desc",
+                      "name": "Description",
+                      "x": 0,
+                      "y": 0,
+                      "width": 380,
+                      "height": 20,
+                      "text": "Session expired. Please log in again.",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "400",
+                      "fill": "#C53030"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "ck-section-separator",
+          "name": "Separator Section",
+          "x": 0,
+          "y": 0,
+          "width": 1680,
+          "height": 80,
+          "layout": {
+            "autoLayout": true,
+            "flexDirection": "column",
+            "gap": 16,
+            "alignItems": "flex-start"
+          },
+          "children": [
+            {
+              "type": "text",
+              "id": "ck-label-separator",
+              "name": "Section Label",
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 24,
+              "text": "Separator",
+              "fontSize": 14,
+              "fontFamily": "Inter",
+              "fontWeight": "500",
+              "fill": "#718096",
+              "fillBinding": {
+                "variableId": "ck_gray_500"
+              }
+            },
+            {
+              "type": "frame",
+              "id": "ck-separator-row",
+              "name": "Separator Row",
+              "x": 0,
+              "y": 0,
+              "width": 500,
+              "height": 40,
+              "layout": {
+                "autoLayout": true,
+                "flexDirection": "row",
+                "gap": 32,
+                "alignItems": "center"
+              },
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ck-separator-h",
+                  "name": "Separator/Horizontal",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 320,
+                  "height": 1,
+                  "fill": "#E2E8F0",
+                  "fillBinding": {
+                    "variableId": "ck_border"
+                  },
+                  "children": []
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-separator-v",
+                  "name": "Separator/Vertical",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 40,
+                  "fill": "#E2E8F0",
+                  "fillBinding": {
+                    "variableId": "ck_border"
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "ck-section-spinner",
+          "name": "Spinner Section",
+          "x": 0,
+          "y": 0,
+          "width": 1680,
+          "height": 100,
+          "layout": {
+            "autoLayout": true,
+            "flexDirection": "column",
+            "gap": 16,
+            "alignItems": "flex-start"
+          },
+          "children": [
+            {
+              "type": "text",
+              "id": "ck-label-spinner",
+              "name": "Section Label",
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 24,
+              "text": "Spinner",
+              "fontSize": 14,
+              "fontFamily": "Inter",
+              "fontWeight": "500",
+              "fill": "#718096",
+              "fillBinding": {
+                "variableId": "ck_gray_500"
+              }
+            },
+            {
+              "type": "frame",
+              "id": "ck-spinner-row",
+              "name": "Spinner Row",
+              "x": 0,
+              "y": 0,
+              "width": 400,
+              "height": 48,
+              "layout": {
+                "autoLayout": true,
+                "flexDirection": "row",
+                "gap": 24,
+                "alignItems": "center"
+              },
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ck-spinner-sm",
+                  "name": "Spinner/Small",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 24,
+                  "height": 24,
+                  "cornerRadius": 12,
+                  "stroke": "#E2E8F0",
+                  "strokeWidth": 3,
+                  "strokeAlign": "inside",
+                  "strokeBinding": {
+                    "variableId": "ck_gray_200"
+                  },
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "ck-spinner-sm-arc",
+                      "name": "Arc",
+                      "x": 0,
+                      "y": 0,
+                      "width": 24,
+                      "height": 24,
+                      "stroke": "#3182CE",
+                      "strokeWidth": 3,
+                      "strokeBinding": {
+                        "variableId": "ck_blue_500"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-spinner-md",
+                  "name": "Spinner/Medium",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 36,
+                  "height": 36,
+                  "cornerRadius": 18,
+                  "stroke": "#E2E8F0",
+                  "strokeWidth": 3,
+                  "strokeAlign": "inside",
+                  "strokeBinding": {
+                    "variableId": "ck_gray_200"
+                  },
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "ck-spinner-md-arc",
+                      "name": "Arc",
+                      "x": 0,
+                      "y": 0,
+                      "width": 36,
+                      "height": 36,
+                      "stroke": "#3182CE",
+                      "strokeWidth": 3,
+                      "strokeBinding": {
+                        "variableId": "ck_blue_500"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-spinner-lg",
+                  "name": "Spinner/Large",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 48,
+                  "height": 48,
+                  "cornerRadius": 24,
+                  "stroke": "#E2E8F0",
+                  "strokeWidth": 4,
+                  "strokeAlign": "inside",
+                  "strokeBinding": {
+                    "variableId": "ck_gray_200"
+                  },
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "ck-spinner-lg-arc",
+                      "name": "Arc",
+                      "x": 0,
+                      "y": 0,
+                      "width": 48,
+                      "height": 48,
+                      "stroke": "#3182CE",
+                      "strokeWidth": 4,
+                      "strokeBinding": {
+                        "variableId": "ck_blue_500"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "ck-section-tag",
+          "name": "Tag Section",
+          "x": 0,
+          "y": 0,
+          "width": 1680,
+          "height": 80,
+          "layout": {
+            "autoLayout": true,
+            "flexDirection": "column",
+            "gap": 16,
+            "alignItems": "flex-start"
+          },
+          "children": [
+            {
+              "type": "text",
+              "id": "ck-label-tag",
+              "name": "Section Label",
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 24,
+              "text": "Tag",
+              "fontSize": 14,
+              "fontFamily": "Inter",
+              "fontWeight": "500",
+              "fill": "#718096",
+              "fillBinding": {
+                "variableId": "ck_gray_500"
+              }
+            },
+            {
+              "type": "frame",
+              "id": "ck-tags-row",
+              "name": "Tags Row",
+              "x": 0,
+              "y": 0,
+              "width": 800,
+              "height": 28,
+              "layout": {
+                "autoLayout": true,
+                "flexDirection": "row",
+                "gap": 12,
+                "alignItems": "center"
+              },
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ck-tag-blue",
+                  "name": "Tag/Blue",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 100,
+                  "height": 28,
+                  "fill": "#EBF8FF",
+                  "fillBinding": {
+                    "variableId": "ck_blue_50"
+                  },
+                  "cornerRadius": 14,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "gap": 6,
+                    "paddingTop": 4,
+                    "paddingRight": 10,
+                    "paddingBottom": 4,
+                    "paddingLeft": 10,
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-tag-blue-text",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 50,
+                      "height": 18,
+                      "text": "React",
+                      "fontSize": 12,
+                      "fontFamily": "Inter",
+                      "fontWeight": "600",
+                      "fill": "#3182CE",
+                      "fillBinding": {
+                        "variableId": "ck_blue_500"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "ck-tag-blue-close",
+                      "name": "Close",
+                      "x": 0,
+                      "y": 0,
+                      "width": 14,
+                      "height": 18,
+                      "text": "×",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "400",
+                      "fill": "#3182CE",
+                      "fillBinding": {
+                        "variableId": "ck_blue_500"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-tag-green",
+                  "name": "Tag/Green",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 110,
+                  "height": 28,
+                  "fill": "#F0FFF4",
+                  "fillBinding": {
+                    "variableId": "ck_green_50"
+                  },
+                  "cornerRadius": 14,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "gap": 6,
+                    "paddingTop": 4,
+                    "paddingRight": 10,
+                    "paddingBottom": 4,
+                    "paddingLeft": 10,
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-tag-green-text",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 60,
+                      "height": 18,
+                      "text": "Chakra",
+                      "fontSize": 12,
+                      "fontFamily": "Inter",
+                      "fontWeight": "600",
+                      "fill": "#38A169",
+                      "fillBinding": {
+                        "variableId": "ck_green_500"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "ck-tag-green-close",
+                      "name": "Close",
+                      "x": 0,
+                      "y": 0,
+                      "width": 14,
+                      "height": 18,
+                      "text": "×",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "400",
+                      "fill": "#38A169",
+                      "fillBinding": {
+                        "variableId": "ck_green_500"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-tag-red",
+                  "name": "Tag/Red",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 100,
+                  "height": 28,
+                  "fill": "#FFF5F5",
+                  "fillBinding": {
+                    "variableId": "ck_red_50"
+                  },
+                  "cornerRadius": 14,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "gap": 6,
+                    "paddingTop": 4,
+                    "paddingRight": 10,
+                    "paddingBottom": 4,
+                    "paddingLeft": 10,
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-tag-red-text",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 50,
+                      "height": 18,
+                      "text": "Urgent",
+                      "fontSize": 12,
+                      "fontFamily": "Inter",
+                      "fontWeight": "600",
+                      "fill": "#E53E3E",
+                      "fillBinding": {
+                        "variableId": "ck_red_500"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "ck-tag-red-close",
+                      "name": "Close",
+                      "x": 0,
+                      "y": 0,
+                      "width": 14,
+                      "height": 18,
+                      "text": "×",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "400",
+                      "fill": "#E53E3E",
+                      "fillBinding": {
+                        "variableId": "ck_red_500"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ck-tag-gray",
+                  "name": "Tag/Gray",
+                  "reusable": true,
+                  "x": 0,
+                  "y": 0,
+                  "width": 100,
+                  "height": 28,
+                  "fill": "#EDF2F7",
+                  "fillBinding": {
+                    "variableId": "ck_gray_100"
+                  },
+                  "cornerRadius": 14,
+                  "layout": {
+                    "autoLayout": true,
+                    "flexDirection": "row",
+                    "gap": 6,
+                    "paddingTop": 4,
+                    "paddingRight": 10,
+                    "paddingBottom": 4,
+                    "paddingLeft": 10,
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                  },
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ck-tag-gray-text",
+                      "name": "Label",
+                      "x": 0,
+                      "y": 0,
+                      "width": 50,
+                      "height": 18,
+                      "text": "Default",
+                      "fontSize": 12,
+                      "fontFamily": "Inter",
+                      "fontWeight": "600",
+                      "fill": "#4A5568",
+                      "fillBinding": {
+                        "variableId": "ck_gray_600"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "ck-tag-gray-close",
+                      "name": "Close",
+                      "x": 0,
+                      "y": 0,
+                      "width": 14,
+                      "height": 18,
+                      "text": "×",
+                      "fontSize": 14,
+                      "fontFamily": "Inter",
+                      "fontWeight": "400",
+                      "fill": "#4A5568",
+                      "fillBinding": {
+                        "variableId": "ck_gray_600"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
