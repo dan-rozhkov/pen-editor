@@ -95,7 +95,7 @@ export function PrimitivesPanel() {
               className={`${toolButtonBaseClass} ${
                 isActive
                   ? "bg-[#0d99ff] text-white hover:bg-[#0d99ff] hover:text-white"
-                  : "text-text-primary hover:text-text-primary hover:bg-surface-elevated"
+                  : "text-text-primary hover:text-text-primary hover:bg-surface-hover dark:hover:bg-surface-hover"
               }`}
             >
               <Icon size={40} className="size-6" weight="light" />
@@ -113,7 +113,7 @@ export function PrimitivesPanel() {
               className={`${toolButtonBaseClass} ${
                 isRectangleActive
                   ? "bg-[#0d99ff] text-white hover:bg-[#0d99ff] hover:text-white"
-                  : "text-text-primary hover:text-text-primary hover:bg-surface-elevated"
+                  : "text-text-primary hover:text-text-primary hover:bg-surface-hover dark:hover:bg-surface-hover"
               }`}
             >
               <SquareIcon size={40} className="size-6" weight="light" />
@@ -127,7 +127,7 @@ export function PrimitivesPanel() {
                 className={`${toolButtonBaseClass} w-6 justify-center ${
                   isRectSubToolActive
                     ? "bg-[#0d99ff] text-white hover:bg-[#0d99ff] hover:text-white"
-                    : "text-text-primary hover:text-text-primary hover:bg-surface-elevated"
+                    : "text-text-primary hover:text-text-primary hover:bg-surface-hover dark:hover:bg-surface-hover"
                 }`}
               >
                 <CaretDownIcon size={12} className="size-3" weight="bold" />
@@ -169,7 +169,7 @@ export function PrimitivesPanel() {
               className={`${toolButtonBaseClass} ${
                 isActive
                   ? "bg-[#0d99ff] text-white hover:bg-[#0d99ff] hover:text-white"
-                  : "text-text-primary hover:text-text-primary hover:bg-surface-elevated"
+                  : "text-text-primary hover:text-text-primary hover:bg-surface-hover dark:hover:bg-surface-hover"
               }`}
             >
               <Icon size={40} className="size-6" weight="light" />
@@ -187,7 +187,7 @@ export function PrimitivesPanel() {
           className={`${toolButtonBaseClass} ${
             isChatOpen
               ? "bg-[#0d99ff] text-white hover:bg-[#0d99ff] hover:text-white"
-              : "text-text-primary hover:text-text-primary hover:bg-surface-elevated"
+              : "text-text-primary hover:text-text-primary hover:bg-surface-hover dark:hover:bg-surface-hover"
           }`}
         >
           <SparkleIcon size={40} className="size-6" weight="light" />
