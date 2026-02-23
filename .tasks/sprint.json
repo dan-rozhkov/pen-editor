@@ -58,5 +58,9 @@
   {
     "name": "component-instance-update-performance",
     "passed": true
+  },
+  {
+    "name": "node-size-badge-fill-fit-label",
+    "passed": true
   }
 ]

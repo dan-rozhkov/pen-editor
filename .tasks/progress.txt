@@ -78,3 +78,10 @@
   - pixiSync: track rebuilt instance IDs during component-driven ref rebuild
   - include rebuilt instance IDs into auto-layout dirty set so parent auto-layout recomputes positions
   - Tested: npm run build passes
+
+2026-02-23: node-size-badge-fill-fit-label — Show Fill/Fit labels in node size badge.
+  - Modified drawSizeLabel() in SelectionOverlay.ts to accept widthMode/heightMode params
+  - Single selection: reads sizing mode from the selected node
+  - Multi-select: shows label only when all nodes share the same non-fixed mode
+  - Instance descendant selection: resolves sizing from prepared descendant node
+  - Tested in browser: Fill label on fill_container, Fit label on fit_content, no label on fixed, mixed multi-select hides labels
