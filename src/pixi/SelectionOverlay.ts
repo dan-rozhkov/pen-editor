@@ -347,8 +347,19 @@ export function createSelectionOverlay(
         handlesContainer.addChild(handle);
       }
 
-      // Draw size label for descendant
-      drawSizeLabel(minX + width / 2, minY + height, width, height, scale, true);
+      // Draw size label for descendant — resolve sizing mode from descendant node
+      let descWidthMode: string | undefined;
+      let descHeightMode: string | undefined;
+      if (rectEntries.length === 1) {
+        const descNode = descendantPath
+          ? findDescendantByPath(prepared.layoutChildren, descendantPath)
+          : findNodeById(prepared.layoutChildren, rectEntries[0].id);
+        if (descNode) {
+          descWidthMode = (descNode as unknown as { sizing?: { widthMode?: string; heightMode?: string } }).sizing?.widthMode;
+          descHeightMode = (descNode as unknown as { sizing?: { widthMode?: string; heightMode?: string } }).sizing?.heightMode;
+        }
+      }
+      drawSizeLabel(minX + width / 2, minY + height, width, height, scale, true, descWidthMode, descHeightMode);
       return;
     }
 
@@ -444,6 +455,37 @@ export function createSelectionOverlay(
       // Draw size label below the selection bounding box
       if (totalW > 0 && totalH > 0) {
         const isComp = selectedIds.some((id) => isComponentOrInstance(id));
+
+        // Compute sizing modes for the badge label
+        let badgeWidthMode: string | undefined;
+        let badgeHeightMode: string | undefined;
+        if (selectedIds.length === 1) {
+          const singleNode = state.nodesById[selectedIds[0]];
+          if (singleNode) {
+            badgeWidthMode = singleNode.sizing?.widthMode;
+            badgeHeightMode = singleNode.sizing?.heightMode;
+          }
+        } else {
+          // Multi-select: show mode only if all selected nodes share the same mode
+          const widthModes = new Set<string | undefined>();
+          const heightModes = new Set<string | undefined>();
+          for (const id of selectedIds) {
+            const n = state.nodesById[id];
+            if (n) {
+              widthModes.add(n.sizing?.widthMode ?? "fixed");
+              heightModes.add(n.sizing?.heightMode ?? "fixed");
+            }
+          }
+          if (widthModes.size === 1) {
+            const mode = [...widthModes][0];
+            if (mode !== "fixed") badgeWidthMode = mode;
+          }
+          if (heightModes.size === 1) {
+            const mode = [...heightModes][0];
+            if (mode !== "fixed") badgeHeightMode = mode;
+          }
+        }
+
         drawSizeLabel(
           minX + totalW / 2,
           maxY,
@@ -451,6 +493,8 @@ export function createSelectionOverlay(
           totalH,
           scale,
           isComp,
+          badgeWidthMode,
+          badgeHeightMode,
         );
       }
     }
@@ -463,9 +507,13 @@ export function createSelectionOverlay(
     height: number,
     scale: number,
     isComponent: boolean,
+    widthMode?: string,
+    heightMode?: string,
   ): void {
     const worldOffsetY = SIZE_LABEL_OFFSET_Y / scale;
-    const displayText = `${Math.round(width)} × ${Math.round(height)}`;
+    const widthLabel = widthMode === "fill_container" ? " Fill" : widthMode === "fit_content" ? " Fit" : "";
+    const heightLabel = heightMode === "fill_container" ? " Fill" : heightMode === "fit_content" ? " Fit" : "";
+    const displayText = `${Math.round(width)}${widthLabel} × ${Math.round(height)}${heightLabel}`;
 
     const text = new Text({ text: displayText, style: SIZE_LABEL_STYLE });
     const textWidth = text.width;

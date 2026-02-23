@@ -65,6 +65,6 @@
   },
   {
     "name": "node-size-badge-fill-fit-label",
-    "passed": false
+    "passed": true
   }
 ]
