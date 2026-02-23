@@ -84,3 +84,10 @@
   - PrimitivesPanel: changed toolbar buttons from hover:bg-surface-elevated to hover:bg-surface-hover with dark: variant override
   - Root cause: ghost button variant's dark:hover:bg-muted/50 was overriding hover:bg-surface-elevated due to specificity
   - Tested in browser: verified hover bg computes to rgb(74,74,74) on all toolbar buttons in dark mode, light theme unaffected
+
+2026-02-23: node-size-badge-fill-fit-label — Show Fill/Fit labels in node size badge.
+  - Modified drawSizeLabel() in SelectionOverlay.ts to accept widthMode/heightMode params
+  - Single selection: reads sizing mode from the selected node
+  - Multi-select: shows label only when all nodes share the same non-fixed mode
+  - Instance descendant selection: resolves sizing from prepared descendant node
+  - Tested in browser: Fill label on fill_container, Fit label on fit_content, no label on fixed, mixed multi-select hides labels
