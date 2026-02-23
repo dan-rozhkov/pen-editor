@@ -27,6 +27,7 @@ export function resolveVariableValue(
     const variable = variables.find((v) => {
       const normalizedVarName = normalizeVariableRefName(v.name)
       return (
+        v.id === refName ||
         v.name === directValue ||
         v.name === refName ||
         normalizedVarName === refName

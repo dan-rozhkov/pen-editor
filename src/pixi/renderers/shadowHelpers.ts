@@ -3,7 +3,16 @@ import type { ShadowEffect } from "@/types/scene";
 import { parseHexAlpha } from "@/utils/shadowUtils";
 import { parseColor } from "./colorHelpers";
 
-export function applyShadow(container: Container, effect: ShadowEffect | undefined, width: number, height: number): void {
+export type ShadowShape = "rect" | "ellipse";
+
+export function applyShadow(
+  container: Container,
+  effect: ShadowEffect | undefined,
+  width: number,
+  height: number,
+  cornerRadius?: number,
+  shape: ShadowShape = "rect",
+): void {
   // Remove existing shadow layer
   const existing = container.getChildByLabel("shadow-layer");
   if (existing) {
@@ -21,7 +30,19 @@ export function applyShadow(container: Container, effect: ShadowEffect | undefin
   shadowContainer.position.set(effect.offset.x, effect.offset.y);
 
   const shadowGfx = new Graphics();
-  shadowGfx.rect(0, 0, width, height);
+  if (shape === "ellipse") {
+    shadowGfx.ellipse(width / 2, height / 2, width / 2, height / 2);
+  } else {
+    const radius = Math.max(
+      0,
+      Math.min(cornerRadius ?? 0, width / 2, height / 2),
+    );
+    if (radius > 0) {
+      shadowGfx.roundRect(0, 0, width, height, radius);
+    } else {
+      shadowGfx.rect(0, 0, width, height);
+    }
+  }
   shadowGfx.fill({ color: parseColor(hexColor), alpha: opacity });
   shadowContainer.addChild(shadowGfx);
 

@@ -21,6 +21,31 @@ import { createPathContainer, updatePathContainer } from "./pathRenderer";
 import { createFrameContainer, updateFrameContainer, drawFrameBackground } from "./frameRenderer";
 import { createGroupContainer } from "./groupRenderer";
 import { createRefContainer, updateRefContainer } from "./refRenderer";
+import type { ShadowShape } from "./shadowHelpers";
+
+function getNodeCornerRadius(node: FlatSceneNode): number | undefined {
+  if (node.type === "frame" || node.type === "rect") {
+    return node.cornerRadius;
+  }
+  return undefined;
+}
+
+function getNodeShadowShape(node: FlatSceneNode): ShadowShape {
+  if (node.type === "ellipse") return "ellipse";
+  return "rect";
+}
+
+function getNodeShadowSize(node: FlatSceneNode, container: Container): { width: number; height: number } {
+  if (node.type === "frame") {
+    const effectiveWidth = (container as unknown as { _effectiveWidth?: number })._effectiveWidth;
+    const effectiveHeight = (container as unknown as { _effectiveHeight?: number })._effectiveHeight;
+    return {
+      width: effectiveWidth ?? node.width,
+      height: effectiveHeight ?? node.height,
+    };
+  }
+  return { width: node.width, height: node.height };
+}
 
 /**
  * Create a PixiJS Container for a given flat scene node.
@@ -98,7 +123,15 @@ export function createNodeContainer(
   }
 
   // Shadow
-  applyShadow(container, node.effect, node.width, node.height);
+  const initialShadowSize = getNodeShadowSize(node, container);
+  applyShadow(
+    container,
+    node.effect,
+    initialShadowSize.width,
+    initialShadowSize.height,
+    getNodeCornerRadius(node),
+    getNodeShadowShape(node),
+  );
 
   return container;
 }
@@ -140,11 +173,6 @@ export function updateNodeContainer(
     container.scale.set(node.flipX ? -1 : 1, node.flipY ? -1 : 1);
     container.pivot.x = node.flipX ? node.width : 0;
     container.pivot.y = node.flipY ? node.height : 0;
-  }
-
-  // Shadow
-  if (node.effect !== prev.effect || node.width !== prev.width || node.height !== prev.height) {
-    applyShadow(container, node.effect, node.width, node.height);
   }
 
   // Type-specific updates
@@ -198,6 +226,26 @@ export function updateNodeContainer(
       );
       break;
   }
+
+  // Shadow (after type-specific updates so frame effective size stays in sync)
+  if (
+    node.effect !== prev.effect ||
+    node.width !== prev.width ||
+    node.height !== prev.height ||
+    (node.type === "frame" && (node.sizing !== (prev as FlatFrameNode).sizing || node.layout !== (prev as FlatFrameNode).layout)) ||
+    (node.type === "frame" && node.cornerRadius !== (prev as FlatFrameNode).cornerRadius) ||
+    (node.type === "rect" && node.cornerRadius !== (prev as RectNode).cornerRadius)
+  ) {
+    const shadowSize = getNodeShadowSize(node, container);
+    applyShadow(
+      container,
+      node.effect,
+      shadowSize.width,
+      shadowSize.height,
+      getNodeCornerRadius(node),
+      getNodeShadowShape(node),
+    );
+  }
 }
 
 /**
@@ -222,6 +270,14 @@ export function applyLayoutSize(
         gfx.clear();
         drawRect(gfx, { ...node, width: layoutWidth, height: layoutHeight } as RectNode);
       }
+      const shadowRectNode = { ...node, width: layoutWidth, height: layoutHeight } as RectNode;
+      applyShadow(
+        container,
+        shadowRectNode.effect,
+        layoutWidth,
+        layoutHeight,
+        shadowRectNode.cornerRadius,
+      );
       break;
     }
     case "ellipse": {
@@ -230,6 +286,15 @@ export function applyLayoutSize(
         gfx.clear();
         drawEllipse(gfx, { ...node, width: layoutWidth, height: layoutHeight } as EllipseNode);
       }
+      const shadowEllipseNode = { ...node, width: layoutWidth, height: layoutHeight } as EllipseNode;
+      applyShadow(
+        container,
+        shadowEllipseNode.effect,
+        layoutWidth,
+        layoutHeight,
+        undefined,
+        "ellipse",
+      );
       break;
     }
     case "frame": {
@@ -250,6 +315,13 @@ export function applyLayoutSize(
         }
         mask.fill(0xffffff);
       }
+      applyShadow(
+        container,
+        (node as FlatFrameNode).effect,
+        layoutWidth,
+        layoutHeight,
+        (node as FlatFrameNode).cornerRadius,
+      );
       break;
     }
     case "ref": {

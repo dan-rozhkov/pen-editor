@@ -11,9 +11,13 @@ import { Button } from "@/components/ui/button";
 const MODEL_OPTIONS = [
   { value: "moonshotai/kimi-k2.5", label: "Kimi K2.5" },
   { value: "anthropic/claude-opus-4.6", label: "Claude Opus 4.6" },
+  { value: "anthropic/claude-sonnet-4.6", label: "Claude Sonnet 4.6" },
   { value: "z-ai/glm-5", label: "GLM-5" },
   { value: "minimax/minimax-m2.5", label: "Minimax M2.5" },
   { value: "qwen/qwen3.5-397b-a17b", label: "Qwen 3.5 397B" },
+  { value: "qwen/qwen3.5-plus-02-15", label: "Qwen 3.5 Plus" },
+  { value: "google/gemini-3.1-pro-preview", label: "Gemini 3.1 Pro" },
+  { value: "google/gemini-3-flash-preview", label: "Gemini 3 Flash" },
 ];
 
 function TabBar() {
@@ -130,6 +134,7 @@ export function ChatPanel() {
   const close = useChatStore((s) => s.close);
   const model = useChatStore((s) => s.model);
   const setModel = useChatStore((s) => s.setModel);
+  const tabs = useChatStore((s) => s.tabs);
   const activeTabId = useChatStore((s) => s.activeTabId);
 
   if (!isOpen) {
@@ -156,8 +161,15 @@ export function ChatPanel() {
         {/* Tab bar */}
         <TabBar />
 
-        {/* Active session */}
-        <ChatSession key={activeTabId} sessionId={activeTabId} />
+        {/* Keep all sessions mounted so tab switch doesn't reset chat state */}
+        {tabs.map((tab: ChatTab) => (
+          <div
+            key={tab.id}
+            className={tab.id === activeTabId ? "flex-1 min-h-0 flex flex-col" : "hidden"}
+          >
+            <ChatSession sessionId={tab.id} />
+          </div>
+        ))}
 
         {/* Model selector */}
         <div className="px-3 pb-2 shrink-0 w-fit">
