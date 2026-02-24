@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useSceneStore } from "../store/sceneStore";
 import { useSelectionStore } from "../store/selectionStore";
 import { useVariableStore } from "../store/variableStore";
+import { useHistoryStore } from "../store/historyStore";
 
 import { useThemeStore } from "../store/themeStore";
 import { useViewportStore } from "../store/viewportStore";
@@ -72,6 +73,18 @@ export function Toolbar() {
       setNodes(loadedNodes);
       setVariables(loadedVariables);
       setUITheme(loadedTheme);
+      // Opening a file should define a new baseline state:
+      // no undo step back to the pre-open (often empty) canvas.
+      useSelectionStore.setState({
+        selectedIds: [],
+        editingNodeId: null,
+        editingMode: null,
+        instanceContext: null,
+        selectedDescendantIds: [],
+        enteredContainerId: null,
+        lastSelectedId: null,
+      });
+      useHistoryStore.getState().clear();
       focusViewportOnNodes(loadedNodes);
     } catch (err) {
       console.error("Failed to open file:", err);

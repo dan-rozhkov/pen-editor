@@ -369,6 +369,24 @@ export interface FlatSnapshot {
   rootIds: string[]
 }
 
+/** Selection state snapshot (used by history) */
+export interface SelectionSnapshot {
+  selectedIds: string[]
+  instanceContext: {
+    instanceId: string
+    descendantId: string
+    descendantPath?: string
+  } | null
+  selectedDescendantIds: string[]
+  enteredContainerId: string | null
+  lastSelectedId: string | null
+}
+
+/** Full editor snapshot for history (scene + selection) */
+export interface HistorySnapshot extends FlatSnapshot {
+  selection: SelectionSnapshot
+}
+
 export function generateId(): string {
   return Math.random().toString(36).substring(2, 9)
 }

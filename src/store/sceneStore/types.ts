@@ -2,6 +2,7 @@ import type {
   SceneNode,
   FlatSceneNode,
   FlatSnapshot,
+  HistorySnapshot,
   DescendantOverride,
 } from "../../types/scene";
 
@@ -34,7 +35,7 @@ export interface SceneState {
   clearNodes: () => void;
   setNodes: (nodes: SceneNode[]) => void;
   setNodesWithoutHistory: (nodes: SceneNode[]) => void;
-  restoreSnapshot: (snapshot: FlatSnapshot) => void;
+  restoreSnapshot: (snapshot: FlatSnapshot | HistorySnapshot) => void;
   reorderNode: (fromIndex: number, toIndex: number) => void;
   setVisibility: (id: string, visible: boolean) => void;
   toggleVisibility: (id: string) => void;

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { isContainerNode, type FrameNode, type RefNode, type SceneNode, type FlatSnapshot } from "@/types/scene";
+import { isContainerNode, type FrameNode, type RefNode, type SceneNode, type HistorySnapshot } from "@/types/scene";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
@@ -28,12 +28,12 @@ interface CanvasKeyboardShortcutsParams {
   groupNodes: (ids: string[]) => string | null;
   ungroupNodes: (ids: string[]) => string[];
   wrapInAutoLayoutFrame: (ids: string[]) => string | null;
-  restoreSnapshot: (snapshot: FlatSnapshot) => void;
-  saveHistory: (snapshot: FlatSnapshot) => void;
+  restoreSnapshot: (snapshot: HistorySnapshot) => void;
+  saveHistory: (snapshot: HistorySnapshot) => void;
   startBatch: () => void;
   endBatch: () => void;
-  undo: (snapshot: FlatSnapshot) => FlatSnapshot | null;
-  redo: (snapshot: FlatSnapshot) => FlatSnapshot | null;
+  undo: (snapshot: HistorySnapshot) => HistorySnapshot | null;
+  redo: (snapshot: HistorySnapshot) => HistorySnapshot | null;
   fitToContent: (nodes: SceneNode[], width: number, height: number) => void;
   toggleTool: (tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon") => void;
   cancelDrawing: () => void;

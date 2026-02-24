@@ -73,12 +73,29 @@ function applyRefDefaultsFromComponent(
   const hasWidth = Object.prototype.hasOwnProperty.call(nodeData, "width");
   const hasHeight = Object.prototype.hasOwnProperty.call(nodeData, "height");
   const hasSizing = Object.prototype.hasOwnProperty.call(nodeData, "sizing");
+  const rawWidth = nodeData.width;
+  const rawHeight = nodeData.height;
+
+  const hasExplicitNumericWidth =
+    typeof rawWidth === "number" ||
+    (typeof rawWidth === "string" && /\((\d+)\)$/.test(rawWidth));
+  const hasExplicitNumericHeight =
+    typeof rawHeight === "number" ||
+    (typeof rawHeight === "string" && /\((\d+)\)$/.test(rawHeight));
+
+  // width/height shorthand strings like "fill_container" are mapped into sizing modes
+  // and should count as explicit sizing even without nodeData.sizing object.
+  const hasImplicitSizingFromDimensions =
+    (hasWidth && refNode.sizing?.widthMode !== undefined) ||
+    (hasHeight && refNode.sizing?.heightMode !== undefined);
+  const keepRefSizing = hasSizing || hasImplicitSizingFromDimensions;
 
   return {
     ...refNode,
-    width: hasWidth ? refNode.width : component.width,
-    height: hasHeight ? refNode.height : component.height,
-    sizing: hasSizing ? refNode.sizing : component.sizing,
+    // For non-numeric width/height modes (fill/fit), keep component base size.
+    width: hasWidth && hasExplicitNumericWidth ? refNode.width : component.width,
+    height: hasHeight && hasExplicitNumericHeight ? refNode.height : component.height,
+    sizing: keepRefSizing ? refNode.sizing : component.sizing,
   } as SceneNode;
 }
 

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type {
   FlatSceneNode,
   FlatSnapshot,
+  HistorySnapshot,
 } from "../../types/scene";
 import {
   isContainerNode,
@@ -10,6 +11,7 @@ import {
 } from "../../types/scene";
 import { loadGoogleFontsFromNodes, registerFontLoadCallback } from "../../utils/fontUtils";
 import { saveHistory } from "./helpers/history";
+import { useSelectionStore } from "../selectionStore";
 import { getCachedTree } from "./helpers/treeCache";
 import {
   syncTextDimensions,
@@ -20,6 +22,7 @@ import {
 import {
   insertTreeIntoFlat,
   removeNodeAndDescendants,
+  normalizeInsertedNode,
 } from "./helpers/flatStoreHelpers";
 import { createInstanceOperations } from "./instanceOperations";
 import { createComplexOperations } from "./complexOperations";
@@ -48,7 +51,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   addNode: (node) => {
     set((state) => {
       saveHistory(state);
-      const synced = node.type === "text" ? syncTextDimensions(toFlatNode(node)) : toFlatNode(node);
+      const raw = node.type === "text" ? syncTextDimensions(toFlatNode(node)) : toFlatNode(node);
+      const synced = normalizeInsertedNode(raw, state.nodesById);
       const newNodesById = { ...state.nodesById, [node.id]: synced };
       const newParentById = { ...state.parentById, [node.id]: null };
       const newChildrenById = { ...state.childrenById };
@@ -226,13 +230,37 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     });
   },
 
-  restoreSnapshot: (snapshot: FlatSnapshot) => {
+  restoreSnapshot: (snapshot: FlatSnapshot | HistorySnapshot) => {
+    const validIds = new Set(Object.keys(snapshot.nodesById));
+    const historySelection = "selection" in snapshot ? snapshot.selection : null;
     set({
       nodesById: snapshot.nodesById,
       parentById: snapshot.parentById,
       childrenById: snapshot.childrenById,
       rootIds: snapshot.rootIds,
       _cachedTree: null,
+    });
+    if (!historySelection) return;
+    useSelectionStore.setState({
+      selectedIds: historySelection.selectedIds.filter((id) => validIds.has(id)),
+      instanceContext:
+        historySelection.instanceContext &&
+        validIds.has(historySelection.instanceContext.instanceId)
+          ? historySelection.instanceContext
+          : null,
+      selectedDescendantIds: [...historySelection.selectedDescendantIds],
+      enteredContainerId:
+        historySelection.enteredContainerId &&
+        validIds.has(historySelection.enteredContainerId)
+          ? historySelection.enteredContainerId
+          : null,
+      lastSelectedId:
+        historySelection.lastSelectedId &&
+        validIds.has(historySelection.lastSelectedId)
+          ? historySelection.lastSelectedId
+          : null,
+      editingNodeId: null,
+      editingMode: null,
     });
   },
 

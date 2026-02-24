@@ -5,6 +5,15 @@ function normalizeVariableRefName(name: string): string {
   return name.trim().replace(/^\$/, '')
 }
 
+function canonicalizeVariableToken(name: string): string {
+  return name
+    .trim()
+    .replace(/^\$/, '')
+    .replace(/^--/, '')
+    .replace(/_/g, '-')
+    .toLowerCase()
+}
+
 /**
  * Resolve a generic variable value (string) from binding or use direct value
  */
@@ -24,13 +33,20 @@ export function resolveVariableValue(
   // Fallback: support direct "$varName" references even without explicit bindings.
   if (typeof directValue === 'string' && directValue.trim().startsWith('$')) {
     const refName = normalizeVariableRefName(directValue)
+    const refCanonical = canonicalizeVariableToken(directValue)
     const variable = variables.find((v) => {
       const normalizedVarName = normalizeVariableRefName(v.name)
+      const varIdCanonical = canonicalizeVariableToken(v.id)
+      const varNameCanonical = canonicalizeVariableToken(v.name)
+      const normalizedNameCanonical = canonicalizeVariableToken(normalizedVarName)
       return (
         v.id === refName ||
         v.name === directValue ||
         v.name === refName ||
-        normalizedVarName === refName
+        normalizedVarName === refName ||
+        varIdCanonical === refCanonical ||
+        varNameCanonical === refCanonical ||
+        normalizedNameCanonical === refCanonical
       )
     })
     if (variable) {

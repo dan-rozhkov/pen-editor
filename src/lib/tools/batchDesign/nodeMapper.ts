@@ -152,6 +152,14 @@ export function mapNodeData(
         break;
       }
 
+      // Stroke thickness alias used by some generated payloads
+      case "strokeThickness": {
+        if (typeof value === "number") {
+          result.strokeWidth = value;
+        }
+        break;
+      }
+
       // Width with sizing string support
       case "width": {
         const parsed = parseSizingValue(value);
@@ -264,14 +272,19 @@ export function createNodeFromAiDataWithTheme(
   });
   const childrenData = mapped._children;
   delete (mapped as Record<string, unknown>)._children;
+  const sizing = (mapped as { sizing?: SizingProperties }).sizing;
+  const defaultWidth =
+    sizing?.widthMode && sizing.widthMode !== "fixed" ? 0 : 100;
+  const defaultHeight =
+    sizing?.heightMode && sizing.heightMode !== "fixed" ? 0 : 100;
 
   const base = {
     id: generateId(),
     type,
     x: 0,
     y: 0,
-    width: 100,
-    height: 100,
+    width: defaultWidth,
+    height: defaultHeight,
     ...mapped,
   };
 
@@ -298,6 +311,22 @@ export function createNodeFromAiDataWithTheme(
     const rec = node as unknown as Record<string, unknown>;
     if (!rec.text) rec.text = "";
     node = syncTextDimensions(node);
+  }
+  if (type === "line") {
+    const rec = node as unknown as Record<string, unknown>;
+    const points = rec.points;
+    if (!Array.isArray(points) || points.length < 4) {
+      const width =
+        typeof rec.width === "number" && Number.isFinite(rec.width)
+          ? Math.max(1, rec.width)
+          : 100;
+      const height =
+        typeof rec.height === "number" && Number.isFinite(rec.height)
+          ? Math.max(1, rec.height)
+          : 1;
+      const y = height / 2;
+      rec.points = [0, y, width, y];
+    }
   }
 
   return node as unknown as SceneNode;

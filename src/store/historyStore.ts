@@ -1,21 +1,21 @@
 import { create } from 'zustand'
-import type { FlatSnapshot } from '../types/scene'
+import type { HistorySnapshot } from '../types/scene'
 
 const MAX_HISTORY_SIZE = 50
 
 interface HistoryState {
-  past: FlatSnapshot[]
-  future: FlatSnapshot[]
+  past: HistorySnapshot[]
+  future: HistorySnapshot[]
   batchMode: boolean
 
   // Save current state to history (called before mutations)
-  saveHistory: (currentSnapshot: FlatSnapshot) => void
+  saveHistory: (currentSnapshot: HistorySnapshot) => void
 
   // Undo: pop from past, return snapshot to restore
-  undo: (currentSnapshot: FlatSnapshot) => FlatSnapshot | null
+  undo: (currentSnapshot: HistorySnapshot) => HistorySnapshot | null
 
   // Redo: pop from future, return snapshot to restore
-  redo: (currentSnapshot: FlatSnapshot) => FlatSnapshot | null
+  redo: (currentSnapshot: HistorySnapshot) => HistorySnapshot | null
 
   // Check if undo/redo available
   canUndo: () => boolean
