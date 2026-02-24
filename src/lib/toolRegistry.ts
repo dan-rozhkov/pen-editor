@@ -9,8 +9,6 @@ import { replaceAllMatchingProperties } from "./tools/replaceAllMatchingProperti
 import { searchAllUniqueProperties } from "./tools/searchAllUniqueProperties";
 import { findEmptySpace } from "./tools/findEmptySpace";
 import { openDocument } from "./tools/openDocument";
-import { getGuidelines, getStyleGuideTags, getStyleGuide } from "./tools/staticTools";
-
 export type ToolHandler = (
   args: Record<string, unknown>
 ) => Promise<string>;
@@ -27,7 +25,4 @@ export const toolHandlers: Record<string, ToolHandler> = {
   replace_all_matching_properties: replaceAllMatchingProperties,
   find_empty_space_on_canvas: findEmptySpace,
   search_all_unique_properties: searchAllUniqueProperties,
-  get_guidelines: getGuidelines,
-  get_style_guide_tags: getStyleGuideTags,
-  get_style_guide: getStyleGuide,
 };
