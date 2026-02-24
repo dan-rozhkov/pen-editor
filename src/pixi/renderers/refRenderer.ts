@@ -168,6 +168,27 @@ export function createRefContainer(
   const renderedChildren = prepared?.layoutChildren ?? [];
   const effectiveWidth = prepared?.effectiveWidth ?? node.width;
   const effectiveHeight = prepared?.effectiveHeight ?? node.height;
+  const componentClip =
+    prepared?.component.clip ??
+    (component.type === "frame" ? (component as FlatFrameNode).clip : false);
+  const componentCornerRadius =
+    prepared?.component.cornerRadius ??
+    (component.type === "frame"
+      ? (component as FlatFrameNode).cornerRadius
+      : undefined);
+
+  if (componentClip) {
+    const mask = new Graphics();
+    mask.label = "ref-mask";
+    if (componentCornerRadius) {
+      mask.roundRect(0, 0, effectiveWidth, effectiveHeight, componentCornerRadius);
+    } else {
+      mask.rect(0, 0, effectiveWidth, effectiveHeight);
+    }
+    mask.fill(0xffffff);
+    childrenContainer.addChild(mask);
+    childrenContainer.mask = mask;
+  }
 
   // If the component frame overrides the theme, push it for bg + children
   const compThemeOverride = component.type === "frame"
