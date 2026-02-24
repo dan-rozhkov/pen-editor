@@ -15,7 +15,7 @@ import { useThemeStore } from "@/store/themeStore";
 import { insertTreeIntoFlat, removeNodeAndDescendants } from "@/store/sceneStore/helpers/flatStoreHelpers";
 import { syncTextDimensions } from "@/store/sceneStore/helpers/textSync";
 import { cloneNodeWithNewId } from "@/utils/cloneNode";
-import { setOverrideByPath } from "@/utils/instanceUtils";
+import { resolveRefToFrame, setOverrideByPath } from "@/utils/instanceUtils";
 import type { ParsedArg, ParsedOperation, ExecutionContext } from "./types";
 import {
   createNodeFromAiDataWithTheme,
@@ -108,17 +108,30 @@ function resolveArg(arg: ParsedArg, ctx: ExecutionContext): string {
       return arg.value;
     case "binding": {
       const resolved = ctx.bindings.get(arg.name);
-      if (resolved === undefined) {
-        throw new Error(`Unresolved binding: "${arg.name}"`);
+      if (resolved !== undefined) {
+        return resolved;
       }
-      return resolved;
+
+      // Be permissive for existing node IDs from previous calls:
+      // agents often pass raw IDs without quotes (e.g. U(abc123, {...})).
+      if (ctx.nodesById[arg.name]) {
+        return arg.name;
+      }
+
+      throw new Error(`Unresolved binding: "${arg.name}"`);
     }
     case "concat": {
       const base = ctx.bindings.get(arg.bindingName);
-      if (base === undefined) {
-        throw new Error(`Unresolved binding: "${arg.bindingName}"`);
+      if (base !== undefined) {
+        return base + arg.pathSuffix;
       }
-      return base + arg.pathSuffix;
+
+      // Same permissive fallback for raw node IDs.
+      if (ctx.nodesById[arg.bindingName]) {
+        return arg.bindingName + arg.pathSuffix;
+      }
+
+      throw new Error(`Unresolved binding: "${arg.bindingName}"`);
     }
     case "number":
       return String(arg.value);
@@ -413,7 +426,7 @@ function resolveInstancePath(
 ): { instanceId: string; subPath: string; refNode: RefNode; theme: ThemeName } {
   const slashIdx = path.indexOf("/");
   const instanceId = path.slice(0, slashIdx);
-  const subPath = path.slice(slashIdx + 1);
+  const requestedSubPath = path.slice(slashIdx + 1);
 
   const instanceNode = ctx.nodesById[instanceId];
   if (!instanceNode) {
@@ -427,6 +440,21 @@ function resolveInstancePath(
     );
   }
 
+  const allNodes = buildTree(ctx.rootIds, ctx.nodesById, ctx.childrenById);
+  const resolvedFrame = resolveRefToFrame(instanceNode as RefNode, allNodes);
+  if (!resolvedFrame) {
+    throw new Error(
+      `Line ${op.line}: Failed to resolve instance "${instanceId}" component`
+    );
+  }
+
+  const subPath = resolveDescendantPath(
+    requestedSubPath,
+    resolvedFrame.children,
+    op,
+    instanceId,
+  );
+
   return {
     instanceId,
     subPath,
@@ -437,6 +465,78 @@ function resolveInstancePath(
       ctx.parentById,
     ),
   };
+}
+
+function collectDescendants(nodes: SceneNode[]): Array<{ id: string; name?: string }> {
+  const out: Array<{ id: string; name?: string }> = [];
+  const visit = (node: SceneNode): void => {
+    out.push({ id: node.id, name: node.name });
+    if (node.type === "frame" || node.type === "group") {
+      node.children.forEach(visit);
+    }
+  };
+  nodes.forEach(visit);
+  return out;
+}
+
+function hasIdPath(nodes: SceneNode[], segments: string[]): boolean {
+  let currentNodes = nodes;
+  let current: SceneNode | null = null;
+  for (const segment of segments) {
+    current = currentNodes.find((node) => node.id === segment) ?? null;
+    if (!current) return false;
+    if (current.type === "frame" || current.type === "group") {
+      currentNodes = current.children;
+    } else {
+      currentNodes = [];
+    }
+  }
+  return current !== null;
+}
+
+function resolveDescendantPath(
+  requestedPath: string,
+  resolvedChildren: SceneNode[],
+  op: ParsedOperation,
+  instanceId: string,
+): string {
+  const normalized = requestedPath.split("/").filter(Boolean);
+  if (normalized.length === 0) {
+    throw new Error(`Line ${op.line}: Empty descendant path for instance "${instanceId}"`);
+  }
+
+  const allDescendants = collectDescendants(resolvedChildren);
+
+  if (normalized.length === 1) {
+    const segment = normalized[0];
+    if (allDescendants.some((node) => node.id === segment)) {
+      return segment;
+    }
+
+    const byName = allDescendants.filter(
+      (node) => node.name?.trim().toLowerCase() === segment.trim().toLowerCase(),
+    );
+    if (byName.length === 1) {
+      return byName[0].id;
+    }
+    if (byName.length > 1) {
+      throw new Error(
+        `Line ${op.line}: Descendant "${segment}" is ambiguous in instance "${instanceId}" (matched by name: ${byName.map((n) => n.id).join(", ")})`,
+      );
+    }
+
+    throw new Error(
+      `Line ${op.line}: Descendant "${segment}" not found in instance "${instanceId}"`,
+    );
+  }
+
+  if (!hasIdPath(resolvedChildren, normalized)) {
+    throw new Error(
+      `Line ${op.line}: Descendant path "${requestedPath}" not found in instance "${instanceId}"`,
+    );
+  }
+
+  return normalized.join("/");
 }
 
 function executeUpdate(op: ParsedOperation, ctx: ExecutionContext): void {

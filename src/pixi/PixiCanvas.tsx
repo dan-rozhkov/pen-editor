@@ -22,6 +22,7 @@ import { useViewportStore } from "@/store/viewportStore";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
 import {
   findEffectiveThemeInTree,
+  findParentFrame,
   findNodeById,
   getNodeAbsolutePositionWithLayout,
   getThemeFromAncestorFrames,
@@ -33,6 +34,49 @@ import { setupPixiViewport } from "./pixiViewport";
 import { setupPixiInteraction } from "./interaction";
 import { createSelectionOverlay } from "./SelectionOverlay";
 import { createOverlayRenderer } from "./OverlayRenderer";
+
+function isDescendantInsideAutoLayout(
+  children: import("@/types/scene").SceneNode[],
+  descendantId: string,
+  descendantPath?: string,
+): boolean {
+  if (descendantPath) {
+    const segments = descendantPath.split("/").filter((s) => s.length > 0);
+    let currentChildren = children;
+    let parent: import("@/types/scene").SceneNode | null = null;
+    for (const segment of segments) {
+      const found = currentChildren.find((child) => child.id === segment);
+      if (!found) return false;
+      if (found.id === descendantId) {
+        return !!(parent?.type === "frame" && parent.layout?.autoLayout);
+      }
+      parent = found;
+      if (found.type === "frame" || found.type === "group") {
+        currentChildren = found.children;
+      } else {
+        currentChildren = [];
+      }
+    }
+    return false;
+  }
+
+  const walk = (
+    nodes: import("@/types/scene").SceneNode[],
+    parent: import("@/types/scene").SceneNode | null,
+  ): boolean => {
+    for (const node of nodes) {
+      if (node.id === descendantId) {
+        return !!(parent?.type === "frame" && parent.layout?.autoLayout);
+      }
+      if (node.type === "frame" || node.type === "group") {
+        if (walk(node.children, node)) return true;
+      }
+    }
+    return false;
+  };
+
+  return walk(children, null);
+}
 
 export function PixiCanvas() {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -110,6 +154,10 @@ export function PixiCanvas() {
     editingNodeId && editingMode === "name"
       ? getEditingPosition(editingNodeId)
       : null;
+  const editingTextIsInsideAutoLayout = useMemo(() => {
+    if (editingMode !== "text" || !editingNodeId) return false;
+    return findParentFrame(nodes, editingNodeId).isInsideAutoLayout;
+  }, [editingMode, editingNodeId, nodes]);
 
   // Descendant text editing support
   const editingDescendantTextNode = useMemo(() => {
@@ -180,6 +228,24 @@ export function PixiCanvas() {
     activeTheme,
     nodes,
   ]);
+  const editingDescendantIsInsideAutoLayout = useMemo(() => {
+    if (editingMode !== "text" || !instanceContext) return false;
+    const allNodes = useSceneStore.getState().getNodes();
+    const instance = findNodeById(allNodes, instanceContext.instanceId);
+    if (!instance || instance.type !== "ref") return false;
+    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+    const prepared = prepareInstanceNode(
+      instance as RefNode,
+      allNodes,
+      calculateLayoutForFrame,
+    );
+    if (!prepared) return false;
+    return isDescendantInsideAutoLayout(
+      prepared.layoutChildren,
+      instanceContext.descendantId,
+      instanceContext.descendantPath,
+    );
+  }, [editingMode, instanceContext, nodes]);
 
   const handleDescendantTextUpdate = useMemo(() => {
     if (!instanceContext) return undefined;
@@ -371,6 +437,7 @@ export function PixiCanvas() {
           absoluteX={editingTextPosition.x}
           absoluteY={editingTextPosition.y}
           effectiveTheme={editingTextTheme ?? undefined}
+          isInsideAutoLayoutParent={editingTextIsInsideAutoLayout}
         />
       )}
       {/* Inline text editor for instance descendant text */}
@@ -381,6 +448,7 @@ export function PixiCanvas() {
           absoluteY={editingDescendantTextPosition.y}
           effectiveTheme={editingDescendantTextTheme ?? undefined}
           onUpdateText={handleDescendantTextUpdate}
+          isInsideAutoLayoutParent={editingDescendantIsInsideAutoLayout}
         />
       )}
       {/* Inline name editor overlay */}

@@ -131,14 +131,41 @@ export function createSelectionOverlay(
   }
 
   function getAbsolutePosition(nodeId: string): { x: number; y: number } | null {
-    const flatNode = useSceneStore.getState().nodesById[nodeId];
-    if (flatNode?.type === "ref") {
-      const renderedRect = getRenderedNodeRect(nodeId);
-      if (renderedRect) return { x: renderedRect.x, y: renderedRect.y };
-    }
     const nodes = useSceneStore.getState().getNodes();
     const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-    return getNodeAbsolutePositionWithLayout(nodes, nodeId, calculateLayoutForFrame);
+    const layoutPos = getNodeAbsolutePositionWithLayout(
+      nodes,
+      nodeId,
+      calculateLayoutForFrame,
+    );
+    if (layoutPos) return layoutPos;
+
+    // Fallback to rendered bounds only if node is not found in the tree snapshot.
+    const renderedRect = getRenderedNodeRect(nodeId);
+    if (!renderedRect) return null;
+    return { x: renderedRect.x, y: renderedRect.y };
+  }
+
+  function getEffectiveSize(nodeId: string): { width: number; height: number } | null {
+    const state = useSceneStore.getState();
+    const node = state.nodesById[nodeId];
+    if (!node) return null;
+
+    const sceneNodes = state.getNodes();
+    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+    const layoutSize = getNodeEffectiveSize(sceneNodes, nodeId, calculateLayoutForFrame);
+    if (layoutSize) return layoutSize;
+
+    // Fallback to rendered bounds only if layout lookup fails.
+    const renderedRect = getRenderedNodeRect(nodeId);
+    if (renderedRect) {
+      return {
+        width: renderedRect.width,
+        height: renderedRect.height,
+      };
+    }
+
+    return { width: node.width, height: node.height };
   }
 
   function getSelectionColor(nodeId: string): number {
@@ -235,8 +262,6 @@ export function createSelectionOverlay(
     if (selectedIds.length === 0) return;
 
     const state = useSceneStore.getState();
-    const sceneNodes = state.getNodes();
-    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
     const hasComponentSelection = selectedIds.some((id) => isComponentOrInstance(id));
     const selectionBaselineColor = hasComponentSelection
       ? COMPONENT_SELECTION_COLOR
@@ -256,7 +281,23 @@ export function createSelectionOverlay(
       const instanceNode = findNodeById(allNodes, instanceId);
       if (!instanceNode || instanceNode.type !== "ref") return;
 
-      const prepared = prepareInstanceNode(instanceNode as unknown as RefNode, allNodes, calculateLayoutForFrame);
+      const instanceSize = getNodeEffectiveSize(
+        allNodes,
+        instanceId,
+        calculateLayoutForFrame,
+      );
+      const instanceForLayout = instanceSize
+        ? ({
+            ...(instanceNode as RefNode),
+            width: instanceSize.width,
+            height: instanceSize.height,
+          } as RefNode)
+        : (instanceNode as RefNode);
+      const prepared = prepareInstanceNode(
+        instanceForLayout,
+        allNodes,
+        calculateLayoutForFrame,
+      );
       if (!prepared) return;
 
       const descendantIds =
@@ -374,16 +415,11 @@ export function createSelectionOverlay(
       const node = state.nodesById[id];
       if (!node) continue;
 
-      const renderedRect = node.type === "ref" ? getRenderedNodeRect(id) : null;
-      const absPos = renderedRect
-        ? { x: renderedRect.x, y: renderedRect.y }
-        : getNodeAbsolutePositionWithLayout(sceneNodes, id, calculateLayoutForFrame);
+      const absPos = getAbsolutePosition(id);
       if (!absPos) continue;
 
       // Get effective size (may differ from node.width/height for layout children)
-      const effectiveSize = renderedRect
-        ? { width: renderedRect.width, height: renderedRect.height }
-        : getNodeEffectiveSize(sceneNodes, id, calculateLayoutForFrame);
+      const effectiveSize = getEffectiveSize(id);
       const width = effectiveSize?.width ?? node.width;
       const height = effectiveSize?.height ?? node.height;
 
@@ -644,7 +680,23 @@ export function createSelectionOverlay(
 
       const nodes = state.getNodes();
       const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-      const prepared = prepareInstanceNode(instanceNode as unknown as RefNode, nodes, calculateLayoutForFrame);
+      const instanceSize = getNodeEffectiveSize(
+        nodes,
+        hoveredInstanceId,
+        calculateLayoutForFrame,
+      );
+      const instanceForLayout = instanceSize
+        ? ({
+            ...(instanceNode as RefNode),
+            width: instanceSize.width,
+            height: instanceSize.height,
+          } as RefNode)
+        : (instanceNode as RefNode);
+      const prepared = prepareInstanceNode(
+        instanceForLayout,
+        nodes,
+        calculateLayoutForFrame,
+      );
       if (!prepared) return;
 
       const rect = findDescendantLocalRect(prepared.layoutChildren, hoveredNodeId);
@@ -673,17 +725,11 @@ export function createSelectionOverlay(
     const node = state.nodesById[hoveredNodeId];
     if (!node) return;
 
-    const renderedRect = node.type === "ref" ? getRenderedNodeRect(hoveredNodeId) : null;
-    const absPos = renderedRect
-      ? { x: renderedRect.x, y: renderedRect.y }
-      : getAbsolutePosition(hoveredNodeId);
+    const absPos = getAbsolutePosition(hoveredNodeId);
     if (!absPos) return;
 
     // Get effective size
-    const nodes = useSceneStore.getState().getNodes();
-    const effectiveSize = renderedRect
-      ? { width: renderedRect.width, height: renderedRect.height }
-      : getNodeEffectiveSize(nodes, hoveredNodeId, useLayoutStore.getState().calculateLayoutForFrame);
+    const effectiveSize = getEffectiveSize(hoveredNodeId);
     const width = effectiveSize?.width ?? node.width;
     const height = effectiveSize?.height ?? node.height;
 

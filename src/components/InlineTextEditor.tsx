@@ -15,6 +15,7 @@ interface InlineTextEditorProps {
   absoluteY: number
   effectiveTheme?: ThemeName
   onUpdateText?: (text: string) => void
+  isInsideAutoLayoutParent?: boolean
 }
 
 function toCssFontFamily(fontFamily: string): string {
@@ -39,9 +40,18 @@ function toCssFontFamily(fontFamily: string): string {
     .join(', ')
 }
 
-export function InlineTextEditor({ node, absoluteX, absoluteY, effectiveTheme, onUpdateText }: InlineTextEditorProps) {
+export function InlineTextEditor({
+  node,
+  absoluteX,
+  absoluteY,
+  effectiveTheme,
+  onUpdateText,
+  isInsideAutoLayoutParent = false,
+}: InlineTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const currentTextRef = useRef(node.text) // Track current value for unmount save
+  const pendingTextRef = useRef<string | null>(null)
+  const rafIdRef = useRef<number | null>(null)
   const lastCommittedRef = useRef(node.text)
   const updateNodeWithoutHistory = useSceneStore(
     (state) => state.updateNodeWithoutHistory,
@@ -72,10 +82,13 @@ export function InlineTextEditor({ node, absoluteX, absoluteY, effectiveTheme, o
 
   // Width mode
   const isAutoWidth = node.textWidthMode === 'auto' || !node.textWidthMode
-  const isWrappedWidth = !isAutoWidth
   const isFixedHeight = node.textWidthMode === 'fixed-height'
   const fixedScreenWidth = node.width * scale
   const fixedScreenHeight = node.height * scale
+  const isFitContentInAutoLayout =
+    isInsideAutoLayoutParent && node.sizing?.widthMode === 'fit_content'
+  const shouldUseAutoTextBehavior = isAutoWidth || isFitContentInAutoLayout
+  const isWrappedWidth = !shouldUseAutoTextBehavior
 
   // Build text decoration string
   const textDecorationParts: string[] = []
@@ -95,6 +108,37 @@ export function InlineTextEditor({ node, absoluteX, absoluteY, effectiveTheme, o
     [node.id, updateNodeWithoutHistory, onUpdateText],
   )
 
+  const flushPendingText = useCallback(
+    (textOverride?: string) => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current)
+        rafIdRef.current = null
+      }
+      const text = textOverride ?? pendingTextRef.current
+      pendingTextRef.current = null
+      if (text !== undefined && text !== null) {
+        commitText(text)
+      }
+    },
+    [commitText],
+  )
+
+  const scheduleCommit = useCallback(
+    (text: string) => {
+      pendingTextRef.current = text
+      if (rafIdRef.current !== null) return
+      rafIdRef.current = requestAnimationFrame(() => {
+        rafIdRef.current = null
+        const pending = pendingTextRef.current
+        pendingTextRef.current = null
+        if (pending !== null) {
+          commitText(pending)
+        }
+      })
+    },
+    [commitText],
+  )
+
   const submit = useCallback(() => {
     const el = editorRef.current
     if (!el) {
@@ -105,20 +149,21 @@ export function InlineTextEditor({ node, absoluteX, absoluteY, effectiveTheme, o
     const text = el.innerText ?? el.textContent ?? ''
     const trimmed = text.trim()
     if (trimmed && trimmed !== node.text) {
-      commitText(trimmed)
+      flushPendingText(trimmed)
     }
     stopEditing()
-  }, [node.text, stopEditing, commitText])
+  }, [node.text, stopEditing, flushPendingText])
 
   // Save on unmount (DOM element is already gone, so read from ref)
   useEffect(() => {
     return () => {
+      flushPendingText()
       const trimmed = currentTextRef.current.trim()
       if (trimmed && trimmed !== node.text) {
         commitText(trimmed)
       }
     }
-  }, [node.text, commitText])
+  }, [node.text, commitText, flushPendingText])
 
   // Focus and select all text on mount
   useEffect(() => {
@@ -170,6 +215,15 @@ export function InlineTextEditor({ node, absoluteX, absoluteY, effectiveTheme, o
     if (el) {
       const text = el.innerText ?? el.textContent ?? ''
       currentTextRef.current = text
+      if (text !== node.text) {
+        // Never live-commit while editing inside auto-layout:
+        // avoid parent/ancestor reflow (visible frame shift) on each keystroke.
+        if (isInsideAutoLayoutParent) {
+          pendingTextRef.current = text
+        } else {
+          scheduleCommit(text)
+        }
+      }
     }
   }
 
@@ -178,8 +232,14 @@ export function InlineTextEditor({ node, absoluteX, absoluteY, effectiveTheme, o
   }
 
   // Compute dimensions
-  const widthStyle: React.CSSProperties['width'] = fixedScreenWidth
-  const heightStyle: React.CSSProperties['height'] = fixedScreenHeight
+  const shouldUseDynamicAutoSize =
+    shouldUseAutoTextBehavior &&
+    (!isInsideAutoLayoutParent || isFitContentInAutoLayout)
+  const shouldClipToBox =
+    isInsideAutoLayoutParent && shouldUseAutoTextBehavior && !isFitContentInAutoLayout
+  const widthStyle: React.CSSProperties['width'] = shouldUseDynamicAutoSize ? 'max-content' : fixedScreenWidth
+  const heightStyle: React.CSSProperties['height'] = shouldUseDynamicAutoSize ? 'auto' : fixedScreenHeight
+  const minWidthStyle: React.CSSProperties['minWidth'] = shouldUseDynamicAutoSize ? fixedScreenWidth : undefined
   const lineHeightPx = `${(node.lineHeight ?? 1.2) * screenFontSize}px`
 
   return (
@@ -196,6 +256,7 @@ export function InlineTextEditor({ node, absoluteX, absoluteY, effectiveTheme, o
         top: screenY,
         width: widthStyle,
         height: heightStyle,
+        minWidth: minWidthStyle,
         // Font styles matching Konva
         font: editorFontShorthand,
         fontSynthesis: 'none',
@@ -216,7 +277,7 @@ export function InlineTextEditor({ node, absoluteX, absoluteY, effectiveTheme, o
         display: 'inline-block',
         whiteSpace: isWrappedWidth ? 'pre-wrap' : 'pre',
         wordBreak: isWrappedWidth ? 'break-word' : 'normal',
-        overflow: isFixedHeight ? 'hidden' : 'visible',
+        overflow: isFixedHeight || shouldClipToBox ? 'hidden' : 'visible',
         cursor: 'text',
         // Reset any inherited styles
         textIndent: 0,

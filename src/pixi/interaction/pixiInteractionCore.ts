@@ -8,6 +8,7 @@ import {
   findNodeById,
   findDeepestChildAtPosition,
   getNodeAbsolutePositionWithLayout,
+  getNodeEffectiveSize,
 } from "@/utils/nodeUtils";
 import type { InteractionContext } from "./types";
 import { screenToWorld, findNodeAtPoint, findFrameLabelAtPoint, hitTestTransformHandle, getResizeCursor } from "./hitTesting";
@@ -80,7 +81,19 @@ function findInstanceDescendantAtWorldPoint(
   if (!absPos) return null;
 
   const preparedInstance = prepareInstanceNode(
-    instanceNode,
+    (() => {
+      const effectiveSize = getNodeEffectiveSize(
+        currentNodes,
+        instanceId,
+        calculateLayoutForFrame,
+      );
+      if (!effectiveSize) return instanceNode;
+      return {
+        ...instanceNode,
+        width: effectiveSize.width,
+        height: effectiveSize.height,
+      };
+    })(),
     currentNodes,
     calculateLayoutForFrame,
   );
