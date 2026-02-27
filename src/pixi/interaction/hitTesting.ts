@@ -1,4 +1,4 @@
-import { CanvasTextMetrics, TextStyle } from "pixi.js";
+import { TextStyle } from "pixi.js";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
@@ -9,6 +9,7 @@ import {
   prepareFrameNode,
 } from "@/utils/instanceUtils";
 import type { TransformHandle } from "./types";
+import { measureLabelTextWidth, truncateLabelToWidth } from "@/pixi/frameLabelUtils";
 
 const LABEL_FONT_SIZE = 11;
 const LABEL_OFFSET_Y = 4;
@@ -18,15 +19,6 @@ const LABEL_TEXT_STYLE = new TextStyle({
   fontFamily: LABEL_FONT_FAMILY,
   fontSize: LABEL_FONT_SIZE,
 });
-const labelWidthCache = new Map<string, number>();
-
-function getLabelWidth(text: string): number {
-  const cached = labelWidthCache.get(text);
-  if (cached !== undefined) return cached;
-  const measured = CanvasTextMetrics.measureText(text, LABEL_TEXT_STYLE).width;
-  labelWidthCache.set(text, measured);
-  return measured;
-}
 
 /**
  * Convert screen coordinates to world coordinates
@@ -74,11 +66,14 @@ export function findFrameLabelAtPoint(worldX: number, worldY: number): string | 
     const labelY = node.y;
 
     const defaultName = node.type === "group" ? "Group" : "Frame";
-    const displayName = node.name || defaultName;
+    const fullName = node.name || defaultName;
+    const maxLabelWidthPx = Math.max(0, node.width * scale);
+    const displayName = truncateLabelToWidth(fullName, maxLabelWidthPx, LABEL_TEXT_STYLE);
+    if (!displayName) continue;
 
     const worldOffsetY = (LABEL_FONT_SIZE + LABEL_OFFSET_Y) / scale;
     const labelWorldY = labelY - worldOffsetY;
-    const labelW = getLabelWidth(displayName) / scale;
+    const labelW = measureLabelTextWidth(displayName, LABEL_TEXT_STYLE) / scale;
     const labelH = LABEL_FONT_SIZE / scale;
     const padding = LABEL_HIT_PADDING / scale;
 

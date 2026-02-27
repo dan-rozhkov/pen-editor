@@ -15,6 +15,7 @@ import { findDescendantLocalRect, prepareInstanceNode } from "@/utils/instanceUt
 import { findNodeById } from "@/utils/nodeUtils";
 import { findDescendantByPath, findDescendantRectByPath } from "@/utils/instancePathUtils";
 import { buildTextStyle } from "@/pixi/renderers/textRenderer";
+import { truncateLabelToWidth } from "@/pixi/frameLabelUtils";
 
 const SELECTION_COLOR = 0x0d99ff;
 const HOVER_COLOR = 0x0d99ff;
@@ -621,7 +622,7 @@ export function createSelectionOverlay(
           : LABEL_COLOR_NORMAL;
 
       const defaultName = node.type === "group" ? "Group" : "Frame";
-      const displayName = node.name || defaultName;
+      const fullName = node.name || defaultName;
 
       const worldOffsetY = (LABEL_FONT_SIZE + LABEL_OFFSET_Y) / scale;
 
@@ -631,6 +632,9 @@ export function createSelectionOverlay(
           : labelColor === LABEL_COLOR_SELECTED
             ? FRAME_NAME_STYLE_SELECTED
             : FRAME_NAME_STYLE_NORMAL;
+      const maxLabelWidthPx = Math.max(0, node.width * scale);
+      const displayName = truncateLabelToWidth(fullName, maxLabelWidthPx, style);
+      if (!displayName) continue;
       const text = new Text({ text: displayName, style });
       text.position.set(absPos.x, absPos.y - worldOffsetY);
       text.scale.set(1 / scale);
