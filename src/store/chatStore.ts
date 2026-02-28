@@ -5,9 +5,12 @@ export interface ChatTab {
   title: string;
 }
 
+export type AgentMode = "edits" | "fast";
+
 interface ChatState {
   isOpen: boolean;
   model: string;
+  agentMode: AgentMode;
   tabs: ChatTab[];
   activeTabId: string;
   /** AbortControllers keyed by tab id — managed outside React */
@@ -17,6 +20,7 @@ interface ChatState {
   open: () => void;
   close: () => void;
   setModel: (model: string) => void;
+  setAgentMode: (mode: AgentMode) => void;
 
   createTab: () => string;
   closeTab: (tabId: string) => void;
@@ -28,6 +32,7 @@ interface ChatState {
 }
 
 const DEFAULT_MODEL = "moonshotai/kimi-k2.5";
+const DEFAULT_AGENT_MODE: AgentMode = "edits";
 
 let nextTabCounter = 1;
 
@@ -40,6 +45,9 @@ const initialTabId = generateTabId();
 export const useChatStore = create<ChatState>((set, get) => ({
   isOpen: false,
   model: localStorage.getItem("chat-model") ?? DEFAULT_MODEL,
+  agentMode:
+    (localStorage.getItem("chat-agent-mode") as AgentMode | null) ??
+    DEFAULT_AGENT_MODE,
   tabs: [{ id: initialTabId, title: "Chat 1" }],
   activeTabId: initialTabId,
   abortControllers: {},
@@ -50,6 +58,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setModel: (model) => {
     localStorage.setItem("chat-model", model);
     set({ model });
+  },
+  setAgentMode: (mode) => {
+    localStorage.setItem("chat-agent-mode", mode);
+    set({ agentMode: mode });
   },
 
   createTab: () => {

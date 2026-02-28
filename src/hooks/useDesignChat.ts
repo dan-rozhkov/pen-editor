@@ -49,9 +49,13 @@ function buildCanvasContext(): object {
     };
   });
 
-  const { model } = useChatStore.getState();
+  const { model, agentMode } = useChatStore.getState();
 
-  return { canvasContext: JSON.stringify({ roots, selectedIds, selectedNodes, activeTheme }), model };
+  return {
+    canvasContext: JSON.stringify({ roots, selectedIds, selectedNodes, activeTheme }),
+    model,
+    agentMode,
+  };
 }
 
 async function executeToolCall(

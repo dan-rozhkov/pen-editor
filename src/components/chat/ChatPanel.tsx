@@ -20,6 +20,11 @@ const MODEL_OPTIONS = [
   { value: "google/gemini-3-flash-preview", label: "Gemini 3 Flash" },
 ];
 
+const MODE_OPTIONS = [
+  { value: "edits", label: "Edits" },
+  { value: "fast", label: "Fast" },
+];
+
 function TabBar() {
   const tabs = useChatStore((s) => s.tabs);
   const activeTabId = useChatStore((s) => s.activeTabId);
@@ -134,6 +139,8 @@ export function ChatPanel() {
   const close = useChatStore((s) => s.close);
   const model = useChatStore((s) => s.model);
   const setModel = useChatStore((s) => s.setModel);
+  const agentMode = useChatStore((s) => s.agentMode);
+  const setAgentMode = useChatStore((s) => s.setAgentMode);
   const tabs = useChatStore((s) => s.tabs);
   const activeTabId = useChatStore((s) => s.activeTabId);
 
@@ -172,7 +179,12 @@ export function ChatPanel() {
         ))}
 
         {/* Model selector */}
-        <div className="px-3 pb-2 shrink-0 w-fit">
+        <div className="px-3 pb-2 shrink-0 flex items-center gap-2">
+          <SelectInput
+            value={agentMode}
+            options={MODE_OPTIONS}
+            onChange={(value) => setAgentMode(value as "edits" | "fast")}
+          />
           <SelectInput
             value={model}
             options={MODEL_OPTIONS}
