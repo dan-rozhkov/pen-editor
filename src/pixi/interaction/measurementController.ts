@@ -27,55 +27,65 @@ export function createMeasurementController(_context: InteractionContext): Measu
         clearLines();
       } else {
         const currentSelectedIds = useSelectionStore.getState().selectedIds;
-        if (currentSelectedIds.length === 1) {
-          const selectedId = currentSelectedIds[0];
-          if (selectedId !== hitId) {
-            const currentNodes = useSceneStore.getState().getNodes();
-            const calculateLayoutForFrame =
-              useLayoutStore.getState().calculateLayoutForFrame;
-            const selectedNode = findNodeById(currentNodes, selectedId);
-            const hoveredNode = findNodeById(currentNodes, hitId);
-            const selectedPos = getNodeAbsolutePositionWithLayout(
-              currentNodes,
-              selectedId,
-              calculateLayoutForFrame,
+        const selectedSet = new Set(currentSelectedIds);
+
+        if (currentSelectedIds.length >= 1 && !selectedSet.has(hitId)) {
+          const currentNodes = useSceneStore.getState().getNodes();
+          const calculateLayoutForFrame =
+            useLayoutStore.getState().calculateLayoutForFrame;
+
+          // Compute combined bounding box of all selected nodes
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          let allValid = true;
+          for (const selId of currentSelectedIds) {
+            const node = findNodeById(currentNodes, selId);
+            const pos = getNodeAbsolutePositionWithLayout(
+              currentNodes, selId, calculateLayoutForFrame,
             );
-            const hoveredPos = getNodeAbsolutePositionWithLayout(
-              currentNodes,
-              hitId,
-              calculateLayoutForFrame,
+            if (!node || !pos) { allValid = false; break; }
+            const size = getNodeEffectiveSize(
+              currentNodes, selId, calculateLayoutForFrame,
             );
-            if (selectedNode && hoveredNode && selectedPos && hoveredPos) {
-              const selectedSize = getNodeEffectiveSize(
-                currentNodes,
-                selectedId,
-                calculateLayoutForFrame,
-              );
-              const hoveredSize = getNodeEffectiveSize(
-                currentNodes,
-                hitId,
-                calculateLayoutForFrame,
-              );
-              const selectedBounds = {
-                x: selectedPos.x,
-                y: selectedPos.y,
-                width: selectedSize?.width ?? selectedNode.width,
-                height: selectedSize?.height ?? selectedNode.height,
-              };
-              const hoveredBounds = {
-                x: hoveredPos.x,
-                y: hoveredPos.y,
-                width: hoveredSize?.width ?? hoveredNode.width,
-                height: hoveredSize?.height ?? hoveredNode.height,
-              };
-              const isParent = isDescendantOf(currentNodes, hitId, selectedId);
+            const w = size?.width ?? node.width;
+            const h = size?.height ?? node.height;
+            minX = Math.min(minX, pos.x);
+            minY = Math.min(minY, pos.y);
+            maxX = Math.max(maxX, pos.x + w);
+            maxY = Math.max(maxY, pos.y + h);
+          }
+
+          const hoveredNode = findNodeById(currentNodes, hitId);
+          const hoveredPos = getNodeAbsolutePositionWithLayout(
+            currentNodes, hitId, calculateLayoutForFrame,
+          );
+
+          if (allValid && hoveredNode && hoveredPos) {
+            const hoveredSize = getNodeEffectiveSize(
+              currentNodes, hitId, calculateLayoutForFrame,
+            );
+            const selectedBounds = {
+              x: minX,
+              y: minY,
+              width: maxX - minX,
+              height: maxY - minY,
+            };
+            const hoveredBounds = {
+              x: hoveredPos.x,
+              y: hoveredPos.y,
+              width: hoveredSize?.width ?? hoveredNode.width,
+              height: hoveredSize?.height ?? hoveredNode.height,
+            };
+
+            // For single selection, check if hovered is a parent
+            if (currentSelectedIds.length === 1) {
+              const isParent = isDescendantOf(currentNodes, hitId, currentSelectedIds[0]);
               if (isParent) {
                 setLines(computeParentDistances(selectedBounds, hoveredBounds));
               } else {
                 setLines(computeSiblingDistances(selectedBounds, hoveredBounds));
               }
             } else {
-              clearLines();
+              setLines(computeSiblingDistances(selectedBounds, hoveredBounds));
             }
           } else {
             clearLines();
