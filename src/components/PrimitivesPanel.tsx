@@ -9,6 +9,7 @@ import {
   type IconWeight,
   CaretDownIcon,
   SparkleIcon,
+  CodeIcon,
 } from "@phosphor-icons/react";
 import { useDrawModeStore, type DrawToolType } from "../store/drawModeStore";
 import { useChatStore } from "../store/chatStore";
@@ -56,6 +57,7 @@ export function PrimitivesPanel() {
   }> = [
     { icon: CircleIcon, label: "Ellipse", tool: "ellipse", shortcut: "O" },
     { icon: TextTIcon, label: "Text", tool: "text", shortcut: "T" },
+    { icon: CodeIcon, label: "Embed", tool: "embed", shortcut: "E" },
   ];
 
   const rectSubTools: Array<{

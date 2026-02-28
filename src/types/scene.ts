@@ -74,7 +74,7 @@ export interface PerSideStroke {
 
 export interface BaseNode {
   id: string
-  type: 'frame' | 'group' | 'rect' | 'ellipse' | 'text' | 'ref' | 'path' | 'line' | 'polygon'
+  type: 'frame' | 'group' | 'rect' | 'ellipse' | 'text' | 'ref' | 'path' | 'line' | 'polygon' | 'embed'
   name?: string
   x: number
   y: number
@@ -249,7 +249,12 @@ export interface PolygonNode extends BaseNode {
   sides?: number    // number of sides (default 6)
 }
 
-export type SceneNode = FrameNode | GroupNode | RectNode | EllipseNode | TextNode | RefNode | PathNode | LineNode | PolygonNode
+export interface EmbedNode extends BaseNode {
+  type: 'embed'
+  htmlContent: string
+}
+
+export type SceneNode = FrameNode | GroupNode | RectNode | EllipseNode | TextNode | RefNode | PathNode | LineNode | PolygonNode | EmbedNode
 
 // --- Flat node types (no children arrays - structure lives in store indices) ---
 
@@ -260,7 +265,7 @@ export type FlatFrameNode = Omit<FrameNode, 'children'>
 export type FlatGroupNode = Omit<GroupNode, 'children'>
 
 /** Union of all node types in flat storage (containers have no children property) */
-export type FlatSceneNode = FlatFrameNode | FlatGroupNode | RectNode | EllipseNode | TextNode | RefNode | PathNode | LineNode | PolygonNode
+export type FlatSceneNode = FlatFrameNode | FlatGroupNode | RectNode | EllipseNode | TextNode | RefNode | PathNode | LineNode | PolygonNode | EmbedNode
 
 /** Check if a node is a container (has children array) */
 export function isContainerNode(node: SceneNode): node is FrameNode | GroupNode {

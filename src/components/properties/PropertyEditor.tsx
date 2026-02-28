@@ -12,6 +12,7 @@ import { EffectsSection } from "@/components/properties/EffectsSection";
 import { ThemeSection } from "@/components/properties/ThemeSection";
 import { TypographySection } from "@/components/properties/TypographySection";
 import { InstanceSection } from "@/components/properties/InstanceSection";
+import { EmbedContentSection } from "@/components/properties/EmbedContentSection";
 
 
 interface PropertyEditorProps {
@@ -91,6 +92,9 @@ export function PropertyEditor({
       )}
       {node.type === "text" && (
         <TypographySection node={node} onUpdate={onUpdate} />
+      )}
+      {node.type === "embed" && (
+        <EmbedContentSection node={node} onUpdate={onUpdate} />
       )}
     </div>
   );

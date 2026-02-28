@@ -14,6 +14,7 @@ import {
   resetRenderThemeStack,
   getRenderThemeStackDepth,
 } from "./renderers/colorHelpers";
+import { updateEmbedResolution, setEmbedResolution } from "./renderers/embedRenderer";
 
 interface RegistryEntry {
   container: Container;
@@ -515,6 +516,27 @@ export function createPixiSync(sceneRoot: Container): () => void {
     applyTextResolutionRecursive(sceneRoot, resolution);
   }
 
+  let appliedEmbedResolution = 0;
+
+  function getTargetEmbedResolution(scale: number): number {
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    const effectiveScale = Math.max(1, scale);
+    // Cap at 4x device pixel ratio to avoid huge textures
+    const maxResolution = Math.ceil(devicePixelRatio * 4);
+    return Math.min(maxResolution, effectiveScale * devicePixelRatio);
+  }
+
+  function applyEmbedResolution(resolution: number): void {
+    if (appliedEmbedResolution === resolution) return;
+    appliedEmbedResolution = resolution;
+    setEmbedResolution(resolution);
+    for (const [, entry] of registry) {
+      if (entry.node.type === "embed") {
+        updateEmbedResolution(entry.container, entry.node as import("@/types/scene").EmbedNode, resolution);
+      }
+    }
+  }
+
   /**
    * Full rebuild - used on initial load.
    */
@@ -532,7 +554,9 @@ export function createPixiSync(sceneRoot: Container): () => void {
     // Apply auto-layout positions
     applyAutoLayoutPositions(state);
     appliedTextResolution = 0;
+    appliedEmbedResolution = 0;
     applyTextResolution(getTargetTextResolution(useViewportStore.getState().scale));
+    applyEmbedResolution(getTargetEmbedResolution(useViewportStore.getState().scale));
     applyTextEditingVisibility();
   }
 
@@ -887,6 +911,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
   let lastScale = useViewportStore.getState().scale;
   let textResolutionUpdateTimer: ReturnType<typeof setTimeout> | null = null;
+  let embedResolutionUpdateTimer: ReturnType<typeof setTimeout> | null = null;
 
   function scheduleTextResolutionUpdate(scale: number): void {
     if (textResolutionUpdateTimer) {
@@ -898,13 +923,26 @@ export function createPixiSync(sceneRoot: Container): () => void {
     }, 120);
   }
 
-  // Initial text resolution
+  function scheduleEmbedResolutionUpdate(scale: number): void {
+    if (embedResolutionUpdateTimer) {
+      clearTimeout(embedResolutionUpdateTimer);
+    }
+    // Slightly longer debounce for embeds since re-rendering is heavier
+    embedResolutionUpdateTimer = setTimeout(() => {
+      embedResolutionUpdateTimer = null;
+      applyEmbedResolution(getTargetEmbedResolution(scale));
+    }, 200);
+  }
+
+  // Initial resolutions
   applyTextResolution(getTargetTextResolution(lastScale));
+  applyEmbedResolution(getTargetEmbedResolution(lastScale));
 
   const unsubViewport = useViewportStore.subscribe((state) => {
     if (state.scale !== lastScale) {
       lastScale = state.scale;
       scheduleTextResolutionUpdate(state.scale);
+      scheduleEmbedResolutionUpdate(state.scale);
     }
   });
 

@@ -10,6 +10,7 @@ import type {
   PolygonNode,
   PathNode,
   RefNode,
+  EmbedNode,
 } from "@/types/scene";
 import { applyShadow } from "./shadowHelpers";
 import { createRectContainer, updateRectContainer, drawRect } from "./rectRenderer";
@@ -21,6 +22,7 @@ import { createPathContainer, updatePathContainer } from "./pathRenderer";
 import { createFrameContainer, updateFrameContainer, drawFrameBackground } from "./frameRenderer";
 import { createGroupContainer } from "./groupRenderer";
 import { createRefContainer, updateRefContainer } from "./refRenderer";
+import { createEmbedContainer, updateEmbedContainer } from "./embedRenderer";
 import type { ShadowShape } from "./shadowHelpers";
 
 function getNodeCornerRadius(node: FlatSceneNode): number | undefined {
@@ -97,6 +99,9 @@ export function createNodeContainer(
         nodesById,
         childrenById,
       );
+      break;
+    case "embed":
+      container = createEmbedContainer(node as EmbedNode);
       break;
     default:
       container = new Container();
@@ -225,6 +230,9 @@ export function updateNodeContainer(
         forceRefRebuild,
       );
       break;
+    case "embed":
+      updateEmbedContainer(container, node as EmbedNode, prev as EmbedNode);
+      break;
   }
 
   // Shadow (after type-specific updates so frame effective size stays in sync)
@@ -338,6 +346,14 @@ export function applyLayoutSize(
         nodesById,
         childrenById,
       );
+      break;
+    }
+    case "embed": {
+      const sprite = container.getChildByLabel("embed-content") as import("pixi.js").Sprite | null;
+      if (sprite) {
+        sprite.width = layoutWidth;
+        sprite.height = layoutHeight;
+      }
       break;
     }
     // Text and other types don't need size updates for layout

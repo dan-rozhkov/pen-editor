@@ -98,6 +98,17 @@ export function createDrawController(_context: InteractionContext): DrawControll
         };
         break;
       }
+      case "embed":
+        node = {
+          id,
+          type: "embed",
+          x,
+          y,
+          width,
+          height,
+          htmlContent: '<div style="padding: 16px; font-family: sans-serif; color: #333;"><h2 style="margin: 0 0 8px 0;">HTML Embed</h2><p style="margin: 0;">Edit HTML content in the properties panel.</p></div>',
+        };
+        break;
       default:
         return;
     }
