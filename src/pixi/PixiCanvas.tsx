@@ -454,7 +454,7 @@ export function PixiCanvas() {
       {/* Inline name editor overlay */}
       {editingNameNode && editingNamePosition && editingMode === "name" && (
         <InlineNameEditor
-          node={editingNameNode as any}
+          node={editingNameNode}
           absoluteX={editingNamePosition.x}
           absoluteY={editingNamePosition.y}
         />

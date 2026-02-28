@@ -7,7 +7,7 @@ import { useViewportStore } from "@/store/viewportStore";
 import { getNodeAbsolutePositionWithLayout, getNodeEffectiveSize } from "@/utils/nodeUtils";
 import type {
   FlatFrameNode,
-  FlatGroupNode,
+  FlatSceneNode,
   RefNode,
   TextNode,
 } from "@/types/scene";
@@ -583,7 +583,7 @@ export function createSelectionOverlay(
     const { selectedIds, editingNodeId, editingMode } = useSelectionStore.getState();
     const scale = useViewportStore.getState().scale;
 
-    // Show frame names for top-level frames/groups only (to match Konva).
+    // Show frame names for top-level frames/groups/embeds only (to match Konva).
     const selectedSet = new Set(selectedIds);
 
     // Collect frame IDs to show names for
@@ -594,7 +594,9 @@ export function createSelectionOverlay(
       const node = state.nodesById[rootId];
       if (
         node &&
-        (node.type === "frame" || node.type === "group") &&
+        (node.type === "frame" ||
+          node.type === "group" ||
+          node.type === "embed") &&
         node.visible !== false &&
         node.enabled !== false
       ) {
@@ -606,7 +608,7 @@ export function createSelectionOverlay(
       // Skip if editing this name
       if (editingNodeId === frameId && editingMode === "name") continue;
 
-      const node = state.nodesById[frameId] as FlatFrameNode | FlatGroupNode;
+      const node = state.nodesById[frameId] as FlatSceneNode;
       if (!node) continue;
 
       // We only show names for root-level frames/groups.
@@ -621,7 +623,8 @@ export function createSelectionOverlay(
           ? LABEL_COLOR_SELECTED
           : LABEL_COLOR_NORMAL;
 
-      const defaultName = node.type === "group" ? "Group" : "Frame";
+      const defaultName =
+        node.type === "group" ? "Group" : node.type === "embed" ? "Embed" : "Frame";
       const fullName = node.name || defaultName;
 
       const worldOffsetY = (LABEL_FONT_SIZE + LABEL_OFFSET_Y) / scale;

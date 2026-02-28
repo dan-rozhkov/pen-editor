@@ -3,7 +3,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useLayoutStore } from "@/store/layoutStore";
-import type { SceneNode, FrameNode } from "@/types/scene";
+import type { SceneNode, FrameNode, FlatSceneNode } from "@/types/scene";
 import {
   getPreparedNodeEffectiveSize,
   prepareFrameNode,
@@ -32,7 +32,7 @@ export function screenToWorld(screenX: number, screenY: number): { x: number; y:
 }
 
 /**
- * Find a frame/group label at the given world coordinates.
+ * Find a frame/group/embed label at the given world coordinates.
  * Returns the node ID if a label is hit, null otherwise.
  */
 export function findFrameLabelAtPoint(worldX: number, worldY: number): string | null {
@@ -46,7 +46,7 @@ export function findFrameLabelAtPoint(worldX: number, worldY: number): string | 
   for (const rootId of scene.rootIds) {
     const node = scene.nodesById[rootId];
     if (!node || node.visible === false || node.enabled === false) continue;
-    if (node.type !== "frame" && node.type !== "group") continue;
+    if (node.type !== "frame" && node.type !== "group" && node.type !== "embed") continue;
     frameIds.push(rootId);
   }
 
@@ -57,7 +57,7 @@ export function findFrameLabelAtPoint(worldX: number, worldY: number): string | 
     // Hidden while editing this exact name.
     if (editingNodeId === frameId && editingMode === "name") continue;
 
-    const node = scene.nodesById[frameId];
+    const node = scene.nodesById[frameId] as FlatSceneNode | undefined;
     if (!node) continue;
 
     // We only draw labels for top-level frames/groups.
@@ -65,7 +65,8 @@ export function findFrameLabelAtPoint(worldX: number, worldY: number): string | 
     const labelX = node.x;
     const labelY = node.y;
 
-    const defaultName = node.type === "group" ? "Group" : "Frame";
+    const defaultName =
+      node.type === "group" ? "Group" : node.type === "embed" ? "Embed" : "Frame";
     const fullName = node.name || defaultName;
     const maxLabelWidthPx = Math.max(0, node.width * scale);
     const displayName = truncateLabelToWidth(fullName, maxLabelWidthPx, LABEL_TEXT_STYLE);

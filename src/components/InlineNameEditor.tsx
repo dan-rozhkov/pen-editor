@@ -1,11 +1,11 @@
 import { useRef, useEffect, useState } from 'react'
-import type { FrameNode } from '../types/scene'
+import type { FlatSceneNode } from '../types/scene'
 import { useSceneStore } from '../store/sceneStore'
 import { useSelectionStore } from '../store/selectionStore'
 import { useViewportStore } from '../store/viewportStore'
 
 interface InlineNameEditorProps {
-  node: FrameNode
+  node: FlatSceneNode
   absoluteX: number
   absoluteY: number
 }
@@ -15,10 +15,16 @@ const LABEL_OFFSET_Y = 4
 const MIN_WIDTH = 20
 const PADDING = 4
 
+function getDefaultNodeName(node: FlatSceneNode): string {
+  if (node.type === 'group') return 'Group'
+  if (node.type === 'embed') return 'Embed'
+  return 'Frame'
+}
+
 export function InlineNameEditor({ node, absoluteX, absoluteY }: InlineNameEditorProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const measureRef = useRef<HTMLSpanElement>(null)
-  const [editName, setEditName] = useState(node.name || 'Frame')
+  const [editName, setEditName] = useState(node.name || getDefaultNodeName(node))
   const [inputWidth, setInputWidth] = useState(MIN_WIDTH)
   const editNameRef = useRef(editName) // Track current value
   const updateNode = useSceneStore((state) => state.updateNode)
