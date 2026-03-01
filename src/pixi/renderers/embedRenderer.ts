@@ -4,6 +4,8 @@ import { renderHtmlToTexture, invalidateHtmlTexture } from "./htmlTextureHelpers
 
 /** Current resolution used for embed textures, updated on zoom */
 let currentEmbedResolution = window.devicePixelRatio;
+const EMBED_RESIZE_RERENDER_DEBOUNCE_MS = 180;
+const pendingResizeRerenderByContainer = new WeakMap<Container, ReturnType<typeof setTimeout>>();
 
 function drawPlaceholder(_gfx: Graphics, _width: number, _height: number): void {
   // No visual placeholder — container is transparent until texture loads
@@ -16,6 +18,19 @@ function removeExistingSprite(container: Container): void {
     container.removeChild(existing);
     existing.destroy();
   }
+}
+
+function scheduleRerenderAfterResize(container: Container, node: EmbedNode): void {
+  const pending = pendingResizeRerenderByContainer.get(container);
+  if (pending) clearTimeout(pending);
+
+  const timer = setTimeout(() => {
+    pendingResizeRerenderByContainer.delete(container);
+    if (container.destroyed || !node.htmlContent) return;
+    renderAndApply(container, node);
+  }, EMBED_RESIZE_RERENDER_DEBOUNCE_MS);
+
+  pendingResizeRerenderByContainer.set(container, timer);
 }
 
 async function renderAndApply(container: Container, node: EmbedNode, resolution?: number): Promise<void> {
@@ -68,14 +83,26 @@ export function updateEmbedContainer(
     }
   }
 
-  if (contentChanged || sizeChanged) {
-    // Remove old sprite immediately to avoid rendering with stale/destroyed texture
+  if (contentChanged) {
+    const pending = pendingResizeRerenderByContainer.get(container);
+    if (pending) {
+      clearTimeout(pending);
+      pendingResizeRerenderByContainer.delete(container);
+    }
+
+    // Remove old sprite immediately to avoid rendering with stale/destroyed content
     removeExistingSprite(container);
 
-    if (contentChanged && prev.htmlContent) {
+    if (prev.htmlContent) {
       invalidateHtmlTexture(prev.htmlContent, prev.width, prev.height);
     }
     renderAndApply(container, node);
+    return;
+  }
+
+  if (sizeChanged && node.htmlContent) {
+    // Avoid expensive HTML rerender while pointer is moving; refresh once resize settles.
+    scheduleRerenderAfterResize(container, node);
   }
 }
 

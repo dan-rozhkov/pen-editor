@@ -1,4 +1,4 @@
-import type { PathNode, GroupNode, SceneNode } from "@/types/scene";
+import type { PathNode, GroupNode, SceneNode, GradientFill } from "@/types/scene";
 import { generateId } from "@/types/scene";
 
 /**
@@ -91,6 +91,82 @@ function getInheritedStyle(el: Element, parent: InheritedStyle): InheritedStyle 
 interface ClipPathDef {
   geometry: string;
   bounds: { x: number; y: number; width: number; height: number };
+}
+
+function parseGradientUrl(value: string | undefined): string | null {
+  if (!value) return null;
+  const match = value.match(/^url\(\s*['"]?#([^'")]+)['"]?\s*\)$/i);
+  return match ? match[1] : null;
+}
+
+function parseGradientCoord(
+  value: string | null,
+  fallback: number,
+  axisSize: number,
+  units: string,
+): number {
+  if (!value) return fallback;
+  const raw = value.trim();
+  if (raw.endsWith("%")) {
+    const pct = parseFloat(raw);
+    return Number.isFinite(pct) ? pct / 100 : fallback;
+  }
+  const n = parseFloat(raw);
+  if (!Number.isFinite(n)) return fallback;
+  if (units === "userSpaceOnUse") {
+    return axisSize > 0 ? n / axisSize : fallback;
+  }
+  return n;
+}
+
+function collectLinearGradients(
+  doc: Document,
+  svgWidth: number,
+  svgHeight: number,
+): Map<string, GradientFill> {
+  const gradients = new Map<string, GradientFill>();
+  const gradientEls = doc.querySelectorAll("linearGradient");
+
+  for (const gradientEl of Array.from(gradientEls)) {
+    const id = gradientEl.getAttribute("id");
+    if (!id) continue;
+
+    const units = gradientEl.getAttribute("gradientUnits") ?? "objectBoundingBox";
+    const startX = parseGradientCoord(gradientEl.getAttribute("x1"), 0, svgWidth, units);
+    const startY = parseGradientCoord(gradientEl.getAttribute("y1"), 0, svgHeight, units);
+    const endX = parseGradientCoord(gradientEl.getAttribute("x2"), 1, svgWidth, units);
+    const endY = parseGradientCoord(gradientEl.getAttribute("y2"), 0, svgHeight, units);
+
+    const stops = Array.from(gradientEl.querySelectorAll("stop"))
+      .map((stopEl) => {
+        const offsetRaw = getAttrOrStyle(stopEl, "offset") ?? "0%";
+        const offset = offsetRaw.trim().endsWith("%")
+          ? parseFloat(offsetRaw) / 100
+          : parseFloat(offsetRaw);
+        const stopColor = getAttrOrStyle(stopEl, "stop-color") ?? "#000000";
+        const stopOpacityRaw = getAttrOrStyle(stopEl, "stop-opacity");
+        const stopOpacity = stopOpacityRaw != null ? parseFloat(stopOpacityRaw) : undefined;
+        return {
+          color: stopColor,
+          position: Number.isFinite(offset) ? Math.max(0, Math.min(1, offset)) : 0,
+          ...(Number.isFinite(stopOpacity ?? NaN) ? { opacity: Math.max(0, Math.min(1, stopOpacity!)) } : {}),
+        };
+      })
+      .sort((a, b) => a.position - b.position);
+
+    if (stops.length === 0) continue;
+
+    gradients.set(id, {
+      type: "linear",
+      stops,
+      startX: Math.max(0, Math.min(1, startX)),
+      startY: Math.max(0, Math.min(1, startY)),
+      endX: Math.max(0, Math.min(1, endX)),
+      endY: Math.max(0, Math.min(1, endY)),
+    });
+  }
+
+  return gradients;
 }
 
 /**
@@ -186,9 +262,77 @@ function collectPaths(
   offsetY: number,
   inherited: InheritedStyle,
   clipPaths: Map<string, ClipPathDef>,
+  gradientDefs: Map<string, GradientFill>,
   inheritedClipId: string | null = null,
 ): PathNode[] {
   const results: PathNode[] = [];
+
+  function createPathNode(
+    d: string,
+    bbox: { x: number; y: number; width: number; height: number },
+    fill: string | undefined,
+    fillGradient: GradientFill | undefined,
+    localClipId: string | null,
+    resolvedFillRule: string | undefined,
+    resolvedOpacity: string | undefined,
+    resolvedFillOpacity: string | undefined,
+    resolvedStrokeOpacity: string | undefined,
+    resolvedStroke: string | undefined,
+    resolvedStrokeWidth: string | undefined,
+    resolvedLinejoin: string | undefined,
+    resolvedLinecap: string | undefined,
+  ): PathNode {
+    // Keep thin strokes accurate (e.g. vertical bars with near-zero bbox width),
+    // but avoid zero dimensions that would break scaling in the path renderer.
+    const EPS = 1e-3;
+    const safeGeomWidth = Math.max(EPS, bbox.width);
+    const safeGeomHeight = Math.max(EPS, bbox.height);
+    const node: PathNode = {
+      id: generateId(),
+      type: "path",
+      name: "Vector",
+      x: bbox.x + offsetX,
+      y: bbox.y + offsetY,
+      width: safeGeomWidth,
+      height: safeGeomHeight,
+      geometry: d,
+      fill,
+      geometryBounds: { x: bbox.x, y: bbox.y, width: safeGeomWidth, height: safeGeomHeight },
+    };
+    if (fillGradient) node.gradientFill = fillGradient;
+
+    if (localClipId) {
+      const clipDef = clipPaths.get(localClipId);
+      if (clipDef) {
+        node.clipGeometry = clipDef.geometry;
+        node.clipBounds = clipDef.bounds;
+      }
+    }
+
+    if (resolvedFillRule === "evenodd" || resolvedFillRule === "nonzero") {
+      node.fillRule = resolvedFillRule;
+    }
+    if (resolvedOpacity) node.opacity = parseFloat(resolvedOpacity);
+    if (resolvedFillOpacity) node.fillOpacity = parseFloat(resolvedFillOpacity);
+    if (resolvedStrokeOpacity) node.strokeOpacity = parseFloat(resolvedStrokeOpacity);
+
+    if (resolvedStroke) {
+      node.pathStroke = {
+        fill: resolvedStroke,
+        thickness: resolvedStrokeWidth ? parseFloat(resolvedStrokeWidth) : 1,
+        join: resolvedLinejoin || "round",
+        cap: resolvedLinecap || "round",
+        align: "center",
+      };
+    }
+    return node;
+  }
+
+  function splitIntoSubpaths(pathData: string): string[] {
+    const chunks = pathData.match(/[Mm][^Mm]*/g);
+    if (!chunks || chunks.length <= 1) return [pathData];
+    return chunks.map((chunk) => chunk.trim()).filter(Boolean);
+  }
 
   for (const child of Array.from(el.children)) {
     // Check for clip-path on this element (inherits to children)
@@ -215,72 +359,48 @@ function collectPaths(
       const resolvedFillOpacity = localFillOpacity ?? inherited.fillOpacity;
       const resolvedStrokeOpacity = localStrokeOpacity ?? inherited.strokeOpacity;
       const resolvedFillRule = getAttrOrStyle(child, "fill-rule") ?? inherited.fillRule;
+      const fillGradientId = parseGradientUrl(resolvedFill);
+      const fillGradient = fillGradientId ? gradientDefs.get(fillGradientId) : undefined;
+      const hasSolidFill = !!resolvedFill && !fillGradientId;
 
       // Skip fully invisible paths (no fill AND no stroke)
-      if (!resolvedFill && !resolvedStroke) continue;
+      if (!hasSolidFill && !fillGradient && !resolvedStroke) continue;
 
-      const bbox = getPathBBox(d);
-      // Skip zero-size paths (e.g. bounding box rectangles like "M0 0h24v24H0z")
-      if (bbox.width === 0 && bbox.height === 0) continue;
+      const shouldSplitSubpaths =
+        !!resolvedStroke &&
+        !hasSolidFill &&
+        !fillGradient &&
+        (d.match(/[Mm]/g)?.length ?? 0) > 1;
+      const pathParts = shouldSplitSubpaths ? splitIntoSubpaths(d) : [d];
 
-      const node: PathNode = {
-        id: generateId(),
-        type: "path",
-        name: "Vector",
-        x: bbox.x + offsetX,
-        y: bbox.y + offsetY,
-        width: Math.max(1, bbox.width),
-        height: Math.max(1, bbox.height),
-        geometry: d,
-        fill: resolvedFill,
-        geometryBounds: { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height },
-      };
-
-      // Add clip geometry if present
-      if (localClipId) {
-        const clipDef = clipPaths.get(localClipId);
-        if (clipDef) {
-          node.clipGeometry = clipDef.geometry;
-          node.clipBounds = clipDef.bounds;
-        }
+      for (const part of pathParts) {
+        const bbox = getPathBBox(part);
+        // Skip zero-size paths (e.g. bounding box rectangles like "M0 0h24v24H0z")
+        if (bbox.width === 0 && bbox.height === 0) continue;
+        results.push(createPathNode(
+          part,
+          bbox,
+          hasSolidFill ? resolvedFill : undefined,
+          fillGradient,
+          localClipId,
+          resolvedFillRule,
+          resolvedOpacity,
+          resolvedFillOpacity,
+          resolvedStrokeOpacity,
+          resolvedStroke,
+          resolvedStrokeWidth,
+          resolvedLinejoin,
+          resolvedLinecap,
+        ));
       }
-
-      // Add fill-rule if present (evenodd creates holes in paths)
-      if (resolvedFillRule === "evenodd" || resolvedFillRule === "nonzero") {
-        node.fillRule = resolvedFillRule;
-      }
-
-      // Add opacity if present
-      if (resolvedOpacity) {
-        node.opacity = parseFloat(resolvedOpacity);
-      }
-      if (resolvedFillOpacity) {
-        node.fillOpacity = parseFloat(resolvedFillOpacity);
-      }
-      if (resolvedStrokeOpacity) {
-        node.strokeOpacity = parseFloat(resolvedStrokeOpacity);
-      }
-
-      // Add stroke info if present
-      if (resolvedStroke) {
-        node.pathStroke = {
-          fill: resolvedStroke,
-          thickness: resolvedStrokeWidth ? parseFloat(resolvedStrokeWidth) : 1,
-          join: resolvedLinejoin || "round",
-          cap: resolvedLinecap || "round",
-          align: "center",
-        };
-      }
-
-      results.push(node);
     } else if (child.tagName === "g") {
       const { tx, ty } = getGroupTranslate(child as SVGElement);
       const childStyle = getInheritedStyle(child, inherited);
-      results.push(...collectPaths(child, offsetX + tx, offsetY + ty, childStyle, clipPaths, localClipId));
+      results.push(...collectPaths(child, offsetX + tx, offsetY + ty, childStyle, clipPaths, gradientDefs, localClipId));
     } else {
       // Recurse into other elements (like <svg>, <defs> siblings, etc.)
       const childStyle = getInheritedStyle(child, inherited);
-      results.push(...collectPaths(child, offsetX, offsetY, childStyle, clipPaths, localClipId));
+      results.push(...collectPaths(child, offsetX, offsetY, childStyle, clipPaths, gradientDefs, localClipId));
     }
   }
 
@@ -331,8 +451,9 @@ export function parseSvgToNodes(svgText: string): { node: SceneNode; svgWidth: n
 
   // Collect clip-path definitions from <defs>
   const clipPathDefs = collectClipPaths(doc);
+  const gradientDefs = collectLinearGradients(doc, svgWidth, svgHeight);
 
-  const pathNodes = collectPaths(svgEl, 0, 0, rootStyle, clipPathDefs, null);
+  const pathNodes = collectPaths(svgEl, 0, 0, rootStyle, clipPathDefs, gradientDefs, null);
   if (pathNodes.length === 0) return null;
 
   if (pathNodes.length === 1) {

@@ -11,6 +11,7 @@ import type {
   ShadowEffect,
 } from "@/types/scene";
 import { generateId } from "@/types/scene";
+import { parseSvgToNodes } from "@/utils/svgUtils";
 
 let colorParserCtx: CanvasRenderingContext2D | null = null;
 
@@ -94,8 +95,11 @@ export async function convertHtmlToDesignNodes(
       const topStyle = window.getComputedStyle(container.children[0]);
       const layout = inferAutoLayout(topStyle, container.children[0]);
       if (layout) rootFrame.layout = layout;
-      const bg = parseFillColor(topStyle.backgroundColor);
-      if (bg) rootFrame.fill = bg;
+      const bg = parseColorWithOpacity(topStyle.backgroundColor);
+      if (bg) {
+        rootFrame.fill = bg.color;
+        if (bg.opacity !== undefined) rootFrame.fillOpacity = bg.opacity;
+      }
     }
 
     return rootFrame;
@@ -214,14 +218,41 @@ function convertElement(
 
   // <svg> → placeholder rect
   if (tag === "svg") {
-    const rectNode: RectNode = {
+    const svgFrame: FrameNode = {
       id: generateId(),
-      type: "rect",
+      type: "frame",
       name: "SVG",
       x, y, width: w, height: h,
-      fill: "#E0E0E0",
+      children: [],
     };
-    return rectNode;
+    applyBaseProps(svgFrame, style);
+
+    const serializedSvg = serializeSvgWithComputedStyles(el as SVGSVGElement);
+    const parsed = serializedSvg ? parseSvgToNodes(serializedSvg) : null;
+    if (!parsed) {
+      const svgDataUrl = serializedSvg ? svgTextToDataUrl(serializedSvg) : null;
+      if (svgDataUrl) {
+        svgFrame.imageFill = { url: svgDataUrl, mode: "fill" };
+        return svgFrame;
+      }
+
+      const rectNode: RectNode = {
+        id: generateId(),
+        type: "rect",
+        name: "SVG",
+        x, y, width: w, height: h,
+        fill: "#E0E0E0",
+      };
+      return rectNode;
+    }
+
+    const viewportNode = normalizeSvgNodeToViewport(parsed.node, parsed.svgWidth, parsed.svgHeight);
+    const sx = parsed.svgWidth > 0 ? w / parsed.svgWidth : 1;
+    const sy = parsed.svgHeight > 0 ? h / parsed.svgHeight : 1;
+    scaleAndOffsetNode(viewportNode, sx, sy, 0, 0);
+    viewportNode.absolutePosition = true;
+    svgFrame.children = [viewportNode];
+    return svgFrame;
   }
 
   // Check if this is a text-only element (no element children, only text content)
@@ -305,6 +336,121 @@ function convertElement(
   }
 
   return frame;
+}
+
+function serializeSvgWithComputedStyles(svgEl: SVGSVGElement): string | null {
+  try {
+    const clone = svgEl.cloneNode(true) as SVGSVGElement;
+    const sourceNodes = [svgEl, ...Array.from(svgEl.querySelectorAll("*"))];
+    const cloneNodes = [clone, ...Array.from(clone.querySelectorAll("*"))];
+    const count = Math.min(sourceNodes.length, cloneNodes.length);
+
+    const styleProps = [
+      "fill",
+      "stroke",
+      "stroke-width",
+      "stroke-linecap",
+      "stroke-linejoin",
+      "opacity",
+      "fill-opacity",
+      "stroke-opacity",
+      "fill-rule",
+    ];
+
+    for (let i = 0; i < count; i++) {
+      const sourceEl = sourceNodes[i] as Element;
+      const cloneEl = cloneNodes[i] as Element;
+      const computed = window.getComputedStyle(sourceEl);
+      const isRoot = i === 0;
+      const shouldCopyComputed =
+        isRoot ||
+        sourceEl.hasAttribute("class") ||
+        sourceEl.hasAttribute("style");
+      for (const prop of styleProps) {
+        if (!shouldCopyComputed && !sourceEl.hasAttribute(prop)) continue;
+        const value = computed.getPropertyValue(prop)?.trim();
+        if (!value) continue;
+        // Keep "none" when style/class explicitly defines it (important for SVG paths like chart stroke path).
+        if (
+          (prop === "fill" || prop === "stroke") &&
+          value === "none" &&
+          !sourceEl.hasAttribute(prop) &&
+          !shouldCopyComputed
+        ) {
+          continue;
+        }
+        cloneEl.setAttribute(prop, value);
+      }
+    }
+
+    const viewBox = clone.getAttribute("viewBox");
+    if (!clone.getAttribute("width") || !clone.getAttribute("height")) {
+      const rect = svgEl.getBoundingClientRect();
+      const resolvedW = rect.width > 0 ? rect.width : 1;
+      const resolvedH = rect.height > 0 ? rect.height : 1;
+      clone.setAttribute("width", `${resolvedW}`);
+      clone.setAttribute("height", `${resolvedH}`);
+      if (!viewBox) clone.setAttribute("viewBox", `0 0 ${resolvedW} ${resolvedH}`);
+    }
+
+    if (!clone.getAttribute("xmlns")) clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+
+    return new XMLSerializer().serializeToString(clone);
+  } catch {
+    return null;
+  }
+}
+
+function svgTextToDataUrl(svgText: string): string {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`;
+}
+
+function scaleAndOffsetNode(node: SceneNode, sx: number, sy: number, ox: number, oy: number): void {
+  node.x = node.x * sx + ox;
+  node.y = node.y * sy + oy;
+  node.width *= sx;
+  node.height *= sy;
+
+  if (node.type === "path") {
+    // Keep geometry/clip bounds in the original path coordinate space.
+    // Path renderer derives transform from `node.width/height` vs geometry bounds.
+    // Scaling bounds here causes double-transform and visual offsets/insets.
+  }
+
+  if ("children" in node && Array.isArray(node.children)) {
+    for (const child of node.children) {
+      scaleAndOffsetNode(child, sx, sy, 0, 0);
+    }
+  }
+}
+
+function normalizeSvgNodeToViewport(node: SceneNode, svgWidth: number, svgHeight: number): SceneNode {
+  if (node.type !== "group") return node;
+
+  const normalizedChildren = node.children.map((child) => {
+    const clone = structuredClone(child) as SceneNode;
+    shiftNode(clone, node.x, node.y);
+    return clone;
+  });
+
+  return {
+    ...node,
+    x: 0,
+    y: 0,
+    width: Math.max(1, svgWidth),
+    height: Math.max(1, svgHeight),
+    children: normalizedChildren,
+  };
+}
+
+function shiftNode(node: SceneNode, dx: number, dy: number): void {
+  node.x += dx;
+  node.y += dy;
+  if ("children" in node && Array.isArray(node.children)) {
+    for (const child of node.children) {
+      shiftNode(child, dx, dy);
+    }
+  }
 }
 
 /** Flatten only plain inline text wrappers. Keep styled or container-like text elements as frames. */
@@ -445,10 +591,52 @@ export function isTransparentColor(color: string | null | undefined): boolean {
   return false;
 }
 
-/** Parse a CSS color, returning hex or null if transparent */
-function parseFillColor(cssColor: string): string | null {
+interface ParsedColor {
+  color: string;
+  opacity?: number;
+}
+
+/** Parse CSS color into hex + optional opacity */
+function parseColorWithOpacity(cssColor: string): ParsedColor | null {
   if (isTransparentColor(cssColor)) return null;
-  return cssColorToHex(cssColor);
+  const input = cssColor.trim();
+
+  const rgb = input.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)/i);
+  if (rgb) {
+    const r = Math.round(parseFloat(rgb[1]));
+    const g = Math.round(parseFloat(rgb[2]));
+    const b = Math.round(parseFloat(rgb[3]));
+    const alpha = rgb[4] !== undefined ? parseFloat(rgb[4]) : 1;
+    const color = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+    const normalizedAlpha = Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1;
+    return normalizedAlpha < 1 ? { color, opacity: normalizedAlpha } : { color };
+  }
+
+  try {
+    if (!colorParserCtx) {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1;
+      canvas.height = 1;
+      colorParserCtx = canvas.getContext("2d");
+    }
+    if (colorParserCtx) {
+      colorParserCtx.fillStyle = "#000000";
+      colorParserCtx.fillStyle = input;
+      colorParserCtx.clearRect(0, 0, 1, 1);
+      colorParserCtx.fillRect(0, 0, 1, 1);
+      const rgba = colorParserCtx.getImageData(0, 0, 1, 1).data;
+      const r = rgba[0] ?? 0;
+      const g = rgba[1] ?? 0;
+      const b = rgba[2] ?? 0;
+      const a = (rgba[3] ?? 255) / 255;
+      const color = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+      return a < 1 ? { color, opacity: a } : { color };
+    }
+  } catch {
+    // fall through
+  }
+
+  return { color: cssColorToHex(input) };
 }
 
 /** Convert a CSS color string to hex */
@@ -526,8 +714,11 @@ function applyBaseProps(
   style: CSSStyleDeclaration,
 ): void {
   // Background color
-  const fill = parseFillColor(style.backgroundColor);
-  if (fill) node.fill = fill;
+  const fill = parseColorWithOpacity(style.backgroundColor);
+  if (fill) {
+    node.fill = fill.color;
+    if (fill.opacity !== undefined) node.fillOpacity = fill.opacity;
+  }
 
   // Corner radius
   const radius = parseFloat(style.borderRadius) || 0;
@@ -538,10 +729,10 @@ function applyBaseProps(
   const borderRightWidth = parseFloat(style.borderRightWidth) || 0;
   const borderBottomWidth = parseFloat(style.borderBottomWidth) || 0;
   const borderLeftWidth = parseFloat(style.borderLeftWidth) || 0;
-  const borderTopColor = parseFillColor(style.borderTopColor);
-  const borderRightColor = parseFillColor(style.borderRightColor);
-  const borderBottomColor = parseFillColor(style.borderBottomColor);
-  const borderLeftColor = parseFillColor(style.borderLeftColor);
+  const borderTopColor = parseColorWithOpacity(style.borderTopColor);
+  const borderRightColor = parseColorWithOpacity(style.borderRightColor);
+  const borderBottomColor = parseColorWithOpacity(style.borderBottomColor);
+  const borderLeftColor = parseColorWithOpacity(style.borderLeftColor);
   const borderTopStyle = style.borderTopStyle;
   const borderRightStyle = style.borderRightStyle;
   const borderBottomStyle = style.borderBottomStyle;
@@ -551,29 +742,32 @@ function applyBaseProps(
     borderTopWidth > 0 &&
     borderTopStyle !== "none" &&
     borderTopStyle !== "hidden" &&
-    !!borderTopColor;
+    !!borderTopColor?.color;
   const hasRight =
     borderRightWidth > 0 &&
     borderRightStyle !== "none" &&
     borderRightStyle !== "hidden" &&
-    !!borderRightColor;
+    !!borderRightColor?.color;
   const hasBottom =
     borderBottomWidth > 0 &&
     borderBottomStyle !== "none" &&
     borderBottomStyle !== "hidden" &&
-    !!borderBottomColor;
+    !!borderBottomColor?.color;
   const hasLeft =
     borderLeftWidth > 0 &&
     borderLeftStyle !== "none" &&
     borderLeftStyle !== "hidden" &&
-    !!borderLeftColor;
+    !!borderLeftColor?.color;
 
   if (hasTop || hasRight || hasBottom || hasLeft) {
     const strokeColor =
-      borderTopColor ?? borderRightColor ?? borderBottomColor ?? borderLeftColor;
+      borderTopColor?.color ?? borderRightColor?.color ?? borderBottomColor?.color ?? borderLeftColor?.color;
+    const strokeOpacity =
+      borderTopColor?.opacity ?? borderRightColor?.opacity ?? borderBottomColor?.opacity ?? borderLeftColor?.opacity;
 
     if (strokeColor) {
       node.stroke = strokeColor;
+      if (strokeOpacity !== undefined) node.strokeOpacity = strokeOpacity;
     }
 
     const isUniformStroke =
@@ -584,9 +778,12 @@ function applyBaseProps(
       borderTopWidth === borderRightWidth &&
       borderTopWidth === borderBottomWidth &&
       borderTopWidth === borderLeftWidth &&
-      borderTopColor === borderRightColor &&
-      borderTopColor === borderBottomColor &&
-      borderTopColor === borderLeftColor;
+      borderTopColor?.color === borderRightColor?.color &&
+      borderTopColor?.color === borderBottomColor?.color &&
+      borderTopColor?.color === borderLeftColor?.color &&
+      borderTopColor?.opacity === borderRightColor?.opacity &&
+      borderTopColor?.opacity === borderBottomColor?.opacity &&
+      borderTopColor?.opacity === borderLeftColor?.opacity;
 
     if (isUniformStroke) {
       node.strokeWidth = borderTopWidth;
@@ -658,8 +855,11 @@ function applyTextProps(node: TextNode, style: CSSStyleDeclaration): void {
   }
 
   // Text color → fill
-  const color = parseFillColor(style.color);
-  if (color) node.fill = color;
+  const color = parseColorWithOpacity(style.color);
+  if (color) {
+    node.fill = color.color;
+    if (color.opacity !== undefined) node.fillOpacity = color.opacity;
+  }
 
   // Text align
   const textAlign = style.textAlign;
@@ -979,9 +1179,17 @@ function createRectFromStyle(
     x, y, width: w, height: Math.max(h, 1),
   };
 
-  const borderColor = parseFillColor(style.borderTopColor);
-  const bgColor = parseFillColor(style.backgroundColor);
-  node.fill = bgColor ?? borderColor ?? "#cccccc";
+  const borderColor = parseColorWithOpacity(style.borderTopColor);
+  const bgColor = parseColorWithOpacity(style.backgroundColor);
+  if (bgColor) {
+    node.fill = bgColor.color;
+    if (bgColor.opacity !== undefined) node.fillOpacity = bgColor.opacity;
+  } else if (borderColor) {
+    node.fill = borderColor.color;
+    if (borderColor.opacity !== undefined) node.fillOpacity = borderColor.opacity;
+  } else {
+    node.fill = "#cccccc";
+  }
 
   return node;
 }

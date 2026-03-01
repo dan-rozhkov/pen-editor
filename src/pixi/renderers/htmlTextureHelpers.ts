@@ -5,7 +5,9 @@ import { extractCssUrl, isTransparentColor } from "@/lib/htmlToDesignNodes";
 const textureCache = new Map<string, Texture>();
 /** Dedup parallel renders for the same key */
 const pendingRenders = new Map<string, Promise<Texture | null>>();
-const HTML_TEXTURE_RENDER_VERSION = 6;
+/** Dedup stylesheet loads for external web-font providers */
+const pendingFontStylesheets = new Map<string, Promise<void>>();
+const HTML_TEXTURE_RENDER_VERSION = 7;
 
 function makeCacheKey(html: string, width: number, height: number, resolution: number): string {
   return `v${HTML_TEXTURE_RENDER_VERSION}:${width}x${height}@${resolution}:${html}`;
@@ -49,28 +51,35 @@ async function doRender(
   cacheKey: string,
 ): Promise<Texture | null> {
   const normalizedHtml = normalizeHtmlForEmbedRender(html);
+  await ensureExternalFontStylesLoaded(normalizedHtml);
   const pixelWidth = Math.ceil(width * resolution);
   const pixelHeight = Math.ceil(height * resolution);
+  const hasInlineSvg = /<svg[\s>]/i.test(normalizedHtml);
 
   // Prefer browser-native HTML layout via SVG foreignObject.
   // This yields accurate flex/text positioning when supported.
-  const foreignObjectCanvas = await renderViaForeignObject(
-    normalizedHtml,
-    width,
-    height,
-    pixelWidth,
-    pixelHeight,
-    resolution,
-  );
-  if (foreignObjectCanvas) {
-    const texture = Texture.from({ resource: foreignObjectCanvas, resolution });
-    textureCache.set(cacheKey, texture);
-    return texture;
+  // For inline SVG content we skip this path because foreignObject support is
+  // inconsistent across browsers for nested SVG.
+  if (!hasInlineSvg) {
+    const foreignObjectCanvas = await renderViaForeignObject(
+      normalizedHtml,
+      width,
+      height,
+      pixelWidth,
+      pixelHeight,
+      resolution,
+    );
+    if (foreignObjectCanvas) {
+      const texture = Texture.from({ resource: foreignObjectCanvas, resolution });
+      textureCache.set(cacheKey, texture);
+      return texture;
+    }
   }
 
-  // 1. Create a hidden container in the DOM for layout computation
-  const container = document.createElement("div");
-  container.style.cssText = `
+  // 1. Create an isolated hidden container for layout computation.
+  // Shadow DOM prevents embed <style> rules from affecting editor UI during render.
+  const host = document.createElement("div");
+  host.style.cssText = `
     position: fixed;
     left: -99999px;
     top: -99999px;
@@ -80,8 +89,20 @@ async function doRender(
     pointer-events: none;
     visibility: hidden;
   `;
+
+  const shadow = host.attachShadow({ mode: "open" });
+
+  const container = document.createElement("div");
+  container.style.cssText = `
+    width: ${width}px;
+    height: ${height}px;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+  `;
   container.innerHTML = normalizedHtml;
-  document.body.appendChild(container);
+  shadow.appendChild(container);
+  document.body.appendChild(host);
 
   // Wait one frame for the browser to compute layout
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -95,11 +116,14 @@ async function doRender(
 
     const containerRect = container.getBoundingClientRect();
 
-    // Pre-load all background images before drawing
-    const bgImageMap = await preloadBackgroundImages(container);
+    // Pre-load background images and web fonts in parallel before drawing.
+    const [renderAssets] = await Promise.all([
+      preloadRenderAssets(container),
+      waitForFontsUsedInTree(container),
+    ]);
 
     // Recursively walk the DOM and draw each element
-    walkAndDraw(ctx, container, containerRect, bgImageMap);
+    walkAndDraw(ctx, container, containerRect, renderAssets);
 
     const texture = Texture.from({ resource: canvas, resolution });
     textureCache.set(cacheKey, texture);
@@ -107,8 +131,97 @@ async function doRender(
   } catch {
     return null;
   } finally {
-    document.body.removeChild(container);
+    document.body.removeChild(host);
   }
+}
+
+function extractGoogleFontStylesheetUrls(html: string): string[] {
+  const urls = new Set<string>();
+  const patterns: [RegExp, number][] = [
+    [/href=["'](https?:\/\/fonts\.googleapis\.com\/[^"']+)["']/gi, 1],
+    [/@import\s+url\((['"]?)(https?:\/\/fonts\.googleapis\.com\/[^'")]+)\1\)/gi, 2],
+  ];
+
+  for (const [pattern, urlGroup] of patterns) {
+    let match: RegExpExecArray | null = null;
+    while ((match = pattern.exec(html)) !== null) {
+      const url = (match[urlGroup] ?? "").trim();
+      if (url) urls.add(url);
+    }
+  }
+
+  return [...urls];
+}
+
+function ensureFontStylesheetLoaded(url: string): Promise<void> {
+  const pending = pendingFontStylesheets.get(url);
+  if (pending) return pending;
+
+  let resolve!: () => void;
+  const promise = new Promise<void>((r) => { resolve = r; });
+  const tracked = promise.finally(() => { pendingFontStylesheets.delete(url); });
+  pendingFontStylesheets.set(url, tracked);
+
+  const existing = document.head.querySelector<HTMLLinkElement>(
+    `link[data-embed-font-url="${CSS.escape(url)}"]`,
+  );
+  if (existing) {
+    if ((existing.sheet as CSSStyleSheet | null) != null) {
+      resolve();
+    } else {
+      existing.addEventListener("load", resolve, { once: true });
+      existing.addEventListener("error", resolve, { once: true });
+    }
+    return tracked;
+  }
+
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = url;
+  link.dataset.embedFontUrl = url;
+  link.onload = resolve;
+  link.onerror = resolve;
+  document.head.appendChild(link);
+  return tracked;
+}
+
+async function ensureExternalFontStylesLoaded(html: string): Promise<void> {
+  if (typeof document === "undefined") return;
+  const urls = extractGoogleFontStylesheetUrls(html);
+  if (urls.length === 0) return;
+
+  await Promise.all(urls.map((url) => ensureFontStylesheetLoaded(url)));
+}
+
+function collectComputedFontFamilies(root: Element): string[] {
+  const families = new Set<string>();
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node: Node | null;
+  while ((node = walker.nextNode()) !== null) {
+    const parent = node.parentElement;
+    if (!parent) continue;
+    const family = window.getComputedStyle(parent).fontFamily?.trim();
+    if (family) families.add(family);
+  }
+  return [...families];
+}
+
+async function waitForFontsUsedInTree(root: Element): Promise<void> {
+  if (typeof document === "undefined" || !("fonts" in document)) return;
+
+  const families = collectComputedFontFamilies(root);
+  if (families.length === 0) return;
+
+  const loadPromises = families.map((family) =>
+    document.fonts.load(`16px ${family}`),
+  );
+
+  // Do not block rendering indefinitely on font providers.
+  const timeoutMs = 1200;
+  await Promise.race([
+    Promise.allSettled(loadPromises),
+    new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
 }
 
 function normalizeHtmlForEmbedRender(html: string): string {
@@ -553,14 +666,133 @@ function drawBoxShadows(
   }
 }
 
-/** Scan the container for all elements with background-image: url(...) or <img src> and preload them */
-async function preloadBackgroundImages(
-  container: HTMLElement,
-): Promise<Map<string, HTMLImageElement>> {
-  const map = new Map<string, HTMLImageElement>();
-  const urls = new Set<string>();
+interface PreloadedRenderAssets {
+  imageMap: Map<string, HTMLImageElement>;
+  svgMap: WeakMap<Element, HTMLImageElement>;
+}
 
-  const allElements = container.querySelectorAll<HTMLElement>("*");
+function resolveSvgDimensions(svg: SVGSVGElement, clone: SVGSVGElement): { width: number; height: number } {
+  const attrWidth = parseFloat(clone.getAttribute("width") || "");
+  const attrHeight = parseFloat(clone.getAttribute("height") || "");
+  let width = Number.isFinite(attrWidth) && attrWidth > 0 ? attrWidth : 0;
+  let height = Number.isFinite(attrHeight) && attrHeight > 0 ? attrHeight : 0;
+
+  const viewBox = clone.getAttribute("viewBox");
+  if ((!width || !height) && viewBox) {
+    const parts = viewBox.trim().split(/\s+/).map(Number);
+    if (parts.length === 4) {
+      if (!width && Number.isFinite(parts[2]) && parts[2] > 0) width = parts[2];
+      if (!height && Number.isFinite(parts[3]) && parts[3] > 0) height = parts[3];
+    }
+  }
+
+  if (!width || !height) {
+    const computed = window.getComputedStyle(svg);
+    const cssWidth = parseFloat(computed.width || "");
+    const cssHeight = parseFloat(computed.height || "");
+    if (!width && Number.isFinite(cssWidth) && cssWidth > 0) width = cssWidth;
+    if (!height && Number.isFinite(cssHeight) && cssHeight > 0) height = cssHeight;
+  }
+
+  if (!width || !height) {
+    const rect = svg.getBoundingClientRect();
+    if (!width && rect.width > 0) width = rect.width;
+    if (!height && rect.height > 0) height = rect.height;
+  }
+
+  if (!width) width = 1;
+  if (!height) height = 1;
+
+  return { width, height };
+}
+
+function serializeSvgWithInlineComputedStyles(svg: SVGSVGElement, styleTexts: string[]): string {
+  const clone = svg.cloneNode(true) as SVGSVGElement;
+  const sourceNodes = [svg, ...Array.from(svg.querySelectorAll("*"))];
+  const cloneNodes = [clone, ...Array.from(clone.querySelectorAll("*"))];
+  const count = Math.min(sourceNodes.length, cloneNodes.length);
+  const ignoredStyleProps = new Set(["visibility", "content-visibility"]);
+
+  for (let i = 0; i < count; i++) {
+    const sourceEl = sourceNodes[i] as Element;
+    const cloneEl = cloneNodes[i] as Element;
+    const computed = window.getComputedStyle(sourceEl);
+    const declarations: string[] = [];
+    for (let j = 0; j < computed.length; j++) {
+      const prop = computed[j];
+      if (ignoredStyleProps.has(prop)) continue;
+      declarations.push(`${prop}:${computed.getPropertyValue(prop)};`);
+    }
+    cloneEl.setAttribute("style", declarations.join(""));
+  }
+
+  const { width, height } = resolveSvgDimensions(svg, clone);
+  clone.setAttribute("width", `${width}`);
+  clone.setAttribute("height", `${height}`);
+  if (!clone.getAttribute("viewBox")) clone.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  if (!clone.getAttribute("xmlns")) clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  if (!clone.getAttribute("xmlns:xlink")) clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+
+  if (styleTexts.length > 0) {
+    const styleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");
+    styleEl.textContent = styleTexts.join("\n");
+    clone.insertBefore(styleEl, clone.firstChild);
+  }
+
+  return new XMLSerializer().serializeToString(clone);
+}
+
+function serializeSvgBasic(svg: SVGSVGElement, styleTexts: string[]): string {
+  const clone = svg.cloneNode(true) as SVGSVGElement;
+  const { width, height } = resolveSvgDimensions(svg, clone);
+  clone.setAttribute("width", `${width}`);
+  clone.setAttribute("height", `${height}`);
+  if (!clone.getAttribute("viewBox")) clone.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  if (!clone.getAttribute("xmlns")) clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  if (!clone.getAttribute("xmlns:xlink")) clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+  if (styleTexts.length > 0) {
+    const styleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");
+    styleEl.textContent = styleTexts.join("\n");
+    clone.insertBefore(styleEl, clone.firstChild);
+  }
+  return new XMLSerializer().serializeToString(clone);
+}
+
+async function loadSvgTextAsImage(svgText: string): Promise<HTMLImageElement | null> {
+  const blob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    return await loadImage(objectUrl, false);
+  } catch {
+    return null;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function loadInlineSvgAsImage(svg: SVGSVGElement, styleTexts: string[]): Promise<HTMLImageElement | null> {
+  const rich = serializeSvgWithInlineComputedStyles(svg, styleTexts);
+  const richImage = await loadSvgTextAsImage(rich);
+  if (richImage) return richImage;
+
+  // Fallback for browsers that fail with verbose computed-style serialization.
+  const basic = serializeSvgBasic(svg, styleTexts);
+  return loadSvgTextAsImage(basic);
+}
+
+/** Scan the container for image-like resources and preload them. */
+async function preloadRenderAssets(
+  container: HTMLElement,
+): Promise<PreloadedRenderAssets> {
+  const imageMap = new Map<string, HTMLImageElement>();
+  const svgMap = new WeakMap<Element, HTMLImageElement>();
+  const urls = new Set<string>();
+  const svgs: SVGSVGElement[] = [];
+  const styleTexts = Array.from(container.querySelectorAll("style"))
+    .map((styleEl) => styleEl.textContent ?? "")
+    .filter((text) => text.trim().length > 0);
+
+  const allElements = container.querySelectorAll("*");
   for (const el of allElements) {
     const bgImage = window.getComputedStyle(el).backgroundImage;
     if (bgImage && bgImage !== "none") {
@@ -571,6 +803,9 @@ async function preloadBackgroundImages(
     if (el.tagName === "IMG") {
       const src = (el as HTMLImageElement).src;
       if (src) urls.add(src);
+    }
+    if (el.tagName.toLowerCase() === "svg") {
+      svgs.push(el as SVGSVGElement);
     }
   }
   // Also check the container itself
@@ -584,12 +819,12 @@ async function preloadBackgroundImages(
     [...urls].map(async (url) => {
       try {
         const img = await loadImage(url);
-        map.set(url, img);
+        imageMap.set(url, img);
       } catch {
         // Try without CORS as fallback
         try {
           const img = await loadImage(url, false);
-          map.set(url, img);
+          imageMap.set(url, img);
         } catch {
           // Skip images that fail to load
         }
@@ -597,7 +832,16 @@ async function preloadBackgroundImages(
     }),
   );
 
-  return map;
+  await Promise.all(
+    svgs.map(async (svgEl) => {
+      const svgImg = await loadInlineSvgAsImage(svgEl, styleTexts);
+      if (svgImg) {
+        svgMap.set(svgEl, svgImg);
+      }
+    }),
+  );
+
+  return { imageMap, svgMap };
 }
 
 /** Walk DOM tree and draw elements onto a 2D canvas */
@@ -605,7 +849,7 @@ function walkAndDraw(
   ctx: CanvasRenderingContext2D,
   element: Element,
   containerRect: DOMRect,
-  bgImageMap: Map<string, HTMLImageElement>,
+  renderAssets: PreloadedRenderAssets,
 ): void {
   const style = window.getComputedStyle(element);
   const { x, y, w, h } = getElementRectInContainer(element, style, containerRect);
@@ -655,7 +899,7 @@ function walkAndDraw(
   // Draw background-image: url(...)
   if (bgImage && bgImage !== "none") {
     const bgUrl = extractCssUrl(bgImage);
-    const img = bgUrl ? bgImageMap.get(bgUrl) : undefined;
+    const img = bgUrl ? renderAssets.imageMap.get(bgUrl) : undefined;
     if (img && w > 0 && h > 0) {
       ctx.save();
       if (rounded) {
@@ -671,7 +915,7 @@ function walkAndDraw(
   // Draw <img> element
   if (element.tagName === "IMG" && w > 0 && h > 0) {
     const imgSrc = (element as HTMLImageElement).src;
-    const img = imgSrc ? bgImageMap.get(imgSrc) : undefined;
+    const img = imgSrc ? renderAssets.imageMap.get(imgSrc) : undefined;
     if (img) {
       ctx.save();
       if (rounded) {
@@ -683,6 +927,14 @@ function walkAndDraw(
       const objFit = style.objectFit;
       drawImgElement(ctx, img, objFit, x, y, w, h);
       ctx.restore();
+    }
+  }
+
+  // Draw inline <svg> elements in fallback mode by rasterizing each SVG subtree.
+  if (element.tagName.toLowerCase() === "svg" && w > 0 && h > 0) {
+    const svgImg = renderAssets.svgMap.get(element);
+    if (svgImg) {
+      ctx.drawImage(svgImg, x, y, w, h);
     }
   }
 
@@ -773,8 +1025,9 @@ function walkAndDraw(
 
   // Process child nodes
   for (const child of element.childNodes) {
+    if (element.tagName.toLowerCase() === "svg") break;
     if (child.nodeType === Node.ELEMENT_NODE) {
-      walkAndDraw(ctx, child as Element, containerRect, bgImageMap);
+      walkAndDraw(ctx, child as Element, containerRect, renderAssets);
     } else if (child.nodeType === Node.TEXT_NODE) {
       drawTextNode(ctx, child as Text, style, containerRect);
     }

@@ -349,11 +349,8 @@ export function applyLayoutSize(
       break;
     }
     case "embed": {
-      const sprite = container.getChildByLabel("embed-content") as import("pixi.js").Sprite | null;
-      if (sprite) {
-        sprite.width = layoutWidth;
-        sprite.height = layoutHeight;
-      }
+      // Embed HTML content is intentionally not scaled during interactive resize.
+      // It is re-rendered at the target size after resize settles.
       break;
     }
     // Text and other types don't need size updates for layout
