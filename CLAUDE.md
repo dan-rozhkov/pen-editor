@@ -9,7 +9,7 @@ npm run lint      # ESLint on all files
 npm run preview   # Preview production build
 ```
 
-No test runner is configured. End-to-end testing uses Puppeteer in-browser.
+No test runner is configured. End-to-end testing uses Puppeteer/Playwright in-browser.
 
 ## Path Alias
 
@@ -21,18 +21,17 @@ import { useSceneStore } from "@/store/sceneStore";
 
 ## Architecture
 
-### Dual Rendering Backends
+### Rendering Backend — PixiJS
 
-The editor has two canvas renderers sharing identical Zustand state:
+The editor uses a single PixiJS renderer (Konva has been removed).
 
-- **Konva** (default) — React-based via `react-konva`.
-  Entry: `src/components/Canvas.tsx`, per-node renderers in `src/components/nodes/`.
-- **PixiJS** (in development) — imperative renderer.
-  Entry: `src/pixi/PixiCanvas.tsx`, rendering in `src/pixi/renderers.ts`, state sync in `src/pixi/pixiSync.ts`.
-
-Switched via dropdown in the right sidebar; mode persisted in `localStorage` key `"use-pixi"`. Conditional rendering in `src/App.tsx`.
-
-When implementing rendering features, update both backends (or note which is missing in the commit).
+- Entry: `src/pixi/PixiCanvas.tsx`
+- Node rendering: `src/pixi/renderers/` (per-node files: `frameRenderer.ts`, `textRenderer.ts`, etc.)
+- State sync: `src/pixi/pixiSync.ts` (subscribes to Zustand stores, updates PixiJS containers)
+- Viewport: `src/pixi/pixiViewport.ts`
+- Interaction: `src/pixi/interaction/` (`dragController.ts`, `drawController.ts`, `transformController.ts`, etc.)
+- Overlays: `src/pixi/SelectionOverlay.ts`, `src/pixi/OverlayRenderer.ts`
+- Canvas UI hooks: `src/components/canvas/` (`CanvasOverlays.tsx`, `useCanvasFileDrop.ts`, etc.)
 
 ### State Management — Zustand
 
@@ -48,10 +47,25 @@ All global state lives in `src/store/`. Key stores:
 | `dragStore` | Active drag operations |
 | `variableStore` | Design variables/themes |
 | `drawModeStore` | Shape drawing mode |
+| `hoverStore` | Hovered node state |
+| `chatStore` | AI chat state |
+| `clipboardStore` | Copy/paste clipboard |
+| `measureStore` | Measurement overlay |
+| `pixelGridStore` | Pixel grid display |
+| `smartGuideStore` | Snapping/smart guides |
+| `themeStore` | Active theme |
+| `uiThemeStore` | Editor UI theme |
+| `canvasRefStore` | PixiJS canvas ref |
 
 ### Scene Graph & Layout
 
-Nodes are stored as a flat map with parent-child references. The layout engine computes absolute positions/sizes from the tree. Node types include frames, text, rectangles, ellipses, paths, groups, etc.
+Nodes are stored as a flat map (`nodesById`) with parent-child references (`parentById`, `childrenById`, `rootIds`). The layout engine computes absolute positions/sizes from the tree. Node types: frames, text, rectangles, ellipses, paths, groups, lines, polygons, embeds, refs (component instances).
+
+`sceneStore` is split into modules:
+- `src/store/sceneStore/index.ts` — main store
+- `src/store/sceneStore/complexOperations.ts` — multi-step mutations
+- `src/store/sceneStore/instanceOperations.ts` — component instance logic
+- `src/store/sceneStore/helpers/` — history, textSync, flatStoreHelpers, treeCache
 
 ### File Format
 
@@ -61,7 +75,7 @@ The editor reads/writes `.pen` files. These are accessed exclusively through the
 
 ### Naming
 
-- Components: **PascalCase** (`Canvas.tsx`, `FrameRenderer.tsx`)
+- Components: **PascalCase** (`PixiCanvas.tsx`, `LayersPanel.tsx`)
 - Hooks: **camelCase** with `use` prefix (`useNodePlacement.ts`)
 - Stores: **camelCase** with `Store` suffix (`layoutStore.ts`)
 - Utils: **camelCase** (`colorUtils.ts`)
@@ -84,21 +98,33 @@ Strict mode, `noUnusedLocals`, `noUnusedParameters`. Target ES2022.
 
 ```
 src/
-├── App.tsx              # Root — switches between Konva/PixiJS
-├── main.tsx             # Entry point
-├── index.css            # Tailwind + theme tokens
-├── components/          # React components (UI + Konva renderers)
-│   └── nodes/           # Per-node Konva renderers
-├── pixi/                # PixiJS backend
-│   ├── PixiCanvas.tsx   # PixiJS entry
-│   ├── renderers.ts     # Node rendering logic
-│   ├── pixiSync.ts      # Zustand → PixiJS sync
-│   ├── pixiViewport.ts  # Viewport handling
-│   └── pixiInteraction.ts
-├── store/               # Zustand stores
-├── hooks/               # Custom React hooks
-├── types/               # TypeScript types/interfaces
-├── utils/               # Utility functions
-├── lib/                 # Shared library code
-└── assets/              # Static assets
+├── App.tsx                    # Root component
+├── main.tsx                   # Entry point
+├── index.css                  # Tailwind + theme tokens
+├── components/
+│   ├── canvas/                # Canvas-level UI hooks and overlays
+│   ├── chat/                  # AI chat panel components
+│   ├── properties/            # Property panel sections
+│   ├── ui/                    # Generic UI primitives
+│   ├── LayersPanel.tsx
+│   ├── LeftSidebar.tsx
+│   ├── PropertiesPanel.tsx
+│   ├── RightSidebar.tsx
+│   ├── Toolbar.tsx
+│   └── ...
+├── pixi/                      # PixiJS rendering backend
+│   ├── PixiCanvas.tsx         # Entry point
+│   ├── pixiSync.ts            # Zustand → PixiJS sync
+│   ├── pixiViewport.ts        # Viewport/pan/zoom
+│   ├── OverlayRenderer.ts
+│   ├── SelectionOverlay.ts
+│   ├── interaction/           # Input handling (drag, draw, transform, etc.)
+│   └── renderers/             # Per-node-type renderers
+├── store/                     # Zustand stores
+│   └── sceneStore/            # Scene graph store (split into modules)
+├── hooks/                     # Custom React hooks
+├── lib/                       # Tool registry, HTML→design conversion, etc.
+├── types/                     # TypeScript types/interfaces
+├── utils/                     # Utility functions
+└── assets/                    # Static assets
 ```
