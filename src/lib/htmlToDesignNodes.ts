@@ -90,7 +90,7 @@ export async function convertHtmlToDesignNodes(
     // If there's a single top-level element, try to infer its layout
     if (container.children.length === 1) {
       const topStyle = window.getComputedStyle(container.children[0]);
-      const layout = inferAutoLayout(topStyle);
+      const layout = inferAutoLayout(topStyle, container.children[0]);
       if (layout) rootFrame.layout = layout;
       const bg = parseFillColor(topStyle.backgroundColor);
       if (bg) rootFrame.fill = bg;
@@ -281,7 +281,7 @@ function convertElement(
   }
 
   // Infer auto-layout from CSS display/flex
-  const layout = inferAutoLayout(style);
+  const layout = inferAutoLayout(style, el);
   if (layout) {
     frame.layout = layout;
 
@@ -311,8 +311,11 @@ function hasDirectTextContent(el: Element): boolean {
 function hasVisualStyling(style: CSSStyleDeclaration): boolean {
   const bg = style.backgroundColor;
   if (bg && bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent") return true;
-  const border = parseFloat(style.borderTopWidth) || 0;
-  if (border > 0) return true;
+  const borderTop = parseFloat(style.borderTopWidth) || 0;
+  const borderRight = parseFloat(style.borderRightWidth) || 0;
+  const borderBottom = parseFloat(style.borderBottomWidth) || 0;
+  const borderLeft = parseFloat(style.borderLeftWidth) || 0;
+  if (borderTop > 0 || borderRight > 0 || borderBottom > 0 || borderLeft > 0) return true;
   const shadow = style.boxShadow;
   if (shadow && shadow !== "none") return true;
   return false;
@@ -354,11 +357,38 @@ function inferFrameName(el: Element): string {
   return nameMap[tag] ?? "Frame";
 }
 
+/** Check if a CSS color is fully transparent */
+export function isTransparentColor(color: string | null | undefined): boolean {
+  if (!color) return true;
+  const normalized = color.trim().toLowerCase();
+  if (
+    normalized === "transparent" ||
+    normalized === "rgba(0, 0, 0, 0)" ||
+    normalized === "rgba(0,0,0,0)"
+  ) {
+    return true;
+  }
+
+  const rgbaMatch = normalized.match(/^rgba\(([^)]+)\)$/);
+  if (rgbaMatch?.[1]) {
+    const parts = rgbaMatch[1].split(",").map((part) => part.trim());
+    const alpha = Number(parts[3]);
+    if (Number.isFinite(alpha) && alpha <= 0) return true;
+  }
+
+  const hslaMatch = normalized.match(/^hsla\(([^)]+)\)$/);
+  if (hslaMatch?.[1]) {
+    const parts = hslaMatch[1].split(",").map((part) => part.trim());
+    const alpha = Number(parts[3]);
+    if (Number.isFinite(alpha) && alpha <= 0) return true;
+  }
+
+  return false;
+}
+
 /** Parse a CSS color, returning hex or null if transparent */
 function parseFillColor(cssColor: string): string | null {
-  if (!cssColor || cssColor === "rgba(0, 0, 0, 0)" || cssColor === "transparent") {
-    return null;
-  }
+  if (isTransparentColor(cssColor)) return null;
   return cssColorToHex(cssColor);
 }
 
@@ -393,12 +423,71 @@ function applyBaseProps(
   if (radius > 0) node.cornerRadius = radius;
 
   // Border/stroke
-  const borderWidth = parseFloat(style.borderTopWidth) || 0;
-  if (borderWidth > 0) {
-    const borderColor = parseFillColor(style.borderTopColor);
-    if (borderColor) {
-      node.stroke = borderColor;
-      node.strokeWidth = borderWidth;
+  const borderTopWidth = parseFloat(style.borderTopWidth) || 0;
+  const borderRightWidth = parseFloat(style.borderRightWidth) || 0;
+  const borderBottomWidth = parseFloat(style.borderBottomWidth) || 0;
+  const borderLeftWidth = parseFloat(style.borderLeftWidth) || 0;
+  const borderTopColor = parseFillColor(style.borderTopColor);
+  const borderRightColor = parseFillColor(style.borderRightColor);
+  const borderBottomColor = parseFillColor(style.borderBottomColor);
+  const borderLeftColor = parseFillColor(style.borderLeftColor);
+  const borderTopStyle = style.borderTopStyle;
+  const borderRightStyle = style.borderRightStyle;
+  const borderBottomStyle = style.borderBottomStyle;
+  const borderLeftStyle = style.borderLeftStyle;
+
+  const hasTop =
+    borderTopWidth > 0 &&
+    borderTopStyle !== "none" &&
+    borderTopStyle !== "hidden" &&
+    !!borderTopColor;
+  const hasRight =
+    borderRightWidth > 0 &&
+    borderRightStyle !== "none" &&
+    borderRightStyle !== "hidden" &&
+    !!borderRightColor;
+  const hasBottom =
+    borderBottomWidth > 0 &&
+    borderBottomStyle !== "none" &&
+    borderBottomStyle !== "hidden" &&
+    !!borderBottomColor;
+  const hasLeft =
+    borderLeftWidth > 0 &&
+    borderLeftStyle !== "none" &&
+    borderLeftStyle !== "hidden" &&
+    !!borderLeftColor;
+
+  if (hasTop || hasRight || hasBottom || hasLeft) {
+    const strokeColor =
+      borderTopColor ?? borderRightColor ?? borderBottomColor ?? borderLeftColor;
+
+    if (strokeColor) {
+      node.stroke = strokeColor;
+    }
+
+    const isUniformStroke =
+      hasTop &&
+      hasRight &&
+      hasBottom &&
+      hasLeft &&
+      borderTopWidth === borderRightWidth &&
+      borderTopWidth === borderBottomWidth &&
+      borderTopWidth === borderLeftWidth &&
+      borderTopColor === borderRightColor &&
+      borderTopColor === borderBottomColor &&
+      borderTopColor === borderLeftColor;
+
+    if (isUniformStroke) {
+      node.strokeWidth = borderTopWidth;
+      node.strokeWidthPerSide = undefined;
+    } else {
+      node.strokeWidth = undefined;
+      node.strokeWidthPerSide = {
+        top: hasTop ? borderTopWidth : 0,
+        right: hasRight ? borderRightWidth : 0,
+        bottom: hasBottom ? borderBottomWidth : 0,
+        left: hasLeft ? borderLeftWidth : 0,
+      };
     }
   }
 
@@ -492,9 +581,49 @@ function applyTextProps(node: TextNode, style: CSSStyleDeclaration): void {
   }
 }
 
+/**
+ * Compute the gap between consecutive visible, non-absolute children by
+ * measuring the space between their bounding rects. Returns the median of
+ * positive gaps (robust against outliers), rounded to the nearest integer.
+ */
+function computeGapFromChildRects(el: Element, direction: FlexDirection): number {
+  const rects: DOMRect[] = [];
+  for (const child of el.children) {
+    const s = window.getComputedStyle(child);
+    if (s.display === "none" || s.visibility === "hidden") continue;
+    if (s.position === "absolute" || s.position === "fixed") continue;
+    const r = child.getBoundingClientRect();
+    if (r.width > 0 || r.height > 0) rects.push(r);
+  }
+
+  if (rects.length < 2) return 0;
+
+  const gaps: number[] = [];
+  for (let i = 1; i < rects.length; i++) {
+    const prev = rects[i - 1];
+    const curr = rects[i];
+    const gap = direction === "column"
+      ? curr.top - prev.bottom
+      : curr.left - prev.right;
+    if (gap > 0) gaps.push(gap);
+  }
+
+  if (gaps.length === 0) return 0;
+
+  // Median
+  gaps.sort((a, b) => a - b);
+  const mid = Math.floor(gaps.length / 2);
+  const median = gaps.length % 2 === 0
+    ? (gaps[mid - 1] + gaps[mid]) / 2
+    : gaps[mid];
+
+  return Math.round(median);
+}
+
 /** Infer auto-layout properties from CSS display/flex */
 function inferAutoLayout(
   style: CSSStyleDeclaration,
+  el?: Element,
 ): LayoutProperties | undefined {
   const display = style.display;
 
@@ -504,10 +633,15 @@ function inferAutoLayout(
         ? "row"
         : "column";
 
-    const mainAxisGap =
+    let mainAxisGap =
       flexDirection === "row"
         ? parseFloat(style.columnGap) || parseFloat(style.gap) || 0
         : parseFloat(style.rowGap) || parseFloat(style.gap) || 0;
+
+    // If CSS gap is 0 but children have margin-based spacing, infer from rects
+    if (mainAxisGap === 0 && el) {
+      mainAxisGap = computeGapFromChildRects(el, flexDirection as FlexDirection);
+    }
 
     const layout: LayoutProperties = {
       autoLayout: true,
@@ -558,10 +692,15 @@ function inferAutoLayout(
     // Count columns: if >1 resolved column track, treat as row layout
     const colCount = cols ? cols.trim().split(/\s+/).length : 1;
     const flexDirection: FlexDirection = colCount > 1 ? "row" : "column";
-    const gap =
+    let gap =
       parseFloat(flexDirection === "row" ? style.columnGap : style.rowGap) ||
       parseFloat(style.gap) ||
       0;
+
+    // If CSS gap is 0 but children have margin-based spacing, infer from rects
+    if (gap === 0 && el) {
+      gap = computeGapFromChildRects(el, flexDirection);
+    }
 
     const layout: LayoutProperties = {
       autoLayout: true,
@@ -583,10 +722,11 @@ function inferAutoLayout(
 
   // Block-level → vertical auto-layout
   if (display === "block" || display === "inline-block" || display === "list-item") {
+    const gap = el ? computeGapFromChildRects(el, "column") : 0;
     return {
       autoLayout: true,
       flexDirection: "column",
-      gap: 0,
+      gap,
       paddingTop: parseFloat(style.paddingTop) || 0,
       paddingRight: parseFloat(style.paddingRight) || 0,
       paddingBottom: parseFloat(style.paddingBottom) || 0,

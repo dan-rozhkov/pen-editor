@@ -3,33 +3,81 @@ import type { ImageFill } from "@/types/scene";
 
 /** Cache for loaded textures by URL */
 const textureCache = new Map<string, Texture>();
-const loadingUrls = new Set<string>();
+/** Callbacks queued while a URL is already loading */
+const loadingCallbacks = new Map<string, Array<() => void>>();
 
-async function loadTextureFromUrl(url: string): Promise<Texture> {
-  try {
-    return await Assets.load<Texture>(url);
-  } catch (assetsError) {
-    // Some image CDNs (e.g. Unsplash) use URLs without file extensions.
-    // Pixi's Assets parser may skip those URLs, so fall back to browser image loading.
+/** Load an image as an HTMLImageElement, optionally with CORS */
+function loadImageAsTexture(url: string, useCors: boolean): Promise<Texture> {
+  return new Promise<Texture>((resolve, reject) => {
     const image = new Image();
-    image.crossOrigin = "anonymous";
+    if (useCors) image.crossOrigin = "anonymous";
 
-    const loadPromise = new Promise<void>((resolve, reject) => {
-      image.onload = () => resolve();
-      image.onerror = () => reject(new Error(`Failed to load image URL: ${url}`));
-    });
+    image.onload = () => {
+      if (image.naturalWidth <= 0 || image.naturalHeight <= 0) {
+        reject(new Error(`Image loaded with invalid dimensions: ${url}`));
+        return;
+      }
+      resolve(Texture.from(image));
+    };
+    image.onerror = () => reject(new Error(`Failed to load image URL: ${url}`));
 
     image.src = url;
-    await loadPromise;
+  });
+}
 
-    if (image.naturalWidth <= 0 || image.naturalHeight <= 0) {
-      throw assetsError instanceof Error
-        ? assetsError
-        : new Error(`Image loaded with invalid dimensions: ${url}`);
-    }
-
-    return Texture.from(image);
+async function loadTextureFromUrl(url: string): Promise<Texture> {
+  // Attempt 1: Pixi Assets loader
+  // Note: Assets.load may resolve with null for URLs without file extensions
+  // (e.g. Unsplash URLs with query params), so we must check the result.
+  try {
+    const tex = await Assets.load<Texture>(url);
+    if (tex) return tex;
+  } catch {
+    // fall through
   }
+
+  // Attempt 2: Browser image with CORS
+  try {
+    return await loadImageAsTexture(url, true);
+  } catch {
+    // fall through
+  }
+
+  // Attempt 3: Browser image without CORS (works when server lacks CORS headers)
+  return await loadImageAsTexture(url, false);
+}
+
+/** Load a texture by URL with caching and deduplication, then invoke callback */
+function withTexture(
+  url: string,
+  container: Container,
+  onReady: (texture: Texture) => void,
+): void {
+  const cached = textureCache.get(url);
+  if (cached) {
+    onReady(cached);
+    return;
+  }
+
+  if (loadingCallbacks.has(url)) {
+    loadingCallbacks.get(url)!.push(() => {
+      const tex = textureCache.get(url);
+      if (tex && !container.destroyed) onReady(tex);
+    });
+    return;
+  }
+
+  loadingCallbacks.set(url, []);
+  loadTextureFromUrl(url).then((texture) => {
+    textureCache.set(url, texture);
+    if (!container.destroyed) onReady(texture);
+    const cbs = loadingCallbacks.get(url);
+    loadingCallbacks.delete(url);
+    cbs?.forEach((cb) => cb());
+  }).catch(() => {
+    loadingCallbacks.delete(url);
+    console.warn("[pixi] Failed to load image fill", url);
+  });
 }
 
 export function applyImageFill(
@@ -48,26 +96,9 @@ export function applyImageFill(
 
   if (!imageFill?.url) return;
 
-  const cached = textureCache.get(imageFill.url);
-  if (cached) {
-    addImageSprite(container, cached, imageFill, width, height, cornerRadius);
-  } else if (!loadingUrls.has(imageFill.url)) {
-    loadingUrls.add(imageFill.url);
-    loadTextureFromUrl(imageFill.url).then((texture) => {
-      loadingUrls.delete(imageFill.url);
-      if (texture) {
-        textureCache.set(imageFill.url, texture);
-        // Check container still exists and needs this image
-        if (!container.destroyed) {
-          addImageSprite(container, texture, imageFill, width, height, cornerRadius);
-        }
-      }
-    }).catch(() => {
-      loadingUrls.delete(imageFill.url);
-      // Keep this visible in devtools; otherwise failed image fills are silent.
-      console.warn("[pixi] Failed to load image fill", imageFill.url);
-    });
-  }
+  withTexture(imageFill.url, container, (texture) => {
+    addImageSprite(container, texture, imageFill, width, height, cornerRadius);
+  });
 }
 
 /** Apply image scaling mode (stretch/fill/fit) to a sprite */
@@ -176,22 +207,9 @@ export function applyImageFillEllipse(
 
   if (!imageFill?.url) return;
 
-  const cached = textureCache.get(imageFill.url);
-  if (cached) {
-    addImageSpriteEllipse(container, cached, imageFill, width, height);
-  } else if (!loadingUrls.has(imageFill.url)) {
-    loadingUrls.add(imageFill.url);
-    loadTextureFromUrl(imageFill.url).then((texture) => {
-      loadingUrls.delete(imageFill.url);
-      if (texture && !container.destroyed) {
-        textureCache.set(imageFill.url, texture);
-        addImageSpriteEllipse(container, texture, imageFill, width, height);
-      }
-    }).catch(() => {
-      loadingUrls.delete(imageFill.url);
-      console.warn("[pixi] Failed to load image fill", imageFill.url);
-    });
-  }
+  withTexture(imageFill.url, container, (texture) => {
+    addImageSpriteEllipse(container, texture, imageFill, width, height);
+  });
 }
 
 function addImageSpriteEllipse(

@@ -1,11 +1,11 @@
 import { Texture } from "pixi.js";
-import { extractCssUrl } from "@/lib/htmlToDesignNodes";
+import { extractCssUrl, isTransparentColor } from "@/lib/htmlToDesignNodes";
 
 /** Cache for rendered HTML textures by content+size key */
 const textureCache = new Map<string, Texture>();
 /** Dedup parallel renders for the same key */
 const pendingRenders = new Map<string, Promise<Texture | null>>();
-const HTML_TEXTURE_RENDER_VERSION = 5;
+const HTML_TEXTURE_RENDER_VERSION = 6;
 
 function makeCacheKey(html: string, width: number, height: number, resolution: number): string {
   return `v${HTML_TEXTURE_RENDER_VERSION}:${width}x${height}@${resolution}:${html}`;
@@ -177,12 +177,10 @@ async function renderViaForeignObject(
   }
 }
 
-function loadImage(url: string): Promise<HTMLImageElement> {
+function loadImage(url: string, useCors = true): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    // Prevent canvas tainting for cross-origin images used in WebGL textures.
-    // If the server does not allow CORS, loading will fail and caller can skip it.
-    img.crossOrigin = "anonymous";
+    if (useCors) img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error("Failed to load image"));
     img.src = url;
@@ -392,6 +390,42 @@ function drawBackgroundImage(
   ctx.drawImage(img, x + posX, y + posY, drawW, drawH);
 }
 
+/**
+ * Draw an <img> element onto the canvas, respecting object-fit (cover/contain/fill).
+ */
+function drawImgElement(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  objectFit: string,
+  x: number, y: number, w: number, h: number,
+): void {
+  const imgW = img.naturalWidth;
+  const imgH = img.naturalHeight;
+  if (imgW === 0 || imgH === 0) return;
+
+  let drawX = x;
+  let drawY = y;
+  let drawW = w;
+  let drawH = h;
+
+  if (objectFit === "contain") {
+    const scale = Math.min(w / imgW, h / imgH);
+    drawW = imgW * scale;
+    drawH = imgH * scale;
+    drawX = x + (w - drawW) / 2;
+    drawY = y + (h - drawH) / 2;
+  } else if (objectFit === "cover") {
+    const scale = Math.max(w / imgW, h / imgH);
+    drawW = imgW * scale;
+    drawH = imgH * scale;
+    drawX = x + (w - drawW) / 2;
+    drawY = y + (h - drawH) / 2;
+  }
+  // "fill" (default) — stretch to fit, drawX/Y/W/H already correct
+
+  ctx.drawImage(img, drawX, drawY, drawW, drawH);
+}
+
 function parseBgDimension(
   value: string,
   containerDim: number,
@@ -519,7 +553,7 @@ function drawBoxShadows(
   }
 }
 
-/** Scan the container for all elements with background-image: url(...) and preload them */
+/** Scan the container for all elements with background-image: url(...) or <img src> and preload them */
 async function preloadBackgroundImages(
   container: HTMLElement,
 ): Promise<Map<string, HTMLImageElement>> {
@@ -532,6 +566,11 @@ async function preloadBackgroundImages(
     if (bgImage && bgImage !== "none") {
       const url = extractCssUrl(bgImage);
       if (url) urls.add(url);
+    }
+    // Also preload <img> element sources
+    if (el.tagName === "IMG") {
+      const src = (el as HTMLImageElement).src;
+      if (src) urls.add(src);
     }
   }
   // Also check the container itself
@@ -547,7 +586,13 @@ async function preloadBackgroundImages(
         const img = await loadImage(url);
         map.set(url, img);
       } catch {
-        // Skip images that fail to load
+        // Try without CORS as fallback
+        try {
+          const img = await loadImage(url, false);
+          map.set(url, img);
+        } catch {
+          // Skip images that fail to load
+        }
       }
     }),
   );
@@ -623,22 +668,95 @@ function walkAndDraw(
     }
   }
 
-  // Draw border
-  const borderWidth = parseFloat(style.borderTopWidth) || 0;
-  if (borderWidth > 0) {
-    const borderColor = style.borderTopColor;
-    if (borderColor && borderColor !== "rgba(0, 0, 0, 0)") {
-      ctx.strokeStyle = borderColor;
-      ctx.lineWidth = borderWidth;
-      const bw2 = borderWidth / 2;
+  // Draw <img> element
+  if (element.tagName === "IMG" && w > 0 && h > 0) {
+    const imgSrc = (element as HTMLImageElement).src;
+    const img = imgSrc ? bgImageMap.get(imgSrc) : undefined;
+    if (img) {
+      ctx.save();
       if (rounded) {
         ctx.beginPath();
-        traceRoundedRect(ctx, x + bw2, y + bw2, w - borderWidth, h - borderWidth, radii);
-        ctx.stroke();
-      } else {
-        ctx.strokeRect(x + bw2, y + bw2, w - borderWidth, h - borderWidth);
+        traceRoundedRect(ctx, x, y, w, h, radii);
+        ctx.clip();
       }
+      // Draw image with object-fit behavior
+      const objFit = style.objectFit;
+      drawImgElement(ctx, img, objFit, x, y, w, h);
+      ctx.restore();
     }
+  }
+
+  // Draw border (supports per-side widths/colors like CSS border-top only).
+  const borderTopWidth = parseFloat(style.borderTopWidth) || 0;
+  const borderRightWidth = parseFloat(style.borderRightWidth) || 0;
+  const borderBottomWidth = parseFloat(style.borderBottomWidth) || 0;
+  const borderLeftWidth = parseFloat(style.borderLeftWidth) || 0;
+  const borderTopColor = style.borderTopColor;
+  const borderRightColor = style.borderRightColor;
+  const borderBottomColor = style.borderBottomColor;
+  const borderLeftColor = style.borderLeftColor;
+  const borderTopStyle = style.borderTopStyle;
+  const borderRightStyle = style.borderRightStyle;
+  const borderBottomStyle = style.borderBottomStyle;
+  const borderLeftStyle = style.borderLeftStyle;
+
+  const hasTop = borderTopWidth > 0 && borderTopStyle !== "none" && borderTopStyle !== "hidden" && !isTransparentColor(borderTopColor);
+  const hasRight = borderRightWidth > 0 && borderRightStyle !== "none" && borderRightStyle !== "hidden" && !isTransparentColor(borderRightColor);
+  const hasBottom = borderBottomWidth > 0 && borderBottomStyle !== "none" && borderBottomStyle !== "hidden" && !isTransparentColor(borderBottomColor);
+  const hasLeft = borderLeftWidth > 0 && borderLeftStyle !== "none" && borderLeftStyle !== "hidden" && !isTransparentColor(borderLeftColor);
+
+  const canUseUniformStroke =
+    hasTop &&
+    hasRight &&
+    hasBottom &&
+    hasLeft &&
+    borderTopStyle === "solid" &&
+    borderRightStyle === "solid" &&
+    borderBottomStyle === "solid" &&
+    borderLeftStyle === "solid" &&
+    borderTopWidth === borderRightWidth &&
+    borderTopWidth === borderBottomWidth &&
+    borderTopWidth === borderLeftWidth &&
+    borderTopColor === borderRightColor &&
+    borderTopColor === borderBottomColor &&
+    borderTopColor === borderLeftColor;
+
+  if (canUseUniformStroke) {
+    ctx.strokeStyle = borderTopColor;
+    ctx.lineWidth = borderTopWidth;
+    const bw2 = borderTopWidth / 2;
+    if (rounded) {
+      ctx.beginPath();
+      traceRoundedRect(ctx, x + bw2, y + bw2, w - borderTopWidth, h - borderTopWidth, radii);
+      ctx.stroke();
+    } else {
+      ctx.strokeRect(x + bw2, y + bw2, w - borderTopWidth, h - borderTopWidth);
+    }
+  } else if (hasTop || hasRight || hasBottom || hasLeft) {
+    ctx.save();
+    if (rounded) {
+      ctx.beginPath();
+      traceRoundedRect(ctx, x, y, w, h, radii);
+      ctx.clip();
+    }
+
+    if (hasTop) {
+      ctx.fillStyle = borderTopColor;
+      ctx.fillRect(x, y, w, borderTopWidth);
+    }
+    if (hasRight) {
+      ctx.fillStyle = borderRightColor;
+      ctx.fillRect(x + w - borderRightWidth, y, borderRightWidth, h);
+    }
+    if (hasBottom) {
+      ctx.fillStyle = borderBottomColor;
+      ctx.fillRect(x, y + h - borderBottomWidth, w, borderBottomWidth);
+    }
+    if (hasLeft) {
+      ctx.fillStyle = borderLeftColor;
+      ctx.fillRect(x, y, borderLeftWidth, h);
+    }
+    ctx.restore();
   }
 
   // Clip descendants when overflow is not visible.
