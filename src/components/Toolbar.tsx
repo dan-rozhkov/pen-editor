@@ -2,15 +2,13 @@ import { useState } from "react";
 import { useSceneStore } from "../store/sceneStore";
 import { useSelectionStore } from "../store/selectionStore";
 import { useVariableStore } from "../store/variableStore";
-import { useHistoryStore } from "../store/historyStore";
-
 import { useThemeStore } from "../store/themeStore";
-import { useViewportStore } from "../store/viewportStore";
 import { useUIThemeStore } from "../store/uiThemeStore";
 import { usePixelGridStore } from "../store/pixelGridStore";
+import { useViewportStore } from "../store/viewportStore";
 
-import type { SceneNode } from "../types/scene";
 import { downloadDocument, openFilePicker } from "../utils/fileUtils";
+import { applyOpenedDocument } from "../utils/openDocumentIntoEditor";
 import { parsePixsoJson } from "../utils/pixsoImportUtils";
 import { Button } from "./ui/button";
 import {
@@ -35,29 +33,17 @@ import {
 
 export function Toolbar() {
   const nodes = useSceneStore((state) => state.getNodes());
-  const setNodes = useSceneStore((state) => state.setNodes);
   const addNode = useSceneStore((state) => state.addNode);
   const variables = useVariableStore((state) => state.variables);
-  const setVariables = useVariableStore((state) => state.setVariables);
 
   const activeTheme = useThemeStore((state) => state.activeTheme);
   const uiTheme = useUIThemeStore((s) => s.uiTheme);
-  const setUITheme = useUIThemeStore((s) => s.setUITheme);
   const showPixelGrid = usePixelGridStore((s) => s.showPixelGrid);
   const togglePixelGrid = usePixelGridStore((s) => s.togglePixelGrid);
 
   const [importOpen, setImportOpen] = useState(false);
   const [jsonText, setJsonText] = useState("");
   const [error, setError] = useState<string | null>(null);
-
-  const focusViewportOnNodes = (targetNodes: SceneNode[]) => {
-    const canvasEl = document.querySelector("[data-canvas]");
-    const viewportWidth = canvasEl?.clientWidth ?? window.innerWidth - 480;
-    const viewportHeight = canvasEl?.clientHeight ?? window.innerHeight;
-    useViewportStore
-      .getState()
-      .fitToContent(targetNodes, viewportWidth, viewportHeight);
-  };
 
   const handleSave = () => {
     downloadDocument(nodes, variables, activeTheme);
@@ -70,22 +56,18 @@ export function Toolbar() {
         variables: loadedVariables,
         activeTheme: loadedTheme,
       } = await openFilePicker();
-      setNodes(loadedNodes);
-      setVariables(loadedVariables);
-      setUITheme(loadedTheme);
-      // Opening a file should define a new baseline state:
-      // no undo step back to the pre-open (often empty) canvas.
-      useSelectionStore.setState({
-        selectedIds: [],
-        editingNodeId: null,
-        editingMode: null,
-        instanceContext: null,
-        selectedDescendantIds: [],
-        enteredContainerId: null,
-        lastSelectedId: null,
-      });
-      useHistoryStore.getState().clear();
-      focusViewportOnNodes(loadedNodes);
+      const canvasEl = document.querySelector("[data-canvas]");
+      applyOpenedDocument(
+        {
+          nodes: loadedNodes,
+          variables: loadedVariables,
+          activeTheme: loadedTheme,
+        },
+        {
+          viewportWidth: canvasEl?.clientWidth ?? window.innerWidth - 480,
+          viewportHeight: canvasEl?.clientHeight ?? window.innerHeight,
+        },
+      );
     } catch (err) {
       console.error("Failed to open file:", err);
     }
@@ -101,7 +83,12 @@ export function Toolbar() {
       const node = parsePixsoJson(jsonText);
       addNode(node);
       useSelectionStore.getState().select(node.id);
-      focusViewportOnNodes([node]);
+      const canvasEl = document.querySelector("[data-canvas]");
+      const viewportWidth = canvasEl?.clientWidth ?? window.innerWidth - 480;
+      const viewportHeight = canvasEl?.clientHeight ?? window.innerHeight;
+      useViewportStore
+        .getState()
+        .fitToContent([node], viewportWidth, viewportHeight);
       setImportOpen(false);
       setJsonText("");
       setError(null);

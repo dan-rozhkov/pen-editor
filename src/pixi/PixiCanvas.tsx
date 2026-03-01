@@ -29,6 +29,7 @@ import {
 } from "@/utils/nodeUtils";
 import { findDescendantLocalPosition, prepareInstanceNode } from "@/utils/instanceUtils";
 import { findDescendantByPath, findDescendantPositionByPath } from "@/utils/instancePathUtils";
+import { applyOpenedDocument } from "@/utils/openDocumentIntoEditor";
 import { createPixiSync } from "./pixiSync";
 import { setupPixiViewport } from "./pixiViewport";
 import { setupPixiInteraction } from "./interaction";
@@ -260,6 +261,19 @@ export function PixiCanvas() {
     };
   }, [instanceContext]);
 
+  const handleDocumentDrop = useCallback(
+    (
+      documentData: import("@/utils/fileUtils").DocumentData,
+      viewport: { width: number; height: number },
+    ) => {
+      applyOpenedDocument(documentData, {
+        viewportWidth: viewport.width,
+        viewportHeight: viewport.height,
+      });
+    },
+    [],
+  );
+
   // Keyboard shortcuts (reuse existing hook)
   useCanvasKeyboardShortcuts({
     nodes,
@@ -294,6 +308,7 @@ export function PixiCanvas() {
   useCanvasFileDrop({
     containerRef,
     addNode,
+    onDocumentDrop: handleDocumentDrop,
   });
 
   // Initialize PixiJS Application

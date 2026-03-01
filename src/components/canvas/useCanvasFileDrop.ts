@@ -2,17 +2,23 @@ import { useEffect, useCallback } from "react";
 import type { RefObject } from "react";
 import type { SceneNode, RectNode } from "@/types/scene";
 import { generateId } from "@/types/scene";
+import { deserializeDocument, type DocumentData } from "@/utils/fileUtils";
 import { parseSvgToNodes } from "@/utils/svgUtils";
 import { useViewportStore } from "@/store/viewportStore";
 import { useSelectionStore } from "@/store/selectionStore";
 
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp)$/i;
 const SVG_EXTENSION = /\.svg$/i;
+const JSON_EXTENSION = /\.json$/i;
 const MAX_IMAGE_SIZE = 800;
 
 interface UseCanvasFileDropOptions {
   containerRef: RefObject<HTMLDivElement | null>;
   addNode: (node: SceneNode) => void;
+  onDocumentDrop: (
+    document: DocumentData,
+    viewport: { width: number; height: number },
+  ) => void;
 }
 
 function clientToCanvas(
@@ -69,7 +75,19 @@ function isImageFile(file: File): boolean {
   return file.type.startsWith("image/") || IMAGE_EXTENSIONS.test(file.name);
 }
 
-export function useCanvasFileDrop({ containerRef, addNode }: UseCanvasFileDropOptions) {
+function isJsonFile(file: File): boolean {
+  return (
+    file.type === "application/json" ||
+    file.type === "text/json" ||
+    JSON_EXTENSION.test(file.name)
+  );
+}
+
+export function useCanvasFileDrop({
+  containerRef,
+  addNode,
+  onDocumentDrop,
+}: UseCanvasFileDropOptions) {
   const handleDrop = useCallback(
     async (e: DragEvent) => {
       e.preventDefault();
@@ -83,9 +101,27 @@ export function useCanvasFileDrop({ containerRef, addNode }: UseCanvasFileDropOp
       const rect = container.getBoundingClientRect();
       const { canvasX, canvasY } = clientToCanvas(e.clientX, e.clientY, rect);
 
+      const droppedFiles = Array.from(files);
+      const jsonFile = droppedFiles.find(isJsonFile);
+      if (jsonFile) {
+        try {
+          const jsonText = await readFileAsText(jsonFile);
+          const documentData = deserializeDocument(jsonText);
+          if (!Array.isArray(documentData.nodes)) return;
+
+          onDocumentDrop(documentData, {
+            width: container.clientWidth,
+            height: container.clientHeight,
+          });
+        } catch {
+          // skip failed file
+        }
+        return;
+      }
+
       let offset = 0;
 
-      for (const file of Array.from(files)) {
+      for (const file of droppedFiles) {
         const dropX = canvasX + offset;
         const dropY = canvasY + offset;
 
@@ -130,7 +166,7 @@ export function useCanvasFileDrop({ containerRef, addNode }: UseCanvasFileDropOp
         offset += 20;
       }
     },
-    [containerRef, addNode],
+    [containerRef, addNode, onDocumentDrop],
   );
 
   useEffect(() => {
