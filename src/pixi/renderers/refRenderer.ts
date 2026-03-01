@@ -229,7 +229,7 @@ export function createRefContainer(
         bg.rect(0, 0, effectiveWidth, effectiveHeight);
       }
       applyFill(bg, effectiveFrameStyle, effectiveWidth, effectiveHeight);
-      applyStroke(bg, effectiveFrameStyle, effectiveWidth, effectiveHeight, frame.cornerRadius);
+      applyStroke(bg, effectiveFrameStyle, effectiveWidth, effectiveHeight);
       childrenContainer.addChild(bg);
 
       // In auto-layout siblings, outside stroke should not visually bleed

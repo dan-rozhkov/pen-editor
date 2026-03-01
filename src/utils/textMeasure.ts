@@ -32,7 +32,9 @@ export function measureTextAutoSize(node: TextNode): { width: number; height: nu
   const ctx = getContext()
   const fontSize = node.fontSize ?? 16
   const lineHeight = node.lineHeight ?? 1.2
-  const letterSpacing = node.letterSpacing ?? 0
+  // Pixi word-wrap metrics effectively ignore negative letterSpacing for line breaking.
+  // Keep autosize in sync with rendered text to avoid post-layout overlaps.
+  const letterSpacing = Math.max(0, node.letterSpacing ?? 0)
 
   ctx.font = buildFontString(node)
 
@@ -61,7 +63,8 @@ export function measureTextAutoSize(node: TextNode): { width: number; height: nu
 export function measureTextFixedWidthHeight(node: TextNode): number {
   const fontSize = node.fontSize ?? 16
   const lineHeight = node.lineHeight ?? 1.2
-  const letterSpacing = node.letterSpacing ?? 0
+  // Keep wrapping estimation aligned with Pixi text layout.
+  const letterSpacing = Math.max(0, node.letterSpacing ?? 0)
   const ctx = getContext()
   ctx.font = buildFontString(node)
 

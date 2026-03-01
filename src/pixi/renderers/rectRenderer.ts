@@ -50,5 +50,5 @@ export function drawRect(gfx: Graphics, node: RectNode): void {
   }
   applyFill(gfx, node, node.width, node.height);
 
-  applyStroke(gfx, node, node.width, node.height, node.cornerRadius);
+  applyStroke(gfx, node, node.width, node.height);
 }

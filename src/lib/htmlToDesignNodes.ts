@@ -12,6 +12,8 @@ import type {
 } from "@/types/scene";
 import { generateId } from "@/types/scene";
 
+let colorParserCtx: CanvasRenderingContext2D | null = null;
+
 /** Extract url() value from a CSS property string */
 export function extractCssUrl(value: string): string | null {
   const match = value.match(/url\(["']?(.*?)["']?\)/);
@@ -158,6 +160,7 @@ function convertTextNode(
     y: minY - containerRect.top,
     width: maxX - minX,
     height: maxY - minY,
+    textWidthMode: "fixed",
   };
 
   if (parentStyle) {
@@ -225,9 +228,7 @@ function convertElement(
   const hasElementChildren = el.children.length > 0;
   const hasTextContent = hasDirectTextContent(el);
 
-  const keepAsFrameForTextOnly = shouldKeepTextOnlyElementAsFrame(tag);
-
-  if (!hasElementChildren && hasTextContent && !keepAsFrameForTextOnly) {
+  if (!hasElementChildren && hasTextContent && shouldFlattenTextOnlyElement(style, tag)) {
     // Pure text element → TextNode
     const textNode: TextNode = {
       id: generateId(),
@@ -266,6 +267,14 @@ function convertElement(
 
   applyBaseProps(frame, style);
 
+  // Convert children from canvas-absolute to parent-local coordinates.
+  const parentX = rect.left - containerRect.left;
+  const parentY = rect.top - containerRect.top;
+  for (const child of frame.children) {
+    child.x -= parentX;
+    child.y -= parentY;
+  }
+
   // Mark absolute/fixed positioned children using the element→node map
   // built during child conversion (avoids O(n²) position-based matching).
   const domChildren = el.children;
@@ -285,16 +294,33 @@ function convertElement(
   if (layout) {
     frame.layout = layout;
 
-    // Convert children to relative positions and infer sizing
-    convertChildrenToRelative(frame, el, containerRect);
+    // Zero out auto-layout children positions and infer sizing
+    const nonAbsCount = frame.children.filter((c) => !c.absolutePosition).length;
+    for (const child of frame.children) {
+      if (child.absolutePosition) continue;
+      child.x = 0;
+      child.y = 0;
+      inferChildSizing(child, frame, nonAbsCount);
+    }
   }
 
   return frame;
 }
 
-/** Preserve some text-only elements as frames instead of flattening to a single text node */
-function shouldKeepTextOnlyElementAsFrame(tag: string): boolean {
-  return tag === "div";
+/** Flatten only plain inline text wrappers. Keep styled or container-like text elements as frames. */
+function shouldFlattenTextOnlyElement(
+  style: CSSStyleDeclaration,
+  tag: string,
+): boolean {
+  const semanticTextTag = /^(h[1-6]|p|span|strong|em|small|label)$/i.test(tag);
+  if (tag === "a" || tag === "button") return false;
+  if (!semanticTextTag && style.display !== "inline") return false;
+  if (style.textTransform && style.textTransform !== "none") return false;
+  if (style.cursor === "pointer") return false;
+  if (hasVisualStyling(style)) return false;
+  if (!semanticTextTag && hasBoxSpacing(style)) return false;
+  if (hasExplicitDimensions(style)) return false;
+  return true;
 }
 
 /** Check if an element has direct text content (not just whitespace) */
@@ -319,6 +345,39 @@ function hasVisualStyling(style: CSSStyleDeclaration): boolean {
   const shadow = style.boxShadow;
   if (shadow && shadow !== "none") return true;
   return false;
+}
+
+/** Extract padding values from computed style */
+function parsePadding(style: CSSStyleDeclaration) {
+  return {
+    paddingTop: parseFloat(style.paddingTop) || 0,
+    paddingRight: parseFloat(style.paddingRight) || 0,
+    paddingBottom: parseFloat(style.paddingBottom) || 0,
+    paddingLeft: parseFloat(style.paddingLeft) || 0,
+  };
+}
+
+/** Check if an element has non-zero margin/padding that should be preserved as a container */
+function hasBoxSpacing(style: CSSStyleDeclaration): boolean {
+  const pad = parsePadding(style);
+  if (pad.paddingTop > 0 || pad.paddingRight > 0 || pad.paddingBottom > 0 || pad.paddingLeft > 0) return true;
+
+  const margins = [
+    parseFloat(style.marginTop) || 0,
+    parseFloat(style.marginRight) || 0,
+    parseFloat(style.marginBottom) || 0,
+    parseFloat(style.marginLeft) || 0,
+  ];
+  return margins.some((v) => v > 0);
+}
+
+/** Check if CSS explicitly defines width/height that should keep the node as a frame */
+function hasExplicitDimensions(style: CSSStyleDeclaration): boolean {
+  const width = style.width?.trim().toLowerCase() ?? "";
+  const height = style.height?.trim().toLowerCase() ?? "";
+  const hasWidth = width !== "" && width !== "auto";
+  const hasHeight = height !== "" && height !== "auto";
+  return hasWidth || hasHeight;
 }
 
 /** Infer a reasonable name from an HTML element */
@@ -396,6 +455,58 @@ function parseFillColor(cssColor: string): string | null {
 function cssColorToHex(color: string): string {
   // If already hex, return as-is
   if (color.startsWith("#")) return color;
+
+  // Fast path: rgb/rgba can be parsed directly without canvas overhead
+  const rgbMatch = color.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/);
+  if (rgbMatch) {
+    const r = Math.round(parseFloat(rgbMatch[1]));
+    const g = Math.round(parseFloat(rgbMatch[2]));
+    const b = Math.round(parseFloat(rgbMatch[3]));
+    return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+  }
+
+  // Normalize modern CSS syntaxes (oklch/lab/etc) using browser color parser.
+  try {
+    if (!colorParserCtx) {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1;
+      canvas.height = 1;
+      colorParserCtx = canvas.getContext("2d");
+    }
+    if (colorParserCtx) {
+      colorParserCtx.fillStyle = "#000000";
+      colorParserCtx.fillStyle = color;
+      colorParserCtx.clearRect(0, 0, 1, 1);
+      colorParserCtx.fillRect(0, 0, 1, 1);
+      const rgba = colorParserCtx.getImageData(0, 0, 1, 1).data;
+      if (rgba && rgba.length >= 3) {
+        const r = rgba[0] ?? 0;
+        const g = rgba[1] ?? 0;
+        const b = rgba[2] ?? 0;
+        return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+      }
+    }
+  } catch {
+    // keep original color and continue with regex parsing fallback
+  }
+
+  // Fallback for browsers that keep authored syntax (e.g. oklch()) in fillStyle:
+  // resolve through computed style to canonical rgb/rgba.
+  if (!/^rgba?\(/i.test(color)) {
+    try {
+      const probe = document.createElement("span");
+      probe.style.color = color;
+      probe.style.position = "fixed";
+      probe.style.left = "-99999px";
+      probe.style.top = "-99999px";
+      document.body.appendChild(probe);
+      const resolved = window.getComputedStyle(probe).color;
+      document.body.removeChild(probe);
+      if (resolved) color = resolved;
+    } catch {
+      // ignore and try regex parsing
+    }
+  }
 
   // Parse rgb/rgba
   const match = color.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/);
@@ -647,10 +758,7 @@ function inferAutoLayout(
       autoLayout: true,
       flexDirection: flexDirection as FlexDirection,
       gap: mainAxisGap,
-      paddingTop: parseFloat(style.paddingTop) || 0,
-      paddingRight: parseFloat(style.paddingRight) || 0,
-      paddingBottom: parseFloat(style.paddingBottom) || 0,
-      paddingLeft: parseFloat(style.paddingLeft) || 0,
+      ...parsePadding(style),
     };
 
     // Align items
@@ -706,10 +814,7 @@ function inferAutoLayout(
       autoLayout: true,
       flexDirection,
       gap,
-      paddingTop: parseFloat(style.paddingTop) || 0,
-      paddingRight: parseFloat(style.paddingRight) || 0,
-      paddingBottom: parseFloat(style.paddingBottom) || 0,
-      paddingLeft: parseFloat(style.paddingLeft) || 0,
+      ...parsePadding(style),
     };
 
     // For equal-width grid columns (like repeat(3, 1fr)), mark as flexWrap
@@ -720,55 +825,61 @@ function inferAutoLayout(
     return layout;
   }
 
-  // Block-level → vertical auto-layout
-  if (display === "block" || display === "inline-block" || display === "list-item") {
-    const gap = el ? computeGapFromChildRects(el, "column") : 0;
-    return {
-      autoLayout: true,
-      flexDirection: "column",
-      gap,
-      paddingTop: parseFloat(style.paddingTop) || 0,
-      paddingRight: parseFloat(style.paddingRight) || 0,
-      paddingBottom: parseFloat(style.paddingBottom) || 0,
-      paddingLeft: parseFloat(style.paddingLeft) || 0,
-    };
-  }
-
-  return undefined;
+  return inferFlowLayout(style, el, display);
 }
 
-/** Convert children to relative positions when parent has auto-layout */
-function convertChildrenToRelative(
-  frame: FrameNode,
-  parentEl: Element,
-  containerRect: DOMRect,
-): void {
-  if (!frame.layout?.autoLayout) return;
+/**
+ * Infer flow layout for non-flex/grid containers using actual child geometry.
+ * Returns row/column only when children are clearly aligned on one axis.
+ */
+function inferFlowLayout(
+  style: CSSStyleDeclaration,
+  el: Element | undefined,
+  display: string,
+): LayoutProperties | undefined {
+  if (!el) return undefined;
+  if (display === "none" || display === "contents") return undefined;
 
-  const parentRect = parentEl.getBoundingClientRect();
-  const padLeft = frame.layout.paddingLeft ?? 0;
-  const padTop = frame.layout.paddingTop ?? 0;
-
-  // Pre-compute non-absolute child count for row sizing inference (avoids O(n²))
-  const nonAbsCount = frame.children.filter((c) => !c.absolutePosition).length;
-
-  for (const child of frame.children) {
-    // Skip absolute-positioned children — they keep their relative coords
-    if (child.absolutePosition) {
-      child.x = child.x - (parentRect.left - containerRect.left) - padLeft;
-      child.y = child.y - (parentRect.top - containerRect.top) - padTop;
-      continue;
-    }
-
-    // For auto-layout children, zero out both axes
-    // (the layout engine recomputes all positions from gap/padding/justify)
-    child.x = 0;
-    child.y = 0;
-
-    // Infer sizing mode
-    inferChildSizing(child, frame, nonAbsCount);
+  const candidates: DOMRect[] = [];
+  for (const child of el.children) {
+    const childStyle = window.getComputedStyle(child);
+    if (childStyle.display === "none" || childStyle.visibility === "hidden") continue;
+    if (childStyle.position === "absolute" || childStyle.position === "fixed") continue;
+    const rect = child.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) continue;
+    candidates.push(rect);
   }
+
+  if (candidates.length < 2) return undefined;
+
+  const first = candidates[0];
+  const firstCenterY = first.top + first.height / 2;
+  const firstLeft = first.left;
+  const alignmentTolerance = 6;
+
+  const rowAligned = candidates.every((rect) => {
+    const centerY = rect.top + rect.height / 2;
+    return Math.abs(centerY - firstCenterY) <= alignmentTolerance;
+  });
+  const columnAligned = candidates.every((rect) => Math.abs(rect.left - firstLeft) <= alignmentTolerance);
+
+  const monotonicX = candidates.every((rect, i) => i === 0 || rect.left >= candidates[i - 1].left - alignmentTolerance);
+  const monotonicY = candidates.every((rect, i) => i === 0 || rect.top >= candidates[i - 1].top - alignmentTolerance);
+
+  let direction: FlexDirection | null = null;
+  if (rowAligned && monotonicX) direction = "row";
+  else if (columnAligned && monotonicY) direction = "column";
+
+  if (!direction) return undefined;
+
+  return {
+    autoLayout: true,
+    flexDirection: direction,
+    gap: computeGapFromChildRects(el, direction),
+    ...parsePadding(style),
+  };
 }
+
 
 /** Infer sizing mode for a child inside an auto-layout parent */
 function inferChildSizing(

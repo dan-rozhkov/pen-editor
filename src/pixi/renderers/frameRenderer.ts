@@ -221,5 +221,5 @@ export function drawFrameBackground(
   }
 
   applyFill(gfx, node, width, height);
-  applyStroke(gfx, node, width, height, node.cornerRadius);
+  applyStroke(gfx, node, width, height);
 }

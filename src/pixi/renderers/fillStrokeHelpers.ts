@@ -47,6 +47,7 @@ export function drawPerSideStroke(
   // Top border
   if (top > 0) {
     const y = getSidePosition('top', top, width, height, align);
+    gfx.beginPath();
     gfx.moveTo(0, y);
     gfx.lineTo(width, y);
     gfx.stroke({ color, alpha, width: top });
@@ -55,6 +56,7 @@ export function drawPerSideStroke(
   // Right border
   if (right > 0) {
     const x = getSidePosition('right', right, width, height, align);
+    gfx.beginPath();
     gfx.moveTo(x, 0);
     gfx.lineTo(x, height);
     gfx.stroke({ color, alpha, width: right });
@@ -63,6 +65,7 @@ export function drawPerSideStroke(
   // Bottom border
   if (bottom > 0) {
     const y = getSidePosition('bottom', bottom, width, height, align);
+    gfx.beginPath();
     gfx.moveTo(width, y);
     gfx.lineTo(0, y);
     gfx.stroke({ color, alpha, width: bottom });
@@ -71,6 +74,7 @@ export function drawPerSideStroke(
   // Left border
   if (left > 0) {
     const x = getSidePosition('left', left, width, height, align);
+    gfx.beginPath();
     gfx.moveTo(x, height);
     gfx.lineTo(x, 0);
     gfx.stroke({ color, alpha, width: left });
@@ -163,7 +167,6 @@ export function applyStroke(
   node: FlatSceneNode,
   width: number,
   height: number,
-  cornerRadius?: number,
 ): void {
   const strokeColor = getResolvedStroke(node);
   if (!strokeColor) return;
@@ -172,23 +175,7 @@ export function applyStroke(
 
   const perSide = (node as any).strokeWidthPerSide as PerSideStroke | undefined;
   if (hasPerSideStroke(perSide) && perSide) {
-    if (!cornerRadius) {
-      drawPerSideStroke(gfx, width, height, strokeColor, perSide, align);
-    } else {
-      const maxWidth = Math.max(
-        perSide.top ?? 0,
-        perSide.right ?? 0,
-        perSide.bottom ?? 0,
-        perSide.left ?? 0,
-      );
-      if (maxWidth > 0) {
-        gfx.stroke({
-          color: parseColor(strokeColor),
-          alpha: parseAlpha(strokeColor),
-          width: maxWidth,
-        });
-      }
-    }
+    drawPerSideStroke(gfx, width, height, strokeColor, perSide, align);
   } else if (node.strokeWidth) {
     const alignment = align === 'inside' ? 1 : align === 'outside' ? 0 : 0.5;
     gfx.stroke({
