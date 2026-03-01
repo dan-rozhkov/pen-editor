@@ -4,16 +4,16 @@ import { Texture } from "pixi.js";
 const textureCache = new Map<string, Texture>();
 /** Dedup parallel renders for the same key */
 const pendingRenders = new Map<string, Promise<Texture | null>>();
+const HTML_TEXTURE_RENDER_VERSION = 4;
 
 function makeCacheKey(html: string, width: number, height: number, resolution: number): string {
-  return `${width}x${height}@${resolution}:${html}`;
+  return `v${HTML_TEXTURE_RENDER_VERSION}:${width}x${height}@${resolution}:${html}`;
 }
 
 /**
- * Render HTML/CSS content to a PixiJS Texture via DOM-based pipeline.
- * HTML → hidden DOM element → getComputedStyle + getBoundingClientRect → Canvas 2D → Texture
- *
- * This avoids SVG foreignObject which taints the canvas and breaks WebGL texImage2D.
+ * Render HTML/CSS content to a PixiJS Texture.
+ * First tries SVG foreignObject for browser-native layout fidelity,
+ * then falls back to manual DOM walk + Canvas rendering.
  */
 export async function renderHtmlToTexture(
   html: string,
@@ -49,6 +49,22 @@ async function doRender(
 ): Promise<Texture | null> {
   const pixelWidth = Math.ceil(width * resolution);
   const pixelHeight = Math.ceil(height * resolution);
+
+  // Prefer browser-native HTML layout via SVG foreignObject.
+  // This yields accurate flex/text positioning when supported.
+  const foreignObjectCanvas = await renderViaForeignObject(
+    html,
+    width,
+    height,
+    pixelWidth,
+    pixelHeight,
+    resolution,
+  );
+  if (foreignObjectCanvas) {
+    const texture = Texture.from({ resource: foreignObjectCanvas, resolution });
+    textureCache.set(cacheKey, texture);
+    return texture;
+  }
 
   // 1. Create a hidden container in the DOM for layout computation
   const container = document.createElement("div");
@@ -90,6 +106,61 @@ async function doRender(
   }
 }
 
+async function renderViaForeignObject(
+  html: string,
+  width: number,
+  height: number,
+  pixelWidth: number,
+  pixelHeight: number,
+  resolution: number,
+): Promise<HTMLCanvasElement | null> {
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+  <foreignObject x="0" y="0" width="100%" height="100%">
+    <div xmlns="http://www.w3.org/1999/xhtml" style="width:${width}px;height:${height}px;overflow:hidden;">
+      ${html}
+    </div>
+  </foreignObject>
+</svg>`;
+
+  const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+
+  try {
+    const img = await loadImage(url);
+    const canvas = document.createElement("canvas");
+    canvas.width = pixelWidth;
+    canvas.height = pixelHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+
+    ctx.scale(resolution, resolution);
+    ctx.drawImage(img, 0, 0, width, height);
+
+    // Ensure canvas is not tainted before passing to Pixi/WebGL.
+    try {
+      ctx.getImageData(0, 0, 1, 1);
+    } catch {
+      return null;
+    }
+
+    return canvas;
+  } catch {
+    return null;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Failed to load image"));
+    img.src = url;
+  });
+}
+
 /** Build a rounded-rect path on the context (does NOT call beginPath) */
 function traceRoundedRect(
   ctx: CanvasRenderingContext2D,
@@ -113,12 +184,37 @@ function traceRoundedRect(
   ctx.closePath();
 }
 
+function parseCssRadiusValue(raw: string, width: number, height: number): number {
+  if (!raw) return 0;
+
+  // Computed values can be like "12px", "50%", or "12px 8px".
+  const token = raw.split("/")[0]?.trim().split(/\s+/)[0] ?? "";
+  if (!token) return 0;
+
+  let radius = 0;
+  if (token.endsWith("%")) {
+    const pct = parseFloat(token);
+    if (!Number.isNaN(pct)) {
+      radius = (Math.min(width, height) * pct) / 100;
+    }
+  } else {
+    radius = parseFloat(token) || 0;
+  }
+
+  // Match CSS clamping behavior for large corner radii.
+  return Math.max(0, Math.min(radius, Math.min(width, height) / 2));
+}
+
 /** Parse border-radius values from computed style into [TL, TR, BR, BL] */
-function parseBorderRadii(style: CSSStyleDeclaration): [number, number, number, number] {
-  const tl = parseFloat(style.borderTopLeftRadius) || 0;
-  const tr = parseFloat(style.borderTopRightRadius) || 0;
-  const br = parseFloat(style.borderBottomRightRadius) || 0;
-  const bl = parseFloat(style.borderBottomLeftRadius) || 0;
+function parseBorderRadii(
+  style: CSSStyleDeclaration,
+  width: number,
+  height: number,
+): [number, number, number, number] {
+  const tl = parseCssRadiusValue(style.borderTopLeftRadius, width, height);
+  const tr = parseCssRadiusValue(style.borderTopRightRadius, width, height);
+  const br = parseCssRadiusValue(style.borderBottomRightRadius, width, height);
+  const bl = parseCssRadiusValue(style.borderBottomLeftRadius, width, height);
   return [tl, tr, br, bl];
 }
 
@@ -243,7 +339,7 @@ function walkAndDraw(
     ctx.globalAlpha *= opacity;
   }
 
-  const radii = parseBorderRadii(style);
+  const radii = parseBorderRadii(style, w, h);
   const rounded = hasRadius(radii);
 
   // Draw background (solid color or gradient)
@@ -321,21 +417,14 @@ function drawTextNode(
   const allRects = range.getClientRects();
 
   if (allRects.length === 0) return;
-
-  // For single-line text, just draw it
-  if (allRects.length === 1) {
-    const r = allRects[0];
-    ctx.textBaseline = "top";
-    ctx.fillText(text, r.left - containerRect.left, r.top - containerRect.top);
-    return;
-  }
+  const fontSizePx = parseFloat(parentStyle.fontSize) || 16;
+  const preserveWhitespace = parentStyle.whiteSpace.startsWith("pre");
 
   // For multi-line (wrapped) text, find which characters belong to which line
   // by binary searching through character offsets
-  const lines = extractLinesFromRects(textNode, allRects, containerRect);
-  ctx.textBaseline = "top";
+  const lines = extractLinesFromRects(textNode, allRects, containerRect, preserveWhitespace);
   for (const line of lines) {
-    ctx.fillText(line.text, line.x, line.y);
+    drawTextInLineBox(ctx, line.text, line.x, line.y, line.height, fontSizePx);
   }
 }
 
@@ -343,6 +432,33 @@ interface TextLine {
   text: string;
   x: number;
   y: number;
+  height: number;
+}
+
+function drawTextInLineBox(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  lineTop: number,
+  lineHeight: number,
+  fontSizePx: number,
+): void {
+  // Use font/em box metrics (not glyph box) to match CSS line box positioning.
+  const refMetrics = ctx.measureText("Mg");
+  const ascent =
+    refMetrics.fontBoundingBoxAscent ||
+    refMetrics.emHeightAscent ||
+    fontSizePx * 0.8;
+  const descent =
+    refMetrics.fontBoundingBoxDescent ||
+    refMetrics.emHeightDescent ||
+    fontSizePx * 0.2;
+  const fontBoxHeight = Math.max(1, ascent + descent);
+  const extraLeading = Math.max(0, lineHeight - fontBoxHeight);
+  const baselineY = lineTop + extraLeading / 2 + ascent;
+
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText(text, x, baselineY);
 }
 
 /** Extract per-line text and positions from a text node with multiple client rects */
@@ -350,6 +466,7 @@ function extractLinesFromRects(
   textNode: Text,
   rects: DOMRectList,
   containerRect: DOMRect,
+  preserveWhitespace: boolean,
 ): TextLine[] {
   const lines: TextLine[] = [];
   const text = textNode.textContent ?? "";
@@ -357,10 +474,16 @@ function extractLinesFromRects(
 
   // Group rects by unique Y position (each line has a distinct top)
   const lineYs: number[] = [];
+  const lineHeights: number[] = [];
   for (let i = 0; i < rects.length; i++) {
     const top = Math.round(rects[i].top);
-    if (lineYs.length === 0 || Math.abs(lineYs[lineYs.length - 1] - top) > 2) {
+    const h = rects[i].height;
+    const existingIdx = lineYs.findIndex((lineTop) => Math.abs(lineTop - top) <= 2);
+    if (existingIdx === -1) {
       lineYs.push(top);
+      lineHeights.push(h);
+    } else {
+      lineHeights[existingIdx] = Math.max(lineHeights[existingIdx], h);
     }
   }
 
@@ -389,17 +512,35 @@ function extractLinesFromRects(
       charEnd = lo;
     }
 
-    const lineText = text.slice(charStart, charEnd);
-    if (lineText.trim()) {
+    let drawStart = charStart;
+    let drawEnd = charEnd;
+
+    if (!preserveWhitespace) {
+      while (drawStart < drawEnd && /\s/.test(text[drawStart])) drawStart++;
+      while (drawEnd > drawStart && /\s/.test(text[drawEnd - 1])) drawEnd--;
+    }
+
+    if (drawStart < drawEnd) {
+      let lineText = text.slice(drawStart, drawEnd);
+      if (!preserveWhitespace) {
+        lineText = lineText.replace(/\s+/g, " ");
+      }
+
+      if (!lineText) {
+        charStart = charEnd;
+        continue;
+      }
+
       // Get position of first char in this line
-      range.setStart(textNode, charStart);
-      range.setEnd(textNode, Math.min(charStart + 1, text.length));
+      range.setStart(textNode, drawStart);
+      range.setEnd(textNode, Math.min(drawStart + 1, text.length));
       const firstCharRect = range.getBoundingClientRect();
 
       lines.push({
         text: lineText,
         x: firstCharRect.left - containerRect.left,
         y: firstCharRect.top - containerRect.top,
+        height: lineHeights[lineIdx] ?? firstCharRect.height,
       });
     }
 

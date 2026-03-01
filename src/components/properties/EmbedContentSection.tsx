@@ -5,6 +5,8 @@ import type { SceneNode, EmbedNode } from "@/types/scene";
 import { PropertySection } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { useSceneStore } from "@/store/sceneStore";
+import { useSelectionStore } from "@/store/selectionStore";
 
 interface EmbedContentSectionProps {
   node: EmbedNode;
@@ -15,6 +17,7 @@ export function EmbedContentSection({ node, onUpdate }: EmbedContentSectionProps
   const [localValue, setLocalValue] = useState(node.htmlContent);
   const [isAccordionOpen, setIsAccordionOpen] = useState(false);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [converting, setConverting] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const copyResetRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -80,6 +83,18 @@ export function EmbedContentSection({ node, onUpdate }: EmbedContentSectionProps
     }
   };
 
+  const handleConvertToDesign = async () => {
+    setConverting(true);
+    try {
+      const newFrameId = await useSceneStore.getState().convertEmbedToDesign(node.id);
+      if (newFrameId) {
+        useSelectionStore.getState().setSelectedIds([newFrameId]);
+      }
+    } finally {
+      setConverting(false);
+    }
+  };
+
   return (
     <PropertySection title="Embed">
       <div className="flex flex-col gap-1.5">
@@ -126,6 +141,9 @@ export function EmbedContentSection({ node, onUpdate }: EmbedContentSectionProps
             : copyStatus === "error"
               ? "Copy failed"
               : "Copy as HTML"}
+        </Button>
+        <Button onClick={handleConvertToDesign} variant="secondary" className="w-full" disabled={converting}>
+          {converting ? "Converting..." : "Convert to Design"}
         </Button>
       </div>
     </PropertySection>

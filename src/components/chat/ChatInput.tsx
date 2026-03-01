@@ -1,4 +1,4 @@
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import { PaperPlaneRightIcon, StopIcon } from "@phosphor-icons/react";
 
 interface ChatInputProps {
@@ -24,6 +24,10 @@ export function ChatInput({
     ta.style.height = "auto";
     ta.style.height = `${Math.min(ta.scrollHeight, 96)}px`;
   }, []);
+
+  useEffect(() => {
+    resize();
+  }, [input, resize]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

@@ -2,11 +2,17 @@ import type {
   FlatSceneNode,
   FrameNode,
   FlatFrameNode,
+  EmbedNode,
 } from "../../types/scene";
 import { generateId, buildTree } from "../../types/scene";
+import { convertHtmlToDesignNodes } from "../../lib/htmlToDesignNodes";
 import { useLayoutStore } from "../layoutStore";
 import { calculateFrameIntrinsicSize } from "../../utils/yogaLayout";
 import { saveHistory } from "./helpers/history";
+import {
+  insertTreeIntoFlat,
+  removeNodeAndDescendants,
+} from "./helpers/flatStoreHelpers";
 import type { SceneState } from "./types";
 
 type Bounds = { x: number; y: number; width: number; height: number };
@@ -373,6 +379,70 @@ export function createComplexOperations(
         _cachedTree: null,
       });
       return frameId;
+    },
+
+    convertEmbedToDesign: async (id: string): Promise<string | null> => {
+      const preState = get();
+      const node = preState.nodesById[id];
+      if (!node || node.type !== "embed") return null;
+
+      const embed = node as EmbedNode;
+
+      // Convert HTML to design nodes (async — re-read state after)
+      const rootFrame = await convertHtmlToDesignNodes(
+        embed.htmlContent,
+        embed.width,
+        embed.height,
+      );
+
+      // Position at original embed location
+      rootFrame.x = embed.x;
+      rootFrame.y = embed.y;
+      if (embed.name) rootFrame.name = embed.name;
+
+      // Re-read state after async gap to avoid stale snapshot
+      const state = get();
+      saveHistory(state);
+
+      // Determine embed's parent and position
+      const parentId = state.parentById[id];
+      const parentChildren = parentId != null
+        ? (state.childrenById[parentId] ?? [])
+        : state.rootIds;
+      const embedIndex = parentChildren.indexOf(id);
+
+      // Build new state: remove embed, insert frame tree
+      const newNodesById = { ...state.nodesById };
+      const newParentById = { ...state.parentById };
+      const newChildrenById = { ...state.childrenById };
+
+      removeNodeAndDescendants(id, newNodesById, newParentById, newChildrenById);
+      insertTreeIntoFlat(rootFrame, parentId ?? null, newNodesById, newParentById, newChildrenById);
+
+      // Replace embed in parent's children list
+      let newRootIds = state.rootIds;
+      if (parentId != null) {
+        const updated = [...parentChildren];
+        if (embedIndex >= 0) {
+          updated.splice(embedIndex, 1, rootFrame.id);
+        }
+        newChildrenById[parentId] = updated;
+      } else {
+        newRootIds = [...state.rootIds];
+        if (embedIndex >= 0) {
+          newRootIds.splice(embedIndex, 1, rootFrame.id);
+        }
+      }
+
+      setState({
+        nodesById: newNodesById,
+        parentById: newParentById,
+        childrenById: newChildrenById,
+        rootIds: newRootIds,
+        _cachedTree: null,
+      });
+
+      return rootFrame.id;
     },
   };
 }
