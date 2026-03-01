@@ -1,8 +1,34 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import type { UIMessage } from "ai";
 import { SimpleMarkdown } from "./SimpleMarkdown";
 import { ToolCallIndicator, isToolUIPart } from "./ToolCallIndicator";
 import { ThinkingIndicator } from "./ThinkingIndicator";
+
+export function ImagePreview({ url, alt }: { url: string; alt?: string }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <>
+      <img
+        src={url}
+        alt={alt ?? "attached image"}
+        onClick={() => setExpanded(true)}
+        className="max-w-[120px] max-h-[120px] rounded-md cursor-pointer hover:opacity-80 transition-opacity object-cover"
+      />
+      {expanded && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+          onClick={() => setExpanded(false)}
+        >
+          <img
+            src={url}
+            alt={alt ?? "attached image"}
+            className="max-w-[90vw] max-h-[90vh] rounded-lg"
+          />
+        </div>
+      )}
+    </>
+  );
+}
 
 function StreamingIndicator() {
   return (
@@ -70,9 +96,24 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
             .map((p) => p.text)
             .join("");
 
+          const imageParts = msg.parts.filter(
+            (p): p is { type: "file"; mediaType: string; url: string } => {
+              if (p.type !== "file") return false;
+              const fp = p as { mediaType?: string };
+              return typeof fp.mediaType === "string" && fp.mediaType.startsWith("image/");
+            }
+          );
+
           return (
             <div key={msg.id} className="flex justify-end">
               <div className="max-w-[85%] rounded-xl px-3 py-2 rounded-md bg-secondary text-secondary-foreground transition-colors">
+                {imageParts.length > 0 && (
+                  <div className="flex gap-2 flex-wrap mb-1">
+                    {imageParts.map((p, i) => (
+                      <ImagePreview key={i} url={p.url} />
+                    ))}
+                  </div>
+                )}
                 {textContent && <SimpleMarkdown content={textContent} />}
               </div>
             </div>

@@ -9,6 +9,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useChatStore } from "@/store/chatStore";
 import { toolHandlers } from "@/lib/toolRegistry";
+import type { AttachedImage } from "@/components/chat/ChatInput";
 
 function resolveChatApiUrl(): string {
   const explicitApiUrl = import.meta.env.VITE_AI_API_URL as string | undefined;
@@ -139,11 +140,24 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   }, [sessionId, registerAbortController, unregisterAbortController]);
 
   const sendMessage = useCallback(
-    (e?: React.FormEvent) => {
+    (e?: React.FormEvent, images?: AttachedImage[]) => {
       e?.preventDefault();
       const text = input.trim();
-      if (!text || chat.status !== "ready") return;
-      chat.sendMessage({ text });
+      if ((!text && (!images || images.length === 0)) || chat.status !== "ready") return;
+
+      if (images && images.length > 0) {
+        const parts: Array<{ type: "text"; text: string } | { type: "file"; mediaType: string; url: string }> = [];
+        for (const img of images) {
+          const mediaType = img.dataUrl.match(/^data:(image\/[^;]+);/)?.[1] ?? "image/png";
+          parts.push({ type: "file", mediaType, url: img.dataUrl });
+        }
+        if (text) {
+          parts.push({ type: "text", text });
+        }
+        chat.sendMessage({ parts });
+      } else {
+        chat.sendMessage({ text });
+      }
       setInput("");
     },
     [input, chat]
