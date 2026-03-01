@@ -6,6 +6,7 @@ import type {
 } from "../../types/scene";
 import { generateId, buildTree } from "../../types/scene";
 import { convertHtmlToDesignNodes } from "../../lib/htmlToDesignNodes";
+import { loadGoogleFontsFromNodes } from "../../utils/fontUtils";
 import { useLayoutStore } from "../layoutStore";
 import { calculateFrameIntrinsicSize } from "../../utils/yogaLayout";
 import { saveHistory } from "./helpers/history";
@@ -441,6 +442,9 @@ export function createComplexOperations(
         rootIds: newRootIds,
         _cachedTree: null,
       });
+
+      // Ensure text nodes converted from HTML load their Google Fonts.
+      loadGoogleFontsFromNodes([rootFrame]);
 
       return rootFrame.id;
     },

@@ -12,6 +12,12 @@ import type {
 } from "@/types/scene";
 import { generateId } from "@/types/scene";
 
+/** Extract url() value from a CSS property string */
+export function extractCssUrl(value: string): string | null {
+  const match = value.match(/url\(["']?(.*?)["']?\)/);
+  return match?.[1] ?? null;
+}
+
 /**
  * Convert HTML content into a native design node tree.
  *
@@ -35,7 +41,6 @@ export async function convertHtmlToDesignNodes(
     height: ${height}px;
     overflow: hidden;
     pointer-events: none;
-    visibility: hidden;
   `;
   // Sanitize: strip event handler attributes and script tags to prevent execution
   const sanitized = htmlContent
@@ -59,11 +64,13 @@ export async function convertHtmlToDesignNodes(
 
   try {
     const containerRect = container.getBoundingClientRect();
+    // Per-call map correlating DOM elements to their converted SceneNodes
+    const elementNodeMap = new Map<Element, SceneNode>();
 
     // Convert the container's children into scene nodes
     const children: SceneNode[] = [];
     for (const child of container.childNodes) {
-      const node = convertNode(child, containerRect);
+      const node = convertNode(child, containerRect, elementNodeMap);
       if (node) children.push(node);
     }
 
@@ -99,12 +106,15 @@ export async function convertHtmlToDesignNodes(
 function convertNode(
   domNode: Node,
   containerRect: DOMRect,
+  elementNodeMap: Map<Element, SceneNode>,
 ): SceneNode | null {
   if (domNode.nodeType === Node.TEXT_NODE) {
     return convertTextNode(domNode as Text, containerRect);
   }
   if (domNode.nodeType === Node.ELEMENT_NODE) {
-    return convertElement(domNode as Element, containerRect);
+    const node = convertElement(domNode as Element, containerRect, elementNodeMap);
+    if (node) elementNodeMap.set(domNode as Element, node);
+    return node;
   }
   return null;
 }
@@ -161,6 +171,7 @@ function convertTextNode(
 function convertElement(
   el: Element,
   containerRect: DOMRect,
+  elementNodeMap: Map<Element, SceneNode>,
 ): SceneNode | null {
   const style = window.getComputedStyle(el);
 
@@ -214,7 +225,9 @@ function convertElement(
   const hasElementChildren = el.children.length > 0;
   const hasTextContent = hasDirectTextContent(el);
 
-  if (!hasElementChildren && hasTextContent) {
+  const keepAsFrameForTextOnly = shouldKeepTextOnlyElementAsFrame(tag);
+
+  if (!hasElementChildren && hasTextContent && !keepAsFrameForTextOnly) {
     // Pure text element → TextNode
     const textNode: TextNode = {
       id: generateId(),
@@ -232,7 +245,7 @@ function convertElement(
   const children: SceneNode[] = [];
 
   for (const child of el.childNodes) {
-    const childNode = convertNode(child, containerRect);
+    const childNode = convertNode(child, containerRect, elementNodeMap);
     if (childNode) {
       children.push(childNode);
     }
@@ -253,6 +266,20 @@ function convertElement(
 
   applyBaseProps(frame, style);
 
+  // Mark absolute/fixed positioned children using the element→node map
+  // built during child conversion (avoids O(n²) position-based matching).
+  const domChildren = el.children;
+  for (let i = 0; i < domChildren.length; i++) {
+    const childStyle = window.getComputedStyle(domChildren[i]);
+    const pos = childStyle.position;
+    if (pos === "absolute" || pos === "fixed") {
+      const matchingNode = elementNodeMap.get(domChildren[i]);
+      if (matchingNode) {
+        matchingNode.absolutePosition = true;
+      }
+    }
+  }
+
   // Infer auto-layout from CSS display/flex
   const layout = inferAutoLayout(style);
   if (layout) {
@@ -263,6 +290,11 @@ function convertElement(
   }
 
   return frame;
+}
+
+/** Preserve some text-only elements as frames instead of flattening to a single text node */
+function shouldKeepTextOnlyElementAsFrame(tag: string): boolean {
+  return tag === "div";
 }
 
 /** Check if an element has direct text content (not just whitespace) */
@@ -370,6 +402,17 @@ function applyBaseProps(
     }
   }
 
+  // Background image → imageFill
+  const bgImage = style.backgroundImage;
+  if (bgImage && bgImage !== "none") {
+    const bgUrl = extractCssUrl(bgImage);
+    if (bgUrl) {
+      const bgSize = style.backgroundSize;
+      const mode = bgSize === "contain" ? "fit" : "fill";
+      node.imageFill = { url: bgUrl, mode };
+    }
+  }
+
   // Opacity
   const opacity = parseFloat(style.opacity);
   if (opacity < 1) node.opacity = opacity;
@@ -456,12 +499,20 @@ function inferAutoLayout(
   const display = style.display;
 
   if (display === "flex" || display === "inline-flex") {
+    const flexDirection =
+      style.flexDirection === "row" || style.flexDirection === "row-reverse"
+        ? "row"
+        : "column";
+
+    const mainAxisGap =
+      flexDirection === "row"
+        ? parseFloat(style.columnGap) || parseFloat(style.gap) || 0
+        : parseFloat(style.rowGap) || parseFloat(style.gap) || 0;
+
     const layout: LayoutProperties = {
       autoLayout: true,
-      flexDirection: (style.flexDirection === "row" || style.flexDirection === "row-reverse"
-        ? "row"
-        : "column") as FlexDirection,
-      gap: parseFloat(style.gap) || 0,
+      flexDirection: flexDirection as FlexDirection,
+      gap: mainAxisGap,
       paddingTop: parseFloat(style.paddingTop) || 0,
       paddingRight: parseFloat(style.paddingRight) || 0,
       paddingBottom: parseFloat(style.paddingBottom) || 0,
@@ -501,8 +552,37 @@ function inferAutoLayout(
     return layout;
   }
 
+  // CSS Grid → infer direction from columns
+  if (display === "grid" || display === "inline-grid") {
+    const cols = style.gridTemplateColumns;
+    // Count columns: if >1 resolved column track, treat as row layout
+    const colCount = cols ? cols.trim().split(/\s+/).length : 1;
+    const flexDirection: FlexDirection = colCount > 1 ? "row" : "column";
+    const gap =
+      parseFloat(flexDirection === "row" ? style.columnGap : style.rowGap) ||
+      parseFloat(style.gap) ||
+      0;
+
+    const layout: LayoutProperties = {
+      autoLayout: true,
+      flexDirection,
+      gap,
+      paddingTop: parseFloat(style.paddingTop) || 0,
+      paddingRight: parseFloat(style.paddingRight) || 0,
+      paddingBottom: parseFloat(style.paddingBottom) || 0,
+      paddingLeft: parseFloat(style.paddingLeft) || 0,
+    };
+
+    // For equal-width grid columns (like repeat(3, 1fr)), mark as flexWrap
+    if (flexDirection === "row" && colCount > 1) {
+      layout.alignItems = "stretch";
+    }
+
+    return layout;
+  }
+
   // Block-level → vertical auto-layout
-  if (display === "block" || display === "list-item") {
+  if (display === "block" || display === "inline-block" || display === "list-item") {
     return {
       autoLayout: true,
       flexDirection: "column",
@@ -529,21 +609,24 @@ function convertChildrenToRelative(
   const padLeft = frame.layout.paddingLeft ?? 0;
   const padTop = frame.layout.paddingTop ?? 0;
 
-  for (const child of frame.children) {
-    // Make positions relative to parent content area
-    child.x = child.x - (parentRect.left - containerRect.left) - padLeft;
-    child.y = child.y - (parentRect.top - containerRect.top) - padTop;
+  // Pre-compute non-absolute child count for row sizing inference (avoids O(n²))
+  const nonAbsCount = frame.children.filter((c) => !c.absolutePosition).length;
 
-    // For auto-layout children, zero out the main axis position
-    // (layout engine computes it)
-    if (frame.layout.flexDirection === "column") {
-      child.x = 0;
-    } else {
-      child.y = 0;
+  for (const child of frame.children) {
+    // Skip absolute-positioned children — they keep their relative coords
+    if (child.absolutePosition) {
+      child.x = child.x - (parentRect.left - containerRect.left) - padLeft;
+      child.y = child.y - (parentRect.top - containerRect.top) - padTop;
+      continue;
     }
 
+    // For auto-layout children, zero out both axes
+    // (the layout engine recomputes all positions from gap/padding/justify)
+    child.x = 0;
+    child.y = 0;
+
     // Infer sizing mode
-    inferChildSizing(child, frame);
+    inferChildSizing(child, frame, nonAbsCount);
   }
 }
 
@@ -551,6 +634,7 @@ function convertChildrenToRelative(
 function inferChildSizing(
   child: SceneNode,
   parentFrame: FrameNode,
+  nonAbsCount: number,
 ): void {
   // Check if child width matches parent content width (fill_container)
   const parentContentWidth =
@@ -568,12 +652,24 @@ function inferChildSizing(
   let widthMode: SizingMode = "fixed";
   let heightMode: SizingMode = "fixed";
 
-  // If child width is ~100% of parent content width, use fill_container
-  if (widthRatio > 0.95 && parentFrame.layout?.flexDirection === "column") {
-    widthMode = "fill_container";
-  }
-  if (heightRatio > 0.95 && parentFrame.layout?.flexDirection === "row") {
-    heightMode = "fill_container";
+  if (parentFrame.layout?.flexDirection === "column") {
+    // If child width is ~100% of parent content width, use fill_container
+    if (widthRatio > 0.95) {
+      widthMode = "fill_container";
+    }
+  } else if (parentFrame.layout?.flexDirection === "row") {
+    // For row layouts, check if children are equal-width (grid-like)
+    if (nonAbsCount > 1) {
+      const gap = parentFrame.layout?.gap ?? 0;
+      const expectedChildWidth = (parentContentWidth - gap * (nonAbsCount - 1)) / nonAbsCount;
+      // If this child's width is close to the expected equal share, use fill_container
+      if (expectedChildWidth > 0 && Math.abs(child.width - expectedChildWidth) / expectedChildWidth < 0.1) {
+        widthMode = "fill_container";
+      }
+    }
+    if (heightRatio > 0.95) {
+      heightMode = "fill_container";
+    }
   }
 
   if (widthMode !== "fixed" || heightMode !== "fixed") {

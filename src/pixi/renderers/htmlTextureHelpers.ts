@@ -1,10 +1,11 @@
 import { Texture } from "pixi.js";
+import { extractCssUrl } from "@/lib/htmlToDesignNodes";
 
 /** Cache for rendered HTML textures by content+size key */
 const textureCache = new Map<string, Texture>();
 /** Dedup parallel renders for the same key */
 const pendingRenders = new Map<string, Promise<Texture | null>>();
-const HTML_TEXTURE_RENDER_VERSION = 4;
+const HTML_TEXTURE_RENDER_VERSION = 5;
 
 function makeCacheKey(html: string, width: number, height: number, resolution: number): string {
   return `v${HTML_TEXTURE_RENDER_VERSION}:${width}x${height}@${resolution}:${html}`;
@@ -47,13 +48,14 @@ async function doRender(
   resolution: number,
   cacheKey: string,
 ): Promise<Texture | null> {
+  const normalizedHtml = normalizeHtmlForEmbedRender(html);
   const pixelWidth = Math.ceil(width * resolution);
   const pixelHeight = Math.ceil(height * resolution);
 
   // Prefer browser-native HTML layout via SVG foreignObject.
   // This yields accurate flex/text positioning when supported.
   const foreignObjectCanvas = await renderViaForeignObject(
-    html,
+    normalizedHtml,
     width,
     height,
     pixelWidth,
@@ -78,7 +80,7 @@ async function doRender(
     pointer-events: none;
     visibility: hidden;
   `;
-  container.innerHTML = html;
+  container.innerHTML = normalizedHtml;
   document.body.appendChild(container);
 
   // Wait one frame for the browser to compute layout
@@ -93,8 +95,11 @@ async function doRender(
 
     const containerRect = container.getBoundingClientRect();
 
+    // Pre-load all background images before drawing
+    const bgImageMap = await preloadBackgroundImages(container);
+
     // Recursively walk the DOM and draw each element
-    walkAndDraw(ctx, container, containerRect);
+    walkAndDraw(ctx, container, containerRect, bgImageMap);
 
     const texture = Texture.from({ resource: canvas, resolution });
     textureCache.set(cacheKey, texture);
@@ -103,6 +108,26 @@ async function doRender(
     return null;
   } finally {
     document.body.removeChild(container);
+  }
+}
+
+function normalizeHtmlForEmbedRender(html: string): string {
+  // Fast path: skip DOM round-trip when no fixed positioning is present
+  if (!html.includes("fixed")) return html;
+  try {
+    const container = document.createElement("div");
+    container.innerHTML = html;
+
+    const allElements = container.querySelectorAll<HTMLElement>("*");
+    for (const el of allElements) {
+      if (el.style.position === "fixed") {
+        el.style.position = "absolute";
+      }
+    }
+
+    return container.innerHTML;
+  } catch {
+    return html;
   }
 }
 
@@ -155,6 +180,9 @@ async function renderViaForeignObject(
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
+    // Prevent canvas tainting for cross-origin images used in WebGL textures.
+    // If the server does not allow CORS, loading will fail and caller can skip it.
+    img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error("Failed to load image"));
     img.src = url;
@@ -318,18 +346,224 @@ function parseLinearGradient(
   return gradient;
 }
 
+/**
+ * Draw a preloaded background image onto the canvas, respecting
+ * background-size (cover/contain/explicit) and background-position.
+ */
+function drawBackgroundImage(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  style: CSSStyleDeclaration,
+  x: number, y: number, w: number, h: number,
+): void {
+  const imgW = img.naturalWidth;
+  const imgH = img.naturalHeight;
+  if (imgW === 0 || imgH === 0) return;
+
+  const bgSize = style.backgroundSize;
+  let drawW: number;
+  let drawH: number;
+
+  if (bgSize === "cover") {
+    const scale = Math.max(w / imgW, h / imgH);
+    drawW = imgW * scale;
+    drawH = imgH * scale;
+  } else if (bgSize === "contain") {
+    const scale = Math.min(w / imgW, h / imgH);
+    drawW = imgW * scale;
+    drawH = imgH * scale;
+  } else if (bgSize && bgSize !== "auto") {
+    const parts = bgSize.split(/\s+/);
+    drawW = parseBgDimension(parts[0], w, imgW, imgH, true);
+    drawH = parseBgDimension(parts[1] ?? "auto", h, imgW, imgH, false, drawW);
+  } else {
+    // auto — use natural size
+    drawW = imgW;
+    drawH = imgH;
+  }
+
+  // Parse background-position (defaults to "50% 50%" per spec but computed
+  // style usually gives explicit px values like "0px 0px" or percentages).
+  const bgPos = style.backgroundPosition;
+  const posParts = bgPos ? bgPos.split(/\s+/) : ["50%", "50%"];
+  const posX = parseBgPosition(posParts[0] ?? "50%", w, drawW);
+  const posY = parseBgPosition(posParts[1] ?? "50%", h, drawH);
+
+  ctx.drawImage(img, x + posX, y + posY, drawW, drawH);
+}
+
+function parseBgDimension(
+  value: string,
+  containerDim: number,
+  imgW: number,
+  imgH: number,
+  isWidth: boolean,
+  otherDim?: number,
+): number {
+  if (value === "auto") {
+    // Maintain aspect ratio relative to the other dimension
+    if (otherDim !== undefined && otherDim > 0) {
+      return isWidth
+        ? otherDim * (imgW / imgH)
+        : otherDim * (imgH / imgW);
+    }
+    return isWidth ? imgW : imgH;
+  }
+  if (value.endsWith("%")) {
+    return (parseFloat(value) / 100) * containerDim;
+  }
+  return parseFloat(value) || (isWidth ? imgW : imgH);
+}
+
+function parseBgPosition(value: string, containerDim: number, imageDim: number): number {
+  if (value === "center") return (containerDim - imageDim) / 2;
+  if (value === "left" || value === "top") return 0;
+  if (value === "right" || value === "bottom") return containerDim - imageDim;
+  if (value.endsWith("%")) {
+    const pct = parseFloat(value) / 100;
+    return (containerDim - imageDim) * pct;
+  }
+  return parseFloat(value) || 0;
+}
+
+interface CanvasBoxShadow {
+  inset: boolean;
+  offsetX: number;
+  offsetY: number;
+  blur: number;
+  spread: number;
+  color: string;
+}
+
+function splitShadowList(value: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let depth = 0;
+  for (const ch of value) {
+    if (ch === "(") depth++;
+    else if (ch === ")") depth = Math.max(0, depth - 1);
+    if (ch === "," && depth === 0) {
+      if (current.trim()) parts.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim()) parts.push(current.trim());
+  return parts;
+}
+
+function parseBoxShadows(boxShadow: string): CanvasBoxShadow[] {
+  if (!boxShadow || boxShadow === "none") return [];
+
+  const result: CanvasBoxShadow[] = [];
+  for (const part of splitShadowList(boxShadow)) {
+    const inset = /\binset\b/.test(part);
+    const colorMatch = part.match(/(rgba?\([^)]+\)|hsla?\([^)]+\)|#[\da-fA-F]{3,8}|transparent)/);
+    const color = colorMatch?.[1] ?? "rgba(0, 0, 0, 0.35)";
+
+    const withoutInset = part.replace(/\binset\b/g, "");
+    const withoutColor = colorMatch ? withoutInset.replace(colorMatch[1], "") : withoutInset;
+    const lengths = withoutColor.match(/-?\d*\.?\d+px/g) ?? [];
+    if (lengths.length < 2) continue;
+
+    const offsetX = parseFloat(lengths[0] ?? "0") || 0;
+    const offsetY = parseFloat(lengths[1] ?? "0") || 0;
+    const blur = parseFloat(lengths[2] ?? "0") || 0;
+    const spread = parseFloat(lengths[3] ?? "0") || 0;
+    result.push({ inset, offsetX, offsetY, blur, spread, color });
+  }
+
+  return result;
+}
+
+function drawBoxShadows(
+  ctx: CanvasRenderingContext2D,
+  shadows: CanvasBoxShadow[],
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  radii: [number, number, number, number],
+  fillStyle: string | CanvasGradient,
+): void {
+  for (const shadow of shadows) {
+    if (shadow.inset) continue;
+    const spreadX = x - shadow.spread;
+    const spreadY = y - shadow.spread;
+    const spreadW = w + shadow.spread * 2;
+    const spreadH = h + shadow.spread * 2;
+    if (spreadW <= 0 || spreadH <= 0) continue;
+
+    const spreadRadii: [number, number, number, number] = [
+      Math.max(0, radii[0] + shadow.spread),
+      Math.max(0, radii[1] + shadow.spread),
+      Math.max(0, radii[2] + shadow.spread),
+      Math.max(0, radii[3] + shadow.spread),
+    ];
+
+    ctx.save();
+    ctx.shadowColor = shadow.color;
+    ctx.shadowBlur = Math.max(0, shadow.blur);
+    ctx.shadowOffsetX = shadow.offsetX;
+    ctx.shadowOffsetY = shadow.offsetY;
+    ctx.fillStyle = fillStyle;
+    if (hasRadius(spreadRadii)) {
+      ctx.beginPath();
+      traceRoundedRect(ctx, spreadX, spreadY, spreadW, spreadH, spreadRadii);
+      ctx.fill();
+    } else {
+      ctx.fillRect(spreadX, spreadY, spreadW, spreadH);
+    }
+    ctx.restore();
+  }
+}
+
+/** Scan the container for all elements with background-image: url(...) and preload them */
+async function preloadBackgroundImages(
+  container: HTMLElement,
+): Promise<Map<string, HTMLImageElement>> {
+  const map = new Map<string, HTMLImageElement>();
+  const urls = new Set<string>();
+
+  const allElements = container.querySelectorAll<HTMLElement>("*");
+  for (const el of allElements) {
+    const bgImage = window.getComputedStyle(el).backgroundImage;
+    if (bgImage && bgImage !== "none") {
+      const url = extractCssUrl(bgImage);
+      if (url) urls.add(url);
+    }
+  }
+  // Also check the container itself
+  const containerBg = window.getComputedStyle(container).backgroundImage;
+  if (containerBg && containerBg !== "none") {
+    const url = extractCssUrl(containerBg);
+    if (url) urls.add(url);
+  }
+
+  await Promise.all(
+    [...urls].map(async (url) => {
+      try {
+        const img = await loadImage(url);
+        map.set(url, img);
+      } catch {
+        // Skip images that fail to load
+      }
+    }),
+  );
+
+  return map;
+}
+
 /** Walk DOM tree and draw elements onto a 2D canvas */
 function walkAndDraw(
   ctx: CanvasRenderingContext2D,
   element: Element,
   containerRect: DOMRect,
+  bgImageMap: Map<string, HTMLImageElement>,
 ): void {
   const style = window.getComputedStyle(element);
-  const rect = element.getBoundingClientRect();
-  const x = rect.left - containerRect.left;
-  const y = rect.top - containerRect.top;
-  const w = rect.width;
-  const h = rect.height;
+  const { x, y, w, h } = getElementRectInContainer(element, style, containerRect);
 
   // Opacity
   const opacity = parseFloat(style.opacity);
@@ -341,16 +575,23 @@ function walkAndDraw(
 
   const radii = parseBorderRadii(style, w, h);
   const rounded = hasRadius(radii);
+  const shouldClipChildren = shouldClipByOverflow(style) && w > 0 && h > 0;
 
   // Draw background (solid color or gradient)
   const bg = style.backgroundColor;
   const bgImage = style.backgroundImage;
   const hasSolidBg = bg && bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent";
   const hasGradient = bgImage && bgImage !== "none" && bgImage.includes("linear-gradient");
+  const gradient = hasGradient ? parseLinearGradient(ctx, bgImage, x, y, w, h) : null;
+  const hasPaintCarrier = hasSolidBg || !!gradient;
+
+  const boxShadows = parseBoxShadows(style.boxShadow);
+  if (boxShadows.length > 0 && hasPaintCarrier && w > 0 && h > 0) {
+    drawBoxShadows(ctx, boxShadows, x, y, w, h, radii, gradient ?? bg);
+  }
 
   if (hasSolidBg || hasGradient) {
     if (hasGradient) {
-      const gradient = parseLinearGradient(ctx, bgImage, x, y, w, h);
       if (gradient) ctx.fillStyle = gradient;
       else if (hasSolidBg) ctx.fillStyle = bg;
     } else {
@@ -363,6 +604,22 @@ function walkAndDraw(
       ctx.fill();
     } else {
       ctx.fillRect(x, y, w, h);
+    }
+  }
+
+  // Draw background-image: url(...)
+  if (bgImage && bgImage !== "none") {
+    const bgUrl = extractCssUrl(bgImage);
+    const img = bgUrl ? bgImageMap.get(bgUrl) : undefined;
+    if (img && w > 0 && h > 0) {
+      ctx.save();
+      if (rounded) {
+        ctx.beginPath();
+        traceRoundedRect(ctx, x, y, w, h, radii);
+        ctx.clip();
+      }
+      drawBackgroundImage(ctx, img, style, x, y, w, h);
+      ctx.restore();
     }
   }
 
@@ -384,18 +641,122 @@ function walkAndDraw(
     }
   }
 
+  // Clip descendants when overflow is not visible.
+  if (shouldClipChildren) {
+    ctx.save();
+    ctx.beginPath();
+    if (rounded) {
+      traceRoundedRect(ctx, x, y, w, h, radii);
+    } else {
+      ctx.rect(x, y, w, h);
+    }
+    ctx.clip();
+  }
+
   // Process child nodes
   for (const child of element.childNodes) {
     if (child.nodeType === Node.ELEMENT_NODE) {
-      walkAndDraw(ctx, child as Element, containerRect);
+      walkAndDraw(ctx, child as Element, containerRect, bgImageMap);
     } else if (child.nodeType === Node.TEXT_NODE) {
       drawTextNode(ctx, child as Text, style, containerRect);
     }
   }
 
+  if (shouldClipChildren) {
+    ctx.restore();
+  }
   if (hasOpacity) {
     ctx.restore();
   }
+}
+
+function shouldClipByOverflow(style: CSSStyleDeclaration): boolean {
+  const overflow = style.overflow;
+  const overflowX = style.overflowX;
+  const overflowY = style.overflowY;
+
+  const clips = (value: string): boolean =>
+    value === "hidden" || value === "clip";
+
+  return clips(overflow) || clips(overflowX) || clips(overflowY);
+}
+
+function parseCssLength(value: string | null | undefined, containerSize: number): number | null {
+  if (!value || value === "auto") return null;
+  if (value.endsWith("%")) {
+    const pct = parseFloat(value);
+    return Number.isFinite(pct) ? (containerSize * pct) / 100 : null;
+  }
+  const px = parseFloat(value);
+  return Number.isFinite(px) ? px : null;
+}
+
+function getElementRectInContainer(
+  element: Element,
+  style: CSSStyleDeclaration,
+  containerRect: DOMRect,
+): { x: number; y: number; w: number; h: number } {
+  const rect = element.getBoundingClientRect();
+  const w = rect.width;
+  const h = rect.height;
+
+  if (style.position !== "fixed") {
+    return {
+      x: rect.left - containerRect.left,
+      y: rect.top - containerRect.top,
+      w,
+      h,
+    };
+  }
+
+  // Safety net: normalizeHtmlForEmbedRender converts fixed→absolute before
+  // rendering, so the code below is normally unreachable.
+
+  // The offscreen wrapper used for measurement is itself fixed and attached
+  // to body with large negative coordinates. Keep it in local (0,0)-relative
+  // space; otherwise clipping can move outside the canvas and hide everything.
+  if (element.parentElement === document.body || element.parentElement === document.documentElement) {
+    return {
+      x: rect.left - containerRect.left,
+      y: rect.top - containerRect.top,
+      w,
+      h,
+    };
+  }
+
+  // In fallback mode we emulate app-like embeds where fixed bars (e.g. bottom nav)
+  // should stick to the local HTML viewport (usually the root app shell), not the
+  // full embed texture size.
+  const parentRect = element.parentElement?.getBoundingClientRect();
+  const useParentAnchor =
+    !!parentRect &&
+    parentRect.width > 0 &&
+    parentRect.height > 0 &&
+    element.parentElement !== document.body &&
+    element.parentElement !== document.documentElement;
+
+  const anchorLeft = useParentAnchor ? parentRect.left : containerRect.left;
+  const anchorTop = useParentAnchor ? parentRect.top : containerRect.top;
+  const anchorWidth = useParentAnchor ? parentRect.width : containerRect.width;
+  const anchorHeight = useParentAnchor ? parentRect.height : containerRect.height;
+
+  const left = parseCssLength(style.left, anchorWidth);
+  const right = parseCssLength(style.right, anchorWidth);
+  const top = parseCssLength(style.top, anchorHeight);
+  const bottom = parseCssLength(style.bottom, anchorHeight);
+
+  let x = rect.left - containerRect.left;
+  let y = rect.top - containerRect.top;
+  const anchorX = anchorLeft - containerRect.left;
+  const anchorY = anchorTop - containerRect.top;
+
+  if (left !== null) x = anchorX + left;
+  else if (right !== null) x = anchorX + anchorWidth - right - w;
+
+  if (top !== null) y = anchorY + top;
+  else if (bottom !== null) y = anchorY + anchorHeight - bottom - h;
+
+  return { x, y, w, h };
 }
 
 /** Draw a text node onto the canvas using Range.getClientRects for line-accurate positioning */

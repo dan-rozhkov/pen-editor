@@ -4,7 +4,7 @@ import type { ChatTab } from "@/store/chatStore";
 import { useDesignChat } from "@/hooks/useDesignChat";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
-import { SelectInput } from "@/components/ui/PropertyInputs";
+import { SelectWithOptions } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 
@@ -180,15 +180,19 @@ export function ChatPanel() {
 
         {/* Model selector */}
         <div className="px-3 pb-2 shrink-0 flex items-center gap-2">
-          <SelectInput
+          <SelectWithOptions
             value={agentMode}
             options={MODE_OPTIONS}
-            onChange={(value) => setAgentMode(value as "edits" | "fast")}
+            onValueChange={(value) => setAgentMode(value as "edits" | "fast")}
+            size="sm"
+            className="w-fit"
           />
-          <SelectInput
+          <SelectWithOptions
             value={model}
             options={MODEL_OPTIONS}
-            onChange={setModel}
+            onValueChange={(value) => { if (value) setModel(value); }}
+            size="sm"
+            className="w-fit"
           />
         </div>
       </div>

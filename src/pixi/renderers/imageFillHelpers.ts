@@ -5,6 +5,33 @@ import type { ImageFill } from "@/types/scene";
 const textureCache = new Map<string, Texture>();
 const loadingUrls = new Set<string>();
 
+async function loadTextureFromUrl(url: string): Promise<Texture> {
+  try {
+    return await Assets.load<Texture>(url);
+  } catch (assetsError) {
+    // Some image CDNs (e.g. Unsplash) use URLs without file extensions.
+    // Pixi's Assets parser may skip those URLs, so fall back to browser image loading.
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+
+    const loadPromise = new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error(`Failed to load image URL: ${url}`));
+    });
+
+    image.src = url;
+    await loadPromise;
+
+    if (image.naturalWidth <= 0 || image.naturalHeight <= 0) {
+      throw assetsError instanceof Error
+        ? assetsError
+        : new Error(`Image loaded with invalid dimensions: ${url}`);
+    }
+
+    return Texture.from(image);
+  }
+}
+
 export function applyImageFill(
   container: Container,
   imageFill: ImageFill | undefined,
@@ -26,7 +53,7 @@ export function applyImageFill(
     addImageSprite(container, cached, imageFill, width, height, cornerRadius);
   } else if (!loadingUrls.has(imageFill.url)) {
     loadingUrls.add(imageFill.url);
-    Assets.load<Texture>(imageFill.url).then((texture) => {
+    loadTextureFromUrl(imageFill.url).then((texture) => {
       loadingUrls.delete(imageFill.url);
       if (texture) {
         textureCache.set(imageFill.url, texture);
@@ -37,6 +64,8 @@ export function applyImageFill(
       }
     }).catch(() => {
       loadingUrls.delete(imageFill.url);
+      // Keep this visible in devtools; otherwise failed image fills are silent.
+      console.warn("[pixi] Failed to load image fill", imageFill.url);
     });
   }
 }
@@ -152,7 +181,7 @@ export function applyImageFillEllipse(
     addImageSpriteEllipse(container, cached, imageFill, width, height);
   } else if (!loadingUrls.has(imageFill.url)) {
     loadingUrls.add(imageFill.url);
-    Assets.load<Texture>(imageFill.url).then((texture) => {
+    loadTextureFromUrl(imageFill.url).then((texture) => {
       loadingUrls.delete(imageFill.url);
       if (texture && !container.destroyed) {
         textureCache.set(imageFill.url, texture);
@@ -160,6 +189,7 @@ export function applyImageFillEllipse(
       }
     }).catch(() => {
       loadingUrls.delete(imageFill.url);
+      console.warn("[pixi] Failed to load image fill", imageFill.url);
     });
   }
 }
