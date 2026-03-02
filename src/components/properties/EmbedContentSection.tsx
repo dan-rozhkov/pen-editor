@@ -1,44 +1,24 @@
 import { useState, useEffect, useRef } from "react";
-import { CaretRightIcon } from "@phosphor-icons/react";
-import clsx from "clsx";
-import type { SceneNode, EmbedNode } from "@/types/scene";
+import type { EmbedNode } from "@/types/scene";
 import { PropertySection } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 
 interface EmbedContentSectionProps {
   node: EmbedNode;
-  onUpdate: (updates: Partial<SceneNode>) => void;
 }
 
-export function EmbedContentSection({ node, onUpdate }: EmbedContentSectionProps) {
-  const [localValue, setLocalValue] = useState(node.htmlContent);
-  const [isAccordionOpen, setIsAccordionOpen] = useState(false);
+export function EmbedContentSection({ node }: EmbedContentSectionProps) {
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [converting, setConverting] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const copyResetRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  useEffect(() => {
-    setLocalValue(node.htmlContent);
-  }, [node.htmlContent]);
 
   useEffect(() => {
     return () => {
       clearTimeout(copyResetRef.current);
-      clearTimeout(debounceRef.current);
     };
   }, []);
-
-  const handleChange = (value: string) => {
-    setLocalValue(value);
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      onUpdate({ htmlContent: value } as Partial<SceneNode>);
-    }, 300);
-  };
 
   const resetCopyStatus = () => {
     clearTimeout(copyResetRef.current);
@@ -65,7 +45,7 @@ export function EmbedContentSection({ node, onUpdate }: EmbedContentSectionProps
   };
 
   const handleCopyAsHtml = async () => {
-    const value = localValue ?? "";
+    const value = node.htmlContent ?? "";
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(value);
@@ -98,43 +78,6 @@ export function EmbedContentSection({ node, onUpdate }: EmbedContentSectionProps
   return (
     <PropertySection title="Embed">
       <div className="flex flex-col gap-1.5">
-        <div>
-          <button
-            type="button"
-            onClick={() => setIsAccordionOpen((prev) => !prev)}
-            className={clsx(
-              "group flex w-full items-center cursor-pointer h-6 px-1.5",
-              "hover:bg-surface-elevated",
-            )}
-            aria-expanded={isAccordionOpen}
-            aria-label="Toggle HTML content"
-          >
-            <span className="mr-1 flex items-center justify-center">
-              <CaretRightIcon
-                size={10}
-                className={clsx(
-                  "w-2.5 h-2.5 text-text-muted transition-transform",
-                  isAccordionOpen && "rotate-90",
-                )}
-                weight="bold"
-              />
-            </span>
-            <span className="text-xs whitespace-nowrap text-text-secondary">
-              HTML Content
-            </span>
-          </button>
-          {isAccordionOpen && (
-            <div className="pt-1">
-              <Textarea
-                value={localValue}
-                onChange={(e) => handleChange(e.target.value)}
-                className="min-h-28 font-mono resize-y"
-                spellCheck={false}
-                placeholder="<div>Your HTML here</div>"
-              />
-            </div>
-          )}
-        </div>
         <Button onClick={handleCopyAsHtml} variant="secondary" className="w-full">
           {copyStatus === "copied"
             ? "Copied"

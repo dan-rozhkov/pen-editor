@@ -94,7 +94,7 @@ export function PropertyEditor({
         <TypographySection node={node} onUpdate={onUpdate} />
       )}
       {node.type === "embed" && (
-        <EmbedContentSection node={node} onUpdate={onUpdate} />
+        <EmbedContentSection node={node} />
       )}
     </div>
   );

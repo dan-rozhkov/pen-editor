@@ -3,6 +3,7 @@ import { Application, Container } from "pixi.js";
 import { InlineNameEditor} from "@/components/InlineNameEditor";
 import { InlineTextEditor } from "@/components/InlineTextEditor";
 import { InlineEmbedEditor } from "@/components/InlineEmbedEditor";
+import { EmbedActionBar } from "@/components/canvas/EmbedActionBar";
 import type { EmbedNode, RefNode, TextNode } from "@/types/scene";
 import { useCanvasKeyboardShortcuts } from "@/components/canvas/useCanvasKeyboardShortcuts";
 import { useCanvasFileDrop } from "@/components/canvas/useCanvasFileDrop";
@@ -112,6 +113,7 @@ export function PixiCanvas() {
   const { copiedNodes, copyNodes } = useClipboardStore();
   const { clearSelection, editingNodeId, editingMode, instanceContext, clearInstanceContext } =
     useSelectionStore();
+  const selectedIds = useSelectionStore((s) => s.selectedIds);
   const { undo, redo, saveHistory, startBatch, endBatch } = useHistoryStore();
   const { activeTool, cancelDrawing, toggleTool } = useDrawModeStore();
   const setPixiRefs = useCanvasRefStore((s) => s.setPixiRefs);
@@ -264,6 +266,17 @@ export function PixiCanvas() {
     },
     [],
   );
+
+  const selectedEmbedNode = useMemo(() => {
+    if (selectedIds.length !== 1) return null;
+    const selectedNode = nodesById[selectedIds[0]];
+    return selectedNode?.type === "embed" ? (selectedNode as EmbedNode) : null;
+  }, [selectedIds, nodesById]);
+
+  const selectedEmbedPosition = useMemo(() => {
+    if (!selectedEmbedNode) return null;
+    return getEditingPosition(selectedEmbedNode.id);
+  }, [selectedEmbedNode, getEditingPosition]);
 
   // Keyboard shortcuts (reuse existing hook)
   useCanvasKeyboardShortcuts({
@@ -436,6 +449,13 @@ export function PixiCanvas() {
         }
       />
       <FpsDisplay fps={fps} />
+      {selectedEmbedNode && selectedEmbedPosition && editingMode !== "embed" && (
+        <EmbedActionBar
+          node={selectedEmbedNode}
+          absoluteX={selectedEmbedPosition.x}
+          absoluteY={selectedEmbedPosition.y}
+        />
+      )}
       {/* Inline text editor overlay */}
       {editingNode && editingPosition && editingMode === "text" && (
         <InlineTextEditor
