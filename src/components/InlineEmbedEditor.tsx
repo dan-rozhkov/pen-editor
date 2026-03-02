@@ -4,6 +4,7 @@ import { useSceneStore, createSnapshot } from '../store/sceneStore'
 import { useHistoryStore } from '../store/historyStore'
 import { useSelectionStore } from '../store/selectionStore'
 import { useViewportStore } from '../store/viewportStore'
+import { mountHtmlWithBodyStyles, type MountResult } from '../utils/embedHtmlUtils'
 
 /** Tags that should never be made contenteditable */
 const SKIP_TAGS = new Set([
@@ -44,13 +45,38 @@ function hasEditableAncestor(el: Element, root: Element): boolean {
   return false
 }
 
-/** Serialize container innerHTML, stripping editing artifacts */
-function serializeContainer(container: HTMLDivElement): string {
+/** Deep-clone a container and remove all contenteditable attributes */
+function stripEditableAttributes(container: HTMLElement): HTMLElement {
   const clone = container.cloneNode(true) as HTMLElement
   clone.querySelectorAll('[contenteditable]').forEach((el) => {
     el.removeAttribute('contenteditable')
   })
-  return clone.innerHTML
+  return clone
+}
+
+/** Serialize container innerHTML, stripping editing artifacts */
+function serializeContainer(container: HTMLDivElement): string {
+  return stripEditableAttributes(container).innerHTML
+}
+
+function serializeMountedContainer(
+  container: HTMLDivElement,
+  mountResult: MountResult,
+): string {
+  if (!mountResult.wrappedBody) return serializeContainer(container)
+
+  const clone = stripEditableAttributes(container)
+
+  const directChildren = Array.from(clone.children)
+  const bodyEl = directChildren.find((el) => el.tagName.toLowerCase() === 'body') as HTMLElement | undefined
+  const nonBodyHtml = directChildren
+    .filter((el) => el !== bodyEl)
+    .map((el) => el.outerHTML)
+    .join('')
+
+  if (!bodyEl) return nonBodyHtml
+  if (mountResult.originalHasBodyTag) return `${nonBodyHtml}${bodyEl.outerHTML}`
+  return `${nonBodyHtml}${bodyEl.innerHTML}`
 }
 
 interface InlineEmbedEditorProps {
@@ -70,6 +96,7 @@ export function InlineEmbedEditor({
   const htmlContentRef = useRef(node.htmlContent)
   const nodeIdRef = useRef(node.id)
   const committedRef = useRef(false)
+  const mountResultRef = useRef<MountResult | null>(null)
 
   const scale = useViewportStore((s) => s.scale)
   const panX = useViewportStore((s) => s.x)
@@ -90,7 +117,10 @@ export function InlineEmbedEditor({
     committedRef.current = true
     const container = containerRef.current
     if (!container) return
-    const newHtml = serializeContainer(container)
+    const newHtml = serializeMountedContainer(
+      container,
+      mountResultRef.current ?? { root: container, wrappedBody: false, originalHasBodyTag: false },
+    )
     if (newHtml !== htmlContentRef.current) {
       useSceneStore.getState().updateNodeWithoutHistory(
         nodeIdRef.current,
@@ -121,7 +151,7 @@ export function InlineEmbedEditor({
 
     // Attach shadow DOM for style isolation (reuse existing on strict-mode remount)
     const shadow = host.shadowRoot ?? host.attachShadow({ mode: 'open' })
-    shadow.innerHTML = ''
+    shadow.replaceChildren()
     shadowRootRef.current = shadow
 
     // Add a style to hide outlines on contenteditable elements
@@ -137,7 +167,14 @@ export function InlineEmbedEditor({
     container.style.overflow = 'hidden'
     container.style.transform = `scale(${currentScale})`
     container.style.transformOrigin = 'top left'
-    container.innerHTML = node.htmlContent
+    const mountResult = mountHtmlWithBodyStyles(
+      container,
+      node.htmlContent,
+      node.width,
+      node.height,
+    )
+    mountResultRef.current = mountResult
+    const editableRoot = mountResult.root
     shadow.appendChild(container)
     containerRef.current = container
 
@@ -146,8 +183,8 @@ export function InlineEmbedEditor({
     // Skip elements that already have an editable ancestor to avoid
     // nested contenteditable which causes content duplication.
     const editableEls: HTMLElement[] = []
-    container.querySelectorAll('*').forEach((el) => {
-      if (isTextLeaf(el) && !hasEditableAncestor(el, container)) {
+    editableRoot.querySelectorAll('*').forEach((el) => {
+      if (isTextLeaf(el) && !hasEditableAncestor(el, editableRoot)) {
         ;(el as HTMLElement).setAttribute('contenteditable', 'true')
         editableEls.push(el as HTMLElement)
       }
@@ -158,8 +195,8 @@ export function InlineEmbedEditor({
     if (firstEditable) {
       firstEditable.focus()
     } else {
-      container.setAttribute('contenteditable', 'true')
-      container.focus()
+      editableRoot.setAttribute('contenteditable', 'true')
+      editableRoot.focus()
     }
 
     return () => {
@@ -167,6 +204,7 @@ export function InlineEmbedEditor({
       commit()
       containerRef.current = null
       shadowRootRef.current = null
+      mountResultRef.current = null
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 

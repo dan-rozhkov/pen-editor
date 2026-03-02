@@ -3,6 +3,7 @@ import type {
   FrameNode,
   TextNode,
   RectNode,
+  GradientFill,
   LayoutProperties,
   FlexDirection,
   AlignItems,
@@ -12,6 +13,7 @@ import type {
 } from "@/types/scene";
 import { generateId } from "@/types/scene";
 import { parseSvgToNodes } from "@/utils/svgUtils";
+import { mountHtmlWithBodyStyles } from "@/utils/embedHtmlUtils";
 
 let colorParserCtx: CanvasRenderingContext2D | null = null;
 
@@ -49,13 +51,22 @@ export async function convertHtmlToDesignNodes(
   const sanitized = htmlContent
     .replace(/<script[\s\S]*?<\/script>/gi, "")
     .replace(/\bon\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, "");
-  container.innerHTML = sanitized;
+  const { root: conversionRoot, wrappedBody } = mountHtmlWithBodyStyles(
+    container,
+    sanitized,
+    width,
+    height,
+  );
+  // Scope embed CSS before mounting into document.body to prevent global UI flicker.
+  const scopeId = `convert-scope-${generateId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  conversionRoot.setAttribute("data-convert-scope", scopeId);
+  scopeStyleTagsToRoot(container, `[data-convert-scope="${scopeId}"]`);
   document.body.appendChild(container);
 
   // Wait for fonts and images to load, then one frame for reflow
   await document.fonts.ready;
   await Promise.all(
-    Array.from(container.querySelectorAll("img")).map((img) =>
+    Array.from(conversionRoot.querySelectorAll("img")).map((img) =>
       img.complete
         ? Promise.resolve()
         : new Promise<void>((res) => {
@@ -66,13 +77,13 @@ export async function convertHtmlToDesignNodes(
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
   try {
-    const containerRect = container.getBoundingClientRect();
+    const containerRect = conversionRoot.getBoundingClientRect();
     // Per-call map correlating DOM elements to their converted SceneNodes
     const elementNodeMap = new Map<Element, SceneNode>();
 
     // Convert the container's children into scene nodes
     const children: SceneNode[] = [];
-    for (const child of container.childNodes) {
+    for (const child of conversionRoot.childNodes) {
       const node = convertNode(child, containerRect, elementNodeMap);
       if (node) children.push(node);
     }
@@ -90,10 +101,14 @@ export async function convertHtmlToDesignNodes(
       children,
     };
 
+    // Preserve root-level visual styles (e.g. `body { background: ... }`).
+    const conversionRootStyle = window.getComputedStyle(conversionRoot);
+    applyBaseProps(rootFrame, conversionRootStyle);
+
     // If there's a single top-level element, try to infer its layout
-    if (container.children.length === 1) {
-      const topStyle = window.getComputedStyle(container.children[0]);
-      const layout = inferAutoLayout(topStyle, container.children[0]);
+    if (!wrappedBody && conversionRoot.children.length === 1) {
+      const topStyle = window.getComputedStyle(conversionRoot.children[0]);
+      const layout = inferAutoLayout(topStyle, conversionRoot.children[0]);
       if (layout) rootFrame.layout = layout;
       const bg = parseColorWithOpacity(topStyle.backgroundColor);
       if (bg) {
@@ -106,6 +121,97 @@ export async function convertHtmlToDesignNodes(
   } finally {
     document.body.removeChild(container);
   }
+}
+
+function scopeStyleTagsToRoot(container: HTMLElement, scopeSelector: string): void {
+  const styleElements = container.querySelectorAll("style");
+  for (const styleEl of styleElements) {
+    const cssText = styleEl.textContent;
+    if (!cssText) continue;
+    const scoped = scopeCssText(cssText, scopeSelector);
+    styleEl.textContent = scoped;
+  }
+}
+
+function scopeCssText(cssText: string, scopeSelector: string): string {
+  const sheet = new CSSStyleSheet();
+  try {
+    sheet.replaceSync(cssText);
+  } catch {
+    return cssText;
+  }
+  return scopeCssRules(Array.from(sheet.cssRules), scopeSelector).join("\n");
+}
+
+function scopeCssRules(rules: CSSRule[], scopeSelector: string): string[] {
+  const output: string[] = [];
+
+  for (const rule of rules) {
+    if (rule instanceof CSSStyleRule) {
+      const selectors = splitSelectorList(rule.selectorText);
+      const scopedSelectors = selectors
+        .map((selector) => scopeSelectorItem(selector, scopeSelector))
+        .join(", ");
+      output.push(`${scopedSelectors} { ${rule.style.cssText} }`);
+      continue;
+    }
+
+    if (rule instanceof CSSMediaRule) {
+      const nested = scopeCssRules(Array.from(rule.cssRules), scopeSelector).join("\n");
+      output.push(`@media ${rule.conditionText} {\n${nested}\n}`);
+      continue;
+    }
+
+    if (rule instanceof CSSSupportsRule) {
+      const nested = scopeCssRules(Array.from(rule.cssRules), scopeSelector).join("\n");
+      output.push(`@supports ${rule.conditionText} {\n${nested}\n}`);
+      continue;
+    }
+
+    output.push(rule.cssText);
+  }
+
+  return output;
+}
+
+function splitSelectorList(selectorText: string): string[] {
+  const selectors: string[] = [];
+  let current = "";
+  let parenDepth = 0;
+  let bracketDepth = 0;
+
+  for (let i = 0; i < selectorText.length; i++) {
+    const ch = selectorText[i];
+    if (ch === "(") parenDepth++;
+    else if (ch === ")") parenDepth = Math.max(0, parenDepth - 1);
+    else if (ch === "[") bracketDepth++;
+    else if (ch === "]") bracketDepth = Math.max(0, bracketDepth - 1);
+
+    if (ch === "," && parenDepth === 0 && bracketDepth === 0) {
+      selectors.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+
+  const tail = current.trim();
+  if (tail) selectors.push(tail);
+  return selectors;
+}
+
+function scopeSelectorItem(selector: string, scopeSelector: string): string {
+  const trimmed = selector.trim();
+  if (!trimmed) return scopeSelector;
+  if (trimmed === "html" || trimmed === "body" || trimmed === ":root") {
+    return scopeSelector;
+  }
+  const replacedLeadingRoot = trimmed.replace(
+    /^(:root|html|body)(?=[\s>+~.#[:]|$)/,
+    scopeSelector,
+  );
+  if (replacedLeadingRoot !== trimmed) return replacedLeadingRoot;
+  return `${scopeSelector} ${trimmed}`;
 }
 
 /** Convert a DOM node (element or text) into a SceneNode, or null if empty/invisible */
@@ -802,11 +908,16 @@ function applyBaseProps(
   // Background image → imageFill
   const bgImage = style.backgroundImage;
   if (bgImage && bgImage !== "none") {
-    const bgUrl = extractCssUrl(bgImage);
-    if (bgUrl) {
-      const bgSize = style.backgroundSize;
-      const mode = bgSize === "contain" ? "fit" : "fill";
-      node.imageFill = { url: bgUrl, mode };
+    const linearGradient = parseCssLinearGradient(bgImage);
+    if (linearGradient) {
+      node.gradientFill = linearGradient;
+    } else {
+      const bgUrl = extractCssUrl(bgImage);
+      if (bgUrl) {
+        const bgSize = style.backgroundSize;
+        const mode = bgSize === "contain" ? "fit" : "fill";
+        node.imageFill = { url: bgUrl, mode };
+      }
     }
   }
 
@@ -822,6 +933,143 @@ function applyBaseProps(
   // Box shadow → effect
   const shadow = parseShadow(style.boxShadow);
   if (shadow) node.effect = shadow;
+}
+
+
+function parseLinearGradientAngle(raw: string): number | null {
+  const value = raw.trim().toLowerCase();
+  if (!value) return null;
+
+  const degMatch = value.match(/^(-?\d+(?:\.\d+)?)deg$/);
+  if (degMatch) return parseFloat(degMatch[1]);
+
+  if (value.startsWith("to ")) {
+    const dir = value.slice(3).trim();
+    const map: Record<string, number> = {
+      top: 0,
+      right: 90,
+      bottom: 180,
+      left: 270,
+      "top right": 45,
+      "right top": 45,
+      "bottom right": 135,
+      "right bottom": 135,
+      "bottom left": 225,
+      "left bottom": 225,
+      "top left": 315,
+      "left top": 315,
+    };
+    return map[dir] ?? null;
+  }
+
+  return null;
+}
+
+function splitColorAndPosition(rawStop: string): { color: string; position?: number } {
+  let depth = 0;
+  let splitIndex = -1;
+  for (let i = rawStop.length - 1; i >= 0; i--) {
+    const ch = rawStop[i];
+    if (ch === ")") depth++;
+    else if (ch === "(") depth = Math.max(0, depth - 1);
+    else if (depth === 0 && /\s/.test(ch)) {
+      splitIndex = i;
+      break;
+    }
+  }
+
+  if (splitIndex < 0) {
+    return { color: rawStop.trim() };
+  }
+
+  const color = rawStop.slice(0, splitIndex).trim();
+  const tail = rawStop.slice(splitIndex + 1).trim();
+  const pct = tail.match(/^(-?\d+(?:\.\d+)?)%$/);
+  if (!pct) return { color: rawStop.trim() };
+
+  const pos = parseFloat(pct[1]) / 100;
+  if (!Number.isFinite(pos)) return { color };
+  return { color, position: Math.max(0, Math.min(1, pos)) };
+}
+
+function parseCssLinearGradient(bgImage: string): GradientFill | null {
+  const start = bgImage.toLowerCase().indexOf("linear-gradient(");
+  if (start < 0) return null;
+
+  const openParen = bgImage.indexOf("(", start);
+  if (openParen < 0) return null;
+
+  let depth = 0;
+  let closeParen = -1;
+  for (let i = openParen; i < bgImage.length; i++) {
+    const ch = bgImage[i];
+    if (ch === "(") depth++;
+    else if (ch === ")") {
+      depth--;
+      if (depth === 0) {
+        closeParen = i;
+        break;
+      }
+    }
+  }
+  if (closeParen < 0) return null;
+
+  const inside = bgImage.slice(openParen + 1, closeParen).trim();
+  const parts = splitSelectorList(inside);
+  if (parts.length < 2) return null;
+
+  let angleDeg = 180;
+  let stopStartIndex = 0;
+  const parsedAngle = parseLinearGradientAngle(parts[0] ?? "");
+  if (parsedAngle != null) {
+    angleDeg = parsedAngle;
+    stopStartIndex = 1;
+  }
+
+  const rawStops = parts.slice(stopStartIndex);
+  if (rawStops.length < 2) return null;
+
+  const stops = rawStops.map((rawStop) => {
+    const parsed = splitColorAndPosition(rawStop);
+    const colorWithOpacity = parseColorWithOpacity(parsed.color);
+    if (!colorWithOpacity) {
+      return { color: "#000000", opacity: 0, position: parsed.position };
+    }
+    return {
+      color: colorWithOpacity.color,
+      ...(colorWithOpacity.opacity !== undefined ? { opacity: colorWithOpacity.opacity } : {}),
+      ...(parsed.position !== undefined ? { position: parsed.position } : {}),
+    };
+  });
+
+  // Fallback distribution for omitted positions.
+  const last = stops.length - 1;
+  stops.forEach((s, i) => {
+    if (s.position === undefined) s.position = last > 0 ? i / last : 0;
+  });
+
+  const angleRad = ((angleDeg - 90) * Math.PI) / 180;
+  const cos = Math.cos(angleRad);
+  const sin = Math.sin(angleRad);
+  const len = Math.abs(cos) + Math.abs(sin);
+  const half = len / 2;
+  const startX = Math.max(0, Math.min(1, 0.5 - cos * half));
+  const startY = Math.max(0, Math.min(1, 0.5 - sin * half));
+  const endX = Math.max(0, Math.min(1, 0.5 + cos * half));
+  const endY = Math.max(0, Math.min(1, 0.5 + sin * half));
+
+  return {
+    type: "linear",
+    stops: stops.map((s) => ({
+      color: s.color,
+      position: s.position ?? 0,
+      ...(s.opacity !== undefined ? { opacity: s.opacity } : {}),
+    })),
+    startX,
+    startY,
+    endX,
+    endY,
+  };
 }
 
 /** Apply text-relevant base properties (fill from background, opacity) */

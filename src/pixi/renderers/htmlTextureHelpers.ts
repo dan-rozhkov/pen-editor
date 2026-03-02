@@ -1,5 +1,6 @@
 import { Texture } from "pixi.js";
 import { extractCssUrl, isTransparentColor } from "@/lib/htmlToDesignNodes";
+import { hasBodyTargetedStyles, mountHtmlWithBodyStyles } from "@/utils/embedHtmlUtils";
 
 /** Cache for rendered HTML textures by content+size key */
 const textureCache = new Map<string, Texture>();
@@ -61,12 +62,13 @@ async function doRender(
   const pixelWidth = Math.ceil(width * resolution);
   const pixelHeight = Math.ceil(height * resolution);
   const hasInlineSvg = /<svg[\s>]/i.test(normalizedHtml);
+  const hasBodyStyles = hasBodyTargetedStyles(normalizedHtml);
 
   // Prefer browser-native HTML layout via SVG foreignObject.
   // This yields accurate flex/text positioning when supported.
   // For inline SVG content we skip this path because foreignObject support is
   // inconsistent across browsers for nested SVG.
-  if (!hasInlineSvg) {
+  if (!hasInlineSvg && !hasBodyStyles) {
     const foreignObjectCanvas = await renderViaForeignObject(
       normalizedHtml,
       width,
@@ -106,7 +108,7 @@ async function doRender(
     margin: 0;
     padding: 0;
   `;
-  container.innerHTML = normalizedHtml;
+  const { root: renderRoot } = mountHtmlWithBodyStyles(container, normalizedHtml, width, height);
   shadow.appendChild(container);
   document.body.appendChild(host);
 
@@ -120,16 +122,16 @@ async function doRender(
     const ctx = canvas.getContext("2d")!;
     ctx.scale(resolution, resolution);
 
-    const containerRect = container.getBoundingClientRect();
+    const containerRect = renderRoot.getBoundingClientRect();
 
     // Pre-load background images and web fonts in parallel before drawing.
     const [renderAssets] = await Promise.all([
-      preloadRenderAssets(container),
-      waitForFontsUsedInTree(container),
+      preloadRenderAssets(renderRoot),
+      waitForFontsUsedInTree(renderRoot),
     ]);
 
     // Recursively walk the DOM and draw each element
-    walkAndDraw(ctx, container, containerRect, renderAssets);
+    walkAndDraw(ctx, renderRoot, containerRect, renderAssets);
 
     const texture = Texture.from({ resource: canvas, resolution });
     textureCache.set(cacheKey, texture);

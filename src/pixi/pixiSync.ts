@@ -15,6 +15,7 @@ import {
   getRenderThemeStackDepth,
 } from "./renderers/colorHelpers";
 import { updateEmbedResolution, setEmbedResolution } from "./renderers/embedRenderer";
+import { setImageFillResolution, updateImageFillResolution } from "./renderers/imageFillHelpers";
 
 interface RegistryEntry {
   container: Container;
@@ -520,6 +521,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
   }
 
   let appliedEmbedResolution = 0;
+  let appliedImageFillResolution = 0;
 
   function getTargetEmbedResolution(scale: number): number {
     const devicePixelRatio = window.devicePixelRatio || 1;
@@ -536,6 +538,20 @@ export function createPixiSync(sceneRoot: Container): () => void {
     for (const [, entry] of registry) {
       if (entry.node.type === "embed") {
         updateEmbedResolution(entry.container, entry.node as import("@/types/scene").EmbedNode, resolution);
+      }
+    }
+  }
+
+  // Image fill resolution uses the same formula as embed resolution.
+  const getTargetImageFillResolution = getTargetEmbedResolution;
+
+  function applyImageFillTextureResolution(resolution: number): void {
+    if (appliedImageFillResolution === resolution) return;
+    appliedImageFillResolution = resolution;
+    setImageFillResolution(resolution);
+    for (const [, entry] of registry) {
+      if (entry.node.imageFill) {
+        updateImageFillResolution(entry.container, entry.node);
       }
     }
   }
@@ -558,8 +574,10 @@ export function createPixiSync(sceneRoot: Container): () => void {
     applyAutoLayoutPositions(state);
     appliedTextResolution = 0;
     appliedEmbedResolution = 0;
+    appliedImageFillResolution = 0;
     applyTextResolution(getTargetTextResolution(useViewportStore.getState().scale));
     applyEmbedResolution(getTargetEmbedResolution(useViewportStore.getState().scale));
+    applyImageFillTextureResolution(getTargetImageFillResolution(useViewportStore.getState().scale));
     applyTextEditingVisibility();
   }
 
@@ -915,6 +933,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
   let lastScale = useViewportStore.getState().scale;
   let textResolutionUpdateTimer: ReturnType<typeof setTimeout> | null = null;
   let embedResolutionUpdateTimer: ReturnType<typeof setTimeout> | null = null;
+  let imageFillResolutionUpdateTimer: ReturnType<typeof setTimeout> | null = null;
 
   function scheduleTextResolutionUpdate(scale: number): void {
     if (textResolutionUpdateTimer) {
@@ -937,15 +956,27 @@ export function createPixiSync(sceneRoot: Container): () => void {
     }, 200);
   }
 
+  function scheduleImageFillResolutionUpdate(scale: number): void {
+    if (imageFillResolutionUpdateTimer) {
+      clearTimeout(imageFillResolutionUpdateTimer);
+    }
+    imageFillResolutionUpdateTimer = setTimeout(() => {
+      imageFillResolutionUpdateTimer = null;
+      applyImageFillTextureResolution(getTargetImageFillResolution(scale));
+    }, 200);
+  }
+
   // Initial resolutions
   applyTextResolution(getTargetTextResolution(lastScale));
   applyEmbedResolution(getTargetEmbedResolution(lastScale));
+  applyImageFillTextureResolution(getTargetImageFillResolution(lastScale));
 
   const unsubViewport = useViewportStore.subscribe((state) => {
     if (state.scale !== lastScale) {
       lastScale = state.scale;
       scheduleTextResolutionUpdate(state.scale);
       scheduleEmbedResolutionUpdate(state.scale);
+      scheduleImageFillResolutionUpdate(state.scale);
     }
   });
 
@@ -1038,6 +1069,14 @@ export function createPixiSync(sceneRoot: Container): () => void {
     if (textResolutionUpdateTimer) {
       clearTimeout(textResolutionUpdateTimer);
       textResolutionUpdateTimer = null;
+    }
+    if (embedResolutionUpdateTimer) {
+      clearTimeout(embedResolutionUpdateTimer);
+      embedResolutionUpdateTimer = null;
+    }
+    if (imageFillResolutionUpdateTimer) {
+      clearTimeout(imageFillResolutionUpdateTimer);
+      imageFillResolutionUpdateTimer = null;
     }
     clearPendingSceneUpdate();
     removeFontsListener?.();
