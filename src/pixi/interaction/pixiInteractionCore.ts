@@ -422,7 +422,7 @@ export function setupPixiInteraction(
     const frameLabelHitId = findFrameLabelAtPoint(world.x, world.y);
     if (frameLabelHitId) {
       useSelectionStore.getState().select(frameLabelHitId);
-      useSelectionStore.getState().startNameEditing(frameLabelHitId);
+      useSelectionStore.getState().startEditing(frameLabelHitId, 'name');
       return;
     }
 
@@ -485,6 +485,8 @@ export function setupPixiInteraction(
     if (node.type === "text") {
       // Enter text editing mode
       useSelectionStore.getState().startEditing(hitId);
+    } else if (node.type === "embed") {
+      useSelectionStore.getState().startEditing(hitId, 'embed');
     } else if (node.type === "ref") {
       const descendantHit = findInstanceDescendantAtWorldPoint(
         hitId,

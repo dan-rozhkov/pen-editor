@@ -366,9 +366,6 @@ export function createComplexOperations(
         y: minY,
         width: maxX - minX,
         height: maxY - minY,
-        fill: "#ffffff",
-        stroke: "#cccccc",
-        strokeWidth: 1,
         layout: {
           autoLayout: true,
           flexDirection: "column",

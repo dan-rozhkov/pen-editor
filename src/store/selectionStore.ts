@@ -3,7 +3,7 @@ import type { HistorySnapshot, SelectionSnapshot } from '../types/scene'
 import { useHistoryStore } from './historyStore'
 import { useSceneStore } from './sceneStore'
 
-type EditingMode = 'text' | 'name' | null
+type EditingMode = 'text' | 'name' | 'embed' | null
 
 // Context for editing a descendant node inside an instance
 export interface InstanceContext {
@@ -33,8 +33,7 @@ interface SelectionState {
   clearSelection: () => void
   isSelected: (id: string) => boolean
   selectRange: (fromId: string, toId: string, flatIds: string[]) => void
-  startEditing: (id: string) => void
-  startNameEditing: (id: string) => void
+  startEditing: (id: string, mode?: EditingMode) => void
   stopEditing: () => void
   // Instance interaction methods
   selectDescendant: (instanceId: string, descendantId: string, descendantPath?: string) => void
@@ -245,17 +244,9 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
     })
   },
 
-  startEditing: (id: string) => {
-    // Can only edit text content if node is selected
+  startEditing: (id: string, mode: EditingMode = 'text') => {
     if (get().selectedIds.includes(id)) {
-      set({ editingNodeId: id, editingMode: 'text' })
-    }
-  },
-
-  startNameEditing: (id: string) => {
-    // Can only edit frame name if node is selected
-    if (get().selectedIds.includes(id)) {
-      set({ editingNodeId: id, editingMode: 'name' })
+      set({ editingNodeId: id, editingMode: mode })
     }
   },
 

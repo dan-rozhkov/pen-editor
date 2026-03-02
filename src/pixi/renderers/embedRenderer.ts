@@ -6,18 +6,26 @@ import { renderHtmlToTexture, invalidateHtmlTexture } from "./htmlTextureHelpers
 let currentEmbedResolution = window.devicePixelRatio;
 const EMBED_RESIZE_RERENDER_DEBOUNCE_MS = 180;
 const pendingResizeRerenderByContainer = new WeakMap<Container, ReturnType<typeof setTimeout>>();
+const renderRequestIdByContainer = new WeakMap<Container, number>();
 
 function drawPlaceholder(_gfx: Graphics, _width: number, _height: number): void {
   // No visual placeholder — container is transparent until texture loads
 }
 
-/** Remove existing embed-content sprite safely */
-function removeExistingSprite(container: Container): void {
+function getEmbedContentSprite(container: Container): Sprite | null {
   const existing = container.getChildByLabel("embed-content");
-  if (existing) {
-    container.removeChild(existing);
-    existing.destroy();
-  }
+  return existing instanceof Sprite ? existing : null;
+}
+
+function ensureEmbedContentSprite(container: Container): Sprite {
+  const existing = getEmbedContentSprite(container);
+  if (existing) return existing;
+
+  const sprite = new Sprite();
+  sprite.label = "embed-content";
+  sprite.roundPixels = true;
+  container.addChild(sprite);
+  return sprite;
 }
 
 function scheduleRerenderAfterResize(container: Container, node: EmbedNode): void {
@@ -34,22 +42,26 @@ function scheduleRerenderAfterResize(container: Container, node: EmbedNode): voi
 }
 
 async function renderAndApply(container: Container, node: EmbedNode, resolution?: number): Promise<void> {
+  const nextRequestId = (renderRequestIdByContainer.get(container) ?? 0) + 1;
+  renderRequestIdByContainer.set(container, nextRequestId);
+
   const res = resolution ?? currentEmbedResolution;
   const texture = await renderHtmlToTexture(node.htmlContent, node.width, node.height, res);
-  if (!texture || container.destroyed) return;
+  if (container.destroyed) return;
 
-  // Remove old sprite before creating new one to avoid stale texture references
-  removeExistingSprite(container);
+  // Ignore stale async completions when a newer render request already exists.
+  if (renderRequestIdByContainer.get(container) !== nextRequestId) return;
+
+  if (!texture) return;
 
   // Hide placeholder once texture is ready
   const bg = container.getChildByLabel("embed-bg");
   if (bg) bg.visible = false;
 
-  const sprite = new Sprite(texture);
-  sprite.label = "embed-content";
+  const sprite = ensureEmbedContentSprite(container);
+  sprite.texture = texture;
   sprite.width = node.width;
   sprite.height = node.height;
-  container.addChild(sprite);
 }
 
 export function createEmbedContainer(node: EmbedNode): Container {
@@ -89,9 +101,6 @@ export function updateEmbedContainer(
       clearTimeout(pending);
       pendingResizeRerenderByContainer.delete(container);
     }
-
-    // Remove old sprite immediately to avoid rendering with stale/destroyed content
-    removeExistingSprite(container);
 
     if (prev.htmlContent) {
       invalidateHtmlTexture(prev.htmlContent, prev.width, prev.height);

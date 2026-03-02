@@ -222,11 +222,14 @@ export function createPixiSync(sceneRoot: Container): () => void {
   function applyTextEditingVisibility(): void {
     const { editingNodeId, editingMode, instanceContext } = useSelectionStore.getState();
     const isTextEditing = editingMode === "text" && editingNodeId != null;
+    const isEmbedEditing = editingMode === "embed" && editingNodeId != null;
 
     for (const [id, entry] of registry) {
       const baseVisible = entry.node.visible !== false && entry.node.enabled !== false;
-      const hideWhileEditing =
-        isTextEditing && entry.node.type === "text" && editingNodeId === id;
+      const hideWhileEditing = (
+        (isTextEditing && entry.node.type === "text" && editingNodeId === id) ||
+        (isEmbedEditing && entry.node.type === "embed" && editingNodeId === id)
+      );
       entry.container.visible = baseVisible && !hideWhileEditing;
     }
 

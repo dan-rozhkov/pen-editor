@@ -2,7 +2,8 @@ import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { Application, Container } from "pixi.js";
 import { InlineNameEditor} from "@/components/InlineNameEditor";
 import { InlineTextEditor } from "@/components/InlineTextEditor";
-import type { RefNode, TextNode } from "@/types/scene";
+import { InlineEmbedEditor } from "@/components/InlineEmbedEditor";
+import type { EmbedNode, RefNode, TextNode } from "@/types/scene";
 import { useCanvasKeyboardShortcuts } from "@/components/canvas/useCanvasKeyboardShortcuts";
 import { useCanvasFileDrop } from "@/components/canvas/useCanvasFileDrop";
 import {
@@ -116,14 +117,9 @@ export function PixiCanvas() {
   const setPixiRefs = useCanvasRefStore((s) => s.setPixiRefs);
 
   // Selection data for inline editors
-  const editingTextNode =
-    editingMode === "text" && editingNodeId
-      ? useSceneStore.getState().nodesById[editingNodeId]
-      : null;
-  const editingNameNode =
-    editingMode === "name" && editingNodeId
-      ? useSceneStore.getState().nodesById[editingNodeId]
-      : null;
+  const editingNode = editingNodeId
+    ? useSceneStore.getState().nodesById[editingNodeId]
+    : null;
 
   // Calculate editing positions in world coordinates.
   // Inline editors apply viewport transform internally.
@@ -138,10 +134,9 @@ export function PixiCanvas() {
     );
   }, []);
 
-  const editingTextPosition =
-    editingNodeId && editingMode === "text"
-      ? getEditingPosition(editingNodeId)
-      : null;
+  const editingPosition = editingNodeId
+    ? getEditingPosition(editingNodeId)
+    : null;
   const editingTextTheme = useMemo(() => {
     if (!editingNodeId || editingMode !== "text") return null;
     return getThemeFromAncestorFrames(
@@ -151,10 +146,6 @@ export function PixiCanvas() {
       activeTheme,
     );
   }, [editingNodeId, editingMode, parentById, nodesById, activeTheme]);
-  const editingNamePosition =
-    editingNodeId && editingMode === "name"
-      ? getEditingPosition(editingNodeId)
-      : null;
   const editingTextIsInsideAutoLayout = useMemo(() => {
     if (editingMode !== "text" || !editingNodeId) return false;
     return findParentFrame(nodes, editingNodeId).isInsideAutoLayout;
@@ -446,11 +437,11 @@ export function PixiCanvas() {
       />
       <FpsDisplay fps={fps} />
       {/* Inline text editor overlay */}
-      {editingTextNode && editingTextPosition && editingMode === "text" && (
+      {editingNode && editingPosition && editingMode === "text" && (
         <InlineTextEditor
-          node={editingTextNode as any}
-          absoluteX={editingTextPosition.x}
-          absoluteY={editingTextPosition.y}
+          node={editingNode as any}
+          absoluteX={editingPosition.x}
+          absoluteY={editingPosition.y}
           effectiveTheme={editingTextTheme ?? undefined}
           isInsideAutoLayoutParent={editingTextIsInsideAutoLayout}
         />
@@ -466,12 +457,20 @@ export function PixiCanvas() {
           isInsideAutoLayoutParent={editingDescendantIsInsideAutoLayout}
         />
       )}
+      {/* Inline embed editor overlay */}
+      {editingNode && editingPosition && editingMode === "embed" && (
+        <InlineEmbedEditor
+          node={editingNode as EmbedNode}
+          absoluteX={editingPosition.x}
+          absoluteY={editingPosition.y}
+        />
+      )}
       {/* Inline name editor overlay */}
-      {editingNameNode && editingNamePosition && editingMode === "name" && (
+      {editingNode && editingPosition && editingMode === "name" && (
         <InlineNameEditor
-          node={editingNameNode}
-          absoluteX={editingNamePosition.x}
-          absoluteY={editingNamePosition.y}
+          node={editingNode}
+          absoluteX={editingPosition.x}
+          absoluteY={editingPosition.y}
         />
       )}
     </div>

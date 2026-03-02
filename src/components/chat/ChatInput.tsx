@@ -11,6 +11,8 @@ export interface AttachedImage {
   name: string;
 }
 
+const MAX_IMAGES = 3;
+
 interface ChatInputProps {
   input: string;
   setInput: (value: string) => void;
@@ -62,7 +64,7 @@ export function ChatInput({
   const addImages = useCallback(async (files: FileList | File[]) => {
     const newImages = await processFiles(files);
     if (newImages.length > 0) {
-      setAttachedImages((prev) => [...prev, ...newImages]);
+      setAttachedImages((prev) => [...prev, ...newImages].slice(0, MAX_IMAGES));
     }
   }, []);
 
@@ -189,8 +191,9 @@ export function ChatInput({
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="shrink-0 p-1.5 rounded-lg hover:bg-surface-hover text-text-muted transition-colors"
-          title="Attach image"
+          disabled={attachedImages.length >= MAX_IMAGES}
+          className="shrink-0 p-1.5 rounded-lg hover:bg-surface-hover text-text-muted disabled:text-text-disabled disabled:pointer-events-none transition-colors"
+          title={attachedImages.length >= MAX_IMAGES ? `Max ${MAX_IMAGES} images` : "Attach image"}
         >
           <ImageIcon size={18} weight="light" />
         </button>

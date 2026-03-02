@@ -9,6 +9,12 @@ const pendingRenders = new Map<string, Promise<Texture | null>>();
 const pendingFontStylesheets = new Map<string, Promise<void>>();
 const HTML_TEXTURE_RENDER_VERSION = 7;
 
+/** Cached grapheme segmenter for letter-spacing rendering */
+const graphemeSegmenter =
+  typeof Intl !== "undefined" && "Segmenter" in Intl
+    ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
+    : null;
+
 function makeCacheKey(html: string, width: number, height: number, resolution: number): string {
   return `v${HTML_TEXTURE_RENDER_VERSION}:${width}x${height}@${resolution}:${html}`;
 }
@@ -1155,8 +1161,19 @@ function drawTextNode(
   // For multi-line (wrapped) text, find which characters belong to which line
   // by binary searching through character offsets
   const lines = extractLinesFromRects(textNode, allRects, containerRect, preserveWhitespace);
+  const textTransform = parentStyle.textTransform;
+  const parsedLetterSpacing = parseFloat(parentStyle.letterSpacing);
+  const letterSpacingPx = Number.isFinite(parsedLetterSpacing) ? parsedLetterSpacing : 0;
   for (const line of lines) {
-    drawTextInLineBox(ctx, line.text, line.x, line.y, line.height, fontSizePx);
+    drawTextInLineBox(
+      ctx,
+      applyCssTextTransform(line.text, textTransform),
+      line.x,
+      line.y,
+      line.height,
+      fontSizePx,
+      letterSpacingPx,
+    );
   }
 }
 
@@ -1174,6 +1191,7 @@ function drawTextInLineBox(
   lineTop: number,
   lineHeight: number,
   fontSizePx: number,
+  letterSpacingPx: number,
 ): void {
   // Use font/em box metrics (not glyph box) to match CSS line box positioning.
   const refMetrics = ctx.measureText("Mg");
@@ -1190,7 +1208,35 @@ function drawTextInLineBox(
   const baselineY = lineTop + extraLeading / 2 + ascent;
 
   ctx.textBaseline = "alphabetic";
-  ctx.fillText(text, x, baselineY);
+  if (letterSpacingPx === 0) {
+    ctx.fillText(text, x, baselineY);
+    return;
+  }
+
+  let cursorX = x;
+  const graphemes = graphemeSegmenter
+    ? [...graphemeSegmenter.segment(text)].map((s) => s.segment)
+    : Array.from(text);
+
+  for (let i = 0; i < graphemes.length; i++) {
+    const grapheme = graphemes[i];
+    ctx.fillText(grapheme, cursorX, baselineY);
+    cursorX += ctx.measureText(grapheme).width;
+    if (i < graphemes.length - 1) cursorX += letterSpacingPx;
+  }
+}
+
+function applyCssTextTransform(text: string, textTransform: string): string {
+  switch (textTransform) {
+    case "uppercase":
+      return text.toUpperCase();
+    case "lowercase":
+      return text.toLowerCase();
+    case "capitalize":
+      return text.replace(/\b(\p{L})/gu, (char) => char.toUpperCase());
+    default:
+      return text;
+  }
 }
 
 /** Extract per-line text and positions from a text node with multiple client rects */

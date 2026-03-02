@@ -42,6 +42,26 @@ interface CanvasKeyboardShortcutsParams {
   copyNodes: (nodes: SceneNode[]) => void;
 }
 
+function isTypingTarget(event: KeyboardEvent | ClipboardEvent): boolean {
+  const isEditable = (target: EventTarget | null): boolean => {
+    if (!(target instanceof HTMLElement)) return false;
+    return (
+      target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.isContentEditable
+    );
+  };
+
+  if (isEditable(event.target)) return true;
+
+  const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+  for (const target of path) {
+    if (isEditable(target)) return true;
+  }
+
+  return false;
+}
+
 export function useCanvasKeyboardShortcuts({
   nodes,
   copiedNodes,
@@ -72,11 +92,7 @@ export function useCanvasKeyboardShortcuts({
 }: CanvasKeyboardShortcutsParams) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      const isTyping =
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.isContentEditable;
+      const isTyping = isTypingTarget(e);
 
       if (e.key === "Enter" && !e.shiftKey) {
         if (isTyping) return;
@@ -501,11 +517,7 @@ export function useCanvasKeyboardShortcuts({
     };
 
     const handlePaste = (e: ClipboardEvent) => {
-      const target = e.target as HTMLElement;
-      const isTyping =
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.isContentEditable;
+      const isTyping = isTypingTarget(e);
       if (isTyping) return;
 
       const syncText = e.clipboardData?.getData("text/plain")?.trim() ?? "";
@@ -558,11 +570,11 @@ export function useCanvasKeyboardShortcuts({
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
     window.addEventListener("keyup", handleKeyUp);
     window.addEventListener("paste", handlePaste);
     return () => {
-      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keydown", handleKeyDown, { capture: true });
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("paste", handlePaste);
     };
