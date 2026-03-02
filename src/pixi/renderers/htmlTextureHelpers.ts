@@ -133,6 +133,14 @@ async function doRender(
     // Recursively walk the DOM and draw each element
     walkAndDraw(ctx, renderRoot, containerRect, renderAssets);
 
+    // Guard against tainted canvas (cross-origin images without CORS),
+    // otherwise Pixi/WebGL can throw SecurityError on texture upload.
+    try {
+      ctx.getImageData(0, 0, 1, 1);
+    } catch {
+      return null;
+    }
+
     const texture = Texture.from({ resource: canvas, resolution });
     textureCache.set(cacheKey, texture);
     return texture;
@@ -829,13 +837,7 @@ async function preloadRenderAssets(
         const img = await loadImage(url);
         imageMap.set(url, img);
       } catch {
-        // Try without CORS as fallback
-        try {
-          const img = await loadImage(url, false);
-          imageMap.set(url, img);
-        } catch {
-          // Skip images that fail to load
-        }
+        // Skip images that fail CORS-safe loading.
       }
     }),
   );
