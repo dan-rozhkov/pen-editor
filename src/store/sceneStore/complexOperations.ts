@@ -9,7 +9,7 @@ import { generateId, buildTree } from "../../types/scene";
 import { convertHtmlToDesignNodes } from "../../lib/htmlToDesignNodes";
 import { loadGoogleFontsFromNodes } from "../../utils/fontUtils";
 import { useLayoutStore } from "../layoutStore";
-import { calculateFrameIntrinsicSize } from "../../utils/yogaLayout";
+import { calculateFrameIntrinsicSize, calculateFrameLayout } from "../../utils/yogaLayout";
 import { syncTextDimensions } from "./helpers/textSync";
 import { saveHistory } from "./helpers/history";
 import {
@@ -202,6 +202,14 @@ export function createComplexOperations(
       const state = get();
       const childIds: string[] = [];
 
+      // Check if any node is actually ungroupable before saving history
+      const ungroupableTypes = new Set(["group", "frame"]);
+      const hasUngroupable = ids.some((id) => {
+        const node = state.nodesById[id];
+        return node && ungroupableTypes.has(node.type);
+      });
+      if (!hasUngroupable) return childIds;
+
       saveHistory(state);
 
       const newNodesById = { ...state.nodesById };
@@ -211,43 +219,78 @@ export function createComplexOperations(
 
       for (const id of ids) {
         const node = state.nodesById[id];
-        if (!node || node.type !== "group") continue;
-        const group = node;
+        if (!node || !ungroupableTypes.has(node.type)) continue;
 
-        const groupParentId = state.parentById[id];
-        const groupChildIds = state.childrenById[id] ?? [];
+        const containerParentId = state.parentById[id];
+        const containerChildIds = state.childrenById[id] ?? [];
 
-        // Adjust children positions to be absolute
-        for (const childId of groupChildIds) {
+        // For auto-layout frames, compute yoga positions for children
+        // since their stored x/y don't reflect visual positions
+        let yogaPositions: Map<string, { x: number; y: number }> | null = null;
+        if (node.type === "frame" && (node as FlatFrameNode).layout?.autoLayout) {
+          // Build a tree node for yoga calculation
+          const treeChildren: SceneNode[] = containerChildIds
+            .map((cid) => {
+              const cn = newNodesById[cid];
+              if (!cn) return null;
+              // For frame children, build subtree recursively
+              if (cn.type === "frame" || cn.type === "group") {
+                const subChildIds = newChildrenById[cid] ?? [];
+                return { ...cn, children: subChildIds.map((scid) => newNodesById[scid]).filter(Boolean) } as SceneNode;
+              }
+              return cn as SceneNode;
+            })
+            .filter(Boolean) as SceneNode[];
+
+          const treeFrame: FrameNode = {
+            ...(node as FlatFrameNode),
+            children: treeChildren,
+          } as FrameNode;
+
+          const layoutResults = calculateFrameLayout(treeFrame);
+          if (layoutResults.length > 0) {
+            yogaPositions = new Map();
+            for (const result of layoutResults) {
+              yogaPositions.set(result.id, { x: result.x, y: result.y });
+            }
+          }
+        }
+
+        // Adjust children positions: convert from container-local to parent-local
+        for (const childId of containerChildIds) {
           const child = newNodesById[childId];
           if (child) {
+            // Use yoga-computed position if available, otherwise use stored x/y
+            const childX = yogaPositions?.get(childId)?.x ?? child.x;
+            const childY = yogaPositions?.get(childId)?.y ?? child.y;
+
             newNodesById[childId] = {
               ...child,
-              x: child.x + group.x,
-              y: child.y + group.y,
+              x: childX + node.x,
+              y: childY + node.y,
             } as FlatSceneNode;
-            newParentById[childId] = groupParentId;
+            newParentById[childId] = containerParentId;
             childIds.push(childId);
           }
         }
 
-        // Replace group with its children in parent
-        if (groupParentId !== null && groupParentId !== undefined) {
-          const parentChildList = newChildrenById[groupParentId] ?? [];
+        // Replace container with its children in parent
+        if (containerParentId !== null && containerParentId !== undefined) {
+          const parentChildList = newChildrenById[containerParentId] ?? [];
           const idx = parentChildList.indexOf(id);
           if (idx >= 0) {
             const updated = [...parentChildList];
-            updated.splice(idx, 1, ...groupChildIds);
-            newChildrenById[groupParentId] = updated;
+            updated.splice(idx, 1, ...containerChildIds);
+            newChildrenById[containerParentId] = updated;
           }
         } else {
           const idx = newRootIds.indexOf(id);
           if (idx >= 0) {
-            newRootIds.splice(idx, 1, ...groupChildIds);
+            newRootIds.splice(idx, 1, ...containerChildIds);
           }
         }
 
-        // Remove the group node itself
+        // Remove the container node itself
         delete newNodesById[id];
         delete newParentById[id];
         delete newChildrenById[id];
