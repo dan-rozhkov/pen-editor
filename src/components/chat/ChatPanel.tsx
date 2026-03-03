@@ -1,4 +1,5 @@
-import { XIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
+import { useState } from "react";
+import { XIcon, PlusIcon, TrashIcon, LightningIcon } from "@phosphor-icons/react";
 import { useChatStore } from "@/store/chatStore";
 import type { ChatTab } from "@/store/chatStore";
 import { useDesignChat } from "@/hooks/useDesignChat";
@@ -7,6 +8,8 @@ import { ChatInput } from "./ChatInput";
 import { SelectWithOptions } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { CHAT_PRESETS } from "./chatPresets";
+import type { ChatPreset } from "./chatPresets";
 
 const MODEL_OPTIONS = [
   { value: "moonshotai/kimi-k2.5", label: "Kimi K2.5" },
@@ -76,7 +79,36 @@ function TabBar() {
   );
 }
 
-function ChatSession({ sessionId }: { sessionId: string }) {
+function PresetList({ onSelect }: { onSelect: (preset: ChatPreset) => void }) {
+  return (
+    <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3 flex flex-col gap-2" data-testid="preset-list">
+      <p className="text-xs text-text-muted mb-1">Select a preset to fill the input:</p>
+      {CHAT_PRESETS.map((preset) => (
+        <button
+          key={preset.id}
+          data-testid={`preset-${preset.id}`}
+          onClick={() => onSelect(preset)}
+          className="text-left px-3 py-2.5 rounded-lg border border-border-default hover:bg-surface-hover transition-colors"
+        >
+          <span className="text-sm text-text-primary leading-snug block">{preset.message}</span>
+          <span className="text-xs text-text-muted mt-1 block">
+            {preset.mode} / {preset.label}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ChatSession({
+  sessionId,
+  showPresets,
+  onClosePresets,
+}: {
+  sessionId: string;
+  showPresets: boolean;
+  onClosePresets: () => void;
+}) {
   const {
     messages,
     input,
@@ -88,6 +120,20 @@ function ChatSession({ sessionId }: { sessionId: string }) {
     clearError,
     setMessages,
   } = useDesignChat({ sessionId });
+
+  const setModel = useChatStore((s) => s.setModel);
+  const setAgentMode = useChatStore((s) => s.setAgentMode);
+
+  const handleSelectPreset = (preset: ChatPreset) => {
+    setAgentMode(preset.mode);
+    setModel(preset.model);
+    setInput(preset.message);
+    onClosePresets();
+  };
+
+  if (showPresets) {
+    return <PresetList onSelect={handleSelectPreset} />;
+  }
 
   return (
     <>
@@ -143,6 +189,7 @@ export function ChatPanel() {
   const setAgentMode = useChatStore((s) => s.setAgentMode);
   const tabs = useChatStore((s) => s.tabs);
   const activeTabId = useChatStore((s) => s.activeTabId);
+  const [showPresets, setShowPresets] = useState(false);
 
   if (!isOpen) {
     return null;
@@ -156,6 +203,14 @@ export function ChatPanel() {
           <span className="text-sm font-medium text-text-primary flex-1">
             Design Agent
           </span>
+          <button
+            data-testid="presets-toggle"
+            onClick={() => setShowPresets((v) => !v)}
+            className={`p-1 rounded-lg hover:bg-surface-hover transition-colors ${showPresets ? "text-text-primary bg-surface-hover" : "text-text-muted"}`}
+            title={showPresets ? "Hide presets" : "Show presets"}
+          >
+            <LightningIcon size={16} />
+          </button>
           <button
             onClick={close}
             className="p-1 rounded-lg hover:bg-surface-hover text-text-muted transition-colors"
@@ -174,7 +229,11 @@ export function ChatPanel() {
             key={tab.id}
             className={tab.id === activeTabId ? "flex-1 min-h-0 flex flex-col" : "hidden"}
           >
-            <ChatSession sessionId={tab.id} />
+            <ChatSession
+              sessionId={tab.id}
+              showPresets={showPresets}
+              onClosePresets={() => setShowPresets(false)}
+            />
           </div>
         ))}
 
