@@ -208,6 +208,38 @@ function shapeToPathData(el: Element): string | null {
     return `M${cx - rx},${cy} C${cx - rx},${cy - k * ry} ${cx - k * rx},${cy - ry} ${cx},${cy - ry} C${cx + k * rx},${cy - ry} ${cx + rx},${cy - k * ry} ${cx + rx},${cy} C${cx + rx},${cy + k * ry} ${cx + k * rx},${cy + ry} ${cx},${cy + ry} C${cx - k * rx},${cy + ry} ${cx - rx},${cy + k * ry} ${cx - rx},${cy} Z`;
   }
 
+  if (tag === "line") {
+    const x1 = parseFloat(el.getAttribute("x1") || "0");
+    const y1 = parseFloat(el.getAttribute("y1") || "0");
+    const x2 = parseFloat(el.getAttribute("x2") || "0");
+    const y2 = parseFloat(el.getAttribute("y2") || "0");
+    return `M${x1},${y1} L${x2},${y2}`;
+  }
+
+  if (tag === "polygon") {
+    const points = el.getAttribute("points");
+    if (!points) return null;
+    const coords = points.trim().split(/[\s,]+/).map(Number);
+    if (coords.length < 4) return null;
+    let d = `M${coords[0]},${coords[1]}`;
+    for (let i = 2; i < coords.length; i += 2) {
+      d += ` L${coords[i]},${coords[i + 1]}`;
+    }
+    return d + " Z";
+  }
+
+  if (tag === "polyline") {
+    const points = el.getAttribute("points");
+    if (!points) return null;
+    const coords = points.trim().split(/[\s,]+/).map(Number);
+    if (coords.length < 4) return null;
+    let d = `M${coords[0]},${coords[1]}`;
+    for (let i = 2; i < coords.length; i += 2) {
+      d += ` L${coords[i]},${coords[i + 1]}`;
+    }
+    return d;
+  }
+
   return null;
 }
 
@@ -334,12 +366,15 @@ function collectPaths(
     return chunks.map((chunk) => chunk.trim()).filter(Boolean);
   }
 
+  const shapeTagNames = new Set(["path", "rect", "circle", "ellipse", "line", "polygon", "polyline"]);
+
   for (const child of Array.from(el.children)) {
     // Check for clip-path on this element (inherits to children)
     const localClipId = parseClipPathUrl(child.getAttribute("clip-path")) ?? inheritedClipId;
+    const childTag = child.tagName.toLowerCase();
 
-    if (child.tagName === "path") {
-      const d = child.getAttribute("d");
+    if (shapeTagNames.has(childTag)) {
+      const d = shapeToPathData(child);
       if (!d) continue;
 
       // Resolve fill and stroke with inheritance
@@ -373,22 +408,39 @@ function collectPaths(
         (d.match(/[Mm]/g)?.length ?? 0) > 1;
       const pathParts = shouldSplitSubpaths ? splitIntoSubpaths(d) : [d];
 
-      for (const part of pathParts) {
-        const bbox = getPathBBox(part);
+      for (let part of pathParts) {
+        let bbox = getPathBBox(part);
         // Skip zero-size paths (e.g. bounding box rectangles like "M0 0h24v24H0z")
         if (bbox.width === 0 && bbox.height === 0) continue;
+
+        // Detect dot/point paths (near-zero area, e.g. from <line x1=9 y1=9 x2=9.01 y2=9>).
+        // In SVG these render as filled circles via stroke-linecap:round.
+        // Convert to a filled circle path using stroke color as fill, no stroke.
+        const isDot = bbox.width < 0.5 && bbox.height < 0.5 && resolvedStroke;
+        if (isDot) {
+          const sw = resolvedStrokeWidth ? parseFloat(resolvedStrokeWidth) : 1;
+          const r = sw / 2;
+          const cx = bbox.x + bbox.width / 2;
+          const cy = bbox.y + bbox.height / 2;
+          const k = 0.5522847498;
+          part = `M${cx - r},${cy} C${cx - r},${cy - k * r} ${cx - k * r},${cy - r} ${cx},${cy - r} C${cx + k * r},${cy - r} ${cx + r},${cy - k * r} ${cx + r},${cy} C${cx + r},${cy + k * r} ${cx + k * r},${cy + r} ${cx},${cy + r} C${cx - k * r},${cy + r} ${cx - r},${cy + k * r} ${cx - r},${cy} Z`;
+          bbox = getPathBBox(part);
+        }
+
         results.push(createPathNode(
           part,
           bbox,
-          hasSolidFill ? resolvedFill : undefined,
+          // For dots, use stroke color as fill (SVG renders dots as filled circles)
+          isDot ? resolvedStroke : (hasSolidFill ? resolvedFill : undefined),
           fillGradient,
           localClipId,
           resolvedFillRule,
           resolvedOpacity,
           resolvedFillOpacity,
           resolvedStrokeOpacity,
-          resolvedStroke,
-          resolvedStrokeWidth,
+          // For dots, remove stroke (the fill circle already represents the dot)
+          isDot ? undefined : resolvedStroke,
+          isDot ? undefined : resolvedStrokeWidth,
           resolvedLinejoin,
           resolvedLinecap,
         ));
