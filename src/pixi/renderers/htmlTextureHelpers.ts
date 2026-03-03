@@ -1,5 +1,5 @@
 import { Texture } from "pixi.js";
-import { extractCssUrl, isTransparentColor } from "@/lib/htmlToDesignNodes";
+import { extractCssUrl, isTransparentColor } from "@/lib/htmlToDesign";
 import { hasBodyTargetedStyles, mountHtmlWithBodyStyles } from "@/utils/embedHtmlUtils";
 import type { TextTransform } from "@/types/scene";
 import { applyTextTransform } from "@/utils/textMeasure";

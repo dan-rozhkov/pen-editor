@@ -6,7 +6,7 @@ import type {
   SceneNode,
 } from "../../types/scene";
 import { generateId, buildTree } from "../../types/scene";
-import { convertHtmlToDesignNodes } from "../../lib/htmlToDesignNodes";
+import { convertHtmlToDesignNodes } from "../../lib/htmlToDesign";
 import { loadGoogleFontsFromNodes } from "../../utils/fontUtils";
 import { useLayoutStore } from "../layoutStore";
 import { calculateFrameIntrinsicSize, calculateFrameLayout } from "../../utils/yogaLayout";
