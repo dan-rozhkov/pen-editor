@@ -13,6 +13,7 @@ import { ThemeSection } from "@/components/properties/ThemeSection";
 import { TypographySection } from "@/components/properties/TypographySection";
 import { InstanceSection } from "@/components/properties/InstanceSection";
 import { EmbedContentSection } from "@/components/properties/EmbedContentSection";
+import { FrameActionsSection } from "@/components/properties/FrameActionsSection";
 
 
 interface PropertyEditorProps {
@@ -92,6 +93,9 @@ export function PropertyEditor({
       )}
       {node.type === "text" && (
         <TypographySection node={node} onUpdate={onUpdate} />
+      )}
+      {(node.type === "frame" || node.type === "group") && (
+        <FrameActionsSection node={node} />
       )}
       {node.type === "embed" && (
         <EmbedContentSection node={node} />

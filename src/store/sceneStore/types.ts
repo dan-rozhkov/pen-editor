@@ -73,6 +73,7 @@ export interface SceneState {
   convertNodeType: (id: string) => boolean;
   wrapInAutoLayoutFrame: (ids: string[]) => string | null;
   convertEmbedToDesign: (id: string) => Promise<string | null>;
+  convertDesignToEmbed: (id: string) => string | null;
   setPageBackground: (color: string) => void;
 }
 

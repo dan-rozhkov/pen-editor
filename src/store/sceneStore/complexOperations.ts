@@ -7,6 +7,7 @@ import type {
 } from "../../types/scene";
 import { generateId, buildTree } from "../../types/scene";
 import { convertHtmlToDesignNodes } from "../../lib/htmlToDesign";
+import { convertDesignNodesToHtml } from "../../lib/designToHtml";
 import { loadGoogleFontsFromNodes } from "../../utils/fontUtils";
 import { useLayoutStore } from "../layoutStore";
 import { calculateFrameIntrinsicSize, calculateFrameLayout } from "../../utils/yogaLayout";
@@ -499,6 +500,82 @@ export function createComplexOperations(
       loadGoogleFontsFromNodes([rootFrame]);
 
       return rootFrame.id;
+    },
+
+    convertDesignToEmbed: (id: string): string | null => {
+      const state = get();
+      const node = state.nodesById[id];
+      if (!node || (node.type !== "frame" && node.type !== "group")) return null;
+
+      // Build full tree for resolving refs
+      const allNodes = state.getNodes();
+
+      // Generate HTML from the design node
+      const htmlContent = convertDesignNodesToHtml(
+        id,
+        state.nodesById,
+        state.childrenById,
+        allNodes,
+      );
+
+      saveHistory(state);
+
+      // Determine node's parent and position in sibling list
+      const parentId = state.parentById[id];
+      const parentChildren = parentId != null
+        ? (state.childrenById[parentId] ?? [])
+        : state.rootIds;
+      const nodeIndex = parentChildren.indexOf(id);
+
+      // Create EmbedNode with same position/size
+      const embedId = generateId();
+      const embedNode: EmbedNode = {
+        id: embedId,
+        type: "embed",
+        name: node.name ?? "Embed",
+        x: node.x,
+        y: node.y,
+        width: node.width,
+        height: node.height,
+        sizing: node.sizing,
+        htmlContent,
+      };
+
+      // Build new state: remove frame tree, insert embed
+      const newNodesById = { ...state.nodesById };
+      const newParentById = { ...state.parentById };
+      const newChildrenById = { ...state.childrenById };
+
+      removeNodeAndDescendants(id, newNodesById, newParentById, newChildrenById);
+
+      // Insert embed node
+      newNodesById[embedId] = embedNode;
+      newParentById[embedId] = parentId ?? null;
+
+      // Replace frame in parent's children list
+      let newRootIds = state.rootIds;
+      if (parentId != null) {
+        const updated = [...parentChildren];
+        if (nodeIndex >= 0) {
+          updated.splice(nodeIndex, 1, embedId);
+        }
+        newChildrenById[parentId] = updated;
+      } else {
+        newRootIds = [...state.rootIds];
+        if (nodeIndex >= 0) {
+          newRootIds.splice(nodeIndex, 1, embedId);
+        }
+      }
+
+      setState({
+        nodesById: newNodesById,
+        parentById: newParentById,
+        childrenById: newChildrenById,
+        rootIds: newRootIds,
+        _cachedTree: null,
+      });
+
+      return embedId;
     },
   };
 }
