@@ -17,6 +17,29 @@ import { mountHtmlWithBodyStyles } from "@/utils/embedHtmlUtils";
 
 let colorParserCtx: CanvasRenderingContext2D | null = null;
 
+const CSS_ALIGN_ITEMS_MAP: Record<string, AlignItems> = {
+  "flex-start": "flex-start",
+  "start": "flex-start",
+  "flex-end": "flex-end",
+  "end": "flex-end",
+  "center": "center",
+  "stretch": "stretch",
+};
+
+const CSS_JUSTIFY_CONTENT_MAP: Record<string, JustifyContent> = {
+  "flex-start": "flex-start",
+  "start": "flex-start",
+  "flex-end": "flex-end",
+  "end": "flex-end",
+  "center": "center",
+  "space-between": "space-between",
+  "space-around": "space-around",
+  "space-evenly": "space-evenly",
+};
+
+/** Pixel tolerance for visual row/column alignment detection */
+const ALIGNMENT_TOLERANCE = 6;
+
 /** Extract url() value from a CSS property string */
 export function extractCssUrl(value: string): string | null {
   const match = value.match(/url\(["']?(.*?)["']?\)/);
@@ -109,7 +132,7 @@ export async function convertHtmlToDesignNodes(
     if (!wrappedBody && conversionRoot.children.length === 1) {
       const topStyle = window.getComputedStyle(conversionRoot.children[0]);
       const layout = inferAutoLayout(topStyle, conversionRoot.children[0]);
-      if (layout) rootFrame.layout = layout;
+      if (layout) rootFrame.layout = layout.layout;
       const bg = parseColorWithOpacity(topStyle.backgroundColor);
       if (bg) {
         rootFrame.fill = bg.color;
@@ -433,17 +456,22 @@ function convertElement(
   }
 
   // Infer auto-layout from CSS display/flex
-  const layout = inferAutoLayout(style, el);
-  if (layout) {
-    frame.layout = layout;
+  const autoLayoutResult = inferAutoLayout(style, el);
+  if (autoLayoutResult) {
+    frame.layout = autoLayoutResult.layout;
 
-    // Zero out auto-layout children positions and infer sizing
-    const nonAbsCount = frame.children.filter((c) => !c.absolutePosition).length;
-    for (const child of frame.children) {
-      if (child.absolutePosition) continue;
-      child.x = 0;
-      child.y = 0;
-      inferChildSizing(child, frame, nonAbsCount);
+    // For multi-column CSS grids, group children into row frames
+    if (autoLayoutResult.grid) {
+      groupGridChildrenIntoRows(frame, el, autoLayoutResult.grid, elementNodeMap);
+    } else {
+      // Zero out auto-layout children positions and infer sizing
+      const nonAbsCount = frame.children.filter((c) => !c.absolutePosition).length;
+      for (const child of frame.children) {
+        if (child.absolutePosition) continue;
+        child.x = 0;
+        child.y = 0;
+        inferChildSizing(child, frame, nonAbsCount);
+      }
     }
   }
 
@@ -1191,10 +1219,21 @@ function computeGapFromChildRects(el: Element, direction: FlexDirection): number
 }
 
 /** Infer auto-layout properties from CSS display/flex */
+interface AutoLayoutResult {
+  layout: LayoutProperties;
+  /** For CSS grids with multiple columns, includes metadata for row grouping */
+  grid?: {
+    colCount: number;
+    columnGap: number;
+    rowGap: number;
+    alignItems?: AlignItems;
+  };
+}
+
 function inferAutoLayout(
   style: CSSStyleDeclaration,
   el?: Element,
-): LayoutProperties | undefined {
+): AutoLayoutResult | undefined {
   const display = style.display;
 
   if (display === "flex" || display === "inline-flex") {
@@ -1222,35 +1261,17 @@ function inferAutoLayout(
 
     // Align items
     const alignItems = style.alignItems;
-    const alignMap: Record<string, AlignItems> = {
-      "flex-start": "flex-start",
-      "start": "flex-start",
-      "flex-end": "flex-end",
-      "end": "flex-end",
-      "center": "center",
-      "stretch": "stretch",
-    };
-    if (alignItems && alignMap[alignItems]) {
-      layout.alignItems = alignMap[alignItems];
+    if (alignItems && CSS_ALIGN_ITEMS_MAP[alignItems]) {
+      layout.alignItems = CSS_ALIGN_ITEMS_MAP[alignItems];
     }
 
     // Justify content
     const justifyContent = style.justifyContent;
-    const justifyMap: Record<string, JustifyContent> = {
-      "flex-start": "flex-start",
-      "start": "flex-start",
-      "flex-end": "flex-end",
-      "end": "flex-end",
-      "center": "center",
-      "space-between": "space-between",
-      "space-around": "space-around",
-      "space-evenly": "space-evenly",
-    };
-    if (justifyContent && justifyMap[justifyContent]) {
-      layout.justifyContent = justifyMap[justifyContent];
+    if (justifyContent && CSS_JUSTIFY_CONTENT_MAP[justifyContent]) {
+      layout.justifyContent = CSS_JUSTIFY_CONTENT_MAP[justifyContent];
     }
 
-    return layout;
+    return { layout };
   }
 
   // CSS Grid → infer direction from columns
@@ -1258,61 +1279,62 @@ function inferAutoLayout(
     const cols = style.gridTemplateColumns;
     // Count columns: if >1 resolved column track, treat as row layout
     const colCount = cols ? cols.trim().split(/\s+/).length : 1;
-    const flexDirection: FlexDirection = colCount > 1 ? "row" : "column";
-    let gap =
-      parseFloat(flexDirection === "row" ? style.columnGap : style.rowGap) ||
-      parseFloat(style.gap) ||
-      0;
 
-    // If CSS gap is 0 but children have margin-based spacing, infer from rects
+    const fallbackGap = parseFloat(style.gap) || 0;
+    const columnGap = parseFloat(style.columnGap) || fallbackGap;
+    const rowGap = parseFloat(style.rowGap) || fallbackGap;
+
+    const mappedAlignItems = CSS_ALIGN_ITEMS_MAP[style.alignItems];
+
+    if (colCount > 1) {
+      // Multi-column grid: parent becomes a column layout with rowGap.
+      // Children will be grouped into row frames by convertElement().
+      const layout: LayoutProperties = {
+        autoLayout: true,
+        flexDirection: "column",
+        gap: rowGap,
+        ...parsePadding(style),
+      };
+
+      return {
+        layout,
+        grid: {
+          colCount,
+          columnGap,
+          rowGap,
+          alignItems: mappedAlignItems ?? "stretch",
+        },
+      };
+    }
+
+    // Single-column grid: treat as column layout
+    let gap = rowGap;
     if (gap === 0 && el) {
-      gap = computeGapFromChildRects(el, flexDirection);
+      gap = computeGapFromChildRects(el, "column");
     }
 
     const layout: LayoutProperties = {
       autoLayout: true,
-      flexDirection,
+      flexDirection: "column",
       gap,
       ...parsePadding(style),
     };
 
-    // Map align-items (cross-axis alignment)
-    const gridAlignItems = style.alignItems;
-    const gridAlignMap: Record<string, AlignItems> = {
-      "flex-start": "flex-start",
-      "start": "flex-start",
-      "flex-end": "flex-end",
-      "end": "flex-end",
-      "center": "center",
-      "stretch": "stretch",
-    };
-    if (gridAlignItems && gridAlignMap[gridAlignItems]) {
-      layout.alignItems = gridAlignMap[gridAlignItems];
-    } else if (flexDirection === "row" && colCount > 1) {
-      // Default multi-column grids to stretch when no explicit align-items
-      layout.alignItems = "stretch";
+    if (mappedAlignItems) {
+      layout.alignItems = mappedAlignItems;
     }
 
     // Map justify-content (main-axis alignment)
     const gridJustifyContent = style.justifyContent;
-    const gridJustifyMap: Record<string, JustifyContent> = {
-      "flex-start": "flex-start",
-      "start": "flex-start",
-      "flex-end": "flex-end",
-      "end": "flex-end",
-      "center": "center",
-      "space-between": "space-between",
-      "space-around": "space-around",
-      "space-evenly": "space-evenly",
-    };
-    if (gridJustifyContent && gridJustifyMap[gridJustifyContent]) {
-      layout.justifyContent = gridJustifyMap[gridJustifyContent];
+    if (gridJustifyContent && CSS_JUSTIFY_CONTENT_MAP[gridJustifyContent]) {
+      layout.justifyContent = CSS_JUSTIFY_CONTENT_MAP[gridJustifyContent];
     }
 
-    return layout;
+    return { layout };
   }
 
-  return inferFlowLayout(style, el, display);
+  const flowLayout = inferFlowLayout(style, el, display);
+  return flowLayout ? { layout: flowLayout } : undefined;
 }
 
 /**
@@ -1342,16 +1364,14 @@ function inferFlowLayout(
   const first = candidates[0];
   const firstCenterY = first.top + first.height / 2;
   const firstLeft = first.left;
-  const alignmentTolerance = 6;
-
   const rowAligned = candidates.every((rect) => {
     const centerY = rect.top + rect.height / 2;
-    return Math.abs(centerY - firstCenterY) <= alignmentTolerance;
+    return Math.abs(centerY - firstCenterY) <= ALIGNMENT_TOLERANCE;
   });
-  const columnAligned = candidates.every((rect) => Math.abs(rect.left - firstLeft) <= alignmentTolerance);
+  const columnAligned = candidates.every((rect) => Math.abs(rect.left - firstLeft) <= ALIGNMENT_TOLERANCE);
 
-  const monotonicX = candidates.every((rect, i) => i === 0 || rect.left >= candidates[i - 1].left - alignmentTolerance);
-  const monotonicY = candidates.every((rect, i) => i === 0 || rect.top >= candidates[i - 1].top - alignmentTolerance);
+  const monotonicX = candidates.every((rect, i) => i === 0 || rect.left >= candidates[i - 1].left - ALIGNMENT_TOLERANCE);
+  const monotonicY = candidates.every((rect, i) => i === 0 || rect.top >= candidates[i - 1].top - ALIGNMENT_TOLERANCE);
 
   let direction: FlexDirection | null = null;
   if (rowAligned && monotonicX) direction = "row";
@@ -1367,6 +1387,116 @@ function inferFlowLayout(
   };
 }
 
+
+/**
+ * Group a grid frame's children into row frames based on visual rows
+ * detected from child bounding rects. Absolute-positioned children are
+ * kept at the parent level.
+ */
+function groupGridChildrenIntoRows(
+  frame: FrameNode,
+  el: Element,
+  grid: NonNullable<AutoLayoutResult["grid"]>,
+  elementNodeMap: Map<Element, SceneNode>,
+): void {
+  const absChildren: SceneNode[] = [];
+  // Pair each flow child with its DOM bounding rect via elementNodeMap
+  const flowEntries: { node: SceneNode; rect: DOMRect }[] = [];
+
+  for (const domChild of el.children) {
+    const node = elementNodeMap.get(domChild);
+    if (!node || node.absolutePosition) {
+      if (node?.absolutePosition) absChildren.push(node);
+      continue;
+    }
+    const rect = domChild.getBoundingClientRect();
+    flowEntries.push({ node, rect });
+  }
+  // Include flow children not found via elementNodeMap (e.g. text nodes)
+  const mappedNodes = new Set(flowEntries.map((e) => e.node));
+  for (const child of frame.children) {
+    if (child.absolutePosition) {
+      if (!absChildren.includes(child)) absChildren.push(child);
+      continue;
+    }
+    if (!mappedNodes.has(child)) {
+      flowEntries.push({ node: child, rect: new DOMRect(0, 0, 0, 0) });
+    }
+  }
+
+  if (flowEntries.length === 0) return;
+
+  // Group flow children by their visual row (top coordinate)
+  const rows: { node: SceneNode; rect: DOMRect }[][] = [];
+  let currentRow: { node: SceneNode; rect: DOMRect }[] = [];
+  let currentRowTop: number | null = null;
+
+  for (const entry of flowEntries) {
+    if (currentRowTop === null || Math.abs(entry.rect.top - currentRowTop) > ALIGNMENT_TOLERANCE) {
+      if (currentRow.length > 0) rows.push(currentRow);
+      currentRow = [entry];
+      currentRowTop = entry.rect.top;
+    } else {
+      currentRow.push(entry);
+    }
+  }
+  if (currentRow.length > 0) rows.push(currentRow);
+
+  const flowChildren = flowEntries.map((e) => e.node);
+
+  // If only one row detected, no need for wrapping — just treat as row layout
+  if (rows.length <= 1) {
+    frame.layout = {
+      ...frame.layout,
+      flexDirection: "row",
+      gap: grid.columnGap,
+      ...(grid.alignItems && { alignItems: grid.alignItems }),
+    };
+    for (const child of flowChildren) {
+      child.x = 0;
+      child.y = 0;
+      inferChildSizing(child, frame, flowChildren.length);
+    }
+    return;
+  }
+
+  // Create row frames for each visual row
+  const contentWidth = frame.width - (frame.layout?.paddingLeft ?? 0) - (frame.layout?.paddingRight ?? 0);
+  const rowFrames: FrameNode[] = [];
+  for (const rowEntries of rows) {
+    const rowChildren = rowEntries.map((e) => e.node);
+    const rowFrame: FrameNode = {
+      id: generateId(),
+      type: "frame",
+      name: "row",
+      x: 0,
+      y: 0,
+      width: contentWidth,
+      height: 0,
+      children: rowChildren,
+      layout: {
+        autoLayout: true,
+        flexDirection: "row",
+        gap: grid.columnGap,
+        ...(grid.alignItems && { alignItems: grid.alignItems }),
+      },
+      sizing: { widthMode: "fill_container", heightMode: "fixed" },
+    };
+
+    let maxHeight = 0;
+    for (const child of rowChildren) {
+      child.x = 0;
+      child.y = 0;
+      if (child.height > maxHeight) maxHeight = child.height;
+      inferChildSizing(child, rowFrame, rowChildren.length);
+    }
+    rowFrame.height = maxHeight;
+
+    rowFrames.push(rowFrame);
+  }
+
+  frame.children = [...rowFrames, ...absChildren];
+}
 
 /** Infer sizing mode for a child inside an auto-layout parent */
 function inferChildSizing(
