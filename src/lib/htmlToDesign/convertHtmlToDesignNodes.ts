@@ -1,6 +1,7 @@
 import type { SceneNode, FrameNode } from "@/types/scene";
 import { generateId } from "@/types/scene";
 import { mountHtmlWithBodyStyles } from "@/utils/embedHtmlUtils";
+import { materializePseudoElements } from "@/utils/pseudoElementMaterializer";
 import { scopeStyleTagsToRoot } from "./cssScoping";
 import { parseColorWithOpacity } from "./colorParsing";
 import { applyBaseProps } from "./styleApplication";
@@ -59,6 +60,7 @@ export async function convertHtmlToDesignNodes(
     ),
   );
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  materializePseudoElements(conversionRoot);
 
   try {
     const containerRect = conversionRoot.getBoundingClientRect();
