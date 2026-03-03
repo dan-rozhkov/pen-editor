@@ -1276,9 +1276,37 @@ function inferAutoLayout(
       ...parsePadding(style),
     };
 
-    // For equal-width grid columns (like repeat(3, 1fr)), mark as flexWrap
-    if (flexDirection === "row" && colCount > 1) {
+    // Map align-items (cross-axis alignment)
+    const gridAlignItems = style.alignItems;
+    const gridAlignMap: Record<string, AlignItems> = {
+      "flex-start": "flex-start",
+      "start": "flex-start",
+      "flex-end": "flex-end",
+      "end": "flex-end",
+      "center": "center",
+      "stretch": "stretch",
+    };
+    if (gridAlignItems && gridAlignMap[gridAlignItems]) {
+      layout.alignItems = gridAlignMap[gridAlignItems];
+    } else if (flexDirection === "row" && colCount > 1) {
+      // Default multi-column grids to stretch when no explicit align-items
       layout.alignItems = "stretch";
+    }
+
+    // Map justify-content (main-axis alignment)
+    const gridJustifyContent = style.justifyContent;
+    const gridJustifyMap: Record<string, JustifyContent> = {
+      "flex-start": "flex-start",
+      "start": "flex-start",
+      "flex-end": "flex-end",
+      "end": "flex-end",
+      "center": "center",
+      "space-between": "space-between",
+      "space-around": "space-around",
+      "space-evenly": "space-evenly",
+    };
+    if (gridJustifyContent && gridJustifyMap[gridJustifyContent]) {
+      layout.justifyContent = gridJustifyMap[gridJustifyContent];
     }
 
     return layout;
