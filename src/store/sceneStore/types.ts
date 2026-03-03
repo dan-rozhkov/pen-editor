@@ -88,4 +88,5 @@ export const TEXT_MEASURE_PROPS = new Set([
   "letterSpacing",
   "lineHeight",
   "textWidthMode",
+  "textTransform",
 ]);

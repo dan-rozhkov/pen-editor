@@ -1,6 +1,8 @@
 import { Texture } from "pixi.js";
 import { extractCssUrl, isTransparentColor } from "@/lib/htmlToDesignNodes";
 import { hasBodyTargetedStyles, mountHtmlWithBodyStyles } from "@/utils/embedHtmlUtils";
+import type { TextTransform } from "@/types/scene";
+import { applyTextTransform } from "@/utils/textMeasure";
 
 /** Cache for rendered HTML textures by content+size key */
 const textureCache = new Map<string, Texture>();
@@ -1171,7 +1173,7 @@ function drawTextNode(
   for (const line of lines) {
     drawTextInLineBox(
       ctx,
-      applyCssTextTransform(line.text, textTransform),
+      applyTextTransform(line.text, textTransform as TextTransform),
       line.x,
       line.y,
       line.height,
@@ -1230,18 +1232,6 @@ function drawTextInLineBox(
   }
 }
 
-function applyCssTextTransform(text: string, textTransform: string): string {
-  switch (textTransform) {
-    case "uppercase":
-      return text.toUpperCase();
-    case "lowercase":
-      return text.toLowerCase();
-    case "capitalize":
-      return text.replace(/\b(\p{L})/gu, (char) => char.toUpperCase());
-    default:
-      return text;
-  }
-}
 
 /** Extract per-line text and positions from a text node with multiple client rects */
 function extractLinesFromRects(

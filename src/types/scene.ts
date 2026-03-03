@@ -167,6 +167,9 @@ export type TextWidthMode = 'auto' | 'fixed' | 'fixed-height'
 // Text alignment
 export type TextAlign = 'left' | 'center' | 'right'
 
+// Text transform
+export type TextTransform = 'none' | 'uppercase' | 'lowercase' | 'capitalize'
+
 // Vertical text alignment
 export type TextAlignVertical = 'top' | 'middle' | 'bottom'
 
@@ -192,6 +195,8 @@ export interface TextNode extends BaseNode {
   lineHeight?: number
   // Letter spacing in pixels
   letterSpacing?: number
+  // Text transform (visual only, applied at render/measure time)
+  textTransform?: TextTransform
 }
 
 // Descendant overrides for instance nodes

@@ -125,6 +125,23 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
       </PropertyRow>
       <div className="flex flex-col gap-1">
         <div className="text-[10px] font-normal text-text-muted">
+          Transform
+        </div>
+        <SelectInput
+          value={node.textTransform ?? "none"}
+          options={[
+            { value: "none", label: "None" },
+            { value: "uppercase", label: "Uppercase" },
+            { value: "lowercase", label: "Lowercase" },
+            { value: "capitalize", label: "Capitalize" },
+          ]}
+          onChange={(v) =>
+            onUpdate({ textTransform: v } as Partial<SceneNode>)
+          }
+        />
+      </div>
+      <div className="flex flex-col gap-1">
+        <div className="text-[10px] font-normal text-text-muted">
           Alignment
         </div>
         <PropertyRow>

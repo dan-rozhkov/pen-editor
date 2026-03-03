@@ -1,11 +1,12 @@
 import { Container, Text, TextStyle } from "pixi.js";
 import type { TextNode } from "@/types/scene";
 import { getResolvedFill } from "./colorHelpers";
+import { applyTextTransform } from "@/utils/textMeasure";
 
 export function createTextContainer(node: TextNode): Container {
   const container = new Container();
   const text = new Text({
-    text: node.text,
+    text: applyTextTransform(node.text, node.textTransform),
     style: buildTextStyle(node),
   });
   text.resolution = window.devicePixelRatio || 1;
@@ -24,8 +25,8 @@ export function updateTextContainer(
   const textObj = container.getChildByLabel("text-content") as Text;
   if (!textObj) return;
 
-  if (node.text !== prev.text) {
-    textObj.text = node.text;
+  if (node.text !== prev.text || node.textTransform !== prev.textTransform) {
+    textObj.text = applyTextTransform(node.text, node.textTransform);
   }
 
   // Rebuild style if any text property changed

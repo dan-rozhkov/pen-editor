@@ -567,7 +567,6 @@ function shouldFlattenTextOnlyElement(
   const semanticTextTag = /^(h[1-6]|p|span|strong|em|small|label)$/i.test(tag);
   if (tag === "a" || tag === "button") return false;
   if (!semanticTextTag && style.display !== "inline") return false;
-  if (style.textTransform && style.textTransform !== "none") return false;
   if (style.cursor === "pointer") return false;
   if (hasVisualStyling(style)) return false;
   if (!semanticTextTag && hasBoxSpacing(style)) return false;
@@ -1137,6 +1136,12 @@ function applyTextProps(node: TextNode, style: CSSStyleDeclaration): void {
   }
   if (decoration?.includes("line-through")) {
     node.strikethrough = true;
+  }
+
+  // Text transform
+  const textTransform = style.textTransform;
+  if (textTransform && textTransform !== "none") {
+    node.textTransform = textTransform as TextNode["textTransform"];
   }
 }
 

@@ -1,4 +1,17 @@
-import type { TextNode } from '../types/scene'
+import type { TextNode, TextTransform } from '../types/scene'
+
+/**
+ * Apply CSS-style text transform to a string.
+ * Visual only — original text is preserved in the node.
+ */
+export function applyTextTransform(text: string, transform?: TextTransform): string {
+  switch (transform) {
+    case 'uppercase': return text.toUpperCase()
+    case 'lowercase': return text.toLowerCase()
+    case 'capitalize': return text.replace(/\b(\p{L})/gu, char => char.toUpperCase())
+    default: return text
+  }
+}
 
 // Shared offscreen canvas for text measurement
 let measureCanvas: HTMLCanvasElement | null = null
@@ -38,7 +51,7 @@ export function measureTextAutoSize(node: TextNode): { width: number; height: nu
 
   ctx.font = buildFontString(node)
 
-  const text = node.text || ''
+  const text = applyTextTransform(node.text || '', node.textTransform)
   const lines = text.split('\n')
 
   let maxWidth = 0
@@ -68,7 +81,7 @@ export function measureTextFixedWidthHeight(node: TextNode): number {
   const ctx = getContext()
   ctx.font = buildFontString(node)
 
-  const text = node.text || ''
+  const text = applyTextTransform(node.text || '', node.textTransform)
   const maxWidth = node.width
 
   let totalLines = 0

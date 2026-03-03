@@ -13,6 +13,7 @@ import type {
 } from "@/types/scene";
 import { findDescendantLocalRect, prepareInstanceNode } from "@/utils/instanceUtils";
 import { findNodeById } from "@/utils/nodeUtils";
+import { applyTextTransform } from "@/utils/textMeasure";
 import { findDescendantByPath, findDescendantRectByPath } from "@/utils/instancePathUtils";
 import { buildTextStyle } from "@/pixi/renderers/textRenderer";
 import { truncateLabelToWidth } from "@/pixi/frameLabelUtils";
@@ -207,7 +208,7 @@ export function createSelectionOverlay(
     color: number,
   ): void {
     const style = buildTextStyle(node);
-    const metrics = CanvasTextMetrics.measureText(node.text ?? "", style);
+    const metrics = CanvasTextMetrics.measureText(applyTextTransform(node.text ?? "", node.textTransform), style);
     const lineWidths = metrics.lineWidths ?? [];
     const lineCount = Math.max(1, metrics.lines?.length ?? 0);
     const lineHeight =
