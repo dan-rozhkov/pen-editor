@@ -279,6 +279,10 @@ export function InlineTextEditor({
         wordBreak: isWrappedWidth ? 'break-word' : 'normal',
         overflow: isFixedHeight || shouldClipToBox ? 'hidden' : 'visible',
         cursor: 'text',
+        textTransform: node.textTransform === 'capitalize' ? 'capitalize'
+          : node.textTransform === 'uppercase' ? 'uppercase'
+          : node.textTransform === 'lowercase' ? 'lowercase'
+          : undefined,
         // Reset any inherited styles
         textIndent: 0,
       }}

@@ -262,6 +262,7 @@ function convertTextNode(
     ? window.getComputedStyle(parentEl)
     : null;
 
+  const isSingleLine = !text.includes('\n') && rects.length <= 1;
   const node: TextNode = {
     id: generateId(),
     type: "text",
@@ -270,7 +271,7 @@ function convertTextNode(
     y: minY - containerRect.top,
     width: maxX - minX,
     height: maxY - minY,
-    textWidthMode: "fixed",
+    textWidthMode: isSingleLine ? "auto" : "fixed",
   };
 
   if (parentStyle) {
@@ -367,12 +368,17 @@ function convertElement(
 
   if (!hasElementChildren && hasTextContent && shouldFlattenTextOnlyElement(style, tag)) {
     // Pure text element → TextNode
+    const elText = el.textContent?.trim() ?? "";
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const elRects = range.getClientRects();
+    const elIsSingleLine = !elText.includes('\n') && elRects.length <= 1;
     const textNode: TextNode = {
       id: generateId(),
       type: "text",
-      text: el.textContent?.trim() ?? "",
+      text: elText,
       x, y, width: w, height: h,
-      textWidthMode: "fixed",
+      textWidthMode: elIsSingleLine ? "auto" : "fixed",
     };
     applyTextProps(textNode, style);
     applyBasePropsToText(textNode, style);
