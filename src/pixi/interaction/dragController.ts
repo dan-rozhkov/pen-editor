@@ -4,7 +4,8 @@ import { useViewportStore } from "@/store/viewportStore";
 import { useSmartGuideStore } from "@/store/smartGuideStore";
 import { useDragStore } from "@/store/dragStore";
 import { useLayoutStore } from "@/store/layoutStore";
-import type { FlatFrameNode } from "@/types/scene";
+import type { FlatFrameNode, SceneNode } from "@/types/scene";
+import { cloneNodeWithNewId } from "@/utils/cloneNode";
 import {
   collectSnapTargets,
   getSnapEdges,
@@ -29,6 +30,17 @@ export interface DragController {
 }
 
 export function createDragController(_context: InteractionContext): DragController {
+  const findNodeInTree = (nodes: SceneNode[], nodeId: string): SceneNode | null => {
+    for (const node of nodes) {
+      if (node.id === nodeId) return node;
+      if (node.type === "frame" || node.type === "group") {
+        const found = findNodeInTree(node.children, nodeId);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
   const state: DragState = {
     isDragging: false,
     nodeId: null,
@@ -44,6 +56,7 @@ export function createDragController(_context: InteractionContext): DragControll
     isAutoLayoutDrag: false,
     autoLayoutParentId: null,
     isShiftHeld: false,
+    isAltHeld: false,
     axisLock: null,
     cumulativeDeltaX: 0,
     cumulativeDeltaY: 0,
@@ -80,6 +93,7 @@ export function createDragController(_context: InteractionContext): DragControll
         state.isAutoLayoutDrag = false;
         state.autoLayoutParentId = null;
         state.isShiftHeld = e.shiftKey;
+        state.isAltHeld = e.altKey;
         state.axisLock = null;
         state.cumulativeDeltaX = 0;
         state.cumulativeDeltaY = 0;
@@ -270,6 +284,8 @@ export function createDragController(_context: InteractionContext): DragControll
         state.nodeId = null;
         state.isAutoLayoutDrag = false;
         state.autoLayoutParentId = null;
+        state.isAltHeld = false;
+        state.isShiftHeld = false;
         return true;
       }
 
@@ -280,7 +296,38 @@ export function createDragController(_context: InteractionContext): DragControll
         // Save history with the position change
         const sceneState = useSceneStore.getState();
         const node = sceneState.nodesById[state.nodeId];
-        if (node && (node.x !== state.startNodeX || node.y !== state.startNodeY)) {
+        const hasMoved = !!node && (node.x !== state.startNodeX || node.y !== state.startNodeY);
+        const shouldDuplicateOnDrop = hasMoved && state.isShiftHeld && state.isAltHeld;
+
+        if (node && shouldDuplicateOnDrop) {
+          const treeNodes = sceneState.getNodes();
+          const sourceTreeNode = findNodeInTree(treeNodes, state.nodeId);
+          if (sourceTreeNode) {
+            const clonedNode = cloneNodeWithNewId(sourceTreeNode, false);
+            clonedNode.x = node.x;
+            clonedNode.y = node.y;
+
+            // Restore original to start position and then add a clone at drop point.
+            useSceneStore.getState().updateNodeWithoutHistory(state.nodeId, {
+              x: state.startNodeX,
+              y: state.startNodeY,
+            });
+
+            const parentId = sceneState.parentById[state.nodeId];
+            if (parentId !== null && parentId !== undefined) {
+              useSceneStore.getState().addChildToFrame(parentId, clonedNode);
+            } else {
+              useSceneStore.getState().addNode(clonedNode);
+            }
+            useSelectionStore.getState().select(clonedNode.id);
+          } else {
+            // Fallback to normal move commit if source node can't be resolved.
+            useSceneStore.getState().updateNode(state.nodeId, {
+              x: node.x,
+              y: node.y,
+            });
+          }
+        } else if (node && hasMoved) {
           // Commit the move with history
           useSceneStore.getState().updateNode(state.nodeId, {
             x: node.x,
@@ -292,6 +339,7 @@ export function createDragController(_context: InteractionContext): DragControll
         state.isDragging = false;
         state.nodeId = null;
         state.isShiftHeld = false;
+        state.isAltHeld = false;
         state.axisLock = null;
         state.cumulativeDeltaX = 0;
         state.cumulativeDeltaY = 0;

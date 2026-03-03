@@ -21,6 +21,7 @@ export interface DragState {
   autoLayoutParentId: string | null;
   // Axis lock state
   isShiftHeld: boolean;
+  isAltHeld: boolean;
   axisLock: "x" | "y" | null;
   cumulativeDeltaX: number;
   cumulativeDeltaY: number;
