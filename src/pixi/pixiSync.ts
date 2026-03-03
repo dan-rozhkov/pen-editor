@@ -691,7 +691,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
     // Handle removed nodes
     for (const id of Object.keys(prev.nodesById)) {
       if (!state.nodesById[id]) {
-        removeNode(id, prev.childrenById);
+        removeNode(id, prev.childrenById, state.nodesById);
       }
     }
 
@@ -845,14 +845,24 @@ export function createPixiSync(sceneRoot: Container): () => void {
   function removeNode(
     id: string,
     prevChildrenById: Record<string, string[]>,
+    nextNodesById: Record<string, FlatSceneNode>,
   ): void {
-    const childIds = prevChildrenById[id] ?? [];
-    for (const childId of childIds) {
-      removeNode(childId, prevChildrenById);
-    }
-
     const entry = registry.get(id);
     if (!entry) return;
+
+    const childIds = prevChildrenById[id] ?? [];
+    for (const childId of childIds) {
+      // If a child still exists in the next state, it was reparented.
+      // Keep its container and let reconcileChildren attach it to the new host.
+      if (nextNodesById[childId]) {
+        const childEntry = registry.get(childId);
+        if (childEntry?.container.parent) {
+          childEntry.container.parent.removeChild(childEntry.container);
+        }
+        continue;
+      }
+      removeNode(childId, prevChildrenById, nextNodesById);
+    }
 
     if (!entry.container.destroyed) {
       entry.container.parent?.removeChild(entry.container);
