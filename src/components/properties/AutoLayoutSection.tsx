@@ -215,7 +215,6 @@ export function AutoLayoutSection({ node, onUpdate, mixedKeys }: AutoLayoutSecti
                   layout: { ...node.layout, gap: v },
                 } as Partial<SceneNode>)
               }
-              min={0}
               labelOutside={true}
               isMixed={isMixed("layout.gap")}
             />

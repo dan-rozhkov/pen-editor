@@ -1164,7 +1164,7 @@ function computeGapFromChildRects(el: Element, direction: FlexDirection): number
     const gap = direction === "column"
       ? curr.top - prev.bottom
       : curr.left - prev.right;
-    if (gap > 0) gaps.push(gap);
+    if (gap !== 0) gaps.push(gap);
   }
 
   if (gaps.length === 0) return 0;
