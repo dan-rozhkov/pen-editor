@@ -1,6 +1,6 @@
 import { Container, Graphics, Sprite } from "pixi.js";
 import type { EmbedNode } from "@/types/scene";
-import { renderHtmlToTexture, invalidateHtmlTexture } from "./htmlTextureHelpers";
+import { renderHtmlToTexture, invalidateHtmlTexture } from "./htmlTexture";
 
 /** Current resolution used for embed textures, updated on zoom */
 let currentEmbedResolution = window.devicePixelRatio;
