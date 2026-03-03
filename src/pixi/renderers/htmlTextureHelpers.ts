@@ -10,7 +10,7 @@ const textureCache = new Map<string, Texture>();
 const pendingRenders = new Map<string, Promise<Texture | null>>();
 /** Dedup stylesheet loads for external web-font providers */
 const pendingFontStylesheets = new Map<string, Promise<void>>();
-const HTML_TEXTURE_RENDER_VERSION = 7;
+const HTML_TEXTURE_RENDER_VERSION = 8;
 
 /** Cached grapheme segmenter for letter-spacing rendering */
 const graphemeSegmenter =
@@ -118,6 +118,8 @@ async function doRender(
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
   try {
+    materializePseudoElements(renderRoot);
+
     const canvas = document.createElement("canvas");
     canvas.width = pixelWidth;
     canvas.height = pixelHeight;
@@ -240,6 +242,86 @@ async function waitForFontsUsedInTree(root: Element): Promise<void> {
     Promise.allSettled(loadPromises),
     new Promise((resolve) => setTimeout(resolve, timeoutMs)),
   ]);
+}
+
+function materializePseudoElements(root: Element): void {
+  const elements = [root, ...Array.from(root.querySelectorAll("*"))];
+  for (const el of elements) {
+    materializeElementPseudo(el, "before");
+    materializeElementPseudo(el, "after");
+  }
+}
+
+function materializeElementPseudo(el: Element, pseudoName: "before" | "after"): void {
+  const pseudo = window.getComputedStyle(el, `::${pseudoName}`);
+  if (pseudo.content === "none") return;
+
+  const pseudoEl = document.createElement("span");
+  pseudoEl.dataset.embedPseudo = pseudoName;
+  pseudoEl.setAttribute("aria-hidden", "true");
+
+  for (let i = 0; i < pseudo.length; i++) {
+    const prop = pseudo[i];
+    const value = pseudo.getPropertyValue(prop);
+    if (value) pseudoEl.style.setProperty(prop, value);
+  }
+
+  pseudoEl.textContent = parsePseudoContent(pseudo.content);
+
+  if (pseudoName === "before") el.prepend(pseudoEl);
+  else el.append(pseudoEl);
+}
+
+function parsePseudoContent(content: string): string {
+  if (!content || content === "none" || content === "normal") return "";
+
+  const quote = content[0];
+  if ((quote !== "\"" && quote !== "'") || content[content.length - 1] !== quote) {
+    return "";
+  }
+
+  return decodeCssStringValue(content.slice(1, -1));
+}
+
+function decodeCssStringValue(value: string): string {
+  let out = "";
+
+  for (let i = 0; i < value.length; i++) {
+    const ch = value[i];
+    if (ch !== "\\") {
+      out += ch;
+      continue;
+    }
+
+    const next = value[i + 1];
+    if (!next) break;
+
+    if (next === "\n" || next === "\r" || next === "\f") {
+      i += 1;
+      continue;
+    }
+
+    if (/[0-9a-fA-F]/.test(next)) {
+      let hex = "";
+      let j = i + 1;
+      while (j < value.length && hex.length < 6 && /[0-9a-fA-F]/.test(value[j])) {
+        hex += value[j];
+        j += 1;
+      }
+      const codePoint = parseInt(hex, 16);
+      if (Number.isFinite(codePoint)) {
+        out += String.fromCodePoint(codePoint);
+      }
+      if (j < value.length && /\s/.test(value[j])) j += 1;
+      i = j - 1;
+      continue;
+    }
+
+    out += next;
+    i += 1;
+  }
+
+  return out;
 }
 
 function normalizeHtmlForEmbedRender(html: string): string {
