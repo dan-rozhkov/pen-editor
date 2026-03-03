@@ -1,6 +1,11 @@
-import { useMemo } from "react";
-import { LinkSimple, LinkSimpleBreak } from "@phosphor-icons/react";
+import { useMemo, useState } from "react";
+import {
+  LinkSimple,
+  LinkSimpleBreak,
+  ResizeIcon,
+} from "@phosphor-icons/react";
 import type {
+  EmbedNode,
   FrameNode,
   PolygonNode,
   RefNode,
@@ -11,7 +16,7 @@ import type { ParentContext } from "@/utils/nodeUtils";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
-import { prepareInstanceNode } from "@/utils/instanceUtils";
+import { getPreparedNodeEffectiveSize, prepareInstanceNode } from "@/utils/instanceUtils";
 import { cn } from "@/lib/utils";
 import {
   NumberInput,
@@ -23,12 +28,117 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { generatePolygonPoints } from "@/utils/polygonUtils";
+import { mountHtmlWithBodyStyles } from "@/utils/embedHtmlUtils";
 
 const sizingOptions = [
   { value: "fixed", label: "Fixed" },
   { value: "fill_container", label: "Fill" },
   { value: "fit_content", label: "Fit" },
 ];
+
+function computeFrameFitToContentSize(
+  frame: FrameNode,
+  allNodes: SceneNode[],
+  calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
+): { width: number; height: number } {
+  if (frame.layout?.autoLayout) {
+    const intrinsic = calculateFrameIntrinsicSize(frame, {
+      fitWidth: true,
+      fitHeight: true,
+    });
+    return {
+      width: Math.max(1, Math.ceil(intrinsic.width)),
+      height: Math.max(1, Math.ceil(intrinsic.height)),
+    };
+  }
+
+  let maxX = 0;
+  let maxY = 0;
+  for (const child of frame.children) {
+    if (child.visible === false || child.enabled === false) continue;
+    const { width: preparedWidth, height: preparedHeight } =
+      getPreparedNodeEffectiveSize(child, allNodes, calculateLayoutForFrame);
+    const childWidth = Math.max(0, preparedWidth);
+    const childHeight = Math.max(0, preparedHeight);
+    maxX = Math.max(maxX, child.x + childWidth);
+    maxY = Math.max(maxY, child.y + childHeight);
+  }
+
+  return {
+    width: Math.max(1, Math.ceil(maxX)),
+    height: Math.max(1, Math.ceil(maxY)),
+  };
+}
+
+async function measureEmbedContentSize(
+  node: EmbedNode,
+): Promise<{ width: number; height: number }> {
+  if (typeof document === "undefined") {
+    return { width: node.width, height: node.height };
+  }
+
+  const host = document.createElement("div");
+  host.style.cssText = `
+    position: fixed;
+    left: -99999px;
+    top: -99999px;
+    width: ${node.width}px;
+    height: ${node.height}px;
+    overflow: hidden;
+    pointer-events: none;
+    visibility: hidden;
+  `;
+
+  const shadow = host.attachShadow({ mode: "open" });
+  const container = document.createElement("div");
+  container.style.cssText = `
+    width: ${node.width}px;
+    height: ${node.height}px;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+  `;
+  const { root } = mountHtmlWithBodyStyles(
+    container,
+    node.htmlContent,
+    node.width,
+    node.height,
+  );
+  shadow.appendChild(container);
+  document.body.appendChild(host);
+
+  try {
+    if ("fonts" in document) {
+      const fontsReady = (document as Document & { fonts?: FontFaceSet }).fonts?.ready;
+      if (fontsReady) {
+        await Promise.race([
+          fontsReady,
+          new Promise((resolve) => setTimeout(resolve, 1200)),
+        ]);
+      }
+    }
+
+    await Promise.all(
+      Array.from(root.querySelectorAll("img")).map((img) =>
+        img.complete
+          ? Promise.resolve()
+          : new Promise<void>((resolve) => {
+              img.onload = img.onerror = () => resolve();
+            }),
+      ),
+    );
+
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+    const rect = root.getBoundingClientRect();
+    return {
+      width: Math.max(1, Math.ceil(Math.max(root.scrollWidth, rect.width))),
+      height: Math.max(1, Math.ceil(Math.max(root.scrollHeight, rect.height))),
+    };
+  } finally {
+    document.body.removeChild(host);
+  }
+}
 
 /**
  * Compute the effective size a node would have in a given sizing mode.
@@ -116,7 +226,9 @@ interface SizeSectionProps {
 export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiSelect }: SizeSectionProps) {
   const calculateLayoutForFrame = useLayoutStore((s) => s.calculateLayoutForFrame);
   const allNodes = useSceneStore((s) => s.getNodes());
+  const updateNode = useSceneStore((s) => s.updateNode);
   const updateNodeWithoutHistory = useSceneStore((s) => s.updateNodeWithoutHistory);
+  const [isFitting, setIsFitting] = useState(false);
 
   const reflowAutoLayoutSiblings = (
     dimension: "width" | "height",
@@ -210,6 +322,8 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
 
     return { effectiveWidth: ew, effectiveHeight: eh };
   }, [node, parentContext, calculateLayoutForFrame]);
+
+  const canFitToContent = !isMultiSelect && (node.type === "frame" || node.type === "embed");
 
   return (
     <PropertySection title="Size">
@@ -393,6 +507,35 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
             <LinkSimpleBreak size={14} />
           )}
         </button>}
+        {canFitToContent && (
+          <Button
+            variant="secondary"
+            size="icon-sm"
+            title={isFitting ? "Fitting..." : "Fit to content"}
+            aria-label={isFitting ? "Fitting content" : "Fit to content"}
+            disabled={isFitting}
+            onClick={async () => {
+              setIsFitting(true);
+              try {
+                if (node.type === "frame") {
+                  const size = computeFrameFitToContentSize(
+                    node,
+                    allNodes,
+                    calculateLayoutForFrame,
+                  );
+                  updateNode(node.id, size);
+                } else if (node.type === "embed") {
+                  const size = await measureEmbedContentSize(node);
+                  updateNode(node.id, size);
+                }
+              } finally {
+                setIsFitting(false);
+              }
+            }}
+          >
+            <ResizeIcon />
+          </Button>
+        )}
       </PropertyRow>
       {node.type === "frame" && (
         <Label className="cursor-pointer">
