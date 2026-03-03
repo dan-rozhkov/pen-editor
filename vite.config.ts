@@ -16,9 +16,6 @@ export default defineConfig({
           if (id.includes("node_modules/pixi.js")) {
             return "pixi-vendor";
           }
-          if (id.includes("node_modules/react-konva") || id.includes("node_modules/konva")) {
-            return "konva-vendor";
-          }
           if (id.includes("node_modules/react") || id.includes("node_modules/react-dom")) {
             return "react-vendor";
           }
@@ -34,6 +31,6 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ["react", "react-dom", "react-konva", "konva"],
+    include: ["react", "react-dom"],
   },
 });
