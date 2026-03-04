@@ -6,6 +6,7 @@ import {
   LightningIcon,
 } from "@phosphor-icons/react";
 import { useChatStore } from "@/store/chatStore";
+import { useFloatingPanelsStore } from "@/store/floatingPanelsStore";
 import type { ChatTab } from "@/store/chatStore";
 import { useDesignChat } from "@/hooks/useDesignChat";
 import { MessageList } from "./MessageList";
@@ -204,14 +205,18 @@ export function ChatPanel() {
   const tabs = useChatStore((s) => s.tabs);
   const activeTabId = useChatStore((s) => s.activeTabId);
   const [showPresets, setShowPresets] = useState(false);
+  const isFloating = useFloatingPanelsStore((s) => s.isFloating);
 
   if (!isOpen) {
     return null;
   }
 
   return (
-    <div className="absolute top-0 right-0 bottom-0 z-40 pointer-events-none">
-      <div className="pointer-events-auto w-[360px] h-full bg-surface-panel border-l border-border-default flex flex-col">
+    <div className={isFloating ? "absolute top-5 right-5 bottom-5 z-40 pointer-events-none" : "absolute top-0 right-0 bottom-0 z-40 pointer-events-none"}>
+      <div className={isFloating
+        ? "pointer-events-auto w-[360px] h-full bg-surface-panel rounded-2xl shadow-[0_0px_3px_rgba(0,0,0,0.04)] border border-border-default flex flex-col overflow-hidden"
+        : "pointer-events-auto w-[360px] h-full bg-surface-panel border-l border-border-default flex flex-col"
+      }>
         {/* Header */}
         <div className="flex items-center gap-2 px-3 py-2 border-b border-border-default shrink-0">
           <span className="text-sm font-medium text-text-primary flex-1">
