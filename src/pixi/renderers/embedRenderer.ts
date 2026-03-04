@@ -4,11 +4,15 @@ import { renderHtmlToTexture, invalidateHtmlTexture } from "./htmlTexture";
 
 /** Current resolution used for embed textures, updated on zoom */
 let currentEmbedResolution = window.devicePixelRatio;
+const MIN_EMBED_RENDER_RESOLUTION = 0.25;
+const EMBED_RESOLUTION_STEP = 0.25;
+const MAX_EMBED_TEXTURE_DIMENSION = 8192;
+const MAX_EMBED_TEXTURE_PIXELS = 16_777_216;
 const EMBED_RESIZE_RERENDER_DEBOUNCE_MS = 180;
 const pendingResizeRerenderByContainer = new WeakMap<Container, ReturnType<typeof setTimeout>>();
 const renderRequestIdByContainer = new WeakMap<Container, number>();
 
-function drawPlaceholder(_gfx: Graphics, _width: number, _height: number): void {
+function drawPlaceholder(): void {
   // No visual placeholder — container is transparent until texture loads
 }
 
@@ -28,6 +32,24 @@ function ensureEmbedContentSprite(container: Container): Sprite {
   return sprite;
 }
 
+function quantizeResolution(value: number): number {
+  const stepped = Math.round(value / EMBED_RESOLUTION_STEP) * EMBED_RESOLUTION_STEP;
+  return Math.max(MIN_EMBED_RENDER_RESOLUTION, stepped);
+}
+
+function getSafeEmbedResolution(node: EmbedNode, requestedResolution: number): number {
+  const safeWidth = Math.max(1, node.width);
+  const safeHeight = Math.max(1, node.height);
+  const maxByDimension = MAX_EMBED_TEXTURE_DIMENSION / Math.max(safeWidth, safeHeight);
+  const maxByPixels = Math.sqrt(MAX_EMBED_TEXTURE_PIXELS / (safeWidth * safeHeight));
+  const upperBound = Math.max(
+    MIN_EMBED_RENDER_RESOLUTION,
+    Math.min(maxByDimension, maxByPixels),
+  );
+
+  return quantizeResolution(Math.min(requestedResolution, upperBound));
+}
+
 function scheduleRerenderAfterResize(container: Container, node: EmbedNode): void {
   const pending = pendingResizeRerenderByContainer.get(container);
   if (pending) clearTimeout(pending);
@@ -42,10 +64,15 @@ function scheduleRerenderAfterResize(container: Container, node: EmbedNode): voi
 }
 
 async function renderAndApply(container: Container, node: EmbedNode, resolution?: number): Promise<void> {
+  if (!Number.isFinite(node.width) || !Number.isFinite(node.height) || node.width <= 0 || node.height <= 0) {
+    return;
+  }
+
   const nextRequestId = (renderRequestIdByContainer.get(container) ?? 0) + 1;
   renderRequestIdByContainer.set(container, nextRequestId);
 
-  const res = resolution ?? currentEmbedResolution;
+  const requestedResolution = resolution ?? currentEmbedResolution;
+  const res = getSafeEmbedResolution(node, requestedResolution);
   const texture = await renderHtmlToTexture(node.htmlContent, node.width, node.height, res);
   if (container.destroyed) return;
 
@@ -69,7 +96,7 @@ export function createEmbedContainer(node: EmbedNode): Container {
 
   const bg = new Graphics();
   bg.label = "embed-bg";
-  drawPlaceholder(bg, node.width, node.height);
+  drawPlaceholder();
   container.addChild(bg);
 
   if (node.htmlContent) {
@@ -91,7 +118,7 @@ export function updateEmbedContainer(
     const bg = container.getChildByLabel("embed-bg") as Graphics;
     if (bg) {
       bg.visible = true;
-      drawPlaceholder(bg, node.width, node.height);
+      drawPlaceholder();
     }
   }
 

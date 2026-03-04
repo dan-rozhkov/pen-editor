@@ -3,6 +3,8 @@ import { create } from "zustand";
 export interface ChatTab {
   id: string;
   title: string;
+  model: string;
+  agentMode: AgentMode;
 }
 
 export type AgentMode = "edits" | "fast";
@@ -48,7 +50,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   agentMode:
     (localStorage.getItem("chat-agent-mode") as AgentMode | null) ??
     DEFAULT_AGENT_MODE,
-  tabs: [{ id: initialTabId, title: "Chat 1" }],
+  tabs: [{ id: initialTabId, title: "Chat 1", model: localStorage.getItem("chat-model") ?? DEFAULT_MODEL, agentMode: (localStorage.getItem("chat-agent-mode") as AgentMode | null) ?? DEFAULT_AGENT_MODE }],
   activeTabId: initialTabId,
   abortControllers: {},
 
@@ -57,20 +59,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
   close: () => set({ isOpen: false }),
   setModel: (model) => {
     localStorage.setItem("chat-model", model);
-    set({ model });
+    const { activeTabId } = get();
+    set((s) => ({
+      model,
+      tabs: s.tabs.map((t) => t.id === activeTabId ? { ...t, model } : t),
+    }));
   },
   setAgentMode: (mode) => {
     localStorage.setItem("chat-agent-mode", mode);
-    set({ agentMode: mode });
+    const { activeTabId } = get();
+    set((s) => ({
+      agentMode: mode,
+      tabs: s.tabs.map((t) => t.id === activeTabId ? { ...t, agentMode: mode } : t),
+    }));
   },
 
   createTab: () => {
     const id = generateTabId();
     const { tabs } = get();
     const title = `Chat ${tabs.length + 1}`;
+    const model = localStorage.getItem("chat-model") ?? DEFAULT_MODEL;
+    const agentMode = (localStorage.getItem("chat-agent-mode") as AgentMode | null) ?? DEFAULT_AGENT_MODE;
     set({
-      tabs: [...tabs, { id, title }],
+      tabs: [...tabs, { id, title, model, agentMode }],
       activeTabId: id,
+      model,
+      agentMode,
     });
     return id;
   },
@@ -89,9 +103,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const newId = generateTabId();
       const newControllers = { ...abortControllers };
       delete newControllers[tabId];
+      const model = localStorage.getItem("chat-model") ?? DEFAULT_MODEL;
+      const agentMode = (localStorage.getItem("chat-agent-mode") as AgentMode | null) ?? DEFAULT_AGENT_MODE;
       set({
-        tabs: [{ id: newId, title: "Chat 1" }],
+        tabs: [{ id: newId, title: "Chat 1", model, agentMode }],
         activeTabId: newId,
+        model,
+        agentMode,
         abortControllers: newControllers,
       });
       return;
@@ -109,14 +127,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
       newActiveTabId = newTabs[newIndex].id;
     }
 
+    const switchToTab = newTabs.find((t) => t.id === newActiveTabId);
     set({
       tabs: newTabs,
       activeTabId: newActiveTabId,
+      model: switchToTab?.model ?? get().model,
+      agentMode: switchToTab?.agentMode ?? get().agentMode,
       abortControllers: newControllers,
     });
   },
 
-  setActiveTab: (tabId: string) => set({ activeTabId: tabId }),
+  setActiveTab: (tabId: string) => {
+    const tab = get().tabs.find((t) => t.id === tabId);
+    if (tab) {
+      set({ activeTabId: tabId, model: tab.model, agentMode: tab.agentMode });
+    }
+  },
 
   setTabTitle: (tabId: string, title: string) => {
     set((s) => ({

@@ -41,8 +41,8 @@ function TabBar() {
       onValueChange={(value) => setActiveTab(value as string)}
       className="shrink-0 gap-0"
     >
-      <div className="px-1 pt-1 pb-1 flex items-center overflow-x-auto">
-        <TabsList variant="pill" className="flex-1 w-0 [&>*]:flex-1">
+      <div className="px-1 pt-1 pb-1 flex items-center overflow-x-auto layers-scrollbar">
+        <TabsList variant="pill" className="shrink-0 [&>*]:min-w-[80px]">
           {tabs.map((tab: ChatTab) => (
             <TabsTrigger
               key={tab.id}

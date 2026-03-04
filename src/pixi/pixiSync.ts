@@ -24,6 +24,8 @@ interface RegistryEntry {
 
 const TEXT_RESOLUTION_SHARPNESS_BOOST = 1.35;
 const TEXT_RESOLUTION_MAX_MULTIPLIER = 16;
+const EMBED_RESOLUTION_STEP = 0.25;
+const MIN_EMBED_RESOLUTION = 0.25;
 
 type NodeLayoutOverride = {
   x?: number;
@@ -532,12 +534,20 @@ export function createPixiSync(sceneRoot: Container): () => void {
   }
 
   function applyEmbedResolution(resolution: number): void {
-    if (appliedEmbedResolution === resolution) return;
-    appliedEmbedResolution = resolution;
-    setEmbedResolution(resolution);
+    const normalizedResolution = Math.max(
+      MIN_EMBED_RESOLUTION,
+      Math.round(resolution / EMBED_RESOLUTION_STEP) * EMBED_RESOLUTION_STEP,
+    );
+    if (appliedEmbedResolution === normalizedResolution) return;
+    appliedEmbedResolution = normalizedResolution;
+    setEmbedResolution(normalizedResolution);
     for (const [, entry] of registry) {
       if (entry.node.type === "embed") {
-        updateEmbedResolution(entry.container, entry.node as import("@/types/scene").EmbedNode, resolution);
+        updateEmbedResolution(
+          entry.container,
+          entry.node as import("@/types/scene").EmbedNode,
+          normalizedResolution,
+        );
       }
     }
   }
@@ -877,7 +887,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
   function reconcileChildren(state: SceneState, prev: SceneState): void {
     // Reconcile root level
     if (state.rootIds !== prev.rootIds) {
-      reconcileChildList(state.rootIds, sceneRoot, "root");
+      reconcileChildList(state.rootIds, sceneRoot);
     }
 
     // Reconcile changed parent containers
@@ -893,7 +903,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
             reconcileChildList(
               state.childrenById[id],
               childrenHost as Container,
-              id,
             );
           }
         }
@@ -907,7 +916,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
   function reconcileChildList(
     expectedIds: string[],
     parent: Container,
-    _debugLabel: string,
   ): void {
     const expectedContainers = new Set<Container>();
     for (let i = 0; i < expectedIds.length; i++) {
