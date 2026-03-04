@@ -80,6 +80,14 @@ async function renderAndApply(container: Container, node: EmbedNode, resolution?
   if (renderRequestIdByContainer.get(container) !== nextRequestId) return;
 
   if (!texture) return;
+  if (
+    !Number.isFinite(texture.width) ||
+    !Number.isFinite(texture.height) ||
+    texture.width <= 0 ||
+    texture.height <= 0
+  ) {
+    return;
+  }
 
   // Hide placeholder once texture is ready
   const bg = container.getChildByLabel("embed-bg");

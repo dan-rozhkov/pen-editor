@@ -18,6 +18,23 @@ export function normalizeHtmlForEmbedRender(html: string): string {
   }
 }
 
+function isCanvasVisuallyEmpty(canvas: HTMLCanvasElement): boolean {
+  const sampleCanvas = document.createElement("canvas");
+  sampleCanvas.width = 16;
+  sampleCanvas.height = 16;
+  const sampleCtx = sampleCanvas.getContext("2d");
+  if (!sampleCtx) return false;
+
+  sampleCtx.clearRect(0, 0, sampleCanvas.width, sampleCanvas.height);
+  sampleCtx.drawImage(canvas, 0, 0, sampleCanvas.width, sampleCanvas.height);
+
+  const sample = sampleCtx.getImageData(0, 0, sampleCanvas.width, sampleCanvas.height).data;
+  for (let i = 3; i < sample.length; i += 4) {
+    if (sample[i] !== 0) return false;
+  }
+  return true;
+}
+
 export async function renderViaForeignObject(
   html: string,
   width: number,
@@ -53,6 +70,13 @@ export async function renderViaForeignObject(
     try {
       ctx.getImageData(0, 0, 1, 1);
     } catch {
+      return null;
+    }
+
+    // Browser foreignObject rasterization can sporadically return a transparent frame
+    // for valid HTML (especially under rapid rerenders). Treat it as a failed render
+    // so caller can use the deterministic DOM-walk fallback.
+    if (isCanvasVisuallyEmpty(canvas)) {
       return null;
     }
 
