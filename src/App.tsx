@@ -3,13 +3,19 @@ import { LeftSidebar } from "./components/LeftSidebar";
 import { RightSidebar } from "./components/RightSidebar";
 import { PrimitivesPanel } from "./components/PrimitivesPanel";
 import { ChatPanel } from "./components/chat/ChatPanel";
+import { ZoomIndicator, FpsDisplay } from "./components/canvas/CanvasOverlays";
 import { useUIVisibilityStore } from "./store/uiVisibilityStore";
+import { useViewportStore } from "./store/viewportStore";
+import { useSceneStore } from "./store/sceneStore";
 import "./store/uiThemeStore"; // Initialize UI theme (applies .dark class before first render)
 
 const PixiCanvas = lazy(() => import("./pixi/PixiCanvas").then((m) => ({ default: m.PixiCanvas })));
 
 function App() {
   const isUIHidden = useUIVisibilityStore((s) => s.isUIHidden);
+  const scale = useViewportStore((s) => s.scale);
+  const fitToContent = useViewportStore((s) => s.fitToContent);
+  const nodes = useSceneStore((s) => s.getNodes());
 
   return (
     <div className="w-full h-full relative overflow-hidden">
@@ -32,6 +38,12 @@ function App() {
             <div className="pointer-events-auto">
               <ChatPanel />
             </div>
+            {/* Canvas badges — positioned relative to the area between sidebars */}
+            <ZoomIndicator
+              scale={scale}
+              onFitToContent={() => fitToContent(nodes, window.innerWidth, window.innerHeight)}
+            />
+            <FpsDisplay />
           </div>
           <div className="pointer-events-auto">
             <RightSidebar />

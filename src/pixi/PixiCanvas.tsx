@@ -8,11 +8,9 @@ import type { EmbedNode, RefNode, TextNode } from "@/types/scene";
 import { useCanvasKeyboardShortcuts } from "@/components/canvas/useCanvasKeyboardShortcuts";
 import { useCanvasFileDrop } from "@/components/canvas/useCanvasFileDrop";
 import {
-  useFpsCounter,
   useCanvasResize,
   useAltKeyMeasurement,
 } from "@/hooks/useCanvasEffects";
-import { ZoomIndicator, FpsDisplay } from "@/components/canvas/CanvasOverlays";
 import { useClipboardStore } from "@/store/clipboardStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useHistoryStore } from "@/store/historyStore";
@@ -85,12 +83,10 @@ export function PixiCanvas() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const appRef = useRef<Application | null>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
-  const [fps, setFps] = useState<number | null>(null);
   const [, setIsSpacePressed] = useState(false);
   const [isMiddleMouseDown] = useState(false);
 
   // Store subscriptions for keyboard shortcuts and other React hooks
-  const scale = useViewportStore((s) => s.scale);
   const isPanning = useViewportStore((s) => s.isPanning);
   const setIsPanning = useViewportStore((s) => s.setIsPanning);
   const fitToContent = useViewportStore((s) => s.fitToContent);
@@ -426,7 +422,6 @@ export function PixiCanvas() {
   }, [setPixiRefs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useCanvasResize(containerRef, setDimensions);
-  useFpsCounter(setFps);
   useAltKeyMeasurement();
 
   return (
@@ -442,13 +437,6 @@ export function PixiCanvas() {
         position: "relative",
       }}
     >
-      <ZoomIndicator
-        scale={scale}
-        onFitToContent={() =>
-          fitToContent(nodes, dimensions.width, dimensions.height)
-        }
-      />
-      <FpsDisplay fps={fps} />
       {selectedEmbedNode && selectedEmbedPosition && editingMode !== "embed" && (
         <EmbedActionBar
           node={selectedEmbedNode}
