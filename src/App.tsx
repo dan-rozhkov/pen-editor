@@ -4,12 +4,14 @@ import { RightSidebar } from "./components/RightSidebar";
 import { PrimitivesPanel } from "./components/PrimitivesPanel";
 import { ChatPanel } from "./components/chat/ChatPanel";
 import { useUIVisibilityStore } from "./store/uiVisibilityStore";
+import { useFloatingPanelsStore } from "./store/floatingPanelsStore";
 import "./store/uiThemeStore"; // Initialize UI theme (applies .dark class before first render)
 
 const PixiCanvas = lazy(() => import("./pixi/PixiCanvas").then((m) => ({ default: m.PixiCanvas })));
 
 function App() {
   const isUIHidden = useUIVisibilityStore((s) => s.isUIHidden);
+  const isFloating = useFloatingPanelsStore((s) => s.isFloating);
 
   return (
     <div className="w-full h-full relative overflow-hidden">
@@ -22,10 +24,18 @@ function App() {
       {/* UI panels — overlay on top of canvas */}
       {!isUIHidden && (
         <div className="absolute inset-0 flex flex-row pointer-events-none">
-          <div className="pointer-events-auto">
+          {/* Left sidebar */}
+          <div
+            className={
+              isFloating
+                ? "pointer-events-auto absolute left-0 top-0 bottom-0 z-20"
+                : "pointer-events-auto"
+            }
+          >
             <LeftSidebar />
           </div>
-          <div className="flex-1 h-full relative">
+          {/* Center area */}
+          <div className={isFloating ? "flex-1 h-full relative" : "flex-1 h-full relative"}>
             <div className="pointer-events-auto">
               <PrimitivesPanel />
             </div>
@@ -33,7 +43,14 @@ function App() {
               <ChatPanel />
             </div>
           </div>
-          <div className="pointer-events-auto">
+          {/* Right sidebar */}
+          <div
+            className={
+              isFloating
+                ? "pointer-events-auto absolute right-0 top-0 bottom-0 z-20 shadow-xl"
+                : "pointer-events-auto"
+            }
+          >
             <RightSidebar />
           </div>
         </div>
