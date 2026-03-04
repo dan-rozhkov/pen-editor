@@ -34,7 +34,7 @@ function App() {
           <div
             className={
               isFloating
-                ? "pointer-events-auto absolute left-0 top-0 bottom-0 z-20"
+                ? "pointer-events-auto absolute left-5 top-5 z-20"
                 : "pointer-events-auto"
             }
           >
@@ -59,7 +59,7 @@ function App() {
           <div
             className={
               isFloating
-                ? "pointer-events-auto absolute right-0 top-0 bottom-0 z-20 shadow-xl"
+                ? "pointer-events-auto absolute right-5 top-5 bottom-5 z-20"
                 : "pointer-events-auto"
             }
           >

@@ -18,22 +18,17 @@ export function LeftSidebar() {
     <div
       className={
         isFloating
-          ? "h-full flex flex-col bg-surface-panel border-r border-border-default"
+          ? "flex flex-col bg-surface-panel rounded-2xl shadow-[0_0px_3px_rgba(0,0,0,0.04)] border border-border-default overflow-hidden"
           : "w-[240px] h-full flex flex-col bg-surface-panel border-r border-border-default"
       }
     >
-      <div className="flex flex-row items-center gap-0">
+      <div className={isFloating ? "flex flex-row items-center gap-1 px-2 py-0.5" : "flex flex-row items-center gap-0 pr-1 border-b border-border-default"}>
         <div className="flex-1 min-w-0">
           <Toolbar />
         </div>
         <button
           onClick={toggleFloating}
-          className={
-            "p-1.5 mr-1 rounded transition-colors " +
-            (isFloating
-              ? "text-accent-primary bg-accent-primary/10 hover:bg-accent-primary/20"
-              : "text-text-muted hover:text-text-default hover:bg-surface-hover")
-          }
+          className="p-1.5 rounded transition-colors text-text-muted hover:text-text-default hover:bg-surface-hover"
           title={isFloating ? "Dock panels" : "Float panels"}
           data-testid="sidebar-toggle"
         >
