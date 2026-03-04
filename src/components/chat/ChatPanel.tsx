@@ -82,17 +82,16 @@ function TabBar() {
 function PresetList({ onSelect }: { onSelect: (preset: ChatPreset) => void }) {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3 flex flex-col gap-2" data-testid="preset-list">
-      <p className="text-xs text-text-muted mb-1">Select a preset to fill the input:</p>
-      {CHAT_PRESETS.map((preset) => (
+{CHAT_PRESETS.map((preset) => (
         <button
           key={preset.id}
           data-testid={`preset-${preset.id}`}
           onClick={() => onSelect(preset)}
-          className="text-left px-3 py-2.5 rounded-lg border border-border-default hover:bg-surface-hover transition-colors"
+          className="text-left px-3 py-2.5 rounded-md border border-border-default hover:bg-muted"
         >
-          <span className="text-sm text-text-primary leading-snug block">{preset.message}</span>
-          <span className="text-xs text-text-muted mt-1 block">
-            {preset.mode} / {preset.label}
+          <span className="text-[13px] text-text-primary leading-snug block">{preset.message}</span>
+          <span className="text-xs text-text-muted mt-1 block capitalize">
+            {preset.mode} / {preset.model}
           </span>
         </button>
       ))}
@@ -206,7 +205,7 @@ export function ChatPanel() {
           <button
             data-testid="presets-toggle"
             onClick={() => setShowPresets((v) => !v)}
-            className={`p-1 rounded-lg hover:bg-surface-hover transition-colors ${showPresets ? "text-text-primary bg-surface-hover" : "text-text-muted"}`}
+            className={`p-1 rounded-lg hover:bg-muted ${showPresets ? "text-text-primary bg-muted" : "text-text-muted"}`}
             title={showPresets ? "Hide presets" : "Show presets"}
           >
             <LightningIcon size={16} />
@@ -221,7 +220,7 @@ export function ChatPanel() {
         </div>
 
         {/* Tab bar */}
-        <TabBar />
+        {!showPresets && <TabBar />}
 
         {/* Keep all sessions mounted so tab switch doesn't reset chat state */}
         {tabs.map((tab: ChatTab) => (
@@ -238,7 +237,7 @@ export function ChatPanel() {
         ))}
 
         {/* Model selector */}
-        <div className="px-3 pb-2 shrink-0 flex items-center gap-2">
+        {!showPresets && <div className="px-3 pb-2 shrink-0 flex items-center gap-2">
           <SelectWithOptions
             value={agentMode}
             options={MODE_OPTIONS}
@@ -253,7 +252,7 @@ export function ChatPanel() {
             size="sm"
             className="w-fit"
           />
-        </div>
+        </div>}
       </div>
     </div>
   );
