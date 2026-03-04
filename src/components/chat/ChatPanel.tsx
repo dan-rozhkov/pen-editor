@@ -1,5 +1,10 @@
 import { useState } from "react";
-import { XIcon, PlusIcon, TrashIcon, LightningIcon } from "@phosphor-icons/react";
+import {
+  XIcon,
+  PlusIcon,
+  TrashIcon,
+  LightningIcon,
+} from "@phosphor-icons/react";
 import { useChatStore } from "@/store/chatStore";
 import type { ChatTab } from "@/store/chatStore";
 import { useDesignChat } from "@/hooks/useDesignChat";
@@ -19,8 +24,13 @@ const MODEL_OPTIONS = [
   { value: "minimax/minimax-m2.5", label: "Minimax M2.5" },
   { value: "qwen/qwen3.5-397b-a17b", label: "Qwen 3.5 397B" },
   { value: "qwen/qwen3.5-plus-02-15", label: "Qwen 3.5 Plus" },
+  { value: "qwen/qwen3.5-flash-02-23", label: "Qwen 3.5 Flash" },
   { value: "google/gemini-3.1-pro-preview", label: "Gemini 3.1 Pro" },
   { value: "google/gemini-3-flash-preview", label: "Gemini 3 Flash" },
+  {
+    value: "google/gemini-3.1-flash-lite-preview",
+    label: "Gemini 3.1 Flash Lite",
+  },
 ];
 
 const MODE_OPTIONS = [
@@ -81,15 +91,20 @@ function TabBar() {
 
 function PresetList({ onSelect }: { onSelect: (preset: ChatPreset) => void }) {
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3 flex flex-col gap-2" data-testid="preset-list">
-{CHAT_PRESETS.map((preset) => (
+    <div
+      className="flex-1 min-h-0 overflow-y-auto px-3 py-3 flex flex-col gap-2"
+      data-testid="preset-list"
+    >
+      {CHAT_PRESETS.map((preset) => (
         <button
           key={preset.id}
           data-testid={`preset-${preset.id}`}
           onClick={() => onSelect(preset)}
           className="text-left px-3 py-2.5 rounded-md border border-border-default hover:bg-muted"
         >
-          <span className="text-[13px] text-text-primary leading-snug block">{preset.message}</span>
+          <span className="text-[13px] text-text-primary leading-snug block">
+            {preset.message}
+          </span>
           <span className="text-xs text-text-muted mt-1 block capitalize">
             {preset.mode} / {preset.model}
           </span>
@@ -226,7 +241,9 @@ export function ChatPanel() {
         {tabs.map((tab: ChatTab) => (
           <div
             key={tab.id}
-            className={tab.id === activeTabId ? "flex-1 min-h-0 flex flex-col" : "hidden"}
+            className={
+              tab.id === activeTabId ? "flex-1 min-h-0 flex flex-col" : "hidden"
+            }
           >
             <ChatSession
               sessionId={tab.id}
@@ -237,22 +254,26 @@ export function ChatPanel() {
         ))}
 
         {/* Model selector */}
-        {!showPresets && <div className="px-3 pb-2 shrink-0 flex items-center gap-2">
-          <SelectWithOptions
-            value={agentMode}
-            options={MODE_OPTIONS}
-            onValueChange={(value) => setAgentMode(value as "edits" | "fast")}
-            size="sm"
-            className="w-fit"
-          />
-          <SelectWithOptions
-            value={model}
-            options={MODEL_OPTIONS}
-            onValueChange={(value) => { if (value) setModel(value); }}
-            size="sm"
-            className="w-fit"
-          />
-        </div>}
+        {!showPresets && (
+          <div className="px-3 pb-2 shrink-0 flex items-center gap-2">
+            <SelectWithOptions
+              value={agentMode}
+              options={MODE_OPTIONS}
+              onValueChange={(value) => setAgentMode(value as "edits" | "fast")}
+              size="sm"
+              className="w-fit"
+            />
+            <SelectWithOptions
+              value={model}
+              options={MODEL_OPTIONS}
+              onValueChange={(value) => {
+                if (value) setModel(value);
+              }}
+              size="sm"
+              className="w-fit"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

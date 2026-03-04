@@ -185,7 +185,28 @@ function shapeToPathData(el: Element): string | null {
     const w = parseFloat(el.getAttribute("width") || "0");
     const h = parseFloat(el.getAttribute("height") || "0");
     if (w <= 0 || h <= 0) return null;
-    return `M${x},${y} L${x + w},${y} L${x + w},${y + h} L${x},${y + h} Z`;
+
+    // SVG semantics: if only one radius is provided, the other matches it.
+    const rawRx = el.getAttribute("rx");
+    const rawRy = el.getAttribute("ry");
+    let rx = rawRx !== null ? parseFloat(rawRx) : NaN;
+    let ry = rawRy !== null ? parseFloat(rawRy) : NaN;
+
+    const hasRx = Number.isFinite(rx);
+    const hasRy = Number.isFinite(ry);
+    if (hasRx && !hasRy) ry = rx;
+    if (!hasRx && hasRy) rx = ry;
+
+    rx = Number.isFinite(rx) ? Math.max(0, Math.min(rx, w / 2)) : 0;
+    ry = Number.isFinite(ry) ? Math.max(0, Math.min(ry, h / 2)) : 0;
+
+    if (rx <= 0 || ry <= 0) {
+      return `M${x},${y} L${x + w},${y} L${x + w},${y + h} L${x},${y + h} Z`;
+    }
+
+    const right = x + w;
+    const bottom = y + h;
+    return `M${x + rx},${y} H${right - rx} A${rx},${ry} 0 0 1 ${right},${y + ry} V${bottom - ry} A${rx},${ry} 0 0 1 ${right - rx},${bottom} H${x + rx} A${rx},${ry} 0 0 1 ${x},${bottom - ry} V${y + ry} A${rx},${ry} 0 0 1 ${x + rx},${y} Z`;
   }
 
   if (tag === "circle") {

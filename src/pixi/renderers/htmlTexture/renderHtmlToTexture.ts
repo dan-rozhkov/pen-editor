@@ -1,6 +1,7 @@
 import { Texture } from "pixi.js";
 import { hasBodyTargetedStyles, mountHtmlWithBodyStyles } from "@/utils/embedHtmlUtils";
 import { materializePseudoElements } from "@/utils/pseudoElementMaterializer";
+import { normalizeTinySvgDotPaths } from "@/utils/svgDotNormalization";
 import { ensureExternalFontStylesLoaded, waitForFontsUsedInTree } from "./fontLoading";
 import { normalizeHtmlForEmbedRender, renderViaForeignObject } from "./foreignObject";
 import { preloadRenderAssets } from "./svgAssets";
@@ -10,7 +11,7 @@ import { walkAndDraw } from "./canvasDrawing";
 const textureCache = new Map<string, Texture>();
 /** Dedup parallel renders for the same key */
 const pendingRenders = new Map<string, Promise<Texture | null>>();
-const HTML_TEXTURE_RENDER_VERSION = 8;
+const HTML_TEXTURE_RENDER_VERSION = 9;
 
 function makeCacheKey(html: string, width: number, height: number, resolution: number): string {
   return `v${HTML_TEXTURE_RENDER_VERSION}:${width}x${height}@${resolution}:${html}`;
@@ -113,6 +114,7 @@ async function doRender(
 
   try {
     materializePseudoElements(renderRoot);
+    normalizeTinySvgDotPaths(renderRoot);
 
     const canvas = document.createElement("canvas");
     canvas.width = pixelWidth;

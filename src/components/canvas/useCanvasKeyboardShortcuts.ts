@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { isContainerNode, type FrameNode, type RefNode, type SceneNode, type HistorySnapshot } from "@/types/scene";
 import { useDrawModeStore } from "@/store/drawModeStore";
+import { useUIVisibilityStore } from "@/store/uiVisibilityStore";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
@@ -218,6 +219,13 @@ export function useCanvasKeyboardShortcuts({
         if (nextSnapshot) {
           restoreSnapshot(nextSnapshot);
         }
+        return;
+      }
+
+      if ((e.metaKey || e.ctrlKey) && e.code === "Backslash") {
+        if (isTyping) return;
+        e.preventDefault();
+        useUIVisibilityStore.getState().toggleUI();
         return;
       }
 

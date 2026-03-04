@@ -5,6 +5,7 @@ import { useHistoryStore } from '../store/historyStore'
 import { useSelectionStore } from '../store/selectionStore'
 import { useViewportStore } from '../store/viewportStore'
 import { mountHtmlWithBodyStyles, type MountResult } from '../utils/embedHtmlUtils'
+import { normalizeTinySvgDotPathsWithOptions, stripTinySvgDotPathNormalization } from '../utils/svgDotNormalization'
 
 /** Tags that should never be made contenteditable */
 const SKIP_TAGS = new Set([
@@ -51,6 +52,7 @@ function stripEditableAttributes(container: HTMLElement): HTMLElement {
   clone.querySelectorAll('[contenteditable]').forEach((el) => {
     el.removeAttribute('contenteditable')
   })
+  stripTinySvgDotPathNormalization(clone)
   return clone
 }
 
@@ -176,6 +178,7 @@ export function InlineEmbedEditor({
     mountResultRef.current = mountResult
     const editableRoot = mountResult.root
     shadow.appendChild(container)
+    normalizeTinySvgDotPathsWithOptions(editableRoot, { markTemporary: true })
     containerRef.current = container
 
     // Make "text leaf" elements editable — elements that contain direct

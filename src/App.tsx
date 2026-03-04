@@ -3,24 +3,41 @@ import { LeftSidebar } from "./components/LeftSidebar";
 import { RightSidebar } from "./components/RightSidebar";
 import { PrimitivesPanel } from "./components/PrimitivesPanel";
 import { ChatPanel } from "./components/chat/ChatPanel";
+import { useUIVisibilityStore } from "./store/uiVisibilityStore";
 import "./store/uiThemeStore"; // Initialize UI theme (applies .dark class before first render)
 
 const PixiCanvas = lazy(() => import("./pixi/PixiCanvas").then((m) => ({ default: m.PixiCanvas })));
 
 function App() {
+  const isUIHidden = useUIVisibilityStore((s) => s.isUIHidden);
+
   return (
-    <div className="w-full h-full flex flex-col">
-      <div className="flex-1 flex flex-row overflow-hidden">
-        <LeftSidebar />
-        <div className="flex-1 h-full overflow-hidden relative">
-          <Suspense fallback={null}>
-            <PixiCanvas />
-          </Suspense>
-          <PrimitivesPanel />
-          <ChatPanel />
-        </div>
-        <RightSidebar />
+    <div className="w-full h-full relative overflow-hidden">
+      {/* Canvas — always full window, behind everything */}
+      <div className="absolute inset-0">
+        <Suspense fallback={null}>
+          <PixiCanvas />
+        </Suspense>
       </div>
+      {/* UI panels — overlay on top of canvas */}
+      {!isUIHidden && (
+        <div className="absolute inset-0 flex flex-row pointer-events-none">
+          <div className="pointer-events-auto">
+            <LeftSidebar />
+          </div>
+          <div className="flex-1 h-full relative">
+            <div className="pointer-events-auto">
+              <PrimitivesPanel />
+            </div>
+            <div className="pointer-events-auto">
+              <ChatPanel />
+            </div>
+          </div>
+          <div className="pointer-events-auto">
+            <RightSidebar />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
