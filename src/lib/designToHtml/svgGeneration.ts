@@ -10,7 +10,7 @@ export function pathNodeToSvg(node: PathNode): string {
 
   let strokeAttr = "";
   if (node.pathStroke?.fill) {
-    const strokeColor = node.pathStroke.fill;
+    const strokeColor = applyOpacity(node.pathStroke.fill, node.strokeOpacity);
     const strokeWidth = node.pathStroke.thickness ?? 1;
     const strokeJoin = node.pathStroke.join ?? "miter";
     const strokeCap = node.pathStroke.cap ?? "butt";

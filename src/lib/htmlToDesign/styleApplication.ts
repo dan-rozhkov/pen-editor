@@ -60,14 +60,19 @@ export function applyBaseProps(
     !!borderLeftColor?.color;
 
   if (hasTop || hasRight || hasBottom || hasLeft) {
-    const strokeColor =
-      borderTopColor?.color ?? borderRightColor?.color ?? borderBottomColor?.color ?? borderLeftColor?.color;
-    const strokeOpacity =
-      borderTopColor?.opacity ?? borderRightColor?.opacity ?? borderBottomColor?.opacity ?? borderLeftColor?.opacity;
+    const activeBorderColors = [
+      hasTop ? borderTopColor : null,
+      hasRight ? borderRightColor : null,
+      hasBottom ? borderBottomColor : null,
+      hasLeft ? borderLeftColor : null,
+    ].filter((color): color is NonNullable<typeof color> => !!color?.color);
+    const firstActiveBorderColor = activeBorderColors[0];
 
-    if (strokeColor) {
-      node.stroke = strokeColor;
-      if (strokeOpacity !== undefined) node.strokeOpacity = strokeOpacity;
+    if (firstActiveBorderColor) {
+      node.stroke = firstActiveBorderColor.color;
+      if (firstActiveBorderColor.opacity !== undefined) {
+        node.strokeOpacity = firstActiveBorderColor.opacity;
+      }
     }
 
     const isUniformStroke =

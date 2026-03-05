@@ -365,9 +365,9 @@ function collectPaths(
     if (resolvedFillRule === "evenodd" || resolvedFillRule === "nonzero") {
       node.fillRule = resolvedFillRule;
     }
-    if (resolvedOpacity) node.opacity = parseFloat(resolvedOpacity);
-    if (resolvedFillOpacity) node.fillOpacity = parseFloat(resolvedFillOpacity);
-    if (resolvedStrokeOpacity) node.strokeOpacity = parseFloat(resolvedStrokeOpacity);
+    if (resolvedOpacity != null) node.opacity = parseFloat(resolvedOpacity);
+    if (resolvedFillOpacity != null) node.fillOpacity = parseFloat(resolvedFillOpacity);
+    if (resolvedStrokeOpacity != null) node.strokeOpacity = parseFloat(resolvedStrokeOpacity);
 
     if (resolvedStroke) {
       node.pathStroke = {
