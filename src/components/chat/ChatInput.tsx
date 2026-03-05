@@ -1,10 +1,12 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import {
   PaperPlaneRightIcon,
   StopIcon,
   ImageIcon,
   XIcon,
 } from "@phosphor-icons/react";
+import { SlashCommandMenu } from "./SlashCommandMenu";
+import type { SlashCommand } from "./slashCommands";
 
 export interface AttachedImage {
   dataUrl: string;
@@ -49,6 +51,30 @@ export function ChatInput({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [showSlashMenu, setShowSlashMenu] = useState(false);
+
+  // Extract slash query from input (e.g. "/aud" -> "aud", "/" -> "")
+  const slashQuery = useMemo(() => {
+    const match = input.match(/^\/(\S*)$/);
+    return match ? match[1] : null;
+  }, [input]);
+
+  useEffect(() => {
+    setShowSlashMenu(slashQuery !== null);
+  }, [slashQuery]);
+
+  const handleSlashSelect = useCallback(
+    (cmd: SlashCommand) => {
+      setInput(`/${cmd.name} `);
+      setShowSlashMenu(false);
+      textareaRef.current?.focus();
+    },
+    [setInput]
+  );
+
+  const handleSlashClose = useCallback(() => {
+    setShowSlashMenu(false);
+  }, []);
 
   const resize = useCallback(() => {
     const ta = textareaRef.current;
@@ -159,8 +185,16 @@ export function ChatInput({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`border-t border-border-default px-3 py-2 ${isDragOver ? "bg-surface-hover" : ""}`}
+      className={`relative border-t border-border-default px-3 py-2 ${isDragOver ? "bg-surface-hover" : ""}`}
     >
+      {showSlashMenu && slashQuery !== null && (
+        <SlashCommandMenu
+          query={slashQuery}
+          onSelect={handleSlashSelect}
+          onClose={handleSlashClose}
+        />
+      )}
+
       {/* Image previews */}
       {attachedImages.length > 0 && (
         <div className="flex gap-2 mb-2 flex-wrap">
