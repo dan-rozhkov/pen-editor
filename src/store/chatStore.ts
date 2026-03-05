@@ -7,7 +7,7 @@ export interface ChatTab {
   agentMode: AgentMode;
 }
 
-export type AgentMode = "edits" | "fast" | "research";
+export type AgentMode = "edits" | "prototype" | "research";
 
 interface ChatState {
   isOpen: boolean;
@@ -36,6 +36,14 @@ interface ChatState {
 const DEFAULT_MODEL = "moonshotai/kimi-k2.5";
 const DEFAULT_AGENT_MODE: AgentMode = "edits";
 
+function normalizeAgentMode(mode: string | null): AgentMode {
+  if (mode === "prototype") return mode;
+  if (mode === "edits") return mode;
+  if (mode === "research") return mode;
+  if (mode === "fast") return "prototype";
+  return DEFAULT_AGENT_MODE;
+}
+
 let nextTabCounter = 1;
 
 function generateTabId(): string {
@@ -47,10 +55,8 @@ const initialTabId = generateTabId();
 export const useChatStore = create<ChatState>((set, get) => ({
   isOpen: false,
   model: localStorage.getItem("chat-model") ?? DEFAULT_MODEL,
-  agentMode:
-    (localStorage.getItem("chat-agent-mode") as AgentMode | null) ??
-    DEFAULT_AGENT_MODE,
-  tabs: [{ id: initialTabId, title: "Chat 1", model: localStorage.getItem("chat-model") ?? DEFAULT_MODEL, agentMode: (localStorage.getItem("chat-agent-mode") as AgentMode | null) ?? DEFAULT_AGENT_MODE }],
+  agentMode: normalizeAgentMode(localStorage.getItem("chat-agent-mode")),
+  tabs: [{ id: initialTabId, title: "Chat 1", model: localStorage.getItem("chat-model") ?? DEFAULT_MODEL, agentMode: normalizeAgentMode(localStorage.getItem("chat-agent-mode")) }],
   activeTabId: initialTabId,
   abortControllers: {},
 
@@ -79,7 +85,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { tabs } = get();
     const title = `Chat ${tabs.length + 1}`;
     const model = localStorage.getItem("chat-model") ?? DEFAULT_MODEL;
-    const agentMode = (localStorage.getItem("chat-agent-mode") as AgentMode | null) ?? DEFAULT_AGENT_MODE;
+    const agentMode = normalizeAgentMode(localStorage.getItem("chat-agent-mode"));
     set({
       tabs: [...tabs, { id, title, model, agentMode }],
       activeTabId: id,
@@ -104,7 +110,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const newControllers = { ...abortControllers };
       delete newControllers[tabId];
       const model = localStorage.getItem("chat-model") ?? DEFAULT_MODEL;
-      const agentMode = (localStorage.getItem("chat-agent-mode") as AgentMode | null) ?? DEFAULT_AGENT_MODE;
+      const agentMode = normalizeAgentMode(localStorage.getItem("chat-agent-mode"));
       set({
         tabs: [{ id: newId, title: "Chat 1", model, agentMode }],
         activeTabId: newId,

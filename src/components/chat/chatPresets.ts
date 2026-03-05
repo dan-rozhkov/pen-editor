@@ -14,7 +14,7 @@ export const CHAT_PRESETS: ChatPreset[] = [
     label: "Implement desktop screen from screenshot",
     message:
       "Реализуй экран для [десктопа/мобильного приложения] как на скриншоте",
-    mode: "fast",
+    mode: "prototype",
     model: "google/gemini-3-flash-preview",
   },
   {
@@ -29,7 +29,7 @@ export const CHAT_PRESETS: ChatPreset[] = [
     label: "Copy embed with bitcoin trading content",
     message:
       "Скопируй выбранный embed и замени контент на [напишите текст здесь]. Сохрани стили, цвета, отступы и шрифты",
-    mode: "fast",
+    mode: "prototype",
     model: "google/gemini-3-flash-preview",
   },
   {

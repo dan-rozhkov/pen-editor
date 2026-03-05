@@ -36,7 +36,7 @@ const MODEL_OPTIONS = [
 
 const MODE_OPTIONS = [
   { value: "edits", label: "Edits" },
-  { value: "fast", label: "Fast" },
+  { value: "prototype", label: "Prototype" },
   { value: "research", label: "Research" },
 ];
 
