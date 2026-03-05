@@ -81,7 +81,7 @@ export function PrimitivesPanel() {
 
   return (
     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50">
-      <div className="flex items-center gap-1 p-2 bg-surface-panel/95 backdrop-blur-sm border border-border-default rounded-2xl shadow-[0_0px_3px_rgba(0,0,0,0.04)]">
+      <div className="flex items-center gap-1 p-2 bg-surface-panel border border-border-default rounded-2xl shadow-[0_0px_3px_rgba(0,0,0,0.04)]">
         {leadingTools.map(({ icon: Icon, label, tool, shortcut }) => {
           const isActive =
             tool === "cursor" ? activeTool === null : activeTool === tool;

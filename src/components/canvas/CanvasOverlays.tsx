@@ -1,15 +1,19 @@
 import { useState } from "react";
 import { useFpsCounter } from "@/hooks/useCanvasEffects";
+import { useViewportStore } from "@/store/viewportStore";
+import { useSceneStore } from "@/store/sceneStore";
 
-interface ZoomIndicatorProps {
-  scale: number;
-  onFitToContent: () => void;
-}
+export function ZoomIndicator() {
+  const scale = useViewportStore((s) => s.scale);
+  const fitToContent = useViewportStore((s) => s.fitToContent);
+  const handleFitToContent = () => {
+    const nodes = useSceneStore.getState().getNodes();
+    fitToContent(nodes, window.innerWidth, window.innerHeight);
+  };
 
-export function ZoomIndicator({ scale, onFitToContent }: ZoomIndicatorProps) {
   return (
     <div
-      onClick={onFitToContent}
+      onClick={handleFitToContent}
       className="absolute bottom-3 left-3 z-10 cursor-pointer select-none rounded bg-surface-panel/90 px-2 py-1 text-xs text-text-muted pointer-events-auto"
       title="Click to fit all (Cmd/Ctrl+0)"
     >

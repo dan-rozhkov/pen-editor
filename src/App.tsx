@@ -5,8 +5,6 @@ import { PrimitivesPanel } from "./components/PrimitivesPanel";
 import { ChatPanel } from "./components/chat/ChatPanel";
 import { ZoomIndicator, FpsDisplay } from "./components/canvas/CanvasOverlays";
 import { useUIVisibilityStore } from "./store/uiVisibilityStore";
-import { useViewportStore } from "./store/viewportStore";
-import { useSceneStore } from "./store/sceneStore";
 import { useFloatingPanelsStore } from "./store/floatingPanelsStore";
 import "./store/uiThemeStore"; // Initialize UI theme (applies .dark class before first render)
 
@@ -14,9 +12,6 @@ const PixiCanvas = lazy(() => import("./pixi/PixiCanvas").then((m) => ({ default
 
 function App() {
   const isUIHidden = useUIVisibilityStore((s) => s.isUIHidden);
-  const scale = useViewportStore((s) => s.scale);
-  const fitToContent = useViewportStore((s) => s.fitToContent);
-  const nodes = useSceneStore((s) => s.getNodes());
   const isFloating = useFloatingPanelsStore((s) => s.isFloating);
 
   return (
@@ -49,10 +44,7 @@ function App() {
               <ChatPanel />
             </div>
             {/* Canvas badges — positioned relative to the area between sidebars */}
-            <ZoomIndicator
-              scale={scale}
-              onFitToContent={() => fitToContent(nodes, window.innerWidth, window.innerHeight)}
-            />
+            <ZoomIndicator />
             <FpsDisplay />
           </div>
           {/* Right sidebar */}
