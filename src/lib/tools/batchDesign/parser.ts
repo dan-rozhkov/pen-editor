@@ -9,14 +9,14 @@ const MAX_OPERATIONS = 25;
  * Each line is: [binding=]OP(arg1, arg2, ...)
  */
 export function parseOperations(input: string): ParsedOperation[] {
-  const lines = input.split("\n");
+  const lines = splitOperationLines(input);
   const operations: ParsedOperation[] = [];
 
   for (let i = 0; i < lines.length; i++) {
-    const raw = lines[i].trim();
+    const raw = lines[i].text.trim();
     if (!raw || raw.startsWith("//") || raw.startsWith("#")) continue;
 
-    const parsed = parseLine(raw, i + 1);
+    const parsed = parseLine(raw, lines[i].line);
     operations.push(parsed);
   }
 
@@ -30,6 +30,76 @@ export function parseOperations(input: string): ParsedOperation[] {
   }
 
   return operations;
+}
+
+function splitOperationLines(input: string): Array<{ text: string; line: number }> {
+  const parts: Array<{ text: string; line: number }> = [];
+  let current = "";
+  let currentStartLine = 1;
+  let line = 1;
+
+  let parenDepth = 0;
+  let braceDepth = 0;
+  let bracketDepth = 0;
+  let escaped = false;
+  let stringDelimiter: '"' | "'" | "`" | null = null;
+
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    current += ch;
+
+    if (ch === "\n") {
+      line++;
+    }
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    if (stringDelimiter) {
+      if (ch === stringDelimiter) {
+        stringDelimiter = null;
+      }
+      continue;
+    }
+
+    if (ch === '"' || ch === "'" || ch === "`") {
+      stringDelimiter = ch;
+      continue;
+    }
+
+    if (ch === "(") parenDepth++;
+    else if (ch === ")") parenDepth--;
+    else if (ch === "{") braceDepth++;
+    else if (ch === "}") braceDepth--;
+    else if (ch === "[") bracketDepth++;
+    else if (ch === "]") bracketDepth--;
+
+    // New statement boundary only at top level
+    if (
+      ch === "\n" &&
+      parenDepth === 0 &&
+      braceDepth === 0 &&
+      bracketDepth === 0 &&
+      current.trim()
+    ) {
+      parts.push({ text: current, line: currentStartLine });
+      current = "";
+      currentStartLine = line;
+    }
+  }
+
+  if (current.trim()) {
+    parts.push({ text: current, line: currentStartLine });
+  }
+
+  return parts;
 }
 
 function parseLine(raw: string, lineNum: number): ParsedOperation {
@@ -71,7 +141,7 @@ function extractBalancedArgs(str: string, lineNum: number): string {
   let depth = 1; // we already consumed the opening paren
   let braceDepth = 0;
   let bracketDepth = 0;
-  let inString = false;
+  let stringDelimiter: '"' | "'" | "`" | null = null;
   let escaped = false;
 
   for (let i = 0; i < str.length; i++) {
@@ -87,12 +157,17 @@ function extractBalancedArgs(str: string, lineNum: number): string {
       continue;
     }
 
-    if (ch === '"') {
-      inString = !inString;
+    if (stringDelimiter) {
+      if (ch === stringDelimiter) {
+        stringDelimiter = null;
+      }
       continue;
     }
 
-    if (inString) continue;
+    if (ch === '"' || ch === "'" || ch === "`") {
+      stringDelimiter = ch;
+      continue;
+    }
 
     if (ch === "{") braceDepth++;
     else if (ch === "}") braceDepth--;
@@ -119,7 +194,7 @@ function tokenizeArgs(argsStr: string, lineNum: number): ParsedArg[] {
   const tokens: string[] = [];
   let braceDepth = 0;
   let bracketDepth = 0;
-  let inString = false;
+  let stringDelimiter: '"' | "'" | "`" | null = null;
   let escaped = false;
   let current = "";
 
@@ -138,13 +213,16 @@ function tokenizeArgs(argsStr: string, lineNum: number): ParsedArg[] {
       continue;
     }
 
-    if (ch === '"') {
-      inString = !inString;
+    if (stringDelimiter) {
+      if (ch === stringDelimiter) {
+        stringDelimiter = null;
+      }
       current += ch;
       continue;
     }
 
-    if (inString) {
+    if (ch === '"' || ch === "'" || ch === "`") {
+      stringDelimiter = ch;
       current += ch;
       continue;
     }
@@ -183,7 +261,7 @@ function classifyToken(token: string, lineNum: number): ParsedArg {
     (token.startsWith("'") && token.endsWith("'"))
   ) {
     try {
-      const decoded = JSON5.parse(token);
+      const decoded = JSON5.parse(escapeRawNewlinesInStrings(token));
       if (typeof decoded === "string") {
         return { kind: "string", value: decodeHtmlEntities(decoded) };
       }
@@ -239,11 +317,63 @@ function classifyToken(token: string, lineNum: number): ParsedArg {
 }
 
 function parseJsonLike(token: string): unknown {
+  const normalized = escapeRawNewlinesInStrings(token);
+
   try {
-    return JSON.parse(token);
+    return JSON.parse(normalized);
   } catch {
-    return JSON5.parse(token);
+    return JSON5.parse(normalized);
   }
+}
+
+function escapeRawNewlinesInStrings(input: string): string {
+  let result = "";
+  let escaped = false;
+  let stringDelimiter: '"' | "'" | "`" | null = null;
+
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+
+    if (escaped) {
+      result += ch;
+      escaped = false;
+      continue;
+    }
+
+    if (ch === "\\") {
+      result += ch;
+      escaped = true;
+      continue;
+    }
+
+    if (stringDelimiter) {
+      if (ch === stringDelimiter) {
+        result += ch;
+        stringDelimiter = null;
+        continue;
+      }
+      if (ch === "\n") {
+        result += "\\n";
+        continue;
+      }
+      if (ch === "\r") {
+        result += "\\r";
+        continue;
+      }
+      result += ch;
+      continue;
+    }
+
+    if (ch === '"' || ch === "'" || ch === "`") {
+      stringDelimiter = ch;
+      result += ch;
+      continue;
+    }
+
+    result += ch;
+  }
+
+  return result;
 }
 
 function decodeHtmlEntities(input: string): string {

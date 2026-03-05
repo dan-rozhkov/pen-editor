@@ -18,6 +18,7 @@ import { CHAT_PRESETS } from "./chatPresets";
 import type { ChatPreset } from "./chatPresets";
 
 const MODEL_OPTIONS = [
+  { value: "openai/gpt-5.4", label: "GPT-5.4" },
   { value: "moonshotai/kimi-k2.5", label: "Kimi K2.5" },
   { value: "anthropic/claude-opus-4.6", label: "Claude Opus 4.6" },
   { value: "anthropic/claude-sonnet-4.6", label: "Claude Sonnet 4.6" },

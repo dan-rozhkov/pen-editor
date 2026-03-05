@@ -33,8 +33,8 @@ interface ChatState {
   unregisterAbortController: (tabId: string) => void;
 }
 
-const DEFAULT_MODEL = "moonshotai/kimi-k2.5";
-const DEFAULT_AGENT_MODE: AgentMode = "edits";
+const DEFAULT_MODEL = "google/gemini-3-flash-preview";
+const DEFAULT_AGENT_MODE: AgentMode = "prototype";
 
 function normalizeAgentMode(mode: string | null): AgentMode {
   if (mode === "prototype") return mode;
