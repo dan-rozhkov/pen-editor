@@ -7,7 +7,7 @@ import { useUIThemeStore } from "../store/uiThemeStore";
 import { usePixelGridStore } from "../store/pixelGridStore";
 import { useViewportStore } from "../store/viewportStore";
 
-import { downloadDocument, openFilePicker } from "../utils/fileUtils";
+import { downloadDocument, downloadPublicPen, openFilePicker } from "../utils/fileUtils";
 import { applyOpenedDocument } from "../utils/openDocumentIntoEditor";
 import { parsePixsoJson } from "../utils/pixsoImportUtils";
 import { Button } from "./ui/button";
@@ -47,6 +47,10 @@ export function Toolbar() {
 
   const handleSave = () => {
     downloadDocument(nodes, variables, activeTheme);
+  };
+
+  const handleExportPublicPen = () => {
+    downloadPublicPen(nodes, variables, activeTheme);
   };
 
   const handleOpen = async () => {
@@ -110,17 +114,34 @@ export function Toolbar() {
           <DropdownMenuItem onClick={handleOpen}>
             Open
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleSave}>
-            Save
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => {
-              setImportOpen(true);
-              setError(null);
-            }}
-          >
-            Import JSON
-          </DropdownMenuItem>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              Export
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuItem onClick={handleSave}>
+                Export as .json
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportPublicPen}>
+                Export as .pen
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              Import
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuItem
+                onClick={() => {
+                  setImportOpen(true);
+                  setError(null);
+                }}
+              >
+                Import from Pixso
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
           <DropdownMenuSeparator />
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>

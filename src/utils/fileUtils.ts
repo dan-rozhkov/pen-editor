@@ -1,6 +1,7 @@
 import type { SceneNode } from '../types/scene'
 import type { Variable, ThemeName } from '../types/variable'
 import { ensureThemeValues } from '../types/variable'
+import { serializePublicPenDocument } from "@/utils/publicPenExport";
 
 export interface PenDocument {
   version: string
@@ -49,7 +50,21 @@ export function downloadDocument(
   filename = 'document.json'
 ) {
   const json = serializeDocument(nodes, variables, activeTheme)
-  const blob = new Blob([json], { type: 'application/json' })
+  downloadTextFile(json, filename)
+}
+
+export function downloadPublicPen(
+  nodes: SceneNode[],
+  variables: Variable[],
+  activeTheme: ThemeName,
+  filename = "document.pen"
+) {
+  const json = serializePublicPenDocument(nodes, variables, activeTheme)
+  downloadTextFile(json, filename)
+}
+
+function downloadTextFile(text: string, filename: string) {
+  const blob = new Blob([text], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
 
   const a = document.createElement('a')
