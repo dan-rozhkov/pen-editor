@@ -7,7 +7,7 @@ export interface ChatTab {
   agentMode: AgentMode;
 }
 
-export type AgentMode = "edits" | "fast";
+export type AgentMode = "edits" | "fast" | "research";
 
 interface ChatState {
   isOpen: boolean;

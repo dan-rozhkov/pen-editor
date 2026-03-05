@@ -7,7 +7,7 @@ import {
 } from "@phosphor-icons/react";
 import { useChatStore } from "@/store/chatStore";
 import { useFloatingPanelsStore } from "@/store/floatingPanelsStore";
-import type { ChatTab } from "@/store/chatStore";
+import type { AgentMode, ChatTab } from "@/store/chatStore";
 import { useDesignChat } from "@/hooks/useDesignChat";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
@@ -37,6 +37,7 @@ const MODEL_OPTIONS = [
 const MODE_OPTIONS = [
   { value: "edits", label: "Edits" },
   { value: "fast", label: "Fast" },
+  { value: "research", label: "Research" },
 ];
 
 function TabBar() {
@@ -264,7 +265,7 @@ export function ChatPanel() {
             <SelectWithOptions
               value={agentMode}
               options={MODE_OPTIONS}
-              onValueChange={(value) => setAgentMode(value as "edits" | "fast")}
+              onValueChange={(value) => setAgentMode(value as AgentMode)}
               size="sm"
               className="w-fit"
             />

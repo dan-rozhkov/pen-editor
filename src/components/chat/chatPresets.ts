@@ -32,4 +32,11 @@ export const CHAT_PRESETS: ChatPreset[] = [
     mode: "fast",
     model: "google/gemini-3-flash-preview",
   },
+  {
+    id: "research-pricing",
+    label: "Research pricing page design patterns",
+    message: "Research pricing page design patterns and find reference screens",
+    mode: "research",
+    model: "moonshotai/kimi-k2.5",
+  },
 ];

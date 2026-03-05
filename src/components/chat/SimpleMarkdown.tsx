@@ -99,6 +99,8 @@ function renderLines(text: string): React.ReactNode[] {
 
   while (i < lines.length) {
     const line = lines[i];
+    const headingMatch = line.match(/^(#{1,6})\s+(.+)/);
+    const hrMatch = line.match(/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/);
     const ulMatch = line.match(/^[-*]\s+(.+)/);
     const olMatch = line.match(/^\d+\.\s+(.+)/);
     const isTableStart =
@@ -106,7 +108,34 @@ function renderLines(text: string): React.ReactNode[] {
       i + 1 < lines.length &&
       isTableSeparatorLine(lines[i + 1]);
 
-    if (isTableStart) {
+    if (headingMatch) {
+      const level = Math.min(headingMatch[1].length, 6);
+      const textContent = headingMatch[2];
+      const classesByLevel: Record<number, string> = {
+        1: "m-0 mt-1.5 mb-1 text-[18px] leading-tight font-semibold",
+        2: "m-0 mt-1.5 mb-1 text-[16px] leading-tight font-semibold",
+        3: "m-0 mt-1 mb-0.5 text-[14px] leading-snug font-semibold",
+        4: "m-0 mt-1 mb-0.5 text-[13px] leading-snug font-semibold",
+        5: "m-0 mt-1 mb-0.5 text-[12px] leading-snug font-semibold uppercase tracking-wide text-text-secondary",
+        6: "m-0 mt-1 mb-0.5 text-[12px] leading-snug font-semibold uppercase tracking-wide text-text-secondary",
+      };
+
+      const Tag = `h${Math.min(level, 6)}` as keyof JSX.IntrinsicElements;
+      nodes.push(
+        <Tag key={key++} className={classesByLevel[level] ?? classesByLevel[4]}>
+          {renderInline(textContent)}
+        </Tag>
+      );
+      i++;
+    } else if (hrMatch) {
+      nodes.push(
+        <hr
+          key={key++}
+          className="my-2 border-0 border-t border-border-default/80"
+        />
+      );
+      i++;
+    } else if (isTableStart) {
       const header = parseTableRow(line);
       i += 2; // skip header + separator
       const rows: string[][] = [];

@@ -1,19 +1,28 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { UIMessage } from "ai";
+import { ImageBrokenIcon } from "@phosphor-icons/react";
 import { SimpleMarkdown } from "./SimpleMarkdown";
 import { ToolCallIndicator, isToolUIPart } from "./ToolCallIndicator";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 
 export function ImagePreview({ url, alt }: { url: string; alt?: string }) {
   const [expanded, setExpanded] = useState(false);
+  const [failed, setFailed] = useState(false);
   return (
     <>
-      <img
-        src={url}
-        alt={alt ?? "attached image"}
-        onClick={() => setExpanded(true)}
-        className="max-w-[120px] max-h-[120px] rounded-md cursor-pointer hover:opacity-80 transition-opacity object-cover"
-      />
+      {failed ? (
+        <div className="w-[60px] h-[120px] rounded-md bg-surface-panel text-text-muted flex items-center justify-center">
+          <ImageBrokenIcon size={18} />
+        </div>
+      ) : (
+        <img
+          src={url}
+          alt={alt ?? "attached image"}
+          onClick={() => setExpanded(true)}
+          onError={() => setFailed(true)}
+          className="max-w-[120px] max-h-[120px] rounded-md cursor-pointer hover:opacity-80 transition-opacity object-cover"
+        />
+      )}
       {expanded && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
@@ -22,6 +31,7 @@ export function ImagePreview({ url, alt }: { url: string; alt?: string }) {
           <img
             src={url}
             alt={alt ?? "attached image"}
+            onError={() => setExpanded(false)}
             className="max-w-[90vw] max-h-[90vh] rounded-lg"
           />
         </div>

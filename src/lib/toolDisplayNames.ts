@@ -13,6 +13,20 @@ const toolDisplayNames: Record<string, string> = {
   get_guidelines: "Get Guidelines",
   get_style_guide_tags: "Get Style Guide Tags",
   get_style_guide: "Get Style Guide",
+  search_screens: "Search Screens",
+  get_screen: "Get Screen",
+  search_flows: "Search Flows",
+  get_flow: "Get Flow",
+  get_design_guidance: "Design Guidance",
+  refero_search_screens: "Search Screens",
+  refero_get_screen: "Get Screen",
+  refero_search_flows: "Search Flows",
+  refero_get_flow: "Get Flow",
+  mcp_refero_search_screens: "Search Screens",
+  mcp_refero_get_screen: "Get Screen",
+  mcp_refero_search_flows: "Search Flows",
+  mcp_refero_get_flow: "Get Flow",
+  mcp_refero_get_design_guidance: "Design Guidance",
 };
 
 export function getToolDisplayName(toolName: string): string {
