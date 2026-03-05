@@ -105,10 +105,26 @@ async function loadSvgTextAsImage(svgText: string): Promise<HTMLImageElement | n
   }
 }
 
+function isImageVisuallyEmpty(image: HTMLImageElement): boolean {
+  const sampleCanvas = document.createElement("canvas");
+  sampleCanvas.width = 16;
+  sampleCanvas.height = 16;
+  const sampleCtx = sampleCanvas.getContext("2d");
+  if (!sampleCtx) return false;
+
+  sampleCtx.clearRect(0, 0, sampleCanvas.width, sampleCanvas.height);
+  sampleCtx.drawImage(image, 0, 0, sampleCanvas.width, sampleCanvas.height);
+  const sample = sampleCtx.getImageData(0, 0, sampleCanvas.width, sampleCanvas.height).data;
+  for (let i = 3; i < sample.length; i += 4) {
+    if (sample[i] !== 0) return false;
+  }
+  return true;
+}
+
 async function loadInlineSvgAsImage(svg: SVGSVGElement, styleTexts: string[]): Promise<HTMLImageElement | null> {
   const rich = serializeSvgWithInlineComputedStyles(svg, styleTexts);
   const richImage = await loadSvgTextAsImage(rich);
-  if (richImage) return richImage;
+  if (richImage && !isImageVisuallyEmpty(richImage)) return richImage;
 
   // Fallback for browsers that fail with verbose computed-style serialization.
   const basic = serializeSvgBasic(svg, styleTexts);

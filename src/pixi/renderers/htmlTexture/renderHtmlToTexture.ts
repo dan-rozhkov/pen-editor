@@ -11,7 +11,7 @@ import { walkAndDraw } from "./canvasDrawing";
 const textureCache = new Map<string, Texture>();
 /** Dedup parallel renders for the same key */
 const pendingRenders = new Map<string, Promise<Texture | null>>();
-const HTML_TEXTURE_RENDER_VERSION = 9;
+const HTML_TEXTURE_RENDER_VERSION = 10;
 
 function makeCacheKey(html: string, width: number, height: number, resolution: number): string {
   return `v${HTML_TEXTURE_RENDER_VERSION}:${width}x${height}@${resolution}:${html}`;

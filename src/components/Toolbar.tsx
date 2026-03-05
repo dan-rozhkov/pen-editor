@@ -6,7 +6,6 @@ import { useThemeStore } from "../store/themeStore";
 import { useUIThemeStore } from "../store/uiThemeStore";
 import { usePixelGridStore } from "../store/pixelGridStore";
 import { useViewportStore } from "../store/viewportStore";
-import { useFloatingPanelsStore } from "../store/floatingPanelsStore";
 
 import { downloadDocument, openFilePicker } from "../utils/fileUtils";
 import { applyOpenedDocument } from "../utils/openDocumentIntoEditor";
@@ -97,8 +96,6 @@ export function Toolbar() {
       setError(err instanceof Error ? err.message : "Invalid JSON");
     }
   };
-
-  const isFloating = useFloatingPanelsStore((s) => s.isFloating);
 
   return (
     <div className="flex flex-row items-center gap-2 px-1 py-2 bg-surface-panel">

@@ -119,13 +119,20 @@ function renderLines(text: string): React.ReactNode[] {
         5: "m-0 mt-1 mb-0.5 text-[12px] leading-snug font-semibold uppercase tracking-wide text-text-secondary",
         6: "m-0 mt-1 mb-0.5 text-[12px] leading-snug font-semibold uppercase tracking-wide text-text-secondary",
       };
-
-      const Tag = `h${Math.min(level, 6)}` as keyof JSX.IntrinsicElements;
-      nodes.push(
-        <Tag key={key++} className={classesByLevel[level] ?? classesByLevel[4]}>
-          {renderInline(textContent)}
-        </Tag>
-      );
+      const headingClass = classesByLevel[level] ?? classesByLevel[4];
+      if (level === 1) {
+        nodes.push(<h1 key={key++} className={headingClass}>{renderInline(textContent)}</h1>);
+      } else if (level === 2) {
+        nodes.push(<h2 key={key++} className={headingClass}>{renderInline(textContent)}</h2>);
+      } else if (level === 3) {
+        nodes.push(<h3 key={key++} className={headingClass}>{renderInline(textContent)}</h3>);
+      } else if (level === 4) {
+        nodes.push(<h4 key={key++} className={headingClass}>{renderInline(textContent)}</h4>);
+      } else if (level === 5) {
+        nodes.push(<h5 key={key++} className={headingClass}>{renderInline(textContent)}</h5>);
+      } else {
+        nodes.push(<h6 key={key++} className={headingClass}>{renderInline(textContent)}</h6>);
+      }
       i++;
     } else if (hrMatch) {
       nodes.push(
