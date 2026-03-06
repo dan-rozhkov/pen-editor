@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite, Texture, Assets } from "pixi.js";
+import { Container, Graphics, Sprite, Texture, Assets, Rectangle } from "pixi.js";
 import type { FlatSceneNode, ImageFill, PerCornerRadius } from "@/types/scene";
 import { drawRoundedShape } from "./fillStrokeHelpers";
 import { hasPerCornerRadius } from "@/utils/renderUtils";
@@ -151,6 +151,46 @@ function withTexture(
   });
 }
 
+function destroyImageSprite(container: Container): void {
+  const existing = container.getChildByLabel("image-fill");
+  if (!existing) return;
+
+  container.removeChild(existing);
+  if (existing instanceof Sprite) {
+    const derivedTexture = (existing as Sprite & { _derivedImageTexture?: Texture })
+      ._derivedImageTexture;
+    if (derivedTexture) {
+      derivedTexture.destroy(false);
+    }
+  }
+  existing.destroy();
+}
+
+function createCoverTexture(
+  texture: Texture,
+  containerW: number,
+  containerH: number,
+): Texture {
+  const imgAspect = texture.width / texture.height;
+  const containerAspect = containerW / containerH;
+
+  if (imgAspect > containerAspect) {
+    const cropWidth = texture.height * containerAspect;
+    const cropX = (texture.width - cropWidth) / 2;
+    return new Texture({
+      source: texture.source,
+      frame: new Rectangle(cropX, 0, cropWidth, texture.height),
+    });
+  }
+
+  const cropHeight = texture.width / containerAspect;
+  const cropY = (texture.height - cropHeight) / 2;
+  return new Texture({
+    source: texture.source,
+    frame: new Rectangle(0, cropY, texture.width, cropHeight),
+  });
+}
+
 export function setImageFillResolution(resolution: number): void {
   currentImageFillResolution = resolution;
 }
@@ -164,11 +204,7 @@ export function applyImageFill(
   cornerRadiusPerCorner?: PerCornerRadius,
 ): void {
   // Remove existing image sprite
-  const existing = container.getChildByLabel("image-fill");
-  if (existing) {
-    container.removeChild(existing);
-    existing.destroy();
-  }
+  destroyImageSprite(container);
 
   if (!imageFill?.url) return;
 
@@ -192,19 +228,14 @@ function scaleImageSprite(
     sprite.width = containerW;
     sprite.height = containerH;
   } else if (imageFill.mode === "fill") {
-    // Cover: fill container, crop overflow
-    let sw: number, sh: number;
-    if (imgAspect > containerAspect) {
-      sh = containerH;
-      sw = containerH * imgAspect;
-    } else {
-      sw = containerW;
-      sh = containerW / imgAspect;
-    }
-    sprite.width = sw;
-    sprite.height = sh;
-    sprite.x = (containerW - sw) / 2;
-    sprite.y = (containerH - sh) / 2;
+    const coverTexture = createCoverTexture(texture, containerW, containerH);
+    sprite.texture = coverTexture;
+    (sprite as Sprite & { _derivedImageTexture?: Texture })._derivedImageTexture =
+      coverTexture;
+    sprite.width = containerW;
+    sprite.height = containerH;
+    sprite.x = 0;
+    sprite.y = 0;
   } else {
     // Fit: contain within bounds
     let sw: number, sh: number;
@@ -232,11 +263,7 @@ function addImageSprite(
   cornerRadiusPerCorner?: PerCornerRadius,
 ): void {
   // Remove any existing image sprite first
-  const existing = container.getChildByLabel("image-fill");
-  if (existing) {
-    container.removeChild(existing);
-    existing.destroy();
-  }
+  destroyImageSprite(container);
 
   const sprite = new Sprite(texture);
   sprite.label = "image-fill";
@@ -271,11 +298,7 @@ export function applyImageFillEllipse(
   height: number,
 ): void {
   // Remove existing
-  const existing = container.getChildByLabel("image-fill");
-  if (existing) {
-    container.removeChild(existing);
-    existing.destroy();
-  }
+  destroyImageSprite(container);
   const existingMask = container.getChildByLabel("image-mask");
   if (existingMask) {
     container.removeChild(existingMask);
@@ -296,11 +319,7 @@ function addImageSpriteEllipse(
   containerW: number,
   containerH: number,
 ): void {
-  const existing = container.getChildByLabel("image-fill");
-  if (existing) {
-    container.removeChild(existing);
-    existing.destroy();
-  }
+  destroyImageSprite(container);
 
   const sprite = new Sprite(texture);
   sprite.label = "image-fill";

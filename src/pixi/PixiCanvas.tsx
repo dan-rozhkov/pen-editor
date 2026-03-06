@@ -308,7 +308,11 @@ export function PixiCanvas() {
   useCanvasFileDrop({
     containerRef,
     addNode,
+    addChildToFrame,
     onDocumentDrop: handleDocumentDrop,
+    saveHistory,
+    startBatch,
+    endBatch,
   });
 
   // Initialize PixiJS Application

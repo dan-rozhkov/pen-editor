@@ -13,6 +13,12 @@ import {
   findParentFrameInComponent,
 } from "@/utils/nodeUtils";
 import { parseSvgToNodes } from "@/utils/svgUtils";
+import {
+  applyImageImportPlans,
+  createImageImportPlan,
+  type ImageImportPlan,
+  setImportedSelection,
+} from "./imageImport";
 
 interface CanvasKeyboardShortcutsParams {
   nodes: SceneNode[];
@@ -61,6 +67,17 @@ function isTypingTarget(event: KeyboardEvent | ClipboardEvent): boolean {
   }
 
   return false;
+}
+
+function getViewportCenter(dimensions: { width: number; height: number }): {
+  x: number;
+  y: number;
+} {
+  const { x, y, scale } = useViewportStore.getState();
+  return {
+    x: (-x + dimensions.width / 2) / scale,
+    y: (-y + dimensions.height / 2) / scale,
+  };
 }
 
 export function useCanvasKeyboardShortcuts({
@@ -524,22 +541,70 @@ export function useCanvasKeyboardShortcuts({
       }
     };
 
-    const handlePaste = (e: ClipboardEvent) => {
+    const handlePaste = async (e: ClipboardEvent) => {
       const isTyping = isTypingTarget(e);
       if (isTyping) return;
 
       const syncText = e.clipboardData?.getData("text/plain")?.trim() ?? "";
+      const imageItems =
+        e.clipboardData?.items == null
+          ? []
+          : Array.from(e.clipboardData.items).filter((item) =>
+              item.type.startsWith("image/"),
+            );
+
+      if (imageItems.length > 0) {
+        e.preventDefault();
+        const viewportCenter = getViewportCenter(dimensions);
+        const selectionState = useSelectionStore.getState();
+        const currentNodes = useSceneStore.getState().getNodes();
+        const imagePlans: ImageImportPlan[] = [];
+
+        for (let i = 0; i < imageItems.length; i++) {
+          const file = imageItems[i]?.getAsFile();
+          if (!file) continue;
+          try {
+            const plan = await createImageImportPlan({
+              blob: file,
+              name: file.name,
+              anchorWorld: {
+                x: viewportCenter.x + i * 20,
+                y: viewportCenter.y + i * 20,
+              },
+              canvasSize: {
+                width: dimensions.width,
+                height: dimensions.height,
+              },
+              nodes: currentNodes,
+              selectedIds: selectionState.selectedIds,
+              enteredContainerId: selectionState.enteredContainerId,
+              fallbackName: imageItems.length > 1 ? `Pasted Image ${i + 1}` : "Pasted Image",
+            });
+            imagePlans.push(plan);
+          } catch {
+            // skip failed clipboard image
+          }
+        }
+
+        applyImageImportPlans({
+          plans: imagePlans,
+          addNode,
+          addChildToFrame,
+          saveHistory,
+          startBatch,
+          endBatch,
+        });
+        return;
+      }
 
       // 1. Try SVG from text/plain
       if (syncText && syncText.includes("<svg") && syncText.includes("</svg>")) {
         e.preventDefault();
         const result = parseSvgToNodes(syncText);
         if (result) {
-          const { x: vpX, y: vpY, scale } = useViewportStore.getState();
-          const viewportCenterX = (-vpX + window.innerWidth / 2) / scale;
-          const viewportCenterY = (-vpY + window.innerHeight / 2) / scale;
-          result.node.x = viewportCenterX - result.node.width / 2;
-          result.node.y = viewportCenterY - result.node.height / 2;
+          const viewportCenter = getViewportCenter(dimensions);
+          result.node.x = viewportCenter.x - result.node.width / 2;
+          result.node.y = viewportCenter.y - result.node.height / 2;
 
           addNode(result.node);
           useSelectionStore.getState().select(result.node.id);
@@ -551,11 +616,16 @@ export function useCanvasKeyboardShortcuts({
       if (copiedNodes.length > 0) {
         e.preventDefault();
         const clonedNodes = copiedNodes.map((n) => cloneNodeWithNewId(n));
-        const selectedIds = useSelectionStore.getState().selectedIds;
+        const selectionState = useSelectionStore.getState();
         let targetContainerId: string | null = null;
 
-        if (selectedIds.length === 1) {
-          const selectedNode = findNodeById(nodes, selectedIds[0]);
+        if (selectionState.enteredContainerId) {
+          const enteredNode = findNodeById(nodes, selectionState.enteredContainerId);
+          if (enteredNode && isContainerNode(enteredNode)) {
+            targetContainerId = enteredNode.id;
+          }
+        } else if (selectionState.selectedIds.length === 1) {
+          const selectedNode = findNodeById(nodes, selectionState.selectedIds[0]);
           if (selectedNode && isContainerNode(selectedNode)) {
             targetContainerId = selectedNode.id;
           }
@@ -574,7 +644,7 @@ export function useCanvasKeyboardShortcuts({
         }
         endBatch();
 
-        useSelectionStore.getState().setSelectedIds(clonedNodes.map((n) => n.id));
+        setImportedSelection(clonedNodes.map((n) => n.id));
       }
     };
 
@@ -594,8 +664,7 @@ export function useCanvasKeyboardShortcuts({
     copiedNodes,
     copyNodes,
     deleteNode,
-    dimensions.height,
-    dimensions.width,
+    dimensions,
     endBatch,
     clearInstanceContext,
     fitToContent,

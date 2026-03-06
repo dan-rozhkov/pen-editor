@@ -1,24 +1,32 @@
 import { useEffect, useCallback } from "react";
 import type { RefObject } from "react";
-import type { SceneNode, RectNode } from "@/types/scene";
-import { generateId } from "@/types/scene";
+import type { HistorySnapshot, SceneNode } from "@/types/scene";
 import { deserializeDocument, type DocumentData } from "@/utils/fileUtils";
 import { parseSvgToNodes } from "@/utils/svgUtils";
 import { useViewportStore } from "@/store/viewportStore";
+import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
+import {
+  applyImageImportPlans,
+  createImageImportPlan,
+  type ImageImportPlan,
+} from "./imageImport";
 
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp)$/i;
 const SVG_EXTENSION = /\.svg$/i;
 const JSON_EXTENSION = /\.json$/i;
-const MAX_IMAGE_SIZE = 800;
 
 interface UseCanvasFileDropOptions {
   containerRef: RefObject<HTMLDivElement | null>;
   addNode: (node: SceneNode) => void;
+  addChildToFrame: (frameId: string, child: SceneNode) => void;
   onDocumentDrop: (
     document: DocumentData,
     viewport: { width: number; height: number },
   ) => void;
+  saveHistory: (snapshot: HistorySnapshot) => void;
+  startBatch: () => void;
+  endBatch: () => void;
 }
 
 function clientToCanvas(
@@ -30,32 +38,6 @@ function clientToCanvas(
   const canvasX = (clientX - containerRect.left - x) / scale;
   const canvasY = (clientY - containerRect.top - y) / scale;
   return { canvasX, canvasY };
-}
-
-function loadImageFromDataUrl(
-  dataUrl: string,
-): Promise<{ width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
-    img.onerror = reject;
-    img.src = dataUrl;
-  });
-}
-
-function clampImageSize(w: number, h: number): { width: number; height: number } {
-  if (w <= MAX_IMAGE_SIZE && h <= MAX_IMAGE_SIZE) return { width: w, height: h };
-  const ratio = Math.min(MAX_IMAGE_SIZE / w, MAX_IMAGE_SIZE / h);
-  return { width: Math.round(w * ratio), height: Math.round(h * ratio) };
-}
-
-function readFileAsDataURL(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
 }
 
 function readFileAsText(file: File): Promise<string> {
@@ -86,7 +68,11 @@ function isJsonFile(file: File): boolean {
 export function useCanvasFileDrop({
   containerRef,
   addNode,
+  addChildToFrame,
   onDocumentDrop,
+  saveHistory,
+  startBatch,
+  endBatch,
 }: UseCanvasFileDropOptions) {
   const handleDrop = useCallback(
     async (e: DragEvent) => {
@@ -120,6 +106,9 @@ export function useCanvasFileDrop({
       }
 
       let offset = 0;
+      const imagePlans: ImageImportPlan[] = [];
+      const selectionState = useSelectionStore.getState();
+      const currentNodes = useSceneStore.getState().getNodes();
 
       for (const file of droppedFiles) {
         const dropX = canvasX + offset;
@@ -140,24 +129,20 @@ export function useCanvasFileDrop({
           }
         } else if (isImageFile(file)) {
           try {
-            const dataUrl = await readFileAsDataURL(file);
-            const { width: natW, height: natH } = await loadImageFromDataUrl(dataUrl);
-            const { width, height } = clampImageSize(natW, natH);
-
-            const node: RectNode = {
-              id: generateId(),
-              type: "rect",
-              name: file.name.replace(/\.[^.]+$/, ""),
-              x: dropX,
-              y: dropY,
-              width,
-              height,
-              fill: "#ffffff",
-              cornerRadius: 0,
-              imageFill: { url: dataUrl, mode: "fill" },
-            };
-            addNode(node);
-            useSelectionStore.getState().select(node.id);
+            const plan = await createImageImportPlan({
+              blob: file,
+              name: file.name,
+              anchorWorld: { x: dropX, y: dropY },
+              canvasSize: {
+                width: container.clientWidth,
+                height: container.clientHeight,
+              },
+              nodes: currentNodes,
+              selectedIds: selectionState.selectedIds,
+              enteredContainerId: selectionState.enteredContainerId,
+              fallbackName: "Image",
+            });
+            imagePlans.push(plan);
           } catch {
             // skip failed file
           }
@@ -165,8 +150,25 @@ export function useCanvasFileDrop({
 
         offset += 20;
       }
+
+      applyImageImportPlans({
+        plans: imagePlans,
+        addNode,
+        addChildToFrame,
+        saveHistory,
+        startBatch,
+        endBatch,
+      });
     },
-    [containerRef, addNode, onDocumentDrop],
+    [
+      containerRef,
+      addChildToFrame,
+      addNode,
+      endBatch,
+      onDocumentDrop,
+      saveHistory,
+      startBatch,
+    ],
   );
 
   useEffect(() => {
