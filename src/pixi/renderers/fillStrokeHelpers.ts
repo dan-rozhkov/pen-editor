@@ -1,7 +1,9 @@
 import { Graphics, FillGradient } from "pixi.js";
-import type { FlatSceneNode, GradientFill, PerSideStroke } from "@/types/scene";
-import { hasPerSideStroke } from "@/utils/renderUtils";
+import type { FlatSceneNode, GradientFill, PerSideStroke, PerCornerRadius } from "@/types/scene";
+import { hasPerSideStroke, hasPerCornerRadius } from "@/utils/renderUtils";
 import { getResolvedFill, getResolvedStroke, parseColor, parseAlpha } from "./colorHelpers";
+
+export { hasPerCornerRadius } from "@/utils/renderUtils";
 
 function getSidePosition(
   side: 'top' | 'right' | 'bottom' | 'left',
@@ -125,6 +127,49 @@ export function buildPixiGradient(
   });
 }
 
+/** Draw a rounded rectangle with independent corner radii using arcTo */
+export function drawPerCornerRoundRect(
+  gfx: Graphics,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  radii: PerCornerRadius,
+): void {
+  const tl = Math.min(radii.topLeft ?? 0, w / 2, h / 2);
+  const tr = Math.min(radii.topRight ?? 0, w / 2, h / 2);
+  const br = Math.min(radii.bottomRight ?? 0, w / 2, h / 2);
+  const bl = Math.min(radii.bottomLeft ?? 0, w / 2, h / 2);
+
+  gfx.moveTo(x + tl, y);
+  gfx.lineTo(x + w - tr, y);
+  gfx.arcTo(x + w, y, x + w, y + tr, tr);
+  gfx.lineTo(x + w, y + h - br);
+  gfx.arcTo(x + w, y + h, x + w - br, y + h, br);
+  gfx.lineTo(x + bl, y + h);
+  gfx.arcTo(x, y + h, x, y + h - bl, bl);
+  gfx.lineTo(x, y + tl);
+  gfx.arcTo(x, y, x + tl, y, tl);
+  gfx.closePath();
+}
+
+/** Draw a rounded rectangle shape (unified or per-corner) */
+export function drawRoundedShape(
+  gfx: Graphics,
+  width: number,
+  height: number,
+  cornerRadius?: number,
+  cornerRadiusPerCorner?: PerCornerRadius,
+): void {
+  if (hasPerCornerRadius(cornerRadiusPerCorner)) {
+    drawPerCornerRoundRect(gfx, 0, 0, width, height, cornerRadiusPerCorner!);
+  } else if (cornerRadius) {
+    gfx.roundRect(0, 0, width, height, cornerRadius);
+  } else {
+    gfx.rect(0, 0, width, height);
+  }
+}
+
 /** Check if any shared visual properties (fill, stroke, size, cornerRadius) changed. */
 export function hasVisualPropsChanged(
   node: FlatSceneNode,
@@ -144,6 +189,8 @@ export function hasVisualPropsChanged(
     node.strokeWidthPerSide !== prev.strokeWidthPerSide ||
     (node as { cornerRadius?: number }).cornerRadius !==
       (prev as { cornerRadius?: number }).cornerRadius ||
+    (node as { cornerRadiusPerCorner?: PerCornerRadius }).cornerRadiusPerCorner !==
+      (prev as { cornerRadiusPerCorner?: PerCornerRadius }).cornerRadiusPerCorner ||
     node.gradientFill !== prev.gradientFill
   );
 }

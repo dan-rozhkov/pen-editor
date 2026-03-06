@@ -17,6 +17,10 @@ const extractors: Record<string, PropertyExtractor> = {
     n.type === "frame" || n.type === "rect"
       ? (n as unknown as Record<string, unknown>).cornerRadius
       : undefined,
+  cornerRadiusPerCorner: (n) =>
+    n.type === "frame" || n.type === "rect"
+      ? (n as unknown as Record<string, unknown>).cornerRadiusPerCorner
+      : undefined,
   padding: (n) => {
     if (n.type !== "frame") return undefined;
     const layout = (n as unknown as Record<string, unknown>).layout as

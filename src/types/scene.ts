@@ -72,6 +72,14 @@ export interface PerSideStroke {
   left?: number
 }
 
+// Per-corner border radius
+export interface PerCornerRadius {
+  topLeft?: number
+  topRight?: number
+  bottomRight?: number
+  bottomLeft?: number
+}
+
 export interface BaseNode {
   id: string
   type: 'frame' | 'group' | 'rect' | 'ellipse' | 'text' | 'ref' | 'path' | 'line' | 'polygon' | 'embed'
@@ -139,6 +147,7 @@ export interface FrameNode extends BaseNode {
   type: 'frame'
   children: SceneNode[]
   cornerRadius?: number
+  cornerRadiusPerCorner?: PerCornerRadius
   // Clip content - when true, visually clip children to frame bounds
   clip?: boolean
   // Auto-layout properties
@@ -152,6 +161,7 @@ export interface FrameNode extends BaseNode {
 export interface RectNode extends BaseNode {
   type: 'rect'
   cornerRadius?: number
+  cornerRadiusPerCorner?: PerCornerRadius
 }
 
 export interface EllipseNode extends BaseNode {

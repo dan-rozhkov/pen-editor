@@ -21,8 +21,22 @@ export function applyBaseProps(
   }
 
   // Corner radius
-  const radius = parseFloat(style.borderRadius) || 0;
-  if (radius > 0) node.cornerRadius = radius;
+  const tlr = parseFloat(style.borderTopLeftRadius) || 0;
+  const trr = parseFloat(style.borderTopRightRadius) || 0;
+  const brr = parseFloat(style.borderBottomRightRadius) || 0;
+  const blr = parseFloat(style.borderBottomLeftRadius) || 0;
+  if (tlr > 0 || trr > 0 || brr > 0 || blr > 0) {
+    if (tlr === trr && trr === brr && brr === blr) {
+      node.cornerRadius = tlr;
+    } else {
+      node.cornerRadiusPerCorner = {
+        topLeft: tlr || undefined,
+        topRight: trr || undefined,
+        bottomRight: brr || undefined,
+        bottomLeft: blr || undefined,
+      };
+    }
+  }
 
   // Border/stroke
   const borderTopWidth = parseFloat(style.borderTopWidth) || 0;

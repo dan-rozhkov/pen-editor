@@ -89,11 +89,13 @@ interface PenFrameNode extends PenBaseNode {
   alignItems?: "start" | "center" | "end";
   clip?: boolean;
   cornerRadius?: number;
+  cornerRadiusPerCorner?: { topLeft?: number; topRight?: number; bottomRight?: number; bottomLeft?: number };
 }
 
 interface PenRectangleNode extends PenBaseNode {
   type: "rectangle";
   cornerRadius?: number;
+  cornerRadiusPerCorner?: { topLeft?: number; topRight?: number; bottomRight?: number; bottomLeft?: number };
 }
 
 interface PenEllipseNode extends PenBaseNode {
@@ -489,6 +491,9 @@ function exportOverride(override: DescendantOverride, context: ExportContext): R
   if ("cornerRadius" in override && override.cornerRadius != null) {
     exported.cornerRadius = override.cornerRadius;
   }
+  if ("cornerRadiusPerCorner" in override && (override as Record<string, unknown>).cornerRadiusPerCorner != null) {
+    exported.cornerRadiusPerCorner = (override as Record<string, unknown>).cornerRadiusPerCorner;
+  }
   if (override.text != null) exported.content = override.text;
   if (textOverride.fontFamily) exported.fontFamily = textOverride.fontFamily;
   if (textOverride.fontSize != null) exported.fontSize = textOverride.fontSize;
@@ -552,6 +557,7 @@ function exportFrameNode(
       : { layout: "none" }),
     ...(node.type === "frame" && node.clip ? { clip: true } : {}),
     ...(node.type === "frame" && node.cornerRadius != null ? { cornerRadius: node.cornerRadius } : {}),
+    ...(node.type === "frame" && node.cornerRadiusPerCorner != null ? { cornerRadiusPerCorner: node.cornerRadiusPerCorner } : {}),
   };
 }
 
@@ -580,6 +586,7 @@ function exportNode(node: SceneNode, context: ExportContext, parentUsesLayout: b
         ...exportNodeBase(node, context, parentUsesLayout),
         type: "rectangle",
         ...(node.cornerRadius != null ? { cornerRadius: node.cornerRadius } : {}),
+        ...(node.cornerRadiusPerCorner != null ? { cornerRadiusPerCorner: node.cornerRadiusPerCorner } : {}),
       };
     case "ellipse":
       return {

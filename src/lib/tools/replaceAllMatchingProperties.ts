@@ -18,6 +18,7 @@ interface PropertyRules {
   fontFamily?: ReplacementRule[];
   fontWeight?: ReplacementRule[];
   cornerRadius?: ReplacementRule[];
+  cornerRadiusPerCorner?: ReplacementRule[];
   padding?: ReplacementRule[];
   gap?: ReplacementRule[];
 }
@@ -151,6 +152,24 @@ export const replaceAllMatchingProperties: ToolHandler = async (args) => {
         if (nodeAny.cornerRadius === rule.from) {
           updated = updated ?? { ...node };
           (updated as unknown as Record<string, unknown>).cornerRadius = rule.to;
+          replacements++;
+        }
+      }
+    }
+
+    // cornerRadiusPerCorner (frame/rect only)
+    if (rules.cornerRadiusPerCorner && (node.type === "frame" || node.type === "rect")) {
+      const nodeAny = node as unknown as Record<string, unknown>;
+      const current = nodeAny.cornerRadiusPerCorner as Record<string, unknown> | undefined;
+      for (const rule of rules.cornerRadiusPerCorner) {
+        const from = rule.from as Record<string, unknown> | undefined;
+        const match = current?.topLeft === from?.topLeft &&
+          current?.topRight === from?.topRight &&
+          current?.bottomRight === from?.bottomRight &&
+          current?.bottomLeft === from?.bottomLeft;
+        if (match) {
+          updated = updated ?? { ...node };
+          (updated as unknown as Record<string, unknown>).cornerRadiusPerCorner = rule.to;
           replacements++;
         }
       }

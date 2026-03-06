@@ -1,5 +1,7 @@
 import { Container, Graphics, Sprite, Texture, Assets } from "pixi.js";
-import type { FlatSceneNode, ImageFill } from "@/types/scene";
+import type { FlatSceneNode, ImageFill, PerCornerRadius } from "@/types/scene";
+import { drawRoundedShape } from "./fillStrokeHelpers";
+import { hasPerCornerRadius } from "@/utils/renderUtils";
 
 /** Cache for loaded textures by URL */
 const textureCache = new Map<string, Texture>();
@@ -159,6 +161,7 @@ export function applyImageFill(
   width: number,
   height: number,
   cornerRadius?: number,
+  cornerRadiusPerCorner?: PerCornerRadius,
 ): void {
   // Remove existing image sprite
   const existing = container.getChildByLabel("image-fill");
@@ -170,7 +173,7 @@ export function applyImageFill(
   if (!imageFill?.url) return;
 
   withTexture(imageFill.url, width, height, container, (texture) => {
-    addImageSprite(container, texture, imageFill, width, height, cornerRadius);
+    addImageSprite(container, texture, imageFill, width, height, cornerRadius, cornerRadiusPerCorner);
   });
 }
 
@@ -226,6 +229,7 @@ function addImageSprite(
   containerW: number,
   containerH: number,
   cornerRadius?: number,
+  cornerRadiusPerCorner?: PerCornerRadius,
 ): void {
   // Remove any existing image sprite first
   const existing = container.getChildByLabel("image-fill");
@@ -239,10 +243,10 @@ function addImageSprite(
   scaleImageSprite(sprite, texture, imageFill, containerW, containerH);
 
   // Apply mask for clipping (cornerRadius or bounds)
-  if (cornerRadius && cornerRadius > 0) {
+  if (hasPerCornerRadius(cornerRadiusPerCorner) || (cornerRadius && cornerRadius > 0)) {
     const mask = new Graphics();
     mask.label = "image-mask";
-    mask.roundRect(0, 0, containerW, containerH, cornerRadius);
+    drawRoundedShape(mask, containerW, containerH, cornerRadius, cornerRadiusPerCorner);
     mask.fill(0xffffff);
     container.addChild(mask);
     sprite.mask = mask;
@@ -331,13 +335,13 @@ export function updateImageFillResolution(
   }
 
   if (node.type === "rect") {
-    applyImageFill(container, node.imageFill, node.width, node.height, node.cornerRadius);
+    applyImageFill(container, node.imageFill, node.width, node.height, node.cornerRadius, node.cornerRadiusPerCorner);
     return;
   }
 
   if (node.type === "frame") {
     const effectiveWidth = (container as { _effectiveWidth?: number })._effectiveWidth ?? node.width;
     const effectiveHeight = (container as { _effectiveHeight?: number })._effectiveHeight ?? node.height;
-    applyImageFill(container, node.imageFill, effectiveWidth, effectiveHeight, node.cornerRadius);
+    applyImageFill(container, node.imageFill, effectiveWidth, effectiveHeight, node.cornerRadius, node.cornerRadiusPerCorner);
   }
 }

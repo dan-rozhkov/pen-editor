@@ -1,6 +1,6 @@
 import { Container, Graphics } from "pixi.js";
 import type { RectNode } from "@/types/scene";
-import { applyFill, applyStroke, hasVisualPropsChanged } from "./fillStrokeHelpers";
+import { applyFill, applyStroke, hasVisualPropsChanged, drawRoundedShape } from "./fillStrokeHelpers";
 import { applyImageFill } from "./imageFillHelpers";
 
 export function createRectContainer(node: RectNode): Container {
@@ -12,7 +12,7 @@ export function createRectContainer(node: RectNode): Container {
 
   // Image fill
   if (node.imageFill) {
-    applyImageFill(container, node.imageFill, node.width, node.height, node.cornerRadius);
+    applyImageFill(container, node.imageFill, node.width, node.height, node.cornerRadius, node.cornerRadiusPerCorner);
   }
 
   return container;
@@ -36,18 +36,16 @@ export function updateRectContainer(
   if (
     node.imageFill !== prev.imageFill ||
     node.width !== prev.width ||
-    node.height !== prev.height
+    node.height !== prev.height ||
+    node.cornerRadius !== prev.cornerRadius ||
+    node.cornerRadiusPerCorner !== prev.cornerRadiusPerCorner
   ) {
-    applyImageFill(container, node.imageFill, node.width, node.height, node.cornerRadius);
+    applyImageFill(container, node.imageFill, node.width, node.height, node.cornerRadius, node.cornerRadiusPerCorner);
   }
 }
 
 export function drawRect(gfx: Graphics, node: RectNode): void {
-  if (node.cornerRadius) {
-    gfx.roundRect(0, 0, node.width, node.height, node.cornerRadius);
-  } else {
-    gfx.rect(0, 0, node.width, node.height);
-  }
+  drawRoundedShape(gfx, node.width, node.height, node.cornerRadius, node.cornerRadiusPerCorner);
   applyFill(gfx, node, node.width, node.height);
 
   applyStroke(gfx, node, node.width, node.height);

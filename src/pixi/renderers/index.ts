@@ -11,6 +11,7 @@ import type {
   PathNode,
   RefNode,
   EmbedNode,
+  PerCornerRadius,
 } from "@/types/scene";
 import { applyShadow } from "./shadowHelpers";
 import { createRectContainer, updateRectContainer, drawRect } from "./rectRenderer";
@@ -20,6 +21,7 @@ import { createLineContainer, updateLineContainer } from "./lineRenderer";
 import { createPolygonContainer, updatePolygonContainer } from "./polygonRenderer";
 import { createPathContainer, updatePathContainer } from "./pathRenderer";
 import { createFrameContainer, updateFrameContainer, drawFrameBackground } from "./frameRenderer";
+import { drawRoundedShape } from "./fillStrokeHelpers";
 import { createGroupContainer } from "./groupRenderer";
 import { createRefContainer, updateRefContainer } from "./refRenderer";
 import { createEmbedContainer, updateEmbedContainer } from "./embedRenderer";
@@ -28,6 +30,13 @@ import type { ShadowShape } from "./shadowHelpers";
 function getNodeCornerRadius(node: FlatSceneNode): number | undefined {
   if (node.type === "frame" || node.type === "rect") {
     return node.cornerRadius;
+  }
+  return undefined;
+}
+
+function getNodeCornerRadiusPerCorner(node: FlatSceneNode): PerCornerRadius | undefined {
+  if (node.type === "frame" || node.type === "rect") {
+    return node.cornerRadiusPerCorner;
   }
   return undefined;
 }
@@ -136,6 +145,7 @@ export function createNodeContainer(
     initialShadowSize.height,
     getNodeCornerRadius(node),
     getNodeShadowShape(node),
+    getNodeCornerRadiusPerCorner(node),
   );
 
   return container;
@@ -241,8 +251,8 @@ export function updateNodeContainer(
     node.width !== prev.width ||
     node.height !== prev.height ||
     (node.type === "frame" && (node.sizing !== (prev as FlatFrameNode).sizing || node.layout !== (prev as FlatFrameNode).layout)) ||
-    (node.type === "frame" && node.cornerRadius !== (prev as FlatFrameNode).cornerRadius) ||
-    (node.type === "rect" && node.cornerRadius !== (prev as RectNode).cornerRadius)
+    (node.type === "frame" && (node.cornerRadius !== (prev as FlatFrameNode).cornerRadius || node.cornerRadiusPerCorner !== (prev as FlatFrameNode).cornerRadiusPerCorner)) ||
+    (node.type === "rect" && (node.cornerRadius !== (prev as RectNode).cornerRadius || node.cornerRadiusPerCorner !== (prev as RectNode).cornerRadiusPerCorner))
   ) {
     const shadowSize = getNodeShadowSize(node, container);
     applyShadow(
@@ -252,6 +262,7 @@ export function updateNodeContainer(
       shadowSize.height,
       getNodeCornerRadius(node),
       getNodeShadowShape(node),
+      getNodeCornerRadiusPerCorner(node),
     );
   }
 }
@@ -285,6 +296,8 @@ export function applyLayoutSize(
         layoutWidth,
         layoutHeight,
         shadowRectNode.cornerRadius,
+        "rect",
+        shadowRectNode.cornerRadiusPerCorner,
       );
       break;
     }
@@ -316,11 +329,7 @@ export function applyLayoutSize(
       if (mask && (node as FlatFrameNode).clip) {
         mask.clear();
         const frameNode = node as FlatFrameNode;
-        if (frameNode.cornerRadius) {
-          mask.roundRect(0, 0, layoutWidth, layoutHeight, frameNode.cornerRadius);
-        } else {
-          mask.rect(0, 0, layoutWidth, layoutHeight);
-        }
+        drawRoundedShape(mask, layoutWidth, layoutHeight, frameNode.cornerRadius, frameNode.cornerRadiusPerCorner);
         mask.fill(0xffffff);
       }
       applyShadow(
@@ -329,6 +338,8 @@ export function applyLayoutSize(
         layoutWidth,
         layoutHeight,
         (node as FlatFrameNode).cornerRadius,
+        "rect",
+        (node as FlatFrameNode).cornerRadiusPerCorner,
       );
       break;
     }

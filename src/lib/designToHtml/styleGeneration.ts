@@ -1,5 +1,6 @@
 import type { BaseNode, TextNode, FrameNode, RectNode, ShadowEffect, GradientFill, ImageFill, PerSideStroke } from "@/types/scene";
 import { applyOpacity } from "@/utils/colorUtils";
+import { hasPerCornerRadius } from "@/utils/renderUtils";
 
 /**
  * Generate inline CSS for visual properties (fill, stroke, effects, etc.)
@@ -40,8 +41,11 @@ export function generateVisualStyles(node: BaseNode): Record<string, string> {
 
   // Corner radius (only on frame and rect nodes)
   if (node.type === "frame" || node.type === "rect") {
+    const pcr = (node as FrameNode | RectNode).cornerRadiusPerCorner;
     const cornerRadius = (node as FrameNode | RectNode).cornerRadius;
-    if (cornerRadius !== undefined && cornerRadius > 0) {
+    if (pcr && hasPerCornerRadius(pcr)) {
+      styles["border-radius"] = `${pcr.topLeft ?? 0}px ${pcr.topRight ?? 0}px ${pcr.bottomRight ?? 0}px ${pcr.bottomLeft ?? 0}px`;
+    } else if (cornerRadius !== undefined && cornerRadius > 0) {
       styles["border-radius"] = `${cornerRadius}px`;
     }
   }

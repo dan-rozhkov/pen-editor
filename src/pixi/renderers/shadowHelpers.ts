@@ -1,7 +1,8 @@
 import { Container, Graphics, BlurFilter } from "pixi.js";
-import type { ShadowEffect } from "@/types/scene";
+import type { ShadowEffect, PerCornerRadius } from "@/types/scene";
 import { parseHexAlpha } from "@/utils/shadowUtils";
 import { parseColor } from "./colorHelpers";
+import { hasPerCornerRadius, drawPerCornerRoundRect } from "./fillStrokeHelpers";
 
 export type ShadowShape = "rect" | "ellipse";
 
@@ -12,6 +13,7 @@ export function applyShadow(
   height: number,
   cornerRadius?: number,
   shape: ShadowShape = "rect",
+  cornerRadiusPerCorner?: PerCornerRadius,
 ): void {
   // Remove existing shadow layer
   const existing = container.getChildByLabel("shadow-layer");
@@ -32,6 +34,8 @@ export function applyShadow(
   const shadowGfx = new Graphics();
   if (shape === "ellipse") {
     shadowGfx.ellipse(width / 2, height / 2, width / 2, height / 2);
+  } else if (hasPerCornerRadius(cornerRadiusPerCorner)) {
+    drawPerCornerRoundRect(shadowGfx, 0, 0, width, height, cornerRadiusPerCorner!);
   } else {
     const radius = Math.max(
       0,

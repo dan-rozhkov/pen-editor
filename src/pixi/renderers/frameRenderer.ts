@@ -6,7 +6,7 @@ import type {
   SceneNode,
 } from "@/types/scene";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
-import { applyFill, applyStroke, hasVisualPropsChanged } from "./fillStrokeHelpers";
+import { applyFill, applyStroke, hasVisualPropsChanged, drawRoundedShape } from "./fillStrokeHelpers";
 import { applyImageFill } from "./imageFillHelpers";
 import { pushRenderTheme, popRenderTheme } from "./colorHelpers";
 import { createNodeContainer } from "./index";
@@ -82,18 +82,14 @@ export function createFrameContainer(
 
   // Image fill
   if (node.imageFill) {
-    applyImageFill(container, node.imageFill, effectiveWidth, effectiveHeight, node.cornerRadius);
+    applyImageFill(container, node.imageFill, effectiveWidth, effectiveHeight, node.cornerRadius, node.cornerRadiusPerCorner);
   }
 
   // Clipping mask
   if (node.clip) {
     const mask = new Graphics();
     mask.label = "frame-mask";
-    if (node.cornerRadius) {
-      mask.roundRect(0, 0, effectiveWidth, effectiveHeight, node.cornerRadius);
-    } else {
-      mask.rect(0, 0, effectiveWidth, effectiveHeight);
-    }
+    drawRoundedShape(mask, effectiveWidth, effectiveHeight, node.cornerRadius, node.cornerRadiusPerCorner);
     mask.fill(0xffffff);
     container.addChild(mask);
     container.mask = mask;
@@ -168,9 +164,11 @@ export function updateFrameContainer(
     node.width !== prev.width ||
     node.height !== prev.height ||
     node.sizing !== prev.sizing ||
-    node.layout !== prev.layout
+    node.layout !== prev.layout ||
+    node.cornerRadius !== prev.cornerRadius ||
+    node.cornerRadiusPerCorner !== prev.cornerRadiusPerCorner
   ) {
-    applyImageFill(container, node.imageFill, effectiveWidth, effectiveHeight, node.cornerRadius);
+    applyImageFill(container, node.imageFill, effectiveWidth, effectiveHeight, node.cornerRadius, node.cornerRadiusPerCorner);
   }
 
   // Update clip mask
@@ -179,6 +177,7 @@ export function updateFrameContainer(
     node.width !== prev.width ||
     node.height !== prev.height ||
     node.cornerRadius !== prev.cornerRadius ||
+    node.cornerRadiusPerCorner !== prev.cornerRadiusPerCorner ||
     node.sizing !== prev.sizing ||
     node.layout !== prev.layout
   ) {
@@ -187,11 +186,7 @@ export function updateFrameContainer(
       const mask = existingMask ?? new Graphics();
       mask.label = "frame-mask";
       mask.clear();
-      if (node.cornerRadius) {
-        mask.roundRect(0, 0, effectiveWidth, effectiveHeight, node.cornerRadius);
-      } else {
-        mask.rect(0, 0, effectiveWidth, effectiveHeight);
-      }
+      drawRoundedShape(mask, effectiveWidth, effectiveHeight, node.cornerRadius, node.cornerRadiusPerCorner);
       mask.fill(0xffffff);
       if (!existingMask) {
         container.addChild(mask);
@@ -214,11 +209,7 @@ export function drawFrameBackground(
   const width = effectiveWidth ?? node.width;
   const height = effectiveHeight ?? node.height;
 
-  if (node.cornerRadius) {
-    gfx.roundRect(0, 0, width, height, node.cornerRadius);
-  } else {
-    gfx.rect(0, 0, width, height);
-  }
+  drawRoundedShape(gfx, width, height, node.cornerRadius, node.cornerRadiusPerCorner);
 
   applyFill(gfx, node, width, height);
   applyStroke(gfx, node, width, height);

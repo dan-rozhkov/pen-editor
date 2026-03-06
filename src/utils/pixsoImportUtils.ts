@@ -14,6 +14,7 @@ import {
   type GradientFill,
   type GradientColorStop,
   type PerSideStroke,
+  type PerCornerRadius,
 } from "../types/scene";
 import { generatePolygonPoints } from "./polygonUtils";
 import { getPathBBox } from "./svgUtils";
@@ -287,16 +288,26 @@ function extractPerSideStroke(node: PixsoNode): PerSideStroke | undefined {
   return { top, right, bottom, left };
 }
 
-function extractCornerRadius(node: PixsoNode): number | undefined {
-  if (node.cornerRadius && node.cornerRadius > 0) return node.cornerRadius;
-  const radii = [
-    node.topLeftRadius,
-    node.topRightRadius,
-    node.bottomLeftRadius,
-    node.bottomRightRadius,
-  ].filter((r): r is number => r !== undefined && r > 0);
-  if (radii.length > 0) return Math.max(...radii);
-  return undefined;
+function extractCornerRadius(node: PixsoNode): { cornerRadius?: number; cornerRadiusPerCorner?: PerCornerRadius } {
+  if (node.cornerRadius && node.cornerRadius > 0) return { cornerRadius: node.cornerRadius };
+  const tl = node.topLeftRadius ?? 0;
+  const tr = node.topRightRadius ?? 0;
+  const bl = node.bottomLeftRadius ?? 0;
+  const br = node.bottomRightRadius ?? 0;
+  if (tl > 0 || tr > 0 || bl > 0 || br > 0) {
+    if (tl === tr && tr === br && br === bl) {
+      return { cornerRadius: tl };
+    }
+    return {
+      cornerRadiusPerCorner: {
+        topLeft: tl || undefined,
+        topRight: tr || undefined,
+        bottomLeft: bl || undefined,
+        bottomRight: br || undefined,
+      },
+    };
+  }
+  return {};
 }
 
 function mapJustifyContent(value?: string): LayoutProperties["justifyContent"] {
@@ -503,13 +514,14 @@ export function convertPixsoNode(node: PixsoNode): SceneNode | null {
         .map(convertPixsoNode)
         .filter((n): n is SceneNode => n !== null);
       const { layout, sizing } = extractLayout(node);
-      const cornerRadius = extractCornerRadius(node);
+      const { cornerRadius, cornerRadiusPerCorner } = extractCornerRadius(node);
       const frame: FrameNode = {
         ...(base as Omit<FrameNode, "type" | "children">),
         type: "frame",
         children,
       };
       if (cornerRadius) frame.cornerRadius = cornerRadius;
+      if (cornerRadiusPerCorner) frame.cornerRadiusPerCorner = cornerRadiusPerCorner;
       if (layout) frame.layout = layout;
       if (sizing) frame.sizing = sizing;
       if (node.type === "COMPONENT") frame.reusable = true;
@@ -529,12 +541,13 @@ export function convertPixsoNode(node: PixsoNode): SceneNode | null {
     }
 
     case "RECTANGLE": {
-      const cornerRadius = extractCornerRadius(node);
+      const { cornerRadius: rectCornerRadius, cornerRadiusPerCorner: rectPerCorner } = extractCornerRadius(node);
       const rect: RectNode = {
         ...(base as Omit<RectNode, "type">),
         type: "rect",
       };
-      if (cornerRadius) rect.cornerRadius = cornerRadius;
+      if (rectCornerRadius) rect.cornerRadius = rectCornerRadius;
+      if (rectPerCorner) rect.cornerRadiusPerCorner = rectPerCorner;
       return rect;
     }
 

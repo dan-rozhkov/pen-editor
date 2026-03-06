@@ -11,7 +11,7 @@ import { useLayoutStore } from "@/store/layoutStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { measureTextAutoSize, measureTextFixedWidthHeight } from "@/utils/textMeasure";
 import { pushRenderTheme, popRenderTheme } from "./colorHelpers";
-import { applyFill, applyStroke } from "./fillStrokeHelpers";
+import { applyFill, applyStroke, drawRoundedShape } from "./fillStrokeHelpers";
 import { createNodeContainer } from "./index";
 import { prepareInstanceNode } from "@/utils/instanceUtils";
 
@@ -176,15 +176,16 @@ export function createRefContainer(
     (component.type === "frame"
       ? (component as FlatFrameNode).cornerRadius
       : undefined);
+  const componentCornerRadiusPerCorner =
+    prepared?.component.cornerRadiusPerCorner ??
+    (component.type === "frame"
+      ? (component as FlatFrameNode).cornerRadiusPerCorner
+      : undefined);
 
   if (componentClip) {
     const mask = new Graphics();
     mask.label = "ref-mask";
-    if (componentCornerRadius) {
-      mask.roundRect(0, 0, effectiveWidth, effectiveHeight, componentCornerRadius);
-    } else {
-      mask.rect(0, 0, effectiveWidth, effectiveHeight);
-    }
+    drawRoundedShape(mask, effectiveWidth, effectiveHeight, componentCornerRadius, componentCornerRadiusPerCorner);
     mask.fill(0xffffff);
     childrenContainer.addChild(mask);
     childrenContainer.mask = mask;
@@ -223,11 +224,7 @@ export function createRefContainer(
             ? node.strokeWidthPerSide
             : frame.strokeWidthPerSide,
       };
-      if (frame.cornerRadius) {
-        bg.roundRect(0, 0, effectiveWidth, effectiveHeight, frame.cornerRadius);
-      } else {
-        bg.rect(0, 0, effectiveWidth, effectiveHeight);
-      }
+      drawRoundedShape(bg, effectiveWidth, effectiveHeight, frame.cornerRadius, frame.cornerRadiusPerCorner);
       applyFill(bg, effectiveFrameStyle, effectiveWidth, effectiveHeight);
       applyStroke(bg, effectiveFrameStyle, effectiveWidth, effectiveHeight);
       childrenContainer.addChild(bg);
@@ -243,11 +240,7 @@ export function createRefContainer(
       if (isInAutoLayoutParent && effectiveStrokeAlign === "outside") {
         const bgMask = new Graphics();
         bgMask.label = "ref-bg-mask";
-        if (frame.cornerRadius) {
-          bgMask.roundRect(0, 0, effectiveWidth, effectiveHeight, frame.cornerRadius);
-        } else {
-          bgMask.rect(0, 0, effectiveWidth, effectiveHeight);
-        }
+        drawRoundedShape(bgMask, effectiveWidth, effectiveHeight, frame.cornerRadius, frame.cornerRadiusPerCorner);
         bgMask.fill(0xffffff);
         childrenContainer.addChild(bgMask);
         bg.mask = bgMask;
