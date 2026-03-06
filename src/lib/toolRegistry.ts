@@ -8,7 +8,6 @@ import { setVariables } from "./tools/setVariables";
 import { replaceAllMatchingProperties } from "./tools/replaceAllMatchingProperties";
 import { searchAllUniqueProperties } from "./tools/searchAllUniqueProperties";
 import { findEmptySpace } from "./tools/findEmptySpace";
-import { openDocument } from "./tools/openDocument";
 import { getGuidelines, getStyleGuide, getStyleGuideTags } from "./tools/staticTools";
 export type ToolHandler = (
   args: Record<string, unknown>
@@ -16,7 +15,6 @@ export type ToolHandler = (
 
 export const toolHandlers: Record<string, ToolHandler> = {
   get_editor_state: getEditorState,
-  open_document: openDocument,
   batch_get: batchGet,
   snapshot_layout: snapshotLayout,
   get_screenshot: getScreenshot,

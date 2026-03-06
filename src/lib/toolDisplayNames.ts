@@ -1,6 +1,5 @@
 const toolDisplayNames: Record<string, string> = {
   get_editor_state: "Get Editor State",
-  open_document: "Open Document",
   batch_get: "Read Nodes",
   snapshot_layout: "Snapshot Layout",
   get_screenshot: "Get Screenshot",
