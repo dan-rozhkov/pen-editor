@@ -3,10 +3,11 @@ import {
   NumberInput,
   PropertyRow,
   PropertySection,
-  SelectInput,
 } from "@/components/ui/PropertyInputs";
 import { generatePolygonPoints } from "@/utils/polygonUtils";
 import { hasPerCornerRadius } from "@/utils/renderUtils";
+import { CornersOut } from "@phosphor-icons/react";
+import clsx from "clsx";
 
 interface AppearanceSectionProps {
   node: SceneNode;
@@ -90,6 +91,21 @@ export function AppearanceSection({ node, onUpdate, mixedKeys, allTypesSupport }
             isMixed={mixedKeys?.has("cornerRadius")}
           />
         )}
+        {showCornerRadius && (
+          <button
+            type="button"
+            title={cornerMode === "unified" ? "Per corner radius" : "Unified radius"}
+            className={clsx(
+              "shrink-0 flex items-center justify-center w-6 h-6 rounded self-end",
+              cornerMode === "per-corner"
+                ? "text-sky-600 bg-sky-100 hover:bg-sky-200"
+                : "text-text-muted hover:bg-surface-hover"
+            )}
+            onClick={() => handleModeChange(cornerMode === "unified" ? "per-corner" : "unified")}
+          >
+            <CornersOut size={14} />
+          </button>
+        )}
         {node.type === "polygon" && (
           <NumberInput
             label="Sides"
@@ -110,52 +126,36 @@ export function AppearanceSection({ node, onUpdate, mixedKeys, allTypesSupport }
           />
         )}
       </PropertyRow>
-      {showCornerRadius && (
+      {showCornerRadius && cornerMode === "per-corner" && (
         <>
-          <div className="flex-1">
-            <SelectInput
-              label="Radius"
-              labelOutside
-              value={cornerMode}
-              options={[
-                { value: "unified", label: "Unified" },
-                { value: "per-corner", label: "Per Corner" },
-              ]}
-              onChange={handleModeChange}
+          <PropertyRow>
+            <NumberInput
+              label="TL"
+              value={(node as FrameNode).cornerRadiusPerCorner?.topLeft ?? 0}
+              onChange={(v) => handlePerCornerChange("topLeft", v)}
+              min={0}
             />
-          </div>
-          {cornerMode === "per-corner" && (
-            <>
-              <PropertyRow>
-                <NumberInput
-                  label="TL"
-                  value={(node as FrameNode).cornerRadiusPerCorner?.topLeft ?? 0}
-                  onChange={(v) => handlePerCornerChange("topLeft", v)}
-                  min={0}
-                />
-                <NumberInput
-                  label="TR"
-                  value={(node as FrameNode).cornerRadiusPerCorner?.topRight ?? 0}
-                  onChange={(v) => handlePerCornerChange("topRight", v)}
-                  min={0}
-                />
-              </PropertyRow>
-              <PropertyRow>
-                <NumberInput
-                  label="BL"
-                  value={(node as FrameNode).cornerRadiusPerCorner?.bottomLeft ?? 0}
-                  onChange={(v) => handlePerCornerChange("bottomLeft", v)}
-                  min={0}
-                />
-                <NumberInput
-                  label="BR"
-                  value={(node as FrameNode).cornerRadiusPerCorner?.bottomRight ?? 0}
-                  onChange={(v) => handlePerCornerChange("bottomRight", v)}
-                  min={0}
-                />
-              </PropertyRow>
-            </>
-          )}
+            <NumberInput
+              label="TR"
+              value={(node as FrameNode).cornerRadiusPerCorner?.topRight ?? 0}
+              onChange={(v) => handlePerCornerChange("topRight", v)}
+              min={0}
+            />
+          </PropertyRow>
+          <PropertyRow>
+            <NumberInput
+              label="BL"
+              value={(node as FrameNode).cornerRadiusPerCorner?.bottomLeft ?? 0}
+              onChange={(v) => handlePerCornerChange("bottomLeft", v)}
+              min={0}
+            />
+            <NumberInput
+              label="BR"
+              value={(node as FrameNode).cornerRadiusPerCorner?.bottomRight ?? 0}
+              onChange={(v) => handlePerCornerChange("bottomRight", v)}
+              min={0}
+            />
+          </PropertyRow>
         </>
       )}
     </PropertySection>

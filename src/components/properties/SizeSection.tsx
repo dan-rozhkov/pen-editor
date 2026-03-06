@@ -502,7 +502,7 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
           }
         >
           {node.aspectRatioLocked ? (
-            <LinkSimple size={14} weight="bold" />
+            <LinkSimple size={14} />
           ) : (
             <LinkSimpleBreak size={14} />
           )}
