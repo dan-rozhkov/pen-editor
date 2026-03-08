@@ -2,7 +2,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useThemeStore } from "@/store/themeStore";
 import { getVariableValue } from "@/types/variable";
-import type { FlatSceneNode } from "@/types/scene";
+import type { FlatSceneNode, EmbedNode } from "@/types/scene";
 import type { ToolHandler } from "../toolRegistry";
 import { serializeNodeToDepth } from "./serializeUtils";
 
@@ -22,7 +22,7 @@ function matchesPattern(node: FlatSceneNode, pattern: SearchPattern): boolean {
     if (!regex.test(node.name ?? "")) return false;
   }
   if (pattern.reusable !== undefined) {
-    const isReusable = node.type === "frame" && (node as { reusable?: boolean }).reusable === true;
+    const isReusable = node.type === "embed" && (node as EmbedNode).isComponent === true;
     if (pattern.reusable !== isReusable) return false;
   }
   return true;

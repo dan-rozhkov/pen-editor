@@ -1,16 +1,14 @@
 import { useMemo } from "react";
 import type {
+  EmbedNode,
   FrameNode,
   GroupNode,
-  RefNode,
   SceneNode,
   TextNode,
 } from "@/types/scene";
-import type { InstanceContext } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
 import {
-  findEffectiveThemeInTree,
   findNodeById,
   findParentFrame,
   getThemeFromAncestorFrames,
@@ -18,19 +16,15 @@ import {
   getNodeAbsolutePositionWithLayout,
 } from "@/utils/nodeUtils";
 import {
-  findDescendantLocalPosition,
   getPreparedNodeEffectiveSize,
-  prepareInstanceNode,
 } from "@/utils/instanceUtils";
 
 interface CanvasSelectionDataParams {
   nodes: SceneNode[];
   visibleNodes: SceneNode[];
   selectedIds: string[];
-  selectedDescendantIds: string[];
   editingNodeId: string | null;
   editingMode: "text" | "name" | null;
-  instanceContext: InstanceContext | null;
   calculateLayoutForFrame: (frame: FrameNode) => SceneNode[];
 }
 
@@ -38,10 +32,8 @@ export function useCanvasSelectionData({
   nodes,
   visibleNodes,
   selectedIds,
-  selectedDescendantIds,
   editingNodeId,
   editingMode,
-  instanceContext,
   calculateLayoutForFrame,
 }: CanvasSelectionDataParams) {
   const editingTextNode = useMemo(() => {
@@ -63,8 +55,7 @@ export function useCanvasSelectionData({
       while (currentId) {
         const currentNode = nodesById[currentId];
         if (!currentNode) break;
-        if (currentNode.type === "ref") return true;
-        if (currentNode.type === "frame" && currentNode.reusable) return true;
+        if (currentNode.type === "embed" && (currentNode as EmbedNode).isComponent) return true;
         currentId = parentById[currentId] ?? null;
       }
       return false;
@@ -108,88 +99,6 @@ export function useCanvasSelectionData({
     );
   }, [editingTextNode, parentById, nodesById, activeTheme]);
 
-  // Descendant text editing: compute the effective text node and its absolute position
-  const editingDescendantTextNode = useMemo(() => {
-    if (editingMode !== "text" || !instanceContext) return null;
-    const instance = findNodeById(nodes, instanceContext.instanceId);
-    if (!instance || instance.type !== "ref") return null;
-    const preparedInstance = prepareInstanceNode(
-      instance as RefNode,
-      nodes,
-      calculateLayoutForFrame,
-    );
-    if (!preparedInstance) return null;
-
-    const descendantNode = findNodeById(
-      preparedInstance.layoutChildren,
-      instanceContext.descendantId,
-    );
-    if (!descendantNode || descendantNode.type !== "text") return null;
-    return descendantNode as TextNode;
-  }, [editingMode, instanceContext, nodes]);
-
-  const editingDescendantTextPosition = useMemo(() => {
-    if (!editingDescendantTextNode || !instanceContext) return null;
-    const instanceAbsPos = getNodeAbsolutePositionWithLayout(
-      nodes,
-      instanceContext.instanceId,
-      calculateLayoutForFrame,
-    );
-    if (!instanceAbsPos) return null;
-    const instance = findNodeById(nodes, instanceContext.instanceId);
-    if (!instance || instance.type !== "ref") return null;
-    const preparedInstance = prepareInstanceNode(
-      instance as RefNode,
-      nodes,
-      calculateLayoutForFrame,
-    );
-    if (!preparedInstance) return null;
-
-    const localPos = findDescendantLocalPosition(
-      preparedInstance.layoutChildren,
-      instanceContext.descendantId,
-    );
-    if (!localPos) return null;
-    return {
-      x: instanceAbsPos.x + localPos.x,
-      y: instanceAbsPos.y + localPos.y,
-    };
-  }, [editingDescendantTextNode, instanceContext, nodes, calculateLayoutForFrame]);
-
-  const editingDescendantTextTheme = useMemo(() => {
-    if (!editingDescendantTextNode || !instanceContext) return null;
-    const instanceTheme = getThemeFromAncestorFrames(
-      parentById,
-      nodesById,
-      instanceContext.instanceId,
-      activeTheme,
-    );
-    const instance = findNodeById(nodes, instanceContext.instanceId);
-    if (!instance || instance.type !== "ref") return instanceTheme;
-    const preparedInstance = prepareInstanceNode(
-      instance as RefNode,
-      nodes,
-      calculateLayoutForFrame,
-    );
-    if (!preparedInstance) return instanceTheme;
-    const baseTheme = preparedInstance.component.themeOverride ?? instanceTheme;
-    return (
-      findEffectiveThemeInTree(
-        preparedInstance.layoutChildren,
-        instanceContext.descendantId,
-        baseTheme,
-      ) ?? baseTheme
-    );
-  }, [
-    editingDescendantTextNode,
-    instanceContext,
-    parentById,
-    nodesById,
-    activeTheme,
-    nodes,
-    calculateLayoutForFrame,
-  ]);
-
   const collectFrameNodes = useMemo(() => {
     const frames: Array<{
       node: FrameNode | GroupNode;
@@ -221,52 +130,6 @@ export function useCanvasSelectionData({
     }> = [];
 
     if (selectedIds.length === 0) return result;
-
-    if (instanceContext) {
-      const instance = findNodeById(nodes, instanceContext.instanceId);
-      if (instance && instance.type === "ref") {
-        const refNode = instance as RefNode;
-        const preparedInstance = prepareInstanceNode(
-          refNode,
-          nodes,
-          calculateLayoutForFrame,
-        );
-        if (preparedInstance) {
-          const instanceAbsPos = getNodeAbsolutePositionWithLayout(
-            nodes,
-            instanceContext.instanceId,
-            calculateLayoutForFrame,
-          );
-          if (!instanceAbsPos) return result;
-
-          const descendantIds =
-            selectedDescendantIds.length > 0
-              ? selectedDescendantIds
-              : [instanceContext.descendantId];
-
-          for (const descendantId of descendantIds) {
-            const descendantNode = findNodeById(
-              preparedInstance.layoutChildren,
-              descendantId,
-            );
-            const localPos = findDescendantLocalPosition(
-              preparedInstance.layoutChildren,
-              descendantId,
-            );
-            if (!descendantNode || !localPos) continue;
-            result.push({
-              node: descendantNode,
-              absX: instanceAbsPos.x + localPos.x,
-              absY: instanceAbsPos.y + localPos.y,
-              effectiveWidth: descendantNode.width,
-              effectiveHeight: descendantNode.height,
-              isInComponentContext: true,
-            });
-          }
-          if (result.length > 0) return result;
-        }
-      }
-    }
 
     for (const id of selectedIds) {
       const node = findNodeById(nodes, id);
@@ -313,10 +176,8 @@ export function useCanvasSelectionData({
     return result;
   }, [
     selectedIds,
-    selectedDescendantIds,
     nodes,
     calculateLayoutForFrame,
-    instanceContext,
     isInComponentContext,
   ]);
 
@@ -357,9 +218,6 @@ export function useCanvasSelectionData({
     editingTextPosition,
     editingTextTheme,
     editingNamePosition,
-    editingDescendantTextNode,
-    editingDescendantTextPosition,
-    editingDescendantTextTheme,
     transformerColor,
     collectFrameNodes,
     collectSelectedNodes,

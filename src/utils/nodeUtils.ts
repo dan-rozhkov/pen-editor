@@ -1,4 +1,4 @@
-import type { SceneNode, FrameNode, GroupNode } from "../types/scene";
+import type { SceneNode, FrameNode, GroupNode, EmbedNode } from "../types/scene";
 import type { ThemeName } from "../types/variable";
 import { isContainerNode } from "../types/scene";
 import { findComponentById as findComponentByIdImpl, getAllComponents as getAllComponentsImpl } from "./componentUtils";
@@ -101,20 +101,19 @@ export function getNodeAbsolutePosition(
 }
 
 /**
- * Find a component (reusable FrameNode) by ID
- * Searches the entire tree for a FrameNode with matching ID and reusable: true
+ * Find a component (EmbedNode with isComponent: true) by ID
  */
 export function findComponentById(
   nodes: SceneNode[],
   id: string,
-): FrameNode | null {
+): EmbedNode | null {
   return findComponentByIdImpl(nodes, id);
 }
 
 /**
- * Get all components (reusable FrameNodes) from the scene tree
+ * Get all component embeds from the scene tree
  */
-export function getAllComponents(nodes: SceneNode[]): FrameNode[] {
+export function getAllComponents(nodes: SceneNode[]): EmbedNode[] {
   return getAllComponentsImpl(nodes);
 }
 

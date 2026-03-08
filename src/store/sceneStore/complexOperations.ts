@@ -502,7 +502,7 @@ export function createComplexOperations(
       return rootFrame.id;
     },
 
-    convertDesignToEmbed: (id: string): string | null => {
+    convertDesignToEmbed: (id: string, options?: { isComponent?: boolean }): string | null => {
       const state = get();
       const node = state.nodesById[id];
       if (!node || (node.type !== "frame" && node.type !== "group")) return null;
@@ -539,6 +539,7 @@ export function createComplexOperations(
         height: node.height,
         sizing: node.sizing,
         htmlContent,
+        ...(options?.isComponent ? { isComponent: true } : {}),
       };
 
       // Build new state: remove frame tree, insert embed

@@ -4,15 +4,32 @@ export type TransformHandle = HandleCorner | HandleSide;
 
 import type { SnapTarget } from "@/utils/smartGuideUtils";
 
+export interface DragItem {
+  id: string;
+  startNodeX: number;
+  startNodeY: number;
+  startAbsX: number;
+  startAbsY: number;
+  parentOffsetX: number;
+  parentOffsetY: number;
+  width: number;
+  height: number;
+}
+
 export interface DragState {
   isDragging: boolean;
   nodeId: string | null;
+  dragItems: DragItem[];
   startWorldX: number;
   startWorldY: number;
   startNodeX: number;
   startNodeY: number;
   parentOffsetX: number;
   parentOffsetY: number;
+  startBoundsX: number;
+  startBoundsY: number;
+  startBoundsWidth: number;
+  startBoundsHeight: number;
   snapTargets: SnapTarget[];
   snapOffsetX: number;
   snapOffsetY: number;

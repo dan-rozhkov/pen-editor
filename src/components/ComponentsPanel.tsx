@@ -1,42 +1,42 @@
 import clsx from "clsx";
 import { DiamondsFourIcon } from "@phosphor-icons/react";
 import { useSceneStore } from "../store/sceneStore";
-import { getAllComponents } from "../utils/nodeUtils";
+import { getAllComponentsFlat } from "../utils/componentUtils";
 import { generateId } from "../types/scene";
-import type { SceneNode, FrameNode, RefNode } from "../types/scene";
+import type { SceneNode, EmbedNode } from "../types/scene";
 import { useNodePlacement } from "../hooks/useNodePlacement";
 
 export function ComponentsPanel() {
-  const nodes = useSceneStore((state) => state.getNodes());
+  const nodesById = useSceneStore((state) => state.nodesById);
   const addNode = useSceneStore((state) => state.addNode);
   const addChildToFrame = useSceneStore((state) => state.addChildToFrame);
   const { getSelectedFrame, getViewportCenter } = useNodePlacement();
 
-  // Get all components from the scene
-  const components = getAllComponents(nodes);
+  // Get all component embeds from the scene
+  const components = getAllComponentsFlat(nodesById);
 
-  const createInstance = (component: FrameNode) => {
+  const createInstance = (component: EmbedNode) => {
     const { centerX, centerY } = getViewportCenter();
 
-    const instance: RefNode = {
+    const copy: EmbedNode = {
       id: generateId(),
-      type: "ref",
-      componentId: component.id,
-      name: `${component.name || "Component"} instance`,
+      type: "embed",
+      name: `${component.name || "Component"}`,
       x: centerX - component.width / 2,
       y: centerY - component.height / 2,
       width: component.width,
       height: component.height,
+      htmlContent: component.htmlContent,
       visible: true,
     };
 
     const selectedFrame = getSelectedFrame();
     if (selectedFrame && selectedFrame.id !== component.id) {
       // Add as child to selected frame (position relative to frame)
-      const childInstance = { ...instance, x: 10, y: 10 };
-      addChildToFrame(selectedFrame.id, childInstance as SceneNode);
+      const childCopy = { ...copy, x: 10, y: 10 };
+      addChildToFrame(selectedFrame.id, childCopy as SceneNode);
     } else {
-      addNode(instance as SceneNode);
+      addNode(copy as SceneNode);
     }
   };
 

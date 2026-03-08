@@ -211,8 +211,6 @@ export function setImportedSelection(nodeIds: string[]): void {
     selectedIds: nodeIds,
     editingNodeId: null,
     editingMode: null,
-    instanceContext: null,
-    selectedDescendantIds: [],
     lastSelectedId: getLastNodeId(nodeIds),
   });
 }

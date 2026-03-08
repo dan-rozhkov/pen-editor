@@ -30,8 +30,6 @@ export function applyOpenedDocument(
     selectedIds: [],
     editingNodeId: null,
     editingMode: null,
-    instanceContext: null,
-    selectedDescendantIds: [],
     enteredContainerId: null,
     lastSelectedId: null,
   });

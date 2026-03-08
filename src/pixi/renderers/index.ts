@@ -9,7 +9,6 @@ import type {
   LineNode,
   PolygonNode,
   PathNode,
-  RefNode,
   EmbedNode,
   PerCornerRadius,
 } from "@/types/scene";
@@ -23,7 +22,6 @@ import { createPathContainer, updatePathContainer } from "./pathRenderer";
 import { createFrameContainer, updateFrameContainer, drawFrameBackground } from "./frameRenderer";
 import { drawRoundedShape } from "./fillStrokeHelpers";
 import { createGroupContainer } from "./groupRenderer";
-import { createRefContainer, updateRefContainer } from "./refRenderer";
 import { createEmbedContainer, updateEmbedContainer } from "./embedRenderer";
 import type { ShadowShape } from "./shadowHelpers";
 
@@ -102,13 +100,6 @@ export function createNodeContainer(
     case "path":
       container = createPathContainer(node as PathNode);
       break;
-    case "ref":
-      container = createRefContainer(
-        node as RefNode,
-        nodesById,
-        childrenById,
-      );
-      break;
     case "embed":
       container = createEmbedContainer(node as EmbedNode);
       break;
@@ -161,7 +152,6 @@ export function updateNodeContainer(
   nodesById: Record<string, FlatSceneNode>,
   childrenById: Record<string, string[]>,
   skipPosition?: boolean,
-  forceRefRebuild?: boolean,
 ): void {
   // Position - skip for auto-layout children (handled by applyAutoLayoutPositions)
   if (!skipPosition && (node.x !== prev.x || node.y !== prev.y)) {
@@ -230,16 +220,6 @@ export function updateNodeContainer(
     case "path":
       updatePathContainer(container, node as PathNode, prev as PathNode);
       break;
-    case "ref":
-      updateRefContainer(
-        container,
-        node as RefNode,
-        prev as RefNode,
-        nodesById,
-        childrenById,
-        forceRefRebuild,
-      );
-      break;
     case "embed":
       updateEmbedContainer(container, node as EmbedNode, prev as EmbedNode);
       break;
@@ -276,8 +256,8 @@ export function applyLayoutSize(
   node: FlatSceneNode,
   layoutWidth: number,
   layoutHeight: number,
-  nodesById?: Record<string, FlatSceneNode>,
-  childrenById?: Record<string, string[]>,
+  _nodesById?: Record<string, FlatSceneNode>,
+  _childrenById?: Record<string, string[]>,
 ): void {
   // Skip if size hasn't changed
   if (node.width === layoutWidth && node.height === layoutHeight) return;
@@ -340,22 +320,6 @@ export function applyLayoutSize(
         (node as FlatFrameNode).cornerRadius,
         "rect",
         (node as FlatFrameNode).cornerRadiusPerCorner,
-      );
-      break;
-    }
-    case "ref": {
-      if (!nodesById || !childrenById) break;
-      const layoutSizedRef: RefNode = {
-        ...(node as RefNode),
-        width: layoutWidth,
-        height: layoutHeight,
-      };
-      updateRefContainer(
-        container,
-        layoutSizedRef,
-        node as RefNode,
-        nodesById,
-        childrenById,
       );
       break;
     }

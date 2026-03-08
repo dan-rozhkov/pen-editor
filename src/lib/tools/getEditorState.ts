@@ -1,6 +1,7 @@
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
+import type { EmbedNode } from "@/types/scene";
 import type { ToolHandler } from "../toolRegistry";
 
 export const getEditorState: ToolHandler = async () => {
@@ -15,8 +16,13 @@ export const getEditorState: ToolHandler = async () => {
   });
 
   const reusableComponents = Object.values(nodesById)
-    .filter((n) => n.type === "frame" && (n as { reusable?: boolean }).reusable)
-    .map((n) => ({ id: n.id, type: n.type, name: n.name }));
+    .filter((n) => n.type === "embed" && (n as EmbedNode).isComponent)
+    .map((n) => ({
+      id: n.id,
+      type: n.type,
+      name: n.name,
+      htmlContent: (n as EmbedNode).htmlContent,
+    }));
 
   const selectedNodes = selectedIds.map((id) => {
     const n = nodesById[id];

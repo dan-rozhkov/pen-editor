@@ -3,7 +3,6 @@ import type {
   FlatSceneNode,
   FlatSnapshot,
   HistorySnapshot,
-  DescendantOverride,
 } from "../../types/scene";
 
 // ----- SceneState Interface -----
@@ -48,32 +47,12 @@ export interface SceneState {
     newParentId: string | null,
     newIndex: number,
   ) => void;
-  updateDescendantOverride: (
-    instanceId: string,
-    descendantId: string,
-    updates: DescendantOverride,
-  ) => void;
-  resetDescendantOverride: (
-    instanceId: string,
-    descendantId: string,
-    property?: keyof DescendantOverride,
-  ) => void;
-  replaceSlotContent: (instanceId: string, slotChildId: string, newNode: SceneNode) => void;
-  resetSlotContent: (instanceId: string, slotChildId: string) => void;
-  updateSlotContentNode: (instanceId: string, slotChildId: string, updates: Partial<SceneNode>) => void;
-  updateDescendantTextWithoutHistory: (
-    instanceId: string,
-    descendantId: string,
-    text: string,
-    descendantPath?: string,
-  ) => void;
-  detachInstance: (instanceId: string) => void;
   groupNodes: (ids: string[]) => string | null;
   ungroupNodes: (ids: string[]) => string[];
   convertNodeType: (id: string) => boolean;
   wrapInAutoLayoutFrame: (ids: string[]) => string | null;
   convertEmbedToDesign: (id: string) => Promise<string | null>;
-  convertDesignToEmbed: (id: string) => string | null;
+  convertDesignToEmbed: (id: string, options?: { isComponent?: boolean }) => string | null;
   setPageBackground: (color: string) => void;
 }
 

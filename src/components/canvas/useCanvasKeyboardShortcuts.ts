@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { isContainerNode, type FrameNode, type RefNode, type SceneNode, type HistorySnapshot } from "@/types/scene";
+import { isContainerNode, type SceneNode, type HistorySnapshot } from "@/types/scene";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useUIVisibilityStore } from "@/store/uiVisibilityStore";
 import { useClipboardStore } from "@/store/clipboardStore";
@@ -8,10 +8,8 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { cloneNodeWithNewId } from "@/utils/cloneNode";
 import {
-  findComponentById,
   findNodeById,
   findParentFrame,
-  findParentFrameInComponent,
 } from "@/utils/nodeUtils";
 import { parseSvgToNodes } from "@/utils/svgUtils";
 import {
@@ -48,7 +46,6 @@ interface CanvasKeyboardShortcutsParams {
   toggleTool: (tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon" | "embed") => void;
   cancelDrawing: () => void;
   clearSelection: () => void;
-  clearInstanceContext: () => void;
   copyNodes: (nodes: SceneNode[]) => void;
 }
 
@@ -132,7 +129,6 @@ export function useCanvasKeyboardShortcuts({
   toggleTool,
   cancelDrawing,
   clearSelection,
-  clearInstanceContext,
   copyNodes,
 }: CanvasKeyboardShortcutsParams) {
   useEffect(() => {
@@ -162,24 +158,8 @@ export function useCanvasKeyboardShortcuts({
 
       if (e.key === "Enter" && !e.shiftKey) {
         if (isTyping) return;
-        const { selectedIds, editingNodeId, editingMode, instanceContext } =
+        const { selectedIds, editingNodeId, editingMode } =
           useSelectionStore.getState();
-
-        // Descendant text editing: Enter on a text descendant in instance edit mode
-        if (!editingMode && instanceContext) {
-          const instance = findNodeById(nodes, instanceContext.instanceId);
-          if (instance && instance.type === "ref") {
-            const component = findComponentById(nodes, (instance as RefNode).componentId);
-            if (component) {
-              const descendant = findNodeById(component.children, instanceContext.descendantId);
-              if (descendant?.type === "text") {
-                e.preventDefault();
-                useSelectionStore.getState().startDescendantEditing();
-                return;
-              }
-            }
-          }
-        }
 
         if (!editingNodeId && !editingMode && selectedIds.length === 1) {
           const selectedNode = findNodeById(nodes, selectedIds[0]);
@@ -195,32 +175,8 @@ export function useCanvasKeyboardShortcuts({
         if (isTyping) return;
         e.preventDefault();
 
-        const { selectedIds, instanceContext } = useSelectionStore.getState();
-        if (instanceContext) {
-          const instance = findNodeById(nodes, instanceContext.instanceId);
-          if (instance && instance.type === "ref") {
-            const component = findComponentById(nodes, instance.componentId);
-            if (component) {
-              const parentFrame = findParentFrameInComponent(
-                component.children,
-                instanceContext.descendantId,
-                component,
-              );
-              if (parentFrame) {
-                if (parentFrame.id === component.id) {
-                  useSelectionStore.getState().clearDescendantSelection();
-                } else {
-                  useSelectionStore
-                    .getState()
-                    .selectDescendant(
-                      instanceContext.instanceId,
-                      parentFrame.id,
-                    );
-                }
-              }
-            }
-          }
-        } else if (selectedIds.length === 1) {
+        const { selectedIds } = useSelectionStore.getState();
+        if (selectedIds.length === 1) {
           const parentContext = findParentFrame(nodes, selectedIds[0]);
           if (parentContext.parent) {
             useSelectionStore.getState().select(parentContext.parent.id);
@@ -369,24 +325,6 @@ export function useCanvasKeyboardShortcuts({
         return;
       }
 
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.code === "KeyK") {
-        e.preventDefault();
-        const ids = useSelectionStore.getState().selectedIds;
-        if (ids.length === 1) {
-          const selectedNode = findNodeById(nodes, ids[0]);
-          if (selectedNode?.type === "frame") {
-            const frameNode = selectedNode as FrameNode;
-            if (!frameNode.reusable) updateNode(selectedNode.id, { reusable: true });
-          } else if (selectedNode?.type === "group") {
-            const converted = useSceneStore.getState().convertNodeType(selectedNode.id);
-            if (converted) {
-              updateNode(selectedNode.id, { reusable: true });
-            }
-          }
-        }
-        return;
-      }
-
       if (!isTyping && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
         if (e.code === "KeyV") {
           e.preventDefault();
@@ -440,30 +378,7 @@ export function useCanvasKeyboardShortcuts({
       if (e.code === "Delete" || e.code === "Backspace") {
         if (isTyping) return;
         e.preventDefault();
-        const selectionState = useSelectionStore.getState();
-        const { selectedIds: ids, instanceContext, selectedDescendantIds } =
-          selectionState;
-
-        if (instanceContext) {
-          const descendantIds =
-            selectedDescendantIds.length > 0
-              ? selectedDescendantIds
-              : [instanceContext.descendantId];
-          if (descendantIds.length > 0) {
-            saveHistory(createSnapshot(useSceneStore.getState()));
-            startBatch();
-            const updateDescendantOverride =
-              useSceneStore.getState().updateDescendantOverride;
-            descendantIds.forEach((descendantId) => {
-              updateDescendantOverride(instanceContext.instanceId, descendantId, {
-                enabled: false,
-              });
-            });
-            endBatch();
-            clearSelection();
-          }
-          return;
-        }
+        const ids = useSelectionStore.getState().selectedIds;
 
         if (ids.length > 0) {
           saveHistory(createSnapshot(useSceneStore.getState()));
@@ -570,13 +485,7 @@ export function useCanvasKeyboardShortcuts({
           cancelDrawing();
           return;
         }
-        const currentInstanceContext =
-          useSelectionStore.getState().instanceContext;
-        if (currentInstanceContext) {
-          clearInstanceContext();
-        } else {
-          clearSelection();
-        }
+        clearSelection();
       }
     };
 
@@ -695,7 +604,6 @@ export function useCanvasKeyboardShortcuts({
     deleteNode,
     dimensions,
     endBatch,
-    clearInstanceContext,
     fitToContent,
     groupNodes,
     isMiddleMouseDown,

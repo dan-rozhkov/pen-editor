@@ -6,15 +6,11 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { getNodeAbsolutePositionWithLayout, getNodeEffectiveSize } from "@/utils/nodeUtils";
 import type {
-  FlatFrameNode,
   FlatSceneNode,
-  RefNode,
+  EmbedNode,
   TextNode,
 } from "@/types/scene";
-import { findDescendantLocalRect, prepareInstanceNode } from "@/utils/instanceUtils";
-import { findNodeById } from "@/utils/nodeUtils";
 import { applyTextTransform } from "@/utils/textMeasure";
-import { findDescendantByPath, findDescendantRectByPath } from "@/utils/instancePathUtils";
 import { buildTextStyle } from "@/pixi/renderers/textRenderer";
 import { truncateLabelToWidth } from "@/pixi/frameLabelUtils";
 
@@ -172,30 +168,17 @@ export function createSelectionOverlay(
 
   function getSelectionColor(nodeId: string): number {
     const state = useSceneStore.getState();
-    let currentId: string | null = nodeId;
-    while (currentId) {
-      const node = state.nodesById[currentId];
-      if (!node) break;
-      if (node.type === "ref") return COMPONENT_SELECTION_COLOR;
-      if (node.type === "frame" && (node as FlatFrameNode).reusable) {
-        return COMPONENT_SELECTION_COLOR;
-      }
-      currentId = state.parentById[currentId] ?? null;
+    const node = state.nodesById[nodeId];
+    if (node?.type === "embed" && (node as EmbedNode).isComponent) {
+      return COMPONENT_SELECTION_COLOR;
     }
     return SELECTION_COLOR;
   }
 
   function isComponentOrInstance(nodeId: string): boolean {
     const state = useSceneStore.getState();
-    let currentId: string | null = nodeId;
-    while (currentId) {
-      const node = state.nodesById[currentId];
-      if (!node) break;
-      if (node.type === "ref") return true;
-      if (node.type === "frame" && (node as FlatFrameNode).reusable) return true;
-      currentId = state.parentById[currentId] ?? null;
-    }
-    return false;
+    const node = state.nodesById[nodeId];
+    return node?.type === "embed" && !!(node as EmbedNode).isComponent;
   }
 
   function drawTextBaselines(
@@ -247,10 +230,8 @@ export function createSelectionOverlay(
   function redrawSelection(): void {
     const {
       selectedIds,
-      selectedDescendantIds,
       editingNodeId,
       editingMode,
-      instanceContext,
     } = useSelectionStore.getState();
     const scale = useViewportStore.getState().scale;
     const strokeWidth = 1 / scale;
@@ -268,143 +249,6 @@ export function createSelectionOverlay(
     const selectionBaselineColor = hasComponentSelection
       ? COMPONENT_SELECTION_COLOR
       : TEXT_BASELINE_COLOR;
-
-    // Instance descendant selection: draw outline at descendant position
-    if (instanceContext) {
-      const { instanceId, descendantId, descendantPath } = instanceContext;
-      // Skip drawing if descendant text is being edited
-      if (editingMode === "text") return;
-
-      const instanceAbsPos = getAbsolutePosition(instanceId);
-      if (!instanceAbsPos) return;
-
-      const allNodes = state.getNodes();
-      const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-      const instanceNode = findNodeById(allNodes, instanceId);
-      if (!instanceNode || instanceNode.type !== "ref") return;
-
-      const instanceSize = getNodeEffectiveSize(
-        allNodes,
-        instanceId,
-        calculateLayoutForFrame,
-      );
-      const instanceForLayout = instanceSize
-        ? ({
-            ...(instanceNode as RefNode),
-            width: instanceSize.width,
-            height: instanceSize.height,
-          } as RefNode)
-        : (instanceNode as RefNode);
-      const prepared = prepareInstanceNode(
-        instanceForLayout,
-        allNodes,
-        calculateLayoutForFrame,
-      );
-      if (!prepared) return;
-
-      const descendantIds =
-        selectedDescendantIds.length > 0
-          ? selectedDescendantIds
-          : [descendantId];
-      const rectEntries = descendantIds
-        .map((id, index) => ({
-          id,
-          rect:
-            index === 0 && descendantPath
-              ? findDescendantRectByPath(prepared.layoutChildren, descendantPath)
-              : findDescendantLocalRect(prepared.layoutChildren, id),
-        }))
-        .filter(
-          (
-            entry,
-          ): entry is { id: string; rect: NonNullable<typeof entry.rect> } =>
-            entry.rect != null,
-        );
-      const rects = rectEntries.map((entry) => entry.rect);
-      if (rects.length === 0) return;
-
-      let minX = Infinity;
-      let minY = Infinity;
-      let maxX = -Infinity;
-      let maxY = -Infinity;
-
-      for (const entry of rectEntries) {
-        const { id: descendantId, rect } = entry;
-        const absX = instanceAbsPos.x + rect.x;
-        const absY = instanceAbsPos.y + rect.y;
-        const { width, height } = rect;
-        minX = Math.min(minX, absX);
-        minY = Math.min(minY, absY);
-        maxX = Math.max(maxX, absX + width);
-        maxY = Math.max(maxY, absY + height);
-
-        // Draw per-descendant outline
-        const outline = new Graphics();
-        outline.rect(absX, absY, width, height);
-        outline.stroke({ color: COMPONENT_SELECTION_COLOR, width: strokeWidth });
-        outlinesContainer.addChild(outline);
-
-        const descendant =
-          descendantPath && descendantId === instanceContext.descendantId
-            ? findDescendantByPath(prepared.layoutChildren, descendantPath)
-            : findNodeById(prepared.layoutChildren, descendantId);
-        if (descendant?.type === "text") {
-          drawTextBaselines(
-            selectionTextBaselines,
-            descendant as TextNode,
-            absX,
-            absY,
-            width,
-            scale,
-            selectionBaselineColor,
-          );
-        }
-      }
-
-      const width = maxX - minX;
-      const height = maxY - minY;
-      if (width <= 0 || height <= 0) return;
-
-      // Draw multi-selection bbox outline for descendants
-      if (rects.length > 1) {
-        const multiOutline = new Graphics();
-        multiOutline.rect(minX, minY, width, height);
-        multiOutline.stroke({ color: COMPONENT_SELECTION_COLOR, width: strokeWidth });
-        outlinesContainer.addChild(multiOutline);
-      }
-
-      // Draw transform handles at descendant corners
-      const handleSizeWorld = HANDLE_SIZE / scale;
-      const halfHandle = handleSizeWorld / 2;
-      const corners = [
-        { x: minX, y: minY },
-        { x: minX + width, y: minY },
-        { x: minX, y: minY + height },
-        { x: minX + width, y: minY + height },
-      ];
-      for (const corner of corners) {
-        const handle = new Graphics();
-        handle.rect(corner.x - halfHandle, corner.y - halfHandle, handleSizeWorld, handleSizeWorld);
-        handle.fill(HANDLE_FILL);
-        handle.stroke({ color: COMPONENT_SELECTION_COLOR, width: strokeWidth });
-        handlesContainer.addChild(handle);
-      }
-
-      // Draw size label for descendant — resolve sizing mode from descendant node
-      let descWidthMode: string | undefined;
-      let descHeightMode: string | undefined;
-      if (rectEntries.length === 1) {
-        const descNode = descendantPath
-          ? findDescendantByPath(prepared.layoutChildren, descendantPath)
-          : findNodeById(prepared.layoutChildren, rectEntries[0].id);
-        if (descNode) {
-          descWidthMode = (descNode as unknown as { sizing?: { widthMode?: string; heightMode?: string } }).sizing?.widthMode;
-          descHeightMode = (descNode as unknown as { sizing?: { widthMode?: string; heightMode?: string } }).sizing?.heightMode;
-        }
-      }
-      drawSizeLabel(minX + width / 2, minY + height, width, height, scale, true, descWidthMode, descHeightMode);
-      return;
-    }
 
     // Draw outline for each selected node
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -617,8 +461,8 @@ export function createSelectionOverlay(
       const absPos = { x: node.x, y: node.y };
 
       const isSelected = selectedSet.has(frameId);
-      const isReusable = node.type === "frame" && (node as FlatFrameNode).reusable;
-      const labelColor = isReusable
+      const isComponentEmbed = node.type === "embed" && (node as EmbedNode).isComponent;
+      const labelColor = isComponentEmbed
         ? LABEL_COLOR_COMPONENT
         : isSelected
           ? LABEL_COLOR_SELECTED
@@ -651,84 +495,16 @@ export function createSelectionOverlay(
     hovOutline.clear();
     hoverTextBaselines.clear();
 
-    const { hoveredNodeId, hoveredInstanceId } = useHoverStore.getState();
+    const { hoveredNodeId } = useHoverStore.getState();
     if (!hoveredNodeId) return;
 
     // Don't show hover on selected nodes
     const { selectedIds } = useSelectionStore.getState();
+    if (selectedIds.includes(hoveredNodeId)) return;
 
     const state = useSceneStore.getState();
     const scale = useViewportStore.getState().scale;
     const strokeWidth = 1 / scale;
-    const hoverBaselineColor = hoveredInstanceId
-      ? COMPONENT_SELECTION_COLOR
-      : isComponentOrInstance(hoveredNodeId)
-        ? COMPONENT_SELECTION_COLOR
-        : TEXT_BASELINE_COLOR;
-
-    // Instance descendant hover
-    if (hoveredInstanceId) {
-      if (selectedIds.includes(hoveredInstanceId)) {
-        const { instanceContext, selectedDescendantIds } = useSelectionStore.getState();
-        if (
-          instanceContext?.instanceId === hoveredInstanceId &&
-          (selectedDescendantIds.length > 0
-            ? selectedDescendantIds.includes(hoveredNodeId)
-            : instanceContext?.descendantId === hoveredNodeId)
-        ) {
-          return;
-        }
-      }
-
-      const instanceNode = state.nodesById[hoveredInstanceId];
-      if (!instanceNode || instanceNode.type !== "ref") return;
-
-      const instanceAbsPos = getAbsolutePosition(hoveredInstanceId);
-      if (!instanceAbsPos) return;
-
-      const nodes = state.getNodes();
-      const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-      const instanceSize = getNodeEffectiveSize(
-        nodes,
-        hoveredInstanceId,
-        calculateLayoutForFrame,
-      );
-      const instanceForLayout = instanceSize
-        ? ({
-            ...(instanceNode as RefNode),
-            width: instanceSize.width,
-            height: instanceSize.height,
-          } as RefNode)
-        : (instanceNode as RefNode);
-      const prepared = prepareInstanceNode(
-        instanceForLayout,
-        nodes,
-        calculateLayoutForFrame,
-      );
-      if (!prepared) return;
-
-      const rect = findDescendantLocalRect(prepared.layoutChildren, hoveredNodeId);
-      if (!rect) return;
-
-      hovOutline.rect(instanceAbsPos.x + rect.x, instanceAbsPos.y + rect.y, rect.width, rect.height);
-      hovOutline.stroke({ color: COMPONENT_SELECTION_COLOR, width: strokeWidth });
-
-      const descendant = findNodeById(prepared.layoutChildren, hoveredNodeId);
-      if (descendant?.type === "text") {
-        drawTextBaselines(
-          hoverTextBaselines,
-          descendant as TextNode,
-          instanceAbsPos.x + rect.x,
-          instanceAbsPos.y + rect.y,
-          rect.width,
-          scale,
-          hoverBaselineColor,
-        );
-      }
-      return;
-    }
-
-    if (selectedIds.includes(hoveredNodeId)) return;
 
     const node = state.nodesById[hoveredNodeId];
     if (!node) return;
@@ -748,6 +524,9 @@ export function createSelectionOverlay(
     hovOutline.stroke({ color: hoverColor, width: strokeWidth });
 
     if (node.type === "text") {
+      const hoverBaselineColor = isComponentOrInstance(hoveredNodeId)
+        ? COMPONENT_SELECTION_COLOR
+        : TEXT_BASELINE_COLOR;
       drawTextBaselines(
         hoverTextBaselines,
         node as TextNode,

@@ -17,10 +17,6 @@ export function createSnapshot(state: {
     rootIds: [...state.rootIds],
     selection: {
       selectedIds: [...selection.selectedIds],
-      instanceContext: selection.instanceContext
-        ? { ...selection.instanceContext }
-        : null,
-      selectedDescendantIds: [...selection.selectedDescendantIds],
       enteredContainerId: selection.enteredContainerId,
       lastSelectedId: selection.lastSelectedId,
     },

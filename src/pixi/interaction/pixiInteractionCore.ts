@@ -9,6 +9,7 @@ import {
   findDeepestChildAtPosition,
   getNodeAbsolutePositionWithLayout,
   getNodeEffectiveSize,
+  isDescendantOfFlat,
 } from "@/utils/nodeUtils";
 import type { InteractionContext } from "./types";
 import { screenToWorld, findNodeAtPoint, findFrameLabelAtPoint, hitTestTransformHandle, getResizeCursor } from "./hitTesting";
@@ -18,166 +19,72 @@ import { createDrawController } from "./drawController";
 import { createDragController } from "./dragController";
 import { createMarqueeController } from "./marqueeController";
 import { createMeasurementController } from "./measurementController";
-import { prepareFrameNode, prepareInstanceNode } from "@/utils/instanceUtils";
+import { prepareFrameNode } from "@/utils/instanceUtils";
 import type { SceneNode } from "@/types/scene";
 
 const EMPTY_POINTER_EVENT = {} as PointerEvent;
 
-interface DescendantHit {
-  id: string;
-  path: string;
-}
-
-function findDeepestVisibleChildHit(
-  children: SceneNode[],
-  localX: number,
-  localY: number,
-  pathPrefix = "",
-): DescendantHit | null {
-  const visibleChildren = children.filter(
-    (child) => child.visible !== false && child.enabled !== false,
-  );
-  for (let i = visibleChildren.length - 1; i >= 0; i--) {
-    const child = visibleChildren[i];
-    if (
-      localX < child.x ||
-      localX > child.x + child.width ||
-      localY < child.y ||
-      localY > child.y + child.height
-    ) {
-      continue;
-    }
-
-    const nextPath = pathPrefix ? `${pathPrefix}/${child.id}` : child.id;
-    if (child.type === "frame" || child.type === "group") {
-      const nested = findDeepestVisibleChildHit(
-        child.children,
-        localX - child.x,
-        localY - child.y,
-        nextPath,
-      );
-      if (nested) return nested;
-    }
-    return { id: child.id, path: nextPath };
-  }
-  return null;
-}
-
-function findInstanceDescendantAtWorldPoint(
-  instanceId: string,
-  worldX: number,
-  worldY: number,
-  currentNodes: ReturnType<typeof useSceneStore.getState>["getNodes"] extends () => infer T ? T : never,
-  calculateLayoutForFrame: ReturnType<typeof useLayoutStore.getState>["calculateLayoutForFrame"],
-): DescendantHit | null {
-  const instanceNode = findNodeById(currentNodes, instanceId);
-  if (!instanceNode || instanceNode.type !== "ref") return null;
-
-  const absPos = getNodeAbsolutePositionWithLayout(
-    currentNodes,
-    instanceId,
-    calculateLayoutForFrame,
-  );
-  if (!absPos) return null;
-
-  const preparedInstance = prepareInstanceNode(
-    (() => {
-      const effectiveSize = getNodeEffectiveSize(
-        currentNodes,
-        instanceId,
-        calculateLayoutForFrame,
-      );
-      if (!effectiveSize) return instanceNode;
-      return {
-        ...instanceNode,
-        width: effectiveSize.width,
-        height: effectiveSize.height,
-      };
-    })(),
-    currentNodes,
-    calculateLayoutForFrame,
-  );
-  if (!preparedInstance) return null;
-
-  const localX = worldX - absPos.x;
-  const localY = worldY - absPos.y;
-  return findDeepestVisibleChildHit(
-    preparedInstance.layoutChildren,
-    localX,
-    localY,
-  );
-}
-
-function flattenVisibleDescendantIds(children: SceneNode[]): string[] {
-  const ids: string[] = [];
-  const walk = (nodes: SceneNode[]) => {
-    for (const node of nodes) {
-      if (node.visible === false || node.enabled === false) continue;
-      ids.push(node.id);
-      if (node.type === "frame" || node.type === "group") {
-        walk(node.children);
-      }
-    }
-  };
-  walk(children);
-  return ids;
-}
-
-function findAncestorContainerIds(
-  nodes: SceneNode[],
-  targetId: string,
-  path: string[] = [],
-): string[] | null {
-  for (const node of nodes) {
-    if (node.id === targetId) {
-      return path;
-    }
-    if (node.type === "frame" || node.type === "group") {
-      const result = findAncestorContainerIds(node.children, targetId, [
-        ...path,
-        node.id,
-      ]);
-      if (result) return result;
-    }
-  }
-  return null;
-}
-
-/**
- * Expand an instance and its ancestor containers, then select a descendant.
- * Shared by pointerDown and dblClick handlers.
- */
-function expandAndSelectDescendant(
-  instanceId: string,
-  descendantHit: DescendantHit,
+function getSelectionBoundingBox(
+  selectedIds: string[],
   currentNodes: SceneNode[],
-  calculateLayoutForFrame: (frame: import("@/types/scene").FrameNode) => SceneNode[],
-): void {
-  useSceneStore.getState().setFrameExpanded(instanceId, true);
-  const instanceNode = findNodeById(currentNodes, instanceId);
-  if (instanceNode && instanceNode.type === "ref") {
-    const preparedInstance = prepareInstanceNode(
-      instanceNode,
+  calculateLayoutForFrame: ReturnType<typeof useLayoutStore.getState>["calculateLayoutForFrame"],
+): { x: number; y: number; width: number; height: number } | null {
+  if (selectedIds.length <= 1) return null;
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const id of selectedIds) {
+    const absPos = getNodeAbsolutePositionWithLayout(
       currentNodes,
+      id,
       calculateLayoutForFrame,
     );
-    if (preparedInstance) {
-      const ancestorIds = findAncestorContainerIds(
-        preparedInstance.layoutChildren,
-        descendantHit.id,
-      );
-      if (ancestorIds && ancestorIds.length > 0) {
-        ancestorIds.forEach((id) =>
-          useSceneStore.getState().setFrameExpanded(id, true),
-        );
-      }
-    }
+    const size = getNodeEffectiveSize(currentNodes, id, calculateLayoutForFrame);
+    if (!absPos || !size) continue;
+
+    minX = Math.min(minX, absPos.x);
+    minY = Math.min(minY, absPos.y);
+    maxX = Math.max(maxX, absPos.x + size.width);
+    maxY = Math.max(maxY, absPos.y + size.height);
   }
-  useSelectionStore.getState().selectDescendant(
-    instanceId,
-    descendantHit.id,
-    descendantHit.path,
+
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) return null;
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+function isPointInsideBounds(
+  point: { x: number; y: number },
+  bounds: { x: number; y: number; width: number; height: number } | null,
+): boolean {
+  if (!bounds) return false;
+
+  return (
+    point.x >= bounds.x &&
+    point.x <= bounds.x + bounds.width &&
+    point.y >= bounds.y &&
+    point.y <= bounds.y + bounds.height
   );
+}
+
+function resolveDragTargetId(hitId: string | null): string | null {
+  if (!hitId) return null;
+
+  const sceneState = useSceneStore.getState();
+  const { selectedIds } = useSelectionStore.getState();
+  if (selectedIds.length !== 1) return hitId;
+
+  const selectedId = selectedIds[0];
+  if (selectedId === hitId) return hitId;
+
+  const selectedNode = sceneState.nodesById[selectedId];
+  if (selectedNode?.type !== "group") return hitId;
+
+  return isDescendantOfFlat(sceneState.parentById, selectedId, hitId)
+    ? selectedId
+    : hitId;
 }
 
 /**
@@ -186,9 +93,12 @@ function expandAndSelectDescendant(
  */
 export function setupPixiInteraction(
   app: Application,
-  _viewport: Container,
-  _sceneRoot: Container,
+  viewport: Container,
+  sceneRoot: Container,
 ): () => void {
+  void viewport;
+  void sceneRoot;
+
   const canvas = app.canvas as HTMLCanvasElement;
 
   let isSpaceHeld = false;
@@ -214,27 +124,7 @@ export function setupPixiInteraction(
 
   function runHoverPass(world: { x: number; y: number }): void {
     const hitId = findNodeAtPoint(world.x, world.y, { deepSelect: true });
-    const selectionState = useSelectionStore.getState();
-    const activeInstanceId = selectionState.instanceContext?.instanceId;
-    if (activeInstanceId && hitId === activeInstanceId) {
-      // When inside an instance context, resolve descendant under pointer for hover
-      const currentNodes = useSceneStore.getState().getNodes();
-      const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-      const descendantId = findInstanceDescendantAtWorldPoint(
-        activeInstanceId,
-        world.x,
-        world.y,
-        currentNodes,
-        calculateLayoutForFrame,
-      );
-      if (descendantId) {
-        useHoverStore.getState().setHoveredNode(descendantId.id, activeInstanceId);
-      } else {
-        useHoverStore.getState().setHoveredNode(hitId);
-      }
-    } else {
-      useHoverStore.getState().setHoveredNode(hitId);
-    }
+    useHoverStore.getState().setHoveredNode(hitId);
 
     // Measurement (Alt+hover)
     measurement.handlePointerMove(EMPTY_POINTER_EVENT, world, hitId);
@@ -301,77 +191,22 @@ export function setupPixiInteraction(
 
       const deepSelect = e.metaKey || e.ctrlKey;
       const hitId = findNodeAtPoint(world.x, world.y, { deepSelect });
+      const dragHitId = resolveDragTargetId(hitId);
       const selectionState = useSelectionStore.getState();
       const currentNodes = useSceneStore.getState().getNodes();
       const calculateLayoutForFrame =
         useLayoutStore.getState().calculateLayoutForFrame;
 
-      // Instance descendant selection (like Konva):
-      // - Cmd/Ctrl+click on instance deep-selects descendant
-      // - while already in instance context, plain click switches descendant
-      if (hitId) {
-        const hitNode = findNodeById(currentNodes, hitId);
-        const activeInstanceId = selectionState.instanceContext?.instanceId;
-        const isSingleSelectedRef =
-          hitNode?.type === "ref" &&
-          selectionState.selectedIds.length === 1 &&
-          selectionState.selectedIds[0] === hitId;
-        const shouldDeepSelectInInstance =
-          (deepSelect && hitNode?.type === "ref") ||
-          (!!activeInstanceId && activeInstanceId === hitId) ||
-          isSingleSelectedRef;
-        if (shouldDeepSelectInInstance) {
-          const descendantHit = findInstanceDescendantAtWorldPoint(
-            hitId,
-            world.x,
-            world.y,
-            currentNodes,
-            calculateLayoutForFrame,
-          );
-          if (descendantHit) {
-            const selState = useSelectionStore.getState();
-            const sameInstance =
-              selState.instanceContext?.instanceId === hitId &&
-              selState.selectedDescendantIds.length > 0;
-            if (e.shiftKey && sameInstance) {
-              const instanceNode = findNodeById(currentNodes, hitId);
-              if (instanceNode && instanceNode.type === "ref") {
-                const preparedInstance = prepareInstanceNode(
-                  instanceNode,
-                  currentNodes,
-                  calculateLayoutForFrame,
-                );
-                if (preparedInstance) {
-                  const flatIds = flattenVisibleDescendantIds(
-                    preparedInstance.layoutChildren,
-                  );
-                  useSceneStore.getState().setFrameExpanded(hitId, true);
-                  const ancestorIds = findAncestorContainerIds(
-                    preparedInstance.layoutChildren,
-                    descendantHit.id,
-                  );
-                  if (ancestorIds && ancestorIds.length > 0) {
-                    ancestorIds.forEach((id) =>
-                      useSceneStore.getState().setFrameExpanded(id, true),
-                    );
-                  }
-                  selState.selectDescendantRange(
-                    hitId,
-                    selState.instanceContext!.descendantId,
-                    descendantHit.id,
-                    flatIds,
-                  );
-                  return;
-                }
-              }
-            }
-            expandAndSelectDescendant(hitId, descendantHit, currentNodes, calculateLayoutForFrame);
-            return;
-          }
-        }
+      const selectionBounds = getSelectionBoundingBox(
+        selectionState.selectedIds,
+        currentNodes,
+        calculateLayoutForFrame,
+      );
+      if (!hitId && isPointInsideBounds(world, selectionBounds)) {
+        if (drag.handlePointerDown(e, world, null, selectionState.selectedIds)) return;
       }
 
-      if (drag.handlePointerDown(e, world, hitId)) return;
+      if (drag.handlePointerDown(e, world, dragHitId)) return;
 
       // Priority 5: Marquee selection (background click)
       marquee.handlePointerDown(e, world, hitId);
@@ -429,27 +264,6 @@ export function setupPixiInteraction(
     // Match Konva behavior: drill down from currently selected container.
     if (currentSelectedIds.length === 1) {
       const selectedNode = findNodeById(currentNodes, currentSelectedIds[0]);
-      if (selectedNode && selectedNode.type === "ref") {
-        const descendantHit = findInstanceDescendantAtWorldPoint(
-          selectedNode.id,
-          world.x,
-          world.y,
-          currentNodes,
-          calculateLayoutForFrame,
-        );
-        if (descendantHit) {
-          expandAndSelectDescendant(selectedNode.id, descendantHit, currentNodes, calculateLayoutForFrame);
-          const preparedInstance = prepareInstanceNode(selectedNode, currentNodes, calculateLayoutForFrame);
-          const descendantNode = findNodeById(
-            preparedInstance?.layoutChildren ?? [],
-            descendantHit.id,
-          );
-          if (descendantNode?.type === "text") {
-            useSelectionStore.getState().startDescendantEditing();
-          }
-        }
-        return;
-      }
       if (selectedNode && (selectedNode.type === "frame" || selectedNode.type === "group")) {
         useSelectionStore.getState().enterContainer(selectedNode.id);
 
@@ -487,25 +301,6 @@ export function setupPixiInteraction(
       useSelectionStore.getState().startEditing(hitId);
     } else if (node.type === "embed") {
       useSelectionStore.getState().startEditing(hitId, 'embed');
-    } else if (node.type === "ref") {
-      const descendantHit = findInstanceDescendantAtWorldPoint(
-        hitId,
-        world.x,
-        world.y,
-        currentNodes,
-        calculateLayoutForFrame,
-      );
-      if (descendantHit) {
-        expandAndSelectDescendant(hitId, descendantHit, currentNodes, calculateLayoutForFrame);
-        const preparedInstance = prepareInstanceNode(node, currentNodes, calculateLayoutForFrame);
-        const descendantNode = findNodeById(
-          preparedInstance?.layoutChildren ?? [],
-          descendantHit.id,
-        );
-        if (descendantNode?.type === "text") {
-          useSelectionStore.getState().startDescendantEditing();
-        }
-      }
     } else if (node.type === "frame" || node.type === "group") {
       // Enter container (fallback when no selected container context)
       useSelectionStore.getState().enterContainer(hitId);

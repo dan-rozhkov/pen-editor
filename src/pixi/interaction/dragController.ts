@@ -2,34 +2,43 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useSmartGuideStore } from "@/store/smartGuideStore";
+import { useHoverStore } from "@/store/hoverStore";
 import { useDragStore } from "@/store/dragStore";
 import { useLayoutStore } from "@/store/layoutStore";
-import type { FlatFrameNode, SceneNode } from "@/types/scene";
+import type { FlatFrameNode, FlatSceneNode, SceneNode } from "@/types/scene";
 import { cloneNodeWithNewId } from "@/utils/cloneNode";
+import { saveHistory } from "@/store/sceneStore/helpers/history";
 import {
   collectSnapTargets,
   getSnapEdges,
   calculateSnap,
 } from "@/utils/smartGuideUtils";
-import { getNodeAbsolutePosition } from "@/utils/nodeUtils";
+import { getNodeAbsolutePositionWithLayout, getNodeEffectiveSize } from "@/utils/nodeUtils";
 import {
   calculateDropPosition,
   isPointInsideRect,
   getFrameAbsoluteRectWithLayout,
 } from "@/utils/dragUtils";
-import type { InteractionContext, DragState } from "./types";
+import type { DragItem, InteractionContext, DragState } from "./types";
 import { findFrameInTree } from "./hitTesting";
 
 const AXIS_LOCK_THRESHOLD = 8; // pixels
 
 export interface DragController {
-  handlePointerDown(e: PointerEvent, world: { x: number; y: number }, hitId: string | null): boolean;
+  handlePointerDown(
+    e: PointerEvent,
+    world: { x: number; y: number },
+    hitId: string | null,
+    dragSelectionIds?: string[],
+  ): boolean;
   handlePointerMove(e: PointerEvent, world: { x: number; y: number }): boolean;
   handlePointerUp(e: PointerEvent, world: { x: number; y: number }): boolean;
   isDragging: () => boolean;
 }
 
-export function createDragController(_context: InteractionContext): DragController {
+export function createDragController(context: InteractionContext): DragController {
+  void context;
+
   const findNodeInTree = (nodes: SceneNode[], nodeId: string): SceneNode | null => {
     for (const node of nodes) {
       if (node.id === nodeId) return node;
@@ -44,12 +53,17 @@ export function createDragController(_context: InteractionContext): DragControll
   const state: DragState = {
     isDragging: false,
     nodeId: null,
+    dragItems: [],
     startWorldX: 0,
     startWorldY: 0,
     startNodeX: 0,
     startNodeY: 0,
     parentOffsetX: 0,
     parentOffsetY: 0,
+    startBoundsX: 0,
+    startBoundsY: 0,
+    startBoundsWidth: 0,
+    startBoundsHeight: 0,
     snapTargets: [],
     snapOffsetX: 0,
     snapOffsetY: 0,
@@ -62,18 +76,140 @@ export function createDragController(_context: InteractionContext): DragControll
     cumulativeDeltaY: 0,
   };
 
-  return {
-    handlePointerDown(e: PointerEvent, world: { x: number; y: number }, hitId: string | null): boolean {
-      if (e.button === 0 && hitId) {
-        const sceneState = useSceneStore.getState();
-        const node = sceneState.nodesById[hitId];
-        if (!node) return false;
+  const resetDragState = (): void => {
+    state.isDragging = false;
+    state.nodeId = null;
+    state.dragItems = [];
+    state.isAutoLayoutDrag = false;
+    state.autoLayoutParentId = null;
+    state.isAltHeld = false;
+    state.isShiftHeld = false;
+    state.axisLock = null;
+    state.cumulativeDeltaX = 0;
+    state.cumulativeDeltaY = 0;
+  };
 
-        // Select
-        if (e.shiftKey) {
-          useSelectionStore.getState().addToSelection(hitId);
-        } else {
-          useSelectionStore.getState().select(hitId);
+  const resolveDragIds = (
+    hitId: string | null,
+    dragSelectionIds: string[] | undefined,
+    effectiveSelectedIds: string[],
+    sceneNodesById: Record<string, FlatSceneNode>,
+  ): string[] => {
+    if (dragSelectionIds && dragSelectionIds.length > 0) {
+      return dragSelectionIds.filter((id) => !!sceneNodesById[id]);
+    }
+
+    if (hitId && effectiveSelectedIds.includes(hitId) && effectiveSelectedIds.length > 1) {
+      return effectiveSelectedIds.filter((id) => !!sceneNodesById[id]);
+    }
+
+    return hitId ? [hitId] : [];
+  };
+
+  const collectDragItems = (
+    dragIds: string[],
+    nodes: SceneNode[],
+    sceneNodesById: Record<string, FlatSceneNode>,
+    calculateLayoutForFrame: ReturnType<typeof useLayoutStore.getState>["calculateLayoutForFrame"],
+  ): DragItem[] =>
+    dragIds
+      .map((id) => {
+        const dragNode = sceneNodesById[id];
+        if (!dragNode) return null;
+
+        const absPos = getNodeAbsolutePositionWithLayout(
+          nodes,
+          id,
+          calculateLayoutForFrame,
+        );
+        const effectiveSize = getNodeEffectiveSize(nodes, id, calculateLayoutForFrame);
+        if (!absPos || !effectiveSize) return null;
+
+        return {
+          id,
+          startNodeX: dragNode.x,
+          startNodeY: dragNode.y,
+          startAbsX: absPos.x,
+          startAbsY: absPos.y,
+          parentOffsetX: absPos.x - dragNode.x,
+          parentOffsetY: absPos.y - dragNode.y,
+          width: effectiveSize.width,
+          height: effectiveSize.height,
+        };
+      })
+      .filter((item): item is DragItem => item !== null);
+
+  const setDragBounds = (dragItems: DragItem[]): void => {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    for (const item of dragItems) {
+      minX = Math.min(minX, item.startAbsX);
+      minY = Math.min(minY, item.startAbsY);
+      maxX = Math.max(maxX, item.startAbsX + item.width);
+      maxY = Math.max(maxY, item.startAbsY + item.height);
+    }
+
+    state.startBoundsX = minX;
+    state.startBoundsY = minY;
+    state.startBoundsWidth = maxX - minX;
+    state.startBoundsHeight = maxY - minY;
+  };
+
+  const updateDraggedNodesWithoutHistory = (
+    adjustedDeltaX: number,
+    adjustedDeltaY: number,
+  ): void => {
+    useSceneStore.setState((sceneState) => {
+      const newNodesById = { ...sceneState.nodesById };
+      let hasChanges = false;
+
+      for (const item of state.dragItems) {
+        const existing = newNodesById[item.id];
+        if (!existing) continue;
+
+        const nextX = Math.round(item.startNodeX + adjustedDeltaX);
+        const nextY = Math.round(item.startNodeY + adjustedDeltaY);
+        if (existing.x === nextX && existing.y === nextY) continue;
+
+        newNodesById[item.id] = {
+          ...existing,
+          x: nextX,
+          y: nextY,
+        };
+        hasChanges = true;
+      }
+
+      return hasChanges
+        ? {
+            nodesById: newNodesById,
+            _cachedTree: null,
+          }
+        : sceneState;
+    });
+  };
+
+  return {
+    handlePointerDown(
+      e: PointerEvent,
+      world: { x: number; y: number },
+      hitId: string | null,
+      dragSelectionIds?: string[],
+    ): boolean {
+      if (e.button === 0 && (hitId || (dragSelectionIds && dragSelectionIds.length > 0))) {
+        const sceneState = useSceneStore.getState();
+        const selectionState = useSelectionStore.getState();
+        const currentSelectedIds = selectionState.selectedIds;
+        const wasAlreadySelected = !!hitId && currentSelectedIds.includes(hitId);
+
+        if (hitId) {
+          if (e.shiftKey) {
+            selectionState.addToSelection(hitId);
+          } else if (!wasAlreadySelected || currentSelectedIds.length <= 1) {
+            selectionState.select(hitId);
+          }
         }
 
         // Cmd/Ctrl are selection modifiers - prevent drag
@@ -82,12 +218,42 @@ export function createDragController(_context: InteractionContext): DragControll
           return false;
         }
 
+        const effectiveSelectedIds = useSelectionStore.getState().selectedIds;
+        const dragIds = resolveDragIds(
+          hitId,
+          dragSelectionIds,
+          effectiveSelectedIds,
+          sceneState.nodesById,
+        );
+
+        if (dragIds.length === 0) return false;
+
+        const nodes = sceneState.getNodes();
+        const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+        const dragItems = collectDragItems(
+          dragIds,
+          nodes,
+          sceneState.nodesById,
+          calculateLayoutForFrame,
+        );
+
+        if (dragItems.length === 0) return false;
+
+        const primaryItem = dragItems.find((item) => item.id === hitId) ?? dragItems[0];
+        const primaryNode = sceneState.nodesById[primaryItem.id];
+        if (!primaryNode) return false;
+
+        useHoverStore.getState().setHoveredNode(null);
+
         state.isDragging = true;
-        state.nodeId = hitId;
+        state.nodeId = primaryItem.id;
+        state.dragItems = dragItems;
         state.startWorldX = world.x;
         state.startWorldY = world.y;
-        state.startNodeX = node.x;
-        state.startNodeY = node.y;
+        state.startNodeX = primaryItem.startNodeX;
+        state.startNodeY = primaryItem.startNodeY;
+        state.parentOffsetX = primaryItem.parentOffsetX;
+        state.parentOffsetY = primaryItem.parentOffsetY;
         state.snapOffsetX = 0;
         state.snapOffsetY = 0;
         state.isAutoLayoutDrag = false;
@@ -98,9 +264,12 @@ export function createDragController(_context: InteractionContext): DragControll
         state.cumulativeDeltaX = 0;
         state.cumulativeDeltaY = 0;
 
-        // Check if node is inside an auto-layout frame (skip for absolute-positioned nodes)
-        const parentId = sceneState.parentById[hitId];
-        if (parentId && !node.absolutePosition) {
+        setDragBounds(dragItems);
+
+        // Check if node is inside an auto-layout frame (skip for absolute-positioned nodes).
+        // Multi-select drag uses free-drag semantics even if one of the nodes belongs to auto-layout.
+        const parentId = sceneState.parentById[primaryItem.id];
+        if (dragItems.length === 1 && parentId && !primaryNode.absolutePosition) {
           const parentNode = sceneState.nodesById[parentId];
           if (
             parentNode &&
@@ -109,25 +278,13 @@ export function createDragController(_context: InteractionContext): DragControll
           ) {
             state.isAutoLayoutDrag = true;
             state.autoLayoutParentId = parentId;
-            useDragStore.getState().startDrag(hitId);
+            useDragStore.getState().startDrag(primaryItem.id);
           }
-        }
-
-        // Compute parent offset for absolute position
-        const nodes = sceneState.getNodes();
-        const absPos = getNodeAbsolutePosition(nodes, hitId);
-        if (absPos) {
-          state.parentOffsetX = absPos.x - node.x;
-          state.parentOffsetY = absPos.y - node.y;
-        } else {
-          state.parentOffsetX = 0;
-          state.parentOffsetY = 0;
         }
 
         // Collect snap targets (skip for auto-layout drags)
         if (!state.isAutoLayoutDrag) {
-          const selectedIds = useSelectionStore.getState().selectedIds;
-          const excludeIds = new Set(selectedIds);
+          const excludeIds = new Set(dragItems.map((item) => item.id));
           state.snapTargets = collectSnapTargets(nodes, excludeIds);
         } else {
           state.snapTargets = [];
@@ -174,8 +331,8 @@ export function createDragController(_context: InteractionContext): DragControll
         const deltaX = world.x - state.startWorldX;
         const deltaY = world.y - state.startWorldY;
 
-        let newX = state.startNodeX + deltaX;
-        let newY = state.startNodeY + deltaY;
+        let adjustedDeltaX = deltaX;
+        let adjustedDeltaY = deltaY;
 
         // Apply axis lock if Shift was held at drag start (only for free drag, not auto-layout)
         if (state.isShiftHeld && !state.isAutoLayoutDrag) {
@@ -188,8 +345,8 @@ export function createDragController(_context: InteractionContext): DragControll
 
           // Below threshold: don't move element at all (prevents jitter)
           if (totalMovement < AXIS_LOCK_THRESHOLD) {
-            newX = state.startNodeX;
-            newY = state.startNodeY;
+            adjustedDeltaX = 0;
+            adjustedDeltaY = 0;
           } else {
             // Above threshold: determine dominant axis (only once)
             if (state.axisLock === null) {
@@ -198,25 +355,25 @@ export function createDragController(_context: InteractionContext): DragControll
 
             // Lock to dominant axis
             if (state.axisLock === "x") {
-              newY = state.startNodeY; // Lock Y, allow X
+              adjustedDeltaY = 0; // Lock Y, allow X
             } else {
-              newX = state.startNodeX; // Lock X, allow Y
+              adjustedDeltaX = 0; // Lock X, allow Y
             }
           }
         }
 
         // Smart guide snapping
         if (state.snapTargets.length > 0) {
-          const sceneState = useSceneStore.getState();
-          const node = sceneState.nodesById[state.nodeId];
-          if (node) {
+          if (state.dragItems.length > 0) {
             const scale = useViewportStore.getState().scale;
             const threshold = 2 / scale;
 
-            const absX = newX + state.parentOffsetX;
-            const absY = newY + state.parentOffsetY;
-
-            const draggedEdges = getSnapEdges(absX, absY, node.width, node.height);
+            const draggedEdges = getSnapEdges(
+              state.startBoundsX + adjustedDeltaX,
+              state.startBoundsY + adjustedDeltaY,
+              state.startBoundsWidth,
+              state.startBoundsHeight,
+            );
             const result = calculateSnap(draggedEdges, state.snapTargets, threshold);
 
             // Filter snap deltas based on axis lock
@@ -234,8 +391,8 @@ export function createDragController(_context: InteractionContext): DragControll
               }
             }
 
-            newX += snapDeltaX;
-            newY += snapDeltaY;
+            adjustedDeltaX += snapDeltaX;
+            adjustedDeltaY += snapDeltaY;
 
             if (filteredGuides.length > 0) {
               useSmartGuideStore.getState().setGuides(filteredGuides);
@@ -245,11 +402,8 @@ export function createDragController(_context: InteractionContext): DragControll
           }
         }
 
-        // Update node position without history (history saved on drag end)
-        useSceneStore.getState().updateNodeWithoutHistory(state.nodeId, {
-          x: Math.round(newX),
-          y: Math.round(newY),
-        });
+        // Update dragged nodes without history (history saved on drag end)
+        updateDraggedNodesWithoutHistory(adjustedDeltaX, adjustedDeltaY);
         return true;
       }
       return false;
@@ -280,12 +434,7 @@ export function createDragController(_context: InteractionContext): DragControll
         }
 
         dragStore.endDrag();
-        state.isDragging = false;
-        state.nodeId = null;
-        state.isAutoLayoutDrag = false;
-        state.autoLayoutParentId = null;
-        state.isAltHeld = false;
-        state.isShiftHeld = false;
+        resetDragState();
         return true;
       }
 
@@ -293,19 +442,22 @@ export function createDragController(_context: InteractionContext): DragControll
       if (state.isDragging && state.nodeId) {
         useSmartGuideStore.getState().clearGuides();
 
-        // Save history with the position change
         const sceneState = useSceneStore.getState();
-        const node = sceneState.nodesById[state.nodeId];
-        const hasMoved = !!node && (node.x !== state.startNodeX || node.y !== state.startNodeY);
+        const movedItems = state.dragItems.filter((item) => {
+          const node = sceneState.nodesById[item.id];
+          return !!node && (node.x !== item.startNodeX || node.y !== item.startNodeY);
+        });
+        const primaryNode = sceneState.nodesById[state.nodeId];
+        const hasMoved = movedItems.length > 0;
         const shouldDuplicateOnDrop = hasMoved && state.isShiftHeld && state.isAltHeld;
 
-        if (node && shouldDuplicateOnDrop) {
+        if (primaryNode && shouldDuplicateOnDrop && state.dragItems.length === 1) {
           const treeNodes = sceneState.getNodes();
           const sourceTreeNode = findNodeInTree(treeNodes, state.nodeId);
           if (sourceTreeNode) {
             const clonedNode = cloneNodeWithNewId(sourceTreeNode, false);
-            clonedNode.x = node.x;
-            clonedNode.y = node.y;
+            clonedNode.x = primaryNode.x;
+            clonedNode.y = primaryNode.y;
 
             // Restore original to start position and then add a clone at drop point.
             useSceneStore.getState().updateNodeWithoutHistory(state.nodeId, {
@@ -323,26 +475,33 @@ export function createDragController(_context: InteractionContext): DragControll
           } else {
             // Fallback to normal move commit if source node can't be resolved.
             useSceneStore.getState().updateNode(state.nodeId, {
-              x: node.x,
-              y: node.y,
+              x: primaryNode.x,
+              y: primaryNode.y,
             });
           }
-        } else if (node && hasMoved) {
-          // Commit the move with history
-          useSceneStore.getState().updateNode(state.nodeId, {
-            x: node.x,
-            y: node.y,
+        } else if (hasMoved) {
+          useSceneStore.setState((currentState) => {
+            saveHistory(currentState);
+            const newNodesById = { ...currentState.nodesById };
+
+            for (const item of movedItems) {
+              const currentNode = newNodesById[item.id];
+              if (!currentNode) continue;
+              newNodesById[item.id] = {
+                ...currentNode,
+                x: currentNode.x,
+                y: currentNode.y,
+              };
+            }
+
+            return {
+              nodesById: newNodesById,
+              _cachedTree: null,
+            };
           });
         }
 
-        // Reset axis lock state
-        state.isDragging = false;
-        state.nodeId = null;
-        state.isShiftHeld = false;
-        state.isAltHeld = false;
-        state.axisLock = null;
-        state.cumulativeDeltaX = 0;
-        state.cumulativeDeltaY = 0;
+        resetDragState();
         return true;
       }
       return false;

@@ -4,11 +4,8 @@ import type {
   FlatFrameNode,
   TextNode,
   EmbedNode,
-  RefNode,
   LayoutProperties,
 } from "@/types/scene";
-import { flattenTree } from "@/types/scene";
-import { resolveRefToFrame } from "@/utils/instanceUtils";
 import { generateVisualStyles, generateTextStyles } from "./styleGeneration";
 import { generateLayoutStyles } from "./layoutStyleGeneration";
 import { pathNodeToSvg, lineNodeToSvg, polygonNodeToSvg } from "./svgGeneration";
@@ -18,17 +15,14 @@ export interface ConversionContext {
   nodesById: Record<string, FlatSceneNode>;
   childrenById: Record<string, string[]>;
   allNodes: SceneNode[];
-  /** Overlay maps from resolved ref nodes — checked before the main store. */
-  overlayNodes?: Record<string, FlatSceneNode>;
-  overlayChildren?: Record<string, string[]>;
 }
 
 function lookupNode(ctx: ConversionContext, id: string): FlatSceneNode | undefined {
-  return ctx.overlayNodes?.[id] ?? ctx.nodesById[id];
+  return ctx.nodesById[id];
 }
 
 function lookupChildren(ctx: ConversionContext, id: string): string[] {
-  return ctx.overlayChildren?.[id] ?? ctx.childrenById[id] ?? [];
+  return ctx.childrenById[id] ?? [];
 }
 
 /**
@@ -67,8 +61,6 @@ export function convertNodeToHtml(
       return convertSvgShapeNode(node, parentLayout, isRoot, polygonNodeToSvg);
     case "embed":
       return (node as EmbedNode).htmlContent ?? "";
-    case "ref":
-      return convertRefNode(node as RefNode, ctx, parentLayout, isRoot);
     default:
       return "";
   }
@@ -167,28 +159,6 @@ function convertSvgShapeNode(
   delete visualStyles.border;
   const wrapperStyles = { ...layoutStyles, ...visualStyles };
   return `<div style="${stylesToString(wrapperStyles)}">${svgFn(node as never)}</div>`;
-}
-
-function convertRefNode(
-  refNode: RefNode,
-  ctx: ConversionContext,
-  parentLayout: LayoutProperties | undefined,
-  isRoot: boolean,
-): string {
-  // Resolve the ref to a full frame with overrides applied
-  const resolved = resolveRefToFrame(refNode, ctx.allNodes);
-  if (!resolved) return "";
-
-  // Flatten resolved tree and layer on top of existing maps (no copying of the full store)
-  const { nodesById: resolvedNodes, childrenById: resolvedChildren } = flattenTree([resolved]);
-
-  const layeredCtx: ConversionContext = {
-    ...ctx,
-    overlayNodes: resolvedNodes,
-    overlayChildren: resolvedChildren,
-  };
-
-  return convertNodeToHtml(resolved.id, layeredCtx, parentLayout, isRoot);
 }
 
 function stylesToString(styles: Record<string, string>): string {

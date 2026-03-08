@@ -1,8 +1,6 @@
 import type {
   FlatSceneNode,
   SceneNode,
-  RefNode,
-  DescendantOverrides,
   FlatFrameNode,
 } from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
@@ -15,12 +13,10 @@ import { useThemeStore } from "@/store/themeStore";
 import { insertTreeIntoFlat, removeNodeAndDescendants } from "@/store/sceneStore/helpers/flatStoreHelpers";
 import { syncTextDimensions } from "@/store/sceneStore/helpers/textSync";
 import { cloneNodeWithNewId } from "@/utils/cloneNode";
-import { resolveRefToFrame, setOverrideByPath } from "@/utils/instanceUtils";
 import type { ParsedArg, ParsedOperation, ExecutionContext } from "./types";
 import {
   createNodeFromAiDataWithTheme,
   mapNodeData,
-  mapDescendantOverride,
 } from "./nodeMapper";
 import { serializeNodeToDepth } from "../serializeUtils";
 
@@ -57,46 +53,6 @@ function resolveInheritedTheme(
   }
 
   return theme;
-}
-
-function applyRefDefaultsFromComponent(
-  node: SceneNode,
-  nodeData: Record<string, unknown>,
-  nodesById: Record<string, FlatSceneNode>,
-): SceneNode {
-  if (node.type !== "ref") return node;
-
-  const refNode = node as RefNode;
-  const component = nodesById[refNode.componentId];
-  if (!component || component.type !== "frame") return node;
-
-  const hasWidth = Object.prototype.hasOwnProperty.call(nodeData, "width");
-  const hasHeight = Object.prototype.hasOwnProperty.call(nodeData, "height");
-  const hasSizing = Object.prototype.hasOwnProperty.call(nodeData, "sizing");
-  const rawWidth = nodeData.width;
-  const rawHeight = nodeData.height;
-
-  const hasExplicitNumericWidth =
-    typeof rawWidth === "number" ||
-    (typeof rawWidth === "string" && /\((\d+)\)$/.test(rawWidth));
-  const hasExplicitNumericHeight =
-    typeof rawHeight === "number" ||
-    (typeof rawHeight === "string" && /\((\d+)\)$/.test(rawHeight));
-
-  // width/height shorthand strings like "fill_container" are mapped into sizing modes
-  // and should count as explicit sizing even without nodeData.sizing object.
-  const hasImplicitSizingFromDimensions =
-    (hasWidth && refNode.sizing?.widthMode !== undefined) ||
-    (hasHeight && refNode.sizing?.heightMode !== undefined);
-  const keepRefSizing = hasSizing || hasImplicitSizingFromDimensions;
-
-  return {
-    ...refNode,
-    // For non-numeric width/height modes (fill/fit), keep component base size.
-    width: hasWidth && hasExplicitNumericWidth ? refNode.width : component.width,
-    height: hasHeight && hasExplicitNumericHeight ? refNode.height : component.height,
-    sizing: keepRefSizing ? refNode.sizing : component.sizing,
-  } as SceneNode;
 }
 
 /**
@@ -193,8 +149,7 @@ function executeInsert(op: ParsedOperation, ctx: ExecutionContext): void {
     ctx.nodesById,
     ctx.parentById,
   );
-  const createdNode = createNodeFromAiDataWithTheme(nodeData, inheritedTheme);
-  const node = applyRefDefaultsFromComponent(createdNode, nodeData, ctx.nodesById);
+  const node = createNodeFromAiDataWithTheme(nodeData, inheritedTheme);
 
   // Insert into flat storage
   insertTreeIntoFlat(
@@ -279,25 +234,8 @@ function executeCopy(op: ParsedOperation, ctx: ExecutionContext): void {
     Object.assign(cloned, mapped);
   }
 
-  // Handle descendants overrides for ref nodes
-  if (descendantsOverrides && cloned.type === "ref") {
-    const refClone = cloned as RefNode;
-    const mappedOverrides: DescendantOverrides = {};
-    for (const [path, override] of Object.entries(
-      descendantsOverrides as Record<string, Record<string, unknown>>
-    )) {
-      mappedOverrides[path] = mapDescendantOverride(override, {
-        theme: resolveInheritedTheme(actualParentId, ctx.nodesById, ctx.parentById),
-      });
-    }
-    refClone.descendants = {
-      ...refClone.descendants,
-      ...mappedOverrides,
-    };
-  }
-
-  // Handle descendants overrides for non-ref clones by building old→new ID map
-  if (descendantsOverrides && cloned.type !== "ref") {
+  // Handle descendants overrides by building old→new ID map
+  if (descendantsOverrides) {
     const oldToNew = buildIdMap(sourceTree, cloned);
     for (const [oldPath, override] of Object.entries(
       descendantsOverrides as Record<string, Record<string, unknown>>
@@ -405,184 +343,41 @@ function remapPath(path: string, idMap: Map<string, string>): string {
     .join("/");
 }
 
-function setDescendantOverrideByPath(
-  existingOverrides: DescendantOverrides | undefined,
-  descendantPath: string,
-  mappedOverride: Record<string, unknown>,
-): DescendantOverrides {
-  const segments = descendantPath.split("/").filter(Boolean);
-  return setOverrideByPath(existingOverrides ?? {}, segments, mappedOverride);
-}
-
 /**
  * Execute an Update operation.
- * U(path, updateData)
+ * U(nodeId, updateData)
  */
-/** Parse a slash-separated instance path, validate, and return the ref node clone + metadata. */
-function resolveInstancePath(
-  path: string,
-  op: ParsedOperation,
-  ctx: ExecutionContext,
-): { instanceId: string; subPath: string; refNode: RefNode; theme: ThemeName } {
-  const slashIdx = path.indexOf("/");
-  const instanceId = path.slice(0, slashIdx);
-  const requestedSubPath = path.slice(slashIdx + 1);
-
-  const instanceNode = ctx.nodesById[instanceId];
-  if (!instanceNode) {
-    throw new Error(
-      `Line ${op.line}: Instance node not found: "${instanceId}"`
-    );
-  }
-  if (instanceNode.type !== "ref") {
-    throw new Error(
-      `Line ${op.line}: Node "${instanceId}" is not a ref node (type: ${instanceNode.type})`
-    );
-  }
-
-  const allNodes = buildTree(ctx.rootIds, ctx.nodesById, ctx.childrenById);
-  const resolvedFrame = resolveRefToFrame(instanceNode as RefNode, allNodes);
-  if (!resolvedFrame) {
-    throw new Error(
-      `Line ${op.line}: Failed to resolve instance "${instanceId}" component`
-    );
-  }
-
-  const subPath = resolveDescendantPath(
-    requestedSubPath,
-    resolvedFrame.children,
-    op,
-    instanceId,
-  );
-
-  return {
-    instanceId,
-    subPath,
-    refNode: { ...instanceNode } as RefNode,
-    theme: resolveInheritedTheme(
-      ctx.parentById[instanceId] ?? null,
-      ctx.nodesById,
-      ctx.parentById,
-    ),
-  };
-}
-
-function collectDescendants(nodes: SceneNode[]): Array<{ id: string; name?: string }> {
-  const out: Array<{ id: string; name?: string }> = [];
-  const visit = (node: SceneNode): void => {
-    out.push({ id: node.id, name: node.name });
-    if (node.type === "frame" || node.type === "group") {
-      node.children.forEach(visit);
-    }
-  };
-  nodes.forEach(visit);
-  return out;
-}
-
-function hasIdPath(nodes: SceneNode[], segments: string[]): boolean {
-  let currentNodes = nodes;
-  let current: SceneNode | null = null;
-  for (const segment of segments) {
-    current = currentNodes.find((node) => node.id === segment) ?? null;
-    if (!current) return false;
-    if (current.type === "frame" || current.type === "group") {
-      currentNodes = current.children;
-    } else {
-      currentNodes = [];
-    }
-  }
-  return current !== null;
-}
-
-function resolveDescendantPath(
-  requestedPath: string,
-  resolvedChildren: SceneNode[],
-  op: ParsedOperation,
-  instanceId: string,
-): string {
-  const normalized = requestedPath.split("/").filter(Boolean);
-  if (normalized.length === 0) {
-    throw new Error(`Line ${op.line}: Empty descendant path for instance "${instanceId}"`);
-  }
-
-  const allDescendants = collectDescendants(resolvedChildren);
-
-  if (normalized.length === 1) {
-    const segment = normalized[0];
-    if (allDescendants.some((node) => node.id === segment)) {
-      return segment;
-    }
-
-    const byName = allDescendants.filter(
-      (node) => node.name?.trim().toLowerCase() === segment.trim().toLowerCase(),
-    );
-    if (byName.length === 1) {
-      return byName[0].id;
-    }
-    if (byName.length > 1) {
-      throw new Error(
-        `Line ${op.line}: Descendant "${segment}" is ambiguous in instance "${instanceId}" (matched by name: ${byName.map((n) => n.id).join(", ")})`,
-      );
-    }
-
-    throw new Error(
-      `Line ${op.line}: Descendant "${segment}" not found in instance "${instanceId}"`,
-    );
-  }
-
-  if (!hasIdPath(resolvedChildren, normalized)) {
-    throw new Error(
-      `Line ${op.line}: Descendant path "${requestedPath}" not found in instance "${instanceId}"`,
-    );
-  }
-
-  return normalized.join("/");
-}
-
 function executeUpdate(op: ParsedOperation, ctx: ExecutionContext): void {
   if (op.args.length < 2) {
-    throw new Error(`Line ${op.line}: U() requires 2 arguments (path, updateData)`);
+    throw new Error(`Line ${op.line}: U() requires 2 arguments (nodeId, updateData)`);
   }
 
   const path = resolveArg(op.args[0], ctx);
   const updateData = resolveJsonArg(op.args[1]);
 
-  if (path.includes("/")) {
-    const { instanceId, subPath, refNode, theme } = resolveInstancePath(path, op, ctx);
-    const mapped = mapDescendantOverride(updateData, { theme });
-
-    refNode.descendants = setDescendantOverrideByPath(
-      refNode.descendants,
-      subPath,
-      mapped,
-    );
-
-    ctx.nodesById[instanceId] = refNode;
-  } else {
-    // Direct node update
-    const node = ctx.nodesById[path];
-    if (!node) {
-      throw new Error(`Line ${op.line}: Node not found: "${path}"`);
-    }
-
-    const mapped = mapNodeData(updateData, "update", node, {
-      theme: resolveInheritedTheme(
-        ctx.parentById[path] ?? null,
-        ctx.nodesById,
-        ctx.parentById,
-      ),
-    });
-    delete (mapped as Record<string, unknown>)._children;
-
-    let updated = { ...node, ...mapped } as FlatSceneNode;
-
-    // Sync text dimensions if text node
-    if (updated.type === "text") {
-      updated = syncTextDimensions(updated);
-    }
-
-    ctx.nodesById[path] = updated;
+  // Direct node update
+  const node = ctx.nodesById[path];
+  if (!node) {
+    throw new Error(`Line ${op.line}: Node not found: "${path}"`);
   }
+
+  const mapped = mapNodeData(updateData, "update", node, {
+    theme: resolveInheritedTheme(
+      ctx.parentById[path] ?? null,
+      ctx.nodesById,
+      ctx.parentById,
+    ),
+  });
+  delete (mapped as Record<string, unknown>)._children;
+
+  let updated = { ...node, ...mapped } as FlatSceneNode;
+
+  // Sync text dimensions if text node
+  if (updated.type === "text") {
+    updated = syncTextDimensions(updated);
+  }
+
+  ctx.nodesById[path] = updated;
 }
 
 /**
@@ -591,76 +386,59 @@ function executeUpdate(op: ParsedOperation, ctx: ExecutionContext): void {
  */
 function executeReplace(op: ParsedOperation, ctx: ExecutionContext): void {
   if (op.args.length < 2) {
-    throw new Error(`Line ${op.line}: R() requires 2 arguments (path, nodeData)`);
+    throw new Error(`Line ${op.line}: R() requires 2 arguments (nodeId, nodeData)`);
   }
 
   const path = resolveArg(op.args[0], ctx);
   const nodeData = resolveJsonArg(op.args[1]);
 
-  if (path.includes("/")) {
-    const { instanceId, subPath: slotChildId, refNode, theme } = resolveInstancePath(path, op, ctx);
-    const newNode = createNodeFromAiDataWithTheme(nodeData, theme);
-    refNode.slotContent = {
-      ...refNode.slotContent,
-      [slotChildId]: newNode,
-    };
+  const existingNode = ctx.nodesById[path];
+  if (!existingNode) {
+    throw new Error(`Line ${op.line}: Node not found: "${path}"`);
+  }
 
-    ctx.nodesById[instanceId] = refNode;
-    ctx.createdNodeIds.push(newNode.id);
+  const parentId = ctx.parentById[path];
+  const newNode = createNodeFromAiDataWithTheme(
+    nodeData,
+    resolveInheritedTheme(parentId ?? null, ctx.nodesById, ctx.parentById),
+  );
 
-    if (op.binding) {
-      ctx.bindings.set(op.binding, newNode.id);
+  // Find position in parent's children
+  if (parentId !== null && parentId !== undefined) {
+    const siblings = ctx.childrenById[parentId] ?? [];
+    const idx = siblings.indexOf(path);
+    if (idx !== -1) {
+      siblings[idx] = newNode.id;
+      ctx.childrenById[parentId] = [...siblings];
     }
   } else {
-    // Direct node replacement
-    const existingNode = ctx.nodesById[path];
-    if (!existingNode) {
-      throw new Error(`Line ${op.line}: Node not found: "${path}"`);
+    const idx = ctx.rootIds.indexOf(path);
+    if (idx !== -1) {
+      ctx.rootIds[idx] = newNode.id;
     }
+  }
 
-    const parentId = ctx.parentById[path];
-    const newNode = createNodeFromAiDataWithTheme(
-      nodeData,
-      resolveInheritedTheme(parentId ?? null, ctx.nodesById, ctx.parentById),
-    );
+  // Remove old node and descendants
+  removeNodeAndDescendants(
+    path,
+    ctx.nodesById,
+    ctx.parentById,
+    ctx.childrenById
+  );
 
-    // Find position in parent's children
-    if (parentId !== null && parentId !== undefined) {
-      const siblings = ctx.childrenById[parentId] ?? [];
-      const idx = siblings.indexOf(path);
-      if (idx !== -1) {
-        siblings[idx] = newNode.id;
-        ctx.childrenById[parentId] = [...siblings];
-      }
-    } else {
-      const idx = ctx.rootIds.indexOf(path);
-      if (idx !== -1) {
-        ctx.rootIds[idx] = newNode.id;
-      }
-    }
+  // Insert new node
+  insertTreeIntoFlat(
+    newNode,
+    parentId ?? null,
+    ctx.nodesById,
+    ctx.parentById,
+    ctx.childrenById
+  );
 
-    // Remove old node and descendants
-    removeNodeAndDescendants(
-      path,
-      ctx.nodesById,
-      ctx.parentById,
-      ctx.childrenById
-    );
+  ctx.createdNodeIds.push(newNode.id);
 
-    // Insert new node
-    insertTreeIntoFlat(
-      newNode,
-      parentId ?? null,
-      ctx.nodesById,
-      ctx.parentById,
-      ctx.childrenById
-    );
-
-    ctx.createdNodeIds.push(newNode.id);
-
-    if (op.binding) {
-      ctx.bindings.set(op.binding, newNode.id);
-    }
+  if (op.binding) {
+    ctx.bindings.set(op.binding, newNode.id);
   }
 }
 

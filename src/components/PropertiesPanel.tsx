@@ -14,7 +14,6 @@ import {
   type ParentContext,
 } from "@/utils/nodeUtils";
 import { AlignmentSection } from "@/components/properties/AlignmentSection";
-import { DescendantPropertyEditor } from "@/components/properties/DescendantPropertyEditor";
 import { ExportSection } from "@/components/properties/ExportSection";
 import { MultiSelectPropertyEditor } from "@/components/properties/MultiSelectPropertyEditor";
 import { PageProperties } from "@/components/properties/PageProperties";
@@ -171,7 +170,7 @@ function FramePresetsPanel() {
 export function PropertiesPanel() {
   const nodes = useSceneStore((s) => s.getNodes());
   const updateNode = useSceneStore((s) => s.updateNode);
-  const { selectedIds, instanceContext } = useSelectionStore();
+  const { selectedIds } = useSelectionStore();
   const variables = useVariableStore((s) => s.variables);
   const activeTheme = useThemeStore((s) => s.activeTheme);
   const activeTool = useDrawModeStore((s) => s.activeTool);
@@ -184,27 +183,10 @@ export function PropertiesPanel() {
   const parentById = useSceneStore((s) => s.parentById);
 
   // Compute effective theme for the selected node by walking ancestor themeOverrides.
-  // For instance descendants, also consider the component's themeOverride.
   const effectiveTheme = useMemo(() => {
-    if (instanceContext) {
-      const instanceTheme = getThemeFromAncestorFrames(
-        parentById, nodesById, instanceContext.instanceId, activeTheme,
-      );
-      // Also check if the component frame has a themeOverride
-      const instanceNode = nodesById[instanceContext.instanceId];
-      if (instanceNode?.type === "ref") {
-        const componentId = (instanceNode as unknown as { componentId: string }).componentId;
-        const component = nodesById[componentId];
-        if (component?.type === "frame") {
-          const compOverride = (component as unknown as { themeOverride?: string }).themeOverride;
-          if (compOverride === "light" || compOverride === "dark") return compOverride;
-        }
-      }
-      return instanceTheme;
-    }
     if (!selectedNode) return activeTheme;
     return getThemeFromAncestorFrames(parentById, nodesById, selectedNode.id, activeTheme);
-  }, [selectedNode, instanceContext, parentById, nodesById, activeTheme]);
+  }, [selectedNode, parentById, nodesById, activeTheme]);
   const selectedNodes = useMemo(() => {
     if (selectedIds.length <= 1) return [];
     return selectedIds
@@ -261,17 +243,8 @@ export function PropertiesPanel() {
             activeTheme={effectiveTheme}
           />
         )}
-        {/* If editing a descendant inside an instance, show descendant editor */}
-        {instanceContext && activeTool !== "frame" && (
-          <DescendantPropertyEditor
-            instanceContext={instanceContext}
-            allNodes={nodes}
-            variables={variables}
-            activeTheme={effectiveTheme}
-          />
-        )}
-        {/* Otherwise show normal property editor */}
-        {selectedNode && !instanceContext && activeTool !== "frame" && (
+        {/* Show normal property editor */}
+        {selectedNode && activeTool !== "frame" && (
           <PropertyEditor
             node={selectedNode}
             onUpdate={handleUpdate}

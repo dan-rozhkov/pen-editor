@@ -36,74 +36,6 @@ type NodeLayoutOverride = {
 
 type AutoLayoutFrameSet = Set<string>;
 
-function isReusableFrame(node: FlatSceneNode | undefined): node is FlatFrameNode {
-  return node?.type === "frame" && (node as FlatFrameNode).reusable === true;
-}
-
-function collectChangedComponentIds(
-  changedIds: Set<string>,
-  state: SceneState,
-  prev: SceneState,
-): Set<string> {
-  const affected = new Set<string>();
-
-  const markAncestors = (
-    startId: string,
-    nodesById: Record<string, FlatSceneNode>,
-    parentById: Record<string, string | null>,
-  ): void => {
-    let current: string | null = startId;
-    while (current != null) {
-      const currentNode = nodesById[current];
-      if (isReusableFrame(currentNode)) {
-        affected.add(current);
-      }
-      current = parentById[current] ?? null;
-    }
-  };
-
-  for (const changedId of changedIds) {
-    markAncestors(changedId, state.nodesById, state.parentById);
-    markAncestors(changedId, prev.nodesById, prev.parentById);
-  }
-
-  return affected;
-}
-
-function findContainerByLabelRecursive(
-  root: Container,
-  label: string,
-): Container | null {
-  for (const child of root.children) {
-    if (child instanceof Container) {
-      if (child.label === label) return child;
-      const found = findContainerByLabelRecursive(child, label);
-      if (found) return found;
-    }
-  }
-  return null;
-}
-
-function getRenderedRefSize(
-  refContainer: Container,
-  fallback: { width: number; height: number },
-): { width: number; height: number } {
-  const refBg = findContainerByLabelRecursive(refContainer, "ref-bg");
-  const target = refBg ?? findContainerByLabelRecursive(refContainer, "ref-children");
-  if (!target) return fallback;
-
-  const bounds = target.getLocalBounds();
-  if (!Number.isFinite(bounds.width) || !Number.isFinite(bounds.height)) {
-    return fallback;
-  }
-  if (bounds.width <= 0 || bounds.height <= 0) return fallback;
-
-  return {
-    width: bounds.width,
-    height: bounds.height,
-  };
-}
-
 /**
  * Push ancestor theme overrides onto the render theme stack (outermost first).
  * Returns the number of themes pushed so the caller can pop them.
@@ -208,7 +140,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
   const registry = new Map<string, RegistryEntry>();
   let appliedTextResolution = 0;
   let rebuildScheduled = false;
-  let hiddenEditingDescContainer: Container | null = null;
 
   function applyTextResolutionRecursive(container: Container, resolution: number): void {
     for (const child of container.children) {
@@ -223,7 +154,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
   }
 
   function applyTextEditingVisibility(): void {
-    const { editingNodeId, editingMode, instanceContext } = useSelectionStore.getState();
+    const { editingNodeId, editingMode } = useSelectionStore.getState();
     const isTextEditing = editingMode === "text" && editingNodeId != null;
     const isEmbedEditing = editingMode === "embed" && editingNodeId != null;
 
@@ -236,81 +167,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
       entry.container.visible = baseVisible && !hideWhileEditing;
     }
 
-    // Restore only the descendant container that was hidden for text editing previously.
-    // Do not force-show all descendants: that breaks true hidden state from node props.
-    if (hiddenEditingDescContainer) {
-      hiddenEditingDescContainer.visible = true;
-      hiddenEditingDescContainer = null;
-    }
-
-    // Hide descendant text inside instance during editing
-    if (editingMode === "text" && instanceContext) {
-      const { instanceId, descendantId, descendantPath } = instanceContext;
-      const instanceEntry = registry.get(instanceId);
-      if (instanceEntry) {
-        const refChildren = instanceEntry.container.getChildByLabel("ref-children") as Container | null;
-        if (refChildren) {
-          const descContainer = descendantPath
-            ? findDescendantContainerByPath(refChildren, descendantPath)
-            : findDescendantContainer(refChildren, descendantId);
-          if (descContainer) {
-            // Hide only text descendants (to avoid accidentally hiding full frame/group trees
-            // when instanceContext points to a non-text node).
-            const textNode = descContainer.getChildByLabel("text-content");
-            if (textNode) {
-              descContainer.visible = false;
-              hiddenEditingDescContainer = descContainer;
-            }
-          }
-        }
-      }
-    }
-  }
-
-  function findDescendantContainer(parent: Container, descendantId: string): Container | null {
-    const label = `desc-${descendantId}`;
-    for (const child of parent.children) {
-      if (child.label === label) return child as Container;
-      if (child instanceof Container) {
-        const found = findDescendantContainer(child, descendantId);
-        if (found) return found;
-      }
-    }
-    return null;
-  }
-
-  function findDescendantContainerByPath(
-    refChildren: Container,
-    path: string,
-  ): Container | null {
-    const segments = path.split("/").filter((segment) => segment.length > 0);
-    if (segments.length === 0) return null;
-
-    let currentHost: Container | null = refChildren;
-    let currentNode: Container | null = null;
-
-    for (const segment of segments) {
-      if (!currentHost) return null;
-      const descendantChildren = currentHost.children.filter(
-        (child) =>
-          child instanceof Container &&
-          typeof child.label === "string" &&
-          child.label.startsWith("desc-"),
-      ) as Container[];
-      const nextNode = descendantChildren.find(
-        (child) => child.label === `desc-${segment}`,
-      );
-      if (!nextNode) {
-        return null;
-      }
-      currentNode = nextNode;
-      if (!(currentNode instanceof Container)) return null;
-      const nextHost = currentNode.getChildByLabel("frame-children")
-        ?? currentNode.getChildByLabel("group-children");
-      currentHost = (nextHost as Container | null) ?? null;
-    }
-
-    return currentNode;
   }
 
   /**
@@ -368,25 +224,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
       const childIds = state.childrenById[frameId] ?? [];
       const frameOverride = layoutOverrides.get(frameId);
-
-      // For ref children, prefer the currently rendered size (it already reflects
-      // component updates). Store size overrides so parent auto-layout positions
-      // are computed from up-to-date instance bounds.
-      for (const childId of childIds) {
-        const childNode = state.nodesById[childId];
-        if (!childNode || childNode.type !== "ref") continue;
-        const childEntry = registry.get(childId);
-        if (!childEntry) continue;
-        const renderedSize = getRenderedRefSize(childEntry.container, {
-          width: childNode.width,
-          height: childNode.height,
-        });
-        layoutOverrides.set(childId, {
-          ...(layoutOverrides.get(childId) ?? {}),
-          width: renderedSize.width,
-          height: renderedSize.height,
-        });
-      }
 
       if ((frameNode as FlatFrameNode).layout?.autoLayout) {
         // Convert to tree structure for layout calculation, including overrides
@@ -626,8 +463,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
     const childIds = childrenById[nodeId] ?? [];
     const childrenHost =
       parentContainer.getChildByLabel("frame-children") ??
-      parentContainer.getChildByLabel("group-children") ??
-      parentContainer.getChildByLabel("ref-children");
+      parentContainer.getChildByLabel("group-children");
 
     if (!childrenHost || childIds.length === 0) return;
 
@@ -733,56 +569,15 @@ export function createPixiSync(sceneRoot: Container): () => void {
       }
     }
 
-    // Rebuild instances whose source component/subtree changed even if ref node itself didn't.
-    const rebuiltInstanceIds = new Set<string>();
-    if (changedIds.size > 0) {
-      const affectedComponentIds = collectChangedComponentIds(
-        changedIds,
-        state,
-        prev,
-      );
-      if (affectedComponentIds.size === 0) {
-        // Continue with structural/layout/text updates below.
-      } else {
-      for (const [id, node] of Object.entries(state.nodesById)) {
-        if (node.type !== "ref") continue;
-        const entry = registry.get(id);
-        if (!entry) continue;
-
-        if (!affectedComponentIds.has(node.componentId)) continue;
-
-        withAncestorThemes(id, state.parentById, state.nodesById, () => {
-          updateNodeContainer(
-            entry.container,
-            node,
-            node,
-            state.nodesById,
-            state.childrenById,
-            false,
-            true,
-          );
-        });
-        entry.node = node;
-        rebuiltInstanceIds.add(id);
-      }
-      }
-    }
-
     // Handle structural changes (children order, parent changes)
     if (state.childrenById !== prev.childrenById || state.rootIds !== prev.rootIds) {
       reconcileChildren(state, prev);
     }
 
     // Reapply only affected auto-layout frame chains.
-    // When component changes rebuild instances, their auto-layout parents must be
-    // reflowed too (even if the ref node object itself didn't change in store).
-    const autoLayoutChangedIds =
-      rebuiltInstanceIds.size > 0
-        ? new Set<string>([...changedIds, ...rebuiltInstanceIds])
-        : changedIds;
     const dirtyAutoLayoutFrames = collectDirtyAutoLayoutFrames(
       state,
-      autoLayoutChangedIds,
+      changedIds,
     );
     if (dirtyAutoLayoutFrames.size > 0) {
       applyAutoLayoutPositions(state, dirtyAutoLayoutFrames);
@@ -827,8 +622,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
       if (parentEntry) {
         const childrenHost =
           parentEntry.container.getChildByLabel("frame-children") ??
-          parentEntry.container.getChildByLabel("group-children") ??
-          parentEntry.container.getChildByLabel("ref-children");
+          parentEntry.container.getChildByLabel("group-children");
         if (childrenHost) {
           (childrenHost as Container).addChild(createdContainer);
         }
@@ -897,8 +691,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
         if (entry) {
           const childrenHost =
             entry.container.getChildByLabel("frame-children") ??
-            entry.container.getChildByLabel("group-children") ??
-            entry.container.getChildByLabel("ref-children");
+            entry.container.getChildByLabel("group-children");
           if (childrenHost) {
             reconcileChildList(
               state.childrenById[id],

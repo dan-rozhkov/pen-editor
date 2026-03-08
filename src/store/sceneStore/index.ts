@@ -243,12 +243,6 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     if (!historySelection) return;
     useSelectionStore.setState({
       selectedIds: historySelection.selectedIds.filter((id) => validIds.has(id)),
-      instanceContext:
-        historySelection.instanceContext &&
-        validIds.has(historySelection.instanceContext.instanceId)
-          ? historySelection.instanceContext
-          : null,
-      selectedDescendantIds: [...historySelection.selectedDescendantIds],
       enteredContainerId:
         historySelection.enteredContainerId &&
         validIds.has(historySelection.enteredContainerId)

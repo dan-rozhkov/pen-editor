@@ -267,6 +267,7 @@ export interface PolygonNode extends BaseNode {
 export interface EmbedNode extends BaseNode {
   type: 'embed'
   htmlContent: string
+  isComponent?: boolean
 }
 
 export type SceneNode = FrameNode | GroupNode | RectNode | EllipseNode | TextNode | RefNode | PathNode | LineNode | PolygonNode | EmbedNode
@@ -392,12 +393,6 @@ export interface FlatSnapshot {
 /** Selection state snapshot (used by history) */
 export interface SelectionSnapshot {
   selectedIds: string[]
-  instanceContext: {
-    instanceId: string
-    descendantId: string
-    descendantPath?: string
-  } | null
-  selectedDescendantIds: string[]
   enteredContainerId: string | null
   lastSelectedId: string | null
 }

@@ -125,9 +125,9 @@ export function mapNodeData(
         break;
       }
 
-      // Ref → componentId
-      case "ref": {
-        result.componentId = String(value);
+      // isComponent flag for embed nodes
+      case "isComponent": {
+        result.isComponent = !!value;
         break;
       }
 

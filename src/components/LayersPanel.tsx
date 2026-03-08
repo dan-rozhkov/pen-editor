@@ -11,7 +11,6 @@ import {
   RectangleIcon,
   CircleIcon,
   TextTIcon,
-  DiamondIcon,
   EyeIcon as EyeIconIcon,
   EyeSlashIcon,
   CaretRightIcon,
@@ -26,10 +25,9 @@ import clsx from "clsx";
 import { useSceneStore } from "../store/sceneStore";
 import { useSelectionStore } from "../store/selectionStore";
 import { useHoverStore } from "../store/hoverStore";
-import type { SceneNode, FrameNode, FlatFrameNode, GroupNode, LayoutProperties, RefNode } from "../types/scene";
+import type { SceneNode, FrameNode, GroupNode, LayoutProperties, EmbedNode } from "../types/scene";
 import { isContainerNode } from "../types/scene";
 import { getAncestorIds } from "../utils/nodeUtils";
-import { resolveRefToFrame } from "@/utils/instanceUtils";
 
 // Module-level flag so LayerItem can set it without a ref prop
 let _selectionFromLayers = false;
@@ -123,21 +121,17 @@ const AutoLayoutIcon = ({ layout }: { layout: LayoutProperties }) => {
 // Icons for different node types
 const NodeIcon = ({
   type,
-  reusable,
+  isComponent,
   layout,
 }: {
   type: SceneNode["type"];
-  reusable?: boolean;
+  isComponent?: boolean;
   layout?: LayoutProperties;
 }) => {
   const iconClass = clsx("w-4 h-4 shrink-0", "text-text-muted");
 
   switch (type) {
     case "frame":
-      if (reusable) {
-        // Component icon: 4 diamonds in a grid pattern (like Figma)
-        return <DiamondsFourIcon size={16} className={iconClass} />;
-      }
       if (layout?.autoLayout) {
         return <AutoLayoutIcon layout={layout} />;
       }
@@ -150,9 +144,6 @@ const NodeIcon = ({
       return <CircleIcon size={16} className={iconClass} weight="regular" />;
     case "text":
       return <TextTIcon size={16} className={iconClass} weight="regular" />;
-    case "ref":
-      // Instance icon: single diamond (like Figma instance)
-      return <DiamondIcon size={16} className={iconClass} weight="regular" />;
     case "path":
       return <PenNibIcon size={16} className={iconClass} weight="regular" />;
     case "line":
@@ -160,6 +151,9 @@ const NodeIcon = ({
     case "polygon":
       return <HexagonIcon size={16} className={iconClass} weight="regular" />;
     case "embed":
+      if (isComponent) {
+        return <DiamondsFourIcon size={16} className={iconClass} />;
+      }
       return <CodeIcon size={16} className={iconClass} weight="regular" />;
     default:
       return null;
@@ -212,9 +206,6 @@ interface LayerItemProps {
   ) => void;
   onDrop: () => void;
   selectableFlatIds: string[];
-  instanceFlatIds: string[];
-  instanceId?: string;
-  refChildCount?: number;
 }
 
 const LayerItem = memo(function LayerItem({
@@ -226,48 +217,14 @@ const LayerItem = memo(function LayerItem({
   onDragOver,
   onDrop,
   selectableFlatIds,
-  instanceFlatIds,
-  instanceId,
-  refChildCount,
 }: LayerItemProps) {
-  // Granular selection subscription - only re-render when THIS node's selection state changes
-  const isSelected = useSelectionStore((s) => !instanceId && s.selectedIds.includes(node.id));
-  const isDescendantSelected = useSelectionStore(
-    (s) =>
-      !!instanceId &&
-      s.instanceContext?.instanceId === instanceId &&
-      s.selectedDescendantIds.includes(node.id),
-  );
-  const isInstanceRootWithDescendantSelection = useSelectionStore(
-    (s) =>
-      !instanceId &&
-      s.instanceContext?.instanceId === node.id &&
-      s.selectedDescendantIds.length > 0,
-  );
+  const isSelected = useSelectionStore((s) => s.selectedIds.includes(node.id));
   const toggleVisibility = useSceneStore((state) => state.toggleVisibility);
-  const updateDescendantOverride = useSceneStore(
-    (state) => state.updateDescendantOverride,
-  );
-  const updateSlotContentNode = useSceneStore(
-    (state) => state.updateSlotContentNode,
-  );
-  const instanceNode = useSceneStore((state) =>
-    instanceId ? (state.nodesById[instanceId] as RefNode | undefined) : undefined,
-  );
   const expandedFrameIds = useSceneStore((state) => state.expandedFrameIds);
   const toggleFrameExpanded = useSceneStore(
     (state) => state.toggleFrameExpanded,
   );
   const updateNode = useSceneStore((state) => state.updateNode);
-
-  // Components (ref nodes) inside reusable frames are automatically slots
-  const isSlotChild = useSceneStore((state) => {
-    if (!parentId || node.type !== "ref") return false;
-    const parentNode = state.nodesById[parentId];
-    if (!parentNode || parentNode.type !== "frame") return false;
-    const frame = parentNode as FlatFrameNode;
-    return !!frame.reusable;
-  });
 
   // Inline editing state
   const [isEditing, setIsEditing] = useState(false);
@@ -282,15 +239,10 @@ const LayerItem = memo(function LayerItem({
     }
   }, [isEditing]);
 
-  const slotContentNode = instanceNode?.slotContent?.[node.id];
-  const descendantOverride = instanceNode?.descendants?.[node.id];
-  const isVisible = slotContentNode
-    ? slotContentNode.visible !== false
-    : descendantOverride?.visible ?? node.visible !== false;
+  const isVisible = node.visible !== false;
   const isFrame = node.type === "frame" || node.type === "group";
   const hasChildren =
-    (isFrame && (node as FrameNode | GroupNode).children.length > 0) ||
-    (node.type === "ref" && (refChildCount ?? 0) > 0);
+    isFrame && (node as FrameNode | GroupNode).children.length > 0;
   const isExpanded = expandedFrameIds.has(node.id);
   const isDragging = dragState.draggedId === node.id;
   const isDropTarget = dragState.dropTargetId === node.id;
@@ -298,33 +250,6 @@ const LayerItem = memo(function LayerItem({
   const handleClick = (e: React.MouseEvent) => {
     _selectionFromLayers = true;
     const selState = useSelectionStore.getState();
-    if (instanceId) {
-      if (e.shiftKey) {
-        const sameInstance =
-          selState.instanceContext?.instanceId === instanceId &&
-          selState.selectedDescendantIds.length > 0;
-        if (sameInstance) {
-          const fromDescendantId = selState.instanceContext!.descendantId;
-          selState.selectDescendantRange(
-            instanceId,
-            fromDescendantId,
-            node.id,
-            instanceFlatIds,
-          );
-        } else if (selState.lastSelectedId) {
-          selState.selectRange(
-            selState.lastSelectedId,
-            instanceId,
-            selectableFlatIds,
-          );
-        } else {
-          selState.addToSelection(instanceId);
-        }
-      } else {
-        selState.selectDescendant(instanceId, node.id);
-      }
-      return;
-    }
     if (e.shiftKey && selState.lastSelectedId) {
       selState.selectRange(selState.lastSelectedId, node.id, selectableFlatIds);
     } else if (e.shiftKey) {
@@ -336,14 +261,6 @@ const LayerItem = memo(function LayerItem({
 
   const handleVisibilityClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (instanceId) {
-      if (slotContentNode) {
-        updateSlotContentNode(instanceId, node.id, { visible: !isVisible });
-      } else {
-        updateDescendantOverride(instanceId, node.id, { visible: !isVisible });
-      }
-      return;
-    }
     toggleVisibility(node.id);
   };
 
@@ -384,7 +301,7 @@ const LayerItem = memo(function LayerItem({
   };
 
   const handleMouseEnter = () => {
-    useHoverStore.getState().setHoveredNode(node.id, instanceId);
+    useHoverStore.getState().setHoveredNode(node.id);
   };
 
   const handleMouseLeave = () => {
@@ -427,14 +344,11 @@ const LayerItem = memo(function LayerItem({
   const displayName =
     node.name || `${node.type.charAt(0).toUpperCase() + node.type.slice(1)}`;
 
-  const isHighlighted =
-    isDescendantSelected ||
-    (isSelected && !isInstanceRootWithDescendantSelection);
+  const isHighlighted = isSelected;
 
   return (
     <div
         data-node-id={node.id}
-        data-instance-id={instanceId}
         className={clsx(
           "group flex items-center cursor-pointer h-[28px]",
           isHighlighted
@@ -455,7 +369,7 @@ const LayerItem = memo(function LayerItem({
         onClick={handleClick}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        draggable={!instanceId}
+        draggable
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragLeave={() => {}}
@@ -475,8 +389,8 @@ const LayerItem = memo(function LayerItem({
           )}
           <NodeIcon
             type={node.type}
-            reusable={
-              node.type === "frame" && (node as FrameNode).reusable === true
+            isComponent={
+              node.type === "embed" && (node as EmbedNode).isComponent === true
             }
             layout={
               node.type === "frame" ? (node as FrameNode).layout : undefined
@@ -497,21 +411,15 @@ const LayerItem = memo(function LayerItem({
               )}
             />
           ) : (
-            <>
-              <span
-                className={clsx(
-                  "text-xs whitespace-nowrap",
-                  instanceId ? "text-text-muted" : "text-text-secondary",
-                  !isVisible && "opacity-50",
-                )}
-                onDoubleClick={instanceId ? undefined : handleDoubleClick}
-              >
-                {displayName}
-              </span>
-              {isSlotChild && (
-                <span className="text-[9px] text-purple-400 font-medium ml-1">S</span>
+            <span
+              className={clsx(
+                "text-xs whitespace-nowrap text-text-secondary",
+                !isVisible && "opacity-50",
               )}
-            </>
+              onDoubleClick={handleDoubleClick}
+            >
+              {displayName}
+            </span>
           )}
         </div>
         <div
@@ -536,8 +444,6 @@ interface FlattenedLayer {
   node: SceneNode;
   depth: number;
   parentId: string | null;
-  instanceId?: string;
-  refChildCount?: number;
 }
 
 const ROW_HEIGHT = 28;
@@ -546,37 +452,16 @@ const OVERSCAN = 8;
 function flattenLayers(
   nodes: SceneNode[],
   expandedFrameIds: Set<string>,
-  allNodes: SceneNode[],
   depth = 0,
   parentId: string | null = null,
-  instanceId: string | null = null,
   out: FlattenedLayer[] = [],
 ): FlattenedLayer[] {
   for (const node of nodes) {
-    let refChildCount: number | undefined;
-    let resolvedChildren: SceneNode[] | undefined;
-    if (node.type === "ref") {
-      const resolved = resolveRefToFrame(node as RefNode, allNodes);
-      if (resolved && resolved.children.length > 0) {
-        resolvedChildren = resolved.children;
-        refChildCount = resolved.children.length;
-      }
-    }
+    out.push({ node, depth, parentId });
 
-    out.push({
-      node,
-      depth,
-      parentId,
-      ...(instanceId ? { instanceId } : {}),
-      ...(refChildCount !== undefined ? { refChildCount } : {}),
-    });
-
-    if (node.type === "ref" && expandedFrameIds.has(node.id) && resolvedChildren) {
-      const children = [...resolvedChildren].reverse();
-      flattenLayers(children, expandedFrameIds, allNodes, depth + 1, node.id, instanceId ?? node.id, out);
-    } else if (isContainerNode(node) && expandedFrameIds.has(node.id)) {
+    if (isContainerNode(node) && expandedFrameIds.has(node.id)) {
       const children = [...node.children].reverse();
-      flattenLayers(children, expandedFrameIds, allNodes, depth + 1, node.id, instanceId, out);
+      flattenLayers(children, expandedFrameIds, depth + 1, node.id, out);
     }
   }
   return out;
@@ -593,7 +478,6 @@ interface LayerListProps {
   ) => void;
   onDrop: () => void;
   selectableFlatIds: string[];
-  descendantFlatIdsByInstance: Record<string, string[]>;
 }
 
 function LayerList({
@@ -603,13 +487,12 @@ function LayerList({
   onDragOver,
   onDrop,
   selectableFlatIds,
-  descendantFlatIdsByInstance,
 }: LayerListProps) {
   return (
     <>
       {items.map((item) => (
         <LayerItem
-          key={item.instanceId ? `${item.instanceId}/${item.node.id}` : item.node.id}
+          key={item.node.id}
           node={item.node}
           depth={item.depth}
           parentId={item.parentId}
@@ -618,9 +501,6 @@ function LayerList({
           onDragOver={onDragOver}
           onDrop={onDrop}
           selectableFlatIds={selectableFlatIds}
-          instanceFlatIds={item.instanceId ? (descendantFlatIdsByInstance[item.instanceId] ?? []) : []}
-          instanceId={item.instanceId}
-          refChildCount={item.refChildCount}
         />
       ))}
     </>
@@ -657,7 +537,6 @@ export function LayersPanel() {
   const expandAncestors = useSceneStore((state) => state.expandAncestors);
   const parentById = useSceneStore((state) => state.parentById);
   const selectedIds = useSelectionStore((state) => state.selectedIds);
-  const instanceContext = useSelectionStore((state) => state.instanceContext);
   const select = useSelectionStore((state) => state.select);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -680,31 +559,18 @@ export function LayersPanel() {
       }
     }
 
-    // Auto-expand instance when a descendant is selected from the canvas
-    if (instanceContext && !expandedFrameIds.has(instanceContext.instanceId)) {
-      idsToExpand.push(instanceContext.instanceId);
-    }
-
     if (idsToExpand.length > 0) {
       expandAncestors(idsToExpand);
     }
 
     // Scroll first selected node into view after DOM updates
     requestAnimationFrame(() => {
-      let el: Element | null | undefined;
-      if (instanceContext) {
-        el = scrollRef.current?.querySelector(
-          `[data-instance-id="${instanceContext.instanceId}"][data-node-id="${instanceContext.descendantId}"]`,
-        );
-      }
-      if (!el) {
-        el = scrollRef.current?.querySelector(
-          `[data-node-id="${selectedIds[0]}"]`,
-        );
-      }
+      const el = scrollRef.current?.querySelector(
+        `[data-node-id="${selectedIds[0]}"]`,
+      );
       el?.scrollIntoView({ block: "nearest", inline: "nearest" });
     });
-  }, [selectedIds, instanceContext, parentById, expandedFrameIds, expandAncestors]);
+  }, [selectedIds, parentById, expandedFrameIds, expandAncestors]);
 
   const [dragState, setDragState] = useState<DragState>({
     draggedId: null,
@@ -793,24 +659,13 @@ export function LayersPanel() {
   // Reverse the nodes array so that top items in the list appear on top visually (higher z-index)
   const reversedNodes = useMemo(() => [...nodes].reverse(), [nodes]);
   const flatLayers = useMemo(
-    () => flattenLayers(reversedNodes, expandedFrameIds, nodes),
-    [reversedNodes, expandedFrameIds, nodes],
+    () => flattenLayers(reversedNodes, expandedFrameIds),
+    [reversedNodes, expandedFrameIds],
   );
   const selectableFlatIds = useMemo(
-    () => flatLayers.filter((l) => !l.instanceId).map((l) => l.node.id),
+    () => flatLayers.map((l) => l.node.id),
     [flatLayers],
   );
-  const descendantFlatIdsByInstance = useMemo(() => {
-    const byInstance: Record<string, string[]> = {};
-    for (const layer of flatLayers) {
-      if (!layer.instanceId) continue;
-      if (!byInstance[layer.instanceId]) {
-        byInstance[layer.instanceId] = [];
-      }
-      byInstance[layer.instanceId].push(layer.node.id);
-    }
-    return byInstance;
-  }, [flatLayers]);
   const totalHeight = flatLayers.length * ROW_HEIGHT;
 
   useEffect(() => {
@@ -890,7 +745,6 @@ export function LayersPanel() {
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
                 selectableFlatIds={selectableFlatIds}
-                descendantFlatIdsByInstance={descendantFlatIdsByInstance}
               />
             </div>
           </div>
