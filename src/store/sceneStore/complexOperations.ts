@@ -11,7 +11,6 @@ import { convertDesignNodesToHtml } from "../../lib/designToHtml";
 import { loadGoogleFontsFromNodes } from "../../utils/fontUtils";
 import { useLayoutStore } from "../layoutStore";
 import { calculateFrameIntrinsicSize, calculateFrameLayout } from "../../utils/yogaLayout";
-import { syncTextDimensions } from "./helpers/textSync";
 import { saveHistory } from "./helpers/history";
 import {
   insertTreeIntoFlat,
@@ -20,15 +19,6 @@ import {
 import type { SceneState } from "./types";
 
 type Bounds = { x: number; y: number; width: number; height: number };
-
-function syncTextDimensionsInTree(node: SceneNode): SceneNode {
-  const synced = node.type === "text" ? syncTextDimensions(node) as SceneNode : node;
-  if (synced.type !== "frame" && synced.type !== "group") return synced;
-  return {
-    ...synced,
-    children: synced.children.map((child) => syncTextDimensionsInTree(child)),
-  };
-}
 
 /** Build a map of Yoga-computed positions for children of an auto-layout parent. */
 function buildLayoutMap(
@@ -447,7 +437,7 @@ export function createComplexOperations(
         embed.width,
         embed.height,
       );
-      const rootFrame = syncTextDimensionsInTree(convertedRoot) as FrameNode;
+      const rootFrame = convertedRoot as FrameNode;
 
       // Position at original embed location
       rootFrame.x = embed.x;

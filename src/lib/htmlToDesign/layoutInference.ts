@@ -8,7 +8,8 @@ import type {
   SizingMode,
 } from "@/types/scene";
 import { generateId } from "@/types/scene";
-import { parsePadding } from "./elementChecks";
+import { hasPadding, hasVisualStyling, parsePadding } from "./elementChecks";
+import { measureNodeContents } from "./textMeasurement";
 
 const CSS_ALIGN_ITEMS_MAP: Record<string, AlignItems> = {
   "flex-start": "flex-start",
@@ -51,14 +52,7 @@ export interface AutoLayoutResult {
  * positive gaps (robust against outliers), rounded to the nearest integer.
  */
 export function computeGapFromChildRects(el: Element, direction: FlexDirection): number {
-  const rects: DOMRect[] = [];
-  for (const child of el.children) {
-    const s = window.getComputedStyle(child);
-    if (s.display === "none" || s.visibility === "hidden") continue;
-    if (s.position === "absolute" || s.position === "fixed") continue;
-    const r = child.getBoundingClientRect();
-    if (r.width > 0 || r.height > 0) rects.push(r);
-  }
+  const rects = getFlowChildRects(el);
 
   if (rects.length < 2) return 0;
 
@@ -82,6 +76,36 @@ export function computeGapFromChildRects(el: Element, direction: FlexDirection):
     : gaps[mid];
 
   return Math.round(median);
+}
+
+function getFlowChildRects(el: Element): DOMRect[] {
+  const rects: DOMRect[] = [];
+
+  for (const child of el.childNodes) {
+    if (child.nodeType === Node.ELEMENT_NODE) {
+      const childEl = child as Element;
+      const childStyle = window.getComputedStyle(childEl);
+      if (childStyle.display === "none" || childStyle.visibility === "hidden") continue;
+      if (childStyle.position === "absolute" || childStyle.position === "fixed") continue;
+
+      const rect = childEl.getBoundingClientRect();
+      if (rect.width > 0 || rect.height > 0) {
+        rects.push(rect);
+      }
+      continue;
+    }
+
+    if (child.nodeType !== Node.TEXT_NODE || !child.textContent?.trim()) {
+      continue;
+    }
+
+    const measurement = measureNodeContents(child);
+    if (measurement) {
+      rects.push(measurement.bounds);
+    }
+  }
+
+  return rects;
 }
 
 export function inferAutoLayout(
@@ -187,8 +211,62 @@ export function inferAutoLayout(
     return { layout };
   }
 
+  const singleChildLayout = inferSingleChildLayout(style, el);
+  if (singleChildLayout) {
+    return { layout: singleChildLayout };
+  }
+
   const flowLayout = inferFlowLayout(style, el, display);
   return flowLayout ? { layout: flowLayout } : undefined;
+}
+
+function inferSingleChildLayout(
+  style: CSSStyleDeclaration,
+  el: Element | undefined,
+): LayoutProperties | undefined {
+  if (!el) return undefined;
+
+  const childRects = getFlowChildRects(el);
+  if (childRects.length !== 1) return undefined;
+
+  const shouldPreserveAsBox =
+    el.tagName.toLowerCase() === "button" ||
+    hasPadding(style) ||
+    hasVisualStyling(style);
+  if (!shouldPreserveAsBox) return undefined;
+
+  const padding = parsePadding(style);
+  const parentRect = el.getBoundingClientRect();
+  const childRect = childRects[0];
+
+  const contentLeft = parentRect.left + padding.paddingLeft;
+  const contentTop = parentRect.top + padding.paddingTop;
+  const contentWidth = Math.max(parentRect.width - padding.paddingLeft - padding.paddingRight, 0);
+  const contentHeight = Math.max(parentRect.height - padding.paddingTop - padding.paddingBottom, 0);
+
+  const layout: LayoutProperties = {
+    autoLayout: true,
+    flexDirection: "row",
+    gap: 0,
+    ...padding,
+  };
+
+  const childCenterY = childRect.top + childRect.height / 2;
+  const contentCenterY = contentTop + contentHeight / 2;
+  if (contentHeight > 0 && Math.abs(childCenterY - contentCenterY) <= ALIGNMENT_TOLERANCE) {
+    layout.alignItems = "center";
+  }
+
+  const childCenterX = childRect.left + childRect.width / 2;
+  const contentCenterX = contentLeft + contentWidth / 2;
+  if (
+    contentWidth > 0 &&
+    (style.textAlign === "center" || Math.abs(childCenterX - contentCenterX) <= ALIGNMENT_TOLERANCE)
+  ) {
+    layout.justifyContent = "center";
+  }
+
+  return layout;
 }
 
 /**
@@ -203,15 +281,7 @@ function inferFlowLayout(
   if (!el) return undefined;
   if (display === "none" || display === "contents") return undefined;
 
-  const candidates: DOMRect[] = [];
-  for (const child of el.children) {
-    const childStyle = window.getComputedStyle(child);
-    if (childStyle.display === "none" || childStyle.visibility === "hidden") continue;
-    if (childStyle.position === "absolute" || childStyle.position === "fixed") continue;
-    const rect = child.getBoundingClientRect();
-    if (rect.width === 0 && rect.height === 0) continue;
-    candidates.push(rect);
-  }
+  const candidates = getFlowChildRects(el);
 
   if (candidates.length < 2) return undefined;
 

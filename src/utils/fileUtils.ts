@@ -75,7 +75,11 @@ function downloadTextFile(text: string, filename: string) {
   URL.revokeObjectURL(url)
 }
 
-export function openFilePicker(): Promise<DocumentData> {
+export interface OpenFileResult extends DocumentData {
+  fileName: string;
+}
+
+export function openFilePicker(): Promise<OpenFileResult> {
   return new Promise((resolve, reject) => {
     const input = document.createElement('input')
     input.type = 'file'
@@ -91,7 +95,7 @@ export function openFilePicker(): Promise<DocumentData> {
       try {
         const text = await file.text()
         const data = deserializeDocument(text)
-        resolve(data)
+        resolve({ ...data, fileName: file.name })
       } catch (err) {
         reject(err)
       }

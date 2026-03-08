@@ -8,18 +8,22 @@ export function parsePadding(style: CSSStyleDeclaration) {
   };
 }
 
-/** Flatten only plain inline text wrappers. Keep styled or container-like text elements as frames. */
+export function hasPadding(style: CSSStyleDeclaration): boolean {
+  const pad = parsePadding(style);
+  return pad.paddingTop > 0 || pad.paddingRight > 0 || pad.paddingBottom > 0 || pad.paddingLeft > 0;
+}
+
+/** Flatten text-only wrappers unless they behave like a visual box/control. */
 export function shouldFlattenTextOnlyElement(
+  el: Element,
   style: CSSStyleDeclaration,
   tag: string,
 ): boolean {
-  const semanticTextTag = /^(h[1-6]|p|span|strong|em|small|label)$/i.test(tag);
-  if (tag === "a" || tag === "button") return false;
-  if (!semanticTextTag && style.display !== "inline") return false;
-  if (style.cursor === "pointer") return false;
+  if (/^(button|input|textarea|select|option)$/i.test(tag)) return false;
+  if (style.display === "contents") return false;
+  if (el.childElementCount > 0) return false;
   if (hasVisualStyling(style)) return false;
-  if (!semanticTextTag && hasBoxSpacing(style)) return false;
-  if (hasExplicitDimensions(style)) return false;
+  if (hasPadding(style)) return false;
   return true;
 }
 
@@ -45,29 +49,6 @@ export function hasVisualStyling(style: CSSStyleDeclaration): boolean {
   const shadow = style.boxShadow;
   if (shadow && shadow !== "none") return true;
   return false;
-}
-
-/** Check if an element has non-zero margin/padding that should be preserved as a container */
-function hasBoxSpacing(style: CSSStyleDeclaration): boolean {
-  const pad = parsePadding(style);
-  if (pad.paddingTop > 0 || pad.paddingRight > 0 || pad.paddingBottom > 0 || pad.paddingLeft > 0) return true;
-
-  const margins = [
-    parseFloat(style.marginTop) || 0,
-    parseFloat(style.marginRight) || 0,
-    parseFloat(style.marginBottom) || 0,
-    parseFloat(style.marginLeft) || 0,
-  ];
-  return margins.some((v) => v > 0);
-}
-
-/** Check if CSS explicitly defines width/height that should keep the node as a frame */
-function hasExplicitDimensions(style: CSSStyleDeclaration): boolean {
-  const width = style.width?.trim().toLowerCase() ?? "";
-  const height = style.height?.trim().toLowerCase() ?? "";
-  const hasWidth = width !== "" && width !== "auto";
-  const hasHeight = height !== "" && height !== "auto";
-  return hasWidth || hasHeight;
 }
 
 /** Infer a reasonable name from an HTML element */

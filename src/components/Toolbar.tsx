@@ -8,6 +8,7 @@ import { usePixelGridStore } from "../store/pixelGridStore";
 import { useViewportStore } from "../store/viewportStore";
 
 import { downloadDocument, downloadPublicPen, openFilePicker } from "../utils/fileUtils";
+import { useDocumentStore } from "../store/documentStore";
 import { applyOpenedDocument } from "../utils/openDocumentIntoEditor";
 import { parsePixsoJson } from "../utils/pixsoImportUtils";
 import { Button } from "./ui/button";
@@ -46,11 +47,13 @@ export function Toolbar() {
   const [error, setError] = useState<string | null>(null);
 
   const handleSave = () => {
-    downloadDocument(nodes, variables, activeTheme);
+    const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
+    downloadDocument(nodes, variables, activeTheme, `${name}.json`);
   };
 
   const handleExportPublicPen = () => {
-    downloadPublicPen(nodes, variables, activeTheme);
+    const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
+    downloadPublicPen(nodes, variables, activeTheme, `${name}.pen`);
   };
 
   const handleOpen = async () => {
@@ -59,7 +62,9 @@ export function Toolbar() {
         nodes: loadedNodes,
         variables: loadedVariables,
         activeTheme: loadedTheme,
+        fileName,
       } = await openFilePicker();
+      useDocumentStore.getState().setFileName(fileName);
       const canvasEl = document.querySelector("[data-canvas]");
       applyOpenedDocument(
         {

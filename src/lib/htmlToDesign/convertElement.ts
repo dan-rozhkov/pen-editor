@@ -10,6 +10,7 @@ import { applyBaseProps, applyTextProps, applyBasePropsToText, createRectFromSty
 import { shouldFlattenTextOnlyElement, hasDirectTextContent, hasVisualStyling, inferFrameName } from "./elementChecks";
 import { inferAutoLayout, groupGridChildrenIntoRows, inferChildSizing } from "./layoutInference";
 import { serializeSvgWithComputedStyles, svgTextToDataUrl, scaleAndOffsetNode, normalizeSvgNodeToViewport } from "./svgHandling";
+import { measureNodeContents } from "./textMeasurement";
 
 /** Convert a DOM node (element or text) into a SceneNode, or null if empty/invisible */
 export function convertNode(
@@ -36,38 +37,23 @@ function convertTextNode(
   const text = textNode.textContent?.trim();
   if (!text) return null;
 
-  const range = document.createRange();
-  range.selectNodeContents(textNode);
-  const rects = range.getClientRects();
-  if (rects.length === 0) return null;
-
-  // Use bounding rect of all line rects
-  const firstRect = rects[0];
-  let minX = firstRect.left;
-  let minY = firstRect.top;
-  let maxX = firstRect.right;
-  let maxY = firstRect.bottom;
-  for (let i = 1; i < rects.length; i++) {
-    minX = Math.min(minX, rects[i].left);
-    minY = Math.min(minY, rects[i].top);
-    maxX = Math.max(maxX, rects[i].right);
-    maxY = Math.max(maxY, rects[i].bottom);
-  }
+  const measurement = measureNodeContents(textNode);
+  if (!measurement) return null;
 
   const parentEl = textNode.parentElement;
   const parentStyle = parentEl
     ? window.getComputedStyle(parentEl)
     : null;
 
-  const isSingleLine = !text.includes('\n') && rects.length <= 1;
+  const isSingleLine = !text.includes('\n') && measurement.rectCount <= 1;
   const node: TextNode = {
     id: generateId(),
     type: "text",
     text,
-    x: minX - containerRect.left,
-    y: minY - containerRect.top,
-    width: maxX - minX,
-    height: maxY - minY,
+    x: measurement.bounds.left - containerRect.left,
+    y: measurement.bounds.top - containerRect.top,
+    width: measurement.bounds.width,
+    height: measurement.bounds.height,
     textWidthMode: isSingleLine ? "auto" : "fixed",
   };
 
@@ -163,7 +149,7 @@ function convertElement(
   const hasElementChildren = el.children.length > 0;
   const hasTextContent = hasDirectTextContent(el);
 
-  if (!hasElementChildren && hasTextContent && shouldFlattenTextOnlyElement(style, tag)) {
+  if (!hasElementChildren && hasTextContent && shouldFlattenTextOnlyElement(el, style, tag)) {
     // Pure text element → TextNode
     const elText = el.textContent?.trim() ?? "";
     const range = document.createRange();

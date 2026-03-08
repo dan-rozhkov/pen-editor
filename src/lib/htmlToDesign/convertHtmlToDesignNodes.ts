@@ -21,9 +21,11 @@ export async function convertHtmlToDesignNodes(
   width: number,
   height: number,
 ): Promise<FrameNode> {
-  // 1. Create hidden container at embed dimensions
-  const container = document.createElement("div");
-  container.style.cssText = `
+  // 1. Create hidden host + shadow root at embed dimensions.
+  // This keeps editor-wide styles (e.g. body line-height) from leaking into
+  // the DOM we measure for conversion.
+  const host = document.createElement("div");
+  host.style.cssText = `
     position: fixed;
     left: -99999px;
     top: -99999px;
@@ -31,6 +33,25 @@ export async function convertHtmlToDesignNodes(
     height: ${height}px;
     overflow: hidden;
     pointer-events: none;
+  `;
+  const shadow = host.attachShadow({ mode: "open" });
+
+  const container = document.createElement("div");
+  container.style.cssText = `
+    width: ${width}px;
+    height: ${height}px;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+    color: initial;
+    font-family: initial;
+    font-size: medium;
+    font-style: normal;
+    font-weight: 400;
+    letter-spacing: normal;
+    line-height: normal;
+    text-align: initial;
+    text-transform: none;
   `;
   // Sanitize: strip event handler attributes and script tags to prevent execution
   const sanitized = htmlContent
@@ -46,7 +67,8 @@ export async function convertHtmlToDesignNodes(
   const scopeId = `convert-scope-${generateId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   conversionRoot.setAttribute("data-convert-scope", scopeId);
   scopeStyleTagsToRoot(container, `[data-convert-scope="${scopeId}"]`);
-  document.body.appendChild(container);
+  shadow.appendChild(container);
+  document.body.appendChild(host);
 
   // Wait for fonts and images to load, then one frame for reflow
   await document.fonts.ready;
@@ -105,6 +127,6 @@ export async function convertHtmlToDesignNodes(
 
     return rootFrame;
   } finally {
-    document.body.removeChild(container);
+    document.body.removeChild(host);
   }
 }

@@ -6,8 +6,11 @@ import { renderHtmlToTexture, invalidateHtmlTexture } from "./htmlTexture";
 let currentEmbedResolution = window.devicePixelRatio;
 const MIN_EMBED_RENDER_RESOLUTION = 0.25;
 const EMBED_RESOLUTION_STEP = 0.25;
-const MAX_EMBED_TEXTURE_DIMENSION = 8192;
-const MAX_EMBED_TEXTURE_PIXELS = 16_777_216;
+// Large embeds (for example long page screenshots) were hitting the old
+// 4096x4096 pixel budget too early, so zoom-based sharpness upgrades never
+// kicked in. Keep a hard cap, but allow textures to grow up to 8k x 8k.
+const MAX_EMBED_TEXTURE_DIMENSION = 16_384;
+const MAX_EMBED_TEXTURE_PIXELS = 67_108_864;
 const EMBED_RESIZE_RERENDER_DEBOUNCE_MS = 180;
 const pendingResizeRerenderByContainer = new WeakMap<Container, ReturnType<typeof setTimeout>>();
 const renderRequestIdByContainer = new WeakMap<Container, number>();

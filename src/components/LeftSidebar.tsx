@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ArrowsInLineVertical, SidebarSimple } from "@phosphor-icons/react";
 import { LayersPanel } from "./LayersPanel";
 import { ComponentsPanel } from "./ComponentsPanel";
@@ -6,6 +6,7 @@ import { Toolbar } from "./Toolbar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 import { useSceneStore } from "@/store/sceneStore";
 import { useFloatingPanelsStore } from "@/store/floatingPanelsStore";
+import { useDocumentStore } from "@/store/documentStore";
 
 export function LeftSidebar() {
   const [activeTab, setActiveTab] = useState("layers");
@@ -13,6 +14,28 @@ export function LeftSidebar() {
   const hasExpanded = useSceneStore((s) => s.expandedFrameIds.size > 0);
   const isFloating = useFloatingPanelsStore((s) => s.isFloating);
   const toggleFloating = useFloatingPanelsStore((s) => s.toggleFloating);
+  const fileName = useDocumentStore((s) => s.fileName);
+  const setFileName = useDocumentStore((s) => s.setFileName);
+  const [isEditing, setIsEditing] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const displayName = fileName ? fileName.replace(/\.[^.]+$/, "") : "Untitled";
+  const extension = fileName?.match(/\.[^.]+$/)?.[0] ?? "";
+
+  const handleStartEdit = () => {
+    setIsEditing(true);
+    requestAnimationFrame(() => {
+      inputRef.current?.select();
+    });
+  };
+
+  const handleFinishEdit = () => {
+    setIsEditing(false);
+    const value = inputRef.current?.value.trim();
+    if (value) {
+      setFileName(value + extension);
+    }
+  };
 
   return (
     <div
@@ -22,7 +45,7 @@ export function LeftSidebar() {
           : "w-[240px] h-full flex flex-col bg-surface-panel border-r border-border-default"
       }
     >
-      <div className={isFloating ? "flex flex-row items-center gap-1 px-2 py-0.5" : "flex flex-row items-center gap-0 pr-1 border-b border-border-default"}>
+      <div className={isFloating ? "flex flex-row items-center gap-1 px-2 py-0.5" : "flex flex-row items-center gap-0 pr-1"}>
         <div className="flex-1 min-w-0">
           <Toolbar />
         </div>
@@ -35,6 +58,29 @@ export function LeftSidebar() {
           <SidebarSimple size={16} />
         </button>
       </div>
+      {!isFloating && (
+        <div className="px-2">
+          {isEditing ? (
+            <input
+              ref={inputRef}
+              defaultValue={displayName}
+              onBlur={handleFinishEdit}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleFinishEdit();
+                if (e.key === "Escape") setIsEditing(false);
+              }}
+              className="w-full h-7 px-1 py-0.5 rounded text-sm font-medium text-text-default bg-secondary outline-none"
+            />
+          ) : (
+            <div
+              onClick={handleStartEdit}
+              className="h-7 px-1 rounded truncate text-sm font-medium text-text-default cursor-text hover:bg-secondary flex items-center"
+            >
+              {displayName}
+            </div>
+          )}
+        </div>
+      )}
       {!isFloating && (
         <Tabs defaultValue="layers" className="flex-1 flex flex-col gap-0 overflow-hidden" onValueChange={setActiveTab}>
           <div className="px-1 pt-1 pb-1 border-b border-border-default flex items-center justify-between">
