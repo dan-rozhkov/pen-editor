@@ -1,2 +1,12 @@
 // Chat types are now provided by the `ai` package (Message, ToolInvocation).
-// This file is kept as a placeholder for any future app-specific chat types.
+// This file contains app-specific chat payloads shared across the UI/store.
+
+export interface AttachedImage {
+  dataUrl: string;
+  name: string;
+}
+
+export interface ChatLaunchPayload {
+  text: string;
+  images?: AttachedImage[];
+}

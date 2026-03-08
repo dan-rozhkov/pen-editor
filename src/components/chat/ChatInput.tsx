@@ -7,18 +7,14 @@ import {
 } from "@phosphor-icons/react";
 import { SlashCommandMenu } from "./SlashCommandMenu";
 import type { SlashCommand } from "./slashCommands";
-
-export interface AttachedImage {
-  dataUrl: string;
-  name: string;
-}
+import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
 
 const MAX_IMAGES = 3;
 
 interface ChatInputProps {
   input: string;
   setInput: (value: string) => void;
-  onSubmit: (e: React.FormEvent, images?: AttachedImage[]) => void;
+  onSubmit: (payload: ChatLaunchPayload) => void;
   isLoading: boolean;
   stop: () => void;
 }
@@ -99,12 +95,12 @@ export function ChatInput({
   }, []);
 
   const doSubmit = useCallback(
-    (e: React.SyntheticEvent) => {
+    () => {
       if ((input.trim() || attachedImages.length > 0) && !isLoading) {
-        onSubmit(
-          e as React.FormEvent,
-          attachedImages.length > 0 ? attachedImages : undefined,
-        );
+        onSubmit({
+          text: input.trim(),
+          images: attachedImages.length > 0 ? attachedImages : undefined,
+        });
         setAttachedImages([]);
       }
     },
@@ -115,7 +111,7 @@ export function ChatInput({
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        doSubmit(e);
+        doSubmit();
       }
     },
     [doSubmit]
@@ -124,7 +120,7 @@ export function ChatInput({
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
-      doSubmit(e);
+      doSubmit();
     },
     [doSubmit]
   );

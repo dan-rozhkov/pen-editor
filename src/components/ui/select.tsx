@@ -194,6 +194,7 @@ interface SelectWithOptionsProps {
   onValueChange: (value: string | null) => void;
   options: { value: string; label: string }[];
   children?: React.ReactNode;
+  triggerPrefix?: React.ReactNode;
   className?: string;
   size?: "sm" | "default";
 }
@@ -203,6 +204,7 @@ function SelectWithOptions({
   onValueChange,
   options,
   children,
+  triggerPrefix,
   className,
   size = "default",
   ...props
@@ -214,6 +216,7 @@ function SelectWithOptions({
   return (
     <Select value={value} onValueChange={onValueChange} {...props}>
       <SelectTrigger size={size} className={className}>
+        {triggerPrefix}
         <SelectValue>{currentLabel}</SelectValue>
       </SelectTrigger>
       <SelectContent>

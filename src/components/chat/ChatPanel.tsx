@@ -7,7 +7,7 @@ import {
 } from "@phosphor-icons/react";
 import { useChatStore } from "@/store/chatStore";
 import { useFloatingPanelsStore } from "@/store/floatingPanelsStore";
-import type { AgentMode, ChatTab } from "@/store/chatStore";
+import type { AgentMode, ChatTab, ParallelCount } from "@/store/chatStore";
 import { useDesignChat } from "@/hooks/useDesignChat";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
@@ -16,6 +16,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { CHAT_PRESETS } from "./chatPresets";
 import type { ChatPreset } from "./chatPresets";
+import type { ChatLaunchPayload } from "@/types/chat";
 
 const MODEL_OPTIONS = [
   { value: "openai/gpt-5.4", label: "GPT-5.4" },
@@ -40,6 +41,19 @@ const MODE_OPTIONS = [
   { value: "prototype", label: "Prototype" },
   { value: "research", label: "Research" },
 ];
+
+const PARALLEL_COUNT_OPTIONS = [
+  { value: "1", label: "x1" },
+  { value: "2", label: "x2" },
+  { value: "3", label: "x3" },
+];
+
+function cloneLaunchPayload(payload: ChatLaunchPayload): ChatLaunchPayload {
+  return {
+    text: payload.text,
+    images: payload.images?.map((image) => ({ ...image })),
+  };
+}
 
 function TabBar() {
   const tabs = useChatStore((s) => s.tabs);
@@ -130,7 +144,7 @@ function ChatSession({
     messages,
     input,
     setInput,
-    sendMessage,
+    submitLaunchPayload,
     isLoading,
     stop,
     error,
@@ -140,6 +154,10 @@ function ChatSession({
 
   const setModel = useChatStore((s) => s.setModel);
   const setAgentMode = useChatStore((s) => s.setAgentMode);
+  const parallelCount = useChatStore((s) => s.parallelCount);
+  const setParallelCount = useChatStore((s) => s.setParallelCount);
+  const createTab = useChatStore((s) => s.createTab);
+  const queueLaunchPayload = useChatStore((s) => s.queueLaunchPayload);
 
   const handleSelectPreset = (preset: ChatPreset) => {
     setAgentMode(preset.mode);
@@ -151,6 +169,23 @@ function ChatSession({
   if (showPresets) {
     return <PresetList onSelect={handleSelectPreset} />;
   }
+
+  const handleSubmit = (payload: ChatLaunchPayload) => {
+    const launchPayload = cloneLaunchPayload(payload);
+    const didSend = submitLaunchPayload(launchPayload);
+    if (!didSend) {
+      return;
+    }
+
+    setInput("");
+
+    for (let i = 1; i < parallelCount; i += 1) {
+      const tabId = createTab();
+      queueLaunchPayload(tabId, cloneLaunchPayload(launchPayload));
+    }
+
+    setParallelCount(1);
+  };
 
   return (
     <>
@@ -189,7 +224,7 @@ function ChatSession({
       <ChatInput
         input={input}
         setInput={setInput}
-        onSubmit={sendMessage}
+        onSubmit={handleSubmit}
         isLoading={isLoading}
         stop={stop}
       />
@@ -204,6 +239,8 @@ export function ChatPanel() {
   const setModel = useChatStore((s) => s.setModel);
   const agentMode = useChatStore((s) => s.agentMode);
   const setAgentMode = useChatStore((s) => s.setAgentMode);
+  const parallelCount = useChatStore((s) => s.parallelCount);
+  const setParallelCount = useChatStore((s) => s.setParallelCount);
   const tabs = useChatStore((s) => s.tabs);
   const activeTabId = useChatStore((s) => s.activeTabId);
   const [showPresets, setShowPresets] = useState(false);
@@ -278,6 +315,17 @@ export function ChatPanel() {
               }}
               size="sm"
               className="w-fit"
+            />
+            <SelectWithOptions
+              value={String(parallelCount)}
+              options={PARALLEL_COUNT_OPTIONS}
+              onValueChange={(value) => {
+                if (!value) return;
+                setParallelCount(Number(value) as ParallelCount);
+              }}
+              size="sm"
+              className="w-fit gap-1 pl-1.5 pr-1.5"
+              triggerPrefix={<LightningIcon className="size-3 text-text-muted" />}
             />
           </div>
         )}

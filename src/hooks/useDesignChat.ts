@@ -9,7 +9,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useChatStore } from "@/store/chatStore";
 import { toolHandlers } from "@/lib/toolRegistry";
-import type { AttachedImage } from "@/components/chat/ChatInput";
+import type { ChatLaunchPayload } from "@/types/chat";
 
 function resolveChatApiUrl(): string {
   const explicitApiUrl = import.meta.env.VITE_AI_API_URL as string | undefined;
@@ -89,6 +89,13 @@ interface UseDesignChatOptions {
   sessionId: string;
 }
 
+function cloneLaunchPayload(payload: ChatLaunchPayload): ChatLaunchPayload {
+  return {
+    text: payload.text,
+    images: payload.images?.map((image) => ({ ...image })),
+  };
+}
+
 export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   const [input, setInput] = useState("");
 
@@ -118,6 +125,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   // Register/unregister abort capability for this session
   const registerAbortController = useChatStore((s) => s.registerAbortController);
   const unregisterAbortController = useChatStore((s) => s.unregisterAbortController);
+  const consumeLaunchPayload = useChatStore((s) => s.consumeLaunchPayload);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -139,11 +147,13 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, registerAbortController, unregisterAbortController]);
 
-  const sendMessage = useCallback(
-    (e?: React.FormEvent, images?: AttachedImage[]) => {
-      e?.preventDefault();
-      const text = input.trim();
-      if ((!text && (!images || images.length === 0)) || chat.status !== "ready") return;
+  const sendPayload = useCallback(
+    (payload: ChatLaunchPayload): boolean => {
+      const text = payload.text.trim();
+      const images = payload.images;
+      if ((!text && (!images || images.length === 0)) || chat.status !== "ready") {
+        return false;
+      }
 
       if (images && images.length > 0) {
         const parts: Array<{ type: "text"; text: string } | { type: "file"; mediaType: string; url: string }> = [];
@@ -158,9 +168,41 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       } else {
         chat.sendMessage({ text });
       }
-      setInput("");
+      return true;
     },
-    [input, chat]
+    [chat]
+  );
+
+  useEffect(() => {
+    if (chat.status !== "ready") {
+      return;
+    }
+
+    const queuedPayload = consumeLaunchPayload(sessionId);
+    if (!queuedPayload) {
+      return;
+    }
+
+    sendPayload(cloneLaunchPayload(queuedPayload));
+  }, [chat.status, consumeLaunchPayload, sendPayload, sessionId]);
+
+  const sendMessage = useCallback((): boolean => {
+    const didSend = sendPayload({ text: input.trim() });
+    if (didSend) {
+      setInput("");
+    }
+    return didSend;
+  }, [input, sendPayload]);
+
+  const submitLaunchPayload = useCallback(
+    (payload: ChatLaunchPayload): boolean => {
+      const didSend = sendPayload(payload);
+      if (didSend && payload.text.trim() === input.trim()) {
+        setInput("");
+      }
+      return didSend;
+    },
+    [input, sendPayload]
   );
 
   return {
@@ -168,6 +210,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     input,
     setInput,
     sendMessage,
+    submitLaunchPayload,
     status: chat.status,
     isLoading: chat.status === "submitted" || chat.status === "streaming",
     stop: chat.stop,
