@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { isContainerNode, type FrameNode, type RefNode, type SceneNode, type HistorySnapshot } from "@/types/scene";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useUIVisibilityStore } from "@/store/uiVisibilityStore";
+import { useClipboardStore } from "@/store/clipboardStore";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
@@ -19,6 +20,8 @@ import {
   type ImageImportPlan,
   setImportedSelection,
 } from "./imageImport";
+
+const INTERNAL_CLIPBOARD_PRIORITY_MS = 5000;
 
 interface CanvasKeyboardShortcutsParams {
   nodes: SceneNode[];
@@ -80,6 +83,30 @@ function getViewportCenter(dimensions: { width: number; height: number }): {
   };
 }
 
+function resolvePasteTargetContainerId(
+  nodes: SceneNode[],
+  selectionState: Pick<
+    ReturnType<typeof useSelectionStore.getState>,
+    "enteredContainerId" | "selectedIds"
+  >,
+): string | null {
+  if (selectionState.enteredContainerId) {
+    const enteredNode = findNodeById(nodes, selectionState.enteredContainerId);
+    if (enteredNode && isContainerNode(enteredNode)) {
+      return enteredNode.id;
+    }
+  }
+
+  if (selectionState.selectedIds.length === 1) {
+    const selectedNode = findNodeById(nodes, selectionState.selectedIds[0]);
+    if (selectedNode && isContainerNode(selectedNode)) {
+      return selectedNode.id;
+    }
+  }
+
+  return null;
+}
+
 export function useCanvasKeyboardShortcuts({
   nodes,
   copiedNodes,
@@ -109,6 +136,27 @@ export function useCanvasKeyboardShortcuts({
   copyNodes,
 }: CanvasKeyboardShortcutsParams) {
   useEffect(() => {
+    const pasteInternalNodes = (sourceNodes: SceneNode[]): void => {
+      const clonedNodes = sourceNodes.map((node) => cloneNodeWithNewId(node));
+      const selectionState = useSelectionStore.getState();
+      const targetContainerId = resolvePasteTargetContainerId(nodes, selectionState);
+
+      saveHistory(createSnapshot(useSceneStore.getState()));
+      startBatch();
+      for (const clonedNode of clonedNodes) {
+        if (targetContainerId) {
+          clonedNode.x = 20;
+          clonedNode.y = 20;
+          addChildToFrame(targetContainerId, clonedNode);
+        } else {
+          addNode(clonedNode);
+        }
+      }
+      endBatch();
+
+      setImportedSelection(clonedNodes.map((node) => node.id));
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
       const isTyping = isTypingTarget(e);
 
@@ -545,6 +593,7 @@ export function useCanvasKeyboardShortcuts({
       const isTyping = isTypingTarget(e);
       if (isTyping) return;
 
+      const clipboardState = useClipboardStore.getState();
       const syncText = e.clipboardData?.getData("text/plain")?.trim() ?? "";
       const imageItems =
         e.clipboardData?.items == null
@@ -552,6 +601,15 @@ export function useCanvasKeyboardShortcuts({
           : Array.from(e.clipboardData.items).filter((item) =>
               item.type.startsWith("image/"),
             );
+      const shouldPreferInternalClipboard =
+        clipboardState.copiedNodes.length > 0 &&
+        Date.now() - clipboardState.lastCopiedAt <= INTERNAL_CLIPBOARD_PRIORITY_MS;
+
+      if (shouldPreferInternalClipboard) {
+        e.preventDefault();
+        pasteInternalNodes(clipboardState.copiedNodes);
+        return;
+      }
 
       if (imageItems.length > 0) {
         e.preventDefault();
@@ -613,38 +671,9 @@ export function useCanvasKeyboardShortcuts({
       }
 
       // 2. Internal clipboard (copiedNodes) — fallback when no external data matched
-      if (copiedNodes.length > 0) {
+      if (clipboardState.copiedNodes.length > 0) {
         e.preventDefault();
-        const clonedNodes = copiedNodes.map((n) => cloneNodeWithNewId(n));
-        const selectionState = useSelectionStore.getState();
-        let targetContainerId: string | null = null;
-
-        if (selectionState.enteredContainerId) {
-          const enteredNode = findNodeById(nodes, selectionState.enteredContainerId);
-          if (enteredNode && isContainerNode(enteredNode)) {
-            targetContainerId = enteredNode.id;
-          }
-        } else if (selectionState.selectedIds.length === 1) {
-          const selectedNode = findNodeById(nodes, selectionState.selectedIds[0]);
-          if (selectedNode && isContainerNode(selectedNode)) {
-            targetContainerId = selectedNode.id;
-          }
-        }
-
-        saveHistory(createSnapshot(useSceneStore.getState()));
-        startBatch();
-        for (const clonedNode of clonedNodes) {
-          if (targetContainerId) {
-            clonedNode.x = 20;
-            clonedNode.y = 20;
-            addChildToFrame(targetContainerId, clonedNode);
-          } else {
-            addNode(clonedNode);
-          }
-        }
-        endBatch();
-
-        setImportedSelection(clonedNodes.map((n) => n.id));
+        pasteInternalNodes(clipboardState.copiedNodes);
       }
     };
 
