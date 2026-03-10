@@ -47,6 +47,34 @@ function serializeSvgWithInlineComputedStyles(svg: SVGSVGElement, styleTexts: st
   const cloneNodes = [clone, ...Array.from(clone.querySelectorAll("*"))];
   const count = Math.min(sourceNodes.length, cloneNodes.length);
   const ignoredStyleProps = new Set(["visibility", "content-visibility"]);
+  const ignoredRootLayoutProps = new Set([
+    "position",
+    "left",
+    "right",
+    "top",
+    "bottom",
+    "inset",
+    "inset-inline",
+    "inset-inline-start",
+    "inset-inline-end",
+    "inset-block",
+    "inset-block-start",
+    "inset-block-end",
+    "transform",
+    "transform-origin",
+    "translate",
+    "rotate",
+    "scale",
+    "overflow",
+    "overflow-x",
+    "overflow-y",
+    "width",
+    "height",
+    "min-width",
+    "min-height",
+    "max-width",
+    "max-height",
+  ]);
 
   for (let i = 0; i < count; i++) {
     const sourceEl = sourceNodes[i] as Element;
@@ -56,6 +84,7 @@ function serializeSvgWithInlineComputedStyles(svg: SVGSVGElement, styleTexts: st
     for (let j = 0; j < computed.length; j++) {
       const prop = computed[j];
       if (ignoredStyleProps.has(prop)) continue;
+      if (i === 0 && ignoredRootLayoutProps.has(prop)) continue;
       declarations.push(`${prop}:${computed.getPropertyValue(prop)};`);
     }
     cloneEl.setAttribute("style", declarations.join(""));

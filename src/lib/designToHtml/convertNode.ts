@@ -157,7 +157,7 @@ function convertSvgShapeNode(
   const visualStyles = generateVisualStyles(node);
   delete visualStyles["background-color"];
   delete visualStyles.border;
-  const wrapperStyles = { ...layoutStyles, ...visualStyles };
+  const wrapperStyles = { ...layoutStyles, ...visualStyles, overflow: "visible" };
   return `<div style="${stylesToString(wrapperStyles)}">${svgFn(node as never)}</div>`;
 }
 
