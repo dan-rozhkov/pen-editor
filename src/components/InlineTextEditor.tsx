@@ -232,11 +232,7 @@ export function InlineTextEditor({
   }
 
   // Compute dimensions
-  const shouldUseDynamicAutoSize =
-    shouldUseAutoTextBehavior &&
-    (!isInsideAutoLayoutParent || isFitContentInAutoLayout)
-  const shouldClipToBox =
-    isInsideAutoLayoutParent && shouldUseAutoTextBehavior && !isFitContentInAutoLayout
+  const shouldUseDynamicAutoSize = shouldUseAutoTextBehavior
   const widthStyle: React.CSSProperties['width'] = shouldUseDynamicAutoSize ? 'max-content' : fixedScreenWidth
   const heightStyle: React.CSSProperties['height'] = shouldUseDynamicAutoSize ? 'auto' : fixedScreenHeight
   const minWidthStyle: React.CSSProperties['minWidth'] = shouldUseDynamicAutoSize ? fixedScreenWidth : undefined
@@ -277,7 +273,7 @@ export function InlineTextEditor({
         display: 'inline-block',
         whiteSpace: isWrappedWidth ? 'pre-wrap' : 'pre',
         wordBreak: isWrappedWidth ? 'break-word' : 'normal',
-        overflow: isFixedHeight || shouldClipToBox ? 'hidden' : 'visible',
+        overflow: isFixedHeight ? 'hidden' : 'visible',
         cursor: 'text',
         textTransform: node.textTransform === 'capitalize' ? 'capitalize'
           : node.textTransform === 'uppercase' ? 'uppercase'
