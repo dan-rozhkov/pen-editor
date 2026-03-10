@@ -1,6 +1,6 @@
 import type { SceneNode } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
-import { findComponentById, type ParentContext } from "@/utils/nodeUtils";
+import type { ParentContext } from "@/utils/nodeUtils";
 import { TypeSection } from "@/components/properties/TypeSection";
 import { PositionSection } from "@/components/properties/PositionSection";
 import { SizeSection } from "@/components/properties/SizeSection";
@@ -21,7 +21,6 @@ interface PropertyEditorProps {
   parentContext: ParentContext;
   variables: Variable[];
   activeTheme: ThemeName;
-  allNodes: SceneNode[];
 }
 
 export function PropertyEditor({
@@ -30,23 +29,7 @@ export function PropertyEditor({
   parentContext,
   variables,
   activeTheme,
-  allNodes,
 }: PropertyEditorProps) {
-  const component =
-    node.type === "ref" ? findComponentById(allNodes, node.componentId) : null;
-
-  const isOverridden = <T,>(
-    instanceVal: T | undefined,
-    componentVal: T | undefined
-  ): boolean => {
-    if (!component) return false;
-    return instanceVal !== undefined && instanceVal !== componentVal;
-  };
-
-  const resetOverride = (property: keyof SceneNode) => {
-    onUpdate({ [property]: undefined } as Partial<SceneNode>);
-  };
-
   const colorVariables = variables.filter((v) => v.type === "color");
 
   return (
@@ -61,20 +44,20 @@ export function PropertyEditor({
       <FillSection
         node={node}
         onUpdate={onUpdate}
-        component={component}
+        component={null}
         colorVariables={colorVariables}
         activeTheme={activeTheme}
-        isOverridden={isOverridden}
-        resetOverride={resetOverride}
+        isOverridden={() => false}
+        resetOverride={() => {}}
       />
       <StrokeSection
         node={node}
         onUpdate={onUpdate}
-        component={component}
+        component={null}
         colorVariables={colorVariables}
         activeTheme={activeTheme}
-        isOverridden={isOverridden}
-        resetOverride={resetOverride}
+        isOverridden={() => false}
+        resetOverride={() => {}}
       />
       <EffectsSection node={node} onUpdate={onUpdate} />
       {node.type === "frame" && (

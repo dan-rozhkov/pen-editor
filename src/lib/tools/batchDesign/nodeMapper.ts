@@ -208,11 +208,6 @@ export function mapNodeData(
         break;
       }
 
-      // Descendants: pass through for ref nodes
-      case "descendants":
-        result.descendants = value;
-        break;
-
       // positionDirection/positionPadding: copy metadata (handled by executor)
       case "positionDirection":
       case "positionPadding":
@@ -332,28 +327,6 @@ export function createNodeFromAiDataWithTheme(
   return node as unknown as SceneNode;
 }
 
-/**
- * Map descendant override data from AI format.
- * Converts content→text and other AI shorthands.
- */
-export function mapDescendantOverride(
-  data: AiNodeData,
-  options?: { theme?: ThemeName },
-): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(data)) {
-    if (key === "content") {
-      result.text = String(value);
-    } else if (key === "fill" || key === "stroke") {
-      applyColorVariable(result, key, value, options?.theme);
-    } else if (key === "ref" || key === "placeholder") {
-      // skip
-    } else {
-      result[key] = value;
-    }
-  }
-  return result;
-}
 
 /**
  * Apply an image fill to a node.

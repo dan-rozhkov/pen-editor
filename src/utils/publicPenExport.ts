@@ -1,7 +1,5 @@
 import type {
   AlignItems,
-  DescendantOverride,
-  DescendantOverrides,
   FrameNode,
   GroupNode,
   JustifyContent,
@@ -124,13 +122,7 @@ interface PenTextNode extends PenBaseNode {
   letterSpacing?: number;
 }
 
-interface PenRefNode extends PenBaseNode {
-  type: "ref";
-  ref: string;
-  descendants?: Record<string, Record<string, unknown>>;
-}
-
-type PenNode = PenFrameNode | PenRectangleNode | PenEllipseNode | PenPathNode | PenTextNode | PenRefNode;
+type PenNode = PenFrameNode | PenRectangleNode | PenEllipseNode | PenPathNode | PenTextNode;
 
 interface PenDocument {
   version: string;
@@ -155,8 +147,6 @@ type StrokeSource = Pick<
   SceneNode,
   "stroke" | "strokeBinding" | "strokeOpacity" | "strokeWidth" | "strokeWidthPerSide" | "strokeAlign"
 >;
-
-type TextOverride = DescendantOverride & Partial<TextNode>;
 
 function sanitizeVariableName(name: string, fallbackId: string): string {
   const normalized = name
@@ -466,72 +456,6 @@ function pointsToPath(points: number[], close: boolean): string | undefined {
   return commands.join(" ");
 }
 
-function exportOverride(override: DescendantOverride, context: ExportContext): Record<string, unknown> {
-  const exported: Record<string, unknown> = {};
-  const textOverride = override as TextOverride;
-
-  if (override.name) exported.name = override.name;
-  if (override.x != null) exported.x = override.x;
-  if (override.y != null) exported.y = override.y;
-  if (override.width != null) exported.width = override.width;
-  if (override.height != null) exported.height = override.height;
-  if (override.opacity != null) exported.opacity = override.opacity;
-  if (override.enabled === false) exported.enabled = false;
-  if (override.rotation != null) exported.rotation = override.rotation;
-  if (override.flipX) exported.flipX = true;
-  if (override.flipY) exported.flipY = true;
-  if (override.fill || override.fillBinding || override.imageFill || override.gradientFill) {
-    const fill = exportFill(override as FillSource, context);
-    if (fill) exported.fill = fill;
-  }
-  if (override.stroke || override.strokeBinding || override.strokeWidth != null || override.strokeWidthPerSide) {
-    const stroke = exportStroke(override as StrokeSource, context);
-    if (stroke) exported.stroke = stroke;
-  }
-  if ("cornerRadius" in override && override.cornerRadius != null) {
-    exported.cornerRadius = override.cornerRadius;
-  }
-  if ("cornerRadiusPerCorner" in override && (override as Record<string, unknown>).cornerRadiusPerCorner != null) {
-    exported.cornerRadiusPerCorner = (override as Record<string, unknown>).cornerRadiusPerCorner;
-  }
-  if (override.text != null) exported.content = override.text;
-  if (textOverride.fontFamily) exported.fontFamily = textOverride.fontFamily;
-  if (textOverride.fontSize != null) exported.fontSize = textOverride.fontSize;
-  if (textOverride.fontWeight) exported.fontWeight = textOverride.fontWeight;
-  if (textOverride.fontStyle) exported.fontStyle = textOverride.fontStyle;
-  if (textOverride.textAlign) exported.textAlign = textOverride.textAlign;
-  if (textOverride.textAlignVertical) exported.textAlignVertical = textOverride.textAlignVertical;
-  if (textOverride.lineHeight != null) exported.lineHeight = textOverride.lineHeight;
-  if (textOverride.letterSpacing != null) exported.letterSpacing = textOverride.letterSpacing;
-  if (textOverride.underline) exported.underline = true;
-  if (textOverride.strikethrough) exported.strikethrough = true;
-  if (textOverride.textWidthMode) {
-    exported.textGrowth = mapTextGrowth(textOverride.textWidthMode);
-  }
-
-  return exported;
-}
-
-function flattenDescendantOverrides(
-  overrides: DescendantOverrides | undefined,
-  context: ExportContext,
-  prefix = "",
-): Record<string, Record<string, unknown>> | undefined {
-  if (!overrides) return undefined;
-
-  const exported: Record<string, Record<string, unknown>> = {};
-  for (const [id, override] of Object.entries(overrides)) {
-    const path = prefix ? `${prefix}/${id}` : id;
-    const own = exportOverride(override, context);
-    if (Object.keys(own).length > 0) exported[path] = own;
-
-    const nested = flattenDescendantOverrides(override.descendants, context, path);
-    if (nested) Object.assign(exported, nested);
-  }
-
-  return Object.keys(exported).length > 0 ? exported : undefined;
-}
-
 function exportFrameNode(
   node: FrameNode | GroupNode,
   context: ExportContext,
@@ -558,21 +482,6 @@ function exportFrameNode(
     ...(node.type === "frame" && node.clip ? { clip: true } : {}),
     ...(node.type === "frame" && node.cornerRadius != null ? { cornerRadius: node.cornerRadius } : {}),
     ...(node.type === "frame" && node.cornerRadiusPerCorner != null ? { cornerRadiusPerCorner: node.cornerRadiusPerCorner } : {}),
-  };
-}
-
-function exportRefNode(
-  node: Extract<SceneNode, { type: "ref" }>,
-  context: ExportContext,
-  parentUsesLayout: boolean,
-): PenRefNode {
-  const descendants = flattenDescendantOverrides(node.descendants, context);
-
-  return {
-    ...exportNodeBase(node, context, parentUsesLayout),
-    type: "ref",
-    ref: node.componentId,
-    ...(descendants ? { descendants } : {}),
   };
 }
 
@@ -614,8 +523,6 @@ function exportNode(node: SceneNode, context: ExportContext, parentUsesLayout: b
         type: "path",
         geometry: pointsToPath(node.points, true),
       };
-    case "ref":
-      return exportRefNode(node, context, parentUsesLayout);
     case "embed":
       return {
         ...exportNodeBase(node, context, parentUsesLayout),

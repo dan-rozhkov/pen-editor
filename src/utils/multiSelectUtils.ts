@@ -89,7 +89,6 @@ const SECTION_MAP: Record<SceneNode["type"], SharedSection[]> = {
   rect: ["position", "size", "appearance", "fill", "stroke", "effects"],
   ellipse: ["position", "size", "appearance", "fill", "stroke", "effects"],
   text: ["position", "size", "appearance", "fill", "stroke", "effects"],
-  ref: ["position", "size", "appearance", "fill", "stroke", "effects"],
   path: ["position", "size", "appearance", "fill", "stroke", "effects"],
   line: ["position", "size", "appearance", "stroke", "effects"],
   polygon: ["position", "size", "appearance", "fill", "stroke", "effects"],

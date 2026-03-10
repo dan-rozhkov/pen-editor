@@ -251,7 +251,6 @@ export function PropertiesPanel() {
             parentContext={parentContext}
             variables={variables}
             activeTheme={effectiveTheme}
-            allNodes={nodes}
           />
         )}
         {/* Export section - always visible at the bottom */}

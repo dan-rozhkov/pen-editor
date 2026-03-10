@@ -24,9 +24,7 @@ import {
 import {
   insertTreeIntoFlat,
   removeNodeAndDescendants,
-  normalizeInsertedNode,
 } from "./helpers/flatStoreHelpers";
-import { createInstanceOperations } from "./instanceOperations";
 import { createComplexOperations } from "./complexOperations";
 import type { SceneState } from "./types";
 
@@ -63,9 +61,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   addNode: (node) => {
     set((state) => {
       saveHistory(state);
-      const raw = node.type === "text" ? syncTextDimensions(toFlatNode(node)) : toFlatNode(node);
-      const synced = normalizeInsertedNode(raw, state.nodesById);
-      const newNodesById = { ...state.nodesById, [node.id]: synced };
+      const flat = node.type === "text" ? syncTextDimensions(toFlatNode(node)) : toFlatNode(node);
+      const newNodesById = { ...state.nodesById, [node.id]: flat };
       const newParentById = { ...state.parentById, [node.id]: null };
       const newChildrenById = { ...state.childrenById };
       const newRootIds = [...state.rootIds, node.id];
@@ -390,9 +387,6 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         _cachedTree: null,
       };
     }),
-
-  // ----- Instance Operations (RefNode) -----
-  ...createInstanceOperations(get, set),
 
   // ----- Complex Operations (Group/Ungroup/Convert/Wrap) -----
   ...createComplexOperations(get, (partial) => set(partial)),

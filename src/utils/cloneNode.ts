@@ -34,10 +34,17 @@ export function cloneNodeWithNewId(
     } as GroupNode;
   }
 
-  return {
+  const cloned = {
     ...node,
     id: newId,
     x: node.x + offset,
     y: node.y + offset,
   } as SceneNode;
+
+  // Strip isComponent flag when copying embed nodes
+  if (cloned.type === "embed") {
+    delete cloned.isComponent;
+  }
+
+  return cloned;
 }

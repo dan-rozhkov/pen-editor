@@ -1,7 +1,6 @@
-import type { SceneNode, FrameNode, GroupNode, EmbedNode } from "../types/scene";
+import type { SceneNode, FrameNode, GroupNode } from "../types/scene";
 import type { ThemeName } from "../types/variable";
 import { isContainerNode } from "../types/scene";
-import { findComponentById as findComponentByIdImpl, getAllComponents as getAllComponentsImpl } from "./componentUtils";
 import { getPreparedNodeEffectiveSize, prepareFrameNode } from "@/utils/instanceUtils";
 import { rectsIntersect } from "@/utils/dragUtils";
 
@@ -98,23 +97,6 @@ export function getNodeAbsolutePosition(
   }
 
   return findWithPath(nodes, 0, 0);
-}
-
-/**
- * Find a component (EmbedNode with isComponent: true) by ID
- */
-export function findComponentById(
-  nodes: SceneNode[],
-  id: string,
-): EmbedNode | null {
-  return findComponentByIdImpl(nodes, id);
-}
-
-/**
- * Get all component embeds from the scene tree
- */
-export function getAllComponents(nodes: SceneNode[]): EmbedNode[] {
-  return getAllComponentsImpl(nodes);
 }
 
 /**

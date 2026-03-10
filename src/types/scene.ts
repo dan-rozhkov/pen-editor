@@ -82,7 +82,7 @@ export interface PerCornerRadius {
 
 export interface BaseNode {
   id: string
-  type: 'frame' | 'group' | 'rect' | 'ellipse' | 'text' | 'ref' | 'path' | 'line' | 'polygon' | 'embed'
+  type: 'frame' | 'group' | 'rect' | 'ellipse' | 'text' | 'path' | 'line' | 'polygon' | 'embed'
   name?: string
   x: number
   y: number
@@ -209,29 +209,6 @@ export interface TextNode extends BaseNode {
   textTransform?: TextTransform
 }
 
-// Descendant overrides for instance nodes
-// Maps child node IDs to their overridden properties
-export type DescendantOverride = Partial<Omit<BaseNode, 'id' | 'type'>> & {
-  // Text content override (for text node descendants)
-  text?: string
-  // For nested frames with their own children
-  descendants?: DescendantOverrides
-}
-
-export type DescendantOverrides = {
-  [nodeId: string]: DescendantOverride
-}
-
-// Reference to a component (instance)
-export interface RefNode extends BaseNode {
-  type: 'ref'
-  componentId: string  // ID of the component (FrameNode with reusable: true)
-  // Overrides for descendant nodes within the component
-  descendants?: DescendantOverrides
-  // Slot content replacements: maps slot child ID to replacement node tree
-  slotContent?: Record<string, SceneNode>
-}
-
 export interface GroupNode extends BaseNode {
   type: 'group'
   children: SceneNode[]
@@ -271,7 +248,7 @@ export interface EmbedNode extends BaseNode {
   sourceTemplate?: string
 }
 
-export type SceneNode = FrameNode | GroupNode | RectNode | EllipseNode | TextNode | RefNode | PathNode | LineNode | PolygonNode | EmbedNode
+export type SceneNode = FrameNode | GroupNode | RectNode | EllipseNode | TextNode | PathNode | LineNode | PolygonNode | EmbedNode
 
 // --- Flat node types (no children arrays - structure lives in store indices) ---
 
@@ -282,7 +259,7 @@ export type FlatFrameNode = Omit<FrameNode, 'children'>
 export type FlatGroupNode = Omit<GroupNode, 'children'>
 
 /** Union of all node types in flat storage (containers have no children property) */
-export type FlatSceneNode = FlatFrameNode | FlatGroupNode | RectNode | EllipseNode | TextNode | RefNode | PathNode | LineNode | PolygonNode | EmbedNode
+export type FlatSceneNode = FlatFrameNode | FlatGroupNode | RectNode | EllipseNode | TextNode | PathNode | LineNode | PolygonNode | EmbedNode
 
 /** Check if a node is a container (has children array) */
 export function isContainerNode(node: SceneNode): node is FrameNode | GroupNode {
