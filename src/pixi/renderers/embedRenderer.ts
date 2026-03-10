@@ -1,6 +1,7 @@
 import { Container, Graphics, Sprite } from "pixi.js";
 import type { EmbedNode } from "@/types/scene";
 import { renderHtmlToTexture, invalidateHtmlTexture } from "./htmlTexture";
+import { buildVariableStyleBlock } from "@/utils/variableCssUtils";
 
 /** Current resolution used for embed textures, updated on zoom */
 let currentEmbedResolution = window.devicePixelRatio;
@@ -14,6 +15,13 @@ const MAX_EMBED_TEXTURE_PIXELS = 67_108_864;
 const EMBED_RESIZE_RERENDER_DEBOUNCE_MS = 180;
 const pendingResizeRerenderByContainer = new WeakMap<Container, ReturnType<typeof setTimeout>>();
 const renderRequestIdByContainer = new WeakMap<Container, number>();
+
+function snapEmbedSize(node: EmbedNode): { width: number; height: number } {
+  return {
+    width: Math.max(1, Math.ceil(node.width)),
+    height: Math.max(1, Math.ceil(node.height)),
+  };
+}
 
 function drawPlaceholder(): void {
   // No visual placeholder — container is transparent until texture loads
@@ -41,8 +49,9 @@ function quantizeResolution(value: number): number {
 }
 
 function getSafeEmbedResolution(node: EmbedNode, requestedResolution: number): number {
-  const safeWidth = Math.max(1, node.width);
-  const safeHeight = Math.max(1, node.height);
+  const snapped = snapEmbedSize(node);
+  const safeWidth = snapped.width;
+  const safeHeight = snapped.height;
   const maxByDimension = MAX_EMBED_TEXTURE_DIMENSION / Math.max(safeWidth, safeHeight);
   const maxByPixels = Math.sqrt(MAX_EMBED_TEXTURE_PIXELS / (safeWidth * safeHeight));
   const upperBound = Math.max(
@@ -70,13 +79,16 @@ async function renderAndApply(container: Container, node: EmbedNode, resolution?
   if (!Number.isFinite(node.width) || !Number.isFinite(node.height) || node.width <= 0 || node.height <= 0) {
     return;
   }
+  const snapped = snapEmbedSize(node);
 
   const nextRequestId = (renderRequestIdByContainer.get(container) ?? 0) + 1;
   renderRequestIdByContainer.set(container, nextRequestId);
 
   const requestedResolution = resolution ?? currentEmbedResolution;
   const res = getSafeEmbedResolution(node, requestedResolution);
-  const texture = await renderHtmlToTexture(node.htmlContent, node.width, node.height, res);
+  const variableBlock = buildVariableStyleBlock();
+  const htmlWithVars = variableBlock ? node.htmlContent + variableBlock : node.htmlContent;
+  const texture = await renderHtmlToTexture(htmlWithVars, snapped.width, snapped.height, res);
   if (container.destroyed) return;
 
   // Ignore stale async completions when a newer render request already exists.
@@ -98,8 +110,8 @@ async function renderAndApply(container: Container, node: EmbedNode, resolution?
 
   const sprite = ensureEmbedContentSprite(container);
   sprite.texture = texture;
-  sprite.width = node.width;
-  sprite.height = node.height;
+  sprite.width = snapped.width;
+  sprite.height = snapped.height;
 }
 
 export function createEmbedContainer(node: EmbedNode): Container {
@@ -141,7 +153,8 @@ export function updateEmbedContainer(
     }
 
     if (prev.htmlContent) {
-      invalidateHtmlTexture(prev.htmlContent, prev.width, prev.height);
+      const prevSnapped = snapEmbedSize(prev);
+      invalidateHtmlTexture(prev.htmlContent, prevSnapped.width, prevSnapped.height);
     }
     renderAndApply(container, node);
     return;

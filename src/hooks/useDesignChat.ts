@@ -7,6 +7,7 @@ import {
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
+import { useVariableStore } from "@/store/variableStore";
 import { useChatStore } from "@/store/chatStore";
 import { toolHandlers } from "@/lib/toolRegistry";
 import type { ChatLaunchPayload } from "@/types/chat";
@@ -29,6 +30,7 @@ function buildCanvasContext(): object {
   const { selectedIds } = useSelectionStore.getState();
   const { rootIds, nodesById } = useSceneStore.getState();
   const { activeTheme } = useThemeStore.getState();
+  const { variables } = useVariableStore.getState();
 
   const roots = rootIds.map((id) => {
     const n = nodesById[id];
@@ -53,7 +55,18 @@ function buildCanvasContext(): object {
   const { model, agentMode } = useChatStore.getState();
 
   return {
-    canvasContext: JSON.stringify({ roots, selectedIds, selectedNodes, activeTheme }),
+    canvasContext: JSON.stringify({
+      roots,
+      selectedIds,
+      selectedNodes,
+      activeTheme,
+      variables: variables.map((v) => ({
+        name: v.name,
+        type: v.type,
+        value: v.value,
+        themeValues: v.themeValues,
+      })),
+    }),
     model,
     agentMode,
   };

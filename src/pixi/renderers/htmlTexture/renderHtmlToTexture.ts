@@ -11,7 +11,7 @@ import { walkAndDraw } from "./canvasDrawing";
 const textureCache = new Map<string, Texture>();
 /** Dedup parallel renders for the same key */
 const pendingRenders = new Map<string, Promise<Texture | null>>();
-const HTML_TEXTURE_RENDER_VERSION = 11;
+const HTML_TEXTURE_RENDER_VERSION = 12;
 const EDGE_BLEED_RADIUS = 2;
 
 function makeCacheKey(html: string, width: number, height: number, resolution: number): string {
@@ -157,8 +157,8 @@ async function doRender(
 ): Promise<Texture | null> {
   const normalizedHtml = normalizeHtmlForEmbedRender(html);
   await ensureExternalFontStylesLoaded(normalizedHtml);
-  const pixelWidth = Math.ceil(width * resolution);
-  const pixelHeight = Math.ceil(height * resolution);
+  const pixelWidth = Math.max(1, Math.round(width * resolution));
+  const pixelHeight = Math.max(1, Math.round(height * resolution));
   const hasInlineSvg = /<svg[\s>]/i.test(normalizedHtml);
   const hasBodyStyles = hasBodyTargetedStyles(normalizedHtml);
 
@@ -200,6 +200,7 @@ async function doRender(
   const shadow = host.attachShadow({ mode: "open" });
 
   const container = document.createElement("div");
+  container.className = "ck-preflight-root";
   container.style.cssText = `
     width: ${width}px;
     height: ${height}px;

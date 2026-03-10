@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { generatePolygonPoints } from "@/utils/polygonUtils";
 import { mountHtmlWithBodyStyles } from "@/utils/embedHtmlUtils";
+import { normalizeHtmlForEmbedRender } from "@/pixi/renderers/htmlTexture/foreignObject";
 
 const sizingOptions = [
   { value: "fixed", label: "Fixed" },
@@ -47,8 +48,8 @@ function computeFrameFitToContentSize(
       fitHeight: true,
     });
     return {
-      width: Math.max(1, Math.ceil(intrinsic.width)),
-      height: Math.max(1, Math.ceil(intrinsic.height)),
+      width: Math.max(1, intrinsic.width),
+      height: Math.max(1, intrinsic.height),
     };
   }
 
@@ -65,8 +66,8 @@ function computeFrameFitToContentSize(
   }
 
   return {
-    width: Math.max(1, Math.ceil(maxX)),
-    height: Math.max(1, Math.ceil(maxY)),
+    width: Math.max(1, maxX),
+    height: Math.max(1, maxY),
   };
 }
 
@@ -91,6 +92,7 @@ async function measureEmbedContentSize(
 
   const shadow = host.attachShadow({ mode: "open" });
   const container = document.createElement("div");
+  container.className = "ck-preflight-root";
   container.style.cssText = `
     width: max-content;
     height: max-content;
@@ -98,9 +100,10 @@ async function measureEmbedContentSize(
     margin: 0;
     padding: 0;
   `;
+  const normalizedHtml = normalizeHtmlForEmbedRender(node.htmlContent);
   const { root, wrappedBody } = mountHtmlWithBodyStyles(
     container,
-    node.htmlContent,
+    normalizedHtml,
     node.width,
     node.height,
   );
@@ -138,8 +141,8 @@ async function measureEmbedContentSize(
 
     const rect = root.getBoundingClientRect();
     return {
-      width: Math.max(1, Math.ceil(Math.max(root.scrollWidth, rect.width))),
-      height: Math.max(1, Math.ceil(Math.max(root.scrollHeight, rect.height))),
+      width: Math.max(1, rect.width),
+      height: Math.max(1, rect.height),
     };
   } finally {
     document.body.removeChild(host);

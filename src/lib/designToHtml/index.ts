@@ -1,6 +1,7 @@
 import type { FlatSceneNode, SceneNode, TextNode } from "@/types/scene";
 import { isGoogleFont } from "@/utils/fontUtils";
 import { convertNodeToHtml, type ConversionContext } from "./convertNode";
+import { buildVariableStyleBlock } from "@/utils/variableCssUtils";
 
 /**
  * Convert a design frame (by ID) to an HTML string with inline styles.
@@ -20,12 +21,23 @@ export function convertDesignNodesToHtml(
   const ctx: ConversionContext = { nodesById, childrenById, allNodes };
   const html = convertNodeToHtml(frameId, ctx, undefined, true);
 
-  // Collect font families used in the design and generate <link> tags
+  const varBlock = generateVariableRootBlock(nodesById);
   const fontLinks = generateFontLinks(nodesById);
-  if (fontLinks) {
-    return fontLinks + html;
+  return varBlock + fontLinks + html;
+}
+
+/**
+ * Collect all variable IDs referenced via fillBinding/strokeBinding in the node tree
+ * and generate a `<style>:root { ... }</style>` block with their current values.
+ */
+function generateVariableRootBlock(nodesById: Record<string, FlatSceneNode>): string {
+  const referencedVarIds = new Set<string>();
+  for (const node of Object.values(nodesById)) {
+    if (node.fillBinding) referencedVarIds.add(node.fillBinding.variableId);
+    if (node.strokeBinding) referencedVarIds.add(node.strokeBinding.variableId);
   }
-  return html;
+  if (referencedVarIds.size === 0) return "";
+  return buildVariableStyleBlock(referencedVarIds);
 }
 
 /**

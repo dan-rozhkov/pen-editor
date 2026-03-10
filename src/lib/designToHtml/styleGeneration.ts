@@ -1,12 +1,30 @@
-import type { BaseNode, TextNode, FrameNode, RectNode, ShadowEffect, GradientFill, ImageFill, PerSideStroke } from "@/types/scene";
+import type { BaseNode, TextNode, FrameNode, RectNode, ShadowEffect, GradientFill, ImageFill, PerSideStroke, ColorBinding } from "@/types/scene";
+import type { Variable } from "@/types/variable";
 import { applyOpacity } from "@/utils/colorUtils";
 import { hasPerCornerRadius } from "@/utils/renderUtils";
+import { useVariableStore } from "@/store/variableStore";
+
+/**
+ * Resolve a color binding to a CSS variable reference, e.g. `var(--primary, #ff0000)`.
+ * Returns null if no binding or variable not found.
+ */
+function resolveBindingToCssVar(
+  binding: ColorBinding | undefined,
+  fallbackColor: string,
+  variables: Variable[],
+): string | null {
+  if (!binding) return null;
+  const variable = variables.find((v) => v.id === binding.variableId);
+  if (!variable) return null;
+  return `var(${variable.name}, ${fallbackColor})`;
+}
 
 /**
  * Generate inline CSS for visual properties (fill, stroke, effects, etc.)
  */
 export function generateVisualStyles(node: BaseNode): Record<string, string> {
   const styles: Record<string, string> = {};
+  const { variables } = useVariableStore.getState();
 
   // Fill / background
   if (node.gradientFill) {
@@ -14,7 +32,8 @@ export function generateVisualStyles(node: BaseNode): Record<string, string> {
   } else if (node.imageFill) {
     Object.assign(styles, generateImageFillCss(node.imageFill));
   } else if (node.fill) {
-    const color = applyOpacity(node.fill, node.fillOpacity);
+    const rawColor = applyOpacity(node.fill, node.fillOpacity);
+    const color = resolveBindingToCssVar(node.fillBinding, rawColor, variables) ?? rawColor;
     if (node.type === "text") {
       styles.color = color;
     } else {
@@ -24,7 +43,8 @@ export function generateVisualStyles(node: BaseNode): Record<string, string> {
 
   // Stroke / border
   if (node.stroke && (node.strokeWidth || node.strokeWidthPerSide)) {
-    const strokeColor = applyOpacity(node.stroke, node.strokeOpacity);
+    const rawStrokeColor = applyOpacity(node.stroke, node.strokeOpacity);
+    const strokeColor = resolveBindingToCssVar(node.strokeBinding, rawStrokeColor, variables) ?? rawStrokeColor;
     if (node.strokeWidthPerSide) {
       Object.assign(styles, generatePerSideBorderCss(node.strokeWidthPerSide, strokeColor));
     } else if (node.strokeWidth) {

@@ -56,6 +56,11 @@ function getNodeShadowSize(node: FlatSceneNode, container: Container): { width: 
   return { width: node.width, height: node.height };
 }
 
+function getSnappedNodePosition(node: FlatSceneNode): { x: number; y: number } {
+  if (node.type !== "embed") return { x: node.x, y: node.y };
+  return { x: Math.round(node.x), y: Math.round(node.y) };
+}
+
 /**
  * Create a PixiJS Container for a given flat scene node.
  * This is the main dispatch function.
@@ -111,7 +116,8 @@ export function createNodeContainer(
   container.label = node.id;
   // Position will be set by applyAutoLayoutPositions for auto-layout children
   // For now, set it from node (will be overwritten if in auto-layout)
-  container.position.set(node.x, node.y);
+  const initialPos = getSnappedNodePosition(node);
+  container.position.set(initialPos.x, initialPos.y);
   container.alpha = node.opacity ?? 1;
   container.visible = node.visible !== false && node.enabled !== false;
 
@@ -155,7 +161,8 @@ export function updateNodeContainer(
 ): void {
   // Position - skip for auto-layout children (handled by applyAutoLayoutPositions)
   if (!skipPosition && (node.x !== prev.x || node.y !== prev.y)) {
-    container.position.set(node.x, node.y);
+    const pos = getSnappedNodePosition(node);
+    container.position.set(pos.x, pos.y);
   }
 
   // Opacity

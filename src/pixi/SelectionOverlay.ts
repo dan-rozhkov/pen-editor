@@ -175,6 +175,27 @@ export function createSelectionOverlay(
     return SELECTION_COLOR;
   }
 
+  function getDrawRect(
+    node: FlatSceneNode,
+    absPos: { x: number; y: number },
+    size: { width: number; height: number },
+  ): { x: number; y: number; width: number; height: number } {
+    if (node.type !== "embed") {
+      return {
+        x: absPos.x,
+        y: absPos.y,
+        width: size.width,
+        height: size.height,
+      };
+    }
+    return {
+      x: Math.round(absPos.x),
+      y: Math.round(absPos.y),
+      width: Math.max(1, Math.round(size.width)),
+      height: Math.max(1, Math.round(size.height)),
+    };
+  }
+
   function isComponentOrInstance(nodeId: string): boolean {
     const state = useSceneStore.getState();
     const node = state.nodesById[nodeId];
@@ -268,10 +289,11 @@ export function createSelectionOverlay(
       const effectiveSize = getEffectiveSize(id);
       const width = effectiveSize?.width ?? node.width;
       const height = effectiveSize?.height ?? node.height;
+      const drawRect = getDrawRect(node, absPos, { width, height });
 
       const color = getSelectionColor(id);
       const outline = new Graphics();
-      outline.rect(absPos.x, absPos.y, width, height);
+      outline.rect(drawRect.x, drawRect.y, drawRect.width, drawRect.height);
       outline.stroke({ color, width: strokeWidth });
       outlinesContainer.addChild(outline);
 
@@ -279,19 +301,19 @@ export function createSelectionOverlay(
         drawTextBaselines(
           selectionTextBaselines,
           node as TextNode,
-          absPos.x,
-          absPos.y,
-          width,
+          drawRect.x,
+          drawRect.y,
+          drawRect.width,
           scale,
           selectionBaselineColor,
         );
       }
 
       // Track bounding box for handles
-      minX = Math.min(minX, absPos.x);
-      minY = Math.min(minY, absPos.y);
-      maxX = Math.max(maxX, absPos.x + width);
-      maxY = Math.max(maxY, absPos.y + height);
+      minX = Math.min(minX, drawRect.x);
+      minY = Math.min(minY, drawRect.y);
+      maxX = Math.max(maxX, drawRect.x + drawRect.width);
+      maxY = Math.max(maxY, drawRect.y + drawRect.height);
     }
 
     totalW = maxX - minX;
@@ -516,8 +538,9 @@ export function createSelectionOverlay(
     const effectiveSize = getEffectiveSize(hoveredNodeId);
     const width = effectiveSize?.width ?? node.width;
     const height = effectiveSize?.height ?? node.height;
+    const drawRect = getDrawRect(node, absPos, { width, height });
 
-    hovOutline.rect(absPos.x, absPos.y, width, height);
+    hovOutline.rect(drawRect.x, drawRect.y, drawRect.width, drawRect.height);
     const hoverColor = isComponentOrInstance(hoveredNodeId)
       ? COMPONENT_SELECTION_COLOR
       : HOVER_COLOR;
@@ -530,9 +553,9 @@ export function createSelectionOverlay(
       drawTextBaselines(
         hoverTextBaselines,
         node as TextNode,
-        absPos.x,
-        absPos.y,
-        width,
+        drawRect.x,
+        drawRect.y,
+        drawRect.width,
         scale,
         hoverBaselineColor,
       );
