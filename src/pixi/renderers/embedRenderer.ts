@@ -1,7 +1,10 @@
 import { Container, Graphics, Sprite } from "pixi.js";
-import type { EmbedNode } from "@/types/scene";
+import type { EmbedNode, FlatFrameNode } from "@/types/scene";
 import { renderHtmlToTexture, invalidateHtmlTexture } from "./htmlTexture";
 import { buildVariableStyleBlock } from "@/utils/variableCssUtils";
+import { useSceneStore } from "@/store/sceneStore";
+import { useThemeStore } from "@/store/themeStore";
+import type { ThemeName } from "@/types/variable";
 
 /** Current resolution used for embed textures, updated on zoom */
 let currentEmbedResolution = window.devicePixelRatio;
@@ -15,6 +18,24 @@ const MAX_EMBED_TEXTURE_PIXELS = 67_108_864;
 const EMBED_RESIZE_RERENDER_DEBOUNCE_MS = 180;
 const pendingResizeRerenderByContainer = new WeakMap<Container, ReturnType<typeof setTimeout>>();
 const renderRequestIdByContainer = new WeakMap<Container, number>();
+
+/**
+ * Compute the effective theme for a node by walking up its ancestor chain.
+ * Returns the innermost ancestor's themeOverride, or the global active theme.
+ * Unlike the render theme stack, this works reliably from async/deferred contexts.
+ */
+function getEffectiveThemeForNode(nodeId: string): ThemeName {
+  const { parentById, nodesById } = useSceneStore.getState();
+  let cur = parentById[nodeId] ?? null;
+  while (cur != null) {
+    const n = nodesById[cur];
+    if (n?.type === "frame" && (n as FlatFrameNode).themeOverride) {
+      return (n as FlatFrameNode).themeOverride as ThemeName;
+    }
+    cur = parentById[cur] ?? null;
+  }
+  return useThemeStore.getState().activeTheme;
+}
 
 function snapEmbedSize(node: EmbedNode): { width: number; height: number } {
   return {
@@ -86,7 +107,7 @@ async function renderAndApply(container: Container, node: EmbedNode, resolution?
 
   const requestedResolution = resolution ?? currentEmbedResolution;
   const res = getSafeEmbedResolution(node, requestedResolution);
-  const variableBlock = buildVariableStyleBlock();
+  const variableBlock = buildVariableStyleBlock(undefined, getEffectiveThemeForNode(node.id));
   const htmlWithVars = variableBlock ? node.htmlContent + variableBlock : node.htmlContent;
   const texture = await renderHtmlToTexture(htmlWithVars, snapped.width, snapped.height, res);
   if (container.destroyed) return;
