@@ -11,10 +11,111 @@ import { walkAndDraw } from "./canvasDrawing";
 const textureCache = new Map<string, Texture>();
 /** Dedup parallel renders for the same key */
 const pendingRenders = new Map<string, Promise<Texture | null>>();
-const HTML_TEXTURE_RENDER_VERSION = 10;
+const HTML_TEXTURE_RENDER_VERSION = 11;
+const EDGE_BLEED_RADIUS = 2;
 
 function makeCacheKey(html: string, width: number, height: number, resolution: number): string {
   return `v${HTML_TEXTURE_RENDER_VERSION}:${width}x${height}@${resolution}:${html}`;
+}
+
+function getPixelIndex(width: number, x: number, y: number): number {
+  return (y * width + x) * 4;
+}
+
+function hasOpaqueAndTransparentNeighbors(
+  src: Uint8ClampedArray,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+  alpha: number,
+): boolean {
+  let nearOpaque = false;
+  let nearTransparent = alpha === 0;
+
+  for (let ny = Math.max(0, y - 1); ny <= Math.min(height - 1, y + 1); ny++) {
+    for (let nx = Math.max(0, x - 1); nx <= Math.min(width - 1, x + 1); nx++) {
+      if (nx === x && ny === y) continue;
+
+      const neighborAlpha = src[getPixelIndex(width, nx, ny) + 3] ?? 0;
+      if (neighborAlpha === 0) nearTransparent = true;
+      if (neighborAlpha >= 250) nearOpaque = true;
+
+      if (nearOpaque && nearTransparent) return true;
+    }
+  }
+
+  return false;
+}
+
+function findBestBleedSourceIndex(
+  src: Uint8ClampedArray,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+): number {
+  let bestIdx = -1;
+  let bestAlpha = -1;
+  let bestDistanceSq = Number.POSITIVE_INFINITY;
+
+  for (let dy = -EDGE_BLEED_RADIUS; dy <= EDGE_BLEED_RADIUS; dy++) {
+    const ny = y + dy;
+    if (ny < 0 || ny >= height) continue;
+
+    for (let dx = -EDGE_BLEED_RADIUS; dx <= EDGE_BLEED_RADIUS; dx++) {
+      const nx = x + dx;
+      if (nx < 0 || nx >= width || (dx === 0 && dy === 0)) continue;
+
+      const neighborIdx = getPixelIndex(width, nx, ny);
+      const neighborAlpha = src[neighborIdx + 3];
+      if (neighborAlpha <= 0) continue;
+
+      const distanceSq = dx * dx + dy * dy;
+      if (
+        neighborAlpha > bestAlpha ||
+        (neighborAlpha === bestAlpha && distanceSq < bestDistanceSq)
+      ) {
+        bestIdx = neighborIdx;
+        bestAlpha = neighborAlpha;
+        bestDistanceSq = distanceSq;
+      }
+    }
+  }
+
+  return bestIdx;
+}
+
+function bleedTransparentEdgeColors(canvas: HTMLCanvasElement): void {
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return;
+
+  const { width, height } = canvas;
+  if (width <= 0 || height <= 0) return;
+
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const src = imageData.data;
+  const out = new Uint8ClampedArray(src);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = getPixelIndex(width, x, y);
+      const alpha = src[idx + 3];
+      if (alpha >= 255) continue;
+
+      if (!hasOpaqueAndTransparentNeighbors(src, width, height, x, y, alpha)) continue;
+
+      const bestIdx = findBestBleedSourceIndex(src, width, height, x, y);
+      if (bestIdx < 0) continue;
+
+      out[idx] = src[bestIdx];
+      out[idx + 1] = src[bestIdx + 1];
+      out[idx + 2] = src[bestIdx + 2];
+    }
+  }
+
+  imageData.data.set(out);
+  ctx.putImageData(imageData, 0, 0);
 }
 
 /**
@@ -75,6 +176,7 @@ async function doRender(
       resolution,
     );
     if (foreignObjectCanvas) {
+      bleedTransparentEdgeColors(foreignObjectCanvas);
       const texture = Texture.from({ resource: foreignObjectCanvas, resolution });
       textureCache.set(cacheKey, texture);
       return texture;
@@ -140,6 +242,8 @@ async function doRender(
     } catch {
       return null;
     }
+
+    bleedTransparentEdgeColors(canvas);
 
     const texture = Texture.from({ resource: canvas, resolution });
     textureCache.set(cacheKey, texture);

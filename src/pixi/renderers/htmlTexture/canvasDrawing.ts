@@ -8,7 +8,12 @@ function traceRoundedRect(
   x: number, y: number, w: number, h: number,
   radii: [number, number, number, number], // TL, TR, BR, BL
 ): void {
-  const [tl, tr, br, bl] = radii;
+  const maxRadius = Math.min(Math.max(w, 0) / 2, Math.max(h, 0) / 2);
+  const [rawTl, rawTr, rawBr, rawBl] = radii;
+  const tl = Math.min(rawTl, maxRadius);
+  const tr = Math.min(rawTr, maxRadius);
+  const br = Math.min(rawBr, maxRadius);
+  const bl = Math.min(rawBl, maxRadius);
   ctx.moveTo(x + tl, y);
   ctx.lineTo(x + w - tr, y);
   if (tr) ctx.arcTo(x + w, y, x + w, y + tr, tr);
