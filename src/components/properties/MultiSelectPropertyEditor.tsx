@@ -3,6 +3,7 @@ import type { FrameNode, SceneNode } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
 import { useSceneStore } from "@/store/sceneStore";
 import { saveHistory } from "@/store/sceneStore/helpers/history";
+import { findParentFrame } from "@/utils/nodeUtils";
 import {
   computeMergedProperties,
   getSharedSections,
@@ -111,6 +112,39 @@ export function MultiSelectPropertyEditor({
 
   const neutralParentContext = { parent: null, isInsideAutoLayout: false };
 
+  const allNodes = useSceneStore((s) => s.getNodes());
+
+  // Show sizing mode buttons if any selected node is in auto-layout or is an auto-layout frame
+  const showSizingModes = useMemo(() =>
+    selectedNodes.some(n => {
+      if (n.type === "frame" && n.layout?.autoLayout) return true;
+      const ctx = findParentFrame(allNodes, n.id);
+      return ctx.isInsideAutoLayout;
+    }),
+    [selectedNodes, allNodes],
+  );
+
+  // Deep-merge sizing property per-node instead of overwriting
+  const handleSizeUpdate = (updates: Partial<SceneNode>) => {
+    const sizingUpdate = (updates as Record<string, unknown>).sizing as Record<string, unknown> | undefined;
+    if (!sizingUpdate) {
+      updateMultipleNodes(ids, updates);
+      return;
+    }
+    useSceneStore.setState((state) => {
+      saveHistory(state);
+      const newNodesById = { ...state.nodesById };
+      for (const id of ids) {
+        const existing = newNodesById[id];
+        if (!existing) continue;
+        const mergedSizing = { ...existing.sizing, ...sizingUpdate };
+        const { sizing: _s, ...restUpdates } = updates as Record<string, unknown>;
+        newNodesById[id] = { ...existing, ...restUpdates, sizing: mergedSizing } as typeof existing;
+      }
+      return { nodesById: newNodesById, _cachedTree: null };
+    });
+  };
+
   // Auto-layout: show if any selected node is a frame with auto-layout enabled
   const autoLayoutFrames = useMemo(
     () => selectedNodes.filter(
@@ -202,10 +236,12 @@ export function MultiSelectPropertyEditor({
       {sharedSections.has("size") && (
         <SizeSection
           node={merged.node}
-          onUpdate={handleUpdate}
+          onUpdate={handleSizeUpdate}
           parentContext={neutralParentContext}
           mixedKeys={merged.mixedKeys}
           isMultiSelect
+          selectedNodes={selectedNodes}
+          showSizingModes={showSizingModes}
         />
       )}
       {showAutoLayout && autoLayoutData && (

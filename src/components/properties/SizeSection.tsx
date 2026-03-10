@@ -16,6 +16,7 @@ import { useLayoutStore } from "@/store/layoutStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 import { getPreparedNodeEffectiveSize } from "@/utils/instanceUtils";
+import { saveHistory } from "@/store/sceneStore/helpers/history";
 import { cn } from "@/lib/utils";
 import {
   NumberInput,
@@ -81,9 +82,9 @@ async function measureEmbedContentSize(
     position: fixed;
     left: -99999px;
     top: -99999px;
-    width: ${node.width}px;
-    height: ${node.height}px;
-    overflow: hidden;
+    width: max-content;
+    height: max-content;
+    overflow: visible;
     pointer-events: none;
     visibility: hidden;
   `;
@@ -91,18 +92,24 @@ async function measureEmbedContentSize(
   const shadow = host.attachShadow({ mode: "open" });
   const container = document.createElement("div");
   container.style.cssText = `
-    width: ${node.width}px;
-    height: ${node.height}px;
-    overflow: hidden;
+    width: max-content;
+    height: max-content;
+    overflow: visible;
     margin: 0;
     padding: 0;
   `;
-  const { root } = mountHtmlWithBodyStyles(
+  const { root, wrappedBody } = mountHtmlWithBodyStyles(
     container,
     node.htmlContent,
     node.width,
     node.height,
   );
+  // Override constrained sizes for natural measurement
+  if (wrappedBody) {
+    root.style.width = "max-content";
+    root.style.height = "max-content";
+    root.style.overflow = "visible";
+  }
   shadow.appendChild(container);
   document.body.appendChild(host);
 
@@ -199,9 +206,11 @@ interface SizeSectionProps {
   parentContext: ParentContext;
   mixedKeys?: Set<string>;
   isMultiSelect?: boolean;
+  selectedNodes?: SceneNode[];
+  showSizingModes?: boolean;
 }
 
-export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiSelect }: SizeSectionProps) {
+export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiSelect, selectedNodes, showSizingModes }: SizeSectionProps) {
   const calculateLayoutForFrame = useLayoutStore((s) => s.calculateLayoutForFrame);
   const allNodes = useSceneStore((s) => s.getNodes());
   const updateNode = useSceneStore((s) => s.updateNode);
@@ -301,12 +310,15 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
     return { effectiveWidth: ew, effectiveHeight: eh };
   }, [node, parentContext, calculateLayoutForFrame]);
 
-  const canFitToContent = !isMultiSelect && (node.type === "frame" || node.type === "embed");
+  const canFitToContent = isMultiSelect
+    ? (selectedNodes ?? []).some(n => n.type === "frame" || n.type === "embed")
+    : (node.type === "frame" || node.type === "embed");
 
   return (
     <PropertySection title="Size">
-      {!isMultiSelect && (parentContext.isInsideAutoLayout ||
-        (node.type === "frame" && node.layout?.autoLayout)) && (
+      {(parentContext.isInsideAutoLayout ||
+        (node.type === "frame" && node.layout?.autoLayout) ||
+        showSizingModes) && (
         <>
           <div className="flex items-center gap-1">
             <span className="text-[11px] text-text-muted w-4 shrink-0">
@@ -317,13 +329,13 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
                 <Button
                   key={option.value}
                   variant={
-                    (node.sizing?.widthMode ?? "fixed") === option.value
+                    !mixedKeys?.has("sizing") && (node.sizing?.widthMode ?? "fixed") === option.value
                       ? "default"
                       : "secondary"
                   }
                   size="sm"
                   className={`flex-1 ${
-                    (node.sizing?.widthMode ?? "fixed") === option.value
+                    !mixedKeys?.has("sizing") && (node.sizing?.widthMode ?? "fixed") === option.value
                       ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
                       : ""
                   }`}
@@ -343,7 +355,9 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
                       },
                       ...(computedWidth !== undefined ? { width: computedWidth } : {}),
                     });
-                    reflowAutoLayoutSiblings("width", newMode, computedWidth);
+                    if (!isMultiSelect) {
+                      reflowAutoLayoutSiblings("width", newMode, computedWidth);
+                    }
                   }}
                 >
                   {option.label}
@@ -360,13 +374,13 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
                 <Button
                   key={option.value}
                   variant={
-                    (node.sizing?.heightMode ?? "fixed") === option.value
+                    !mixedKeys?.has("sizing") && (node.sizing?.heightMode ?? "fixed") === option.value
                       ? "default"
                       : "secondary"
                   }
                   size="sm"
                   className={`flex-1 ${
-                    (node.sizing?.heightMode ?? "fixed") === option.value
+                    !mixedKeys?.has("sizing") && (node.sizing?.heightMode ?? "fixed") === option.value
                       ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
                       : ""
                   }`}
@@ -386,7 +400,9 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
                       },
                       ...(computedHeight !== undefined ? { height: computedHeight } : {}),
                     });
-                    reflowAutoLayoutSiblings("height", newMode, computedHeight);
+                    if (!isMultiSelect) {
+                      reflowAutoLayoutSiblings("height", newMode, computedHeight);
+                    }
                   }}
                 >
                   {option.label}
@@ -459,7 +475,7 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
           }}
           min={1}
         />
-        {!isMultiSelect && <button
+        {<button
           type="button"
           className={cn(
             "shrink-0 flex items-center justify-center w-6 h-6 rounded",
@@ -493,16 +509,37 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
             onClick={async () => {
               setIsFitting(true);
               try {
-                if (node.type === "frame") {
-                  const size = computeFrameFitToContentSize(
-                    node,
-                    allNodes,
-                    calculateLayoutForFrame,
-                  );
-                  updateNode(node.id, size);
-                } else if (node.type === "embed") {
-                  const size = await measureEmbedContentSize(node);
-                  updateNode(node.id, size);
+                if (isMultiSelect && selectedNodes) {
+                  const state = useSceneStore.getState();
+                  saveHistory(state);
+                  for (const n of selectedNodes) {
+                    if (n.type === "frame") {
+                      const treeNode = allNodes.find(a => a.id === n.id);
+                      if (treeNode && treeNode.type === "frame" && "children" in treeNode) {
+                        const size = computeFrameFitToContentSize(
+                          treeNode as FrameNode,
+                          allNodes,
+                          calculateLayoutForFrame,
+                        );
+                        updateNodeWithoutHistory(n.id, size);
+                      }
+                    } else if (n.type === "embed") {
+                      const size = await measureEmbedContentSize(n as EmbedNode);
+                      updateNodeWithoutHistory(n.id, size);
+                    }
+                  }
+                } else {
+                  if (node.type === "frame") {
+                    const size = computeFrameFitToContentSize(
+                      node,
+                      allNodes,
+                      calculateLayoutForFrame,
+                    );
+                    updateNode(node.id, size);
+                  } else if (node.type === "embed") {
+                    const size = await measureEmbedContentSize(node);
+                    updateNode(node.id, size);
+                  }
                 }
               } finally {
                 setIsFitting(false);
