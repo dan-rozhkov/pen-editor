@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { ArrowsInLineVertical, SidebarSimple } from "@phosphor-icons/react";
-import { LayersPanel } from "./LayersPanel";
+import { LayersPanel } from "./layers";
 import { ComponentsPanel } from "./ComponentsPanel";
 import { Toolbar } from "./Toolbar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
