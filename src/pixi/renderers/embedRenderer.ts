@@ -158,9 +158,9 @@ export function updateEmbedResolution(
   container: Container,
   node: EmbedNode,
   resolution: number,
-): void {
-  if (!node.htmlContent) return;
-  renderAndApply(container, node, resolution);
+): Promise<void> {
+  if (!node.htmlContent) return Promise.resolve();
+  return renderAndApply(container, node, resolution);
 }
 
 /** Set the current embed resolution (call when zoom changes) */

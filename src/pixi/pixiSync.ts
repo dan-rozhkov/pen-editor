@@ -7,6 +7,8 @@ import { useViewportStore } from "@/store/viewportStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import type { FlatSceneNode, FlatFrameNode, FrameNode, SceneNode } from "@/types/scene";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
+import { getViewportBounds } from "@/utils/viewportUtils";
+import type { EmbedNode } from "@/types/scene";
 import { createNodeContainer, updateNodeContainer, applyLayoutSize } from "./renderers";
 import {
   pushRenderTheme,
@@ -361,13 +363,85 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
   let appliedEmbedResolution = 0;
   let appliedImageFillResolution = 0;
+  const embedsAtTargetRes = new Set<string>(); // embeds already at appliedEmbedResolution
+  const EMBED_VIEWPORT_MARGIN = 300; // world-space margin to avoid pop-in
 
   function getTargetEmbedResolution(scale: number): number {
     const devicePixelRatio = window.devicePixelRatio || 1;
     const effectiveScale = Math.max(1, scale);
-    // Cap at 4x device pixel ratio to avoid huge textures
-    const maxResolution = Math.ceil(devicePixelRatio * 4);
+    // Allow high zoom levels — per-node getSafeEmbedResolution() handles texture size limits
+    const maxResolution = Math.ceil(devicePixelRatio * 32);
     return Math.min(maxResolution, effectiveScale * devicePixelRatio);
+  }
+
+  function getCurrentViewportBounds() {
+    const vp = useViewportStore.getState();
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    return getViewportBounds(vp.scale, vp.x, vp.y, w, h);
+  }
+
+  /**
+   * Get world-space position of a container by walking the PixiJS parent chain.
+   * Unlike store-based position, this reflects auto-layout computed positions.
+   */
+  function getContainerWorldPos(container: Container): { x: number; y: number } {
+    let x = 0, y = 0;
+    let cur: Container | null = container;
+    while (cur && cur !== sceneRoot) {
+      x += cur.position.x;
+      y += cur.position.y;
+      cur = cur.parent;
+    }
+    return { x, y };
+  }
+
+  function isContainerInViewport(
+    container: Container,
+    node: FlatSceneNode,
+    bounds: { minX: number; maxX: number; minY: number; maxY: number },
+  ): boolean {
+    const pos = getContainerWorldPos(container);
+    return !(
+      pos.x + node.width < bounds.minX - EMBED_VIEWPORT_MARGIN ||
+      pos.x > bounds.maxX + EMBED_VIEWPORT_MARGIN ||
+      pos.y + node.height < bounds.minY - EMBED_VIEWPORT_MARGIN ||
+      pos.y > bounds.maxY + EMBED_VIEWPORT_MARGIN
+    );
+  }
+
+  /**
+   * Sequentially upgrade visible embed nodes to the target resolution.
+   * Processing one at a time avoids overwhelming the browser with concurrent
+   * HTML-to-canvas renders. A generation counter cancels stale runs.
+   */
+  let embedUpgradeGeneration = 0;
+
+  async function upgradeVisibleEmbeds(onlyNew: boolean): Promise<void> {
+    const generation = ++embedUpgradeGeneration;
+    if (appliedEmbedResolution <= 0) return;
+
+    const bounds = getCurrentViewportBounds();
+    const toUpgrade: Array<{ id: string; entry: RegistryEntry }> = [];
+
+    for (const [id, entry] of registry) {
+      if (entry.node.type !== "embed") continue;
+      if (onlyNew && embedsAtTargetRes.has(id)) continue;
+      if (!isContainerInViewport(entry.container, entry.node, bounds)) continue;
+      toUpgrade.push({ id, entry });
+    }
+
+    for (const { id, entry } of toUpgrade) {
+      if (embedUpgradeGeneration !== generation) return; // newer run supersedes
+      if (entry.container.destroyed) continue;
+
+      await updateEmbedResolution(
+        entry.container,
+        entry.node as EmbedNode,
+        appliedEmbedResolution,
+      );
+      embedsAtTargetRes.add(id);
+    }
   }
 
   function applyEmbedResolution(resolution: number): void {
@@ -378,15 +452,8 @@ export function createPixiSync(sceneRoot: Container): () => void {
     if (appliedEmbedResolution === normalizedResolution) return;
     appliedEmbedResolution = normalizedResolution;
     setEmbedResolution(normalizedResolution);
-    for (const [, entry] of registry) {
-      if (entry.node.type === "embed") {
-        updateEmbedResolution(
-          entry.container,
-          entry.node as import("@/types/scene").EmbedNode,
-          normalizedResolution,
-        );
-      }
-    }
+    embedsAtTargetRes.clear(); // new target — all embeds need upgrading
+    upgradeVisibleEmbeds(false);
   }
 
   // Image fill resolution uses the same formula as embed resolution.
@@ -422,6 +489,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
     appliedTextResolution = 0;
     appliedEmbedResolution = 0;
     appliedImageFillResolution = 0;
+    embedsAtTargetRes.clear();
     applyTextResolution(getTargetTextResolution(useViewportStore.getState().scale));
     applyEmbedResolution(getTargetEmbedResolution(useViewportStore.getState().scale));
     applyImageFillTextureResolution(getTargetImageFillResolution(useViewportStore.getState().scale));
@@ -673,6 +741,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
       entry.container.destroy({ children: true });
     }
     registry.delete(id);
+    embedsAtTargetRes.delete(id);
   }
 
   /**
@@ -742,9 +811,12 @@ export function createPixiSync(sceneRoot: Container): () => void {
   }
 
   let lastScale = useViewportStore.getState().scale;
+  let lastX = useViewportStore.getState().x;
+  let lastY = useViewportStore.getState().y;
   let textResolutionUpdateTimer: ReturnType<typeof setTimeout> | null = null;
   let embedResolutionUpdateTimer: ReturnType<typeof setTimeout> | null = null;
   let imageFillResolutionUpdateTimer: ReturnType<typeof setTimeout> | null = null;
+  let panUpgradeTimer: ReturnType<typeof setTimeout> | null = null;
 
   function scheduleTextResolutionUpdate(scale: number): void {
     if (textResolutionUpdateTimer) {
@@ -782,12 +854,26 @@ export function createPixiSync(sceneRoot: Container): () => void {
   applyEmbedResolution(getTargetEmbedResolution(lastScale));
   applyImageFillTextureResolution(getTargetImageFillResolution(lastScale));
 
+  function schedulePanUpgrade(): void {
+    if (panUpgradeTimer) clearTimeout(panUpgradeTimer);
+    panUpgradeTimer = setTimeout(() => {
+      panUpgradeTimer = null;
+      upgradeVisibleEmbeds(true);
+    }, 200);
+  }
+
   const unsubViewport = useViewportStore.subscribe((state) => {
     if (state.scale !== lastScale) {
       lastScale = state.scale;
+      lastX = state.x;
+      lastY = state.y;
       scheduleTextResolutionUpdate(state.scale);
       scheduleEmbedResolutionUpdate(state.scale);
       scheduleImageFillResolutionUpdate(state.scale);
+    } else if (state.x !== lastX || state.y !== lastY) {
+      lastX = state.x;
+      lastY = state.y;
+      schedulePanUpgrade();
     }
   });
 
@@ -888,6 +974,10 @@ export function createPixiSync(sceneRoot: Container): () => void {
     if (imageFillResolutionUpdateTimer) {
       clearTimeout(imageFillResolutionUpdateTimer);
       imageFillResolutionUpdateTimer = null;
+    }
+    if (panUpgradeTimer) {
+      clearTimeout(panUpgradeTimer);
+      panUpgradeTimer = null;
     }
     clearPendingSceneUpdate();
     removeFontsListener?.();

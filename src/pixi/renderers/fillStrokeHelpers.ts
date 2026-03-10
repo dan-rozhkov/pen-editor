@@ -163,6 +163,12 @@ export function drawRoundedShape(
 ): void {
   if (hasPerCornerRadius(cornerRadiusPerCorner)) {
     drawPerCornerRoundRect(gfx, 0, 0, width, height, cornerRadiusPerCorner!);
+  } else if (
+    cornerRadius !== undefined &&
+    width === height &&
+    cornerRadius >= width / 2
+  ) {
+    gfx.circle(width / 2, height / 2, width / 2);
   } else if (cornerRadius) {
     gfx.roundRect(0, 0, width, height, cornerRadius);
   } else {
