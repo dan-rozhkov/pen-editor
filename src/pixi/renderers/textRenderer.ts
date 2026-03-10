@@ -1,4 +1,4 @@
-import { Container, Text, TextStyle } from "pixi.js";
+import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { TextNode } from "@/types/scene";
 import { getResolvedFill } from "./colorHelpers";
 import { applyTextTransform } from "@/utils/textMeasure";
@@ -14,6 +14,7 @@ export function createTextContainer(node: TextNode): Container {
   text.label = "text-content";
   text.anchor.set(0, 0);
   container.addChild(text);
+  drawTextDecorations(container, text, node);
   return container;
 }
 
@@ -49,6 +50,8 @@ export function updateTextContainer(
   ) {
     textObj.style = buildTextStyle(node);
   }
+
+  drawTextDecorations(container, textObj, node);
 }
 
 export function buildTextStyle(node: TextNode): TextStyle {
@@ -69,4 +72,48 @@ export function buildTextStyle(node: TextNode): TextStyle {
     lineHeight: fontSize * lineHeightMultiplier,
     letterSpacing: node.letterSpacing ?? 0,
   });
+}
+
+function drawTextDecorations(
+  container: Container,
+  textObj: Text,
+  node: TextNode,
+): void {
+  const existing = container.getChildByLabel("text-decorations") as Graphics | null;
+  if (!node.underline && !node.strikethrough) {
+    if (existing) container.removeChild(existing);
+    return;
+  }
+
+  const g = existing ?? new Graphics();
+  g.label = "text-decorations";
+  g.clear();
+
+  const fillColor = getResolvedFill(node) ?? "#000000";
+  const fontSize = node.fontSize ?? 16;
+  const lineHeightMultiplier = node.lineHeight ?? 1.2;
+  const lineHeight = fontSize * lineHeightMultiplier;
+  const thickness = Math.max(1, Math.round(fontSize / 14));
+  const textWidth = textObj.width;
+  const textHeight = textObj.height;
+  const lineCount = Math.max(1, Math.round(textHeight / lineHeight));
+
+  for (let i = 0; i < lineCount; i++) {
+    const lineY = i * lineHeight;
+    // For the last line, use remaining height to compute actual line width
+    // For single-line text, just use textWidth
+    const w = textWidth;
+
+    if (node.underline) {
+      const y = lineY + fontSize * 1.05;
+      g.rect(0, y, w, thickness).fill(fillColor);
+    }
+
+    if (node.strikethrough) {
+      const y = lineY + fontSize * 0.55;
+      g.rect(0, y, w, thickness).fill(fillColor);
+    }
+  }
+
+  if (!existing) container.addChild(g);
 }
