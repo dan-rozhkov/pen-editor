@@ -1,4 +1,4 @@
-import type { FlatSceneNode } from "@/types/scene";
+import type { FlatSceneNode, EmbedNode } from "@/types/scene";
 
 /**
  * Serialize a flat node to a plain JSON object with depth-limited children.
@@ -12,6 +12,7 @@ export function serializeNodeToDepth(
   options?: {
     resolveVars?: boolean;
     variableLookup?: Record<string, string>;
+    preferSourceTemplate?: boolean;
   },
 ): Record<string, unknown> | null {
   const node = nodesById[nodeId];
@@ -21,6 +22,15 @@ export function serializeNodeToDepth(
   for (const [key, value] of Object.entries(node)) {
     if (value !== undefined) {
       result[key] = value;
+    }
+  }
+
+  // When preferSourceTemplate is set, replace htmlContent with sourceTemplate
+  // for embed nodes that have authoring templates
+  if (options?.preferSourceTemplate && node.type === "embed") {
+    const embed = node as EmbedNode;
+    if (embed.sourceTemplate) {
+      result.htmlContent = embed.sourceTemplate;
     }
   }
 

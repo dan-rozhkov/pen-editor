@@ -3,6 +3,7 @@ import type {
   FlatSceneNode,
   FlatSnapshot,
   HistorySnapshot,
+  EmbedNode,
 } from "../../types/scene";
 import {
   isContainerNode,
@@ -10,6 +11,7 @@ import {
   flattenTree,
 } from "../../types/scene";
 import { loadGoogleFontsFromNodes, registerFontLoadCallback } from "../../utils/fontUtils";
+import { propagateComponentChanges } from "../../utils/embedTemplateUtils";
 import { saveHistory } from "./helpers/history";
 import { useSelectionStore } from "../selectionStore";
 import { getCachedTree } from "./helpers/treeCache";
@@ -31,6 +33,16 @@ import type { SceneState } from "./types";
 // Re-export types and utilities
 export type { SceneState } from "./types";
 export { createSnapshot } from "./helpers/history";
+
+/** Check if an update changes htmlContent on a component embed node. */
+function isComponentHtmlUpdate(
+  existing: FlatSceneNode,
+  updates: Partial<FlatSceneNode>,
+): boolean {
+  if (existing.type !== "embed") return false;
+  if (!(existing as EmbedNode).isComponent) return false;
+  return "htmlContent" in updates;
+}
 
 // ----- Store -----
 
@@ -112,10 +124,14 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         updated = syncTextDimensions(updated);
       }
 
-      return {
-        nodesById: { ...state.nodesById, [id]: updated },
-        _cachedTree: null,
-      };
+      const newNodesById = { ...state.nodesById, [id]: updated };
+
+      // Propagate component changes to dependent embeds
+      if (isComponentHtmlUpdate(existing, updates)) {
+        propagateComponentChanges(newNodesById);
+      }
+
+      return { nodesById: newNodesById, _cachedTree: null };
     }),
 
   updateMultipleNodes: (ids, updates) =>
@@ -123,15 +139,24 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       saveHistory(state);
       const newNodesById = { ...state.nodesById };
       const needsTextSync = hasTextMeasureProps(updates);
+      let anyComponentChanged = false;
       for (const id of ids) {
         const existing = newNodesById[id];
         if (!existing) continue;
+        if (isComponentHtmlUpdate(existing, updates)) {
+          anyComponentChanged = true;
+        }
         let updated = { ...existing, ...updates } as FlatSceneNode;
         if (updated.type === "text" && needsTextSync) {
           updated = syncTextDimensions(updated);
         }
         newNodesById[id] = updated;
       }
+
+      if (anyComponentChanged) {
+        propagateComponentChanges(newNodesById);
+      }
+
       return { nodesById: newNodesById, _cachedTree: null };
     }),
 
@@ -145,10 +170,13 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         updated = syncTextDimensions(updated);
       }
 
-      return {
-        nodesById: { ...state.nodesById, [id]: updated },
-        _cachedTree: null,
-      };
+      const newNodesById = { ...state.nodesById, [id]: updated };
+
+      if (isComponentHtmlUpdate(existing, updates)) {
+        propagateComponentChanges(newNodesById);
+      }
+
+      return { nodesById: newNodesById, _cachedTree: null };
     }),
 
   deleteNode: (id) =>

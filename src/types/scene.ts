@@ -268,6 +268,7 @@ export interface EmbedNode extends BaseNode {
   type: 'embed'
   htmlContent: string
   isComponent?: boolean
+  sourceTemplate?: string
 }
 
 export type SceneNode = FrameNode | GroupNode | RectNode | EllipseNode | TextNode | RefNode | PathNode | LineNode | PolygonNode | EmbedNode

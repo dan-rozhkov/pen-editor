@@ -2,6 +2,7 @@ import type {
   FlatSceneNode,
   SceneNode,
   FlatFrameNode,
+  EmbedNode,
 } from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
 import {
@@ -13,6 +14,7 @@ import { useThemeStore } from "@/store/themeStore";
 import { insertTreeIntoFlat, removeNodeAndDescendants } from "@/store/sceneStore/helpers/flatStoreHelpers";
 import { syncTextDimensions } from "@/store/sceneStore/helpers/textSync";
 import { cloneNodeWithNewId } from "@/utils/cloneNode";
+import { normalizeEmbedHtmlForStorage } from "@/utils/embedTemplateUtils";
 import type { ParsedArg, ParsedOperation, ExecutionContext } from "./types";
 import {
   createNodeFromAiDataWithTheme,
@@ -53,6 +55,29 @@ function resolveInheritedTheme(
   }
 
   return theme;
+}
+
+/**
+ * If the node is an embed, expand any document component tags in its htmlContent
+ * and set sourceTemplate accordingly.
+ */
+function normalizeEmbedNode(
+  node: SceneNode | FlatSceneNode,
+  ctx: ExecutionContext,
+): void {
+  if (node.type !== "embed" || ctx.componentTagMap.size === 0) return;
+  const embed = node as EmbedNode;
+  const { htmlContent, sourceTemplate, issues } = normalizeEmbedHtmlForStorage(
+    embed.htmlContent,
+    ctx.componentTagMap,
+  );
+  embed.htmlContent = htmlContent;
+  if (sourceTemplate) {
+    embed.sourceTemplate = sourceTemplate;
+  }
+  for (const issue of issues) {
+    ctx.issues.push(issue);
+  }
 }
 
 /**
@@ -150,6 +175,9 @@ function executeInsert(op: ParsedOperation, ctx: ExecutionContext): void {
     ctx.parentById,
   );
   const node = createNodeFromAiDataWithTheme(nodeData, inheritedTheme);
+
+  // Expand document component tags in embed HTML
+  normalizeEmbedNode(node, ctx);
 
   // Insert into flat storage
   insertTreeIntoFlat(
@@ -372,6 +400,9 @@ function executeUpdate(op: ParsedOperation, ctx: ExecutionContext): void {
 
   let updated = { ...node, ...mapped } as FlatSceneNode;
 
+  // Expand document component tags in embed HTML
+  normalizeEmbedNode(updated, ctx);
+
   // Sync text dimensions if text node
   if (updated.type === "text") {
     updated = syncTextDimensions(updated);
@@ -402,6 +433,9 @@ function executeReplace(op: ParsedOperation, ctx: ExecutionContext): void {
     nodeData,
     resolveInheritedTheme(parentId ?? null, ctx.nodesById, ctx.parentById),
   );
+
+  // Expand document component tags in embed HTML
+  normalizeEmbedNode(newNode, ctx);
 
   // Find position in parent's children
   if (parentId !== null && parentId !== undefined) {

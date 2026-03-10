@@ -1,7 +1,7 @@
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
-import type { EmbedNode } from "@/types/scene";
+import { collectDocumentComponents } from "@/lib/documentComponents";
 import type { ToolHandler } from "../toolRegistry";
 
 export const getEditorState: ToolHandler = async () => {
@@ -15,14 +15,23 @@ export const getEditorState: ToolHandler = async () => {
     return { id: n.id, type: n.type, name: n.name };
   });
 
-  const reusableComponents = Object.values(nodesById)
-    .filter((n) => n.type === "embed" && (n as EmbedNode).isComponent)
-    .map((n) => ({
-      id: n.id,
-      type: n.type,
-      name: n.name,
-      htmlContent: (n as EmbedNode).htmlContent,
-    }));
+  // Single pass: collect document components, then derive both response shapes
+  const docComponents = collectDocumentComponents(nodesById);
+
+  const reusableComponents = docComponents.map((c) => ({
+    id: c.id,
+    type: "embed" as const,
+    name: c.name,
+    htmlContent: c.templateHtml,
+  }));
+
+  const documentComponents = docComponents.map((c) => ({
+    id: c.id,
+    name: c.name,
+    tag: c.tag,
+    width: c.width,
+    height: c.height,
+  }));
 
   const selectedNodes = selectedIds.map((id) => {
     const n = nodesById[id];
@@ -43,6 +52,7 @@ export const getEditorState: ToolHandler = async () => {
     selectedIds,
     selectedNodes,
     reusableComponents,
+    documentComponents,
     viewport: { scale, x, y },
   });
 };

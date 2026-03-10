@@ -1,5 +1,11 @@
 import { useSceneStore } from "@/store/sceneStore";
 import { createSnapshot, saveHistory } from "@/store/sceneStore/helpers/history";
+import type { EmbedNode } from "@/types/scene";
+import {
+  collectDocumentComponents,
+  buildDocumentComponentTagMap,
+} from "@/lib/documentComponents";
+import { propagateComponentChanges } from "@/utils/embedTemplateUtils";
 import type { ToolHandler } from "../../toolRegistry";
 import type { ExecutionContext } from "./types";
 import { parseOperations } from "./parser";
@@ -26,6 +32,10 @@ export const batchDesign: ToolHandler = async (args) => {
   const state = useSceneStore.getState();
   const originalSnapshot = createSnapshot(state);
 
+  // Build document component tag map from current state (before mutations)
+  const docComponents = collectDocumentComponents(state.nodesById);
+  const componentTagMap = buildDocumentComponentTagMap(docComponents);
+
   const ctx: ExecutionContext = {
     bindings: new Map([["document", "__document__"]]),
     nodesById: { ...state.nodesById },
@@ -34,6 +44,7 @@ export const batchDesign: ToolHandler = async (args) => {
     rootIds: [...state.rootIds],
     createdNodeIds: [],
     issues: [],
+    componentTagMap,
   };
 
   // 3. Execute operations sequentially
@@ -54,7 +65,18 @@ export const batchDesign: ToolHandler = async (args) => {
     });
   }
 
-  // 4. All operations succeeded — commit to store
+  // 4. Propagate component changes to dependent embeds
+  // Check if any component htmlContent was modified, and re-expand dependents
+  const anyComponentChanged = docComponents.some((comp) => {
+    const current = ctx.nodesById[comp.id];
+    return current && current.type === "embed" &&
+      (current as EmbedNode).htmlContent !== comp.templateHtml;
+  });
+  if (anyComponentChanged) {
+    propagateComponentChanges(ctx.nodesById);
+  }
+
+  // 5. All operations succeeded — commit to store
   // Save history first (one undo entry for the entire batch)
   saveHistory(originalSnapshot);
 
@@ -67,7 +89,7 @@ export const batchDesign: ToolHandler = async (args) => {
     _cachedTree: null,
   });
 
-  // 5. Build response
+  // 6. Build response
   const createdNodes = serializeCreatedNodes(ctx);
 
   const response: Record<string, unknown> = {

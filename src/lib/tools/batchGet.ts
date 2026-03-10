@@ -74,6 +74,7 @@ export const batchGet: ToolHandler = async (args) => {
   const readDepth = (args.readDepth as number) ?? 1;
   const searchDepth = args.searchDepth as number | undefined;
   const resolveVariables = args.resolveVariables as boolean | undefined;
+  const preferSourceTemplate = args.preferSourceTemplate as boolean | undefined;
 
   const { nodesById, childrenById, rootIds } = useSceneStore.getState();
 
@@ -118,6 +119,7 @@ export const batchGet: ToolHandler = async (args) => {
       serializeNodeToDepth(id, nodesById, childrenById, readDepth, {
         resolveVars: !!resolveVariables,
         variableLookup,
+        preferSourceTemplate: !!preferSourceTemplate,
       })
     )
     .filter(Boolean);
