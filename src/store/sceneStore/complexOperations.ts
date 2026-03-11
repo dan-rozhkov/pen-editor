@@ -506,6 +506,7 @@ export function createComplexOperations(
         state.nodesById,
         state.childrenById,
         allNodes,
+        { isComponent: options?.isComponent },
       );
 
       saveHistory(state);

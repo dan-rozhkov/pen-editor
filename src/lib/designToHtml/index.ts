@@ -17,8 +17,9 @@ export function convertDesignNodesToHtml(
   nodesById: Record<string, FlatSceneNode>,
   childrenById: Record<string, string[]>,
   allNodes: SceneNode[],
+  options?: { isComponent?: boolean },
 ): string {
-  const ctx: ConversionContext = { nodesById, childrenById, allNodes };
+  const ctx: ConversionContext = { nodesById, childrenById, allNodes, isComponent: options?.isComponent };
   const html = convertNodeToHtml(frameId, ctx, undefined, true);
 
   const varBlock = generateVariableRootBlock(nodesById);

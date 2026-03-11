@@ -31,6 +31,7 @@ export const getEditorState: ToolHandler = async () => {
     tag: c.tag,
     width: c.width,
     height: c.height,
+    slots: c.slots,
   }));
 
   const selectedNodes = selectedIds.map((id) => {

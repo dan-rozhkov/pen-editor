@@ -15,6 +15,7 @@ export interface ConversionContext {
   nodesById: Record<string, FlatSceneNode>;
   childrenById: Record<string, string[]>;
   allNodes: SceneNode[];
+  isComponent?: boolean;
 }
 
 function lookupNode(ctx: ConversionContext, id: string): FlatSceneNode | undefined {
@@ -23,6 +24,34 @@ function lookupNode(ctx: ConversionContext, id: string): FlatSceneNode | undefin
 
 function lookupChildren(ctx: ConversionContext, id: string): string[] {
   return ctx.childrenById[id] ?? [];
+}
+
+/**
+ * Parse a node name for slot convention.
+ * - "slot" → default slot (name: null)
+ * - "slot:title" → named slot (name: "title")
+ * - anything else → null (not a slot)
+ */
+function parseSlotName(name?: string): { name: string | null } | null {
+  if (!name) return null;
+  const lower = name.toLowerCase().trim();
+  if (lower === "slot") return { name: null };
+  if (lower.startsWith("slot:")) return { name: lower.slice(5).trim() || null };
+  return null;
+}
+
+/**
+ * Wrap HTML in a `<slot>` element if the node name matches slot convention.
+ * Only applies when converting a component (ctx.isComponent is true).
+ */
+function wrapWithSlotIfNeeded(html: string, node: FlatSceneNode, ctx: ConversionContext): string {
+  if (!ctx.isComponent) return html;
+  const slotInfo = parseSlotName(node.name);
+  if (!slotInfo) return html;
+  if (slotInfo.name) {
+    return `<slot name="${slotInfo.name}">${html}</slot>`;
+  }
+  return `<slot>${html}</slot>`;
 }
 
 /**
@@ -43,27 +72,44 @@ export function convertNodeToHtml(
     return "";
   }
 
+  let html: string;
   switch (node.type) {
     case "frame":
-      return convertFrameNode(node as FlatFrameNode, nodeId, ctx, parentLayout, isRoot);
+      html = convertFrameNode(node as FlatFrameNode, nodeId, ctx, parentLayout, isRoot);
+      break;
     case "group":
-      return convertGroupNode(nodeId, ctx, parentLayout, isRoot);
+      html = convertGroupNode(nodeId, ctx, parentLayout, isRoot);
+      break;
     case "text":
-      return convertTextNode(node as TextNode, parentLayout, isRoot);
+      html = convertTextNode(node as TextNode, parentLayout, isRoot);
+      break;
     case "rect":
     case "ellipse":
-      return convertShapeNode(node, parentLayout, isRoot);
+      html = convertShapeNode(node, parentLayout, isRoot);
+      break;
     case "path":
-      return convertSvgShapeNode(node, parentLayout, isRoot, pathNodeToSvg);
+      html = convertSvgShapeNode(node, parentLayout, isRoot, pathNodeToSvg);
+      break;
     case "line":
-      return convertSvgShapeNode(node, parentLayout, isRoot, lineNodeToSvg);
+      html = convertSvgShapeNode(node, parentLayout, isRoot, lineNodeToSvg);
+      break;
     case "polygon":
-      return convertSvgShapeNode(node, parentLayout, isRoot, polygonNodeToSvg);
+      html = convertSvgShapeNode(node, parentLayout, isRoot, polygonNodeToSvg);
+      break;
     case "embed":
-      return (node as EmbedNode).htmlContent ?? "";
+      html = (node as EmbedNode).htmlContent ?? "";
+      break;
     default:
-      return "";
+      html = "";
+      break;
   }
+
+  // Wrap with <slot> if node name matches slot convention and we're converting a component
+  if (!isRoot && html) {
+    html = wrapWithSlotIfNeeded(html, node, ctx);
+  }
+
+  return html;
 }
 
 function convertFrameNode(

@@ -1,5 +1,6 @@
 import type { FlatSceneNode } from "@/types/scene";
 import { getAllComponentsFlat } from "@/utils/componentUtils";
+import { extractSlotNames } from "./expander";
 
 export interface DocumentComponentDefinition {
   id: string;
@@ -8,6 +9,7 @@ export interface DocumentComponentDefinition {
   width: number;
   height: number;
   templateHtml: string;
+  slots: string[];
 }
 
 /**
@@ -45,6 +47,7 @@ export function collectDocumentComponents(
     width: embed.width,
     height: embed.height,
     templateHtml: embed.htmlContent,
+    slots: extractSlotNames(embed.htmlContent),
   }));
 
   // Deduplicate tags — track assigned tags to avoid collisions
