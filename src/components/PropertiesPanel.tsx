@@ -14,6 +14,7 @@ import {
   type ParentContext,
 } from "@/utils/nodeUtils";
 import { AlignmentSection } from "@/components/properties/AlignmentSection";
+import { DescendantPropertyEditor } from "@/components/properties/DescendantPropertyEditor";
 import { ExportSection } from "@/components/properties/ExportSection";
 import { MultiSelectPropertyEditor } from "@/components/properties/MultiSelectPropertyEditor";
 import { PageProperties } from "@/components/properties/PageProperties";
@@ -170,7 +171,7 @@ function FramePresetsPanel() {
 export function PropertiesPanel() {
   const nodes = useSceneStore((s) => s.getNodes());
   const updateNode = useSceneStore((s) => s.updateNode);
-  const { selectedIds } = useSelectionStore();
+  const { selectedIds, instanceContext } = useSelectionStore();
   const variables = useVariableStore((s) => s.variables);
   const activeTheme = useThemeStore((s) => s.activeTheme);
   const activeTool = useDrawModeStore((s) => s.activeTool);
@@ -243,14 +244,23 @@ export function PropertiesPanel() {
             activeTheme={effectiveTheme}
           />
         )}
+        {instanceContext && activeTool !== "frame" && (
+          <DescendantPropertyEditor
+            instanceContext={instanceContext}
+            allNodes={nodes}
+            variables={variables}
+            activeTheme={effectiveTheme}
+          />
+        )}
         {/* Show normal property editor */}
-        {selectedNode && activeTool !== "frame" && (
+        {selectedNode && !instanceContext && activeTool !== "frame" && (
           <PropertyEditor
             node={selectedNode}
             onUpdate={handleUpdate}
             parentContext={parentContext}
             variables={variables}
             activeTheme={effectiveTheme}
+            allNodes={nodes}
           />
         )}
         {/* Export section - always visible at the bottom */}

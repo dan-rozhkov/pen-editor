@@ -1,4 +1,4 @@
-import type { FlatSceneNode } from "@/types/scene";
+import type { ComponentArtifact, FlatSceneNode } from "@/types/scene";
 import { getAllComponentsFlat } from "@/utils/componentUtils";
 import { extractSlotNames } from "./expander";
 
@@ -33,22 +33,28 @@ export function generateComponentTag(name: string): string {
 }
 
 /**
- * Discover all reusable embed components from the current scene
+ * Discover all reusable native components from the current scene
  * and return their definitions with generated tags.
  */
 export function collectDocumentComponents(
   nodesById: Record<string, FlatSceneNode>,
+  componentArtifactsById?: Record<string, ComponentArtifact>,
 ): DocumentComponentDefinition[] {
-  const embeds = getAllComponentsFlat(nodesById);
-  const components = embeds.map((embed) => ({
-    id: embed.id,
-    name: embed.name ?? "Unnamed",
-    tag: generateComponentTag(embed.name ?? "Unnamed"),
-    width: embed.width,
-    height: embed.height,
-    templateHtml: embed.htmlContent,
-    slots: extractSlotNames(embed.htmlContent),
-  }));
+  const components = getAllComponentsFlat(nodesById).map((component) => {
+    const artifact = componentArtifactsById?.[component.id];
+    const templateHtml = artifact?.authoringHtml
+      ?? artifact?.sourceTemplate
+      ?? "";
+    return {
+      id: component.id,
+      name: component.name ?? "Unnamed",
+      tag: generateComponentTag(component.name ?? "Unnamed"),
+      width: component.width,
+      height: component.height,
+      templateHtml,
+      slots: component.slot ?? extractSlotNames(templateHtml),
+    };
+  });
 
   // Deduplicate tags — track assigned tags to avoid collisions
   const assignedTags = new Set<string>();

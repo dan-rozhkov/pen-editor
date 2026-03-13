@@ -125,12 +125,6 @@ export function mapNodeData(
         break;
       }
 
-      // isComponent flag for embed nodes
-      case "isComponent": {
-        result.isComponent = !!value;
-        break;
-      }
-
       // Padding shorthand (single number → all sides)
       case "padding": {
         if (typeof value === "number") {

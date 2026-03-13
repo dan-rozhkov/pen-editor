@@ -524,6 +524,7 @@ function exportNode(node: SceneNode, context: ExportContext, parentUsesLayout: b
         geometry: pointsToPath(node.points, true),
       };
     case "embed":
+    case "ref":
       return {
         ...exportNodeBase(node, context, parentUsesLayout),
         type: "frame",

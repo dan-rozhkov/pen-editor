@@ -243,7 +243,7 @@ export function createDragController(context: InteractionContext): DragControlle
         const primaryNode = sceneState.nodesById[primaryItem.id];
         if (!primaryNode) return false;
 
-        useHoverStore.getState().setHoveredNode(null);
+        useHoverStore.getState().clearHovered();
 
         state.isDragging = true;
         state.nodeId = primaryItem.id;

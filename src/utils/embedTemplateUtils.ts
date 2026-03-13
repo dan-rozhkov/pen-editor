@@ -60,9 +60,7 @@ export function propagateComponentChanges(
   for (const node of Object.values(nodesById)) {
     if (node.type !== "embed") continue;
     const embed = node as EmbedNode;
-    // Only re-expand nodes that have a sourceTemplate (i.e. they use component tags)
-    // and are NOT components themselves (components are the source, not dependents)
-    if (!embed.sourceTemplate || embed.isComponent) continue;
+    if (!embed.sourceTemplate) continue;
 
     const { expandedHtml, changed } = expandDocumentComponentTags(
       embed.sourceTemplate,

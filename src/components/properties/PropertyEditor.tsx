@@ -1,6 +1,6 @@
 import type { SceneNode } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
-import type { ParentContext } from "@/utils/nodeUtils";
+import { findComponentById, type ParentContext } from "@/utils/nodeUtils";
 import { TypeSection } from "@/components/properties/TypeSection";
 import { PositionSection } from "@/components/properties/PositionSection";
 import { SizeSection } from "@/components/properties/SizeSection";
@@ -10,10 +10,11 @@ import { FillSection } from "@/components/properties/FillSection";
 import { StrokeSection } from "@/components/properties/StrokeSection";
 import { EffectsSection } from "@/components/properties/EffectsSection";
 import { ThemeSection } from "@/components/properties/ThemeSection";
+import { InstanceSection } from "@/components/properties/InstanceSection";
 import { TypographySection } from "@/components/properties/TypographySection";
+import { SlotsSection } from "@/components/properties/SlotsSection";
 import { EmbedContentSection } from "@/components/properties/EmbedContentSection";
 import { FrameActionsSection } from "@/components/properties/FrameActionsSection";
-
 
 interface PropertyEditorProps {
   node: SceneNode;
@@ -21,6 +22,7 @@ interface PropertyEditorProps {
   parentContext: ParentContext;
   variables: Variable[];
   activeTheme: ThemeName;
+  allNodes: SceneNode[];
 }
 
 export function PropertyEditor({
@@ -29,7 +31,21 @@ export function PropertyEditor({
   parentContext,
   variables,
   activeTheme,
+  allNodes,
 }: PropertyEditorProps) {
+  const component =
+    node.type === "ref" ? findComponentById(allNodes, node.componentId) : null;
+  const frameNode = node.type === "frame" ? node : null;
+
+  const isOverridden = <T,>(instanceVal: T | undefined, componentVal: T | undefined): boolean => {
+    if (!component) return false;
+    return instanceVal !== undefined && instanceVal !== componentVal;
+  };
+
+  const resetOverride = (property: keyof SceneNode) => {
+    onUpdate({ [property]: undefined } as Partial<SceneNode>);
+  };
+
   const colorVariables = variables.filter((v) => v.type === "color");
 
   return (
@@ -44,24 +60,38 @@ export function PropertyEditor({
       <FillSection
         node={node}
         onUpdate={onUpdate}
-        component={null}
+        component={component}
         colorVariables={colorVariables}
         activeTheme={activeTheme}
-        isOverridden={() => false}
-        resetOverride={() => {}}
+        isOverridden={isOverridden}
+        resetOverride={resetOverride}
       />
       <StrokeSection
         node={node}
         onUpdate={onUpdate}
-        component={null}
+        component={component}
         colorVariables={colorVariables}
         activeTheme={activeTheme}
-        isOverridden={() => false}
-        resetOverride={() => {}}
+        isOverridden={isOverridden}
+        resetOverride={resetOverride}
       />
       <EffectsSection node={node} onUpdate={onUpdate} />
-      {node.type === "frame" && (
-        <ThemeSection node={node} onUpdate={onUpdate} />
+      {frameNode && (
+        <ThemeSection node={frameNode} onUpdate={onUpdate} />
+      )}
+      {frameNode?.reusable && (
+        <SlotsSection
+          node={frameNode}
+          childNodes={frameNode.children}
+        />
+      )}
+      {node.type === "ref" && (
+        <InstanceSection
+          node={node}
+          onUpdate={onUpdate}
+          allNodes={allNodes}
+          isOverridden={isOverridden}
+        />
       )}
       {node.type === "text" && (
         <TypographySection node={node} onUpdate={onUpdate} />

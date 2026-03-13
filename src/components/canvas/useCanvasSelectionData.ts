@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import type {
-  EmbedNode,
   FrameNode,
   GroupNode,
   SceneNode,
@@ -55,7 +54,7 @@ export function useCanvasSelectionData({
       while (currentId) {
         const currentNode = nodesById[currentId];
         if (!currentNode) break;
-        if (currentNode.type === "embed" && (currentNode as EmbedNode).isComponent) return true;
+        if ((currentNode.type === "frame" && currentNode.reusable) || currentNode.type === "ref") return true;
         currentId = parentById[currentId] ?? null;
       }
       return false;

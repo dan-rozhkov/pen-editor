@@ -2,7 +2,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useThemeStore } from "@/store/themeStore";
 import { getVariableValue } from "@/types/variable";
-import type { FlatSceneNode, EmbedNode } from "@/types/scene";
+import type { FlatSceneNode } from "@/types/scene";
 import type { ToolHandler } from "../toolRegistry";
 import { serializeNodeToDepth } from "./serializeUtils";
 
@@ -22,7 +22,7 @@ function matchesPattern(node: FlatSceneNode, pattern: SearchPattern): boolean {
     if (!regex.test(node.name ?? "")) return false;
   }
   if (pattern.reusable !== undefined) {
-    const isReusable = node.type === "embed" && (node as EmbedNode).isComponent === true;
+    const isReusable = node.type === "frame" && node.reusable === true;
     if (pattern.reusable !== isReusable) return false;
   }
   return true;
@@ -79,7 +79,7 @@ export const batchGet: ToolHandler = async (args) => {
   const { nodesById, childrenById, rootIds } = useSceneStore.getState();
 
   // Build variable lookup if resolving
-  let variableLookup: Record<string, string> = {};
+  const variableLookup: Record<string, string> = {};
   if (resolveVariables) {
     const { variables } = useVariableStore.getState();
     const { activeTheme } = useThemeStore.getState();

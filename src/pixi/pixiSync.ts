@@ -38,6 +38,57 @@ type NodeLayoutOverride = {
 
 type AutoLayoutFrameSet = Set<string>;
 
+function collectAffectedComponentIds(
+  state: SceneState,
+  prev: SceneState,
+  changedIds: Set<string>,
+): Set<string> {
+  const affected = new Set<string>();
+
+  const markFromChain = (
+    startId: string,
+    nodesById: Record<string, FlatSceneNode>,
+    parentById: Record<string, string | null>,
+  ): void => {
+    let current: string | null = startId;
+    while (current != null) {
+      const node = nodesById[current];
+      if (node?.type === "frame" && (node as FlatFrameNode).reusable) {
+        affected.add(current);
+      }
+      current = parentById[current] ?? null;
+    }
+  };
+
+  for (const id of changedIds) {
+    if (state.nodesById[id]) {
+      markFromChain(id, state.nodesById, state.parentById);
+    }
+    if (prev.nodesById[id]) {
+      markFromChain(id, prev.nodesById, prev.parentById);
+    }
+  }
+
+  return affected;
+}
+
+function collectAffectedInstanceIds(
+  state: SceneState,
+  prev: SceneState,
+  changedIds: Set<string>,
+): Set<string> {
+  const affectedComponentIds = collectAffectedComponentIds(state, prev, changedIds);
+  if (affectedComponentIds.size === 0) return new Set<string>();
+
+  const affectedInstances = new Set<string>();
+  for (const [id, node] of Object.entries(state.nodesById)) {
+    if (node.type === "ref" && affectedComponentIds.has(node.componentId)) {
+      affectedInstances.add(id);
+    }
+  }
+  return affectedInstances;
+}
+
 /**
  * Push ancestor theme overrides onto the render theme stack (outermost first).
  * Returns the number of themes pushed so the caller can pop them.
@@ -602,6 +653,8 @@ export function createPixiSync(sceneRoot: Container): () => void {
       }
     }
 
+    const affectedInstanceIds = collectAffectedInstanceIds(state, prev, changedIds);
+
     // Handle removed nodes
     for (const id of Object.keys(prev.nodesById)) {
       if (!state.nodesById[id]) {
@@ -630,11 +683,37 @@ export function createPixiSync(sceneRoot: Container): () => void {
               state.nodesById,
               state.childrenById,
               isInAutoLayout, // skipPosition for auto-layout children
+              false,
             );
           });
           entry.node = node;
         }
       }
+    }
+
+    // Rebuild instance render trees when their source component changed,
+    // even if the ref node itself is unchanged.
+    for (const id of affectedInstanceIds) {
+      if (changedIds.has(id)) continue;
+      const node = state.nodesById[id];
+      const prevNode = prev.nodesById[id];
+      const entry = registry.get(id);
+      if (!node || !prevNode || !entry || node.type !== "ref" || prevNode.type !== "ref") {
+        continue;
+      }
+      withAncestorThemes(id, state.parentById, state.nodesById, () => {
+        updateNodeContainer(
+          entry.container,
+          node,
+          prevNode,
+          state.nodesById,
+          state.childrenById,
+          false,
+          true,
+        );
+      });
+      entry.node = node;
+      changedIds.add(id);
     }
 
     // Handle structural changes (children order, parent changes)

@@ -3,7 +3,7 @@ import { DiamondsFourIcon } from "@phosphor-icons/react";
 import { useSceneStore } from "../store/sceneStore";
 import { getAllComponentsFlat } from "../utils/componentUtils";
 import { generateId } from "../types/scene";
-import type { SceneNode, EmbedNode } from "../types/scene";
+import type { SceneNode, FlatFrameNode, RefNode } from "../types/scene";
 import { useNodePlacement } from "../hooks/useNodePlacement";
 
 export function ComponentsPanel() {
@@ -12,31 +12,31 @@ export function ComponentsPanel() {
   const addChildToFrame = useSceneStore((state) => state.addChildToFrame);
   const { getSelectedFrame, getViewportCenter } = useNodePlacement();
 
-  // Get all component embeds from the scene
+  // Get all reusable native components from the scene
   const components = getAllComponentsFlat(nodesById);
 
-  const createInstance = (component: EmbedNode) => {
+  const createInstance = (component: FlatFrameNode) => {
     const { centerX, centerY } = getViewportCenter();
 
-    const copy: EmbedNode = {
+    const instance: RefNode = {
       id: generateId(),
-      type: "embed",
-      name: `${component.name || "Component"}`,
+      type: "ref",
+      componentId: component.id,
+      name: `${component.name || "Component"} instance`,
       x: centerX - component.width / 2,
       y: centerY - component.height / 2,
       width: component.width,
       height: component.height,
-      htmlContent: component.htmlContent,
       visible: true,
     };
 
     const selectedFrame = getSelectedFrame();
     if (selectedFrame && selectedFrame.id !== component.id) {
       // Add as child to selected frame (position relative to frame)
-      const childCopy = { ...copy, x: 10, y: 10 };
-      addChildToFrame(selectedFrame.id, childCopy as SceneNode);
+      const childInstance = { ...instance, x: 10, y: 10 };
+      addChildToFrame(selectedFrame.id, childInstance as SceneNode);
     } else {
-      addNode(copy as SceneNode);
+      addNode(instance as SceneNode);
     }
   };
 

@@ -16,8 +16,18 @@ export function FrameActionsSection({ node }: FrameActionsSectionProps) {
     }
   };
 
+  const handleSyncToHtml = () => {
+    if (node.type !== "frame" || !node.reusable) return;
+    useSceneStore.getState().syncComponentToHtml(node.id);
+  };
+
   return (
     <PropertySection title="Actions">
+      {node.type === "frame" && node.reusable && (
+        <Button onClick={handleSyncToHtml} variant="secondary" className="w-full mb-2">
+          Sync Component to HTML
+        </Button>
+      )}
       <Button onClick={handleConvertToEmbed} variant="secondary" className="w-full">
         Convert to Embed
       </Button>

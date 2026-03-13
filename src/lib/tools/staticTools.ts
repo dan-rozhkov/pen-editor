@@ -17,8 +17,8 @@ const guidelines: Record<string, string> = {
     "WRONG: `I(screen, {type: \"frame\", layout: \"vertical\", gap: 16})` — no width/height, will use fixed defaults!\n" +
     "RIGHT: `I(screen, {type: \"frame\", layout: \"vertical\", gap: 16, width: \"fill_container\", height: \"fit_content\"})`\n\n" +
     "## Component Usage\n" +
-    "- Use reusable components (embed nodes with isComponent: true) as building blocks.\n" +
-    "- Copy components using the C() operation to create independent embed instances.\n\n" +
+    "- Use reusable frame components as building blocks.\n" +
+    "- Copy reusable components using the C() operation to create native instances or variations.\n\n" +
     "## Layout Patterns\n" +
     "- Sidebar + Content: sidebar with fixed width (240-280px), main with `width: \"fill_container\"`.\n" +
     "- Card grids: horizontal frame with `gap: 16-24`, cards with `width: \"fill_container\"`.\n" +

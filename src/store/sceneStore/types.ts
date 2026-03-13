@@ -3,6 +3,8 @@ import type {
   FlatSceneNode,
   FlatSnapshot,
   HistorySnapshot,
+  ComponentArtifact,
+  InstanceOverrideUpdateProps,
 } from "../../types/scene";
 
 // ----- SceneState Interface -----
@@ -13,6 +15,7 @@ export interface SceneState {
   parentById: Record<string, string | null>;
   childrenById: Record<string, string[]>;
   rootIds: string[];
+  componentArtifactsById: Record<string, ComponentArtifact>;
 
   // Backward compat: lazily cached tree
   _cachedTree: SceneNode[] | null;
@@ -52,7 +55,13 @@ export interface SceneState {
   convertNodeType: (id: string) => boolean;
   wrapInAutoLayoutFrame: (ids: string[]) => string | null;
   convertEmbedToDesign: (id: string) => Promise<string | null>;
-  convertDesignToEmbed: (id: string, options?: { isComponent?: boolean }) => string | null;
+  convertDesignToEmbed: (id: string) => string | null;
+  updateInstanceOverride: (instanceId: string, path: string, updates: InstanceOverrideUpdateProps) => void;
+  replaceInstanceNode: (instanceId: string, path: string, newNode: SceneNode) => void;
+  resetInstanceOverride: (instanceId: string, path: string, property?: keyof InstanceOverrideUpdateProps) => void;
+  toggleSlot: (frameId: string, childId: string) => void;
+  detachInstance: (instanceId: string) => string | null;
+  syncComponentToHtml: (componentId: string) => void;
   setPageBackground: (color: string) => void;
 }
 

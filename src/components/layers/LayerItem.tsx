@@ -3,7 +3,7 @@ import clsx from "clsx";
 import { useSceneStore } from "../../store/sceneStore";
 import { useSelectionStore } from "../../store/selectionStore";
 import { useHoverStore } from "../../store/hoverStore";
-import type { SceneNode, FrameNode, GroupNode, EmbedNode } from "../../types/scene";
+import type { SceneNode, FrameNode, GroupNode } from "../../types/scene";
 import { NodeIcon, EyeIcon, ChevronIcon } from "./LayerIcons";
 import { getDisplayName, selectionFromLayersRef } from "./layerTypes";
 import type { DragState, DropPosition } from "./layerTypes";
@@ -196,7 +196,7 @@ export const LayerItem = memo(function LayerItem({
           <NodeIcon
             type={node.type}
             isComponent={
-              node.type === "embed" && (node as EmbedNode).isComponent === true
+              node.type === "frame" && (node as FrameNode).reusable === true
             }
             layout={
               node.type === "frame" ? (node as FrameNode).layout : undefined

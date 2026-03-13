@@ -5,10 +5,17 @@ import { useSceneStore } from './sceneStore'
 
 type EditingMode = 'text' | 'name' | 'embed' | null
 
+export interface InstanceContext {
+  instanceId: string
+  descendantPath: string
+}
+
 interface SelectionState {
   selectedIds: string[]
   editingNodeId: string | null
   editingMode: EditingMode
+  editingInstanceId: string | null
+  instanceContext: InstanceContext | null
   // Nested selection: the container the user has drilled into via double-click
   enteredContainerId: string | null
   // Last selected node ID for range selection
@@ -23,6 +30,10 @@ interface SelectionState {
   selectRange: (fromId: string, toId: string, flatIds: string[]) => void
   startEditing: (id: string, mode?: EditingMode) => void
   stopEditing: () => void
+  enterInstanceEditMode: (instanceId: string) => void
+  exitInstanceEditMode: () => void
+  selectDescendant: (instanceId: string, descendantPath: string) => void
+  clearDescendantSelection: () => void
   // Nested selection methods
   enterContainer: (containerId: string) => void
   resetContainerContext: () => void
@@ -70,6 +81,8 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   selectedIds: [],
   editingNodeId: null,
   editingMode: null,
+  editingInstanceId: null,
+  instanceContext: null,
   enteredContainerId: null,
   lastSelectedId: null,
 
@@ -85,6 +98,8 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       selectedIds: [id],
       editingNodeId: null,
       editingMode: null,
+      editingInstanceId: null,
+      instanceContext: null,
       lastSelectedId: id
     })
   },
@@ -101,6 +116,8 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       selectedIds: ids,
       editingNodeId: null,
       editingMode: null,
+      editingInstanceId: null,
+      instanceContext: null,
       lastSelectedId: ids.length > 0 ? ids[ids.length - 1] : null
     })
   },
@@ -141,6 +158,8 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       selectedIds: [],
       editingNodeId: null,
       editingMode: null,
+      editingInstanceId: null,
+      instanceContext: null,
       enteredContainerId: null
     })
   },
@@ -180,6 +199,8 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       selectedIds: rangeIds,
       editingNodeId: null,
       editingMode: null,
+      editingInstanceId: null,
+      instanceContext: null,
       lastSelectedId: toId
     })
   },
@@ -192,6 +213,39 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
 
   stopEditing: () => {
     set({ editingNodeId: null, editingMode: null })
+  },
+
+  enterInstanceEditMode: (instanceId: string) => {
+    set({
+      editingInstanceId: instanceId,
+      instanceContext: null,
+      selectedIds: [instanceId],
+      editingNodeId: null,
+      editingMode: null,
+    })
+  },
+
+  exitInstanceEditMode: () => {
+    const { editingInstanceId } = get()
+    set({
+      editingInstanceId: null,
+      instanceContext: null,
+      selectedIds: editingInstanceId ? [editingInstanceId] : [],
+    })
+  },
+
+  selectDescendant: (instanceId: string, descendantPath: string) => {
+    set({
+      selectedIds: [instanceId],
+      editingInstanceId: instanceId,
+      instanceContext: { instanceId, descendantPath },
+      editingNodeId: null,
+      editingMode: null,
+    })
+  },
+
+  clearDescendantSelection: () => {
+    set({ instanceContext: null })
   },
 
   // Nested selection methods

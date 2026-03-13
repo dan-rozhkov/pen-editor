@@ -12,7 +12,14 @@ import {
   isDescendantOfFlat,
 } from "@/utils/nodeUtils";
 import type { InteractionContext } from "./types";
-import { screenToWorld, findNodeAtPoint, findFrameLabelAtPoint, hitTestTransformHandle, getResizeCursor } from "./hitTesting";
+import {
+  screenToWorld,
+  findCanvasHitTargetAtPoint,
+  findNodeAtPoint,
+  findFrameLabelAtPoint,
+  hitTestTransformHandle,
+  getResizeCursor,
+} from "./hitTesting";
 import { createPanController } from "./panController";
 import { createTransformController } from "./transformController";
 import { createDrawController } from "./drawController";
@@ -123,11 +130,23 @@ export function setupPixiInteraction(
   // --- Pointer handlers ---
 
   function runHoverPass(world: { x: number; y: number }): void {
-    const hitId = findNodeAtPoint(world.x, world.y, { deepSelect: true });
-    useHoverStore.getState().setHoveredNode(hitId);
+    const hitTarget = findCanvasHitTargetAtPoint(world.x, world.y, { deepSelect: true });
+    if (!hitTarget) {
+      useHoverStore.getState().clearHovered();
+    } else if (hitTarget.kind === "node") {
+      useHoverStore.getState().setHoveredNode(hitTarget.nodeId);
+    } else {
+      useHoverStore
+        .getState()
+        .setHoveredDescendant(hitTarget.instanceId, hitTarget.descendantPath);
+    }
 
     // Measurement (Alt+hover)
-    measurement.handlePointerMove(EMPTY_POINTER_EVENT, world, hitId);
+    measurement.handlePointerMove(
+      EMPTY_POINTER_EVENT,
+      world,
+      hitTarget?.kind === "node" ? hitTarget.nodeId : null,
+    );
 
     // Update cursor for transform handles
     const handleHit = hitTestTransformHandle(world.x, world.y);
@@ -190,7 +209,15 @@ export function setupPixiInteraction(
       }
 
       const deepSelect = e.metaKey || e.ctrlKey;
-      const hitId = findNodeAtPoint(world.x, world.y, { deepSelect });
+      const hitTarget = findCanvasHitTargetAtPoint(world.x, world.y, { deepSelect });
+      const hitId = hitTarget?.kind === "node" ? hitTarget.nodeId : null;
+      if (hitTarget?.kind === "instance-descendant") {
+        useSelectionStore
+          .getState()
+          .selectDescendant(hitTarget.instanceId, hitTarget.descendantPath);
+        return;
+      }
+
       const dragHitId = resolveDragTargetId(hitId);
       const selectionState = useSelectionStore.getState();
       const currentNodes = useSceneStore.getState().getNodes();

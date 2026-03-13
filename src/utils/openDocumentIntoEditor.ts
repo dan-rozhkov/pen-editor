@@ -21,6 +21,9 @@ export function applyOpenedDocument(
   const themeToApply: ThemeName = data.activeTheme ?? DEFAULT_THEME;
 
   useSceneStore.getState().setNodes(data.nodes);
+  useSceneStore.setState({
+    componentArtifactsById: data.componentArtifacts ?? {},
+  });
   useVariableStore.getState().setVariables(data.variables);
   useUIThemeStore.getState().setUITheme(themeToApply);
 

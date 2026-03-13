@@ -5,7 +5,7 @@ import { collectDocumentComponents } from "@/lib/documentComponents";
 import type { ToolHandler } from "../toolRegistry";
 
 export const getEditorState: ToolHandler = async () => {
-  const { rootIds, nodesById } = useSceneStore.getState();
+  const { rootIds, nodesById, componentArtifactsById } = useSceneStore.getState();
   const { selectedIds } = useSelectionStore.getState();
   const { scale, x, y } = useViewportStore.getState();
 
@@ -16,13 +16,14 @@ export const getEditorState: ToolHandler = async () => {
   });
 
   // Single pass: collect document components, then derive both response shapes
-  const docComponents = collectDocumentComponents(nodesById);
+  const docComponents = collectDocumentComponents(nodesById, componentArtifactsById);
 
   const reusableComponents = docComponents.map((c) => ({
     id: c.id,
-    type: "embed" as const,
+    type: "frame" as const,
     name: c.name,
     htmlContent: c.templateHtml,
+    syncState: componentArtifactsById[c.id]?.syncState ?? "missing",
   }));
 
   const documentComponents = docComponents.map((c) => ({

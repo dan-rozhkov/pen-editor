@@ -135,6 +135,8 @@ export const NodeIcon = ({
         return <DiamondsFourIcon size={16} className={iconClass} />;
       }
       return <CodeIcon size={16} className={iconClass} weight="regular" />;
+    case "ref":
+      return <DiamondsFourIcon size={16} className={iconClass} weight="fill" />;
     default:
       return null;
   }

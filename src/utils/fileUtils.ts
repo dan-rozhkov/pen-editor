@@ -1,4 +1,4 @@
-import type { SceneNode } from '../types/scene'
+import type { ComponentArtifact, SceneNode } from '../types/scene'
 import type { Variable, ThemeName } from '../types/variable'
 import { ensureThemeValues } from '../types/variable'
 import { serializePublicPenDocument } from "@/utils/publicPenExport";
@@ -8,12 +8,14 @@ export interface PenDocument {
   nodes: SceneNode[]
   variables?: Variable[]
   activeTheme?: ThemeName
+  componentArtifacts?: Record<string, ComponentArtifact>
 }
 
 export interface DocumentData {
   nodes: SceneNode[]
   variables: Variable[]
   activeTheme: ThemeName
+  componentArtifacts: Record<string, ComponentArtifact>
 }
 
 const CURRENT_VERSION = '1.0'
@@ -21,13 +23,15 @@ const CURRENT_VERSION = '1.0'
 export function serializeDocument(
   nodes: SceneNode[],
   variables: Variable[],
-  activeTheme: ThemeName
+  activeTheme: ThemeName,
+  componentArtifacts: Record<string, ComponentArtifact> = {},
 ): string {
   const doc: PenDocument = {
     version: CURRENT_VERSION,
     nodes,
     variables,
     activeTheme,
+    componentArtifacts,
   }
   return JSON.stringify(doc, null, 2)
 }
@@ -40,6 +44,7 @@ export function deserializeDocument(json: string): DocumentData {
     nodes: doc.nodes,
     variables: migratedVariables,
     activeTheme: doc.activeTheme ?? 'light',
+    componentArtifacts: doc.componentArtifacts ?? {},
   }
 }
 
@@ -47,9 +52,10 @@ export function downloadDocument(
   nodes: SceneNode[],
   variables: Variable[],
   activeTheme: ThemeName,
+  componentArtifacts: Record<string, ComponentArtifact> = {},
   filename = 'document.json'
 ) {
-  const json = serializeDocument(nodes, variables, activeTheme)
+  const json = serializeDocument(nodes, variables, activeTheme, componentArtifacts)
   downloadTextFile(json, filename)
 }
 

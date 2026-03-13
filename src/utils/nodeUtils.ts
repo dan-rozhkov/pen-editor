@@ -71,6 +71,40 @@ export function findNodeById(nodes: SceneNode[], id: string): SceneNode | null {
   return null;
 }
 
+export function findComponentById(
+  nodes: SceneNode[],
+  id: string,
+): FrameNode | null {
+  for (const node of nodes) {
+    if (node.type === "frame" && node.id === id && node.reusable) {
+      return node;
+    }
+    if (isContainerNode(node)) {
+      const found = findComponentById(node.children, id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+export function getAllComponents(nodes: SceneNode[]): FrameNode[] {
+  const components: FrameNode[] = [];
+
+  function collect(searchNodes: SceneNode[]) {
+    for (const node of searchNodes) {
+      if (node.type === "frame") {
+        if (node.reusable) components.push(node);
+        collect(node.children);
+      } else if (node.type === "group") {
+        collect(node.children);
+      }
+    }
+  }
+
+  collect(nodes);
+  return components;
+}
+
 /**
  * Get absolute position of a node by traversing parent chain
  * Returns the accumulated x,y from all parent frames

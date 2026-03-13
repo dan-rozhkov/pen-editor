@@ -10,8 +10,10 @@ import type {
   PolygonNode,
   PathNode,
   EmbedNode,
+  RefNode,
   PerCornerRadius,
 } from "@/types/scene";
+import { flattenTree } from "@/types/scene";
 import { applyShadow } from "./shadowHelpers";
 import { createRectContainer, updateRectContainer, drawRect } from "./rectRenderer";
 import { createEllipseContainer, updateEllipseContainer, drawEllipse } from "./ellipseRenderer";
@@ -24,6 +26,9 @@ import { drawRoundedShape } from "./fillStrokeHelpers";
 import { createGroupContainer } from "./groupRenderer";
 import { createEmbedContainer, updateEmbedContainer } from "./embedRenderer";
 import type { ShadowShape } from "./shadowHelpers";
+import { resolveRefToTree } from "@/utils/instanceRuntime";
+import { useLayoutStore } from "@/store/layoutStore";
+import { applyAutoLayoutRecursively } from "@/utils/autoLayoutUtils";
 
 function getNodeCornerRadius(node: FlatSceneNode): number | undefined {
   if (node.type === "frame" || node.type === "rect") {
@@ -59,6 +64,55 @@ function getNodeShadowSize(node: FlatSceneNode, container: Container): { width: 
 function getSnappedNodePosition(node: FlatSceneNode): { x: number; y: number } {
   if (node.type !== "embed") return { x: node.x, y: node.y };
   return { x: Math.round(node.x), y: Math.round(node.y) };
+}
+
+function createRefContainer(
+  node: RefNode,
+  nodesById: Record<string, FlatSceneNode>,
+  childrenById: Record<string, string[]>,
+): Container {
+  const resolved = resolveRefToTree(node, nodesById, childrenById);
+  if (!resolved) return new Container();
+  const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+  const laidOutResolved = applyAutoLayoutRecursively(
+    resolved,
+    calculateLayoutForFrame,
+  );
+
+  const flat = flattenTree([laidOutResolved]);
+  const root = flat.nodesById[laidOutResolved.id] as FlatFrameNode | undefined;
+  if (!root) return new Container();
+
+  return createFrameContainer(root, flat.nodesById, flat.childrenById);
+}
+
+function updateRefContainer(
+  container: Container,
+  node: RefNode,
+  prev: RefNode,
+  nodesById: Record<string, FlatSceneNode>,
+  childrenById: Record<string, string[]>,
+  forceRebuild = false,
+): void {
+  if (
+    forceRebuild ||
+    node.componentId !== prev.componentId ||
+    node.overrides !== prev.overrides ||
+    node.width !== prev.width ||
+    node.height !== prev.height ||
+    node.fill !== prev.fill ||
+    node.fillBinding !== prev.fillBinding ||
+    node.stroke !== prev.stroke ||
+    node.strokeBinding !== prev.strokeBinding ||
+    node.strokeWidth !== prev.strokeWidth
+  ) {
+    container.removeChildren().forEach((child) => child.destroy());
+    const next = createRefContainer(node, nodesById, childrenById);
+    while (next.children.length > 0) {
+      container.addChild(next.children[0]);
+    }
+    next.destroy();
+  }
 }
 
 /**
@@ -107,6 +161,9 @@ export function createNodeContainer(
       break;
     case "embed":
       container = createEmbedContainer(node as EmbedNode);
+      break;
+    case "ref":
+      container = createRefContainer(node as RefNode, nodesById, childrenById);
       break;
     default:
       container = new Container();
@@ -158,6 +215,7 @@ export function updateNodeContainer(
   nodesById: Record<string, FlatSceneNode>,
   childrenById: Record<string, string[]>,
   skipPosition?: boolean,
+  forceRebuild?: boolean,
 ): void {
   // Position - skip for auto-layout children (handled by applyAutoLayoutPositions)
   if (!skipPosition && (node.x !== prev.x || node.y !== prev.y)) {
@@ -230,6 +288,16 @@ export function updateNodeContainer(
     case "embed":
       updateEmbedContainer(container, node as EmbedNode, prev as EmbedNode);
       break;
+    case "ref":
+      updateRefContainer(
+        container,
+        node as RefNode,
+        prev as RefNode,
+        nodesById,
+        childrenById,
+        forceRebuild,
+      );
+      break;
   }
 
   // Shadow (after type-specific updates so frame effective size stays in sync)
@@ -263,9 +331,11 @@ export function applyLayoutSize(
   node: FlatSceneNode,
   layoutWidth: number,
   layoutHeight: number,
-  _nodesById?: Record<string, FlatSceneNode>,
-  _childrenById?: Record<string, string[]>,
+  nodesById?: Record<string, FlatSceneNode>,
+  childrenById?: Record<string, string[]>,
 ): void {
+  void nodesById;
+  void childrenById;
   // Skip if size hasn't changed
   if (node.width === layoutWidth && node.height === layoutHeight) return;
 

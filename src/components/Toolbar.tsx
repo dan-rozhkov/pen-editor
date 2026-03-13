@@ -34,6 +34,7 @@ import {
 
 export function Toolbar() {
   const nodes = useSceneStore((state) => state.getNodes());
+  const componentArtifacts = useSceneStore((state) => state.componentArtifactsById);
   const addNode = useSceneStore((state) => state.addNode);
   const variables = useVariableStore((state) => state.variables);
 
@@ -48,7 +49,7 @@ export function Toolbar() {
 
   const handleSave = () => {
     const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
-    downloadDocument(nodes, variables, activeTheme, `${name}.json`);
+    downloadDocument(nodes, variables, activeTheme, componentArtifacts, `${name}.json`);
   };
 
   const handleExportPublicPen = () => {
@@ -62,6 +63,7 @@ export function Toolbar() {
         nodes: loadedNodes,
         variables: loadedVariables,
         activeTheme: loadedTheme,
+        componentArtifacts,
         fileName,
       } = await openFilePicker();
       useDocumentStore.getState().setFileName(fileName);
@@ -71,6 +73,7 @@ export function Toolbar() {
           nodes: loadedNodes,
           variables: loadedVariables,
           activeTheme: loadedTheme,
+          componentArtifacts,
         },
         {
           viewportWidth: canvasEl?.clientWidth ?? window.innerWidth - 480,

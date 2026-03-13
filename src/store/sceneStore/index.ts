@@ -3,7 +3,10 @@ import type {
   FlatSceneNode,
   FlatSnapshot,
   HistorySnapshot,
-  EmbedNode,
+  FlatFrameNode,
+  InstanceOverrideUpdateProps,
+  RefNode,
+  ComponentArtifact,
 } from "../../types/scene";
 import {
   isContainerNode,
@@ -11,7 +14,6 @@ import {
   flattenTree,
 } from "../../types/scene";
 import { loadGoogleFontsFromNodes, registerFontLoadCallback } from "../../utils/fontUtils";
-import { propagateComponentChanges } from "../../utils/embedTemplateUtils";
 import { saveHistory } from "./helpers/history";
 import { useSelectionStore } from "../selectionStore";
 import { getCachedTree } from "./helpers/treeCache";
@@ -27,19 +29,82 @@ import {
 } from "./helpers/flatStoreHelpers";
 import { createComplexOperations } from "./complexOperations";
 import type { SceneState } from "./types";
+import { convertDesignNodesToHtml } from "@/lib/designToHtml";
+import { deepCloneNode } from "@/utils/cloneNode";
+import { resolveRefToFrame } from "@/utils/instanceRuntime";
 
 // Re-export types and utilities
 export type { SceneState } from "./types";
 export { createSnapshot } from "./helpers/history";
 
-/** Check if an update changes htmlContent on a component embed node. */
-function isComponentHtmlUpdate(
-  existing: FlatSceneNode,
-  updates: Partial<FlatSceneNode>,
-): boolean {
-  if (existing.type !== "embed") return false;
-  if (!(existing as EmbedNode).isComponent) return false;
-  return "htmlContent" in updates;
+function cloneArtifacts(
+  artifacts: Record<string, ComponentArtifact>,
+): Record<string, ComponentArtifact> {
+  return Object.fromEntries(
+    Object.entries(artifacts).map(([id, artifact]) => [id, { ...artifact }]),
+  );
+}
+
+function markComponentArtifactStaleFromNative(
+  artifacts: Record<string, ComponentArtifact>,
+  node: FlatSceneNode | undefined,
+): Record<string, ComponentArtifact> {
+  if (!node || node.type !== "frame" || !(node as FlatFrameNode).reusable) return artifacts;
+  const next = cloneArtifacts(artifacts);
+  const existing = next[node.id];
+  next[node.id] = {
+    authoringHtml: existing?.authoringHtml,
+    sourceTemplate: existing?.sourceTemplate,
+    revision: (existing?.revision ?? 0) + 1,
+    syncState: existing?.authoringHtml || existing?.sourceTemplate ? "stale_from_native" : "missing",
+  };
+  return next;
+}
+
+function markComponentArtifactsStaleFromNative(
+  artifacts: Record<string, ComponentArtifact>,
+  nodes: Array<FlatSceneNode | undefined>,
+): Record<string, ComponentArtifact> {
+  return nodes.reduce(
+    (next, node) => markComponentArtifactStaleFromNative(next, node),
+    artifacts,
+  );
+}
+
+function deleteOverridePath(
+  overrides: RefNode["overrides"],
+  path: string,
+): RefNode["overrides"] {
+  if (!overrides?.[path]) return overrides;
+  const next = { ...overrides };
+  delete next[path];
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
+function pruneOverrideProperty(
+  overrides: RefNode["overrides"],
+  path: string,
+  property: keyof InstanceOverrideUpdateProps,
+): RefNode["overrides"] {
+  const currentOverride = overrides?.[path];
+  if (!currentOverride) return overrides;
+  if (currentOverride.kind !== "update") {
+    return deleteOverridePath(overrides, path);
+  }
+
+  const nextProps = { ...currentOverride.props };
+  delete nextProps[property];
+  if (Object.keys(nextProps).length === 0) {
+    return deleteOverridePath(overrides, path);
+  }
+
+  return {
+    ...overrides,
+    [path]: {
+      kind: "update",
+      props: nextProps,
+    },
+  };
 }
 
 // ----- Store -----
@@ -49,6 +114,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   parentById: {},
   childrenById: {},
   rootIds: [],
+  componentArtifactsById: {},
   _cachedTree: null,
   expandedFrameIds: new Set<string>(),
   pageBackground: "#f5f5f5",
@@ -80,6 +146,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         parentById: newParentById,
         childrenById: newChildrenById,
         rootIds: newRootIds,
+        componentArtifactsById: state.componentArtifactsById,
         _cachedTree: null,
       };
     });
@@ -104,6 +171,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         nodesById: newNodesById,
         parentById: newParentById,
         childrenById: newChildrenById,
+        componentArtifactsById: state.componentArtifactsById,
         _cachedTree: null,
       };
     });
@@ -122,13 +190,12 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       }
 
       const newNodesById = { ...state.nodesById, [id]: updated };
+      const componentArtifactsById = markComponentArtifactsStaleFromNative(
+        state.componentArtifactsById,
+        [existing],
+      );
 
-      // Propagate component changes to dependent embeds
-      if (isComponentHtmlUpdate(existing, updates)) {
-        propagateComponentChanges(newNodesById);
-      }
-
-      return { nodesById: newNodesById, _cachedTree: null };
+      return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
     }),
 
   updateMultipleNodes: (ids, updates) =>
@@ -136,25 +203,21 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       saveHistory(state);
       const newNodesById = { ...state.nodesById };
       const needsTextSync = hasTextMeasureProps(updates);
-      let anyComponentChanged = false;
       for (const id of ids) {
         const existing = newNodesById[id];
         if (!existing) continue;
-        if (isComponentHtmlUpdate(existing, updates)) {
-          anyComponentChanged = true;
-        }
         let updated = { ...existing, ...updates } as FlatSceneNode;
         if (updated.type === "text" && needsTextSync) {
           updated = syncTextDimensions(updated);
         }
         newNodesById[id] = updated;
       }
+      const componentArtifactsById = markComponentArtifactsStaleFromNative(
+        state.componentArtifactsById,
+        ids.map((id) => state.nodesById[id]),
+      );
 
-      if (anyComponentChanged) {
-        propagateComponentChanges(newNodesById);
-      }
-
-      return { nodesById: newNodesById, _cachedTree: null };
+      return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
     }),
 
   updateNodeWithoutHistory: (id, updates) =>
@@ -168,12 +231,12 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       }
 
       const newNodesById = { ...state.nodesById, [id]: updated };
+      const componentArtifactsById = markComponentArtifactsStaleFromNative(
+        state.componentArtifactsById,
+        [existing],
+      );
 
-      if (isComponentHtmlUpdate(existing, updates)) {
-        propagateComponentChanges(newNodesById);
-      }
-
-      return { nodesById: newNodesById, _cachedTree: null };
+      return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
     }),
 
   deleteNode: (id) =>
@@ -206,6 +269,12 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         parentById: newParentById,
         childrenById: newChildrenById,
         rootIds: newRootIds,
+        componentArtifactsById:
+          id in state.componentArtifactsById
+            ? Object.fromEntries(
+                Object.entries(state.componentArtifactsById).filter(([artifactId]) => artifactId !== id),
+              )
+            : state.componentArtifactsById,
         _cachedTree: null,
       };
     }),
@@ -216,6 +285,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       parentById: {},
       childrenById: {},
       rootIds: [],
+      componentArtifactsById: {},
       _cachedTree: null,
     }),
 
@@ -229,6 +299,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       parentById: flat.parentById,
       childrenById: flat.childrenById,
       rootIds: flat.rootIds,
+      componentArtifactsById: state.componentArtifactsById,
       _cachedTree: null,
     });
     loadGoogleFontsFromNodes(nodes);
@@ -251,6 +322,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       parentById: flat.parentById,
       childrenById: flat.childrenById,
       rootIds: flat.rootIds,
+      componentArtifactsById: get().componentArtifactsById,
       _cachedTree: null,
     });
   },
@@ -263,11 +335,14 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       parentById: snapshot.parentById,
       childrenById: snapshot.childrenById,
       rootIds: snapshot.rootIds,
+      componentArtifactsById: { ...(snapshot.componentArtifactsById ?? {}) },
       _cachedTree: null,
     });
     if (!historySelection) return;
     useSelectionStore.setState({
       selectedIds: historySelection.selectedIds.filter((id) => validIds.has(id)),
+      editingInstanceId: null,
+      instanceContext: null,
       enteredContainerId:
         historySelection.enteredContainerId &&
         validIds.has(historySelection.enteredContainerId)
@@ -385,6 +460,171 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         childrenById: newChildrenById,
         rootIds: newRootIds,
         _cachedTree: null,
+      };
+    }),
+
+  updateInstanceOverride: (instanceId, path, updates) =>
+    set((state) => {
+      const existing = state.nodesById[instanceId];
+      if (!existing || existing.type !== "ref") return state;
+      saveHistory(state);
+
+      const refNode = existing as RefNode;
+      const existingOverrides = refNode.overrides ?? {};
+      const existingOverride = existingOverrides[path];
+      const existingProps =
+        existingOverride?.kind === "update" ? existingOverride.props : {};
+
+      const updated: RefNode = {
+        ...refNode,
+        overrides: {
+          ...existingOverrides,
+          [path]: {
+            kind: "update",
+            props: { ...existingProps, ...updates },
+          },
+        },
+      };
+
+      return {
+        nodesById: { ...state.nodesById, [instanceId]: updated },
+        _cachedTree: null,
+      };
+    }),
+
+  replaceInstanceNode: (instanceId, path, newNode) =>
+    set((state) => {
+      const existing = state.nodesById[instanceId];
+      if (!existing || existing.type !== "ref") return state;
+      saveHistory(state);
+
+      const refNode = existing as RefNode;
+      const existingOverrides = refNode.overrides ?? {};
+
+      return {
+        nodesById: {
+          ...state.nodesById,
+          [instanceId]: {
+            ...refNode,
+            overrides: {
+              ...existingOverrides,
+              [path]: {
+                kind: "replace",
+                node: deepCloneNode(newNode),
+              },
+            },
+          },
+        },
+        _cachedTree: null,
+      };
+    }),
+
+  resetInstanceOverride: (instanceId, path, property) =>
+    set((state) => {
+      const existing = state.nodesById[instanceId];
+      if (!existing || existing.type !== "ref") return state;
+
+      const refNode = existing as RefNode;
+      const existingOverrides = refNode.overrides;
+      const currentOverride = existingOverrides?.[path];
+      if (!currentOverride) return state;
+      saveHistory(state);
+
+      const overrides = property
+        ? pruneOverrideProperty(existingOverrides, path, property)
+        : deleteOverridePath(existingOverrides, path);
+
+      return {
+        nodesById: {
+          ...state.nodesById,
+          [instanceId]: { ...refNode, overrides },
+        },
+        _cachedTree: null,
+      };
+    }),
+
+  toggleSlot: (frameId, childId) =>
+    set((state) => {
+      const existing = state.nodesById[frameId];
+      if (!existing || existing.type !== "frame") return state;
+      const frame = existing as FlatFrameNode;
+      if (!frame.reusable) return state;
+      const childIds = state.childrenById[frameId] ?? [];
+      if (!childIds.includes(childId)) return state;
+      saveHistory(state);
+
+      const currentSlots = frame.slot ?? [];
+      const nextSlots = currentSlots.includes(childId)
+        ? currentSlots.filter((id) => id !== childId)
+        : [...currentSlots, childId];
+
+      return {
+        nodesById: {
+          ...state.nodesById,
+          [frameId]: {
+            ...frame,
+            slot: nextSlots.length > 0 ? nextSlots : undefined,
+          } as FlatSceneNode,
+        },
+        _cachedTree: null,
+      };
+    }),
+
+  detachInstance: (instanceId) => {
+    const state = get();
+    const resolved = resolveRefToFrame(instanceId, state.nodesById, state.childrenById);
+    if (!resolved) return null;
+
+    saveHistory(state);
+
+    const parentId = state.parentById[instanceId];
+    const siblings = parentId != null ? (state.childrenById[parentId] ?? []) : state.rootIds;
+    const index = siblings.indexOf(instanceId);
+    const newNodesById = { ...state.nodesById };
+    const newParentById = { ...state.parentById };
+    const newChildrenById = { ...state.childrenById };
+
+    removeNodeAndDescendants(instanceId, newNodesById, newParentById, newChildrenById);
+    insertTreeIntoFlat(resolved, parentId ?? null, newNodesById, newParentById, newChildrenById);
+
+    const newRootIds = [...state.rootIds];
+    if (parentId != null) {
+      const updated = [...siblings];
+      if (index >= 0) updated.splice(index, 1, resolved.id);
+      newChildrenById[parentId] = updated;
+    } else if (index >= 0) {
+      newRootIds.splice(index, 1, resolved.id);
+    }
+
+    set({
+      nodesById: newNodesById,
+      parentById: newParentById,
+      childrenById: newChildrenById,
+      rootIds: newRootIds,
+      _cachedTree: null,
+    });
+    return resolved.id;
+  },
+
+  syncComponentToHtml: (componentId) =>
+    set((state) => {
+      const node = state.nodesById[componentId];
+      if (!node || node.type !== "frame" || !(node as FlatFrameNode).reusable) return state;
+
+      const allNodes = state.getNodes();
+      const html = convertDesignNodesToHtml(componentId, state.nodesById, state.childrenById, allNodes, { isComponent: true });
+      const existing = state.componentArtifactsById[componentId];
+
+      return {
+        componentArtifactsById: {
+          ...state.componentArtifactsById,
+          [componentId]: {
+            authoringHtml: html,
+            sourceTemplate: existing?.sourceTemplate,
+            revision: existing?.revision ?? 1,
+            syncState: "in_sync",
+          },
+        },
       };
     }),
 

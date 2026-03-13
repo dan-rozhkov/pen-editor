@@ -3,13 +3,18 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useLayoutStore } from "@/store/layoutStore";
-import type { SceneNode, FrameNode, FlatSceneNode } from "@/types/scene";
+import type { SceneNode, FrameNode, FlatSceneNode, RefNode } from "@/types/scene";
 import {
   getPreparedNodeEffectiveSize,
   prepareFrameNode,
 } from "@/utils/instanceUtils";
 import type { TransformHandle } from "./types";
 import { measureLabelTextWidth, truncateLabelToWidth } from "@/pixi/frameLabelUtils";
+import { resolveRefToTree } from "@/utils/instanceRuntime";
+
+export type CanvasHitTarget =
+  | { kind: "node"; nodeId: string }
+  | { kind: "instance-descendant"; instanceId: string; descendantPath: string };
 
 const LABEL_FONT_SIZE = 11;
 const LABEL_OFFSET_Y = 4;
@@ -100,6 +105,15 @@ export function findNodeAtPoint(
   worldY: number,
   options?: { deepSelect?: boolean },
 ): string | null {
+  const target = findCanvasHitTargetAtPoint(worldX, worldY, options);
+  return target?.kind === "node" ? target.nodeId : null;
+}
+
+export function findCanvasHitTargetAtPoint(
+  worldX: number,
+  worldY: number,
+  options?: { deepSelect?: boolean },
+): CanvasHitTarget | null {
   const state = useSceneStore.getState();
   const sceneNodes = state.getNodes();
   const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
@@ -115,7 +129,8 @@ export function findNodeAtPoint(
     node: SceneNode,
     parentAbsX: number,
     parentAbsY: number,
-  ): string | null => {
+    parentPath = "",
+  ): CanvasHitTarget | null => {
     if (node.visible === false || node.enabled === false) return null;
 
     const absX = parentAbsX + node.x;
@@ -135,6 +150,73 @@ export function findNodeAtPoint(
       return null;
     }
 
+    if (node.type === "ref") {
+      const resolved = resolveRefToTree(
+        node as RefNode,
+        state.nodesById,
+        state.childrenById,
+      );
+      if (resolved) {
+        const hitResolvedDescendant = (
+          resolvedNode: SceneNode,
+          resolvedAbsX: number,
+          resolvedAbsY: number,
+          resolvedPath: string,
+        ): CanvasHitTarget | null => {
+          if (resolvedNode.visible === false || resolvedNode.enabled === false) return null;
+
+          const { width: resolvedWidth, height: resolvedHeight } =
+            getPreparedNodeEffectiveSize(resolvedNode, [], calculateLayoutForFrame);
+          if (
+            worldX < resolvedAbsX ||
+            worldX > resolvedAbsX + resolvedWidth ||
+            worldY < resolvedAbsY ||
+            worldY > resolvedAbsY + resolvedHeight
+          ) {
+            return null;
+          }
+
+          const resolvedChildren =
+            resolvedNode.type === "frame" && resolvedNode.layout?.autoLayout
+              ? prepareFrameNode(resolvedNode, calculateLayoutForFrame).layoutChildren
+              : resolvedNode.type === "frame" || resolvedNode.type === "group"
+                ? resolvedNode.children
+                : [];
+
+          for (let i = resolvedChildren.length - 1; i >= 0; i--) {
+            const child = resolvedChildren[i];
+            const childPath = `${resolvedPath}/${child.id}`;
+            const childHit = hitResolvedDescendant(
+              child,
+              resolvedAbsX + child.x,
+              resolvedAbsY + child.y,
+              childPath,
+            );
+            if (childHit) return childHit;
+          }
+
+          return {
+            kind: "instance-descendant",
+            instanceId: node.id,
+            descendantPath: resolvedPath,
+          };
+        };
+
+        for (let i = resolved.children.length - 1; i >= 0; i--) {
+          const child = resolved.children[i];
+          const childHit = hitResolvedDescendant(
+            child,
+            absX + child.x,
+            absY + child.y,
+            child.id,
+          );
+          if (childHit) return childHit;
+        }
+      }
+
+      return { kind: "node", nodeId: node.id };
+    }
+
     const childNodes =
       node.type === "frame" && node.layout?.autoLayout
         ? prepareFrameNode(node, calculateLayoutForFrame).layoutChildren
@@ -144,17 +226,23 @@ export function findNodeAtPoint(
 
     for (let i = childNodes.length - 1; i >= 0; i--) {
       const child = childNodes[i];
-      const childHit = hitNode(child, absX, absY);
+      const childHit = hitNode(
+        child,
+        absX,
+        absY,
+        parentPath ? `${parentPath}/${node.id}` : node.id,
+      );
       if (!childHit) continue;
 
       if (deepSelect) return childHit;
-      if (selectedSet?.has(childHit)) return childHit;
+      if (childHit.kind === "instance-descendant") return childHit;
+      if (selectedSet?.has(childHit.nodeId)) return childHit;
       if (enteredContainerId === node.id) return childHit;
-      if (state.parentById[node.id] === null) return node.id;
-      return node.id;
+      if (state.parentById[node.id] === null) return { kind: "node", nodeId: node.id };
+      return { kind: "node", nodeId: node.id };
     }
 
-    return node.id;
+    return { kind: "node", nodeId: node.id };
   };
 
   // Walk root nodes in reverse (top-most first).
@@ -185,7 +273,8 @@ export function hitTestTransformHandle(worldX: number, worldY: number): {
   width: number;
   height: number;
 } | null {
-  const { selectedIds } = useSelectionStore.getState();
+  const { selectedIds, instanceContext } = useSelectionStore.getState();
+  if (instanceContext) return null;
   if (selectedIds.length !== 1) return null;
 
   const state = useSceneStore.getState();
