@@ -118,12 +118,12 @@ export function findCanvasHitTargetAtPoint(
   const sceneNodes = state.getNodes();
   const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
   const deepSelect = options?.deepSelect === true;
-  const selectedSet = deepSelect
-    ? null
-    : new Set(useSelectionStore.getState().selectedIds);
-  const enteredContainerId = deepSelect
-    ? null
-    : useSelectionStore.getState().enteredContainerId;
+  const selectionState = deepSelect ? null : useSelectionStore.getState();
+  const selectedSet = selectionState
+    ? new Set(selectionState.selectedIds)
+    : null;
+  const enteredContainerId = selectionState?.enteredContainerId ?? null;
+  const enteredInstanceDescendantPath = selectionState?.enteredInstanceDescendantPath ?? null;
 
   const hitNode = (
     node: SceneNode,
@@ -151,67 +151,83 @@ export function findCanvasHitTargetAtPoint(
     }
 
     if (node.type === "ref") {
+      // Default: ref is opaque unless deep-selecting or entered
+      if (!deepSelect && enteredContainerId !== node.id) {
+        return { kind: "node", nodeId: node.id };
+      }
+
       const resolved = resolveRefToTree(
         node as RefNode,
         state.nodesById,
         state.childrenById,
       );
-      if (resolved) {
-        const hitResolvedDescendant = (
-          resolvedNode: SceneNode,
-          resolvedAbsX: number,
-          resolvedAbsY: number,
-          resolvedPath: string,
-        ): CanvasHitTarget | null => {
-          if (resolvedNode.visible === false || resolvedNode.enabled === false) return null;
+      if (!resolved) return { kind: "node", nodeId: node.id };
 
-          const { width: resolvedWidth, height: resolvedHeight } =
-            getPreparedNodeEffectiveSize(resolvedNode, [], calculateLayoutForFrame);
-          if (
-            worldX < resolvedAbsX ||
-            worldX > resolvedAbsX + resolvedWidth ||
-            worldY < resolvedAbsY ||
-            worldY > resolvedAbsY + resolvedHeight
-          ) {
-            return null;
-          }
+      // Unified recursive hit test — returns deepest matching path
+      const hitResolvedPath = (
+        resolvedNode: SceneNode,
+        resolvedAbsX: number,
+        resolvedAbsY: number,
+        resolvedPath: string,
+      ): string | null => {
+        if (resolvedNode.visible === false || resolvedNode.enabled === false) return null;
 
-          const resolvedChildren =
-            resolvedNode.type === "frame" && resolvedNode.layout?.autoLayout
-              ? prepareFrameNode(resolvedNode, calculateLayoutForFrame).layoutChildren
-              : resolvedNode.type === "frame" || resolvedNode.type === "group"
-                ? resolvedNode.children
-                : [];
+        const { width: resolvedWidth, height: resolvedHeight } =
+          getPreparedNodeEffectiveSize(resolvedNode, [], calculateLayoutForFrame);
+        if (
+          worldX < resolvedAbsX ||
+          worldX > resolvedAbsX + resolvedWidth ||
+          worldY < resolvedAbsY ||
+          worldY > resolvedAbsY + resolvedHeight
+        ) {
+          return null;
+        }
 
-          for (let i = resolvedChildren.length - 1; i >= 0; i--) {
-            const child = resolvedChildren[i];
-            const childPath = `${resolvedPath}/${child.id}`;
-            const childHit = hitResolvedDescendant(
-              child,
-              resolvedAbsX + child.x,
-              resolvedAbsY + child.y,
-              childPath,
-            );
-            if (childHit) return childHit;
-          }
+        const resolvedChildren =
+          resolvedNode.type === "frame" && resolvedNode.layout?.autoLayout
+            ? prepareFrameNode(resolvedNode, calculateLayoutForFrame).layoutChildren
+            : resolvedNode.type === "frame" || resolvedNode.type === "group"
+              ? resolvedNode.children
+              : [];
 
-          return {
-            kind: "instance-descendant",
-            instanceId: node.id,
-            descendantPath: resolvedPath,
-          };
-        };
-
-        for (let i = resolved.children.length - 1; i >= 0; i--) {
-          const child = resolved.children[i];
-          const childHit = hitResolvedDescendant(
+        for (let i = resolvedChildren.length - 1; i >= 0; i--) {
+          const child = resolvedChildren[i];
+          const childHit = hitResolvedPath(
             child,
-            absX + child.x,
-            absY + child.y,
-            child.id,
+            resolvedAbsX + child.x,
+            resolvedAbsY + child.y,
+            `${resolvedPath}/${child.id}`,
           );
           if (childHit) return childHit;
         }
+
+        return resolvedPath;
+      };
+
+      // Find deepest hit path
+      let deepHitPath: string | null = null;
+      for (let i = resolved.children.length - 1; i >= 0; i--) {
+        const child = resolved.children[i];
+        deepHitPath = hitResolvedPath(child, absX + child.x, absY + child.y, child.id);
+        if (deepHitPath) break;
+      }
+
+      if (!deepHitPath) return { kind: "node", nodeId: node.id };
+
+      // Deep select: return full deep path
+      if (deepSelect) {
+        return { kind: "instance-descendant", instanceId: node.id, descendantPath: deepHitPath };
+      }
+
+      // Entered ref: truncate to first child below entered level
+      const prefix = enteredInstanceDescendantPath ? enteredInstanceDescendantPath + "/" : "";
+      if (deepHitPath.startsWith(prefix)) {
+        const remaining = deepHitPath.slice(prefix.length);
+        const firstChild = remaining.split("/")[0];
+        const resultPath = enteredInstanceDescendantPath
+          ? `${enteredInstanceDescendantPath}/${firstChild}`
+          : firstChild;
+        return { kind: "instance-descendant", instanceId: node.id, descendantPath: resultPath };
       }
 
       return { kind: "node", nodeId: node.id };

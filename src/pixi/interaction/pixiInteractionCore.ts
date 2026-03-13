@@ -27,7 +27,8 @@ import { createDragController } from "./dragController";
 import { createMarqueeController } from "./marqueeController";
 import { createMeasurementController } from "./measurementController";
 import { prepareFrameNode } from "@/utils/instanceUtils";
-import type { SceneNode } from "@/types/scene";
+import { resolveRefToTree, findNodeByPath } from "@/utils/instanceRuntime";
+import type { SceneNode, RefNode } from "@/types/scene";
 
 const EMPTY_POINTER_EVENT = {} as PointerEvent;
 
@@ -288,9 +289,46 @@ export function setupPixiInteraction(
       return;
     }
 
+    // Handle double-click within an entered ref instance
+    const selState = useSelectionStore.getState();
+    if (selState.instanceContext) {
+      const scState = useSceneStore.getState();
+      const refNode = scState.nodesById[selState.instanceContext.instanceId];
+      if (refNode?.type === "ref") {
+        const resolved = resolveRefToTree(refNode as RefNode, scState.nodesById, scState.childrenById);
+        if (resolved) {
+          const descNode = findNodeByPath(resolved.children, selState.instanceContext.descendantPath);
+          if (descNode?.type === "text") {
+            // Enter text editing for descendant
+            useSelectionStore.getState().startEditing(selState.instanceContext.descendantPath);
+            return;
+          }
+          if (descNode && (descNode.type === "frame" || descNode.type === "group")) {
+            // Drill deeper within instance
+            useSelectionStore.getState().enterInstanceDescendant(selState.instanceContext.descendantPath);
+            // Re-hit-test now that enteredInstanceDescendantPath is updated
+            const hitTarget = findCanvasHitTargetAtPoint(world.x, world.y);
+            if (hitTarget?.kind === "instance-descendant") {
+              useSelectionStore.getState().selectDescendant(hitTarget.instanceId, hitTarget.descendantPath);
+            }
+            return;
+          }
+        }
+      }
+    }
+
     // Match Konva behavior: drill down from currently selected container.
     if (currentSelectedIds.length === 1) {
       const selectedNode = findNodeById(currentNodes, currentSelectedIds[0]);
+      if (selectedNode && selectedNode.type === "ref") {
+        useSelectionStore.getState().enterContainer(selectedNode.id);
+        // Hit test to find which first-level child was hit
+        const hitTarget = findCanvasHitTargetAtPoint(world.x, world.y);
+        if (hitTarget?.kind === "instance-descendant") {
+          useSelectionStore.getState().selectDescendant(hitTarget.instanceId, hitTarget.descendantPath);
+        }
+        return;
+      }
       if (selectedNode && (selectedNode.type === "frame" || selectedNode.type === "group")) {
         useSelectionStore.getState().enterContainer(selectedNode.id);
 

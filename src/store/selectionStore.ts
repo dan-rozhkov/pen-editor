@@ -18,6 +18,8 @@ interface SelectionState {
   instanceContext: InstanceContext | null
   // Nested selection: the container the user has drilled into via double-click
   enteredContainerId: string | null
+  // Depth within an entered ref instance (e.g. "childId/grandchildId")
+  enteredInstanceDescendantPath: string | null
   // Last selected node ID for range selection
   lastSelectedId: string | null
 
@@ -36,6 +38,8 @@ interface SelectionState {
   clearDescendantSelection: () => void
   // Nested selection methods
   enterContainer: (containerId: string) => void
+  enterInstanceDescendant: (path: string) => void
+  exitContainer: () => boolean
   resetContainerContext: () => void
 }
 
@@ -84,6 +88,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   editingInstanceId: null,
   instanceContext: null,
   enteredContainerId: null,
+  enteredInstanceDescendantPath: null,
   lastSelectedId: null,
 
   select: (id: string) => {
@@ -160,7 +165,8 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       editingMode: null,
       editingInstanceId: null,
       instanceContext: null,
-      enteredContainerId: null
+      enteredContainerId: null,
+      enteredInstanceDescendantPath: null,
     })
   },
 
@@ -256,7 +262,48 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       enteredContainerId: containerId,
     }
     saveSelectionHistoryIfChanged(current, next)
-    set({ enteredContainerId: containerId })
+    set({ enteredContainerId: containerId, enteredInstanceDescendantPath: null })
+  },
+
+  enterInstanceDescendant: (path: string) => {
+    set({ enteredInstanceDescendantPath: path })
+  },
+
+  exitContainer: () => {
+    const { enteredContainerId, instanceContext, editingNodeId, enteredInstanceDescendantPath } = get()
+    // Step 1: Stop editing
+    if (editingNodeId) {
+      set({ editingNodeId: null, editingMode: null })
+      return true
+    }
+    // Step 2: Exit descendant selection within instance
+    if (instanceContext) {
+      set({
+        instanceContext: null,
+        editingInstanceId: null,
+        selectedIds: enteredContainerId ? [enteredContainerId] : [],
+      })
+      return true
+    }
+    // Step 3: Exit one level within entered instance
+    if (enteredInstanceDescendantPath) {
+      const lastSlash = enteredInstanceDescendantPath.lastIndexOf("/")
+      set({
+        enteredInstanceDescendantPath: lastSlash >= 0
+          ? enteredInstanceDescendantPath.slice(0, lastSlash)
+          : null,
+      })
+      return true
+    }
+    // Step 4: Exit entered container
+    if (enteredContainerId) {
+      const current = getSelectionSnapshot(get())
+      const next = { ...current, enteredContainerId: null }
+      saveSelectionHistoryIfChanged(current, next)
+      set({ enteredContainerId: null, selectedIds: [enteredContainerId] })
+      return true
+    }
+    return false
   },
 
   resetContainerContext: () => {
@@ -266,6 +313,6 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       enteredContainerId: null,
     }
     saveSelectionHistoryIfChanged(current, next)
-    set({ enteredContainerId: null })
+    set({ enteredContainerId: null, enteredInstanceDescendantPath: null })
   },
 }))

@@ -485,6 +485,7 @@ export function useCanvasKeyboardShortcuts({
           cancelDrawing();
           return;
         }
+        if (useSelectionStore.getState().exitContainer()) return;
         clearSelection();
       }
     };
