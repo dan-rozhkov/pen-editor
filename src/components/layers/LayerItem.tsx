@@ -21,6 +21,8 @@ export interface LayerItemProps {
   ) => void;
   onDrop: () => void;
   selectableFlatIds: string[];
+  instanceId?: string;
+  descendantPath?: string;
 }
 
 export const LayerItem = memo(function LayerItem({
@@ -32,8 +34,19 @@ export const LayerItem = memo(function LayerItem({
   onDragOver,
   onDrop,
   selectableFlatIds,
+  instanceId,
+  descendantPath,
 }: LayerItemProps) {
-  const isSelected = useSelectionStore((s) => s.selectedIds.includes(node.id));
+  const isRefDescendant = !!(instanceId && descendantPath);
+  const isSelected = useSelectionStore((s) => {
+    if (isRefDescendant) {
+      return (
+        s.instanceContext?.instanceId === instanceId &&
+        s.instanceContext?.descendantPath === descendantPath
+      );
+    }
+    return s.selectedIds.includes(node.id);
+  });
   const toggleVisibility = useSceneStore((state) => state.toggleVisibility);
   const expandedFrameIds = useSceneStore((state) => state.expandedFrameIds);
   const toggleFrameExpanded = useSceneStore(
@@ -56,15 +69,22 @@ export const LayerItem = memo(function LayerItem({
 
   const isVisible = node.visible !== false;
   const isFrame = node.type === "frame" || node.type === "group";
-  const hasChildren =
-    isFrame && (node as FrameNode | GroupNode).children.length > 0;
-  const isExpanded = expandedFrameIds.has(node.id);
-  const isDragging = dragState.draggedId === node.id;
-  const isDropTarget = dragState.dropTargetId === node.id;
+  const isRef = node.type === "ref";
+  const hasChildren = isRefDescendant
+    ? isFrame && (node as FrameNode | GroupNode).children.length > 0
+    : isRef || (isFrame && (node as FrameNode | GroupNode).children.length > 0);
+  const expandKey = isRefDescendant ? `${instanceId}:${descendantPath}` : node.id;
+  const isExpanded = expandedFrameIds.has(expandKey);
+  const isDragging = !isRefDescendant && dragState.draggedId === node.id;
+  const isDropTarget = !isRefDescendant && dragState.dropTargetId === node.id;
 
   const handleClick = (e: React.MouseEvent) => {
     selectionFromLayersRef.current = true;
     const selState = useSelectionStore.getState();
+    if (isRefDescendant) {
+      selState.selectDescendant(instanceId, descendantPath);
+      return;
+    }
     if (e.shiftKey && selState.lastSelectedId) {
       selState.selectRange(selState.lastSelectedId, node.id, selectableFlatIds);
     } else if (e.shiftKey) {
@@ -76,15 +96,25 @@ export const LayerItem = memo(function LayerItem({
 
   const handleVisibilityClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    toggleVisibility(node.id);
+    if (isRefDescendant) {
+      const store = useSceneStore.getState();
+      if (isVisible) {
+        store.updateInstanceOverride(instanceId, descendantPath, { visible: false });
+      } else {
+        store.resetInstanceOverride(instanceId, descendantPath, "visible");
+      }
+    } else {
+      toggleVisibility(node.id);
+    }
   };
 
   const handleChevronClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    toggleFrameExpanded(node.id);
+    toggleFrameExpanded(expandKey);
   };
 
   const handleDoubleClick = (e: React.MouseEvent) => {
+    if (isRefDescendant) return;
     e.stopPropagation();
     setEditName(getDisplayName(node));
     setIsEditing(true);
@@ -113,11 +143,19 @@ export const LayerItem = memo(function LayerItem({
   };
 
   const handleMouseEnter = () => {
-    useHoverStore.getState().setHoveredNode(node.id);
+    if (isRefDescendant) {
+      useHoverStore.getState().setHoveredDescendant(instanceId, descendantPath);
+    } else {
+      useHoverStore.getState().setHoveredNode(node.id);
+    }
   };
 
   const handleMouseLeave = () => {
-    useHoverStore.getState().setHoveredNode(null);
+    if (isRefDescendant) {
+      useHoverStore.getState().setHoveredDescendant(null, null);
+    } else {
+      useHoverStore.getState().setHoveredNode(null);
+    }
   };
 
   const handleDragStart = (e: React.DragEvent) => {
@@ -157,6 +195,7 @@ export const LayerItem = memo(function LayerItem({
   return (
     <div
         data-node-id={node.id}
+        data-layer-key={expandKey}
         className={clsx(
           "group flex items-center cursor-pointer h-[28px]",
           isSelected
@@ -177,10 +216,10 @@ export const LayerItem = memo(function LayerItem({
         onClick={handleClick}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        draggable
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
+        draggable={!isRefDescendant}
+        onDragStart={isRefDescendant ? undefined : handleDragStart}
+        onDragOver={isRefDescendant ? undefined : handleDragOver}
+        onDrop={isRefDescendant ? undefined : handleDrop}
       >
         <div className="flex items-center gap-1 flex-1">
           {hasChildren ? (

@@ -30,26 +30,10 @@ function getParentContextForDescendant(
   let siblings: SceneNode[] = component.children;
   let parent: FrameNode | GroupNode | null = component;
 
-  for (const segment of segments) {
-    const node = siblings.find((child) => child.id === segment);
-    if (!node) {
-      return {
-        parent,
-        isInsideAutoLayout: parent?.type === "frame" && !!parent.layout?.autoLayout,
-      };
-    }
-
-    if (segment === segments[segments.length - 1]) {
-      return {
-        parent,
-        isInsideAutoLayout: parent?.type === "frame" && !!parent.layout?.autoLayout,
-      };
-    }
-
-    if (!isContainerNode(node)) {
-      break;
-    }
-
+  // Walk to the second-to-last segment to find the parent of the target node
+  for (let i = 0; i < segments.length - 1; i++) {
+    const node = siblings.find((child) => child.id === segments[i]);
+    if (!node || !isContainerNode(node)) break;
     parent = node;
     siblings = node.children;
   }

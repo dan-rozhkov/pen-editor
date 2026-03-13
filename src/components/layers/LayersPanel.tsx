@@ -14,6 +14,7 @@ import {
   OVERSCAN,
   flattenLayers,
   selectionFromLayersRef,
+  getLayerKey,
 } from "./layerTypes";
 import type { DragState, DropPosition } from "./layerTypes";
 
@@ -25,7 +26,9 @@ export function LayersPanel() {
   const expandAncestors = useSceneStore((state) => state.expandAncestors);
   const parentById = useSceneStore((state) => state.parentById);
   const childrenById = useSceneStore((state) => state.childrenById);
+  const nodesById = useSceneStore((state) => state.nodesById);
   const selectedIds = useSelectionStore((state) => state.selectedIds);
+  const instanceContext = useSelectionStore((state) => state.instanceContext);
   const select = useSelectionStore((state) => state.select);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -48,18 +51,39 @@ export function LayersPanel() {
       }
     }
 
+    // Auto-expand ref node and its descendant containers when instanceContext is active
+    if (instanceContext) {
+      const { instanceId, descendantPath } = instanceContext;
+      if (!expandedFrameIds.has(instanceId)) {
+        idsToExpand.push(instanceId);
+      }
+      // Expand intermediate containers within the ref tree
+      const segments = descendantPath.split("/");
+      for (let i = 1; i < segments.length; i++) {
+        const partialPath = segments.slice(0, i).join("/");
+        const expandKey = `${instanceId}:${partialPath}`;
+        if (!expandedFrameIds.has(expandKey)) {
+          idsToExpand.push(expandKey);
+        }
+      }
+    }
+
     if (idsToExpand.length > 0) {
       expandAncestors(idsToExpand);
     }
 
     // Scroll first selected node into view after DOM updates
     requestAnimationFrame(() => {
-      const el = scrollRef.current?.querySelector(
-        `[data-node-id="${selectedIds[0]}"]`,
-      );
+      let selector: string;
+      if (instanceContext) {
+        selector = `[data-layer-key="${instanceContext.instanceId}:${instanceContext.descendantPath}"]`;
+      } else {
+        selector = `[data-node-id="${selectedIds[0]}"]`;
+      }
+      const el = scrollRef.current?.querySelector(selector);
       el?.scrollIntoView({ block: "nearest", inline: "nearest" });
     });
-  }, [selectedIds, parentById, expandedFrameIds, expandAncestors]);
+  }, [selectedIds, instanceContext, parentById, expandedFrameIds, expandAncestors]);
 
   const [dragState, setDragState] = useState<DragState>({
     draggedId: null,
@@ -144,11 +168,11 @@ export function LayersPanel() {
   // Reverse the nodes array so that top items in the list appear on top visually (higher z-index)
   const reversedNodes = useMemo(() => [...nodes].reverse(), [nodes]);
   const flatLayers = useMemo(
-    () => flattenLayers(reversedNodes, expandedFrameIds),
-    [reversedNodes, expandedFrameIds],
+    () => flattenLayers(reversedNodes, expandedFrameIds, nodesById, childrenById),
+    [reversedNodes, expandedFrameIds, nodesById, childrenById],
   );
   const selectableFlatIds = useMemo(
-    () => flatLayers.map((l) => l.node.id),
+    () => flatLayers.map((l) => getLayerKey(l)),
     [flatLayers],
   );
   const totalHeight = flatLayers.length * ROW_HEIGHT;
@@ -225,7 +249,7 @@ export function LayersPanel() {
             <div style={{ transform: `translateY(${translateY}px)` }}>
               {visibleItems.map((item) => (
                 <LayerItem
-                  key={item.node.id}
+                  key={getLayerKey(item)}
                   node={item.node}
                   depth={item.depth}
                   parentId={item.parentId}
@@ -234,6 +258,8 @@ export function LayersPanel() {
                   onDragOver={handleDragOver}
                   onDrop={handleDrop}
                   selectableFlatIds={selectableFlatIds}
+                  instanceId={item.instanceId}
+                  descendantPath={item.descendantPath}
                 />
               ))}
             </div>
