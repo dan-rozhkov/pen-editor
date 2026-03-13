@@ -146,7 +146,14 @@ export function setupPixiInteraction(
     measurement.handlePointerMove(
       EMPTY_POINTER_EVENT,
       world,
-      hitTarget?.kind === "node" ? hitTarget.nodeId : null,
+      hitTarget?.kind === "node"
+        ? hitTarget.nodeId
+        : hitTarget?.kind === "instance-descendant"
+          ? hitTarget.instanceId
+          : null,
+      hitTarget?.kind === "instance-descendant"
+        ? { instanceId: hitTarget.instanceId, descendantPath: hitTarget.descendantPath }
+        : undefined,
     );
 
     // Update cursor for transform handles
@@ -310,6 +317,14 @@ export function setupPixiInteraction(
             const hitTarget = findCanvasHitTargetAtPoint(world.x, world.y);
             if (hitTarget?.kind === "instance-descendant") {
               useSelectionStore.getState().selectDescendant(hitTarget.instanceId, hitTarget.descendantPath);
+
+              // Start inline editing if the deeper descendant is text/embed
+              const deepDesc = findNodeByPath(resolved.children, hitTarget.descendantPath);
+              if (deepDesc?.type === "text") {
+                useSelectionStore.getState().startEditing(hitTarget.descendantPath);
+              } else if (deepDesc?.type === "embed") {
+                useSelectionStore.getState().startEditing(hitTarget.descendantPath, "embed");
+              }
             }
             return;
           }
@@ -326,6 +341,18 @@ export function setupPixiInteraction(
         const hitTarget = findCanvasHitTargetAtPoint(world.x, world.y);
         if (hitTarget?.kind === "instance-descendant") {
           useSelectionStore.getState().selectDescendant(hitTarget.instanceId, hitTarget.descendantPath);
+
+          // Start inline editing immediately if the descendant is text/embed
+          const scState = useSceneStore.getState();
+          const resolved = resolveRefToTree(selectedNode as RefNode, scState.nodesById, scState.childrenById);
+          if (resolved) {
+            const descNode = findNodeByPath(resolved.children, hitTarget.descendantPath);
+            if (descNode?.type === "text") {
+              useSelectionStore.getState().startEditing(hitTarget.descendantPath);
+            } else if (descNode?.type === "embed") {
+              useSelectionStore.getState().startEditing(hitTarget.descendantPath, "embed");
+            }
+          }
         }
         return;
       }
