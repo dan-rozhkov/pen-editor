@@ -310,6 +310,14 @@ export function setupPixiInteraction(
         const childId = findDeepestChildAtPosition(hitChildren, localX, localY);
         if (childId) {
           useSelectionStore.getState().select(childId);
+
+          // Start inline editing immediately if the deepest child is text/embed
+          const childNode = useSceneStore.getState().nodesById[childId];
+          if (childNode?.type === "text") {
+            useSelectionStore.getState().startEditing(childId);
+          } else if (childNode?.type === "embed") {
+            useSelectionStore.getState().startEditing(childId, "embed");
+          }
         }
         return;
       }
