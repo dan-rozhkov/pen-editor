@@ -212,7 +212,9 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   },
 
   startEditing: (id: string, mode: EditingMode = 'text') => {
-    if (get().selectedIds.includes(id)) {
+    const state = get()
+    // Allow editing for regular selected nodes or instance descendants
+    if (state.selectedIds.includes(id) || (state.instanceContext && state.instanceContext.descendantPath === id)) {
       set({ editingNodeId: id, editingMode: mode })
     }
   },

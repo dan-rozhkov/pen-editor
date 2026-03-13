@@ -11,6 +11,8 @@ import {
   findNodeById,
   findParentFrame,
 } from "@/utils/nodeUtils";
+import { resolveRefToTree, findNodeByPath } from "@/utils/instanceRuntime";
+import type { RefNode } from "@/types/scene";
 import { parseSvgToNodes } from "@/utils/svgUtils";
 import {
   applyImageImportPlans,
@@ -158,10 +160,31 @@ export function useCanvasKeyboardShortcuts({
 
       if (e.key === "Enter" && !e.shiftKey) {
         if (isTyping) return;
-        const { selectedIds, editingNodeId, editingMode } =
+        const { selectedIds, editingNodeId, editingMode, instanceContext } =
           useSelectionStore.getState();
 
         if (!editingNodeId && !editingMode && selectedIds.length === 1) {
+          // Handle instance descendant text editing
+          if (instanceContext) {
+            const scState = useSceneStore.getState();
+            const refNode = scState.nodesById[instanceContext.instanceId];
+            if (refNode?.type === "ref") {
+              const resolved = resolveRefToTree(refNode as RefNode, scState.nodesById, scState.childrenById);
+              if (resolved) {
+                const descNode = findNodeByPath(resolved.children, instanceContext.descendantPath);
+                if (descNode?.type === "text") {
+                  e.preventDefault();
+                  useSelectionStore.getState().startEditing(instanceContext.descendantPath);
+                  return;
+                } else if (descNode?.type === "embed") {
+                  e.preventDefault();
+                  useSelectionStore.getState().startEditing(instanceContext.descendantPath, "embed");
+                  return;
+                }
+              }
+            }
+          }
+
           const selectedNode = findNodeById(nodes, selectedIds[0]);
           if (selectedNode?.type === "text") {
             e.preventDefault();

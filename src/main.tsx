@@ -20,6 +20,9 @@ if (import.meta.env.DEV) {
   import('@/store/variableStore').then(({ useVariableStore }) => {
     (window as unknown as Record<string, unknown>).__variableStore = useVariableStore;
   });
+  import('@/store/selectionStore').then(({ useSelectionStore }) => {
+    (window as unknown as Record<string, unknown>).__selectionStore = useSelectionStore;
+  });
 }
 
 createRoot(document.getElementById('root')!).render(

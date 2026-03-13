@@ -25,6 +25,8 @@ import {
   getNodeAbsolutePositionWithLayout,
   getThemeFromAncestorFrames,
 } from "@/utils/nodeUtils";
+import { findResolvedDescendantByPath } from "@/utils/instanceRuntime";
+import type { RefNode } from "@/types/scene";
 import { applyOpenedDocument } from "@/utils/openDocumentIntoEditor";
 import { createPixiSync } from "./pixiSync";
 import { setupPixiViewport } from "./pixiViewport";
@@ -68,8 +70,27 @@ export function PixiCanvas() {
   const setPixiRefs = useCanvasRefStore((s) => s.setPixiRefs);
 
   // Selection data for inline editors
+  const instanceContext = useSelectionStore((s) => s.instanceContext);
+
+  // Resolve instance descendant if editing within a component instance
+  const resolvedDescendant = useMemo(() => {
+    if (!editingNodeId || !instanceContext) return null;
+    const state = useSceneStore.getState();
+    const refNode = state.nodesById[instanceContext.instanceId];
+    if (!refNode || refNode.type !== "ref") return null;
+    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+    return findResolvedDescendantByPath(
+      refNode as RefNode,
+      instanceContext.descendantPath,
+      state.nodesById,
+      state.childrenById,
+      state.parentById,
+      calculateLayoutForFrame,
+    );
+  }, [editingNodeId, instanceContext]);
+
   const editingNode = editingNodeId
-    ? useSceneStore.getState().nodesById[editingNodeId]
+    ? (resolvedDescendant?.node ?? useSceneStore.getState().nodesById[editingNodeId])
     : null;
 
   // Calculate editing positions in world coordinates.
@@ -86,21 +107,33 @@ export function PixiCanvas() {
   }, []);
 
   const editingPosition = editingNodeId
-    ? getEditingPosition(editingNodeId)
+    ? (resolvedDescendant
+        ? { x: resolvedDescendant.absX, y: resolvedDescendant.absY }
+        : getEditingPosition(editingNodeId))
     : null;
   const editingTextTheme = useMemo(() => {
     if (!editingNodeId || editingMode !== "text") return null;
+    if (resolvedDescendant) {
+      // For instance descendants, use the instance's ancestor theme
+      return getThemeFromAncestorFrames(
+        parentById,
+        nodesById,
+        instanceContext!.instanceId,
+        activeTheme,
+      );
+    }
     return getThemeFromAncestorFrames(
       parentById,
       nodesById,
       editingNodeId,
       activeTheme,
     );
-  }, [editingNodeId, editingMode, parentById, nodesById, activeTheme]);
+  }, [editingNodeId, editingMode, parentById, nodesById, activeTheme, resolvedDescendant, instanceContext]);
   const editingTextIsInsideAutoLayout = useMemo(() => {
     if (editingMode !== "text" || !editingNodeId) return false;
+    if (resolvedDescendant) return false;
     return findParentFrame(nodes, editingNodeId).isInsideAutoLayout;
-  }, [editingMode, editingNodeId, nodes]);
+  }, [editingMode, editingNodeId, nodes, resolvedDescendant]);
 
   const handleDocumentDrop = useCallback(
     (
@@ -307,6 +340,13 @@ export function PixiCanvas() {
           absoluteY={editingPosition.y}
           effectiveTheme={editingTextTheme ?? undefined}
           isInsideAutoLayoutParent={editingTextIsInsideAutoLayout}
+          onUpdateText={instanceContext ? (text) => {
+            useSceneStore.getState().updateInstanceOverride(
+              instanceContext.instanceId,
+              instanceContext.descendantPath,
+              { text } as any,
+            );
+          } : undefined}
         />
       )}
       {/* Inline embed editor overlay */}

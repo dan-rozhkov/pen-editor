@@ -10,6 +10,7 @@ import { buildTree, generateId, isContainerNode } from "@/types/scene";
 import { deepCloneNode } from "@/utils/cloneNode";
 import { getPreparedNodeEffectiveSize, prepareFrameNode } from "@/utils/instanceUtils";
 import { getAbsolutePositionFlat } from "@/utils/nodeUtils";
+import { syncTextDimensions, hasTextMeasureProps } from "@/store/sceneStore/helpers/textSync";
 
 export interface ResolvedDescendant {
   path: string
@@ -43,8 +44,13 @@ function resolveNodeAtPath(
   }
 
   const updateProps = override?.kind === "update" ? override.props : {};
-  const updated = { ...node, ...updateProps } as SceneNode;
+  let updated = { ...node, ...updateProps } as SceneNode;
   if (updated.enabled === false) return null;
+
+  // Re-measure text dimensions if text-related properties were overridden
+  if (updated.type === "text" && Object.keys(updateProps).length > 0 && hasTextMeasureProps(updateProps as Partial<SceneNode>)) {
+    updated = syncTextDimensions(updated);
+  }
 
   if (isContainerNode(updated)) {
     const nextChildren = updated.children
