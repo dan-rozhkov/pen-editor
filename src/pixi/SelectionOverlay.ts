@@ -170,6 +170,9 @@ export function createSelectionOverlay(
   }
 
   function getSelectionColor(nodeId: string): number {
+    if (isInComponentContext(nodeId)) {
+      return COMPONENT_SELECTION_COLOR;
+    }
     const state = useSceneStore.getState();
     const node = state.nodesById[nodeId];
     if (
@@ -209,6 +212,20 @@ export function createSelectionOverlay(
       (node?.type === "frame" && !!(node as FlatFrameNode).reusable) ||
       node?.type === "ref"
     );
+  }
+
+  function isInComponentContext(nodeId: string): boolean {
+    const state = useSceneStore.getState();
+    let currentId: string | null = nodeId;
+
+    while (currentId) {
+      if (isComponentOrInstance(currentId)) {
+        return true;
+      }
+      currentId = state.parentById[currentId] ?? null;
+    }
+
+    return false;
   }
 
   function drawTextBaselines(
@@ -327,7 +344,7 @@ export function createSelectionOverlay(
       selectedIds[0] === instanceContext.instanceId;
     const hasComponentSelection =
       !isInstanceDescendantSelection &&
-      selectedIds.some((id) => isComponentOrInstance(id));
+      selectedIds.some((id) => isInComponentContext(id));
     const selectionBaselineColor = hasComponentSelection
       ? COMPONENT_SELECTION_COLOR
       : TEXT_BASELINE_COLOR;
@@ -461,7 +478,7 @@ export function createSelectionOverlay(
 
       // Draw size label below the selection bounding box
       if (totalW > 0 && totalH > 0) {
-        const isComp = selectedIds.some((id) => isComponentOrInstance(id));
+        const isComp = selectedIds.some((id) => isInComponentContext(id));
 
         // Compute sizing modes for the badge label
         let badgeWidthMode: string | undefined;
@@ -687,13 +704,13 @@ export function createSelectionOverlay(
     const drawRect = getDrawRect(node, absPos, { width, height });
 
     hovOutline.rect(drawRect.x, drawRect.y, drawRect.width, drawRect.height);
-    const hoverColor = isComponentOrInstance(hoveredNodeId)
+    const hoverColor = isInComponentContext(hoveredNodeId)
       ? COMPONENT_SELECTION_COLOR
       : HOVER_COLOR;
     hovOutline.stroke({ color: hoverColor, width: strokeWidth });
 
     if (node.type === "text") {
-      const hoverBaselineColor = isComponentOrInstance(hoveredNodeId)
+      const hoverBaselineColor = isInComponentContext(hoveredNodeId)
         ? COMPONENT_SELECTION_COLOR
         : TEXT_BASELINE_COLOR;
       drawTextBaselines(

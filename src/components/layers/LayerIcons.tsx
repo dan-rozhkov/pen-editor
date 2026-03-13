@@ -1,4 +1,5 @@
 import {
+  DiamondIcon,
   DiamondsFourIcon,
   RectangleIcon,
   CircleIcon,
@@ -112,6 +113,9 @@ export const NodeIcon = ({
 
   switch (type) {
     case "frame":
+      if (isComponent) {
+        return <DiamondsFourIcon size={16} className={iconClass} weight="regular" />;
+      }
       if (layout?.autoLayout) {
         return <AutoLayoutIcon layout={layout} />;
       }
@@ -132,11 +136,11 @@ export const NodeIcon = ({
       return <HexagonIcon size={16} className={iconClass} weight="regular" />;
     case "embed":
       if (isComponent) {
-        return <DiamondsFourIcon size={16} className={iconClass} />;
+        return <DiamondsFourIcon size={16} className={iconClass} weight="regular" />;
       }
       return <CodeIcon size={16} className={iconClass} weight="regular" />;
     case "ref":
-      return <DiamondsFourIcon size={16} className={iconClass} weight="fill" />;
+      return <DiamondIcon size={16} className={iconClass} weight="regular" />;
     default:
       return null;
   }
