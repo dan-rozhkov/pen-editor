@@ -1,10 +1,10 @@
 import { useSceneStore } from "@/store/sceneStore";
 import { type InstanceContext } from "@/store/selectionStore";
-import type { InstanceOverrideUpdateProps, RefNode, SceneNode } from "@/types/scene";
+import type { FlatSceneNode, InstanceOverrideUpdateProps, RefNode, SceneNode } from "@/types/scene";
 import { isContainerNode, type FrameNode, type GroupNode, type TextNode } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
 import { findComponentById, findNodeById } from "@/utils/nodeUtils";
-import { findNodeByPath } from "@/utils/instanceRuntime";
+import { findNodeByPath, resolveRefToTree } from "@/utils/instanceRuntime";
 import {
   NumberInput,
   PropertySection,
@@ -25,6 +25,8 @@ import { Eye, EyeSlash } from "@phosphor-icons/react";
 function getParentContextForDescendant(
   component: FrameNode,
   descendantPath: string,
+  nodesById?: Record<string, FlatSceneNode>,
+  childrenById?: Record<string, string[]>,
 ): { parent: FrameNode | GroupNode | null; isInsideAutoLayout: boolean } {
   const segments = descendantPath.split("/");
   let siblings: SceneNode[] = component.children;
@@ -33,7 +35,18 @@ function getParentContextForDescendant(
   // Walk to the second-to-last segment to find the parent of the target node
   for (let i = 0; i < segments.length - 1; i++) {
     const node = siblings.find((child) => child.id === segments[i]);
-    if (!node || !isContainerNode(node)) break;
+    if (!node) break;
+    // Handle nested ref — resolve it and continue into its children
+    if (node.type === "ref" && nodesById && childrenById) {
+      const resolved = resolveRefToTree(node as RefNode, nodesById, childrenById);
+      if (resolved) {
+        parent = resolved;
+        siblings = resolved.children;
+        continue;
+      }
+      break;
+    }
+    if (!isContainerNode(node)) break;
     parent = node;
     siblings = node.children;
   }
@@ -67,7 +80,8 @@ export function DescendantPropertyEditor({
   const component = findComponentById(allNodes, instance.componentId);
   if (!component) return null;
 
-  const originalNode = findNodeByPath(component.children, instanceContext.descendantPath);
+  const scState = useSceneStore.getState();
+  const originalNode = findNodeByPath(component.children, instanceContext.descendantPath, scState.nodesById, scState.childrenById);
   if (!originalNode) return null;
 
   const isRootSlot =
@@ -82,7 +96,7 @@ export function DescendantPropertyEditor({
     ? sourceNode
     : ({ ...originalNode, ...updateProps } as SceneNode);
   const colorVariables = variables.filter((v) => v.type === "color");
-  const parentContext = getParentContextForDescendant(component, instanceContext.descendantPath);
+  const parentContext = getParentContextForDescendant(component, instanceContext.descendantPath, scState.nodesById, scState.childrenById);
 
   const handleUpdate = (updates: Partial<SceneNode>) => {
     if (isReplaced) {

@@ -3,6 +3,7 @@ import type {
   FlatSceneNode,
   FlatFrameNode,
   FlatGroupNode,
+  SceneNode,
   TextNode,
   RectNode,
   EllipseNode,
@@ -13,7 +14,7 @@ import type {
   RefNode,
   PerCornerRadius,
 } from "@/types/scene";
-import { flattenTree } from "@/types/scene";
+import { toFlatNode } from "@/types/scene";
 import { applyShadow } from "./shadowHelpers";
 import { createRectContainer, updateRectContainer, drawRect } from "./rectRenderer";
 import { createEllipseContainer, updateEllipseContainer, drawEllipse } from "./ellipseRenderer";
@@ -26,9 +27,14 @@ import { drawRoundedShape } from "./fillStrokeHelpers";
 import { createGroupContainer } from "./groupRenderer";
 import { createEmbedContainer, updateEmbedContainer } from "./embedRenderer";
 import type { ShadowShape } from "./shadowHelpers";
-import { resolveRefToTree } from "@/utils/instanceRuntime";
-import { useLayoutStore } from "@/store/layoutStore";
-import { applyAutoLayoutRecursively } from "@/utils/autoLayoutUtils";
+import { getResolvedSnapshotForRef } from "@/utils/instanceRuntime";
+import type { ResolvedInstanceSnapshot } from "@/utils/instanceSnapshotCache";
+import { pushRenderTheme, popRenderTheme } from "./colorHelpers";
+
+type InstanceRenderContainer = Container & {
+  _instancePath?: string;
+  _instanceSnapshot?: ResolvedInstanceSnapshot;
+};
 
 function getNodeCornerRadius(node: FlatSceneNode): number | undefined {
   if (node.type === "frame" || node.type === "rect") {
@@ -66,24 +72,222 @@ function getSnappedNodePosition(node: FlatSceneNode): { x: number; y: number } {
   return { x: Math.round(node.x), y: Math.round(node.y) };
 }
 
+function getChildrenHost(container: Container): Container | null {
+  return (
+    (container.getChildByLabel("frame-children") as Container | null) ??
+    (container.getChildByLabel("group-children") as Container | null)
+  );
+}
+
+function deriveParentById(
+  nodesById: Record<string, FlatSceneNode>,
+  childrenById: Record<string, string[]>,
+): Record<string, string | null> {
+  const parentById: Record<string, string | null> = {};
+  for (const id of Object.keys(nodesById)) {
+    parentById[id] = null;
+  }
+  for (const [parentId, childIds] of Object.entries(childrenById)) {
+    for (const childId of childIds) {
+      parentById[childId] = parentId;
+    }
+  }
+  return parentById;
+}
+
+function withSnapshotAncestorThemes(
+  snapshot: ResolvedInstanceSnapshot,
+  path: string,
+  fn: () => void,
+): void {
+  const themes: Array<"light" | "dark"> = [];
+  const pushTheme = (node: SceneNode | undefined): void => {
+    if (node?.type === "frame" && node.themeOverride) {
+      themes.push(node.themeOverride);
+      pushRenderTheme(node.themeOverride);
+    }
+  };
+
+  const segments = path.split("/").filter(Boolean);
+  pushTheme(snapshot.tree);
+  if (segments.length === 0) {
+    try {
+      fn();
+    } finally {
+      while (themes.length > 0) {
+        themes.pop();
+        popRenderTheme();
+      }
+    }
+    return;
+  }
+
+  let currentPath = "";
+  for (let i = 0; i < segments.length - 1; i++) {
+    currentPath = currentPath ? `${currentPath}/${segments[i]}` : segments[i];
+    pushTheme(snapshot.nodesByPath[currentPath]);
+  }
+
+  try {
+    fn();
+  } finally {
+    while (themes.length > 0) {
+      themes.pop();
+      popRenderTheme();
+    }
+  }
+}
+
+function annotateSnapshotPaths(
+  container: Container,
+  snapshot: ResolvedInstanceSnapshot,
+  path = "",
+): void {
+  const instanceContainer = container as InstanceRenderContainer;
+  instanceContainer._instancePath = path;
+  if (path === "") {
+    instanceContainer._instanceSnapshot = snapshot;
+  }
+
+  const host = getChildrenHost(container);
+  if (!host) return;
+  const childPaths = snapshot.childrenByPath[path] ?? [];
+  for (let i = 0; i < childPaths.length; i++) {
+    const childContainer = host.children[i] as Container | undefined;
+    if (!childContainer) continue;
+    annotateSnapshotPaths(childContainer, snapshot, childPaths[i]);
+  }
+}
+
+function createSnapshotSubtreeContainer(
+  snapshot: ResolvedInstanceSnapshot,
+  path: string,
+): Container {
+  const node = path === "" ? snapshot.tree : snapshot.nodesByPath[path];
+  if (!node) return new Container();
+
+  let container: Container | null = null;
+  const create = (): void => {
+    container = createNodeContainer(
+      toFlatNode(node),
+      snapshot.flatNodesById,
+      snapshot.flatChildrenById,
+    );
+  };
+
+  if (path === "") {
+    create();
+  } else {
+    withSnapshotAncestorThemes(snapshot, path, create);
+  }
+
+  annotateSnapshotPaths(container!, snapshot, path);
+  return container!;
+}
+
+function copyRootContainerMetadata(target: Container, source: Container): void {
+  (target as unknown as { _effectiveWidth?: number })._effectiveWidth =
+    (source as unknown as { _effectiveWidth?: number })._effectiveWidth;
+  (target as unknown as { _effectiveHeight?: number })._effectiveHeight =
+    (source as unknown as { _effectiveHeight?: number })._effectiveHeight;
+}
+
+function replaceRefContainerContents(
+  container: Container,
+  snapshot: ResolvedInstanceSnapshot,
+): void {
+  container.removeChildren().forEach((child) => child.destroy());
+  const next = createSnapshotSubtreeContainer(snapshot, "");
+  while (next.children.length > 0) {
+    container.addChild(next.children[0]);
+  }
+  copyRootContainerMetadata(container, next);
+  (container as InstanceRenderContainer)._instanceSnapshot = snapshot;
+  (container as InstanceRenderContainer)._instancePath = "";
+  next.destroy();
+}
+
+function reconcileSnapshotChildren(
+  parentContainer: Container,
+  parentPath: string,
+  prevSnapshot: ResolvedInstanceSnapshot,
+  nextSnapshot: ResolvedInstanceSnapshot,
+): void {
+  const host = getChildrenHost(parentContainer);
+  if (!host) return;
+
+  const expectedPaths = nextSnapshot.childrenByPath[parentPath] ?? [];
+  const expectedSet = new Set(expectedPaths);
+  const currentChildren = new Map<string, Container>();
+  for (const child of host.children) {
+    const instanceChild = child as InstanceRenderContainer;
+    if (instanceChild._instancePath) {
+      currentChildren.set(instanceChild._instancePath, child as Container);
+    }
+  }
+
+  for (let index = 0; index < expectedPaths.length; index++) {
+    const path = expectedPaths[index];
+    const nextNode = nextSnapshot.nodesByPath[path];
+    if (!nextNode) continue;
+    const prevNode = prevSnapshot.nodesByPath[path];
+    let childContainer = currentChildren.get(path);
+
+    if (!childContainer || !prevNode || prevNode.type !== nextNode.type) {
+      if (childContainer) {
+        host.removeChild(childContainer);
+        childContainer.destroy({ children: true });
+      }
+      childContainer = createSnapshotSubtreeContainer(nextSnapshot, path);
+      host.addChildAt(childContainer, Math.min(index, host.children.length));
+    } else {
+      const applyUpdate = (): void => {
+        updateNodeContainer(
+          childContainer!,
+          toFlatNode(nextNode),
+          toFlatNode(prevNode),
+          nextSnapshot.flatNodesById,
+          nextSnapshot.flatChildrenById,
+          false,
+          false,
+        );
+      };
+
+      withSnapshotAncestorThemes(nextSnapshot, path, applyUpdate);
+
+      if (nextNode.type === "frame" || nextNode.type === "group") {
+        reconcileSnapshotChildren(childContainer, path, prevSnapshot, nextSnapshot);
+      }
+    }
+
+    if (host.getChildIndex(childContainer) !== index) {
+      host.setChildIndex(childContainer, index);
+    }
+    annotateSnapshotPaths(childContainer, nextSnapshot, path);
+  }
+
+  for (let i = host.children.length - 1; i >= 0; i--) {
+    const child = host.children[i] as InstanceRenderContainer;
+    if (!child._instancePath || expectedSet.has(child._instancePath)) continue;
+    host.removeChild(child as Container);
+    (child as Container).destroy({ children: true });
+  }
+}
+
 function createRefContainer(
   node: RefNode,
   nodesById: Record<string, FlatSceneNode>,
   childrenById: Record<string, string[]>,
 ): Container {
-  const resolved = resolveRefToTree(node, nodesById, childrenById);
-  if (!resolved) return new Container();
-  const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-  const laidOutResolved = applyAutoLayoutRecursively(
-    resolved,
-    calculateLayoutForFrame,
+  const parentById = deriveParentById(nodesById, childrenById);
+  const snapshot = getResolvedSnapshotForRef(
+    node,
+    nodesById,
+    childrenById,
+    parentById,
   );
-
-  const flat = flattenTree([laidOutResolved]);
-  const root = flat.nodesById[laidOutResolved.id] as FlatFrameNode | undefined;
-  if (!root) return new Container();
-
-  return createFrameContainer(root, flat.nodesById, flat.childrenById);
+  if (!snapshot) return new Container();
+  return createSnapshotSubtreeContainer(snapshot, "");
 }
 
 function updateRefContainer(
@@ -94,25 +298,35 @@ function updateRefContainer(
   childrenById: Record<string, string[]>,
   forceRebuild = false,
 ): void {
-  if (
-    forceRebuild ||
-    node.componentId !== prev.componentId ||
-    node.overrides !== prev.overrides ||
-    node.width !== prev.width ||
-    node.height !== prev.height ||
-    node.fill !== prev.fill ||
-    node.fillBinding !== prev.fillBinding ||
-    node.stroke !== prev.stroke ||
-    node.strokeBinding !== prev.strokeBinding ||
-    node.strokeWidth !== prev.strokeWidth
-  ) {
+  const resolvedParentById = deriveParentById(nodesById, childrenById);
+  const nextSnapshot = getResolvedSnapshotForRef(
+    node,
+    nodesById,
+    childrenById,
+    resolvedParentById,
+  );
+  if (!nextSnapshot) {
     container.removeChildren().forEach((child) => child.destroy());
-    const next = createRefContainer(node, nodesById, childrenById);
-    while (next.children.length > 0) {
-      container.addChild(next.children[0]);
-    }
-    next.destroy();
+    (container as InstanceRenderContainer)._instanceSnapshot = undefined;
+    return;
   }
+
+  const prevSnapshot = (container as InstanceRenderContainer)._instanceSnapshot;
+  if (!prevSnapshot || forceRebuild || node.componentId !== prev.componentId) {
+    replaceRefContainerContents(container, nextSnapshot);
+    return;
+  }
+
+  updateFrameContainer(
+    container,
+    toFlatNode(nextSnapshot.tree) as FlatFrameNode,
+    toFlatNode(prevSnapshot.tree) as FlatFrameNode,
+    nextSnapshot.flatNodesById,
+    nextSnapshot.flatChildrenById,
+  );
+  reconcileSnapshotChildren(container, "", prevSnapshot, nextSnapshot);
+  annotateSnapshotPaths(container, nextSnapshot, "");
+  (container as InstanceRenderContainer)._instanceSnapshot = nextSnapshot;
 }
 
 /**

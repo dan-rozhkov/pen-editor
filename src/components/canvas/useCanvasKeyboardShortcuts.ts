@@ -171,7 +171,7 @@ export function useCanvasKeyboardShortcuts({
             if (refNode?.type === "ref") {
               const resolved = resolveRefToTree(refNode as RefNode, scState.nodesById, scState.childrenById);
               if (resolved) {
-                const descNode = findNodeByPath(resolved.children, instanceContext.descendantPath);
+                const descNode = findNodeByPath(resolved.children, instanceContext.descendantPath, scState.nodesById, scState.childrenById);
                 if (descNode?.type === "text") {
                   e.preventDefault();
                   useSelectionStore.getState().startEditing(instanceContext.descendantPath);

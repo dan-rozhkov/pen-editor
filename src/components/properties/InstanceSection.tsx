@@ -1,3 +1,4 @@
+import { DiamondIcon, MinusIcon } from "@phosphor-icons/react";
 import type { RefNode, SceneNode } from "@/types/scene";
 import { findComponentById } from "@/utils/nodeUtils";
 import { PropertySection } from "@/components/ui/PropertyInputs";
@@ -31,21 +32,27 @@ export function InstanceSection({
 
   return (
     <PropertySection title="Instance">
-      <div className="flex items-center gap-2 text-xs text-purple-400">
-        <span>Instance of: {component?.name || "Component"}</span>
-      </div>
-      <div className="mt-2 flex flex-col gap-2">
-        <button
-          onClick={() => {
-            const detachedId = detachInstance(node.id);
-            if (detachedId) {
-              setSelectedIds([detachedId]);
-            }
-          }}
-          className="px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
-        >
-          Detach Instance
-        </button>
+      <div className="flex items-center justify-between gap-2 text-xs">
+        <span className="text-text-secondary">{component?.name || "Component"}</span>
+        <div className="flex justify-end">
+          <button
+            onClick={() => {
+              const detachedId = detachInstance(node.id);
+              if (detachedId) {
+                setSelectedIds([detachedId]);
+              }
+            }}
+            className="relative rounded p-1 text-text-muted transition-colors hover:bg-surface-elevated hover:text-text-primary"
+            title="Detach Instance"
+          >
+            <DiamondIcon size={16} weight="regular" />
+            <MinusIcon
+              size={8}
+              weight="bold"
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+            />
+          </button>
+        </div>
       </div>
       {slotIds.length > 0 && (
         <div className="mt-2 text-xs text-text-secondary">
