@@ -9,7 +9,7 @@ import type {
 import { buildTree, generateId, isContainerNode } from "@/types/scene";
 import { deepCloneNode } from "@/utils/cloneNode";
 import { getPreparedNodeEffectiveSize, prepareFrameNode } from "@/utils/instanceUtils";
-import { getAbsolutePositionFlat } from "@/utils/nodeUtils";
+import { getAbsolutePositionFlat, getNodeAbsolutePositionWithLayout } from "@/utils/nodeUtils";
 import { syncTextDimensions, hasTextMeasureProps } from "@/store/sceneStore/helpers/textSync";
 
 export interface ResolvedDescendant {
@@ -37,6 +37,9 @@ function resolveNodeAtPath(
   node: SceneNode,
   path: string,
   overrides: RefNode["overrides"],
+  nodesById?: Record<string, FlatSceneNode>,
+  childrenById?: Record<string, string[]>,
+  visitedComponentIds?: Set<string>,
 ): SceneNode | null {
   const override = getOverrideForPath(overrides, path);
   if (override?.kind === "replace") {
@@ -52,9 +55,46 @@ function resolveNodeAtPath(
     updated = syncTextDimensions(updated);
   }
 
+  // Resolve nested RefNode — expand it into its tree form with sub-overrides
+  if (updated.type === "ref" && nodesById && childrenById) {
+    const refNode = updated as RefNode;
+    const visited = visitedComponentIds ? new Set(visitedComponentIds) : new Set<string>();
+    if (visited.has(refNode.componentId)) return updated; // circular ref guard
+    visited.add(refNode.componentId);
+
+    const resolved = resolveRefToTree(refNode, nodesById, childrenById, visited);
+    if (!resolved) return updated;
+
+    // Extract sub-overrides: outer overrides with paths starting with "{path}/"
+    const subOverrides: Record<string, InstanceOverride> = {};
+    if (overrides) {
+      const prefix = path + "/";
+      for (const [key, value] of Object.entries(overrides)) {
+        if (key.startsWith(prefix)) {
+          subOverrides[key.slice(prefix.length)] = value;
+        }
+      }
+    }
+
+    // Preserve the ref's ID so path-based lookups work consistently
+    const resolvedWithRefId = { ...resolved, id: refNode.id } as FrameNode;
+
+    // Apply sub-overrides to resolved children
+    if (Object.keys(subOverrides).length > 0) {
+      const resolvedChildren = resolvedWithRefId.children
+        .map((child) =>
+          resolveNodeAtPath(child, child.id, subOverrides, nodesById, childrenById, new Set(visited)),
+        )
+        .filter(Boolean) as SceneNode[];
+      return { ...resolvedWithRefId, children: resolvedChildren };
+    }
+
+    return resolvedWithRefId;
+  }
+
   if (isContainerNode(updated)) {
     const nextChildren = updated.children
-      .map((child) => resolveNodeAtPath(child, path ? `${path}/${child.id}` : child.id, overrides))
+      .map((child) => resolveNodeAtPath(child, path ? `${path}/${child.id}` : child.id, overrides, nodesById, childrenById, visitedComponentIds))
       .filter(Boolean) as SceneNode[];
     return { ...updated, children: nextChildren };
   }
@@ -81,7 +121,12 @@ function assignFreshIds(node: SceneNode): SceneNode {
   return { ...node, id };
 }
 
-export function findNodeByPath(children: SceneNode[], path: string): SceneNode | null {
+export function findNodeByPath(
+  children: SceneNode[],
+  path: string,
+  nodesById?: Record<string, FlatSceneNode>,
+  childrenById?: Record<string, string[]>,
+): SceneNode | null {
   const segments = path.split("/").filter(Boolean);
   if (segments.length === 0) return null;
 
@@ -90,8 +135,19 @@ export function findNodeByPath(children: SceneNode[], path: string): SceneNode |
   for (const segment of segments) {
     current = currentChildren.find((child) => child.id === segment) ?? null;
     if (!current) return null;
-    currentChildren =
-      current.type === "frame" || current.type === "group" ? current.children : [];
+
+    if (current.type === "ref" && nodesById && childrenById) {
+      // Resolve nested ref and continue into its children
+      const resolved = resolveRefToTree(current as RefNode, nodesById, childrenById);
+      if (resolved) {
+        currentChildren = resolved.children;
+      } else {
+        currentChildren = [];
+      }
+    } else {
+      currentChildren =
+        current.type === "frame" || current.type === "group" ? current.children : [];
+    }
   }
   return current;
 }
@@ -117,6 +173,7 @@ export function resolveRefToTree(
   refNode: RefNode,
   nodesById: Record<string, FlatSceneNode>,
   childrenById: Record<string, string[]>,
+  visitedComponentIds?: Set<string>,
 ): FrameNode | null {
   const component = nodesById[refNode.componentId];
   if (!component || component.type !== "frame" || !(component as FlatFrameNode).reusable) {
@@ -127,7 +184,7 @@ export function resolveRefToTree(
   if (!tree || tree.type !== "frame") return null;
 
   const resolvedChildren = tree.children
-    .map((child) => resolveNodeAtPath(child, child.id, refNode.overrides))
+    .map((child) => resolveNodeAtPath(child, child.id, refNode.overrides, nodesById, childrenById, visitedComponentIds))
     .filter(Boolean) as SceneNode[];
 
   return {
@@ -141,6 +198,7 @@ export function resolveRefToTree(
     strokeWidth: refNode.strokeWidth ?? tree.strokeWidth,
     fillBinding: refNode.fillBinding ?? tree.fillBinding,
     strokeBinding: refNode.strokeBinding ?? tree.strokeBinding,
+    sizing: refNode.sizing ?? tree.sizing,
     visible: refNode.visible,
     enabled: refNode.enabled,
     children: resolvedChildren,
@@ -162,9 +220,22 @@ export function resolveRefToFrame(
 function getResolvedChildNodes(
   node: SceneNode,
   calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
+  nodesById?: Record<string, FlatSceneNode>,
+  childrenById?: Record<string, string[]>,
 ): SceneNode[] {
   if (node.type === "frame" && node.layout?.autoLayout) {
     return prepareFrameNode(node, calculateLayoutForFrame).layoutChildren;
+  }
+  // Resolve nested ref as safety net
+  if (node.type === "ref" && nodesById && childrenById) {
+    const resolved = resolveRefToTree(node as RefNode, nodesById, childrenById);
+    if (resolved) {
+      if (resolved.layout?.autoLayout) {
+        return prepareFrameNode(resolved, calculateLayoutForFrame).layoutChildren;
+      }
+      return resolved.children;
+    }
+    return [];
   }
   return isContainerNode(node) ? node.children : [];
 }
@@ -179,7 +250,16 @@ export function findResolvedDescendantByPath(
 ): ResolvedInstanceDescendant | null {
   const resolved = resolveRefToTree(refNode, nodesById, childrenById);
   if (!resolved) return null;
-  const instanceAbsPos = getAbsolutePositionFlat(refNode.id, nodesById, parentById);
+  const rootIds = Object.entries(parentById)
+    .filter(([, parentId]) => parentId == null)
+    .map(([id]) => id);
+  const sceneTree = buildTree(rootIds, nodesById, childrenById);
+  const instanceAbsPos =
+    getNodeAbsolutePositionWithLayout(
+      sceneTree,
+      refNode.id,
+      calculateLayoutForFrame,
+    ) ?? getAbsolutePositionFlat(refNode.id, nodesById, parentById);
 
   const visit = (
     nodes: SceneNode[],
@@ -198,7 +278,7 @@ export function findResolvedDescendantByPath(
       }
 
       const childResult = visit(
-        getResolvedChildNodes(node, calculateLayoutForFrame),
+        getResolvedChildNodes(node, calculateLayoutForFrame, nodesById, childrenById),
         absX,
         absY,
         path,
@@ -208,5 +288,7 @@ export function findResolvedDescendantByPath(
     return null;
   };
 
-  return visit(resolved.children, instanceAbsPos.x, instanceAbsPos.y);
+  // Use layout-computed children for the root resolved frame (auto-layout)
+  const rootChildren = getResolvedChildNodes(resolved, calculateLayoutForFrame, nodesById, childrenById);
+  return visit(rootChildren, instanceAbsPos.x, instanceAbsPos.y);
 }

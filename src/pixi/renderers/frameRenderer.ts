@@ -5,6 +5,7 @@ import type {
   FrameNode,
   SceneNode,
 } from "@/types/scene";
+import { materializeLayoutRefs } from "@/utils/layoutRefUtils";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 import { applyFill, applyStroke, hasVisualPropsChanged, drawRoundedShape } from "./fillStrokeHelpers";
 import { applyImageFill } from "./imageFillHelpers";
@@ -52,7 +53,8 @@ export function getFrameEffectiveSize(
   }
 
   const treeFrame = flatToTreeFrame(node, nodesById, childrenById);
-  const intrinsicSize = calculateFrameIntrinsicSize(treeFrame, { fitWidth, fitHeight });
+  const layoutFrame = materializeLayoutRefs(treeFrame, nodesById, childrenById);
+  const intrinsicSize = calculateFrameIntrinsicSize(layoutFrame, { fitWidth, fitHeight });
 
   return {
     width: fitWidth ? intrinsicSize.width : node.width,

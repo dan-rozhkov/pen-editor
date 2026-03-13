@@ -11,9 +11,11 @@ import type {
   SceneNode,
   SizingMode,
 } from "@/types/scene";
+import { flattenTree } from "@/types/scene";
 import type { ParentContext } from "@/utils/nodeUtils";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useSceneStore } from "@/store/sceneStore";
+import { materializeLayoutRefs } from "@/utils/layoutRefUtils";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 import { getPreparedNodeEffectiveSize } from "@/utils/instanceUtils";
 import { saveHistory } from "@/store/sceneStore/helpers/history";
@@ -42,8 +44,15 @@ function computeFrameFitToContentSize(
   allNodes: SceneNode[],
   calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
 ): { width: number; height: number } {
+  const flat = flattenTree(allNodes);
+  const layoutFrame = materializeLayoutRefs(
+    frame,
+    flat.nodesById,
+    flat.childrenById,
+  );
+
   if (frame.layout?.autoLayout) {
-    const intrinsic = calculateFrameIntrinsicSize(frame, {
+    const intrinsic = calculateFrameIntrinsicSize(layoutFrame, {
       fitWidth: true,
       fitHeight: true,
     });
@@ -55,7 +64,7 @@ function computeFrameFitToContentSize(
 
   let maxX = 0;
   let maxY = 0;
-  for (const child of frame.children) {
+  for (const child of layoutFrame.children) {
     if (child.visible === false || child.enabled === false) continue;
     const { width: preparedWidth, height: preparedHeight } =
       getPreparedNodeEffectiveSize(child, allNodes, calculateLayoutForFrame);
@@ -159,6 +168,7 @@ function computeSizeForMode(
   mode: SizingMode,
   dimension: "width" | "height",
   calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
+  allNodes: SceneNode[],
 ): number | undefined {
   if (mode === "fixed") return undefined;
 
@@ -167,7 +177,13 @@ function computeSizeForMode(
       return undefined;
     }
     const frame = node as FrameNode;
-    const intrinsic = calculateFrameIntrinsicSize(frame, {
+    const flat = flattenTree(allNodes);
+    const layoutFrame = materializeLayoutRefs(
+      frame,
+      flat.nodesById,
+      flat.childrenById,
+    );
+    const intrinsic = calculateFrameIntrinsicSize(layoutFrame, {
       fitWidth: dimension === "width",
       fitHeight: dimension === "height",
     });
@@ -293,7 +309,13 @@ export function SizeSection({
       const fitWidth = frame.sizing?.widthMode === "fit_content";
       const fitHeight = frame.sizing?.heightMode === "fit_content";
       if (fitWidth || fitHeight) {
-        const intrinsicSize = calculateFrameIntrinsicSize(frame, {
+        const flat = flattenTree(allNodes);
+        const layoutFrame = materializeLayoutRefs(
+          frame,
+          flat.nodesById,
+          flat.childrenById,
+        );
+        const intrinsicSize = calculateFrameIntrinsicSize(layoutFrame, {
           fitWidth,
           fitHeight,
         });
@@ -321,7 +343,7 @@ export function SizeSection({
     }
 
     return { effectiveWidth: ew, effectiveHeight: eh };
-  }, [node, parentContext, calculateLayoutForFrame]);
+  }, [node, parentContext, calculateLayoutForFrame, allNodes]);
 
   const canFitToContent = !isMultiSelect && (node.type === "frame" || node.type === "embed")
     ? true
@@ -362,6 +384,7 @@ export function SizeSection({
                       newMode,
                       "width",
                       calculateLayoutForFrame,
+                      allNodes,
                     );
                     onUpdate({
                       sizing: {
@@ -407,6 +430,7 @@ export function SizeSection({
                       newMode,
                       "height",
                       calculateLayoutForFrame,
+                      allNodes,
                     );
                     onUpdate({
                       sizing: {

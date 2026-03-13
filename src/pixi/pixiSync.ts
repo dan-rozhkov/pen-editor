@@ -6,6 +6,7 @@ import { useVariableStore } from "@/store/variableStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import type { FlatSceneNode, FlatFrameNode, FrameNode, SceneNode } from "@/types/scene";
+import { materializeLayoutRefs } from "@/utils/layoutRefUtils";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 import { getViewportBounds } from "@/utils/viewportUtils";
 import type { EmbedNode } from "@/types/scene";
@@ -289,6 +290,11 @@ export function createPixiSync(sceneRoot: Container): () => void {
         );
 
         if (treeFrame) {
+          const layoutFrame = materializeLayoutRefs(
+            treeFrame,
+            state.nodesById,
+            state.childrenById,
+          );
           // Keep frame background/mask in sync for fit_content frames even when
           // only descendants changed (e.g. text metrics after font load).
           const fitWidth = frameNode.sizing?.widthMode === "fit_content";
@@ -299,7 +305,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
           let frameHeight = frameOverride?.height ?? frameNode.height;
 
           if (fitWidth || fitHeight) {
-            const intrinsicSize = calculateFrameIntrinsicSize(treeFrame as FrameNode, {
+            const intrinsicSize = calculateFrameIntrinsicSize(layoutFrame, {
               fitWidth,
               fitHeight,
             });
@@ -327,7 +333,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
           }
 
           // Calculate layout
-          const layoutChildren = calculateLayoutForFrame(treeFrame);
+          const layoutChildren = calculateLayoutForFrame(layoutFrame);
 
           // Apply positions/sizes to child containers and cache overrides for nested frames.
           for (const layoutChild of layoutChildren) {

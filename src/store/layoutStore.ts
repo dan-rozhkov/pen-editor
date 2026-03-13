@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { useSceneStore } from "@/store/sceneStore";
+import { materializeLayoutRefs } from "@/utils/layoutRefUtils";
 import {
   calculateFrameLayout,
   applyLayoutToChildren,
@@ -23,7 +25,9 @@ export const useLayoutStore = create<LayoutState>(() => ({
       return frame.children;
     }
 
-    const layoutResults = calculateFrameLayout(frame);
+    const { nodesById, childrenById } = useSceneStore.getState();
+    const layoutFrame = materializeLayoutRefs(frame, nodesById, childrenById);
+    const layoutResults = calculateFrameLayout(layoutFrame);
 
     if (layoutResults.length === 0) {
       return frame.children;
