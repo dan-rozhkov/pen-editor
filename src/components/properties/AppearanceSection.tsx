@@ -14,6 +14,7 @@ interface AppearanceSectionProps {
   onUpdate: (updates: Partial<SceneNode>) => void;
   mixedKeys?: Set<string>;
   allTypesSupport?: { cornerRadius: boolean };
+  hideOpacity?: boolean;
 }
 
 type CornerRadiusMode = "unified" | "per-corner";
@@ -22,7 +23,13 @@ function getCornerRadiusMode(node: SceneNode): CornerRadiusMode {
   return hasPerCornerRadius((node as FrameNode).cornerRadiusPerCorner) ? "per-corner" : "unified";
 }
 
-export function AppearanceSection({ node, onUpdate, mixedKeys, allTypesSupport }: AppearanceSectionProps) {
+export function AppearanceSection({
+  node,
+  onUpdate,
+  mixedKeys,
+  allTypesSupport,
+  hideOpacity = false,
+}: AppearanceSectionProps) {
   const showCornerRadius = allTypesSupport
     ? allTypesSupport.cornerRadius
     : (node.type === "frame" || node.type === "rect");
@@ -69,18 +76,20 @@ export function AppearanceSection({ node, onUpdate, mixedKeys, allTypesSupport }
   return (
     <PropertySection title="Appearance">
       <PropertyRow>
-        <NumberInput
-          label="Opacity %"
-          value={Math.round((node.opacity ?? 1) * 100)}
-          onChange={(v) =>
-            onUpdate({ opacity: Math.max(0, Math.min(100, v)) / 100 })
-          }
-          min={0}
-          max={100}
-          step={1}
-          labelOutside={true}
-          isMixed={mixedKeys?.has("opacity")}
-        />
+        {!hideOpacity && (
+          <NumberInput
+            label="Opacity %"
+            value={Math.round((node.opacity ?? 1) * 100)}
+            onChange={(v) =>
+              onUpdate({ opacity: Math.max(0, Math.min(100, v)) / 100 })
+            }
+            min={0}
+            max={100}
+            step={1}
+            labelOutside={true}
+            isMixed={mixedKeys?.has("opacity")}
+          />
+        )}
         {showCornerRadius && cornerMode === "unified" && (
           <NumberInput
             label="Radius"

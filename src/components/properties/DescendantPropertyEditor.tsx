@@ -1,16 +1,64 @@
 import { useSceneStore } from "@/store/sceneStore";
-import { useSelectionStore, type InstanceContext } from "@/store/selectionStore";
+import { type InstanceContext } from "@/store/selectionStore";
 import type { InstanceOverrideUpdateProps, RefNode, SceneNode } from "@/types/scene";
+import { isContainerNode, type FrameNode, type GroupNode, type TextNode } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
 import { findComponentById, findNodeById } from "@/utils/nodeUtils";
 import { findNodeByPath } from "@/utils/instanceRuntime";
 import {
-  CheckboxInput,
-  ColorInput,
   NumberInput,
   PropertySection,
 } from "@/components/ui/PropertyInputs";
-import { OverrideIndicator } from "@/components/properties/OverrideIndicator";
+import { TypeSection } from "@/components/properties/TypeSection";
+import { PositionSection } from "@/components/properties/PositionSection";
+import { SizeSection } from "@/components/properties/SizeSection";
+import { AutoLayoutSection } from "@/components/properties/AutoLayoutSection";
+import { AppearanceSection } from "@/components/properties/AppearanceSection";
+import { FillSection } from "@/components/properties/FillSection";
+import { StrokeSection } from "@/components/properties/StrokeSection";
+import { EffectsSection } from "@/components/properties/EffectsSection";
+import { ThemeSection } from "@/components/properties/ThemeSection";
+import { TypographySection } from "@/components/properties/TypographySection";
+import { Button } from "@/components/ui/button";
+import { Eye, EyeSlash } from "@phosphor-icons/react";
+
+function getParentContextForDescendant(
+  component: FrameNode,
+  descendantPath: string,
+): { parent: FrameNode | GroupNode | null; isInsideAutoLayout: boolean } {
+  const segments = descendantPath.split("/");
+  let siblings: SceneNode[] = component.children;
+  let parent: FrameNode | GroupNode | null = component;
+
+  for (const segment of segments) {
+    const node = siblings.find((child) => child.id === segment);
+    if (!node) {
+      return {
+        parent,
+        isInsideAutoLayout: parent?.type === "frame" && !!parent.layout?.autoLayout,
+      };
+    }
+
+    if (segment === segments[segments.length - 1]) {
+      return {
+        parent,
+        isInsideAutoLayout: parent?.type === "frame" && !!parent.layout?.autoLayout,
+      };
+    }
+
+    if (!isContainerNode(node)) {
+      break;
+    }
+
+    parent = node;
+    siblings = node.children;
+  }
+
+  return {
+    parent,
+    isInsideAutoLayout: parent?.type === "frame" && !!parent.layout?.autoLayout,
+  };
+}
 
 interface DescendantPropertyEditorProps {
   instanceContext: InstanceContext;
@@ -28,7 +76,6 @@ export function DescendantPropertyEditor({
   const updateInstanceOverride = useSceneStore((s) => s.updateInstanceOverride);
   const replaceInstanceNode = useSceneStore((s) => s.replaceInstanceNode);
   const resetInstanceOverride = useSceneStore((s) => s.resetInstanceOverride);
-  const exitInstanceEditMode = useSelectionStore((s) => s.exitInstanceEditMode);
 
   const instance = findNodeById(allNodes, instanceContext.instanceId) as RefNode | null;
   if (!instance || instance.type !== "ref") return null;
@@ -51,9 +98,7 @@ export function DescendantPropertyEditor({
     ? sourceNode
     : ({ ...originalNode, ...updateProps } as SceneNode);
   const colorVariables = variables.filter((v) => v.type === "color");
-
-  const isPropertyOverridden = (property: keyof InstanceOverrideUpdateProps): boolean =>
-    currentOverride?.kind === "update" && currentOverride.props[property] !== undefined;
+  const parentContext = getParentContextForDescendant(component, instanceContext.descendantPath);
 
   const handleUpdate = (updates: Partial<SceneNode>) => {
     if (isReplaced) {
@@ -79,94 +124,94 @@ export function DescendantPropertyEditor({
     resetInstanceOverride(instanceContext.instanceId, instanceContext.descendantPath);
   };
 
+  const isOverridden = <T,>(instanceVal: T | undefined, componentVal: T | undefined): boolean =>
+    instanceVal !== undefined && instanceVal !== componentVal;
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col">
       <PropertySection title="Selected Instance Element">
         <div className="text-xs text-purple-400">{originalNode.name || originalNode.type}</div>
         {isRootSlot && !isReplaced && (
-          <button
+          <Button
             onClick={() => replaceInstanceNode(instanceContext.instanceId, instanceContext.descendantPath, originalNode)}
-            className="mt-2 px-3 py-1.5 bg-purple-500/20 border border-purple-500/30 rounded text-purple-400 text-xs cursor-pointer transition-colors hover:bg-purple-500/30"
+            variant="secondary"
+            className="mt-2 w-full"
           >
             Replace Slot
-          </button>
+          </Button>
         )}
-        <button
-          onClick={exitInstanceEditMode}
-          className="mt-2 px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
-        >
-          Exit Edit Mode
-        </button>
       </PropertySection>
 
       <PropertySection title="Visibility">
-        <div className="flex items-center gap-1">
-          <div className="flex-1">
-            <CheckboxInput
-              label="Enabled"
-              checked={displayNode.enabled !== false}
-              onChange={(v) => handleUpdate({ enabled: v ? undefined : false })}
-            />
-          </div>
-          <OverrideIndicator isOverridden={isPropertyOverridden("enabled")} onReset={() => handleResetProperty("enabled")} />
-        </div>
-      </PropertySection>
-
-      <PropertySection title="Fill">
-        <div className="flex items-center gap-1">
-          <div className="flex-1">
-            <ColorInput
-              value={displayNode.fill ?? originalNode.fill ?? "#000000"}
-              onChange={(v) => handleUpdate({ fill: v })}
-              variableId={displayNode.fillBinding?.variableId}
-              onVariableChange={(variableId) => handleUpdate({ fillBinding: variableId ? { variableId } : undefined })}
-              availableVariables={colorVariables}
-              activeTheme={activeTheme}
-            />
-          </div>
-          <OverrideIndicator isOverridden={isPropertyOverridden("fill")} onReset={() => handleResetProperty("fill")} />
-        </div>
-      </PropertySection>
-
-      <PropertySection title="Stroke">
-        <div className="flex items-center gap-1">
-          <div className="flex-1">
-            <ColorInput
-              value={displayNode.stroke ?? originalNode.stroke ?? ""}
-              onChange={(v) => handleUpdate({ stroke: v || undefined })}
-              variableId={displayNode.strokeBinding?.variableId}
-              onVariableChange={(variableId) => handleUpdate({ strokeBinding: variableId ? { variableId } : undefined })}
-              availableVariables={colorVariables}
-              activeTheme={activeTheme}
-            />
-          </div>
-          <OverrideIndicator isOverridden={isPropertyOverridden("stroke")} onReset={() => handleResetProperty("stroke")} />
-        </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-end gap-2">
           <div className="flex-1">
             <NumberInput
-              label="Weight"
+              label="Opacity %"
               labelOutside
-              value={displayNode.strokeWidth ?? originalNode.strokeWidth ?? 0}
-              onChange={(v) => handleUpdate({ strokeWidth: v })}
+              value={Math.round((displayNode.opacity ?? 1) * 100)}
+              onChange={(value) => {
+                handleUpdate({ opacity: Math.max(0, Math.min(100, value)) / 100 });
+              }}
               min={0}
-              step={0.5}
+              max={100}
+              step={1}
             />
           </div>
-          <OverrideIndicator
-            isOverridden={isPropertyOverridden("strokeWidth")}
-            onReset={() => handleResetProperty("strokeWidth")}
-          />
+          <Button
+            type="button"
+            variant="secondary"
+            size="icon-sm"
+            onClick={() => handleUpdate({ enabled: displayNode.enabled === false ? undefined : false })}
+            title={displayNode.enabled === false ? "Show element" : "Hide element"}
+            aria-label={displayNode.enabled === false ? "Show element" : "Hide element"}
+          >
+            {displayNode.enabled === false ? <EyeSlash size={14} /> : <Eye size={14} />}
+          </Button>
         </div>
       </PropertySection>
 
+      <TypeSection node={displayNode} onUpdate={handleUpdate} />
+      <PositionSection node={displayNode} onUpdate={handleUpdate} parentContext={parentContext} />
+      <SizeSection
+        node={displayNode}
+        onUpdate={handleUpdate}
+        parentContext={parentContext}
+        useDirectUpdateOnly
+      />
+      {displayNode.type === "frame" && (
+        <AutoLayoutSection node={displayNode} onUpdate={handleUpdate} />
+      )}
+      <AppearanceSection node={displayNode} onUpdate={handleUpdate} hideOpacity />
+      <FillSection
+        node={displayNode}
+        onUpdate={handleUpdate}
+        component={originalNode}
+        colorVariables={colorVariables}
+        activeTheme={activeTheme}
+        isOverridden={isOverridden}
+        resetOverride={(property) => handleResetProperty(property as keyof InstanceOverrideUpdateProps)}
+      />
+      <StrokeSection
+        node={displayNode}
+        onUpdate={handleUpdate}
+        component={originalNode}
+        colorVariables={colorVariables}
+        activeTheme={activeTheme}
+        isOverridden={isOverridden}
+        resetOverride={(property) => handleResetProperty(property as keyof InstanceOverrideUpdateProps)}
+      />
+      <EffectsSection node={displayNode} onUpdate={handleUpdate} />
+      {displayNode.type === "frame" && (
+        <ThemeSection node={displayNode} onUpdate={handleUpdate} />
+      )}
+      {displayNode.type === "text" && (
+        <TypographySection node={displayNode as TextNode} onUpdate={handleUpdate} />
+      )}
+
       <PropertySection title="Overrides">
-        <button
-          onClick={handleResetAll}
-          className="px-3 py-1.5 bg-surface-elevated border border-border-light rounded text-text-secondary text-xs cursor-pointer transition-colors hover:bg-surface-hover hover:border-border-hover"
-        >
+        <Button onClick={handleResetAll} variant="secondary" className="w-full">
           {isReplaced ? "Reset Replacement" : "Reset All Overrides"}
-        </button>
+        </Button>
       </PropertySection>
     </div>
   );

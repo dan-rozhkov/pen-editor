@@ -211,9 +211,19 @@ interface SizeSectionProps {
   isMultiSelect?: boolean;
   selectedNodes?: SceneNode[];
   showSizingModes?: boolean;
+  useDirectUpdateOnly?: boolean;
 }
 
-export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiSelect, selectedNodes, showSizingModes }: SizeSectionProps) {
+export function SizeSection({
+  node,
+  onUpdate,
+  parentContext,
+  mixedKeys,
+  isMultiSelect,
+  selectedNodes,
+  showSizingModes,
+  useDirectUpdateOnly = false,
+}: SizeSectionProps) {
   const calculateLayoutForFrame = useLayoutStore((s) => s.calculateLayoutForFrame);
   const allNodes = useSceneStore((s) => s.getNodes());
   const updateNode = useSceneStore((s) => s.updateNode);
@@ -262,7 +272,7 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
       if (heightMode !== "fixed" && sourceChild.height !== laidOutChild.height) {
         updates.height = laidOutChild.height;
       }
-      if (updates.width !== undefined || updates.height !== undefined) {
+      if (!useDirectUpdateOnly && (updates.width !== undefined || updates.height !== undefined)) {
         updateNodeWithoutHistory(laidOutChild.id, updates);
       }
     }
@@ -313,7 +323,9 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
     return { effectiveWidth: ew, effectiveHeight: eh };
   }, [node, parentContext, calculateLayoutForFrame]);
 
-  const canFitToContent = isMultiSelect
+  const canFitToContent = !isMultiSelect && (node.type === "frame" || node.type === "embed")
+    ? true
+    : isMultiSelect
     ? (selectedNodes ?? []).some(n => n.type === "frame" || n.type === "embed")
     : (node.type === "frame" || node.type === "embed");
 
@@ -358,7 +370,7 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
                       },
                       ...(computedWidth !== undefined ? { width: computedWidth } : {}),
                     });
-                    if (!isMultiSelect) {
+                    if (!isMultiSelect && !useDirectUpdateOnly) {
                       reflowAutoLayoutSiblings("width", newMode, computedWidth);
                     }
                   }}
@@ -403,7 +415,7 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
                       },
                       ...(computedHeight !== undefined ? { height: computedHeight } : {}),
                     });
-                    if (!isMultiSelect) {
+                    if (!isMultiSelect && !useDirectUpdateOnly) {
                       reflowAutoLayoutSiblings("height", newMode, computedHeight);
                     }
                   }}
@@ -538,10 +550,18 @@ export function SizeSection({ node, onUpdate, parentContext, mixedKeys, isMultiS
                       allNodes,
                       calculateLayoutForFrame,
                     );
-                    updateNode(node.id, size);
+                    if (useDirectUpdateOnly) {
+                      onUpdate(size);
+                    } else {
+                      updateNode(node.id, size);
+                    }
                   } else if (node.type === "embed") {
                     const size = await measureEmbedContentSize(node);
-                    updateNode(node.id, size);
+                    if (useDirectUpdateOnly) {
+                      onUpdate(size);
+                    } else {
+                      updateNode(node.id, size);
+                    }
                   }
                 }
               } finally {
