@@ -101,7 +101,7 @@ export const LayerItem = memo(function LayerItem({
       if (isVisible) {
         store.updateInstanceOverride(instanceId, descendantPath, { visible: false });
       } else {
-        store.resetInstanceOverride(instanceId, descendantPath, "visible");
+        store.updateInstanceOverride(instanceId, descendantPath, { visible: true });
       }
     } else {
       toggleVisibility(node.id);
