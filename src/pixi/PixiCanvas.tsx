@@ -31,7 +31,7 @@ import { applyOpenedDocument } from "@/utils/openDocumentIntoEditor";
 import { createPixiSync } from "./pixiSync";
 import { setupPixiViewport } from "./pixiViewport";
 import { setupPixiInteraction } from "./interaction";
-import { createSelectionOverlay } from "./SelectionOverlay";
+import { createSelectionOverlay } from "./selectionOverlay";
 import { createOverlayRenderer } from "./OverlayRenderer";
 
 export function PixiCanvas() {
