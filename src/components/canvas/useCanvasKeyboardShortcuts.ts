@@ -348,6 +348,35 @@ export function useCanvasKeyboardShortcuts({
         return;
       }
 
+      // Shift+G: Toggle all layout grids visibility
+      if (e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && e.code === "KeyG") {
+        if (isTyping) return;
+        e.preventDefault();
+        const scState = useSceneStore.getState();
+        const frameIds: string[] = [];
+        for (const id in scState.nodesById) {
+          const node = scState.nodesById[id];
+          if (node.type === "frame" && node.layoutGrids?.length) {
+            frameIds.push(id);
+          }
+        }
+        if (frameIds.length === 0) return;
+        // If any grid is visible, hide all; otherwise show all
+        const anyVisible = frameIds.some((id) => {
+          const node = scState.nodesById[id];
+          return node.type === "frame" && node.layoutGrids?.some((g) => g.visible);
+        });
+        for (const id of frameIds) {
+          const node = scState.nodesById[id];
+          if (node.type === "frame" && node.layoutGrids) {
+            updateNode(id, {
+              layoutGrids: node.layoutGrids.map((g) => ({ ...g, visible: !anyVisible })),
+            } as Partial<SceneNode>);
+          }
+        }
+        return;
+      }
+
       if (!isTyping && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
         if (e.code === "KeyV") {
           e.preventDefault();

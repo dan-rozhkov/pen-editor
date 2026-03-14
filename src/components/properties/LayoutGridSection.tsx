@@ -313,21 +313,23 @@ export function LayoutGridSection({ node, onUpdate }: LayoutGridSectionProps) {
             </span>
           </button>
 
-          <button
-            className="shrink-0 text-text-muted hover:text-text-primary p-0.5"
+          <Button
+            variant="ghost"
+            size="icon-sm"
             onClick={(e) => { e.stopPropagation(); toggleVisibility(grid.id); }}
             title={grid.visible ? "Hide grid" : "Show grid"}
           >
             {grid.visible ? <EyeIcon size={14} /> : <EyeSlashIcon size={14} />}
-          </button>
+          </Button>
 
-          <button
-            className="shrink-0 text-text-muted hover:text-text-primary p-0.5"
+          <Button
+            variant="ghost"
+            size="icon-sm"
             onClick={(e) => { e.stopPropagation(); removeGrid(grid.id); }}
             title="Remove grid"
           >
             <MinusIcon size={14} />
-          </button>
+          </Button>
 
           {popoverState?.id === grid.id && (
             <GridPopover
