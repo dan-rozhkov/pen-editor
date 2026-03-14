@@ -23,6 +23,7 @@ import { createPolygonContainer, updatePolygonContainer } from "./polygonRendere
 import { createPathContainer, updatePathContainer } from "./pathRenderer";
 import { createFrameContainer, updateFrameContainer, drawFrameBackground } from "./frameRenderer";
 import { drawRoundedShape } from "./fillStrokeHelpers";
+import { drawLayoutGrids } from "./layoutGridRenderer";
 import { createGroupContainer } from "./groupRenderer";
 import { createEmbedContainer, updateEmbedContainer } from "./embedRenderer";
 import type { ShadowShape } from "./shadowHelpers";
@@ -374,27 +375,33 @@ export function applyLayoutSize(
       break;
     }
     case "frame": {
+      const frameNode = node as FlatFrameNode;
       const bg = container.getChildByLabel("frame-bg") as Graphics;
       if (bg) {
         bg.clear();
-        drawFrameBackground(bg, node as FlatFrameNode, layoutWidth, layoutHeight);
+        drawFrameBackground(bg, frameNode, layoutWidth, layoutHeight);
       }
       // Update mask if present
       const mask = container.getChildByLabel("frame-mask") as Graphics;
-      if (mask && (node as FlatFrameNode).clip) {
+      if (mask && frameNode.clip) {
         mask.clear();
-        const frameNode = node as FlatFrameNode;
         drawRoundedShape(mask, layoutWidth, layoutHeight, frameNode.cornerRadius, frameNode.cornerRadiusPerCorner);
         mask.fill(0xffffff);
       }
+      // Update layout grid overlay
+      const gridGfx = container.getChildByLabel("frame-layout-grid") as Graphics;
+      if (gridGfx && frameNode.layoutGrids?.length) {
+        gridGfx.clear();
+        drawLayoutGrids(gridGfx, frameNode.layoutGrids, layoutWidth, layoutHeight);
+      }
       applyShadow(
         container,
-        (node as FlatFrameNode).effect,
+        frameNode.effect,
         layoutWidth,
         layoutHeight,
-        (node as FlatFrameNode).cornerRadius,
+        frameNode.cornerRadius,
         "rect",
-        (node as FlatFrameNode).cornerRadiusPerCorner,
+        frameNode.cornerRadiusPerCorner,
       );
       break;
     }

@@ -5,6 +5,7 @@ import { TypeSection } from "@/components/properties/TypeSection";
 import { PositionSection } from "@/components/properties/PositionSection";
 import { SizeSection } from "@/components/properties/SizeSection";
 import { AutoLayoutSection } from "@/components/properties/AutoLayoutSection";
+import { LayoutGridSection } from "@/components/properties/LayoutGridSection";
 import { AppearanceSection } from "@/components/properties/AppearanceSection";
 import { FillSection } from "@/components/properties/FillSection";
 import { StrokeSection } from "@/components/properties/StrokeSection";
@@ -55,6 +56,9 @@ export function PropertyEditor({
       <SizeSection node={node} onUpdate={onUpdate} parentContext={parentContext} />
       {node.type === "frame" && (
         <AutoLayoutSection node={node} onUpdate={onUpdate} />
+      )}
+      {node.type === "frame" && (
+        <LayoutGridSection node={node} onUpdate={onUpdate} />
       )}
       <AppearanceSection node={node} onUpdate={onUpdate} />
       <FillSection

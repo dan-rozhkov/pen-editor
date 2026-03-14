@@ -143,6 +143,25 @@ export interface LayoutProperties {
   justifyContent?: JustifyContent
 }
 
+// Layout grid types (Figma-style visual grid overlays)
+export type LayoutGridType = 'grid' | 'columns' | 'rows'
+export type LayoutGridAlignment = 'stretch' | 'center' | 'min' | 'max'
+// columns: min=left, max=right; rows: min=top, max=bottom
+
+export interface LayoutGridConfig {
+  id: string
+  type: LayoutGridType
+  visible: boolean
+  color: string        // hex e.g. "#FF0000"
+  opacity: number      // 0-1
+  size?: number        // grid type cell size (default 10)
+  count?: number       // columns/rows count (default 5)
+  gutter?: number      // spacing between columns/rows (default 20)
+  margin?: number      // offset from frame edge (default 0)
+  width?: number | null // null = auto (stretch fills available space)
+  alignment?: LayoutGridAlignment
+}
+
 export interface FrameNode extends BaseNode {
   type: 'frame'
   children: SceneNode[]
@@ -158,6 +177,8 @@ export interface FrameNode extends BaseNode {
   reusable?: boolean
   // IDs of direct children that are slot nodes (replaceable in instances)
   slot?: string[]
+  // Layout grid overlays (visual design aid, not part of exported design)
+  layoutGrids?: LayoutGridConfig[]
 }
 
 export interface RectNode extends BaseNode {

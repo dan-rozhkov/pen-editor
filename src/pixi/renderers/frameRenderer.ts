@@ -11,6 +11,7 @@ import { applyFill, applyStroke, hasVisualPropsChanged, drawRoundedShape } from 
 import { applyImageFill } from "./imageFillHelpers";
 import { pushRenderTheme, popRenderTheme } from "./colorHelpers";
 import { createNodeContainer } from "./index";
+import { drawLayoutGrids } from "./layoutGridRenderer";
 
 /**
  * Convert flat frame to tree frame for layout calculations
@@ -126,6 +127,14 @@ export function createFrameContainer(
     }
   }
 
+  // Layout grid overlay (rendered above children)
+  if (node.layoutGrids?.length) {
+    const gridGfx = new Graphics();
+    gridGfx.label = "frame-layout-grid";
+    drawLayoutGrids(gridGfx, node.layoutGrids, effectiveWidth, effectiveHeight);
+    container.addChild(gridGfx);
+  }
+
   // Disabled for now: cacheAsTexture can leave stale visual artifacts
   // after structural reparent/move operations (ghost copies on canvas).
   container.cacheAsTexture(false);
@@ -171,6 +180,29 @@ export function updateFrameContainer(
     node.cornerRadiusPerCorner !== prev.cornerRadiusPerCorner
   ) {
     applyImageFill(container, node.imageFill, effectiveWidth, effectiveHeight, node.cornerRadius, node.cornerRadiusPerCorner);
+  }
+
+  // Update layout grid overlay
+  if (
+    node.layoutGrids !== prev.layoutGrids ||
+    node.width !== prev.width ||
+    node.height !== prev.height ||
+    node.sizing !== prev.sizing ||
+    node.layout !== prev.layout
+  ) {
+    const existingGrid = container.getChildByLabel("frame-layout-grid") as Graphics;
+    if (node.layoutGrids?.length) {
+      const gridGfx = existingGrid ?? new Graphics();
+      gridGfx.label = "frame-layout-grid";
+      gridGfx.clear();
+      drawLayoutGrids(gridGfx, node.layoutGrids, effectiveWidth, effectiveHeight);
+      if (!existingGrid) {
+        container.addChild(gridGfx);
+      }
+    } else if (existingGrid) {
+      container.removeChild(existingGrid);
+      existingGrid.destroy();
+    }
   }
 
   // Update clip mask
