@@ -194,6 +194,18 @@ export function createPixiSync(sceneRoot: Container): () => void {
   const registry = new Map<string, RegistryEntry>();
   let appliedTextResolution = 0;
   let rebuildScheduled = false;
+  let hiddenInstanceContainer: Container | null = null;
+
+  function findContainerByLabel(parent: Container, label: string): Container | null {
+    for (const child of parent.children) {
+      if (child instanceof Container) {
+        if (child.label === label) return child;
+        const found = findContainerByLabel(child, label);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
 
   function applyTextResolutionRecursive(container: Container, resolution: number): void {
     for (const child of container.children) {
@@ -208,10 +220,31 @@ export function createPixiSync(sceneRoot: Container): () => void {
   }
 
   function applyTextEditingVisibility(): void {
-    const { editingNodeId, editingMode } = useSelectionStore.getState();
+    const { editingNodeId, editingMode, instanceContext } = useSelectionStore.getState();
     const isTextEditing = editingMode === "text" && editingNodeId != null;
     const isEmbedEditing = editingMode === "embed" && editingNodeId != null;
 
+    // Restore previously hidden instance container
+    if (hiddenInstanceContainer) {
+      hiddenInstanceContainer.visible = true;
+      hiddenInstanceContainer = null;
+    }
+
+    // Handle instance descendant editing (ref children aren't in the registry)
+    if ((isTextEditing || isEmbedEditing) && instanceContext) {
+      const refEntry = registry.get(instanceContext.instanceId);
+      if (refEntry) {
+        const segments = editingNodeId!.split("/");
+        const targetId = segments[segments.length - 1];
+        const found = findContainerByLabel(refEntry.container, targetId);
+        if (found) {
+          found.visible = false;
+          hiddenInstanceContainer = found;
+        }
+      }
+    }
+
+    // Existing logic for registered (non-instance) nodes
     for (const [id, entry] of registry) {
       const baseVisible = entry.node.visible !== false && entry.node.enabled !== false;
       const hideWhileEditing = (
@@ -220,7 +253,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
       );
       entry.container.visible = baseVisible && !hideWhileEditing;
     }
-
   }
 
   /**
