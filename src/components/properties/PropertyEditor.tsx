@@ -50,16 +50,7 @@ export function PropertyEditor({
 
   return (
     <div className="flex flex-col">
-      {node.type === "ref" ? (
-        <InstanceSection
-          node={node}
-          onUpdate={onUpdate}
-          allNodes={allNodes}
-          isOverridden={isOverridden}
-        />
-      ) : (
-        <TypeSection node={node} onUpdate={onUpdate} />
-      )}
+      <TypeSection node={node} onUpdate={onUpdate} />
       <PositionSection node={node} onUpdate={onUpdate} parentContext={parentContext} />
       <SizeSection node={node} onUpdate={onUpdate} parentContext={parentContext} />
       {node.type === "frame" && (
@@ -92,6 +83,14 @@ export function PropertyEditor({
         <SlotsSection
           node={frameNode}
           childNodes={frameNode.children}
+        />
+      )}
+      {node.type === "ref" && (
+        <InstanceSection
+          node={node}
+          onUpdate={onUpdate}
+          allNodes={allNodes}
+          isOverridden={isOverridden}
         />
       )}
       {node.type === "text" && (

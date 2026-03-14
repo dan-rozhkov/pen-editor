@@ -304,7 +304,7 @@ export function setupPixiInteraction(
       if (refNode?.type === "ref") {
         const resolved = resolveRefToTree(refNode as RefNode, scState.nodesById, scState.childrenById);
         if (resolved) {
-          const descNode = findNodeByPath(resolved.children, selState.instanceContext.descendantPath, scState.nodesById, scState.childrenById);
+          const descNode = findNodeByPath(resolved.children, selState.instanceContext.descendantPath);
           if (descNode?.type === "text") {
             // Enter text editing for descendant
             useSelectionStore.getState().startEditing(selState.instanceContext.descendantPath);
@@ -319,7 +319,7 @@ export function setupPixiInteraction(
               useSelectionStore.getState().selectDescendant(hitTarget.instanceId, hitTarget.descendantPath);
 
               // Start inline editing if the deeper descendant is text/embed
-              const deepDesc = findNodeByPath(resolved.children, hitTarget.descendantPath, scState.nodesById, scState.childrenById);
+              const deepDesc = findNodeByPath(resolved.children, hitTarget.descendantPath);
               if (deepDesc?.type === "text") {
                 useSelectionStore.getState().startEditing(hitTarget.descendantPath);
               } else if (deepDesc?.type === "embed") {
@@ -346,7 +346,7 @@ export function setupPixiInteraction(
           const scState = useSceneStore.getState();
           const resolved = resolveRefToTree(selectedNode as RefNode, scState.nodesById, scState.childrenById);
           if (resolved) {
-            const descNode = findNodeByPath(resolved.children, hitTarget.descendantPath, scState.nodesById, scState.childrenById);
+            const descNode = findNodeByPath(resolved.children, hitTarget.descendantPath);
             if (descNode?.type === "text") {
               useSelectionStore.getState().startEditing(hitTarget.descendantPath);
             } else if (descNode?.type === "embed") {

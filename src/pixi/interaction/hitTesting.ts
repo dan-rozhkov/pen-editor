@@ -10,7 +10,7 @@ import {
 } from "@/utils/instanceUtils";
 import type { TransformHandle } from "./types";
 import { measureLabelTextWidth, truncateLabelToWidth } from "@/pixi/frameLabelUtils";
-import { getResolvedSnapshotForRef } from "@/utils/instanceRuntime";
+import { resolveRefToTree } from "@/utils/instanceRuntime";
 
 export type CanvasHitTarget =
   | { kind: "node"; nodeId: string }
@@ -156,44 +156,61 @@ export function findCanvasHitTargetAtPoint(
         return { kind: "node", nodeId: node.id };
       }
 
-      const snapshot = getResolvedSnapshotForRef(
+      const resolved = resolveRefToTree(
         node as RefNode,
         state.nodesById,
         state.childrenById,
-        state.parentById,
       );
-      if (!snapshot) return { kind: "node", nodeId: node.id };
+      if (!resolved) return { kind: "node", nodeId: node.id };
 
+      // Unified recursive hit test — returns deepest matching path
       const hitResolvedPath = (
-        parentPath: string,
+        resolvedNode: SceneNode,
+        resolvedAbsX: number,
+        resolvedAbsY: number,
+        resolvedPath: string,
       ): string | null => {
-        const childPaths = snapshot.childrenByPath[parentPath] ?? [];
-        for (let i = childPaths.length - 1; i >= 0; i--) {
-          const childPath = childPaths[i];
-          const childNode = snapshot.nodesByPath[childPath];
-          const childBounds = snapshot.layoutBoundsByPath[childPath];
-          if (!childNode || !childBounds) continue;
-          if (childNode.visible === false || childNode.enabled === false) continue;
+        if (resolvedNode.visible === false || resolvedNode.enabled === false) return null;
 
-          const childAbsX = absX + childBounds.x;
-          const childAbsY = absY + childBounds.y;
-          if (
-            worldX < childAbsX ||
-            worldX > childAbsX + childBounds.width ||
-            worldY < childAbsY ||
-            worldY > childAbsY + childBounds.height
-          ) {
-            continue;
-          }
-
-          const nestedHit = hitResolvedPath(childPath);
-          if (nestedHit) return nestedHit;
-          return childPath;
+        const { width: resolvedWidth, height: resolvedHeight } =
+          getPreparedNodeEffectiveSize(resolvedNode, [], calculateLayoutForFrame);
+        if (
+          worldX < resolvedAbsX ||
+          worldX > resolvedAbsX + resolvedWidth ||
+          worldY < resolvedAbsY ||
+          worldY > resolvedAbsY + resolvedHeight
+        ) {
+          return null;
         }
-        return null;
+
+        const resolvedChildren =
+          resolvedNode.type === "frame" && resolvedNode.layout?.autoLayout
+            ? prepareFrameNode(resolvedNode, calculateLayoutForFrame).layoutChildren
+            : resolvedNode.type === "frame" || resolvedNode.type === "group"
+              ? resolvedNode.children
+              : [];
+
+        for (let i = resolvedChildren.length - 1; i >= 0; i--) {
+          const child = resolvedChildren[i];
+          const childHit = hitResolvedPath(
+            child,
+            resolvedAbsX + child.x,
+            resolvedAbsY + child.y,
+            `${resolvedPath}/${child.id}`,
+          );
+          if (childHit) return childHit;
+        }
+
+        return resolvedPath;
       };
 
-      const deepHitPath = hitResolvedPath("");
+      // Find deepest hit path
+      let deepHitPath: string | null = null;
+      for (let i = resolved.children.length - 1; i >= 0; i--) {
+        const child = resolved.children[i];
+        deepHitPath = hitResolvedPath(child, absX + child.x, absY + child.y, child.id);
+        if (deepHitPath) break;
+      }
 
       if (!deepHitPath) return { kind: "node", nodeId: node.id };
 
