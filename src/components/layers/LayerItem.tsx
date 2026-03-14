@@ -235,7 +235,9 @@ export const LayerItem = memo(function LayerItem({
           <NodeIcon
             type={node.type}
             isComponent={
-              node.type === "frame" && (node as FrameNode).reusable === true
+              !isRefDescendant &&
+              node.type === "frame" &&
+              (node as FrameNode).reusable === true
             }
             layout={
               node.type === "frame" ? (node as FrameNode).layout : undefined
