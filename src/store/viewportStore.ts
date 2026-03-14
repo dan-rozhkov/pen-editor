@@ -27,6 +27,8 @@ interface ViewportState {
     viewportWidth: number,
     viewportHeight: number,
   ) => void;
+  getViewportState: () => { scale: number; x: number; y: number };
+  setViewportState: (state: { scale: number; x: number; y: number }) => void;
 }
 
 const MIN_SCALE = 0.1;
@@ -172,4 +174,11 @@ export const useViewportStore = create<ViewportState>((set, get) => ({
 
     set({ scale: newScale, x: newX, y: newY });
   },
+
+  getViewportState: () => {
+    const { scale, x, y } = get();
+    return { scale, x, y };
+  },
+
+  setViewportState: (state) => set({ scale: state.scale, x: state.x, y: state.y }),
 }));

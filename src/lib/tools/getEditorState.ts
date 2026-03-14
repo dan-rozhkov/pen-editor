@@ -1,6 +1,7 @@
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
+import { usePageStore } from "@/store/pageStore";
 import { collectDocumentComponents } from "@/lib/documentComponents";
 import type { ToolHandler } from "../toolRegistry";
 
@@ -49,7 +50,12 @@ export const getEditorState: ToolHandler = async () => {
     };
   });
 
+  const { pages, activePageId } = usePageStore.getState();
+  const pagesInfo = pages.map((p) => ({ id: p.id, name: p.name }));
+
   return JSON.stringify({
+    pages: pagesInfo,
+    activePageId,
     roots,
     selectedIds,
     selectedNodes,

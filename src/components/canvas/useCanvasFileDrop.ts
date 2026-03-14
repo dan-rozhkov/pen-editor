@@ -93,7 +93,7 @@ export function useCanvasFileDrop({
         try {
           const jsonText = await readFileAsText(jsonFile);
           const documentData = deserializeDocument(jsonText);
-          if (!Array.isArray(documentData.nodes)) return;
+          if (!documentData.pages || documentData.pages.length === 0) return;
 
           onDocumentDrop(documentData, {
             width: container.clientWidth,

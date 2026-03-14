@@ -27,6 +27,10 @@ interface HistoryState {
   // Batch mode: multiple mutations as single undo step
   startBatch: () => void
   endBatch: () => void
+
+  // Save/restore for page switching
+  getStacks: () => { past: HistorySnapshot[]; future: HistorySnapshot[] }
+  setStacks: (stacks: { past: HistorySnapshot[]; future: HistorySnapshot[] }) => void
 }
 
 export const useHistoryStore = create<HistoryState>((set, get) => ({
@@ -97,4 +101,11 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
   startBatch: () => set({ batchMode: true }),
 
   endBatch: () => set({ batchMode: false }),
+
+  getStacks: () => {
+    const { past, future } = get()
+    return { past: [...past], future: [...future] }
+  },
+
+  setStacks: (stacks) => set({ past: stacks.past, future: stacks.future }),
 }))

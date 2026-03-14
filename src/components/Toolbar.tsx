@@ -6,6 +6,8 @@ import { useThemeStore } from "../store/themeStore";
 import { useUIThemeStore } from "../store/uiThemeStore";
 import { usePixelGridStore } from "../store/pixelGridStore";
 import { useViewportStore } from "../store/viewportStore";
+import { usePageStore } from "../store/pageStore";
+import { buildTree } from "../types/scene";
 
 import { downloadDocument, downloadPublicPen, openFilePicker } from "../utils/fileUtils";
 import { useDocumentStore } from "../store/documentStore";
@@ -33,8 +35,6 @@ import {
 } from "@phosphor-icons/react";
 
 export function Toolbar() {
-  const nodes = useSceneStore((state) => state.getNodes());
-  const componentArtifacts = useSceneStore((state) => state.componentArtifactsById);
   const addNode = useSceneStore((state) => state.addNode);
   const variables = useVariableStore((state) => state.variables);
 
@@ -48,38 +48,36 @@ export function Toolbar() {
   const [error, setError] = useState<string | null>(null);
 
   const handleSave = () => {
+    const pageStore = usePageStore.getState();
+    pageStore.saveCurrentPageState();
+
+    const { pages, componentArtifactsById } = usePageStore.getState();
+    const pagesForExport = pages.map((page) => ({
+      id: page.id,
+      name: page.name,
+      nodes: buildTree(page.rootIds, page.nodesById, page.childrenById),
+      pageBackground: page.pageBackground,
+    }));
+
     const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
-    downloadDocument(nodes, variables, activeTheme, componentArtifacts, `${name}.json`);
+    downloadDocument(pagesForExport, variables, activeTheme, componentArtifactsById, `${name}.json`);
   };
 
   const handleExportPublicPen = () => {
+    const currentPageNodes = useSceneStore.getState().getNodes();
     const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
-    downloadPublicPen(nodes, variables, activeTheme, `${name}.pen`);
+    downloadPublicPen(currentPageNodes, variables, activeTheme, `${name}.pen`);
   };
 
   const handleOpen = async () => {
     try {
-      const {
-        nodes: loadedNodes,
-        variables: loadedVariables,
-        activeTheme: loadedTheme,
-        componentArtifacts,
-        fileName,
-      } = await openFilePicker();
-      useDocumentStore.getState().setFileName(fileName);
+      const result = await openFilePicker();
+      useDocumentStore.getState().setFileName(result.fileName);
       const canvasEl = document.querySelector("[data-canvas]");
-      applyOpenedDocument(
-        {
-          nodes: loadedNodes,
-          variables: loadedVariables,
-          activeTheme: loadedTheme,
-          componentArtifacts,
-        },
-        {
-          viewportWidth: canvasEl?.clientWidth ?? window.innerWidth - 480,
-          viewportHeight: canvasEl?.clientHeight ?? window.innerHeight,
-        },
-      );
+      applyOpenedDocument(result, {
+        viewportWidth: canvasEl?.clientWidth ?? window.innerWidth - 480,
+        viewportHeight: canvasEl?.clientHeight ?? window.innerHeight,
+      });
     } catch (err) {
       console.error("Failed to open file:", err);
     }

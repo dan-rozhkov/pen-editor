@@ -2,11 +2,19 @@ import { useRef, useState } from "react";
 import { ArrowsInLineVertical, SidebarSimple } from "@phosphor-icons/react";
 import { LayersPanel } from "./layers";
 import { ComponentsPanel } from "./ComponentsPanel";
+import { PagesPanel } from "./PagesPanel";
 import { Toolbar } from "./Toolbar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 import { useSceneStore } from "@/store/sceneStore";
 import { useFloatingPanelsStore } from "@/store/floatingPanelsStore";
 import { useDocumentStore } from "@/store/documentStore";
+import { usePageStore } from "@/store/pageStore";
+
+function PagesPanelSection() {
+  const hasPages = usePageStore((s) => s.pages.length > 0);
+  if (!hasPages) return null;
+  return <PagesPanel />;
+}
 
 export function LeftSidebar() {
   const [activeTab, setActiveTab] = useState("layers");
@@ -59,7 +67,7 @@ export function LeftSidebar() {
         </button>
       </div>
       {!isFloating && (
-        <div className="px-2">
+        <div className="px-2 pb-2">
           {isEditing ? (
             <input
               ref={inputRef}
@@ -81,9 +89,10 @@ export function LeftSidebar() {
           )}
         </div>
       )}
+      {!isFloating && <PagesPanelSection />}
       {!isFloating && (
         <Tabs defaultValue="layers" className="flex-1 flex flex-col gap-0 overflow-hidden" onValueChange={setActiveTab}>
-          <div className="px-1 pt-1 pb-1 border-b border-border-default flex items-center justify-between">
+          <div className="px-1 pt-1 pb-1 flex items-center justify-between">
             <TabsList variant="pill">
               <TabsTrigger value="layers">Layers</TabsTrigger>
               <TabsTrigger value="components">Components</TabsTrigger>

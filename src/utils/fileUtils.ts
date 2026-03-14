@@ -1,34 +1,57 @@
 import type { ComponentArtifact, SceneNode } from '../types/scene'
 import type { Variable, ThemeName } from '../types/variable'
 import { ensureThemeValues } from '../types/variable'
+import { generateId } from '../types/scene'
 import { serializePublicPenDocument } from "@/utils/publicPenExport";
+
+export interface PenPage {
+  id: string
+  name: string
+  nodes: SceneNode[]
+  pageBackground?: string
+}
 
 export interface PenDocument {
   version: string
-  nodes: SceneNode[]
+  // Legacy single-page format
+  nodes?: SceneNode[]
+  // Multi-page format
+  pages?: PenPage[]
   variables?: Variable[]
   activeTheme?: ThemeName
   componentArtifacts?: Record<string, ComponentArtifact>
 }
 
-export interface DocumentData {
+export interface DocumentPageData {
+  id: string
+  name: string
   nodes: SceneNode[]
+  pageBackground: string
+}
+
+export interface DocumentData {
+  pages: DocumentPageData[]
   variables: Variable[]
   activeTheme: ThemeName
   componentArtifacts: Record<string, ComponentArtifact>
 }
 
-const CURRENT_VERSION = '1.0'
+const CURRENT_VERSION = '1.1'
 
 export function serializeDocument(
-  nodes: SceneNode[],
+  pages: { id: string; name: string; nodes: SceneNode[]; pageBackground: string }[],
   variables: Variable[],
   activeTheme: ThemeName,
   componentArtifacts: Record<string, ComponentArtifact> = {},
 ): string {
   const doc: PenDocument = {
     version: CURRENT_VERSION,
-    nodes,
+    pages: pages.map((p) => ({
+      id: p.id,
+      name: p.name,
+      nodes: p.nodes,
+      ...(p.pageBackground !== '#f5f5f5' ? { pageBackground: p.pageBackground } : {}),
+    })),
     variables,
     activeTheme,
     componentArtifacts,
@@ -38,10 +61,29 @@ export function serializeDocument(
 
 export function deserializeDocument(json: string): DocumentData {
   const doc: PenDocument = JSON.parse(json)
-  // Migrate variables to ensure theme values exist
   const migratedVariables = (doc.variables ?? []).map(ensureThemeValues)
+
+  let pages: DocumentPageData[]
+  if (doc.pages && doc.pages.length > 0) {
+    // Multi-page format
+    pages = doc.pages.map((p) => ({
+      id: p.id,
+      name: p.name,
+      nodes: p.nodes,
+      pageBackground: p.pageBackground ?? '#f5f5f5',
+    }))
+  } else {
+    // Legacy single-page: wrap in a single page
+    pages = [{
+      id: generateId(),
+      name: 'Page 1',
+      nodes: doc.nodes ?? [],
+      pageBackground: '#f5f5f5',
+    }]
+  }
+
   return {
-    nodes: doc.nodes,
+    pages,
     variables: migratedVariables,
     activeTheme: doc.activeTheme ?? 'light',
     componentArtifacts: doc.componentArtifacts ?? {},
@@ -49,13 +91,13 @@ export function deserializeDocument(json: string): DocumentData {
 }
 
 export function downloadDocument(
-  nodes: SceneNode[],
+  pages: { id: string; name: string; nodes: SceneNode[]; pageBackground: string }[],
   variables: Variable[],
   activeTheme: ThemeName,
   componentArtifacts: Record<string, ComponentArtifact> = {},
   filename = 'document.json'
 ) {
-  const json = serializeDocument(nodes, variables, activeTheme, componentArtifacts)
+  const json = serializeDocument(pages, variables, activeTheme, componentArtifacts)
   downloadTextFile(json, filename)
 }
 
