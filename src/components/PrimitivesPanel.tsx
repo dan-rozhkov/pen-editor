@@ -6,6 +6,7 @@ import {
   LineSegmentIcon,
   HexagonIcon,
   HashStraight,
+  PencilSimple,
   type IconWeight,
   CaretDownIcon,
   SparkleIcon,
@@ -55,6 +56,7 @@ export function PrimitivesPanel() {
     tool: DrawToolType;
     shortcut: string;
   }> = [
+    { icon: PencilSimple, label: "Pencil", tool: "pencil", shortcut: "D" },
     { icon: CircleIcon, label: "Ellipse", tool: "ellipse", shortcut: "O" },
     { icon: TextTIcon, label: "Text", tool: "text", shortcut: "T" },
     { icon: CodeIcon, label: "Embed", tool: "embed", shortcut: "E" },

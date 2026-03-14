@@ -45,7 +45,7 @@ interface CanvasKeyboardShortcutsParams {
   undo: (snapshot: HistorySnapshot) => HistorySnapshot | null;
   redo: (snapshot: HistorySnapshot) => HistorySnapshot | null;
   fitToContent: (nodes: SceneNode[], width: number, height: number) => void;
-  toggleTool: (tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon" | "embed") => void;
+  toggleTool: (tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon" | "embed" | "pencil") => void;
   cancelDrawing: () => void;
   clearSelection: () => void;
   copyNodes: (nodes: SceneNode[]) => void;
@@ -416,6 +416,11 @@ export function useCanvasKeyboardShortcuts({
         if (e.code === "KeyE") {
           e.preventDefault();
           toggleTool("embed");
+          return;
+        }
+        if (e.code === "KeyD") {
+          e.preventDefault();
+          toggleTool("pencil");
           return;
         }
       }
