@@ -334,8 +334,6 @@ export function applyLayoutSize(
   nodesById?: Record<string, FlatSceneNode>,
   childrenById?: Record<string, string[]>,
 ): void {
-  void nodesById;
-  void childrenById;
   // Skip if size hasn't changed
   if (node.width === layoutWidth && node.height === layoutHeight) return;
 
@@ -403,6 +401,20 @@ export function applyLayoutSize(
     case "embed": {
       // Embed HTML content is intentionally not scaled during interactive resize.
       // It is re-rendered at the target size after resize settles.
+      break;
+    }
+    case "ref": {
+      if (!nodesById || !childrenById) break;
+      container.removeChildren().forEach((c) => c.destroy());
+      const next = createRefContainer(
+        { ...node, width: layoutWidth, height: layoutHeight } as RefNode,
+        nodesById,
+        childrenById,
+      );
+      while (next.children.length > 0) {
+        container.addChild(next.children[0]);
+      }
+      next.destroy();
       break;
     }
     // Text and other types don't need size updates for layout

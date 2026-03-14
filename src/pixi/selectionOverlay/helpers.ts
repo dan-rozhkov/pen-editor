@@ -160,8 +160,13 @@ export function createOverlayHelpers(sceneRoot: Container) {
     if (!instance || instance.type !== "ref") return null;
 
     const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+    // Use layout-computed size so fill_container refs resolve inner children correctly
+    const effectiveSize = getEffectiveSize(instanceId);
+    const refWithLayout: RefNode = effectiveSize
+      ? { ...(instance as RefNode), width: effectiveSize.width, height: effectiveSize.height }
+      : (instance as RefNode);
     const resolved = findResolvedDescendantByPath(
-      instance as RefNode,
+      refWithLayout,
       descendantPath,
       state.nodesById,
       state.childrenById,
