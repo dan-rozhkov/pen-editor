@@ -6,6 +6,21 @@ export const COMPONENT_SELECTION_COLOR = 0x8b5cf6;
 export const TEXT_BASELINE_COLOR = 0x0d99ff;
 export const HANDLE_SIZE = 8;
 export const HANDLE_FILL = 0xffffff;
+export const GAP_COLOR = 0xff44b4;
+export const PADDING_OVERLAY_ALPHA = 0.08;
+export const GAP_OVERLAY_ALPHA = 0.08;
+export const HATCH_SPACING = 6;
+
+// Floating label constants (shared by measure lines, spacing overlays, etc.)
+export const FLOATING_LABEL_FONT_SIZE = 11;
+export const FLOATING_LABEL_PADDING_X = 4;
+export const FLOATING_LABEL_PADDING_Y = 2;
+export const FLOATING_LABEL_RADIUS = 2;
+export const FLOATING_LABEL_STYLE = new TextStyle({
+  fontFamily: "system-ui, -apple-system, sans-serif",
+  fontSize: FLOATING_LABEL_FONT_SIZE,
+  fill: "#ffffff",
+});
 
 // Frame name label constants
 export const LABEL_FONT_SIZE = 11;

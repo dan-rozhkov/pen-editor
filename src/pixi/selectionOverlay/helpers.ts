@@ -13,7 +13,7 @@ import type {
 import { applyTextTransform } from "@/utils/textMeasure";
 import { buildTextStyle } from "@/pixi/renderers/textRenderer";
 import { findResolvedDescendantByPath } from "@/utils/instanceRuntime";
-import { COMPONENT_SELECTION_COLOR, SELECTION_COLOR } from "./constants";
+import { COMPONENT_SELECTION_COLOR, HATCH_SPACING, SELECTION_COLOR } from "./constants";
 
 export type Rect = { x: number; y: number; width: number; height: number };
 
@@ -249,6 +249,40 @@ export function drawTextBaselines(
     gfx.lineTo(lineX + lineWidth, lineY);
     gfx.stroke({ color, width: 1 / scale });
   }
+}
+
+/** Draw a semi-transparent filled rect with diagonal hatching lines. */
+export function drawHatchedRect(
+  gfx: Graphics,
+  rect: Rect,
+  color: number,
+  scale: number,
+  alpha: number,
+): void {
+  const { x, y, width: w, height: h } = rect;
+  if (w <= 0 || h <= 0) return;
+
+  // Semi-transparent fill
+  gfx.rect(x, y, w, h);
+  gfx.fill({ color, alpha });
+
+  // Diagonal hatching lines (bottom-left to top-right, 45°)
+  const spacing = HATCH_SPACING / scale;
+  const totalSpan = w + h;
+  const lineWidth = 1 / scale;
+  const maxLines = 200;
+  const effectiveSpacing = Math.max(spacing, totalSpan / maxLines);
+
+  for (let d = effectiveSpacing; d < totalSpan; d += effectiveSpacing) {
+    // Line from (x, y + d) to (x + d, y), clipped to rect
+    const x1 = x + Math.max(0, d - h);
+    const y1 = y + Math.min(d, h);
+    const x2 = x + Math.min(d, w);
+    const y2 = y + Math.max(0, d - w);
+    gfx.moveTo(x1, y1);
+    gfx.lineTo(x2, y2);
+  }
+  gfx.stroke({ color, alpha: alpha * 4, width: lineWidth });
 }
 
 /** Draw a dashed rectangle outline (axis-aligned). */

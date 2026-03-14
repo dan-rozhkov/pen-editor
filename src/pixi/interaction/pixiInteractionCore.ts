@@ -1,7 +1,7 @@
 import { Application, Container } from "pixi.js";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
-import { useHoverStore } from "@/store/hoverStore";
+import { useHoverStore, worldMouse } from "@/store/hoverStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import {
@@ -23,6 +23,7 @@ import {
 import { createPanController } from "./panController";
 import { createTransformController } from "./transformController";
 import { createDrawController } from "./drawController";
+import { createPencilController } from "./pencilController";
 import { createDragController } from "./dragController";
 import { createMarqueeController } from "./marqueeController";
 import { createMeasurementController } from "./measurementController";
@@ -124,6 +125,7 @@ export function setupPixiInteraction(
   const pan = createPanController(context);
   const transform = createTransformController(context);
   const draw = createDrawController(context);
+  const pencil = createPencilController(context);
   const drag = createDragController(context);
   const marquee = createMarqueeController(context);
   const measurement = createMeasurementController(context);
@@ -190,7 +192,8 @@ export function setupPixiInteraction(
     // Priority 2: Transform (resize handles)
     if (transform.handlePointerDown(e, world)) return;
 
-    // Priority 3: Drawing mode
+    // Priority 3: Drawing mode (pencil first, then standard draw)
+    if (pencil.handlePointerDown(e, world)) return;
     if (draw.handlePointerDown(e, world)) return;
 
     // Priority 4: Drag (label or node)
@@ -256,10 +259,15 @@ export function setupPixiInteraction(
 
     // Handle active interactions
     if (pan.handlePointerMove(e)) return;
+    if (pencil.handlePointerMove(e, world)) return;
     if (draw.handlePointerMove(e, world)) return;
     if (transform.handlePointerMove(e, world)) return;
     if (drag.handlePointerMove(e, world)) return;
     if (marquee.handlePointerMove(e, world)) return;
+
+    // Track world mouse for spacing overlay hit-testing
+    worldMouse.x = world.x;
+    worldMouse.y = world.y;
 
     // Hover/hit-test path is expensive on big scenes; run at most once per frame.
     scheduleHoverPass(world);
@@ -274,6 +282,7 @@ export function setupPixiInteraction(
     // Handle interaction cleanup in order
     if (pan.handlePointerUp(e)) return;
     if (transform.handlePointerUp(e, world)) return;
+    if (pencil.handlePointerUp(e, world)) return;
     if (draw.handlePointerUp(e, world)) return;
     if (drag.handlePointerUp(e, world)) return;
     if (marquee.handlePointerUp(e, world)) return;

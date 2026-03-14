@@ -25,6 +25,10 @@ export function createSelectionOverlay(
   hovOutline.label = "hover-outline";
   selectionContainer.addChild(hovOutline);
 
+  const spacingOverlay = new Container();
+  spacingOverlay.label = "spacing-overlay";
+  selectionContainer.addChild(spacingOverlay);
+
   const childOutlines = new Graphics();
   childOutlines.label = "child-outlines";
   selectionContainer.addChild(childOutlines);
@@ -49,6 +53,10 @@ export function createSelectionOverlay(
   sizeLabelsContainer.label = "size-labels";
   selectionContainer.addChild(sizeLabelsContainer);
 
+  const spacingLabel = new Container();
+  spacingLabel.label = "spacing-label";
+  selectionContainer.addChild(spacingLabel);
+
   const helpers = createOverlayHelpers(sceneRoot);
   let lastScale = useViewportStore.getState().scale;
 
@@ -63,7 +71,7 @@ export function createSelectionOverlay(
   }
 
   function doRedrawHover() {
-    redrawHover(hovOutline, childOutlines, hoverTextBaselines, helpers);
+    redrawHover(hovOutline, childOutlines, hoverTextBaselines, spacingOverlay, spacingLabel, helpers);
   }
 
   function doRedrawFrameNames() {
@@ -107,6 +115,8 @@ export function createSelectionOverlay(
     unsubViewport();
     outlinesContainer.destroy({ children: true });
     hovOutline.destroy();
+    spacingOverlay.destroy({ children: true });
+    spacingLabel.destroy({ children: true });
     childOutlines.destroy();
     selectionTextBaselines.destroy();
     hoverTextBaselines.destroy();

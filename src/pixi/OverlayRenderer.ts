@@ -1,4 +1,4 @@
-import { Container, Graphics, Text, TextStyle } from "pixi.js";
+import { Container, Graphics, Text } from "pixi.js";
 import { useSmartGuideStore } from "@/store/smartGuideStore";
 import { useDragStore } from "@/store/dragStore";
 import { useMeasureStore } from "@/store/measureStore";
@@ -7,15 +7,17 @@ import { useDrawModeStore } from "@/store/drawModeStore";
 import { usePixelGridStore } from "@/store/pixelGridStore";
 import { useUIThemeStore } from "@/store/uiThemeStore";
 import { getMarqueeRect, subscribeOverlayState } from "./pixiOverlayState";
+import {
+  FLOATING_LABEL_FONT_SIZE,
+  FLOATING_LABEL_PADDING_X,
+  FLOATING_LABEL_PADDING_Y,
+  FLOATING_LABEL_RADIUS,
+  FLOATING_LABEL_STYLE,
+} from "./selectionOverlay/constants";
 
 const GUIDE_COLOR = 0xff3366;
 const DROP_INDICATOR_COLOR = 0x0d99ff;
 const MEASURE_COLOR = 0xf24822;
-const MEASURE_LABEL_TEXT_COLOR = "#ffffff";
-const MEASURE_LABEL_FONT_SIZE = 11;
-const MEASURE_LABEL_PADDING_X = 4;
-const MEASURE_LABEL_PADDING_Y = 2;
-const MEASURE_LABEL_RADIUS = 2;
 const MARQUEE_FILL = 0x0d99ff;
 const MARQUEE_FILL_ALPHA = 0.08;
 const MARQUEE_STROKE = 0x0d99ff;
@@ -27,11 +29,6 @@ const PIXEL_GRID_FADE_SCALE = 10;
 const PIXEL_GRID_BASE_OPACITY = 0.03;
 const PIXEL_GRID_LIGHT_COLOR = 0x000000;
 const PIXEL_GRID_DARK_COLOR = 0xffffff;
-const MEASURE_LABEL_STYLE = new TextStyle({
-  fontFamily: "system-ui, -apple-system, sans-serif",
-  fontSize: MEASURE_LABEL_FONT_SIZE,
-  fill: MEASURE_LABEL_TEXT_COLOR,
-});
 
 type MeasureLabelEntry = {
   group: Container;
@@ -94,7 +91,7 @@ export function createOverlayRenderer(
     if (pooled) return pooled;
     const group = new Container();
     const bg = new Graphics();
-    const text = new Text({ text: "", style: MEASURE_LABEL_STYLE });
+    const text = new Text({ text: "", style: FLOATING_LABEL_STYLE });
     group.addChild(bg);
     group.addChild(text);
     return { group, bg, text };
@@ -239,12 +236,12 @@ export function createOverlayRenderer(
       entry.group.position.set(centerX, centerY);
       entry.group.scale.set(invScale);
       entry.text.text = line.label;
-      const bgWidth = entry.text.width + MEASURE_LABEL_PADDING_X * 2;
-      const bgHeight = MEASURE_LABEL_FONT_SIZE + MEASURE_LABEL_PADDING_Y * 2;
+      const bgWidth = entry.text.width + FLOATING_LABEL_PADDING_X * 2;
+      const bgHeight = FLOATING_LABEL_FONT_SIZE + FLOATING_LABEL_PADDING_Y * 2;
       entry.bg.clear();
-      entry.bg.roundRect(-bgWidth / 2, -bgHeight / 2, bgWidth, bgHeight, MEASURE_LABEL_RADIUS);
+      entry.bg.roundRect(-bgWidth / 2, -bgHeight / 2, bgWidth, bgHeight, FLOATING_LABEL_RADIUS);
       entry.bg.fill(MEASURE_COLOR);
-      entry.text.position.set(-entry.text.width / 2, -bgHeight / 2 + MEASURE_LABEL_PADDING_Y);
+      entry.text.position.set(-entry.text.width / 2, -bgHeight / 2 + FLOATING_LABEL_PADDING_Y);
       measureLabels.addChild(entry.group);
       activeMeasureLabels.push(entry);
     }
@@ -252,12 +249,25 @@ export function createOverlayRenderer(
 
   function redrawDrawPreview(): void {
     drawPreviewGfx.clear();
-    const { isDrawing, drawStart, drawCurrent } = useDrawModeStore.getState();
-    if (!isDrawing || !drawStart || !drawCurrent) return;
+    const { isDrawing, drawStart, drawCurrent, pencilPoints, activeTool } = useDrawModeStore.getState();
+    if (!isDrawing) return;
 
     const scale = useViewportStore.getState().scale;
-    const strokeWidth = 1 / scale;
 
+    // Pencil tool: draw polyline preview
+    if (activeTool === "pencil" && pencilPoints.length > 1) {
+      drawPreviewGfx.moveTo(pencilPoints[0].x, pencilPoints[0].y);
+      for (let i = 1; i < pencilPoints.length; i++) {
+        drawPreviewGfx.lineTo(pencilPoints[i].x, pencilPoints[i].y);
+      }
+      drawPreviewGfx.stroke({ color: 0x000000, width: 2 / scale, alpha: 0.6 });
+      return;
+    }
+
+    // Standard draw tools: rectangle preview
+    if (!drawStart || !drawCurrent) return;
+
+    const strokeWidth = 1 / scale;
     const x = Math.min(drawStart.x, drawCurrent.x);
     const y = Math.min(drawStart.y, drawCurrent.y);
     const w = Math.abs(drawCurrent.x - drawStart.x);
