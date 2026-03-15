@@ -9,6 +9,7 @@ import { generateId, buildTree } from "../types/scene";
 import { loadGoogleFontsFromNodes } from "../utils/fontUtils";
 import { useSceneStore } from "./sceneStore";
 import { useHistoryStore } from "./historyStore";
+import { useLoadingStore } from "./loadingStore";
 import { useViewportStore } from "./viewportStore";
 import { useSelectionStore } from "./selectionStore";
 
@@ -240,10 +241,10 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
       for (const [id, node] of Object.entries(page.nodesById)) {
         if (
           node.type === "frame" &&
-          (node as FlatFrameNode).reusable &&
-          page.parentById[id] === null
+          (node as FlatFrameNode).reusable
         ) {
-          // This is a root-level reusable component on another page
+          // This is a reusable component on another page — inject its subtree
+          // so that instances (RefNodes) on the target page can resolve it.
           const subtreeIds = collectSubtreeIds(id, page.childrenById);
           for (const sid of subtreeIds) {
             if (!(sid in nodesById)) {
@@ -302,6 +303,9 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
       activePageId: pageId,
       _injectedComponentIds: injectedIds,
     });
+
+    // Show loading overlay until PixiJS finishes rendering
+    useLoadingStore.getState().showLoadingUntilRendered();
   },
 
   initFromDocument: (

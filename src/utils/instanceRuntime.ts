@@ -177,6 +177,14 @@ export function resolveRefToTree(
 ): FrameNode | null {
   const component = nodesById[refNode.componentId];
   if (!component || component.type !== "frame" || !(component as FlatFrameNode).reusable) {
+    if (import.meta.env.DEV) {
+      console.warn(
+        `[resolveRefToTree] Failed to resolve ref ${refNode.id} → componentId=${refNode.componentId}:`,
+        !component ? "component not found in nodesById" :
+        component.type !== "frame" ? `unexpected type "${component.type}"` :
+        "component is not reusable",
+      );
+    }
     return null;
   }
 
