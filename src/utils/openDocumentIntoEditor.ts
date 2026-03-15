@@ -2,6 +2,7 @@ import type { ThemeName } from "@/types/variable";
 import type { DocumentData } from "@/utils/fileUtils";
 import { flattenTree } from "@/types/scene";
 import { useHistoryStore } from "@/store/historyStore";
+import { useLoadingStore } from "@/store/loadingStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useUIThemeStore } from "@/store/uiThemeStore";
 import { useVariableStore } from "@/store/variableStore";
@@ -21,6 +22,9 @@ export function applyOpenedDocument(
   options: ApplyOpenedDocumentOptions,
 ) {
   const themeToApply: ThemeName = data.activeTheme ?? DEFAULT_THEME;
+
+  // Show loading overlay immediately
+  useLoadingStore.getState().setCanvasLoading(true);
 
   // Convert document pages into PageData format (flat storage)
   const pageDataList: PageData[] = data.pages.map((page) => {

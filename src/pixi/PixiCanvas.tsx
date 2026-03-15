@@ -11,10 +11,12 @@ import {
   useCanvasResize,
   useAltKeyMeasurement,
 } from "@/hooks/useCanvasEffects";
+import { CircleNotch } from "@phosphor-icons/react";
 import { useClipboardStore } from "@/store/clipboardStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { useLayoutStore } from "@/store/layoutStore";
+import { useLoadingStore } from "@/store/loadingStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useThemeStore } from "@/store/themeStore";
@@ -67,6 +69,7 @@ export function PixiCanvas() {
   const selectedIds = useSelectionStore((s) => s.selectedIds);
   const { undo, redo, saveHistory, startBatch, endBatch } = useHistoryStore();
   const { activeTool, cancelDrawing, toggleTool } = useDrawModeStore();
+  const isCanvasLoading = useLoadingStore((s) => s.isCanvasLoading);
   const setPixiRefs = useCanvasRefStore((s) => s.setPixiRefs);
 
   // Selection data for inline editors
@@ -364,6 +367,20 @@ export function PixiCanvas() {
           absoluteX={editingPosition.x}
           absoluteY={editingPosition.y}
         />
+      )}
+      {/* Canvas loading overlay — opaque to hide content until rendered */}
+      {isCanvasLoading && (
+        <div
+          className="absolute inset-0 flex items-center justify-center pointer-events-none"
+          style={{ background: pageBackground }}
+        >
+          <CircleNotch
+            size={28}
+            weight="thin"
+            className="text-text-muted"
+            style={{ animation: "spin 1s linear infinite" }}
+          />
+        </div>
       )}
     </div>
   );
