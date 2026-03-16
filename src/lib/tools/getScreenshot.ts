@@ -1,6 +1,6 @@
 import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { useSceneStore } from "@/store/sceneStore";
-import type { Container } from "pixi.js";
+import { findPixiChild } from "@/utils/pixiUtils";
 import type { ToolHandler } from "../toolRegistry";
 
 export const getScreenshot: ToolHandler = async (args) => {
@@ -33,15 +33,3 @@ export const getScreenshot: ToolHandler = async (args) => {
 
   return JSON.stringify({ error: "No canvas renderer available" });
 };
-
-/**
- * Recursively find a PixiJS container by its label (node ID).
- */
-function findPixiChild(parent: Container, label: string): Container | null {
-  if (parent.label === label) return parent;
-  for (const child of parent.children) {
-    const found = findPixiChild(child as Container, label);
-    if (found) return found;
-  }
-  return null;
-}
