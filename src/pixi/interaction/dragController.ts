@@ -5,7 +5,7 @@ import { useSmartGuideStore } from "@/store/smartGuideStore";
 import { useHoverStore } from "@/store/hoverStore";
 import { useDragStore } from "@/store/dragStore";
 import { useLayoutStore } from "@/store/layoutStore";
-import type { FlatFrameNode, FlatSceneNode, SceneNode } from "@/types/scene";
+import type { FlatFrameNode, FlatSceneNode, FrameNode, SceneNode } from "@/types/scene";
 import { cloneNodeWithNewId } from "@/utils/cloneNode";
 import { saveHistory } from "@/store/sceneStore/helpers/history";
 import {
@@ -19,8 +19,13 @@ import {
   isPointInsideRect,
   getFrameAbsoluteRectWithLayout,
 } from "@/utils/dragUtils";
+import type { SiblingPosition } from "@/utils/dragUtils";
 import type { DragItem, InteractionContext, DragState } from "./types";
 import { findFrameInTree } from "./hitTesting";
+import {
+  createAutoLayoutDragAnimator,
+  type AutoLayoutDragAnimator,
+} from "../autoLayoutDragAnimator";
 
 const AXIS_LOCK_THRESHOLD = 8; // pixels
 
@@ -75,6 +80,8 @@ export function createDragController(context: InteractionContext): DragControlle
     cumulativeDeltaX: 0,
     cumulativeDeltaY: 0,
   };
+
+  let animator: AutoLayoutDragAnimator | null = null;
 
   const resetDragState = (): void => {
     state.isDragging = false;
@@ -191,6 +198,62 @@ export function createDragController(context: InteractionContext): DragControlle
     });
   };
 
+  const computeDropFinalPosition = (
+    parentFrame: FrameNode,
+    insertIndex: number,
+    draggedId: string,
+    calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
+    frameRect: { x: number; y: number },
+  ): { x: number; y: number } => {
+    const layoutChildren = calculateLayoutForFrame(parentFrame);
+    // Filter out the dragged node from layout children
+    const siblings = layoutChildren.filter((c) => c.id !== draggedId);
+
+    const layout = parentFrame.layout;
+    const isHorizontal = layout?.flexDirection === "row" || layout?.flexDirection === undefined;
+    const gap = layout?.gap ?? 0;
+
+    // Find the dragged child to know its size
+    const draggedChild = parentFrame.children.find((c) => c.id === draggedId);
+    const draggedWidth = draggedChild?.width ?? 0;
+    const draggedHeight = draggedChild?.height ?? 0;
+
+    if (siblings.length === 0) {
+      // Only child — goes to first layout position
+      const paddingLeft = layout?.paddingLeft ?? 0;
+      const paddingTop = layout?.paddingTop ?? 0;
+      return { x: frameRect.x + paddingLeft, y: frameRect.y + paddingTop };
+    }
+
+    if (insertIndex <= 0) {
+      // Before the first sibling
+      const first = siblings[0];
+      if (isHorizontal) {
+        return { x: frameRect.x + first.x - gap - draggedWidth, y: frameRect.y + first.y };
+      } else {
+        return { x: frameRect.x + first.x, y: frameRect.y + first.y - gap - draggedHeight };
+      }
+    }
+
+    if (insertIndex >= siblings.length) {
+      // After the last sibling
+      const last = siblings[siblings.length - 1];
+      if (isHorizontal) {
+        return { x: frameRect.x + last.x + last.width + gap, y: frameRect.y + last.y };
+      } else {
+        return { x: frameRect.x + last.x, y: frameRect.y + last.y + last.height + gap };
+      }
+    }
+
+    // Between two siblings — use the position of the sibling at insertIndex (before shift)
+    const nextSibling = siblings[insertIndex];
+    if (isHorizontal) {
+      return { x: frameRect.x + nextSibling.x - gap - draggedWidth, y: frameRect.y + nextSibling.y };
+    } else {
+      return { x: frameRect.x + nextSibling.x, y: frameRect.y + nextSibling.y - gap - draggedHeight };
+    }
+  };
+
   return {
     handlePointerDown(
       e: PointerEvent,
@@ -279,6 +342,76 @@ export function createDragController(context: InteractionContext): DragControlle
             state.isAutoLayoutDrag = true;
             state.autoLayoutParentId = parentId;
             useDragStore.getState().startDrag(primaryItem.id);
+
+            // Create and start the drag animator
+            const parentFrame = findFrameInTree(nodes, parentId);
+            if (parentFrame) {
+              const layout = parentFrame.layout;
+              const isHorizontal = layout?.flexDirection === "row" || layout?.flexDirection === undefined;
+              const gap = layout?.gap ?? 0;
+
+              // Compute sibling IDs (children excluding dragged node)
+              const siblingIds = parentFrame.children
+                .filter((c) => c.id !== primaryItem.id && c.visible !== false && c.enabled !== false)
+                .map((c) => c.id);
+
+              // Get dragged node's main axis size
+              const draggedChild = parentFrame.children.find((c) => c.id === primaryItem.id);
+              const draggedMainAxisSize = isHorizontal
+                ? (draggedChild?.width ?? primaryItem.width)
+                : (draggedChild?.height ?? primaryItem.height);
+
+              // Compute sibling positions from current layout.
+              // originalPositions: where siblings are now (with dragged node present) — for cancel restore.
+              // noGapPositions: where siblings would be if dragged node is removed — shifted backward.
+              const layoutChildren = calculateLayoutForFrame(parentFrame);
+              const noGapPositions = new Map<string, SiblingPosition>();
+              const originalPositions = new Map<string, SiblingPosition>();
+              let pastDragged = false;
+              const shift = draggedMainAxisSize + gap;
+              for (const child of layoutChildren) {
+                if (child.id === primaryItem.id) {
+                  pastDragged = true;
+                  continue;
+                }
+                originalPositions.set(child.id, { x: child.x, y: child.y });
+                if (pastDragged) {
+                  noGapPositions.set(child.id, {
+                    x: child.x - (isHorizontal ? shift : 0),
+                    y: child.y - (isHorizontal ? 0 : shift),
+                  });
+                } else {
+                  noGapPositions.set(child.id, { x: child.x, y: child.y });
+                }
+              }
+
+              animator = createAutoLayoutDragAnimator();
+              animator.start({
+                draggedId: primaryItem.id,
+                parentId,
+                siblingIds,
+                noGapPositions,
+                originalPositions,
+                draggedMainAxisSize,
+                gap,
+                isHorizontal,
+                startAbsX: primaryItem.startAbsX,
+                startAbsY: primaryItem.startAbsY,
+                startWorldX: world.x,
+                startWorldY: world.y,
+              });
+
+              // Register cancel handler
+              useDragStore.getState().setCancelDrag(() => {
+                if (animator) {
+                  animator.cancel();
+                  animator.destroy();
+                  animator = null;
+                }
+                useDragStore.getState().endDrag();
+                resetDragState();
+              });
+            }
           }
         }
 
@@ -297,6 +430,9 @@ export function createDragController(context: InteractionContext): DragControlle
     handlePointerMove(_e: PointerEvent, world: { x: number; y: number }): boolean {
       // Auto-layout drag reordering
       if (state.isDragging && state.nodeId && state.isAutoLayoutDrag && state.autoLayoutParentId) {
+        // Update ghost position via animator
+        animator?.updateCursorWorld(world.x, world.y);
+
         const sceneState = useSceneStore.getState();
         const nodes = sceneState.getNodes();
         const parentFrame = findFrameInTree(nodes, state.autoLayoutParentId);
@@ -316,11 +452,14 @@ export function createDragController(context: InteractionContext): DragControlle
             );
             if (dropResult) {
               useDragStore.getState().updateDrop(dropResult.indicator, dropResult.insertInfo, false);
+              animator?.updateInsertIndex(dropResult.insertInfo.index, false);
             } else {
               useDragStore.getState().updateDrop(null, null, false);
+              animator?.updateInsertIndex(null, false);
             }
           } else {
             useDragStore.getState().updateDrop(null, null, true);
+            animator?.updateInsertIndex(null, true);
           }
         }
         return true;
@@ -416,25 +555,57 @@ export function createDragController(context: InteractionContext): DragControlle
         const nodeId = state.nodeId;
         const sceneState = useSceneStore.getState();
         const node = sceneState.nodesById[nodeId];
+        const currentAnimator = animator;
+        animator = null;
 
-        if (dragStore.isOutsideParent && node) {
-          // Dragged out of auto-layout frame - extract to root level
-          useSceneStore.getState().moveNode(nodeId, null, 0);
-          useSceneStore.getState().updateNode(nodeId, {
-            x: Math.round(world.x - node.width / 2),
-            y: Math.round(world.y - node.height / 2),
-          });
-        } else if (dragStore.insertInfo) {
-          // Reorder within the frame
-          useSceneStore.getState().moveNode(
-            nodeId,
-            dragStore.insertInfo.parentId,
-            dragStore.insertInfo.index,
-          );
+        // Block further pointer events immediately
+        state.isDragging = false;
+
+        const commitAndCleanup = (): void => {
+          const ds = useDragStore.getState();
+          if (ds.isOutsideParent && node) {
+            useSceneStore.getState().moveNode(nodeId, null, 0);
+            useSceneStore.getState().updateNode(nodeId, {
+              x: Math.round(world.x - node.width / 2),
+              y: Math.round(world.y - node.height / 2),
+            });
+          } else if (ds.insertInfo) {
+            useSceneStore.getState().moveNode(
+              nodeId,
+              ds.insertInfo.parentId,
+              ds.insertInfo.index,
+            );
+          }
+
+          currentAnimator?.destroy();
+          ds.endDrag();
+          resetDragState();
+        };
+
+        if (currentAnimator && dragStore.insertInfo && !dragStore.isOutsideParent) {
+          // Compute the final absolute position for the drop animation
+          const nodes = sceneState.getNodes();
+          const parentFrame = findFrameInTree(nodes, dragStore.insertInfo.parentId);
+          if (parentFrame) {
+            const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+            const frameRect = getFrameAbsoluteRectWithLayout(parentFrame, nodes, calculateLayoutForFrame);
+            // Compute where the dragged node will land based on sibling positions
+            const finalPos = computeDropFinalPosition(
+              parentFrame,
+              dragStore.insertInfo.index,
+              nodeId,
+              calculateLayoutForFrame,
+              frameRect,
+            );
+            useDragStore.getState().setAnimationPhase("dropping");
+            currentAnimator.animateDrop(finalPos.x, finalPos.y).then(commitAndCleanup);
+          } else {
+            commitAndCleanup();
+          }
+        } else {
+          commitAndCleanup();
         }
 
-        dragStore.endDrag();
-        resetDragState();
         return true;
       }
 

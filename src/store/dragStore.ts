@@ -19,6 +19,8 @@ interface DragState {
   dropIndicator: DropIndicatorData | null;
   insertInfo: InsertInfo | null;
   isOutsideParent: boolean;
+  animationPhase: "dragging" | "dropping" | null;
+  cancelDrag: (() => void) | null;
 
   startDrag: (nodeId: string) => void;
   updateDrop: (
@@ -27,6 +29,8 @@ interface DragState {
     isOutsideParent?: boolean,
   ) => void;
   endDrag: () => void;
+  setAnimationPhase: (phase: "dragging" | "dropping" | null) => void;
+  setCancelDrag: (fn: (() => void) | null) => void;
 }
 
 export const useDragStore = create<DragState>((set) => ({
@@ -35,6 +39,8 @@ export const useDragStore = create<DragState>((set) => ({
   dropIndicator: null,
   insertInfo: null,
   isOutsideParent: false,
+  animationPhase: null,
+  cancelDrag: null,
 
   startDrag: (nodeId) => {
     // Select the node when starting to drag
@@ -46,6 +52,7 @@ export const useDragStore = create<DragState>((set) => ({
       dropIndicator: null,
       insertInfo: null,
       isOutsideParent: false,
+      animationPhase: "dragging",
     });
   },
 
@@ -63,5 +70,10 @@ export const useDragStore = create<DragState>((set) => ({
       dropIndicator: null,
       insertInfo: null,
       isOutsideParent: false,
+      animationPhase: null,
+      cancelDrag: null,
     }),
+
+  setAnimationPhase: (phase) => set({ animationPhase: phase }),
+  setCancelDrag: (fn) => set({ cancelDrag: fn }),
 }));

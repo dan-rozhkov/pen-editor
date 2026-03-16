@@ -1,6 +1,11 @@
 import type { SceneNode, FrameNode, GroupNode } from '../types/scene'
 import type { DropIndicatorData, InsertInfo } from '../store/dragStore'
 
+export interface SiblingPosition {
+  x: number
+  y: number
+}
+
 interface Point {
   x: number
   y: number

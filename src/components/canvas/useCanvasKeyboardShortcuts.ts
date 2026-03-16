@@ -3,6 +3,8 @@ import { isContainerNode, type SceneNode, type HistorySnapshot } from "@/types/s
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useUIVisibilityStore } from "@/store/uiVisibilityStore";
 import { useClipboardStore } from "@/store/clipboardStore";
+import { useConnectorStore } from "@/store/connectorStore";
+import { useDragStore } from "@/store/dragStore";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
@@ -45,7 +47,7 @@ interface CanvasKeyboardShortcutsParams {
   undo: (snapshot: HistorySnapshot) => HistorySnapshot | null;
   redo: (snapshot: HistorySnapshot) => HistorySnapshot | null;
   fitToContent: (nodes: SceneNode[], width: number, height: number) => void;
-  toggleTool: (tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon" | "embed" | "pencil") => void;
+  toggleTool: (tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon" | "embed" | "pencil" | "connector") => void;
   cancelDrawing: () => void;
   clearSelection: () => void;
   copyNodes: (nodes: SceneNode[]) => void;
@@ -423,6 +425,11 @@ export function useCanvasKeyboardShortcuts({
           toggleTool("pencil");
           return;
         }
+        if (e.code === "KeyC") {
+          e.preventDefault();
+          toggleTool("connector");
+          return;
+        }
       }
 
       if (e.code === "Space" && !e.repeat) {
@@ -537,8 +544,16 @@ export function useCanvasKeyboardShortcuts({
       }
 
       if (e.code === "Escape") {
+        // Cancel auto-layout drag animation if in progress
+        const dragCancelFn = useDragStore.getState().cancelDrag;
+        if (dragCancelFn) {
+          dragCancelFn();
+          return;
+        }
+
         const drawState = useDrawModeStore.getState();
         if (drawState.activeTool || drawState.isDrawing) {
+          useConnectorStore.getState().cancelConnectorDraw();
           cancelDrawing();
           return;
         }
