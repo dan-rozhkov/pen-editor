@@ -1,17 +1,21 @@
 import { Diamond, DiamondsFour, Minus } from "@phosphor-icons/react";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
-import type { SceneNode } from "@/types/scene";
+import type { FlatFrameNode, SceneNode } from "@/types/scene";
 import { PropertySection, SelectInput } from "@/components/ui/PropertyInputs";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 
 interface TypeSectionProps {
   node: SceneNode;
   onUpdate: (updates: Partial<SceneNode>) => void;
   typeLabelOverride?: string;
+  slotNode?: FlatFrameNode | null;
 }
 
-export function TypeSection({ node, onUpdate, typeLabelOverride }: TypeSectionProps) {
+export function TypeSection({ node, onUpdate, typeLabelOverride, slotNode }: TypeSectionProps) {
   const detachInstance = useSceneStore((s) => s.detachInstance);
+  const toggleSlot = useSceneStore((s) => s.toggleSlot);
   const setSelectedIds = useSelectionStore((s) => s.setSelectedIds);
   const typeLabel = typeLabelOverride ?? (node.type === "ref" ? "Instance" : node.type);
   const isContainerType = node.type === "frame" || node.type === "group";
@@ -85,6 +89,17 @@ export function TypeSection({ node, onUpdate, typeLabelOverride }: TypeSectionPr
           </>
         )}
       </div>
+      {slotNode && (
+        <div className="mt-3">
+          <Label className="cursor-pointer">
+            <Checkbox
+              checked={!!slotNode.isSlot}
+              onCheckedChange={() => toggleSlot(slotNode.id)}
+            />
+            Mark as slot
+          </Label>
+        </div>
+      )}
     </PropertySection>
   );
 }

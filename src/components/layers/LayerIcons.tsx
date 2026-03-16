@@ -13,6 +13,7 @@ import {
   HexagonIcon,
   HashStraight,
   CodeIcon,
+  FlowArrow,
 } from "@phosphor-icons/react";
 import clsx from "clsx";
 import type { SceneNode, LayoutProperties } from "../../types/scene";
@@ -141,6 +142,8 @@ export const NodeIcon = ({
       return <CodeIcon size={16} className={iconClass} weight="regular" />;
     case "ref":
       return <DiamondIcon size={16} className={iconClass} weight="regular" />;
+    case "connector":
+      return <FlowArrow size={16} className={iconClass} weight="regular" />;
     default:
       return null;
   }

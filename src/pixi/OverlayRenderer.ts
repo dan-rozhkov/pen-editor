@@ -6,6 +6,11 @@ import { useViewportStore } from "@/store/viewportStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { usePixelGridStore } from "@/store/pixelGridStore";
 import { useUIThemeStore } from "@/store/uiThemeStore";
+import { useConnectorStore } from "@/store/connectorStore";
+import { useSceneStore } from "@/store/sceneStore";
+import { useLayoutStore } from "@/store/layoutStore";
+import type { AnchorPosition } from "@/types/scene";
+import { getAnchorWorldPosition, drawArrowhead, shortenLineEnd } from "@/utils/connectorUtils";
 import { getMarqueeRect, subscribeOverlayState } from "./pixiOverlayState";
 import {
   FLOATING_LABEL_FONT_SIZE,
@@ -73,6 +78,11 @@ export function createOverlayRenderer(
   const marqueeGfx = new Graphics();
   marqueeGfx.label = "marquee-selection";
   overlayContainer.addChild(marqueeGfx);
+
+  const connectorPreviewGfx = new Graphics();
+  connectorPreviewGfx.label = "connector-preview";
+  overlayContainer.addChild(connectorPreviewGfx);
+
   const measureLabelPool: MeasureLabelEntry[] = [];
   const activeMeasureLabels: MeasureLabelEntry[] = [];
   let lastViewport = useViewportStore.getState();
@@ -297,6 +307,73 @@ export function createOverlayRenderer(
     marqueeGfx.stroke({ color: MARQUEE_STROKE, width: strokeWidth });
   }
 
+  function drawAnchorCircles(nodeId: string, highlightAnchor?: AnchorPosition): void {
+    const nodes = useSceneStore.getState().getNodes();
+    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+    const scale = useViewportStore.getState().scale;
+    const radius = 4 / scale;
+    const anchors: AnchorPosition[] = ["top", "right", "bottom", "left"];
+
+    for (const anchor of anchors) {
+      const pos = getAnchorWorldPosition(nodeId, anchor, nodes, calculateLayoutForFrame);
+      if (!pos) continue;
+      const isHighlighted = anchor === highlightAnchor;
+      connectorPreviewGfx.circle(pos.x, pos.y, radius);
+      if (isHighlighted) {
+        connectorPreviewGfx.fill({ color: 0x0d99ff, alpha: 1 });
+      } else {
+        connectorPreviewGfx.fill({ color: 0xffffff, alpha: 1 });
+        connectorPreviewGfx.circle(pos.x, pos.y, radius);
+        connectorPreviewGfx.stroke({ color: 0x0d99ff, width: 1 / scale });
+      }
+    }
+  }
+
+  function redrawConnectorPreview(): void {
+    connectorPreviewGfx.clear();
+
+    const { activeTool } = useDrawModeStore.getState();
+    if (activeTool !== "connector") return;
+
+    const connState = useConnectorStore.getState();
+    const scale = useViewportStore.getState().scale;
+
+    if (connState.sourceNodeId && connState.sourceAnchor) {
+      // Draw source anchor (filled blue)
+      drawAnchorCircles(connState.sourceNodeId, connState.sourceAnchor);
+
+      // Draw target anchors if hovering
+      if (connState.hoveredNodeId && connState.hoveredNodeId !== connState.sourceNodeId) {
+        drawAnchorCircles(connState.hoveredNodeId, connState.hoveredAnchor ?? undefined);
+      }
+
+      // Draw preview line from source anchor to cursor/target
+      const nodes = useSceneStore.getState().getNodes();
+      const calcLayout = useLayoutStore.getState().calculateLayoutForFrame;
+      const startPos = getAnchorWorldPosition(connState.sourceNodeId, connState.sourceAnchor, nodes, calcLayout);
+      if (startPos && connState.previewEndPoint) {
+        let endPos = connState.previewEndPoint;
+        if (connState.hoveredNodeId && connState.hoveredAnchor) {
+          const targetPos = getAnchorWorldPosition(connState.hoveredNodeId, connState.hoveredAnchor, nodes, calcLayout);
+          if (targetPos) endPos = targetPos;
+        }
+
+        const arrowSize = 8 / scale;
+        const lineEnd = shortenLineEnd(startPos.x, startPos.y, endPos.x, endPos.y, arrowSize);
+        connectorPreviewGfx.moveTo(startPos.x, startPos.y);
+        connectorPreviewGfx.lineTo(lineEnd.x, lineEnd.y);
+        connectorPreviewGfx.stroke({ color: 0x0d99ff, width: 2 / scale });
+
+        drawArrowhead(connectorPreviewGfx, startPos.x, startPos.y, endPos.x, endPos.y, arrowSize, { color: 0x0d99ff });
+      }
+    } else {
+      // Idle: show anchors on nearest node (uses connector store which has proximity detection)
+      if (connState.hoveredNodeId) {
+        drawAnchorCircles(connState.hoveredNodeId);
+      }
+    }
+  }
+
   // Phase 5: Batch viewport-triggered overlay redraws via dirty flags + RAF.
   // Interactive store subscriptions stay synchronous to avoid perceptible lag
   // on guides/draw preview/drop indicators during drag/draw.
@@ -306,7 +383,8 @@ export function createOverlayRenderer(
   const DIRTY_MEASURE = 8;
   const DIRTY_DRAW = 16;
   const DIRTY_MARQUEE = 32;
-  const DIRTY_ALL_SCALE = DIRTY_GUIDES | DIRTY_DROP | DIRTY_MEASURE | DIRTY_DRAW | DIRTY_MARQUEE;
+  const DIRTY_CONNECTOR = 64;
+  const DIRTY_ALL_SCALE = DIRTY_GUIDES | DIRTY_DROP | DIRTY_MEASURE | DIRTY_DRAW | DIRTY_MARQUEE | DIRTY_CONNECTOR;
   let dirtyFlags = 0;
   let overlayRafId: number | null = null;
 
@@ -320,6 +398,7 @@ export function createOverlayRenderer(
     if (flags & DIRTY_MEASURE) redrawMeasureLines();
     if (flags & DIRTY_DRAW) redrawDrawPreview();
     if (flags & DIRTY_MARQUEE) redrawMarquee();
+    if (flags & DIRTY_CONNECTOR) redrawConnectorPreview();
   }
 
   function scheduleOverlayRedraw(flags: number): void {
@@ -334,6 +413,7 @@ export function createOverlayRenderer(
   const unsubDrawMode = useDrawModeStore.subscribe(redrawDrawPreview);
   const unsubMarquee = subscribeOverlayState(redrawMarquee);
   const unsubMeasure = useMeasureStore.subscribe(redrawMeasureLines);
+  const unsubConnector = useConnectorStore.subscribe(redrawConnectorPreview);
   // Non-interactive — batched via RAF
   const unsubPixelGrid = usePixelGridStore.subscribe(() => scheduleOverlayRedraw(DIRTY_GRID));
   const unsubUITheme = useUIThemeStore.subscribe(() => scheduleOverlayRedraw(DIRTY_GRID));
@@ -357,6 +437,7 @@ export function createOverlayRenderer(
   redrawMeasureLines();
   redrawDrawPreview();
   redrawMarquee();
+  redrawConnectorPreview();
 
   return () => {
     if (overlayRafId !== null) {
@@ -370,6 +451,7 @@ export function createOverlayRenderer(
     unsubMeasure();
     unsubDrawMode();
     unsubMarquee();
+    unsubConnector();
     unsubViewport();
     pixelGridGfx.destroy();
     guidesGfx.destroy();
@@ -384,5 +466,6 @@ export function createOverlayRenderer(
     measureLabels.destroy({ children: true });
     drawPreviewGfx.destroy();
     marqueeGfx.destroy();
+    connectorPreviewGfx.destroy();
   };
 }

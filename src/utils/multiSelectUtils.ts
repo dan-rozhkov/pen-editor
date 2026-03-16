@@ -94,6 +94,7 @@ const SECTION_MAP: Record<SceneNode["type"], SharedSection[]> = {
   polygon: ["position", "size", "appearance", "fill", "stroke", "effects"],
   embed: ["position", "size", "appearance", "effects"],
   ref: ["position", "size", "appearance", "fill", "stroke", "effects"],
+  connector: ["position", "size", "stroke"],
 };
 
 /** Returns the intersection of applicable property sections for given node types */

@@ -152,7 +152,7 @@ export function createDrawController(_context: InteractionContext): DrawControll
   return {
     handlePointerDown(e: PointerEvent, world: { x: number; y: number }): boolean {
       const { activeTool } = useDrawModeStore.getState();
-      if (activeTool && activeTool !== "cursor" && e.button === 0) {
+      if (activeTool && activeTool !== "cursor" && activeTool !== "connector" && e.button === 0) {
         state.isDrawing = true;
         state.startWorldX = world.x;
         state.startWorldY = world.y;

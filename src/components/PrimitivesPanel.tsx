@@ -7,6 +7,7 @@ import {
   HexagonIcon,
   HashStraight,
   PencilSimple,
+  FlowArrow,
   type IconWeight,
   CaretDownIcon,
   SparkleIcon,
@@ -74,6 +75,7 @@ export function PrimitivesPanel() {
   }> = [
     { icon: LineSegmentIcon, label: "Line", tool: "line", shortcut: "L" },
     { icon: HexagonIcon, label: "Polygon", tool: "polygon", shortcut: "P" },
+    { icon: FlowArrow, label: "Connector", tool: "connector", shortcut: "C" },
   ];
 
   const isRectSubToolActive = rectSubTools.some((t) => t.tool === activeTool);
