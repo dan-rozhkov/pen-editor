@@ -6,7 +6,7 @@ import { collectDocumentComponents } from "@/lib/documentComponents";
 import type { ToolHandler } from "../toolRegistry";
 
 export const getEditorState: ToolHandler = async () => {
-  const { rootIds, nodesById, componentArtifactsById } = useSceneStore.getState();
+  const { rootIds, nodesById, childrenById, componentArtifactsById } = useSceneStore.getState();
   const { selectedIds } = useSelectionStore.getState();
   const { scale, x, y } = useViewportStore.getState();
 
@@ -17,7 +17,7 @@ export const getEditorState: ToolHandler = async () => {
   });
 
   // Single pass: collect document components, then derive both response shapes
-  const docComponents = collectDocumentComponents(nodesById, componentArtifactsById);
+  const docComponents = collectDocumentComponents(nodesById, componentArtifactsById, childrenById);
 
   const reusableComponents = docComponents.map((c) => ({
     id: c.id,

@@ -46,6 +46,15 @@ function parseSlotName(name?: string): { name: string | null } | null {
  */
 function wrapWithSlotIfNeeded(html: string, node: FlatSceneNode, ctx: ConversionContext): string {
   if (!ctx.isComponent) return html;
+  // Check isSlot flag on frame nodes
+  if (node.type === "frame" && (node as FlatFrameNode).isSlot) {
+    const slotName = node.name?.toLowerCase().trim();
+    if (slotName && slotName !== "slot") {
+      return `<slot name="${slotName}">${html}</slot>`;
+    }
+    return `<slot>${html}</slot>`;
+  }
+  // Fall back to naming convention
   const slotInfo = parseSlotName(node.name);
   if (!slotInfo) return html;
   if (slotInfo.name) {

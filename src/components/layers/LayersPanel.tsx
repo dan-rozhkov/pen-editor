@@ -8,6 +8,12 @@ import {
 import { useSceneStore } from "../../store/sceneStore";
 import { useSelectionStore } from "../../store/selectionStore";
 import { getAncestorIds } from "../../utils/nodeUtils";
+import { findNodeByPath } from "../../utils/instanceRuntime";
+import { findComponentById } from "../../utils/nodeUtils";
+import type { FlatFrameNode, FrameNode, RefNode, SceneNode } from "../../types/scene";
+import { buildTree } from "../../types/scene";
+import { createRefFromComponent } from "../../utils/componentUtils";
+import { deepCloneNode } from "../../utils/cloneNode";
 import { LayerItem } from "./LayerItem";
 import {
   ROW_HEIGHT,
@@ -107,12 +113,14 @@ export function LayersPanel() {
   );
 
   const handleDragOver = useCallback(
-    (nodeId: string, position: DropPosition, parentId: string | null) => {
+    (nodeId: string, position: DropPosition, parentId: string | null, instanceId?: string, descendantPath?: string) => {
       setDragState((prev) => ({
         ...prev,
         dropTargetId: nodeId,
         dropPosition: position,
         dropParentId: parentId,
+        dropInstanceId: instanceId ?? null,
+        dropDescendantPath: descendantPath ?? null,
       }));
     },
     [],
@@ -127,8 +135,11 @@ export function LayersPanel() {
     });
   }, []);
 
+  const replaceInstanceNode = useSceneStore((state) => state.replaceInstanceNode);
+  const deleteNode = useSceneStore((state) => state.deleteNode);
+
   const handleDrop = useCallback(() => {
-    const { draggedId, dropTargetId, dropPosition, dropParentId } = dragState;
+    const { draggedId, dropTargetId, dropPosition, dropParentId, dropInstanceId, dropDescendantPath } = dragState;
 
     if (!draggedId || !dropTargetId || !dropPosition) {
       handleDragEnd();
@@ -136,6 +147,50 @@ export function LayersPanel() {
     }
 
     if (draggedId === dropTargetId) {
+      handleDragEnd();
+      return;
+    }
+
+    // Drop into a slot inside an instance — create a replace override
+    if (dropInstanceId && dropDescendantPath && dropPosition === "inside") {
+      const state = useSceneStore.getState();
+      const instance = state.nodesById[dropInstanceId] as RefNode | undefined;
+      const draggedNode = state.nodesById[draggedId];
+      if (instance?.type === "ref" && draggedNode) {
+        const allNodes = state.getNodes();
+        const component = findComponentById(allNodes, instance.componentId);
+        if (component) {
+          const slotFrame = findNodeByPath(component.children, dropDescendantPath);
+          if (slotFrame?.type === "frame") {
+            // If dragging a reusable component, create a ref to it (don't clone the definition)
+            let nodeToInsert: SceneNode;
+            let shouldDelete = true;
+            if (draggedNode.type === "frame" && (draggedNode as FlatFrameNode).reusable) {
+              nodeToInsert = createRefFromComponent(draggedId, draggedNode.width, draggedNode.height);
+              shouldDelete = false; // Don't delete the component definition
+            } else {
+              const draggedTree = buildTree([draggedId], state.nodesById, state.childrenById)[0];
+              if (!draggedTree) { handleDragEnd(); return; }
+              nodeToInsert = deepCloneNode(draggedTree);
+              nodeToInsert.x = 0;
+              nodeToInsert.y = 0;
+            }
+            // Preserve existing override children
+            const currentOverride = instance.overrides?.[dropDescendantPath];
+            const baseFrame = currentOverride?.kind === "replace"
+              ? currentOverride.node as FrameNode
+              : slotFrame as FrameNode;
+            const replacement: FrameNode = {
+              ...baseFrame,
+              children: [...baseFrame.children, nodeToInsert],
+            };
+            replaceInstanceNode(dropInstanceId, dropDescendantPath, replacement);
+            if (shouldDelete) deleteNode(draggedId);
+            handleDragEnd();
+            return;
+          }
+        }
+      }
       handleDragEnd();
       return;
     }
@@ -163,7 +218,7 @@ export function LayersPanel() {
 
     moveNode(draggedId, newParentId, newIndex);
     handleDragEnd();
-  }, [dragState, childrenById, moveNode, setFrameExpanded, handleDragEnd]);
+  }, [dragState, childrenById, moveNode, setFrameExpanded, handleDragEnd, replaceInstanceNode, deleteNode]);
 
   // Reverse the nodes array so that top items in the list appear on top visually (higher z-index)
   const reversedNodes = useMemo(() => [...nodes].reverse(), [nodes]);

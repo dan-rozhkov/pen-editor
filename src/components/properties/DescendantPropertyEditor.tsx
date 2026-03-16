@@ -4,7 +4,8 @@ import type { InstanceOverrideUpdateProps, RefNode, SceneNode } from "@/types/sc
 import { isContainerNode, type FrameNode, type GroupNode, type TextNode } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
 import { findComponentById, findNodeById } from "@/utils/nodeUtils";
-import { findNodeByPath } from "@/utils/instanceRuntime";
+import { findNodeByPath, resolveRefToTree } from "@/utils/instanceRuntime";
+import { findSlotContext } from "@/utils/componentUtils";
 import {
   NumberInput,
   PropertySection,
@@ -60,6 +61,9 @@ export function DescendantPropertyEditor({
   const updateInstanceOverride = useSceneStore((s) => s.updateInstanceOverride);
   const replaceInstanceNode = useSceneStore((s) => s.replaceInstanceNode);
   const resetInstanceOverride = useSceneStore((s) => s.resetInstanceOverride);
+  const updateSlotChildWithoutHistory = useSceneStore((s) => s.updateSlotChildWithoutHistory);
+  const nodesById = useSceneStore((s) => s.nodesById);
+  const childrenById = useSceneStore((s) => s.childrenById);
 
   const instance = findNodeById(allNodes, instanceContext.instanceId) as RefNode | null;
   if (!instance || instance.type !== "ref") return null;
@@ -67,12 +71,17 @@ export function DescendantPropertyEditor({
   const component = findComponentById(allNodes, instance.componentId);
   if (!component) return null;
 
-  const originalNode = findNodeByPath(component.children, instanceContext.descendantPath);
+  // Look up node in component definition first, then fall back to resolved instance tree
+  let originalNode = findNodeByPath(component.children, instanceContext.descendantPath);
+  let resolvedTree: FrameNode | null = null;
+  if (!originalNode) {
+    resolvedTree = resolveRefToTree(instance, nodesById, childrenById);
+    if (resolvedTree) {
+      originalNode = findNodeByPath(resolvedTree.children, instanceContext.descendantPath, nodesById, childrenById);
+    }
+  }
   if (!originalNode) return null;
 
-  const isRootSlot =
-    !instanceContext.descendantPath.includes("/") &&
-    (component.slot?.includes(instanceContext.descendantPath) ?? false);
   const currentOverride = instance.overrides?.[instanceContext.descendantPath];
   const isReplaced = currentOverride?.kind === "replace";
   const updateProps = currentOverride?.kind === "update" ? currentOverride.props : {};
@@ -82,10 +91,23 @@ export function DescendantPropertyEditor({
     ? sourceNode
     : ({ ...originalNode, ...updateProps } as SceneNode);
   const colorVariables = variables.filter((v) => v.type === "color");
-  const parentContext = getParentContextForDescendant(component, instanceContext.descendantPath);
+  // Use resolved tree for parent context when node is inside a replaced slot
+  const parentContextSource = resolvedTree ?? component;
+  const parentContext = getParentContextForDescendant(parentContextSource, instanceContext.descendantPath);
+
+  // Find the slot path if this node is inside a replaced slot
+  const slotContext = resolvedTree ? findSlotContext(instanceContext.descendantPath, instance.overrides) : null;
 
   const handleUpdate = (updates: Partial<SceneNode>) => {
-    if (isReplaced) {
+    if (slotContext) {
+      // Node is inside a replaced slot — update within the replacement tree
+      updateSlotChildWithoutHistory(
+        instanceContext.instanceId,
+        slotContext.slotPath,
+        slotContext.relativePath,
+        updates,
+      );
+    } else if (isReplaced) {
       replaceInstanceNode(
         instanceContext.instanceId,
         instanceContext.descendantPath,
@@ -113,18 +135,7 @@ export function DescendantPropertyEditor({
 
   return (
     <div className="flex flex-col">
-      <PropertySection title="Selected Instance Element">
-        <div className="text-xs text-purple-400">{originalNode.name || originalNode.type}</div>
-        {isRootSlot && !isReplaced && (
-          <Button
-            onClick={() => replaceInstanceNode(instanceContext.instanceId, instanceContext.descendantPath, originalNode)}
-            variant="secondary"
-            className="mt-2 w-full"
-          >
-            Replace Slot
-          </Button>
-        )}
-      </PropertySection>
+      <TypeSection node={displayNode} onUpdate={handleUpdate} />
 
       <PropertySection title="Visibility">
         <div className="flex items-end gap-2">
@@ -153,8 +164,6 @@ export function DescendantPropertyEditor({
           </Button>
         </div>
       </PropertySection>
-
-      <TypeSection node={displayNode} onUpdate={handleUpdate} />
       <PositionSection node={displayNode} onUpdate={handleUpdate} parentContext={parentContext} />
       <SizeSection
         node={displayNode}

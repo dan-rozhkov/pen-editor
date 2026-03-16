@@ -82,7 +82,7 @@ export interface PerCornerRadius {
 
 export interface BaseNode {
   id: string
-  type: 'frame' | 'group' | 'rect' | 'ellipse' | 'text' | 'path' | 'line' | 'polygon' | 'embed' | 'ref'
+  type: 'frame' | 'group' | 'rect' | 'ellipse' | 'text' | 'path' | 'line' | 'polygon' | 'embed' | 'ref' | 'connector'
   name?: string
   x: number
   y: number
@@ -175,8 +175,8 @@ export interface FrameNode extends BaseNode {
   themeOverride?: ThemeName
   // Reusable component flag - when true, this frame is a component that can be instantiated
   reusable?: boolean
-  // IDs of direct children that are slot nodes (replaceable in instances)
-  slot?: string[]
+  // When true, this frame is a slot (replaceable in instances)
+  isSlot?: boolean
   // Layout grid overlays (visual design aid, not part of exported design)
   layoutGrids?: LayoutGridConfig[]
 }
@@ -258,6 +258,20 @@ export interface LineNode extends BaseNode {
   points: number[]  // [x1, y1, x2, y2] relative to node x,y
 }
 
+export type AnchorPosition = 'top' | 'right' | 'bottom' | 'left'
+
+export interface ConnectorEndpoint {
+  nodeId: string
+  anchor: AnchorPosition
+}
+
+export interface ConnectorNode extends BaseNode {
+  type: 'connector'
+  startConnection: ConnectorEndpoint
+  endConnection: ConnectorEndpoint
+  points: number[]  // [x1, y1, x2, y2] relative to node x,y
+}
+
 export interface PolygonNode extends BaseNode {
   type: 'polygon'
   points: number[]  // vertices [x1,y1,x2,y2,...] relative to node x,y
@@ -293,7 +307,7 @@ export interface RefNode extends BaseNode {
   overrides?: InstanceOverrides
 }
 
-export type SceneNode = FrameNode | GroupNode | RectNode | EllipseNode | TextNode | PathNode | LineNode | PolygonNode | EmbedNode | RefNode
+export type SceneNode = FrameNode | GroupNode | RectNode | EllipseNode | TextNode | PathNode | LineNode | PolygonNode | EmbedNode | RefNode | ConnectorNode
 
 // --- Flat node types (no children arrays - structure lives in store indices) ---
 
@@ -304,7 +318,7 @@ export type FlatFrameNode = Omit<FrameNode, 'children'>
 export type FlatGroupNode = Omit<GroupNode, 'children'>
 
 /** Union of all node types in flat storage (containers have no children property) */
-export type FlatSceneNode = FlatFrameNode | FlatGroupNode | RectNode | EllipseNode | TextNode | PathNode | LineNode | PolygonNode | EmbedNode | RefNode
+export type FlatSceneNode = FlatFrameNode | FlatGroupNode | RectNode | EllipseNode | TextNode | PathNode | LineNode | PolygonNode | EmbedNode | RefNode | ConnectorNode
 
 /** Check if a node is a container (has children array) */
 export function isContainerNode(node: SceneNode): node is FrameNode | GroupNode {

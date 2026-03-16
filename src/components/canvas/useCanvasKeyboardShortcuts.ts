@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { isContainerNode, type SceneNode, type HistorySnapshot } from "@/types/scene";
+import { isContainerNode, type SceneNode, type HistorySnapshot, type FrameNode, type RefNode } from "@/types/scene";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useUIVisibilityStore } from "@/store/uiVisibilityStore";
 import { useClipboardStore } from "@/store/clipboardStore";
@@ -8,13 +8,14 @@ import { useDragStore } from "@/store/dragStore";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
-import { cloneNodeWithNewId } from "@/utils/cloneNode";
+import { cloneNodeWithNewId, deepCloneNode } from "@/utils/cloneNode";
 import {
   findNodeById,
   findParentFrame,
+  findComponentById,
 } from "@/utils/nodeUtils";
+import { createRefFromComponent } from "@/utils/componentUtils";
 import { resolveRefToTree, findNodeByPath } from "@/utils/instanceRuntime";
-import type { RefNode } from "@/types/scene";
 import { parseSvgToNodes } from "@/utils/svgUtils";
 import {
   applyImageImportPlans,
@@ -137,8 +138,44 @@ export function useCanvasKeyboardShortcuts({
 }: CanvasKeyboardShortcutsParams) {
   useEffect(() => {
     const pasteInternalNodes = (sourceNodes: SceneNode[]): void => {
-      const clonedNodes = sourceNodes.map((node) => cloneNodeWithNewId(node));
       const selectionState = useSelectionStore.getState();
+
+      // Paste into slot inside instance
+      if (selectionState.instanceContext) {
+        const { instanceId, descendantPath } = selectionState.instanceContext;
+        const state = useSceneStore.getState();
+        const instance = state.nodesById[instanceId] as RefNode | undefined;
+        if (instance?.type === "ref") {
+          const component = findComponentById(nodes, instance.componentId);
+          if (component) {
+            const slotFrame = findNodeByPath(component.children, descendantPath);
+            if (slotFrame?.type === "frame" && (slotFrame as FrameNode).isSlot) {
+              const clonedNodes = sourceNodes.map((srcNode) => {
+                // Reusable components → create a ref, don't flatten
+                if (srcNode.type === "frame" && (srcNode as FrameNode).reusable) {
+                  return createRefFromComponent(srcNode.id, srcNode.width, srcNode.height) as SceneNode;
+                }
+                const cloned = deepCloneNode(srcNode);
+                cloned.x = 0;
+                cloned.y = 0;
+                return cloned;
+              });
+              const currentOverride = instance.overrides?.[descendantPath];
+              const baseFrame = currentOverride?.kind === "replace"
+                ? currentOverride.node as FrameNode
+                : slotFrame as FrameNode;
+              const replacement: FrameNode = {
+                ...baseFrame,
+                children: [...baseFrame.children, ...clonedNodes],
+              };
+              state.replaceInstanceNode(instanceId, descendantPath, replacement);
+              return;
+            }
+          }
+        }
+      }
+
+      const clonedNodes = sourceNodes.map((node) => cloneNodeWithNewId(node));
       const targetContainerId = resolvePasteTargetContainerId(nodes, selectionState);
 
       saveHistory(createSnapshot(useSceneStore.getState()));

@@ -9,6 +9,10 @@ export interface DragState {
   dropTargetId: string | null;
   dropPosition: DropPosition;
   dropParentId: string | null;
+  /** Set when drop target is inside a ref (instance) */
+  dropInstanceId?: string | null;
+  /** Path within the instance's resolved tree */
+  dropDescendantPath?: string | null;
 }
 
 export interface FlattenedLayer {
@@ -46,6 +50,8 @@ function flattenRefChildren(
   depth: number,
   parentPath: string,
   out: FlattenedLayer[],
+  nodesById?: Record<string, FlatSceneNode>,
+  childrenById?: Record<string, string[]>,
 ): void {
   for (let i = children.length - 1; i >= 0; i--) {
     const child = children[i];
@@ -60,8 +66,13 @@ function flattenRefChildren(
       descendantPath: path,
     });
 
-    if (isContainerNode(child) && child.children.length > 0 && expandedFrameIds.has(expandKey)) {
-      flattenRefChildren(child.children, instanceId, expandedFrameIds, depth + 1, path, out);
+    if (child.type === "ref" && nodesById && childrenById && expandedFrameIds.has(expandKey)) {
+      const nestedResolved = resolveRefToTree(child as RefNode, nodesById, childrenById);
+      if (nestedResolved && nestedResolved.children.length > 0) {
+        flattenRefChildren(nestedResolved.children, instanceId, expandedFrameIds, depth + 1, path, out, nodesById, childrenById);
+      }
+    } else if (isContainerNode(child) && child.children.length > 0 && expandedFrameIds.has(expandKey)) {
+      flattenRefChildren(child.children, instanceId, expandedFrameIds, depth + 1, path, out, nodesById, childrenById);
     }
   }
 }
@@ -85,7 +96,7 @@ function flattenLayersRec(
     } else if (node.type === "ref" && nodesById && childrenById && expandedFrameIds.has(node.id)) {
       const resolved = resolveRefToTree(node as RefNode, nodesById, childrenById);
       if (resolved && resolved.children.length > 0) {
-        flattenRefChildren(resolved.children, node.id, expandedFrameIds, depth + 1, "", out);
+        flattenRefChildren(resolved.children, node.id, expandedFrameIds, depth + 1, "", out, nodesById, childrenById);
       }
     }
   }

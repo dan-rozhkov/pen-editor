@@ -3,7 +3,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useLayoutStore } from "@/store/layoutStore";
-import type { SceneNode, FrameNode, FlatSceneNode, RefNode } from "@/types/scene";
+import type { SceneNode, FrameNode, FlatSceneNode, RefNode, ConnectorNode } from "@/types/scene";
 import {
   getPreparedNodeEffectiveSize,
   prepareFrameNode,
@@ -24,6 +24,21 @@ const LABEL_TEXT_STYLE = new TextStyle({
   fontFamily: LABEL_FONT_FAMILY,
   fontSize: LABEL_FONT_SIZE,
 });
+
+function pointToSegmentDistance(
+  px: number, py: number,
+  x1: number, y1: number,
+  x2: number, y2: number,
+): number {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lenSq));
+  const projX = x1 + t * dx;
+  const projY = y1 + t * dy;
+  return Math.sqrt((px - projX) ** 2 + (py - projY) ** 2);
+}
 
 /**
  * Convert screen coordinates to world coordinates
@@ -150,6 +165,24 @@ export function findCanvasHitTargetAtPoint(
       return null;
     }
 
+    // Connector nodes: use line-segment distance instead of bounding box
+    if (node.type === "connector") {
+      const conn = node as ConnectorNode;
+      if (conn.points.length >= 4) {
+        const scale = useViewportStore.getState().scale;
+        const threshold = 5 / scale;
+        const dist = pointToSegmentDistance(
+          worldX, worldY,
+          absX + conn.points[0], absY + conn.points[1],
+          absX + conn.points[2], absY + conn.points[3],
+        );
+        if (dist <= threshold) {
+          return { kind: "node", nodeId: node.id };
+        }
+        return null;
+      }
+    }
+
     if (node.type === "ref") {
       // Default: ref is opaque unless deep-selecting or entered
       if (!deepSelect && enteredContainerId !== node.id) {
@@ -183,12 +216,25 @@ export function findCanvasHitTargetAtPoint(
           return null;
         }
 
-        const resolvedChildren =
-          resolvedNode.type === "frame" && resolvedNode.layout?.autoLayout
-            ? prepareFrameNode(resolvedNode, calculateLayoutForFrame).layoutChildren
-            : resolvedNode.type === "frame" || resolvedNode.type === "group"
-              ? resolvedNode.children
-              : [];
+        let resolvedChildren: SceneNode[];
+        if (resolvedNode.type === "ref") {
+          const nestedResolved = resolveRefToTree(
+            resolvedNode as RefNode, state.nodesById, state.childrenById,
+          );
+          if (nestedResolved) {
+            resolvedChildren = nestedResolved.layout?.autoLayout
+              ? prepareFrameNode(nestedResolved, calculateLayoutForFrame).layoutChildren
+              : nestedResolved.children;
+          } else {
+            resolvedChildren = [];
+          }
+        } else if (resolvedNode.type === "frame" && resolvedNode.layout?.autoLayout) {
+          resolvedChildren = prepareFrameNode(resolvedNode, calculateLayoutForFrame).layoutChildren;
+        } else if (resolvedNode.type === "frame" || resolvedNode.type === "group") {
+          resolvedChildren = resolvedNode.children;
+        } else {
+          resolvedChildren = [];
+        }
 
         for (let i = resolvedChildren.length - 1; i >= 0; i--) {
           const child = resolvedChildren[i];
@@ -204,10 +250,13 @@ export function findCanvasHitTargetAtPoint(
         return resolvedPath;
       };
 
-      // Find deepest hit path
+      // Find deepest hit path (apply auto-layout at root level, matching renderer)
+      const rootChildren = resolved.layout?.autoLayout
+        ? prepareFrameNode(resolved, calculateLayoutForFrame).layoutChildren
+        : resolved.children;
       let deepHitPath: string | null = null;
-      for (let i = resolved.children.length - 1; i >= 0; i--) {
-        const child = resolved.children[i];
+      for (let i = rootChildren.length - 1; i >= 0; i--) {
+        const child = rootChildren[i];
         deepHitPath = hitResolvedPath(child, absX + child.x, absY + child.y, child.id);
         if (deepHitPath) break;
       }

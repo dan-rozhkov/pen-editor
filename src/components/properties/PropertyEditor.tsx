@@ -1,6 +1,8 @@
-import type { SceneNode } from "@/types/scene";
+import type { SceneNode, FlatFrameNode } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
 import { findComponentById, type ParentContext } from "@/utils/nodeUtils";
+import { useSceneStore } from "@/store/sceneStore";
+import { isInsideReusableComponent } from "@/utils/componentUtils";
 import { TypeSection } from "@/components/properties/TypeSection";
 import { PositionSection } from "@/components/properties/PositionSection";
 import { SizeSection } from "@/components/properties/SizeSection";
@@ -12,7 +14,6 @@ import { StrokeSection } from "@/components/properties/StrokeSection";
 import { EffectsSection } from "@/components/properties/EffectsSection";
 import { ThemeSection } from "@/components/properties/ThemeSection";
 import { TypographySection } from "@/components/properties/TypographySection";
-import { SlotsSection } from "@/components/properties/SlotsSection";
 import { EmbedContentSection } from "@/components/properties/EmbedContentSection";
 import { FrameActionsSection } from "@/components/properties/FrameActionsSection";
 
@@ -46,6 +47,14 @@ export function PropertyEditor({
     onUpdate({ [property]: undefined } as Partial<SceneNode>);
   };
 
+  const slotFlatNode = useSceneStore((s) => {
+    if (node.type !== "frame") return null;
+    const hasChildren = (s.childrenById[node.id] ?? []).length > 0;
+    if (hasChildren && !(node as unknown as FlatFrameNode).isSlot) return null;
+    if (!isInsideReusableComponent(node.id, s.nodesById, s.parentById)) return null;
+    return s.nodesById[node.id] as FlatFrameNode;
+  });
+
   const colorVariables = variables.filter((v) => v.type === "color");
 
   return (
@@ -58,6 +67,7 @@ export function PropertyEditor({
             ? `Instance of ${component?.name || "Component"}`
             : undefined
         }
+        slotNode={slotFlatNode}
       />
       <PositionSection node={node} onUpdate={onUpdate} parentContext={parentContext} />
       <SizeSection node={node} onUpdate={onUpdate} parentContext={parentContext} />
@@ -89,12 +99,6 @@ export function PropertyEditor({
       <EffectsSection node={node} onUpdate={onUpdate} />
       {frameNode && (
         <ThemeSection node={frameNode} onUpdate={onUpdate} />
-      )}
-      {frameNode?.reusable && (
-        <SlotsSection
-          node={frameNode}
-          childNodes={frameNode.children}
-        />
       )}
       {node.type === "text" && (
         <TypographySection node={node} onUpdate={onUpdate} />

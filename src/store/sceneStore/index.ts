@@ -4,8 +4,11 @@ import type {
   FlatSnapshot,
   HistorySnapshot,
   FlatFrameNode,
+  FrameNode,
+  SceneNode,
   InstanceOverrideUpdateProps,
   RefNode,
+  ConnectorNode,
   ComponentArtifact,
 } from "../../types/scene";
 import {
@@ -32,6 +35,7 @@ import type { SceneState } from "./types";
 import { convertDesignNodesToHtml } from "@/lib/designToHtml";
 import { deepCloneNode } from "@/utils/cloneNode";
 import { resolveRefToFrame } from "@/utils/instanceRuntime";
+import { isInsideReusableComponent } from "@/utils/componentUtils";
 
 // Re-export types and utilities
 export type { SceneState } from "./types";
@@ -259,10 +263,34 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       // Remove node and all descendants
       removeNodeAndDescendants(id, newNodesById, newParentById, newChildrenById);
 
-      // Update rootIds if root node
-      const newRootIds = parentId === null || parentId === undefined
-        ? state.rootIds.filter((rid) => rid !== id)
-        : state.rootIds;
+      // Remove orphaned connectors referencing the deleted node
+      const orphanedConnectorIds: string[] = [];
+      for (const nodeId of Object.keys(newNodesById)) {
+        const node = newNodesById[nodeId];
+        if (node?.type === "connector") {
+          const conn = node as ConnectorNode;
+          if (conn.startConnection.nodeId === id || conn.endConnection.nodeId === id) {
+            orphanedConnectorIds.push(nodeId);
+          }
+        }
+      }
+      for (const connId of orphanedConnectorIds) {
+        const connParentId = newParentById[connId];
+        if (connParentId !== null && connParentId !== undefined) {
+          newChildrenById[connParentId] = (newChildrenById[connParentId] ?? []).filter(
+            (cid) => cid !== connId,
+          );
+        }
+        removeNodeAndDescendants(connId, newNodesById, newParentById, newChildrenById);
+      }
+
+      // Update rootIds — filter deleted node + orphaned connectors in one pass
+      const removedIds = new Set([id, ...orphanedConnectorIds]);
+      const newRootIds = (parentId === null || parentId === undefined)
+        ? state.rootIds.filter((rid) => !removedIds.has(rid))
+        : (orphanedConnectorIds.length > 0
+            ? state.rootIds.filter((rid) => !removedIds.has(rid))
+            : state.rootIds);
 
       return {
         nodesById: newNodesById,
@@ -293,6 +321,24 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     const state = get();
     saveHistory(state);
     const flat = flattenTree(nodes);
+
+    // Migration: convert old slot: string[] on parent to isSlot: true on children
+    type FrameWithOldSlot = FlatFrameNode & { slot?: string[] };
+    for (const id of Object.keys(flat.nodesById)) {
+      const node = flat.nodesById[id];
+      if (node.type !== "frame") continue;
+      const frame = node as FrameWithOldSlot;
+      if (!Array.isArray(frame.slot)) continue;
+      for (const slotChildId of frame.slot) {
+        const child = flat.nodesById[slotChildId];
+        if (child?.type === "frame") {
+          flat.nodesById[slotChildId] = { ...child, isSlot: true } as FlatSceneNode;
+        }
+      }
+      const { slot: _, ...rest } = frame;
+      flat.nodesById[id] = rest as FlatSceneNode;
+    }
+
     const synced = syncAllTextDimensionsFlat(flat.nodesById);
     set({
       nodesById: synced,
@@ -519,6 +565,91 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       };
     }),
 
+  updateSlotChildWithoutHistory: (instanceId, slotPath, relativePath, updates) =>
+    set((state) => {
+      const existing = state.nodesById[instanceId];
+      if (!existing || existing.type !== "ref") return state;
+      const refNode = existing as RefNode;
+      const override = refNode.overrides?.[slotPath];
+      if (!override || override.kind !== "replace") return state;
+
+      const segments = relativePath.split("/");
+      const needsTextSync = hasTextMeasureProps(updates as Partial<SceneNode>);
+
+      // Walk the replacement tree following the path segments.
+      // When encountering a ref node, update its overrides for the remaining sub-path.
+      const updateAtPath = (node: SceneNode, segIdx: number): SceneNode => {
+        const targetId = segments[segIdx];
+        if (node.id === targetId) {
+          // Last segment — apply updates directly
+          if (segIdx === segments.length - 1) {
+            let updated = { ...node, ...updates } as SceneNode;
+            if (updated.type === "text" && needsTextSync) {
+              updated = syncTextDimensions(updated);
+            }
+            return updated;
+          }
+          // Not last segment — drill deeper
+          if (node.type === "ref") {
+            // Update the ref's overrides for the remaining sub-path
+            const subPath = segments.slice(segIdx + 1).join("/");
+            const leafId = segments[segments.length - 1];
+            const ref = node as RefNode;
+            const existingOverride = ref.overrides?.[subPath];
+            const existingProps = existingOverride?.kind === "update" ? existingOverride.props : {};
+            let mergedProps = { ...existingProps, ...updates };
+            if (needsTextSync) {
+              // Check if the target node in the component is text
+              const compNode = state.nodesById[ref.componentId];
+              if (compNode) {
+                // Just store the override — text sync happens at resolve time
+                void leafId;
+              }
+            }
+            return {
+              ...ref,
+              overrides: {
+                ...ref.overrides,
+                [subPath]: { kind: "update" as const, props: mergedProps },
+              },
+            } as SceneNode;
+          }
+          if (node.type === "frame" || node.type === "group") {
+            const container = node as FrameNode;
+            return {
+              ...container,
+              children: container.children.map((c) => updateAtPath(c, segIdx + 1)),
+            } as SceneNode;
+          }
+        }
+        // Not the target — recurse into containers
+        if (node.type === "frame" || node.type === "group") {
+          const container = node as FrameNode;
+          const newChildren = container.children.map((c) => updateAtPath(c, segIdx));
+          if (newChildren.every((c, i) => c === container.children[i])) return node;
+          return { ...container, children: newChildren } as SceneNode;
+        }
+        return node;
+      };
+
+      const updatedNode = updateAtPath(override.node, 0);
+      if (updatedNode === override.node) return state;
+
+      return {
+        nodesById: {
+          ...state.nodesById,
+          [instanceId]: {
+            ...refNode,
+            overrides: {
+              ...refNode.overrides,
+              [slotPath]: { kind: "replace" as const, node: updatedNode },
+            },
+          },
+        },
+        _cachedTree: null,
+      };
+    }),
+
   resetInstanceOverride: (instanceId, path, property) =>
     set((state) => {
       const existing = state.nodesById[instanceId];
@@ -543,27 +674,24 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       };
     }),
 
-  toggleSlot: (frameId, childId) =>
+  toggleSlot: (frameId) =>
     set((state) => {
       const existing = state.nodesById[frameId];
       if (!existing || existing.type !== "frame") return state;
       const frame = existing as FlatFrameNode;
-      if (!frame.reusable) return state;
+      // Must be inside a reusable component
+      if (!isInsideReusableComponent(frameId, state.nodesById, state.parentById)) return state;
+      // Must have no children (unless already a slot — allow toggling off)
       const childIds = state.childrenById[frameId] ?? [];
-      if (!childIds.includes(childId)) return state;
+      if (childIds.length > 0 && !frame.isSlot) return state;
       saveHistory(state);
-
-      const currentSlots = frame.slot ?? [];
-      const nextSlots = currentSlots.includes(childId)
-        ? currentSlots.filter((id) => id !== childId)
-        : [...currentSlots, childId];
 
       return {
         nodesById: {
           ...state.nodesById,
           [frameId]: {
             ...frame,
-            slot: nextSlots.length > 0 ? nextSlots : undefined,
+            isSlot: frame.isSlot ? undefined : true,
           } as FlatSceneNode,
         },
         _cachedTree: null,

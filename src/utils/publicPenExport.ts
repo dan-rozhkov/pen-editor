@@ -480,6 +480,7 @@ function exportFrameNode(
         }
       : { layout: "none" }),
     ...(node.type === "frame" && node.clip ? { clip: true } : {}),
+    ...(node.type === "frame" && node.isSlot ? { isSlot: true } : {}),
     ...(node.type === "frame" && node.cornerRadius != null ? { cornerRadius: node.cornerRadius } : {}),
     ...(node.type === "frame" && node.cornerRadiusPerCorner != null ? { cornerRadiusPerCorner: node.cornerRadiusPerCorner } : {}),
   };
@@ -525,6 +526,7 @@ function exportNode(node: SceneNode, context: ExportContext, parentUsesLayout: b
       };
     case "embed":
     case "ref":
+    case "connector":
       return {
         ...exportNodeBase(node, context, parentUsesLayout),
         type: "frame",

@@ -26,10 +26,20 @@ import { drawRoundedShape } from "./fillStrokeHelpers";
 import { drawLayoutGrids } from "./layoutGridRenderer";
 import { createGroupContainer } from "./groupRenderer";
 import { createEmbedContainer, updateEmbedContainer } from "./embedRenderer";
+import { createConnectorContainer, updateConnectorContainer } from "./connectorRenderer";
+import type { ConnectorNode } from "@/types/scene";
 import type { ShadowShape } from "./shadowHelpers";
 import { resolveRefToTree } from "@/utils/instanceRuntime";
+import { useSceneStore } from "@/store/sceneStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { applyAutoLayoutRecursively } from "@/utils/autoLayoutUtils";
+
+// --- Ref context tracking for slot indicator rendering ---
+let refContextDepth = 0;
+
+export function pushRefContext(): void { refContextDepth++; }
+export function popRefContext(): void { refContextDepth = Math.max(0, refContextDepth - 1); }
+export function isInsideRef(): boolean { return refContextDepth > 0; }
 
 function getNodeCornerRadius(node: FlatSceneNode): number | undefined {
   if (node.type === "frame" || node.type === "rect") {
@@ -72,7 +82,11 @@ function createRefContainer(
   nodesById: Record<string, FlatSceneNode>,
   childrenById: Record<string, string[]>,
 ): Container {
-  const resolved = resolveRefToTree(node, nodesById, childrenById);
+  // Use global store for resolution — the passed-in maps may be a private
+  // flat store (from flattenTree) that doesn't contain component definitions.
+  void nodesById; void childrenById;
+  const globalState = useSceneStore.getState();
+  const resolved = resolveRefToTree(node, globalState.nodesById, globalState.childrenById);
   if (!resolved) return new Container();
   const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
   const laidOutResolved = applyAutoLayoutRecursively(
@@ -84,7 +98,12 @@ function createRefContainer(
   const root = flat.nodesById[laidOutResolved.id] as FlatFrameNode | undefined;
   if (!root) return new Container();
 
-  return createFrameContainer(root, flat.nodesById, flat.childrenById);
+  pushRefContext();
+  try {
+    return createFrameContainer(root, flat.nodesById, flat.childrenById);
+  } finally {
+    popRefContext();
+  }
 }
 
 function updateRefContainer(
@@ -165,6 +184,9 @@ export function createNodeContainer(
       break;
     case "ref":
       container = createRefContainer(node as RefNode, nodesById, childrenById);
+      break;
+    case "connector":
+      container = createConnectorContainer(node as ConnectorNode);
       break;
     default:
       container = new Container();
@@ -297,6 +319,13 @@ export function updateNodeContainer(
         nodesById,
         childrenById,
         forceRebuild,
+      );
+      break;
+    case "connector":
+      updateConnectorContainer(
+        container,
+        node as ConnectorNode,
+        prev as ConnectorNode,
       );
       break;
   }

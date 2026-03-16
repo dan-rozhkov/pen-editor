@@ -28,6 +28,7 @@ import {
 } from "@/utils/nodeUtils";
 import { findResolvedDescendantByPath } from "@/utils/instanceRuntime";
 import type { RefNode } from "@/types/scene";
+import { findSlotContext } from "@/utils/componentUtils";
 import { applyOpenedDocument } from "@/utils/openDocumentIntoEditor";
 import { createPixiSync } from "./pixiSync";
 import { setupPixiViewport } from "./pixiViewport";
@@ -342,11 +343,14 @@ export function PixiCanvas() {
           effectiveTheme={editingTextTheme ?? undefined}
           isInsideAutoLayoutParent={editingTextIsInsideAutoLayout}
           onUpdateText={instanceContext ? (text) => {
-            useSceneStore.getState().updateInstanceOverride(
-              instanceContext.instanceId,
-              instanceContext.descendantPath,
-              { text } as any,
-            );
+            const store = useSceneStore.getState();
+            const inst = store.nodesById[instanceContext.instanceId] as RefNode | undefined;
+            const sc = inst?.type === "ref" ? findSlotContext(instanceContext.descendantPath, inst.overrides) : null;
+            if (sc) {
+              store.updateSlotChildWithoutHistory(instanceContext.instanceId, sc.slotPath, sc.relativePath, { text });
+            } else {
+              store.updateInstanceOverride(instanceContext.instanceId, instanceContext.descendantPath, { text } as any);
+            }
           } : undefined}
         />
       )}

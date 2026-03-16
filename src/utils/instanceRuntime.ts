@@ -140,7 +140,7 @@ function materializeResolvedNode(
     return {
       ...node,
       reusable: undefined,
-      slot: undefined,
+      isSlot: undefined,
       children: materializedChildren,
     };
   }

@@ -8,6 +8,10 @@ import { NodeIcon, EyeIcon, ChevronIcon } from "./LayerIcons";
 import { getDisplayName, selectionFromLayersRef } from "./layerTypes";
 import type { DragState, DropPosition } from "./layerTypes";
 
+function isSlotFrame(node: SceneNode): boolean {
+  return node.type === "frame" && !!(node as FrameNode).isSlot;
+}
+
 export interface LayerItemProps {
   node: SceneNode;
   depth: number;
@@ -18,6 +22,8 @@ export interface LayerItemProps {
     nodeId: string,
     position: DropPosition,
     parentId: string | null,
+    instanceId?: string,
+    descendantPath?: string,
   ) => void;
   onDrop: () => void;
   selectableFlatIds: string[];
@@ -71,12 +77,13 @@ export const LayerItem = memo(function LayerItem({
   const isFrame = node.type === "frame" || node.type === "group";
   const isRef = node.type === "ref";
   const hasChildren = isRefDescendant
-    ? isFrame && (node as FrameNode | GroupNode).children.length > 0
+    ? isRef || (isFrame && (node as FrameNode | GroupNode).children.length > 0)
     : isRef || (isFrame && (node as FrameNode | GroupNode).children.length > 0);
   const expandKey = isRefDescendant ? `${instanceId}:${descendantPath}` : node.id;
   const isExpanded = expandedFrameIds.has(expandKey);
+  const isSlotDropTarget = isRefDescendant && isSlotFrame(node);
   const isDragging = !isRefDescendant && dragState.draggedId === node.id;
-  const isDropTarget = !isRefDescendant && dragState.dropTargetId === node.id;
+  const isDropTarget = (!isRefDescendant || isSlotDropTarget) && dragState.dropTargetId === node.id;
 
   const handleClick = (e: React.MouseEvent) => {
     selectionFromLayersRef.current = true;
@@ -168,6 +175,12 @@ export const LayerItem = memo(function LayerItem({
     e.preventDefault();
     e.stopPropagation();
 
+    // Slot frames inside instances only accept "inside" drops
+    if (isSlotDropTarget) {
+      onDragOver(node.id, "inside", parentId, instanceId, descendantPath);
+      return;
+    }
+
     const rect = e.currentTarget.getBoundingClientRect();
     const y = e.clientY - rect.top;
     const height = rect.height;
@@ -218,8 +231,8 @@ export const LayerItem = memo(function LayerItem({
         onMouseLeave={handleMouseLeave}
         draggable={!isRefDescendant}
         onDragStart={isRefDescendant ? undefined : handleDragStart}
-        onDragOver={isRefDescendant ? undefined : handleDragOver}
-        onDrop={isRefDescendant ? undefined : handleDrop}
+        onDragOver={!isRefDescendant || isSlotDropTarget ? handleDragOver : undefined}
+        onDrop={!isRefDescendant || isSlotDropTarget ? handleDrop : undefined}
       >
         <div className="flex items-center gap-1 flex-1">
           {hasChildren ? (

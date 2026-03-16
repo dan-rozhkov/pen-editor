@@ -25,12 +25,16 @@ import { createPanController } from "./panController";
 import { createTransformController } from "./transformController";
 import { createDrawController } from "./drawController";
 import { createPencilController } from "./pencilController";
+import { createConnectorController } from "./connectorController";
 import { createDragController } from "./dragController";
 import { createMarqueeController } from "./marqueeController";
 import { createMeasurementController } from "./measurementController";
 import { prepareFrameNode } from "@/utils/instanceUtils";
 import { resolveRefToTree, findNodeByPath } from "@/utils/instanceRuntime";
 import type { SceneNode, RefNode } from "@/types/scene";
+import { findSlotContext } from "@/utils/componentUtils";
+import { saveHistory } from "@/store/sceneStore/helpers/history";
+import { createSnapshot } from "@/store/sceneStore";
 
 const EMPTY_POINTER_EVENT = {} as PointerEvent;
 
@@ -115,6 +119,19 @@ export function setupPixiInteraction(
   let hoverRafId: number | null = null;
   let pendingHoverWorld: { x: number; y: number } | null = null;
 
+  // Descendant drag state (for dragging nodes inside slot overrides)
+  let descendantDrag: {
+    instanceId: string;
+    descendantPath: string;
+    slotPath: string;
+    relativePath: string;
+    startWorldX: number;
+    startWorldY: number;
+    startNodeX: number;
+    startNodeY: number;
+    hasMoved: boolean;
+  } | null = null;
+
   // Create interaction context
   const context: InteractionContext = {
     canvas,
@@ -127,6 +144,7 @@ export function setupPixiInteraction(
   const transform = createTransformController(context);
   const draw = createDrawController(context);
   const pencil = createPencilController(context);
+  const connector = createConnectorController(context);
   const drag = createDragController(context);
   const marquee = createMarqueeController(context);
   const measurement = createMeasurementController(context);
@@ -193,8 +211,9 @@ export function setupPixiInteraction(
     // Priority 2: Transform (resize handles)
     if (transform.handlePointerDown(e, world)) return;
 
-    // Priority 3: Drawing mode (pencil first, then standard draw)
+    // Priority 3: Drawing mode (pencil first, then connector, then standard draw)
     if (pencil.handlePointerDown(e, world)) return;
+    if (connector.handlePointerDown(e, world)) return;
     if (draw.handlePointerDown(e, world)) return;
 
     // Priority 4: Drag (label or node)
@@ -227,6 +246,34 @@ export function setupPixiInteraction(
         useSelectionStore
           .getState()
           .selectDescendant(hitTarget.instanceId, hitTarget.descendantPath);
+
+        // Check if this descendant is inside a replaced slot — allow drag
+        if (!e.metaKey && !e.ctrlKey) {
+          const scState = useSceneStore.getState();
+          const inst = scState.nodesById[hitTarget.instanceId] as RefNode | undefined;
+          if (inst?.type === "ref") {
+            const sc = findSlotContext(hitTarget.descendantPath, inst.overrides);
+            if (sc) {
+              const resolved = resolveRefToTree(inst, scState.nodesById, scState.childrenById);
+              if (resolved) {
+                const descNode = findNodeByPath(resolved.children, hitTarget.descendantPath, scState.nodesById, scState.childrenById);
+                if (descNode) {
+                  descendantDrag = {
+                    instanceId: hitTarget.instanceId,
+                    descendantPath: hitTarget.descendantPath,
+                    slotPath: sc.slotPath,
+                    relativePath: sc.relativePath,
+                    startWorldX: world.x,
+                    startWorldY: world.y,
+                    startNodeX: descNode.x,
+                    startNodeY: descNode.y,
+                    hasMoved: false,
+                  };
+                }
+              }
+            }
+          }
+        }
         return;
       }
 
@@ -258,9 +305,29 @@ export function setupPixiInteraction(
     const screenY = e.clientY - rect.top;
     const world = screenToWorld(screenX, screenY);
 
+    // Handle descendant drag (slot child)
+    if (descendantDrag) {
+      const dx = world.x - descendantDrag.startWorldX;
+      const dy = world.y - descendantDrag.startWorldY;
+      if (!descendantDrag.hasMoved && Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
+      if (!descendantDrag.hasMoved) {
+        descendantDrag.hasMoved = true;
+      }
+      const newX = Math.round(descendantDrag.startNodeX + dx);
+      const newY = Math.round(descendantDrag.startNodeY + dy);
+      useSceneStore.getState().updateSlotChildWithoutHistory(
+        descendantDrag.instanceId,
+        descendantDrag.slotPath,
+        descendantDrag.relativePath,
+        { x: newX, y: newY },
+      );
+      return;
+    }
+
     // Handle active interactions
     if (pan.handlePointerMove(e)) return;
     if (pencil.handlePointerMove(e, world)) return;
+    if (connector.handlePointerMove(e, world)) return;
     if (draw.handlePointerMove(e, world)) return;
     if (transform.handlePointerMove(e, world)) return;
     if (drag.handlePointerMove(e, world)) return;
@@ -284,10 +351,30 @@ export function setupPixiInteraction(
     const screenY = e.clientY - rect.top;
     const world = screenToWorld(screenX, screenY);
 
+    // Finalize descendant drag
+    if (descendantDrag) {
+      if (descendantDrag.hasMoved) {
+        // Save history by re-applying current state with history
+        const state = useSceneStore.getState();
+        const inst = state.nodesById[descendantDrag.instanceId] as RefNode | undefined;
+        if (inst?.type === "ref") {
+          const override = inst.overrides?.[descendantDrag.slotPath];
+          if (override?.kind === "replace") {
+            // Save history then re-set to current (position already updated via WithoutHistory)
+            saveHistory(createSnapshot(state));
+            useSceneStore.setState({ nodesById: { ...state.nodesById }, _cachedTree: null });
+          }
+        }
+      }
+      descendantDrag = null;
+      return;
+    }
+
     // Handle interaction cleanup in order
     if (pan.handlePointerUp(e)) return;
     if (transform.handlePointerUp(e, world)) return;
     if (pencil.handlePointerUp(e, world)) return;
+    if (connector.handlePointerUp(e, world)) return;
     if (draw.handlePointerUp(e, world)) return;
     if (drag.handlePointerUp(e, world)) return;
     if (marquee.handlePointerUp(e, world)) return;
@@ -318,14 +405,14 @@ export function setupPixiInteraction(
       if (refNode?.type === "ref") {
         const resolved = resolveRefToTree(refNode as RefNode, scState.nodesById, scState.childrenById);
         if (resolved) {
-          const descNode = findNodeByPath(resolved.children, selState.instanceContext.descendantPath);
+          const descNode = findNodeByPath(resolved.children, selState.instanceContext.descendantPath, scState.nodesById, scState.childrenById);
           if (descNode?.type === "text") {
             // Enter text editing for descendant
             useSelectionStore.getState().startEditing(selState.instanceContext.descendantPath);
             return;
           }
-          if (descNode && (descNode.type === "frame" || descNode.type === "group")) {
-            // Drill deeper within instance
+          if (descNode && (descNode.type === "frame" || descNode.type === "group" || descNode.type === "ref")) {
+            // Drill deeper within instance (frames, groups, and nested refs)
             useSelectionStore.getState().enterInstanceDescendant(selState.instanceContext.descendantPath);
             // Re-hit-test now that enteredInstanceDescendantPath is updated
             const hitTarget = findCanvasHitTargetAtPoint(world.x, world.y);
@@ -333,7 +420,7 @@ export function setupPixiInteraction(
               useSelectionStore.getState().selectDescendant(hitTarget.instanceId, hitTarget.descendantPath);
 
               // Start inline editing if the deeper descendant is text/embed
-              const deepDesc = findNodeByPath(resolved.children, hitTarget.descendantPath);
+              const deepDesc = findNodeByPath(resolved.children, hitTarget.descendantPath, scState.nodesById, scState.childrenById);
               if (deepDesc?.type === "text") {
                 useSelectionStore.getState().startEditing(hitTarget.descendantPath);
               } else if (deepDesc?.type === "embed") {
@@ -360,7 +447,7 @@ export function setupPixiInteraction(
           const scState = useSceneStore.getState();
           const resolved = resolveRefToTree(selectedNode as RefNode, scState.nodesById, scState.childrenById);
           if (resolved) {
-            const descNode = findNodeByPath(resolved.children, hitTarget.descendantPath);
+            const descNode = findNodeByPath(resolved.children, hitTarget.descendantPath, scState.nodesById, scState.childrenById);
             if (descNode?.type === "text") {
               useSelectionStore.getState().startEditing(hitTarget.descendantPath);
             } else if (descNode?.type === "embed") {

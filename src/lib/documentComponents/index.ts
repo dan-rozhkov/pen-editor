@@ -1,4 +1,4 @@
-import type { ComponentArtifact, FlatSceneNode } from "@/types/scene";
+import type { ComponentArtifact, FlatFrameNode, FlatSceneNode } from "@/types/scene";
 import { getAllComponentsFlat } from "@/utils/componentUtils";
 import { extractSlotNames } from "./expander";
 
@@ -36,15 +36,39 @@ export function generateComponentTag(name: string): string {
  * Discover all reusable native components from the current scene
  * and return their definitions with generated tags.
  */
+function collectSlotNames(
+  componentId: string,
+  nodesById: Record<string, FlatSceneNode>,
+  childrenById?: Record<string, string[]>,
+): string[] {
+  if (!childrenById) return [];
+  const slots: string[] = [];
+  const visit = (nodeId: string) => {
+    const node = nodesById[nodeId];
+    if (!node) return;
+    if (node.type === "frame" && (node as FlatFrameNode).isSlot) {
+      slots.push(node.name ?? node.id);
+    }
+    const children = childrenById[nodeId] ?? [];
+    for (const childId of children) {
+      visit(childId);
+    }
+  };
+  visit(componentId);
+  return slots;
+}
+
 export function collectDocumentComponents(
   nodesById: Record<string, FlatSceneNode>,
   componentArtifactsById?: Record<string, ComponentArtifact>,
+  childrenById?: Record<string, string[]>,
 ): DocumentComponentDefinition[] {
   const components = getAllComponentsFlat(nodesById).map((component) => {
     const artifact = componentArtifactsById?.[component.id];
     const templateHtml = artifact?.authoringHtml
       ?? artifact?.sourceTemplate
       ?? "";
+    const slotNames = collectSlotNames(component.id, nodesById, childrenById);
     return {
       id: component.id,
       name: component.name ?? "Unnamed",
@@ -52,7 +76,7 @@ export function collectDocumentComponents(
       width: component.width,
       height: component.height,
       templateHtml,
-      slots: component.slot ?? extractSlotNames(templateHtml),
+      slots: slotNames.length > 0 ? slotNames : extractSlotNames(templateHtml),
     };
   });
 

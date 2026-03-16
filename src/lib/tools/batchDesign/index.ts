@@ -33,7 +33,7 @@ export const batchDesign: ToolHandler = async (args) => {
   const originalSnapshot = createSnapshot(state);
 
   // Build document component tag map from current state (before mutations)
-  const docComponents = collectDocumentComponents(state.nodesById);
+  const docComponents = collectDocumentComponents(state.nodesById, undefined, state.childrenById);
   const componentTagMap = buildDocumentComponentTagMap(docComponents);
 
   const ctx: ExecutionContext = {
