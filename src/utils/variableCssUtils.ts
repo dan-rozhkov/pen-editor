@@ -1,5 +1,4 @@
 import { useVariableStore } from "@/store/variableStore";
-import { useThemeStore } from "@/store/themeStore";
 import { getVariableValue } from "@/types/variable";
 import type { ThemeName } from "@/types/variable";
 
@@ -14,7 +13,7 @@ export function buildVariableStyleBlock(variableIds?: Set<string>, theme?: Theme
   const { variables } = useVariableStore.getState();
   if (variables.length === 0) return "";
 
-  const activeTheme = theme ?? useThemeStore.getState().activeTheme;
+  const activeTheme = theme ?? 'light';
   const declarations: string[] = [];
   for (const v of variables) {
     if (variableIds && !variableIds.has(v.id)) continue;

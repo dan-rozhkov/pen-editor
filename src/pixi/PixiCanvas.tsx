@@ -19,7 +19,6 @@ import { useLayoutStore } from "@/store/layoutStore";
 import { useLoadingStore } from "@/store/loadingStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
-import { useThemeStore } from "@/store/themeStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
 import {
@@ -51,7 +50,6 @@ export function PixiCanvas() {
   const nodesById = useSceneStore((state) => state.nodesById);
   const parentById = useSceneStore((state) => state.parentById);
   const pageBackground = useSceneStore((state) => state.pageBackground);
-  const activeTheme = useThemeStore((state) => state.activeTheme);
   const addNode = useSceneStore((state) => state.addNode);
   const addChildToFrame = useSceneStore((state) => state.addChildToFrame);
   const deleteNode = useSceneStore((state) => state.deleteNode);
@@ -122,16 +120,16 @@ export function PixiCanvas() {
         parentById,
         nodesById,
         instanceContext!.instanceId,
-        activeTheme,
+        'light',
       );
     }
     return getThemeFromAncestorFrames(
       parentById,
       nodesById,
       editingNodeId,
-      activeTheme,
+      'light',
     );
-  }, [editingNodeId, editingMode, parentById, nodesById, activeTheme, resolvedDescendant, instanceContext]);
+  }, [editingNodeId, editingMode, parentById, nodesById, resolvedDescendant, instanceContext]);
   const editingTextIsInsideAutoLayout = useMemo(() => {
     if (editingMode !== "text" || !editingNodeId) return false;
     if (resolvedDescendant) return false;

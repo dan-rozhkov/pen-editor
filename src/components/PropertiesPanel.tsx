@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
-import { useThemeStore } from "@/store/themeStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useViewportStore } from "@/store/viewportStore";
@@ -174,7 +173,6 @@ export function PropertiesPanel() {
   const updateNode = useSceneStore((s) => s.updateNode);
   const { selectedIds, instanceContext } = useSelectionStore();
   const variables = useVariableStore((s) => s.variables);
-  const activeTheme = useThemeStore((s) => s.activeTheme);
   const activeTool = useDrawModeStore((s) => s.activeTool);
   const [variablesOpen, setVariablesOpen] = useState(false);
 
@@ -186,9 +184,9 @@ export function PropertiesPanel() {
 
   // Compute effective theme for the selected node by walking ancestor themeOverrides.
   const effectiveTheme = useMemo(() => {
-    if (!selectedNode) return activeTheme;
-    return getThemeFromAncestorFrames(parentById, nodesById, selectedNode.id, activeTheme);
-  }, [selectedNode, parentById, nodesById, activeTheme]);
+    if (!selectedNode) return 'light' as const;
+    return getThemeFromAncestorFrames(parentById, nodesById, selectedNode.id, 'light');
+  }, [selectedNode, parentById, nodesById]);
   const selectedNodes = useMemo(() => {
     if (selectedIds.length <= 1) return [];
     return selectedIds

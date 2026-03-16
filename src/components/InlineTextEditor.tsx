@@ -5,7 +5,6 @@ import { useHistoryStore } from '../store/historyStore'
 import { useSelectionStore } from '../store/selectionStore'
 import { useViewportStore } from '../store/viewportStore'
 import { useVariableStore } from '../store/variableStore'
-import { useThemeStore } from '../store/themeStore'
 import { resolveColor } from '../utils/colorUtils'
 import type { ThemeName } from '../types/variable'
 
@@ -59,14 +58,13 @@ export function InlineTextEditor({
   const stopEditing = useSelectionStore((state) => state.stopEditing)
   const { scale, x, y } = useViewportStore()
   const variables = useVariableStore((state) => state.variables)
-  const activeTheme = useThemeStore((state) => state.activeTheme)
 
   // Resolve the fill color (matching Konva rendering)
   const fillColor = resolveColor(
     node.fill,
     node.fillBinding,
     variables,
-    effectiveTheme ?? activeTheme,
+    effectiveTheme ?? 'light',
   ) ?? '#000000'
 
   // Calculate screen position from absolute world coordinates and snap to device pixels.

@@ -6,7 +6,6 @@ import type {
   TextNode,
 } from "@/types/scene";
 import { useSceneStore } from "@/store/sceneStore";
-import { useThemeStore } from "@/store/themeStore";
 import {
   findNodeById,
   findParentFrame,
@@ -47,7 +46,6 @@ export function useCanvasSelectionData({
 
   const parentById = useSceneStore((state) => state.parentById);
   const nodesById = useSceneStore((state) => state.nodesById);
-  const activeTheme = useThemeStore((state) => state.activeTheme);
   const isInComponentContext = useMemo(
     () => (nodeId: string): boolean => {
       let currentId: string | null = nodeId;
@@ -94,9 +92,9 @@ export function useCanvasSelectionData({
       parentById,
       nodesById,
       editingTextNode.id,
-      activeTheme,
+      'light',
     );
-  }, [editingTextNode, parentById, nodesById, activeTheme]);
+  }, [editingTextNode, parentById, nodesById]);
 
   const collectFrameNodes = useMemo(() => {
     const frames: Array<{

@@ -1,6 +1,5 @@
 import { useSceneStore } from "@/store/sceneStore";
 import { useVariableStore } from "@/store/variableStore";
-import { useThemeStore } from "@/store/themeStore";
 import { getVariableValue } from "@/types/variable";
 import type { FlatSceneNode } from "@/types/scene";
 import type { ToolHandler } from "../toolRegistry";
@@ -82,9 +81,8 @@ export const batchGet: ToolHandler = async (args) => {
   const variableLookup: Record<string, string> = {};
   if (resolveVariables) {
     const { variables } = useVariableStore.getState();
-    const { activeTheme } = useThemeStore.getState();
     for (const v of variables) {
-      variableLookup[v.id] = getVariableValue(v, activeTheme);
+      variableLookup[v.id] = getVariableValue(v, 'light');
     }
   }
 

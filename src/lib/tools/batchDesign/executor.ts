@@ -10,7 +10,6 @@ import {
   isContainerNode,
   buildTree,
 } from "@/types/scene";
-import { useThemeStore } from "@/store/themeStore";
 import { insertTreeIntoFlat, removeNodeAndDescendants } from "@/store/sceneStore/helpers/flatStoreHelpers";
 import { syncTextDimensions } from "@/store/sceneStore/helpers/textSync";
 import { cloneNodeWithNewId } from "@/utils/cloneNode";
@@ -37,8 +36,7 @@ function resolveInheritedTheme(
   nodesById: Record<string, FlatSceneNode>,
   parentById: Record<string, string | null>,
 ): ThemeName {
-  const { activeTheme } = useThemeStore.getState();
-  let theme: ThemeName = activeTheme;
+  let theme: ThemeName = 'light';
   let current = parentId;
 
   const chain: string[] = [];

@@ -1,7 +1,6 @@
 import type { FlatSceneNode } from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
 import { useVariableStore } from "@/store/variableStore";
-import { useThemeStore } from "@/store/themeStore";
 import { resolveColor, applyOpacity } from "@/utils/colorUtils";
 
 /**
@@ -30,7 +29,7 @@ export function getRenderThemeStackDepth(): number {
 function getEffectiveTheme(): ThemeName {
   return themeStack.length > 0
     ? themeStack[themeStack.length - 1]
-    : useThemeStore.getState().activeTheme;
+    : 'light';
 }
 
 export function getResolvedFill(node: FlatSceneNode): string | undefined {

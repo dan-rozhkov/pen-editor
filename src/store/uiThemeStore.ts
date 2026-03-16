@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 import { useSceneStore } from './sceneStore'
-import { useThemeStore } from './themeStore'
 
 type UITheme = 'light' | 'dark'
 
@@ -40,7 +39,6 @@ interface UIThemeState {
 export const useUIThemeStore = create<UIThemeState>((set, get) => {
   const initial = getInitialTheme()
   applyTheme(initial)
-  useThemeStore.getState().setActiveTheme(initial)
   // Sync page background with initial theme (deferred to avoid circular init)
   queueMicrotask(() => {
     const scene = useSceneStore.getState()
@@ -63,7 +61,6 @@ export const useUIThemeStore = create<UIThemeState>((set, get) => {
 useUIThemeStore.subscribe((state, prev) => {
   if (state.uiTheme !== prev.uiTheme) {
     applyThemeWithoutTransitions(state.uiTheme)
-    useThemeStore.getState().setActiveTheme(state.uiTheme)
   } else {
     applyTheme(state.uiTheme)
   }

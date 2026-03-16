@@ -1,5 +1,4 @@
 import { useVariableStore } from "@/store/variableStore";
-import { useThemeStore } from "@/store/themeStore";
 import { getVariableValue } from "@/types/variable";
 import type { ThemeName } from "@/types/variable";
 
@@ -29,8 +28,7 @@ export function resolveVariableReference(
   if (!referenceName) return null;
 
   const { variables } = useVariableStore.getState();
-  const { activeTheme } = useThemeStore.getState();
-  const effectiveTheme = theme ?? activeTheme;
+  const effectiveTheme = theme ?? 'light';
 
   const variable = variables.find((v) => {
     const normalizedVarName = normalizeVariableRefName(v.name);

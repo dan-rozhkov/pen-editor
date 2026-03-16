@@ -1,15 +1,16 @@
 import { Container } from "pixi.js";
 import { useSceneStore, type SceneState } from "@/store/sceneStore";
 import { useLayoutStore } from "@/store/layoutStore";
-import { useThemeStore } from "@/store/themeStore";
+import { useDragStore } from "@/store/dragStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useSelectionStore } from "@/store/selectionStore";
-import type { FlatSceneNode, FlatFrameNode, RefNode } from "@/types/scene";
+import type { FlatSceneNode, FlatFrameNode, RefNode, ConnectorNode } from "@/types/scene";
 import { materializeLayoutRefs } from "@/utils/layoutRefUtils";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 import { getViewportBounds } from "@/utils/viewportUtils";
 import { updateNodeContainer, applyLayoutSize } from "./renderers";
+import { getAnchorWorldPosition } from "@/utils/connectorUtils";
 import {
   type RegistryEntry,
   type NodeLayoutOverride,
@@ -21,6 +22,18 @@ import {
 } from "./syncHelpers";
 import { createResolutionManager } from "./syncResolution";
 import { createNodeTreeManager } from "./syncNodeTree";
+
+// Module-level registry accessor for the drag animator
+let registryAccessor: ((id: string) => Container | null) | null = null;
+let sceneRootAccessor: (() => Container) | null = null;
+
+export function getNodeContainer(id: string): Container | null {
+  return registryAccessor?.(id) ?? null;
+}
+
+export function getSceneRoot(): Container | null {
+  return sceneRootAccessor?.() ?? null;
+}
 
 // Phase 1: Viewport culling — screen-space margin to avoid pop-in during fast panning
 const CULL_MARGIN = 400;
@@ -40,6 +53,10 @@ export function createPixiSync(sceneRoot: Container): () => void {
   const registry = new Map<string, RegistryEntry>();
   let rebuildScheduled = false;
 
+  // Expose registry and sceneRoot to the drag animator
+  registryAccessor = (id) => registry.get(id)?.container ?? null;
+  sceneRootAccessor = () => sceneRoot;
+
   const ctx = { sceneRoot, registry };
   const resolutionMgr = createResolutionManager(ctx);
   const nodeTreeMgr = createNodeTreeManager(
@@ -50,6 +67,78 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
   // Phase 3: Index for fast componentId → refNodeId lookups
   const componentIndex = new ComponentIdIndex();
+
+  // Connector index: targetNodeId → set of connectorIds that reference it
+  const connectorIndex = new Map<string, Set<string>>();
+
+  function addToConnectorIndex(connectorId: string, node: ConnectorNode): void {
+    for (const targetId of [node.startConnection.nodeId, node.endConnection.nodeId]) {
+      let set = connectorIndex.get(targetId);
+      if (!set) {
+        set = new Set();
+        connectorIndex.set(targetId, set);
+      }
+      set.add(connectorId);
+    }
+  }
+
+  function removeFromConnectorIndex(connectorId: string, node: ConnectorNode): void {
+    for (const targetId of [node.startConnection.nodeId, node.endConnection.nodeId]) {
+      const set = connectorIndex.get(targetId);
+      if (set) {
+        set.delete(connectorId);
+        if (set.size === 0) connectorIndex.delete(targetId);
+      }
+    }
+  }
+
+  function buildConnectorIndex(nodesById: Record<string, FlatSceneNode>): void {
+    connectorIndex.clear();
+    for (const id of Object.keys(nodesById)) {
+      const node = nodesById[id];
+      if (node?.type === "connector") {
+        addToConnectorIndex(id, node as ConnectorNode);
+      }
+    }
+  }
+
+  function updateConnectorsForNode(nodeId: string): void {
+    const connectorIds = connectorIndex.get(nodeId);
+    if (!connectorIds || connectorIds.size === 0) return;
+
+    const currentState = useSceneStore.getState();
+    for (const connId of connectorIds) {
+      const connNode = currentState.nodesById[connId];
+      if (!connNode || connNode.type !== "connector") continue;
+
+      const conn = connNode as ConnectorNode;
+      const nodes = useSceneStore.getState().getNodes();
+      const calcLayout = useLayoutStore.getState().calculateLayoutForFrame;
+      const startPos = getAnchorWorldPosition(conn.startConnection.nodeId, conn.startConnection.anchor, nodes, calcLayout);
+      const endPos = getAnchorWorldPosition(conn.endConnection.nodeId, conn.endConnection.anchor, nodes, calcLayout);
+      if (!startPos || !endPos) continue;
+
+      const minX = Math.min(startPos.x, endPos.x);
+      const minY = Math.min(startPos.y, endPos.y);
+      const maxX = Math.max(startPos.x, endPos.x);
+      const maxY = Math.max(startPos.y, endPos.y);
+      const nodeWidth = Math.max(maxX - minX, 1);
+      const nodeHeight = Math.max(maxY - minY, 1);
+
+      useSceneStore.getState().updateNodeWithoutHistory(connId, {
+        x: minX,
+        y: minY,
+        width: nodeWidth,
+        height: nodeHeight,
+        points: [
+          startPos.x - minX,
+          startPos.y - minY,
+          endPos.x - minX,
+          endPos.y - minY,
+        ],
+      });
+    }
+  }
 
   // ─── Phase 1: Viewport Culling ───────────────────────────────────────
 
@@ -131,6 +220,10 @@ export function createPixiSync(sceneRoot: Container): () => void {
     const applyFrameLayoutRecursively = (frameId: string): void => {
       const frameNode = state.nodesById[frameId];
       if (!frameNode || frameNode.type !== "frame") return;
+
+      // Skip frames being animated during auto-layout drag
+      const dragState = useDragStore.getState();
+      if (dragState.isDragging && dragState.animationPhase && dragState.insertInfo?.parentId === frameId) return;
 
       const childIds = state.childrenById[frameId] ?? [];
       const frameOverride = layoutOverrides.get(frameId);
@@ -275,6 +368,9 @@ export function createPixiSync(sceneRoot: Container): () => void {
     // Phase 3: Rebuild componentId index
     componentIndex.buildFrom(state.nodesById);
 
+    // Rebuild connector index
+    buildConnectorIndex(state.nodesById);
+
     // Phase 6: Rebuild text/ref node tracking
     resolutionMgr.rebuildTracking();
 
@@ -379,6 +475,9 @@ export function createPixiSync(sceneRoot: Container): () => void {
           if (node.type === "ref") {
             componentIndex.add(id, (node as RefNode).componentId);
           }
+          if (node.type === "connector") {
+            addToConnectorIndex(id, node as ConnectorNode);
+          }
           resolutionMgr.trackNodeAdded(id, node);
         }
       }
@@ -395,6 +494,9 @@ export function createPixiSync(sceneRoot: Container): () => void {
         if (prevNode) {
           if (prevNode.type === "ref") {
             componentIndex.remove(id, (prevNode as RefNode).componentId);
+          }
+          if (prevNode.type === "connector") {
+            removeFromConnectorIndex(id, prevNode as ConnectorNode);
           }
           resolutionMgr.trackNodeRemoved(id);
         }
@@ -464,6 +566,14 @@ export function createPixiSync(sceneRoot: Container): () => void {
       });
       entry.node = node;
       changedIds.add(id);
+    }
+
+    // Update connectors when connected nodes move/resize
+    for (const id of changedIds) {
+      const node = state.nodesById[id];
+      if (node && node.type !== "connector") {
+        updateConnectorsForNode(id);
+      }
     }
 
     // Handle structural changes (children order, parent changes)
@@ -568,11 +678,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
     });
   };
 
-  // Phase 7: Incremental theme/variable updates instead of full rebuild
-  const unsubTheme = useThemeStore.subscribe(() => {
-    incrementalThemeUpdate();
-  });
-
   const unsubVariables = useVariableStore.subscribe(() => {
     incrementalThemeUpdate();
   });
@@ -598,7 +703,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
   return () => {
     unsubScene();
-    unsubTheme();
     unsubVariables();
     unsubSelection();
     unsubViewport();
@@ -611,6 +715,9 @@ export function createPixiSync(sceneRoot: Container): () => void {
     }
     registry.clear();
     componentIndex.clear();
+    connectorIndex.clear();
     sceneRoot.removeChildren();
+    registryAccessor = null;
+    sceneRootAccessor = null;
   };
 }
