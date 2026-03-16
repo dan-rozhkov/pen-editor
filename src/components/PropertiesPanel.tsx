@@ -18,6 +18,7 @@ import { DescendantPropertyEditor } from "@/components/properties/DescendantProp
 import { ExportSection } from "@/components/properties/ExportSection";
 import { MultiSelectPropertyEditor } from "@/components/properties/MultiSelectPropertyEditor";
 import { PageProperties } from "@/components/properties/PageProperties";
+import { PencilToolProperties } from "@/components/properties/PencilToolProperties";
 import { PropertyEditor } from "@/components/properties/PropertyEditor";
 import { VariablesDialog } from "@/components/VariablesPanel";
 import { SlidersHorizontal, CaretRightIcon } from "@phosphor-icons/react";
@@ -208,8 +209,9 @@ export function PropertiesPanel() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden [&_[data-slot=button-group]_[data-slot=button]:focus-visible]:border-transparent [&_[data-slot=button-group]_[data-slot=button]:focus-visible]:ring-0 [&_[data-slot=button-group]_[data-slot=button]:focus-visible]:outline-none">
       <div className="layers-scrollbar flex-1 overflow-y-auto">
+        {activeTool === "pencil" && selectedIds.length === 0 && <PencilToolProperties />}
         {activeTool === "frame" && <FramePresetsPanel />}
-        {selectedIds.length === 0 && activeTool !== "frame" && (
+        {selectedIds.length === 0 && activeTool !== "frame" && activeTool !== "pencil" && (
           <PageProperties />
         )}
         {selectedIds.length === 0 && (

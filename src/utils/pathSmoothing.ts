@@ -81,12 +81,12 @@ function chaikinSmooth(points: Point[], iterations: number): Point[] {
  * Convert raw freehand points to a smooth SVG path.
  * Pipeline: RDP simplification → Chaikin subdivision → Catmull-Rom cubic beziers.
  */
-export function pointsToSmoothSVGPath(points: Point[]): string {
+export function pointsToSmoothSVGPath(points: Point[], epsilon = 2.0): string {
   if (points.length === 0) return "";
   if (points.length === 1) return `M${points[0].x},${points[0].y}`;
 
   // 1. RDP simplification — remove jitter (higher epsilon = fewer points)
-  const simplified = simplifyPoints(points, 2.0);
+  const simplified = simplifyPoints(points, epsilon);
 
   if (simplified.length === 1) return `M${simplified[0].x},${simplified[0].y}`;
   if (simplified.length === 2) {

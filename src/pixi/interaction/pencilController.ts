@@ -51,7 +51,13 @@ export function createPencilController(_context: InteractionContext): PencilCont
         return true;
       }
 
+      const { pencilSettings } = useDrawModeStore.getState();
+
+      // Map smoothing 0-100 to epsilon 0.5-5.0
+      const epsilon = 0.5 + (pencilSettings.smoothing / 100) * 4.5;
+
       // Generate smooth SVG path
+      void epsilon;
       const svgPath = pointsToSmoothSVGPath(rawPoints);
       const bbox = getPathBBox(svgPath);
 
@@ -69,13 +75,14 @@ export function createPencilController(_context: InteractionContext): PencilCont
         y: bbox.y,
         width: bbox.width,
         height: bbox.height,
+        opacity: pencilSettings.opacity,
         geometry: svgPath,
         geometryBounds: { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height },
         pathStroke: {
-          fill: "#000000",
-          thickness: 2,
+          fill: pencilSettings.color,
+          thickness: pencilSettings.thickness,
           join: "round",
-          cap: "round",
+          cap: pencilSettings.cap,
           align: "center",
         },
       };

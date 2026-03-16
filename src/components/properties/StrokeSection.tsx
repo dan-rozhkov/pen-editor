@@ -1,4 +1,4 @@
-import type { PerSideStroke, SceneNode } from "@/types/scene";
+import type { PathStroke, PerSideStroke, SceneNode } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
 import {
   ColorInput,
@@ -42,6 +42,8 @@ export function StrokeSection({
   resetOverride,
   mixedKeys,
 }: StrokeSectionProps) {
+  const pathStroke: PathStroke | undefined = node.type === "path" ? node.pathStroke : undefined;
+
   const hasStroke = !!(
     node.stroke ||
     (node.strokeWidth && node.strokeWidth > 0) ||
@@ -49,8 +51,24 @@ export function StrokeSection({
       (node.strokeWidthPerSide.top != null ||
         node.strokeWidthPerSide.right != null ||
         node.strokeWidthPerSide.bottom != null ||
-        node.strokeWidthPerSide.left != null))
+        node.strokeWidthPerSide.left != null)) ||
+    pathStroke
   );
+
+  // Wrap onUpdate to migrate pathStroke to BaseNode properties on first edit
+  const effectiveOnUpdate = (updates: Partial<SceneNode>) => {
+    if (pathStroke && !node.stroke && !node.strokeWidth) {
+      onUpdate({
+        stroke: pathStroke.fill ?? "#000000",
+        strokeWidth: pathStroke.thickness ?? 1,
+        strokeAlign: (pathStroke.align as 'center' | 'inside' | 'outside') ?? "center",
+        pathStroke: undefined,
+        ...updates,
+      } as Partial<SceneNode>);
+    } else {
+      onUpdate(updates);
+    }
+  };
 
   const strokeMode = getStrokeMode(node);
 
@@ -59,32 +77,36 @@ export function StrokeSection({
 
   const handleStrokeVariableChange = (variableId: string | undefined) => {
     if (variableId) {
-      onUpdate({ strokeBinding: { variableId } });
+      effectiveOnUpdate({ strokeBinding: { variableId } });
     } else {
-      onUpdate({ strokeBinding: undefined });
+      effectiveOnUpdate({ strokeBinding: undefined });
     }
   };
 
   const handleAddStroke = () => {
-    onUpdate({ stroke: "#000000", strokeWidth: 1 });
+    effectiveOnUpdate({ stroke: "#000000", strokeWidth: 1 });
   };
 
   const handleRemoveStroke = () => {
-    onUpdate({
+    const removeUpdates: Partial<SceneNode> = {
       stroke: undefined,
       strokeWidth: undefined,
       strokeAlign: undefined,
       strokeBinding: undefined,
       strokeOpacity: undefined,
       strokeWidthPerSide: undefined,
-    } as Partial<SceneNode>);
+    } as Partial<SceneNode>;
+    if (node.type === "path") {
+      (removeUpdates as Record<string, unknown>).pathStroke = undefined;
+    }
+    onUpdate(removeUpdates);
   };
 
   const handleModeChange = (mode: string) => {
     if (mode === "per-side") {
       // Switch to per-side: copy current strokeWidth to all sides
-      const currentWidth = node.strokeWidth ?? 1;
-      onUpdate({
+      const currentWidth = node.strokeWidth ?? pathStroke?.thickness ?? 1;
+      effectiveOnUpdate({
         strokeWidthPerSide: {
           top: currentWidth,
           right: currentWidth,
@@ -103,7 +125,7 @@ export function StrokeSection({
         perSide?.left ?? 0,
         1
       );
-      onUpdate({
+      effectiveOnUpdate({
         strokeWidth: maxWidth,
         strokeWidthPerSide: undefined,
       } as Partial<SceneNode>);
@@ -111,7 +133,7 @@ export function StrokeSection({
   };
 
   const handlePerSideChange = (side: keyof PerSideStroke, value: number) => {
-    onUpdate({
+    effectiveOnUpdate({
       strokeWidthPerSide: {
         ...node.strokeWidthPerSide,
         [side]: value,
@@ -140,8 +162,8 @@ export function StrokeSection({
           <div className="flex items-center gap-1">
             <div className="min-w-0 flex-1">
               <ColorInput
-                value={node.stroke ?? component?.stroke ?? "#000000"}
-                onChange={(v) => onUpdate({ stroke: v || undefined })}
+                value={node.stroke ?? pathStroke?.fill ?? component?.stroke ?? "#000000"}
+                onChange={(v) => effectiveOnUpdate({ stroke: v || undefined })}
                 variableId={node.strokeBinding?.variableId}
                 onVariableChange={handleStrokeVariableChange}
                 availableVariables={colorVariables}
@@ -154,7 +176,7 @@ export function StrokeSection({
                 label="%"
                 value={Math.round((node.strokeOpacity ?? 1) * 100)}
                 onChange={(v) =>
-                  onUpdate({ strokeOpacity: Math.max(0, Math.min(100, v)) / 100 })
+                  effectiveOnUpdate({ strokeOpacity: Math.max(0, Math.min(100, v)) / 100 })
                 }
                 min={0}
                 max={100}
@@ -188,13 +210,13 @@ export function StrokeSection({
               <SelectInput
                 label="Align"
                 labelOutside
-                value={mixedKeys?.has("strokeAlign") ? "" : (node.strokeAlign ?? "center")}
+                value={mixedKeys?.has("strokeAlign") ? "" : (node.strokeAlign ?? (pathStroke?.align as 'center' | 'inside' | 'outside') ?? "center")}
                 options={[
                   { value: "inside", label: "Inside" },
                   { value: "center", label: "Center" },
                   { value: "outside", label: "Outside" },
                 ]}
-                onChange={(v) => onUpdate({ strokeAlign: v as 'center' | 'inside' | 'outside' })}
+                onChange={(v) => effectiveOnUpdate({ strokeAlign: v as 'center' | 'inside' | 'outside' })}
                 isMixed={mixedKeys?.has("strokeAlign")}
               />
             </div>
@@ -207,8 +229,8 @@ export function StrokeSection({
                 <NumberInput
                   label="Weight"
                   labelOutside={true}
-                  value={node.strokeWidth ?? component?.strokeWidth ?? 1}
-                  onChange={(v) => onUpdate({ strokeWidth: v })}
+                  value={node.strokeWidth ?? pathStroke?.thickness ?? component?.strokeWidth ?? 1}
+                  onChange={(v) => effectiveOnUpdate({ strokeWidth: v })}
                   min={0}
                   step={0.5}
                   isMixed={mixedKeys?.has("strokeWidth")}

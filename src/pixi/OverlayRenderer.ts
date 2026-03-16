@@ -256,11 +256,13 @@ export function createOverlayRenderer(
 
     // Pencil tool: draw polyline preview
     if (activeTool === "pencil" && pencilPoints.length > 1) {
+      const { pencilSettings } = useDrawModeStore.getState();
+      const previewColor = parseInt(pencilSettings.color.replace('#', ''), 16);
       drawPreviewGfx.moveTo(pencilPoints[0].x, pencilPoints[0].y);
       for (let i = 1; i < pencilPoints.length; i++) {
         drawPreviewGfx.lineTo(pencilPoints[i].x, pencilPoints[i].y);
       }
-      drawPreviewGfx.stroke({ color: 0x000000, width: 2 / scale, alpha: 0.6 });
+      drawPreviewGfx.stroke({ color: previewColor, width: pencilSettings.thickness / scale, alpha: pencilSettings.opacity });
       return;
     }
 
