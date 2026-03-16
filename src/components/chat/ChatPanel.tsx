@@ -24,6 +24,7 @@ const MODEL_OPTIONS = [
   { value: "anthropic/claude-opus-4.6", label: "Claude Opus 4.6" },
   { value: "anthropic/claude-sonnet-4.6", label: "Claude Sonnet 4.6" },
   { value: "z-ai/glm-5", label: "GLM-5" },
+  { value: "z-ai/glm-5-turbo", label: "GLM-5 Turbo" },
   { value: "minimax/minimax-m2.5", label: "Minimax M2.5" },
   { value: "qwen/qwen3.5-397b-a17b", label: "Qwen 3.5 397B" },
   { value: "qwen/qwen3.5-plus-02-15", label: "Qwen 3.5 Plus" },
@@ -33,6 +34,14 @@ const MODEL_OPTIONS = [
   {
     value: "google/gemini-3.1-flash-lite-preview",
     label: "Gemini 3.1 Flash Lite",
+  },
+  {
+    value: "x-ai/grok-4.20-beta",
+    label: "Grok 4.20",
+  },
+  {
+    value: "nvidia/nemotron-3-super-120b-a12b:free",
+    label: "Nemotron 3 Super 120B",
   },
 ];
 
@@ -251,11 +260,20 @@ export function ChatPanel() {
   }
 
   return (
-    <div className={isFloating ? "absolute top-5 right-5 bottom-5 z-40 pointer-events-none" : "absolute top-0 right-0 bottom-0 z-40 pointer-events-none"}>
-      <div className={isFloating
-        ? "pointer-events-auto w-[360px] h-full bg-surface-panel rounded-2xl shadow-[0_0px_3px_rgba(0,0,0,0.04)] border border-border-default flex flex-col overflow-hidden"
-        : "pointer-events-auto w-[360px] h-full bg-surface-panel border-l border-border-default flex flex-col"
-      }>
+    <div
+      className={
+        isFloating
+          ? "absolute top-5 right-5 bottom-5 z-40 pointer-events-none"
+          : "absolute top-0 right-0 bottom-0 z-40 pointer-events-none"
+      }
+    >
+      <div
+        className={
+          isFloating
+            ? "pointer-events-auto w-[360px] h-full bg-surface-panel rounded-2xl shadow-[0_0px_3px_rgba(0,0,0,0.04)] border border-border-default flex flex-col overflow-hidden"
+            : "pointer-events-auto w-[360px] h-full bg-surface-panel border-l border-border-default flex flex-col"
+        }
+      >
         {/* Header */}
         <div className="flex items-center gap-2 px-3 py-2 border-b border-border-default shrink-0">
           <span className="text-sm font-medium text-text-primary flex-1">
@@ -325,7 +343,9 @@ export function ChatPanel() {
               }}
               size="sm"
               className="w-fit gap-1 pl-1.5 pr-1.5"
-              triggerPrefix={<LightningIcon className="size-3 text-text-muted" />}
+              triggerPrefix={
+                <LightningIcon className="size-3 text-text-muted" />
+              }
             />
           </div>
         )}
