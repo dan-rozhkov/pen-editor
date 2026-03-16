@@ -5,7 +5,7 @@ import { useThemeStore } from "@/store/themeStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useSelectionStore } from "@/store/selectionStore";
-import type { FlatFrameNode } from "@/types/scene";
+import type { FlatSceneNode, FlatFrameNode } from "@/types/scene";
 import { materializeLayoutRefs } from "@/utils/layoutRefUtils";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 import { updateNodeContainer, applyLayoutSize } from "./renderers";
@@ -13,12 +13,23 @@ import {
   type RegistryEntry,
   type NodeLayoutOverride,
   type AutoLayoutFrameSet,
+  ComponentIdIndex,
   collectAffectedInstanceIds,
   withAncestorThemes,
   flatToTreeFrame,
 } from "./syncHelpers";
 import { createResolutionManager } from "./syncResolution";
 import { createNodeTreeManager } from "./syncNodeTree";
+
+// Phase 1: Viewport culling — screen-space margin to avoid pop-in during fast panning
+const CULL_MARGIN = 400;
+
+/**
+ * Sentinel "previous node" used to force all renderers to re-apply visual
+ * properties (fill, stroke, shadow, etc.) without destroying containers.
+ * Every property comparison with the real node will show "changed".
+ */
+const THEME_SENTINEL = Object.freeze({ type: "none" }) as unknown as FlatSceneNode;
 
 /**
  * Core sync engine: subscribes to Zustand scene store and incrementally updates PixiJS containers.
@@ -35,6 +46,42 @@ export function createPixiSync(sceneRoot: Container): () => void {
     () => resolutionMgr.getAppliedTextResolution(),
     (id) => resolutionMgr.clearEmbedCache(id),
   );
+
+  // Phase 3: Index for fast componentId → refNodeId lookups
+  const componentIndex = new ComponentIdIndex();
+
+  // ─── Phase 1: Viewport Culling ───────────────────────────────────────
+
+  function updateCulling(): void {
+    const { scale, x, y } = useViewportStore.getState();
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+
+    // Expanded viewport bounds in world space
+    const margin = CULL_MARGIN / scale;
+    const minX = -x / scale - margin;
+    const maxX = (-x + w) / scale + margin;
+    const minY = -y / scale - margin;
+    const maxY = (-y + h) / scale + margin;
+
+    const state = useSceneStore.getState();
+    for (const rootId of state.rootIds) {
+      const entry = registry.get(rootId);
+      if (!entry) continue;
+      const node = entry.node;
+      const nodeRight = node.x + node.width;
+      const nodeBottom = node.y + node.height;
+
+      entry.container.renderable = !(
+        nodeRight < minX ||
+        node.x > maxX ||
+        nodeBottom < minY ||
+        node.y > maxY
+      );
+    }
+  }
+
+  // ─── Auto-Layout ─────────────────────────────────────────────────────
 
   /**
    * Apply auto-layout positions to frame children
@@ -122,8 +169,16 @@ export function createPixiSync(sceneRoot: Container): () => void {
               fitWidth,
               fitHeight,
             });
-            if (fitWidth) frameWidth = intrinsicSize.width;
-            if (fitHeight) frameHeight = intrinsicSize.height;
+            if (fitWidth) {
+              frameWidth = frameNode.clip
+                ? Math.min(intrinsicSize.width, frameNode.width)
+                : intrinsicSize.width;
+            }
+            if (fitHeight) {
+              frameHeight = frameNode.clip
+                ? Math.min(intrinsicSize.height, frameNode.height)
+                : intrinsicSize.height;
+            }
           }
 
           const frameEntry = registry.get(frameId);
@@ -205,6 +260,8 @@ export function createPixiSync(sceneRoot: Container): () => void {
     }
   }
 
+  // ─── Full Rebuild ────────────────────────────────────────────────────
+
   /**
    * Full rebuild - used on initial load.
    */
@@ -219,6 +276,12 @@ export function createPixiSync(sceneRoot: Container): () => void {
     // Build all nodes
     nodeTreeMgr.buildNodeTree(state.rootIds, state.nodesById, state.childrenById, sceneRoot);
 
+    // Phase 3: Rebuild componentId index
+    componentIndex.buildFrom(state.nodesById);
+
+    // Phase 6: Rebuild text/ref node tracking
+    resolutionMgr.rebuildTracking();
+
     // Apply auto-layout positions
     applyAutoLayoutPositions(state);
     resolutionMgr.resetResolutions();
@@ -226,7 +289,37 @@ export function createPixiSync(sceneRoot: Container): () => void {
     resolutionMgr.applyEmbedResolution(resolutionMgr.getTargetEmbedResolution(useViewportStore.getState().scale));
     resolutionMgr.applyImageFillTextureResolution(resolutionMgr.getTargetImageFillResolution(useViewportStore.getState().scale));
     nodeTreeMgr.applyTextEditingVisibility();
+
+    // Phase 1: Apply culling after build
+    updateCulling();
   }
+
+  // ─── Phase 7: Incremental Theme/Variable Update ──────────────────────
+
+  /**
+   * Re-apply colors to all containers without destroying/recreating the tree.
+   * Uses THEME_SENTINEL as a fake "previous" node so all property comparisons
+   * evaluate as "changed", causing renderers to re-resolve fills/strokes.
+   */
+  function incrementalThemeUpdate(): void {
+    const state = useSceneStore.getState();
+    for (const [id, entry] of registry) {
+      withAncestorThemes(id, state.parentById, state.nodesById, () => {
+        updateNodeContainer(
+          entry.container,
+          entry.node,
+          THEME_SENTINEL,
+          state.nodesById,
+          state.childrenById,
+          true, // skipPosition — positions haven't changed
+          true, // forceRebuild — ensures ref containers re-resolve internal colors
+        );
+      });
+    }
+    nodeTreeMgr.applyTextEditingVisibility();
+  }
+
+  // ─── Incremental Update (Phases 3 + 4) ──────────────────────────────
 
   /**
    * Incremental update - only process changed nodes.
@@ -236,33 +329,39 @@ export function createPixiSync(sceneRoot: Container): () => void {
       return; // No scene changes
     }
 
-    // If any frame's themeOverride changed, fall back to full rebuild
-    // because all descendants need their colors re-resolved.
+    // Phase 4: Combined change detection + theme override check in a single pass
+    const changedIds = new Set<string>();
+    let needsThemeRebuild = false;
+
     for (const id of Object.keys(state.nodesById)) {
       const node = state.nodesById[id];
       const prevNode = prev.nodesById[id];
-      if (
-        node && prevNode && node !== prevNode &&
-        node.type === "frame" &&
-        (node as FlatFrameNode).themeOverride !== (prevNode as FlatFrameNode).themeOverride
-      ) {
-        fullRebuild(state);
-        return;
-      }
-    }
-
-    const changedIds = new Set<string>();
-
-    for (const id of Object.keys(state.nodesById)) {
-      if (state.nodesById[id] !== prev.nodesById[id]) {
+      if (node !== prevNode) {
         changedIds.add(id);
+        // Check theme override only on changed frame nodes
+        if (
+          node && prevNode &&
+          node.type === "frame" &&
+          (node as FlatFrameNode).themeOverride !== (prevNode as FlatFrameNode).themeOverride
+        ) {
+          needsThemeRebuild = true;
+        }
       }
     }
+
+    if (needsThemeRebuild) {
+      fullRebuild(state);
+      return;
+    }
+
+    // Removed nodes
     for (const id of Object.keys(prev.nodesById)) {
       if (!state.nodesById[id]) {
         changedIds.add(id);
       }
     }
+
+    // Children changes
     for (const id of Object.keys(state.childrenById)) {
       if (state.childrenById[id] !== prev.childrenById[id]) {
         changedIds.add(id);
@@ -278,14 +377,31 @@ export function createPixiSync(sceneRoot: Container): () => void {
     for (const id of Object.keys(state.nodesById)) {
       if (!prev.nodesById[id]) {
         nodeTreeMgr.createAndAttachNode(id, state);
+        // Phase 3 + 6: Update indexes for new nodes
+        const node = state.nodesById[id];
+        if (node) {
+          if (node.type === "ref") {
+            componentIndex.add(id, (node as unknown as { componentId: string }).componentId);
+          }
+          resolutionMgr.trackNodeAdded(id, node);
+        }
       }
     }
 
-    const affectedInstanceIds = collectAffectedInstanceIds(state, prev, changedIds);
+    // Phase 3: Use componentId index for fast instance lookup
+    const affectedInstanceIds = collectAffectedInstanceIds(state, prev, changedIds, componentIndex);
 
     // Handle removed nodes
     for (const id of Object.keys(prev.nodesById)) {
       if (!state.nodesById[id]) {
+        // Phase 3 + 6: Update indexes for removed nodes
+        const prevNode = prev.nodesById[id];
+        if (prevNode) {
+          if (prevNode.type === "ref") {
+            componentIndex.remove(id, (prevNode as unknown as { componentId: string }).componentId);
+          }
+          resolutionMgr.trackNodeRemoved(id);
+        }
         nodeTreeMgr.removeNode(id, prev.childrenById, state.nodesById);
       }
     }
@@ -315,6 +431,16 @@ export function createPixiSync(sceneRoot: Container): () => void {
             );
           });
           entry.node = node;
+
+          // Phase 3: Update componentId index if ref's componentId changed
+          if (node.type === "ref" && prevNode.type === "ref") {
+            const prevCompId = (prevNode as unknown as { componentId: string }).componentId;
+            const newCompId = (node as unknown as { componentId: string }).componentId;
+            if (prevCompId !== newCompId) {
+              componentIndex.remove(id, prevCompId);
+              componentIndex.add(id, newCompId);
+            }
+          }
         }
       }
     }
@@ -361,7 +487,12 @@ export function createPixiSync(sceneRoot: Container): () => void {
     // Re-apply current resolution so they don't stay at the default and look blurry.
     resolutionMgr.refreshTextResolution();
     nodeTreeMgr.applyTextEditingVisibility();
+
+    // Phase 1: Re-apply culling after tree changes
+    updateCulling();
   }
+
+  // ─── Subscriptions ───────────────────────────────────────────────────
 
   let lastScale = useViewportStore.getState().scale;
   let lastX = useViewportStore.getState().x;
@@ -380,10 +511,14 @@ export function createPixiSync(sceneRoot: Container): () => void {
       resolutionMgr.scheduleTextResolutionUpdate(state.scale);
       resolutionMgr.scheduleEmbedResolutionUpdate(state.scale);
       resolutionMgr.scheduleImageFillResolutionUpdate(state.scale);
+      // Phase 1: Update culling on zoom
+      updateCulling();
     } else if (state.x !== lastX || state.y !== lastY) {
       lastX = state.x;
       lastY = state.y;
       resolutionMgr.schedulePanUpgrade();
+      // Phase 1: Update culling on pan
+      updateCulling();
     }
   });
 
@@ -437,15 +572,13 @@ export function createPixiSync(sceneRoot: Container): () => void {
     });
   };
 
-  // Re-render all nodes when theme or variables change (colors need re-resolution)
+  // Phase 7: Incremental theme/variable updates instead of full rebuild
   const unsubTheme = useThemeStore.subscribe(() => {
-    fullRebuild(useSceneStore.getState());
-    prevState = useSceneStore.getState();
+    incrementalThemeUpdate();
   });
 
   const unsubVariables = useVariableStore.subscribe(() => {
-    fullRebuild(useSceneStore.getState());
-    prevState = useSceneStore.getState();
+    incrementalThemeUpdate();
   });
 
   const unsubSelection = useSelectionStore.subscribe(() => {
@@ -481,6 +614,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
       entry.container.destroy({ children: true });
     }
     registry.clear();
+    componentIndex.clear();
     sceneRoot.removeChildren();
   };
 }

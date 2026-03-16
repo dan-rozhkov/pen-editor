@@ -57,9 +57,18 @@ export function getFrameEffectiveSize(
   const layoutFrame = materializeLayoutRefs(treeFrame, nodesById, childrenById);
   const intrinsicSize = calculateFrameIntrinsicSize(layoutFrame, { fitWidth, fitHeight });
 
+  // When clip is enabled, keep the frame's explicit bounds authoritative for
+  // clipping instead of expanding to fit overflowing content.
+  const width = fitWidth
+    ? (node.clip ? Math.min(intrinsicSize.width, node.width) : intrinsicSize.width)
+    : node.width;
+  const height = fitHeight
+    ? (node.clip ? Math.min(intrinsicSize.height, node.height) : intrinsicSize.height)
+    : node.height;
+
   return {
-    width: fitWidth ? intrinsicSize.width : node.width,
-    height: fitHeight ? intrinsicSize.height : node.height,
+    width,
+    height,
   };
 }
 
