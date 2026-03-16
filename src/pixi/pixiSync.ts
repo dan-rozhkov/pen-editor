@@ -5,9 +5,10 @@ import { useThemeStore } from "@/store/themeStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useSelectionStore } from "@/store/selectionStore";
-import type { FlatSceneNode, FlatFrameNode } from "@/types/scene";
+import type { FlatSceneNode, FlatFrameNode, RefNode } from "@/types/scene";
 import { materializeLayoutRefs } from "@/utils/layoutRefUtils";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
+import { getViewportBounds } from "@/utils/viewportUtils";
 import { updateNodeContainer, applyLayoutSize } from "./renderers";
 import {
   type RegistryEntry,
@@ -54,28 +55,23 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
   function updateCulling(): void {
     const { scale, x, y } = useViewportStore.getState();
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-
-    // Expanded viewport bounds in world space
+    const bounds = getViewportBounds(scale, x, y, window.innerWidth, window.innerHeight);
     const margin = CULL_MARGIN / scale;
-    const minX = -x / scale - margin;
-    const maxX = (-x + w) / scale + margin;
-    const minY = -y / scale - margin;
-    const maxY = (-y + h) / scale + margin;
+    const minX = bounds.minX - margin;
+    const maxX = bounds.maxX + margin;
+    const minY = bounds.minY - margin;
+    const maxY = bounds.maxY + margin;
 
     const state = useSceneStore.getState();
     for (const rootId of state.rootIds) {
       const entry = registry.get(rootId);
       if (!entry) continue;
       const node = entry.node;
-      const nodeRight = node.x + node.width;
-      const nodeBottom = node.y + node.height;
 
       entry.container.renderable = !(
-        nodeRight < minX ||
+        node.x + node.width < minX ||
         node.x > maxX ||
-        nodeBottom < minY ||
+        node.y + node.height < minY ||
         node.y > maxY
       );
     }
@@ -312,7 +308,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
           state.nodesById,
           state.childrenById,
           true, // skipPosition — positions haven't changed
-          true, // forceRebuild — ensures ref containers re-resolve internal colors
+          entry.node.type === "ref", // forceRebuild only for refs (re-resolve internal colors)
         );
       });
     }
@@ -381,7 +377,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
         const node = state.nodesById[id];
         if (node) {
           if (node.type === "ref") {
-            componentIndex.add(id, (node as unknown as { componentId: string }).componentId);
+            componentIndex.add(id, (node as RefNode).componentId);
           }
           resolutionMgr.trackNodeAdded(id, node);
         }
@@ -398,7 +394,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
         const prevNode = prev.nodesById[id];
         if (prevNode) {
           if (prevNode.type === "ref") {
-            componentIndex.remove(id, (prevNode as unknown as { componentId: string }).componentId);
+            componentIndex.remove(id, (prevNode as RefNode).componentId);
           }
           resolutionMgr.trackNodeRemoved(id);
         }
@@ -434,8 +430,8 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
           // Phase 3: Update componentId index if ref's componentId changed
           if (node.type === "ref" && prevNode.type === "ref") {
-            const prevCompId = (prevNode as unknown as { componentId: string }).componentId;
-            const newCompId = (node as unknown as { componentId: string }).componentId;
+            const prevCompId = (prevNode as RefNode).componentId;
+            const newCompId = (node as RefNode).componentId;
             if (prevCompId !== newCompId) {
               componentIndex.remove(id, prevCompId);
               componentIndex.add(id, newCompId);

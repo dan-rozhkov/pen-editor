@@ -1,5 +1,5 @@
 import { Container } from "pixi.js";
-import type { FlatSceneNode, FlatFrameNode, FrameNode, SceneNode } from "@/types/scene";
+import type { FlatSceneNode, FlatFrameNode, FrameNode, SceneNode, RefNode } from "@/types/scene";
 import type { SceneState } from "@/store/sceneStore";
 import {
   pushRenderTheme,
@@ -67,18 +67,63 @@ function collectAffectedComponentIds(
   return affected;
 }
 
+/**
+ * Index mapping componentId → Set<refNodeId> for O(1) instance lookups.
+ */
+export class ComponentIdIndex {
+  private index = new Map<string, Set<string>>();
+
+  add(refNodeId: string, componentId: string): void {
+    let set = this.index.get(componentId);
+    if (!set) {
+      set = new Set();
+      this.index.set(componentId, set);
+    }
+    set.add(refNodeId);
+  }
+
+  remove(refNodeId: string, componentId: string): void {
+    const set = this.index.get(componentId);
+    if (set) {
+      set.delete(refNodeId);
+      if (set.size === 0) this.index.delete(componentId);
+    }
+  }
+
+  getRefIds(componentId: string): ReadonlySet<string> {
+    return this.index.get(componentId) ?? EMPTY_SET;
+  }
+
+  clear(): void {
+    this.index.clear();
+  }
+
+  buildFrom(nodesById: Record<string, FlatSceneNode>): void {
+    this.index.clear();
+    for (const id of Object.keys(nodesById)) {
+      const node = nodesById[id];
+      if (node.type === "ref") {
+        this.add(id, (node as RefNode).componentId);
+      }
+    }
+  }
+}
+
+const EMPTY_SET: ReadonlySet<string> = new Set();
+
 export function collectAffectedInstanceIds(
   state: SceneState,
   prev: SceneState,
   changedIds: Set<string>,
+  componentIndex: ComponentIdIndex,
 ): Set<string> {
   const affectedComponentIds = collectAffectedComponentIds(state, prev, changedIds);
   if (affectedComponentIds.size === 0) return new Set<string>();
 
   const affectedInstances = new Set<string>();
-  for (const [id, node] of Object.entries(state.nodesById)) {
-    if (node.type === "ref" && affectedComponentIds.has(node.componentId)) {
-      affectedInstances.add(id);
+  for (const compId of affectedComponentIds) {
+    for (const refId of componentIndex.getRefIds(compId)) {
+      affectedInstances.add(refId);
     }
   }
   return affectedInstances;

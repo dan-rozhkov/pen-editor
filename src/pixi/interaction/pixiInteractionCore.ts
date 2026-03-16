@@ -4,6 +4,7 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useHoverStore, worldMouse } from "@/store/hoverStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useLayoutStore } from "@/store/layoutStore";
+import { useViewportStore } from "@/store/viewportStore";
 import {
   findNodeById,
   findDeepestChildAtPosition,
@@ -268,6 +269,10 @@ export function setupPixiInteraction(
     // Track world mouse for spacing overlay hit-testing
     worldMouse.x = world.x;
     worldMouse.y = world.y;
+
+    // Phase 2: Skip expensive hover/hit-test pass during active zoom animation.
+    // The next pointermove after zoom completes will restore the correct hover state.
+    if (useViewportStore.getState().animationFrameId !== null) return;
 
     // Hover/hit-test path is expensive on big scenes; run at most once per frame.
     scheduleHoverPass(world);

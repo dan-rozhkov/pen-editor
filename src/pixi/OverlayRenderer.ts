@@ -297,27 +297,56 @@ export function createOverlayRenderer(
     marqueeGfx.stroke({ color: MARQUEE_STROKE, width: strokeWidth });
   }
 
-  // Subscribe to stores
-  const unsubPixelGrid = usePixelGridStore.subscribe(redrawPixelGrid);
-  const unsubUITheme = useUIThemeStore.subscribe(redrawPixelGrid);
+  // Phase 5: Batch viewport-triggered overlay redraws via dirty flags + RAF.
+  // Interactive store subscriptions stay synchronous to avoid perceptible lag
+  // on guides/draw preview/drop indicators during drag/draw.
+  const DIRTY_GRID = 1;
+  const DIRTY_GUIDES = 2;
+  const DIRTY_DROP = 4;
+  const DIRTY_MEASURE = 8;
+  const DIRTY_DRAW = 16;
+  const DIRTY_MARQUEE = 32;
+  const DIRTY_ALL_SCALE = DIRTY_GUIDES | DIRTY_DROP | DIRTY_MEASURE | DIRTY_DRAW | DIRTY_MARQUEE;
+  let dirtyFlags = 0;
+  let overlayRafId: number | null = null;
+
+  function flushOverlayRedraw(): void {
+    overlayRafId = null;
+    const flags = dirtyFlags;
+    dirtyFlags = 0;
+    if (flags & DIRTY_GRID) redrawPixelGrid();
+    if (flags & DIRTY_GUIDES) redrawGuides();
+    if (flags & DIRTY_DROP) redrawDropIndicator();
+    if (flags & DIRTY_MEASURE) redrawMeasureLines();
+    if (flags & DIRTY_DRAW) redrawDrawPreview();
+    if (flags & DIRTY_MARQUEE) redrawMarquee();
+  }
+
+  function scheduleOverlayRedraw(flags: number): void {
+    dirtyFlags |= flags;
+    if (overlayRafId !== null) return;
+    overlayRafId = requestAnimationFrame(flushOverlayRedraw);
+  }
+
+  // Interactive store subscriptions — synchronous for zero-latency feedback
   const unsubGuides = useSmartGuideStore.subscribe(redrawGuides);
   const unsubDrop = useDragStore.subscribe(redrawDropIndicator);
-  const unsubMeasure = useMeasureStore.subscribe(redrawMeasureLines);
   const unsubDrawMode = useDrawModeStore.subscribe(redrawDrawPreview);
   const unsubMarquee = subscribeOverlayState(redrawMarquee);
+  const unsubMeasure = useMeasureStore.subscribe(redrawMeasureLines);
+  // Non-interactive — batched via RAF
+  const unsubPixelGrid = usePixelGridStore.subscribe(() => scheduleOverlayRedraw(DIRTY_GRID));
+  const unsubUITheme = useUIThemeStore.subscribe(() => scheduleOverlayRedraw(DIRTY_GRID));
+  // Viewport scale/pan changes — batch all overlays (cosmetic stroke-width corrections)
   const unsubViewport = useViewportStore.subscribe((state) => {
     const scaleChanged = state.scale !== lastViewport.scale;
     const panChanged = state.x !== lastViewport.x || state.y !== lastViewport.y;
     lastViewport = state;
     if (panChanged || scaleChanged) {
-      redrawPixelGrid();
+      scheduleOverlayRedraw(DIRTY_GRID);
     }
     if (scaleChanged) {
-      redrawGuides();
-      redrawDropIndicator();
-      redrawMeasureLines();
-      redrawDrawPreview();
-      redrawMarquee();
+      scheduleOverlayRedraw(DIRTY_ALL_SCALE);
     }
   });
 
@@ -330,6 +359,10 @@ export function createOverlayRenderer(
   redrawMarquee();
 
   return () => {
+    if (overlayRafId !== null) {
+      cancelAnimationFrame(overlayRafId);
+      overlayRafId = null;
+    }
     unsubPixelGrid();
     unsubUITheme();
     unsubGuides();

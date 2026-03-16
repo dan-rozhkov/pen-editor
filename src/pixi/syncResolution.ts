@@ -39,6 +39,11 @@ export function createResolutionManager(ctx: SyncContext) {
   const embedsAtTargetRes = new Set<string>();
   let embedUpgradeGeneration = 0;
 
+  // --- Text/ref node tracking for fast resolution updates ---
+  const textNodeIds = new Set<string>();
+  const refNodeIds = new Set<string>();
+  let trackingInitialized = false;
+
   // --- Text resolution ---
 
   function applyTextResolutionRecursive(container: Container, resolution: number): void {
@@ -50,6 +55,28 @@ export function createResolutionManager(ctx: SyncContext) {
       } else if (child instanceof Container) {
         applyTextResolutionRecursive(child, resolution);
       }
+    }
+  }
+
+  /**
+   * Fast text resolution update using tracked text/ref node IDs
+   * instead of walking the entire PixiJS tree.
+   */
+  function applyTextResolutionFast(resolution: number): void {
+    // Direct text nodes — update their text-content child directly
+    for (const id of textNodeIds) {
+      const entry = ctx.registry.get(id);
+      if (!entry) continue;
+      const textObj = entry.container.getChildByLabel("text-content") as Text | undefined;
+      if (textObj && textObj.resolution !== resolution) {
+        textObj.resolution = resolution;
+      }
+    }
+    // Ref containers may contain embedded text — walk only their subtrees
+    for (const id of refNodeIds) {
+      const entry = ctx.registry.get(id);
+      if (!entry) continue;
+      applyTextResolutionRecursive(entry.container, resolution);
     }
   }
 
@@ -67,14 +94,22 @@ export function createResolutionManager(ctx: SyncContext) {
   function applyTextResolution(resolution: number): void {
     if (appliedTextResolution === resolution) return;
     appliedTextResolution = resolution;
-    applyTextResolutionRecursive(ctx.sceneRoot, resolution);
+    if (trackingInitialized) {
+      applyTextResolutionFast(resolution);
+    } else {
+      applyTextResolutionRecursive(ctx.sceneRoot, resolution);
+    }
   }
 
   function refreshTextResolution(): void {
     const resolution =
       appliedTextResolution ||
       getTargetTextResolution(useViewportStore.getState().scale);
-    applyTextResolutionRecursive(ctx.sceneRoot, resolution);
+    if (trackingInitialized) {
+      applyTextResolutionFast(resolution);
+    } else {
+      applyTextResolutionRecursive(ctx.sceneRoot, resolution);
+    }
   }
 
   // --- Embed resolution ---
@@ -253,6 +288,25 @@ export function createResolutionManager(ctx: SyncContext) {
     clearEmbedCache,
     resetResolutions,
     cleanup,
+
+    // Phase 6: Text/ref node tracking for fast resolution updates
+    trackNodeAdded(id: string, node: FlatSceneNode): void {
+      if (node.type === "text") textNodeIds.add(id);
+      else if (node.type === "ref") refNodeIds.add(id);
+    },
+    trackNodeRemoved(id: string): void {
+      textNodeIds.delete(id);
+      refNodeIds.delete(id);
+    },
+    rebuildTracking(): void {
+      textNodeIds.clear();
+      refNodeIds.clear();
+      for (const [id, entry] of ctx.registry) {
+        if (entry.node.type === "text") textNodeIds.add(id);
+        else if (entry.node.type === "ref") refNodeIds.add(id);
+      }
+      trackingInitialized = true;
+    },
   };
 }
 
