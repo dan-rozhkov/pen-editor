@@ -11,7 +11,6 @@ import { FillSection } from "@/components/properties/FillSection";
 import { StrokeSection } from "@/components/properties/StrokeSection";
 import { EffectsSection } from "@/components/properties/EffectsSection";
 import { ThemeSection } from "@/components/properties/ThemeSection";
-import { InstanceSection } from "@/components/properties/InstanceSection";
 import { TypographySection } from "@/components/properties/TypographySection";
 import { SlotsSection } from "@/components/properties/SlotsSection";
 import { EmbedContentSection } from "@/components/properties/EmbedContentSection";
@@ -51,7 +50,15 @@ export function PropertyEditor({
 
   return (
     <div className="flex flex-col">
-      <TypeSection node={node} onUpdate={onUpdate} />
+      <TypeSection
+        node={node}
+        onUpdate={onUpdate}
+        typeLabelOverride={
+          node.type === "ref"
+            ? `Instance of ${component?.name || "Component"}`
+            : undefined
+        }
+      />
       <PositionSection node={node} onUpdate={onUpdate} parentContext={parentContext} />
       <SizeSection node={node} onUpdate={onUpdate} parentContext={parentContext} />
       {node.type === "frame" && (
@@ -87,14 +94,6 @@ export function PropertyEditor({
         <SlotsSection
           node={frameNode}
           childNodes={frameNode.children}
-        />
-      )}
-      {node.type === "ref" && (
-        <InstanceSection
-          node={node}
-          onUpdate={onUpdate}
-          allNodes={allNodes}
-          isOverridden={isOverridden}
         />
       )}
       {node.type === "text" && (

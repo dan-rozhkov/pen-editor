@@ -121,6 +121,44 @@ function assignFreshIds(node: SceneNode): SceneNode {
   return { ...node, id };
 }
 
+function materializeResolvedNode(
+  node: SceneNode,
+  nodesById: Record<string, FlatSceneNode>,
+  childrenById: Record<string, string[]>,
+): SceneNode | null {
+  if (node.type === "ref") {
+    const resolved = resolveRefToTree(node as RefNode, nodesById, childrenById);
+    if (!resolved) return null;
+    return materializeResolvedNode(resolved, nodesById, childrenById);
+  }
+
+  if (node.type === "frame") {
+    const materializedChildren = node.children
+      .map((child) => materializeResolvedNode(child, nodesById, childrenById))
+      .filter(Boolean) as SceneNode[];
+
+    return {
+      ...node,
+      reusable: undefined,
+      slot: undefined,
+      children: materializedChildren,
+    };
+  }
+
+  if (node.type === "group") {
+    const materializedChildren = node.children
+      .map((child) => materializeResolvedNode(child, nodesById, childrenById))
+      .filter(Boolean) as SceneNode[];
+
+    return {
+      ...node,
+      children: materializedChildren,
+    };
+  }
+
+  return { ...node };
+}
+
 export function findNodeByPath(
   children: SceneNode[],
   path: string,
@@ -222,7 +260,9 @@ export function resolveRefToFrame(
   if (!node || node.type !== "ref") return null;
   const resolved = resolveRefToTree(node as RefNode, nodesById, childrenById);
   if (!resolved) return null;
-  return assignFreshIds(resolved) as FrameNode;
+  const materialized = materializeResolvedNode(resolved, nodesById, childrenById);
+  if (!materialized || materialized.type !== "frame") return null;
+  return assignFreshIds(materialized) as FrameNode;
 }
 
 function getResolvedChildNodes(
