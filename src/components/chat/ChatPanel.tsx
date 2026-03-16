@@ -4,6 +4,7 @@ import {
   PlusIcon,
   TrashIcon,
   LightningIcon,
+  ArrowLineLeftIcon,
 } from "@phosphor-icons/react";
 import { useChatStore } from "@/store/chatStore";
 import { useFloatingPanelsStore } from "@/store/floatingPanelsStore";
@@ -243,6 +244,8 @@ function ChatSession({
 
 export function ChatPanel() {
   const isOpen = useChatStore((s) => s.isOpen);
+  const isExpanded = useChatStore((s) => s.isExpanded);
+  const toggleExpanded = useChatStore((s) => s.toggleExpanded);
   const close = useChatStore((s) => s.close);
   const model = useChatStore((s) => s.model);
   const setModel = useChatStore((s) => s.setModel);
@@ -263,19 +266,29 @@ export function ChatPanel() {
     <div
       className={
         isFloating
-          ? "absolute top-5 right-5 bottom-5 z-40 pointer-events-none"
-          : "absolute top-0 right-0 bottom-0 z-40 pointer-events-none"
+          ? `absolute top-5 right-5 bottom-5 z-50 pointer-events-none${isExpanded ? " left-5" : ""}`
+          : `absolute top-0 right-0 bottom-0 z-50 pointer-events-none${isExpanded ? " left-0" : ""}`
       }
     >
       <div
         className={
           isFloating
-            ? "pointer-events-auto w-[360px] h-full bg-surface-panel rounded-2xl shadow-[0_0px_3px_rgba(0,0,0,0.04)] border border-border-default flex flex-col overflow-hidden"
-            : "pointer-events-auto w-[360px] h-full bg-surface-panel border-l border-border-default flex flex-col"
+            ? `pointer-events-auto ${isExpanded ? "w-full" : "w-[360px]"} h-full bg-surface-panel rounded-2xl shadow-[0_0px_3px_rgba(0,0,0,0.04)] border border-border-default flex flex-col overflow-hidden`
+            : `pointer-events-auto ${isExpanded ? "w-full" : "w-[360px]"} h-full bg-surface-panel ${isExpanded ? "" : "border-l "}border-border-default flex flex-col`
         }
       >
         {/* Header */}
         <div className="flex items-center gap-2 px-3 py-2 border-b border-border-default shrink-0">
+          <button
+            onClick={toggleExpanded}
+            className="p-1 rounded-lg hover:bg-surface-hover text-text-muted transition-colors"
+            title={isExpanded ? "Collapse panel" : "Expand panel"}
+          >
+            <ArrowLineLeftIcon
+              size={16}
+              className={isExpanded ? "rotate-180" : ""}
+            />
+          </button>
           <span className="text-sm font-medium text-text-primary flex-1">
             Design Agent
           </span>

@@ -14,6 +14,7 @@ export type ParallelCount = 1 | 2 | 3;
 
 interface ChatState {
   isOpen: boolean;
+  isExpanded: boolean;
   model: string;
   agentMode: AgentMode;
   parallelCount: ParallelCount;
@@ -26,6 +27,7 @@ interface ChatState {
   toggleOpen: () => void;
   open: () => void;
   close: () => void;
+  toggleExpanded: () => void;
   setModel: (model: string) => void;
   setAgentMode: (mode: AgentMode) => void;
   setParallelCount: (count: ParallelCount) => void;
@@ -69,6 +71,7 @@ const initialTabId = generateTabId();
 
 export const useChatStore = create<ChatState>((set, get) => ({
   isOpen: false,
+  isExpanded: localStorage.getItem("chat-expanded") === "true",
   model: localStorage.getItem("chat-model") ?? DEFAULT_MODEL,
   agentMode: normalizeAgentMode(localStorage.getItem("chat-agent-mode")),
   parallelCount: normalizeParallelCount(localStorage.getItem("chat-parallel-count")),
@@ -86,6 +89,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   toggleOpen: () => set((s) => ({ isOpen: !s.isOpen })),
   open: () => set({ isOpen: true }),
   close: () => set({ isOpen: false }),
+  toggleExpanded: () => {
+    const next = !get().isExpanded;
+    localStorage.setItem("chat-expanded", String(next));
+    set({ isExpanded: next });
+  },
   setModel: (model) => {
     localStorage.setItem("chat-model", model);
     const { activeTabId } = get();
