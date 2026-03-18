@@ -111,6 +111,55 @@ function pruneOverrideProperty(
   };
 }
 
+/** Walk a replacement node tree and apply updates at the given path segments. */
+function updateNodeInReplaceTree(
+  node: SceneNode,
+  segments: string[],
+  segIdx: number,
+  updates: InstanceOverrideUpdateProps,
+): SceneNode {
+  const targetId = segments[segIdx];
+  if (node.id === targetId) {
+    // Last segment — apply updates directly
+    if (segIdx === segments.length - 1) {
+      let updated = { ...node, ...updates } as SceneNode;
+      if (updated.type === "text" && hasTextMeasureProps(updates as Partial<SceneNode>)) {
+        updated = syncTextDimensions(updated);
+      }
+      return updated;
+    }
+    // Not last segment — drill deeper
+    if (node.type === "ref") {
+      const ref = node as RefNode;
+      const subPath = segments.slice(segIdx + 1).join("/");
+      const existingOverride = ref.overrides?.[subPath];
+      const existingProps = existingOverride?.kind === "update" ? existingOverride.props : {};
+      return {
+        ...ref,
+        overrides: {
+          ...ref.overrides,
+          [subPath]: { kind: "update" as const, props: { ...existingProps, ...updates } },
+        },
+      } as SceneNode;
+    }
+    if (node.type === "frame" || node.type === "group") {
+      const container = node as FrameNode;
+      return {
+        ...container,
+        children: container.children.map((c) => updateNodeInReplaceTree(c, segments, segIdx + 1, updates)),
+      } as SceneNode;
+    }
+  }
+  // Not the target — recurse into containers
+  if (node.type === "frame" || node.type === "group") {
+    const container = node as FrameNode;
+    const newChildren = container.children.map((c) => updateNodeInReplaceTree(c, segments, segIdx, updates));
+    if (newChildren.every((c, i) => c === container.children[i])) return node;
+    return { ...container, children: newChildren } as SceneNode;
+  }
+  return node;
+}
+
 /** Shared logic for applying an override update — handles both "update" and "replace" override kinds. */
 function applyInstanceOverrideUpdate(
   state: SceneState,
@@ -120,6 +169,35 @@ function applyInstanceOverrideUpdate(
 ): Partial<SceneState> {
   const refNode = state.nodesById[instanceId] as RefNode;
   const existingOverrides = refNode.overrides ?? {};
+
+  // Check if the path targets a node inside a replaced ancestor (e.g., a slot).
+  // In that case, update the child within the replacement node tree directly.
+  const pathSegments = path.split("/");
+  if (pathSegments.length > 1) {
+    for (let i = 1; i < pathSegments.length; i++) {
+      const ancestorPath = pathSegments.slice(0, i).join("/");
+      const ancestorOverride = existingOverrides[ancestorPath];
+      if (ancestorOverride?.kind === "replace") {
+        const relativeSegments = pathSegments.slice(i);
+        const updatedNode = updateNodeInReplaceTree(ancestorOverride.node, relativeSegments, 0, updates);
+        if (updatedNode === ancestorOverride.node) return {};
+        return {
+          nodesById: {
+            ...state.nodesById,
+            [instanceId]: {
+              ...refNode,
+              overrides: {
+                ...existingOverrides,
+                [ancestorPath]: { kind: "replace" as const, node: updatedNode },
+              },
+            },
+          },
+          _cachedTree: null,
+        };
+      }
+    }
+  }
+
   const existingOverride = existingOverrides[path];
 
   let newOverride: import("../../types/scene").InstanceOverride;
@@ -599,65 +677,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       if (!override || override.kind !== "replace") return state;
 
       const segments = relativePath.split("/");
-      const needsTextSync = hasTextMeasureProps(updates as Partial<SceneNode>);
-
-      // Walk the replacement tree following the path segments.
-      // When encountering a ref node, update its overrides for the remaining sub-path.
-      const updateAtPath = (node: SceneNode, segIdx: number): SceneNode => {
-        const targetId = segments[segIdx];
-        if (node.id === targetId) {
-          // Last segment — apply updates directly
-          if (segIdx === segments.length - 1) {
-            let updated = { ...node, ...updates } as SceneNode;
-            if (updated.type === "text" && needsTextSync) {
-              updated = syncTextDimensions(updated);
-            }
-            return updated;
-          }
-          // Not last segment — drill deeper
-          if (node.type === "ref") {
-            // Update the ref's overrides for the remaining sub-path
-            const subPath = segments.slice(segIdx + 1).join("/");
-            const leafId = segments[segments.length - 1];
-            const ref = node as RefNode;
-            const existingOverride = ref.overrides?.[subPath];
-            const existingProps = existingOverride?.kind === "update" ? existingOverride.props : {};
-            let mergedProps = { ...existingProps, ...updates };
-            if (needsTextSync) {
-              // Check if the target node in the component is text
-              const compNode = state.nodesById[ref.componentId];
-              if (compNode) {
-                // Just store the override — text sync happens at resolve time
-                void leafId;
-              }
-            }
-            return {
-              ...ref,
-              overrides: {
-                ...ref.overrides,
-                [subPath]: { kind: "update" as const, props: mergedProps },
-              },
-            } as SceneNode;
-          }
-          if (node.type === "frame" || node.type === "group") {
-            const container = node as FrameNode;
-            return {
-              ...container,
-              children: container.children.map((c) => updateAtPath(c, segIdx + 1)),
-            } as SceneNode;
-          }
-        }
-        // Not the target — recurse into containers
-        if (node.type === "frame" || node.type === "group") {
-          const container = node as FrameNode;
-          const newChildren = container.children.map((c) => updateAtPath(c, segIdx));
-          if (newChildren.every((c, i) => c === container.children[i])) return node;
-          return { ...container, children: newChildren } as SceneNode;
-        }
-        return node;
-      };
-
-      const updatedNode = updateAtPath(override.node, 0);
+      const updatedNode = updateNodeInReplaceTree(override.node, segments, 0, updates);
       if (updatedNode === override.node) return state;
 
       return {
