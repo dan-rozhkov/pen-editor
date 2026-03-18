@@ -111,6 +111,45 @@ function pruneOverrideProperty(
   };
 }
 
+/** Shared logic for applying an override update — handles both "update" and "replace" override kinds. */
+function applyInstanceOverrideUpdate(
+  state: SceneState,
+  instanceId: string,
+  path: string,
+  updates: InstanceOverrideUpdateProps,
+): Partial<SceneState> {
+  const refNode = state.nodesById[instanceId] as RefNode;
+  const existingOverrides = refNode.overrides ?? {};
+  const existingOverride = existingOverrides[path];
+
+  let newOverride: import("../../types/scene").InstanceOverride;
+  if (existingOverride?.kind === "replace") {
+    // Merge updates into the replacement node
+    newOverride = {
+      kind: "replace",
+      node: { ...existingOverride.node, ...updates } as SceneNode,
+    };
+  } else {
+    const existingProps =
+      existingOverride?.kind === "update" ? existingOverride.props : {};
+    newOverride = {
+      kind: "update",
+      props: { ...existingProps, ...updates },
+    };
+  }
+
+  return {
+    nodesById: {
+      ...state.nodesById,
+      [instanceId]: {
+        ...refNode,
+        overrides: { ...existingOverrides, [path]: newOverride },
+      },
+    },
+    _cachedTree: null,
+  };
+}
+
 // ----- Store -----
 
 export const useSceneStore = create<SceneState>((set, get) => ({
@@ -514,28 +553,14 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       const existing = state.nodesById[instanceId];
       if (!existing || existing.type !== "ref") return state;
       saveHistory(state);
+      return applyInstanceOverrideUpdate(state, instanceId, path, updates);
+    }),
 
-      const refNode = existing as RefNode;
-      const existingOverrides = refNode.overrides ?? {};
-      const existingOverride = existingOverrides[path];
-      const existingProps =
-        existingOverride?.kind === "update" ? existingOverride.props : {};
-
-      const updated: RefNode = {
-        ...refNode,
-        overrides: {
-          ...existingOverrides,
-          [path]: {
-            kind: "update",
-            props: { ...existingProps, ...updates },
-          },
-        },
-      };
-
-      return {
-        nodesById: { ...state.nodesById, [instanceId]: updated },
-        _cachedTree: null,
-      };
+  updateInstanceOverrideWithoutHistory: (instanceId, path, updates) =>
+    set((state) => {
+      const existing = state.nodesById[instanceId];
+      if (!existing || existing.type !== "ref") return state;
+      return applyInstanceOverrideUpdate(state, instanceId, path, updates);
     }),
 
   replaceInstanceNode: (instanceId, path, newNode) =>

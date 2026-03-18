@@ -8,9 +8,10 @@ import {
   getPreparedNodeEffectiveSize,
   prepareFrameNode,
 } from "@/utils/instanceUtils";
+import { getNodeEffectiveSize } from "@/utils/nodeUtils";
 import type { TransformHandle } from "./types";
 import { measureLabelTextWidth, truncateLabelToWidth } from "@/pixi/frameLabelUtils";
-import { resolveRefToTree } from "@/utils/instanceRuntime";
+import { resolveRefToTree, findResolvedDescendantByPath } from "@/utils/instanceRuntime";
 
 export type CanvasHitTarget =
   | { kind: "node"; nodeId: string }
@@ -337,15 +338,48 @@ export function hitTestTransformHandle(worldX: number, worldY: number): {
   absY: number;
   width: number;
   height: number;
+  slotContext?: { instanceId: string; descendantPath: string };
 } | null {
   const { selectedIds, instanceContext } = useSelectionStore.getState();
-  if (instanceContext) return null;
-  if (selectedIds.length !== 1) return null;
 
   const state = useSceneStore.getState();
+  const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+
+  // Instance descendant: only allow transform for slot frames
+  if (instanceContext) {
+    if (selectedIds.length !== 1) return null;
+    const instance = state.nodesById[instanceContext.instanceId];
+    if (!instance || instance.type !== "ref") return null;
+    const effectiveSize = getEffectiveSizeForHit(instanceContext.instanceId, state, calculateLayoutForFrame);
+    const refWithLayout: RefNode = effectiveSize
+      ? { ...(instance as RefNode), width: effectiveSize.width, height: effectiveSize.height }
+      : (instance as RefNode);
+    const resolved = findResolvedDescendantByPath(
+      refWithLayout,
+      instanceContext.descendantPath,
+      state.nodesById,
+      state.childrenById,
+      state.parentById,
+      calculateLayoutForFrame,
+    );
+    if (!resolved) return null;
+    if (resolved.node.type !== "frame" || !(resolved.node as FrameNode).isSlot) return null;
+
+    const absX = resolved.absX;
+    const absY = resolved.absY;
+    const width = resolved.width;
+    const height = resolved.height;
+
+    return hitTestHandlesAt(worldX, worldY, absX, absY, width, height, instanceContext.instanceId, {
+      instanceId: instanceContext.instanceId,
+      descendantPath: instanceContext.descendantPath,
+    });
+  }
+
+  if (selectedIds.length !== 1) return null;
+
   const nodeId = selectedIds[0];
   const treeNodes = state.getNodes();
-  const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
   let bounds: { x: number; y: number; width: number; height: number } | null = null;
 
   const findBounds = (
@@ -380,8 +414,42 @@ export function hitTestTransformHandle(worldX: number, worldY: number): {
   if (!findBounds(treeNodes, 0, 0) || !bounds) return null;
   const { x: absX, y: absY, width, height } = bounds;
 
+  return hitTestHandlesAt(worldX, worldY, absX, absY, width, height, nodeId);
+}
+
+/** Get effective (layout-computed) size for a node during hit testing. */
+function getEffectiveSizeForHit(
+  nodeId: string,
+  state: { nodesById: Record<string, FlatSceneNode>; getNodes: () => SceneNode[] },
+  calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
+): { width: number; height: number } | null {
+  const node = state.nodesById[nodeId];
+  if (!node) return null;
+  const treeNodes = state.getNodes();
+  return getNodeEffectiveSize(treeNodes, nodeId, calculateLayoutForFrame) ?? { width: node.width, height: node.height };
+}
+
+/** Shared handle hit-testing logic against a known bounding rect. */
+function hitTestHandlesAt(
+  worldX: number,
+  worldY: number,
+  absX: number,
+  absY: number,
+  width: number,
+  height: number,
+  nodeId: string,
+  slotContext?: { instanceId: string; descendantPath: string },
+): {
+  corner: TransformHandle;
+  nodeId: string;
+  absX: number;
+  absY: number;
+  width: number;
+  height: number;
+  slotContext?: { instanceId: string; descendantPath: string };
+} | null {
   const scale = useViewportStore.getState().scale;
-  const handleRadius = 6 / scale; // Hit area slightly larger than visual handle
+  const handleRadius = 6 / scale;
 
   const corners: Array<{ corner: "tl" | "tr" | "bl" | "br"; cx: number; cy: number }> = [
     { corner: "tl", cx: absX, cy: absY },
@@ -394,11 +462,10 @@ export function hitTestTransformHandle(worldX: number, worldY: number): {
     const dx = worldX - cx;
     const dy = worldY - cy;
     if (Math.abs(dx) <= handleRadius && Math.abs(dy) <= handleRadius) {
-      return { corner, nodeId, absX, absY, width, height };
+      return { corner, nodeId, absX, absY, width, height, slotContext };
     }
   }
 
-  // Side handles (skip corner zones to avoid ambiguity)
   const sideTolerance = handleRadius;
   const cornerExclusion = handleRadius * 2;
   const distLeft = Math.abs(worldX - absX);
@@ -411,28 +478,28 @@ export function hitTestTransformHandle(worldX: number, worldY: number): {
     worldY >= absY + cornerExclusion &&
     worldY <= absY + height - cornerExclusion
   ) {
-    return { corner: "l", nodeId, absX, absY, width, height };
+    return { corner: "l", nodeId, absX, absY, width, height, slotContext };
   }
   if (
     distRight <= sideTolerance &&
     worldY >= absY + cornerExclusion &&
     worldY <= absY + height - cornerExclusion
   ) {
-    return { corner: "r", nodeId, absX, absY, width, height };
+    return { corner: "r", nodeId, absX, absY, width, height, slotContext };
   }
   if (
     distTop <= sideTolerance &&
     worldX >= absX + cornerExclusion &&
     worldX <= absX + width - cornerExclusion
   ) {
-    return { corner: "t", nodeId, absX, absY, width, height };
+    return { corner: "t", nodeId, absX, absY, width, height, slotContext };
   }
   if (
     distBottom <= sideTolerance &&
     worldX >= absX + cornerExclusion &&
     worldX <= absX + width - cornerExclusion
   ) {
-    return { corner: "b", nodeId, absX, absY, width, height };
+    return { corner: "b", nodeId, absX, absY, width, height, slotContext };
   }
 
   return null;

@@ -2,7 +2,7 @@ import { Container, Graphics, Text } from "pixi.js";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
-import type { TextNode } from "@/types/scene";
+import type { FrameNode, TextNode } from "@/types/scene";
 import type { OverlayHelpers } from "./helpers";
 import { drawTextBaselines } from "./helpers";
 import {
@@ -56,7 +56,7 @@ export function redrawSelection(
     ? COMPONENT_SELECTION_COLOR
     : TEXT_BASELINE_COLOR;
 
-  // Instance descendant selection — single outline + size label
+  // Instance descendant selection — single outline + size label (+ handles for slots)
   if (isInstanceDescendantSelection && instanceContext) {
     const target = helpers.getInstanceDescendantTarget(
       instanceContext.instanceId,
@@ -83,6 +83,32 @@ export function redrawSelection(
           scale,
           COMPONENT_SELECTION_COLOR,
         );
+      }
+
+      // Draw transform handles for slot frames
+      const isSlot = target.node.type === "frame" && !!(target.node as FrameNode).isSlot;
+      if (isSlot) {
+        const handleSizeWorld = HANDLE_SIZE / scale;
+        const halfHandle = handleSizeWorld / 2;
+        const { x: rx, y: ry, width: rw, height: rh } = target.drawRect;
+        const slotCorners = [
+          { x: rx, y: ry },
+          { x: rx + rw, y: ry },
+          { x: rx, y: ry + rh },
+          { x: rx + rw, y: ry + rh },
+        ];
+        for (const corner of slotCorners) {
+          const handle = new Graphics();
+          handle.rect(
+            corner.x - halfHandle,
+            corner.y - halfHandle,
+            handleSizeWorld,
+            handleSizeWorld,
+          );
+          handle.fill(HANDLE_FILL);
+          handle.stroke({ color: COMPONENT_SELECTION_COLOR, width: strokeWidth });
+          handlesContainer.addChild(handle);
+        }
       }
 
       drawSizeLabel(

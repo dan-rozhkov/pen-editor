@@ -1,8 +1,11 @@
 import { useSceneStore } from "@/store/sceneStore";
+import { useLayoutStore } from "@/store/layoutStore";
 import type { InteractionContext, TransformState } from "./types";
 import { hitTestTransformHandle, getResizeCursor } from "./hitTesting";
 import { generatePolygonPoints } from "@/utils/polygonUtils";
-import type { PolygonNode, LineNode } from "@/types/scene";
+import type { PolygonNode, LineNode, RefNode, InstanceOverrideUpdateProps } from "@/types/scene";
+import { findResolvedDescendantByPath } from "@/utils/instanceRuntime";
+import { getNodeEffectiveSize } from "@/utils/nodeUtils";
 
 export interface TransformController {
   handlePointerDown(e: PointerEvent, world: { x: number; y: number }): boolean;
@@ -25,6 +28,7 @@ export function createTransformController(context: InteractionContext): Transfor
     parentOffsetX: 0,
     parentOffsetY: 0,
     startLinePoints: null,
+    slotContext: null,
   };
 
   return {
@@ -32,12 +36,48 @@ export function createTransformController(context: InteractionContext): Transfor
       if (e.button === 0) {
         const handleHit = hitTestTransformHandle(world.x, world.y);
         if (handleHit) {
+          // Slot inside instance — resolve local coordinates for override
+          if (handleHit.slotContext) {
+            const scState = useSceneStore.getState();
+            const calcLayout = useLayoutStore.getState().calculateLayoutForFrame;
+            const inst = scState.nodesById[handleHit.slotContext.instanceId];
+            if (!inst || inst.type !== "ref") return false;
+            const effSize = getNodeEffectiveSize(scState.getNodes(), inst.id, calcLayout);
+            const refWithLayout: RefNode = effSize
+              ? { ...(inst as RefNode), width: effSize.width, height: effSize.height }
+              : (inst as RefNode);
+            const resolved = findResolvedDescendantByPath(
+              refWithLayout,
+              handleHit.slotContext.descendantPath,
+              scState.nodesById, scState.childrenById, scState.parentById,
+              calcLayout,
+            );
+            if (!resolved) return false;
+
+            state.isTransforming = true;
+            state.nodeId = handleHit.nodeId;
+            state.corner = handleHit.corner;
+            state.slotContext = handleHit.slotContext;
+            state.startNodeX = resolved.node.x; // local X
+            state.startNodeY = resolved.node.y; // local Y
+            state.startNodeW = handleHit.width;
+            state.startNodeH = handleHit.height;
+            state.absX = handleHit.absX; // absolute X for resize math
+            state.absY = handleHit.absY;
+            state.parentOffsetX = 0;
+            state.parentOffsetY = 0;
+            state.startLinePoints = null;
+            context.canvas.style.cursor = getResizeCursor(handleHit.corner);
+            return true;
+          }
+
           const sceneState = useSceneStore.getState();
           const node = sceneState.nodesById[handleHit.nodeId];
           if (node) {
             state.isTransforming = true;
             state.nodeId = handleHit.nodeId;
             state.corner = handleHit.corner;
+            state.slotContext = null;
             state.startNodeX = node.x;
             state.startNodeY = node.y;
             state.startNodeW = handleHit.width;
@@ -115,6 +155,23 @@ export function createTransformController(context: InteractionContext): Transfor
 
         const roundedW = Math.round(newW);
         const roundedH = Math.round(newH);
+
+        // Slot inside instance — update via instance override (x/y are local coords)
+        if (state.slotContext) {
+          const overrideUpdates: InstanceOverrideUpdateProps = {
+            x: Math.round(newX),
+            y: Math.round(newY),
+            width: roundedW,
+            height: roundedH,
+          };
+          useSceneStore.getState().updateInstanceOverrideWithoutHistory(
+            state.slotContext.instanceId,
+            state.slotContext.descendantPath,
+            overrideUpdates,
+          );
+          return true;
+        }
+
         const updates: Record<string, unknown> = {
           x: Math.round(newX),
           y: Math.round(newY),
@@ -143,6 +200,22 @@ export function createTransformController(context: InteractionContext): Transfor
 
     handlePointerUp(_e: PointerEvent, _world: { x: number; y: number }): boolean {
       if (state.isTransforming && state.nodeId) {
+        // Slot inside instance — commit via instance override with history
+        if (state.slotContext) {
+          // Re-apply current values with history (mirrors the normal transform commit pattern)
+          useSceneStore.getState().updateInstanceOverride(
+            state.slotContext.instanceId,
+            state.slotContext.descendantPath,
+            {} as InstanceOverrideUpdateProps,
+          );
+          state.isTransforming = false;
+          state.nodeId = null;
+          state.corner = null;
+          state.slotContext = null;
+          context.canvas.style.cursor = "";
+          return true;
+        }
+
         const sceneState = useSceneStore.getState();
         const node = sceneState.nodesById[state.nodeId];
         if (node) {
@@ -163,6 +236,7 @@ export function createTransformController(context: InteractionContext): Transfor
         state.isTransforming = false;
         state.nodeId = null;
         state.corner = null;
+        state.slotContext = null;
         context.canvas.style.cursor = "";
         return true;
       }

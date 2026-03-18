@@ -84,6 +84,8 @@ export interface TransformState {
   parentOffsetY: number;
   /** Original line points at drag start (for scaling during resize) */
   startLinePoints: number[] | null;
+  /** Instance slot context (when resizing a slot inside an instance) */
+  slotContext: { instanceId: string; descendantPath: string } | null;
 }
 
 export interface InteractionContext {

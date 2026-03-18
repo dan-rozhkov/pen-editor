@@ -57,6 +57,7 @@ export interface SceneState {
   convertEmbedToDesign: (id: string) => Promise<string | null>;
   convertDesignToEmbed: (id: string) => string | null;
   updateInstanceOverride: (instanceId: string, path: string, updates: InstanceOverrideUpdateProps) => void;
+  updateInstanceOverrideWithoutHistory: (instanceId: string, path: string, updates: InstanceOverrideUpdateProps) => void;
   replaceInstanceNode: (instanceId: string, path: string, newNode: SceneNode) => void;
   updateSlotChildWithoutHistory: (instanceId: string, slotPath: string, relativePath: string, updates: Partial<SceneNode>) => void;
   resetInstanceOverride: (instanceId: string, path: string, property?: keyof InstanceOverrideUpdateProps) => void;

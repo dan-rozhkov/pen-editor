@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { isContainerNode, type SceneNode, type HistorySnapshot, type FrameNode, type RefNode } from "@/types/scene";
+import { isContainerNode, buildTree, type SceneNode, type HistorySnapshot, type FrameNode, type FlatFrameNode, type RefNode } from "@/types/scene";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useUIVisibilityStore } from "@/store/uiVisibilityStore";
 import { useClipboardStore } from "@/store/clipboardStore";
@@ -12,7 +12,6 @@ import { cloneNodeWithNewId, deepCloneNode } from "@/utils/cloneNode";
 import {
   findNodeById,
   findParentFrame,
-  findComponentById,
 } from "@/utils/nodeUtils";
 import { createRefFromComponent } from "@/utils/componentUtils";
 import { resolveRefToTree, findNodeByPath } from "@/utils/instanceRuntime";
@@ -146,10 +145,27 @@ export function useCanvasKeyboardShortcuts({
         const state = useSceneStore.getState();
         const instance = state.nodesById[instanceId] as RefNode | undefined;
         if (instance?.type === "ref") {
-          const component = findComponentById(nodes, instance.componentId);
-          if (component) {
-            const slotFrame = findNodeByPath(component.children, descendantPath);
-            if (slotFrame?.type === "frame" && (slotFrame as FrameNode).isSlot) {
+          // Use fresh state to build component tree (avoids stale closure)
+          const compNode = state.nodesById[instance.componentId];
+          if (compNode?.type === "frame" && (compNode as FlatFrameNode).reusable) {
+            const componentTree = buildTree([instance.componentId], state.nodesById, state.childrenById)[0] as FrameNode;
+
+            // Walk up the descendant path to find the nearest slot ancestor
+            // (handles selecting both the slot itself and children inside a slot)
+            const segments = descendantPath.split("/");
+            let slotPath: string | null = null;
+            let slotFrame: FrameNode | null = null;
+            for (let i = segments.length; i >= 1; i--) {
+              const candidatePath = segments.slice(0, i).join("/");
+              const candidateNode = findNodeByPath(componentTree.children, candidatePath);
+              if (candidateNode?.type === "frame" && (candidateNode as FrameNode).isSlot) {
+                slotPath = candidatePath;
+                slotFrame = candidateNode as FrameNode;
+                break;
+              }
+            }
+
+            if (slotPath && slotFrame) {
               const clonedNodes = sourceNodes.map((srcNode) => {
                 // Reusable components → create a ref, don't flatten
                 if (srcNode.type === "frame" && (srcNode as FrameNode).reusable) {
@@ -160,15 +176,15 @@ export function useCanvasKeyboardShortcuts({
                 cloned.y = 0;
                 return cloned;
               });
-              const currentOverride = instance.overrides?.[descendantPath];
+              const currentOverride = instance.overrides?.[slotPath];
               const baseFrame = currentOverride?.kind === "replace"
                 ? currentOverride.node as FrameNode
-                : slotFrame as FrameNode;
+                : slotFrame;
               const replacement: FrameNode = {
                 ...baseFrame,
                 children: [...baseFrame.children, ...clonedNodes],
               };
-              state.replaceInstanceNode(instanceId, descendantPath, replacement);
+              state.replaceInstanceNode(instanceId, slotPath, replacement);
               return;
             }
           }
