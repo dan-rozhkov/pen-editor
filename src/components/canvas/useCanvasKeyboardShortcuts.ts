@@ -108,6 +108,44 @@ function resolvePasteTargetContainerId(
   return null;
 }
 
+/**
+ * Resolve which nodes should be copied based on current selection state.
+ * If a descendant inside an instance is selected (instanceContext),
+ * resolve the actual descendant node instead of copying the whole instance.
+ */
+function resolveNodesToCopy(
+  selState: ReturnType<typeof useSelectionStore.getState>,
+  nodes: SceneNode[],
+): SceneNode[] {
+  if (selState.instanceContext) {
+    const { instanceId, descendantPath } = selState.instanceContext;
+    const state = useSceneStore.getState();
+    const instance = state.nodesById[instanceId];
+    if (instance?.type === "ref") {
+      const resolved = resolveRefToTree(
+        instance as RefNode,
+        state.nodesById,
+        state.childrenById,
+      );
+      if (resolved) {
+        const descendant = findNodeByPath(
+          resolved.children,
+          descendantPath,
+          state.nodesById,
+          state.childrenById,
+        );
+        if (descendant) return [descendant];
+      }
+    }
+    // Fallback: nothing resolvable
+    return [];
+  }
+
+  return selState.selectedIds
+    .map((id) => findNodeById(nodes, id))
+    .filter((n): n is SceneNode => n != null);
+}
+
 export function useCanvasKeyboardShortcuts({
   nodes,
   copiedNodes,
@@ -266,14 +304,10 @@ export function useCanvasKeyboardShortcuts({
       if ((e.metaKey || e.ctrlKey) && e.code === "KeyC") {
         if (isTyping) return;
         e.preventDefault();
-        const ids = useSelectionStore.getState().selectedIds;
-        if (ids.length > 0) {
-          const nodesToCopy = ids
-            .map((id) => findNodeById(nodes, id))
-            .filter((n): n is SceneNode => n != null);
-          if (nodesToCopy.length > 0) {
-            copyNodes(nodesToCopy);
-          }
+        const selState = useSelectionStore.getState();
+        const nodesToCopy = resolveNodesToCopy(selState, nodes);
+        if (nodesToCopy.length > 0) {
+          copyNodes(nodesToCopy);
         }
         return;
       }
@@ -281,15 +315,15 @@ export function useCanvasKeyboardShortcuts({
       if ((e.metaKey || e.ctrlKey) && e.code === "KeyX") {
         if (isTyping) return;
         e.preventDefault();
-        const ids = useSelectionStore.getState().selectedIds;
-        if (ids.length > 0) {
-          const nodesToCut = ids
-            .map((id) => findNodeById(nodes, id))
-            .filter((n): n is SceneNode => n != null);
-          if (nodesToCut.length > 0) {
-            copyNodes(nodesToCut);
+        const selState = useSelectionStore.getState();
+        const nodesToCut = resolveNodesToCopy(selState, nodes);
+        if (nodesToCut.length > 0) {
+          copyNodes(nodesToCut);
+          // Only delete for non-instance-descendant selections
+          // (descendants inside instances are virtual and can't be deleted directly)
+          if (!selState.instanceContext) {
             saveHistory(createSnapshot(useSceneStore.getState()));
-            for (const id of ids) {
+            for (const id of selState.selectedIds) {
               deleteNode(id);
             }
             clearSelection();
