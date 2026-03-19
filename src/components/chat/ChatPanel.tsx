@@ -21,12 +21,14 @@ import type { ChatLaunchPayload } from "@/types/chat";
 
 const MODEL_OPTIONS = [
   { value: "openai/gpt-5.4", label: "GPT-5.4" },
+  { value: "openai/gpt-5.4-mini", label: "GPT-5.4 Mini" },
   { value: "moonshotai/kimi-k2.5", label: "Kimi K2.5" },
   { value: "anthropic/claude-opus-4.6", label: "Claude Opus 4.6" },
   { value: "anthropic/claude-sonnet-4.6", label: "Claude Sonnet 4.6" },
   { value: "z-ai/glm-5", label: "GLM-5" },
   { value: "z-ai/glm-5-turbo", label: "GLM-5 Turbo" },
   { value: "minimax/minimax-m2.5", label: "Minimax M2.5" },
+  { value: "minimax/minimax-m2.7", label: "Minimax M2.7" },
   { value: "qwen/qwen3.5-397b-a17b", label: "Qwen 3.5 397B" },
   { value: "qwen/qwen3.5-plus-02-15", label: "Qwen 3.5 Plus" },
   { value: "qwen/qwen3.5-flash-02-23", label: "Qwen 3.5 Flash" },
@@ -39,6 +41,14 @@ const MODEL_OPTIONS = [
   {
     value: "x-ai/grok-4.20-beta",
     label: "Grok 4.20",
+  },
+  {
+    value: "xiaomi/mimo-v2-omni",
+    label: "MiMo V2 Omni",
+  },
+  {
+    value: "xiaomi/mimo-v2-pro",
+    label: "MiMo V2 Pro",
   },
   {
     value: "nvidia/nemotron-3-super-120b-a12b:free",

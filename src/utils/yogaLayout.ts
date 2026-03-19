@@ -8,9 +8,14 @@
 import type {
   SceneNode,
   FrameNode,
+  TextNode,
   AlignItems,
   JustifyContent,
 } from "../types/scene";
+import {
+  measureTextAutoSize,
+  measureTextFixedWidthHeight,
+} from "./textMeasure";
 
 // ── Internal types ──────────────────────────────────────────────────────────
 
@@ -132,6 +137,23 @@ function resolveEffectiveSize(
       const intrinsic = computeIntrinsicSize(frame);
       if (widthMode === "fit_content") effectiveWidth = intrinsic.width;
       if (heightMode === "fit_content") effectiveHeight = intrinsic.height;
+    }
+  } else if (child.type === "text") {
+    const textNode = child as TextNode;
+    const textMode = textNode.textWidthMode ?? "auto";
+
+    if (widthMode === "fit_content" || heightMode === "fit_content") {
+      if (textMode === "fixed") {
+        // Fixed width, auto height — measure wrapped text height
+        if (heightMode === "fit_content") {
+          effectiveHeight = measureTextFixedWidthHeight(textNode);
+        }
+      } else {
+        // Auto mode — measure both dimensions from content
+        const measured = measureTextAutoSize(textNode);
+        if (widthMode === "fit_content") effectiveWidth = measured.width;
+        if (heightMode === "fit_content") effectiveHeight = measured.height;
+      }
     }
   }
 
@@ -494,6 +516,51 @@ export function isYogaReady(): boolean {
 }
 
 /**
+ * Re-measure text node heights after layout widths are resolved.
+ * When text has fill_container width and fit_content height, the correct
+ * wrapped height can only be computed once the layout-assigned width is known.
+ */
+function remeasureTextHeights(
+  items: FlexItem[],
+  children: SceneNode[],
+  container: FlexContainer,
+): void {
+  const isHorizontal = container.direction === "row";
+
+  for (let i = 0; i < items.length; i++) {
+    const child = children[i];
+    if (child.type !== "text") continue;
+
+    const textNode = child as TextNode;
+    const textMode = textNode.textWidthMode ?? "auto";
+    // Only wrapped text (fixed / fixed-height) needs re-measurement
+    if (textMode !== "fixed" && textMode !== "fixed-height") continue;
+
+    const heightMode = child.sizing?.heightMode ?? "fixed";
+    if (heightMode !== "fit_content") continue;
+
+    const computedWidth = isHorizontal
+      ? items[i].computedMainSize
+      : items[i].computedCrossSize;
+
+    // Skip if width hasn't changed from the stored value (already measured correctly)
+    if (computedWidth === textNode.width) continue;
+
+    const measuredHeight = measureTextFixedWidthHeight({
+      ...textNode,
+      width: computedWidth,
+    });
+
+    if (isHorizontal) {
+      items[i].computedCrossSize = measuredHeight;
+      items[i].crossBaseSize = measuredHeight;
+    } else {
+      items[i].computedMainSize = measuredHeight;
+    }
+  }
+}
+
+/**
  * Calculate layout for a Frame and its children.
  * Returns updated positions for all visible children.
  */
@@ -519,6 +586,12 @@ export function calculateFrameLayout(frame: FrameNode): LayoutResult[] {
 
   resolveMainAxisSizes(items, container);
   resolveCrossAxisSizes(items, container);
+
+  // Second pass: re-measure text heights using layout-computed widths.
+  // Text wrapping depends on the final width, which is only known after
+  // main/cross sizing resolves fill_container widths.
+  remeasureTextHeights(items, visibleChildren, container);
+
   positionMainAxis(items, container);
   positionCrossAxis(items, container);
 
@@ -564,6 +637,7 @@ export function calculateFrameIntrinsicSize(
   // Run sizing phases to get accurate sizes
   resolveMainAxisSizes(items, container);
   resolveCrossAxisSizes(items, container);
+  remeasureTextHeights(items, visibleChildren, container);
 
   const totalGap = items.length > 1 ? container.gap * (items.length - 1) : 0;
 

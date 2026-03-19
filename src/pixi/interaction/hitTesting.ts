@@ -41,6 +41,31 @@ function pointToSegmentDistance(
   return Math.sqrt((px - projX) ** 2 + (py - projY) ** 2);
 }
 
+function getHitNodeEffectiveSize(
+  node: SceneNode,
+  sceneNodes: SceneNode[],
+  calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
+  nodesById: Record<string, FlatSceneNode>,
+  childrenById: Record<string, string[]>,
+): { width: number; height: number } {
+  if (node.type === "ref") {
+    const resolved = resolveRefToTree(
+      node as RefNode,
+      nodesById,
+      childrenById,
+    );
+    if (resolved) {
+      return getPreparedNodeEffectiveSize(
+        resolved,
+        sceneNodes,
+        calculateLayoutForFrame,
+      );
+    }
+  }
+
+  return getPreparedNodeEffectiveSize(node, sceneNodes, calculateLayoutForFrame);
+}
+
 /**
  * Convert screen coordinates to world coordinates
  */
@@ -151,10 +176,12 @@ export function findCanvasHitTargetAtPoint(
 
     const absX = parentAbsX + node.x;
     const absY = parentAbsY + node.y;
-    const { width, height } = getPreparedNodeEffectiveSize(
+    const { width, height } = getHitNodeEffectiveSize(
       node,
       sceneNodes,
       calculateLayoutForFrame,
+      state.nodesById,
+      state.childrenById,
     );
 
     if (
@@ -390,10 +417,12 @@ export function hitTestTransformHandle(worldX: number, worldY: number): {
     for (const n of nodes) {
       const absX = parentAbsX + n.x;
       const absY = parentAbsY + n.y;
-      const { width, height } = getPreparedNodeEffectiveSize(
+      const { width, height } = getHitNodeEffectiveSize(
         n,
         treeNodes,
         calculateLayoutForFrame,
+        state.nodesById,
+        state.childrenById,
       );
       if (n.id === nodeId) {
         bounds = { x: absX, y: absY, width, height };

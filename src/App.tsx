@@ -3,7 +3,7 @@ import { LeftSidebar } from "./components/LeftSidebar";
 import { RightSidebar } from "./components/RightSidebar";
 import { PrimitivesPanel } from "./components/PrimitivesPanel";
 import { ChatPanel } from "./components/chat/ChatPanel";
-import { ZoomIndicator, FpsDisplay } from "./components/canvas/CanvasOverlays";
+import { FpsDisplay } from "./components/canvas/CanvasOverlays";
 import { useUIVisibilityStore } from "./store/uiVisibilityStore";
 import { useFloatingPanelsStore } from "./store/floatingPanelsStore";
 import "./store/uiThemeStore"; // Initialize UI theme (applies .dark class before first render)
@@ -43,8 +43,6 @@ function App() {
             <div className="pointer-events-auto">
               <ChatPanel />
             </div>
-            {/* Canvas badges — positioned relative to the area between sidebars */}
-            <ZoomIndicator />
             <FpsDisplay />
           </div>
           {/* Right sidebar */}

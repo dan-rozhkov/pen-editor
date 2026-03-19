@@ -1,7 +1,8 @@
-import type { SceneNode, FrameNode, GroupNode } from "../types/scene";
+import type { SceneNode, FrameNode, GroupNode, RefNode } from "../types/scene";
 import type { ThemeName } from "../types/variable";
-import { isContainerNode } from "../types/scene";
+import { flattenTree, isContainerNode } from "../types/scene";
 import { getPreparedNodeEffectiveSize, prepareFrameNode } from "@/utils/instanceUtils";
+import { resolveRefToTree } from "@/utils/instanceRuntime";
 import { rectsIntersect } from "@/utils/dragUtils";
 
 export interface ParentContext {
@@ -323,6 +324,8 @@ export function getNodeEffectiveSize(
   targetId: string,
   calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
 ): { width: number; height: number } | null {
+  const flatTree = flattenTree(nodes);
+
   function findWithPath(
     searchNodes: SceneNode[],
     parentFrame: FrameNode | null,
@@ -335,6 +338,20 @@ export function getNodeEffectiveSize(
 
     for (const node of effectiveNodes) {
       if (node.id === targetId) {
+        if (node.type === "ref") {
+          const resolved = resolveRefToTree(
+            node as RefNode,
+            flatTree.nodesById,
+            flatTree.childrenById,
+          );
+          if (resolved) {
+            return getPreparedNodeEffectiveSize(
+              resolved,
+              nodes,
+              calculateLayoutForFrame,
+            );
+          }
+        }
         return getPreparedNodeEffectiveSize(node, nodes, calculateLayoutForFrame);
       }
       if (isContainerNode(node)) {

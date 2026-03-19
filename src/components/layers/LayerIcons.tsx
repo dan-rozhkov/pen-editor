@@ -1,6 +1,7 @@
 import {
   DiamondIcon,
   DiamondsFourIcon,
+  PlusSquareIcon,
   RectangleIcon,
   CircleIcon,
   TextTIcon,
@@ -104,10 +105,12 @@ const AutoLayoutIcon = ({ layout }: { layout: LayoutProperties }) => {
 export const NodeIcon = ({
   type,
   isComponent,
+  isSlot,
   layout,
 }: {
   type: SceneNode["type"];
   isComponent?: boolean;
+  isSlot?: boolean;
   layout?: LayoutProperties;
 }) => {
   const iconClass = clsx("w-4 h-4 shrink-0", "text-text-muted");
@@ -116,6 +119,9 @@ export const NodeIcon = ({
     case "frame":
       if (isComponent) {
         return <DiamondsFourIcon size={16} className={iconClass} weight="regular" />;
+      }
+      if (isSlot) {
+        return <PlusSquareIcon size={16} className={iconClass} weight="regular" />;
       }
       if (layout?.autoLayout) {
         return <AutoLayoutIcon layout={layout} />;

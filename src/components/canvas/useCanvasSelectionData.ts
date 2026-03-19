@@ -12,6 +12,7 @@ import {
   getThemeFromAncestorFrames,
   getNodeAbsolutePosition,
   getNodeAbsolutePositionWithLayout,
+  getNodeEffectiveSize,
 } from "@/utils/nodeUtils";
 import {
   getPreparedNodeEffectiveSize,
@@ -140,7 +141,8 @@ export function useCanvasSelectionData({
       if (!absPos) continue;
 
       let { width: effectiveWidth, height: effectiveHeight } =
-        getPreparedNodeEffectiveSize(node, nodes, calculateLayoutForFrame);
+        getNodeEffectiveSize(nodes, id, calculateLayoutForFrame)
+        ?? getPreparedNodeEffectiveSize(node, nodes, calculateLayoutForFrame);
 
       const parentContext = findParentFrame(nodes, node.id);
       if (

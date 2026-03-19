@@ -1,4 +1,5 @@
 import { PropertiesPanel } from "./PropertiesPanel";
+import { PageControls } from "./PageControls";
 import { useFloatingPanelsStore } from "@/store/floatingPanelsStore";
 
 export function RightSidebar() {
@@ -10,6 +11,7 @@ export function RightSidebar() {
         ? "w-[260px] h-full flex flex-col bg-surface-panel rounded-2xl shadow-[0_0px_3px_rgba(0,0,0,0.04)] border border-border-default overflow-hidden"
         : "w-[260px] h-full flex flex-col bg-surface-panel border-l border-border-default"
     }>
+      <PageControls />
       <PropertiesPanel />
     </div>
   );

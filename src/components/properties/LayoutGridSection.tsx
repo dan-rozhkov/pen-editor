@@ -10,12 +10,12 @@ import type {
 } from "@/types/scene";
 import { generateId } from "@/types/scene";
 import {
+  ColorInput,
   NumberInput,
   PropertyRow,
   PropertySection,
   SelectInput,
 } from "@/components/ui/PropertyInputs";
-import { CustomColorPicker } from "@/components/ui/ColorPicker";
 import { Button } from "@/components/ui/button";
 
 interface LayoutGridSectionProps {
@@ -122,10 +122,16 @@ function GridPopover({
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      const clickedPortaledControl = target?.closest(
+        "[data-slot='select-content'], [data-slot='select-trigger']",
+      );
+
       if (
+        !clickedPortaledControl &&
         popoverRef.current &&
-        !popoverRef.current.contains(e.target as Node) &&
-        !anchorEl.contains(e.target as Node)
+        !popoverRef.current.contains(target) &&
+        !anchorEl.contains(target)
       ) {
         onClose();
       }
@@ -180,12 +186,11 @@ function GridPopover({
       <PropertyRow>
         <div className="flex-1 flex flex-col gap-1">
           <span className="text-[10px] font-normal text-text-muted">Color</span>
-          <div className="flex items-center gap-1">
-            <CustomColorPicker
+          <div className="min-w-0">
+            <ColorInput
               value={grid.color}
-              onChange={(c) => update({ color: c })}
+              onChange={(color) => update({ color })}
             />
-            <span className="text-[10px] text-text-muted font-mono">{grid.color}</span>
           </div>
         </div>
         <NumberInput
