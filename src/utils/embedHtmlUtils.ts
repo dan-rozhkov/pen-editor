@@ -3,6 +3,8 @@
  * Used by InlineEmbedEditor, htmlToDesignNodes, and htmlTextureHelpers.
  */
 
+import { sanitizeEmbedHtml } from "./sanitizeEmbedHtml";
+
 /** Detect whether HTML contains `<body>` tags or CSS selectors targeting `html`/`body`. */
 export function hasBodyTargetedStyles(html: string): boolean {
   if (/<body[\s>]/i.test(html)) return true;
@@ -129,14 +131,17 @@ export function mountHtmlWithBodyStyles(
   height: number,
 ): MountResult {
   const originalHasBodyTag = /<body[\s>]/i.test(html);
+  // Embed HTML is untrusted (AI output, pasted markup, shared .pen files) —
+  // strip scripts and event handlers before it touches the DOM.
+  const safeHtml = sanitizeEmbedHtml(html);
   if (!hasBodyTargetedStyles(html)) {
-    container.innerHTML = html;
+    container.innerHTML = safeHtml;
     applyGlobalRootCustomProperties(container, container);
     return { root: container, wrappedBody: false, originalHasBodyTag: false };
   }
 
   try {
-    const parsed = new DOMParser().parseFromString(html, "text/html");
+    const parsed = new DOMParser().parseFromString(safeHtml, "text/html");
 
     for (const node of Array.from(parsed.head.childNodes)) {
       container.appendChild(document.importNode(node, true));
@@ -159,7 +164,7 @@ export function mountHtmlWithBodyStyles(
 
     return { root: body, wrappedBody: true, originalHasBodyTag };
   } catch {
-    container.innerHTML = html;
+    container.innerHTML = safeHtml;
     applyGlobalRootCustomProperties(container, container);
     return { root: container, wrappedBody: false, originalHasBodyTag };
   }

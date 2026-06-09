@@ -53,13 +53,10 @@ export async function convertHtmlToDesignNodes(
     text-align: initial;
     text-transform: none;
   `;
-  // Sanitize: strip event handler attributes and script tags to prevent execution
-  const sanitized = htmlContent
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/\bon\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, "");
+  // mountHtmlWithBodyStyles sanitizes via DOMPurify — no pre-cleaning needed.
   const { root: conversionRoot, wrappedBody } = mountHtmlWithBodyStyles(
     container,
-    sanitized,
+    htmlContent,
     width,
     height,
   );

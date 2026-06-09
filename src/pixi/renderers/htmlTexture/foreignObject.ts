@@ -1,3 +1,5 @@
+import { sanitizeEmbedHtml } from "@/utils/sanitizeEmbedHtml";
+
 const EMBED_PREFLIGHT_STYLE_ID = "embed-tailwind-preflight";
 const EMBED_PREFLIGHT_ROOT_CLASS = "ck-preflight-root";
 const EMBED_PREFLIGHT_CSS = `
@@ -130,10 +132,12 @@ const EMBED_PREFLIGHT_CSS = `
 `;
 
 export function normalizeHtmlForEmbedRender(html: string): string {
-  // Fast path: skip DOM round-trip when no fixed positioning is present
+  // Untrusted markup: even on a detached element, <img onerror> handlers
+  // fire once innerHTML is assigned — sanitize first.
+  const safeHtml = sanitizeEmbedHtml(html);
   try {
     const container = document.createElement("div");
-    container.innerHTML = html;
+    container.innerHTML = safeHtml;
 
     if (!container.querySelector(`style[data-embed-style="${EMBED_PREFLIGHT_STYLE_ID}"]`)) {
       const style = document.createElement("style");
@@ -151,7 +155,7 @@ export function normalizeHtmlForEmbedRender(html: string): string {
 
     return container.innerHTML;
   } catch {
-    return html;
+    return safeHtml;
   }
 }
 
