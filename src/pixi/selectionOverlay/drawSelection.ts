@@ -21,6 +21,13 @@ import {
   TEXT_BASELINE_COLOR,
 } from "./constants";
 
+/** Detach and destroy all children — removeChildren() alone leaks Graphics/Text GPU resources. */
+function destroyChildren(container: Container): void {
+  for (const child of container.removeChildren()) {
+    child.destroy({ children: true });
+  }
+}
+
 export function redrawSelection(
   outlinesContainer: Container,
   handlesContainer: Container,
@@ -37,9 +44,9 @@ export function redrawSelection(
   const scale = useViewportStore.getState().scale;
   const strokeWidth = 1 / scale;
 
-  outlinesContainer.removeChildren();
-  handlesContainer.removeChildren();
-  sizeLabelsContainer.removeChildren();
+  destroyChildren(outlinesContainer);
+  destroyChildren(handlesContainer);
+  destroyChildren(sizeLabelsContainer);
   selectionTextBaselines.clear();
 
   if (selectedIds.length === 0) return;

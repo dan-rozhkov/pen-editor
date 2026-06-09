@@ -5,7 +5,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { createOverlayHelpers } from "./helpers";
 import { redrawSelection } from "./drawSelection";
-import { redrawHover } from "./drawHover";
+import { redrawHover, cleanupSpacingPool } from "./drawHover";
 import { redrawFrameNames, cleanupFrameNamePool } from "./drawFrameNames";
 
 // Dirty flags for RAF batching
@@ -187,6 +187,7 @@ export function createSelectionOverlay(
     unsubScene();
     unsubViewport();
     cleanupFrameNamePool();
+    cleanupSpacingPool();
     outlinesContainer.destroy({ children: true });
     hovOutline.destroy();
     spacingOverlay.destroy({ children: true });

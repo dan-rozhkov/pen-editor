@@ -534,6 +534,9 @@ export function setupPixiInteraction(
   canvas.addEventListener("pointerdown", handlePointerDown);
   canvas.addEventListener("pointermove", handlePointerMove);
   canvas.addEventListener("pointerup", handlePointerUp);
+  // Treat cancelled pointers (touch scroll/pinch, stylus loss, OS interrupts)
+  // like pointerup — otherwise drag/transform state gets stuck.
+  canvas.addEventListener("pointercancel", handlePointerUp);
   canvas.addEventListener("dblclick", handleDblClick);
   canvas.addEventListener("contextmenu", handleContextMenu);
   window.addEventListener("keydown", handleKeyDown);
@@ -549,6 +552,7 @@ export function setupPixiInteraction(
     canvas.removeEventListener("pointerdown", handlePointerDown);
     canvas.removeEventListener("pointermove", handlePointerMove);
     canvas.removeEventListener("pointerup", handlePointerUp);
+    canvas.removeEventListener("pointercancel", handlePointerUp);
     canvas.removeEventListener("dblclick", handleDblClick);
     canvas.removeEventListener("contextmenu", handleContextMenu);
     window.removeEventListener("keydown", handleKeyDown);

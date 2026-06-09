@@ -2,6 +2,9 @@ import { CanvasTextMetrics, TextStyle } from "pixi.js";
 
 const ELLIPSIS = "...";
 const widthCache = new Map<string, number>();
+// Truncation probes many substrings per (name, width, style) combo; reset the
+// cache when it grows too large instead of letting it accumulate for the session.
+const WIDTH_CACHE_MAX_ENTRIES = 4096;
 
 function getStyleCacheKey(style: TextStyle): string {
   const family = Array.isArray(style.fontFamily) ? style.fontFamily.join(",") : String(style.fontFamily ?? "");
@@ -13,6 +16,7 @@ export function measureLabelTextWidth(text: string, style: TextStyle): number {
   const cached = widthCache.get(cacheKey);
   if (cached !== undefined) return cached;
   const width = CanvasTextMetrics.measureText(text, style).width;
+  if (widthCache.size >= WIDTH_CACHE_MAX_ENTRIES) widthCache.clear();
   widthCache.set(cacheKey, width);
   return width;
 }

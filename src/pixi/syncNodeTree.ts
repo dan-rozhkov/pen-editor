@@ -242,12 +242,40 @@ export function createNodeTreeManager(
 
     // Remove stale/duplicate children that are not expected in this host.
     // This prevents ghost copies after move/reparent operations.
+    let registryContainers: Set<Container> | null = null;
     for (let i = parent.children.length - 1; i >= 0; i--) {
       const child = parent.children[i] as Container;
       if (!expectedContainers.has(child)) {
         parent.removeChild(child);
+        // Destroy true orphans; keep containers still referenced from the
+        // registry (e.g. mid-reparent) — reconcile will re-attach those.
+        if (!registryContainers) {
+          registryContainers = new Set();
+          for (const entry of registry.values()) {
+            registryContainers.add(entry.container);
+          }
+        }
+        if (!subtreeHasRegisteredContainer(child, registryContainers)) {
+          child.destroy({ children: true });
+        }
       }
     }
+  }
+
+  function subtreeHasRegisteredContainer(
+    container: Container,
+    registered: Set<Container>,
+  ): boolean {
+    if (registered.has(container)) return true;
+    for (const child of container.children) {
+      if (
+        child instanceof Container &&
+        subtreeHasRegisteredContainer(child, registered)
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   return {

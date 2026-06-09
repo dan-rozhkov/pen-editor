@@ -51,7 +51,8 @@ const THEME_SENTINEL = Object.freeze({ type: "none" }) as unknown as FlatSceneNo
  */
 export function createPixiSync(sceneRoot: Container): () => void {
   const registry = new Map<string, RegistryEntry>();
-  let rebuildScheduled = false;
+  let fontsRebuildRafId: number | null = null;
+  let disposed = false;
 
   // Expose registry and sceneRoot to the drag animator
   registryAccessor = (id) => registry.get(id)?.container ?? null;
@@ -670,10 +671,9 @@ export function createPixiSync(sceneRoot: Container): () => void {
   };
 
   const scheduleRebuildFromFonts = (): void => {
-    if (rebuildScheduled) return;
-    rebuildScheduled = true;
-    requestAnimationFrame(() => {
-      rebuildScheduled = false;
+    if (disposed || fontsRebuildRafId != null) return;
+    fontsRebuildRafId = requestAnimationFrame(() => {
+      fontsRebuildRafId = null;
       rebuildFromCurrentState();
     });
   };
@@ -702,6 +702,11 @@ export function createPixiSync(sceneRoot: Container): () => void {
   }
 
   return () => {
+    disposed = true;
+    if (fontsRebuildRafId != null) {
+      cancelAnimationFrame(fontsRebuildRafId);
+      fontsRebuildRafId = null;
+    }
     unsubScene();
     unsubVariables();
     unsubSelection();

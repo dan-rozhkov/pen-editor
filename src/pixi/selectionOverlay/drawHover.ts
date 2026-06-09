@@ -41,6 +41,21 @@ function ensureSpacingPool(): { gfx: Graphics; group: Container; bg: Graphics; t
   return { gfx: spacingGfx, group: labelGroup, bg: labelBg, text: labelText };
 }
 
+/** Destroy pooled spacing-overlay objects. Called from selectionOverlay cleanup.
+ *  Without this, the parent containers' destroy({ children: true }) can destroy
+ *  pooled objects while module-level refs still point at them — a later remount
+ *  would then reuse destroyed objects. */
+export function cleanupSpacingPool(): void {
+  spacingGfx?.removeFromParent();
+  labelGroup?.removeFromParent();
+  if (spacingGfx && !spacingGfx.destroyed) spacingGfx.destroy();
+  if (labelGroup && !labelGroup.destroyed) labelGroup.destroy({ children: true });
+  spacingGfx = null;
+  labelGroup = null;
+  labelBg = null;
+  labelText = null;
+}
+
 export function redrawHover(
   hovOutline: Graphics,
   childOutlines: Graphics,
@@ -58,7 +73,7 @@ export function redrawHover(
   if (labelGroup?.parent) labelGroup.removeFromParent();
   spacingGfx?.clear();
   labelBg?.clear();
-  labelGroup && (labelGroup.visible = false);
+  if (labelGroup) labelGroup.visible = false;
 
   const { hoveredNodeId, hoveredInstanceId, hoveredDescendantPath } =
     useHoverStore.getState();

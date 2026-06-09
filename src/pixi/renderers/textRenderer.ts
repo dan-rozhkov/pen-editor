@@ -81,7 +81,10 @@ function drawTextDecorations(
 ): void {
   const existing = container.getChildByLabel("text-decorations") as Graphics | null;
   if (!node.underline && !node.strikethrough) {
-    if (existing) container.removeChild(existing);
+    if (existing) {
+      container.removeChild(existing);
+      existing.destroy();
+    }
     return;
   }
 

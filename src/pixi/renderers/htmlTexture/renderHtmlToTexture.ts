@@ -7,10 +7,35 @@ import { normalizeHtmlForEmbedRender, renderViaForeignObject } from "./foreignOb
 import { preloadRenderAssets } from "./svgAssets";
 import { walkAndDraw } from "./canvasDrawing";
 
-/** Cache for rendered HTML textures by content+size key */
+/** Cache for rendered HTML textures by content+size key (LRU, bounded — keys
+ *  include full html + size + resolution, so edits/resizes/zoom would otherwise
+ *  accumulate stale canvas-backed textures without limit) */
 const textureCache = new Map<string, Texture>();
+const TEXTURE_CACHE_MAX_ENTRIES = 64;
 /** Dedup parallel renders for the same key */
 const pendingRenders = new Map<string, Promise<Texture | null>>();
+
+function getCachedTexture(key: string): Texture | undefined {
+  const texture = textureCache.get(key);
+  if (texture) {
+    // Refresh LRU position
+    textureCache.delete(key);
+    textureCache.set(key, texture);
+  }
+  return texture;
+}
+
+function setCachedTexture(key: string, texture: Texture): void {
+  textureCache.delete(key);
+  textureCache.set(key, texture);
+  // Evict oldest entries without destroying — live sprites may still reference
+  // them; Pixi's texture GC reclaims unused GPU memory once unreferenced.
+  while (textureCache.size > TEXTURE_CACHE_MAX_ENTRIES) {
+    const oldestKey = textureCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    textureCache.delete(oldestKey);
+  }
+}
 const HTML_TEXTURE_RENDER_VERSION = 12;
 const EDGE_BLEED_RADIUS = 2;
 
@@ -131,7 +156,7 @@ export async function renderHtmlToTexture(
 ): Promise<Texture | null> {
   const key = makeCacheKey(html, width, height, resolution);
 
-  const cached = textureCache.get(key);
+  const cached = getCachedTexture(key);
   if (cached) return cached;
 
   const pending = pendingRenders.get(key);
@@ -178,7 +203,7 @@ async function doRender(
     if (foreignObjectCanvas) {
       bleedTransparentEdgeColors(foreignObjectCanvas);
       const texture = Texture.from({ resource: foreignObjectCanvas, resolution });
-      textureCache.set(cacheKey, texture);
+      setCachedTexture(cacheKey, texture);
       return texture;
     }
   }
@@ -247,7 +272,7 @@ async function doRender(
     bleedTransparentEdgeColors(canvas);
 
     const texture = Texture.from({ resource: canvas, resolution });
-    textureCache.set(cacheKey, texture);
+    setCachedTexture(cacheKey, texture);
     return texture;
   } catch {
     return null;

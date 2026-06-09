@@ -3,10 +3,34 @@ import type { FlatSceneNode, ImageFill, PerCornerRadius } from "@/types/scene";
 import { drawRoundedShape } from "./fillStrokeHelpers";
 import { hasPerCornerRadius } from "@/utils/renderUtils";
 
-/** Cache for loaded textures by URL */
+/** Cache for loaded textures by URL (LRU, bounded — SVG keys include size/resolution,
+ *  so interactive resize/zoom would otherwise grow it without limit) */
 const textureCache = new Map<string, Texture>();
+const TEXTURE_CACHE_MAX_ENTRIES = 128;
 /** Callbacks queued while a URL is already loading */
 const loadingCallbacks = new Map<string, Array<() => void>>();
+
+function getCachedTexture(key: string): Texture | undefined {
+  const texture = textureCache.get(key);
+  if (texture) {
+    // Refresh LRU position
+    textureCache.delete(key);
+    textureCache.set(key, texture);
+  }
+  return texture;
+}
+
+function setCachedTexture(key: string, texture: Texture): void {
+  textureCache.delete(key);
+  textureCache.set(key, texture);
+  // Evict oldest entries without destroying — live sprites may still reference
+  // them; Pixi's texture GC reclaims unused GPU memory once unreferenced.
+  while (textureCache.size > TEXTURE_CACHE_MAX_ENTRIES) {
+    const oldestKey = textureCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    textureCache.delete(oldestKey);
+  }
+}
 /** Current resolution used for image fill textures, updated on zoom */
 let currentImageFillResolution = window.devicePixelRatio || 1;
 
@@ -124,7 +148,7 @@ function withTexture(
   onReady: (texture: Texture) => void,
 ): void {
   const cacheKey = getTextureCacheKey(url, width, height, currentImageFillResolution);
-  const cached = textureCache.get(cacheKey);
+  const cached = getCachedTexture(cacheKey);
   if (cached) {
     onReady(cached);
     return;
@@ -140,7 +164,7 @@ function withTexture(
 
   loadingCallbacks.set(cacheKey, []);
   loadTextureFromUrl(url, width, height, currentImageFillResolution).then((texture) => {
-    textureCache.set(cacheKey, texture);
+    setCachedTexture(cacheKey, texture);
     if (!container.destroyed) onReady(texture);
     const cbs = loadingCallbacks.get(cacheKey);
     loadingCallbacks.delete(cacheKey);
