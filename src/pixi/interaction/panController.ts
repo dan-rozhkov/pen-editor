@@ -4,6 +4,8 @@ import type { InteractionContext, PanState } from "./types";
 // 1:1 like Figma — the grabbed canvas point stays locked under the cursor.
 const DRAG_PAN_SPEED = 1;
 const WHEEL_PAN_SPEED = 1.5;
+// Wheel/pinch zoom sensitivity (scale multiplier = exp(-deltaY * intensity)).
+const WHEEL_ZOOM_INTENSITY = 0.008;
 
 // deltaMode normalization: Firefox reports wheel deltas in lines (1) or pages (2).
 const WHEEL_LINE_HEIGHT_PX = 16;
@@ -35,23 +37,44 @@ export function createPanController(context: InteractionContext): PanController 
     panRafId: null,
   };
 
-  // Wheel-pan deltas are accumulated and flushed once per frame. Trackpads emit
-  // several wheel events per frame; applying each one synchronously runs every
-  // viewport-store subscriber (culling, overlays, React) per event while PixiJS
-  // only renders once per frame anyway.
+  // Wheel pan/zoom deltas are accumulated and flushed once per frame. Trackpads
+  // emit several wheel events per frame; applying each one synchronously runs
+  // every viewport-store subscriber (culling, overlays, React) per event while
+  // PixiJS only renders once per frame anyway. Zoom is applied instantly (no
+  // easing animation) so the canvas tracks the gesture like Figma.
   let wheelDX = 0;
   let wheelDY = 0;
+  let wheelZoomDelta = 0;
+  let wheelZoomCenterX = 0;
+  let wheelZoomCenterY = 0;
   let wheelRafId: number | null = null;
 
-  const flushWheelPan = (): void => {
+  const flushWheel = (): void => {
     wheelRafId = null;
     const dx = wheelDX;
     const dy = wheelDY;
+    const zoomDelta = wheelZoomDelta;
     wheelDX = 0;
     wheelDY = 0;
-    if (dx === 0 && dy === 0) return;
-    const vs = useViewportStore.getState();
-    vs.setPosition(vs.x + dx, vs.y + dy);
+    wheelZoomDelta = 0;
+    if (zoomDelta !== 0) {
+      const vs = useViewportStore.getState();
+      vs.zoomAtPoint(
+        vs.scale * Math.exp(-zoomDelta * WHEEL_ZOOM_INTENSITY),
+        wheelZoomCenterX,
+        wheelZoomCenterY,
+      );
+    }
+    if (dx !== 0 || dy !== 0) {
+      const vs = useViewportStore.getState();
+      vs.setPosition(vs.x + dx, vs.y + dy);
+    }
+  };
+
+  const scheduleWheelFlush = (): void => {
+    if (wheelRafId === null) {
+      wheelRafId = requestAnimationFrame(flushWheel);
+    }
   };
 
   const flushPanPosition = (): void => {
@@ -124,16 +147,15 @@ export function createPanController(context: InteractionContext): PanController 
         // Pinch-to-zoom. getBoundingClientRect is only needed here — it forces
         // layout, so keep it out of the high-frequency pan path.
         const rect = context.canvas.getBoundingClientRect();
-        const centerX = e.clientX - rect.left;
-        const centerY = e.clientY - rect.top;
-        useViewportStore.getState().startSmoothZoom(deltaY, centerX, centerY);
+        wheelZoomDelta += deltaY;
+        wheelZoomCenterX = e.clientX - rect.left;
+        wheelZoomCenterY = e.clientY - rect.top;
+        scheduleWheelFlush();
       } else {
         // Two-finger scroll = pan; accumulate and apply once per frame.
         wheelDX += (e.shiftKey ? -deltaY : -deltaX) * WHEEL_PAN_SPEED;
         wheelDY += (e.shiftKey ? 0 : -deltaY) * WHEEL_PAN_SPEED;
-        if (wheelRafId === null) {
-          wheelRafId = requestAnimationFrame(flushWheelPan);
-        }
+        scheduleWheelFlush();
       }
     },
 
