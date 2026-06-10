@@ -1,7 +1,8 @@
 import { useViewportStore } from "@/store/viewportStore";
 import type { InteractionContext, PanState } from "./types";
 
-const DRAG_PAN_SPEED = 1.35;
+// 1:1 like Figma — the grabbed canvas point stays locked under the cursor.
+const DRAG_PAN_SPEED = 1;
 const WHEEL_PAN_SPEED = 1.5;
 
 // deltaMode normalization: Firefox reports wheel deltas in lines (1) or pages (2).
