@@ -96,35 +96,34 @@ function TabBar() {
         >
           <PlusIcon />
         </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            data-testid="chat-menu-trigger"
-            className="shrink-0 p-1.5 rounded-lg text-text-muted hover:bg-surface-hover data-popup-open:bg-surface-hover"
-            title="Chat options"
-          >
-            <DotsThreeVerticalIcon size={16} weight="bold" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" sideOffset={4} className="min-w-44">
-            <DropdownMenuItem
-              data-testid="chat-menu-download"
-              disabled={!activeActions?.hasMessages}
-              onClick={() => activeActions?.exportChat()}
+        {activeActions?.hasMessages && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              data-testid="chat-menu-trigger"
+              title="Chat options"
+              render={<Button variant="ghost" size="icon" />}
             >
-              <DownloadSimpleIcon size={14} />
-              Download chat
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              data-testid="chat-menu-clear"
-              variant="destructive"
-              disabled={!activeActions?.hasMessages}
-              onClick={() => activeActions?.clearChat()}
-            >
-              <TrashIcon size={14} />
-              Clear chat
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <DotsThreeVerticalIcon size={16} weight="bold" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" sideOffset={4} className="min-w-44">
+              <DropdownMenuItem
+                data-testid="chat-menu-download"
+                onClick={() => activeActions?.exportChat()}
+              >
+                <DownloadSimpleIcon size={14} />
+                Download chat
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                data-testid="chat-menu-clear"
+                onClick={() => activeActions?.clearChat()}
+              >
+                <TrashIcon size={14} />
+                Clear chat
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
     </Tabs>
   );
