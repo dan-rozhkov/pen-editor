@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import type { FrameNode, SceneNode } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
 import { useSceneStore } from "@/store/sceneStore";
@@ -59,9 +59,12 @@ export function MultiSelectPropertyEditor({
     [selectedNodes],
   );
 
-  const handleUpdate = (updates: Partial<SceneNode>) => {
-    updateMultipleNodes(ids, updates);
-  };
+  const handleUpdate = useCallback(
+    (updates: Partial<SceneNode>) => {
+      updateMultipleNodes(ids, updates);
+    },
+    [ids, updateMultipleNodes],
+  );
 
   const colorVariables = useMemo(
     () => variables.filter((v) => v.type === "color"),

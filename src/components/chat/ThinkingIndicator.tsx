@@ -13,20 +13,25 @@ interface ThinkingIndicatorProps {
 }
 
 function useThinkingDuration(isStreaming: boolean) {
-  const startRef = useRef(Date.now());
+  // Initialized lazily in the effect to keep render pure (Date.now() is impure).
+  const startRef = useRef<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const finalRef = useRef<number | null>(null);
 
   useEffect(() => {
+    if (startRef.current === null) {
+      startRef.current = Date.now();
+    }
+    const start = startRef.current;
     if (!isStreaming) {
       if (finalRef.current === null) {
-        finalRef.current = Math.round((Date.now() - startRef.current) / 1000);
+        finalRef.current = Math.round((Date.now() - start) / 1000);
       }
       setElapsed(finalRef.current);
       return;
     }
     const id = setInterval(() => {
-      setElapsed(Math.round((Date.now() - startRef.current) / 1000));
+      setElapsed(Math.round((Date.now() - start) / 1000));
     }, 1000);
     return () => clearInterval(id);
   }, [isStreaming]);

@@ -6,7 +6,7 @@ import {
   CaretDownIcon,
   DownloadSimpleIcon,
 } from "@phosphor-icons/react";
-import { isToolUIPart, getToolName } from "ai";
+import { getToolName } from "ai";
 import { getToolDisplayName } from "@/lib/toolDisplayNames";
 import { downloadFile, filenameFromUrl } from "@/lib/downloadFile";
 import { ImagePreview } from "./MessageList";
@@ -139,8 +139,6 @@ interface ToolCallIndicatorProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   part: any;
 }
-
-export { isToolUIPart };
 
 export function ToolCallIndicator({ part }: ToolCallIndicatorProps) {
   const [open, setOpen] = useState(false);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 
 const imageCache = new Map<string, HTMLImageElement>()
 
@@ -8,40 +8,38 @@ const imageCache = new Map<string, HTMLImageElement>()
  * Caches loaded images to avoid re-fetching.
  */
 export function useLoadImage(url: string | undefined): HTMLImageElement | null {
-  const [image, setImage] = useState<HTMLImageElement | null>(() => {
-    if (!url) return null
-    return imageCache.get(url) ?? null
-  })
-  const urlRef = useRef(url)
+  // Track the result per-URL; the returned image is derived during render so
+  // no setState is needed inside the effect body itself.
+  const [loaded, setLoaded] = useState<{
+    url: string
+    image: HTMLImageElement | null
+  } | null>(null)
 
   useEffect(() => {
-    urlRef.current = url
-    if (!url) {
-      setImage(null)
-      return
-    }
+    if (!url) return
+    if (imageCache.has(url)) return
 
-    const cached = imageCache.get(url)
-    if (cached) {
-      setImage(cached)
-      return
-    }
-
+    let cancelled = false
     const img = new Image()
     img.crossOrigin = 'anonymous'
     img.onload = () => {
       imageCache.set(url, img)
-      if (urlRef.current === url) {
-        setImage(img)
+      if (!cancelled) {
+        setLoaded({ url, image: img })
       }
     }
     img.onerror = () => {
-      if (urlRef.current === url) {
-        setImage(null)
+      if (!cancelled) {
+        setLoaded({ url, image: null })
       }
     }
     img.src = url
+    return () => {
+      cancelled = true
+    }
   }, [url])
 
-  return image
+  if (!url) return null
+  if (loaded?.url === url) return loaded.image
+  return imageCache.get(url) ?? null
 }

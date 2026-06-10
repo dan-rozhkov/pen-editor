@@ -4,7 +4,7 @@ import { InlineNameEditor} from "@/components/InlineNameEditor";
 import { InlineTextEditor } from "@/components/InlineTextEditor";
 import { InlineEmbedEditor } from "@/components/InlineEmbedEditor";
 import { EmbedActionBar } from "@/components/canvas/EmbedActionBar";
-import type { EmbedNode } from "@/types/scene";
+import type { EmbedNode, TextNode, InstanceOverrideUpdateProps } from "@/types/scene";
 import { useCanvasKeyboardShortcuts } from "@/components/canvas/useCanvasKeyboardShortcuts";
 import { useCanvasFileDrop } from "@/components/canvas/useCanvasFileDrop";
 import {
@@ -290,7 +290,7 @@ export function PixiCanvas() {
         });
 
         // Store cleanup functions
-        (app as any)._pixiCleanup = () => {
+        (app as Application & { _pixiCleanup?: () => void })._pixiCleanup = () => {
           viewportCleanup();
           syncCleanup();
           selectionCleanup();
@@ -304,12 +304,12 @@ export function PixiCanvas() {
       setPixiRefs(null);
       const a = appRef.current;
       if (a) {
-        (a as any)._pixiCleanup?.();
+        (a as Application & { _pixiCleanup?: () => void })._pixiCleanup?.();
         a.destroy(true, { children: true });
         appRef.current = null;
       }
     };
-  }, [setPixiRefs]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [setPixiRefs]);
 
   useCanvasResize(containerRef, setDimensions);
   useAltKeyMeasurement();
@@ -337,7 +337,7 @@ export function PixiCanvas() {
       {/* Inline text editor overlay */}
       {editingNode && editingPosition && editingMode === "text" && (
         <InlineTextEditor
-          node={editingNode as any}
+          node={editingNode as TextNode}
           absoluteX={editingPosition.x}
           absoluteY={editingPosition.y}
           effectiveTheme={editingTextTheme ?? undefined}
@@ -349,7 +349,7 @@ export function PixiCanvas() {
             if (sc) {
               store.updateSlotChildWithoutHistory(instanceContext.instanceId, sc.slotPath, sc.relativePath, { text });
             } else {
-              store.updateInstanceOverride(instanceContext.instanceId, instanceContext.descendantPath, { text } as any);
+              store.updateInstanceOverride(instanceContext.instanceId, instanceContext.descendantPath, { text } satisfies Partial<TextNode> as InstanceOverrideUpdateProps);
             }
           } : undefined}
         />

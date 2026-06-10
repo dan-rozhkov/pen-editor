@@ -24,7 +24,6 @@ const CATEGORIES = [
 ] as const;
 
 export function SlashCommandMenu({ query, onSelect, onClose }: SlashCommandMenuProps) {
-  const [selectedValue, setSelectedValue] = useState(SLASH_COMMANDS[0]?.name ?? "");
   const listRef = useRef<HTMLDivElement>(null);
 
   const filtered = useMemo(() => {
@@ -38,12 +37,16 @@ export function SlashCommandMenu({ query, onSelect, onClose }: SlashCommandMenuP
     );
   }, [query]);
 
-  // Reset selection when filter changes
-  useEffect(() => {
-    if (filtered.length > 0) {
-      setSelectedValue(filtered[0].name);
-    }
-  }, [filtered]);
+  // Selection is derived: a user choice only applies to the filter list it was
+  // made in. When the filter changes, selection falls back to the first match
+  // (same reset behavior as before, without setState-in-effect).
+  const [selection, setSelection] = useState<{ list: readonly SlashCommand[]; value: string } | null>(null);
+  const selectedValue =
+    selection && selection.list === filtered ? selection.value : filtered[0]?.name ?? "";
+  const setSelectedValue = useCallback(
+    (value: string) => setSelection({ list: filtered, value }),
+    [filtered]
+  );
 
   const selectCommand = useCallback(
     (name: string) => {
@@ -76,7 +79,7 @@ export function SlashCommandMenu({ query, onSelect, onClose }: SlashCommandMenuP
     };
     window.addEventListener("keydown", handler, true);
     return () => window.removeEventListener("keydown", handler, true);
-  }, [filtered, selectedValue, selectCommand, onClose]);
+  }, [filtered, selectedValue, setSelectedValue, selectCommand, onClose]);
 
   // Scroll selected item into view
   useEffect(() => {

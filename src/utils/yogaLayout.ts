@@ -573,7 +573,7 @@ export function calculateFrameLayout(frame: FrameNode): LayoutResult[] {
   const fitHeight = frame.sizing?.heightMode === "fit_content";
 
   const container = buildContainer(frame, { fitWidth, fitHeight });
-  const children = Array.isArray((frame as any).children) ? frame.children : [];
+  const children = Array.isArray(frame.children) ? frame.children : [];
   const visibleChildren = children.filter(
     (c) => c.visible !== false && c.enabled !== false && !c.absolutePosition,
   );
@@ -618,7 +618,7 @@ export function calculateFrameIntrinsicSize(
 
   const container = buildContainer(frame, { fitWidth, fitHeight });
   const pad = resolvePadding(container);
-  const children = Array.isArray((frame as any).children) ? frame.children : [];
+  const children = Array.isArray(frame.children) ? frame.children : [];
   const visibleChildren = children.filter(
     (c) => c.visible !== false && c.enabled !== false && !c.absolutePosition,
   );

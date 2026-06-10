@@ -173,7 +173,7 @@ function computeSizeForMode(
   if (mode === "fixed") return undefined;
 
   if (mode === "fit_content" && node.type === "frame") {
-    if (!("children" in node) || !Array.isArray((node as any).children)) {
+    if (!("children" in node) || !Array.isArray(node.children)) {
       return undefined;
     }
     const frame = node as FrameNode;
@@ -302,7 +302,7 @@ export function SizeSection({
     if (
       node.type === "frame" &&
       ("children" in node) &&
-      Array.isArray((node as any).children) &&
+      Array.isArray(node.children) &&
       (node as FrameNode).layout?.autoLayout
     ) {
       const frame = node as FrameNode;

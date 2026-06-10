@@ -13,6 +13,12 @@ import { pushRenderTheme, popRenderTheme } from "./colorHelpers";
 import { createNodeContainer, isInsideRef } from "./index";
 import { drawLayoutGrids } from "./layoutGridRenderer";
 
+/** Container with the frame's effective (fit_content-resolved) size attached */
+type FrameContainer = Container & {
+  _effectiveWidth?: number;
+  _effectiveHeight?: number;
+};
+
 /**
  * Convert flat frame to tree frame for layout calculations
  */
@@ -83,8 +89,8 @@ export function createFrameContainer(
   const { width: effectiveWidth, height: effectiveHeight } = getFrameEffectiveSize(node, nodesById, childrenById);
 
   // Store effective size for later use
-  (container as any)._effectiveWidth = effectiveWidth;
-  (container as any)._effectiveHeight = effectiveHeight;
+  (container as FrameContainer)._effectiveWidth = effectiveWidth;
+  (container as FrameContainer)._effectiveHeight = effectiveHeight;
 
   // Background
   const bg = new Graphics();
@@ -170,8 +176,8 @@ export function updateFrameContainer(
   const { width: effectiveWidth, height: effectiveHeight } = getFrameEffectiveSize(node, nodesById, childrenById);
 
   // Store effective size for later use
-  (container as any)._effectiveWidth = effectiveWidth;
-  (container as any)._effectiveHeight = effectiveHeight;
+  (container as FrameContainer)._effectiveWidth = effectiveWidth;
+  (container as FrameContainer)._effectiveHeight = effectiveHeight;
 
   // Update background
   if (

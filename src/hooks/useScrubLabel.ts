@@ -26,10 +26,12 @@ export function useScrubLabel({
   const stepRef = useRef(step);
   const minRef = useRef(min);
   const maxRef = useRef(max);
-  onChangeRef.current = onChange;
-  stepRef.current = step;
-  minRef.current = min;
-  maxRef.current = max;
+  useEffect(() => {
+    onChangeRef.current = onChange;
+    stepRef.current = step;
+    minRef.current = min;
+    maxRef.current = max;
+  });
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     const deltaX = e.clientX - startXRef.current;
@@ -39,14 +41,8 @@ export function useScrubLabel({
     onChangeRef.current(newValue);
   }, []);
 
-  const handleMouseUp = useCallback(() => {
-    isDraggingRef.current = false;
-    useHistoryStore.getState().endBatch();
-    document.body.style.cursor = "";
-    document.body.style.userSelect = "";
-    window.removeEventListener("mousemove", handleMouseMove);
-    window.removeEventListener("mouseup", handleMouseUp);
-  }, [handleMouseMove]);
+  // Holds the teardown for the currently active drag (null when not dragging).
+  const endDragRef = useRef<(() => void) | null>(null);
 
   const onMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -65,24 +61,29 @@ export function useScrubLabel({
       document.body.style.cursor = "ew-resize";
       document.body.style.userSelect = "none";
 
+      const endDrag = () => {
+        isDraggingRef.current = false;
+        useHistoryStore.getState().endBatch();
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        window.removeEventListener("mousemove", handleMouseMove);
+        window.removeEventListener("mouseup", endDrag);
+        endDragRef.current = null;
+      };
+      endDragRef.current = endDrag;
+
       window.addEventListener("mousemove", handleMouseMove);
-      window.addEventListener("mouseup", handleMouseUp);
+      window.addEventListener("mouseup", endDrag);
     },
-    [value, handleMouseMove, handleMouseUp]
+    [value, handleMouseMove]
   );
 
   // Cleanup on unmount if mid-drag
   useEffect(() => {
     return () => {
-      if (isDraggingRef.current) {
-        useHistoryStore.getState().endBatch();
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-        window.removeEventListener("mousemove", handleMouseMove);
-        window.removeEventListener("mouseup", handleMouseUp);
-      }
+      endDragRef.current?.();
     };
-  }, [handleMouseMove, handleMouseUp]);
+  }, []);
 
   return {
     onMouseDown,

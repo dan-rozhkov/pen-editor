@@ -321,7 +321,7 @@ function injectSlots(
 
     // Make sure it's actually a <slot element (not <slotted or similar)
     const charAfterSlot = templateHtml[slotIdx + 5];
-    if (charAfterSlot && !/[\s>\/]/.test(charAfterSlot)) {
+    if (charAfterSlot && !/[\s>/]/.test(charAfterSlot)) {
       result += templateHtml.slice(i, slotIdx + 5);
       i = slotIdx + 5;
       continue;
@@ -380,7 +380,7 @@ function injectSlots(
           if (
             templateHtml.slice(i, i + 5).toLowerCase() === "<slot" &&
             i + 5 < templateHtml.length &&
-            /[\s>\/]/.test(templateHtml[i + 5])
+            /[\s>/]/.test(templateHtml[i + 5])
           ) {
             depth++;
           }

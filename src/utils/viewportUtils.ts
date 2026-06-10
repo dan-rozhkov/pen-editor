@@ -104,8 +104,8 @@ export function calculateNodesBounds(nodes: SceneNode[]): ContentBounds {
     maxY = Math.max(maxY, absoluteY + node.height)
 
     // Process children for containers (frames and groups)
-    if ((node.type === 'frame' || node.type === 'group') && (node as any).children) {
-      for (const child of (node as any).children) {
+    if ((node.type === 'frame' || node.type === 'group') && node.children) {
+      for (const child of node.children) {
         processNode(child, absoluteX, absoluteY)
       }
     }

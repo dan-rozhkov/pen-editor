@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { UIMessage } from "ai";
+import { isToolUIPart } from "ai";
 import {
   ImageBrokenIcon,
   ArrowCounterClockwiseIcon,
@@ -8,7 +9,7 @@ import {
 } from "@phosphor-icons/react";
 import { messageToMarkdown } from "@/lib/chatExport";
 import { SimpleMarkdown } from "./SimpleMarkdown";
-import { ToolCallIndicator, isToolUIPart } from "./ToolCallIndicator";
+import { ToolCallIndicator } from "./ToolCallIndicator";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 import { ImageLightbox } from "./ImageLightbox";
 

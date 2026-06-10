@@ -226,7 +226,7 @@ export function applyStroke(
 
   const align = node.strokeAlign ?? 'center';
 
-  const perSide = (node as any).strokeWidthPerSide as PerSideStroke | undefined;
+  const perSide = node.strokeWidthPerSide;
   if (hasPerSideStroke(perSide) && perSide) {
     drawPerSideStroke(gfx, width, height, strokeColor, perSide, align);
   } else if (node.strokeWidth) {

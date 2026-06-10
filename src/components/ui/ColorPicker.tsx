@@ -33,7 +33,6 @@ export function CustomColorPicker({
   swatchSize = "md",
 }: CustomColorPickerProps) {
   const [open, setOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
@@ -73,10 +72,6 @@ export function CustomColorPicker({
 
     setPopoverStyle({ position: "fixed", top, left });
   }, [open]);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // Close on click outside
   useEffect(() => {
@@ -123,8 +118,9 @@ export function CustomColorPicker({
       />
 
       {/* Popover */}
+      {/* `open` can only become true after a user click, so the component is
+          guaranteed to be mounted — no separate `mounted` guard is needed. */}
       {open &&
-        mounted &&
         createPortal(
         <div
           ref={popoverRef}

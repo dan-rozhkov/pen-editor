@@ -1,5 +1,6 @@
 import { Graphics, GraphicsPath } from "pixi.js";
 import { Container } from "pixi.js";
+import type { LineCap, LineJoin } from "pixi.js";
 import type { PathNode } from "@/types/scene";
 import { getResolvedFill, getResolvedStroke, parseColor, parseAlpha, escapeXmlAttr } from "./colorHelpers";
 import { buildPixiGradient } from "./fillStrokeHelpers";
@@ -162,8 +163,8 @@ export function drawPath(gfx: Graphics, node: PathNode): void {
     gfx.stroke({
       color: parseColor(sColor),
       width: pathStroke?.thickness ?? node.strokeWidth ?? 1,
-      cap: (pathStroke?.cap as any) ?? "butt",
-      join: (pathStroke?.join as any) ?? "miter",
+      cap: (pathStroke?.cap as LineCap | undefined) ?? "butt",
+      join: (pathStroke?.join as LineJoin | undefined) ?? "miter",
       alignment,
     });
   }
