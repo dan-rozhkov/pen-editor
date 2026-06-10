@@ -15,14 +15,14 @@ export const CHAT_PRESETS: ChatPreset[] = [
     message:
       "Реализуй экран для [десктопа/мобильного приложения] как на скриншоте",
     mode: "prototype",
-    model: "google/gemini-3-flash-preview",
+    model: "google/gemini-2.5-flash",
   },
   {
     id: "remove-frame-wrappers",
     label: "Remove extra frame wrappers from text nodes",
     message: "Убери лишние frame обертки у текстовых нод на выбранном фрейме",
     mode: "edits",
-    model: "moonshotai/kimi-k2.5",
+    model: "moonshotai/kimi-k2.6",
   },
   {
     id: "copy-embed-bitcoin",
@@ -30,13 +30,13 @@ export const CHAT_PRESETS: ChatPreset[] = [
     message:
       "Скопируй выбранный embed и замени контент на [напишите текст здесь]. Сохрани стили, цвета, отступы и шрифты",
     mode: "prototype",
-    model: "google/gemini-3-flash-preview",
+    model: "google/gemini-2.5-flash",
   },
   {
     id: "research-pricing",
     label: "Research pricing page design patterns",
     message: "Research pricing page design patterns and find reference screens",
     mode: "research",
-    model: "moonshotai/kimi-k2.5",
+    model: "moonshotai/kimi-k2.6",
   },
 ];

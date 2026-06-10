@@ -1,4 +1,6 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
+import { loadModels } from "./lib/chatModels";
+import { reconcileModels } from "./store/chatStore";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { RightSidebar } from "./components/RightSidebar";
 import { PrimitivesPanel } from "./components/PrimitivesPanel";
@@ -13,6 +15,12 @@ const PixiCanvas = lazy(() => import("./pixi/PixiCanvas").then((m) => ({ default
 function App() {
   const isUIHidden = useUIVisibilityStore((s) => s.isUIHidden);
   const isFloating = useFloatingPanelsStore((s) => s.isFloating);
+
+  // Pull the authoritative chat model list from the backend, then drop any saved
+  // selection it no longer allows. Falls back to the hardcoded list on failure.
+  useEffect(() => {
+    loadModels().then(reconcileModels);
+  }, []);
 
   return (
     <div className="w-full h-full relative overflow-hidden">

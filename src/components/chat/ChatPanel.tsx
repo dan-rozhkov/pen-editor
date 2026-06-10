@@ -27,7 +27,7 @@ import {
 import { CHAT_PRESETS } from "./chatPresets";
 import type { ChatPreset } from "./chatPresets";
 import type { ChatLaunchPayload } from "@/types/chat";
-import { MODEL_OPTIONS } from "@/lib/chatModels";
+import { useModelOptions } from "@/hooks/useModelOptions";
 import { chatToMarkdown, chatFilename, downloadMarkdown } from "@/lib/chatExport";
 
 const MODE_OPTIONS = [
@@ -296,6 +296,7 @@ export function ChatPanel() {
   const close = useChatStore((s) => s.close);
   const model = useChatStore((s) => s.model);
   const setModel = useChatStore((s) => s.setModel);
+  const modelOptions = useModelOptions();
   const agentMode = useChatStore((s) => s.agentMode);
   const setAgentMode = useChatStore((s) => s.setAgentMode);
   const parallelCount = useChatStore((s) => s.parallelCount);
@@ -387,7 +388,7 @@ export function ChatPanel() {
             />
             <SelectWithOptions
               value={model}
-              options={MODEL_OPTIONS}
+              options={modelOptions}
               onValueChange={(value) => {
                 if (value) setModel(value);
               }}

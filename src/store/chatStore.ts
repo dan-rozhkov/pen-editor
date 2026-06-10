@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { ChatLaunchPayload } from "@/types/chat";
-import { MODEL_OPTIONS } from "@/lib/chatModels";
+import { getDefaultModel, getModelOptions } from "@/lib/chatModels";
 
 export interface ChatTab {
   id: string;
@@ -56,16 +56,30 @@ interface ChatState {
   unregisterSessionActions: (tabId: string) => void;
 }
 
-const DEFAULT_MODEL = "google/gemini-2.5-flash";
 const DEFAULT_AGENT_MODE: AgentMode = "prototype";
 const DEFAULT_PARALLEL_COUNT: ParallelCount = 1;
 
 function normalizeModel(model: string | null): string {
-  if (!model) return DEFAULT_MODEL;
-  // Unknown/removed model ids (e.g. stale localStorage) fall back to the default.
-  return MODEL_OPTIONS.some((option) => option.value === model)
-    ? model
-    : DEFAULT_MODEL;
+  // The backend-served list is the authority and isn't loaded yet at init, so
+  // accept any saved id here rather than rejecting it against the fallback list.
+  // reconcileModels() resets ids the backend actually rejects, once it responds.
+  return model || getDefaultModel();
+}
+
+// Re-validate the active/tab models against the freshly loaded backend list.
+// Called after loadModels() resolves; resets any selection the backend rejects.
+export function reconcileModels() {
+  const { model, tabs, setModel } = useChatStore.getState();
+  const known = getModelOptions();
+  const isValid = (m: string) => known.some((option) => option.value === m);
+  if (tabs.some((t) => !isValid(t.model)) || !isValid(model)) {
+    useChatStore.setState((s) => ({
+      tabs: s.tabs.map((t) =>
+        isValid(t.model) ? t : { ...t, model: getDefaultModel() },
+      ),
+    }));
+    if (!isValid(model)) setModel(getDefaultModel());
+  }
 }
 
 function normalizeAgentMode(mode: string | null): AgentMode {

@@ -6,6 +6,7 @@ import {
   type UIMessage,
 } from "ai";
 import { modelSupportsVision } from "@/lib/chatModels";
+import { resolveApiUrl } from "@/lib/apiBase";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
@@ -15,17 +16,10 @@ import { toolHandlers } from "@/lib/toolRegistry";
 import type { ChatLaunchPayload } from "@/types/chat";
 
 function resolveChatApiUrl(): string {
+  // VITE_AI_API_URL is the explicit full chat URL; honor it verbatim. Otherwise
+  // derive /api/chat from the shared backend base resolver.
   const explicitApiUrl = import.meta.env.VITE_AI_API_URL as string | undefined;
-  if (explicitApiUrl) {
-    return explicitApiUrl;
-  }
-
-  const backendUrl = import.meta.env.VITE_DESIGN_AGENT_BACKEND_URL as string | undefined;
-  if (backendUrl) {
-    return `${backendUrl.replace(/\/$/, "")}/api/chat`;
-  }
-
-  return "/api/chat";
+  return explicitApiUrl ?? resolveApiUrl("/api/chat");
 }
 
 function buildCanvasContext(): object {
