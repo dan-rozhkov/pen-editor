@@ -3,7 +3,9 @@ import { useChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithToolCalls,
+  type UIMessage,
 } from "ai";
+import { modelSupportsVision } from "@/lib/chatModels";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
@@ -72,6 +74,32 @@ function buildCanvasContext(): object {
   };
 }
 
+function isImagePart(part: UIMessage["parts"][number]): boolean {
+  return (
+    part.type === "file" &&
+    typeof part.mediaType === "string" &&
+    part.mediaType.startsWith("image/")
+  );
+}
+
+// Non-vision models reject requests whose history contains image parts, which
+// would otherwise make a chat permanently broken after attaching an image.
+// Replace images with a text placeholder so the model still sees that an
+// attachment existed.
+function stripImageParts(messages: UIMessage[]): UIMessage[] {
+  return messages.map((message) => {
+    if (!message.parts.some(isImagePart)) {
+      return message;
+    }
+    const parts = message.parts.filter((part) => !isImagePart(part));
+    parts.push({
+      type: "text",
+      text: "[Attached image omitted: the selected model cannot read images]",
+    });
+    return { ...message, parts };
+  });
+}
+
 async function executeToolCall(
   toolName: string,
   input: unknown
@@ -117,6 +145,20 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       new DefaultChatTransport({
         api: resolveChatApiUrl(),
         body: () => buildCanvasContext(),
+        prepareSendMessagesRequest: ({ id, messages, body, trigger, messageId }) => {
+          const { model } = useChatStore.getState();
+          return {
+            body: {
+              ...body,
+              id,
+              messages: modelSupportsVision(model)
+                ? messages
+                : stripImageParts(messages),
+              trigger,
+              messageId,
+            },
+          };
+        },
       }),
     []
   );
@@ -164,7 +206,14 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     (payload: ChatLaunchPayload): boolean => {
       const text = payload.text.trim();
       const images = payload.images;
-      if ((!text && (!images || images.length === 0)) || chat.status !== "ready") {
+      if (!text && (!images || images.length === 0)) {
+        return false;
+      }
+      // A failed request leaves the chat in "error" status; clear it so the
+      // user can retry instead of the chat being stuck.
+      if (chat.status === "error") {
+        chat.clearError();
+      } else if (chat.status !== "ready") {
         return false;
       }
 

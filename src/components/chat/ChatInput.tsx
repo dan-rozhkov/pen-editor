@@ -8,8 +8,11 @@ import {
 import { SlashCommandMenu } from "./SlashCommandMenu";
 import type { SlashCommand } from "./slashCommands";
 import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
+import { useChatStore } from "@/store/chatStore";
+import { modelSupportsVision } from "@/lib/chatModels";
 
-const MAX_IMAGES = 3;
+// Maximum images per message (mirrored by MAX_IMAGE_PARTS on the backend).
+const MAX_IMAGES = 4;
 
 interface ChatInputProps {
   input: string;
@@ -48,6 +51,8 @@ export function ChatInput({
   const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
+  const model = useChatStore((s) => s.model);
+  const supportsVision = modelSupportsVision(model);
 
   // Extract slash query from input (e.g. "/aud" -> "aud", "/" -> "")
   const slashQuery = useMemo(() => {
@@ -83,12 +88,18 @@ export function ChatInput({
     resize();
   }, [input, resize]);
 
-  const addImages = useCallback(async (files: FileList | File[]) => {
-    const newImages = await processFiles(files);
-    if (newImages.length > 0) {
-      setAttachedImages((prev) => [...prev, ...newImages].slice(0, MAX_IMAGES));
-    }
-  }, []);
+  const addImages = useCallback(
+    async (files: FileList | File[]) => {
+      if (!supportsVision) return;
+      const newImages = await processFiles(files);
+      if (newImages.length > 0) {
+        setAttachedImages((prev) =>
+          [...prev, ...newImages].slice(0, MAX_IMAGES)
+        );
+      }
+    },
+    [supportsVision]
+  );
 
   const removeImage = useCallback((index: number) => {
     setAttachedImages((prev) => prev.filter((_, i) => i !== index));
@@ -96,15 +107,18 @@ export function ChatInput({
 
   const doSubmit = useCallback(
     () => {
-      if ((input.trim() || attachedImages.length > 0) && !isLoading) {
+      // Drop attachments the selected model can't read (a warning is shown
+      // above the previews) so the request doesn't fail at the provider.
+      const images = supportsVision ? attachedImages : [];
+      if ((input.trim() || images.length > 0) && !isLoading) {
         onSubmit({
           text: input.trim(),
-          images: attachedImages.length > 0 ? attachedImages : undefined,
+          images: images.length > 0 ? images : undefined,
         });
         setAttachedImages([]);
       }
     },
-    [input, attachedImages, isLoading, onSubmit]
+    [input, attachedImages, supportsVision, isLoading, onSubmit]
   );
 
   const handleKeyDown = useCallback(
@@ -127,6 +141,7 @@ export function ChatInput({
 
   const handlePaste = useCallback(
     (e: React.ClipboardEvent) => {
+      if (!supportsVision) return;
       const items = e.clipboardData?.items;
       if (!items) return;
       const imageFiles: File[] = [];
@@ -141,7 +156,7 @@ export function ChatInput({
         addImages(imageFiles);
       }
     },
-    [addImages]
+    [supportsVision, addImages]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -192,6 +207,11 @@ export function ChatInput({
       )}
 
       {/* Image previews */}
+      {attachedImages.length > 0 && !supportsVision && (
+        <div className="mb-2 text-xs text-amber-500">
+          The selected model can't read images — attachments won't be sent.
+        </div>
+      )}
       {attachedImages.length > 0 && (
         <div className="flex gap-2 mb-2 flex-wrap">
           {attachedImages.map((img, i) => (
@@ -221,9 +241,15 @@ export function ChatInput({
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          disabled={attachedImages.length >= MAX_IMAGES}
+          disabled={!supportsVision || attachedImages.length >= MAX_IMAGES}
           className="shrink-0 p-1.5 rounded-lg hover:bg-surface-hover text-text-muted disabled:text-text-disabled disabled:pointer-events-none transition-colors"
-          title={attachedImages.length >= MAX_IMAGES ? `Max ${MAX_IMAGES} images` : "Attach image"}
+          title={
+            !supportsVision
+              ? "Selected model can't read images"
+              : attachedImages.length >= MAX_IMAGES
+                ? `Max ${MAX_IMAGES} images`
+                : "Attach image"
+          }
         >
           <ImageIcon size={18} weight="light" />
         </button>
