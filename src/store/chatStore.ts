@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { ChatLaunchPayload } from "@/types/chat";
+import { MODEL_OPTIONS } from "@/lib/chatModels";
 
 export interface ChatTab {
   id: string;
@@ -47,6 +48,21 @@ const DEFAULT_MODEL = "google/gemini-3-flash-preview";
 const DEFAULT_AGENT_MODE: AgentMode = "prototype";
 const DEFAULT_PARALLEL_COUNT: ParallelCount = 1;
 
+// Model IDs that were removed from OpenRouter, mapped to their successors.
+const RENAMED_MODELS: Record<string, string> = {
+  "x-ai/grok-4.20-beta": "x-ai/grok-4.3",
+  "xiaomi/mimo-v2-omni": "xiaomi/mimo-v2.5",
+  "xiaomi/mimo-v2-pro": "xiaomi/mimo-v2.5-pro",
+};
+
+function normalizeModel(model: string | null): string {
+  if (!model) return DEFAULT_MODEL;
+  const renamed = RENAMED_MODELS[model] ?? model;
+  return MODEL_OPTIONS.some((option) => option.value === renamed)
+    ? renamed
+    : DEFAULT_MODEL;
+}
+
 function normalizeAgentMode(mode: string | null): AgentMode {
   if (mode === "prototype") return mode;
   if (mode === "edits") return mode;
@@ -72,13 +88,13 @@ const initialTabId = generateTabId();
 export const useChatStore = create<ChatState>((set, get) => ({
   isOpen: false,
   isExpanded: localStorage.getItem("chat-expanded") === "true",
-  model: localStorage.getItem("chat-model") ?? DEFAULT_MODEL,
+  model: normalizeModel(localStorage.getItem("chat-model")),
   agentMode: normalizeAgentMode(localStorage.getItem("chat-agent-mode")),
   parallelCount: normalizeParallelCount(localStorage.getItem("chat-parallel-count")),
   tabs: [{
     id: initialTabId,
     title: "Chat 1",
-    model: localStorage.getItem("chat-model") ?? DEFAULT_MODEL,
+    model: normalizeModel(localStorage.getItem("chat-model")),
     agentMode: normalizeAgentMode(localStorage.getItem("chat-agent-mode")),
     parallelCount: normalizeParallelCount(localStorage.getItem("chat-parallel-count")),
   }],
@@ -123,7 +139,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const id = generateTabId();
     const { tabs } = get();
     const title = `Chat ${tabs.length + 1}`;
-    const model = localStorage.getItem("chat-model") ?? DEFAULT_MODEL;
+    const model = normalizeModel(localStorage.getItem("chat-model"));
     const agentMode = normalizeAgentMode(localStorage.getItem("chat-agent-mode"));
     const parallelCount = normalizeParallelCount(localStorage.getItem("chat-parallel-count"));
     set({
@@ -150,7 +166,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const newId = generateTabId();
       const newControllers = { ...abortControllers };
       delete newControllers[tabId];
-      const model = localStorage.getItem("chat-model") ?? DEFAULT_MODEL;
+      const model = normalizeModel(localStorage.getItem("chat-model"));
       const agentMode = normalizeAgentMode(localStorage.getItem("chat-agent-mode"));
       const parallelCount = normalizeParallelCount(localStorage.getItem("chat-parallel-count"));
       const newLaunchQueue = { ...launchQueue };

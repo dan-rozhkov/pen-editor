@@ -64,15 +64,15 @@ export const MODEL_OPTIONS: ChatModelOption[] = [
     label: "Gemini 3.1 Flash Lite",
     supportsVision: true,
   },
-  { value: "x-ai/grok-4.20-beta", label: "Grok 4.20", supportsVision: true },
+  { value: "x-ai/grok-4.3", label: "Grok 4.3", supportsVision: true },
   {
-    value: "xiaomi/mimo-v2-omni",
-    label: "MiMo V2 Omni",
+    value: "xiaomi/mimo-v2.5",
+    label: "MiMo V2.5",
     supportsVision: true,
   },
   {
-    value: "xiaomi/mimo-v2-pro",
-    label: "MiMo V2 Pro",
+    value: "xiaomi/mimo-v2.5-pro",
+    label: "MiMo V2.5 Pro",
     supportsVision: false,
   },
   {
