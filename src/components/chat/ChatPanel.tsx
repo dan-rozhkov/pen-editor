@@ -2,9 +2,9 @@ import { useState } from "react";
 import {
   XIcon,
   PlusIcon,
-  TrashIcon,
   LightningIcon,
   ArrowLineLeftIcon,
+  DownloadSimpleIcon,
 } from "@phosphor-icons/react";
 import { useChatStore } from "@/store/chatStore";
 import { useFloatingPanelsStore } from "@/store/floatingPanelsStore";
@@ -18,43 +18,8 @@ import { Button } from "@/components/ui/button";
 import { CHAT_PRESETS } from "./chatPresets";
 import type { ChatPreset } from "./chatPresets";
 import type { ChatLaunchPayload } from "@/types/chat";
-
-const MODEL_OPTIONS = [
-  { value: "openai/gpt-5.4", label: "GPT-5.4" },
-  { value: "openai/gpt-5.4-mini", label: "GPT-5.4 Mini" },
-  { value: "moonshotai/kimi-k2.5", label: "Kimi K2.5" },
-  { value: "anthropic/claude-opus-4.6", label: "Claude Opus 4.6" },
-  { value: "anthropic/claude-sonnet-4.6", label: "Claude Sonnet 4.6" },
-  { value: "z-ai/glm-5", label: "GLM-5" },
-  { value: "z-ai/glm-5-turbo", label: "GLM-5 Turbo" },
-  { value: "minimax/minimax-m2.5", label: "Minimax M2.5" },
-  { value: "minimax/minimax-m2.7", label: "Minimax M2.7" },
-  { value: "qwen/qwen3.5-397b-a17b", label: "Qwen 3.5 397B" },
-  { value: "qwen/qwen3.5-plus-02-15", label: "Qwen 3.5 Plus" },
-  { value: "qwen/qwen3.5-flash-02-23", label: "Qwen 3.5 Flash" },
-  { value: "google/gemini-3.1-pro-preview", label: "Gemini 3.1 Pro" },
-  { value: "google/gemini-3-flash-preview", label: "Gemini 3 Flash" },
-  {
-    value: "google/gemini-3.1-flash-lite-preview",
-    label: "Gemini 3.1 Flash Lite",
-  },
-  {
-    value: "x-ai/grok-4.20-beta",
-    label: "Grok 4.20",
-  },
-  {
-    value: "xiaomi/mimo-v2-omni",
-    label: "MiMo V2 Omni",
-  },
-  {
-    value: "xiaomi/mimo-v2-pro",
-    label: "MiMo V2 Pro",
-  },
-  {
-    value: "nvidia/nemotron-3-super-120b-a12b:free",
-    label: "Nemotron 3 Super 120B",
-  },
-];
+import { MODEL_OPTIONS } from "@/lib/chatModels";
+import { chatToMarkdown, chatFilename, downloadMarkdown } from "@/lib/chatExport";
 
 const MODE_OPTIONS = [
   { value: "edits", label: "Edits" },
@@ -162,6 +127,7 @@ function ChatSession({
 }) {
   const {
     messages,
+    setMessages,
     input,
     setInput,
     submitLaunchPayload,
@@ -169,7 +135,6 @@ function ChatSession({
     stop,
     error,
     clearError,
-    setMessages,
   } = useDesignChat({ sessionId });
 
   const setModel = useChatStore((s) => s.setModel);
@@ -178,6 +143,16 @@ function ChatSession({
   const setParallelCount = useChatStore((s) => s.setParallelCount);
   const createTab = useChatStore((s) => s.createTab);
   const queueLaunchPayload = useChatStore((s) => s.queueLaunchPayload);
+  const tabTitle = useChatStore(
+    (s) => s.tabs.find((t) => t.id === sessionId)?.title,
+  );
+
+  const handleExportChat = () => {
+    downloadMarkdown(
+      chatToMarkdown(messages, tabTitle),
+      chatFilename(tabTitle),
+    );
+  };
 
   const handleSelectPreset = (preset: ChatPreset) => {
     setAgentMode(preset.mode);
@@ -207,6 +182,19 @@ function ChatSession({
     setParallelCount(1);
   };
 
+  const handleRollback = (messageId: string) => {
+    const index = messages.findIndex((m) => m.id === messageId);
+    if (index === -1) return;
+
+    const text = messages[index].parts
+      .filter((p): p is { type: "text"; text: string } => p.type === "text")
+      .map((p) => p.text)
+      .join("");
+
+    setMessages(messages.slice(0, index));
+    setInput(text);
+  };
+
   return (
     <>
       {/* Error banner */}
@@ -225,17 +213,21 @@ function ChatSession({
       )}
 
       {/* Messages */}
-      <MessageList messages={messages} isLoading={isLoading} />
+      <MessageList
+        messages={messages}
+        isLoading={isLoading}
+        onRollback={isLoading ? undefined : handleRollback}
+      />
 
-      {/* Clear button */}
+      {/* Session toolbar */}
       {messages.length > 0 && (
-        <div className="px-3 py-1 shrink-0 flex justify-end">
+        <div className="flex items-center justify-end px-3 pt-1 shrink-0">
           <button
-            onClick={() => setMessages([])}
+            onClick={handleExportChat}
             className="p-1 rounded-lg hover:bg-surface-hover text-text-muted transition-colors"
-            title="Clear messages"
+            title="Export chat as Markdown"
           >
-            <TrashIcon size={14} />
+            <DownloadSimpleIcon size={16} />
           </button>
         </div>
       )}

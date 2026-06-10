@@ -4,9 +4,11 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   CaretDownIcon,
+  DownloadSimpleIcon,
 } from "@phosphor-icons/react";
 import { isToolUIPart, getToolName } from "ai";
 import { getToolDisplayName } from "@/lib/toolDisplayNames";
+import { downloadFile, filenameFromUrl } from "@/lib/downloadFile";
 import { ImagePreview } from "./MessageList";
 
 type ToolStatus = "running" | "completed" | "error";
@@ -148,6 +150,18 @@ export function ToolCallIndicator({ part }: ToolCallIndicatorProps) {
   const displayName = getToolDisplayName(toolName);
   const imageUrls = status === "completed" ? extractImageUrls(toolPart.output) : [];
 
+  const downloadOne = (url: string, index: number) =>
+    downloadFile(url, filenameFromUrl(url, index));
+
+  const downloadAll = async () => {
+    for (let i = 0; i < imageUrls.length; i++) {
+      await downloadOne(imageUrls[i], i + 1);
+      if (i < imageUrls.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
+    }
+  };
+
   return (
     <div className="my-2 px-2 py-1 rounded bg-surface-elevated/60">
       <button
@@ -165,12 +179,33 @@ export function ToolCallIndicator({ part }: ToolCallIndicatorProps) {
         </span>
       </button>
       {status === "completed" && imageUrls.length > 0 && (
-        <div className="ml-5 mt-1.5 mb-1.5 flex gap-1.5 overflow-x-auto overflow-y-hidden pb-1 layers-scrollbar">
-          {imageUrls.map((url) => (
-            <div key={url} className="shrink-0">
-              <ImagePreview url={url} />
-            </div>
-          ))}
+        <div className="ml-5 mt-1.5 mb-1.5">
+          {imageUrls.length >= 2 && (
+            <button
+              onClick={() => void downloadAll()}
+              className="mb-1.5 flex items-center gap-1 text-xs text-text-muted hover:text-text-secondary"
+            >
+              <DownloadSimpleIcon size={12} />
+              Download all
+            </button>
+          )}
+          <div className="flex gap-1.5 overflow-x-auto overflow-y-hidden pb-1 layers-scrollbar">
+            {imageUrls.map((url, i) => (
+              <div key={url} className="shrink-0 relative group">
+                <ImagePreview url={url} urls={imageUrls} index={i} />
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void downloadOne(url, i + 1);
+                  }}
+                  title="Download image"
+                  className="absolute top-1 right-1 p-1 rounded bg-black/60 text-white opacity-0 group-hover:opacity-100 hover:bg-black/80 transition-opacity"
+                >
+                  <DownloadSimpleIcon size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
       {open && (
