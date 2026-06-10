@@ -133,9 +133,6 @@ describe("replace_all_matching_properties", () => {
     expect(text.fill).toBe("#444444");
   });
 
-  // Note: gap and padding rules each rebuild `layout` from the original node,
-  // so combining both in one call would clobber the earlier change. They are
-  // exercised in separate calls here (matching how the agent uses the tool).
   it("replaces layout padding on frames (all matching sides)", async () => {
     const result = JSON.parse(
       await replaceAllMatchingProperties({
@@ -162,6 +159,25 @@ describe("replace_all_matching_properties", () => {
     const frame = useSceneStore.getState().nodesById["frame1"] as FlatFrameNode;
     expect(frame.layout?.gap).toBe(12);
     expect(frame.layout?.paddingTop).toBe(16);
+  });
+
+  it("applies padding and gap rules together in one call", async () => {
+    const result = JSON.parse(
+      await replaceAllMatchingProperties({
+        parents: ["frame1"],
+        properties: {
+          padding: [{ from: 16, to: 32 }],
+          gap: [{ from: 8, to: 12 }],
+        },
+      })
+    );
+    expect(result.replacements).toBe(2);
+    const frame = useSceneStore.getState().nodesById["frame1"] as FlatFrameNode;
+    expect(frame.layout?.paddingTop).toBe(32);
+    expect(frame.layout?.paddingRight).toBe(32);
+    expect(frame.layout?.paddingBottom).toBe(32);
+    expect(frame.layout?.paddingLeft).toBe(32);
+    expect(frame.layout?.gap).toBe(12);
   });
 
   it("reports zero replacements and skips history when nothing matches", async () => {

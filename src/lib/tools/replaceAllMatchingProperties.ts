@@ -175,6 +175,18 @@ export const replaceAllMatchingProperties: ToolHandler = async (args) => {
       }
     }
 
+    // Padding/gap rules match against the original layout (so rules don't
+    // cascade into each other's output) but write into the accumulated
+    // updated layout (so padding and gap rules in one call don't clobber
+    // each other).
+    function currentLayout(original: LayoutProperties): LayoutProperties {
+      return (
+        ((updated as unknown as Record<string, unknown> | null)?.layout as
+          | LayoutProperties
+          | undefined) ?? original
+      );
+    }
+
     // padding (frame only, in layout)
     if (rules.padding && node.type === "frame") {
       const nodeAny = node as unknown as Record<string, unknown>;
@@ -190,11 +202,11 @@ export const replaceAllMatchingProperties: ToolHandler = async (args) => {
           ) {
             updated = updated ?? { ...node };
             const toVal = rule.to as number;
-            const newLayout = { ...layout };
-            if (newLayout.paddingTop === fromVal) newLayout.paddingTop = toVal;
-            if (newLayout.paddingRight === fromVal) newLayout.paddingRight = toVal;
-            if (newLayout.paddingBottom === fromVal) newLayout.paddingBottom = toVal;
-            if (newLayout.paddingLeft === fromVal) newLayout.paddingLeft = toVal;
+            const newLayout = { ...currentLayout(layout) };
+            if (layout.paddingTop === fromVal) newLayout.paddingTop = toVal;
+            if (layout.paddingRight === fromVal) newLayout.paddingRight = toVal;
+            if (layout.paddingBottom === fromVal) newLayout.paddingBottom = toVal;
+            if (layout.paddingLeft === fromVal) newLayout.paddingLeft = toVal;
             (updated as unknown as Record<string, unknown>).layout = newLayout;
             replacements++;
           }
@@ -210,7 +222,7 @@ export const replaceAllMatchingProperties: ToolHandler = async (args) => {
         for (const rule of rules.gap) {
           if (layout.gap === rule.from) {
             updated = updated ?? { ...node };
-            const newLayout = { ...layout, gap: rule.to as number };
+            const newLayout = { ...currentLayout(layout), gap: rule.to as number };
             (updated as unknown as Record<string, unknown>).layout = newLayout;
             replacements++;
           }
