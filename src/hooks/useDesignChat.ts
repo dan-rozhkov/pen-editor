@@ -15,14 +15,16 @@ import { useChatStore } from "@/store/chatStore";
 import { toolHandlers } from "@/lib/toolRegistry";
 import type { ChatLaunchPayload } from "@/types/chat";
 
-function resolveChatApiUrl(): string {
+// Exported for tests.
+export function resolveChatApiUrl(): string {
   // VITE_AI_API_URL is the explicit full chat URL; honor it verbatim. Otherwise
   // derive /api/chat from the shared backend base resolver.
   const explicitApiUrl = import.meta.env.VITE_AI_API_URL as string | undefined;
   return explicitApiUrl ?? resolveApiUrl("/api/chat");
 }
 
-function buildCanvasContext(): object {
+// Exported for tests.
+export function buildCanvasContext(): object {
   const { selectedIds } = useSelectionStore.getState();
   const { rootIds, nodesById } = useSceneStore.getState();
   const { activeTheme } = useThemeStore.getState();
@@ -80,7 +82,8 @@ function isImagePart(part: UIMessage["parts"][number]): boolean {
 // would otherwise make a chat permanently broken after attaching an image.
 // Replace images with a text placeholder so the model still sees that an
 // attachment existed.
-function stripImageParts(messages: UIMessage[]): UIMessage[] {
+// Exported for tests.
+export function stripImageParts(messages: UIMessage[]): UIMessage[] {
   return messages.map((message) => {
     if (!message.parts.some(isImagePart)) {
       return message;
@@ -94,7 +97,8 @@ function stripImageParts(messages: UIMessage[]): UIMessage[] {
   });
 }
 
-async function executeToolCall(
+// Exported for tests.
+export async function executeToolCall(
   toolName: string,
   input: unknown
 ): Promise<string> {
