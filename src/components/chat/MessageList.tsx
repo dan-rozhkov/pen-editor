@@ -3,9 +3,10 @@ import type { UIMessage } from "ai";
 import {
   ImageBrokenIcon,
   ArrowCounterClockwiseIcon,
-  DownloadSimpleIcon,
+  CopyIcon,
+  CheckIcon,
 } from "@phosphor-icons/react";
-import { messageToMarkdown, downloadMarkdown, messageFilename } from "@/lib/chatExport";
+import { messageToMarkdown } from "@/lib/chatExport";
 import { SimpleMarkdown } from "./SimpleMarkdown";
 import { ToolCallIndicator, isToolUIPart } from "./ToolCallIndicator";
 import { ThinkingIndicator } from "./ThinkingIndicator";
@@ -51,18 +52,32 @@ export function ImagePreview({ url, alt, urls, index = 0 }: ImagePreviewProps) {
   );
 }
 
-function exportMessage(msg: UIMessage) {
-  downloadMarkdown(messageToMarkdown(msg), messageFilename(msg));
-}
+function MessageCopyButton({ msg }: { msg: UIMessage }) {
+  const [copied, setCopied] = useState(false);
+  const resetTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
 
-function MessageExportButton({ msg }: { msg: UIMessage }) {
+  useEffect(() => () => clearTimeout(resetTimeoutRef.current), []);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(messageToMarkdown(msg));
+      setCopied(true);
+      clearTimeout(resetTimeoutRef.current);
+      resetTimeoutRef.current = setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard write can fail without permission; ignore silently.
+    }
+  };
+
   return (
     <button
-      onClick={() => exportMessage(msg)}
+      onClick={handleCopy}
       className="opacity-0 group-hover:opacity-100 shrink-0 p-1 rounded-lg hover:bg-surface-hover text-text-muted transition-colors"
-      title="Export message as Markdown"
+      title={copied ? "Copied" : "Copy message"}
     >
-      <DownloadSimpleIcon size={14} />
+      {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
     </button>
   );
 }
@@ -144,7 +159,7 @@ export function MessageList({ messages, isLoading, onRollback }: MessageListProp
 
           return (
             <div key={msg.id} className="group flex justify-end items-center gap-1">
-              <MessageExportButton msg={msg} />
+              <MessageCopyButton msg={msg} />
               {onRollback && (
                 <button
                   onClick={() => onRollback(msg.id)}
@@ -202,7 +217,7 @@ export function MessageList({ messages, isLoading, onRollback }: MessageListProp
               })}
               {isEmptyStreaming && <StreamingIndicator />}
             </div>
-            <MessageExportButton msg={msg} />
+            <MessageCopyButton msg={msg} />
           </div>
         );
       })}

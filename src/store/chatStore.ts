@@ -13,6 +13,13 @@ export interface ChatTab {
 export type AgentMode = "edits" | "prototype" | "research";
 export type ParallelCount = 1 | 2 | 3;
 
+/** Actions published by a mounted chat session so the tab bar can drive it. */
+export interface ChatSessionActions {
+  hasMessages: boolean;
+  exportChat: () => void;
+  clearChat: () => void;
+}
+
 interface ChatState {
   isOpen: boolean;
   isExpanded: boolean;
@@ -24,6 +31,8 @@ interface ChatState {
   /** AbortControllers keyed by tab id — managed outside React */
   abortControllers: Record<string, AbortController>;
   launchQueue: Record<string, ChatLaunchPayload | undefined>;
+  /** Export/clear handlers published by each mounted session, keyed by tab id */
+  sessionActions: Record<string, ChatSessionActions>;
 
   toggleOpen: () => void;
   open: () => void;
@@ -42,24 +51,20 @@ interface ChatState {
 
   registerAbortController: (tabId: string, controller: AbortController) => void;
   unregisterAbortController: (tabId: string) => void;
+
+  registerSessionActions: (tabId: string, actions: ChatSessionActions) => void;
+  unregisterSessionActions: (tabId: string) => void;
 }
 
-const DEFAULT_MODEL = "google/gemini-3-flash-preview";
+const DEFAULT_MODEL = "google/gemini-2.5-flash";
 const DEFAULT_AGENT_MODE: AgentMode = "prototype";
 const DEFAULT_PARALLEL_COUNT: ParallelCount = 1;
 
-// Model IDs that were removed from OpenRouter, mapped to their successors.
-const RENAMED_MODELS: Record<string, string> = {
-  "x-ai/grok-4.20-beta": "x-ai/grok-4.3",
-  "xiaomi/mimo-v2-omni": "xiaomi/mimo-v2.5",
-  "xiaomi/mimo-v2-pro": "xiaomi/mimo-v2.5-pro",
-};
-
 function normalizeModel(model: string | null): string {
   if (!model) return DEFAULT_MODEL;
-  const renamed = RENAMED_MODELS[model] ?? model;
-  return MODEL_OPTIONS.some((option) => option.value === renamed)
-    ? renamed
+  // Unknown/removed model ids (e.g. stale localStorage) fall back to the default.
+  return MODEL_OPTIONS.some((option) => option.value === model)
+    ? model
     : DEFAULT_MODEL;
 }
 
@@ -101,6 +106,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   activeTabId: initialTabId,
   abortControllers: {},
   launchQueue: {},
+  sessionActions: {},
 
   toggleOpen: () => set((s) => ({ isOpen: !s.isOpen })),
   open: () => set({ isOpen: true }),
@@ -260,6 +266,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const newControllers = { ...s.abortControllers };
       delete newControllers[tabId];
       return { abortControllers: newControllers };
+    });
+  },
+
+  registerSessionActions: (tabId: string, actions: ChatSessionActions) => {
+    set((s) => ({
+      sessionActions: { ...s.sessionActions, [tabId]: actions },
+    }));
+  },
+
+  unregisterSessionActions: (tabId: string) => {
+    set((s) => {
+      const newActions = { ...s.sessionActions };
+      delete newActions[tabId];
+      return { sessionActions: newActions };
     });
   },
 }));

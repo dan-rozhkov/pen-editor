@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   XIcon,
   PlusIcon,
   LightningIcon,
   ArrowLineLeftIcon,
   DownloadSimpleIcon,
+  DotsThreeVerticalIcon,
+  TrashIcon,
 } from "@phosphor-icons/react";
 import { useChatStore } from "@/store/chatStore";
 import { useFloatingPanelsStore } from "@/store/floatingPanelsStore";
@@ -15,6 +17,13 @@ import { ChatInput } from "./ChatInput";
 import { SelectWithOptions } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { CHAT_PRESETS } from "./chatPresets";
 import type { ChatPreset } from "./chatPresets";
 import type { ChatLaunchPayload } from "@/types/chat";
@@ -46,6 +55,7 @@ function TabBar() {
   const setActiveTab = useChatStore((s) => s.setActiveTab);
   const closeTab = useChatStore((s) => s.closeTab);
   const createTab = useChatStore((s) => s.createTab);
+  const activeActions = useChatStore((s) => s.sessionActions[s.activeTabId]);
 
   return (
     <Tabs
@@ -86,6 +96,35 @@ function TabBar() {
         >
           <PlusIcon />
         </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            data-testid="chat-menu-trigger"
+            className="shrink-0 p-1.5 rounded-lg text-text-muted hover:bg-surface-hover data-popup-open:bg-surface-hover"
+            title="Chat options"
+          >
+            <DotsThreeVerticalIcon size={16} weight="bold" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" sideOffset={4} className="min-w-44">
+            <DropdownMenuItem
+              data-testid="chat-menu-download"
+              disabled={!activeActions?.hasMessages}
+              onClick={() => activeActions?.exportChat()}
+            >
+              <DownloadSimpleIcon size={14} />
+              Download chat
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              data-testid="chat-menu-clear"
+              variant="destructive"
+              disabled={!activeActions?.hasMessages}
+              onClick={() => activeActions?.clearChat()}
+            >
+              <TrashIcon size={14} />
+              Clear chat
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </Tabs>
   );
@@ -143,16 +182,36 @@ function ChatSession({
   const setParallelCount = useChatStore((s) => s.setParallelCount);
   const createTab = useChatStore((s) => s.createTab);
   const queueLaunchPayload = useChatStore((s) => s.queueLaunchPayload);
+  const registerSessionActions = useChatStore((s) => s.registerSessionActions);
+  const unregisterSessionActions = useChatStore(
+    (s) => s.unregisterSessionActions,
+  );
   const tabTitle = useChatStore(
     (s) => s.tabs.find((t) => t.id === sessionId)?.title,
   );
 
-  const handleExportChat = () => {
-    downloadMarkdown(
-      chatToMarkdown(messages, tabTitle),
-      chatFilename(tabTitle),
-    );
-  };
+  // Publish export/clear handlers so the tab bar dropdown can drive this
+  // session. A ref keeps the handlers reading the latest messages without
+  // re-registering (and re-rendering the tab bar) on every streamed token.
+  const sessionDataRef = useRef({ messages, tabTitle, setMessages });
+  useEffect(() => {
+    sessionDataRef.current = { messages, tabTitle, setMessages };
+  });
+  const hasMessages = messages.length > 0;
+
+  useEffect(() => {
+    registerSessionActions(sessionId, {
+      hasMessages,
+      exportChat: () => {
+        const { messages, tabTitle } = sessionDataRef.current;
+        downloadMarkdown(chatToMarkdown(messages, tabTitle), chatFilename(tabTitle));
+      },
+      clearChat: () => {
+        sessionDataRef.current.setMessages([]);
+      },
+    });
+    return () => unregisterSessionActions(sessionId);
+  }, [sessionId, hasMessages, registerSessionActions, unregisterSessionActions]);
 
   const handleSelectPreset = (preset: ChatPreset) => {
     setAgentMode(preset.mode);
@@ -218,19 +277,6 @@ function ChatSession({
         isLoading={isLoading}
         onRollback={isLoading ? undefined : handleRollback}
       />
-
-      {/* Session toolbar */}
-      {messages.length > 0 && (
-        <div className="flex items-center justify-end px-3 pt-1 shrink-0">
-          <button
-            onClick={handleExportChat}
-            className="p-1 rounded-lg hover:bg-surface-hover text-text-muted transition-colors"
-            title="Export chat as Markdown"
-          >
-            <DownloadSimpleIcon size={16} />
-          </button>
-        </div>
-      )}
 
       {/* Input */}
       <ChatInput

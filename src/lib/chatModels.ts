@@ -9,76 +9,20 @@ export interface ChatModelOption {
 }
 
 export const MODEL_OPTIONS: ChatModelOption[] = [
-  { value: "openai/gpt-5.4", label: "GPT-5.4", supportsVision: true },
-  { value: "openai/gpt-5.4-mini", label: "GPT-5.4 Mini", supportsVision: true },
-  { value: "moonshotai/kimi-k2.5", label: "Kimi K2.5", supportsVision: true },
   {
-    value: "anthropic/claude-opus-4.6",
-    label: "Claude Opus 4.6",
+    value: "google/gemini-2.5-flash",
+    label: "Gemini 2.5 Flash",
     supportsVision: true,
   },
   {
-    value: "anthropic/claude-sonnet-4.6",
-    label: "Claude Sonnet 4.6",
-    supportsVision: true,
-  },
-  { value: "z-ai/glm-5", label: "GLM-5", supportsVision: false },
-  { value: "z-ai/glm-5-turbo", label: "GLM-5 Turbo", supportsVision: false },
-  {
-    value: "minimax/minimax-m2.5",
-    label: "Minimax M2.5",
-    supportsVision: false,
-  },
-  {
-    value: "minimax/minimax-m2.7",
-    label: "Minimax M2.7",
-    supportsVision: false,
-  },
-  {
-    value: "qwen/qwen3.5-397b-a17b",
-    label: "Qwen 3.5 397B",
+    value: "moonshotai/kimi-k2.6",
+    label: "Kimi K2.6",
     supportsVision: true,
   },
   {
-    value: "qwen/qwen3.5-plus-02-15",
-    label: "Qwen 3.5 Plus",
+    value: "minimax/minimax-m3",
+    label: "Minimax M3",
     supportsVision: true,
-  },
-  {
-    value: "qwen/qwen3.5-flash-02-23",
-    label: "Qwen 3.5 Flash",
-    supportsVision: true,
-  },
-  {
-    value: "google/gemini-3.1-pro-preview",
-    label: "Gemini 3.1 Pro",
-    supportsVision: true,
-  },
-  {
-    value: "google/gemini-3-flash-preview",
-    label: "Gemini 3 Flash",
-    supportsVision: true,
-  },
-  {
-    value: "google/gemini-3.1-flash-lite-preview",
-    label: "Gemini 3.1 Flash Lite",
-    supportsVision: true,
-  },
-  { value: "x-ai/grok-4.3", label: "Grok 4.3", supportsVision: true },
-  {
-    value: "xiaomi/mimo-v2.5",
-    label: "MiMo V2.5",
-    supportsVision: true,
-  },
-  {
-    value: "xiaomi/mimo-v2.5-pro",
-    label: "MiMo V2.5 Pro",
-    supportsVision: false,
-  },
-  {
-    value: "nvidia/nemotron-3-super-120b-a12b:free",
-    label: "Nemotron 3 Super 120B",
-    supportsVision: false,
   },
 ];
 
