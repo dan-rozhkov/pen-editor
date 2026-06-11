@@ -330,6 +330,21 @@ export function isFlatContainerType(node: FlatSceneNode): node is FlatFrameNode 
   return node.type === 'frame' || node.type === 'group'
 }
 
+/** Check if a flat node is a frame */
+export function isFlatFrameNode(node: FlatSceneNode): node is FlatFrameNode {
+  return node.type === 'frame'
+}
+
+/** Check if a flat node is a component instance (ref) */
+export function isRefNode(node: FlatSceneNode): node is RefNode {
+  return node.type === 'ref'
+}
+
+/** Check if a flat node is a connector */
+export function isConnectorNode(node: FlatSceneNode): node is ConnectorNode {
+  return node.type === 'connector'
+}
+
 /** Get children of a container node, or empty array for leaf nodes */
 export function getNodeChildren(node: SceneNode): SceneNode[] {
   if (node.type === 'frame' || node.type === 'group') {
