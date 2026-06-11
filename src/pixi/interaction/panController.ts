@@ -23,6 +23,7 @@ export interface PanController {
   handlePointerUp(e: PointerEvent): boolean;
   handleWheel(e: WheelEvent): void;
   isPanning: () => boolean;
+  destroy(): void;
 }
 
 export function createPanController(context: InteractionContext): PanController {
@@ -160,5 +161,20 @@ export function createPanController(context: InteractionContext): PanController 
     },
 
     isPanning: () => state.isPanning,
+
+    destroy(): void {
+      if (wheelRafId !== null) {
+        cancelAnimationFrame(wheelRafId);
+        wheelRafId = null;
+      }
+      if (state.panRafId !== null) {
+        cancelAnimationFrame(state.panRafId);
+        state.panRafId = null;
+      }
+      // Drop accumulated wheel deltas so a re-created controller starts clean.
+      wheelDX = 0;
+      wheelDY = 0;
+      wheelZoomDelta = 0;
+    },
   };
 }

@@ -548,6 +548,7 @@ export function setupPixiInteraction(
       hoverRafId = null;
     }
     pendingHoverWorld = null;
+    pan.destroy();
     canvas.removeEventListener("wheel", handleWheel);
     canvas.removeEventListener("pointerdown", handlePointerDown);
     canvas.removeEventListener("pointermove", handlePointerMove);
