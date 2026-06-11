@@ -33,6 +33,9 @@ export interface SceneState {
   updateNode: (id: string, updates: Partial<SceneNode>) => void;
   updateMultipleNodes: (ids: string[], updates: Partial<SceneNode>) => void;
   updateNodeWithoutHistory: (id: string, updates: Partial<SceneNode>) => void;
+  updateNodesWithoutHistory: (
+    updatesById: Record<string, Partial<SceneNode>>,
+  ) => void;
   deleteNode: (id: string) => void;
   clearNodes: () => void;
   setNodes: (nodes: SceneNode[]) => void;

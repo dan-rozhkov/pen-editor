@@ -126,18 +126,28 @@ export function createPixiSync(sceneRoot: Container): () => void {
     }
   }
 
-  function updateConnectorsForNode(nodeId: string): void {
-    const connectorIds = connectorIndex.get(nodeId);
-    if (!connectorIds || connectorIds.size === 0) return;
+  function updateConnectorsForNodes(changedIds: Set<string> | string[]): void {
+    // Collect every connector attached to any of the changed (non-connector)
+    // nodes into a single set, so each connector is recomputed at most once.
+    const connectorIds = new Set<string>();
+    for (const nodeId of changedIds) {
+      const attached = connectorIndex.get(nodeId);
+      if (!attached) continue;
+      for (const connId of attached) connectorIds.add(connId);
+    }
+    if (connectorIds.size === 0) return;
 
+    // Single tree fetch + layout accessor for the whole flush.
     const currentState = useSceneStore.getState();
+    const nodes = currentState.getNodes();
+    const calcLayout = useLayoutStore.getState().calculateLayoutForFrame;
+
+    const updatesById: Record<string, Partial<ConnectorNode>> = {};
     for (const connId of connectorIds) {
       const connNode = currentState.nodesById[connId];
       if (!connNode || connNode.type !== "connector") continue;
 
       const conn = connNode as ConnectorNode;
-      const nodes = useSceneStore.getState().getNodes();
-      const calcLayout = useLayoutStore.getState().calculateLayoutForFrame;
       const startPos = getAnchorWorldPosition(conn.startConnection.nodeId, conn.startConnection.anchor, nodes, calcLayout);
       const endPos = getAnchorWorldPosition(conn.endConnection.nodeId, conn.endConnection.anchor, nodes, calcLayout);
       if (!startPos || !endPos) continue;
@@ -148,19 +158,41 @@ export function createPixiSync(sceneRoot: Container): () => void {
       const maxY = Math.max(startPos.y, endPos.y);
       const nodeWidth = Math.max(maxX - minX, 1);
       const nodeHeight = Math.max(maxY - minY, 1);
+      const points = [
+        startPos.x - minX,
+        startPos.y - minY,
+        endPos.x - minX,
+        endPos.y - minY,
+      ];
 
-      useSceneStore.getState().updateNodeWithoutHistory(connId, {
+      // Skip no-op updates: geometry unchanged ⇒ no store write (which would
+      // otherwise create a fresh node object and schedule another sync pass).
+      const prev = conn.points;
+      if (
+        conn.x === minX &&
+        conn.y === minY &&
+        conn.width === nodeWidth &&
+        conn.height === nodeHeight &&
+        prev.length === 4 &&
+        prev[0] === points[0] &&
+        prev[1] === points[1] &&
+        prev[2] === points[2] &&
+        prev[3] === points[3]
+      ) {
+        continue;
+      }
+
+      updatesById[connId] = {
         x: minX,
         y: minY,
         width: nodeWidth,
         height: nodeHeight,
-        points: [
-          startPos.x - minX,
-          startPos.y - minY,
-          endPos.x - minX,
-          endPos.y - minY,
-        ],
-      });
+        points,
+      };
+    }
+
+    if (Object.keys(updatesById).length > 0) {
+      useSceneStore.getState().updateNodesWithoutHistory(updatesById);
     }
   }
 
@@ -614,12 +646,18 @@ export function createPixiSync(sceneRoot: Container): () => void {
       changedIds.add(id);
     }
 
-    // Update connectors when connected nodes move/resize
+    // Update connectors when connected nodes move/resize. Collect the changed
+    // non-connector ids and recompute all affected connectors in one batched
+    // store write per flush.
+    const movedNonConnectorIds: string[] = [];
     for (const id of changedIds) {
       const node = state.nodesById[id];
       if (node && node.type !== "connector") {
-        updateConnectorsForNode(id);
+        movedNonConnectorIds.push(id);
       }
+    }
+    if (movedNonConnectorIds.length > 0) {
+      updateConnectorsForNodes(movedNonConnectorIds);
     }
 
     // Handle structural changes (children order, parent changes)

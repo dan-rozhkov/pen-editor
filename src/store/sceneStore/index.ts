@@ -360,6 +360,31 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
     }),
 
+  updateNodesWithoutHistory: (updatesById) =>
+    set((state) => {
+      const ids = Object.keys(updatesById).filter((id) => state.nodesById[id]);
+      if (ids.length === 0) return state;
+
+      const newNodesById = { ...state.nodesById };
+      const staleSources: FlatSceneNode[] = [];
+      for (const id of ids) {
+        const existing = state.nodesById[id];
+        const updates = updatesById[id];
+        let updated = { ...existing, ...updates } as FlatSceneNode;
+        if (updated.type === "text" && hasTextMeasureProps(updates)) {
+          updated = syncTextDimensions(updated);
+        }
+        newNodesById[id] = updated;
+        staleSources.push(existing);
+      }
+      const componentArtifactsById = markComponentArtifactsStaleFromNative(
+        state.componentArtifactsById,
+        staleSources,
+      );
+
+      return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
+    }),
+
   deleteNode: (id) =>
     set((state) => {
       if (!state.nodesById[id]) return state;
