@@ -5,7 +5,8 @@ import { useDragStore } from "@/store/dragStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useSelectionStore } from "@/store/selectionStore";
-import type { FlatSceneNode, FlatFrameNode, RefNode, ConnectorNode } from "@/types/scene";
+import type { FlatSceneNode, ConnectorNode } from "@/types/scene";
+import { isFlatFrameNode, isRefNode, isConnectorNode } from "@/types/scene";
 import { materializeLayoutRefs } from "@/utils/layoutRefUtils";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 import { getViewportBounds } from "@/utils/viewportUtils";
@@ -120,8 +121,8 @@ export function createPixiSync(sceneRoot: Container): () => void {
     connectorIndex.clear();
     for (const id of Object.keys(nodesById)) {
       const node = nodesById[id];
-      if (node?.type === "connector") {
-        addToConnectorIndex(id, node as ConnectorNode);
+      if (node && isConnectorNode(node)) {
+        addToConnectorIndex(id, node);
       }
     }
   }
@@ -145,9 +146,9 @@ export function createPixiSync(sceneRoot: Container): () => void {
     const updatesById: Record<string, Partial<ConnectorNode>> = {};
     for (const connId of connectorIds) {
       const connNode = currentState.nodesById[connId];
-      if (!connNode || connNode.type !== "connector") continue;
+      if (!connNode || !isConnectorNode(connNode)) continue;
 
-      const conn = connNode as ConnectorNode;
+      const conn = connNode;
       const startPos = getAnchorWorldPosition(conn.startConnection.nodeId, conn.startConnection.anchor, nodes, calcLayout);
       const endPos = getAnchorWorldPosition(conn.endConnection.nodeId, conn.endConnection.anchor, nodes, calcLayout);
       if (!startPos || !endPos) continue;
@@ -237,7 +238,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
       let current: string | null = startId;
       while (current != null) {
         const n = state.nodesById[current];
-        if (n?.type === "frame" && (n as FlatFrameNode).layout?.autoLayout) {
+        if (n && isFlatFrameNode(n) && n.layout?.autoLayout) {
           dirty.add(current);
         }
         current = state.parentById[current] ?? null;
@@ -275,7 +276,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
     const applyFrameLayoutRecursively = (frameId: string): void => {
       const frameNode = state.nodesById[frameId];
-      if (!frameNode || frameNode.type !== "frame") return;
+      if (!frameNode || !isFlatFrameNode(frameNode)) return;
 
       // Skip frames being animated during auto-layout drag
       const dragState = useDragStore.getState();
@@ -284,7 +285,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
       const childIds = state.childrenById[frameId] ?? [];
       const frameOverride = layoutOverrides.get(frameId);
 
-      if ((frameNode as FlatFrameNode).layout?.autoLayout) {
+      if (frameNode.layout?.autoLayout) {
         // Convert to tree structure for layout calculation, including overrides
         // inherited from parent auto-layout.
         const treeFrame = flatToTreeFrame(
@@ -500,8 +501,8 @@ export function createPixiSync(sceneRoot: Container): () => void {
         // Check theme override only on changed frame nodes
         if (
           node && prevNode &&
-          node.type === "frame" &&
-          (node as FlatFrameNode).themeOverride !== (prevNode as FlatFrameNode).themeOverride
+          isFlatFrameNode(node) &&
+          node.themeOverride !== (isFlatFrameNode(prevNode) ? prevNode.themeOverride : undefined)
         ) {
           needsThemeRebuild = true;
         }
@@ -539,11 +540,11 @@ export function createPixiSync(sceneRoot: Container): () => void {
         // Phase 3 + 6: Update indexes for new nodes
         const node = state.nodesById[id];
         if (node) {
-          if (node.type === "ref") {
-            componentIndex.add(id, (node as RefNode).componentId);
+          if (isRefNode(node)) {
+            componentIndex.add(id, node.componentId);
           }
-          if (node.type === "connector") {
-            addToConnectorIndex(id, node as ConnectorNode);
+          if (isConnectorNode(node)) {
+            addToConnectorIndex(id, node);
           }
           if (isVariableDependent(node)) {
             variableDependentIds.add(id);
@@ -562,11 +563,11 @@ export function createPixiSync(sceneRoot: Container): () => void {
         // Phase 3 + 6: Update indexes for removed nodes
         const prevNode = prev.nodesById[id];
         if (prevNode) {
-          if (prevNode.type === "ref") {
-            componentIndex.remove(id, (prevNode as RefNode).componentId);
+          if (isRefNode(prevNode)) {
+            componentIndex.remove(id, prevNode.componentId);
           }
-          if (prevNode.type === "connector") {
-            removeFromConnectorIndex(id, prevNode as ConnectorNode);
+          if (isConnectorNode(prevNode)) {
+            removeFromConnectorIndex(id, prevNode);
           }
           variableDependentIds.delete(id);
           resolutionMgr.trackNodeRemoved(id);
@@ -585,8 +586,8 @@ export function createPixiSync(sceneRoot: Container): () => void {
           // Check if node is inside auto-layout frame
           const parentId = state.parentById[id];
           const parentNode = parentId ? state.nodesById[parentId] : null;
-          const isInAutoLayout = parentNode?.type === "frame" &&
-            (parentNode as FlatFrameNode).layout?.autoLayout;
+          const isInAutoLayout = !!parentNode && isFlatFrameNode(parentNode) &&
+            parentNode.layout?.autoLayout;
 
           withAncestorThemes(id, state.parentById, state.nodesById, () => {
             updateNodeContainer(
@@ -609,9 +610,9 @@ export function createPixiSync(sceneRoot: Container): () => void {
           }
 
           // Phase 3: Update componentId index if ref's componentId changed
-          if (node.type === "ref" && prevNode.type === "ref") {
-            const prevCompId = (prevNode as RefNode).componentId;
-            const newCompId = (node as RefNode).componentId;
+          if (isRefNode(node) && isRefNode(prevNode)) {
+            const prevCompId = prevNode.componentId;
+            const newCompId = node.componentId;
             if (prevCompId !== newCompId) {
               componentIndex.remove(id, prevCompId);
               componentIndex.add(id, newCompId);
