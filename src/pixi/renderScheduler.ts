@@ -8,7 +8,8 @@
  * This module detaches that unconditional per-frame render and replaces it with
  * a dirty-flag scheduler:
  *   - render whenever something invalidates (any visual store change, marquee
- *     overlay state, font load, or an explicit `requestCanvasRender()` call),
+ *     overlay state, font load, canvas/window resize, or an explicit
+ *     `requestCanvasRender()` call),
  *   - keep rendering for a trailing window after the last signal (covers drop
  *     animations and debounced re-renders + async rasterization),
  *   - a low-rate safety render as the backstop for purely-async arrivals
@@ -100,11 +101,29 @@ export function setupRenderScheduler(app: Application): () => void {
     document.fonts.addEventListener("loadingdone", markActivity);
   }
 
+  // Resizing the renderer changes the canvas visually but emits no store signal:
+  // (a) window resize, handled by Pixi's ResizePlugin (`resizeTo: container`);
+  // (b) container-only resize (e.g. a sidebar collapsing) with no window event.
+  const hasWindow = typeof window !== "undefined";
+  if (hasWindow) {
+    window.addEventListener("resize", markActivity);
+  }
+  const canvasParent = app.canvas.parentElement;
+  const resizeObserver =
+    canvasParent && typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(markActivity)
+      : null;
+  resizeObserver?.observe(canvasParent!);
+
   return () => {
     for (const unsub of unsubs) unsub();
     if (hasFonts) {
       document.fonts.removeEventListener("loadingdone", markActivity);
     }
+    if (hasWindow) {
+      window.removeEventListener("resize", markActivity);
+    }
+    resizeObserver?.disconnect();
     app.ticker.remove(onTick);
     invalidate = null;
     // Do NOT re-add app.render — the app is being destroyed.
