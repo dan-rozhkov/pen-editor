@@ -47,7 +47,6 @@ export function PixiCanvas() {
   const isPanning = useViewportStore((s) => s.isPanning);
   const setIsPanning = useViewportStore((s) => s.setIsPanning);
   const fitToContent = useViewportStore((s) => s.fitToContent);
-  const nodes = useSceneStore((state) => state.getNodes());
   const nodesById = useSceneStore((state) => state.nodesById);
   const parentById = useSceneStore((state) => state.parentById);
   const pageBackground = useSceneStore((state) => state.pageBackground);
@@ -134,8 +133,9 @@ export function PixiCanvas() {
   const editingTextIsInsideAutoLayout = useMemo(() => {
     if (editingMode !== "text" || !editingNodeId) return false;
     if (resolvedDescendant) return false;
+    const nodes = useSceneStore.getState().getNodes();
     return findParentFrame(nodes, editingNodeId).isInsideAutoLayout;
-  }, [editingMode, editingNodeId, nodes, resolvedDescendant]);
+  }, [editingMode, editingNodeId, resolvedDescendant]);
 
   const handleDocumentDrop = useCallback(
     (
@@ -163,7 +163,6 @@ export function PixiCanvas() {
 
   // Keyboard shortcuts (reuse existing hook)
   useCanvasKeyboardShortcuts({
-    nodes,
     copiedNodes,
     dimensions,
     isMiddleMouseDown,

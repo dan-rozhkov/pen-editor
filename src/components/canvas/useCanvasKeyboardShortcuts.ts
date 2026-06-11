@@ -26,7 +26,6 @@ import {
 const INTERNAL_CLIPBOARD_PRIORITY_MS = 5000;
 
 interface CanvasKeyboardShortcutsParams {
-  nodes: SceneNode[];
   copiedNodes: SceneNode[];
   dimensions: { width: number; height: number };
   isMiddleMouseDown: boolean;
@@ -147,7 +146,6 @@ function resolveNodesToCopy(
 }
 
 export function useCanvasKeyboardShortcuts({
-  nodes,
   copiedNodes,
   dimensions,
   isMiddleMouseDown,
@@ -230,6 +228,7 @@ export function useCanvasKeyboardShortcuts({
       }
 
       const clonedNodes = sourceNodes.map((node) => cloneNodeWithNewId(node));
+      const nodes = useSceneStore.getState().getNodes();
       const targetContainerId = resolvePasteTargetContainerId(nodes, selectionState);
 
       saveHistory(createSnapshot(useSceneStore.getState()));
@@ -250,6 +249,7 @@ export function useCanvasKeyboardShortcuts({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const isTyping = isTypingTarget(e);
+      const nodes = useSceneStore.getState().getNodes();
 
       if (e.key === "Enter" && !e.shiftKey) {
         if (isTyping) return;
@@ -768,7 +768,6 @@ export function useCanvasKeyboardShortcuts({
     groupNodes,
     isMiddleMouseDown,
     moveNode,
-    nodes,
     redo,
     restoreSnapshot,
     saveHistory,
