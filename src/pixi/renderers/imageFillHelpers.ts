@@ -36,11 +36,23 @@ let currentImageFillResolution = window.devicePixelRatio || 1;
 
 const SVG_TEXTURE_MAX_DIMENSION = 8192;
 
-function isSvgUrl(url: string): boolean {
+/** Last SVG fill applied per container, so a size-only change can re-stretch the
+ *  existing sprite cheaply and defer the sharp re-rasterization (mirrors the
+ *  embed renderer's resize-debounce pattern). */
+interface AppliedImageFill {
+  url: string;
+  width: number;
+  height: number;
+}
+const appliedImageFillByContainer = new WeakMap<Container, AppliedImageFill>();
+const pendingSvgRerenderByContainer = new WeakMap<Container, ReturnType<typeof setTimeout>>();
+const SVG_FILL_RESIZE_RERENDER_DEBOUNCE_MS = 180; // mirrors EMBED_RESIZE_RERENDER_DEBOUNCE_MS
+
+export function isSvgUrl(url: string): boolean {
   return /^data:image\/svg\+xml/i.test(url) || /\.svg(?:[?#]|$)/i.test(url);
 }
 
-function getTextureCacheKey(
+export function getTextureCacheKey(
   url: string,
   width: number,
   height: number,
@@ -176,6 +188,7 @@ function withTexture(
 }
 
 function destroyImageSprite(container: Container): void {
+  appliedImageFillByContainer.delete(container);
   const existing = container.getChildByLabel("image-fill");
   if (!existing) return;
 
@@ -219,6 +232,81 @@ export function setImageFillResolution(resolution: number): void {
   currentImageFillResolution = resolution;
 }
 
+/** Re-stretch an existing image sprite to a new size without reloading the
+ *  texture. `scaleImageSprite` re-derives the `fill`-mode cover texture from the
+ *  original (uncropped) texture recorded as `_baseImageTexture`, so we destroy
+ *  the previous derived cover first to avoid leaking it. */
+function restretchExistingSprite(
+  sprite: Sprite,
+  imageFill: ImageFill,
+  width: number,
+  height: number,
+): void {
+  const typed = sprite as Sprite & {
+    _baseImageTexture?: Texture;
+    _derivedImageTexture?: Texture;
+  };
+  const baseTexture = typed._baseImageTexture ?? sprite.texture;
+  const prevDerived = typed._derivedImageTexture;
+  scaleImageSprite(sprite, baseTexture, imageFill, width, height);
+  // If a new cover texture was created, destroy the previous one (now unused).
+  const newDerived = typed._derivedImageTexture;
+  if (prevDerived && prevDerived !== newDerived) {
+    prevDerived.destroy(false);
+  }
+}
+
+/**
+ * Fast path for a size-only change of an SVG image fill: re-stretch the existing
+ * sprite immediately (cheap) and defer the sharp re-rasterization until the
+ * resize gesture settles. Returns true when it handled the call, false to fall
+ * through to the full (immediate) path. Mirrors the embed resize-debounce.
+ */
+function trySvgResizeFastPath(
+  container: Container,
+  imageFill: ImageFill | undefined,
+  width: number,
+  height: number,
+  scheduleFullRerender: () => void,
+  redrawMask: (mask: Graphics) => void,
+): boolean {
+  if (!imageFill?.url || !isSvgUrl(imageFill.url)) return false;
+
+  const prev = appliedImageFillByContainer.get(container);
+  const existing = container.getChildByLabel("image-fill");
+  if (
+    !(existing instanceof Sprite) ||
+    !prev ||
+    prev.url !== imageFill.url ||
+    (prev.width === width && prev.height === height)
+  ) {
+    return false;
+  }
+
+  // Size-only change of the same SVG fill: stretch now, re-rasterize later.
+  const pending = pendingSvgRerenderByContainer.get(container);
+  if (pending) clearTimeout(pending);
+
+  restretchExistingSprite(existing, imageFill, width, height);
+
+  const mask = container.getChildByLabel("image-mask");
+  if (mask instanceof Graphics) {
+    mask.clear();
+    redrawMask(mask);
+  }
+
+  appliedImageFillByContainer.set(container, { url: imageFill.url, width, height });
+
+  const timer = setTimeout(() => {
+    pendingSvgRerenderByContainer.delete(container);
+    if (container.destroyed) return;
+    scheduleFullRerender();
+  }, SVG_FILL_RESIZE_RERENDER_DEBOUNCE_MS);
+  pendingSvgRerenderByContainer.set(container, timer);
+
+  return true;
+}
+
 export function applyImageFill(
   container: Container,
   imageFill: ImageFill | undefined,
@@ -227,6 +315,26 @@ export function applyImageFill(
   cornerRadius?: number,
   cornerRadiusPerCorner?: PerCornerRadius,
 ): void {
+  const handled = trySvgResizeFastPath(
+    container,
+    imageFill,
+    width,
+    height,
+    () => applyImageFill(container, imageFill, width, height, cornerRadius, cornerRadiusPerCorner),
+    (mask) => {
+      drawRoundedShape(mask, width, height, cornerRadius, cornerRadiusPerCorner);
+      mask.fill(0xffffff);
+    },
+  );
+  if (handled) return;
+
+  // Full path: clear any pending re-render, then rebuild the sprite immediately.
+  const pending = pendingSvgRerenderByContainer.get(container);
+  if (pending) {
+    clearTimeout(pending);
+    pendingSvgRerenderByContainer.delete(container);
+  }
+
   // Remove existing image sprite
   destroyImageSprite(container);
 
@@ -245,6 +353,9 @@ function scaleImageSprite(
   containerW: number,
   containerH: number,
 ): void {
+  // Remember the original (uncropped) texture so a later resize fast path can
+  // re-derive the `fill`-mode cover crop from it instead of compounding crops.
+  (sprite as Sprite & { _baseImageTexture?: Texture })._baseImageTexture = texture;
   const imgAspect = texture.width / texture.height;
   const containerAspect = containerW / containerH;
 
@@ -313,6 +424,12 @@ function addImageSprite(
   } else {
     container.addChildAt(sprite, 0);
   }
+
+  appliedImageFillByContainer.set(container, {
+    url: imageFill.url,
+    width: containerW,
+    height: containerH,
+  });
 }
 
 export function applyImageFillEllipse(
@@ -321,6 +438,26 @@ export function applyImageFillEllipse(
   width: number,
   height: number,
 ): void {
+  const handled = trySvgResizeFastPath(
+    container,
+    imageFill,
+    width,
+    height,
+    () => applyImageFillEllipse(container, imageFill, width, height),
+    (mask) => {
+      mask.ellipse(width / 2, height / 2, width / 2, height / 2);
+      mask.fill(0xffffff);
+    },
+  );
+  if (handled) return;
+
+  // Full path: clear any pending re-render, then rebuild the sprite immediately.
+  const pending = pendingSvgRerenderByContainer.get(container);
+  if (pending) {
+    clearTimeout(pending);
+    pendingSvgRerenderByContainer.delete(container);
+  }
+
   // Remove existing
   destroyImageSprite(container);
   const existingMask = container.getChildByLabel("image-mask");
@@ -364,6 +501,12 @@ function addImageSpriteEllipse(
   } else {
     container.addChildAt(sprite, 0);
   }
+
+  appliedImageFillByContainer.set(container, {
+    url: imageFill.url,
+    width: containerW,
+    height: containerH,
+  });
 }
 
 export function updateImageFillResolution(
