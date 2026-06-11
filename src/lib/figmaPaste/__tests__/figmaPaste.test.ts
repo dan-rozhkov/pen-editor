@@ -7,6 +7,7 @@ import type { FrameNode, GroupNode, PathNode, TextNode } from '@/types/scene'
 import {
   buildFigmaClipboardHtml,
   encodePathCommandsBlob,
+  encodeVectorNetworkBlob,
   guid,
   identityTransform,
   solidPaint,
@@ -174,6 +175,67 @@ describe('convertFigmaClipboardHtml', () => {
     expect(path.fill).toBe('#00ff00')
     expect(path.pathStroke).toMatchObject({ thickness: 1.5, fill: '#000000' })
     expect(path.stroke).toBeUndefined()
+  })
+
+  it('builds vector geometry from the vector network when fillGeometry is absent', async () => {
+    // Real clipboard payloads carry only the editing topology. Triangle in
+    // normalized 1x1 space, node sized 24x24 → coordinates scale by 24.
+    const blob = encodeVectorNetworkBlob({
+      vertices: [[0, 0], [1, 0], [1, 1]],
+      segments: [
+        { start: 0, end: 1 },
+        { start: 1, end: 2 },
+        { start: 2, end: 0 },
+      ],
+      regions: [{ windingRule: 'NONZERO', loops: [[0, 1, 2]] }],
+    })
+    const html = clipboardWith(
+      [
+        onCanvas({
+          guid: guid(2),
+          type: 'VECTOR',
+          name: 'Triangle',
+          size: { x: 24, y: 24 },
+          transform: identityTransform(),
+          fillPaints: [solidPaint(1, 0, 0)],
+          vectorData: { vectorNetworkBlob: 0, normalizedSize: { x: 1, y: 1 } },
+        }),
+      ],
+      [blob],
+    )
+
+    const path = (await convertFigmaClipboardHtml(html))!.nodes[0] as PathNode
+    expect(path.type).toBe('path')
+    expect(path.geometry).toBe('M 0 0 L 24 0 L 24 24 L 0 0 Z')
+    expect(path.fill).toBe('#ff0000')
+  })
+
+  it('builds open stroke-only paths with curves from the vector network', async () => {
+    const blob = encodeVectorNetworkBlob({
+      vertices: [[0, 10], [10, 0]],
+      segments: [{ start: 0, end: 1, t1: [4, 0], t2: [-4, 0] }],
+    })
+    const html = clipboardWith(
+      [
+        onCanvas({
+          guid: guid(2),
+          type: 'VECTOR',
+          name: 'Curve',
+          size: { x: 10, y: 10 },
+          transform: identityTransform(),
+          strokePaints: [solidPaint(0, 0, 0)],
+          strokeWeight: 2,
+          vectorData: { vectorNetworkBlob: 0, normalizedSize: { x: 10, y: 10 } },
+        }),
+      ],
+      [blob],
+    )
+
+    const path = (await convertFigmaClipboardHtml(html))!.nodes[0] as PathNode
+    expect(path.geometry).toBe('M 0 10 C 4 10 6 0 10 0')
+    expect(path.geometry).not.toContain('Z')
+    expect(path.fill).toBeUndefined()
+    expect(path.pathStroke).toMatchObject({ thickness: 2, fill: '#000000' })
   })
 
   it('falls back to stroke geometry for unfilled open paths', async () => {

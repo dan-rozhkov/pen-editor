@@ -46,7 +46,7 @@ import {
   type FigPaint,
   type FigPasteData,
 } from './figTypes'
-import { decodePathCommandsBlob } from './pathBlobs'
+import { decodePathCommandsBlob, decodeVectorNetworkBlob, vectorNetworkToPathData } from './pathBlobs'
 
 export interface FigmaConversionResult {
   nodes: SceneNode[]
@@ -451,10 +451,32 @@ function geometryFromPaths(
   return { d: parts.join(' '), windingRule: paths[0].windingRule ?? 'NONZERO' }
 }
 
+/**
+ * Vector geometry from the editing topology (vectorNetworkBlob) — clipboard
+ * payloads carry this instead of derived fill/stroke command geometry.
+ */
+function geometryFromVectorNetwork(
+  change: FigNodeChange,
+  ctx: ConvertContext,
+): { d: string; windingRule: 'NONZERO' | 'ODD' } | null {
+  const blobIndex = change.vectorData?.vectorNetworkBlob
+  if (blobIndex == null) return null
+  const blob = ctx.blobs[blobIndex]
+  if (!blob) return null
+  const network = decodeVectorNetworkBlob(blob.bytes)
+  if (!network) return null
+  // Network coordinates are in normalizedSize space; scale to the node size
+  const normalized = change.vectorData?.normalizedSize
+  const scaleX = normalized?.x ? (change.size?.x ?? normalized.x) / normalized.x : 1
+  const scaleY = normalized?.y ? (change.size?.y ?? normalized.y) / normalized.y : 1
+  return vectorNetworkToPathData(network, scaleX, scaleY)
+}
+
 function convertVectorLike(change: FigNodeChange, ctx: ConvertContext): PathNode | null {
   const base = buildBase(change, ctx, false)
   const stroke = resolveStroke(change, ctx)
-  const fillGeometry = geometryFromPaths(change.fillGeometry, ctx)
+  const fillGeometry =
+    geometryFromPaths(change.fillGeometry, ctx) ?? geometryFromVectorNetwork(change, ctx)
   const strokeGeometry = geometryFromPaths(change.strokeGeometry, ctx)
 
   if (fillGeometry) {

@@ -240,6 +240,11 @@ message ArcData {
   float innerRadius = 3;
 }
 
+message VectorData {
+  uint vectorNetworkBlob = 1;
+  Vector normalizedSize = 2;
+}
+
 message NodeChange {
   GUID guid = 1;
   ParentIndex parentIndex = 2;
@@ -293,6 +298,7 @@ message NodeChange {
   float stackChildPrimaryGrow = 50;
   StackCounterAlign stackChildAlignSelf = 51;
   StackPositioning stackPositioning = 52;
+  VectorData vectorData = 53;
 }
 
 message Blob {
@@ -370,6 +376,61 @@ export function encodePathCommandsBlob(commands: (string | number)[]): Uint8Arra
     bytes.push(verb)
     pushFloats(commands.slice(i, i + argCount) as number[])
     i += argCount
+  }
+  return new Uint8Array(bytes)
+}
+
+export interface FixtureNetworkSegment {
+  start: number
+  end: number
+  t1?: [number, number]
+  t2?: [number, number]
+}
+
+export interface FixtureNetwork {
+  vertices: [number, number][]
+  segments: FixtureNetworkSegment[]
+  regions?: { windingRule?: 'NONZERO' | 'ODD'; loops: number[][] }[]
+}
+
+/** Encode a vector network into Figma's vectorNetworkBlob binary format. */
+export function encodeVectorNetworkBlob(network: FixtureNetwork): Uint8Array {
+  const regions = network.regions ?? []
+  const bytes: number[] = []
+  const buf = new DataView(new ArrayBuffer(4))
+  const pushU32 = (value: number) => {
+    buf.setUint32(0, value, true)
+    bytes.push(buf.getUint8(0), buf.getUint8(1), buf.getUint8(2), buf.getUint8(3))
+  }
+  const pushF32 = (value: number) => {
+    buf.setFloat32(0, value, true)
+    bytes.push(buf.getUint8(0), buf.getUint8(1), buf.getUint8(2), buf.getUint8(3))
+  }
+
+  pushU32(network.vertices.length)
+  pushU32(network.segments.length)
+  pushU32(regions.length)
+  for (const [x, y] of network.vertices) {
+    pushU32(0) // styleID
+    pushF32(x)
+    pushF32(y)
+  }
+  for (const segment of network.segments) {
+    pushU32(0) // styleID
+    pushU32(segment.start)
+    pushF32(segment.t1?.[0] ?? 0)
+    pushF32(segment.t1?.[1] ?? 0)
+    pushU32(segment.end)
+    pushF32(segment.t2?.[0] ?? 0)
+    pushF32(segment.t2?.[1] ?? 0)
+  }
+  for (const region of regions) {
+    pushU32(((region.windingRule ?? 'NONZERO') === 'NONZERO' ? 1 : 0) | (0 << 1))
+    pushU32(region.loops.length)
+    for (const loop of region.loops) {
+      pushU32(loop.length)
+      for (const index of loop) pushU32(index)
+    }
   }
   return new Uint8Array(bytes)
 }
