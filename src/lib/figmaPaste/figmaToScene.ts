@@ -308,7 +308,7 @@ function decomposePosition(change: FigNodeChange): { x: number; y: number; rotat
   }
 }
 
-function buildBase(change: FigNodeChange, ctx: ConvertContext): MutableBase {
+function buildBase(change: FigNodeChange, ctx: ConvertContext, withStroke = true): MutableBase {
   const { x, y, rotation } = decomposePosition(change)
   const base: MutableBase = {
     id: generateId(),
@@ -323,7 +323,9 @@ function buildBase(change: FigNodeChange, ctx: ConvertContext): MutableBase {
   if (change.opacity != null && change.opacity < 1) base.opacity = change.opacity
 
   applyFillPaints(base, change, ctx)
-  applyStrokePaints(base, change, ctx)
+  // Path nodes render strokes through pathStroke — top-level stroke props
+  // would double-draw there, so vector conversion opts out
+  if (withStroke) applyStrokePaints(base, change, ctx)
   applyEffects(base, change)
   return base
 }
@@ -351,24 +353,43 @@ function applyFillPaints(base: MutableBase, change: FigNodeChange, ctx: ConvertC
   }
 }
 
-function applyStrokePaints(base: MutableBase, change: FigNodeChange, ctx: ConvertContext): void {
+interface StrokeStyle {
+  color: string
+  opacity?: number
+  width: number
+  align: 'center' | 'inside' | 'outside'
+}
+
+/** Resolve the topmost stroke paint into a color/width/align triple. */
+function resolveStroke(change: FigNodeChange, ctx: ConvertContext): StrokeStyle | null {
   const paint = topPaint(change.strokePaints, (p) => p.type !== 'IMAGE')
-  if (!paint) return
+  if (!paint) return null
+  const style: StrokeStyle = {
+    color: '',
+    width: change.strokeWeight ?? 1,
+    align:
+      change.strokeAlign === 'INSIDE' ? 'inside' : change.strokeAlign === 'OUTSIDE' ? 'outside' : 'center',
+  }
   if (paint.type === 'SOLID' && paint.color) {
-    base.stroke = colorToHex(paint.color)
+    style.color = colorToHex(paint.color)
     const opacity = paint.color.a * (paint.opacity ?? 1)
-    if (opacity < 1) base.strokeOpacity = opacity
+    if (opacity < 1) style.opacity = opacity
   } else if (paint.stops && paint.stops.length > 0) {
-    base.stroke = colorToHex(paint.stops[0].color)
+    style.color = colorToHex(paint.stops[0].color)
     ctx.warnings.push(`Gradient stroke on "${change.name ?? 'node'}" approximated with a solid color`)
   } else {
-    return
+    return null
   }
-  base.strokeWidth = change.strokeWeight ?? 1
-  if (change.strokeAlign) {
-    base.strokeAlign =
-      change.strokeAlign === 'INSIDE' ? 'inside' : change.strokeAlign === 'OUTSIDE' ? 'outside' : 'center'
-  }
+  return style
+}
+
+function applyStrokePaints(base: MutableBase, change: FigNodeChange, ctx: ConvertContext): void {
+  const stroke = resolveStroke(change, ctx)
+  if (!stroke) return
+  base.stroke = stroke.color
+  if (stroke.opacity != null) base.strokeOpacity = stroke.opacity
+  base.strokeWidth = stroke.width
+  if (change.strokeAlign) base.strokeAlign = stroke.align
 }
 
 function applyEffects(base: MutableBase, change: FigNodeChange): void {
@@ -431,7 +452,8 @@ function geometryFromPaths(
 }
 
 function convertVectorLike(change: FigNodeChange, ctx: ConvertContext): PathNode | null {
-  const base = buildBase(change, ctx)
+  const base = buildBase(change, ctx, false)
+  const stroke = resolveStroke(change, ctx)
   const fillGeometry = geometryFromPaths(change.fillGeometry, ctx)
   const strokeGeometry = geometryFromPaths(change.strokeGeometry, ctx)
 
@@ -442,23 +464,19 @@ function convertVectorLike(change: FigNodeChange, ctx: ConvertContext): PathNode
       geometry: fillGeometry.d,
       fillRule: fillGeometry.windingRule === 'ODD' ? 'evenodd' : 'nonzero',
     }
-    if (base.stroke && base.strokeWidth) {
+    if (stroke) {
       node.pathStroke = {
-        align: base.strokeAlign ?? 'center',
-        thickness: base.strokeWidth,
+        align: stroke.align,
+        thickness: stroke.width,
         join: change.strokeJoin ? change.strokeJoin.toLowerCase() : undefined,
         cap: change.strokeCap === 'ROUND' ? 'round' : change.strokeCap === 'SQUARE' ? 'square' : 'butt',
-        fill: base.stroke,
+        fill: stroke.color,
       }
     }
-    // Top-level stroke props would double-draw on paths — pathStroke owns it
-    delete (node as Partial<MutableBase>).stroke
-    delete (node as Partial<MutableBase>).strokeWidth
-    delete (node as Partial<MutableBase>).strokeAlign
     return node
   }
 
-  if (strokeGeometry) {
+  if (strokeGeometry && stroke) {
     // Open path: Figma pre-computes the stroke outline; fill it with the
     // stroke paint for an exact visual match (caps, joins and dashes included).
     const node: PathNode = {
@@ -466,13 +484,9 @@ function convertVectorLike(change: FigNodeChange, ctx: ConvertContext): PathNode
       ...base,
       geometry: strokeGeometry.d,
       fillRule: strokeGeometry.windingRule === 'ODD' ? 'evenodd' : 'nonzero',
+      fill: stroke.color,
     }
-    node.fill = base.stroke
-    if (base.strokeOpacity != null) node.fillOpacity = base.strokeOpacity
-    delete (node as Partial<MutableBase>).stroke
-    delete (node as Partial<MutableBase>).strokeWidth
-    delete (node as Partial<MutableBase>).strokeAlign
-    delete (node as Partial<MutableBase>).strokeOpacity
+    if (stroke.opacity != null) node.fillOpacity = stroke.opacity
     return node
   }
 
@@ -509,6 +523,31 @@ function fontWeightFromStyle(style: string): string | undefined {
   return undefined
 }
 
+const TEXT_ALIGN_MAP: Record<string, TextAlign> = {
+  LEFT: 'left',
+  CENTER: 'center',
+  RIGHT: 'right',
+  JUSTIFIED: 'left',
+}
+
+const TEXT_ALIGN_VERTICAL_MAP: Record<string, TextAlignVertical> = {
+  TOP: 'top',
+  CENTER: 'middle',
+  BOTTOM: 'bottom',
+}
+
+const TEXT_CASE_MAP: Partial<Record<string, TextTransform>> = {
+  UPPER: 'uppercase',
+  LOWER: 'lowercase',
+  TITLE: 'capitalize',
+}
+
+const TEXT_WIDTH_MODE_MAP: Record<string, TextWidthMode> = {
+  WIDTH_AND_HEIGHT: 'auto',
+  HEIGHT: 'fixed',
+  NONE: 'fixed-height',
+}
+
 function convertText(change: FigNodeChange, ctx: ConvertContext): TextNode {
   const base = buildBase(change, ctx)
   const node: TextNode = {
@@ -539,30 +578,18 @@ function convertText(change: FigNodeChange, ctx: ConvertContext): TextNode {
         : change.letterSpacing.value
   }
 
-  const alignMap: Record<string, TextAlign> = { LEFT: 'left', CENTER: 'center', RIGHT: 'right', JUSTIFIED: 'left' }
   if (change.textAlignHorizontal && change.textAlignHorizontal !== 'LEFT') {
-    node.textAlign = alignMap[change.textAlignHorizontal] ?? 'left'
+    node.textAlign = TEXT_ALIGN_MAP[change.textAlignHorizontal] ?? 'left'
   }
-  const verticalMap: Record<string, TextAlignVertical> = { TOP: 'top', CENTER: 'middle', BOTTOM: 'bottom' }
   if (change.textAlignVertical && change.textAlignVertical !== 'TOP') {
-    node.textAlignVertical = verticalMap[change.textAlignVertical] ?? 'top'
+    node.textAlignVertical = TEXT_ALIGN_VERTICAL_MAP[change.textAlignVertical] ?? 'top'
   }
-  const caseMap: Partial<Record<string, TextTransform>> = {
-    UPPER: 'uppercase',
-    LOWER: 'lowercase',
-    TITLE: 'capitalize',
-  }
-  const transform = change.textCase ? caseMap[change.textCase] : undefined
+  const transform = change.textCase ? TEXT_CASE_MAP[change.textCase] : undefined
   if (transform) node.textTransform = transform
   if (change.textDecoration === 'UNDERLINE') node.underline = true
   if (change.textDecoration === 'STRIKETHROUGH') node.strikethrough = true
 
-  const widthModeMap: Record<string, TextWidthMode> = {
-    WIDTH_AND_HEIGHT: 'auto',
-    HEIGHT: 'fixed',
-    NONE: 'fixed-height',
-  }
-  node.textWidthMode = widthModeMap[change.textAutoResize ?? 'NONE'] ?? 'fixed-height'
+  node.textWidthMode = TEXT_WIDTH_MODE_MAP[change.textAutoResize ?? 'NONE'] ?? 'fixed-height'
 
   if ((change.textData?.characterStyleIDs?.length ?? 0) > 0) {
     ctx.warnings.push(
@@ -784,16 +811,6 @@ function convertFrame(node: FigTreeNode, change: FigNodeChange, ctx: ConvertCont
   return frame
 }
 
-function definedProps(change: FigNodeChange): Partial<FigNodeChange> {
-  const result: Partial<FigNodeChange> = {}
-  for (const [key, value] of Object.entries(change)) {
-    if (value !== undefined) {
-      ;(result as Record<string, unknown>)[key] = value
-    }
-  }
-  return result
-}
-
 const OVERRIDE_EXCLUDED_KEYS = new Set(['guid', 'guidPath', 'parentIndex', 'type', 'phase'])
 
 function mergeChange(original: FigNodeChange, override: FigNodeChange): FigNodeChange {
@@ -832,11 +849,9 @@ function convertInstance(change: FigNodeChange, ctx: ConvertContext): SceneNode 
     return { type: 'frame', ...base, children: [], clip: true }
   }
 
-  // Wrapper frame: symbol defaults + instance-level overrides (size, transform, fills…)
-  const mergedChange = mergeChange(
-    { ...symbol.change, type: 'FRAME' },
-    { ...definedProps(change), type: 'FRAME' },
-  )
+  // Wrapper frame: symbol defaults + instance-level overrides (size, transform,
+  // fills…); mergeChange skips undefined fields and keeps type pinned to FRAME
+  const mergedChange = mergeChange({ ...symbol.change, type: 'FRAME' }, change)
 
   const instanceCtx: ConvertContext = {
     ...ctx,
@@ -866,11 +881,9 @@ function convertNode(node: FigTreeNode, ctx: ConvertContext): SceneNode | null {
     case 'SECTION':
     case 'GROUP':
       return convertFrame(node, change, ctx)
-    case 'SYMBOL': {
+    case 'SYMBOL':
       // A component master copied directly — paste as a regular frame
-      const frame = convertFrame(node, { ...change, type: 'FRAME' }, ctx)
-      return frame
-    }
+      return convertFrame(node, { ...change, type: 'FRAME' }, ctx)
     case 'INSTANCE':
       return convertInstance(change, ctx)
     case 'RECTANGLE':

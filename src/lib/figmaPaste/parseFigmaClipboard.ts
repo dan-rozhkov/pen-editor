@@ -14,20 +14,11 @@
 import { compileSchema, decodeBinarySchema } from 'kiwi-schema'
 import { inflateSync } from 'fflate'
 import { decompress as zstdDecompress } from 'fzstd'
+import { DATA_END, DATA_START, META_END, META_START } from './detect'
 import type { FigClipboardMeta, FigMessage, FigPasteData } from './figTypes'
-
-const META_START = '<!--(figmeta)'
-const META_END = '(/figmeta)-->'
-const DATA_START = '<!--(figma)'
-const DATA_END = '(/figma)-->'
 
 const FIG_KIWI_PRELUDE = 'fig-kiwi'
 const FIG_JAM_PRELUDE = 'fig-jam.'
-
-/** Quick check: does this `text/html` clipboard payload come from Figma? */
-export function isFigmaClipboardHtml(html: string): boolean {
-  return html.includes(DATA_START) && html.includes(DATA_END)
-}
 
 function extractBase64Section(html: string, start: string, end: string): string | null {
   const startIndex = html.indexOf(start)

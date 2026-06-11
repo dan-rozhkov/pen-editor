@@ -39,19 +39,19 @@ function onCanvas(change: FigNodeChange, position = '!'): FigNodeChange {
 }
 
 describe('isFigmaClipboardHtml', () => {
-  it('detects Figma clipboard markers', () => {
+  it('detects Figma clipboard markers', async () => {
     const html = clipboardWith([])
     expect(isFigmaClipboardHtml(html)).toBe(true)
   })
 
-  it('rejects regular html', () => {
+  it('rejects regular html', async () => {
     expect(isFigmaClipboardHtml('<div>hello</div>')).toBe(false)
-    expect(convertFigmaClipboardHtml('<div>hello</div>')).toBeNull()
+    expect(await convertFigmaClipboardHtml('<div>hello</div>')).toBeNull()
   })
 })
 
 describe('convertFigmaClipboardHtml', () => {
-  it('converts a frame with a rectangle child 1:1', () => {
+  it('converts a frame with a rectangle child 1:1', async () => {
     const html = clipboardWith([
       onCanvas({
         guid: guid(2),
@@ -76,7 +76,7 @@ describe('convertFigmaClipboardHtml', () => {
       },
     ])
 
-    const result = convertFigmaClipboardHtml(html)!
+    const result = (await convertFigmaClipboardHtml(html))!
     expect(result.nodes).toHaveLength(1)
     const frame = result.nodes[0] as FrameNode
     expect(frame.type).toBe('frame')
@@ -97,7 +97,7 @@ describe('convertFigmaClipboardHtml', () => {
     expect(rect.strokeAlign).toBe('inside')
   })
 
-  it('keeps z-order from fractional position strings (bottom first)', () => {
+  it('keeps z-order from fractional position strings (bottom first)', async () => {
     const html = clipboardWith([
       onCanvas({ guid: guid(2), type: 'FRAME', name: 'Root', size: { x: 10, y: 10 }, transform: identityTransform() }),
       // intentionally listed out of order
@@ -105,11 +105,11 @@ describe('convertFigmaClipboardHtml', () => {
       { guid: guid(3), type: 'RECTANGLE', name: 'Bottom', parentIndex: { guid: guid(2), position: '!' }, size: { x: 1, y: 1 }, transform: identityTransform() },
     ])
 
-    const frame = convertFigmaClipboardHtml(html)!.nodes[0] as FrameNode
+    const frame = (await convertFigmaClipboardHtml(html))!.nodes[0] as FrameNode
     expect(frame.children.map((child) => child.name)).toEqual(['Bottom', 'Top'])
   })
 
-  it('maps text styles', () => {
+  it('maps text styles', async () => {
     const html = clipboardWith([
       onCanvas({
         guid: guid(2),
@@ -131,7 +131,7 @@ describe('convertFigmaClipboardHtml', () => {
       }),
     ])
 
-    const text = convertFigmaClipboardHtml(html)!.nodes[0] as TextNode
+    const text = (await convertFigmaClipboardHtml(html))!.nodes[0] as TextNode
     expect(text.type).toBe('text')
     expect(text.text).toBe('Hello Figma')
     expect(text.fontSize).toBe(20)
@@ -148,7 +148,7 @@ describe('convertFigmaClipboardHtml', () => {
     expect(text.fill).toBe('#000000')
   })
 
-  it('converts vectors through fill geometry blobs', () => {
+  it('converts vectors through fill geometry blobs', async () => {
     const blob = encodePathCommandsBlob(['M', 0, 0, 'L', 24, 0, 'L', 24, 24, 'Z'])
     const html = clipboardWith(
       [
@@ -167,7 +167,7 @@ describe('convertFigmaClipboardHtml', () => {
       [blob],
     )
 
-    const path = convertFigmaClipboardHtml(html)!.nodes[0] as PathNode
+    const path = (await convertFigmaClipboardHtml(html))!.nodes[0] as PathNode
     expect(path.type).toBe('path')
     expect(path.geometry).toBe('M 0 0 L 24 0 L 24 24 Z')
     expect(path.fillRule).toBe('evenodd')
@@ -176,7 +176,7 @@ describe('convertFigmaClipboardHtml', () => {
     expect(path.stroke).toBeUndefined()
   })
 
-  it('falls back to stroke geometry for unfilled open paths', () => {
+  it('falls back to stroke geometry for unfilled open paths', async () => {
     const blob = encodePathCommandsBlob(['M', 0, 0, 'L', 10, 10, 'L', 10, 9, 'Z'])
     const html = clipboardWith(
       [
@@ -193,13 +193,13 @@ describe('convertFigmaClipboardHtml', () => {
       [blob],
     )
 
-    const path = convertFigmaClipboardHtml(html)!.nodes[0] as PathNode
+    const path = (await convertFigmaClipboardHtml(html))!.nodes[0] as PathNode
     expect(path.geometry).toContain('M 0 0')
     expect(path.fill).toBe('#ff00ff')
     expect(path.pathStroke).toBeUndefined()
   })
 
-  it('embeds image fills from clipboard blobs as data URLs', () => {
+  it('embeds image fills from clipboard blobs as data URLs', async () => {
     const html = clipboardWith(
       [
         onCanvas({
@@ -222,13 +222,13 @@ describe('convertFigmaClipboardHtml', () => {
       [PNG_BYTES],
     )
 
-    const rect = convertFigmaClipboardHtml(html)!.nodes[0]
+    const rect = (await convertFigmaClipboardHtml(html))!.nodes[0]
     expect(rect.imageFill).toBeDefined()
     expect(rect.imageFill!.mode).toBe('fill')
     expect(rect.imageFill!.url.startsWith('data:image/png;base64,')).toBe(true)
   })
 
-  it('warns when image bytes are not embedded', () => {
+  it('warns when image bytes are not embedded', async () => {
     const html = clipboardWith([
       onCanvas({
         guid: guid(2),
@@ -247,13 +247,13 @@ describe('convertFigmaClipboardHtml', () => {
       }),
     ])
 
-    const result = convertFigmaClipboardHtml(html)!
+    const result = (await convertFigmaClipboardHtml(html))!
     expect(result.nodes[0].imageFill).toBeUndefined()
     expect(result.nodes[0].fill).toBe('#cccccc')
     expect(result.warnings.some((warning) => warning.includes('remote.png'))).toBe(true)
   })
 
-  it('converts linear gradients with handle positions', () => {
+  it('converts linear gradients with handle positions', async () => {
     const html = clipboardWith([
       onCanvas({
         guid: guid(2),
@@ -275,7 +275,7 @@ describe('convertFigmaClipboardHtml', () => {
       }),
     ])
 
-    const rect = convertFigmaClipboardHtml(html)!.nodes[0]
+    const rect = (await convertFigmaClipboardHtml(html))!.nodes[0]
     const gradient = rect.gradientFill!
     expect(gradient.type).toBe('linear')
     expect(gradient.startX).toBeCloseTo(0)
@@ -287,7 +287,7 @@ describe('convertFigmaClipboardHtml', () => {
     expect(gradient.stops[1].opacity).toBeCloseTo(0.5)
   })
 
-  it('decomposes rotation from the transform matrix', () => {
+  it('decomposes rotation from the transform matrix', async () => {
     const angle = Math.PI / 2 // 90° clockwise on screen
     const html = clipboardWith([
       onCanvas({
@@ -305,13 +305,13 @@ describe('convertFigmaClipboardHtml', () => {
       }),
     ])
 
-    const rect = convertFigmaClipboardHtml(html)!.nodes[0]
+    const rect = (await convertFigmaClipboardHtml(html))!.nodes[0]
     expect(rect.x).toBeCloseTo(40)
     expect(rect.y).toBeCloseTo(50)
     expect(rect.rotation).toBeCloseTo(90)
   })
 
-  it('maps resize-to-fit frames to groups', () => {
+  it('maps resize-to-fit frames to groups', async () => {
     const html = clipboardWith([
       onCanvas({
         guid: guid(2),
@@ -330,13 +330,13 @@ describe('convertFigmaClipboardHtml', () => {
       },
     ])
 
-    const group = convertFigmaClipboardHtml(html)!.nodes[0] as GroupNode
+    const group = (await convertFigmaClipboardHtml(html))!.nodes[0] as GroupNode
     expect(group.type).toBe('group')
     expect(group.children).toHaveLength(1)
     expect(group.children[0]).toMatchObject({ x: 2, y: 3 })
   })
 
-  it('maps auto-layout stacks to flexbox layout with child sizing', () => {
+  it('maps auto-layout stacks to flexbox layout with child sizing', async () => {
     const html = clipboardWith([
       onCanvas({
         guid: guid(2),
@@ -385,7 +385,7 @@ describe('convertFigmaClipboardHtml', () => {
       },
     ])
 
-    const frame = convertFigmaClipboardHtml(html)!.nodes[0] as FrameNode
+    const frame = (await convertFigmaClipboardHtml(html))!.nodes[0] as FrameNode
     expect(frame.layout).toEqual({
       autoLayout: true,
       flexDirection: 'column',
@@ -407,7 +407,7 @@ describe('convertFigmaClipboardHtml', () => {
     expect(floating.sizing).toBeUndefined()
   })
 
-  it('reproduces Figma stack coordinates through the layout engine', () => {
+  it('reproduces Figma stack coordinates through the layout engine', async () => {
     // VERTICAL stack 90x76, padding t10/r20/b10/l20, gap 8, two fixed 50x20
     // children. Figma computes their positions as (20,10) and (20,38) —
     // the editor's layout engine must arrive at the same coordinates.
@@ -443,7 +443,7 @@ describe('convertFigmaClipboardHtml', () => {
       },
     ])
 
-    const frame = convertFigmaClipboardHtml(html)!.nodes[0] as FrameNode
+    const frame = (await convertFigmaClipboardHtml(html))!.nodes[0] as FrameNode
     const results = calculateFrameLayout(frame)
     const byId = new Map(results.map((r) => [r.id, r]))
     const a = byId.get(frame.children[0].id)!
@@ -452,7 +452,7 @@ describe('convertFigmaClipboardHtml', () => {
     expect({ x: b.x, y: b.y }).toEqual({ x: 20, y: 38 })
   })
 
-  it('zeroes the gap in space-between stacks', () => {
+  it('zeroes the gap in space-between stacks', async () => {
     const html = clipboardWith([
       onCanvas({
         guid: guid(2),
@@ -465,12 +465,12 @@ describe('convertFigmaClipboardHtml', () => {
       }),
     ])
 
-    const frame = convertFigmaClipboardHtml(html)!.nodes[0] as FrameNode
+    const frame = (await convertFigmaClipboardHtml(html))!.nodes[0] as FrameNode
     expect(frame.layout!.justifyContent).toBe('space-between')
     expect(frame.layout!.gap).toBe(0)
   })
 
-  it('does not enable auto-layout for plain frames', () => {
+  it('does not enable auto-layout for plain frames', async () => {
     const html = clipboardWith([
       onCanvas({
         guid: guid(2),
@@ -480,12 +480,12 @@ describe('convertFigmaClipboardHtml', () => {
       }),
     ])
 
-    const frame = convertFigmaClipboardHtml(html)!.nodes[0] as FrameNode
+    const frame = (await convertFigmaClipboardHtml(html))!.nodes[0] as FrameNode
     expect(frame.layout).toBeUndefined()
     expect(frame.sizing).toBeUndefined()
   })
 
-  it('maps drop shadows to shadow effects', () => {
+  it('maps drop shadows to shadow effects', async () => {
     const html = clipboardWith([
       onCanvas({
         guid: guid(2),
@@ -505,7 +505,7 @@ describe('convertFigmaClipboardHtml', () => {
       }),
     ])
 
-    const rect = convertFigmaClipboardHtml(html)!.nodes[0]
+    const rect = (await convertFigmaClipboardHtml(html))!.nodes[0]
     expect(rect.effect).toEqual({
       type: 'shadow',
       shadowType: 'outer',
@@ -516,7 +516,7 @@ describe('convertFigmaClipboardHtml', () => {
     })
   })
 
-  it('expands component instances using the embedded master and overrides', () => {
+  it('expands component instances using the embedded master and overrides', async () => {
     const internalCanvas: FigNodeChange = {
       guid: guid(50),
       type: 'CANVAS',
@@ -559,9 +559,9 @@ describe('convertFigmaClipboardHtml', () => {
       ],
     })
 
-    const result = convertFigmaClipboardHtml(
+    const result = (await convertFigmaClipboardHtml(
       clipboardWith([instance], [], [internalCanvas, symbol, symbolLabel]),
-    )!
+    ))!
 
     // The internal canvas (symbol master) must not be pasted as a root
     expect(result.nodes).toHaveLength(1)
@@ -576,7 +576,7 @@ describe('convertFigmaClipboardHtml', () => {
     expect(label.text).toBe('Click me')
   })
 
-  it('applies the avatar-mask workaround (image fill onto the mask shape)', () => {
+  it('applies the avatar-mask workaround (image fill onto the mask shape)', async () => {
     const html = clipboardWith(
       [
         onCanvas({
@@ -618,7 +618,7 @@ describe('convertFigmaClipboardHtml', () => {
       [PNG_BYTES],
     )
 
-    const group = convertFigmaClipboardHtml(html)!.nodes[0] as GroupNode
+    const group = (await convertFigmaClipboardHtml(html))!.nodes[0] as GroupNode
     expect(group.children).toHaveLength(1)
     const shape = group.children[0]
     expect(shape.type).toBe('ellipse')
@@ -628,12 +628,12 @@ describe('convertFigmaClipboardHtml', () => {
 })
 
 describe('decodePathCommandsBlob', () => {
-  it('round-trips an encoded command stream', () => {
+  it('round-trips an encoded command stream', async () => {
     const blob = encodePathCommandsBlob(['M', 1.5, 2, 'Q', 3, 4, 5, 6, 'C', 1, 2, 3, 4, 5, 6, 'Z'])
     expect(decodePathCommandsBlob(blob)).toBe('M 1.5 2 Q 3 4 5 6 C 1 2 3 4 5 6 Z')
   })
 
-  it('stops at unknown command bytes', () => {
+  it('stops at unknown command bytes', async () => {
     const blob = new Uint8Array([1, 0, 0, 0, 0, 0, 0, 0, 0, 99, 1, 2])
     expect(decodePathCommandsBlob(blob)).toBe('M 0 0')
   })

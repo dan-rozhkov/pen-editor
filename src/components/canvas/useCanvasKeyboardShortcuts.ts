@@ -17,6 +17,7 @@ import { createRefFromComponent } from "@/utils/componentUtils";
 import { resolveRefToTree, findNodeByPath } from "@/utils/instanceRuntime";
 import { parseSvgToNodes } from "@/utils/svgUtils";
 import { convertFigmaClipboardHtml, isFigmaClipboardHtml } from "@/lib/figmaPaste";
+import { applyFigmaPasteNodes } from "./figmaPasteImport";
 import {
   applyImageImportPlans,
   createImageImportPlan,
@@ -686,34 +687,16 @@ export function useCanvasKeyboardShortcuts({
       if (isFigmaClipboardHtml(htmlText)) {
         e.preventDefault();
         try {
-          const result = convertFigmaClipboardHtml(htmlText);
+          const result = await convertFigmaClipboardHtml(htmlText);
           if (result && result.nodes.length > 0) {
-            const viewportCenter = getViewportCenter(dimensions);
-            let minX = Infinity;
-            let minY = Infinity;
-            let maxX = -Infinity;
-            let maxY = -Infinity;
-            for (const node of result.nodes) {
-              minX = Math.min(minX, node.x);
-              minY = Math.min(minY, node.y);
-              maxX = Math.max(maxX, node.x + node.width);
-              maxY = Math.max(maxY, node.y + node.height);
-            }
-            const offsetX = viewportCenter.x - (minX + maxX) / 2;
-            const offsetY = viewportCenter.y - (minY + maxY) / 2;
-
-            saveHistory(createSnapshot(useSceneStore.getState()));
-            startBatch();
-            try {
-              for (const node of result.nodes) {
-                node.x += offsetX;
-                node.y += offsetY;
-                addNode(node);
-              }
-            } finally {
-              endBatch();
-            }
-            setImportedSelection(result.nodes.map((node) => node.id));
+            applyFigmaPasteNodes({
+              nodes: result.nodes,
+              viewportCenter: getViewportCenter(dimensions),
+              addNode,
+              saveHistory,
+              startBatch,
+              endBatch,
+            });
             if (result.warnings.length > 0) {
               console.warn("[figma-paste] imported with warnings:", result.warnings);
             }

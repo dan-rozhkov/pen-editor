@@ -69,26 +69,3 @@ export function decodePathCommandsBlob(bytes: Uint8Array): string {
 
   return parts.join(' ')
 }
-
-const PATH_NUMBER_RE = /-?\d*\.?\d+(?:e[+-]?\d+)?/gi
-
-/** Compute the bounding box of an SVG path's anchor/control points (approximation). */
-export function pathDataBounds(d: string): { x: number; y: number; width: number; height: number } | null {
-  const numbers = d.match(PATH_NUMBER_RE)
-  if (!numbers || numbers.length < 2) return null
-  let minX = Infinity
-  let minY = Infinity
-  let maxX = -Infinity
-  let maxY = -Infinity
-  for (let i = 0; i + 1 < numbers.length; i += 2) {
-    const x = parseFloat(numbers[i])
-    const y = parseFloat(numbers[i + 1])
-    if (!Number.isFinite(x) || !Number.isFinite(y)) continue
-    if (x < minX) minX = x
-    if (y < minY) minY = y
-    if (x > maxX) maxX = x
-    if (y > maxY) maxY = y
-  }
-  if (!Number.isFinite(minX) || !Number.isFinite(minY)) return null
-  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
-}
