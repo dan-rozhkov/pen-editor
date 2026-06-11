@@ -106,6 +106,63 @@ function createRefContainer(
   }
 }
 
+/**
+ * Classify what kind of change happened between two RefNode states, to decide
+ * how the resolved subtree should be updated.
+ *
+ * - "structural": componentId/overrides changed (or forceRebuild) → the resolved
+ *   tree shape can differ (overrides can add/remove slot children), so the whole
+ *   subtree must be destroyed and recreated. `overrides` is compared by reference,
+ *   so a new object with equal contents still counts as structural (conservative).
+ * - "resize": only width/height changed → re-run layout + targeted in-place updates.
+ * - "cosmetic": only fill/stroke/binding/strokeWidth changed → in-place updates.
+ * - "none": nothing relevant changed.
+ *
+ * If both resize and cosmetic apply, "resize" is returned — the in-place path
+ * handles both anyway (it re-resolves the whole subtree and reconciles every node).
+ * `forceRebuild` wins over everything.
+ */
+export function classifyRefChange(
+  node: RefNode,
+  prev: RefNode,
+  forceRebuild = false,
+): "structural" | "resize" | "cosmetic" | "none" {
+  if (
+    forceRebuild ||
+    node.componentId !== prev.componentId ||
+    node.overrides !== prev.overrides
+  ) {
+    return "structural";
+  }
+
+  const sizeChanged = node.width !== prev.width || node.height !== prev.height;
+  if (sizeChanged) return "resize";
+
+  const cosmeticChanged =
+    node.fill !== prev.fill ||
+    node.fillBinding !== prev.fillBinding ||
+    node.stroke !== prev.stroke ||
+    node.strokeBinding !== prev.strokeBinding ||
+    node.strokeWidth !== prev.strokeWidth;
+  if (cosmeticChanged) return "cosmetic";
+
+  return "none";
+}
+
+function rebuildRefContainer(
+  container: Container,
+  node: RefNode,
+  nodesById: Record<string, FlatSceneNode>,
+  childrenById: Record<string, string[]>,
+): void {
+  container.removeChildren().forEach((child) => child.destroy());
+  const next = createRefContainer(node, nodesById, childrenById);
+  while (next.children.length > 0) {
+    container.addChild(next.children[0]);
+  }
+  next.destroy();
+}
+
 function updateRefContainer(
   container: Container,
   node: RefNode,
@@ -114,25 +171,29 @@ function updateRefContainer(
   childrenById: Record<string, string[]>,
   forceRebuild = false,
 ): void {
-  if (
-    forceRebuild ||
-    node.componentId !== prev.componentId ||
-    node.overrides !== prev.overrides ||
-    node.width !== prev.width ||
-    node.height !== prev.height ||
-    node.fill !== prev.fill ||
-    node.fillBinding !== prev.fillBinding ||
-    node.stroke !== prev.stroke ||
-    node.strokeBinding !== prev.strokeBinding ||
-    node.strokeWidth !== prev.strokeWidth
-  ) {
-    container.removeChildren().forEach((child) => child.destroy());
-    const next = createRefContainer(node, nodesById, childrenById);
-    while (next.children.length > 0) {
-      container.addChild(next.children[0]);
-    }
-    next.destroy();
+  const change = classifyRefChange(node, prev, forceRebuild);
+  if (change === "none") return;
+  if (change === "structural") {
+    rebuildRefContainer(container, node, nodesById, childrenById);
+    return;
   }
+  // "resize" / "cosmetic": in-place update (Steps 2-3).
+  // Step 1 stages this as a rebuild fallthrough (no behavior change); Step 2
+  // replaces the body with a re-resolve + reconcile-by-label diff.
+  updateRefContainerInPlace(container, node, nodesById, childrenById);
+}
+
+/**
+ * In-place update of a resolved ref subtree for size/cosmetic changes.
+ * (Step 1 stub: falls through to a full rebuild — replaced in Step 2.)
+ */
+function updateRefContainerInPlace(
+  container: Container,
+  node: RefNode,
+  nodesById: Record<string, FlatSceneNode>,
+  childrenById: Record<string, string[]>,
+): void {
+  rebuildRefContainer(container, node, nodesById, childrenById);
 }
 
 /**
