@@ -35,6 +35,7 @@ import { setupPixiViewport } from "./pixiViewport";
 import { setupPixiInteraction } from "./interaction";
 import { createSelectionOverlay } from "./selectionOverlay";
 import { createOverlayRenderer } from "./OverlayRenderer";
+import { setupRenderScheduler } from "./renderScheduler";
 
 export function PixiCanvas() {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -280,6 +281,10 @@ export function PixiCanvas() {
           sceneRoot,
         );
 
+        // Render on demand: detach Pixi's per-frame render and drive it from
+        // store/overlay/font signals + a trailing window + a safety tick.
+        const renderSchedulerCleanup = setupRenderScheduler(app);
+
         setPixiRefs({
           app,
           viewport,
@@ -290,6 +295,8 @@ export function PixiCanvas() {
 
         // Store cleanup functions
         (app as Application & { _pixiCleanup?: () => void })._pixiCleanup = () => {
+          // Scheduler cleanup must run while the app/ticker still exist.
+          renderSchedulerCleanup();
           viewportCleanup();
           syncCleanup();
           selectionCleanup();

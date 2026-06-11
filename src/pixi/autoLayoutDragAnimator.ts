@@ -1,4 +1,5 @@
 import { getNodeContainer, getSceneRoot } from "./pixiSync";
+import { requestCanvasRender } from "./renderScheduler";
 import type { SiblingPosition } from "@/utils/dragUtils";
 import type { Container } from "pixi.js";
 
@@ -121,6 +122,9 @@ export function createAutoLayoutDragAnimator(): AutoLayoutDragAnimator {
   function rafLoop(): void {
     if (destroyed) return;
     const allConverged = lerpSiblings();
+    // The animator mutates containers directly, bypassing every store, so it
+    // must explicitly signal the render scheduler each frame.
+    requestCanvasRender();
 
     if (allConverged) {
       convergedFrames++;
@@ -223,6 +227,8 @@ export function createAutoLayoutDragAnimator(): AutoLayoutDragAnimator {
 
         // Also continue lerping siblings during drop
         lerpSiblings();
+        // Direct container mutation — signal the render scheduler each frame.
+        requestCanvasRender();
 
         if (t < 1) {
           rafId = requestAnimationFrame(dropLoop);
