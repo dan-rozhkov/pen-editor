@@ -46,11 +46,34 @@ const CULL_MARGIN = 400;
 const THEME_SENTINEL = Object.freeze({ type: "none" }) as unknown as FlatSceneNode;
 
 /**
+ * A node is "variable-dependent" if its rendering can change when a design
+ * variable / theme changes:
+ * - `ref`: the resolved component subtree may contain bindings anywhere;
+ * - `embed`: variables are injected as a CSS block into the HTML;
+ * - any node with a `fillBinding` or `strokeBinding`.
+ *
+ * NOTE: if a new `*Binding` field is added to scene nodes (see
+ * `src/types/scene.ts`), it MUST be added here, or bound nodes will stop
+ * live-updating on variable changes.
+ */
+export function isVariableDependent(node: FlatSceneNode): boolean {
+  return (
+    node.type === "ref" || // resolved subtree may contain bindings anywhere
+    node.type === "embed" || // variables are injected as CSS into the HTML
+    node.fillBinding != null ||
+    node.strokeBinding != null
+  );
+}
+
+/**
  * Core sync engine: subscribes to Zustand scene store and incrementally updates PixiJS containers.
  * Returns a cleanup function.
  */
 export function createPixiSync(sceneRoot: Container): () => void {
   const registry = new Map<string, RegistryEntry>();
+  // Nodes whose rendering can change when a design variable / theme changes.
+  // Maintained in lockstep with the registry so theme updates only touch them.
+  const variableDependentIds = new Set<string>();
   let fontsRebuildRafId: number | null = null;
   let disposed = false;
 
@@ -372,6 +395,15 @@ export function createPixiSync(sceneRoot: Container): () => void {
     // Rebuild connector index
     buildConnectorIndex(state.nodesById);
 
+    // Rebuild variable-dependency set
+    variableDependentIds.clear();
+    for (const id of Object.keys(state.nodesById)) {
+      const node = state.nodesById[id];
+      if (node && isVariableDependent(node)) {
+        variableDependentIds.add(id);
+      }
+    }
+
     // Phase 6: Rebuild text/ref node tracking
     resolutionMgr.rebuildTracking();
 
@@ -396,7 +428,9 @@ export function createPixiSync(sceneRoot: Container): () => void {
    */
   function incrementalThemeUpdate(): void {
     const state = useSceneStore.getState();
-    for (const [id, entry] of registry) {
+    for (const id of variableDependentIds) {
+      const entry = registry.get(id);
+      if (!entry) continue;
       withAncestorThemes(id, state.parentById, state.nodesById, () => {
         updateNodeContainer(
           entry.container,
@@ -479,6 +513,9 @@ export function createPixiSync(sceneRoot: Container): () => void {
           if (node.type === "connector") {
             addToConnectorIndex(id, node as ConnectorNode);
           }
+          if (isVariableDependent(node)) {
+            variableDependentIds.add(id);
+          }
           resolutionMgr.trackNodeAdded(id, node);
         }
       }
@@ -499,6 +536,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
           if (prevNode.type === "connector") {
             removeFromConnectorIndex(id, prevNode as ConnectorNode);
           }
+          variableDependentIds.delete(id);
           resolutionMgr.trackNodeRemoved(id);
         }
         nodeTreeMgr.removeNode(id, prev.childrenById, state.nodesById);
@@ -530,6 +568,13 @@ export function createPixiSync(sceneRoot: Container): () => void {
             );
           });
           entry.node = node;
+
+          // Re-evaluate variable-dependency since edits can add/remove bindings.
+          if (isVariableDependent(node)) {
+            variableDependentIds.add(id);
+          } else {
+            variableDependentIds.delete(id);
+          }
 
           // Phase 3: Update componentId index if ref's componentId changed
           if (node.type === "ref" && prevNode.type === "ref") {
@@ -678,8 +723,33 @@ export function createPixiSync(sceneRoot: Container): () => void {
     });
   };
 
-  const unsubVariables = useVariableStore.subscribe(() => {
+  // RAF-coalesce variable/theme updates: a burst of variable-store mutations
+  // (e.g. dragging a color slider) collapses into one theme update per frame.
+  // Registered after the scene-update RAF so, when both land in the same frame,
+  // the theme flush runs after the scene flush (browsers run RAF callbacks in
+  // registration order).
+  let themeUpdateFrameId: number | null = null;
+
+  const flushThemeUpdate = (): void => {
+    themeUpdateFrameId = null;
+    if (disposed) return;
     incrementalThemeUpdate();
+  };
+
+  const scheduleThemeUpdate = (): void => {
+    if (disposed || themeUpdateFrameId != null) return;
+    themeUpdateFrameId = requestAnimationFrame(flushThemeUpdate);
+  };
+
+  const clearPendingThemeUpdate = (): void => {
+    if (themeUpdateFrameId != null) {
+      cancelAnimationFrame(themeUpdateFrameId);
+      themeUpdateFrameId = null;
+    }
+  };
+
+  const unsubVariables = useVariableStore.subscribe(() => {
+    scheduleThemeUpdate();
   });
 
   const unsubSelection = useSelectionStore.subscribe(() => {
@@ -713,12 +783,14 @@ export function createPixiSync(sceneRoot: Container): () => void {
     unsubViewport();
     resolutionMgr.cleanup();
     clearPendingSceneUpdate();
+    clearPendingThemeUpdate();
     removeFontsListener?.();
     // Clean up all containers
     for (const entry of registry.values()) {
       entry.container.destroy({ children: true });
     }
     registry.clear();
+    variableDependentIds.clear();
     componentIndex.clear();
     connectorIndex.clear();
     sceneRoot.removeChildren();
