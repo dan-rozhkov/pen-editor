@@ -98,7 +98,7 @@ export function createNodeTreeManager(
       const childNode = nodesById[childId];
       if (!childNode) continue;
 
-      const childContainer = (childrenHost as Container).children[i] as Container | undefined;
+      const childContainer = childrenHost.children[i] as Container | undefined;
       if (childContainer) {
         registry.set(childId, { container: childContainer, node: childNode });
         // Recurse for nested containers
@@ -140,7 +140,7 @@ export function createNodeTreeManager(
           parentEntry.container.getChildByLabel("frame-children") ??
           parentEntry.container.getChildByLabel("group-children");
         if (childrenHost) {
-          (childrenHost as Container).addChild(createdContainer);
+          childrenHost.addChild(createdContainer);
         }
       }
     } else {
@@ -153,8 +153,8 @@ export function createNodeTreeManager(
 
     if (node.type === "text") {
       const appliedTextResolution = getAppliedTextResolution();
-      const textObj = createdContainer.getChildByLabel("text-content") as Text | undefined;
-      if (textObj && textObj.resolution !== appliedTextResolution) {
+      const textObj = createdContainer.getChildByLabel("text-content");
+      if (textObj instanceof Text && textObj.resolution !== appliedTextResolution) {
         textObj.resolution = appliedTextResolution;
       }
     }
@@ -207,7 +207,7 @@ export function createNodeTreeManager(
           if (childrenHost) {
             reconcileChildList(
               state.childrenById[id],
-              childrenHost as Container,
+              childrenHost,
             );
           }
         }
@@ -244,7 +244,12 @@ export function createNodeTreeManager(
     // This prevents ghost copies after move/reparent operations.
     let registryContainers: Set<Container> | null = null;
     for (let i = parent.children.length - 1; i >= 0; i--) {
-      const child = parent.children[i] as Container;
+      const child = parent.children[i];
+      // SAFETY: children hosts (frame-children / group-children) and sceneRoot
+      // only ever receive createNodeContainer outputs, which are Containers, so
+      // `child` is always a Container. The instanceof guard makes that explicit
+      // and skips any unexpected non-Container rather than operating on it blindly.
+      if (!(child instanceof Container)) continue;
       if (!expectedContainers.has(child)) {
         parent.removeChild(child);
         // Destroy true orphans; keep containers still referenced from the
