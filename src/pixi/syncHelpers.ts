@@ -1,5 +1,7 @@
 import { Container } from "pixi.js";
-import type { FlatSceneNode, FlatFrameNode, FrameNode, SceneNode, RefNode } from "@/types/scene";
+import type { FlatSceneNode, FlatFrameNode, FrameNode, SceneNode } from "@/types/scene";
+import { isFlatFrameNode, isRefNode } from "@/types/scene";
+import type { ThemeName } from "@/types/variable";
 import type { SceneState } from "@/store/sceneStore";
 import {
   pushRenderTheme,
@@ -48,7 +50,7 @@ function collectAffectedComponentIds(
     let current: string | null = startId;
     while (current != null) {
       const node = nodesById[current];
-      if (node?.type === "frame" && (node as FlatFrameNode).reusable) {
+      if (node && isFlatFrameNode(node) && node.reusable) {
         affected.add(current);
       }
       current = parentById[current] ?? null;
@@ -102,8 +104,8 @@ export class ComponentIdIndex {
     this.index.clear();
     for (const id of Object.keys(nodesById)) {
       const node = nodesById[id];
-      if (node.type === "ref") {
-        this.add(id, (node as RefNode).componentId);
+      if (isRefNode(node)) {
+        this.add(id, node.componentId);
       }
     }
   }
@@ -139,18 +141,18 @@ function pushAncestorThemes(
   nodesById: Record<string, FlatSceneNode>,
 ): number {
   // Collect ancestor theme overrides from root to parent
-  const overrides: string[] = [];
+  const overrides: ThemeName[] = [];
   let cur = parentById[nodeId] ?? null;
   while (cur != null) {
     const n = nodesById[cur];
-    if (n?.type === "frame" && (n as FlatFrameNode).themeOverride) {
-      overrides.push((n as FlatFrameNode).themeOverride!);
+    if (n && isFlatFrameNode(n) && n.themeOverride) {
+      overrides.push(n.themeOverride);
     }
     cur = parentById[cur] ?? null;
   }
   // Push from outermost ancestor to innermost (so innermost wins)
   for (let i = overrides.length - 1; i >= 0; i--) {
-    pushRenderTheme(overrides[i] as "light" | "dark");
+    pushRenderTheme(overrides[i]);
   }
   return overrides.length;
 }
@@ -187,13 +189,13 @@ export function flatToTreeFrame(
   layoutOverrides?: Map<string, NodeLayoutOverride>,
 ): FrameNode | null {
   const node = nodesById[frameId];
-  if (!node || node.type !== "frame") return null;
+  if (!node || !isFlatFrameNode(node)) return null;
 
   const frameOverride = layoutOverrides?.get(frameId);
-  const flatFrame = {
-    ...(node as FlatFrameNode),
+  const flatFrame: FlatFrameNode = {
+    ...node,
     ...(frameOverride ?? {}),
-  } as FlatFrameNode;
+  };
   const childIds = childrenById[frameId] ?? [];
   const children: SceneNode[] = [];
 
