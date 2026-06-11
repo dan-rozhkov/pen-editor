@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { convertFigmaClipboardHtml, isFigmaClipboardHtml } from '..'
 import { calculateFrameLayout } from '@/utils/yogaLayout'
 import { decodePathCommandsBlob } from '../pathBlobs'
-import type { FigNodeChange } from '../figTypes'
+import type { FigNodeChange, FigTextData } from '../figTypes'
 import type { FrameNode, GroupNode, PathNode, TextNode } from '@/types/scene'
 import {
   buildFigmaClipboardHtml,
@@ -147,6 +147,83 @@ describe('convertFigmaClipboardHtml', () => {
     expect(text.underline).toBe(true)
     expect(text.textWidthMode).toBe('auto')
     expect(text.fill).toBe('#000000')
+  })
+
+  /** A TEXT node-change clipboard varying only in text data and base font. */
+  function textClipboard(textData: FigTextData, baseFamily = 'Inter'): string {
+    return clipboardWith([
+      onCanvas({
+        guid: guid(2),
+        type: 'TEXT',
+        size: { x: 120, y: 30 },
+        transform: identityTransform(),
+        fontSize: 14,
+        fontName: { family: baseFamily, style: 'Regular', postscript: `${baseFamily}-Regular` },
+        textData,
+        fillPaints: [solidPaint(0, 0, 0)],
+      }),
+    ])
+  }
+
+  it('resolves the font from a character style override covering the whole text', async () => {
+    // A text created with the default font and re-fonted afterwards keeps the
+    // stale base fontName (Inter) and carries the real font as an override.
+    const html = textClipboard({
+      characters: 'Hello',
+      characterStyleIDs: [5, 5, 5, 5, 5],
+      styleOverrideTable: [
+        {
+          styleID: 5,
+          fontSize: 24,
+          fontName: { family: 'Playfair Display', style: 'Bold', postscript: 'PlayfairDisplay-Bold' },
+        },
+      ],
+    })
+
+    const result = (await convertFigmaClipboardHtml(html))!
+    const text = result.nodes[0] as TextNode
+    expect(text.fontFamily).toBe('Playfair Display')
+    expect(text.fontWeight).toBe('700')
+    expect(text.fontSize).toBe(24)
+    // A uniform override is not mixed styling — no warning
+    expect(result.warnings).toEqual([])
+  })
+
+  it('applies the dominant style and warns when styles are truly mixed', async () => {
+    const html = textClipboard({
+      characters: 'Hello world',
+      // 8 chars use style 5, the remaining 3 keep the base style
+      characterStyleIDs: [5, 5, 5, 5, 5, 5, 5, 5],
+      styleOverrideTable: [
+        { styleID: 5, fontName: { family: 'Roboto', style: 'Medium', postscript: 'Roboto-Medium' } },
+      ],
+    })
+
+    const result = (await convertFigmaClipboardHtml(html))!
+    const text = result.nodes[0] as TextNode
+    expect(text.fontFamily).toBe('Roboto')
+    expect(result.warnings).toHaveLength(1)
+    expect(result.warnings[0]).toContain('mixed styles')
+  })
+
+  it('keeps the base style when most characters use it', async () => {
+    const html = textClipboard(
+      {
+        characters: 'Hello world',
+        // Only the first 2 chars are overridden
+        characterStyleIDs: [5, 5],
+        styleOverrideTable: [
+          { styleID: 5, fontName: { family: 'Roboto', style: 'Bold', postscript: 'Roboto-Bold' } },
+        ],
+      },
+      'Lato',
+    )
+
+    const result = (await convertFigmaClipboardHtml(html))!
+    const text = result.nodes[0] as TextNode
+    expect(text.fontFamily).toBe('Lato')
+    expect(text.fontSize).toBe(14)
+    expect(result.warnings).toHaveLength(1)
   })
 
   it('converts vectors through fill geometry blobs', async () => {

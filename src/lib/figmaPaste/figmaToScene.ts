@@ -570,7 +570,43 @@ const TEXT_WIDTH_MODE_MAP: Record<string, TextWidthMode> = {
   NONE: 'fixed-height',
 }
 
-function convertText(change: FigNodeChange, ctx: ConvertContext): TextNode {
+/**
+ * Figma keeps the style a text node was created with in the top-level fields
+ * and records later edits as per-character overrides: characterStyleIDs maps
+ * each character to a styleOverrideTable entry (0 = base style). A text whose
+ * font was changed after creation therefore still carries the stale base font
+ * (typically Inter). Resolve the style covering the most characters and merge
+ * it over the base so the visible style wins.
+ */
+function resolveTextStyle(change: FigNodeChange): { change: FigNodeChange; mixed: boolean } {
+  const ids = change.textData?.characterStyleIDs ?? []
+  if (ids.length === 0) return { change, mixed: false }
+
+  // Characters beyond the ids array keep the base style (id 0)
+  const baseCount = Math.max((change.textData?.characters?.length ?? 0) - ids.length, 0)
+  const counts = new Map([[0, baseCount]])
+  for (const id of ids) counts.set(id, (counts.get(id) ?? 0) + 1)
+  if (counts.get(0) === 0) counts.delete(0)
+
+  // Base style wins ties (it was inserted first)
+  let dominantId = 0
+  let dominantCount = 0
+  for (const [id, count] of counts) {
+    if (count > dominantCount) {
+      dominantId = id
+      dominantCount = count
+    }
+  }
+
+  const override =
+    dominantId !== 0
+      ? change.textData?.styleOverrideTable?.find((entry) => entry.styleID === dominantId)
+      : undefined
+  return { change: override ? mergeChange(change, override) : change, mixed: counts.size > 1 }
+}
+
+function convertText(rawChange: FigNodeChange, ctx: ConvertContext): TextNode {
+  const { change, mixed } = resolveTextStyle(rawChange)
   const base = buildBase(change, ctx)
   const node: TextNode = {
     type: 'text',
@@ -613,9 +649,9 @@ function convertText(change: FigNodeChange, ctx: ConvertContext): TextNode {
 
   node.textWidthMode = TEXT_WIDTH_MODE_MAP[change.textAutoResize ?? 'NONE'] ?? 'fixed-height'
 
-  if ((change.textData?.characterStyleIDs?.length ?? 0) > 0) {
+  if (mixed) {
     ctx.warnings.push(
-      `Text "${change.name ?? node.text.slice(0, 20)}" has mixed styles; only the base style was applied`,
+      `Text "${change.name ?? node.text.slice(0, 20)}" has mixed styles; the dominant style was applied`,
     )
   }
   return node
@@ -833,7 +869,7 @@ function convertFrame(node: FigTreeNode, change: FigNodeChange, ctx: ConvertCont
   return frame
 }
 
-const OVERRIDE_EXCLUDED_KEYS = new Set(['guid', 'guidPath', 'parentIndex', 'type', 'phase'])
+const OVERRIDE_EXCLUDED_KEYS = new Set(['guid', 'guidPath', 'parentIndex', 'type', 'phase', 'styleID'])
 
 function mergeChange(original: FigNodeChange, override: FigNodeChange): FigNodeChange {
   const merged: FigNodeChange = { ...original }

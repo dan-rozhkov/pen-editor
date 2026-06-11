@@ -223,6 +223,7 @@ message Path {
 message TextData {
   string characters = 1;
   uint[] characterStyleIDs = 2;
+  NodeChange[] styleOverrideTable = 3;
 }
 
 message GUIDPath {
@@ -299,6 +300,7 @@ message NodeChange {
   StackCounterAlign stackChildAlignSelf = 51;
   StackPositioning stackPositioning = 52;
   VectorData vectorData = 53;
+  uint styleID = 54;
 }
 
 message Blob {

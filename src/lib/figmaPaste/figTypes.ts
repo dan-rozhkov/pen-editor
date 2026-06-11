@@ -71,6 +71,7 @@ export interface FigNumber {
 export interface FigTextData {
   characters?: string
   characterStyleIDs?: number[]
+  // Entries are NodeChange-shaped style patches keyed by styleID
   styleOverrideTable?: FigNodeChange[]
 }
 
@@ -175,6 +176,7 @@ export interface FigNodeChange {
   // Text
   fontSize?: number
   fontName?: FigFontName
+  styleID?: number // present on textData.styleOverrideTable entries
   textData?: FigTextData
   textAlignHorizontal?: 'LEFT' | 'CENTER' | 'RIGHT' | 'JUSTIFIED'
   textAlignVertical?: 'TOP' | 'CENTER' | 'BOTTOM'
