@@ -357,27 +357,40 @@ export function buildFigmaClipboardHtml(message: FigMessage, meta: object = { da
   )
 }
 
+/** Little-endian byte writer shared by the binary blob encoders below. */
+function createByteWriter() {
+  const bytes: number[] = []
+  const buf = new DataView(new ArrayBuffer(4))
+  const push4 = () => bytes.push(buf.getUint8(0), buf.getUint8(1), buf.getUint8(2), buf.getUint8(3))
+  return {
+    u8: (value: number) => bytes.push(value & 0xff),
+    u32: (value: number) => {
+      buf.setUint32(0, value, true)
+      push4()
+    },
+    f32: (value: number) => {
+      buf.setFloat32(0, value, true)
+      push4()
+    },
+    toBytes: () => new Uint8Array(bytes),
+  }
+}
+
 /** Encode an SVG-like command list into a Figma path-commands blob. */
 export function encodePathCommandsBlob(commands: (string | number)[]): Uint8Array {
-  const bytes: number[] = []
-  const pushFloats = (values: number[]) => {
-    const buf = new ArrayBuffer(4)
-    const view = new DataView(buf)
-    for (const value of values) {
-      view.setFloat32(0, value, true)
-      bytes.push(view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3))
-    }
-  }
+  const writer = createByteWriter()
   let i = 0
   while (i < commands.length) {
     const op = commands[i++] as string
     const argCount = op === 'Z' ? 0 : op === 'M' || op === 'L' ? 2 : op === 'Q' ? 4 : 6
     const verb = op === 'Z' ? 0 : op === 'M' ? 1 : op === 'L' ? 2 : op === 'Q' ? 3 : 4
-    bytes.push(verb)
-    pushFloats(commands.slice(i, i + argCount) as number[])
+    writer.u8(verb)
+    for (const value of commands.slice(i, i + argCount) as number[]) {
+      writer.f32(value)
+    }
     i += argCount
   }
-  return new Uint8Array(bytes)
+  return writer.toBytes()
 }
 
 export interface FixtureNetworkSegment {
@@ -396,43 +409,35 @@ export interface FixtureNetwork {
 /** Encode a vector network into Figma's vectorNetworkBlob binary format. */
 export function encodeVectorNetworkBlob(network: FixtureNetwork): Uint8Array {
   const regions = network.regions ?? []
-  const bytes: number[] = []
-  const buf = new DataView(new ArrayBuffer(4))
-  const pushU32 = (value: number) => {
-    buf.setUint32(0, value, true)
-    bytes.push(buf.getUint8(0), buf.getUint8(1), buf.getUint8(2), buf.getUint8(3))
-  }
-  const pushF32 = (value: number) => {
-    buf.setFloat32(0, value, true)
-    bytes.push(buf.getUint8(0), buf.getUint8(1), buf.getUint8(2), buf.getUint8(3))
-  }
+  const writer = createByteWriter()
 
-  pushU32(network.vertices.length)
-  pushU32(network.segments.length)
-  pushU32(regions.length)
+  writer.u32(network.vertices.length)
+  writer.u32(network.segments.length)
+  writer.u32(regions.length)
   for (const [x, y] of network.vertices) {
-    pushU32(0) // styleID
-    pushF32(x)
-    pushF32(y)
+    writer.u32(0) // styleID
+    writer.f32(x)
+    writer.f32(y)
   }
   for (const segment of network.segments) {
-    pushU32(0) // styleID
-    pushU32(segment.start)
-    pushF32(segment.t1?.[0] ?? 0)
-    pushF32(segment.t1?.[1] ?? 0)
-    pushU32(segment.end)
-    pushF32(segment.t2?.[0] ?? 0)
-    pushF32(segment.t2?.[1] ?? 0)
+    writer.u32(0) // styleID
+    writer.u32(segment.start)
+    writer.f32(segment.t1?.[0] ?? 0)
+    writer.f32(segment.t1?.[1] ?? 0)
+    writer.u32(segment.end)
+    writer.f32(segment.t2?.[0] ?? 0)
+    writer.f32(segment.t2?.[1] ?? 0)
   }
   for (const region of regions) {
-    pushU32(((region.windingRule ?? 'NONZERO') === 'NONZERO' ? 1 : 0) | (0 << 1))
-    pushU32(region.loops.length)
+    // bit0 = NONZERO winding; the remaining styleID bits stay 0
+    writer.u32((region.windingRule ?? 'NONZERO') === 'NONZERO' ? 1 : 0)
+    writer.u32(region.loops.length)
     for (const loop of region.loops) {
-      pushU32(loop.length)
-      for (const index of loop) pushU32(index)
+      writer.u32(loop.length)
+      for (const index of loop) writer.u32(index)
     }
   }
-  return new Uint8Array(bytes)
+  return writer.toBytes()
 }
 
 // Convenience builders ------------------------------------------------------
