@@ -39,6 +39,67 @@ function toCssFontFamily(fontFamily: string): string {
     .join(', ')
 }
 
+/**
+ * Extract plain text from the contentEditable DOM with exact newline semantics.
+ * `innerText` doubles empty lines (Chrome represents them as `<div><br></div>`,
+ * which innerText renders as two newlines), so we walk the tree ourselves:
+ * each block element starts a new line; a `<br>` that is the sole content of a
+ * block is the empty-line placeholder, not an extra break.
+ */
+function extractEditorText(root: HTMLElement): string {
+  const lines: string[] = []
+  let current: string | null = null
+
+  const visit = (n: Node) => {
+    if (n.nodeType === Node.TEXT_NODE) {
+      current = (current ?? '') + (n.textContent ?? '')
+      return
+    }
+    if (!(n instanceof HTMLElement)) return
+    if (n.tagName === 'BR') {
+      const parent = n.parentElement
+      const isPlaceholder = parent !== root && parent?.childNodes.length === 1
+      if (isPlaceholder) {
+        current = current ?? ''
+      } else {
+        lines.push(current ?? '')
+        current = null
+      }
+      return
+    }
+    if (n.tagName === 'DIV' || n.tagName === 'P') {
+      if (current !== null) {
+        lines.push(current)
+        current = null
+      }
+      n.childNodes.forEach(visit)
+      if (current === null) current = ''
+      return
+    }
+    n.childNodes.forEach(visit)
+  }
+
+  root.childNodes.forEach(visit)
+  if (current !== null) lines.push(current)
+  return lines.join('\n')
+}
+
+/**
+ * Set editor content mirroring Chrome's native contentEditable structure
+ * (one <div> per line, <br> placeholder for empty lines) so it round-trips
+ * exactly through extractEditorText — including trailing newlines, which the
+ * innerText setter would drop.
+ */
+function setEditorText(root: HTMLElement, text: string) {
+  root.textContent = ''
+  for (const line of text.split('\n')) {
+    const div = document.createElement('div')
+    if (line) div.textContent = line
+    else div.appendChild(document.createElement('br'))
+    root.appendChild(div)
+  }
+}
+
 export function InlineTextEditor({
   node,
   absoluteX,
@@ -142,11 +203,11 @@ export function InlineTextEditor({
       stopEditing()
       return
     }
-    // Extract plain text from contentEditable (preserving newlines from <br>/<div>)
-    const text = el.innerText ?? el.textContent ?? ''
-    const trimmed = text.trim()
-    if (trimmed && trimmed !== node.text) {
-      flushPendingText(trimmed)
+    const text = extractEditorText(el)
+    // Commit untrimmed (trailing newlines are real content, as in Figma);
+    // whitespace-only edits are not committed.
+    if (text.trim() && text !== node.text) {
+      flushPendingText(text)
     }
     stopEditing()
   }, [node.text, stopEditing, flushPendingText])
@@ -155,9 +216,9 @@ export function InlineTextEditor({
   useEffect(() => {
     return () => {
       flushPendingText()
-      const trimmed = currentTextRef.current.trim()
-      if (trimmed && trimmed !== node.text) {
-        commitText(trimmed)
+      const text = currentTextRef.current
+      if (text.trim() && text !== node.text) {
+        commitText(text)
       }
     }
   }, [node.text, commitText, flushPendingText])
@@ -167,7 +228,7 @@ export function InlineTextEditor({
     useHistoryStore.getState().saveHistory(createSnapshot(useSceneStore.getState()))
     const el = editorRef.current
     if (!el) return
-    el.innerText = node.text
+    setEditorText(el, node.text)
     currentTextRef.current = node.text
     el.focus()
     // Select all text
@@ -189,7 +250,7 @@ export function InlineTextEditor({
       return
     }
     if (node.text !== currentTextRef.current) {
-      el.innerText = node.text
+      setEditorText(el, node.text)
       currentTextRef.current = node.text
     }
     lastCommittedRef.current = node.text
@@ -209,7 +270,7 @@ export function InlineTextEditor({
   const handleInput = () => {
     const el = editorRef.current
     if (el) {
-      const text = el.innerText ?? el.textContent ?? ''
+      const text = extractEditorText(el)
       currentTextRef.current = text
       if (text !== node.text) {
         // Never live-commit while editing inside auto-layout:

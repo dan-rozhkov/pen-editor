@@ -10,7 +10,7 @@ import type {
   SceneNode,
   TextNode,
 } from "@/types/scene";
-import { applyTextTransform } from "@/utils/textMeasure";
+import { applyTextTransform, wrapTextToLines } from "@/utils/textMeasure";
 import { buildTextStyle } from "@/pixi/renderers/textRenderer";
 import { findResolvedDescendantByPath } from "@/utils/instanceRuntime";
 import { COMPONENT_SELECTION_COLOR, HATCH_SPACING, SELECTION_COLOR } from "./constants";
@@ -217,7 +217,14 @@ export function drawTextBaselines(
   color: number,
 ): void {
   const style = buildTextStyle(node);
-  const metrics = CanvasTextMetrics.measureText(applyTextTransform(node.text ?? "", node.textTransform), style);
+  // The renderer pre-wraps text itself (style has wordWrap off), so wrapped
+  // modes must measure the wrapped lines, not the raw text.
+  const isWrapped =
+    node.textWidthMode === "fixed" || node.textWidthMode === "fixed-height";
+  const measuredText = isWrapped
+    ? wrapTextToLines(node, width).join("\n")
+    : applyTextTransform(node.text ?? "", node.textTransform);
+  const metrics = CanvasTextMetrics.measureText(measuredText, style);
   const lineWidths = metrics.lineWidths ?? [];
   const lineCount = Math.max(1, metrics.lines?.length ?? 0);
   const lineHeight =

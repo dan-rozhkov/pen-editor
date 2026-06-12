@@ -498,7 +498,11 @@ function hitTestHandlesAt(
   }
 
   const sideTolerance = handleRadius;
-  const cornerExclusion = handleRadius * 2;
+  // On thin nodes (e.g. a single-line text) a fixed exclusion would leave the
+  // side handles with no grabbable zone — cap it so the middle third of the
+  // edge always engages the side. Corners are checked first and keep priority.
+  const vCornerExclusion = Math.min(handleRadius * 2, height / 3);
+  const hCornerExclusion = Math.min(handleRadius * 2, width / 3);
   const distLeft = Math.abs(worldX - absX);
   const distRight = Math.abs(worldX - (absX + width));
   const distTop = Math.abs(worldY - absY);
@@ -506,29 +510,29 @@ function hitTestHandlesAt(
 
   if (
     distLeft <= sideTolerance &&
-    worldY >= absY + cornerExclusion &&
-    worldY <= absY + height - cornerExclusion
+    worldY >= absY + vCornerExclusion &&
+    worldY <= absY + height - vCornerExclusion
   ) {
     return { corner: "l", nodeId, absX, absY, width, height, slotContext };
   }
   if (
     distRight <= sideTolerance &&
-    worldY >= absY + cornerExclusion &&
-    worldY <= absY + height - cornerExclusion
+    worldY >= absY + vCornerExclusion &&
+    worldY <= absY + height - vCornerExclusion
   ) {
     return { corner: "r", nodeId, absX, absY, width, height, slotContext };
   }
   if (
     distTop <= sideTolerance &&
-    worldX >= absX + cornerExclusion &&
-    worldX <= absX + width - cornerExclusion
+    worldX >= absX + hCornerExclusion &&
+    worldX <= absX + width - hCornerExclusion
   ) {
     return { corner: "t", nodeId, absX, absY, width, height, slotContext };
   }
   if (
     distBottom <= sideTolerance &&
-    worldX >= absX + cornerExclusion &&
-    worldX <= absX + width - cornerExclusion
+    worldX >= absX + hCornerExclusion &&
+    worldX <= absX + width - hCornerExclusion
   ) {
     return { corner: "b", nodeId, absX, absY, width, height, slotContext };
   }
