@@ -152,7 +152,10 @@ export function setupPixiInteraction(
   // --- Pointer handlers ---
 
   function runHoverPass(world: { x: number; y: number }): void {
-    const hitTarget = findCanvasHitTargetAtPoint(world.x, world.y, { deepSelect: true });
+    const labelHitId = findFrameLabelAtPoint(world.x, world.y);
+    const hitTarget = labelHitId
+      ? ({ kind: "node", nodeId: labelHitId } as const)
+      : findCanvasHitTargetAtPoint(world.x, world.y, { deepSelect: true });
     if (!hitTarget) {
       useHoverStore.getState().clearHovered();
     } else if (hitTarget.kind === "node") {

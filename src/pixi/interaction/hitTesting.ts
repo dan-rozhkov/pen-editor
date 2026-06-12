@@ -12,13 +12,15 @@ import { getNodeEffectiveSize } from "@/utils/nodeUtils";
 import type { TransformHandle } from "./types";
 import { measureLabelTextWidth, truncateLabelToWidth } from "@/pixi/frameLabelUtils";
 import { resolveRefToTree, findResolvedDescendantByPath } from "@/utils/instanceRuntime";
+import {
+  LABEL_FONT_SIZE,
+  LABEL_OFFSET_Y,
+} from "@/pixi/selectionOverlay/constants";
 
 export type CanvasHitTarget =
   | { kind: "node"; nodeId: string }
   | { kind: "instance-descendant"; instanceId: string; descendantPath: string };
 
-const LABEL_FONT_SIZE = 11;
-const LABEL_OFFSET_Y = 4;
 const LABEL_HIT_PADDING = 2;
 const LABEL_FONT_FAMILY = "system-ui, -apple-system, sans-serif";
 const LABEL_TEXT_STYLE = new TextStyle({

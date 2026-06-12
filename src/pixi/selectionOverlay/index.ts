@@ -108,7 +108,7 @@ export function createSelectionOverlay(
   });
 
   const unsubHover = useHoverStore.subscribe(() => {
-    scheduleSelectionRedraw(DIRTY_HOVER);
+    scheduleSelectionRedraw(DIRTY_HOVER | DIRTY_FRAME_NAMES);
   });
 
   const unsubScene = useSceneStore.subscribe(() => {

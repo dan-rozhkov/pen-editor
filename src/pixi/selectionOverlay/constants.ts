@@ -24,7 +24,7 @@ export const FLOATING_LABEL_STYLE = new TextStyle({
 
 // Frame name label constants
 export const LABEL_FONT_SIZE = 11;
-export const LABEL_OFFSET_Y = 4;
+export const LABEL_OFFSET_Y = 8;
 export const LABEL_COLOR_NORMAL = "#666666";
 export const LABEL_COLOR_SELECTED = "#0d99ff";
 export const LABEL_COLOR_COMPONENT = "#9747ff";

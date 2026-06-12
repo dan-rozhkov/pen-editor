@@ -1,6 +1,7 @@
 import { Container, Text } from "pixi.js";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
+import { useHoverStore } from "@/store/hoverStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { getViewportBounds } from "@/utils/viewportUtils";
 import type { FlatFrameNode, FlatSceneNode } from "@/types/scene";
@@ -52,6 +53,7 @@ export function redrawFrameNames(frameNamesContainer: Container): void {
 
   const state = useSceneStore.getState();
   const { selectedIds, editingNodeId, editingMode } = useSelectionStore.getState();
+  const { hoveredNodeId } = useHoverStore.getState();
   const { scale, x, y } = useViewportStore.getState();
 
   // Compute viewport bounds for culling off-screen frame labels
@@ -87,11 +89,12 @@ export function redrawFrameNames(frameNamesContainer: Container): void {
     const flatNode = node as FlatSceneNode;
 
     const isSelected = selectedSet.has(rootId);
+    const isHovered = hoveredNodeId === rootId;
     const isComponentNode =
       node.type === "frame" && (node as FlatFrameNode).reusable;
     const labelColor = isComponentNode
       ? LABEL_COLOR_COMPONENT
-      : isSelected
+      : isSelected || isHovered
         ? LABEL_COLOR_SELECTED
         : LABEL_COLOR_NORMAL;
 
