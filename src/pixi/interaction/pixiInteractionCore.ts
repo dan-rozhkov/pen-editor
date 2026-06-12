@@ -26,7 +26,7 @@ import { createTransformController } from "./transformController";
 import { createDrawController } from "./drawController";
 import { createPencilController } from "./pencilController";
 import { createConnectorController } from "./connectorController";
-import { createDragController } from "./dragController";
+import { createDragController, DRAG_CLICK_THRESHOLD } from "./dragController";
 import { createMarqueeController } from "./marqueeController";
 import { createMeasurementController } from "./measurementController";
 import { prepareFrameNode } from "@/utils/instanceUtils";
@@ -313,7 +313,13 @@ export function setupPixiInteraction(
     if (descendantDrag) {
       const dx = world.x - descendantDrag.startWorldX;
       const dy = world.y - descendantDrag.startWorldY;
-      if (!descendantDrag.hasMoved && Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
+      if (
+        !descendantDrag.hasMoved &&
+        Math.abs(dx) < DRAG_CLICK_THRESHOLD &&
+        Math.abs(dy) < DRAG_CLICK_THRESHOLD
+      ) {
+        return;
+      }
       if (!descendantDrag.hasMoved) {
         descendantDrag.hasMoved = true;
       }

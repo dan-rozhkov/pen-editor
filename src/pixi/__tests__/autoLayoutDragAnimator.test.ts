@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import type { Container } from "pixi.js";
 import type { AutoLayoutDragAnimatorConfig } from "@/pixi/autoLayoutDragAnimator";
 
 // The animator resolves containers through pixiSync's module-level accessors.
@@ -52,9 +51,6 @@ class FakeContainer {
   }
 }
 
-const asContainer = (c: FakeContainer): Container => c as unknown as Container;
-void asContainer;
-
 // Scene fixture: an auto-layout frame at world (300, 200); its children host
 // holds the dragged node at frame-local (20, 30) plus two siblings below it.
 const PARENT_ABS = { x: 300, y: 200 };
@@ -88,8 +84,6 @@ function makeConfig(
     startAbsY: PARENT_ABS.y + DRAGGED_LOCAL.y,
     startWorldX: 330,
     startWorldY: 240,
-    parentAbsX: PARENT_ABS.x,
-    parentAbsY: PARENT_ABS.y,
     ...overrides,
   };
 }

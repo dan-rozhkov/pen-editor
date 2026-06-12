@@ -806,6 +806,9 @@ export function createPixiSync(sceneRoot: Container): () => void {
     if (!prevDragState.isDragging || dragState.isDragging) return;
     const draggedId = prevDragState.draggedNodeId;
     if (!draggedId) return;
+    // A drop that committed a scene mutation already scheduled a flush that
+    // will re-apply layout for the affected chain — don't relayout it twice.
+    if (pendingSceneState !== null) return;
     const sceneState = useSceneStore.getState();
     const dirtyFrames = collectDirtyAutoLayoutFrames(
       sceneState,

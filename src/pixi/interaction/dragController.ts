@@ -25,13 +25,15 @@ import { findFrameInTree } from "./hitTesting";
 import {
   createAutoLayoutDragAnimator,
   type AutoLayoutDragAnimator,
+  type AutoLayoutDragAnimatorConfig,
 } from "../autoLayoutDragAnimator";
 
 const AXIS_LOCK_THRESHOLD = 8; // pixels
-// Minimum pointer travel before an auto-layout drag lifts the node out of its
-// frame. Below this, pointerdown+pointerup is a click and must not touch
-// containers (mirrors the descendant-drag threshold in pixiInteractionCore).
-const AUTO_LAYOUT_DRAG_THRESHOLD = 3; // pixels
+// Minimum pointer travel before pointerdown+move counts as a drag rather than
+// a click. Shared with the descendant-drag gate in pixiInteractionCore; for
+// auto-layout drags it defers the lift so a plain click never touches
+// containers.
+export const DRAG_CLICK_THRESHOLD = 3; // pixels
 
 export interface DragController {
   handlePointerDown(
@@ -78,8 +80,6 @@ export function createDragController(context: InteractionContext): DragControlle
     snapOffsetY: 0,
     isAutoLayoutDrag: false,
     autoLayoutParentId: null,
-    pendingAutoLayoutStart: null,
-    autoLayoutDragActivated: false,
     isShiftHeld: false,
     isAltHeld: false,
     axisLock: null,
@@ -88,6 +88,9 @@ export function createDragController(context: InteractionContext): DragControlle
   };
 
   let animator: AutoLayoutDragAnimator | null = null;
+  // True once a deferred auto-layout drag has lifted the node (the pointer
+  // travelled past DRAG_CLICK_THRESHOLD).
+  let autoLayoutDragActivated = false;
 
   const resetDragState = (): void => {
     state.isDragging = false;
@@ -95,8 +98,7 @@ export function createDragController(context: InteractionContext): DragControlle
     state.dragItems = [];
     state.isAutoLayoutDrag = false;
     state.autoLayoutParentId = null;
-    state.pendingAutoLayoutStart = null;
-    state.autoLayoutDragActivated = false;
+    autoLayoutDragActivated = false;
     state.isAltHeld = false;
     state.isShiftHeld = false;
     state.axisLock = null;
@@ -262,6 +264,72 @@ export function createDragController(context: InteractionContext): DragControlle
     }
   };
 
+  // Build the animator config for the node recorded at pointerdown. Runs at
+  // lift time (first pointermove past DRAG_CLICK_THRESHOLD) so plain clicks
+  // skip the layout computation entirely.
+  // originalPositions: where siblings are now (with dragged node present) — for cancel restore.
+  // noGapPositions: where siblings would be if dragged node is removed — shifted backward.
+  const buildAutoLayoutLiftConfig = (): AutoLayoutDragAnimatorConfig | null => {
+    if (!state.nodeId || !state.autoLayoutParentId) return null;
+    const primaryItem = state.dragItems.find((item) => item.id === state.nodeId);
+    if (!primaryItem) return null;
+
+    const nodes = useSceneStore.getState().getNodes();
+    const parentFrame = findFrameInTree(nodes, state.autoLayoutParentId);
+    if (!parentFrame) return null;
+
+    const layout = parentFrame.layout;
+    const isHorizontal = layout?.flexDirection === "row" || layout?.flexDirection === undefined;
+    const gap = layout?.gap ?? 0;
+
+    // Compute sibling IDs (children excluding dragged node)
+    const siblingIds = parentFrame.children
+      .filter((c) => c.id !== primaryItem.id && c.visible !== false && c.enabled !== false)
+      .map((c) => c.id);
+
+    // Get dragged node's main axis size
+    const draggedChild = parentFrame.children.find((c) => c.id === primaryItem.id);
+    const draggedMainAxisSize = isHorizontal
+      ? (draggedChild?.width ?? primaryItem.width)
+      : (draggedChild?.height ?? primaryItem.height);
+
+    const layoutChildren = useLayoutStore.getState().calculateLayoutForFrame(parentFrame);
+    const noGapPositions = new Map<string, SiblingPosition>();
+    const originalPositions = new Map<string, SiblingPosition>();
+    let pastDragged = false;
+    const shift = draggedMainAxisSize + gap;
+    for (const child of layoutChildren) {
+      if (child.id === primaryItem.id) {
+        pastDragged = true;
+        continue;
+      }
+      originalPositions.set(child.id, { x: child.x, y: child.y });
+      if (pastDragged) {
+        noGapPositions.set(child.id, {
+          x: child.x - (isHorizontal ? shift : 0),
+          y: child.y - (isHorizontal ? 0 : shift),
+        });
+      } else {
+        noGapPositions.set(child.id, { x: child.x, y: child.y });
+      }
+    }
+
+    return {
+      draggedId: primaryItem.id,
+      parentId: state.autoLayoutParentId,
+      siblingIds,
+      noGapPositions,
+      originalPositions,
+      draggedMainAxisSize,
+      gap,
+      isHorizontal,
+      startAbsX: primaryItem.startAbsX,
+      startAbsY: primaryItem.startAbsY,
+      startWorldX: state.startWorldX,
+      startWorldY: state.startWorldY,
+    };
+  };
+
   return {
     handlePointerDown(
       e: PointerEvent,
@@ -347,77 +415,12 @@ export function createDragController(context: InteractionContext): DragControlle
             parentNode.type === "frame" &&
             (parentNode as FlatFrameNode).layout?.autoLayout
           ) {
+            // Mark only — the animator config build and the lift are deferred
+            // to the first pointermove past DRAG_CLICK_THRESHOLD, so a plain
+            // click does no layout work and leaves the frame's containers
+            // untouched.
             state.isAutoLayoutDrag = true;
             state.autoLayoutParentId = parentId;
-
-            // Prepare the drag animator config, but don't lift the node yet —
-            // the actual start is deferred to the first pointermove past
-            // AUTO_LAYOUT_DRAG_THRESHOLD so a plain click leaves the frame's
-            // containers untouched.
-            const parentFrame = findFrameInTree(nodes, parentId);
-            if (parentFrame) {
-              const layout = parentFrame.layout;
-              const isHorizontal = layout?.flexDirection === "row" || layout?.flexDirection === undefined;
-              const gap = layout?.gap ?? 0;
-
-              // Compute sibling IDs (children excluding dragged node)
-              const siblingIds = parentFrame.children
-                .filter((c) => c.id !== primaryItem.id && c.visible !== false && c.enabled !== false)
-                .map((c) => c.id);
-
-              // Get dragged node's main axis size
-              const draggedChild = parentFrame.children.find((c) => c.id === primaryItem.id);
-              const draggedMainAxisSize = isHorizontal
-                ? (draggedChild?.width ?? primaryItem.width)
-                : (draggedChild?.height ?? primaryItem.height);
-
-              // Compute sibling positions from current layout.
-              // originalPositions: where siblings are now (with dragged node present) — for cancel restore.
-              // noGapPositions: where siblings would be if dragged node is removed — shifted backward.
-              const layoutChildren = calculateLayoutForFrame(parentFrame);
-              const noGapPositions = new Map<string, SiblingPosition>();
-              const originalPositions = new Map<string, SiblingPosition>();
-              let pastDragged = false;
-              const shift = draggedMainAxisSize + gap;
-              for (const child of layoutChildren) {
-                if (child.id === primaryItem.id) {
-                  pastDragged = true;
-                  continue;
-                }
-                originalPositions.set(child.id, { x: child.x, y: child.y });
-                if (pastDragged) {
-                  noGapPositions.set(child.id, {
-                    x: child.x - (isHorizontal ? shift : 0),
-                    y: child.y - (isHorizontal ? 0 : shift),
-                  });
-                } else {
-                  noGapPositions.set(child.id, { x: child.x, y: child.y });
-                }
-              }
-
-              const frameRect = getFrameAbsoluteRectWithLayout(
-                parentFrame,
-                nodes,
-                calculateLayoutForFrame,
-              );
-
-              state.pendingAutoLayoutStart = {
-                draggedId: primaryItem.id,
-                parentId,
-                siblingIds,
-                noGapPositions,
-                originalPositions,
-                draggedMainAxisSize,
-                gap,
-                isHorizontal,
-                startAbsX: primaryItem.startAbsX,
-                startAbsY: primaryItem.startAbsY,
-                startWorldX: world.x,
-                startWorldY: world.y,
-                parentAbsX: frameRect.x,
-                parentAbsY: frameRect.y,
-              };
-            }
           }
         }
 
@@ -438,23 +441,23 @@ export function createDragController(context: InteractionContext): DragControlle
       if (state.isDragging && state.nodeId && state.isAutoLayoutDrag && state.autoLayoutParentId) {
         // Deferred start: lift the node only after the pointer travels past
         // the click threshold, so plain clicks never disturb the frame.
-        if (!state.autoLayoutDragActivated) {
+        if (!autoLayoutDragActivated) {
           const dx = world.x - state.startWorldX;
           const dy = world.y - state.startWorldY;
           if (
-            Math.abs(dx) < AUTO_LAYOUT_DRAG_THRESHOLD &&
-            Math.abs(dy) < AUTO_LAYOUT_DRAG_THRESHOLD
+            Math.abs(dx) < DRAG_CLICK_THRESHOLD &&
+            Math.abs(dy) < DRAG_CLICK_THRESHOLD
           ) {
             return true;
           }
 
-          state.autoLayoutDragActivated = true;
+          autoLayoutDragActivated = true;
           useDragStore.getState().startDrag(state.nodeId);
 
-          if (state.pendingAutoLayoutStart) {
+          const liftConfig = buildAutoLayoutLiftConfig();
+          if (liftConfig) {
             animator = createAutoLayoutDragAnimator();
-            animator.start(state.pendingAutoLayoutStart);
-            state.pendingAutoLayoutStart = null;
+            animator.start(liftConfig);
 
             // Register cancel handler
             useDragStore.getState().setCancelDrag(() => {
@@ -592,7 +595,7 @@ export function createDragController(context: InteractionContext): DragControlle
       if (state.isDragging && state.nodeId && state.isAutoLayoutDrag) {
         // The pointer never moved past the click threshold — nothing was
         // lifted and the drag store drag never started; it was just a click.
-        if (!state.autoLayoutDragActivated) {
+        if (!autoLayoutDragActivated) {
           resetDragState();
           return true;
         }

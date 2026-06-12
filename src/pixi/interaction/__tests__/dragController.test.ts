@@ -23,8 +23,7 @@ vi.mock("@/pixi/autoLayoutDragAnimator", () => ({
 import { createDragController } from "../dragController";
 import { useSceneStore } from "@/store/sceneStore";
 import { useDragStore } from "@/store/dragStore";
-import { useSelectionStore } from "@/store/selectionStore";
-import { useHistoryStore } from "@/store/historyStore";
+import { resetStores } from "@/test/fixtures";
 
 // Auto-layout column frame at world (300, 200) with two 50x50 children.
 // The stored child x/y are deliberately stale garbage — layout positions for
@@ -101,8 +100,7 @@ const CHILD1_CENTER = { x: 345, y: 255 };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  useSelectionStore.setState({ selectedIds: [], lastSelectedId: null });
-  useHistoryStore.setState({ past: [], future: [], batchMode: false });
+  resetStores();
   useDragStore.getState().endDrag();
   seedAutoLayoutScene();
 });
@@ -143,7 +141,7 @@ describe("dragController auto-layout drag lifecycle", () => {
     expect(h.animator.start).not.toHaveBeenCalled();
   });
 
-  it("movement past the threshold starts the drag and passes the parent frame origin to the animator", () => {
+  it("movement past the threshold starts the drag and lifts the node at its layout position", () => {
     const controller = makeController();
     controller.handlePointerDown(pointerEvent, CHILD1_CENTER, "child1");
     controller.handlePointerMove(pointerEvent, {
@@ -157,11 +155,12 @@ describe("dragController auto-layout drag lifecycle", () => {
     expect(config).toMatchObject({
       draggedId: "child1",
       parentId: "frame",
-      parentAbsX: 300,
-      parentAbsY: 200,
       // child1 layout position: frame (300,200) + padding (20,30)
       startAbsX: 320,
       startAbsY: 230,
+      // cursor position at pointerdown, not at activation
+      startWorldX: CHILD1_CENTER.x,
+      startWorldY: CHILD1_CENTER.y,
       isHorizontal: false,
     });
   });
