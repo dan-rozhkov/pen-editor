@@ -29,6 +29,25 @@ interface TypographySectionProps {
 }
 
 export function TypographySection({ node, onUpdate }: TypographySectionProps) {
+  // Switching the text resize mode must not contradict auto-layout sizing:
+  // auto-width can't fill its container, and auto-height can't fill vertically.
+  const setTextWidthMode = (mode: TextNode["textWidthMode"]) => {
+    const updates: Partial<TextNode> = { textWidthMode: mode };
+    const demoteWidthFill =
+      mode === "auto" && node.sizing?.widthMode === "fill_container";
+    const demoteHeightFill =
+      (mode === "auto" || mode === "fixed") &&
+      node.sizing?.heightMode === "fill_container";
+    if (demoteWidthFill || demoteHeightFill) {
+      updates.sizing = {
+        ...node.sizing,
+        ...(demoteWidthFill ? { widthMode: "fit_content" } : {}),
+        ...(demoteHeightFill ? { heightMode: "fit_content" } : {}),
+      };
+    }
+    onUpdate(updates as Partial<SceneNode>);
+  };
+
   return (
     <PropertySection title="Typography">
       <FontCombobox
@@ -278,9 +297,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
                 : ""
             }`}
-            onClick={() =>
-              onUpdate({ textWidthMode: "auto" } as Partial<SceneNode>)
-            }
+            onClick={() => setTextWidthMode("auto")}
           >
             <ArrowsOut size={14} />
           </Button>
@@ -294,9 +311,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
                 : ""
             }`}
-            onClick={() =>
-              onUpdate({ textWidthMode: "fixed" } as Partial<SceneNode>)
-            }
+            onClick={() => setTextWidthMode("fixed")}
           >
             <ArrowRight size={14} />
           </Button>
@@ -312,11 +327,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
                 : ""
             }`}
-            onClick={() =>
-              onUpdate({
-                textWidthMode: "fixed-height",
-              } as Partial<SceneNode>)
-            }
+            onClick={() => setTextWidthMode("fixed-height")}
           >
             <Article size={14} />
           </Button>

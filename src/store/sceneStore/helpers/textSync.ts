@@ -9,8 +9,15 @@ export function syncTextDimensions(node: SceneNode): SceneNode;
 export function syncTextDimensions(node: FlatSceneNode): FlatSceneNode;
 export function syncTextDimensions(node: FlatSceneNode | SceneNode): FlatSceneNode | SceneNode {
   if (node.type !== "text") return node;
-  const textNode = node as TextNode;
-  const mode = textNode.textWidthMode;
+  let textNode = node as TextNode;
+  let mode = textNode.textWidthMode;
+
+  // Auto-width can't fill its container: a fill-width text must wrap at the
+  // assigned width (data from AI tools / older files can carry this combo).
+  if ((!mode || mode === "auto") && textNode.sizing?.widthMode === "fill_container") {
+    mode = "fixed";
+    textNode = { ...textNode, textWidthMode: mode };
+  }
 
   if (!mode || mode === "auto") {
     const measured = measureTextAutoSize(textNode);

@@ -83,4 +83,6 @@ export const TEXT_MEASURE_PROPS = new Set([
   "lineHeight",
   "textWidthMode",
   "textTransform",
+  // sizing can force a textWidthMode normalization (fill width => wrap)
+  "sizing",
 ]);

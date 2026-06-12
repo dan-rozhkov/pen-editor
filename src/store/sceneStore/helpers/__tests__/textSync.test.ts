@@ -66,6 +66,32 @@ describe("syncTextDimensions", () => {
     expect(synced).toBe(node);
   });
 
+  it("normalizes auto + fill_container width to fixed (wrap at assigned width)", () => {
+    // width 24 => 3 chars/line, "aaa bbb ccc" => 3 lines.
+    const node = textNode({
+      text: "aaa bbb ccc",
+      width: 3 * CHAR,
+      height: 5,
+      textWidthMode: "auto",
+      sizing: { widthMode: "fill_container" },
+    });
+    const synced = syncTextDimensions(node) as TextNode;
+    expect(synced.textWidthMode).toBe("fixed");
+    expect(synced.width).toBe(3 * CHAR);
+    expect(synced.height).toBe(Math.ceil(3 * 16 * 1.2));
+  });
+
+  it("keeps auto mode when sizing width is fit_content", () => {
+    const node = textNode({
+      text: "hello",
+      width: 999,
+      sizing: { widthMode: "fit_content" },
+    });
+    const synced = syncTextDimensions(node) as TextNode;
+    expect(synced.textWidthMode).toBe("auto");
+    expect(synced.width).toBe(5 * CHAR);
+  });
+
   it("auto + left align keeps x fixed", () => {
     const node = textNode({ text: "hello", width: 999, x: 100 });
     const synced = syncTextDimensions(node) as TextNode;

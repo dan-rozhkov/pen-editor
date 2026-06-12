@@ -394,7 +394,19 @@ export function SizeSection({
                         widthMode: newMode,
                       },
                       ...(computedWidth !== undefined ? { width: computedWidth } : {}),
-                    });
+                      // Keep textWidthMode consistent: hug width = auto-width,
+                      // fill/fixed width = wrap at the assigned width.
+                      ...(node.type === "text"
+                        ? {
+                            textWidthMode:
+                              newMode === "fit_content"
+                                ? "auto"
+                                : (node as TextNode).textWidthMode === "fixed-height"
+                                  ? "fixed-height"
+                                  : "fixed",
+                          }
+                        : {}),
+                    } as Partial<SceneNode>);
                     if (!isMultiSelect && !useDirectUpdateOnly) {
                       reflowAutoLayoutSiblings("width", newMode, computedWidth);
                     }
@@ -440,7 +452,19 @@ export function SizeSection({
                         heightMode: newMode,
                       },
                       ...(computedHeight !== undefined ? { height: computedHeight } : {}),
-                    });
+                      // Hug height = height follows content (demote fixed-size to
+                      // auto-height); fill/fixed height = fixed-size box.
+                      ...(node.type === "text"
+                        ? {
+                            textWidthMode:
+                              newMode === "fit_content"
+                                ? (node as TextNode).textWidthMode === "fixed-height"
+                                  ? "fixed"
+                                  : ((node as TextNode).textWidthMode ?? "auto")
+                                : "fixed-height",
+                          }
+                        : {}),
+                    } as Partial<SceneNode>);
                     if (!isMultiSelect && !useDirectUpdateOnly) {
                       reflowAutoLayoutSiblings("height", newMode, computedHeight);
                     }
