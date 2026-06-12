@@ -1,17 +1,10 @@
-import type { TextNode, TextTransform } from '../types/scene'
+import type { TextNode } from '../types/scene'
+import { applyTextTransform } from './textTransform'
+import { buildFontString, wrapTextToLines } from './textWrap'
 
-/**
- * Apply CSS-style text transform to a string.
- * Visual only — original text is preserved in the node.
- */
-export function applyTextTransform(text: string, transform?: TextTransform): string {
-  switch (transform) {
-    case 'uppercase': return text.toUpperCase()
-    case 'lowercase': return text.toLowerCase()
-    case 'capitalize': return text.replace(/\b(\p{L})/gu, char => char.toUpperCase())
-    default: return text
-  }
-}
+// Re-export the shared helpers so existing call sites keep their import path.
+export { applyTextTransform } from './textTransform'
+export { wrapTextToLines, buildFontString } from './textWrap'
 
 // Shared offscreen canvas for text measurement
 let measureCanvas: HTMLCanvasElement | null = null
@@ -26,20 +19,8 @@ function getContext(): CanvasRenderingContext2D {
 }
 
 /**
- * Build a CSS font string from TextNode properties.
- * Format: "[style] [weight] <size>px <family>"
- */
-function buildFontString(node: TextNode): string {
-  const style = node.fontStyle ?? 'normal'
-  const weight = node.fontWeight ?? 'normal'
-  const size = node.fontSize ?? 16
-  const family = node.fontFamily ?? 'Arial'
-  return `${style} ${weight} ${size}px ${family}`
-}
-
-/**
  * Measure the rendered dimensions of a text node in "auto" mode
- * (single line, no wrapping).
+ * (single line per paragraph, no wrapping).
  */
 export function measureTextAutoSize(node: TextNode): { width: number; height: number } {
   const ctx = getContext()
@@ -70,39 +51,13 @@ export function measureTextAutoSize(node: TextNode): { width: number; height: nu
 
 /**
  * Measure the height of wrapped text for "fixed" mode (fixed width, auto height).
+ *
+ * Derived from `wrapTextToLines` so the measured height can never disagree with
+ * the rendered/edited wrapping.
  */
 export function measureTextFixedWidthHeight(node: TextNode): number {
   const fontSize = node.fontSize ?? 16
   const lineHeight = node.lineHeight ?? 1.2
-  const letterSpacing = node.letterSpacing ?? 0
-  const ctx = getContext()
-  ctx.font = buildFontString(node)
-
-  const text = applyTextTransform(node.text || '', node.textTransform)
-  const maxWidth = node.width
-
-  let totalLines = 0
-
-  for (const paragraph of text.split('\n')) {
-    if (paragraph === '') {
-      totalLines++
-      continue
-    }
-    const words = paragraph.split(/\s+/)
-    let currentLine = ''
-    for (const word of words) {
-      const testLine = currentLine ? `${currentLine} ${word}` : word
-      const metrics = ctx.measureText(testLine)
-      const testWidth = metrics.width + Math.max(0, testLine.length - 1) * letterSpacing
-      if (testWidth > maxWidth && currentLine) {
-        totalLines++
-        currentLine = word
-      } else {
-        currentLine = testLine
-      }
-    }
-    totalLines++
-  }
-
-  return Math.ceil(Math.max(1, totalLines) * fontSize * lineHeight)
+  const lineCount = wrapTextToLines(node, node.width).length
+  return Math.ceil(Math.max(1, lineCount) * fontSize * lineHeight)
 }

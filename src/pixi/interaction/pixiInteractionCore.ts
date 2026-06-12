@@ -31,7 +31,8 @@ import { createMarqueeController } from "./marqueeController";
 import { createMeasurementController } from "./measurementController";
 import { prepareFrameNode } from "@/utils/instanceUtils";
 import { resolveRefToTree, findNodeByPath } from "@/utils/instanceRuntime";
-import type { SceneNode, RefNode } from "@/types/scene";
+import type { SceneNode, RefNode, TextNode } from "@/types/scene";
+import { resolveTextHandleReset } from "./textResize";
 import { findSlotContext } from "@/utils/componentUtils";
 import { saveHistory } from "@/store/sceneStore/helpers/history";
 import { createSnapshot } from "@/store/sceneStore";
@@ -392,6 +393,25 @@ export function setupPixiInteraction(
     const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
     const currentSelectedIds = useSelectionStore.getState().selectedIds;
     const currentNodes = useSceneStore.getState().getNodes();
+
+    // Double-clicking a transform handle of a text node resets its sizing mode
+    // (side → auto-width, bottom/top → auto-height, corner → auto-width). The
+    // mode change runs through updateNode → syncTextDimensions to snap dims.
+    const handleHit = hitTestTransformHandle(world.x, world.y);
+    if (handleHit && !handleHit.slotContext) {
+      const hitNode = useSceneStore.getState().nodesById[handleHit.nodeId] as
+        | TextNode
+        | undefined;
+      if (hitNode?.type === "text") {
+        const nextMode = resolveTextHandleReset(handleHit.corner);
+        if (nextMode) {
+          useSceneStore.getState().updateNode(handleHit.nodeId, {
+            textWidthMode: nextMode,
+          });
+          return;
+        }
+      }
+    }
 
     const frameLabelHitId = findFrameLabelAtPoint(world.x, world.y);
     if (frameLabelHitId) {

@@ -14,7 +14,16 @@ export function syncTextDimensions(node: FlatSceneNode | SceneNode): FlatSceneNo
 
   if (!mode || mode === "auto") {
     const measured = measureTextAutoSize(textNode);
-    return { ...textNode, width: measured.width, height: measured.height };
+    // Anchor per textAlign: the top edge is fixed (no y change); the horizontal
+    // anchor depends on alignment — left keeps x, center keeps the center, right
+    // keeps the right edge. Inside auto-layout parents, layout owns x/y — the
+    // x adjustment there is harmless because layout overwrites it next pass.
+    const align = textNode.textAlign ?? "left";
+    const widthDelta = measured.width - textNode.width;
+    let x = textNode.x;
+    if (align === "center") x = Math.round(textNode.x - widthDelta / 2);
+    else if (align === "right") x = textNode.x - widthDelta;
+    return { ...textNode, x, width: measured.width, height: measured.height };
   } else if (mode === "fixed") {
     const measuredHeight = measureTextFixedWidthHeight(textNode);
     return { ...textNode, height: measuredHeight };

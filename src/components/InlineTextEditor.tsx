@@ -80,7 +80,6 @@ export function InlineTextEditor({
 
   // Width mode
   const isAutoWidth = node.textWidthMode === 'auto' || !node.textWidthMode
-  const isFixedHeight = node.textWidthMode === 'fixed-height'
   const fixedScreenWidth = node.width * scale
   const fixedScreenHeight = node.height * scale
   const isFitContentInAutoLayout =
@@ -197,12 +196,11 @@ export function InlineTextEditor({
   }, [node.text])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // Figma parity: Enter inserts a line break; Esc commits.
+    // (Both plain Enter and Shift+Enter fall through to contentEditable.)
+    if (e.key === 'Escape') {
       e.preventDefault()
       submit()
-    } else if (e.key === 'Escape') {
-      e.preventDefault()
-      stopEditing()
     }
     // Stop propagation so canvas shortcuts don't fire
     e.stopPropagation()
@@ -270,8 +268,13 @@ export function InlineTextEditor({
         boxSizing: 'content-box',
         display: 'inline-block',
         whiteSpace: isWrappedWidth ? 'pre-wrap' : 'pre',
-        wordBreak: isWrappedWidth ? 'break-word' : 'normal',
-        overflow: isFixedHeight ? 'hidden' : 'visible',
+        // overflowWrap: break-word breaks only words wider than the box;
+        // wordBreak: normal keeps word-boundary wrapping (the old break-word
+        // over-broke). Matches wrapTextToLines as closely as the browser allows.
+        overflowWrap: isWrappedWidth ? 'break-word' : 'normal',
+        wordBreak: 'normal',
+        // Fixed-size overflow renders outside the box (Figma parity), not clipped.
+        overflow: 'visible',
         cursor: 'text',
         textTransform: node.textTransform === 'capitalize' ? 'capitalize'
           : node.textTransform === 'uppercase' ? 'uppercase'

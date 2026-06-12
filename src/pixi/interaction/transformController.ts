@@ -3,9 +3,10 @@ import { useLayoutStore } from "@/store/layoutStore";
 import type { InteractionContext, TransformState } from "./types";
 import { hitTestTransformHandle, getResizeCursor } from "./hitTesting";
 import { generatePolygonPoints } from "@/utils/polygonUtils";
-import type { PolygonNode, LineNode, RefNode, InstanceOverrideUpdateProps } from "@/types/scene";
+import type { PolygonNode, LineNode, RefNode, TextNode, InstanceOverrideUpdateProps } from "@/types/scene";
 import { findResolvedDescendantByPath } from "@/utils/instanceRuntime";
 import { getNodeEffectiveSize } from "@/utils/nodeUtils";
+import { resolveTextResize, minTextWidth } from "./textResize";
 
 export interface TransformController {
   handlePointerDown(e: PointerEvent, world: { x: number; y: number }): boolean;
@@ -172,6 +173,24 @@ export function createTransformController(context: InteractionContext): Transfor
           return true;
         }
 
+        const node = useSceneStore.getState().nodesById[state.nodeId];
+
+        // Text: switch sizing mode based on which handle is dragged and
+        // re-hug height live for side (auto-height) drags (Figma parity).
+        if (node?.type === "text") {
+          const textNode = node as TextNode;
+          const clampedW = Math.max(minTextWidth(textNode), roundedW);
+          const resolved = resolveTextResize(textNode, corner, clampedW, roundedH);
+          useSceneStore.getState().updateNodeWithoutHistory(state.nodeId, {
+            x: Math.round(newX),
+            y: Math.round(newY),
+            width: resolved.width,
+            height: resolved.height,
+            textWidthMode: resolved.textWidthMode,
+          });
+          return true;
+        }
+
         const updates: Record<string, unknown> = {
           x: Math.round(newX),
           y: Math.round(newY),
@@ -180,7 +199,6 @@ export function createTransformController(context: InteractionContext): Transfor
         };
 
         // Regenerate points for polygon/line nodes
-        const node = useSceneStore.getState().nodesById[state.nodeId];
         if (node?.type === "polygon") {
           const sides = (node as PolygonNode).sides ?? 6;
           updates.points = generatePolygonPoints(sides, roundedW, roundedH);
@@ -230,6 +248,10 @@ export function createTransformController(context: InteractionContext): Transfor
             commitUpdates.points = (node as PolygonNode).points;
           } else if (node.type === "line") {
             commitUpdates.points = (node as LineNode).points;
+          } else if (node.type === "text") {
+            // Mode was switched live via WithoutHistory; include it so the
+            // history record and syncTextDimensions use the new mode.
+            commitUpdates.textWidthMode = (node as TextNode).textWidthMode;
           }
           useSceneStore.getState().updateNode(state.nodeId, commitUpdates);
         }
