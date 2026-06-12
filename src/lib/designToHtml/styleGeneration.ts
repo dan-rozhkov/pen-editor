@@ -1,8 +1,24 @@
-import type { BaseNode, TextNode, FrameNode, RectNode, ShadowEffect, GradientFill, ImageFill, PerSideStroke, ColorBinding } from "@/types/scene";
+import type { BaseNode, TextNode, FrameNode, RectNode, ShadowEffect, GradientFill, ImageFill, PerSideStroke, ColorBinding, SolidPaint, GradientPaint, ImagePaint } from "@/types/scene";
 import type { Variable } from "@/types/variable";
 import { applyOpacity } from "@/utils/colorUtils";
 import { hasPerCornerRadius } from "@/utils/renderUtils";
 import { useVariableStore } from "@/store/variableStore";
+import { getRenderableFills, getRenderableEffects, getPrimarySolidPaint } from "@/utils/fillUtils";
+import { imageModeToCssSize } from "@/lib/cssBackground";
+
+/**
+ * CSS properties emitted by `generateFillCss` for a node's background.
+ * Owned here so consumers that need to strip the generated background (e.g.
+ * SVG shape wrappers in convertNode) cannot drift from what is emitted.
+ */
+export const BACKGROUND_STYLE_KEYS = [
+  "background-color",
+  "background-image",
+  "background-size",
+  "background-position",
+  "background-repeat",
+  "background-blend-mode",
+] as const;
 
 /**
  * Resolve a color binding to a CSS variable reference, e.g. `var(--primary, #ff0000)`.
@@ -26,20 +42,8 @@ export function generateVisualStyles(node: BaseNode): Record<string, string> {
   const styles: Record<string, string> = {};
   const { variables } = useVariableStore.getState();
 
-  // Fill / background
-  if (node.gradientFill) {
-    styles.background = generateGradientCss(node.gradientFill);
-  } else if (node.imageFill) {
-    Object.assign(styles, generateImageFillCss(node.imageFill));
-  } else if (node.fill) {
-    const rawColor = applyOpacity(node.fill, node.fillOpacity);
-    const color = resolveBindingToCssVar(node.fillBinding, rawColor, variables) ?? rawColor;
-    if (node.type === "text") {
-      styles.color = color;
-    } else {
-      styles["background-color"] = color;
-    }
-  }
+  // Fill / background — from the paint stack (bottom-to-top).
+  Object.assign(styles, generateFillCss(node, variables));
 
   // Stroke / border
   if (node.stroke && (node.strokeWidth || node.strokeWidthPerSide)) {
@@ -80,9 +84,17 @@ export function generateVisualStyles(node: BaseNode): Record<string, string> {
     styles.opacity = String(node.opacity);
   }
 
-  // Shadow effects
-  if (node.effect) {
-    styles["box-shadow"] = generateShadowCss(node.effect);
+  // Shadow effects — from the effect stack (bottom-to-top).
+  // CSS box-shadow lists paint the FIRST shadow on top, but our stack is
+  // bottom-to-top, so reverse the stack to get correct visual stacking.
+  const effects = getRenderableEffects(node);
+  if (effects.length > 0) {
+    styles["box-shadow"] = effects
+      .filter((e): e is ShadowEffect => e.type === "shadow")
+      .slice()
+      .reverse()
+      .map(generateShadowCss)
+      .join(", ");
   }
 
   // Rotation and flip transforms
@@ -159,12 +171,134 @@ export function generateTextStyles(node: TextNode): Record<string, string> {
   return styles;
 }
 
-function generateGradientCss(gradient: GradientFill): string {
+/**
+ * Build the per-layer CSS properties for an image fill. The `mode` ↔
+ * `background-size` mapping is shared with htmlToDesign via
+ * `@/lib/cssBackground` so the roundtrip stays in sync (no-repeat always).
+ */
+function imageFillLayerCss(imageFill: ImageFill): {
+  image: string;
+  size: string;
+  position: string;
+  repeat: string;
+} {
+  return {
+    image: `url("${imageFill.url}")`,
+    size: imageModeToCssSize(imageFill.mode),
+    position: imageFill.mode === "stretch" ? "0% 0%" : "center",
+    repeat: "no-repeat",
+  };
+}
+
+/**
+ * Build the CSS fill declarations for a node's renderable paint stack.
+ *
+ * Ordering: our `fills` array is bottom-to-top (fills[0] is the bottom), but
+ * CSS multiple-background lists paint the FIRST item on top. So whenever we
+ * emit a `background-image` list we reverse the stack (top-to-bottom).
+ *
+ * Single-solid stacks collapse to `background-color` (or `color` for text).
+ * Per-layer `opacity` is baked into the solid/gradient colors; CSS has no
+ * per-layer image opacity, so image-layer opacity is intentionally ignored
+ * (documented simplification).
+ */
+function generateFillCss(node: BaseNode, variables: Variable[]): Record<string, string> {
+  const styles: Record<string, string> = {};
+
+  // Text nodes color their glyphs; use the primary solid paint's own
+  // opacity/binding. For legacy nodes the derived paint already carries
+  // `fillOpacity`/`fillBinding` (see legacyFillsToPaints), so one branch
+  // covers both representations.
+  if (node.type === "text") {
+    const primary = getPrimarySolidPaint(node);
+    if (primary) {
+      const rawColor = applyOpacity(primary.color, primary.opacity);
+      styles.color = resolveBindingToCssVar(primary.colorBinding, rawColor, variables) ?? rawColor;
+    }
+    return styles;
+  }
+
+  const paints = getRenderableFills(node);
+  if (paints.length === 0) return styles;
+
+  // Single solid layer → background-color (preserve legacy behavior incl.
+  // variable binding resolution from the legacy fillBinding field).
+  if (paints.length === 1 && paints[0].type === "solid") {
+    const solid = paints[0] as SolidPaint;
+    const rawColor = applyOpacity(solid.color, solid.opacity);
+    const binding = solid.colorBinding ?? node.fillBinding;
+    styles["background-color"] = resolveBindingToCssVar(binding, rawColor, variables) ?? rawColor;
+    return styles;
+  }
+
+  // Multiple layers / gradients / images → CSS multiple backgrounds.
+  // Reverse the stack so CSS list order is top-to-bottom.
+  const ordered = paints.slice().reverse();
+
+  const images: string[] = [];
+  const sizes: string[] = [];
+  const positions: string[] = [];
+  const repeats: string[] = [];
+  const blendModes: string[] = [];
+  let hasBlend = false;
+  let bottomColor: string | undefined;
+
+  ordered.forEach((paint, idx) => {
+    const isBottommost = idx === ordered.length - 1;
+    if (paint.type === "solid") {
+      const solid = paint as SolidPaint;
+      const binding = solid.colorBinding ?? (isBottommost ? node.fillBinding : undefined);
+      const rawColor = applyOpacity(solid.color, solid.opacity);
+      const color = resolveBindingToCssVar(binding, rawColor, variables) ?? rawColor;
+      // The bottommost solid can be expressed via background-color; any other
+      // solid layer becomes a flat linear-gradient so it can sit in the list.
+      if (isBottommost) {
+        bottomColor = color;
+        return;
+      }
+      images.push(`linear-gradient(${color}, ${color})`);
+      sizes.push("auto");
+      positions.push("0% 0%");
+      repeats.push("repeat");
+    } else if (paint.type === "gradient") {
+      images.push(generateGradientCss((paint as GradientPaint).gradient, paint.opacity));
+      sizes.push("auto");
+      positions.push("0% 0%");
+      repeats.push("repeat");
+    } else {
+      const layer = imageFillLayerCss((paint as ImagePaint).image);
+      images.push(layer.image);
+      sizes.push(layer.size);
+      positions.push(layer.position);
+      repeats.push(layer.repeat);
+    }
+    blendModes.push(paint.blendMode ?? "normal");
+    if (paint.blendMode && paint.blendMode !== "normal") hasBlend = true;
+  });
+
+  if (images.length > 0) {
+    styles["background-image"] = images.join(", ");
+    styles["background-size"] = sizes.join(", ");
+    styles["background-position"] = positions.join(", ");
+    styles["background-repeat"] = repeats.join(", ");
+    if (hasBlend) {
+      styles["background-blend-mode"] = blendModes.join(", ");
+    }
+  }
+  if (bottomColor !== undefined) {
+    styles["background-color"] = bottomColor;
+  }
+
+  return styles;
+}
+
+function generateGradientCss(gradient: GradientFill, layerOpacity?: number): string {
+  const factor = layerOpacity ?? 1;
   const stops = gradient.stops
     .map((s) => {
-      const color = s.opacity !== undefined && s.opacity < 1
-        ? applyOpacity(s.color, s.opacity)
-        : s.color;
+      const stopOpacity = s.opacity !== undefined ? s.opacity : 1;
+      const effective = stopOpacity * factor;
+      const color = effective < 1 ? applyOpacity(s.color, effective) : s.color;
       return `${color} ${Math.round(s.position * 100)}%`;
     })
     .join(", ");
@@ -178,28 +312,6 @@ function generateGradientCss(gradient: GradientFill): string {
   const dy = gradient.endY - gradient.startY;
   const angle = Math.round((Math.atan2(dx, -dy) * 180) / Math.PI);
   return `linear-gradient(${angle}deg, ${stops})`;
-}
-
-function generateImageFillCss(imageFill: ImageFill): Record<string, string> {
-  const styles: Record<string, string> = {};
-  styles["background-image"] = `url("${imageFill.url}")`;
-  styles["background-repeat"] = "no-repeat";
-
-  switch (imageFill.mode) {
-    case "fill":
-      styles["background-size"] = "cover";
-      styles["background-position"] = "center";
-      break;
-    case "fit":
-      styles["background-size"] = "contain";
-      styles["background-position"] = "center";
-      break;
-    case "stretch":
-      styles["background-size"] = "100% 100%";
-      break;
-  }
-
-  return styles;
 }
 
 function generatePerSideBorderCss(

@@ -38,6 +38,57 @@ export interface GradientFill {
   endRadius?: number
 }
 
+// --- Multiple fills (Figma-style paint stack) ---
+
+// Blend modes supported per paint layer (subset of CSS/Pixi blend modes).
+// Single source of truth — UI options and CSS parsing derive from this list.
+export const PAINT_BLEND_MODES = [
+  'normal',
+  'multiply',
+  'screen',
+  'overlay',
+  'darken',
+  'lighten',
+  'color-dodge',
+  'color-burn',
+  'hard-light',
+  'soft-light',
+  'difference',
+  'exclusion',
+] as const
+
+export type PaintBlendMode = (typeof PAINT_BLEND_MODES)[number]
+
+interface PaintBase {
+  // Stable id for UI list keys/reordering (generated, not semantic)
+  id: string
+  visible?: boolean   // defaults to true
+  opacity?: number    // 0-1, defaults to 1
+  blendMode?: PaintBlendMode // defaults to 'normal'
+}
+
+export interface SolidPaint extends PaintBase {
+  type: 'solid'
+  color: string             // hex, e.g. '#ff0000' or '#ff000080'
+  colorBinding?: ColorBinding
+}
+
+export interface GradientPaint extends PaintBase {
+  type: 'gradient'
+  gradient: GradientFill
+}
+
+export interface ImagePaint extends PaintBase {
+  type: 'image'
+  image: ImageFill
+}
+
+/**
+ * One paint layer in a fill stack. `fills: Paint[]` is ordered bottom-to-top:
+ * fills[0] renders first (bottom), the last element renders on top.
+ */
+export type Paint = SolidPaint | GradientPaint | ImagePaint
+
 // Sizing modes for elements inside auto-layout containers
 export type SizingMode = 'fixed' | 'fill_container' | 'fit_content'
 
@@ -62,7 +113,17 @@ export interface ShadowEffect {
   offset: { x: number; y: number }
   blur: number
   spread: number
+  // Stable id for UI list keys when used inside `effects: Effect[]`
+  id?: string
+  visible?: boolean   // defaults to true
 }
+
+/**
+ * One effect layer in an effect stack. `effects: Effect[]` is ordered
+ * bottom-to-top like `fills`. Currently only shadows; future effect kinds
+ * (blur, etc.) extend this union.
+ */
+export type Effect = ShadowEffect
 
 // Per-side stroke widths (like CSS border-top, border-right, etc.)
 export interface PerSideStroke {
@@ -113,11 +174,25 @@ export interface BaseNode {
   flipX?: boolean
   flipY?: boolean
   // Image fill (takes priority over color fill when set)
+  // Legacy single-fill field — superseded by `fills` when that is set
   imageFill?: ImageFill
   // Gradient fill (takes priority over solid fill when set)
+  // Legacy single-fill field — superseded by `fills` when that is set
   gradientFill?: GradientFill
-  // Shadow effect
+  /**
+   * Figma-style paint stack (bottom-to-top). When defined, this is the single
+   * source of truth for the node's fill; the legacy `fill`/`gradientFill`/
+   * `imageFill`/`fillOpacity`/`fillBinding` fields are ignored. Use
+   * `getFills()` from `@/utils/fillUtils` to read fills with legacy fallback.
+   */
+  fills?: Paint[]
+  // Shadow effect (legacy single-effect field — superseded by `effects`)
   effect?: ShadowEffect
+  /**
+   * Figma-style effect stack (bottom-to-top). When defined, supersedes the
+   * legacy `effect` field. Use `getEffects()` from `@/utils/fillUtils`.
+   */
+  effects?: Effect[]
   // Aspect ratio lock for proportional resize
   aspectRatioLocked?: boolean
   // Stored aspect ratio (width/height) when lock is enabled

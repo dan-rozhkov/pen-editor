@@ -81,10 +81,7 @@ export function MultiSelectPropertyEditor({
   const noopIsOverridden = () => false;
   const noopResetOverride = () => {};
 
-  // For fill/stroke: show section as "has fill" if any node has it
-  const anyHasFill = selectedNodes.some(
-    (n) => !!(n.fill || n.gradientFill || n.imageFill),
-  );
+  // For stroke: show section as "has stroke" if any node has it
   const anyHasStroke = selectedNodes.some(
     (n) =>
       !!(
@@ -98,14 +95,7 @@ export function MultiSelectPropertyEditor({
       ),
   );
 
-  // Build a synthetic node for fill/stroke that has fill/stroke if any node does
-  const fillNode = useMemo(() => {
-    if (anyHasFill && !merged.node.fill && !merged.node.gradientFill && !merged.node.imageFill) {
-      return { ...merged.node, fill: "#000000" } as SceneNode;
-    }
-    return merged.node;
-  }, [merged.node, anyHasFill]);
-
+  // Build a synthetic node for stroke that has stroke if any node does
   const strokeNode = useMemo(() => {
     if (anyHasStroke && !merged.node.stroke && !(merged.node.strokeWidth && merged.node.strokeWidth > 0)) {
       return { ...merged.node, stroke: "#000000", strokeWidth: 1 } as SceneNode;
@@ -264,7 +254,7 @@ export function MultiSelectPropertyEditor({
       )}
       {sharedSections.has("fill") && (
         <FillSection
-          node={fillNode}
+          node={merged.node}
           onUpdate={handleUpdate}
           component={null}
           colorVariables={colorVariables}

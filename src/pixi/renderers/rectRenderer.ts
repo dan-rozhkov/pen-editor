@@ -1,19 +1,23 @@
 import { Container, Graphics } from "pixi.js";
 import type { RectNode } from "@/types/scene";
-import { applyFill, applyStroke, hasVisualPropsChanged, drawRoundedShape } from "./fillStrokeHelpers";
-import { applyImageFill } from "./imageFillHelpers";
+import {
+  applyFills,
+  applyStroke,
+  hasFillSourceChanged,
+  hasVisualPropsChanged,
+  drawRoundedShape,
+} from "./fillStrokeHelpers";
+import { applyImageFills } from "./imageFillHelpers";
 
 export function createRectContainer(node: RectNode): Container {
   const container = new Container();
   const gfx = new Graphics();
   gfx.label = "rect-bg";
-  drawRect(gfx, node);
   container.addChild(gfx);
+  drawRect(gfx, node);
 
-  // Image fill
-  if (node.imageFill) {
-    applyImageFill(container, node.imageFill, node.width, node.height, node.cornerRadius, node.cornerRadiusPerCorner);
-  }
+  // Image fill paint stack
+  applyImageFills(container, node, node.width, node.height, node.cornerRadius, node.cornerRadiusPerCorner);
 
   return container;
 }
@@ -32,21 +36,23 @@ export function updateRectContainer(
     }
   }
 
-  // Image fill
+  // Image fill stack
   if (
-    node.imageFill !== prev.imageFill ||
+    hasFillSourceChanged(node, prev) ||
     node.width !== prev.width ||
     node.height !== prev.height ||
     node.cornerRadius !== prev.cornerRadius ||
     node.cornerRadiusPerCorner !== prev.cornerRadiusPerCorner
   ) {
-    applyImageFill(container, node.imageFill, node.width, node.height, node.cornerRadius, node.cornerRadiusPerCorner);
+    applyImageFills(container, node, node.width, node.height, node.cornerRadius, node.cornerRadiusPerCorner);
   }
 }
 
 export function drawRect(gfx: Graphics, node: RectNode): void {
-  drawRoundedShape(gfx, node.width, node.height, node.cornerRadius, node.cornerRadiusPerCorner);
-  applyFill(gfx, node, node.width, node.height);
-
-  applyStroke(gfx, node, node.width, node.height);
+  const drawShape = (target: Graphics) =>
+    drawRoundedShape(target, node.width, node.height, node.cornerRadius, node.cornerRadiusPerCorner);
+  const pathReady = applyFills(gfx, node, node.width, node.height, drawShape);
+  // Skip rebuilding the geometry for the stroke when the last fill already left
+  // a reusable path on `gfx`.
+  applyStroke(gfx, node, node.width, node.height, pathReady ? undefined : drawShape);
 }

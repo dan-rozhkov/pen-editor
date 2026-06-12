@@ -1,19 +1,22 @@
 import { Container, Graphics } from "pixi.js";
 import type { EllipseNode } from "@/types/scene";
-import { applyFill, applyStroke, hasVisualPropsChanged } from "./fillStrokeHelpers";
-import { applyImageFillEllipse } from "./imageFillHelpers";
+import {
+  applyFills,
+  applyStroke,
+  hasFillSourceChanged,
+  hasVisualPropsChanged,
+} from "./fillStrokeHelpers";
+import { applyImageFillsEllipse } from "./imageFillHelpers";
 
 export function createEllipseContainer(node: EllipseNode): Container {
   const container = new Container();
   const gfx = new Graphics();
   gfx.label = "ellipse-bg";
-  drawEllipse(gfx, node);
   container.addChild(gfx);
+  drawEllipse(gfx, node);
 
-  // Image fill with elliptical clipping
-  if (node.imageFill) {
-    applyImageFillEllipse(container, node.imageFill, node.width, node.height);
-  }
+  // Image fill stack with elliptical clipping
+  applyImageFillsEllipse(container, node, node.width, node.height);
 
   return container;
 }
@@ -31,19 +34,21 @@ export function updateEllipseContainer(
     }
   }
 
-  // Image fill
+  // Image fill stack
   if (
-    node.imageFill !== prev.imageFill ||
+    hasFillSourceChanged(node, prev) ||
     node.width !== prev.width ||
     node.height !== prev.height
   ) {
-    applyImageFillEllipse(container, node.imageFill, node.width, node.height);
+    applyImageFillsEllipse(container, node, node.width, node.height);
   }
 }
 
 export function drawEllipse(gfx: Graphics, node: EllipseNode): void {
-  gfx.ellipse(node.width / 2, node.height / 2, node.width / 2, node.height / 2);
-  applyFill(gfx, node, node.width, node.height);
-
-  applyStroke(gfx, node, node.width, node.height);
+  const drawShape = (target: Graphics) =>
+    target.ellipse(node.width / 2, node.height / 2, node.width / 2, node.height / 2);
+  const pathReady = applyFills(gfx, node, node.width, node.height, drawShape);
+  // Skip rebuilding the geometry for the stroke when the last fill already left
+  // a reusable path on `gfx`.
+  applyStroke(gfx, node, node.width, node.height, pathReady ? undefined : drawShape);
 }

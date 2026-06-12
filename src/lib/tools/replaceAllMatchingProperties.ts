@@ -1,6 +1,6 @@
 import { useSceneStore } from "@/store/sceneStore";
 import { createSnapshot, saveHistory } from "@/store/sceneStore/helpers/history";
-import type { FlatSceneNode, LayoutProperties } from "@/types/scene";
+import type { FlatSceneNode, LayoutProperties, Paint } from "@/types/scene";
 import type { ToolHandler } from "../toolRegistry";
 import { resolveVariableReference } from "@/lib/tools/variableResolutionUtils";
 
@@ -86,14 +86,56 @@ export const replaceAllMatchingProperties: ToolHandler = async (args) => {
       }
     }
 
-    // fillColor → fill (all nodes)
-    if (rules.fillColor) {
-      applyColorRules(rules.fillColor, "fill", "fillBinding");
+    /**
+     * Apply color rules inside the Figma-style `fills` stack, matching/replacing
+     * the color of each SolidPaint and attaching/clearing its `colorBinding`
+     * when the replacement is a variable reference.
+     */
+    function applyFillsColorRules(colorRules: ReplacementRule[]) {
+      const sourceFills = (
+        updated as unknown as { fills?: Paint[] } | null
+      )?.fills ?? node.fills;
+      if (!sourceFills) return;
+
+      let changed = false;
+      const nextFills = sourceFills.map((paint): Paint => {
+        if (paint.type !== "solid") return paint;
+        for (const rule of colorRules) {
+          if (isColorEqual(paint.color, rule.from)) {
+            const replacement = getColorReplacement(rule.to);
+            changed = true;
+            replacements++;
+            return {
+              ...paint,
+              color: replacement.colorValue as string,
+              colorBinding: replacement.binding,
+            };
+          }
+        }
+        return paint;
+      });
+
+      if (changed) {
+        updated = updated ?? { ...node };
+        (updated as unknown as Record<string, unknown>).fills = nextFills;
+      }
     }
 
-    // textColor → fill (text nodes only)
+    // When `fills` is set it is the single source of truth and the renderer
+    // ignores the legacy `fill` field (see fillUtils contract) — "replacing"
+    // legacy `fill` there would count a no-op as a replacement.
+    const hasFillsStack = node.fills !== undefined;
+
+    // fillColor → fill + fills solid paints (all nodes)
+    if (rules.fillColor) {
+      if (!hasFillsStack) applyColorRules(rules.fillColor, "fill", "fillBinding");
+      applyFillsColorRules(rules.fillColor);
+    }
+
+    // textColor → fill + fills solid paints (text nodes only)
     if (rules.textColor && node.type === "text") {
-      applyColorRules(rules.textColor, "fill", "fillBinding");
+      if (!hasFillsStack) applyColorRules(rules.textColor, "fill", "fillBinding");
+      applyFillsColorRules(rules.textColor);
     }
 
     // strokeColor → stroke

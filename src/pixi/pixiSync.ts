@@ -52,7 +52,8 @@ const THEME_SENTINEL = Object.freeze({ type: "none" }) as unknown as FlatSceneNo
  * variable / theme changes:
  * - `ref`: the resolved component subtree may contain bindings anywhere;
  * - `embed`: variables are injected as a CSS block into the HTML;
- * - any node with a `fillBinding` or `strokeBinding`.
+ * - any node with a `fillBinding` or `strokeBinding`;
+ * - any node whose `fills` stack contains a solid paint with a `colorBinding`.
  *
  * NOTE: if a new `*Binding` field is added to scene nodes (see
  * `src/types/scene.ts`), it MUST be added here, or bound nodes will stop
@@ -63,7 +64,13 @@ export function isVariableDependent(node: FlatSceneNode): boolean {
     node.type === "ref" || // resolved subtree may contain bindings anywhere
     node.type === "embed" || // variables are injected as CSS into the HTML
     node.fillBinding != null ||
-    node.strokeBinding != null
+    node.strokeBinding != null ||
+    // Deliberately scans the raw `node.fills` instead of `getFills()`: this
+    // runs for every node on registration and must not manufacture a derived
+    // legacy paint stack. Legacy-only nodes are covered by the `fillBinding`
+    // check above.
+    (node.fills != null &&
+      node.fills.some((p) => p.type === "solid" && p.colorBinding != null))
   );
 }
 

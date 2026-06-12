@@ -58,17 +58,20 @@ function splitColorAndPosition(rawStop: string): { color: string; position?: num
   return { color, position: Math.max(0, Math.min(1, pos)) };
 }
 
-export function parseCssLinearGradient(bgImage: string): GradientFill | null {
-  const start = bgImage.toLowerCase().indexOf("linear-gradient(");
+/**
+ * Extract the inner argument list of the first `fnName(...)` occurrence in
+ * `value`, respecting nested parentheses. Returns null if not present.
+ */
+function extractFunctionArgs(value: string, fnName: string): string | null {
+  const start = value.toLowerCase().indexOf(`${fnName}(`);
   if (start < 0) return null;
-
-  const openParen = bgImage.indexOf("(", start);
+  const openParen = value.indexOf("(", start);
   if (openParen < 0) return null;
 
   let depth = 0;
   let closeParen = -1;
-  for (let i = openParen; i < bgImage.length; i++) {
-    const ch = bgImage[i];
+  for (let i = openParen; i < value.length; i++) {
+    const ch = value[i];
     if (ch === "(") depth++;
     else if (ch === ")") {
       depth--;
@@ -79,22 +82,12 @@ export function parseCssLinearGradient(bgImage: string): GradientFill | null {
     }
   }
   if (closeParen < 0) return null;
+  return value.slice(openParen + 1, closeParen).trim();
+}
 
-  const inside = bgImage.slice(openParen + 1, closeParen).trim();
-  const parts = splitSelectorList(inside);
-  if (parts.length < 2) return null;
-
-  let angleDeg = 180;
-  let stopStartIndex = 0;
-  const parsedAngle = parseLinearGradientAngle(parts[0] ?? "");
-  if (parsedAngle != null) {
-    angleDeg = parsedAngle;
-    stopStartIndex = 1;
-  }
-
-  const rawStops = parts.slice(stopStartIndex);
+/** Parse `<color> <pos%>?` stop tokens into GradientFill stops. */
+function parseGradientStops(rawStops: string[]): GradientFill["stops"] | null {
   if (rawStops.length < 2) return null;
-
   const stops = rawStops.map((rawStop) => {
     const parsed = splitColorAndPosition(rawStop);
     const colorWithOpacity = parseColorWithOpacity(parsed.color);
@@ -114,6 +107,31 @@ export function parseCssLinearGradient(bgImage: string): GradientFill | null {
     if (s.position === undefined) s.position = last > 0 ? i / last : 0;
   });
 
+  return stops.map((s) => ({
+    color: s.color,
+    position: s.position ?? 0,
+    ...(s.opacity !== undefined ? { opacity: s.opacity } : {}),
+  }));
+}
+
+export function parseCssLinearGradient(bgImage: string): GradientFill | null {
+  const inside = extractFunctionArgs(bgImage, "linear-gradient");
+  if (inside === null) return null;
+
+  const parts = splitSelectorList(inside);
+  if (parts.length < 2) return null;
+
+  let angleDeg = 180;
+  let stopStartIndex = 0;
+  const parsedAngle = parseLinearGradientAngle(parts[0] ?? "");
+  if (parsedAngle != null) {
+    angleDeg = parsedAngle;
+    stopStartIndex = 1;
+  }
+
+  const stops = parseGradientStops(parts.slice(stopStartIndex));
+  if (!stops) return null;
+
   const angleRad = ((angleDeg - 90) * Math.PI) / 180;
   const cos = Math.cos(angleRad);
   const sin = Math.sin(angleRad);
@@ -124,16 +142,70 @@ export function parseCssLinearGradient(bgImage: string): GradientFill | null {
   const endX = Math.max(0, Math.min(1, 0.5 + cos * half));
   const endY = Math.max(0, Math.min(1, 0.5 + sin * half));
 
+  return { type: "linear", stops, startX, startY, endX, endY };
+}
+
+export function parseCssRadialGradient(bgImage: string): GradientFill | null {
+  const inside = extractFunctionArgs(bgImage, "radial-gradient");
+  if (inside === null) return null;
+
+  const parts = splitSelectorList(inside);
+  if (parts.length < 2) return null;
+
+  // The first segment may be a shape/size/position config (no comma inside it
+  // after splitting) — e.g. "circle at center". A color stop always parses as
+  // a color, so if the first part is not a color, treat it as config.
+  let stopStartIndex = 0;
+  const firstParsed = splitColorAndPosition(parts[0] ?? "");
+  if (!parseColorWithOpacity(firstParsed.color)) {
+    stopStartIndex = 1;
+  }
+
+  const stops = parseGradientStops(parts.slice(stopStartIndex));
+  if (!stops) return null;
+
+  // Radial gradients are centered; use a normalized center-out vector.
   return {
-    type: "linear",
-    stops: stops.map((s) => ({
-      color: s.color,
-      position: s.position ?? 0,
-      ...(s.opacity !== undefined ? { opacity: s.opacity } : {}),
-    })),
-    startX,
-    startY,
-    endX,
-    endY,
+    type: "radial",
+    stops,
+    startX: 0.5,
+    startY: 0.5,
+    endX: 1,
+    endY: 0.5,
   };
+}
+
+/** Parse either a linear or radial CSS gradient into a GradientFill. */
+export function parseCssGradient(bgImage: string): GradientFill | null {
+  const lower = bgImage.toLowerCase();
+  if (lower.includes("linear-gradient(")) return parseCssLinearGradient(bgImage);
+  if (lower.includes("radial-gradient(")) return parseCssRadialGradient(bgImage);
+  return null;
+}
+
+/**
+ * Detect a flat `linear-gradient(<c>, <c>)` whose stops are all the same solid
+ * color — used by designToHtml to encode a mid-stack solid layer. Returns the
+ * single color (with optional opacity) when it matches, else null.
+ */
+export function detectSolidGradient(
+  bgImage: string,
+): { color: string; opacity?: number } | null {
+  const inside = extractFunctionArgs(bgImage, "linear-gradient");
+  if (inside === null) return null;
+  const parts = splitSelectorList(inside);
+  // Reject when an angle/direction prefix is present.
+  if (parseLinearGradientAngle(parts[0] ?? "") != null) return null;
+  if (parts.length < 2) return null;
+
+  const colors = parts.map((p) => parseColorWithOpacity(splitColorAndPosition(p).color));
+  if (colors.some((c) => !c)) return null;
+  const first = colors[0]!;
+  const allSame = colors.every(
+    (c) => c!.color === first.color && c!.opacity === first.opacity,
+  );
+  if (!allSame) return null;
+  return first.opacity !== undefined
+    ? { color: first.color, opacity: first.opacity }
+    : { color: first.color };
 }

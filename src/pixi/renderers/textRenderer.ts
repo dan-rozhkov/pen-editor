@@ -1,10 +1,24 @@
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { TextNode } from "@/types/scene";
-import { getResolvedFill } from "./colorHelpers";
+import { getPrimarySolidPaint } from "@/utils/fillUtils";
+import { getResolvedFill, getResolvedSolidPaint } from "./colorHelpers";
 import { applyTextTransform, wrapTextToLines } from "@/utils/textMeasure";
 
 function isWrappedMode(node: TextNode): boolean {
   return node.textWidthMode === "fixed" || node.textWidthMode === "fixed-height";
+}
+
+/**
+ * Resolve the text color. Text supports only a single solid color: when a paint
+ * stack is present, use the topmost visible solid paint (resolving its binding +
+ * opacity); otherwise fall back to the legacy resolved fill.
+ */
+function getResolvedTextColor(node: TextNode): string | undefined {
+  if (node.fills) {
+    const paint = getPrimarySolidPaint(node);
+    return paint ? getResolvedSolidPaint(paint) : undefined;
+  }
+  return getResolvedFill(node);
 }
 
 /**
@@ -74,7 +88,8 @@ export function updateTextContainer(
     node.textWidthMode !== prev.textWidthMode ||
     node.underline !== prev.underline ||
     node.strikethrough !== prev.strikethrough ||
-    node.gradientFill !== prev.gradientFill
+    node.gradientFill !== prev.gradientFill ||
+    node.fills !== prev.fills
   ) {
     textObj.style = buildTextStyle(node);
   }
@@ -84,7 +99,7 @@ export function updateTextContainer(
 }
 
 export function buildTextStyle(node: TextNode): TextStyle {
-  const fillColor = getResolvedFill(node) ?? "#000000";
+  const fillColor = getResolvedTextColor(node) ?? "#000000";
   const fontSize = node.fontSize ?? 16;
   const lineHeightMultiplier = node.lineHeight ?? 1.2;
 
@@ -155,7 +170,7 @@ function drawTextDecorations(
   g.x = textObj.x;
   g.y = textObj.y;
 
-  const fillColor = getResolvedFill(node) ?? "#000000";
+  const fillColor = getResolvedTextColor(node) ?? "#000000";
   const fontSize = node.fontSize ?? 16;
   const lineHeightMultiplier = node.lineHeight ?? 1.2;
   const lineHeight = fontSize * lineHeightMultiplier;

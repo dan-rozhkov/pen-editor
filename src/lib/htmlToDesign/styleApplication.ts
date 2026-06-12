@@ -1,23 +1,41 @@
 import type {
+  Effect,
   FrameNode,
   TextNode,
   RectNode,
   ShadowEffect,
 } from "@/types/scene";
 import { generateId } from "@/types/scene";
+import { imageModeFromCssSize } from "@/lib/cssBackground";
 import { parseColorWithOpacity, cssColorToHex, extractCssUrl } from "./colorParsing";
-import { parseCssLinearGradient } from "./gradientParsing";
+import { parseCssGradient } from "./gradientParsing";
+import { parseBackgroundToPaints } from "./backgroundParsing";
+import { splitSelectorList } from "./cssScoping";
 
 /** Apply base visual properties from CSS to a frame/rect node */
 export function applyBaseProps(
   node: FrameNode | RectNode,
   style: CSSStyleDeclaration,
 ): void {
-  // Background color
-  const fill = parseColorWithOpacity(style.backgroundColor);
-  if (fill) {
-    node.fill = fill.color;
-    if (fill.opacity !== undefined) node.fillOpacity = fill.opacity;
+  // Background — prefer a multi-layer paint stack when CSS describes more than
+  // one background layer; otherwise fall back to the legacy single-fill fields.
+  const multiPaints = parseBackgroundToPaints({
+    backgroundColor: style.backgroundColor,
+    backgroundImage: style.backgroundImage,
+    backgroundSize: style.backgroundSize,
+    backgroundBlendMode: style.backgroundBlendMode,
+  });
+  if (multiPaints) {
+    node.fills = multiPaints;
+  }
+
+  // Background color (legacy single-fill path; skipped when fills is set)
+  if (!multiPaints) {
+    const fill = parseColorWithOpacity(style.backgroundColor);
+    if (fill) {
+      node.fill = fill.color;
+      if (fill.opacity !== undefined) node.fillOpacity = fill.opacity;
+    }
   }
 
   // Corner radius
@@ -118,18 +136,17 @@ export function applyBaseProps(
     }
   }
 
-  // Background image → imageFill
+  // Background image → imageFill (legacy single-fill path; skipped when the
+  // multi-layer paint stack already captured the backgrounds).
   const bgImage = style.backgroundImage;
-  if (bgImage && bgImage !== "none") {
-    const linearGradient = parseCssLinearGradient(bgImage);
-    if (linearGradient) {
-      node.gradientFill = linearGradient;
+  if (!multiPaints && bgImage && bgImage !== "none") {
+    const gradient = parseCssGradient(bgImage);
+    if (gradient) {
+      node.gradientFill = gradient;
     } else {
       const bgUrl = extractCssUrl(bgImage);
       if (bgUrl) {
-        const bgSize = style.backgroundSize;
-        const mode = bgSize === "contain" ? "fit" : "fill";
-        node.imageFill = { url: bgUrl, mode };
+        node.imageFill = { url: bgUrl, mode: imageModeFromCssSize(style.backgroundSize) };
       }
     }
   }
@@ -143,9 +160,13 @@ export function applyBaseProps(
     node.clip = true;
   }
 
-  // Box shadow → effect
-  const shadow = parseShadow(style.boxShadow);
-  if (shadow) node.effect = shadow;
+  // Box shadow → effect (single) or effects (multiple)
+  const shadows = parseShadows(style.boxShadow);
+  if (shadows.length === 1) {
+    node.effect = shadows[0];
+  } else if (shadows.length > 1) {
+    node.effects = shadows;
+  }
 }
 
 /** Apply text-relevant base properties (fill from background, opacity) */
@@ -222,21 +243,23 @@ export function applyTextProps(node: TextNode, style: CSSStyleDeclaration): void
   }
 }
 
-/** Parse CSS box-shadow into a ShadowEffect */
+/** Parse a single CSS box-shadow segment into a ShadowEffect */
 export function parseShadow(boxShadow: string): ShadowEffect | null {
   if (!boxShadow || boxShadow === "none") return null;
 
-  // Parse first shadow: offsetX offsetY blur spread color
+  const isInset = /(^|\s)inset(\s|$)/i.test(boxShadow);
+
+  // Parse offsetX offsetY blur spread (blur/spread optional)
   // e.g. "rgb(0, 0, 0) 2px 4px 6px 0px" or "2px 4px 6px 0px rgba(0,0,0,0.25)"
   const match = boxShadow.match(
-    /(?:(-?[\d.]+)px)\s+(?:(-?[\d.]+)px)\s+(?:([\d.]+)px)(?:\s+([\d.]+)px)?/,
+    /(-?[\d.]+)px\s+(-?[\d.]+)px(?:\s+([\d.]+)px)?(?:\s+(-?[\d.]+)px)?/,
   );
   if (!match) return null;
 
   const offsetX = parseFloat(match[1]) || 0;
   const offsetY = parseFloat(match[2]) || 0;
-  const blur = parseFloat(match[3]) || 0;
-  const spread = parseFloat(match[4]) || 0;
+  const blur = match[3] !== undefined ? parseFloat(match[3]) || 0 : 0;
+  const spread = match[4] !== undefined ? parseFloat(match[4]) || 0 : 0;
 
   // Extract color
   const colorMatch = boxShadow.match(/rgba?\([^)]+\)/);
@@ -249,12 +272,31 @@ export function parseShadow(boxShadow: string): ShadowEffect | null {
 
   return {
     type: "shadow",
-    shadowType: "outer",
+    shadowType: isInset ? "inner" : "outer",
     color: color + alphaHex,
     offset: { x: offsetX, y: offsetY },
     blur,
     spread,
   };
+}
+
+/**
+ * Parse CSS box-shadow (possibly a comma-separated list) into ShadowEffects.
+ *
+ * CSS lists the first shadow on top; our effect stack is bottom-to-top, so the
+ * returned array reverses the CSS order. Commas inside `rgba(...)` are not
+ * treated as list separators.
+ */
+export function parseShadows(boxShadow: string): ShadowEffect[] {
+  if (!boxShadow || boxShadow === "none") return [];
+  const segments = splitSelectorList(boxShadow);
+  const shadows: Effect[] = [];
+  for (const segment of segments) {
+    const shadow = parseShadow(segment);
+    if (shadow) shadows.push(shadow);
+  }
+  // CSS top-to-bottom → bottom-to-top stack.
+  return (shadows.reverse() as ShadowEffect[]);
 }
 
 /** Create a RectNode from an <hr> element */

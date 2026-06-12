@@ -1,6 +1,7 @@
 import { Container, Graphics, Sprite, Texture, Assets, Rectangle } from "pixi.js";
-import type { FlatSceneNode, ImageFill, PerCornerRadius } from "@/types/scene";
-import { drawRoundedShape } from "./fillStrokeHelpers";
+import type { FlatSceneNode, ImageFill, ImagePaint, PerCornerRadius } from "@/types/scene";
+import { getRenderableFills } from "@/utils/fillUtils";
+import { drawRoundedShape, resolvePaintBlendMode } from "./fillStrokeHelpers";
 import { hasPerCornerRadius } from "@/utils/renderUtils";
 
 /** Cache for loaded textures by URL (LRU, bounded — SVG keys include size/resolution,
@@ -513,21 +514,200 @@ export function updateImageFillResolution(
   container: Container,
   node: FlatSceneNode,
 ): void {
-  if (!node.imageFill?.url || !isSvgUrl(node.imageFill.url)) return;
+  // Cheap bail-out first: this runs for every registered node on each
+  // zoom-resolution step, and most nodes carry no image fill source at all.
+  if (!node.fills && !node.imageFill) return;
+
+  // Re-apply image fills only when at least one SVG image paint is present
+  // (raster textures don't need a resolution-driven re-rasterization).
+  const hasSvgImage = getImagePaints(node).some((p) => isSvgUrl(p.image.url));
+  if (!hasSvgImage) return;
 
   if (node.type === "ellipse") {
-    applyImageFillEllipse(container, node.imageFill, node.width, node.height);
+    applyImageFillsEllipse(container, node, node.width, node.height);
     return;
   }
 
   if (node.type === "rect") {
-    applyImageFill(container, node.imageFill, node.width, node.height, node.cornerRadius, node.cornerRadiusPerCorner);
+    applyImageFills(container, node, node.width, node.height, node.cornerRadius, node.cornerRadiusPerCorner);
     return;
   }
 
   if (node.type === "frame") {
     const effectiveWidth = (container as { _effectiveWidth?: number })._effectiveWidth ?? node.width;
     const effectiveHeight = (container as { _effectiveHeight?: number })._effectiveHeight ?? node.height;
-    applyImageFill(container, node.imageFill, effectiveWidth, effectiveHeight, node.cornerRadius, node.cornerRadiusPerCorner);
+    applyImageFills(container, node, effectiveWidth, effectiveHeight, node.cornerRadius, node.cornerRadiusPerCorner);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Multiple image paints (Figma-style paint stack)
+//
+// All image sprites are drawn ABOVE the Graphics-based fills (solid/gradient),
+// preserving their mutual bottom-to-top order and per-layer opacity. When the
+// stack has 0 or 1 image paint we delegate to the legacy single-sprite path so
+// the SVG resize fast-path and texture cache behave exactly as before. With 2+
+// image paints we render an indexed sprite per paint (fast-path skipped).
+// ---------------------------------------------------------------------------
+
+const MULTI_IMAGE_LABEL_PREFIX = "image-fill-";
+const MULTI_IMAGE_MASK_PREFIX = "image-mask-";
+
+/** Image paints from the node's renderable fill stack (bottom-to-top). */
+function getImagePaints(node: FlatSceneNode): ImagePaint[] {
+  return getRenderableFills(node).filter((p): p is ImagePaint => p.type === "image");
+}
+
+/** Remove all indexed multi-image sprites and their masks. */
+function destroyMultiImageSprites(container: Container): void {
+  for (let i = container.children.length - 1; i >= 0; i--) {
+    const child = container.children[i];
+    const label = child.label ?? "";
+    if (label.startsWith(MULTI_IMAGE_LABEL_PREFIX) || label.startsWith(MULTI_IMAGE_MASK_PREFIX)) {
+      container.removeChildAt(i);
+      if (child instanceof Sprite) {
+        const derived = (child as Sprite & { _derivedImageTexture?: Texture })._derivedImageTexture;
+        if (derived) derived.destroy(false);
+      }
+      child.destroy();
+    }
+  }
+}
+
+/**
+ * Apply the node's image paint stack to a container. `ellipse` selects the
+ * clip geometry: elliptical mask vs rounded-rect (cornerRadius) mask.
+ */
+function applyImagePaintStack(
+  container: Container,
+  node: FlatSceneNode,
+  width: number,
+  height: number,
+  ellipse: boolean,
+  cornerRadius?: number,
+  cornerRadiusPerCorner?: PerCornerRadius,
+): void {
+  const imagePaints = getImagePaints(node);
+  const applyLegacySprite = (image: ImageFill | undefined) =>
+    ellipse
+      ? applyImageFillEllipse(container, image, width, height)
+      : applyImageFill(container, image, width, height, cornerRadius, cornerRadiusPerCorner);
+
+  if (imagePaints.length <= 1) {
+    // Single (or no) image: legacy fast path + cache parity.
+    destroyMultiImageSprites(container);
+    applyLegacySprite(imagePaints[0]?.image);
+    applyImagePaintProps(container, "image-fill", imagePaints[0]);
+    return;
+  }
+
+  // Multiple images: clear the legacy single sprite and render indexed sprites.
+  applyLegacySprite(undefined);
+  destroyMultiImageSprites(container);
+
+  imagePaints.forEach((paint, index) => {
+    withTexture(paint.image.url, width, height, container, (texture) => {
+      addIndexedImageSprite(
+        container,
+        texture,
+        paint,
+        index,
+        imagePaints.length,
+        width,
+        height,
+        ellipse,
+        cornerRadius,
+        cornerRadiusPerCorner,
+      );
+    });
+  });
+}
+
+/** Apply the node's image paint stack to a rect/frame container. */
+export function applyImageFills(
+  container: Container,
+  node: FlatSceneNode,
+  width: number,
+  height: number,
+  cornerRadius?: number,
+  cornerRadiusPerCorner?: PerCornerRadius,
+): void {
+  applyImagePaintStack(container, node, width, height, false, cornerRadius, cornerRadiusPerCorner);
+}
+
+/** Apply the node's image paint stack to an ellipse container. */
+export function applyImageFillsEllipse(
+  container: Container,
+  node: FlatSceneNode,
+  width: number,
+  height: number,
+): void {
+  applyImagePaintStack(container, node, width, height, true);
+}
+
+/** Apply per-paint alpha/blend to a sprite found by label (single-image path). */
+function applyImagePaintProps(
+  container: Container,
+  label: string,
+  paint: ImagePaint | undefined,
+): void {
+  const sprite = container.getChildByLabel(label);
+  if (!(sprite instanceof Sprite)) return;
+  sprite.alpha = paint?.opacity ?? 1;
+  sprite.blendMode = resolvePaintBlendMode(paint?.blendMode);
+}
+
+function addIndexedImageSprite(
+  container: Container,
+  texture: Texture,
+  paint: ImagePaint,
+  index: number,
+  count: number,
+  containerW: number,
+  containerH: number,
+  ellipse: boolean,
+  cornerRadius?: number,
+  cornerRadiusPerCorner?: PerCornerRadius,
+): void {
+  const sprite = new Sprite(texture);
+  sprite.label = `${MULTI_IMAGE_LABEL_PREFIX}${index}`;
+  sprite.alpha = paint.opacity ?? 1;
+  sprite.blendMode = resolvePaintBlendMode(paint.blendMode);
+  scaleImageSprite(sprite, texture, paint.image, containerW, containerH);
+
+  // Clip mask: ellipse, per-corner, or single corner radius. A Graphics used as
+  // a mask is excluded from normal rendering, so its z-position is irrelevant —
+  // append it at the end.
+  if (ellipse || hasPerCornerRadius(cornerRadiusPerCorner) || (cornerRadius && cornerRadius > 0)) {
+    const mask = new Graphics();
+    mask.label = `${MULTI_IMAGE_MASK_PREFIX}${index}`;
+    if (ellipse) {
+      mask.ellipse(containerW / 2, containerH / 2, containerW / 2, containerH / 2);
+    } else {
+      drawRoundedShape(mask, containerW, containerH, cornerRadius, cornerRadiusPerCorner);
+    }
+    mask.fill(0xffffff);
+    container.addChild(mask);
+    sprite.mask = mask;
+  }
+
+  // Image sprites render above the Graphics fills but BELOW the frame's
+  // children. Insert just after the background (mirrors the single-image path),
+  // offset by this paint's index so later paints stack on top of earlier ones.
+  const bgChild = container.getChildByLabel("rect-bg") ??
+    container.getChildByLabel("ellipse-bg") ??
+    container.getChildByLabel("frame-bg");
+  const baseIndex = bgChild ? container.getChildIndex(bgChild) + 1 : 0;
+  // Skip past any already-inserted lower-index sprites to keep order stable
+  // regardless of async texture load completion order.
+  let insertIndex = baseIndex;
+  for (let i = 0; i < count; i++) {
+    if (i >= index) break;
+    const lower = container.getChildByLabel(`${MULTI_IMAGE_LABEL_PREFIX}${i}`);
+    if (lower) {
+      const li = container.getChildIndex(lower);
+      if (li + 1 > insertIndex) insertIndex = li + 1;
+    }
+  }
+  container.addChildAt(sprite, Math.min(insertIndex, container.children.length));
 }

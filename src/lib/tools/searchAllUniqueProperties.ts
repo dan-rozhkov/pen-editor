@@ -1,32 +1,52 @@
 import { useSceneStore } from "@/store/sceneStore";
 import type { FlatSceneNode } from "@/types/scene";
 import type { ToolHandler } from "../toolRegistry";
+import { getFills, getPrimarySolidColor } from "@/utils/fillUtils";
 
-/** API property name → how to extract value from a flat node */
-type PropertyExtractor = (node: FlatSceneNode) => unknown;
+/**
+ * Collect every solid-paint color of a node, covering both the legacy `fill`
+ * field and the Figma-style `fills` stack. `getFills` already falls back to the
+ * legacy fields when `fills` is unset, so this captures both representations.
+ */
+function collectFillColors(n: FlatSceneNode): string[] {
+  const colors: string[] = [];
+  for (const paint of getFills(n)) {
+    if (paint.type === "solid") colors.push(paint.color);
+  }
+  return colors;
+}
+
+/**
+ * API property name → how to extract values from a flat node. Each extractor
+ * returns zero or more values; `undefined`/`null` entries are filtered by the
+ * collection loop.
+ */
+type PropertyExtractor = (node: FlatSceneNode) => readonly unknown[];
 
 const extractors: Record<string, PropertyExtractor> = {
-  fillColor: (n) => n.fill,
-  textColor: (n) => (n.type === "text" ? n.fill : undefined),
-  strokeColor: (n) => n.stroke,
-  strokeThickness: (n) => n.strokeWidth,
-  fontSize: (n) => (n.type === "text" ? n.fontSize : undefined),
-  fontFamily: (n) => (n.type === "text" ? n.fontFamily : undefined),
-  fontWeight: (n) => (n.type === "text" ? n.fontWeight : undefined),
+  fillColor: (n) => collectFillColors(n),
+  // Text color is the topmost visible solid paint (covers both the legacy
+  // `fill` field and the `fills` stack — see fillUtils).
+  textColor: (n) => (n.type === "text" ? [getPrimarySolidColor(n)] : []),
+  strokeColor: (n) => [n.stroke],
+  strokeThickness: (n) => [n.strokeWidth],
+  fontSize: (n) => (n.type === "text" ? [n.fontSize] : []),
+  fontFamily: (n) => (n.type === "text" ? [n.fontFamily] : []),
+  fontWeight: (n) => (n.type === "text" ? [n.fontWeight] : []),
   cornerRadius: (n) =>
     n.type === "frame" || n.type === "rect"
-      ? (n as unknown as Record<string, unknown>).cornerRadius
-      : undefined,
+      ? [(n as unknown as Record<string, unknown>).cornerRadius]
+      : [],
   cornerRadiusPerCorner: (n) =>
     n.type === "frame" || n.type === "rect"
-      ? (n as unknown as Record<string, unknown>).cornerRadiusPerCorner
-      : undefined,
+      ? [(n as unknown as Record<string, unknown>).cornerRadiusPerCorner]
+      : [],
   padding: (n) => {
-    if (n.type !== "frame") return undefined;
+    if (n.type !== "frame") return [];
     const layout = (n as unknown as Record<string, unknown>).layout as
       | Record<string, unknown>
       | undefined;
-    if (!layout) return undefined;
+    if (!layout) return [];
     const { paddingTop, paddingRight, paddingBottom, paddingLeft } = layout as {
       paddingTop?: number;
       paddingRight?: number;
@@ -39,15 +59,15 @@ const extractors: Record<string, PropertyExtractor> = {
       paddingBottom === undefined &&
       paddingLeft === undefined
     )
-      return undefined;
-    return paddingTop ?? 0;
+      return [];
+    return [paddingTop ?? 0];
   },
   gap: (n) => {
-    if (n.type !== "frame") return undefined;
+    if (n.type !== "frame") return [];
     const layout = (n as unknown as Record<string, unknown>).layout as
       | Record<string, unknown>
       | undefined;
-    return layout?.gap;
+    return [layout?.gap];
   },
 };
 
@@ -84,12 +104,13 @@ export const searchAllUniqueProperties: ToolHandler = async (args) => {
     for (const prop of propList) {
       const extractor = extractors[prop];
       if (!extractor) continue;
-      const val = extractor(node);
-      if (val !== undefined && val !== null) {
-        const key = JSON.stringify(val);
-        if (!valueSets[prop].has(key)) {
-          valueSets[prop].add(key);
-          result[prop].push(val);
+      for (const val of extractor(node)) {
+        if (val !== undefined && val !== null) {
+          const key = JSON.stringify(val);
+          if (!valueSets[prop].has(key)) {
+            valueSets[prop].add(key);
+            result[prop].push(val);
+          }
         }
       }
     }

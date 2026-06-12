@@ -14,7 +14,8 @@ import type {
   PerCornerRadius,
 } from "@/types/scene";
 import { flattenTree } from "@/types/scene";
-import { applyShadow } from "./shadowHelpers";
+import { getRenderableEffects } from "@/utils/fillUtils";
+import { applyShadows } from "./shadowHelpers";
 import { createRectContainer, updateRectContainer, drawRect } from "./rectRenderer";
 import { createEllipseContainer, updateEllipseContainer, drawEllipse } from "./ellipseRenderer";
 import { createTextContainer, updateTextContainer } from "./textRenderer";
@@ -392,11 +393,11 @@ export function createNodeContainer(
     if (node.flipY) container.pivot.y = node.height;
   }
 
-  // Shadow
+  // Shadow stack
   const initialShadowSize = getNodeShadowSize(node, container);
-  applyShadow(
+  applyShadows(
     container,
-    node.effect,
+    getRenderableEffects(node),
     initialShadowSize.width,
     initialShadowSize.height,
     getNodeCornerRadius(node),
@@ -512,6 +513,7 @@ export function updateNodeContainer(
   // Shadow (after type-specific updates so frame effective size stays in sync)
   if (
     node.effect !== prev.effect ||
+    node.effects !== prev.effects ||
     node.width !== prev.width ||
     node.height !== prev.height ||
     (node.type === "frame" && (node.sizing !== (prev as FlatFrameNode).sizing || node.layout !== (prev as FlatFrameNode).layout)) ||
@@ -519,9 +521,9 @@ export function updateNodeContainer(
     (node.type === "rect" && (node.cornerRadius !== (prev as RectNode).cornerRadius || node.cornerRadiusPerCorner !== (prev as RectNode).cornerRadiusPerCorner))
   ) {
     const shadowSize = getNodeShadowSize(node, container);
-    applyShadow(
+    applyShadows(
       container,
-      node.effect,
+      getRenderableEffects(node),
       shadowSize.width,
       shadowSize.height,
       getNodeCornerRadius(node),
@@ -554,9 +556,9 @@ export function applyLayoutSize(
         drawRect(gfx, { ...node, width: layoutWidth, height: layoutHeight } as RectNode);
       }
       const shadowRectNode = { ...node, width: layoutWidth, height: layoutHeight } as RectNode;
-      applyShadow(
+      applyShadows(
         container,
-        shadowRectNode.effect,
+        getRenderableEffects(shadowRectNode),
         layoutWidth,
         layoutHeight,
         shadowRectNode.cornerRadius,
@@ -572,9 +574,9 @@ export function applyLayoutSize(
         drawEllipse(gfx, { ...node, width: layoutWidth, height: layoutHeight } as EllipseNode);
       }
       const shadowEllipseNode = { ...node, width: layoutWidth, height: layoutHeight } as EllipseNode;
-      applyShadow(
+      applyShadows(
         container,
-        shadowEllipseNode.effect,
+        getRenderableEffects(shadowEllipseNode),
         layoutWidth,
         layoutHeight,
         undefined,
@@ -602,9 +604,9 @@ export function applyLayoutSize(
         gridGfx.clear();
         drawLayoutGrids(gridGfx, frameNode.layoutGrids, layoutWidth, layoutHeight);
       }
-      applyShadow(
+      applyShadows(
         container,
-        frameNode.effect,
+        getRenderableEffects(frameNode),
         layoutWidth,
         layoutHeight,
         frameNode.cornerRadius,

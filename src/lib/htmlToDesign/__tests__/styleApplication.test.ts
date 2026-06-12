@@ -1,0 +1,78 @@
+import { describe, it, expect } from "vitest";
+import { applyBaseProps } from "../styleApplication";
+import type { RectNode } from "@/types/scene";
+
+/**
+ * Minimal CSSStyleDeclaration stub: applyBaseProps only reads string
+ * properties and guards every parse, so missing fields may be undefined.
+ */
+function styleStub(props: Record<string, string>): CSSStyleDeclaration {
+  return props as unknown as CSSStyleDeclaration;
+}
+
+function rect(): RectNode {
+  return { id: "r1", type: "rect", x: 0, y: 0, width: 100, height: 100 };
+}
+
+describe("applyBaseProps — legacy single-background-layer path", () => {
+  it("single radial-gradient background → legacy gradientFill with type radial", () => {
+    const node = rect();
+    applyBaseProps(
+      node,
+      styleStub({
+        backgroundColor: "rgba(0, 0, 0, 0)",
+        backgroundImage: "radial-gradient(rgb(255, 0, 0), rgb(0, 0, 255))",
+        backgroundSize: "",
+        backgroundBlendMode: "",
+      }),
+    );
+    expect(node.fills).toBeUndefined(); // single layer stays on legacy fields
+    expect(node.gradientFill).toBeDefined();
+    expect(node.gradientFill!.type).toBe("radial");
+    expect(node.gradientFill!.stops.map((s) => s.color)).toEqual(["#ff0000", "#0000ff"]);
+  });
+
+  it("single linear-gradient background still → legacy gradientFill", () => {
+    const node = rect();
+    applyBaseProps(
+      node,
+      styleStub({
+        backgroundColor: "rgba(0, 0, 0, 0)",
+        backgroundImage: "linear-gradient(90deg, rgb(255, 0, 0), rgb(0, 0, 255))",
+        backgroundSize: "",
+        backgroundBlendMode: "",
+      }),
+    );
+    expect(node.fills).toBeUndefined();
+    expect(node.gradientFill?.type).toBe("linear");
+  });
+
+  it("single image with background-size 100% 100% → legacy imageFill stretch", () => {
+    const node = rect();
+    applyBaseProps(
+      node,
+      styleStub({
+        backgroundColor: "rgba(0, 0, 0, 0)",
+        backgroundImage: 'url("http://x/y.png")',
+        backgroundSize: "100% 100%",
+        backgroundBlendMode: "",
+      }),
+    );
+    expect(node.fills).toBeUndefined();
+    expect(node.imageFill).toEqual({ url: "http://x/y.png", mode: "stretch" });
+  });
+
+  it("single image with background-size contain → legacy imageFill fit", () => {
+    const node = rect();
+    applyBaseProps(
+      node,
+      styleStub({
+        backgroundColor: "rgba(0, 0, 0, 0)",
+        backgroundImage: 'url("http://x/y.png")',
+        backgroundSize: "contain",
+        backgroundBlendMode: "",
+      }),
+    );
+    expect(node.imageFill).toEqual({ url: "http://x/y.png", mode: "fit" });
+  });
+});

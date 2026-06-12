@@ -3,7 +3,7 @@ import { batchDesign } from "@/lib/tools/batchDesign";
 import { useSceneStore } from "@/store/sceneStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { resetStores, seedScene, seedVariables } from "@/test/fixtures";
-import type { FlatFrameNode, TextNode } from "@/types/scene";
+import type { FlatFrameNode, Paint, TextNode } from "@/types/scene";
 
 function sceneState() {
   return useSceneStore.getState();
@@ -143,6 +143,223 @@ describe("batch_design", () => {
         widthMode: "fill_container",
         heightMode: "fit_content",
       });
+    });
+  });
+
+  describe("fills (paint stack)", () => {
+    it("creates a node with a multi-paint fills stack and generates ids", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'r=I(document, {type: "rectangle", name: "Layered", width: 10, height: 10, fills: [{type: "solid", color: "#ff0000"}, {type: "solid", color: "#00ff00", opacity: 0.5}]})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const node = sceneState().nodesById[result.createdNodes[0].id];
+      const fills = node.fills as Paint[];
+      expect(fills).toHaveLength(2);
+      expect(fills[0]).toMatchObject({ type: "solid", color: "#ff0000" });
+      expect(fills[1]).toMatchObject({ type: "solid", color: "#00ff00", opacity: 0.5 });
+      // ids are generated, present and unique
+      expect(typeof fills[0].id).toBe("string");
+      expect(fills[0].id).not.toBe(fills[1].id);
+      // legacy single-fill field is not set when fills is the source of truth
+      expect(node.fill).toBeUndefined();
+    });
+
+    it("normalizes a flat image paint and a nested image paint", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'r=I(document, {type: "rectangle", name: "Img", width: 10, height: 10, fills: [{type: "image", url: "https://x/a.png", mode: "fit"}, {type: "image", image: {url: "https://x/b.png", mode: "stretch"}}]})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const fills = sceneState().nodesById[result.createdNodes[0].id].fills as Paint[];
+      expect(fills[0]).toMatchObject({
+        type: "image",
+        image: { url: "https://x/a.png", mode: "fit" },
+      });
+      expect(fills[1]).toMatchObject({
+        type: "image",
+        image: { url: "https://x/b.png", mode: "stretch" },
+      });
+    });
+
+    it("normalizes a flat gradient paint into the nested form", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'r=I(document, {type: "rectangle", name: "Grad", width: 10, height: 10, fills: [{type: "gradient", gradient: {type: "linear", stops: [{color: "#000000", position: 0}, {color: "#ffffff", position: 1}], startX: 0, startY: 0, endX: 1, endY: 1}}]})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const fills = sceneState().nodesById[result.createdNodes[0].id].fills as Paint[];
+      expect(fills[0].type).toBe("gradient");
+      expect(fills[0]).toMatchObject({
+        gradient: { type: "linear", startX: 0, endX: 1 },
+      });
+    });
+
+    it("resolves $variable references inside solid fills to value + binding", async () => {
+      seedVariables();
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'r=I(document, {type: "rectangle", name: "Var", width: 10, height: 10, fills: [{type: "solid", color: "$--primary"}]})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const fills = sceneState().nodesById[result.createdNodes[0].id].fills as Paint[];
+      expect(fills[0]).toMatchObject({
+        type: "solid",
+        color: "#3366ff",
+        colorBinding: { variableId: "var-primary" },
+      });
+    });
+
+    it("U() with fills replaces the stack and clears legacy fill props", async () => {
+      // rect1 starts with legacy fill #ff0000
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'U(rect1, {fills: [{type: "solid", color: "#0000ff"}]})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const node = sceneState().nodesById["rect1"] as Record<string, unknown>;
+      const fills = node.fills as Paint[];
+      expect(fills).toHaveLength(1);
+      expect(fills[0]).toMatchObject({ type: "solid", color: "#0000ff" });
+      // legacy fields cleared
+      expect(node.fill).toBeUndefined();
+      expect(node.fillBinding).toBeUndefined();
+      expect(node.gradientFill).toBeUndefined();
+      expect(node.imageFill).toBeUndefined();
+    });
+
+    it("G() pushes an image paint on top of an existing fills stack", async () => {
+      await batchDesign({
+        operations:
+          'U(rect1, {fills: [{type: "solid", color: "#0000ff"}]})',
+      });
+      const result = JSON.parse(
+        await batchDesign({ operations: 'G(rect1, "ai", "a cat")' })
+      );
+      expect(result.success).toBe(true);
+      const fills = sceneState().nodesById["rect1"].fills as Paint[];
+      expect(fills).toHaveLength(2);
+      expect(fills[0]).toMatchObject({ type: "solid", color: "#0000ff" });
+      expect(fills[1].type).toBe("image");
+    });
+
+    it("G() replaces the topmost image paint instead of stacking duplicates", async () => {
+      await batchDesign({
+        operations:
+          'U(rect1, {fills: [{type: "solid", color: "#0000ff"}, {type: "image", url: "https://x/old.png", mode: "fill"}]})',
+      });
+      const result = JSON.parse(
+        await batchDesign({ operations: 'G(rect1, "ai", "a dog")' })
+      );
+      expect(result.success).toBe(true);
+      const fills = sceneState().nodesById["rect1"].fills as Paint[];
+      expect(fills).toHaveLength(2);
+      expect(fills[1].type).toBe("image");
+      expect((fills[1] as { image: { url: string } }).image.url).not.toBe(
+        "https://x/old.png"
+      );
+    });
+
+    it("G() migrates a legacy node to a fills stack, keeping its fill as the bottom layer", async () => {
+      // rect1 starts with legacy fill #ff0000 and no fills stack
+      const result = JSON.parse(
+        await batchDesign({ operations: 'G(rect1, "ai", "a bird")' })
+      );
+      expect(result.success).toBe(true);
+      const node = sceneState().nodesById["rect1"] as Record<string, unknown>;
+      const fills = node.fills as Paint[];
+      expect(fills).toHaveLength(2);
+      expect(fills[0]).toMatchObject({ type: "solid", color: "#ff0000" });
+      expect(fills[1].type).toBe("image");
+      // legacy single-fill fields are cleared once fills is the source of truth
+      expect(node.fill).toBeUndefined();
+      expect(node.imageFill).toBeUndefined();
+    });
+
+    it("U() with legacy fill on a fills node updates the topmost solid paint", async () => {
+      await batchDesign({
+        operations:
+          'U(rect1, {fills: [{type: "solid", color: "#0000ff"}, {type: "image", url: "https://x/a.png", mode: "fill"}]})',
+      });
+      const result = JSON.parse(
+        await batchDesign({ operations: 'U(rect1, {fill: "#00ff00"})' })
+      );
+      expect(result.success).toBe(true);
+      const node = sceneState().nodesById["rect1"] as Record<string, unknown>;
+      const fills = node.fills as Paint[];
+      expect(fills).toHaveLength(2);
+      expect(fills[0]).toMatchObject({ type: "solid", color: "#00ff00" });
+      expect(fills[1].type).toBe("image");
+      // legacy field is not written — the stack stays the source of truth
+      expect(node.fill).toBeUndefined();
+    });
+
+    it("U() with legacy fill adds a solid paint on top when the stack has none", async () => {
+      await batchDesign({
+        operations:
+          'U(rect1, {fills: [{type: "image", url: "https://x/a.png", mode: "fill"}]})',
+      });
+      const result = JSON.parse(
+        await batchDesign({ operations: 'U(rect1, {fill: "#00ff00"})' })
+      );
+      expect(result.success).toBe(true);
+      const node = sceneState().nodesById["rect1"] as Record<string, unknown>;
+      const fills = node.fills as Paint[];
+      expect(fills).toHaveLength(2);
+      expect(fills[0].type).toBe("image");
+      expect(fills[1]).toMatchObject({ type: "solid", color: "#00ff00" });
+      expect(node.fill).toBeUndefined();
+    });
+
+    it("U() with legacy imageFill on a fills node updates the topmost image paint", async () => {
+      await batchDesign({
+        operations:
+          'U(rect1, {fills: [{type: "solid", color: "#0000ff"}, {type: "image", url: "https://x/old.png", mode: "fill"}]})',
+      });
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'U(rect1, {imageFill: {url: "https://x/new.png", mode: "fit"}})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const node = sceneState().nodesById["rect1"] as Record<string, unknown>;
+      const fills = node.fills as Paint[];
+      expect(fills).toHaveLength(2);
+      expect(fills[1]).toMatchObject({
+        type: "image",
+        image: { url: "https://x/new.png", mode: "fit" },
+      });
+      expect(node.imageFill).toBeUndefined();
+    });
+
+    it("U() with a $variable fill on a fills node binds the topmost solid paint", async () => {
+      seedVariables();
+      await batchDesign({
+        operations: 'U(rect1, {fills: [{type: "solid", color: "#0000ff"}]})',
+      });
+      const result = JSON.parse(
+        await batchDesign({ operations: 'U(rect1, {fill: "$--primary"})' })
+      );
+      expect(result.success).toBe(true);
+      const node = sceneState().nodesById["rect1"] as Record<string, unknown>;
+      const fills = node.fills as Paint[];
+      expect(fills[0]).toMatchObject({
+        type: "solid",
+        color: "#3366ff",
+        colorBinding: { variableId: "var-primary" },
+      });
+      expect(node.fillBinding).toBeUndefined();
     });
   });
 

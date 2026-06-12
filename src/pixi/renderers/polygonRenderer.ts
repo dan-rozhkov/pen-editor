@@ -1,6 +1,6 @@
 import { Container, Graphics } from "pixi.js";
 import type { PolygonNode } from "@/types/scene";
-import { applyFill, applyStroke } from "./fillStrokeHelpers";
+import { applyFills, applyStroke } from "./fillStrokeHelpers";
 
 export function createPolygonContainer(node: PolygonNode): Container {
   const container = new Container();
@@ -28,7 +28,8 @@ export function updatePolygonContainer(
     node.strokeOpacity !== prev.strokeOpacity ||
     node.strokeWidth !== prev.strokeWidth ||
     node.strokeAlign !== prev.strokeAlign ||
-    node.gradientFill !== prev.gradientFill
+    node.gradientFill !== prev.gradientFill ||
+    node.fills !== prev.fills
   ) {
     const gfx = container.getChildByLabel("polygon-gfx") as Graphics;
     if (gfx) {
@@ -42,8 +43,9 @@ export function drawPolygon(gfx: Graphics, node: PolygonNode): void {
   const points = node.points;
   if (!points || points.length < 6) return;
 
-  gfx.poly(points, true);
-  applyFill(gfx, node, node.width, node.height);
-
-  applyStroke(gfx, node, node.width, node.height);
+  const drawShape = (target: Graphics) => target.poly(points, true);
+  const pathReady = applyFills(gfx, node, node.width, node.height, drawShape);
+  // Skip rebuilding the geometry for the stroke when the last fill already left
+  // a reusable path on `gfx`.
+  applyStroke(gfx, node, node.width, node.height, pathReady ? undefined : drawShape);
 }

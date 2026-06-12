@@ -3,6 +3,8 @@ import type {
   SceneNode,
   FlatFrameNode,
   EmbedNode,
+  ImageFill,
+  Paint,
 } from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
 import {
@@ -13,6 +15,12 @@ import {
 import { insertTreeIntoFlat, removeNodeAndDescendants } from "@/store/sceneStore/helpers/flatStoreHelpers";
 import { syncTextDimensions } from "@/store/sceneStore/helpers/textSync";
 import { cloneNodeWithNewId } from "@/utils/cloneNode";
+import {
+  clearLegacyFillProps,
+  createImagePaint,
+  createSolidPaint,
+  getFills,
+} from "@/utils/fillUtils";
 import { normalizeEmbedHtmlForStorage } from "@/utils/embedTemplateUtils";
 import type { ParsedArg, ParsedOperation, ExecutionContext } from "./types";
 import {
@@ -369,6 +377,64 @@ function remapPath(path: string, idMap: Map<string, string>): string {
     .join("/");
 }
 
+/** Index of the topmost (last) paint of the given type, or -1. */
+function findTopPaintIndex(fills: Paint[], type: Paint["type"]): number {
+  for (let i = fills.length - 1; i >= 0; i--) {
+    if (fills[i].type === type) return i;
+  }
+  return -1;
+}
+
+/**
+ * Route legacy single-fill updates into a node's `fills` stack.
+ *
+ * Per the fillUtils contract, once `node.fills` is set it is the single source
+ * of truth and the renderer ignores the legacy `fill`/`imageFill` fields —
+ * writing them would be a silent no-op (the op "succeeds" but the canvas never
+ * changes). Instead: a legacy `fill` update rewrites the topmost solid paint
+ * (or adds one on top), and a legacy `imageFill` update rewrites the topmost
+ * image paint (or adds one on top). Skipped when the update itself carries
+ * `fills` (the stack then replaces everything wholesale).
+ */
+function reconcileLegacyFillUpdate(
+  node: FlatSceneNode,
+  mapped: Partial<FlatSceneNode>,
+): Partial<FlatSceneNode> {
+  if (!node.fills || mapped.fills !== undefined) return mapped;
+
+  const legacyColor = typeof mapped.fill === "string" ? mapped.fill : undefined;
+  const legacyImage = mapped.imageFill as ImageFill | undefined;
+  if (legacyColor === undefined && !legacyImage) return mapped;
+
+  const fills = [...node.fills];
+
+  if (legacyColor !== undefined) {
+    const idx = findTopPaintIndex(fills, "solid");
+    if (idx >= 0) {
+      fills[idx] = {
+        ...fills[idx],
+        color: legacyColor,
+        colorBinding: mapped.fillBinding,
+      } as Paint;
+    } else {
+      fills.push(
+        createSolidPaint(legacyColor, mapped.fillBinding ? { colorBinding: mapped.fillBinding } : undefined),
+      );
+    }
+  }
+
+  if (legacyImage) {
+    const idx = findTopPaintIndex(fills, "image");
+    if (idx >= 0) {
+      fills[idx] = { ...fills[idx], image: legacyImage } as Paint;
+    } else {
+      fills.push(createImagePaint(legacyImage));
+    }
+  }
+
+  return { ...mapped, fills, ...clearLegacyFillProps() };
+}
+
 /**
  * Execute an Update operation.
  * U(nodeId, updateData)
@@ -396,7 +462,7 @@ function executeUpdate(op: ParsedOperation, ctx: ExecutionContext): void {
   });
   delete (mapped as Record<string, unknown>)._children;
 
-  let updated = { ...node, ...mapped } as FlatSceneNode;
+  let updated = { ...node, ...reconcileLegacyFillUpdate(node, mapped) } as FlatSceneNode;
 
   // Expand document component tags in embed HTML
   normalizeEmbedNode(updated, ctx);
@@ -585,13 +651,25 @@ function executeGenerate(
     throw new Error(`Line ${op.line}: Node not found: "${nodeId}"`);
   }
 
-  // Stub: apply placeholder image fill
+  // Stub: apply a placeholder image fill.
+  const url = `https://placehold.co/600x400?text=${encodeURIComponent(prompt.slice(0, 30))}`;
+
+  // Normalize to the paint stack via getFills (legacy single-fill fields are
+  // lazily converted with stable ids — see fillUtils contract), then add or
+  // replace the topmost image paint, leaving underlying layers intact. Legacy
+  // nodes migrate to `fills` here, so the legacy fields are cleared alongside.
+  const fills = [...getFills(node)];
+  const newImagePaint = createImagePaint({ url, mode: "fill" });
+  const topIdx = fills.length - 1;
+  if (topIdx >= 0 && fills[topIdx].type === "image") {
+    fills[topIdx] = newImagePaint;
+  } else {
+    fills.push(newImagePaint);
+  }
   ctx.nodesById[nodeId] = {
     ...node,
-    imageFill: {
-      url: `https://placehold.co/600x400?text=${encodeURIComponent(prompt.slice(0, 30))}`,
-      mode: "fill",
-    },
+    fills,
+    ...clearLegacyFillProps(),
     name: node.name ?? `Image: ${prompt.slice(0, 50)}`,
   } as FlatSceneNode;
 

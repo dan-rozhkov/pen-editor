@@ -6,7 +6,7 @@ import type {
   EmbedNode,
   LayoutProperties,
 } from "@/types/scene";
-import { generateVisualStyles, generateTextStyles } from "./styleGeneration";
+import { generateVisualStyles, generateTextStyles, BACKGROUND_STYLE_KEYS } from "./styleGeneration";
 import { generateLayoutStyles } from "./layoutStyleGeneration";
 import { pathNodeToSvg, lineNodeToSvg, polygonNodeToSvg } from "./svgGeneration";
 
@@ -210,7 +210,9 @@ function convertSvgShapeNode(
 ): string {
   const layoutStyles = generateLayoutStyles(node, parentLayout, isRoot);
   const visualStyles = generateVisualStyles(node);
-  delete visualStyles["background-color"];
+  for (const key of BACKGROUND_STYLE_KEYS) {
+    delete visualStyles[key];
+  }
   delete visualStyles.border;
   const wrapperStyles = { ...layoutStyles, ...visualStyles, overflow: "visible" };
   return `<div style="${stylesToString(wrapperStyles)}">${svgFn(node as never)}</div>`;

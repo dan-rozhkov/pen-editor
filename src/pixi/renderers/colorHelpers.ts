@@ -1,4 +1,4 @@
-import type { FlatSceneNode } from "@/types/scene";
+import type { FlatSceneNode, SolidPaint } from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
 import { useVariableStore } from "@/store/variableStore";
 import { resolveColor, applyOpacity } from "@/utils/colorUtils";
@@ -37,6 +37,19 @@ export function getResolvedFill(node: FlatSceneNode): string | undefined {
   const theme = getEffectiveTheme();
   const raw = resolveColor(node.fill, node.fillBinding, variables, theme);
   return raw ? applyOpacity(raw, node.fillOpacity) : raw;
+}
+
+/**
+ * Resolve an arbitrary {@link SolidPaint}'s color the same way `getResolvedFill`
+ * resolves a node's `fill`: apply its `colorBinding` against the active theme,
+ * then fold in the paint's per-layer `opacity`. Generalizes `getResolvedFill`
+ * for the multi-fill paint stack.
+ */
+export function getResolvedSolidPaint(paint: SolidPaint): string | undefined {
+  const variables = useVariableStore.getState().variables;
+  const theme = getEffectiveTheme();
+  const raw = resolveColor(paint.color, paint.colorBinding, variables, theme);
+  return raw ? applyOpacity(raw, paint.opacity) : raw;
 }
 
 export function getResolvedStroke(node: FlatSceneNode): string | undefined {

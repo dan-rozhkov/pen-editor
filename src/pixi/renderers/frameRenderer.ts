@@ -7,8 +7,14 @@ import type {
 } from "@/types/scene";
 import { materializeLayoutRefs } from "@/utils/layoutRefUtils";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
-import { applyFill, applyStroke, hasVisualPropsChanged, drawRoundedShape } from "./fillStrokeHelpers";
-import { applyImageFill } from "./imageFillHelpers";
+import {
+  applyFills,
+  applyStroke,
+  hasFillSourceChanged,
+  hasVisualPropsChanged,
+  drawRoundedShape,
+} from "./fillStrokeHelpers";
+import { applyImageFills } from "./imageFillHelpers";
 import { pushRenderTheme, popRenderTheme } from "./colorHelpers";
 import { createNodeContainer, isInsideRef } from "./index";
 import { drawLayoutGrids } from "./layoutGridRenderer";
@@ -106,10 +112,8 @@ export function createFrameContainer(
     container.addChild(slotGfx);
   }
 
-  // Image fill
-  if (node.imageFill) {
-    applyImageFill(container, node.imageFill, effectiveWidth, effectiveHeight, node.cornerRadius, node.cornerRadiusPerCorner);
-  }
+  // Image fill stack
+  applyImageFills(container, node, effectiveWidth, effectiveHeight, node.cornerRadius, node.cornerRadiusPerCorner);
 
   // Clipping mask
   if (node.clip) {
@@ -192,9 +196,9 @@ export function updateFrameContainer(
     }
   }
 
-  // Image fill
+  // Image fill stack
   if (
-    node.imageFill !== prev.imageFill ||
+    hasFillSourceChanged(node, prev) ||
     node.width !== prev.width ||
     node.height !== prev.height ||
     node.sizing !== prev.sizing ||
@@ -202,7 +206,7 @@ export function updateFrameContainer(
     node.cornerRadius !== prev.cornerRadius ||
     node.cornerRadiusPerCorner !== prev.cornerRadiusPerCorner
   ) {
-    applyImageFill(container, node.imageFill, effectiveWidth, effectiveHeight, node.cornerRadius, node.cornerRadiusPerCorner);
+    applyImageFills(container, node, effectiveWidth, effectiveHeight, node.cornerRadius, node.cornerRadiusPerCorner);
   }
 
   // Update layout grid overlay
@@ -345,8 +349,10 @@ export function drawFrameBackground(
   const width = effectiveWidth ?? node.width;
   const height = effectiveHeight ?? node.height;
 
-  drawRoundedShape(gfx, width, height, node.cornerRadius, node.cornerRadiusPerCorner);
-
-  applyFill(gfx, node, width, height);
-  applyStroke(gfx, node, width, height);
+  const drawShape = (target: Graphics) =>
+    drawRoundedShape(target, width, height, node.cornerRadius, node.cornerRadiusPerCorner);
+  const pathReady = applyFills(gfx, node, width, height, drawShape);
+  // Skip rebuilding the geometry for the stroke when the last fill already left
+  // a reusable path on `gfx`.
+  applyStroke(gfx, node, width, height, pathReady ? undefined : drawShape);
 }

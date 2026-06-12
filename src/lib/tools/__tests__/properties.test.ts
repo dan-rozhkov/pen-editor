@@ -4,7 +4,35 @@ import { replaceAllMatchingProperties } from "@/lib/tools/replaceAllMatchingProp
 import { useSceneStore } from "@/store/sceneStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { resetStores, seedScene, seedVariables } from "@/test/fixtures";
-import type { FlatFrameNode, TextNode } from "@/types/scene";
+import type { FlatFrameNode, Paint, TextNode } from "@/types/scene";
+
+/** Add a node with a multi-paint `fills` stack as a child of frame1. */
+function seedNodeWithFills(
+  id: string,
+  fills: Paint[],
+  extra: Record<string, unknown> = {},
+): void {
+  useSceneStore.setState((state) => ({
+    nodesById: {
+      ...state.nodesById,
+      [id]: {
+        id,
+        type: "rect",
+        x: 0,
+        y: 0,
+        width: 5,
+        height: 5,
+        fills,
+        ...extra,
+      } as unknown as never,
+    },
+    parentById: { ...state.parentById, [id]: "frame1" },
+    childrenById: {
+      ...state.childrenById,
+      frame1: [...state.childrenById["frame1"], id],
+    },
+  }));
+}
 
 beforeEach(() => {
   resetStores();
@@ -69,6 +97,50 @@ describe("search_all_unique_properties", () => {
     expect(
       result.fillColor.filter((c: string) => c === "#ff0000")
     ).toHaveLength(1);
+  });
+
+  it("collects solid colors from the fills paint stack", async () => {
+    seedNodeWithFills("rectF", [
+      { id: "p1", type: "solid", color: "#abcdef" },
+      { id: "p2", type: "gradient", gradient: { type: "linear", stops: [], startX: 0, startY: 0, endX: 1, endY: 1 } },
+      { id: "p3", type: "solid", color: "#fedcba" },
+    ]);
+
+    const result = JSON.parse(
+      await searchAllUniqueProperties({
+        parents: ["frame1"],
+        properties: ["fillColor"],
+      })
+    );
+    // legacy fills (#ffffff frame, #ff0000 rect1, #000000 text1) + both solid
+    // paints from the stack; the gradient paint contributes no fillColor.
+    expect(result.fillColor).toEqual(
+      expect.arrayContaining(["#abcdef", "#fedcba", "#ff0000", "#000000"])
+    );
+  });
+
+  it("collects textColor from text nodes using the fills paint stack", async () => {
+    seedNodeWithFills(
+      "textF",
+      [
+        { id: "p1", type: "solid", color: "#111111" },
+        { id: "p2", type: "solid", color: "#abcdef" },
+      ],
+      { type: "text", text: "Hi", fontSize: 14 },
+    );
+
+    const result = JSON.parse(
+      await searchAllUniqueProperties({
+        parents: ["frame1"],
+        properties: ["textColor"],
+      })
+    );
+    // text1 contributes its legacy fill; textF contributes the topmost solid
+    // paint of its stack (not the bottom one).
+    expect(result.textColor).toEqual(
+      expect.arrayContaining(["#000000", "#abcdef"])
+    );
+    expect(result.textColor).not.toContain("#111111");
   });
 });
 
@@ -178,6 +250,65 @@ describe("replace_all_matching_properties", () => {
     expect(frame.layout?.paddingBottom).toBe(32);
     expect(frame.layout?.paddingLeft).toBe(32);
     expect(frame.layout?.gap).toBe(12);
+  });
+
+  it("replaces matching solid colors inside the fills stack", async () => {
+    seedNodeWithFills("rectF", [
+      { id: "p1", type: "solid", color: "#ff0000" },
+      { id: "p2", type: "image", image: { url: "https://x/a.png", mode: "fill" } },
+    ]);
+
+    const result = JSON.parse(
+      await replaceAllMatchingProperties({
+        parents: ["frame1"],
+        properties: { fillColor: [{ from: "#FF0000", to: "#123456" }] },
+      })
+    );
+    // rect1 (legacy fill) + the solid paint in rectF's stack
+    expect(result.replacements).toBe(2);
+    const fills = useSceneStore.getState().nodesById["rectF"].fills as Paint[];
+    expect(fills[0]).toMatchObject({ type: "solid", color: "#123456" });
+    // non-solid paint untouched
+    expect(fills[1].type).toBe("image");
+  });
+
+  it("binds a variable when replacing a color inside the fills stack", async () => {
+    seedVariables();
+    seedNodeWithFills("rectF", [{ id: "p1", type: "solid", color: "#ff0000" }]);
+
+    const result = JSON.parse(
+      await replaceAllMatchingProperties({
+        parents: ["rectF"],
+        properties: { fillColor: [{ from: "#ff0000", to: "$--primary" }] },
+      })
+    );
+    expect(result.replacements).toBe(1);
+    const fills = useSceneStore.getState().nodesById["rectF"].fills as Paint[];
+    expect(fills[0]).toMatchObject({
+      type: "solid",
+      color: "#3366ff",
+      colorBinding: { variableId: "var-primary" },
+    });
+  });
+
+  it("ignores the legacy fill field on nodes that use a fills stack", async () => {
+    // The renderer ignores legacy `fill` once `fills` is set — "replacing" it
+    // must not count as a replacement.
+    seedNodeWithFills("rectF", [{ id: "p1", type: "solid", color: "#abcdef" }], {
+      fill: "#ff0000",
+    });
+
+    const result = JSON.parse(
+      await replaceAllMatchingProperties({
+        parents: ["rectF"],
+        properties: { fillColor: [{ from: "#ff0000", to: "#123456" }] },
+      })
+    );
+    expect(result).toEqual({ success: true, replacements: 0 });
+    const node = useSceneStore.getState().nodesById["rectF"];
+    expect(node.fill).toBe("#ff0000"); // stale legacy field left untouched
+    expect((node.fills as Paint[])[0]).toMatchObject({ color: "#abcdef" });
+    expect(useHistoryStore.getState().past).toHaveLength(0);
   });
 
   it("reports zero replacements and skips history when nothing matches", async () => {

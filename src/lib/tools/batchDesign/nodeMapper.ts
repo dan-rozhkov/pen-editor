@@ -4,11 +4,19 @@ import type {
   SizingProperties,
   SceneNode,
   ImageFill,
+  Paint,
+  GradientFill,
 } from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
 import { generateId } from "@/types/scene";
 import { syncTextDimensions } from "@/store/sceneStore/helpers/textSync";
 import { resolveVariableReference } from "@/lib/tools/variableResolutionUtils";
+import {
+  clearLegacyFillProps,
+  createGradientPaint,
+  createImagePaint,
+  createSolidPaint,
+} from "@/utils/fillUtils";
 
 /** AI node data as received from the operations script */
 type AiNodeData = Record<string, unknown>;
@@ -38,6 +46,102 @@ function applyColorVariable(
   }
 }
 
+
+/**
+ * Normalize a single AI-format paint entry into a typed Paint object.
+ *
+ * Accepted forms (id is always generated, never taken from the model):
+ *   solid:    {type:"solid", color, opacity?, visible?, blendMode?, colorBinding?}
+ *   gradient: {type:"gradient", gradient:{...}}  OR  flat GradientFill fields
+ *             ({type:"gradient", stops, startX, ...})
+ *   image:    {type:"image", url, mode}  OR  {type:"image", image:{url, mode}}
+ *
+ * For solid paints a `$--var` reference in `color` is resolved to its value and
+ * a `colorBinding` is attached (mirrors the legacy single-`fill` behavior).
+ * Returns null for entries that cannot be interpreted.
+ */
+function normalizePaint(entry: unknown, theme?: ThemeName): Paint | null {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+  const raw = entry as Record<string, unknown>;
+  const type = typeof raw.type === "string" ? raw.type : undefined;
+
+  // Common pass-through paint props.
+  const common: { opacity?: number; visible?: boolean; blendMode?: Paint["blendMode"] } = {};
+  if (typeof raw.opacity === "number") common.opacity = raw.opacity;
+  if (typeof raw.visible === "boolean") common.visible = raw.visible;
+  if (typeof raw.blendMode === "string") {
+    common.blendMode = raw.blendMode as Paint["blendMode"];
+  }
+
+  // ── Image paint ────────────────────────────────────────────────
+  // Accept both flat ({type:"image", url, mode}) and nested ({image:{url,mode}}).
+  if (type === "image" || raw.image !== undefined || (raw.url !== undefined && type === undefined && raw.color === undefined)) {
+    const nested =
+      raw.image && typeof raw.image === "object"
+        ? (raw.image as Record<string, unknown>)
+        : raw;
+    const url = nested.url;
+    if (typeof url !== "string") return null;
+    const mode =
+      nested.mode === "fit" || nested.mode === "stretch" ? nested.mode : "fill";
+    return createImagePaint({ url, mode } as ImageFill, common);
+  }
+
+  // ── Gradient paint ─────────────────────────────────────────────
+  // Accept nested ({type:"gradient", gradient:{...}}) and flat GradientFill.
+  if (type === "gradient" || raw.gradient !== undefined || Array.isArray(raw.stops)) {
+    let gradientFill: GradientFill;
+    if (raw.gradient && typeof raw.gradient === "object") {
+      // Nested form: the gradient object is already a GradientFill (keeps its
+      // own `type: "linear" | "radial"`).
+      const nested = raw.gradient as Record<string, unknown>;
+      if (!Array.isArray(nested.stops)) return null;
+      gradientFill = nested as unknown as GradientFill;
+    } else {
+      // Flat form: GradientFill fields sit alongside the paint discriminator —
+      // strip the paint-level keys (including `type: "gradient"`).
+      if (!Array.isArray(raw.stops)) return null;
+      const { type: _t, opacity: _o, visible: _v, blendMode: _b, ...gradientFields } =
+        raw;
+      void _t;
+      void _o;
+      void _v;
+      void _b;
+      gradientFill = gradientFields as unknown as GradientFill;
+    }
+    return createGradientPaint(gradientFill, common);
+  }
+
+  // ── Solid paint (default) ──────────────────────────────────────
+  if (type === "solid" || typeof raw.color === "string") {
+    const colorValue = raw.color;
+    if (typeof colorValue !== "string") return null;
+    const resolved = resolveVariableReference(colorValue, theme);
+    if (resolved) {
+      return createSolidPaint(resolved.variableValue, {
+        colorBinding: { variableId: resolved.variableId },
+        ...common,
+      });
+    }
+    return createSolidPaint(colorValue, common);
+  }
+
+  return null;
+}
+
+/**
+ * Normalize an AI-format `fills` value (expected: an array bottom-to-top) into a
+ * typed Paint[]. Unparseable entries are dropped.
+ */
+function normalizeFills(value: unknown, theme?: ThemeName): Paint[] {
+  if (!Array.isArray(value)) return [];
+  const paints: Paint[] = [];
+  for (const entry of value) {
+    const paint = normalizePaint(entry, theme);
+    if (paint) paints.push(paint);
+  }
+  return paints;
+}
 
 /**
  * Parse a sizing string like "fill_container" or "fill_container(500)".
@@ -102,6 +206,16 @@ export function mapNodeData(
       case "fill":
       case "stroke": {
         applyColorVariable(result, key, value, options?.theme);
+        break;
+      }
+
+      // Figma-style paint stack (bottom-to-top). When set, it is the single
+      // source of truth — clear the legacy single-fill fields so the two
+      // representations never diverge.
+      case "fills": {
+        const paints = normalizeFills(value, options?.theme);
+        result.fills = paints;
+        Object.assign(result, clearLegacyFillProps());
         break;
       }
 

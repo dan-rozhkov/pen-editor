@@ -1,7 +1,21 @@
-import { Graphics, FillGradient } from "pixi.js";
-import type { FlatSceneNode, GradientFill, PerSideStroke, PerCornerRadius } from "@/types/scene";
+import { Container, Graphics, FillGradient } from "pixi.js";
+import type { BLEND_MODES } from "pixi.js";
+import type {
+  FlatSceneNode,
+  GradientFill,
+  PaintBlendMode,
+  PerSideStroke,
+  PerCornerRadius,
+  SolidPaint,
+} from "@/types/scene";
 import { hasPerSideStroke, hasPerCornerRadius } from "@/utils/renderUtils";
-import { getResolvedFill, getResolvedStroke, parseColor, parseAlpha } from "./colorHelpers";
+import { getRenderableFills } from "@/utils/fillUtils";
+import {
+  getResolvedSolidPaint,
+  getResolvedStroke,
+  parseColor,
+  parseAlpha,
+} from "./colorHelpers";
 
 export { hasPerCornerRadius } from "@/utils/renderUtils";
 
@@ -176,7 +190,16 @@ export function drawRoundedShape(
   }
 }
 
-/** Check if any shared visual properties (fill, stroke, size, cornerRadius) changed. */
+/**
+ * Check if any visual properties affecting the vector shape (fill, stroke,
+ * size, cornerRadius) changed.
+ *
+ * Deliberately EXCLUDES `effect`/`effects` (shadows are rebuilt by their own
+ * branch in `renderers/index.ts` → `applyShadows`) and `imageFill` (image
+ * sprites are rebuilt by the renderers' image-fill branch, see
+ * `hasFillSourceChanged`) so e.g. dragging a shadow-blur slider doesn't
+ * re-tessellate the vector shape on every tick.
+ */
 export function hasVisualPropsChanged(
   node: FlatSceneNode,
   prev: FlatSceneNode,
@@ -197,29 +220,187 @@ export function hasVisualPropsChanged(
       (prev as { cornerRadius?: number }).cornerRadius ||
     (node as { cornerRadiusPerCorner?: PerCornerRadius }).cornerRadiusPerCorner !==
       (prev as { cornerRadiusPerCorner?: PerCornerRadius }).cornerRadiusPerCorner ||
-    node.gradientFill !== prev.gradientFill
+    node.gradientFill !== prev.gradientFill ||
+    node.fills !== prev.fills
   );
 }
 
-/** Fill the current path using node solid/gradient fill settings. */
-export function applyFill(gfx: Graphics, node: FlatSceneNode, width: number, height: number): void {
-  if (node.gradientFill) {
-    const gradient = buildPixiGradient(node.gradientFill, width, height);
-    gfx.fill(gradient);
-  } else {
-    const fillColor = getResolvedFill(node);
-    if (fillColor) {
-      gfx.fill({ color: parseColor(fillColor), alpha: parseAlpha(fillColor) });
+/**
+ * Check if the node's fill *source* changed, i.e. anything that can alter the
+ * derived paint stack (`getFills`): the explicit `fills` array or any legacy
+ * single-fill field. Used by the renderers' image-fill update branches.
+ * `fillBinding`/`fillOpacity` are intentionally omitted: they only affect the
+ * legacy *solid* paint, never the image paint derived from `imageFill`.
+ */
+export function hasFillSourceChanged(
+  node: FlatSceneNode,
+  prev: FlatSceneNode,
+): boolean {
+  return (
+    node.fills !== prev.fills ||
+    node.fill !== prev.fill ||
+    node.gradientFill !== prev.gradientFill ||
+    node.imageFill !== prev.imageFill
+  );
+}
+
+/**
+ * Pixi 8 natively supports only this subset of blend modes for a `Container`
+ * without registering the advanced blend-mode pipeline (we intentionally do not
+ * import `pixi.js/advanced-blend-modes`). Any other mode renders as 'normal'.
+ */
+const NATIVE_BLEND_MODES: ReadonlySet<PaintBlendMode> = new Set([
+  "normal",
+  "multiply",
+  "screen",
+  "darken",
+  "lighten",
+]);
+
+/** Map a paint blend mode to a Pixi blend mode, falling back to 'normal'. */
+export function resolvePaintBlendMode(mode: PaintBlendMode | undefined): BLEND_MODES {
+  if (mode && NATIVE_BLEND_MODES.has(mode)) return mode as BLEND_MODES;
+  return "normal";
+}
+
+/** True when a paint requires its own blended layer (non-default blend mode). */
+function paintNeedsOwnLayer(mode: PaintBlendMode | undefined): boolean {
+  return resolvePaintBlendMode(mode) !== "normal";
+}
+
+/** Fill the current path with a resolved solid paint, honoring per-layer alpha. */
+export function fillSolidPaint(gfx: Graphics, paint: SolidPaint): void {
+  const color = getResolvedSolidPaint(paint);
+  if (!color) return;
+  // `getResolvedSolidPaint` already folds the paint opacity into the color
+  // (rgba / 8-digit hex); `parseAlpha` extracts it back for Pixi.
+  gfx.fill({ color: parseColor(color), alpha: parseAlpha(color) });
+}
+
+/**
+ * Draws the node's shape geometry onto the given Graphics WITHOUT filling.
+ * `applyFills` invokes this once per paint layer because Pixi v8 consumes the
+ * current path on every `.fill()`, so each layer needs its path rebuilt — and
+ * blend layers (separate Graphics objects) need the path drawn onto themselves.
+ */
+export type ShapeDrawer = (target: Graphics) => void;
+
+const BLEND_FILL_LAYER_LABEL = "fill-blend-layer";
+
+/** Container carrying a marker for previously created blend fill layers. */
+type ContainerWithBlendFlag = Container & { _hasBlendFillLayers?: boolean };
+
+/**
+ * Render the node's paint stack (bottom-to-top) onto `container`.
+ *
+ * Solid and gradient layers normally draw into the primary background Graphics
+ * (`baseGfx`), each re-running `drawShape` because Pixi v8 consumes the current
+ * path on every `.fill()`. A paint whose blend mode is non-'normal' instead
+ * draws into its own sibling Graphics with `blendMode` set, inserted directly
+ * above the background so later normal layers still stack correctly.
+ *
+ * Image paints are NOT handled here — they are sprites placed by
+ * `applyImageFills` (see imageFillHelpers). Image sprites render above the
+ * Graphics-based fills while preserving their mutual order and per-layer alpha.
+ *
+ * @returns true when the last vector fill drew into `baseGfx`, leaving its path
+ * reusable by an immediately following `.stroke()` (see `applyStroke`); false
+ * when no vector fill ran or the last one landed on a separate blend layer.
+ */
+export function applyFills(
+  baseGfx: Graphics,
+  node: FlatSceneNode,
+  width: number,
+  height: number,
+  drawShape: ShapeDrawer,
+): boolean {
+  const container = baseGfx.parent as ContainerWithBlendFlag | null;
+
+  const fills = getRenderableFills(node);
+  const needsBlend = fills.some(
+    (p) => p.type !== "image" && paintNeedsOwnLayer(p.blendMode),
+  );
+
+  // Rebuild blend layers from scratch — but only scan the children (O(n) for
+  // frames) when blend layers exist or are about to. The typical no-blend case
+  // skips both the scan and the `getChildIndex` lookup entirely.
+  if (container && (container._hasBlendFillLayers || needsBlend)) {
+    clearBlendFillLayers(container);
+    container._hasBlendFillLayers = needsBlend;
+  }
+
+  // Insertion index for blend layers, advancing so later blend layers stack
+  // above earlier ones (bottom-to-top order preserved).
+  let blendInsertIndex =
+    needsBlend && container ? container.getChildIndex(baseGfx) + 1 : 0;
+
+  let pathOnBase = false;
+  for (const paint of fills) {
+    if (paint.type === "image") continue; // handled by image sprite layer
+
+    let target = baseGfx;
+    if (paintNeedsOwnLayer(paint.blendMode) && container) {
+      target = createBlendFillLayer(
+        container,
+        resolvePaintBlendMode(paint.blendMode),
+        blendInsertIndex,
+      );
+      blendInsertIndex++;
+    }
+
+    drawShape(target);
+
+    if (paint.type === "gradient") {
+      const gradient = buildPixiGradient(paint.gradient, width, height);
+      target.fill({ fill: gradient, alpha: paint.opacity ?? 1 });
+    } else {
+      fillSolidPaint(target, paint);
+    }
+
+    pathOnBase = target === baseGfx;
+  }
+
+  return pathOnBase;
+}
+
+function createBlendFillLayer(
+  container: Container,
+  blendMode: BLEND_MODES,
+  index: number,
+): Graphics {
+  const layer = new Graphics();
+  layer.label = BLEND_FILL_LAYER_LABEL;
+  layer.blendMode = blendMode;
+  container.addChildAt(layer, Math.min(index, container.children.length));
+  return layer;
+}
+
+/** Remove all blend fill layers previously created for this container. */
+function clearBlendFillLayers(container: Container): void {
+  for (let i = container.children.length - 1; i >= 0; i--) {
+    const child = container.children[i];
+    if (child.label === BLEND_FILL_LAYER_LABEL) {
+      container.removeChildAt(i);
+      child.destroy();
     }
   }
 }
 
-/** Apply stroke (per-side or unified) after shape is drawn. */
+/**
+ * Apply stroke (per-side or unified) after shape is drawn.
+ *
+ * The unified branch strokes the current path. In Pixi v8 a `.stroke()` issued
+ * immediately after a `.fill()` reuses the fill's path, so this works when a
+ * fill was the last thing drawn on `gfx`. When `drawShape` is provided it is
+ * re-run first so the stroke has a fresh path even if the last fill landed on a
+ * separate blend layer (or there were no fills at all).
+ */
 export function applyStroke(
   gfx: Graphics,
   node: FlatSceneNode,
   width: number,
   height: number,
+  drawShape?: ShapeDrawer,
 ): void {
   const strokeColor = getResolvedStroke(node);
   if (!strokeColor) return;
@@ -230,6 +411,7 @@ export function applyStroke(
   if (hasPerSideStroke(perSide) && perSide) {
     drawPerSideStroke(gfx, width, height, strokeColor, perSide, align);
   } else if (node.strokeWidth) {
+    if (drawShape) drawShape(gfx);
     const alignment = align === 'inside' ? 1 : align === 'outside' ? 0 : 0.5;
     gfx.stroke({
       color: parseColor(strokeColor),
