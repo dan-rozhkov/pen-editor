@@ -11,6 +11,7 @@ import { materializeLayoutRefs } from "@/utils/layoutRefUtils";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 import { getViewportBounds } from "@/utils/viewportUtils";
 import { updateNodeContainer, applyLayoutSize } from "./renderers";
+import { requestCanvasRender } from "./renderScheduler";
 import { getAnchorWorldPosition } from "@/utils/connectorUtils";
 import {
   type RegistryEntry,
@@ -795,6 +796,28 @@ export function createPixiSync(sceneRoot: Container): () => void {
     nodeTreeMgr.applyTextEditingVisibility();
   });
 
+  // The auto-layout drag animator (autoLayoutDragAnimator.ts) mutates
+  // containers directly, bypassing the store. A normal drop commits a scene
+  // mutation whose flush re-applies layout, but some exits (drop with no
+  // insert target, Esc cancel) mutate nothing — re-apply layout for the
+  // affected frame chain whenever a drag ends, so container positions always
+  // reconcile with the computed layout regardless of how the drag finished.
+  const unsubDrag = useDragStore.subscribe((dragState, prevDragState) => {
+    if (!prevDragState.isDragging || dragState.isDragging) return;
+    const draggedId = prevDragState.draggedNodeId;
+    if (!draggedId) return;
+    const sceneState = useSceneStore.getState();
+    const dirtyFrames = collectDirtyAutoLayoutFrames(
+      sceneState,
+      new Set([draggedId]),
+    );
+    if (dirtyFrames.size > 0) {
+      applyAutoLayoutPositions(sceneState, dirtyFrames);
+      // Direct container mutation outside a store flush — signal the renderer.
+      requestCanvasRender();
+    }
+  });
+
   let removeFontsListener: (() => void) | null = null;
   if (typeof document !== "undefined" && "fonts" in document) {
     const fonts = document.fonts;
@@ -819,6 +842,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
     unsubScene();
     unsubVariables();
     unsubSelection();
+    unsubDrag();
     unsubViewport();
     resolutionMgr.cleanup();
     clearPendingSceneUpdate();

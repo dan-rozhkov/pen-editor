@@ -26,6 +26,9 @@ export interface AutoLayoutDragAnimatorConfig {
   /** World position of cursor at drag start */
   startWorldX: number;
   startWorldY: number;
+  /** Absolute (world) position of the parent frame's origin at drag start */
+  parentAbsX: number;
+  parentAbsY: number;
 }
 
 export interface AutoLayoutDragAnimator {
@@ -241,17 +244,26 @@ export function createAutoLayoutDragAnimator(): AutoLayoutDragAnimator {
     });
   }
 
-  function restoreGhost(): void {
+  function restoreGhost(localX?: number, localY?: number): void {
     if (!ghost) return;
 
     ghost.alpha = 1;
 
-    // Reparent back to original parent
+    // Reparent back to the original children host, converting the ghost's
+    // world-space position to frame-local coordinates. Leaving the world x/y
+    // in place renders the node offset by the frame's absolute position until
+    // the next layout pass — which is not guaranteed to happen (e.g. a drop
+    // that commits no scene mutation).
     if (ghostOriginalParent && !ghostOriginalParent.destroyed) {
+      const x =
+        localX ?? (config ? ghost.position.x - config.parentAbsX : ghost.position.x);
+      const y =
+        localY ?? (config ? ghost.position.y - config.parentAbsY : ghost.position.y);
       ghostOriginalParent.addChildAt(
         ghost,
         Math.min(ghostOriginalIndex, ghostOriginalParent.children.length),
       );
+      ghost.position.set(x, y);
     }
 
     ghost = null;
@@ -266,8 +278,11 @@ export function createAutoLayoutDragAnimator(): AutoLayoutDragAnimator {
       rafId = null;
     }
 
-    // Restore ghost to original position in parent
-    restoreGhost();
+    // Restore ghost to its original frame-local position in the parent
+    restoreGhost(
+      config.startAbsX - config.parentAbsX,
+      config.startAbsY - config.parentAbsY,
+    );
 
     // Snap siblings back to their original positions (with dragged node present)
     for (const id of config.siblingIds) {

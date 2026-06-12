@@ -3,6 +3,7 @@ export type HandleSide = "l" | "r" | "t" | "b";
 export type TransformHandle = HandleCorner | HandleSide;
 
 import type { SnapTarget } from "@/utils/smartGuideUtils";
+import type { AutoLayoutDragAnimatorConfig } from "../autoLayoutDragAnimator";
 
 export interface DragItem {
   id: string;
@@ -36,6 +37,14 @@ export interface DragState {
   // Auto-layout drag reordering
   isAutoLayoutDrag: boolean;
   autoLayoutParentId: string | null;
+  /**
+   * Prepared animator config; the lift (ghost + sibling animation) is deferred
+   * until the pointer moves past the click threshold so a plain click never
+   * disturbs container positions.
+   */
+  pendingAutoLayoutStart: AutoLayoutDragAnimatorConfig | null;
+  /** True once the deferred auto-layout drag has actually started. */
+  autoLayoutDragActivated: boolean;
   // Axis lock state
   isShiftHeld: boolean;
   isAltHeld: boolean;

@@ -28,6 +28,10 @@ import {
 } from "../autoLayoutDragAnimator";
 
 const AXIS_LOCK_THRESHOLD = 8; // pixels
+// Minimum pointer travel before an auto-layout drag lifts the node out of its
+// frame. Below this, pointerdown+pointerup is a click and must not touch
+// containers (mirrors the descendant-drag threshold in pixiInteractionCore).
+const AUTO_LAYOUT_DRAG_THRESHOLD = 3; // pixels
 
 export interface DragController {
   handlePointerDown(
@@ -74,6 +78,8 @@ export function createDragController(context: InteractionContext): DragControlle
     snapOffsetY: 0,
     isAutoLayoutDrag: false,
     autoLayoutParentId: null,
+    pendingAutoLayoutStart: null,
+    autoLayoutDragActivated: false,
     isShiftHeld: false,
     isAltHeld: false,
     axisLock: null,
@@ -89,6 +95,8 @@ export function createDragController(context: InteractionContext): DragControlle
     state.dragItems = [];
     state.isAutoLayoutDrag = false;
     state.autoLayoutParentId = null;
+    state.pendingAutoLayoutStart = null;
+    state.autoLayoutDragActivated = false;
     state.isAltHeld = false;
     state.isShiftHeld = false;
     state.axisLock = null;
@@ -341,9 +349,11 @@ export function createDragController(context: InteractionContext): DragControlle
           ) {
             state.isAutoLayoutDrag = true;
             state.autoLayoutParentId = parentId;
-            useDragStore.getState().startDrag(primaryItem.id);
 
-            // Create and start the drag animator
+            // Prepare the drag animator config, but don't lift the node yet —
+            // the actual start is deferred to the first pointermove past
+            // AUTO_LAYOUT_DRAG_THRESHOLD so a plain click leaves the frame's
+            // containers untouched.
             const parentFrame = findFrameInTree(nodes, parentId);
             if (parentFrame) {
               const layout = parentFrame.layout;
@@ -385,8 +395,13 @@ export function createDragController(context: InteractionContext): DragControlle
                 }
               }
 
-              animator = createAutoLayoutDragAnimator();
-              animator.start({
+              const frameRect = getFrameAbsoluteRectWithLayout(
+                parentFrame,
+                nodes,
+                calculateLayoutForFrame,
+              );
+
+              state.pendingAutoLayoutStart = {
                 draggedId: primaryItem.id,
                 parentId,
                 siblingIds,
@@ -399,18 +414,9 @@ export function createDragController(context: InteractionContext): DragControlle
                 startAbsY: primaryItem.startAbsY,
                 startWorldX: world.x,
                 startWorldY: world.y,
-              });
-
-              // Register cancel handler
-              useDragStore.getState().setCancelDrag(() => {
-                if (animator) {
-                  animator.cancel();
-                  animator.destroy();
-                  animator = null;
-                }
-                useDragStore.getState().endDrag();
-                resetDragState();
-              });
+                parentAbsX: frameRect.x,
+                parentAbsY: frameRect.y,
+              };
             }
           }
         }
@@ -430,6 +436,39 @@ export function createDragController(context: InteractionContext): DragControlle
     handlePointerMove(_e: PointerEvent, world: { x: number; y: number }): boolean {
       // Auto-layout drag reordering
       if (state.isDragging && state.nodeId && state.isAutoLayoutDrag && state.autoLayoutParentId) {
+        // Deferred start: lift the node only after the pointer travels past
+        // the click threshold, so plain clicks never disturb the frame.
+        if (!state.autoLayoutDragActivated) {
+          const dx = world.x - state.startWorldX;
+          const dy = world.y - state.startWorldY;
+          if (
+            Math.abs(dx) < AUTO_LAYOUT_DRAG_THRESHOLD &&
+            Math.abs(dy) < AUTO_LAYOUT_DRAG_THRESHOLD
+          ) {
+            return true;
+          }
+
+          state.autoLayoutDragActivated = true;
+          useDragStore.getState().startDrag(state.nodeId);
+
+          if (state.pendingAutoLayoutStart) {
+            animator = createAutoLayoutDragAnimator();
+            animator.start(state.pendingAutoLayoutStart);
+            state.pendingAutoLayoutStart = null;
+
+            // Register cancel handler
+            useDragStore.getState().setCancelDrag(() => {
+              if (animator) {
+                animator.cancel();
+                animator.destroy();
+                animator = null;
+              }
+              useDragStore.getState().endDrag();
+              resetDragState();
+            });
+          }
+        }
+
         // Update ghost position via animator
         animator?.updateCursorWorld(world.x, world.y);
 
@@ -551,6 +590,13 @@ export function createDragController(context: InteractionContext): DragControlle
     handlePointerUp(_e: PointerEvent, world: { x: number; y: number }): boolean {
       // End auto-layout drag
       if (state.isDragging && state.nodeId && state.isAutoLayoutDrag) {
+        // The pointer never moved past the click threshold — nothing was
+        // lifted and the drag store drag never started; it was just a click.
+        if (!state.autoLayoutDragActivated) {
+          resetDragState();
+          return true;
+        }
+
         const dragStore = useDragStore.getState();
         const nodeId = state.nodeId;
         const sceneState = useSceneStore.getState();
@@ -575,6 +621,12 @@ export function createDragController(context: InteractionContext): DragControlle
               ds.insertInfo.parentId,
               ds.insertInfo.index,
             );
+          } else {
+            // No scene mutation happens on this path, so no sync flush will
+            // re-apply auto-layout — restore the containers the animator moved
+            // (ghost back to its frame-local spot, siblings to their layout
+            // positions) instead of leaving them where the animation stopped.
+            currentAnimator?.cancel();
           }
 
           currentAnimator?.destroy();
