@@ -10,6 +10,7 @@ import type {
   PolygonNode,
   SceneNode,
   SizingMode,
+  TextNode,
 } from "@/types/scene";
 import { flattenTree } from "@/types/scene";
 import type { ParentContext } from "@/utils/nodeUtils";
@@ -479,6 +480,13 @@ export function SizeSection({
                 (p: number, i: number) =>
                   i % 2 === 0 ? p * scaleX : p * scaleY
               );
+            } else if (node.type === "text") {
+              // Figma rule: typing a width fixes the width (auto -> auto-height).
+              // Including the mode in the update triggers height re-measure.
+              (updates as Partial<TextNode>).textWidthMode =
+                (node as TextNode).textWidthMode === "fixed-height"
+                  ? "fixed-height"
+                  : "fixed";
             }
             onUpdate(updates);
           }}
@@ -510,12 +518,15 @@ export function SizeSection({
                 (p: number, i: number) =>
                   i % 2 === 0 ? p * scaleX : p * scaleY
               );
+            } else if (node.type === "text") {
+              // Figma rule: typing a height fixes both dimensions (fixed-size).
+              (updates as Partial<TextNode>).textWidthMode = "fixed-height";
             }
             onUpdate(updates);
           }}
           min={1}
         />
-        {<button
+        {node.type !== "text" && <button
           type="button"
           className={cn(
             "shrink-0 flex items-center justify-center w-6 h-6 rounded",
