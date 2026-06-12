@@ -249,6 +249,22 @@ export function useCanvasKeyboardShortcuts({
       setImportedSelection(clonedNodes.map((node) => node.id));
     };
 
+    const copySelection = (): void => {
+      const nodes = useSceneStore.getState().getNodes();
+      const selState = useSelectionStore.getState();
+      const nodesToCopy = resolveNodesToCopy(selState, nodes);
+      if (nodesToCopy.length > 0) {
+        copyNodes(nodesToCopy);
+      }
+    };
+
+    const pasteFromInternalClipboard = (): void => {
+      const { copiedNodes: sourceNodes } = useClipboardStore.getState();
+      if (sourceNodes.length > 0) {
+        pasteInternalNodes(sourceNodes);
+      }
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
       const isTyping = isTypingTarget(e);
       const nodes = useSceneStore.getState().getNodes();
@@ -306,11 +322,7 @@ export function useCanvasKeyboardShortcuts({
       if ((e.metaKey || e.ctrlKey) && e.code === "KeyC") {
         if (isTyping) return;
         e.preventDefault();
-        const selState = useSelectionStore.getState();
-        const nodesToCopy = resolveNodesToCopy(selState, nodes);
-        if (nodesToCopy.length > 0) {
-          copyNodes(nodesToCopy);
-        }
+        copySelection();
         return;
       }
 
@@ -773,13 +785,25 @@ export function useCanvasKeyboardShortcuts({
       }
     };
 
+    const handleMenuCopy = () => {
+      copySelection();
+    };
+
+    const handleMenuPaste = () => {
+      pasteFromInternalClipboard();
+    };
+
     window.addEventListener("keydown", handleKeyDown, { capture: true });
     window.addEventListener("keyup", handleKeyUp);
     window.addEventListener("paste", handlePaste);
+    window.addEventListener("pen-editor:copy", handleMenuCopy);
+    window.addEventListener("pen-editor:paste", handleMenuPaste);
     return () => {
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("paste", handlePaste);
+      window.removeEventListener("pen-editor:copy", handleMenuCopy);
+      window.removeEventListener("pen-editor:paste", handleMenuPaste);
     };
   }, [
     addChildToFrame,

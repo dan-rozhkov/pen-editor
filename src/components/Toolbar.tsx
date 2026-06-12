@@ -80,6 +80,14 @@ export function Toolbar() {
     }
   };
 
+  const handleCopy = () => {
+    window.dispatchEvent(new Event("pen-editor:copy"));
+  };
+
+  const handlePaste = () => {
+    window.dispatchEvent(new Event("pen-editor:paste"));
+  };
+
   const handleImport = () => {
     setError(null);
     if (!jsonText.trim()) {
@@ -117,6 +125,19 @@ export function Toolbar() {
           <DropdownMenuItem onClick={handleOpen}>
             Open
           </DropdownMenuItem>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              Edit
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuItem onClick={handleCopy}>
+                Copy
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handlePaste}>
+                Paste
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
               Export
