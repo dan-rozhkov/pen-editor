@@ -72,12 +72,6 @@ describe("<FillSection />", () => {
     expect(colorInputs[1].value).toBe("#ff0000");
   });
 
-  it("renders the opacity as a rounded percentage", () => {
-    render(<FillSection {...baseProps(makeNode([solid("a", "#ff0000", { opacity: 0.5 })]))} />);
-    const opacity = screen.getByRole("spinbutton") as HTMLInputElement;
-    expect(opacity.value).toBe("50");
-  });
-
   it("adds a solid fill via the Add button", () => {
     const onUpdate = vi.fn();
     render(<FillSection {...baseProps(makeNode([]), onUpdate)} />);
@@ -108,15 +102,6 @@ describe("<FillSection />", () => {
       id: "a",
       color: "#123456",
     });
-  });
-
-  it("updates opacity (clamped, stored 0-1) when the percentage changes", () => {
-    const onUpdate = vi.fn();
-    render(<FillSection {...baseProps(makeNode([solid("a", "#ff0000")]), onUpdate)} />);
-
-    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "40" } });
-
-    expect(onUpdate.mock.calls[0][0].fills[0]).toMatchObject({ opacity: 0.4 });
   });
 
   it("removes a fill", () => {

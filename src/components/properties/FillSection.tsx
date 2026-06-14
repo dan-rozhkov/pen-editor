@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type {
   GradientFill,
   ImageFill,
@@ -9,13 +10,20 @@ import { PAINT_BLEND_MODES } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
 import {
   ColorInput,
-  NumberInput,
   PropertySection,
   SelectInput,
 } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ArrowDown, ArrowUp, Eye, EyeSlash, PlusIcon, TrashIcon } from "@phosphor-icons/react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Eye,
+  EyeSlash,
+  MinusIcon,
+  PlusIcon,
+  DotsSixVertical,
+} from "@phosphor-icons/react";
 import { GradientEditor } from "@/components/properties/GradientEditor";
 import { ImageFillEditor } from "@/components/properties/ImageFillSection";
 import { OverrideIndicator } from "@/components/properties/OverrideIndicator";
@@ -128,6 +136,20 @@ export function FillSection({
     commit(addSolidFill(fills));
   };
 
+  // --- Drag-to-reorder state (array-index space) ---
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+
+  const handleDrop = (target: number) => {
+    if (dragIndex !== null && dragIndex !== target) {
+      commit(moveItem(fills, dragIndex, target - dragIndex));
+    }
+    setDragIndex(null);
+    setDropIndex(null);
+  };
+
+  const canReorder = fills.length > 1;
+
   return (
     <PropertySection
       title="Fill"
@@ -157,7 +179,41 @@ export function FillSection({
                 : FILL_TYPE_OPTIONS;
 
               return (
-                <div key={paint.id} className="flex items-center gap-1">
+                <div
+                  key={paint.id}
+                  className={`flex items-center gap-1 rounded ${
+                    dropIndex === arrayIndex && dragIndex !== null && dragIndex !== arrayIndex
+                      ? "ring-1 ring-border-hover"
+                      : ""
+                  } ${dragIndex === arrayIndex ? "opacity-50" : ""}`}
+                  onDragOver={(e) => {
+                    if (dragIndex !== null) {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "move";
+                      setDropIndex(arrayIndex);
+                    }
+                  }}
+                  onDrop={() => handleDrop(arrayIndex)}
+                >
+                  {/* Drag handle — reorder the stack by dragging */}
+                  {canReorder && (
+                    <div
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.effectAllowed = "move";
+                        setDragIndex(arrayIndex);
+                      }}
+                      onDragEnd={() => {
+                        setDragIndex(null);
+                        setDropIndex(null);
+                      }}
+                      className="shrink-0 cursor-grab text-text-muted hover:text-text-primary active:cursor-grabbing"
+                      title="Drag to reorder"
+                    >
+                      <DotsSixVertical />
+                    </div>
+                  )}
+
                   {/* Compact trigger: swatch + summary opens the detail popover */}
                   <Popover>
                     <PopoverTrigger
@@ -264,25 +320,6 @@ export function FillSection({
                     </PopoverContent>
                   </Popover>
 
-                  {/* Opacity (inline, Figma-style) */}
-                  <div className="w-16 shrink-0">
-                    <NumberInput
-                      label="%"
-                      value={Math.round((paint.opacity ?? 1) * 100)}
-                      onChange={(v) =>
-                        commit(
-                          updateFillAt(fills, arrayIndex, {
-                            ...paint,
-                            opacity: Math.max(0, Math.min(100, v)) / 100,
-                          }),
-                        )
-                      }
-                      min={0}
-                      max={100}
-                      step={1}
-                    />
-                  </div>
-
                   <Button
                     variant="ghost"
                     size="icon-sm"
@@ -297,7 +334,7 @@ export function FillSection({
                     onClick={() => commit(removeFillAt(fills, arrayIndex))}
                     title="Remove fill"
                   >
-                    <TrashIcon />
+                    <MinusIcon />
                   </Button>
 
                   {rowIndex === 0 && (
