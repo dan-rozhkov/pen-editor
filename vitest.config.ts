@@ -34,6 +34,16 @@ export default defineConfig({
         // PixiJS rendering needs WebGL — covered by e2e, not unit tests.
         "src/pixi/**",
       ],
+      // Non-regression gate: floors sit ~1pp below the current measured
+      // coverage so `npm run test:coverage` fails if coverage drops, without
+      // flaking on minor v8 measurement variance. Ratchet these UP as
+      // coverage grows; never lower them to make a red build pass.
+      thresholds: {
+        statements: 42,
+        branches: 35,
+        functions: 48,
+        lines: 43,
+      },
     },
   },
 });
