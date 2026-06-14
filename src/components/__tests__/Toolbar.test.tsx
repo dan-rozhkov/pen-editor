@@ -11,10 +11,13 @@ import { resetStores } from "@/test/fixtures";
  * pixel-grid stores. We assert against those stores' real state.
  *
  * Note: uiThemeStore / pixelGridStore are not reset by resetStores(), and they
- * persist to localStorage. Each test snapshots and restores the store values it
- * touches so the suite stays order-independent.
+ * persist to localStorage. We snapshot their original values once and restore
+ * them in afterEach so this suite doesn't leak mutated state to other suites.
  */
 describe("<Toolbar />", () => {
+  const originalTheme = useUIThemeStore.getState().uiTheme;
+  const originalGrid = usePixelGridStore.getState().showPixelGrid;
+
   beforeEach(() => {
     resetStores();
     // Known baseline for the stores the toolbar drives.
@@ -22,7 +25,11 @@ describe("<Toolbar />", () => {
     usePixelGridStore.setState({ showPixelGrid: true });
   });
 
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    useUIThemeStore.setState({ uiTheme: originalTheme });
+    usePixelGridStore.setState({ showPixelGrid: originalGrid });
+  });
 
   /** Open the top-level File menu and return its menuitem labels. */
   function openFileMenu() {

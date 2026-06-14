@@ -125,21 +125,18 @@ describe("<VariablesDialog />", () => {
     expect(variables().length).toBe(2);
 
     // Open the add-variable dropdown (icon button, by title) then pick a type.
+    // base-ui Menu renders items into a portal; getByText throws if the menu
+    // didn't open, so a non-mounting menu fails loudly instead of silently
+    // passing with the assertions skipped.
     fireEvent.click(screen.getByTitle("Add variable"));
+    fireEvent.click(screen.getByText("Color"));
 
-    // base-ui Menu renders items into a portal once open. Click the "Color"
-    // item if present; otherwise the menu didn't open in happy-dom and we skip
-    // the interaction half (still asserting the trigger exists above).
-    const colorItem = screen.queryByText("Color");
-    if (colorItem) {
-      fireEvent.click(colorItem);
-      expect(variables().length).toBe(3);
-      const added = variables()[variables().length - 1];
-      expect(added.type).toBe("color");
-      // one color variable is already seeded (var-primary), so the new one is
-      // numbered after the existing color count.
-      expect(added.name).toBe("Color 2");
-      expect(added.themeValues).toEqual({ light: "#4a90d9", dark: "#4a90d9" });
-    }
+    expect(variables().length).toBe(3);
+    const added = variables()[variables().length - 1];
+    expect(added.type).toBe("color");
+    // one color variable is already seeded (var-primary), so the new one is
+    // numbered after the existing color count.
+    expect(added.name).toBe("Color 2");
+    expect(added.themeValues).toEqual({ light: "#4a90d9", dark: "#4a90d9" });
   });
 });

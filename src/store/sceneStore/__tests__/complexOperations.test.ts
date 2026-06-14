@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { useSceneStore } from "@/store/sceneStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { resetStores, seedScene } from "@/test/fixtures";
@@ -264,6 +264,7 @@ describe("complexOperations", () => {
   });
 
   describe("convertEmbedToDesign", () => {
+    let stubbedFonts = false;
     beforeEach(() => {
       // happy-dom has no FontFaceSet; convertHtmlToDesignNodes awaits document.fonts.ready
       if (!(document as unknown as { fonts?: unknown }).fonts) {
@@ -271,6 +272,15 @@ describe("complexOperations", () => {
           configurable: true,
           value: { ready: Promise.resolve() },
         });
+        stubbedFonts = true;
+      }
+    });
+    afterEach(() => {
+      // Remove our stub so the fake FontFaceSet doesn't leak to other test files
+      // in the same worker.
+      if (stubbedFonts) {
+        delete (document as unknown as { fonts?: unknown }).fonts;
+        stubbedFonts = false;
       }
     });
 
