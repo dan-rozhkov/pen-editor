@@ -103,10 +103,6 @@ function normalizePaint(entry: unknown, theme?: ThemeName): Paint | null {
       if (!Array.isArray(raw.stops)) return null;
       const { type: _t, opacity: _o, visible: _v, blendMode: _b, ...gradientFields } =
         raw;
-      void _t;
-      void _o;
-      void _v;
-      void _b;
       gradientFill = gradientFields as unknown as GradientFill;
     }
     return createGradientPaint(gradientFill, common);
