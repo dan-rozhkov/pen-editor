@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import type { ComponentProps, ReactNode } from "react";
 import { EffectsSection } from "../EffectsSection";
 import type { SceneNode, ShadowEffect } from "@/types/scene";
 
@@ -9,6 +10,17 @@ import type { SceneNode, ShadowEffect } from "@/types/scene";
 // hex text <input> (the variable dropdown is absent — no availableVariables).
 vi.mock("@/components/ui/ColorPicker", () => ({
   CustomColorPicker: () => null,
+}));
+
+// The per-effect detail editor now lives in a base-ui popover, which portals and
+// is flaky to drive open in happy-dom. Render trigger + content inline so the
+// shadow parameter inputs are always in the DOM.
+vi.mock("@/components/ui/popover", () => ({
+  Popover: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  PopoverTrigger: ({ children, ...props }: ComponentProps<"button">) => (
+    <button {...props}>{children}</button>
+  ),
+  PopoverContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
 function shadow(extra: Partial<ShadowEffect> = {}): ShadowEffect {
@@ -49,6 +61,17 @@ describe("<EffectsSection />", () => {
     expect(screen.queryAllByRole("spinbutton")).toHaveLength(0);
   });
 
+  it("labels an inner shadow as 'Inner Shadow' (derived from shadowType)", () => {
+    render(
+      <EffectsSection
+        node={makeNode([shadow({ shadowType: "inner" })])}
+        onUpdate={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByText("Inner Shadow").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Drop Shadow")).toBeNull();
+  });
+
   it("renders an existing shadow effect with its parameter values", () => {
     render(
       <EffectsSection
@@ -56,7 +79,9 @@ describe("<EffectsSection />", () => {
         onUpdate={vi.fn()}
       />,
     );
-    expect(screen.getByText("Drop Shadow")).toBeTruthy();
+    // "Drop Shadow" now appears twice: the collapsed row label + the popover title.
+    expect(screen.getAllByText("Drop Shadow").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Inner Shadow")).toBeNull();
 
     const inputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
     // DOM order per card: opacity %, X, Y, Blur, Spread

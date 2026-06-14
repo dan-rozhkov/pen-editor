@@ -11,7 +11,7 @@ import {
   addSolidFill,
   convertFillKind,
   getFillKind,
-  moveFill,
+  moveItem,
   removeEffectAt,
   removeFillAt,
   toggleEffectVisibleAt,
@@ -78,19 +78,19 @@ describe("toggleFillVisibleAt", () => {
   });
 });
 
-describe("moveFill", () => {
-  it("moves a paint toward the top of the stack", () => {
+describe("moveItem", () => {
+  it("moves an item toward the top of the stack", () => {
     const a = solid("#a");
     const b = solid("#b");
     const c = solid("#c");
-    expect(moveFill([a, b, c], 0, 1)).toEqual([b, a, c]);
-    expect(moveFill([a, b, c], 2, -2)).toEqual([c, a, b]);
+    expect(moveItem([a, b, c], 0, 1)).toEqual([b, a, c]);
+    expect(moveItem([a, b, c], 2, -2)).toEqual([c, a, b]);
   });
 
   it("is a no-op when moving out of range", () => {
     const fills = [solid("#a"), solid("#b")];
-    expect(moveFill(fills, 0, -1)).toEqual(fills);
-    expect(moveFill(fills, 1, 1)).toEqual(fills);
+    expect(moveItem(fills, 0, -1)).toEqual(fills);
+    expect(moveItem(fills, 1, 1)).toEqual(fills);
   });
 });
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import type { ComponentProps, ReactNode } from "react";
 import { FillSection } from "../FillSection";
 import type { Paint, SceneNode } from "@/types/scene";
 
@@ -12,6 +13,18 @@ vi.mock("@/components/properties/GradientEditor", () => ({
 }));
 vi.mock("@/components/properties/ImageFillSection", () => ({
   ImageFillEditor: () => <div data-testid="image-editor" />,
+}));
+
+// The per-fill detail editor now lives in a base-ui popover, which portals and
+// is flaky to drive open in happy-dom. Render trigger + content inline so the
+// detail controls (type select, color, blend, reorder) are always in the DOM —
+// the same approach used for the color picker stub below.
+vi.mock("@/components/ui/popover", () => ({
+  Popover: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  PopoverTrigger: ({ children, ...props }: ComponentProps<"button">) => (
+    <button {...props}>{children}</button>
+  ),
+  PopoverContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
 const noop = vi.fn();
@@ -193,17 +206,13 @@ describe("<FillSection />", () => {
     expect(screen.getByTestId("image-editor")).toBeTruthy();
   });
 
-  it("collapses a solid row's blend-mode select via the caret toggle", () => {
+  it("exposes the blend-mode select in the fill detail popover", () => {
     render(<FillSection {...baseProps(makeNode([solid("a", "#ff0000")]))} />);
 
-    // Expanded by default? No: solid rows start collapsed (the caret reads
-    // "Expand"), so the blend select is hidden initially.
-    expect(screen.getByTitle("Expand")).toBeTruthy();
-    expect(screen.queryByText("Blend")).toBeNull();
-
-    fireEvent.click(screen.getByTitle("Expand"));
+    // Details (incl. the blend select) live in the popover; there is no longer
+    // an inline caret toggle on the row.
+    expect(screen.queryByTitle(/Collapse|Expand/)).toBeNull();
     expect(screen.getByText("Blend")).toBeTruthy();
-    expect(screen.getByTitle("Collapse")).toBeTruthy();
   });
 
   it("shows a Mixed placeholder when fills are mixed across the selection", () => {

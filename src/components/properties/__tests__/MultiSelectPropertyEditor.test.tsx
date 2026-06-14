@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import type { ComponentProps, ReactNode } from "react";
 import { MultiSelectPropertyEditor } from "../MultiSelectPropertyEditor";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
@@ -18,6 +19,17 @@ import { resetStores, seedScene } from "@/test/fixtures";
  */
 vi.mock("@/components/ui/ColorPicker", () => ({
   CustomColorPicker: () => null,
+}));
+
+// Fill/Effect detail editors now live in a base-ui popover (portaled, mounted
+// only when open). Render trigger + content inline so the solid color row's hex
+// input is in the DOM without driving the popover open in happy-dom.
+vi.mock("@/components/ui/popover", () => ({
+  Popover: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  PopoverTrigger: ({ children, ...props }: ComponentProps<"button">) => (
+    <button {...props}>{children}</button>
+  ),
+  PopoverContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
 function selectedNodes(ids: string[]): SceneNode[] {

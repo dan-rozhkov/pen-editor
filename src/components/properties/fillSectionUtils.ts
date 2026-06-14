@@ -72,16 +72,17 @@ export function toggleFillVisibleAt(fills: Paint[], index: number): Paint[] {
 }
 
 /**
- * Move the paint at `index` by `delta` positions in the array. `delta` is in
+ * Move the item at `index` by `delta` positions in the array. `delta` is in
  * array space (positive = toward the top of the stack / end of array).
- * Out-of-range moves are clamped to a no-op.
+ * Out-of-range moves are clamped to a no-op. Shared by the fill and effect
+ * stacks (both render bottom-to-top and reorder the same way).
  */
-export function moveFill(fills: Paint[], index: number, delta: number): Paint[] {
+export function moveItem<T>(items: T[], index: number, delta: number): T[] {
   const target = index + delta;
-  if (target < 0 || target >= fills.length || index < 0 || index >= fills.length) {
-    return fills;
+  if (target < 0 || target >= items.length || index < 0 || index >= items.length) {
+    return items;
   }
-  const next = [...fills];
+  const next = [...items];
   const [moved] = next.splice(index, 1);
   next.splice(target, 0, moved);
   return next;

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type {
   GradientFill,
   ImageFill,
@@ -15,16 +14,8 @@ import {
   SelectInput,
 } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
-import {
-  ArrowDown,
-  ArrowUp,
-  CaretDownIcon,
-  CaretRightIcon,
-  Eye,
-  EyeSlash,
-  PlusIcon,
-  TrashIcon,
-} from "@phosphor-icons/react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ArrowDown, ArrowUp, Eye, EyeSlash, PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import { GradientEditor } from "@/components/properties/GradientEditor";
 import { ImageFillEditor } from "@/components/properties/ImageFillSection";
 import { OverrideIndicator } from "@/components/properties/OverrideIndicator";
@@ -34,7 +25,7 @@ import {
   addSolidFill,
   convertFillKind,
   getFillKind,
-  moveFill,
+  moveItem,
   removeFillAt,
   toggleFillVisibleAt,
   updateFillAt,
@@ -102,6 +93,13 @@ const FILL_TYPE_OPTIONS = [
   { value: "radial", label: "Radial" },
 ];
 
+/** One-line summary shown on the collapsed row (popover trigger). */
+function paintSummary(paint: Paint): string {
+  if (paint.type === "solid") return paint.color.toUpperCase();
+  if (paint.type === "image") return "Image";
+  return paint.gradient.type === "radial" ? "Radial" : "Linear";
+}
+
 export function FillSection({
   node,
   onUpdate,
@@ -118,10 +116,6 @@ export function FillSection({
   const supportsImage =
     node.type === "rect" || node.type === "ellipse" || node.type === "frame";
 
-  // Track which solid rows are expanded by paint id (gradient/image rows are
-  // always expanded; solid rows expose the blend-mode select when expanded).
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-
   /**
    * Persist a new fill stack. Always clears legacy single-fill props so the two
    * representations never diverge (see fillUtils contract).
@@ -132,15 +126,6 @@ export function FillSection({
 
   const handleAddFill = () => {
     commit(addSolidFill(fills));
-  };
-
-  const toggleExpanded = (id: string) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
   };
 
   return (
@@ -155,17 +140,13 @@ export function FillSection({
       {isMixed ? (
         <span className="text-xs italic text-text-muted">Mixed</span>
       ) : fills.length === 0 ? null : (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1">
           {/* Render top-to-bottom: last array element is the first (top) row. */}
           {fills
             .map((paint, arrayIndex) => ({ paint, arrayIndex }))
             .reverse()
             .map(({ paint, arrayIndex }, rowIndex) => {
               const kind = getFillKind(paint);
-              // Only solid rows actually collapse anything (the blend select);
-              // gradient/image rows always show their editor + blend select.
-              const collapsible = kind === "solid";
-              const isExpanded = !collapsible || expandedIds.has(paint.id);
               const isVisible = paint.visible !== false;
               // arrayIndex toward end = top of stack. Up arrow moves toward top.
               const canMoveUp = arrayIndex < fills.length - 1;
@@ -176,176 +157,153 @@ export function FillSection({
                 : FILL_TYPE_OPTIONS;
 
               return (
-                <div
-                  key={paint.id}
-                  className="flex flex-col gap-2 rounded border border-border-default p-2"
-                >
-                  {/* Row header: swatch + type + reorder + visibility + delete */}
-                  <div className="flex items-center gap-1">
-                    {collapsible ? (
-                      <button
-                        type="button"
-                        className="shrink-0 text-text-muted hover:text-text-primary"
-                        onClick={() => toggleExpanded(paint.id)}
-                        title={isExpanded ? "Collapse" : "Expand"}
-                      >
-                        {isExpanded ? (
-                          <CaretDownIcon size={12} />
-                        ) : (
-                          <CaretRightIcon size={12} />
-                        )}
-                      </button>
-                    ) : (
-                      <span className="w-3 shrink-0" />
-                    )}
-                    <PaintSwatch paint={paint} />
-                    <div className="min-w-0 flex-1">
-                      <SelectInput
-                        value={kind}
-                        options={typeOptions}
-                        onChange={(v) =>
-                          commit(convertFillKind(fills, arrayIndex, v as FillKind))
-                        }
-                      />
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      disabled={!canMoveUp}
-                      onClick={() => commit(moveFill(fills, arrayIndex, 1))}
-                      title="Move up"
+                <div key={paint.id} className="flex items-center gap-1">
+                  {/* Compact trigger: swatch + summary opens the detail popover */}
+                  <Popover>
+                    <PopoverTrigger
+                      className="flex min-w-0 flex-1 items-center gap-2 rounded px-1.5 py-1 text-left hover:bg-surface-hover"
+                      title="Edit fill"
                     >
-                      <ArrowUp />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      disabled={!canMoveDown}
-                      onClick={() => commit(moveFill(fills, arrayIndex, -1))}
-                      title="Move down"
-                    >
-                      <ArrowDown />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => commit(toggleFillVisibleAt(fills, arrayIndex))}
-                      title={isVisible ? "Hide fill" : "Show fill"}
-                    >
-                      {isVisible ? <Eye /> : <EyeSlash />}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => commit(removeFillAt(fills, arrayIndex))}
-                      title="Remove fill"
-                    >
-                      <TrashIcon />
-                    </Button>
-                  </div>
+                      <PaintSwatch paint={paint} />
+                      <span className="min-w-0 flex-1 truncate font-mono text-xs text-text-primary">
+                        {paintSummary(paint)}
+                      </span>
+                    </PopoverTrigger>
+                    <PopoverContent>
+                      {/* Type + reorder */}
+                      <div className="flex items-center gap-1">
+                        <div className="min-w-0 flex-1">
+                          <SelectInput
+                            value={kind}
+                            options={typeOptions}
+                            onChange={(v) =>
+                              commit(convertFillKind(fills, arrayIndex, v as FillKind))
+                            }
+                          />
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          disabled={!canMoveUp}
+                          onClick={() => commit(moveItem(fills, arrayIndex, 1))}
+                          title="Move up"
+                        >
+                          <ArrowUp />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          disabled={!canMoveDown}
+                          onClick={() => commit(moveItem(fills, arrayIndex, -1))}
+                          title="Move down"
+                        >
+                          <ArrowDown />
+                        </Button>
+                      </div>
 
-                  {/* Solid: color + opacity (always shown) */}
-                  {paint.type === "solid" && (
-                    <div className="flex items-center gap-1">
-                      <div className="min-w-0 flex-1">
+                      {/* Solid color + variable binding */}
+                      {paint.type === "solid" && (
                         <ColorInput
                           value={paint.color}
                           onChange={(v) =>
-                            commit(
-                              updateFillAt(fills, arrayIndex, {
-                                ...paint,
-                                color: v,
-                              }),
-                            )
+                            commit(updateFillAt(fills, arrayIndex, { ...paint, color: v }))
                           }
                           variableId={paint.colorBinding?.variableId}
                           onVariableChange={(variableId) =>
                             commit(
                               updateFillAt(fills, arrayIndex, {
                                 ...paint,
-                                colorBinding: variableId
-                                  ? { variableId }
-                                  : undefined,
+                                colorBinding: variableId ? { variableId } : undefined,
                               }),
                             )
                           }
                           availableVariables={colorVariables}
                           activeTheme={activeTheme}
                         />
-                      </div>
-                      <div className="w-20">
-                        <NumberInput
-                          label="%"
-                          value={Math.round((paint.opacity ?? 1) * 100)}
-                          onChange={(v) =>
-                            commit(
-                              updateFillAt(fills, arrayIndex, {
-                                ...paint,
-                                opacity: Math.max(0, Math.min(100, v)) / 100,
-                              }),
-                            )
+                      )}
+
+                      {/* Gradient editor */}
+                      {paint.type === "gradient" && (
+                        <GradientEditor
+                          gradient={paint.gradient}
+                          onChange={(g: GradientFill) =>
+                            commit(updateFillAt(fills, arrayIndex, { ...paint, gradient: g }))
                           }
-                          min={0}
-                          max={100}
-                          step={1}
-                        />
-                      </div>
-                      {rowIndex === 0 && (
-                        <OverrideIndicator
-                          isOverridden={isOverridden(node.fill, component?.fill)}
-                          onReset={() => resetOverride("fill")}
                         />
                       )}
-                    </div>
-                  )}
 
-                  {/* Gradient editor */}
-                  {paint.type === "gradient" && isExpanded && (
-                    <GradientEditor
-                      gradient={paint.gradient}
-                      onChange={(g: GradientFill) =>
-                        commit(
-                          updateFillAt(fills, arrayIndex, {
-                            ...paint,
-                            gradient: g,
-                          }),
-                        )
-                      }
-                    />
-                  )}
+                      {/* Image editor */}
+                      {paint.type === "image" && (
+                        <ImageFillEditor
+                          imageFill={paint.image}
+                          onUpdate={(updates) => {
+                            const img = (updates as { imageFill?: ImageFill }).imageFill;
+                            if (!img) return;
+                            commit(
+                              updateFillAt(fills, arrayIndex, { ...paint, image: img }),
+                            );
+                          }}
+                        />
+                      )}
 
-                  {/* Image editor */}
-                  {paint.type === "image" && isExpanded && (
-                    <ImageFillEditor
-                      imageFill={paint.image}
-                      onUpdate={(updates) => {
-                        const img = (updates as { imageFill?: ImageFill }).imageFill;
-                        if (!img) return;
-                        commit(
-                          updateFillAt(fills, arrayIndex, {
-                            ...paint,
-                            image: img,
-                          }),
-                        );
-                      }}
-                    />
-                  )}
+                      {/* Blend mode */}
+                      <SelectInput
+                        label="Blend"
+                        labelOutside
+                        value={paint.blendMode ?? "normal"}
+                        options={BLEND_MODE_OPTIONS}
+                        onChange={(v) =>
+                          commit(
+                            updateFillAt(fills, arrayIndex, {
+                              ...paint,
+                              blendMode: v as PaintBlendMode,
+                            }),
+                          )
+                        }
+                      />
+                    </PopoverContent>
+                  </Popover>
 
-                  {/* Blend mode (expanded) */}
-                  {isExpanded && (
-                    <SelectInput
-                      label="Blend"
-                      labelOutside
-                      value={paint.blendMode ?? "normal"}
-                      options={BLEND_MODE_OPTIONS}
+                  {/* Opacity (inline, Figma-style) */}
+                  <div className="w-16 shrink-0">
+                    <NumberInput
+                      label="%"
+                      value={Math.round((paint.opacity ?? 1) * 100)}
                       onChange={(v) =>
                         commit(
                           updateFillAt(fills, arrayIndex, {
                             ...paint,
-                            blendMode: v as PaintBlendMode,
+                            opacity: Math.max(0, Math.min(100, v)) / 100,
                           }),
                         )
                       }
+                      min={0}
+                      max={100}
+                      step={1}
+                    />
+                  </div>
+
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => commit(toggleFillVisibleAt(fills, arrayIndex))}
+                    title={isVisible ? "Hide fill" : "Show fill"}
+                  >
+                    {isVisible ? <Eye /> : <EyeSlash />}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => commit(removeFillAt(fills, arrayIndex))}
+                    title="Remove fill"
+                  >
+                    <TrashIcon />
+                  </Button>
+
+                  {rowIndex === 0 && (
+                    <OverrideIndicator
+                      isOverridden={isOverridden(node.fill, component?.fill)}
+                      onReset={() => resetOverride("fill")}
                     />
                   )}
                 </div>
