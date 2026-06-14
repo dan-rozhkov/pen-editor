@@ -301,6 +301,10 @@ export function createComplexOperations(
       const state = get();
       const node = state.nodesById[id];
       if (!node) return false;
+      // Bail out before saving history on no-op conversions (non-frame/group
+      // nodes, or reusable component frames) so we don't push empty undo steps.
+      if (node.type !== "group" && node.type !== "frame") return false;
+      if (node.type === "frame" && (node as FlatFrameNode).reusable) return false;
 
       saveHistory(state);
 
@@ -338,9 +342,6 @@ export function createComplexOperations(
       }
 
       if (node.type === "frame") {
-        const frame = node as FlatFrameNode;
-        if (frame.reusable) return false;
-
         const group: FlatSceneNode = {
           id: node.id,
           type: "group" as const,
