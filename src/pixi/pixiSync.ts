@@ -1,29 +1,23 @@
 import { Container } from "pixi.js";
 import { useSceneStore, type SceneState } from "@/store/sceneStore";
-import { useLayoutStore } from "@/store/layoutStore";
 import { useDragStore } from "@/store/dragStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useSelectionStore } from "@/store/selectionStore";
-import type { FlatSceneNode, ConnectorNode } from "@/types/scene";
+import type { FlatSceneNode } from "@/types/scene";
 import { isFlatFrameNode, isRefNode, isConnectorNode } from "@/types/scene";
-import { materializeLayoutRefs } from "@/utils/layoutRefUtils";
-import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
-import { getViewportBounds } from "@/utils/viewportUtils";
-import { updateNodeContainer, applyLayoutSize } from "./renderers";
+import { updateNodeContainer } from "./renderers";
 import { requestCanvasRender } from "./renderScheduler";
-import { getAnchorWorldPosition } from "@/utils/connectorUtils";
 import {
   type RegistryEntry,
-  type NodeLayoutOverride,
-  type AutoLayoutFrameSet,
   ComponentIdIndex,
   collectAffectedInstanceIds,
   withAncestorThemes,
-  flatToTreeFrame,
 } from "./syncHelpers";
 import { createResolutionManager } from "./syncResolution";
 import { createNodeTreeManager } from "./syncNodeTree";
+import { createConnectorManager } from "./syncConnectors";
+import { createAutoLayoutManager } from "./syncAutoLayout";
 
 // Module-level registry accessor for the drag animator
 let registryAccessor: ((id: string) => Container | null) | null = null;
@@ -36,9 +30,6 @@ export function getNodeContainer(id: string): Container | null {
 export function getSceneRoot(): Container | null {
   return sceneRootAccessor?.() ?? null;
 }
-
-// Phase 1: Viewport culling — screen-space margin to avoid pop-in during fast panning
-const CULL_MARGIN = 400;
 
 /**
  * Sentinel "previous node" used to force all renderers to re-apply visual
@@ -101,318 +92,18 @@ export function createPixiSync(sceneRoot: Container): () => void {
   // Phase 3: Index for fast componentId → refNodeId lookups
   const componentIndex = new ComponentIdIndex();
 
-  // Connector index: targetNodeId → set of connectorIds that reference it
-  const connectorIndex = new Map<string, Set<string>>();
+  // Connector index + geometry recomputation when connected nodes move/resize.
+  const connectorMgr = createConnectorManager();
+  const {
+    addToConnectorIndex,
+    removeFromConnectorIndex,
+    buildConnectorIndex,
+    updateConnectorsForNodes,
+  } = connectorMgr;
 
-  function addToConnectorIndex(connectorId: string, node: ConnectorNode): void {
-    for (const targetId of [node.startConnection.nodeId, node.endConnection.nodeId]) {
-      let set = connectorIndex.get(targetId);
-      if (!set) {
-        set = new Set();
-        connectorIndex.set(targetId, set);
-      }
-      set.add(connectorId);
-    }
-  }
-
-  function removeFromConnectorIndex(connectorId: string, node: ConnectorNode): void {
-    for (const targetId of [node.startConnection.nodeId, node.endConnection.nodeId]) {
-      const set = connectorIndex.get(targetId);
-      if (set) {
-        set.delete(connectorId);
-        if (set.size === 0) connectorIndex.delete(targetId);
-      }
-    }
-  }
-
-  function buildConnectorIndex(nodesById: Record<string, FlatSceneNode>): void {
-    connectorIndex.clear();
-    for (const id of Object.keys(nodesById)) {
-      const node = nodesById[id];
-      if (node && isConnectorNode(node)) {
-        addToConnectorIndex(id, node);
-      }
-    }
-  }
-
-  function updateConnectorsForNodes(changedIds: Set<string> | string[]): void {
-    // Collect every connector attached to any of the changed (non-connector)
-    // nodes into a single set, so each connector is recomputed at most once.
-    const connectorIds = new Set<string>();
-    for (const nodeId of changedIds) {
-      const attached = connectorIndex.get(nodeId);
-      if (!attached) continue;
-      for (const connId of attached) connectorIds.add(connId);
-    }
-    if (connectorIds.size === 0) return;
-
-    // Single tree fetch + layout accessor for the whole flush.
-    const currentState = useSceneStore.getState();
-    const nodes = currentState.getNodes();
-    const calcLayout = useLayoutStore.getState().calculateLayoutForFrame;
-
-    const updatesById: Record<string, Partial<ConnectorNode>> = {};
-    for (const connId of connectorIds) {
-      const connNode = currentState.nodesById[connId];
-      if (!connNode || !isConnectorNode(connNode)) continue;
-
-      const conn = connNode;
-      const startPos = getAnchorWorldPosition(conn.startConnection.nodeId, conn.startConnection.anchor, nodes, calcLayout);
-      const endPos = getAnchorWorldPosition(conn.endConnection.nodeId, conn.endConnection.anchor, nodes, calcLayout);
-      if (!startPos || !endPos) continue;
-
-      const minX = Math.min(startPos.x, endPos.x);
-      const minY = Math.min(startPos.y, endPos.y);
-      const maxX = Math.max(startPos.x, endPos.x);
-      const maxY = Math.max(startPos.y, endPos.y);
-      const nodeWidth = Math.max(maxX - minX, 1);
-      const nodeHeight = Math.max(maxY - minY, 1);
-      const points = [
-        startPos.x - minX,
-        startPos.y - minY,
-        endPos.x - minX,
-        endPos.y - minY,
-      ];
-
-      // Skip no-op updates: geometry unchanged ⇒ no store write (which would
-      // otherwise create a fresh node object and schedule another sync pass).
-      const prev = conn.points;
-      if (
-        conn.x === minX &&
-        conn.y === minY &&
-        conn.width === nodeWidth &&
-        conn.height === nodeHeight &&
-        prev.length === 4 &&
-        prev[0] === points[0] &&
-        prev[1] === points[1] &&
-        prev[2] === points[2] &&
-        prev[3] === points[3]
-      ) {
-        continue;
-      }
-
-      updatesById[connId] = {
-        x: minX,
-        y: minY,
-        width: nodeWidth,
-        height: nodeHeight,
-        points,
-      };
-    }
-
-    if (Object.keys(updatesById).length > 0) {
-      useSceneStore.getState().updateNodesWithoutHistory(updatesById);
-    }
-  }
-
-  // ─── Phase 1: Viewport Culling ───────────────────────────────────────
-
-  function updateCulling(): void {
-    const { scale, x, y } = useViewportStore.getState();
-    const bounds = getViewportBounds(scale, x, y, window.innerWidth, window.innerHeight);
-    const margin = CULL_MARGIN / scale;
-    const minX = bounds.minX - margin;
-    const maxX = bounds.maxX + margin;
-    const minY = bounds.minY - margin;
-    const maxY = bounds.maxY + margin;
-
-    const state = useSceneStore.getState();
-    for (const rootId of state.rootIds) {
-      const entry = registry.get(rootId);
-      if (!entry) continue;
-      const node = entry.node;
-
-      entry.container.renderable = !(
-        node.x + node.width < minX ||
-        node.x > maxX ||
-        node.y + node.height < minY ||
-        node.y > maxY
-      );
-    }
-  }
-
-  // ─── Auto-Layout ─────────────────────────────────────────────────────
-
-  /**
-   * Apply auto-layout positions to frame children
-   */
-  function collectDirtyAutoLayoutFrames(
-    state: SceneState,
-    changedIds: Set<string>,
-  ): AutoLayoutFrameSet {
-    const dirty = new Set<string>();
-
-    const markAutoLayoutAncestors = (startId: string): void => {
-      let current: string | null = startId;
-      while (current != null) {
-        const n = state.nodesById[current];
-        if (n && isFlatFrameNode(n) && n.layout?.autoLayout) {
-          dirty.add(current);
-        }
-        current = state.parentById[current] ?? null;
-      }
-    };
-
-    for (const id of changedIds) {
-      markAutoLayoutAncestors(id);
-    }
-
-    // Keep only top-most dirty auto-layout frames.
-    const minimal = new Set<string>();
-    for (const frameId of dirty) {
-      let hasDirtyAncestor = false;
-      let cur = state.parentById[frameId] ?? null;
-      while (cur != null) {
-        if (dirty.has(cur)) {
-          hasDirtyAncestor = true;
-          break;
-        }
-        cur = state.parentById[cur] ?? null;
-      }
-      if (!hasDirtyAncestor) minimal.add(frameId);
-    }
-
-    return minimal;
-  }
-
-  function applyAutoLayoutPositions(
-    state: SceneState,
-    dirtyFrames?: AutoLayoutFrameSet,
-  ): void {
-    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-    const layoutOverrides = new Map<string, NodeLayoutOverride>();
-
-    const applyFrameLayoutRecursively = (frameId: string): void => {
-      const frameNode = state.nodesById[frameId];
-      if (!frameNode || !isFlatFrameNode(frameNode)) return;
-
-      // Skip frames being animated during auto-layout drag
-      const dragState = useDragStore.getState();
-      if (dragState.isDragging && dragState.animationPhase && dragState.insertInfo?.parentId === frameId) return;
-
-      const childIds = state.childrenById[frameId] ?? [];
-      const frameOverride = layoutOverrides.get(frameId);
-
-      if (frameNode.layout?.autoLayout) {
-        // Convert to tree structure for layout calculation, including overrides
-        // inherited from parent auto-layout.
-        const treeFrame = flatToTreeFrame(
-          frameId,
-          state.nodesById,
-          state.childrenById,
-          layoutOverrides,
-        );
-
-        if (treeFrame) {
-          const layoutFrame = materializeLayoutRefs(
-            treeFrame,
-            state.nodesById,
-            state.childrenById,
-          );
-          // Keep frame background/mask in sync for fit_content frames even when
-          // only descendants changed (e.g. text metrics after font load).
-          const fitWidth = frameNode.sizing?.widthMode === "fit_content";
-          const fitHeight = frameNode.sizing?.heightMode === "fit_content";
-          // Respect size computed by parent auto-layout when this frame is a child
-          // (e.g. fill_container). Fallback to stored node size for roots/standalone.
-          let frameWidth = frameOverride?.width ?? frameNode.width;
-          let frameHeight = frameOverride?.height ?? frameNode.height;
-
-          if (fitWidth || fitHeight) {
-            const intrinsicSize = calculateFrameIntrinsicSize(layoutFrame, {
-              fitWidth,
-              fitHeight,
-            });
-            if (fitWidth) {
-              frameWidth = frameNode.clip
-                ? Math.min(intrinsicSize.width, frameNode.width)
-                : intrinsicSize.width;
-            }
-            if (fitHeight) {
-              frameHeight = frameNode.clip
-                ? Math.min(intrinsicSize.height, frameNode.height)
-                : intrinsicSize.height;
-            }
-          }
-
-          const frameEntry = registry.get(frameId);
-          if (frameEntry) {
-            withAncestorThemes(
-              frameId,
-              state.parentById,
-              state.nodesById,
-              () => {
-                applyLayoutSize(
-                  frameEntry.container,
-                  frameEntry.node,
-                  frameWidth,
-                  frameHeight,
-                  state.nodesById,
-                  state.childrenById,
-                );
-              },
-            );
-          }
-
-          // Calculate layout
-          const layoutChildren = calculateLayoutForFrame(layoutFrame);
-
-          // Apply positions/sizes to child containers and cache overrides for nested frames.
-          for (const layoutChild of layoutChildren) {
-            layoutOverrides.set(layoutChild.id, {
-              x: layoutChild.x,
-              y: layoutChild.y,
-              width: layoutChild.width,
-              height: layoutChild.height,
-            });
-
-            const childEntry = registry.get(layoutChild.id);
-            if (childEntry) {
-              childEntry.container.position.set(layoutChild.x, layoutChild.y);
-              withAncestorThemes(
-                layoutChild.id,
-                state.parentById,
-                state.nodesById,
-                () => {
-                  applyLayoutSize(
-                    childEntry.container,
-                    childEntry.node,
-                    layoutChild.width,
-                    layoutChild.height,
-                    state.nodesById,
-                    state.childrenById,
-                  );
-                },
-              );
-            }
-          }
-        }
-      }
-
-      // Continue traversal so nested auto-layout frames also get processed.
-      for (const childId of childIds) {
-        const childNode = state.nodesById[childId];
-        if (childNode?.type === "frame") {
-          applyFrameLayoutRecursively(childId);
-        }
-      }
-    };
-
-    if (dirtyFrames && dirtyFrames.size > 0) {
-      for (const frameId of dirtyFrames) {
-        applyFrameLayoutRecursively(frameId);
-      }
-      return;
-    }
-
-    // Full pass from roots.
-    for (const rootId of state.rootIds) {
-      const rootNode = state.nodesById[rootId];
-      if (rootNode?.type === "frame") {
-        applyFrameLayoutRecursively(rootId);
-      }
-    }
-  }
+  // Viewport culling + auto-layout position application.
+  const autoLayoutMgr = createAutoLayoutManager(ctx);
+  const { updateCulling, collectDirtyAutoLayoutFrames, applyAutoLayoutPositions } = autoLayoutMgr;
 
   // ─── Full Rebuild ────────────────────────────────────────────────────
 
@@ -865,7 +556,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
     registry.clear();
     variableDependentIds.clear();
     componentIndex.clear();
-    connectorIndex.clear();
+    connectorMgr.clear();
     sceneRoot.removeChildren();
     registryAccessor = null;
     sceneRootAccessor = null;
