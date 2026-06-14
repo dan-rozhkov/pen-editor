@@ -112,6 +112,7 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
     // All paste logic (internal, SVG) is in handlePaste.
 
     if ((e.metaKey || e.ctrlKey) && e.code === "KeyZ" && !e.shiftKey) {
+      if (isTyping) return;
       e.preventDefault();
       const snapshot = createSnapshot(useSceneStore.getState());
       const prevSnapshot = undo(snapshot);
@@ -122,6 +123,7 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
     }
 
     if ((e.metaKey || e.ctrlKey) && e.code === "KeyZ" && e.shiftKey) {
+      if (isTyping) return;
       e.preventDefault();
       const snapshot = createSnapshot(useSceneStore.getState());
       const nextSnapshot = redo(snapshot);
@@ -139,6 +141,7 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
     }
 
     if ((e.metaKey || e.ctrlKey) && e.code === "Digit0") {
+      if (isTyping) return;
       e.preventDefault();
       const currentNodes = useSceneStore.getState().getNodes();
       fitToContent(currentNodes, dimensions.width, dimensions.height);

@@ -403,6 +403,18 @@ export function createBasicMutations(set: SetState, get: GetState) {
         const node = state.nodesById[nodeId];
         if (!node) return state;
 
+        // Guard against creating a cycle: a node cannot become its own parent or
+        // a child of one of its own descendants. Walk up from the target parent;
+        // if we reach nodeId, the move would form a cycle (which would later
+        // stack-overflow tree traversal), so reject it as a no-op.
+        if (newParentId !== null) {
+          let ancestor: string | null | undefined = newParentId;
+          while (ancestor !== null && ancestor !== undefined) {
+            if (ancestor === nodeId) return state;
+            ancestor = state.parentById[ancestor];
+          }
+        }
+
         const oldParentId = state.parentById[nodeId];
         saveHistory(state);
 

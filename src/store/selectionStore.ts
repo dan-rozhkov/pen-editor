@@ -76,6 +76,10 @@ function saveSelectionHistoryIfChanged(
     parentById: { ...scene.parentById },
     childrenById: { ...scene.childrenById },
     rootIds: [...scene.rootIds],
+    // Must carry component artifacts: restoreSnapshot replaces the artifact map
+    // with `snapshot.componentArtifactsById ?? {}`, so omitting it here would
+    // wipe all component sync-state on undo of a selection change.
+    componentArtifactsById: { ...scene.componentArtifactsById },
     selection: current,
   }
   useHistoryStore.getState().saveHistory(snapshot)

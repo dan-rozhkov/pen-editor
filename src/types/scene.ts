@@ -480,12 +480,21 @@ export function buildTree(
   nodesById: Record<string, FlatSceneNode>,
   childrenById: Record<string, string[]>,
 ): SceneNode[] {
+  // Track the ancestor chain currently being built so a corrupt graph with a
+  // parent/child cycle degrades to a missing-children node instead of recursing
+  // forever and overflowing the stack.
+  const building = new Set<string>()
   function buildNode(id: string): SceneNode {
     const flat = nodesById[id]
     if (!flat) throw new Error(`Node not found: ${id}`)
     if (isFlatContainerType(flat)) {
+      if (building.has(id)) {
+        return { ...flat, children: [] } as SceneNode
+      }
+      building.add(id)
       const childIds = childrenById[id] ?? []
       const children = childIds.map(buildNode)
+      building.delete(id)
       return { ...flat, children } as SceneNode
     }
     return flat as SceneNode
@@ -498,13 +507,17 @@ export function buildTree(
 export function collectDescendantIds(
   nodeId: string,
   childrenById: Record<string, string[]>,
+  visited: Set<string> = new Set(),
 ): string[] {
   const result: string[] = []
   const childIds = childrenById[nodeId]
   if (childIds) {
     for (const childId of childIds) {
+      // Skip already-visited ids so a corrupt cyclic graph can't recurse forever.
+      if (visited.has(childId)) continue
+      visited.add(childId)
       result.push(childId)
-      result.push(...collectDescendantIds(childId, childrenById))
+      result.push(...collectDescendantIds(childId, childrenById, visited))
     }
   }
   return result
