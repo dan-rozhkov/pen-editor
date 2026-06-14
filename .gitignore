@@ -11,3 +11,6 @@ dist
 # Playwright
 test-results/
 playwright-report/
+
+# Vitest coverage output
+coverage/
