@@ -1,0 +1,119 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { SizeSection } from "../SizeSection";
+import { useSceneStore } from "@/store/sceneStore";
+import { resetStores, seedScene } from "@/test/fixtures";
+import type { SceneNode } from "@/types/scene";
+import type { ParentContext } from "@/utils/nodeUtils";
+
+const ROOT_CONTEXT = { isInsideAutoLayout: false, parent: null } as unknown as ParentContext;
+
+function sceneNode(id: string): SceneNode {
+  return useSceneStore.getState().getNodes().find((n) => n.id === id)!;
+}
+
+describe("<SizeSection />", () => {
+  beforeEach(() => {
+    resetStores();
+    seedScene();
+  });
+
+  afterEach(() => cleanup());
+
+  // rect2 is a plain 200x100 rect at the root (not inside auto-layout), so the
+  // sizing-mode buttons are hidden and only the W/H inputs render.
+  it("renders width and height from the node", () => {
+    render(
+      <SizeSection node={sceneNode("rect2")} onUpdate={vi.fn()} parentContext={ROOT_CONTEXT} />,
+    );
+    const inputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    expect(inputs[0].value).toBe("200"); // W
+    expect(inputs[1].value).toBe("100"); // H
+  });
+
+  it("calls onUpdate when width or height is edited", () => {
+    const onUpdate = vi.fn();
+    render(
+      <SizeSection node={sceneNode("rect2")} onUpdate={onUpdate} parentContext={ROOT_CONTEXT} />,
+    );
+    const inputs = screen.getAllByRole("spinbutton");
+
+    fireEvent.change(inputs[0], { target: { value: "300" } });
+    expect(onUpdate).toHaveBeenCalledWith({ width: 300 });
+
+    fireEvent.change(inputs[1], { target: { value: "250" } });
+    expect(onUpdate).toHaveBeenCalledWith({ height: 250 });
+  });
+
+  it("locks the aspect ratio and stores the current ratio", () => {
+    const onUpdate = vi.fn();
+    render(
+      <SizeSection node={sceneNode("rect2")} onUpdate={onUpdate} parentContext={ROOT_CONTEXT} />,
+    );
+    fireEvent.click(screen.getByTitle("Lock aspect ratio"));
+    expect(onUpdate).toHaveBeenCalledWith({ aspectRatioLocked: true, aspectRatio: 2 });
+  });
+
+  it("scales the other dimension when the aspect ratio is locked", () => {
+    const onUpdate = vi.fn();
+    const locked = {
+      ...sceneNode("rect2"),
+      aspectRatioLocked: true,
+      aspectRatio: 2,
+    } as SceneNode;
+    render(<SizeSection node={locked} onUpdate={onUpdate} parentContext={ROOT_CONTEXT} />);
+    const inputs = screen.getAllByRole("spinbutton");
+
+    fireEvent.change(inputs[0], { target: { value: "300" } });
+    // height = round(300 / 2) = 150
+    expect(onUpdate).toHaveBeenCalledWith({ width: 300, height: 150 });
+  });
+
+  it("shows a Mixed placeholder for a mixed width", () => {
+    render(
+      <SizeSection
+        node={sceneNode("rect2")}
+        onUpdate={vi.fn()}
+        parentContext={ROOT_CONTEXT}
+        mixedKeys={new Set(["width"])}
+      />,
+    );
+    const inputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    expect(inputs[0].value).toBe("");
+    expect(inputs[0].placeholder).toBe("Mixed");
+    expect(inputs[1].value).toBe("100"); // H not mixed
+  });
+
+  it("renders sizing-mode buttons for a frame and applies a width mode", () => {
+    const onUpdate = vi.fn();
+    render(
+      <SizeSection node={sceneNode("frame1")} onUpdate={onUpdate} parentContext={ROOT_CONTEXT} />,
+    );
+    // Two rows of Fixed/Fill/Fit (W and H); the first "Fill" is the width mode.
+    const fillButtons = screen.getAllByRole("button", { name: "Fill" });
+    expect(fillButtons.length).toBeGreaterThanOrEqual(2);
+
+    fireEvent.click(fillButtons[0]);
+    expect(onUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sizing: expect.objectContaining({ widthMode: "fill_container" }),
+      }),
+    );
+  });
+
+  it("toggles clip content for frames only", () => {
+    const onUpdate = vi.fn();
+    const { unmount } = render(
+      <SizeSection node={sceneNode("frame1")} onUpdate={onUpdate} parentContext={ROOT_CONTEXT} />,
+    );
+    expect(screen.getByText("Clip content")).toBeTruthy();
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(onUpdate).toHaveBeenCalledWith({ clip: true });
+    unmount();
+
+    render(
+      <SizeSection node={sceneNode("rect2")} onUpdate={vi.fn()} parentContext={ROOT_CONTEXT} />,
+    );
+    expect(screen.queryByText("Clip content")).toBeNull();
+  });
+});
