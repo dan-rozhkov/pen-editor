@@ -1,4 +1,4 @@
-import type { ThemeName } from './variable'
+import type { ThemeName, Variable } from './variable'
 
 // Variable binding to a variable (generic)
 export interface VariableBinding {
@@ -530,6 +530,7 @@ export interface FlatSnapshot {
   childrenById: Record<string, string[]>
   rootIds: string[]
   componentArtifactsById?: Record<string, ComponentArtifact>
+  variables?: Variable[]
 }
 
 export interface ComponentArtifact {

@@ -11,8 +11,14 @@ import {
   toFlatNode,
   isContainerNode,
   buildTree,
+  collectDescendantIds,
 } from "@/types/scene";
-import { insertTreeIntoFlat, removeNodeAndDescendants } from "@/store/sceneStore/helpers/flatStoreHelpers";
+import {
+  insertTreeIntoFlat,
+  removeNodeAndDescendants,
+  removeOrphanedConnectors,
+  repointConnectors,
+} from "@/store/sceneStore/helpers/flatStoreHelpers";
 import { syncTextDimensions } from "@/store/sceneStore/helpers/textSync";
 import { cloneNodeWithNewId } from "@/utils/cloneNode";
 import {
@@ -516,6 +522,13 @@ function executeReplace(op: ParsedOperation, ctx: ExecutionContext): void {
     }
   }
 
+  // Descendants of the replaced subtree get brand-new ids in the new node, so a
+  // connector anchored to an old descendant cannot be re-pointed — capture them
+  // now (before removal) to drop those orphans after the swap.
+  const removedDescendantIds = new Set<string>(
+    collectDescendantIds(path, ctx.childrenById)
+  );
+
   // Remove old node and descendants
   removeNodeAndDescendants(
     path,
@@ -532,6 +545,25 @@ function executeReplace(op: ParsedOperation, ctx: ExecutionContext): void {
     ctx.parentById,
     ctx.childrenById
   );
+
+  // The node was replaced in place under a new id — keep any connectors attached
+  // to it by re-pointing their endpoints rather than leaving them dangling.
+  repointConnectors(path, newNode.id, ctx.nodesById);
+
+  // Connectors anchored to the old (now-removed) descendants can't follow the
+  // swap, so drop them like the delete paths do.
+  if (removedDescendantIds.size > 0) {
+    const orphanedConnectorIds = removeOrphanedConnectors(
+      removedDescendantIds,
+      ctx.nodesById,
+      ctx.parentById,
+      ctx.childrenById
+    );
+    if (orphanedConnectorIds.length > 0) {
+      const orphanSet = new Set(orphanedConnectorIds);
+      ctx.rootIds = ctx.rootIds.filter((rid) => !orphanSet.has(rid));
+    }
+  }
 
   ctx.createdNodeIds.push(newNode.id);
 
@@ -619,6 +651,13 @@ function executeDelete(op: ParsedOperation, ctx: ExecutionContext): void {
     ctx.rootIds = ctx.rootIds.filter((rid) => rid !== nodeId);
   }
 
+  // Capture removed ids (node + descendants) before removal so connectors
+  // anchored to any of them are cleaned up too.
+  const removedIds = new Set<string>([
+    nodeId,
+    ...collectDescendantIds(nodeId, ctx.childrenById),
+  ]);
+
   // Remove node and all descendants
   removeNodeAndDescendants(
     nodeId,
@@ -626,6 +665,18 @@ function executeDelete(op: ParsedOperation, ctx: ExecutionContext): void {
     ctx.parentById,
     ctx.childrenById
   );
+
+  // Drop connectors that now dangle into the removed nodes (matches native delete).
+  const orphanedConnectorIds = removeOrphanedConnectors(
+    removedIds,
+    ctx.nodesById,
+    ctx.parentById,
+    ctx.childrenById
+  );
+  if (orphanedConnectorIds.length > 0) {
+    const orphanSet = new Set(orphanedConnectorIds);
+    ctx.rootIds = ctx.rootIds.filter((rid) => !orphanSet.has(rid));
+  }
 }
 
 /**

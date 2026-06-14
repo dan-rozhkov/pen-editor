@@ -3,7 +3,7 @@ import { batchDesign } from "@/lib/tools/batchDesign";
 import { useSceneStore } from "@/store/sceneStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { resetStores, seedScene, seedVariables } from "@/test/fixtures";
-import type { FlatFrameNode, Paint, TextNode } from "@/types/scene";
+import type { FlatFrameNode, FlatSceneNode, Paint, TextNode, ConnectorNode } from "@/types/scene";
 
 function sceneState() {
   return useSceneStore.getState();
@@ -533,6 +533,72 @@ describe("batch_design", () => {
     it("does not record history for a failed batch", async () => {
       await batchDesign({ operations: "D(nonexistent)" });
       expect(useHistoryStore.getState().past).toHaveLength(0);
+    });
+  });
+
+  // S3: AI delete/replace must not leave connectors dangling into removed nodes.
+  describe("connector cleanup (S3)", () => {
+    function addConnector(id: string, startNodeId: string, endNodeId: string) {
+      useSceneStore.setState((s) => ({
+        nodesById: {
+          ...s.nodesById,
+          [id]: {
+            id,
+            type: "connector",
+            name: "Connector",
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+            startConnection: { nodeId: startNodeId, anchor: "right" },
+            endConnection: { nodeId: endNodeId, anchor: "left" },
+            points: [0, 0, 0, 0],
+          } as unknown as FlatSceneNode,
+        },
+        parentById: { ...s.parentById, [id]: null },
+        rootIds: [...s.rootIds, id],
+        _cachedTree: null,
+      }));
+    }
+
+    it("D() removes connectors anchored to a deleted node", async () => {
+      addConnector("conn1", "rect1", "rect2");
+
+      const result = JSON.parse(await batchDesign({ operations: "D(rect1)" }));
+
+      expect(result.success).toBe(true);
+      expect(sceneState().nodesById["conn1"]).toBeUndefined();
+      expect(sceneState().rootIds).not.toContain("conn1");
+    });
+
+    it("R() drops connectors anchored to a removed descendant of the replaced node", async () => {
+      // conn1 anchors to rect1, a child of frame1; replacing frame1 removes rect1.
+      addConnector("conn1", "rect1", "rect2");
+
+      const result = JSON.parse(
+        await batchDesign({
+          operations: 'R(frame1, {type: "frame", name: "New", width: 100, height: 100})',
+        })
+      );
+
+      expect(result.success).toBe(true);
+      expect(sceneState().nodesById["conn1"]).toBeUndefined();
+    });
+
+    it("R() re-points connectors anchored to the replaced node itself", async () => {
+      addConnector("conn1", "rect2", "frame1");
+
+      const result = JSON.parse(
+        await batchDesign({
+          operations: 'R(frame1, {type: "frame", name: "New", width: 100, height: 100})',
+        })
+      );
+
+      expect(result.success).toBe(true);
+      const newId = result.createdNodes[0].id;
+      const conn = sceneState().nodesById["conn1"] as ConnectorNode | undefined;
+      expect(conn).toBeDefined();
+      expect(conn?.endConnection.nodeId).toBe(newId);
     });
   });
 });

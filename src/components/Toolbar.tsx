@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useSceneStore } from "../store/sceneStore";
 import { useSelectionStore } from "../store/selectionStore";
 import { useVariableStore } from "../store/variableStore";
+import { useThemeStore } from "../store/themeStore";
 import { useUIThemeStore } from "../store/uiThemeStore";
 import { usePixelGridStore } from "../store/pixelGridStore";
 import { useViewportStore } from "../store/viewportStore";
@@ -57,13 +58,15 @@ export function Toolbar() {
     }));
 
     const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
-    downloadDocument(pagesForExport, variables, 'light', componentArtifactsById, `${name}.json`);
+    const activeTheme = useThemeStore.getState().activeTheme;
+    downloadDocument(pagesForExport, variables, activeTheme, componentArtifactsById, `${name}.json`);
   };
 
   const handleExportPublicPen = () => {
     const currentPageNodes = useSceneStore.getState().getNodes();
     const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
-    downloadPublicPen(currentPageNodes, variables, 'light', `${name}.pen`);
+    const activeTheme = useThemeStore.getState().activeTheme;
+    downloadPublicPen(currentPageNodes, variables, activeTheme, `${name}.pen`);
   };
 
   const handleOpen = async () => {

@@ -15,6 +15,7 @@ import { saveHistory } from "./helpers/history";
 import {
   insertTreeIntoFlat,
   removeNodeAndDescendants,
+  removeOrphanedConnectors,
 } from "./helpers/flatStoreHelpers";
 import type { SceneState } from "./types";
 
@@ -207,6 +208,7 @@ export function createComplexOperations(
       const newParentById = { ...state.parentById };
       const newChildrenById = { ...state.childrenById };
       const newRootIds = [...state.rootIds];
+      const removedContainerIds = new Set<string>();
 
       for (const id of ids) {
         const node = state.nodesById[id];
@@ -285,6 +287,24 @@ export function createComplexOperations(
         delete newNodesById[id];
         delete newParentById[id];
         delete newChildrenById[id];
+        removedContainerIds.add(id);
+      }
+
+      // A connector anchored to an ungrouped container now dangles (children are
+      // reparented and stay valid, but the container id is gone) — clean it up.
+      if (removedContainerIds.size > 0) {
+        const orphanedConnectorIds = removeOrphanedConnectors(
+          removedContainerIds,
+          newNodesById,
+          newParentById,
+          newChildrenById,
+        );
+        if (orphanedConnectorIds.length > 0) {
+          const orphanSet = new Set(orphanedConnectorIds);
+          for (let i = newRootIds.length - 1; i >= 0; i--) {
+            if (orphanSet.has(newRootIds[i])) newRootIds.splice(i, 1);
+          }
+        }
       }
 
       setState({

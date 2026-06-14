@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { HistorySnapshot, SelectionSnapshot } from '../types/scene'
 import { useHistoryStore } from './historyStore'
 import { useSceneStore } from './sceneStore'
+import { useVariableStore } from './variableStore'
 
 type EditingMode = 'text' | 'name' | 'embed' | null
 
@@ -80,6 +81,8 @@ function saveSelectionHistoryIfChanged(
     // with `snapshot.componentArtifactsById ?? {}`, so omitting it here would
     // wipe all component sync-state on undo of a selection change.
     componentArtifactsById: { ...scene.componentArtifactsById },
+    // Keep variables on the snapshot too so full-state restore stays consistent.
+    variables: [...useVariableStore.getState().variables],
     selection: current,
   }
   useHistoryStore.getState().saveHistory(snapshot)

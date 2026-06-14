@@ -4,16 +4,17 @@ import type {
   HistorySnapshot,
   FlatFrameNode,
   SceneNode,
-  ConnectorNode,
 } from "../../types/scene";
 import {
   isContainerNode,
   toFlatNode,
   flattenTree,
+  collectDescendantIds,
 } from "../../types/scene";
 import { loadGoogleFontsFromNodes } from "../../utils/fontUtils";
 import { saveHistory } from "./helpers/history";
 import { useSelectionStore } from "../selectionStore";
+import { useVariableStore } from "../variableStore";
 import {
   syncTextDimensions,
   hasTextMeasureProps,
@@ -23,6 +24,7 @@ import {
 import {
   insertTreeIntoFlat,
   removeNodeAndDescendants,
+  removeOrphanedConnectors,
 } from "./helpers/flatStoreHelpers";
 import { markComponentArtifactsStaleFromNative } from "./componentArtifacts";
 import type { SceneState } from "./types";
@@ -190,29 +192,23 @@ export function createBasicMutations(set: SetState, get: GetState) {
           );
         }
 
+        // Capture the full set of ids being removed (node + descendants) so
+        // connectors anchored to any of them — not just the top node — are cleaned.
+        const removedNodeIds = new Set<string>([
+          id,
+          ...collectDescendantIds(id, state.childrenById),
+        ]);
+
         // Remove node and all descendants
         removeNodeAndDescendants(id, newNodesById, newParentById, newChildrenById);
 
-        // Remove orphaned connectors referencing the deleted node
-        const orphanedConnectorIds: string[] = [];
-        for (const nodeId of Object.keys(newNodesById)) {
-          const node = newNodesById[nodeId];
-          if (node?.type === "connector") {
-            const conn = node as ConnectorNode;
-            if (conn.startConnection.nodeId === id || conn.endConnection.nodeId === id) {
-              orphanedConnectorIds.push(nodeId);
-            }
-          }
-        }
-        for (const connId of orphanedConnectorIds) {
-          const connParentId = newParentById[connId];
-          if (connParentId !== null && connParentId !== undefined) {
-            newChildrenById[connParentId] = (newChildrenById[connParentId] ?? []).filter(
-              (cid) => cid !== connId,
-            );
-          }
-          removeNodeAndDescendants(connId, newNodesById, newParentById, newChildrenById);
-        }
+        // Remove connectors that referenced any removed node
+        const orphanedConnectorIds = removeOrphanedConnectors(
+          removedNodeIds,
+          newNodesById,
+          newParentById,
+          newChildrenById,
+        );
 
         // Update rootIds — filter deleted node + orphaned connectors in one pass
         const removedIds = new Set([id, ...orphanedConnectorIds]);
@@ -311,6 +307,12 @@ export function createBasicMutations(set: SetState, get: GetState) {
         componentArtifactsById: { ...(snapshot.componentArtifactsById ?? {}) },
         _cachedTree: null,
       });
+      // Restore variables when the snapshot carries them (all createSnapshot-based
+      // snapshots do), so undo/redo of variable edits round-trips. Snapshots that
+      // omit variables (unknown sources) leave the variable store untouched.
+      if (snapshot.variables) {
+        useVariableStore.setState({ variables: snapshot.variables });
+      }
       if (!historySelection) return;
       useSelectionStore.setState({
         selectedIds: historySelection.selectedIds.filter((id) => validIds.has(id)),

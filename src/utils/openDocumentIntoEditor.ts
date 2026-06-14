@@ -4,6 +4,7 @@ import { flattenTree } from "@/types/scene";
 import { useHistoryStore } from "@/store/historyStore";
 import { useLoadingStore } from "@/store/loadingStore";
 import { useSelectionStore } from "@/store/selectionStore";
+import { useThemeStore } from "@/store/themeStore";
 import { useUIThemeStore } from "@/store/uiThemeStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useViewportStore } from "@/store/viewportStore";
@@ -45,6 +46,10 @@ export function applyOpenedDocument(
 
   // Set up shared state
   useVariableStore.getState().setVariables(data.variables);
+  // Apply the saved theme to BOTH the design-theme store (drives variable
+  // resolution) and the editor-chrome theme store, so the document reopens in
+  // the theme it was saved with instead of always falling back to light.
+  useThemeStore.getState().setActiveTheme(themeToApply);
   useUIThemeStore.getState().setUITheme(themeToApply);
 
   // Clear selection and history before page init
