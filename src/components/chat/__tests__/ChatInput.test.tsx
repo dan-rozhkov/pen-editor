@@ -4,12 +4,20 @@ import { useState } from "react";
 import { ChatInput } from "../ChatInput";
 import { useChatStore } from "@/store/chatStore";
 import type { ChatLaunchPayload } from "@/types/chat";
+import type { SelectionScreenshot } from "@/hooks/useSelectionScreenshots";
+
+// Controllable selection screenshots — the real hook needs the PixiJS renderer.
+let mockSelection: SelectionScreenshot[] = [];
+vi.mock("@/hooks/useSelectionScreenshots", () => ({
+  useSelectionScreenshots: () => mockSelection,
+}));
 
 afterEach(() => cleanup());
 
 beforeEach(() => {
   // A known vision-capable model so the attach button is enabled.
   useChatStore.setState({ model: "google/gemini-2.5-flash" });
+  mockSelection = [];
 });
 
 interface HarnessProps {
@@ -144,5 +152,121 @@ describe("<ChatInput />", () => {
     render(<Harness onSubmit={vi.fn()} />);
     const attach = screen.getByTitle("Attach image") as HTMLButtonElement;
     expect(attach.disabled).toBe(false);
+  });
+
+  describe("selected canvas elements as context", () => {
+    const selection: SelectionScreenshot[] = [
+      { nodeId: "frame1", name: "Screen", dataUrl: "data:image/png;base64,a" },
+      { nodeId: "rect2", name: "Box", dataUrl: "data:image/png;base64,b" },
+    ];
+
+    it("shows selected elements as previews above the input", () => {
+      mockSelection = selection;
+      render(<Harness onSubmit={vi.fn()} />);
+      expect(
+        screen.getByText("2 selected elements attached as context")
+      ).toBeTruthy();
+      expect(screen.getByAltText("Screen")).toBeTruthy();
+      expect(screen.getByAltText("Box")).toBeTruthy();
+    });
+
+    it("attaches selected elements as images when sending", () => {
+      mockSelection = selection;
+      const onSubmit = vi.fn();
+      render(<Harness onSubmit={onSubmit} />);
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: { value: "tweak these" },
+      });
+      fireEvent.click(screen.getByTitle("Send"));
+      expect(onSubmit).toHaveBeenCalledWith({
+        text: "tweak these",
+        images: [
+          { dataUrl: "data:image/png;base64,a", name: "Screen" },
+          { dataUrl: "data:image/png;base64,b", name: "Box" },
+        ],
+      });
+    });
+
+    it("can send with only a selection and no text", () => {
+      mockSelection = selection;
+      const onSubmit = vi.fn();
+      render(<Harness onSubmit={onSubmit} />);
+      const sendBtn = screen.getByTitle("Send") as HTMLButtonElement;
+      expect(sendBtn.disabled).toBe(false);
+      fireEvent.click(sendBtn);
+      expect(onSubmit).toHaveBeenCalledWith({
+        text: "",
+        images: [
+          { dataUrl: "data:image/png;base64,a", name: "Screen" },
+          { dataUrl: "data:image/png;base64,b", name: "Box" },
+        ],
+      });
+    });
+
+    it("drops a dismissed selection element from the attached context", () => {
+      mockSelection = selection;
+      const onSubmit = vi.fn();
+      render(<Harness onSubmit={onSubmit} />);
+      // Dismiss the first selected element ("Screen").
+      fireEvent.click(screen.getAllByTitle("Remove from context")[0]);
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: { value: "just the box" },
+      });
+      fireEvent.click(screen.getByTitle("Send"));
+      expect(onSubmit).toHaveBeenCalledWith({
+        text: "just the box",
+        images: [{ dataUrl: "data:image/png;base64,b", name: "Box" }],
+      });
+    });
+
+    it("does not attach selection images for a non-vision model", () => {
+      // The real hook returns [] for non-vision models, so an empty selection
+      // is the faithful emulation here.
+      mockSelection = [];
+      const onSubmit = vi.fn();
+      render(<Harness onSubmit={onSubmit} initialInput="hi" />);
+      fireEvent.click(screen.getByTitle("Send"));
+      expect(onSubmit).toHaveBeenCalledWith({ text: "hi", images: undefined });
+    });
+
+    it("caps a selection larger than the limit and warns about the overflow", () => {
+      mockSelection = Array.from({ length: 6 }, (_, i) => ({
+        nodeId: `n${i}`,
+        name: `Node ${i}`,
+        dataUrl: `data:image/png;base64,${i}`,
+      }));
+      const onSubmit = vi.fn();
+      render(<Harness onSubmit={onSubmit} initialInput="go" />);
+      expect(
+        screen.getByText(/Only 4 images can be sent per message/)
+      ).toBeTruthy();
+      fireEvent.click(screen.getByTitle("Send"));
+      const payload = onSubmit.mock.calls[0][0] as ChatLaunchPayload;
+      expect(payload.images).toHaveLength(4);
+      expect(payload.images?.map((img) => img.name)).toEqual([
+        "Node 0",
+        "Node 1",
+        "Node 2",
+        "Node 3",
+      ]);
+    });
+
+    it("restores a dismissed element after it is deselected and reselected", () => {
+      mockSelection = selection;
+      const { rerender } = render(<Harness onSubmit={vi.fn()} />);
+
+      // Dismiss "Screen", then deselect it (it leaves the selection).
+      fireEvent.click(screen.getAllByTitle("Remove from context")[0]);
+      expect(screen.queryByAltText("Screen")).toBeNull();
+
+      mockSelection = [selection[1]];
+      rerender(<Harness onSubmit={vi.fn()} />);
+      expect(screen.queryByAltText("Screen")).toBeNull();
+
+      // Reselect it — the stale dismissal must not suppress it anymore.
+      mockSelection = selection;
+      rerender(<Harness onSubmit={vi.fn()} />);
+      expect(screen.getByAltText("Screen")).toBeTruthy();
+    });
   });
 });

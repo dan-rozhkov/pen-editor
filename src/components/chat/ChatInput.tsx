@@ -10,6 +10,7 @@ import type { SlashCommand } from "./slashCommands";
 import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
 import { useChatStore } from "@/store/chatStore";
 import { modelSupportsVision } from "@/lib/chatModels";
+import { useSelectionScreenshots } from "@/hooks/useSelectionScreenshots";
 
 // Maximum images per message (mirrored by MAX_IMAGE_PARTS on the backend).
 const MAX_IMAGES = 4;
@@ -53,6 +54,47 @@ export function ChatInput({
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const model = useChatStore((s) => s.model);
   const supportsVision = modelSupportsVision(model);
+
+  // Screenshots of the currently selected canvas nodes, attached to the message
+  // as visual context. The user can drop individual ones for the message they
+  // are composing without changing the canvas selection.
+  const selectionScreenshots = useSelectionScreenshots();
+  const [dismissedSelection, setDismissedSelection] = useState<Set<string>>(
+    () => new Set()
+  );
+  const visibleSelection = useMemo(
+    () => selectionScreenshots.filter((s) => !dismissedSelection.has(s.nodeId)),
+    [selectionScreenshots, dismissedSelection]
+  );
+
+  const dismissSelection = useCallback((nodeId: string) => {
+    setDismissedSelection((prev) => new Set(prev).add(nodeId));
+  }, []);
+
+  // Forget dismissals for nodes that have left the selection, so re-selecting a
+  // previously-dismissed node brings it back as context.
+  const selectionIds = useMemo(
+    () => selectionScreenshots.map((s) => s.nodeId),
+    [selectionScreenshots]
+  );
+  useEffect(() => {
+    setDismissedSelection((prev) => {
+      if (prev.size === 0) return prev;
+      const present = new Set(selectionIds);
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (present.has(id)) next.add(id);
+      }
+      return next.size === prev.size ? prev : next;
+    });
+  }, [selectionIds]);
+
+  // Selection screenshots plus manual attachments can exceed the per-message
+  // image limit; explicit attachments are always kept and the overflow (extra
+  // selected elements) is dropped — warn so nothing disappears silently.
+  const overImageLimit =
+    supportsVision &&
+    visibleSelection.length + attachedImages.length > MAX_IMAGES;
 
   // Extract slash query from input (e.g. "/aud" -> "aud", "/" -> "")
   const slashQuery = useMemo(() => {
@@ -109,16 +151,30 @@ export function ChatInput({
     () => {
       // Drop attachments the selected model can't read (a warning is shown
       // above the previews) so the request doesn't fail at the provider.
-      const images = supportsVision ? attachedImages : [];
+      // Explicit attachments are always kept; selection screenshots lead in
+      // order but only fill the room left under the per-message limit, so the
+      // user's own attachments are never silently displaced.
+      const room = Math.max(0, MAX_IMAGES - attachedImages.length);
+      const selectionImages: AttachedImage[] = supportsVision
+        ? visibleSelection
+            .slice(0, room)
+            .map((s) => ({ dataUrl: s.dataUrl, name: s.name }))
+        : [];
+      const images = supportsVision
+        ? [...selectionImages, ...attachedImages]
+        : [];
       if ((input.trim() || images.length > 0) && !isLoading) {
         onSubmit({
           text: input.trim(),
           images: images.length > 0 ? images : undefined,
         });
         setAttachedImages([]);
+        // Reset per-message dismissals so the next message re-includes the
+        // still-selected nodes.
+        setDismissedSelection(new Set());
       }
     },
-    [input, attachedImages, supportsVision, isLoading, onSubmit]
+    [input, attachedImages, visibleSelection, supportsVision, isLoading, onSubmit]
   );
 
   const handleKeyDown = useCallback(
@@ -206,6 +262,46 @@ export function ChatInput({
         />
       )}
 
+      {overImageLimit && (
+        <div className="mb-2 text-xs text-amber-500">
+          Only {MAX_IMAGES} images can be sent per message — extra selected
+          elements won't be attached.
+        </div>
+      )}
+
+      {/* Selected canvas elements, attached as visual context */}
+      {visibleSelection.length > 0 && (
+        <div className="mb-2">
+          <div className="text-[11px] text-text-muted mb-1">
+            {visibleSelection.length} selected element
+            {visibleSelection.length > 1 ? "s" : ""} attached as context
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {visibleSelection.map((sel) => (
+              <div
+                key={sel.nodeId}
+                title={sel.name}
+                className="relative group w-12 h-12 rounded-md overflow-hidden border border-primary/60 ring-1 ring-primary/20 bg-surface-hover"
+              >
+                <img
+                  src={sel.dataUrl}
+                  alt={sel.name}
+                  className="w-full h-full object-contain"
+                />
+                <button
+                  type="button"
+                  onClick={() => dismissSelection(sel.nodeId)}
+                  title="Remove from context"
+                  className="absolute top-0 right-0 p-0.5 bg-black/60 rounded-bl text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <XIcon size={10} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Image previews */}
       {attachedImages.length > 0 && !supportsVision && (
         <div className="mb-2 text-xs text-amber-500">
@@ -241,12 +337,15 @@ export function ChatInput({
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          disabled={!supportsVision || attachedImages.length >= MAX_IMAGES}
+          disabled={
+            !supportsVision ||
+            visibleSelection.length + attachedImages.length >= MAX_IMAGES
+          }
           className="shrink-0 p-1.5 rounded-lg hover:bg-surface-hover text-text-muted disabled:text-text-disabled disabled:pointer-events-none transition-colors"
           title={
             !supportsVision
               ? "Selected model can't read images"
-              : attachedImages.length >= MAX_IMAGES
+              : visibleSelection.length + attachedImages.length >= MAX_IMAGES
                 ? `Max ${MAX_IMAGES} images`
                 : "Attach image"
           }
@@ -287,7 +386,11 @@ export function ChatInput({
         ) : (
           <button
             type="submit"
-            disabled={!input.trim() && attachedImages.length === 0}
+            disabled={
+              !input.trim() &&
+              attachedImages.length === 0 &&
+              visibleSelection.length === 0
+            }
             className="shrink-0 p-1.5 rounded-lg hover:bg-surface-hover text-text-muted disabled:text-text-disabled transition-colors"
             title="Send"
           >
