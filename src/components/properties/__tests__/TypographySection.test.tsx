@@ -57,10 +57,14 @@ describe("<TypographySection />", () => {
   });
 
   describe("resizing mode (setTextWidthMode)", () => {
-    // The resizing group is the final ButtonGroup -> last 3 role=button elements
-    // are [auto, fixed, fixed-height].
+    // The resizing group is the final icon-only ButtonGroup -> its last 3
+    // role=button elements are [auto, fixed, fixed-height]. The "Truncate text"
+    // toggle (rendered after it, in wrapped modes) carries a text label, so
+    // filtering text-bearing buttons isolates the icon group reliably.
     function resizingButtons() {
-      const buttons = screen.getAllByRole("button");
+      const buttons = screen
+        .getAllByRole("button")
+        .filter((b) => !b.textContent?.includes("Truncate"));
       return buttons.slice(-3);
     }
 
@@ -102,6 +106,60 @@ describe("<TypographySection />", () => {
         textWidthMode: "fixed",
         sizing: { heightMode: "fit_content" },
       });
+    });
+  });
+
+  describe("truncation controls", () => {
+    const truncateButton = () =>
+      screen
+        .getAllByRole("button")
+        .find((b) => b.textContent?.includes("Truncate text"));
+
+    it("hides the controls in auto-width mode", () => {
+      render(
+        <TypographySection node={textNode({ textWidthMode: "auto" })} onUpdate={vi.fn()} />,
+      );
+      expect(truncateButton()).toBeUndefined();
+    });
+
+    it("shows and toggles Truncate text in wrapped modes", () => {
+      const onUpdate = vi.fn();
+      render(
+        <TypographySection
+          node={textNode({ textWidthMode: "fixed-height" })}
+          onUpdate={onUpdate}
+        />,
+      );
+      const btn = truncateButton();
+      expect(btn).toBeDefined();
+      fireEvent.click(btn!);
+      expect(onUpdate).toHaveBeenCalledWith({ truncateText: true });
+    });
+
+    // Locate the Max Lines input via its label (labelOutside layout: the input
+    // is a sibling within the same wrapper).
+    const maxLinesInput = () =>
+      screen.getByText("Max Lines").parentElement!.querySelector("input")!;
+
+    it("writes a positive Max Lines", () => {
+      const onUpdate = vi.fn();
+      render(
+        <TypographySection node={textNode({ textWidthMode: "fixed" })} onUpdate={onUpdate} />,
+      );
+      fireEvent.change(maxLinesInput(), { target: { value: "3" } });
+      expect(onUpdate).toHaveBeenCalledWith({ maxLines: 3 });
+    });
+
+    it("clears Max Lines (no limit) when set to 0", () => {
+      const onUpdate = vi.fn();
+      render(
+        <TypographySection
+          node={textNode({ textWidthMode: "fixed", maxLines: 3 })}
+          onUpdate={onUpdate}
+        />,
+      );
+      fireEvent.change(maxLinesInput(), { target: { value: "0" } });
+      expect(onUpdate).toHaveBeenCalledWith({ maxLines: undefined });
     });
   });
 

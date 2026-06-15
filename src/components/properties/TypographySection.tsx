@@ -8,6 +8,7 @@ import {
   TextAlignCenter,
   TextAlignLeft,
   TextAlignRight,
+  TextColumns,
   TextItalic,
   TextStrikethrough,
   TextUnderline,
@@ -47,6 +48,11 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
     }
     onUpdate(updates as Partial<SceneNode>);
   };
+
+  // Truncation only applies to wrapped modes (fixed width); auto-width has no
+  // box to overflow, mirroring Figma where "Truncate text" is hidden there.
+  const isWrapped =
+    node.textWidthMode === "fixed" || node.textWidthMode === "fixed-height";
 
   return (
     <PropertySection title="Typography">
@@ -333,6 +339,39 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
           </Button>
         </ButtonGroup>
       </div>
+      {isWrapped && (
+        <div className="flex flex-col gap-1">
+          <Button
+            variant={node.truncateText ? "default" : "secondary"}
+            size="sm"
+            className={`w-full justify-start gap-2 ${
+              node.truncateText
+                ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
+                : ""
+            }`}
+            onClick={() =>
+              onUpdate({
+                truncateText: !node.truncateText,
+              } as Partial<SceneNode>)
+            }
+          >
+            <TextColumns size={14} />
+            Truncate text
+          </Button>
+          <NumberInput
+            label="Max Lines"
+            labelOutside={true}
+            value={node.maxLines ?? 0}
+            onChange={(v) =>
+              onUpdate({
+                maxLines: v >= 1 ? Math.floor(v) : undefined,
+              } as Partial<SceneNode>)
+            }
+            min={0}
+            step={1}
+          />
+        </div>
+      )}
       <PropertyRow>
         <NumberInput
           label="Line Height"

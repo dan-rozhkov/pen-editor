@@ -305,6 +305,13 @@ export interface TextNode extends BaseNode {
   letterSpacing?: number
   // Text transform (visual only, applied at render/measure time)
   textTransform?: TextTransform
+  // Truncate overflowing text with an ellipsis ("…"). Figma "Truncate text".
+  // Only meaningful in wrapped modes ('fixed' / 'fixed-height'): in 'fixed-height'
+  // lines past the box height are dropped; combine with maxLines for a tighter cap.
+  truncateText?: boolean
+  // Optional hard cap on the number of rendered lines (>= 1). When the wrapped
+  // text exceeds it, the last kept line ends with an ellipsis. Figma "Max lines".
+  maxLines?: number
 }
 
 export interface GroupNode extends BaseNode {

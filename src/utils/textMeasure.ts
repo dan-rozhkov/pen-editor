@@ -1,10 +1,10 @@
 import type { TextNode } from '../types/scene'
 import { applyTextTransform } from './textTransform'
-import { buildFontString, wrapTextToLines } from './textWrap'
+import { buildFontString, getLineLimit, wrapTextToLines } from './textWrap'
 
 // Re-export the shared helpers so existing call sites keep their import path.
 export { applyTextTransform } from './textTransform'
-export { wrapTextToLines, buildFontString } from './textWrap'
+export { wrapTextToLines, buildFontString, truncateLines, getLineLimit } from './textWrap'
 
 // Shared offscreen canvas for text measurement
 let measureCanvas: HTMLCanvasElement | null = null
@@ -58,6 +58,11 @@ export function measureTextAutoSize(node: TextNode): { width: number; height: nu
 export function measureTextFixedWidthHeight(node: TextNode): number {
   const fontSize = node.fontSize ?? 16
   const lineHeight = node.lineHeight ?? 1.2
-  const lineCount = wrapTextToLines(node, node.width).length
+  // A maxLines cap shrinks auto-height so the box never grows past the limit.
+  // The 'fixed-height' height limit is irrelevant here (that mode keeps its own
+  // fixed height), so getLineLimit only contributes maxLines in 'fixed' mode.
+  const limit = getLineLimit(node)
+  let lineCount = wrapTextToLines(node, node.width).length
+  if (Number.isFinite(limit)) lineCount = Math.min(lineCount, limit)
   return Math.ceil(Math.max(1, lineCount) * fontSize * lineHeight)
 }

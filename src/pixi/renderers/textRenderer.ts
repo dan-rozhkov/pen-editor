@@ -2,7 +2,7 @@ import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { TextNode } from "@/types/scene";
 import { getPrimarySolidPaint } from "@/utils/fillUtils";
 import { getResolvedFill, getResolvedSolidPaint } from "./colorHelpers";
-import { applyTextTransform, wrapTextToLines } from "@/utils/textMeasure";
+import { applyTextTransform, truncateLines, wrapTextToLines } from "@/utils/textMeasure";
 
 function isWrappedMode(node: TextNode): boolean {
   return node.textWidthMode === "fixed" || node.textWidthMode === "fixed-height";
@@ -29,7 +29,8 @@ function getResolvedTextColor(node: TextNode): string | undefined {
 function buildRenderText(node: TextNode): string {
   const transformed = applyTextTransform(node.text, node.textTransform);
   if (!isWrappedMode(node)) return transformed;
-  return wrapTextToLines(node, node.width).join("\n");
+  const lines = wrapTextToLines(node, node.width);
+  return truncateLines(node, lines, node.width).join("\n");
 }
 
 export function createTextContainer(node: TextNode): Container {
@@ -66,7 +67,11 @@ export function updateTextContainer(
     node.fontFamily !== prev.fontFamily ||
     node.fontWeight !== prev.fontWeight ||
     node.fontStyle !== prev.fontStyle ||
-    node.letterSpacing !== prev.letterSpacing;
+    node.letterSpacing !== prev.letterSpacing ||
+    node.lineHeight !== prev.lineHeight ||
+    node.truncateText !== prev.truncateText ||
+    node.maxLines !== prev.maxLines ||
+    node.height !== prev.height;
 
   if (textChanged) {
     textObj.text = buildRenderText(node);

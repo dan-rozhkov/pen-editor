@@ -161,5 +161,78 @@ export function wrapTextToLines(node: TextNode, maxWidth: number): string[] {
   return lines
 }
 
+const ELLIPSIS = '…'
+
+/**
+ * Compute how many wrapped lines are allowed to render given the node's
+ * truncation settings. Returns `Infinity` when no limit applies.
+ *
+ * Truncation only applies to wrapped modes ('fixed' / 'fixed-height'): 'auto'
+ * (auto-width) lays text out without a width to wrap against, so neither
+ * `maxLines` nor `truncateText` constrains it (mirrors the UI, which hides both
+ * controls there).
+ *
+ * - `maxLines` (if a positive number) caps the line count.
+ * - `truncateText` in 'fixed-height' mode additionally caps by how many lines
+ *   fit the box height (`floor(height / lineHeight)`, at least 1). Plain 'fixed'
+ *   (auto-height) has no height limit, so only `maxLines` constrains it.
+ */
+export function getLineLimit(node: TextNode): number {
+  let limit = Infinity
+
+  const isWrapped =
+    node.textWidthMode === 'fixed' || node.textWidthMode === 'fixed-height'
+  if (!isWrapped) return limit
+
+  if (typeof node.maxLines === 'number' && node.maxLines >= 1) {
+    limit = Math.floor(node.maxLines)
+  }
+
+  if (node.truncateText && node.textWidthMode === 'fixed-height') {
+    const fontSize = node.fontSize ?? 16
+    const lineHeight = (node.lineHeight ?? 1.2) * fontSize
+    const fit = lineHeight > 0 ? Math.max(1, Math.floor(node.height / lineHeight)) : 1
+    limit = Math.min(limit, fit)
+  }
+
+  return limit
+}
+
+/**
+ * Apply ellipsis truncation to a list of already-wrapped lines.
+ *
+ * Keeps at most `getLineLimit(node)` lines. When lines are dropped (or the last
+ * kept line itself overflows the box width), the last kept line is shortened
+ * character-by-character until `line + "…"` fits within `maxWidth`, then the
+ * ellipsis is appended. Mirrors the measurement used in `wrapTextToLines`
+ * (letter-spacing aware) so canvas pixels match.
+ *
+ * A no-op (returns `lines` unchanged) when the limit is not exceeded.
+ */
+export function truncateLines(node: TextNode, lines: string[], maxWidth: number): string[] {
+  const limit = getLineLimit(node)
+  if (!Number.isFinite(limit) || lines.length <= limit) return lines
+
+  const ctx = getContext()
+  ctx.font = buildFontString(node)
+  const letterSpacing = node.letterSpacing ?? 0
+  const widthOf = (s: string): number =>
+    s.length === 0
+      ? 0
+      : ctx.measureText(s).width + Math.max(0, s.length - 1) * letterSpacing
+
+  const kept = lines.slice(0, limit)
+  let last = (kept[kept.length - 1] ?? '').replace(/\s+$/, '')
+
+  // Trim characters off the end until the ellipsis fits. Allow dropping the
+  // whole line content (bare "…") as a last resort for very narrow boxes.
+  while (last.length > 0 && widthOf(last + ELLIPSIS) > maxWidth) {
+    last = last.slice(0, -1).replace(/\s+$/, '')
+  }
+
+  kept[kept.length - 1] = last + ELLIPSIS
+  return kept
+}
+
 // Re-export so existing call sites keep working.
 export { NBSP }
