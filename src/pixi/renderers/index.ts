@@ -545,8 +545,28 @@ export function applyLayoutSize(
   nodesById?: Record<string, FlatSceneNode>,
   childrenById?: Record<string, string[]>,
 ): void {
-  // Skip if size hasn't changed
-  if (node.width === layoutWidth && node.height === layoutHeight) return;
+  // Skip if size hasn't changed — but compare against the size the container was
+  // ACTUALLY last drawn at, not the stored node.width/height. For fit_content
+  // frames the rendered size is layout-driven and diverges from the stored node
+  // size: the frame container tracks its drawn size in `_effectiveWidth`/
+  // `_effectiveHeight` (maintained by frameRenderer + below). Comparing against
+  // the stale node.width made fit frames skip a needed redraw whenever the
+  // computed size returned to a value equal to the stored width — e.g. after
+  // undoing a text edit, or inserting then removing a child — leaving the frame
+  // stuck at its previously-rendered size. Non-frame nodes don't maintain a
+  // drawn-size field, so they keep comparing against node.width as before.
+  const sizedFrame = container as Container & {
+    _effectiveWidth?: number;
+    _effectiveHeight?: number;
+  };
+  const isFrame = node.type === "frame";
+  const drawnWidth = isFrame ? sizedFrame._effectiveWidth ?? node.width : node.width;
+  const drawnHeight = isFrame ? sizedFrame._effectiveHeight ?? node.height : node.height;
+  if (drawnWidth === layoutWidth && drawnHeight === layoutHeight) return;
+  if (isFrame) {
+    sizedFrame._effectiveWidth = layoutWidth;
+    sizedFrame._effectiveHeight = layoutHeight;
+  }
 
   switch (node.type) {
     case "rect": {
