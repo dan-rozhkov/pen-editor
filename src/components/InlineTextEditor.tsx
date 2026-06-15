@@ -259,7 +259,11 @@ export function InlineTextEditor({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Figma parity: Enter inserts a line break; Esc commits.
     // (Both plain Enter and Shift+Enter fall through to contentEditable.)
+    // Cmd/Ctrl+Enter also commits and exits editing.
     if (e.key === 'Escape') {
+      e.preventDefault()
+      submit()
+    } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault()
       submit()
     }
