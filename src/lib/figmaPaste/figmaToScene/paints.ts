@@ -1,6 +1,6 @@
 // Color, gradient and image-paint helpers shared by the node converters.
 
-import type { GradientColorStop, GradientFill, ImageFill } from '@/types/scene'
+import { generateId, type GradientColorStop, type GradientFill, type ImageFill, type Paint, type SolidPaint } from '@/types/scene'
 import type { FigColor, FigMatrix, FigPaint } from '../figTypes'
 import type { ConvertContext } from './types'
 
@@ -30,6 +30,53 @@ export function topPaint(paints: FigPaint[] | undefined, kinds: (paint: FigPaint
     if (paintIsVisible(paint) && kinds(paint)) return paint
   }
   return null
+}
+
+export interface ConvertedPaints {
+  /** Visible paints converted into the editor stack, bottom-to-top. */
+  paints: Paint[]
+  /** True when an IMAGE paint was present but its bytes were not embedded. */
+  hadFailedImage: boolean
+}
+
+/** Convert a single Figma paint into one editor paint layer (null = unusable). */
+function convertPaint(paint: FigPaint, ctx: ConvertContext): Paint | null {
+  if (paint.type === 'SOLID') {
+    if (!paint.color) return null
+    const solid: SolidPaint = { id: generateId(), type: 'solid', color: colorToHex(paint.color) }
+    const opacity = paint.color.a * (paint.opacity ?? 1)
+    if (opacity < 1) solid.opacity = opacity
+    return solid
+  }
+  if (paint.type?.startsWith('GRADIENT_')) {
+    // convertGradient bakes the paint/stop opacity into the gradient stops, so
+    // the wrapping paint keeps the default opacity.
+    const gradient = convertGradient(paint)
+    return gradient ? { id: generateId(), type: 'gradient', gradient } : null
+  }
+  if (paint.type === 'IMAGE') {
+    const image = convertImagePaint(paint, ctx)
+    return image ? { id: generateId(), type: 'image', image } : null
+  }
+  return null
+}
+
+/**
+ * Convert the full Figma paint stack into the editor's paint stack, preserving
+ * bottom-to-top order and dropping hidden/zero-opacity layers. Mirrors the
+ * legacy single-fill conversion for each layer so the two representations agree.
+ */
+export function convertPaints(figPaints: FigPaint[] | undefined, ctx: ConvertContext): ConvertedPaints {
+  const paints: Paint[] = []
+  let hadFailedImage = false
+  if (!figPaints) return { paints, hadFailedImage }
+  for (const paint of figPaints) {
+    if (!paintIsVisible(paint)) continue
+    const converted = convertPaint(paint, ctx)
+    if (converted) paints.push(converted)
+    else if (paint.type === 'IMAGE') hadFailedImage = true
+  }
+  return { paints, hadFailedImage }
 }
 
 interface InvertedMatrix {

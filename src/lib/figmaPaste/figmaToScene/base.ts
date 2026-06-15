@@ -1,9 +1,9 @@
 // Shared node properties: position/size decomposition, fills, strokes,
 // effects and corner radii applied to every converted node.
 
-import { generateId, type PerCornerRadius } from '@/types/scene'
-import type { FigNodeChange } from '../figTypes'
-import { colorToHex, colorToHex8, convertGradient, convertImagePaint, topPaint } from './paints'
+import { generateId, type Paint, type PerCornerRadius, type ShadowEffect } from '@/types/scene'
+import type { FigEffect, FigNodeChange } from '../figTypes'
+import { colorToHex, colorToHex8, convertPaints, topPaint } from './paints'
 import type { ConvertContext, MutableBase, StrokeStyle } from './types'
 
 function decomposePosition(change: FigNodeChange): { x: number; y: number; rotation?: number } {
@@ -42,25 +42,30 @@ export function buildBase(change: FigNodeChange, ctx: ConvertContext, withStroke
 }
 
 function applyFillPaints(base: MutableBase, change: FigNodeChange, ctx: ConvertContext): void {
-  const solid = topPaint(change.fillPaints, (p) => p.type === 'SOLID')
-  if (solid?.color) {
-    base.fill = colorToHex(solid.color)
-    const opacity = solid.color.a * (solid.opacity ?? 1)
-    if (opacity < 1) base.fillOpacity = opacity
+  const { paints, hadFailedImage } = convertPaints(change.fillPaints, ctx)
+  if (paints.length >= 2) {
+    // Multiple visible fills: the legacy single fields can't represent the
+    // stack, so `fills` becomes the single source of truth.
+    base.fills = paints
+    return
   }
-  const gradient = topPaint(change.fillPaints, (p) => p.type?.startsWith('GRADIENT_') === true)
-  if (gradient) {
-    const converted = convertGradient(gradient)
-    if (converted) base.gradientFill = converted
+  if (paints.length === 1) {
+    applyLegacyFill(base, paints[0])
+    return
   }
-  const image = topPaint(change.fillPaints, (p) => p.type === 'IMAGE')
-  if (image) {
-    const converted = convertImagePaint(image, ctx)
-    if (converted) {
-      base.imageFill = converted
-    } else if (!base.fill && !base.gradientFill) {
-      base.fill = '#cccccc'
-    }
+  // No usable paint. Preserve the legacy gray fallback for a broken image fill.
+  if (hadFailedImage) base.fill = '#cccccc'
+}
+
+/** Project a single paint onto the legacy single-fill fields. */
+function applyLegacyFill(base: MutableBase, paint: Paint): void {
+  if (paint.type === 'solid') {
+    base.fill = paint.color
+    if (paint.opacity != null && paint.opacity < 1) base.fillOpacity = paint.opacity
+  } else if (paint.type === 'gradient') {
+    base.gradientFill = paint.gradient
+  } else {
+    base.imageFill = paint.image
   }
 }
 
@@ -96,20 +101,33 @@ function applyStrokePaints(base: MutableBase, change: FigNodeChange, ctx: Conver
   if (change.strokeAlign) base.strokeAlign = stroke.align
 }
 
-function applyEffects(base: MutableBase, change: FigNodeChange): void {
-  const effects = change.effects ?? []
-  const shadow =
-    effects.find((e) => e.visible !== false && e.type === 'DROP_SHADOW') ??
-    effects.find((e) => e.visible !== false && e.type === 'INNER_SHADOW')
-  if (!shadow?.color) return
-  base.effect = {
+/** Map a Figma shadow effect into the editor's shadow effect (null = unusable). */
+function toShadowEffect(effect: FigEffect): ShadowEffect | null {
+  if (!effect.color) return null
+  return {
     type: 'shadow',
-    shadowType: shadow.type === 'INNER_SHADOW' ? 'inner' : 'outer',
-    color: colorToHex8(shadow.color),
-    offset: { x: shadow.offset?.x ?? 0, y: shadow.offset?.y ?? 0 },
-    blur: shadow.radius ?? 0,
-    spread: shadow.spread ?? 0,
+    shadowType: effect.type === 'INNER_SHADOW' ? 'inner' : 'outer',
+    color: colorToHex8(effect.color),
+    offset: { x: effect.offset?.x ?? 0, y: effect.offset?.y ?? 0 },
+    blur: effect.radius ?? 0,
+    spread: effect.spread ?? 0,
   }
+}
+
+function applyEffects(base: MutableBase, change: FigNodeChange): void {
+  const shadows = (change.effects ?? [])
+    .filter((e) => e.visible !== false && (e.type === 'DROP_SHADOW' || e.type === 'INNER_SHADOW'))
+    .map(toShadowEffect)
+    .filter((s): s is ShadowEffect => s !== null)
+  if (shadows.length === 0) return
+  if (shadows.length === 1) {
+    // Single shadow keeps the legacy `effect` field (no id) for back-compat.
+    base.effect = shadows[0]
+    return
+  }
+  // Multiple shadows: the legacy single field can't represent the stack, so
+  // `effects` becomes the source of truth. Ids back UI list keys/reordering.
+  base.effects = shadows.map((shadow) => ({ ...shadow, id: generateId() }))
 }
 
 export function perCornerRadius(change: FigNodeChange): PerCornerRadius | undefined {

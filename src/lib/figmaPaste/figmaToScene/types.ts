@@ -1,8 +1,10 @@
 // Internal types shared across the Figma → SceneNode conversion modules.
 
 import type {
+  Effect,
   GradientFill,
   ImageFill,
+  Paint,
   SceneNode,
   ShadowEffect,
 } from '@/types/scene'
@@ -44,11 +46,17 @@ export type MutableBase = {
   fillOpacity?: number
   gradientFill?: GradientFill
   imageFill?: ImageFill
+  // Figma-style paint stack — set instead of the legacy single fields above
+  // when the node carries more than one visible fill.
+  fills?: Paint[]
   stroke?: string
   strokeOpacity?: number
   strokeWidth?: number
   strokeAlign?: 'center' | 'inside' | 'outside'
   effect?: ShadowEffect
+  // Figma-style effect stack — set instead of the legacy single `effect`
+  // field when the node carries more than one visible shadow.
+  effects?: Effect[]
 }
 
 export interface StrokeStyle {

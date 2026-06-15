@@ -655,6 +655,105 @@ describe('convertFigmaClipboardHtml', () => {
     })
   })
 
+  it('preserves the full paint stack for multiple fills', async () => {
+    const html = clipboardWith([
+      onCanvas({
+        guid: guid(2),
+        type: 'RECTANGLE',
+        size: { x: 100, y: 100 },
+        transform: identityTransform(),
+        fillPaints: [
+          solidPaint(1, 0, 0), // bottom: red
+          solidPaint(0, 0, 1, 1, 0.5), // top: blue at 50% layer opacity
+        ],
+      }),
+    ])
+
+    const rect = (await convertFigmaClipboardHtml(html))!.nodes[0]
+    expect(rect.fills).toHaveLength(2)
+    expect(rect.fills![0]).toMatchObject({ type: 'solid', color: '#ff0000' })
+    expect(rect.fills![1]).toMatchObject({ type: 'solid', color: '#0000ff' })
+    expect(rect.fills![1].opacity).toBeCloseTo(0.5)
+    expect(rect.fills![0].id).toBeTruthy()
+    expect(rect.fills![1].id).toBeTruthy()
+    // When fills is the source of truth the legacy single fields stay unset
+    expect(rect.fill).toBeUndefined()
+  })
+
+  it('preserves a mixed solid + gradient fill stack', async () => {
+    const html = clipboardWith([
+      onCanvas({
+        guid: guid(2),
+        type: 'RECTANGLE',
+        size: { x: 100, y: 100 },
+        transform: identityTransform(),
+        fillPaints: [
+          solidPaint(1, 1, 1), // bottom solid
+          {
+            type: 'GRADIENT_LINEAR',
+            visible: true,
+            opacity: 1,
+            transform: identityTransform(),
+            stops: [
+              { color: { r: 1, g: 0, b: 0, a: 1 }, position: 0 },
+              { color: { r: 0, g: 0, b: 1, a: 1 }, position: 1 },
+            ],
+          },
+        ],
+      }),
+    ])
+
+    const rect = (await convertFigmaClipboardHtml(html))!.nodes[0]
+    expect(rect.fills).toHaveLength(2)
+    expect(rect.fills![0]).toMatchObject({ type: 'solid', color: '#ffffff' })
+    expect(rect.fills![1].type).toBe('gradient')
+    expect(rect.gradientFill).toBeUndefined()
+    expect(rect.fill).toBeUndefined()
+  })
+
+  it('drops hidden paints from the fill stack', async () => {
+    const html = clipboardWith([
+      onCanvas({
+        guid: guid(2),
+        type: 'RECTANGLE',
+        size: { x: 10, y: 10 },
+        transform: identityTransform(),
+        fillPaints: [
+          solidPaint(1, 0, 0),
+          { ...solidPaint(0, 1, 0), visible: false },
+          solidPaint(0, 0, 1),
+        ],
+      }),
+    ])
+
+    const rect = (await convertFigmaClipboardHtml(html))!.nodes[0]
+    expect(rect.fills).toHaveLength(2)
+    expect(rect.fills!.map((p) => (p.type === 'solid' ? p.color : p.type))).toEqual(['#ff0000', '#0000ff'])
+  })
+
+  it('preserves multiple shadow effects as an effect stack', async () => {
+    const html = clipboardWith([
+      onCanvas({
+        guid: guid(2),
+        type: 'RECTANGLE',
+        size: { x: 10, y: 10 },
+        transform: identityTransform(),
+        effects: [
+          { type: 'DROP_SHADOW', visible: true, color: { r: 0, g: 0, b: 0, a: 0.25 }, offset: { x: 0, y: 4 }, radius: 8, spread: 2 },
+          { type: 'INNER_SHADOW', visible: true, color: { r: 1, g: 1, b: 1, a: 0.5 }, offset: { x: 0, y: 1 }, radius: 2, spread: 0 },
+        ],
+      }),
+    ])
+
+    const rect = (await convertFigmaClipboardHtml(html))!.nodes[0]
+    expect(rect.effects).toHaveLength(2)
+    expect(rect.effects![0]).toMatchObject({ type: 'shadow', shadowType: 'outer', color: '#00000040' })
+    expect(rect.effects![1]).toMatchObject({ type: 'shadow', shadowType: 'inner', color: '#ffffff80' })
+    expect(rect.effects![0].id).toBeTruthy()
+    expect(rect.effects![1].id).toBeTruthy()
+    expect(rect.effect).toBeUndefined()
+  })
+
   it('expands component instances using the embedded master and overrides', async () => {
     const internalCanvas: FigNodeChange = {
       guid: guid(50),
