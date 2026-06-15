@@ -15,9 +15,15 @@ import { resetStores, seedScene, seedVariables } from "@/test/fixtures";
 
 const TEST_TOOL = "__test_tool__";
 
+function clearChatApiEnv() {
+  vi.stubEnv("VITE_AI_API_URL", undefined);
+  vi.stubEnv("VITE_DESIGN_AGENT_BACKEND_URL", undefined);
+}
+
 afterEach(() => {
   delete toolHandlers[TEST_TOOL];
   vi.useRealTimers();
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
 
@@ -184,12 +190,14 @@ describe("buildCanvasContext", () => {
 describe("resolveChatApiUrl", () => {
   it("falls back to /api/chat when no env override is set", () => {
     // Test env has neither VITE_AI_API_URL nor VITE_DESIGN_AGENT_BACKEND_URL.
+    clearChatApiEnv();
     expect(resolveChatApiUrl()).toBe("/api/chat");
   });
 });
 
 describe("useDesignChat (hook + UI message stream)", () => {
   beforeEach(() => {
+    clearChatApiEnv();
     resetStores();
     seedScene();
     seedVariables();

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import clsx from "clsx";
 import type {
   GradientFill,
   ImageFill,
@@ -101,6 +102,9 @@ const FILL_TYPE_OPTIONS = [
   { value: "radial", label: "Radial" },
 ];
 
+const FILL_ROW_TRIGGER_CLASS =
+  "flex min-w-0 flex-1 items-center gap-2 rounded bg-secondary px-1.5 py-1 text-left text-secondary-foreground hover:bg-secondary data-popup-open:bg-secondary";
+
 /** One-line summary shown on the collapsed row (popover trigger). */
 function paintSummary(paint: Paint): string {
   if (paint.type === "solid") return paint.color.toUpperCase();
@@ -173,6 +177,8 @@ export function FillSection({
               // arrayIndex toward end = top of stack. Up arrow moves toward top.
               const canMoveUp = arrayIndex < fills.length - 1;
               const canMoveDown = arrayIndex > 0;
+              const isDropTarget =
+                dropIndex === arrayIndex && dragIndex !== null && dragIndex !== arrayIndex;
 
               const typeOptions = supportsImage
                 ? [...FILL_TYPE_OPTIONS, { value: "image", label: "Image" }]
@@ -181,11 +187,11 @@ export function FillSection({
               return (
                 <div
                   key={paint.id}
-                  className={`flex items-center gap-1 rounded ${
-                    dropIndex === arrayIndex && dragIndex !== null && dragIndex !== arrayIndex
-                      ? "ring-1 ring-border-hover"
-                      : ""
-                  } ${dragIndex === arrayIndex ? "opacity-50" : ""}`}
+                  className={clsx(
+                    "group/fill-row relative flex items-center gap-1 rounded",
+                    isDropTarget && "ring-1 ring-border-hover",
+                    dragIndex === arrayIndex && "opacity-50",
+                  )}
                   onDragOver={(e) => {
                     if (dragIndex !== null) {
                       e.preventDefault();
@@ -196,32 +202,36 @@ export function FillSection({
                   onDrop={() => handleDrop(arrayIndex)}
                 >
                   {/* Drag handle — reorder the stack by dragging */}
-                  {canReorder && (
-                    <div
-                      draggable
-                      onDragStart={(e) => {
-                        e.dataTransfer.effectAllowed = "move";
-                        setDragIndex(arrayIndex);
-                      }}
-                      onDragEnd={() => {
-                        setDragIndex(null);
-                        setDropIndex(null);
-                      }}
-                      className="shrink-0 cursor-grab text-text-muted hover:text-text-primary active:cursor-grabbing"
-                      title="Drag to reorder"
-                    >
-                      <DotsSixVertical />
-                    </div>
-                  )}
+                  <div
+                    draggable={canReorder}
+                    onDragStart={(e) => {
+                      if (!canReorder) return;
+                      e.dataTransfer.effectAllowed = "move";
+                      setDragIndex(arrayIndex);
+                    }}
+                    onDragEnd={() => {
+                      setDragIndex(null);
+                      setDropIndex(null);
+                    }}
+                    className={clsx(
+                      "absolute left-[-16px] top-1/2 flex h-6 w-4 -translate-y-1/2 items-center justify-center text-text-primary opacity-0 transition-opacity",
+                      canReorder
+                        ? "cursor-grab group-hover/fill-row:opacity-100 active:cursor-grabbing"
+                        : "pointer-events-none",
+                    )}
+                    title={canReorder ? "Drag to reorder" : undefined}
+                  >
+                    <DotsSixVertical size={16} />
+                  </div>
 
                   {/* Compact trigger: swatch + summary opens the detail popover */}
                   <Popover>
                     <PopoverTrigger
-                      className="flex min-w-0 flex-1 items-center gap-2 rounded px-1.5 py-1 text-left hover:bg-surface-hover"
+                      className={FILL_ROW_TRIGGER_CLASS}
                       title="Edit fill"
                     >
                       <PaintSwatch paint={paint} />
-                      <span className="min-w-0 flex-1 truncate font-mono text-xs text-text-primary">
+                      <span className="min-w-0 flex-1 truncate text-xs text-text-primary">
                         {paintSummary(paint)}
                       </span>
                     </PopoverTrigger>

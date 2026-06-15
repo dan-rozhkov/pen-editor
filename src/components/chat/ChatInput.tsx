@@ -272,16 +272,12 @@ export function ChatInput({
       {/* Selected canvas elements, attached as visual context */}
       {visibleSelection.length > 0 && (
         <div className="mb-2">
-          <div className="text-[11px] text-text-muted mb-1">
-            {visibleSelection.length} selected element
-            {visibleSelection.length > 1 ? "s" : ""} attached as context
-          </div>
           <div className="flex gap-2 flex-wrap">
             {visibleSelection.map((sel) => (
               <div
                 key={sel.nodeId}
                 title={sel.name}
-                className="relative group w-12 h-12 rounded-md overflow-hidden border border-primary/60 ring-1 ring-primary/20 bg-surface-hover"
+                className="relative group w-12 h-12 rounded-md overflow-hidden bg-surface-hover"
               >
                 <img
                   src={sel.dataUrl}

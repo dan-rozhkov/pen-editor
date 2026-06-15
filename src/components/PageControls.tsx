@@ -1,7 +1,5 @@
 import { useMemo } from "react";
-import { PlayIcon } from "@phosphor-icons/react";
 
-import { Button } from "@/components/ui/button";
 import { SelectWithOptions } from "@/components/ui/select";
 import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
@@ -75,14 +73,6 @@ export function PageControls() {
           className="w-auto min-w-0 border-transparent bg-transparent px-2 hover:bg-muted hover:text-foreground focus-visible:border-transparent focus-visible:ring-0"
           size="sm"
         />
-        <div className="ml-auto flex items-center gap-2">
-          <Button variant="ghost" size="icon-sm" aria-label="Play">
-            <PlayIcon />
-          </Button>
-          <Button variant="secondary" size="sm">
-            Share
-          </Button>
-        </div>
       </div>
     </div>
   );

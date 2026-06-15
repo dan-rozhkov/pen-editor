@@ -114,7 +114,7 @@ describe("<ChatPanel />", () => {
     mockState.error = new Error("stream blew up");
     render(<ChatPanel />);
     expect(screen.getByText("stream blew up")).toBeTruthy();
-    fireEvent.click(screen.getByText("Dismiss"));
+    fireEvent.click(screen.getByLabelText("Dismiss error"));
     expect(clearError).toHaveBeenCalledTimes(1);
   });
 

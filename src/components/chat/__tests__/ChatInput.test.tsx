@@ -163,9 +163,7 @@ describe("<ChatInput />", () => {
     it("shows selected elements as previews above the input", () => {
       mockSelection = selection;
       render(<Harness onSubmit={vi.fn()} />);
-      expect(
-        screen.getByText("2 selected elements attached as context")
-      ).toBeTruthy();
+      expect(screen.queryByText("2 selected elements attached as context")).toBeNull();
       expect(screen.getByAltText("Screen")).toBeTruthy();
       expect(screen.getByAltText("Box")).toBeTruthy();
     });

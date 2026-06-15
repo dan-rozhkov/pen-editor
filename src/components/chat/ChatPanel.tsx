@@ -4,9 +4,7 @@ import {
   PlusIcon,
   LightningIcon,
   ArrowLineLeftIcon,
-  DownloadSimpleIcon,
   DotsThreeVerticalIcon,
-  TrashIcon,
 } from "@phosphor-icons/react";
 import { useChatStore } from "@/store/chatStore";
 import { useFloatingPanelsStore } from "@/store/floatingPanelsStore";
@@ -17,6 +15,7 @@ import { ChatInput } from "./ChatInput";
 import { SelectWithOptions } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { InlineAlert } from "@/components/ui/inline-alert";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -110,7 +109,6 @@ function TabBar() {
                 data-testid="chat-menu-download"
                 onClick={() => activeActions?.exportChat()}
               >
-                <DownloadSimpleIcon size={14} />
                 Download chat
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -118,7 +116,6 @@ function TabBar() {
                 data-testid="chat-menu-clear"
                 onClick={() => activeActions?.clearChat()}
               >
-                <TrashIcon size={14} />
                 Clear chat
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -257,16 +254,14 @@ function ChatSession({
     <>
       {/* Error banner */}
       {error && (
-        <div className="px-3 py-2 bg-red-500/10 border-b border-red-500/20 text-xs text-red-400 flex items-center gap-2">
-          <span className="flex-1 truncate">
-            {error.message || "Something went wrong"}
-          </span>
-          <button
-            onClick={clearError}
-            className="shrink-0 text-red-300 hover:text-red-100 underline"
+        <div className="px-3 pt-2">
+          <InlineAlert
+            variant="error"
+            onDismiss={clearError}
+            dismissLabel="Dismiss error"
           >
-            Dismiss
-          </button>
+            {error.message || "Something went wrong"}
+          </InlineAlert>
         </div>
       )}
 
