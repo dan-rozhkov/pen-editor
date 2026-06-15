@@ -69,8 +69,8 @@ export function ExportSection({ selectedNode }: ExportSectionProps) {
             />
           </div>
         </div>
-        <Button onClick={handleExport} variant="secondary" className="w-full">
-          Export {exportName}
+        <Button onClick={handleExport} variant="secondary" className="w-full min-w-0">
+          <span className="min-w-0 truncate">Export {exportName}</span>
         </Button>
       </div>
     </PropertySection>
