@@ -57,21 +57,10 @@ describe("<TypographySection />", () => {
   });
 
   describe("resizing mode (setTextWidthMode)", () => {
-    // The resizing group is the final icon-only ButtonGroup -> its last 3
-    // role=button elements are [auto, fixed, fixed-height]. The "Truncate text"
-    // toggle (rendered after it, in wrapped modes) carries a text label, so
-    // filtering text-bearing buttons isolates the icon group reliably.
-    function resizingButtons() {
-      const buttons = screen
-        .getAllByRole("button")
-        .filter((b) => !b.textContent?.includes("Truncate"));
-      return buttons.slice(-3);
-    }
-
     it("sets the width mode without touching sizing when nothing fills", () => {
       const onUpdate = vi.fn();
       render(<TypographySection node={textNode({ textWidthMode: "fixed" })} onUpdate={onUpdate} />);
-      const [auto] = resizingButtons();
+      const auto = screen.getByRole("button", { name: "Auto width" });
       fireEvent.click(auto);
       expect(onUpdate).toHaveBeenCalledWith({ textWidthMode: "auto" });
     });
@@ -84,7 +73,7 @@ describe("<TypographySection />", () => {
           onUpdate={onUpdate}
         />,
       );
-      const [auto] = resizingButtons();
+      const auto = screen.getByRole("button", { name: "Auto width" });
       fireEvent.click(auto);
       expect(onUpdate).toHaveBeenCalledWith({
         textWidthMode: "auto",
@@ -100,7 +89,7 @@ describe("<TypographySection />", () => {
           onUpdate={onUpdate}
         />,
       );
-      const [, fixed] = resizingButtons();
+      const fixed = screen.getByRole("button", { name: "Fixed width" });
       fireEvent.click(fixed);
       expect(onUpdate).toHaveBeenCalledWith({
         textWidthMode: "fixed",
@@ -113,7 +102,7 @@ describe("<TypographySection />", () => {
     const truncateButton = () =>
       screen
         .getAllByRole("button")
-        .find((b) => b.textContent?.includes("Truncate text"));
+        .find((b) => b.getAttribute("aria-label") === "Truncate with ellipsis");
 
     it("hides the controls in auto-width mode", () => {
       render(
@@ -134,6 +123,18 @@ describe("<TypographySection />", () => {
       expect(btn).toBeDefined();
       fireEvent.click(btn!);
       expect(onUpdate).toHaveBeenCalledWith({ truncateText: true });
+    });
+
+    it("clears Truncate text from the dash button", () => {
+      const onUpdate = vi.fn();
+      render(
+        <TypographySection
+          node={textNode({ textWidthMode: "fixed", truncateText: true })}
+          onUpdate={onUpdate}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "No truncation" }));
+      expect(onUpdate).toHaveBeenCalledWith({ truncateText: false });
     });
 
     // Locate the Max Lines input via its label (labelOutside layout: the input

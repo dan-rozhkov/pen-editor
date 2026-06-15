@@ -5,10 +5,10 @@ import {
   ArrowsOut,
   ArrowRight,
   Article,
+  MinusIcon,
   TextAlignCenter,
   TextAlignLeft,
   TextAlignRight,
-  TextColumns,
   TextItalic,
   TextStrikethrough,
   TextUnderline,
@@ -27,6 +27,34 @@ import { FontCombobox } from "@/components/ui/FontCombobox";
 interface TypographySectionProps {
   node: TextNode;
   onUpdate: (updates: Partial<SceneNode>) => void;
+}
+
+function TruncateTextIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="size-3.5"
+      viewBox="0 0 16 16"
+      fill="none"
+    >
+      <path
+        d="M3.2 10.4L6 4H7.3L10.1 10.4"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M4.4 8H8.9"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+      <circle cx="5.2" cy="12.2" r="0.7" fill="currentColor" />
+      <circle cx="8" cy="12.2" r="0.7" fill="currentColor" />
+      <circle cx="10.8" cy="12.2" r="0.7" fill="currentColor" />
+    </svg>
+  );
 }
 
 export function TypographySection({ node, onUpdate }: TypographySectionProps) {
@@ -298,6 +326,8 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
               node.textWidthMode === "auto" ? "default" : "secondary"
             }
             size="sm"
+            title="Auto width"
+            aria-label="Auto width"
             className={`flex-1 ${
               node.textWidthMode === "auto"
                 ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
@@ -312,6 +342,8 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
               node.textWidthMode === "fixed" ? "default" : "secondary"
             }
             size="sm"
+            title="Fixed width"
+            aria-label="Fixed width"
             className={`flex-1 ${
               node.textWidthMode === "fixed"
                 ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
@@ -328,6 +360,8 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 : "secondary"
             }
             size="sm"
+            title="Fixed size"
+            aria-label="Fixed size"
             className={`flex-1 ${
               node.textWidthMode === "fixed-height"
                 ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
@@ -340,24 +374,52 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
         </ButtonGroup>
       </div>
       {isWrapped && (
-        <div className="flex flex-col gap-1">
-          <Button
-            variant={node.truncateText ? "default" : "secondary"}
-            size="sm"
-            className={`w-full justify-start gap-2 ${
-              node.truncateText
-                ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
-                : ""
-            }`}
-            onClick={() =>
-              onUpdate({
-                truncateText: !node.truncateText,
-              } as Partial<SceneNode>)
-            }
-          >
-            <TextColumns size={14} />
-            Truncate text
-          </Button>
+        <PropertyRow>
+          <div className="flex flex-1 flex-col gap-1">
+            <div className="text-[10px] font-normal text-text-muted">
+              Truncate text
+            </div>
+            <ButtonGroup orientation="horizontal" className="w-full">
+              <Button
+                variant={!node.truncateText ? "default" : "secondary"}
+                size="sm"
+                title="No truncation"
+                aria-label="No truncation"
+                aria-pressed={!node.truncateText}
+                className={`flex-1 ${
+                  !node.truncateText
+                    ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
+                    : ""
+                }`}
+                onClick={() =>
+                  onUpdate({
+                    truncateText: false,
+                  } as Partial<SceneNode>)
+                }
+              >
+                <MinusIcon size={14} />
+              </Button>
+              <Button
+                variant={node.truncateText ? "default" : "secondary"}
+                size="sm"
+                title="Truncate with ellipsis"
+                aria-label="Truncate with ellipsis"
+                aria-pressed={!!node.truncateText}
+                className={`flex-1 ${
+                  node.truncateText
+                    ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
+                    : ""
+                }`}
+                onClick={() =>
+                  onUpdate({
+                    truncateText: true,
+                  } as Partial<SceneNode>)
+                }
+              >
+                <TruncateTextIcon />
+              </Button>
+            </ButtonGroup>
+          </div>
           <NumberInput
             label="Max Lines"
             labelOutside={true}
@@ -370,7 +432,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             min={0}
             step={1}
           />
-        </div>
+        </PropertyRow>
       )}
       <PropertyRow>
         <NumberInput
