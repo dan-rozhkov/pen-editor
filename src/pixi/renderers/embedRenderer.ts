@@ -1,183 +1,35 @@
-import { Container, Graphics, Sprite } from "pixi.js";
+import { Container } from "pixi.js";
 import type { EmbedNode } from "@/types/scene";
-import { renderHtmlToTexture, invalidateHtmlTexture } from "./htmlTexture";
-import { buildVariableStyleBlock } from "@/utils/variableCssUtils";
-import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
 
-/** Current resolution used for embed textures, updated on zoom */
-let currentEmbedResolution = window.devicePixelRatio;
-const MIN_EMBED_RENDER_RESOLUTION = 0.25;
-const EMBED_RESOLUTION_STEP = 0.25;
-// Large embeds (for example long page screenshots) were hitting the old
-// 4096x4096 pixel budget too early, so zoom-based sharpness upgrades never
-// kicked in. Keep a hard cap, but allow textures to grow up to 8k x 8k.
-const MAX_EMBED_TEXTURE_DIMENSION = 16_384;
-const MAX_EMBED_TEXTURE_PIXELS = 67_108_864;
-const EMBED_RESIZE_RERENDER_DEBOUNCE_MS = 180;
-const pendingResizeRerenderByContainer = new WeakMap<Container, ReturnType<typeof setTimeout>>();
-const renderRequestIdByContainer = new WeakMap<Container, number>();
-
-function snapEmbedSize(node: EmbedNode): { width: number; height: number } {
-  return {
-    width: Math.max(1, Math.ceil(node.width)),
-    height: Math.max(1, Math.ceil(node.height)),
-  };
-}
-
-function drawPlaceholder(): void {
-  // No visual placeholder — container is transparent until texture loads
-}
-
-function getEmbedContentSprite(container: Container): Sprite | null {
-  const existing = container.getChildByLabel("embed-content");
-  return existing instanceof Sprite ? existing : null;
-}
-
-function ensureEmbedContentSprite(container: Container): Sprite {
-  const existing = getEmbedContentSprite(container);
-  if (existing) return existing;
-
-  const sprite = new Sprite();
-  sprite.label = "embed-content";
-  sprite.roundPixels = true;
-  container.addChild(sprite);
-  return sprite;
-}
-
-function quantizeResolution(value: number): number {
-  const stepped = Math.round(value / EMBED_RESOLUTION_STEP) * EMBED_RESOLUTION_STEP;
-  return Math.max(MIN_EMBED_RENDER_RESOLUTION, stepped);
-}
-
-function getSafeEmbedResolution(node: EmbedNode, requestedResolution: number): number {
-  const snapped = snapEmbedSize(node);
-  const safeWidth = snapped.width;
-  const safeHeight = snapped.height;
-  const maxByDimension = MAX_EMBED_TEXTURE_DIMENSION / Math.max(safeWidth, safeHeight);
-  const maxByPixels = Math.sqrt(MAX_EMBED_TEXTURE_PIXELS / (safeWidth * safeHeight));
-  const upperBound = Math.max(
-    MIN_EMBED_RENDER_RESOLUTION,
-    Math.min(maxByDimension, maxByPixels),
-  );
-
-  return quantizeResolution(Math.min(requestedResolution, upperBound));
-}
-
-function scheduleRerenderAfterResize(container: Container, node: EmbedNode): void {
-  const pending = pendingResizeRerenderByContainer.get(container);
-  if (pending) clearTimeout(pending);
-
-  const timer = setTimeout(() => {
-    pendingResizeRerenderByContainer.delete(container);
-    if (container.destroyed || !node.htmlContent) return;
-    renderAndApply(container, node);
-  }, EMBED_RESIZE_RERENDER_DEBOUNCE_MS);
-
-  pendingResizeRerenderByContainer.set(container, timer);
-}
-
-async function renderAndApply(container: Container, node: EmbedNode, resolution?: number): Promise<void> {
-  if (!Number.isFinite(node.width) || !Number.isFinite(node.height) || node.width <= 0 || node.height <= 0) {
-    return;
-  }
-  const snapped = snapEmbedSize(node);
-
-  const nextRequestId = (renderRequestIdByContainer.get(container) ?? 0) + 1;
-  renderRequestIdByContainer.set(container, nextRequestId);
-
-  const requestedResolution = resolution ?? currentEmbedResolution;
-  const res = getSafeEmbedResolution(node, requestedResolution);
-  const variableBlock = buildVariableStyleBlock(undefined, getEffectiveThemeForNode(node.id));
-  const htmlWithVars = variableBlock ? node.htmlContent + variableBlock : node.htmlContent;
-  const texture = await renderHtmlToTexture(htmlWithVars, snapped.width, snapped.height, res);
-  if (container.destroyed) return;
-
-  // Ignore stale async completions when a newer render request already exists.
-  if (renderRequestIdByContainer.get(container) !== nextRequestId) return;
-
-  if (!texture) return;
-  if (
-    !Number.isFinite(texture.width) ||
-    !Number.isFinite(texture.height) ||
-    texture.width <= 0 ||
-    texture.height <= 0
-  ) {
-    return;
-  }
-
-  // Hide placeholder once texture is ready
-  const bg = container.getChildByLabel("embed-bg");
-  if (bg) bg.visible = false;
-
-  const sprite = ensureEmbedContentSprite(container);
-  sprite.texture = texture;
-  sprite.width = snapped.width;
-  sprite.height = snapped.height;
-}
-
-export function createEmbedContainer(node: EmbedNode): Container {
-  const container = new Container();
-
-  const bg = new Graphics();
-  bg.label = "embed-bg";
-  drawPlaceholder();
-  container.addChild(bg);
-
-  if (node.htmlContent) {
-    renderAndApply(container, node);
-  }
-
-  return container;
+/**
+ * Embeds ("code layers") now render as a Shadow-DOM overlay above the canvas
+ * (see EmbedLayer). The Pixi side keeps only an empty, invisible container so
+ * hit-testing, selection, drag and smart guides keep operating on the real
+ * scene node. The HTML→texture pipeline (renderers/htmlTexture/*) is retained
+ * for a future screenshot/export path but is intentionally not called here.
+ */
+export function createEmbedContainer(_node: EmbedNode): Container {
+  return new Container();
 }
 
 export function updateEmbedContainer(
-  container: Container,
-  node: EmbedNode,
-  prev: EmbedNode,
+  _container: Container,
+  _node: EmbedNode,
+  _prev: EmbedNode,
 ): void {
-  const sizeChanged = node.width !== prev.width || node.height !== prev.height;
-  const contentChanged = node.htmlContent !== prev.htmlContent;
-
-  if (sizeChanged) {
-    const bg = container.getChildByLabel("embed-bg") as Graphics;
-    if (bg) {
-      bg.visible = true;
-      drawPlaceholder();
-    }
-  }
-
-  if (contentChanged) {
-    const pending = pendingResizeRerenderByContainer.get(container);
-    if (pending) {
-      clearTimeout(pending);
-      pendingResizeRerenderByContainer.delete(container);
-    }
-
-    if (prev.htmlContent) {
-      const prevSnapped = snapEmbedSize(prev);
-      invalidateHtmlTexture(prev.htmlContent, prevSnapped.width, prevSnapped.height);
-    }
-    renderAndApply(container, node);
-    return;
-  }
-
-  if (sizeChanged && node.htmlContent) {
-    // Avoid expensive HTML rerender while pointer is moving; refresh once resize settles.
-    scheduleRerenderAfterResize(container, node);
-  }
+  // No-op: content lives in the DOM overlay.
 }
 
-/** Update global embed resolution and re-render a specific embed at the new resolution */
+/** Retained for syncResolution callers; embeds no longer use textures. */
 export function updateEmbedResolution(
-  container: Container,
-  node: EmbedNode,
-  resolution: number,
+  _container: Container,
+  _node: EmbedNode,
+  _resolution: number,
 ): Promise<void> {
-  if (!node.htmlContent) return Promise.resolve();
-  return renderAndApply(container, node, resolution);
+  return Promise.resolve();
 }
 
-/** Set the current embed resolution (call when zoom changes) */
-export function setEmbedResolution(resolution: number): void {
-  currentEmbedResolution = resolution;
+/** Retained for syncResolution callers; embeds no longer use textures. */
+export function setEmbedResolution(_resolution: number): void {
+  // No-op.
 }
