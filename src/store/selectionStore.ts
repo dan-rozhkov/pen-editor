@@ -23,12 +23,15 @@ interface SelectionState {
   enteredInstanceDescendantPath: string | null
   // Last selected node ID for range selection
   lastSelectedId: string | null
+  // The embed currently "entered" for live interaction (pointer-events: auto)
+  activeEmbedId: string | null
 
   select: (id: string) => void
   setSelectedIds: (ids: string[]) => void
   addToSelection: (id: string) => void
   removeFromSelection: (id: string) => void
   clearSelection: () => void
+  setActiveEmbed: (id: string | null) => void
   isSelected: (id: string) => boolean
   selectRange: (fromId: string, toId: string, flatIds: string[]) => void
   startEditing: (id: string, mode?: EditingMode) => void
@@ -97,6 +100,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   enteredContainerId: null,
   enteredInstanceDescendantPath: null,
   lastSelectedId: null,
+  activeEmbedId: null,
 
   select: (id: string) => {
     const current = getSelectionSnapshot(get())
@@ -112,7 +116,8 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       editingMode: null,
       editingInstanceId: null,
       instanceContext: null,
-      lastSelectedId: id
+      lastSelectedId: id,
+      activeEmbedId: null,
     })
   },
 
@@ -130,7 +135,8 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       editingMode: null,
       editingInstanceId: null,
       instanceContext: null,
-      lastSelectedId: ids.length > 0 ? ids[ids.length - 1] : null
+      lastSelectedId: ids.length > 0 ? ids[ids.length - 1] : null,
+      activeEmbedId: null,
     })
   },
 
@@ -174,8 +180,11 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       instanceContext: null,
       enteredContainerId: null,
       enteredInstanceDescendantPath: null,
+      activeEmbedId: null,
     })
   },
+
+  setActiveEmbed: (id: string | null) => set({ activeEmbedId: id }),
 
   isSelected: (id: string) => {
     return get().selectedIds.includes(id)
