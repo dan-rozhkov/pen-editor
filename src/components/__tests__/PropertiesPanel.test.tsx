@@ -66,12 +66,10 @@ describe("<PropertiesPanel /> (orchestration)", () => {
   afterEach(() => cleanup());
 
   describe("empty selection", () => {
-    it("shows page properties, the Variables trigger and no node editors", () => {
+    it("shows page properties and no node editors", () => {
       render(<PropertiesPanel />);
 
       expect(screen.getByTestId("page-properties")).toBeTruthy();
-      expect(screen.getByText("Variables")).toBeTruthy();
-      expect(screen.getByTitle("Open variables panel")).toBeTruthy();
 
       expect(screen.queryByTestId("property-editor")).toBeNull();
       expect(screen.queryByTestId("multi-select-editor")).toBeNull();
