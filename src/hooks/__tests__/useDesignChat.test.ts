@@ -307,4 +307,70 @@ describe("useDesignChat (hook + UI message stream)", () => {
       )
     ).toBe(true);
   });
+
+  // Research mode streams backend-executed MCP (dynamic) tools. The AI SDK MCP
+  // client tags each tool chunk with `toolMetadata`; the UI message stream
+  // schema must accept it, or the whole stream is rejected with a
+  // TypeValidationError and the tool call hangs forever on "Running…".
+  it("accepts a dynamic MCP tool chunk carrying toolMetadata", async () => {
+    const fetchMock = vi.fn(async () =>
+      sseResponse([
+        { type: "start" },
+        { type: "start-step" },
+        {
+          type: "tool-input-start",
+          toolCallId: "mcp-1",
+          toolName: "refero_search_screens",
+          dynamic: true,
+        },
+        {
+          type: "tool-input-available",
+          toolCallId: "mcp-1",
+          toolName: "refero_search_screens",
+          input: { query: "onboarding", platform: "web" },
+          providerMetadata: { openrouter: { reasoning_details: [] } },
+          toolMetadata: { clientName: "ai-sdk-mcp-client" },
+          dynamic: true,
+          title: "refero_search_screens",
+        },
+        {
+          type: "tool-output-available",
+          toolCallId: "mcp-1",
+          output: { screens: [{ id: "s1" }] },
+          dynamic: true,
+        },
+        { type: "text-start", id: "t1" },
+        { type: "text-delta", id: "t1", delta: "Found some screens" },
+        { type: "text-end", id: "t1" },
+        { type: "finish-step" },
+        { type: "finish" },
+      ])
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const sessionId = `test-session-mcp-${Date.now()}`;
+    const { result } = renderHook(() => useDesignChat({ sessionId }));
+
+    act(() => {
+      result.current.setInput("find onboarding screens");
+    });
+    await act(async () => {
+      result.current.sendMessage();
+    });
+
+    // The stream must parse cleanly — no TypeValidationError on toolMetadata.
+    await waitFor(() => expect(result.current.status).toBe("ready"), {
+      timeout: 5000,
+    });
+    expect(result.current.error).toBeUndefined();
+
+    const assistant = result.current.messages.at(-1);
+    expect(assistant?.role).toBe("assistant");
+    const toolPart = assistant?.parts.find(
+      (p) => p.type === "dynamic-tool"
+    ) as { state?: string; toolName?: string } | undefined;
+    expect(toolPart).toBeDefined();
+    expect(toolPart!.toolName).toBe("refero_search_screens");
+    expect(toolPart!.state).toBe("output-available");
+  });
 });
