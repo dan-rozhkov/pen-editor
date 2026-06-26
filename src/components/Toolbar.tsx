@@ -207,7 +207,7 @@ export function Toolbar() {
               value={jsonText}
               onChange={(e) => setJsonText(e.target.value)}
               placeholder="Paste Pixso JSON here..."
-              className="w-full h-64 bg-secondary text-secondary-foreground rounded-md px-2 py-1.5 text-xs font-mono resize-none outline-none focus-visible:ring-1 focus-visible:ring-[#0d99ff] placeholder:text-muted-foreground"
+              className="w-full h-64 bg-secondary text-secondary-foreground rounded-md px-2 py-1.5 text-xs font-mono resize-none outline-none focus-visible:ring-1 focus-visible:ring-accent-light placeholder:text-muted-foreground"
               spellCheck={false}
             />
             {error && (

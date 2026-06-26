@@ -279,7 +279,7 @@ export function InlineEmbedEditor({
         width: node.width * scale,
         height: node.height * scale,
         overflow: 'hidden',
-        outline: '2px solid #0d99ff',
+        outline: '2px solid var(--color-accent-light)',
         outlineOffset: 0,
         zIndex: 100,
         cursor: 'text',

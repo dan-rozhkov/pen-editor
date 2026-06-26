@@ -24,7 +24,7 @@ import {
 // Type badge labels and colors
 const typeBadge: Record<VariableType, { label: string; className: string }> = {
   color: { label: "C", className: "bg-purple-500/20 text-purple-400" },
-  number: { label: "#", className: "bg-blue-500/20 text-blue-400" },
+  number: { label: "#", className: "bg-accent-light/20 text-accent-light" },
   string: { label: "T", className: "bg-green-500/20 text-green-400" },
 };
 

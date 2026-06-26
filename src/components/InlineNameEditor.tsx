@@ -124,7 +124,7 @@ export function InlineNameEditor({ node, absoluteX, absoluteY }: InlineNameEdito
           width: inputWidth,
           padding: '0 2px',
           margin: 0,
-          border: '1px solid #0d99ff',
+          border: '1px solid var(--color-accent-light)',
           borderRadius: 2,
           outline: 'none',
           background: 'transparent',

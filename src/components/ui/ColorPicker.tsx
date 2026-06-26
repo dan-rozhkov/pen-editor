@@ -152,7 +152,7 @@ export function CustomColorPicker({
                 aria-label="Hex color"
                 className="flex items-center gap-1 flex-1 min-w-0"
               >
-                <Input className="bg-secondary text-secondary-foreground focus-visible:ring-1 focus-visible:ring-[#0d99ff] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 h-6 rounded-md px-2 py-0.5 text-sm transition-colors aria-invalid:ring-[2px] md:text-xs/relaxed placeholder:text-muted-foreground w-full min-w-0 outline-none" />
+                <Input className="bg-secondary text-secondary-foreground focus-visible:ring-1 focus-visible:ring-accent-light aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 h-6 rounded-md px-2 py-0.5 text-sm transition-colors aria-invalid:ring-[2px] md:text-xs/relaxed placeholder:text-muted-foreground w-full min-w-0 outline-none" />
               </ColorField>
               {supportsEyeDropper && (
                 <button

@@ -97,7 +97,7 @@ export function PrimitivesPanel() {
               size="lg"
               className={`${toolButtonBaseClass} ${
                 isActive
-                  ? "bg-[#0d99ff] text-white hover:bg-[#0d99ff] hover:text-white"
+                  ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
                   : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
               }`}
             >
@@ -115,7 +115,7 @@ export function PrimitivesPanel() {
               onClick={() => toggleTool("rect")}
               className={`${toolButtonBaseClass} ${
                 isRectangleActive
-                  ? "bg-[#0d99ff] text-white hover:bg-[#0d99ff] hover:text-white"
+                  ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
                   : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
               }`}
             >
@@ -129,7 +129,7 @@ export function PrimitivesPanel() {
                 title="Line, Polygon"
                 className={`${toolButtonBaseClass} w-6 justify-center ${
                   isRectSubToolActive
-                    ? "bg-[#0d99ff] text-white hover:bg-[#0d99ff] hover:text-white"
+                    ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
                     : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
                 }`}
               >
@@ -171,7 +171,7 @@ export function PrimitivesPanel() {
               size="lg"
               className={`${toolButtonBaseClass} ${
                 isActive
-                  ? "bg-[#0d99ff] text-white hover:bg-[#0d99ff] hover:text-white"
+                  ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
                   : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
               }`}
             >

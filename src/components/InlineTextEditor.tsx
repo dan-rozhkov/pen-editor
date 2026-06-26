@@ -326,7 +326,7 @@ export function InlineTextEditor({
         padding: 0,
         margin: 0,
         border: 'none',
-        outline: '2px solid #0d99ff',
+        outline: '2px solid var(--color-accent-light)',
         outlineOffset: 0,
         background: 'transparent',
         zIndex: 100,

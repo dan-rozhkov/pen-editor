@@ -163,7 +163,7 @@ export function AutoLayoutSection({ node, onUpdate, mixedKeys }: AutoLayoutSecti
                           ? "bg-accent-selection text-text-primary"
                           : "text-text-muted hover:bg-secondary"
                       } ${
-                        showSpaceBetweenIcon ? "ring-2 ring-blue-400" : ""
+                        showSpaceBetweenIcon ? "ring-2 ring-accent-light" : ""
                       }`}
                       onClick={handleClick}
                       onDoubleClick={handleDoubleClick}

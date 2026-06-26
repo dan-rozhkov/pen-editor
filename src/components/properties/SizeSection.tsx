@@ -555,7 +555,7 @@ export function SizeSection({
           className={cn(
             "shrink-0 flex items-center justify-center w-6 h-6 rounded",
             node.aspectRatioLocked
-              ? "text-sky-600 bg-sky-100 hover:bg-sky-200"
+              ? "text-accent-light bg-accent-selection hover:bg-accent-selection/80"
               : "text-text-muted hover:bg-secondary"
           )}
           title={node.aspectRatioLocked ? "Unlock aspect ratio" : "Lock aspect ratio"}
