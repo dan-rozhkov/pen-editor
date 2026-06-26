@@ -22,6 +22,7 @@ import {
   getResizeCursor,
 } from "./hitTesting";
 import { createPanController } from "./panController";
+import { createTouchController } from "./touchController";
 import { createTransformController } from "./transformController";
 import { createDrawController } from "./drawController";
 import { createPencilController } from "./pencilController";
@@ -142,6 +143,11 @@ export function setupPixiInteraction(
 
   // Create all controllers
   const pan = createPanController(context);
+  const touch = createTouchController(context);
+
+  // Last real pointer event, used to release an in-flight single-finger
+  // interaction the moment a two-finger gesture takes over.
+  let lastPointerEvent: PointerEvent | null = null;
   const transform = createTransformController(context);
   const draw = createDrawController(context);
   const pencil = createPencilController(context);
@@ -204,6 +210,10 @@ export function setupPixiInteraction(
   }
 
   function handlePointerDown(e: PointerEvent): void {
+    lastPointerEvent = e;
+    // A two-finger touch gesture (pan/zoom) owns the canvas — ignore the
+    // per-finger pointer events it also emits.
+    if (touch.isGesturing()) return;
     const rect = canvas.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
@@ -304,6 +314,8 @@ export function setupPixiInteraction(
   }
 
   function handlePointerMove(e: PointerEvent): void {
+    lastPointerEvent = e;
+    if (touch.isGesturing()) return;
     const rect = canvas.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
@@ -541,6 +553,23 @@ export function setupPixiInteraction(
     pan.handleWheel(e);
   }
 
+  function handleTouchStart(e: TouchEvent): void {
+    const wasGesturing = touch.isGesturing();
+    if (touch.handleTouchStart(e) && !wasGesturing && lastPointerEvent) {
+      // The first finger may have started a drag/marquee before the second
+      // landed — release it so it doesn't commit while we pan/zoom.
+      handlePointerUp(lastPointerEvent);
+    }
+  }
+
+  function handleTouchMove(e: TouchEvent): void {
+    touch.handleTouchMove(e);
+  }
+
+  function handleTouchEnd(e: TouchEvent): void {
+    touch.handleTouchEnd(e);
+  }
+
   function handleKeyDown(e: KeyboardEvent): void {
     if (e.code === "Space" && !e.repeat) {
       isSpaceHeld = true;
@@ -559,7 +588,17 @@ export function setupPixiInteraction(
 
   // --- Event listeners ---
 
+  // Stop the browser from claiming touch gestures (page scroll / pinch-zoom)
+  // so two-finger pan/zoom reaches our handlers on iPad and phones.
+  canvas.style.touchAction = "none";
+
   canvas.addEventListener("wheel", handleWheel, { passive: false });
+  // Touch listeners must be non-passive so preventDefault can suppress the
+  // browser's native scroll/zoom during a two-finger gesture.
+  canvas.addEventListener("touchstart", handleTouchStart, { passive: false });
+  canvas.addEventListener("touchmove", handleTouchMove, { passive: false });
+  canvas.addEventListener("touchend", handleTouchEnd);
+  canvas.addEventListener("touchcancel", handleTouchEnd);
   canvas.addEventListener("pointerdown", handlePointerDown);
   canvas.addEventListener("pointermove", handlePointerMove);
   canvas.addEventListener("pointerup", handlePointerUp);
@@ -578,7 +617,12 @@ export function setupPixiInteraction(
     }
     pendingHoverWorld = null;
     pan.destroy();
+    touch.destroy();
     canvas.removeEventListener("wheel", handleWheel);
+    canvas.removeEventListener("touchstart", handleTouchStart);
+    canvas.removeEventListener("touchmove", handleTouchMove);
+    canvas.removeEventListener("touchend", handleTouchEnd);
+    canvas.removeEventListener("touchcancel", handleTouchEnd);
     canvas.removeEventListener("pointerdown", handlePointerDown);
     canvas.removeEventListener("pointermove", handlePointerMove);
     canvas.removeEventListener("pointerup", handlePointerUp);

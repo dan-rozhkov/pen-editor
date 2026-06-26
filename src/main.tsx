@@ -23,6 +23,9 @@ if (import.meta.env.DEV) {
   import('@/store/selectionStore').then(({ useSelectionStore }) => {
     (window as unknown as Record<string, unknown>).__selectionStore = useSelectionStore;
   });
+  import('@/store/viewportStore').then(({ useViewportStore }) => {
+    (window as unknown as Record<string, unknown>).__viewportStore = useViewportStore;
+  });
 }
 
 createRoot(document.getElementById('root')!).render(
