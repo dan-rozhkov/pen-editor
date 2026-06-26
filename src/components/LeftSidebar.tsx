@@ -3,12 +3,18 @@ import { ArrowsInLineVertical, SidebarSimple } from "@phosphor-icons/react";
 import { LayersPanel } from "./layers";
 import { ComponentsPanel } from "./ComponentsPanel";
 import { PagesPanel } from "./PagesPanel";
+import { ChatPanelContent } from "./chat/ChatPanel";
 import { Toolbar } from "./Toolbar";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 import { useSceneStore } from "@/store/sceneStore";
 import { useFloatingPanelsStore } from "@/store/floatingPanelsStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { usePageStore } from "@/store/pageStore";
+import { useLeftSidebarStore } from "@/store/leftSidebarStore";
+import { useChatStore } from "@/store/chatStore";
+
+const SECTION_TITLES: Record<string, string> = {
+  components: "Components",
+};
 
 function PagesPanelSection() {
   const hasPages = usePageStore((s) => s.pages.length > 0);
@@ -17,7 +23,8 @@ function PagesPanelSection() {
 }
 
 export function LeftSidebar() {
-  const [activeTab, setActiveTab] = useState("layers");
+  const activeSection = useLeftSidebarStore((s) => s.activeSection);
+  const isChatExpanded = useChatStore((s) => s.isExpanded);
   const collapseAllFrames = useSceneStore((s) => s.collapseAllFrames);
   const hasExpanded = useSceneStore((s) => s.expandedFrameIds.size > 0);
   const isFloating = useFloatingPanelsStore((s) => s.isFloating);
@@ -50,23 +57,32 @@ export function LeftSidebar() {
       className={
         isFloating
           ? "flex flex-col bg-surface-panel rounded-2xl shadow-[0_0px_3px_rgba(0,0,0,0.04)] border border-border-default overflow-hidden"
-          : "w-[240px] h-full flex flex-col bg-surface-panel border-r border-border-default"
+          : "w-[300px] h-full flex flex-col bg-surface-panel border-r border-border-default"
       }
     >
-      <div className={isFloating ? "flex flex-row items-center gap-1 px-2 py-0.5" : "flex flex-row items-center gap-0 pr-1"}>
-        <div className="flex-1 min-w-0">
-          <Toolbar />
+      {/* Agents has its own header (inside the chat); other sections share this one. */}
+      {activeSection !== "agents" && (
+        <div className={isFloating ? "flex flex-row items-center gap-1 px-2 py-0.5" : "flex flex-row items-center gap-0 pr-1"}>
+          <div className="flex-1 min-w-0">
+            {activeSection === "pages" ? (
+              <Toolbar />
+            ) : (
+              <span className="px-2 text-sm font-medium text-text-primary">
+                {SECTION_TITLES[activeSection]}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={toggleFloating}
+            className="p-1.5 rounded transition-colors text-text-muted hover:text-text-default hover:bg-surface-hover"
+            title={isFloating ? "Dock panels" : "Float panels"}
+            data-testid="sidebar-toggle"
+          >
+            <SidebarSimple size={16} />
+          </button>
         </div>
-        <button
-          onClick={toggleFloating}
-          className="p-1.5 rounded transition-colors text-text-muted hover:text-text-default hover:bg-surface-hover"
-          title={isFloating ? "Dock panels" : "Float panels"}
-          data-testid="sidebar-toggle"
-        >
-          <SidebarSimple size={16} />
-        </button>
-      </div>
-      {!isFloating && (
+      )}
+      {!isFloating && activeSection === "pages" && (
         <div className="px-2 pb-2">
           {isEditing ? (
             <input
@@ -89,31 +105,50 @@ export function LeftSidebar() {
           )}
         </div>
       )}
-      {!isFloating && <PagesPanelSection />}
       {!isFloating && (
-        <Tabs defaultValue="layers" className="flex-1 flex flex-col gap-0 overflow-hidden" onValueChange={setActiveTab}>
-          <div className="px-1 pt-1 pb-1 flex items-center justify-between">
-            <TabsList variant="pill">
-              <TabsTrigger value="layers">Layers</TabsTrigger>
-              <TabsTrigger value="components">Components</TabsTrigger>
-            </TabsList>
-            {activeTab === "layers" && hasExpanded && (
-              <button
-                onClick={collapseAllFrames}
-                className="p-1 rounded text-text-muted hover:text-text-default hover:bg-surface-hover transition-colors"
-                title="Collapse all"
-              >
-                <ArrowsInLineVertical size={14} />
-              </button>
-            )}
+        <div className="flex-1 relative overflow-hidden">
+          {/* Pages section: pages list + layer tree of the active page */}
+          {activeSection === "pages" && (
+            <div className="absolute inset-0 flex flex-col overflow-hidden">
+              <PagesPanelSection />
+              {hasExpanded && (
+                <div className="px-1 pt-1 pb-1 flex items-center justify-end">
+                  <button
+                    onClick={collapseAllFrames}
+                    className="p-1 rounded text-text-muted hover:text-text-default hover:bg-surface-hover transition-colors"
+                    title="Collapse all"
+                  >
+                    <ArrowsInLineVertical size={14} />
+                  </button>
+                </div>
+              )}
+              <div className="flex-1 overflow-hidden">
+                <LayersPanel />
+              </div>
+            </div>
+          )}
+
+          {/* Components section */}
+          {activeSection === "components" && (
+            <div className="absolute inset-0 flex flex-col overflow-hidden">
+              <ComponentsPanel />
+            </div>
+          )}
+
+          {/* Agents (chat) — always mounted so streams survive section switches.
+              Inline within the body, or fixed full-canvas overlay when expanded. */}
+          <div
+            className={
+              activeSection !== "agents"
+                ? "hidden"
+                : isChatExpanded
+                  ? "fixed top-0 left-14 right-0 bottom-0 z-50 flex flex-col bg-surface-panel"
+                  : "absolute inset-0 flex flex-col"
+            }
+          >
+            <ChatPanelContent />
           </div>
-          <TabsContent value="layers" className="flex-1 overflow-hidden">
-            <LayersPanel />
-          </TabsContent>
-          <TabsContent value="components" className="flex-1 overflow-hidden">
-            <ComponentsPanel />
-          </TabsContent>
-        </Tabs>
+        </div>
       )}
     </div>
   );

@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useVariableStore } from "@/store/variableStore";
+import { useVariablesDialogStore } from "@/store/variablesDialogStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useViewportStore } from "@/store/viewportStore";
 import type { SceneNode, FrameNode } from "@/types/scene";
@@ -174,7 +175,8 @@ export function PropertiesPanel() {
   const { selectedIds, instanceContext } = useSelectionStore();
   const variables = useVariableStore((s) => s.variables);
   const activeTool = useDrawModeStore((s) => s.activeTool);
-  const [variablesOpen, setVariablesOpen] = useState(false);
+  const variablesOpen = useVariablesDialogStore((s) => s.open);
+  const setVariablesOpen = useVariablesDialogStore((s) => s.setOpen);
 
   const selectedNode =
     selectedIds.length === 1 ? findNodeById(nodes, selectedIds[0]) : null;

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import type { UIMessage } from "ai";
 
 // --- Mock the chat hook so ChatPanel is driven by deterministic state ---
@@ -38,7 +38,7 @@ vi.mock("@/hooks/useModelOptions", () => ({
   ],
 }));
 
-import { ChatPanel } from "../ChatPanel";
+import { ChatPanelContent } from "../ChatPanel";
 import { useChatStore } from "@/store/chatStore";
 
 afterEach(() => cleanup());
@@ -51,9 +51,8 @@ beforeEach(() => {
     isLoading: false,
     error: undefined,
   };
-  // Single deterministic tab, panel open, vision model.
+  // Single deterministic tab, vision model.
   useChatStore.setState({
-    isOpen: true,
     isExpanded: false,
     model: "google/gemini-2.5-flash",
     tabs: [
@@ -70,15 +69,9 @@ beforeEach(() => {
   });
 });
 
-describe("<ChatPanel />", () => {
-  it("renders nothing when the panel is closed", () => {
-    act(() => useChatStore.setState({ isOpen: false }));
-    const { container } = render(<ChatPanel />);
-    expect(container.firstChild).toBeNull();
-  });
-
-  it("composes the header, message list and input when open", () => {
-    render(<ChatPanel />);
+describe("<ChatPanelContent />", () => {
+  it("composes the header, message list and input", () => {
+    render(<ChatPanelContent />);
     expect(screen.getByText("Design Agent")).toBeTruthy();
     // MessageList empty state
     expect(screen.getByText("Ask the design agent anything")).toBeTruthy();
@@ -95,14 +88,14 @@ describe("<ChatPanel />", () => {
         parts: [{ type: "text", text: "hi human" }],
       },
     ];
-    render(<ChatPanel />);
+    render(<ChatPanelContent />);
     expect(screen.getByText("hi agent")).toBeTruthy();
     expect(screen.getByText("hi human")).toBeTruthy();
   });
 
   it("wires the input submit through to submitLaunchPayload", () => {
     mockState.input = "do the thing";
-    render(<ChatPanel />);
+    render(<ChatPanelContent />);
     fireEvent.click(screen.getByTitle("Send"));
     expect(submitLaunchPayload).toHaveBeenCalledTimes(1);
     expect(submitLaunchPayload.mock.calls[0][0]).toMatchObject({
@@ -112,21 +105,21 @@ describe("<ChatPanel />", () => {
 
   it("shows an error banner and dismisses it via clearError", () => {
     mockState.error = new Error("stream blew up");
-    render(<ChatPanel />);
+    render(<ChatPanelContent />);
     expect(screen.getByText("stream blew up")).toBeTruthy();
     fireEvent.click(screen.getByLabelText("Dismiss error"));
     expect(clearError).toHaveBeenCalledTimes(1);
   });
 
   it("toggles the presets view from the header and renders presets", () => {
-    render(<ChatPanel />);
+    render(<ChatPanelContent />);
     fireEvent.click(screen.getByTestId("presets-toggle"));
     // Preset list replaces the message list.
     expect(screen.getByTestId("preset-list")).toBeTruthy();
   });
 
   it("selecting a preset seeds the input and mode/model", () => {
-    render(<ChatPanel />);
+    render(<ChatPanelContent />);
     fireEvent.click(screen.getByTestId("presets-toggle"));
     // Click the first preset (research-pricing has a stable id).
     fireEvent.click(screen.getByTestId("preset-research-pricing"));
@@ -136,7 +129,7 @@ describe("<ChatPanel />", () => {
 
   it("shows the Stop control while loading", () => {
     mockState.isLoading = true;
-    render(<ChatPanel />);
+    render(<ChatPanelContent />);
     expect(screen.getByTitle("Stop")).toBeTruthy();
     expect(screen.queryByTitle("Send")).toBeNull();
   });

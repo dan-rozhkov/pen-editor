@@ -1,10 +1,10 @@
 import { lazy, Suspense, useEffect } from "react";
 import { loadModels } from "./lib/chatModels";
 import { reconcileModels } from "./store/chatStore";
+import { LeftRail } from "./components/LeftRail";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { RightSidebar } from "./components/RightSidebar";
 import { PrimitivesPanel } from "./components/PrimitivesPanel";
-import { ChatPanel } from "./components/chat/ChatPanel";
 import { FpsDisplay } from "./components/canvas/CanvasOverlays";
 import { useUIVisibilityStore } from "./store/uiVisibilityStore";
 import { useFloatingPanelsStore } from "./store/floatingPanelsStore";
@@ -33,23 +33,21 @@ function App() {
       {/* UI panels — overlay on top of canvas */}
       {!isUIHidden && (
         <div className="absolute inset-0 flex flex-row pointer-events-none">
-          {/* Left sidebar */}
+          {/* Left rail + sidebar */}
           <div
             className={
               isFloating
-                ? "pointer-events-auto absolute left-5 top-5 z-20"
-                : "pointer-events-auto"
+                ? "pointer-events-auto absolute left-5 top-5 z-20 flex flex-row"
+                : "pointer-events-auto flex flex-row"
             }
           >
+            <LeftRail />
             <LeftSidebar />
           </div>
           {/* Center area */}
           <div className={isFloating ? "flex-1 h-full relative" : "flex-1 h-full relative"}>
             <div className="pointer-events-auto">
               <PrimitivesPanel />
-            </div>
-            <div className="pointer-events-auto">
-              <ChatPanel />
             </div>
             <FpsDisplay />
           </div>

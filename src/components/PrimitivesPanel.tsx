@@ -10,11 +10,9 @@ import {
   FlowArrow,
   type IconWeight,
   CaretDownIcon,
-  SparkleIcon,
   CodeIcon,
 } from "@phosphor-icons/react";
 import { useDrawModeStore, type DrawToolType } from "../store/drawModeStore";
-import { useChatStore } from "../store/chatStore";
 import { Button } from "./ui/button";
 import { ButtonGroup } from "./ui/button-group";
 import {
@@ -26,7 +24,6 @@ import {
 
 export function PrimitivesPanel() {
   const { activeTool, toggleTool, setActiveTool } = useDrawModeStore();
-  const { isOpen: isChatOpen, toggleOpen: toggleChat } = useChatStore();
 
   const leadingTools: Array<{
     icon: React.ComponentType<{
@@ -182,22 +179,6 @@ export function PrimitivesPanel() {
             </Button>
           );
         })}
-
-        <div className="w-px h-5 bg-border-default mx-0.5" />
-
-        <Button
-          onClick={toggleChat}
-          title="Design Agent"
-          variant="ghost"
-          size="lg"
-          className={`${toolButtonBaseClass} ${
-            isChatOpen
-              ? "bg-[#0d99ff] text-white hover:bg-[#0d99ff] hover:text-white"
-              : "text-text-primary hover:text-text-primary hover:bg-surface-hover dark:hover:bg-surface-hover"
-          }`}
-        >
-          <SparkleIcon size={40} className="size-6" weight="light" />
-        </Button>
       </div>
     </div>
   );

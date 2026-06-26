@@ -7,7 +7,6 @@ import {
   DotsThreeVerticalIcon,
 } from "@phosphor-icons/react";
 import { useChatStore } from "@/store/chatStore";
-import { useFloatingPanelsStore } from "@/store/floatingPanelsStore";
 import type { AgentMode, ChatTab, ParallelCount } from "@/store/chatStore";
 import { useDesignChat } from "@/hooks/useDesignChat";
 import { MessageList } from "./MessageList";
@@ -284,11 +283,9 @@ function ChatSession({
   );
 }
 
-export function ChatPanel() {
-  const isOpen = useChatStore((s) => s.isOpen);
+export function ChatPanelContent() {
   const isExpanded = useChatStore((s) => s.isExpanded);
   const toggleExpanded = useChatStore((s) => s.toggleExpanded);
-  const close = useChatStore((s) => s.close);
   const model = useChatStore((s) => s.model);
   const setModel = useChatStore((s) => s.setModel);
   const modelOptions = useModelOptions();
@@ -299,113 +296,85 @@ export function ChatPanel() {
   const tabs = useChatStore((s) => s.tabs);
   const activeTabId = useChatStore((s) => s.activeTabId);
   const [showPresets, setShowPresets] = useState(false);
-  const isFloating = useFloatingPanelsStore((s) => s.isFloating);
-
-  if (!isOpen) {
-    return null;
-  }
 
   return (
-    <div
-      className={
-        isFloating
-          ? `absolute top-5 right-5 bottom-5 z-50 pointer-events-none${isExpanded ? " left-5" : ""}`
-          : `absolute top-0 right-0 bottom-0 z-50 pointer-events-none${isExpanded ? " left-0" : ""}`
-      }
-    >
-      <div
-        className={
-          isFloating
-            ? `pointer-events-auto ${isExpanded ? "w-full" : "w-[360px]"} h-full bg-surface-panel rounded-2xl shadow-[0_0px_3px_rgba(0,0,0,0.04)] border border-border-default flex flex-col overflow-hidden`
-            : `pointer-events-auto ${isExpanded ? "w-full" : "w-[360px]"} h-full bg-surface-panel ${isExpanded ? "" : "border-l "}border-border-default flex flex-col`
-        }
-      >
-        {/* Header */}
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-border-default shrink-0">
-          <button
-            onClick={toggleExpanded}
-            className="p-1 rounded-lg hover:bg-surface-hover text-text-muted transition-colors"
-            title={isExpanded ? "Collapse panel" : "Expand panel"}
-          >
-            <ArrowLineLeftIcon
-              size={16}
-              className={isExpanded ? "rotate-180" : ""}
-            />
-          </button>
-          <span className="text-sm font-medium text-text-primary flex-1">
-            Design Agent
-          </span>
-          <button
-            data-testid="presets-toggle"
-            onClick={() => setShowPresets((v) => !v)}
-            className={`p-1 rounded-lg hover:bg-muted ${showPresets ? "text-text-primary bg-muted" : "text-text-muted"}`}
-            title={showPresets ? "Hide presets" : "Show presets"}
-          >
-            <LightningIcon size={16} />
-          </button>
-          <button
-            onClick={close}
-            className="p-1 rounded-lg hover:bg-surface-hover text-text-muted transition-colors"
-            title="Close"
-          >
-            <XIcon size={16} />
-          </button>
-        </div>
-
-        {/* Tab bar */}
-        {!showPresets && <TabBar />}
-
-        {/* Keep all sessions mounted so tab switch doesn't reset chat state */}
-        {tabs.map((tab: ChatTab) => (
-          <div
-            key={tab.id}
-            className={
-              tab.id === activeTabId ? "flex-1 min-h-0 flex flex-col" : "hidden"
-            }
-          >
-            <ChatSession
-              sessionId={tab.id}
-              showPresets={showPresets}
-              onClosePresets={() => setShowPresets(false)}
-            />
-          </div>
-        ))}
-
-        {/* Model selector */}
-        {!showPresets && (
-          <div className="px-3 pb-2 shrink-0 flex items-center gap-2">
-            <SelectWithOptions
-              value={agentMode}
-              options={MODE_OPTIONS}
-              onValueChange={(value) => setAgentMode(value as AgentMode)}
-              size="sm"
-              className="w-fit"
-            />
-            <SelectWithOptions
-              value={model}
-              options={modelOptions}
-              onValueChange={(value) => {
-                if (value) setModel(value);
-              }}
-              size="sm"
-              className="w-fit"
-            />
-            <SelectWithOptions
-              value={String(parallelCount)}
-              options={PARALLEL_COUNT_OPTIONS}
-              onValueChange={(value) => {
-                if (!value) return;
-                setParallelCount(Number(value) as ParallelCount);
-              }}
-              size="sm"
-              className="w-fit gap-1 pl-1.5 pr-1.5"
-              triggerPrefix={
-                <LightningIcon className="size-3 text-text-muted" />
-              }
-            />
-          </div>
-        )}
+    <div className="w-full h-full bg-surface-panel flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border-default shrink-0">
+        <button
+          onClick={toggleExpanded}
+          className="p-1 rounded-lg hover:bg-surface-hover text-text-muted transition-colors"
+          title={isExpanded ? "Collapse panel" : "Expand panel"}
+        >
+          <ArrowLineLeftIcon
+            size={16}
+            className={isExpanded ? "rotate-180" : ""}
+          />
+        </button>
+        <span className="text-sm font-medium text-text-primary flex-1">
+          Design Agent
+        </span>
+        <button
+          data-testid="presets-toggle"
+          onClick={() => setShowPresets((v) => !v)}
+          className={`p-1 rounded-lg hover:bg-muted ${showPresets ? "text-text-primary bg-muted" : "text-text-muted"}`}
+          title={showPresets ? "Hide presets" : "Show presets"}
+        >
+          <LightningIcon size={16} />
+        </button>
       </div>
+
+      {/* Tab bar */}
+      {!showPresets && <TabBar />}
+
+      {/* Keep all sessions mounted so tab switch doesn't reset chat state */}
+      {tabs.map((tab: ChatTab) => (
+        <div
+          key={tab.id}
+          className={
+            tab.id === activeTabId ? "flex-1 min-h-0 flex flex-col" : "hidden"
+          }
+        >
+          <ChatSession
+            sessionId={tab.id}
+            showPresets={showPresets}
+            onClosePresets={() => setShowPresets(false)}
+          />
+        </div>
+      ))}
+
+      {/* Model selector */}
+      {!showPresets && (
+        <div className="px-3 pb-2 shrink-0 flex items-center gap-2">
+          <SelectWithOptions
+            value={agentMode}
+            options={MODE_OPTIONS}
+            onValueChange={(value) => setAgentMode(value as AgentMode)}
+            size="sm"
+            className="w-fit"
+          />
+          <SelectWithOptions
+            value={model}
+            options={modelOptions}
+            onValueChange={(value) => {
+              if (value) setModel(value);
+            }}
+            size="sm"
+            className="w-fit"
+          />
+          <SelectWithOptions
+            value={String(parallelCount)}
+            options={PARALLEL_COUNT_OPTIONS}
+            onValueChange={(value) => {
+              if (!value) return;
+              setParallelCount(Number(value) as ParallelCount);
+            }}
+            size="sm"
+            className="w-fit gap-1 pl-1.5 pr-1.5"
+            triggerPrefix={<LightningIcon className="size-3 text-text-muted" />}
+          />
+        </div>
+      )}
     </div>
   );
 }

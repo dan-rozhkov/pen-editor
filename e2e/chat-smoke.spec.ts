@@ -96,8 +96,8 @@ test("AI chat streams a batch_design tool call, executes it locally and auto-con
 
   await page.goto("/");
 
-  // Open the chat panel via the Design Agent toggle in the primitives toolbar.
-  await page.getByTitle("Design Agent").click();
+  // Open the chat panel via the Agents item in the left rail.
+  await page.getByTestId("rail-agents").click();
   await expect(page.getByText("Design Agent", { exact: true })).toBeVisible();
 
   // Send a message (Enter submits).
@@ -159,6 +159,9 @@ test("AI chat streams a batch_design tool call, executes it locally and auto-con
 
   // ...and it shows up as a layer row in the LayersPanel (layer rows carry
   // data-node-id, which keeps this distinct from any chat-message text).
+  // The LayersPanel lives in the Pages section, so switch back to it from the
+  // Agents (chat) section first.
+  await page.getByTestId("rail-pages").click();
   await expect(
     page.locator("[data-node-id]").filter({ hasText: "SmokeTestFrame" })
   ).toBeVisible();

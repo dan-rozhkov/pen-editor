@@ -4,13 +4,14 @@ import { resetStores } from "@/test/fixtures";
 import { useFloatingPanelsStore } from "@/store/floatingPanelsStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { usePageStore } from "@/store/pageStore";
+import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 
 /**
  * LeftSidebar is a layout container composing the Toolbar, an editable file
- * name, the (conditional) PagesPanel, and a Layers/Components tab pair. We mock
- * the heavy child panels to identifiable shims so these tests assert
- * *composition* (which regions render for a given state), not the children's
- * own behaviour.
+ * name, and a body whose content is driven by the active rail section
+ * (pages | agents | components). We mock the heavy child panels to identifiable
+ * shims so these tests assert *composition* (which regions render for a given
+ * state), not the children's own behaviour.
  */
 
 vi.mock("../Toolbar", () => ({
@@ -24,6 +25,9 @@ vi.mock("../ComponentsPanel", () => ({
 }));
 vi.mock("../PagesPanel", () => ({
   PagesPanel: () => <div data-testid="pages-shim" />,
+}));
+vi.mock("../chat/ChatPanel", () => ({
+  ChatPanelContent: () => <div data-testid="chat-shim" />,
 }));
 
 import { LeftSidebar } from "../LeftSidebar";
@@ -52,25 +56,28 @@ describe("<LeftSidebar />", () => {
     resetStores();
     useFloatingPanelsStore.setState({ isFloating: false });
     useDocumentStore.setState({ fileName: null });
+    useLeftSidebarStore.setState({ activeSection: "pages" });
     setPages(1);
   });
 
   afterEach(() => {
     cleanup();
     useFloatingPanelsStore.setState({ isFloating: baselineFloating });
+    useLeftSidebarStore.setState({ activeSection: "pages" });
     usePageStore.setState({
       pages: baselinePages.pages,
       activePageId: baselinePages.activePageId,
     });
   });
 
-  it("renders the Toolbar and the layers/components tabs when docked", () => {
+  it("renders the Toolbar and the Pages section (pages + layers) by default", () => {
     render(<LeftSidebar />);
     expect(screen.getByTestId("toolbar-shim")).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "Layers" })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "Components" })).toBeTruthy();
-    // Layers is the default tab content.
+    // Pages section shows the pages list and the layer tree together.
+    expect(screen.getByTestId("pages-shim")).toBeTruthy();
     expect(screen.getByTestId("layers-shim")).toBeTruthy();
+    // Components content is not mounted in the pages section.
+    expect(screen.queryByTestId("components-shim")).toBeNull();
   });
 
   it("renders the PagesPanel section when there are pages", () => {
@@ -83,6 +90,8 @@ describe("<LeftSidebar />", () => {
     usePageStore.setState({ pages: [], activePageId: "" });
     render(<LeftSidebar />);
     expect(screen.queryByTestId("pages-shim")).toBeNull();
+    // Layers still renders within the pages section.
+    expect(screen.getByTestId("layers-shim")).toBeTruthy();
   });
 
   it("shows 'Untitled' for the file name when none is set", () => {
@@ -96,14 +105,14 @@ describe("<LeftSidebar />", () => {
     expect(screen.getByText("design")).toBeTruthy();
   });
 
-  it("collapses the floating layout to hide tabs, file name and pages", () => {
+  it("collapses the floating layout to hide the body, file name and pages", () => {
     useFloatingPanelsStore.setState({ isFloating: true });
     setPages(2);
     render(<LeftSidebar />);
 
     // Floating mode keeps only the toolbar row; the docked-only regions go away.
     expect(screen.getByTestId("toolbar-shim")).toBeTruthy();
-    expect(screen.queryByRole("tab", { name: "Layers" })).toBeNull();
+    expect(screen.queryByTestId("layers-shim")).toBeNull();
     expect(screen.queryByTestId("pages-shim")).toBeNull();
     expect(screen.queryByText("Untitled")).toBeNull();
   });
@@ -117,13 +126,12 @@ describe("<LeftSidebar />", () => {
     expect(useFloatingPanelsStore.getState().isFloating).toBe(true);
   });
 
-  it("switches to the Components tab content when its tab is clicked", () => {
+  it("renders the Components section when it is active", () => {
+    useLeftSidebarStore.setState({ activeSection: "components" });
     render(<LeftSidebar />);
-    expect(screen.queryByTestId("components-shim")).toBeNull();
-
-    fireEvent.click(screen.getByRole("tab", { name: "Components" }));
-
     expect(screen.getByTestId("components-shim")).toBeTruthy();
+    // Pages section content is not mounted while components is active.
+    expect(screen.queryByTestId("layers-shim")).toBeNull();
   });
 
   it("renames the document via the editable file name field", () => {
