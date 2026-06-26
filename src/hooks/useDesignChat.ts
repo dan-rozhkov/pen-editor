@@ -5,7 +5,7 @@ import {
   lastAssistantMessageIsCompleteWithToolCalls,
   type UIMessage,
 } from "ai";
-import { modelSupportsVision } from "@/lib/chatModels";
+import { modelSupportsVision, resolveModel } from "@/lib/chatModels";
 import { resolveApiUrl } from "@/lib/apiBase";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
@@ -65,7 +65,7 @@ export function buildCanvasContext(): object {
         themeValues: v.themeValues,
       })),
     }),
-    model,
+    model: resolveModel(model),
     agentMode,
   };
 }

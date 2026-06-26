@@ -15,6 +15,18 @@ export interface ChatModelOption {
   supportsVision: boolean;
 }
 
+// Sentinel selection that resolves to whatever the backend reports as its
+// default model (currently Gemini 2.5 Flash). Exposed as a synthetic "Auto"
+// option at the top of the list so the user doesn't have to track which
+// concrete model is the recommended default.
+export const AUTO_MODEL_VALUE = "auto";
+
+const AUTO_OPTION: ChatModelOption = {
+  value: AUTO_MODEL_VALUE,
+  label: "Auto",
+  supportsVision: true,
+};
+
 const FALLBACK_MODELS: ChatModelOption[] = [
   {
     value: "google/gemini-2.5-flash",
@@ -39,8 +51,9 @@ interface ModelsResponse {
   default: string;
 }
 
-let currentModels: ChatModelOption[] = FALLBACK_MODELS;
-let defaultModel: string = FALLBACK_MODELS[0].value;
+let currentModels: ChatModelOption[] = [AUTO_OPTION, ...FALLBACK_MODELS];
+// The concrete model that "Auto" resolves to — the backend's reported default.
+let autoTargetModel: string = FALLBACK_MODELS[0].value;
 const listeners = new Set<() => void>();
 
 function notify() {
@@ -51,15 +64,23 @@ export function getModelOptions(): ChatModelOption[] {
   return currentModels;
 }
 
+// The default selection is always "Auto"; it resolves to the backend default.
 export function getDefaultModel(): string {
-  return defaultModel;
+  return AUTO_MODEL_VALUE;
+}
+
+// Map a selected model value to the concrete id sent to the backend. Only
+// "Auto" is indirected; every other value passes through unchanged.
+export function resolveModel(model: string): string {
+  return model === AUTO_MODEL_VALUE ? autoTargetModel : model;
 }
 
 export function modelSupportsVision(model: string): boolean {
+  const resolved = resolveModel(model);
   // Unknown models (e.g. a custom OPENROUTER_MODEL not in the list) are assumed
   // vision-capable; the stripping is a safety net, not a hard gate.
   return (
-    currentModels.find((option) => option.value === model)?.supportsVision ??
+    currentModels.find((option) => option.value === resolved)?.supportsVision ??
     true
   );
 }
@@ -83,12 +104,15 @@ export function loadModels(): Promise<void> {
       if (!res.ok) return;
       const data = (await res.json()) as ModelsResponse;
       if (!Array.isArray(data.models) || data.models.length === 0) return;
-      currentModels = data.models.map((m) => ({
-        value: m.id,
-        label: m.label,
-        supportsVision: m.supportsVision,
-      }));
-      if (data.default) defaultModel = data.default;
+      currentModels = [
+        AUTO_OPTION,
+        ...data.models.map((m) => ({
+          value: m.id,
+          label: m.label,
+          supportsVision: m.supportsVision,
+        })),
+      ];
+      if (data.default) autoTargetModel = data.default;
       notify();
     } catch {
       // Network/parse error — keep the hardcoded fallback.

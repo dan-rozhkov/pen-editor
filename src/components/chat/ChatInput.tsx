@@ -124,6 +124,10 @@ export function ChatInput({
     if (!ta) return;
     ta.style.height = "auto";
     ta.style.height = `${Math.min(ta.scrollHeight, 96)}px`;
+    // Only show the scrollbar once content actually exceeds the max height;
+    // otherwise the default `overflow: auto` renders a scrollbar even at a
+    // single line due to line-height/subpixel rounding.
+    ta.style.overflowY = ta.scrollHeight > 96 ? "auto" : "hidden";
   }, []);
 
   useEffect(() => {
