@@ -122,7 +122,7 @@ export function LeftSidebar() {
             activeSection !== "agents"
               ? "hidden"
               : isChatExpanded
-                ? "fixed top-0 left-14 right-0 bottom-0 z-50 flex flex-col bg-surface-panel"
+                ? "fixed top-0 left-14 right-0 bottom-0 z-[60] flex flex-col bg-surface-panel"
                 : "absolute inset-0 flex flex-col"
           }
         >
