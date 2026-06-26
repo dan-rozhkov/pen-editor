@@ -57,7 +57,7 @@ export function LeftSidebar() {
         </div>
       )}
       {activeSection === "components" && (
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-border-default shrink-0">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-border-default shrink-0">
           <span className="text-sm font-medium text-text-primary flex-1">
             Components
           </span>
@@ -95,7 +95,7 @@ export function LeftSidebar() {
               <div className="px-1 pt-1 pb-1 flex items-center justify-end">
                 <button
                   onClick={collapseAllFrames}
-                  className="p-1 rounded text-text-muted hover:text-text-default hover:bg-surface-hover transition-colors"
+                  className="p-1 rounded text-text-muted hover:text-text-default hover:bg-secondary transition-colors"
                   title="Collapse all"
                 >
                   <ArrowsInLineVertical size={14} />

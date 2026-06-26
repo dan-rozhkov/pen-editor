@@ -161,7 +161,7 @@ export function ToolCallIndicator({ part }: ToolCallIndicatorProps) {
   };
 
   return (
-    <div className="my-2 px-2 py-1 rounded bg-surface-elevated/60">
+    <div className="my-2 px-2 py-1 rounded bg-secondary/60">
       <button
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1.5 w-full py-0.5 text-xs text-text-muted hover:text-text-secondary"

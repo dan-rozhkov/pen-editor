@@ -45,7 +45,7 @@ export function ImageFillEditor({
 
       {imageFill?.url ? (
         <div className="flex flex-col gap-2">
-          <div className="w-full h-20 rounded border border-border-light overflow-hidden bg-surface-elevated">
+          <div className="w-full h-20 rounded border border-border-light overflow-hidden bg-secondary">
             <img
               src={imageFill.url}
               alt="Fill preview"

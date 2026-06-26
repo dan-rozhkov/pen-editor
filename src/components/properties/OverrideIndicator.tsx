@@ -11,7 +11,7 @@ export function OverrideIndicator({
   return (
     <button
       onClick={onReset}
-      className="h-6 w-6 flex items-center justify-center rounded bg-surface-elevated text-text-muted hover:text-text-primary flex-shrink-0 transition-colors"
+      className="h-6 w-6 flex items-center justify-center rounded bg-secondary text-text-muted hover:text-text-primary flex-shrink-0 transition-colors"
       title="Reset to component value"
     >
       <ArrowCounterClockwise size={12} weight="bold" />

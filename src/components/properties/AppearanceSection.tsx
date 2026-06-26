@@ -108,7 +108,7 @@ export function AppearanceSection({
               "shrink-0 flex items-center justify-center w-6 h-6 rounded self-end",
               cornerMode === "per-corner"
                 ? "text-sky-600 bg-sky-100 hover:bg-sky-200"
-                : "text-text-muted hover:bg-surface-hover"
+                : "text-text-muted hover:bg-secondary"
             )}
             onClick={() => handleModeChange(cornerMode === "unified" ? "per-corner" : "unified")}
           >

@@ -67,7 +67,7 @@ describe("<PagesPanel />", () => {
     render(<PagesPanel />);
     const active = screen.getByText("Page 1").closest("div")!;
     const inactive = screen.getByText("Page 2").closest("div")!;
-    expect(active.className).toContain("bg-surface-elevated");
+    expect(active.className).toContain("bg-secondary");
     expect(active.className).toContain("font-medium");
     // Inactive row does not get the active font weight.
     expect(inactive.className).not.toContain("font-medium");

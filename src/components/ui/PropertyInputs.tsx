@@ -250,7 +250,7 @@ export function ColorInput({
       {availableVariables.length > 0 && onVariableChange && (
         <DropdownMenu>
           <DropdownMenuTrigger
-            className="h-6 w-6 flex items-center justify-center rounded bg-surface-elevated text-text-muted hover:text-text-primary transition-colors"
+            className="h-6 w-6 flex items-center justify-center rounded bg-secondary text-text-muted hover:text-text-primary transition-colors"
             title="Bind to variable"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -399,7 +399,7 @@ export function CheckboxInput({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="w-4 h-4 rounded bg-surface-elevated accent-accent-bright cursor-pointer"
+        className="w-4 h-4 rounded bg-secondary accent-accent-bright cursor-pointer"
       />
       <span>{label}</span>
     </Label>
@@ -435,7 +435,7 @@ export function SegmentedControl({
               className={`flex-1 px-2 py-1 text-[10px] transition-colors ${
                 value === opt.value
                   ? "bg-primary text-primary-foreground"
-                  : "bg-surface-elevated text-text-muted hover:bg-surface-hover"
+                  : "bg-secondary text-text-muted hover:bg-secondary"
               } ${
                 disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
               }`}
@@ -465,7 +465,7 @@ export function SegmentedControl({
             className={`flex-1 px-2 py-1 text-[10px] transition-colors ${
               value === opt.value
                 ? "bg-primary text-primary-foreground"
-                : "bg-surface-elevated text-text-muted hover:bg-surface-hover"
+                : "bg-secondary text-text-muted hover:bg-secondary"
             } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
             onClick={() => !disabled && onChange(opt.value)}
             disabled={disabled}

@@ -157,7 +157,7 @@ export function CustomColorPicker({
               {supportsEyeDropper && (
                 <button
                   type="button"
-                  className="h-6 w-6 flex items-center justify-center rounded-md text-text-secondary hover:bg-surface-hover hover:text-text-primary cursor-pointer shrink-0"
+                  className="h-6 w-6 flex items-center justify-center rounded-md text-text-secondary hover:bg-secondary hover:text-text-primary cursor-pointer shrink-0"
                   aria-label="Pick color from screen"
                   onClick={async () => {
                     try {

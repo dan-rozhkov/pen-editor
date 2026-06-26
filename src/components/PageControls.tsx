@@ -70,7 +70,7 @@ export function PageControls() {
           value={String(currentZoom)}
           onValueChange={handleZoomChange}
           options={zoomOptions}
-          className="w-auto min-w-0 border-transparent bg-transparent px-2 hover:bg-muted hover:text-foreground focus-visible:border-transparent focus-visible:ring-0"
+          className="w-auto min-w-0 border-transparent bg-transparent px-2 hover:bg-secondary hover:text-foreground focus-visible:border-transparent focus-visible:ring-0"
           size="sm"
         />
       </div>

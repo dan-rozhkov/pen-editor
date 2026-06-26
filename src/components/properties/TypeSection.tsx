@@ -51,7 +51,7 @@ export function TypeSection({ node, onUpdate, typeLabelOverride, slotNode }: Typ
                 }}
                 title={node.reusable ? "Detach Component" : "Create Component"}
                 aria-label={node.reusable ? "Detach Component" : "Create Component"}
-                className="p-1 rounded hover:bg-surface-elevated text-text-muted transition-colors relative"
+                className="p-1 rounded hover:bg-secondary text-text-muted transition-colors relative"
               >
                 {node.reusable ? (
                   <>
@@ -80,7 +80,7 @@ export function TypeSection({ node, onUpdate, typeLabelOverride, slotNode }: Typ
                 }}
                 title="Detach Instance"
                 aria-label="Detach Instance"
-                className="p-1 rounded hover:bg-surface-elevated text-text-muted transition-colors relative"
+                className="p-1 rounded hover:bg-secondary text-text-muted transition-colors relative"
               >
                 <Diamond size={16} />
                 <Minus size={8} weight="bold" className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />

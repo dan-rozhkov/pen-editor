@@ -85,7 +85,7 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
                   {/* Compact trigger: swatch + label opens the detail popover */}
                   <Popover>
                     <PopoverTrigger
-                      className="flex min-w-0 flex-1 items-center gap-2 rounded px-1.5 py-1 text-left hover:bg-surface-hover"
+                      className="flex min-w-0 flex-1 items-center gap-2 rounded px-1.5 py-1 text-left hover:bg-secondary"
                       title="Edit effect"
                     >
                       <div

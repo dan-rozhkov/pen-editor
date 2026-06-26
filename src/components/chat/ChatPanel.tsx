@@ -77,7 +77,7 @@ function TabBar() {
                   e.stopPropagation();
                   closeTab(tab.id);
                 }}
-                className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-surface-hover text-text-muted transition-opacity"
+                className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-secondary text-text-muted transition-opacity"
                 title="Close tab"
               >
                 <XIcon size={10} />
@@ -136,7 +136,7 @@ function PresetList({ onSelect }: { onSelect: (preset: ChatPreset) => void }) {
           key={preset.id}
           data-testid={`preset-${preset.id}`}
           onClick={() => onSelect(preset)}
-          className="text-left px-3 py-2.5 rounded-md border border-border-default hover:bg-muted"
+          className="text-left px-3 py-2.5 rounded-md border border-border-default hover:bg-secondary"
         >
           <span className="text-[13px] text-text-primary leading-snug block">
             {preset.message}
@@ -307,14 +307,14 @@ export function ChatPanelContent() {
         <button
           data-testid="presets-toggle"
           onClick={() => setShowPresets((v) => !v)}
-          className={`p-1 rounded-lg hover:bg-muted ${showPresets ? "text-text-primary bg-muted" : "text-text-muted"}`}
+          className={`p-1 rounded-lg hover:bg-secondary ${showPresets ? "text-text-primary bg-secondary" : "text-text-muted"}`}
           title={showPresets ? "Hide presets" : "Show presets"}
         >
           <LightningIcon size={16} />
         </button>
         <button
           onClick={toggleExpanded}
-          className="p-1 rounded-lg hover:bg-surface-hover text-text-muted transition-colors"
+          className="p-1 rounded-lg hover:bg-secondary text-text-muted transition-colors"
           title={isExpanded ? "Collapse panel" : "Expand panel"}
         >
           <ArrowLineLeftIcon

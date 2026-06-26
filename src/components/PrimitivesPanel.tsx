@@ -98,7 +98,7 @@ export function PrimitivesPanel() {
               className={`${toolButtonBaseClass} ${
                 isActive
                   ? "bg-[#0d99ff] text-white hover:bg-[#0d99ff] hover:text-white"
-                  : "text-text-primary hover:text-text-primary hover:bg-surface-hover dark:hover:bg-surface-hover"
+                  : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
               }`}
             >
               <Icon size={40} className="size-6" weight="light" />
@@ -116,7 +116,7 @@ export function PrimitivesPanel() {
               className={`${toolButtonBaseClass} ${
                 isRectangleActive
                   ? "bg-[#0d99ff] text-white hover:bg-[#0d99ff] hover:text-white"
-                  : "text-text-primary hover:text-text-primary hover:bg-surface-hover dark:hover:bg-surface-hover"
+                  : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
               }`}
             >
               <SquareIcon size={40} className="size-6" weight="light" />
@@ -130,7 +130,7 @@ export function PrimitivesPanel() {
                 className={`${toolButtonBaseClass} w-6 justify-center ${
                   isRectSubToolActive
                     ? "bg-[#0d99ff] text-white hover:bg-[#0d99ff] hover:text-white"
-                    : "text-text-primary hover:text-text-primary hover:bg-surface-hover dark:hover:bg-surface-hover"
+                    : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
                 }`}
               >
                 <CaretDownIcon size={12} className="size-3" weight="bold" />
@@ -172,7 +172,7 @@ export function PrimitivesPanel() {
               className={`${toolButtonBaseClass} ${
                 isActive
                   ? "bg-[#0d99ff] text-white hover:bg-[#0d99ff] hover:text-white"
-                  : "text-text-primary hover:text-text-primary hover:bg-surface-hover dark:hover:bg-surface-hover"
+                  : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
               }`}
             >
               <Icon size={40} className="size-6" weight="light" />

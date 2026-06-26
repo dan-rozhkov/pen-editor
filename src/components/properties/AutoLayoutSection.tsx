@@ -161,7 +161,7 @@ export function AutoLayoutSection({ node, onUpdate, mixedKeys }: AutoLayoutSecti
                       className={`h-6 rounded flex items-center justify-center ${
                         isActive
                           ? "bg-accent-selection text-text-primary"
-                          : "text-text-muted hover:bg-surface-hover"
+                          : "text-text-muted hover:bg-secondary"
                       } ${
                         showSpaceBetweenIcon ? "ring-2 ring-blue-400" : ""
                       }`}

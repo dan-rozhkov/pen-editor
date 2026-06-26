@@ -26,7 +26,7 @@ const tabsListVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-muted",
+        default: "bg-secondary",
         pill: "gap-0.5 bg-transparent",
         line: "gap-1 bg-transparent",
       },
@@ -62,7 +62,7 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
         // Vertical
         "group-data-vertical/tabs:py-[calc(--spacing(1.25))] group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start",
         // Default variant active
-        "data-active:bg-background data-active:text-foreground dark:data-active:text-foreground dark:data-active:border-input dark:data-active:bg-input/30",
+        "data-active:bg-background data-active:text-foreground dark:data-active:text-foreground dark:data-active:border-input dark:data-active:bg-secondary/30",
         // Line variant
         "group-data-[variant=line]/tabs-list:bg-transparent group-data-[variant=line]/tabs-list:data-active:bg-transparent dark:group-data-[variant=line]/tabs-list:data-active:border-transparent dark:group-data-[variant=line]/tabs-list:data-active:bg-transparent",
         // Line underline

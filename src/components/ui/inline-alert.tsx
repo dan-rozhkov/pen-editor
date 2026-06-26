@@ -75,7 +75,7 @@ function InlineAlert({
         <button
           type="button"
           onClick={onDismiss}
-          className="shrink-0 rounded p-0.5 text-text-muted hover:bg-surface-hover hover:text-text-primary"
+          className="shrink-0 rounded p-0.5 text-text-muted hover:bg-secondary hover:text-text-primary"
           aria-label={dismissLabel}
           title={dismissLabel}
         >

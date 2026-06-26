@@ -67,19 +67,19 @@ export function PagesPanel() {
 
   return (
     <div className="border-y border-border-default">
-      <div className="flex items-center justify-between pl-3 pr-1 pt-1.5 pb-1.5">
+      <div className="flex items-center justify-between px-4 py-3">
         <span className="text-xs font-medium text-secondary-foreground">
           Pages
         </span>
         <button
           onClick={() => addPage()}
-          className="p-0.5 rounded text-text-muted hover:text-text-default hover:bg-surface-hover"
+          className="p-0.5 rounded text-text-muted hover:text-text-default hover:bg-secondary"
           title="Add page"
         >
           <PlusIcon size={14} />
         </button>
       </div>
-      <div className="flex flex-col pt-0.5 pb-1.5">
+      <div className="flex flex-col gap-0.5 px-4 pt-1 pb-3">
         {pages.map((page, index) => (
           <div
             key={page.id}
@@ -95,10 +95,10 @@ export function PagesPanel() {
             }}
             onDoubleClick={() => handleStartRename(page.id)}
             className={clsx(
-              "group/page flex items-center h-7 pl-3 pr-1 text-xs cursor-default select-none",
+              "group/page flex items-center h-7 rounded-md pl-2 pr-1 text-xs cursor-default select-none",
               page.id === activePageId
-                ? "bg-surface-elevated text-text-default font-medium"
-                : "text-text-secondary hover:bg-surface-elevated",
+                ? "bg-secondary text-text-default font-medium"
+                : "text-text-secondary hover:bg-secondary",
               dropIndex === index &&
                 dragIndex !== null &&
                 dragIndex !== index &&
@@ -124,7 +124,7 @@ export function PagesPanel() {
                 <DropdownMenu>
                   <DropdownMenuTrigger
                     onClick={(e) => e.stopPropagation()}
-                    className="opacity-0 group-hover/page:opacity-100 data-popup-open:opacity-100 p-0.5 rounded text-text-muted hover:text-text-default hover:bg-surface-hover shrink-0"
+                    className="opacity-0 group-hover/page:opacity-100 data-popup-open:opacity-100 p-0.5 rounded text-text-muted hover:text-text-default hover:bg-secondary shrink-0"
                   >
                     <DotsThreeVertical size={14} weight="bold" />
                   </DropdownMenuTrigger>

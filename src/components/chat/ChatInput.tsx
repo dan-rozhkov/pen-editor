@@ -252,7 +252,7 @@ export function ChatInput({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`relative border-t border-border-default px-3 py-2 ${isDragOver ? "bg-surface-hover" : ""}`}
+      className={`relative border-t border-border-default px-3 py-2 ${isDragOver ? "bg-secondary" : ""}`}
     >
       {showSlashMenu && slashQuery !== null && (
         <SlashCommandMenu
@@ -277,7 +277,7 @@ export function ChatInput({
               <div
                 key={sel.nodeId}
                 title={sel.name}
-                className="relative group w-12 h-12 rounded-md overflow-hidden bg-surface-hover"
+                className="relative group w-12 h-12 rounded-md overflow-hidden bg-secondary"
               >
                 <img
                   src={sel.dataUrl}
@@ -337,7 +337,7 @@ export function ChatInput({
             !supportsVision ||
             visibleSelection.length + attachedImages.length >= MAX_IMAGES
           }
-          className="shrink-0 p-1.5 rounded-lg hover:bg-surface-hover text-text-muted disabled:text-text-disabled disabled:pointer-events-none transition-colors"
+          className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted disabled:text-text-disabled disabled:pointer-events-none transition-colors"
           title={
             !supportsVision
               ? "Selected model can't read images"
@@ -374,7 +374,7 @@ export function ChatInput({
           <button
             type="button"
             onClick={stop}
-            className="shrink-0 p-1.5 rounded-lg hover:bg-surface-hover text-text-muted transition-colors"
+            className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted transition-colors"
             title="Stop"
           >
             <StopIcon size={18} />
@@ -387,7 +387,7 @@ export function ChatInput({
               attachedImages.length === 0 &&
               visibleSelection.length === 0
             }
-            className="shrink-0 p-1.5 rounded-lg hover:bg-surface-hover text-text-muted disabled:text-text-disabled transition-colors"
+            className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted disabled:text-text-disabled transition-colors"
             title="Send"
           >
             <PaperPlaneRightIcon size={18} />

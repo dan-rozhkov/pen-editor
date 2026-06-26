@@ -21,7 +21,7 @@ import { PageProperties } from "@/components/properties/PageProperties";
 import { PencilToolProperties } from "@/components/properties/PencilToolProperties";
 import { PropertyEditor } from "@/components/properties/PropertyEditor";
 import { VariablesDialog } from "@/components/VariablesPanel";
-import { SlidersHorizontal, CaretRightIcon } from "@phosphor-icons/react";
+import { CaretRightIcon } from "@phosphor-icons/react";
 import clsx from "clsx";
 
 // Chevron icon for expand/collapse
@@ -139,7 +139,7 @@ function FramePresetsPanel() {
           <div key={group.category} className="mb-2">
             <button
               onClick={() => toggleCategory(group.category)}
-              className="w-full flex items-center gap-1 px-1 py-1 rounded hover:bg-surface-elevated text-left"
+              className="w-full flex items-center gap-1 px-1 py-1 rounded hover:bg-secondary text-left"
             >
               <ChevronIcon expanded={isExpanded} />
               <div className="text-[11px]">{group.category}</div>
@@ -150,7 +150,7 @@ function FramePresetsPanel() {
                   <button
                     key={`${preset.name}-${preset.width}x${preset.height}`}
                     onClick={() => handlePresetClick(preset)}
-                    className="w-full flex items-center justify-between px-2 py-1.5 rounded text-[11px] hover:bg-surface-elevated text-left"
+                    className="w-full flex items-center justify-between px-2 py-1.5 rounded text-[11px] hover:bg-secondary text-left"
                   >
                     <span className="text-text-primary truncate mr-2">
                       {preset.name}
@@ -213,22 +213,6 @@ export function PropertiesPanel() {
         {activeTool === "frame" && <FramePresetsPanel />}
         {selectedIds.length === 0 && activeTool !== "frame" && activeTool !== "pencil" && (
           <PageProperties />
-        )}
-        {selectedIds.length === 0 && (
-          <div className="px-4 py-3 border-b border-border-default">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-text-primary">
-                Variables
-              </span>
-              <button
-                onClick={() => setVariablesOpen(true)}
-                className="p-1 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
-                title="Open variables panel"
-              >
-                <SlidersHorizontal size={14} />
-              </button>
-            </div>
-          </div>
         )}
         {(selectedIds.length > 1 || (selectedIds.length === 1 && parentContext.parent && !parentContext.isInsideAutoLayout)) && (
           <AlignmentSection

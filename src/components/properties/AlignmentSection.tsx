@@ -90,7 +90,7 @@ export function AlignmentSection({
 
   const iconSize = 16;
   const buttonBaseClass = "p-2 rounded transition-colors";
-  const buttonClass = `${buttonBaseClass} bg-surface-elevated hover:bg-surface-hover text-text-muted hover:text-text-primary`;
+  const buttonClass = `${buttonBaseClass} bg-secondary hover:bg-secondary text-text-muted hover:text-text-primary`;
 
   return (
     <div className="flex flex-col gap-4">

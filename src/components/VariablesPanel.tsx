@@ -90,7 +90,7 @@ function EditableCell({
         onBlur={commit}
         onKeyDown={handleKeyDown}
         className={clsx(
-          "w-full bg-surface-elevated rounded px-2 py-1 text-xs text-text-primary outline-none",
+          "w-full bg-secondary rounded px-2 py-1 text-xs text-text-primary outline-none",
           className,
         )}
       />
@@ -100,7 +100,7 @@ function EditableCell({
   return (
     <span
       className={clsx(
-        "text-xs text-text-secondary truncate cursor-text hover:text-text-primary block px-2 py-1 rounded hover:bg-surface-elevated",
+        "text-xs text-text-secondary truncate cursor-text hover:text-text-primary block px-2 py-1 rounded hover:bg-secondary",
         className,
       )}
       onClick={() => {
@@ -173,7 +173,7 @@ function VariableRow({ variable }: { variable: Variable }) {
 
   return (
     <TableRow
-      className="border-border-light hover:bg-surface-elevated/50"
+      className="border-border-light hover:bg-secondary/50"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
@@ -297,7 +297,7 @@ export function VariablesDialog({ open, onOpenChange }: VariablesDialogProps) {
           <DialogTitle>Variables</DialogTitle>
           <AddVariableDropdown onAdd={handleAddVariable}>
             <button
-              className="p-1 rounded hover:bg-surface-elevated transition-colors text-text-muted hover:text-text-primary"
+              className="p-1 rounded hover:bg-secondary transition-colors text-text-muted hover:text-text-primary"
               title="Add variable"
             >
               <PlusIcon className="size-4" />

@@ -26,7 +26,7 @@ function RailButton({ testid, title, active, onClick, children }: RailButtonProp
       className={
         active
           ? "p-2 rounded-lg bg-accent-primary/10 text-accent-primary transition-colors"
-          : "p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-hover transition-colors"
+          : "p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-secondary transition-colors"
       }
     >
       {children}
@@ -51,7 +51,7 @@ export function LeftRail() {
   const openVariables = useVariablesDialogStore((s) => s.setOpen);
 
   return (
-    <div className="w-14 h-full flex flex-col items-center gap-2 py-4 bg-surface-panel border-r border-border-default">
+    <div className="w-14 h-full flex flex-col items-center gap-2 pt-2 pb-4 bg-surface-panel border-r border-border-default">
       {SECTIONS.map((item) => (
         <RailButton
           key={item.section}

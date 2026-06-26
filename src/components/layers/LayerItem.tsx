@@ -213,7 +213,7 @@ export const LayerItem = memo(function LayerItem({
           "group flex items-center cursor-pointer h-[28px]",
           isSelected
             ? "bg-accent-selection hover:bg-accent-selection/80"
-            : "hover:bg-surface-elevated",
+            : "hover:bg-secondary",
           isDragging && "opacity-50",
           isDropTarget &&
             dragState.dropPosition === "before" &&

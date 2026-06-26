@@ -59,7 +59,7 @@ function renderInline(text: string): React.ReactNode[] {
       parts.push(
         <code
           key={key++}
-          className="px-1 py-0.5 rounded bg-surface-elevated text-[0.85em] font-mono"
+          className="px-1 py-0.5 rounded bg-secondary text-[0.85em] font-mono"
         >
           {match[3]}
         </code>
@@ -233,7 +233,7 @@ export function SimpleMarkdown({ content }: SimpleMarkdownProps) {
         return (
           <pre
             key={i}
-            className="m-0 rounded bg-surface-elevated p-2 overflow-x-auto text-xs font-mono"
+            className="m-0 rounded bg-secondary p-2 overflow-x-auto text-xs font-mono"
           >
             <code>{block.text}</code>
           </pre>

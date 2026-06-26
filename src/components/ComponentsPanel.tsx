@@ -55,7 +55,7 @@ export function ComponentsPanel() {
 
   return (
     <div className="h-full bg-surface-panel flex flex-col select-none overflow-hidden">
-      <div className="flex-1 overflow-y-auto p-2">
+      <div className="flex-1 overflow-y-auto px-4 pt-3 pb-5">
         <div className="grid grid-cols-2 gap-2">
           {components.map((component) => {
             const thumb = thumbnails.get(component.id);
@@ -65,10 +65,10 @@ export function ComponentsPanel() {
                 onClick={() => createInstance(component)}
                 className={clsx(
                   "flex flex-col items-center gap-1 p-2 rounded-lg",
-                  "hover:bg-surface-elevated",
+                  "hover:bg-secondary",
                 )}
               >
-                <div className="aspect-square w-full bg-surface-elevated rounded-md flex items-center justify-center overflow-hidden">
+                <div className="aspect-square w-full bg-secondary rounded-md flex items-center justify-center overflow-hidden">
                   {thumb ? (
                     <img
                       src={thumb}
