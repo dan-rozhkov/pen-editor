@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useSceneStore } from "@/store/sceneStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useViewportStore } from "@/store/viewportStore";
@@ -22,32 +22,37 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
   const width = node?.width;
   const height = node?.height;
 
-  // Position/scale the host imperatively from the viewport (no React re-render).
+  // Position/scale the host imperatively from the scene + viewport (no React
+  // re-render). Geometry lives here — not in the inline style — so a React
+  // re-render (e.g. on active toggle) never clobbers the imperative values.
+  const position = useCallback(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const scene = useSceneStore.getState();
+    const n = scene.nodesById[nodeId] as EmbedNode | undefined;
+    if (!n) return;
+    const calc = useLayoutStore.getState().calculateLayoutForFrame;
+    const abs = getNodeAbsolutePositionWithLayout(scene.getNodes(), nodeId, calc);
+    if (!abs) return;
+    const { scale, x: panX, y: panY } = useViewportStore.getState();
+    const dpr = window.devicePixelRatio || 1;
+    const rect = embedScreenRect(abs.x, abs.y, n.width, n.height, scale, panX, panY, dpr);
+    host.style.left = `${rect.left}px`;
+    host.style.top = `${rect.top}px`;
+    host.style.width = `${rect.width}px`;
+    host.style.height = `${rect.height}px`;
+    const content = contentRef.current;
+    if (content) content.style.transform = `scale(${scale})`;
+  }, [nodeId]);
+
+  // Keep the host positioned as the scene, layout, or viewport changes.
   useEffect(() => {
-    const position = () => {
-      const host = hostRef.current;
-      const content = contentRef.current;
-      if (!host || !content) return;
-      const scene = useSceneStore.getState();
-      const n = scene.nodesById[nodeId] as EmbedNode | undefined;
-      if (!n) return;
-      const calc = useLayoutStore.getState().calculateLayoutForFrame;
-      const abs = getNodeAbsolutePositionWithLayout(scene.getNodes(), nodeId, calc);
-      if (!abs) return;
-      const { scale, x: panX, y: panY } = useViewportStore.getState();
-      const dpr = window.devicePixelRatio || 1;
-      const rect = embedScreenRect(abs.x, abs.y, n.width, n.height, scale, panX, panY, dpr);
-      host.style.left = `${rect.left}px`;
-      host.style.top = `${rect.top}px`;
-      host.style.width = `${rect.width}px`;
-      host.style.height = `${rect.height}px`;
-      content.style.transform = `scale(${scale})`;
-    };
     position();
     const unsubViewport = useViewportStore.subscribe(position);
     const unsubLayout = useLayoutStore.subscribe(position);
-    return () => { unsubViewport(); unsubLayout(); };
-  }, [nodeId]);
+    const unsubScene = useSceneStore.subscribe(position);
+    return () => { unsubViewport(); unsubLayout(); unsubScene(); };
+  }, [position]);
 
   // (Re)mount embed content into the shadow root on html/size/theme change.
   useEffect(() => {
@@ -67,11 +72,11 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
     shadow.appendChild(content);
     contentRef.current = content;
 
-    // Re-apply current scale to the freshly mounted content.
-    content.style.transform = `scale(${useViewportStore.getState().scale})`;
+    // Position now that content exists (applies the current scale transform).
+    position();
 
     return () => { contentRef.current = null; };
-  }, [nodeId, htmlContent, width, height]);
+  }, [position, nodeId, htmlContent, width, height]);
 
   if (!node) return null;
 
@@ -81,8 +86,6 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
       data-embed-id={nodeId}
       style={{
         position: "absolute",
-        left: 0,
-        top: 0,
         overflow: "hidden",
         pointerEvents: isActive ? "auto" : "none",
       }}
