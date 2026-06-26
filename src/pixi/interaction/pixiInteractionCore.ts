@@ -523,7 +523,7 @@ export function setupPixiInteraction(
           if (childNode?.type === "text") {
             useSelectionStore.getState().startEditing(childId);
           } else if (childNode?.type === "embed") {
-            useSelectionStore.getState().startEditing(childId, "embed");
+            useSelectionStore.getState().setActiveEmbed(childId);
           }
         }
         return;
@@ -542,7 +542,7 @@ export function setupPixiInteraction(
       // Enter text editing mode
       useSelectionStore.getState().startEditing(hitId);
     } else if (node.type === "embed") {
-      useSelectionStore.getState().startEditing(hitId, 'embed');
+      useSelectionStore.getState().setActiveEmbed(hitId);
     } else if (node.type === "frame" || node.type === "group") {
       // Enter container (fallback when no selected container context)
       useSelectionStore.getState().enterContainer(hitId);
