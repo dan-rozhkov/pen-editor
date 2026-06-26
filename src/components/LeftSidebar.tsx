@@ -12,10 +12,6 @@ import { usePageStore } from "@/store/pageStore";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import { useChatStore } from "@/store/chatStore";
 
-const SECTION_TITLES: Record<string, string> = {
-  components: "Components",
-};
-
 function PagesPanelSection() {
   const hasPages = usePageStore((s) => s.pages.length > 0);
   if (!hasPages) return null;
@@ -60,23 +56,32 @@ export function LeftSidebar() {
           : "w-[300px] h-full flex flex-col bg-surface-panel border-r border-border-default"
       }
     >
-      {/* Agents has its own header (inside the chat); other sections share this one. */}
-      {activeSection !== "agents" && (
+      {/* Pages keeps the File menu header; Agents has its own header (inside the
+          chat); Components gets a titled header styled like the chat's. */}
+      {activeSection === "pages" && (
         <div className={isFloating ? "flex flex-row items-center gap-1 px-2 py-0.5" : "flex flex-row items-center gap-0 pr-1"}>
           <div className="flex-1 min-w-0">
-            {activeSection === "pages" ? (
-              <Toolbar />
-            ) : (
-              <span className="px-2 text-sm font-medium text-text-primary">
-                {SECTION_TITLES[activeSection]}
-              </span>
-            )}
+            <Toolbar />
           </div>
           <button
             onClick={toggleFloating}
             className="p-1.5 rounded transition-colors text-text-muted hover:text-text-default hover:bg-surface-hover"
             title={isFloating ? "Dock panels" : "Float panels"}
             data-testid="sidebar-toggle"
+          >
+            <SidebarSimple size={16} />
+          </button>
+        </div>
+      )}
+      {activeSection === "components" && (
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-border-default shrink-0">
+          <span className="text-sm font-medium text-text-primary flex-1">
+            Components
+          </span>
+          <button
+            onClick={toggleFloating}
+            className="p-1 rounded-lg hover:bg-surface-hover text-text-muted transition-colors"
+            title={isFloating ? "Dock panels" : "Float panels"}
           >
             <SidebarSimple size={16} />
           </button>

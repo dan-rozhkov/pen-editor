@@ -301,16 +301,6 @@ export function ChatPanelContent() {
     <div className="w-full h-full bg-surface-panel flex flex-col overflow-hidden">
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border-default shrink-0">
-        <button
-          onClick={toggleExpanded}
-          className="p-1 rounded-lg hover:bg-surface-hover text-text-muted transition-colors"
-          title={isExpanded ? "Collapse panel" : "Expand panel"}
-        >
-          <ArrowLineLeftIcon
-            size={16}
-            className={isExpanded ? "rotate-180" : ""}
-          />
-        </button>
         <span className="text-sm font-medium text-text-primary flex-1">
           Design Agent
         </span>
@@ -321,6 +311,16 @@ export function ChatPanelContent() {
           title={showPresets ? "Hide presets" : "Show presets"}
         >
           <LightningIcon size={16} />
+        </button>
+        <button
+          onClick={toggleExpanded}
+          className="p-1 rounded-lg hover:bg-surface-hover text-text-muted transition-colors"
+          title={isExpanded ? "Collapse panel" : "Expand panel"}
+        >
+          <ArrowLineLeftIcon
+            size={16}
+            className={isExpanded ? "" : "rotate-180"}
+          />
         </button>
       </div>
 
