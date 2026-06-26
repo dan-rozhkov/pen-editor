@@ -244,7 +244,6 @@ export function ColorInput({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="#000000"
-          className="font-mono"
         />
       </InputGroup>
       {availableVariables.length > 0 && onVariableChange && (
