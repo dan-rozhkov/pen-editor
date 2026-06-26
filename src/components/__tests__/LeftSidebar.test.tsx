@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { resetStores } from "@/test/fixtures";
-import { useFloatingPanelsStore } from "@/store/floatingPanelsStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { usePageStore } from "@/store/pageStore";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
@@ -50,11 +49,9 @@ function setPages(count: number) {
 
 describe("<LeftSidebar />", () => {
   const baselinePages = usePageStore.getState();
-  const baselineFloating = useFloatingPanelsStore.getState().isFloating;
 
   beforeEach(() => {
     resetStores();
-    useFloatingPanelsStore.setState({ isFloating: false });
     useDocumentStore.setState({ fileName: null });
     useLeftSidebarStore.setState({ activeSection: "pages" });
     setPages(1);
@@ -62,7 +59,6 @@ describe("<LeftSidebar />", () => {
 
   afterEach(() => {
     cleanup();
-    useFloatingPanelsStore.setState({ isFloating: baselineFloating });
     useLeftSidebarStore.setState({ activeSection: "pages" });
     usePageStore.setState({
       pages: baselinePages.pages,
@@ -103,27 +99,6 @@ describe("<LeftSidebar />", () => {
     useDocumentStore.setState({ fileName: "design.pen" });
     render(<LeftSidebar />);
     expect(screen.getByText("design")).toBeTruthy();
-  });
-
-  it("collapses the floating layout to hide the body, file name and pages", () => {
-    useFloatingPanelsStore.setState({ isFloating: true });
-    setPages(2);
-    render(<LeftSidebar />);
-
-    // Floating mode keeps only the toolbar row; the docked-only regions go away.
-    expect(screen.getByTestId("toolbar-shim")).toBeTruthy();
-    expect(screen.queryByTestId("layers-shim")).toBeNull();
-    expect(screen.queryByTestId("pages-shim")).toBeNull();
-    expect(screen.queryByText("Untitled")).toBeNull();
-  });
-
-  it("toggles the floating panels store via the dock/float button", () => {
-    render(<LeftSidebar />);
-    expect(useFloatingPanelsStore.getState().isFloating).toBe(false);
-
-    fireEvent.click(screen.getByTestId("sidebar-toggle"));
-
-    expect(useFloatingPanelsStore.getState().isFloating).toBe(true);
   });
 
   it("renders the Components section when it is active", () => {

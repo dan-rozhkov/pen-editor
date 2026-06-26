@@ -7,14 +7,12 @@ import { RightSidebar } from "./components/RightSidebar";
 import { PrimitivesPanel } from "./components/PrimitivesPanel";
 import { FpsDisplay } from "./components/canvas/CanvasOverlays";
 import { useUIVisibilityStore } from "./store/uiVisibilityStore";
-import { useFloatingPanelsStore } from "./store/floatingPanelsStore";
 import "./store/uiThemeStore"; // Initialize UI theme (applies .dark class before first render)
 
 const PixiCanvas = lazy(() => import("./pixi/PixiCanvas").then((m) => ({ default: m.PixiCanvas })));
 
 function App() {
   const isUIHidden = useUIVisibilityStore((s) => s.isUIHidden);
-  const isFloating = useFloatingPanelsStore((s) => s.isFloating);
 
   // Pull the authoritative chat model list from the backend, then drop any saved
   // selection it no longer allows. Falls back to the hardcoded list on failure.
@@ -34,31 +32,19 @@ function App() {
       {!isUIHidden && (
         <div className="absolute inset-0 flex flex-row pointer-events-none">
           {/* Left rail + sidebar */}
-          <div
-            className={
-              isFloating
-                ? "pointer-events-auto absolute left-5 top-5 z-20 flex flex-row"
-                : "pointer-events-auto flex flex-row"
-            }
-          >
+          <div className="pointer-events-auto flex flex-row">
             <LeftRail />
             <LeftSidebar />
           </div>
           {/* Center area */}
-          <div className={isFloating ? "flex-1 h-full relative" : "flex-1 h-full relative"}>
+          <div className="flex-1 h-full relative">
             <div className="pointer-events-auto">
               <PrimitivesPanel />
             </div>
             <FpsDisplay />
           </div>
           {/* Right sidebar */}
-          <div
-            className={
-              isFloating
-                ? "pointer-events-auto absolute right-5 top-5 bottom-5 z-20"
-                : "pointer-events-auto"
-            }
-          >
+          <div className="pointer-events-auto">
             <RightSidebar />
           </div>
         </div>
