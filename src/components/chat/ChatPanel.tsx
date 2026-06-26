@@ -300,21 +300,21 @@ export function ChatPanelContent() {
   return (
     <div className="w-full h-full bg-surface-panel flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-border-default shrink-0">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border-default shrink-0">
         <span className="text-sm font-medium text-text-primary flex-1">
           Design Agent
         </span>
         <button
           data-testid="presets-toggle"
           onClick={() => setShowPresets((v) => !v)}
-          className={`p-1 rounded-lg hover:bg-secondary ${showPresets ? "text-text-primary bg-secondary" : "text-text-muted"}`}
+          className={`-my-0.5 p-1 rounded-lg hover:bg-secondary ${showPresets ? "text-text-primary bg-secondary" : "text-text-muted"}`}
           title={showPresets ? "Hide presets" : "Show presets"}
         >
           <LightningIcon size={16} />
         </button>
         <button
           onClick={toggleExpanded}
-          className="p-1 rounded-lg hover:bg-secondary text-text-muted transition-colors"
+          className="-my-0.5 p-1 rounded-lg hover:bg-secondary text-text-muted transition-colors"
           title={isExpanded ? "Collapse panel" : "Expand panel"}
         >
           <ArrowLineLeftIcon
