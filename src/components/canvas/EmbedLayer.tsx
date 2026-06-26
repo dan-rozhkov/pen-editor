@@ -101,7 +101,13 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
 export function EmbedLayer() {
   const nodesById = useSceneStore((s) => s.nodesById);
   const embedIds = useMemo(
-    () => Object.keys(nodesById).filter((id) => nodesById[id]?.type === "embed"),
+    () =>
+      Object.keys(nodesById).filter((id) => {
+        const n = nodesById[id];
+        // Render only visible, enabled embeds — mirrors the Pixi visibility
+        // rule (renderers/index.ts) so hiding a layer hides its DOM too.
+        return n?.type === "embed" && n.visible !== false && n.enabled !== false;
+      }),
     [nodesById],
   );
 

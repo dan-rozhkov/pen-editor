@@ -46,6 +46,25 @@ describe("<EmbedLayer />", () => {
     expect(host().style.pointerEvents).toBe("auto");
   });
 
+  it("does not render embeds hidden via visible:false or enabled:false", () => {
+    useSceneStore.setState({
+      nodesById: {
+        vis: { id: "vis", type: "embed", name: "Vis", x: 0, y: 0, width: 50, height: 50, htmlContent: "<p>v</p>" } as unknown as FlatSceneNode,
+        hid: { id: "hid", type: "embed", name: "Hid", x: 0, y: 0, width: 50, height: 50, htmlContent: "<p>h</p>", visible: false } as unknown as FlatSceneNode,
+        dis: { id: "dis", type: "embed", name: "Dis", x: 0, y: 0, width: 50, height: 50, htmlContent: "<p>d</p>", enabled: false } as unknown as FlatSceneNode,
+      },
+      parentById: { vis: null, hid: null, dis: null },
+      childrenById: {},
+      rootIds: ["vis", "hid", "dis"],
+      componentArtifactsById: {},
+      _cachedTree: null,
+    });
+    const { container } = render(<EmbedLayer />);
+    expect(container.querySelector('[data-embed-id="vis"]')).not.toBeNull();
+    expect(container.querySelector('[data-embed-id="hid"]')).toBeNull();
+    expect(container.querySelector('[data-embed-id="dis"]')).toBeNull();
+  });
+
   it("removes the host when the embed node is deleted", () => {
     const { container } = render(<EmbedLayer />);
     expect(container.querySelector('[data-embed-id="e1"]')).not.toBeNull();

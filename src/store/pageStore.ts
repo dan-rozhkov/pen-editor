@@ -297,6 +297,7 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
       enteredContainerId: null,
       enteredInstanceDescendantPath: null,
       lastSelectedId: null,
+      activeEmbedId: null,
     });
 
     set({

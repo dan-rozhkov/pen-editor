@@ -27,4 +27,30 @@ describe("selectionStore activeEmbedId", () => {
     useSelectionStore.getState().clearSelection();
     expect(useSelectionStore.getState().activeEmbedId).toBeNull();
   });
+
+  it("clears activeEmbedId on addToSelection / removeFromSelection", () => {
+    useSelectionStore.getState().setActiveEmbed("embed1");
+    useSelectionStore.getState().addToSelection("rect1");
+    expect(useSelectionStore.getState().activeEmbedId).toBeNull();
+
+    useSelectionStore.getState().setActiveEmbed("embed1");
+    useSelectionStore.getState().removeFromSelection("rect1");
+    expect(useSelectionStore.getState().activeEmbedId).toBeNull();
+  });
+
+  it("clears activeEmbedId on selectRange", () => {
+    useSelectionStore.getState().setActiveEmbed("embed1");
+    useSelectionStore.getState().selectRange("a", "c", ["a", "b", "c"]);
+    expect(useSelectionStore.getState().activeEmbedId).toBeNull();
+  });
+
+  it("clears activeEmbedId on stopEditing and exitContainer", () => {
+    useSelectionStore.getState().setActiveEmbed("embed1");
+    useSelectionStore.getState().stopEditing();
+    expect(useSelectionStore.getState().activeEmbedId).toBeNull();
+
+    useSelectionStore.getState().setActiveEmbed("embed1");
+    useSelectionStore.getState().exitContainer();
+    expect(useSelectionStore.getState().activeEmbedId).toBeNull();
+  });
 });

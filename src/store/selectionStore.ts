@@ -149,7 +149,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
         selectedIds: [...selectedIds, id],
       }
       saveSelectionHistoryIfChanged(current, next)
-      set({ selectedIds: [...selectedIds, id] })
+      set({ selectedIds: [...selectedIds, id], activeEmbedId: null })
     }
   },
 
@@ -161,7 +161,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       selectedIds: selectedIds.filter((sid) => sid !== id),
     }
     saveSelectionHistoryIfChanged(current, next)
-    set({ selectedIds: selectedIds.filter((sid) => sid !== id) })
+    set({ selectedIds: selectedIds.filter((sid) => sid !== id), activeEmbedId: null })
   },
 
   clearSelection: () => {
@@ -202,7 +202,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
         lastSelectedId: toId,
       }
       saveSelectionHistoryIfChanged(current, next)
-      set({ selectedIds: [toId], lastSelectedId: toId })
+      set({ selectedIds: [toId], lastSelectedId: toId, activeEmbedId: null })
       return
     }
 
@@ -223,7 +223,8 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       editingMode: null,
       editingInstanceId: null,
       instanceContext: null,
-      lastSelectedId: toId
+      lastSelectedId: toId,
+      activeEmbedId: null,
     })
   },
 
@@ -236,7 +237,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   },
 
   stopEditing: () => {
-    set({ editingNodeId: null, editingMode: null })
+    set({ editingNodeId: null, editingMode: null, activeEmbedId: null })
   },
 
   enterInstanceEditMode: (instanceId: string) => {
@@ -288,7 +289,12 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   },
 
   exitContainer: () => {
-    const { enteredContainerId, instanceContext, editingNodeId, enteredInstanceDescendantPath } = get()
+    const { enteredContainerId, instanceContext, editingNodeId, enteredInstanceDescendantPath, activeEmbedId } = get()
+    // Step 0: Exit an active (interactive) embed first
+    if (activeEmbedId) {
+      set({ activeEmbedId: null })
+      return true
+    }
     // Step 1: Stop editing
     if (editingNodeId) {
       set({ editingNodeId: null, editingMode: null })

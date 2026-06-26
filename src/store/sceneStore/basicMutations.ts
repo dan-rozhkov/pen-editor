@@ -330,6 +330,7 @@ export function createBasicMutations(set: SetState, get: GetState) {
             : null,
         editingNodeId: null,
         editingMode: null,
+        activeEmbedId: null,
       });
     },
 
