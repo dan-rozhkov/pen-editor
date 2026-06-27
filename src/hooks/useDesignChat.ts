@@ -12,6 +12,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useChatStore } from "@/store/chatStore";
+import type { AgentMode } from "@/store/chatStore";
 import { toolHandlers } from "@/lib/toolRegistry";
 import type { ChatLaunchPayload } from "@/types/chat";
 
@@ -23,8 +24,25 @@ export function resolveChatApiUrl(): string {
   return explicitApiUrl ?? resolveApiUrl("/api/chat");
 }
 
+// A session must use ITS OWN tab's model/agentMode rather than the global
+// active-tab values, which setActiveTab overwrites on every tab switch.
+// Without this, switching tabs while a background session streams hijacks that
+// session's auto-continuation request with the foreground tab's model/mode.
 // Exported for tests.
-export function buildCanvasContext(): object {
+export function resolveSessionConfig(sessionId?: string): {
+  model: string;
+  agentMode: AgentMode;
+} {
+  const { model, agentMode, tabs } = useChatStore.getState();
+  const tab = sessionId ? tabs.find((t) => t.id === sessionId) : undefined;
+  return {
+    model: tab?.model ?? model,
+    agentMode: tab?.agentMode ?? agentMode,
+  };
+}
+
+// Exported for tests.
+export function buildCanvasContext(sessionId?: string): object {
   const { selectedIds } = useSelectionStore.getState();
   const { rootIds, nodesById } = useSceneStore.getState();
   const { activeTheme } = useThemeStore.getState();
@@ -50,7 +68,7 @@ export function buildCanvasContext(): object {
     };
   });
 
-  const { model, agentMode } = useChatStore.getState();
+  const { model, agentMode } = resolveSessionConfig(sessionId);
 
   return {
     canvasContext: JSON.stringify({
@@ -142,9 +160,9 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     () =>
       new DefaultChatTransport({
         api: resolveChatApiUrl(),
-        body: () => buildCanvasContext(),
+        body: () => buildCanvasContext(sessionId),
         prepareSendMessagesRequest: ({ id, messages, body, trigger, messageId }) => {
-          const { model } = useChatStore.getState();
+          const { model } = resolveSessionConfig(sessionId);
           return {
             body: {
               ...body,
@@ -158,7 +176,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
           };
         },
       }),
-    []
+    [sessionId]
   );
 
   const chat = useChat({

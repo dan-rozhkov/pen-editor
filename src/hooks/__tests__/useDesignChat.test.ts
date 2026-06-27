@@ -185,6 +185,37 @@ describe("buildCanvasContext", () => {
     const canvas = JSON.parse(context.canvasContext);
     expect(canvas.selectedNodes).toEqual([{ id: "ghost" }]);
   });
+
+  // A streaming session must use ITS OWN tab's model/agentMode, not the global
+  // active-tab values — otherwise switching tabs mid-stream hijacks the
+  // background session's auto-continuation request with the wrong model/mode.
+  it("uses the session's own tab model/agentMode, not the active-tab global", () => {
+    useChatStore.setState({
+      // Global reflects whatever tab is currently active (tab-active).
+      model: "active/model",
+      agentMode: "research",
+      tabs: [
+        { id: "tab-active", title: "A", model: "active/model", agentMode: "research", parallelCount: 1 },
+        { id: "tab-bg", title: "B", model: "background/model", agentMode: "prototype", parallelCount: 1 },
+      ],
+      activeTabId: "tab-active",
+    });
+
+    const context = buildCanvasContext("tab-bg") as {
+      model: string;
+      agentMode: string;
+    };
+
+    expect(context.model).toBe("background/model");
+    expect(context.agentMode).toBe("prototype");
+  });
+
+  it("falls back to the global model/agentMode when no sessionId is given", () => {
+    useChatStore.setState({ model: "test/model-z", agentMode: "edits" });
+    const context = buildCanvasContext() as { model: string; agentMode: string };
+    expect(context.model).toBe("test/model-z");
+    expect(context.agentMode).toBe("edits");
+  });
 });
 
 describe("resolveChatApiUrl", () => {
@@ -215,6 +246,48 @@ describe("useDesignChat (hook + UI message stream)", () => {
       },
     });
   }
+
+  // Regression: a background (non-active) session must send requests with ITS
+  // OWN tab model — switching tabs (which moves the global model to the active
+  // tab) must not hijack a streaming background session's request.
+  it("sends with the session's own tab model, not the active-tab global", async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push(JSON.parse(String(init?.body)));
+      return sseResponse([
+        { type: "start" },
+        { type: "start-step" },
+        { type: "text-start", id: "t1" },
+        { type: "text-delta", id: "t1", delta: "ok" },
+        { type: "text-end", id: "t1" },
+        { type: "finish-step" },
+        { type: "finish" },
+      ]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    // The user is viewing tab-active; tab-bg is mid-conversation in the
+    // background. The global model reflects the active tab.
+    useChatStore.setState({
+      model: "active/model",
+      agentMode: "research",
+      tabs: [
+        { id: "tab-active", title: "A", model: "active/model", agentMode: "research", parallelCount: 1 },
+        { id: "tab-bg", title: "B", model: "background/model", agentMode: "prototype", parallelCount: 1 },
+      ],
+      activeTabId: "tab-active",
+    });
+
+    const { result } = renderHook(() => useDesignChat({ sessionId: "tab-bg" }));
+    act(() => result.current.setInput("continue in background"));
+    await act(async () => {
+      result.current.sendMessage();
+    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    expect(requests[0].model).toBe("background/model");
+    expect(requests[0].agentMode).toBe("prototype");
+  });
 
   it("executes a streamed tool call locally and sends the output back", async () => {
     const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
