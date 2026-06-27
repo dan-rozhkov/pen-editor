@@ -331,6 +331,7 @@ export function ChatPanelContent() {
       {tabs.map((tab: ChatTab) => (
         <div
           key={tab.id}
+          data-testid={`chat-session-${tab.id}`}
           className={
             tab.id === activeTabId ? "flex-1 min-h-0 flex flex-col" : "hidden"
           }
