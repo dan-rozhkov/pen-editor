@@ -40,9 +40,9 @@ const SECTIONS: {
   title: string;
   icon: ReactNode;
 }[] = [
-  { section: "pages", testid: "rail-pages", title: "Pages", icon: <FileIcon size={20} /> },
-  { section: "agents", testid: "rail-agents", title: "Agents", icon: <SparkleIcon size={20} /> },
-  { section: "components", testid: "rail-components", title: "Components", icon: <DiamondsFourIcon size={20} /> },
+  { section: "pages", testid: "rail-pages", title: "Pages", icon: <FileIcon size={20} weight="light" /> },
+  { section: "agents", testid: "rail-agents", title: "Agents", icon: <SparkleIcon size={20} weight="light" /> },
+  { section: "components", testid: "rail-components", title: "Components", icon: <DiamondsFourIcon size={20} weight="light" /> },
 ];
 
 export function LeftRail() {
@@ -69,7 +69,7 @@ export function LeftRail() {
         active={false}
         onClick={() => openVariables(true)}
       >
-        <PlusCircleIcon size={20} />
+        <PlusCircleIcon size={20} weight="light" />
       </RailButton>
     </div>
   );
