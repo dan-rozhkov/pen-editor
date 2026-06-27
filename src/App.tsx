@@ -24,8 +24,10 @@ function App() {
 
   return (
     <div className="w-full h-full relative overflow-hidden">
-      {/* Canvas — always full window, behind everything */}
-      <div className="absolute inset-0">
+      {/* Canvas — always full window, behind everything. `isolate` creates a
+          stacking context so the embed DOM overlay (and other canvas overlays,
+          which use positive z-index) stay trapped beneath the UI panels below. */}
+      <div className="absolute inset-0 isolate">
         <Suspense fallback={null}>
           <PixiCanvas />
         </Suspense>
