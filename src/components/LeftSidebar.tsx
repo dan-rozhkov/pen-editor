@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { ArrowsInLineVertical } from "@phosphor-icons/react";
+import { ArrowsInLineVertical, X } from "@phosphor-icons/react";
 import { LayersPanel } from "./layers";
 import { ComponentsPanel } from "./ComponentsPanel";
 import { PagesPanel } from "./PagesPanel";
@@ -10,6 +10,7 @@ import { useDocumentStore } from "@/store/documentStore";
 import { usePageStore } from "@/store/pageStore";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import { useChatStore } from "@/store/chatStore";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 function PagesPanelSection() {
   const hasPages = usePageStore((s) => s.pages.length > 0);
@@ -19,6 +20,9 @@ function PagesPanelSection() {
 
 export function LeftSidebar() {
   const activeSection = useLeftSidebarStore((s) => s.activeSection);
+  const isPanelOpen = useLeftSidebarStore((s) => s.isPanelOpen);
+  const setPanelOpen = useLeftSidebarStore((s) => s.setPanelOpen);
+  const isMobile = useIsMobile();
   const isChatExpanded = useChatStore((s) => s.isExpanded);
   const collapseAllFrames = useSceneStore((s) => s.collapseAllFrames);
   const hasExpanded = useSceneStore((s) => s.expandedFrameIds.size > 0);
@@ -45,8 +49,30 @@ export function LeftSidebar() {
     }
   };
 
+  // On mobile the panel is hidden until the rail opens it, then it covers the
+  // full screen width to the right of the rail. On desktop it is a fixed 300px
+  // column that is always visible.
+  if (isMobile && !isPanelOpen) return null;
+
   return (
-    <div className="w-[300px] h-full flex flex-col bg-surface-panel border-r border-border-default">
+    <div
+      className={
+        isMobile
+          ? "fixed top-0 left-14 right-0 bottom-0 z-50 flex flex-col bg-surface-panel border-l border-border-default"
+          : "w-[300px] h-full flex flex-col bg-surface-panel border-r border-border-default"
+      }
+    >
+      {isMobile && (
+        <div className="flex items-center justify-end px-2 py-2 shrink-0">
+          <button
+            onClick={() => setPanelOpen(false)}
+            className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-secondary transition-colors"
+            title="Close"
+          >
+            <X size={20} weight="light" />
+          </button>
+        </div>
+      )}
       {/* Pages keeps the File menu header; Agents has its own header (inside the
           chat); Components gets a titled header styled like the chat's. */}
       {activeSection === "pages" && (

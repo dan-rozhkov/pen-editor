@@ -7,12 +7,14 @@ import { RightSidebar } from "./components/RightSidebar";
 import { PrimitivesPanel } from "./components/PrimitivesPanel";
 import { FpsDisplay } from "./components/canvas/CanvasOverlays";
 import { useUIVisibilityStore } from "./store/uiVisibilityStore";
+import { useIsMobile } from "./hooks/useIsMobile";
 import "./store/uiThemeStore"; // Initialize UI theme (applies .dark class before first render)
 
 const PixiCanvas = lazy(() => import("./pixi/PixiCanvas").then((m) => ({ default: m.PixiCanvas })));
 
 function App() {
   const isUIHidden = useUIVisibilityStore((s) => s.isUIHidden);
+  const isMobile = useIsMobile();
 
   // Pull the authoritative chat model list from the backend, then drop any saved
   // selection it no longer allows. Falls back to the hardcoded list on failure.
@@ -36,17 +38,22 @@ function App() {
             <LeftRail />
             <LeftSidebar />
           </div>
-          {/* Center area */}
-          <div className="flex-1 h-full relative">
-            <div className="pointer-events-auto">
-              <PrimitivesPanel />
-            </div>
-            <FpsDisplay />
-          </div>
-          {/* Right sidebar */}
-          <div className="pointer-events-auto">
-            <RightSidebar />
-          </div>
+          {/* Center area — tools/right panel are hidden on mobile, which keeps
+              only the left rail (and its full-width overlay panel). */}
+          {!isMobile && (
+            <>
+              <div className="flex-1 h-full relative">
+                <div className="pointer-events-auto">
+                  <PrimitivesPanel />
+                </div>
+                <FpsDisplay />
+              </div>
+              {/* Right sidebar */}
+              <div className="pointer-events-auto">
+                <RightSidebar />
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

@@ -8,6 +8,7 @@ import {
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import type { LeftSection } from "@/store/leftSidebarStore";
 import { useVariablesDialogStore } from "@/store/variablesDialogStore";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 interface RailButtonProps {
   testid: string;
@@ -48,7 +49,25 @@ const SECTIONS: {
 export function LeftRail() {
   const activeSection = useLeftSidebarStore((s) => s.activeSection);
   const setActiveSection = useLeftSidebarStore((s) => s.setActiveSection);
+  const isPanelOpen = useLeftSidebarStore((s) => s.isPanelOpen);
+  const setPanelOpen = useLeftSidebarStore((s) => s.setPanelOpen);
   const openVariables = useVariablesDialogStore((s) => s.setOpen);
+  const isMobile = useIsMobile();
+
+  // On mobile the panel is a full-width overlay the rail toggles: tapping the
+  // active icon closes it, tapping another opens that section.
+  const handleSectionClick = (section: LeftSection) => {
+    if (isMobile) {
+      if (isPanelOpen && activeSection === section) {
+        setPanelOpen(false);
+      } else {
+        setActiveSection(section);
+        setPanelOpen(true);
+      }
+    } else {
+      setActiveSection(section);
+    }
+  };
 
   return (
     <div className="w-14 h-full flex flex-col items-center gap-2 pt-2 pb-4 bg-surface-panel border-r border-border-default">
@@ -57,8 +76,12 @@ export function LeftRail() {
           key={item.section}
           testid={item.testid}
           title={item.title}
-          active={activeSection === item.section}
-          onClick={() => setActiveSection(item.section)}
+          active={
+            isMobile
+              ? isPanelOpen && activeSection === item.section
+              : activeSection === item.section
+          }
+          onClick={() => handleSectionClick(item.section)}
         >
           {item.icon}
         </RailButton>
