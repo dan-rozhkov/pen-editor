@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { useSceneStore } from "./sceneStore";
 import { useSelectionStore } from "./selectionStore";
-import type { SceneNode } from "@/types/scene";
+import type { FlatSceneNode, SceneNode } from "@/types/scene";
 
 export type EditorMode = "edit" | "view" | "present";
 
@@ -28,12 +28,12 @@ export function canInteractCanvas(mode: EditorMode): boolean {
 
 /** Top-level frame ids ordered top-to-bottom, then left-to-right. */
 export function orderedFrameIds(
-  nodesById: Record<string, SceneNode>,
+  nodesById: Record<string, FlatSceneNode>,
   rootIds: string[],
 ): string[] {
   return rootIds
     .map((id) => nodesById[id])
-    .filter((n): n is SceneNode => !!n && n.type === "frame")
+    .filter((n): n is FlatSceneNode => !!n && n.type === "frame")
     .slice()
     .sort((a, b) => a.y - b.y || a.x - b.x)
     .map((n) => n.id);
@@ -50,7 +50,7 @@ export function presentFitNode(
 }
 
 function topLevelAncestorId(
-  parentById: Record<string, string | undefined>,
+  parentById: Record<string, string | null>,
   id: string,
 ): string {
   let cur = id;

@@ -1,6 +1,7 @@
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
+import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
 import { useSmartGuideStore } from "@/store/smartGuideStore";
 import { useHoverStore } from "@/store/hoverStore";
 import { useDragStore } from "@/store/dragStore";
@@ -349,6 +350,12 @@ export function createDragController(context: InteractionContext): DragControlle
           } else if (!wasAlreadySelected || currentSelectedIds.length <= 1) {
             selectionState.select(hitId);
           }
+        }
+
+        // View/present modes select but never arm a drag — return true so the
+        // caller does not fall through to marquee/move handling.
+        if (!canEditScene(useEditorModeStore.getState().mode)) {
+          return true;
         }
 
         // Cmd/Ctrl are selection modifiers - prevent drag

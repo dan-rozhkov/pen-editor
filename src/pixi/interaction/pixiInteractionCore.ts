@@ -6,6 +6,11 @@ import { useDrawModeStore } from "@/store/drawModeStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useViewportStore } from "@/store/viewportStore";
 import {
+  useEditorModeStore,
+  canEditScene,
+  canInteractCanvas,
+} from "@/store/editorModeStore";
+import {
   findNodeById,
   findDeepestChildAtPosition,
   getNodeAbsolutePositionWithLayout,
@@ -214,21 +219,26 @@ export function setupPixiInteraction(
     // A two-finger touch gesture (pan/zoom) owns the canvas — ignore the
     // per-finger pointer events it also emits.
     if (touch.isGesturing()) return;
+    const mode = useEditorModeStore.getState().mode;
+    // Present mode locks the canvas entirely.
+    if (!canInteractCanvas(mode)) return;
     const rect = canvas.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
     const world = screenToWorld(screenX, screenY);
 
-    // Priority 1: Pan (Space+click or middle-mouse)
+    // Priority 1: Pan (Space+click or middle-mouse) — allowed in edit and view.
     if (pan.handlePointerDown(e)) return;
 
-    // Priority 2: Transform (resize handles)
-    if (transform.handlePointerDown(e, world)) return;
-
-    // Priority 3: Drawing mode (pencil first, then connector, then standard draw)
-    if (pencil.handlePointerDown(e, world)) return;
-    if (connector.handlePointerDown(e, world)) return;
-    if (draw.handlePointerDown(e, world)) return;
+    // Priorities 2-3: scene-editing controllers only run in edit mode.
+    if (canEditScene(mode)) {
+      // Transform (resize handles)
+      if (transform.handlePointerDown(e, world)) return;
+      // Drawing mode (pencil first, then connector, then standard draw)
+      if (pencil.handlePointerDown(e, world)) return;
+      if (connector.handlePointerDown(e, world)) return;
+      if (draw.handlePointerDown(e, world)) return;
+    }
 
     // Priority 4: Drag (label or node)
     if (e.button === 0) {
@@ -261,8 +271,8 @@ export function setupPixiInteraction(
           .getState()
           .selectDescendant(hitTarget.instanceId, hitTarget.descendantPath);
 
-        // Check if this descendant is inside a replaced slot — allow drag
-        if (!e.metaKey && !e.ctrlKey) {
+        // Check if this descendant is inside a replaced slot — allow drag (edit only)
+        if (!e.metaKey && !e.ctrlKey && canEditScene(mode)) {
           const scState = useSceneStore.getState();
           const inst = scState.nodesById[hitTarget.instanceId] as RefNode | undefined;
           if (inst?.type === "ref") {
@@ -550,6 +560,7 @@ export function setupPixiInteraction(
   }
 
   function handleWheel(e: WheelEvent): void {
+    if (!canInteractCanvas(useEditorModeStore.getState().mode)) return;
     pan.handleWheel(e);
   }
 
