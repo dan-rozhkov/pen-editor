@@ -51,10 +51,12 @@ function App() {
       {/* UI panels — overlay on top of canvas */}
       {!isUIHidden && !isPresent && (
         <div className="absolute inset-0 flex flex-row pointer-events-none">
-          {/* Left rail + sidebar */}
+          {/* Left rail + sidebar — layers panel is read-only in view mode. */}
           <div className="pointer-events-auto flex flex-row">
             <LeftRail />
-            <LeftSidebar />
+            <ReadOnlyProvider value={isView}>
+              <LeftSidebar />
+            </ReadOnlyProvider>
           </div>
           {/* Center area — tools/right panel are hidden on mobile, which keeps
               only the left rail (and its full-width overlay panel). */}

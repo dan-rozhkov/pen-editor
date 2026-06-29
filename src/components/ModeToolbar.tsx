@@ -1,16 +1,14 @@
 import { EyeIcon, PlayIcon } from "@phosphor-icons/react";
 import clsx from "clsx";
-import { useEditorModeStore, orderedFrameIds } from "@/store/editorModeStore";
-import { useSceneStore } from "@/store/sceneStore";
+import { useEditorModeStore } from "@/store/editorModeStore";
+import { useHasFrames } from "@/hooks/useHasFrames";
 
 export function ModeToolbar() {
   const mode = useEditorModeStore((s) => s.mode);
   const enterView = useEditorModeStore((s) => s.enterView);
   const exitToEdit = useEditorModeStore((s) => s.exitToEdit);
   const enterPresent = useEditorModeStore((s) => s.enterPresent);
-  const hasFrames = useSceneStore(
-    (s) => orderedFrameIds(s.nodesById, s.rootIds).length > 0,
-  );
+  const hasFrames = useHasFrames();
 
   const isView = mode === "view";
 

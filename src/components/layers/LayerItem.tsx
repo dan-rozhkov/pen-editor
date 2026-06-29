@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { useSceneStore } from "../../store/sceneStore";
 import { useSelectionStore } from "../../store/selectionStore";
 import { useHoverStore } from "../../store/hoverStore";
+import { useReadOnly } from "@/hooks/useReadOnly";
 import type { SceneNode, FrameNode, GroupNode } from "../../types/scene";
 import { NodeIcon, EyeIcon, ChevronIcon } from "./LayerIcons";
 import { getDisplayName, selectionFromLayersRef } from "./layerTypes";
@@ -44,6 +45,7 @@ export const LayerItem = memo(function LayerItem({
   descendantPath,
 }: LayerItemProps) {
   const isRefDescendant = !!(instanceId && descendantPath);
+  const readOnly = useReadOnly();
   const isSelected = useSelectionStore((s) => {
     if (isRefDescendant) {
       return (
@@ -103,6 +105,7 @@ export const LayerItem = memo(function LayerItem({
 
   const handleVisibilityClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (readOnly) return;
     if (isRefDescendant) {
       const store = useSceneStore.getState();
       if (isVisible) {
@@ -121,7 +124,7 @@ export const LayerItem = memo(function LayerItem({
   };
 
   const handleDoubleClick = (e: React.MouseEvent) => {
-    if (isRefDescendant) return;
+    if (isRefDescendant || readOnly) return;
     e.stopPropagation();
     setEditName(getDisplayName(node));
     setIsEditing(true);
@@ -229,10 +232,10 @@ export const LayerItem = memo(function LayerItem({
         onClick={handleClick}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        draggable={!isRefDescendant}
-        onDragStart={isRefDescendant ? undefined : handleDragStart}
-        onDragOver={!isRefDescendant || isSlotDropTarget ? handleDragOver : undefined}
-        onDrop={!isRefDescendant || isSlotDropTarget ? handleDrop : undefined}
+        draggable={!isRefDescendant && !readOnly}
+        onDragStart={isRefDescendant || readOnly ? undefined : handleDragStart}
+        onDragOver={(!isRefDescendant || isSlotDropTarget) && !readOnly ? handleDragOver : undefined}
+        onDrop={(!isRefDescendant || isSlotDropTarget) && !readOnly ? handleDrop : undefined}
       >
         <div className="flex items-center gap-1 flex-1">
           {hasChildren ? (

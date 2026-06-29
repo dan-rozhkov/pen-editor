@@ -5,7 +5,8 @@ import { SelectWithOptions } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
-import { useEditorModeStore, orderedFrameIds } from "@/store/editorModeStore";
+import { useEditorModeStore } from "@/store/editorModeStore";
+import { useHasFrames } from "@/hooks/useHasFrames";
 
 const ZOOM_PRESETS = [25, 50, 75, 100, 125, 150, 200, 300];
 
@@ -26,9 +27,7 @@ export function PageControls() {
   const zoomAtPoint = useViewportStore((s) => s.zoomAtPoint);
   const fitToContent = useViewportStore((s) => s.fitToContent);
   const enterPresent = useEditorModeStore((s) => s.enterPresent);
-  const hasFrames = useSceneStore(
-    (s) => orderedFrameIds(s.nodesById, s.rootIds).length > 0,
-  );
+  const hasFrames = useHasFrames();
 
   const currentZoom = Math.round(scale * 100);
   const zoomOptions = useMemo(() => {

@@ -413,6 +413,9 @@ export function setupPixiInteraction(
   }
 
   function handleDblClick(e: MouseEvent): void {
+    // Double-click only starts inline editing (text/name/embed) — disabled
+    // outside edit mode so view/present stay read-only.
+    if (!canEditScene(useEditorModeStore.getState().mode)) return;
     const rect = canvas.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
@@ -565,6 +568,8 @@ export function setupPixiInteraction(
   }
 
   function handleTouchStart(e: TouchEvent): void {
+    // Present mode locks the canvas — block touch pan/zoom gestures too.
+    if (!canInteractCanvas(useEditorModeStore.getState().mode)) return;
     const wasGesturing = touch.isGesturing();
     if (touch.handleTouchStart(e) && !wasGesturing && lastPointerEvent) {
       // The first finger may have started a drag/marquee before the second

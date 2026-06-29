@@ -5,6 +5,7 @@ import type { EmbedNode } from "@/types/scene";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
+import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
 
 interface EmbedActionBarProps {
   node: EmbedNode;
@@ -18,6 +19,7 @@ export function EmbedActionBar({
   absoluteY,
 }: EmbedActionBarProps) {
   const [isConverting, setIsConverting] = useState(false);
+  const editorMode = useEditorModeStore((s) => s.mode);
   const scale = useViewportStore((s) => s.scale);
   const panX = useViewportStore((s) => s.x);
   const panY = useViewportStore((s) => s.y);
@@ -58,6 +60,10 @@ export function EmbedActionBar({
     },
     [isConverting, node.id],
   );
+
+  // The action bar only offers editing affordances (inline edit, convert) —
+  // hide it entirely in read-only view/present modes.
+  if (!canEditScene(editorMode)) return null;
 
   return (
     <div

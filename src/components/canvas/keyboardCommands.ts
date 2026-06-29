@@ -5,7 +5,7 @@ import {
 } from "@/types/scene";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useUIVisibilityStore } from "@/store/uiVisibilityStore";
-import { useEditorModeStore } from "@/store/editorModeStore";
+import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
 import { useConnectorStore } from "@/store/connectorStore";
 import { useDragStore } from "@/store/dragStore";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
@@ -114,6 +114,28 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
       e.preventDefault();
       useEditorModeStore.getState().enterPresent();
       return;
+    }
+
+    // Read-only (view) mode: allow only non-mutating commands and swallow every
+    // scene-editing shortcut (delete, nudge, group, grid, cut, undo/redo, edit).
+    // This is the single policy point for keyboard editing — keep it here rather
+    // than scattering canEditScene() guards across each command below.
+    if (!canEditScene(useEditorModeStore.getState().mode)) {
+      if (e.code === "Escape") {
+        e.preventDefault();
+        useEditorModeStore.getState().exitToEdit();
+        return;
+      }
+      const mod = e.metaKey || e.ctrlKey;
+      const allowed =
+        (mod && e.code === "KeyC") || // copy
+        (mod && e.code === "KeyA") || // select all
+        (mod && e.code === "Digit0") || // fit to content
+        (mod && e.code === "Backslash") || // toggle UI
+        e.code === "Space" || // pan
+        (e.key === "Enter" && e.shiftKey); // select parent frame
+      if (!allowed) return;
+      // Allowed read-only commands fall through to their handlers below.
     }
 
     if (e.key === "Enter" && !e.shiftKey) {
@@ -368,11 +390,6 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
     }
 
     if (e.code === "Escape") {
-      // View mode exits to edit before any selection/draw cancellation.
-      if (useEditorModeStore.getState().mode === "view") {
-        useEditorModeStore.getState().exitToEdit();
-        return;
-      }
       // Cancel auto-layout drag animation if in progress
       const dragCancelFn = useDragStore.getState().cancelDrag;
       if (dragCancelFn) {
