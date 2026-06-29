@@ -4,6 +4,7 @@ import { InlineNameEditor} from "@/components/InlineNameEditor";
 import { InlineTextEditor } from "@/components/InlineTextEditor";
 import { InlineEmbedEditor } from "@/components/InlineEmbedEditor";
 import { EmbedActionBar } from "@/components/canvas/EmbedActionBar";
+import { EmbedSelectionFrame } from "@/components/canvas/EmbedSelectionFrame";
 import { EmbedLayer } from "@/components/canvas/EmbedLayer";
 import type { EmbedNode, TextNode, InstanceOverrideUpdateProps } from "@/types/scene";
 import { useCanvasKeyboardShortcuts } from "@/components/canvas/useCanvasKeyboardShortcuts";
@@ -336,6 +337,15 @@ export function PixiCanvas() {
     >
       {/* Code layers rendered as live DOM above the Pixi canvas */}
       <EmbedLayer />
+      {/* Selection frame + resize handles mirrored as DOM above the embed
+          layer — the Pixi overlay is hidden behind the embed's HTML content. */}
+      {selectedEmbedNode && selectedEmbedPosition && editingMode !== "embed" && (
+        <EmbedSelectionFrame
+          node={selectedEmbedNode}
+          absoluteX={selectedEmbedPosition.x}
+          absoluteY={selectedEmbedPosition.y}
+        />
+      )}
       {selectedEmbedNode && selectedEmbedPosition && editingMode !== "embed" && (
         <EmbedActionBar
           node={selectedEmbedNode}

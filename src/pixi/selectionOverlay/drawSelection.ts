@@ -133,6 +133,17 @@ export function redrawSelection(
     return;
   }
 
+  // A single selected embed gets its outline + handles rendered as DOM
+  // (EmbedSelectionFrame, above the embed HTML layer) since the Pixi overlay
+  // is hidden behind the embed's content. Skip drawing them here to avoid a
+  // ghosted double set of handles. The size label below is still Pixi-drawn.
+  const singleEmbedId =
+    selectedIds.length === 1 &&
+    editingMode !== "embed" &&
+    state.nodesById[selectedIds[0]]?.type === "embed"
+      ? selectedIds[0]
+      : null;
+
   // Draw outline for each selected node
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 
@@ -145,11 +156,13 @@ export function redrawSelection(
     const drawRect = helpers.getNodeDrawRect(id);
     if (!drawRect) continue;
 
-    const color = helpers.getSelectionColor(id);
-    const outline = new Graphics();
-    outline.rect(drawRect.x, drawRect.y, drawRect.width, drawRect.height);
-    outline.stroke({ color, width: strokeWidth });
-    outlinesContainer.addChild(outline);
+    if (id !== singleEmbedId) {
+      const color = helpers.getSelectionColor(id);
+      const outline = new Graphics();
+      outline.rect(drawRect.x, drawRect.y, drawRect.width, drawRect.height);
+      outline.stroke({ color, width: strokeWidth });
+      outlinesContainer.addChild(outline);
+    }
 
     if (node.type === "text") {
       drawTextBaselines(
@@ -185,28 +198,30 @@ export function redrawSelection(
     outlinesContainer.addChild(multiOutline);
   }
 
-  // Transform handles at corners
-  const handleSizeWorld = HANDLE_SIZE / scale;
-  const halfHandle = handleSizeWorld / 2;
+  // Transform handles at corners (skipped for a single embed — DOM-rendered)
+  if (!singleEmbedId) {
+    const handleSizeWorld = HANDLE_SIZE / scale;
+    const halfHandle = handleSizeWorld / 2;
 
-  const corners = [
-    { x: minX, y: minY },
-    { x: maxX, y: minY },
-    { x: minX, y: maxY },
-    { x: maxX, y: maxY },
-  ];
+    const corners = [
+      { x: minX, y: minY },
+      { x: maxX, y: minY },
+      { x: minX, y: maxY },
+      { x: maxX, y: maxY },
+    ];
 
-  for (const corner of corners) {
-    const handle = new Graphics();
-    handle.rect(
-      corner.x - halfHandle,
-      corner.y - halfHandle,
-      handleSizeWorld,
-      handleSizeWorld,
-    );
-    handle.fill(HANDLE_FILL);
-    handle.stroke({ color: transformerColor, width: strokeWidth });
-    handlesContainer.addChild(handle);
+    for (const corner of corners) {
+      const handle = new Graphics();
+      handle.rect(
+        corner.x - halfHandle,
+        corner.y - halfHandle,
+        handleSizeWorld,
+        handleSizeWorld,
+      );
+      handle.fill(HANDLE_FILL);
+      handle.stroke({ color: transformerColor, width: strokeWidth });
+      handlesContainer.addChild(handle);
+    }
   }
 
   // Size label
