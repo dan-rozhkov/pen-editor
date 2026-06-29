@@ -5,7 +5,18 @@ import { embedScreenRect } from "./embedLayerGeometry";
 
 const SELECTION_COLOR = "#0d99ff";
 const COMPONENT_SELECTION_COLOR = "#8b5cf6";
-const HANDLE_SIZE = 8;
+// Mirror the Pixi overlay (drawSelection.ts): an 8px white handle fill with a
+// 1px stroke that is *centered* on the perimeter (Pixi's default stroke
+// alignment), plus a 1px outline stroke centered on the node edge. A centered
+// stroke straddles its path by half its width, so to reproduce it with CSS
+// (whose borders sit fully inside a border-box) we grow the element by the
+// stroke width and offset it by half the stroke. This makes the handle's outer
+// box HANDLE_BOX (9px) with a 7px white interior — matching Pixi exactly.
+const HANDLE_FILL_SIZE = 8;
+const STROKE_WIDTH = 1;
+const HANDLE_BOX = HANDLE_FILL_SIZE + STROKE_WIDTH;
+const HANDLE_OFFSET = HANDLE_BOX / 2;
+const STROKE_HALF = STROKE_WIDTH / 2;
 
 interface EmbedSelectionFrameProps {
   node: EmbedNode;
@@ -82,27 +93,38 @@ export function EmbedSelectionFrame({
         top: rect.top,
         width: rect.width,
         height: rect.height,
-        boxSizing: "border-box",
-        border: `1px solid ${color}`,
-        borderColor: color,
         pointerEvents: "none",
         zIndex: 11,
       }}
     >
+      {/* Outline: a 1px border centered on the node edge, matching Pixi's
+          centered stroke. Grown by STROKE_HALF on every side so the border band
+          straddles the edge instead of sitting inside it. */}
+      <div
+        data-embed-selection-outline
+        style={{
+          position: "absolute",
+          left: -STROKE_HALF,
+          top: -STROKE_HALF,
+          right: -STROKE_HALF,
+          bottom: -STROKE_HALF,
+          border: `${STROKE_WIDTH}px solid ${color}`,
+          boxSizing: "border-box",
+          pointerEvents: "none",
+        }}
+      />
       {corners.map((c, i) => (
         <div
           key={i}
           data-embed-selection-handle
           style={{
-            // Integer offsets (no CSS transform) keep the 1px border crisp —
-            // a translate() forces a composited layer that softens the edges.
             position: "absolute",
-            left: c.left - HANDLE_SIZE / 2,
-            top: c.top - HANDLE_SIZE / 2,
-            width: HANDLE_SIZE,
-            height: HANDLE_SIZE,
+            left: c.left - HANDLE_OFFSET,
+            top: c.top - HANDLE_OFFSET,
+            width: HANDLE_BOX,
+            height: HANDLE_BOX,
             background: "#ffffff",
-            border: `1px solid ${color}`,
+            border: `${STROKE_WIDTH}px solid ${color}`,
             boxSizing: "border-box",
             pointerEvents: "none",
           }}

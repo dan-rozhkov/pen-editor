@@ -52,8 +52,11 @@ describe("<EmbedSelectionFrame />", () => {
     const handles = frame.querySelectorAll("[data-embed-selection-handle]");
     expect(handles.length).toBe(4);
 
-    // default selection color
-    expect(frame.style.borderColor).toBe("#0d99ff");
+    // default selection color (rendered on the outline border)
+    const outline = frame.querySelector(
+      "[data-embed-selection-outline]",
+    ) as HTMLElement;
+    expect(outline.style.borderColor).toBe("#0d99ff");
   });
 
   it("is non-interactive so pointer events reach the Pixi canvas underneath", () => {
@@ -90,7 +93,10 @@ describe("<EmbedSelectionFrame />", () => {
     const frame = container.querySelector(
       "[data-embed-selection-frame]",
     ) as HTMLElement;
-    // component selection color
-    expect(frame.style.borderColor).toBe("#8b5cf6");
+    // component selection color (rendered on the outline border)
+    const outline = frame.querySelector(
+      "[data-embed-selection-outline]",
+    ) as HTMLElement;
+    expect(outline.style.borderColor).toBe("#8b5cf6");
   });
 });
