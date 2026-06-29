@@ -3,6 +3,7 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useHoverStore } from "@/store/hoverStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
+import { useEditorModeStore } from "@/store/editorModeStore";
 import { createOverlayHelpers } from "./helpers";
 import { redrawSelection } from "./drawSelection";
 import { redrawHover, cleanupSpacingPool } from "./drawHover";
@@ -115,6 +116,15 @@ export function createSelectionOverlay(
     scheduleSelectionRedraw(DIRTY_SELECTION | DIRTY_FRAME_NAMES);
   });
 
+  // Editor mode toggles whether transform handles are drawn — redraw on change.
+  let lastMode = useEditorModeStore.getState().mode;
+  const unsubMode = useEditorModeStore.subscribe(() => {
+    const mode = useEditorModeStore.getState().mode;
+    if (mode === lastMode) return;
+    lastMode = mode;
+    scheduleSelectionRedraw(DIRTY_SELECTION);
+  });
+
   // Viewport — synchronous to stay in sync with pixiViewport.ts transform.
   // Labels use 1/scale sizing; a 1-frame lag causes visible jitter.
   // Fix 2 (hide during zoom animation) handles the perf-critical path.
@@ -186,6 +196,7 @@ export function createSelectionOverlay(
     unsubHover();
     unsubScene();
     unsubViewport();
+    unsubMode();
     cleanupFrameNamePool();
     cleanupSpacingPool();
     outlinesContainer.destroy({ children: true });

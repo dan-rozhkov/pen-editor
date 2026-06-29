@@ -2,6 +2,7 @@ import { Container, Graphics, Text } from "pixi.js";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
+import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
 import type { FrameNode, TextNode } from "@/types/scene";
 import type { OverlayHelpers } from "./helpers";
 import { drawTextBaselines } from "./helpers";
@@ -198,8 +199,9 @@ export function redrawSelection(
     outlinesContainer.addChild(multiOutline);
   }
 
-  // Transform handles at corners (skipped for a single embed — DOM-rendered)
-  if (!singleEmbedId) {
+  // Transform handles at corners (skipped for a single embed — DOM-rendered).
+  // Hidden outside edit mode: view keeps the outline for inspection, no handles.
+  if (!singleEmbedId && canEditScene(useEditorModeStore.getState().mode)) {
     const handleSizeWorld = HANDLE_SIZE / scale;
     const halfHandle = handleSizeWorld / 2;
 
