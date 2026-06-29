@@ -16,6 +16,7 @@ import {
 import { FlipHorizontalIcon, FlipVerticalIcon } from "@phosphor-icons/react";
 import { CustomColorPicker } from "./ColorPicker";
 import { useScrubLabel } from "@/hooks/useScrubLabel";
+import { useReadOnly } from "@/hooks/useReadOnly";
 
 function formatVariableNameForDisplay(name: string): string {
   return name.trim().replace(/^\$/, "");
@@ -69,26 +70,30 @@ export function NumberInput({
   labelOutside = false,
   isMixed = false,
 }: NumberInputProps) {
+  const readOnly = useReadOnly();
   const scrub = useScrubLabel({ value, onChange, step, min, max });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (readOnly) return;
     const val = parseFloat(e.target.value);
     if (!isNaN(val)) {
       onChange(val);
     }
   };
 
+  const scrubMouseDown = readOnly ? undefined : scrub.onMouseDown;
   const displayValue = isMixed ? "" : Math.round(value * 100) / 100;
   const mixedProps = isMixed ? { placeholder: "Mixed" } : {};
 
   if (labelOutside && label) {
     return (
       <div className="flex-1 flex flex-col gap-1">
-        <Label className="text-[10px] font-normal" onMouseDown={scrub.onMouseDown} style={scrub.style}>{label}</Label>
+        <Label className="text-[10px] font-normal" onMouseDown={scrubMouseDown} style={scrub.style}>{label}</Label>
         <Input
           type="number"
           value={displayValue}
           onChange={handleChange}
+          readOnly={readOnly}
           min={min}
           max={max}
           step={step}
@@ -103,12 +108,13 @@ export function NumberInput({
       <div className="flex-1">
         <InputGroup>
           <InputGroupAddon align="inline-start">
-            <Label className="text-[11px] w-4 shrink-0" onMouseDown={scrub.onMouseDown} style={scrub.style}>{label}</Label>
+            <Label className="text-[11px] w-4 shrink-0" onMouseDown={scrubMouseDown} style={scrub.style}>{label}</Label>
           </InputGroupAddon>
           <InputGroupInput
             type="number"
             value={displayValue}
             onChange={handleChange}
+            readOnly={readOnly}
             min={min}
             max={max}
             step={step}
@@ -125,6 +131,7 @@ export function NumberInput({
         type="number"
         value={displayValue}
         onChange={handleChange}
+        readOnly={readOnly}
         min={min}
         max={max}
         step={step}
@@ -153,6 +160,7 @@ export function ColorInput({
   activeTheme = "light",
   isMixed = false,
 }: ColorInputProps) {
+  const readOnly = useReadOnly();
 
   // Find bound variable
   const boundVariable = variableId
@@ -165,6 +173,7 @@ export function ColorInput({
     : value || "#000000";
 
   const handleVariableSelect = (varId: string | undefined) => {
+    if (readOnly) return;
     if (onVariableChange) {
       onVariableChange(varId);
     }
@@ -172,6 +181,7 @@ export function ColorInput({
 
   const handleUnbind = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (readOnly) return;
     if (onVariableChange) {
       onVariableChange(undefined);
     }
@@ -237,12 +247,16 @@ export function ColorInput({
     <div className="flex items-center gap-2">
       <InputGroup className="flex-1">
         <InputGroupAddon align="inline-start">
-          <CustomColorPicker value={value || "#000000"} onChange={onChange} />
+          <CustomColorPicker
+            value={value || "#000000"}
+            onChange={(c) => !readOnly && onChange(c)}
+          />
         </InputGroupAddon>
         <InputGroupInput
           type="text"
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => !readOnly && onChange(e.target.value)}
+          readOnly={readOnly}
           placeholder="#000000"
         />
       </InputGroup>
@@ -297,13 +311,15 @@ export function TextInput({
   onChange,
   placeholder,
 }: TextInputProps) {
+  const readOnly = useReadOnly();
   return (
     <div className="flex flex-col gap-1">
       {label && <Label className="text-[10px]">{label}</Label>}
       <Input
         type="text"
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => !readOnly && onChange(e.target.value)}
+        readOnly={readOnly}
         placeholder={placeholder}
       />
     </div>
@@ -327,7 +343,9 @@ export function SelectInput({
   labelOutside = false,
   isMixed = false,
 }: SelectInputProps) {
+  const readOnly = useReadOnly();
   const handleChange = (val: string | null) => {
+    if (readOnly) return;
     if (val !== null) {
       onChange(val);
     }
@@ -392,12 +410,14 @@ export function CheckboxInput({
   checked,
   onChange,
 }: CheckboxInputProps) {
+  const readOnly = useReadOnly();
   return (
     <Label className="flex items-center gap-2 cursor-pointer">
       <input
         type="checkbox"
         checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
+        onChange={(e) => !readOnly && onChange(e.target.checked)}
+        disabled={readOnly}
         className="w-4 h-4 rounded bg-secondary accent-accent-bright cursor-pointer"
       />
       <span>{label}</span>
@@ -419,9 +439,11 @@ export function SegmentedControl({
   value,
   options,
   onChange,
-  disabled,
+  disabled: disabledProp,
   labelOutside = false,
 }: SegmentedControlProps) {
+  const readOnly = useReadOnly();
+  const disabled = disabledProp || readOnly;
   if (labelOutside && label) {
     return (
       <div className="flex-1 flex flex-col gap-1">
@@ -490,6 +512,7 @@ export function FlipControls({
   onFlipXChange,
   onFlipYChange,
 }: FlipControlsProps) {
+  const readOnly = useReadOnly();
   return (
     <ButtonGroup orientation="horizontal" className="w-full">
       <Button
@@ -497,6 +520,7 @@ export function FlipControls({
         size="sm"
         className="flex-1"
         onClick={() => onFlipXChange(!flipX)}
+        disabled={readOnly}
         title="Flip horizontal"
       >
         <FlipHorizontalIcon />
@@ -506,6 +530,7 @@ export function FlipControls({
         size="sm"
         className="flex-1"
         onClick={() => onFlipYChange(!flipY)}
+        disabled={readOnly}
         title="Flip vertical"
       >
         <FlipVerticalIcon />
