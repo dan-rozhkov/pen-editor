@@ -5,6 +5,7 @@ import {
 } from "@/types/scene";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useUIVisibilityStore } from "@/store/uiVisibilityStore";
+import { useEditorModeStore } from "@/store/editorModeStore";
 import { useConnectorStore } from "@/store/connectorStore";
 import { useDragStore } from "@/store/dragStore";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
@@ -73,7 +74,47 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
 
   return (e: KeyboardEvent) => {
     const isTyping = isTypingTarget(e);
+
+    // Present mode captures navigation keys before any editing shortcut.
+    const modeState = useEditorModeStore.getState();
+    if (modeState.mode === "present") {
+      if (e.code === "Escape") {
+        e.preventDefault();
+        modeState.exitToEdit();
+        return;
+      }
+      if (e.code === "ArrowRight" || e.code === "ArrowDown" || e.code === "Space") {
+        e.preventDefault();
+        modeState.nextFrame();
+        return;
+      }
+      if (e.code === "ArrowLeft" || e.code === "ArrowUp") {
+        e.preventDefault();
+        modeState.prevFrame();
+        return;
+      }
+      return; // present mode swallows all other keys
+    }
+
     const nodes = useSceneStore.getState().getNodes();
+
+    // Shift+V — toggle read-only view mode
+    if (e.code === "KeyV" && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (isTyping) return;
+      e.preventDefault();
+      const m = useEditorModeStore.getState();
+      if (m.mode === "view") m.exitToEdit();
+      else m.enterView();
+      return;
+    }
+
+    // Cmd/Ctrl+Enter — start present mode
+    if ((e.metaKey || e.ctrlKey) && e.code === "Enter") {
+      if (isTyping) return;
+      e.preventDefault();
+      useEditorModeStore.getState().enterPresent();
+      return;
+    }
 
     if (e.key === "Enter" && !e.shiftKey) {
       if (isTyping) return;
@@ -327,6 +368,11 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
     }
 
     if (e.code === "Escape") {
+      // View mode exits to edit before any selection/draw cancellation.
+      if (useEditorModeStore.getState().mode === "view") {
+        useEditorModeStore.getState().exitToEdit();
+        return;
+      }
       // Cancel auto-layout drag animation if in progress
       const dragCancelFn = useDragStore.getState().cancelDrag;
       if (dragCancelFn) {
