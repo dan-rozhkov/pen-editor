@@ -25,9 +25,9 @@ describe("<PageControls /> Play button", () => {
     expect(useEditorModeStore.getState().mode).toBe("present");
   });
 
-  it("disables Play when there are no frames", () => {
+  it("Play is always enabled, even with no frames", () => {
     useSceneStore.setState({ nodesById: {} as never, parentById: {}, childrenById: {}, rootIds: [] });
     render(<PageControls />);
-    expect((screen.getByTestId("page-present") as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId("page-present") as HTMLButtonElement).disabled).toBe(false);
   });
 });

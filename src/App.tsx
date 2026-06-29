@@ -5,7 +5,6 @@ import { LeftRail } from "./components/LeftRail";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { RightSidebar } from "./components/RightSidebar";
 import { PrimitivesPanel } from "./components/PrimitivesPanel";
-import { ModeToolbar } from "./components/ModeToolbar";
 import { PresentOverlay } from "./components/PresentOverlay";
 import { PresentController } from "./components/PresentController";
 import { ReadOnlyProvider } from "./components/ReadOnlyProvider";
@@ -29,6 +28,15 @@ function App() {
   // selection it no longer allows. Falls back to the hardcoded list on failure.
   useEffect(() => {
     loadModels().then(reconcileModels);
+  }, []);
+
+  // Read-only view mode is entered only via the `?view` URL parameter
+  // (e.g. ?view or ?view=1). There is no in-app toggle.
+  useEffect(() => {
+    const view = new URLSearchParams(window.location.search).get("view");
+    if (view !== null && view !== "0" && view !== "false") {
+      useEditorModeStore.getState().enterView();
+    }
   }, []);
 
   return (
@@ -70,9 +78,6 @@ function App() {
                   </div>
                 )}
                 <FpsDisplay />
-                <div className="pointer-events-auto">
-                  <ModeToolbar />
-                </div>
               </div>
               {/* Right sidebar — read-only in view mode (inspect, no edits). */}
               <div className="pointer-events-auto">

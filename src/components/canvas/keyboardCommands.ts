@@ -98,16 +98,6 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
 
     const nodes = useSceneStore.getState().getNodes();
 
-    // Shift+V — toggle read-only view mode
-    if (e.code === "KeyV" && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
-      if (isTyping) return;
-      e.preventDefault();
-      const m = useEditorModeStore.getState();
-      if (m.mode === "view") m.exitToEdit();
-      else m.enterView();
-      return;
-    }
-
     // Cmd/Ctrl+Enter — start present mode
     if ((e.metaKey || e.ctrlKey) && e.code === "Enter") {
       if (isTyping) return;

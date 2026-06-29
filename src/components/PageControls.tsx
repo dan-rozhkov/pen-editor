@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
-import { useHasFrames } from "@/hooks/useHasFrames";
 
 const ZOOM_PRESETS = [25, 50, 75, 100, 125, 150, 200, 300];
 
@@ -27,7 +26,6 @@ export function PageControls() {
   const zoomAtPoint = useViewportStore((s) => s.zoomAtPoint);
   const fitToContent = useViewportStore((s) => s.fitToContent);
   const enterPresent = useEditorModeStore((s) => s.enterPresent);
-  const hasFrames = useHasFrames();
 
   const currentZoom = Math.round(scale * 100);
   const zoomOptions = useMemo(() => {
@@ -83,13 +81,12 @@ export function PageControls() {
         <Button
           variant="default"
           size="sm"
-          className="ml-auto gap-1"
+          className="ml-auto gap-1.5 h-auto px-3 py-2 -my-2 bg-accent-primary text-white hover:bg-accent-primary/90"
           onClick={() => enterPresent()}
-          disabled={!hasFrames}
           title="Present (fullscreen)"
           data-testid="page-present"
         >
-          <PlayIcon size={14} weight="fill" />
+          <PlayIcon size={14} weight="light" />
           Play
         </Button>
       </div>
