@@ -43,6 +43,21 @@ const FALLBACK_MODELS: ChatModelOption[] = [
     label: "Minimax M3",
     supportsVision: true,
   },
+  {
+    value: "deepseek/deepseek-v4-flash",
+    label: "DeepSeek V4 Flash",
+    supportsVision: false,
+  },
+  {
+    value: "deepseek/deepseek-v4-pro",
+    label: "DeepSeek V4 Pro",
+    supportsVision: false,
+  },
+  {
+    value: "qwen/qwen3.7-plus",
+    label: "Qwen3.7 Plus",
+    supportsVision: true,
+  },
 ];
 
 // Backend wire shape (pen-editor-backend GET /api/models).
