@@ -26,6 +26,9 @@ if (import.meta.env.DEV) {
   import('@/store/viewportStore').then(({ useViewportStore }) => {
     (window as unknown as Record<string, unknown>).__viewportStore = useViewportStore;
   });
+  import('@/store/editorModeStore').then(({ useEditorModeStore }) => {
+    (window as unknown as Record<string, unknown>).__editorModeStore = useEditorModeStore;
+  });
 }
 
 createRoot(document.getElementById('root')!).render(

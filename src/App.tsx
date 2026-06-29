@@ -5,8 +5,13 @@ import { LeftRail } from "./components/LeftRail";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { RightSidebar } from "./components/RightSidebar";
 import { PrimitivesPanel } from "./components/PrimitivesPanel";
+import { ModeToolbar } from "./components/ModeToolbar";
+import { PresentOverlay } from "./components/PresentOverlay";
+import { PresentController } from "./components/PresentController";
+import { ReadOnlyProvider } from "./components/ReadOnlyProvider";
 import { FpsDisplay } from "./components/canvas/CanvasOverlays";
 import { useUIVisibilityStore } from "./store/uiVisibilityStore";
+import { useEditorModeStore } from "./store/editorModeStore";
 import { useIsMobile } from "./hooks/useIsMobile";
 import "./store/uiThemeStore"; // Initialize UI theme (applies .dark class before first render)
 
@@ -14,7 +19,11 @@ const PixiCanvas = lazy(() => import("./pixi/PixiCanvas").then((m) => ({ default
 
 function App() {
   const isUIHidden = useUIVisibilityStore((s) => s.isUIHidden);
+  const mode = useEditorModeStore((s) => s.mode);
   const isMobile = useIsMobile();
+
+  const isPresent = mode === "present";
+  const isView = mode === "view";
 
   // Pull the authoritative chat model list from the backend, then drop any saved
   // selection it no longer allows. Falls back to the hardcoded list on failure.
@@ -32,8 +41,15 @@ function App() {
           <PixiCanvas />
         </Suspense>
       </div>
+
+      {/* Keeps the present-mode frame fitted to the window; no-op otherwise. */}
+      <PresentController />
+
+      {/* Present mode hides all editor chrome and shows only the slide controls. */}
+      {isPresent && <PresentOverlay />}
+
       {/* UI panels — overlay on top of canvas */}
-      {!isUIHidden && (
+      {!isUIHidden && !isPresent && (
         <div className="absolute inset-0 flex flex-row pointer-events-none">
           {/* Left rail + sidebar */}
           <div className="pointer-events-auto flex flex-row">
@@ -45,14 +61,22 @@ function App() {
           {!isMobile && (
             <>
               <div className="flex-1 h-full relative">
-                <div className="pointer-events-auto">
-                  <PrimitivesPanel />
-                </div>
+                {/* Drawing tools are pointless in read-only view mode. */}
+                {!isView && (
+                  <div className="pointer-events-auto">
+                    <PrimitivesPanel />
+                  </div>
+                )}
                 <FpsDisplay />
+                <div className="pointer-events-auto">
+                  <ModeToolbar />
+                </div>
               </div>
-              {/* Right sidebar */}
+              {/* Right sidebar — read-only in view mode (inspect, no edits). */}
               <div className="pointer-events-auto">
-                <RightSidebar />
+                <ReadOnlyProvider value={isView}>
+                  <RightSidebar />
+                </ReadOnlyProvider>
               </div>
             </>
           )}
