@@ -1,8 +1,11 @@
 import { useMemo } from "react";
+import { PlayIcon } from "@phosphor-icons/react";
 
 import { SelectWithOptions } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
+import { useEditorModeStore, orderedFrameIds } from "@/store/editorModeStore";
 
 const ZOOM_PRESETS = [25, 50, 75, 100, 125, 150, 200, 300];
 
@@ -22,6 +25,10 @@ export function PageControls() {
   const scale = useViewportStore((s) => s.scale);
   const zoomAtPoint = useViewportStore((s) => s.zoomAtPoint);
   const fitToContent = useViewportStore((s) => s.fitToContent);
+  const enterPresent = useEditorModeStore((s) => s.enterPresent);
+  const hasFrames = useSceneStore(
+    (s) => orderedFrameIds(s.nodesById, s.rootIds).length > 0,
+  );
 
   const currentZoom = Math.round(scale * 100);
   const zoomOptions = useMemo(() => {
@@ -73,6 +80,19 @@ export function PageControls() {
           className="w-auto min-w-0 border-transparent bg-transparent px-2 hover:bg-secondary hover:text-foreground focus-visible:border-transparent focus-visible:ring-0"
           size="sm"
         />
+        {/* Primary "Play" button — opens fullscreen Present mode. */}
+        <Button
+          variant="default"
+          size="sm"
+          className="ml-auto gap-1"
+          onClick={() => enterPresent()}
+          disabled={!hasFrames}
+          title="Present (fullscreen)"
+          data-testid="page-present"
+        >
+          <PlayIcon size={14} weight="fill" />
+          Play
+        </Button>
       </div>
     </div>
   );
