@@ -1,7 +1,7 @@
 import {
   TextAaIcon,
   DatabaseIcon,
-  SparkleIcon,
+  ImageIcon,
   MagnifyingGlassIcon,
   type Icon,
 } from "@phosphor-icons/react";
@@ -38,11 +38,11 @@ export const FRAME_QUICK_ACTIONS: FrameQuickAction[] = [
       "Replace the placeholder text and content in this frame with realistic, plausible real-world data (real-sounding names, prices, dates, copy) that fits the design's purpose. Keep all styling, layout, spacing and fonts exactly as they are.",
   },
   {
-    id: "polish-design",
-    label: "Polish design",
-    icon: SparkleIcon,
+    id: "generate-image",
+    label: "Generate image",
+    icon: ImageIcon,
     prompt:
-      "Polish the visual design of this frame: refine spacing and padding, align elements onto a consistent grid, and tidy up the typographic hierarchy. Make small, safe improvements — keep the overall structure and intent intact.",
+      "Use the `generate_frame_image` tool to generate an image for this frame and set it as the frame's fill in a single step. First look at the attached frame to decide what imagery fits its purpose (e.g. a hero background, a product photo, a textured backdrop), then call `generate_frame_image` with a detailed prompt and this frame's id. Do NOT use `generate_image` + a manual fill, and do NOT use placeholder/stock images (no picsum) — the real generated image must land on the frame.",
   },
   {
     id: "find-references",
