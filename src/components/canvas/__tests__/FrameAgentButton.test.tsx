@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { FrameAgentButton } from "../FrameAgentButton";
+import { FRAME_QUICK_ACTIONS } from "../frameQuickActions";
 import type { FrameNode } from "@/types/scene";
 
 const mockLaunch = vi.fn();
@@ -92,5 +93,42 @@ describe("<FrameAgentButton />", () => {
     fireEvent.keyDown(screen.getByRole("textbox"), { key: "Escape" });
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(mockLaunch).not.toHaveBeenCalled();
+  });
+
+  it("renders all quick actions in the open composer", () => {
+    renderButton();
+    fireEvent.click(screen.getByTitle("Ask agent"));
+    for (const action of FRAME_QUICK_ACTIONS) {
+      expect(screen.getByRole("button", { name: action.label })).toBeTruthy();
+    }
+  });
+
+  it("launches a chat with the action's prompt and mode on click", () => {
+    renderButton();
+    fireEvent.click(screen.getByTitle("Ask agent"));
+    const research = FRAME_QUICK_ACTIONS.find((a) => a.mode === "research")!;
+    fireEvent.click(screen.getByRole("button", { name: research.label }));
+    expect(mockLaunch).toHaveBeenCalledWith(
+      "frame-1",
+      research.prompt,
+      research.mode,
+    );
+  });
+
+  it("passes undefined mode for actions without an explicit mode", () => {
+    renderButton();
+    fireEvent.click(screen.getByTitle("Ask agent"));
+    const noMode = FRAME_QUICK_ACTIONS.find((a) => !a.mode)!;
+    fireEvent.click(screen.getByRole("button", { name: noMode.label }));
+    expect(mockLaunch).toHaveBeenCalledWith("frame-1", noMode.prompt, undefined);
+  });
+
+  it("closes the composer after a quick action runs", () => {
+    renderButton();
+    fireEvent.click(screen.getByTitle("Ask agent"));
+    fireEvent.click(
+      screen.getByRole("button", { name: FRAME_QUICK_ACTIONS[0].label }),
+    );
+    expect(screen.queryByRole("textbox")).toBeNull();
   });
 });

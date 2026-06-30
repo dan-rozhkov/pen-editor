@@ -1,5 +1,5 @@
 import { captureNodeScreenshot } from "@/lib/captureNodeScreenshot";
-import { useChatStore } from "@/store/chatStore";
+import { useChatStore, type AgentMode } from "@/store/chatStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
@@ -11,10 +11,15 @@ import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
  * auto-send effect delivers it once ready), and reveals the agents panel.
  *
  * Returns false (no side effects) when the text is empty/whitespace.
+ *
+ * An optional `agentMode` pins the freshly created tab to a specific mode
+ * (e.g. "research" for reference-finding quick actions) without altering the
+ * user's saved default.
  */
 export async function launchFrameAgentChat(
   frameId: string,
   text: string,
+  agentMode?: AgentMode,
 ): Promise<boolean> {
   const trimmed = text.trim();
   if (!trimmed) return false;
@@ -28,6 +33,7 @@ export async function launchFrameAgentChat(
   const payload: ChatLaunchPayload = { text: trimmed, images };
 
   const tabId = useChatStore.getState().createTab();
+  if (agentMode) useChatStore.getState().setTabAgentMode(tabId, agentMode);
   useChatStore.getState().queueLaunchPayload(tabId, payload);
   // Reveal the agents section AND open the panel: on a narrow (mobile) layout
   // LeftSidebar unmounts entirely while collapsed, which would leave the queued

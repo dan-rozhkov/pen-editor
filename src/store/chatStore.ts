@@ -46,6 +46,12 @@ interface ChatState {
   closeTab: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
   setTabTitle: (tabId: string, title: string) => void;
+  /**
+   * Set a single tab's agent mode without touching the persisted global
+   * default. Used by on-canvas quick actions that need a specific mode
+   * (e.g. research) for one launched chat only.
+   */
+  setTabAgentMode: (tabId: string, mode: AgentMode) => void;
   queueLaunchPayload: (tabId: string, payload: ChatLaunchPayload) => void;
   consumeLaunchPayload: (tabId: string) => ChatLaunchPayload | undefined;
 
@@ -244,6 +250,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setTabTitle: (tabId: string, title: string) => {
     set((s) => ({
       tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, title } : t)),
+    }));
+  },
+
+  setTabAgentMode: (tabId, mode) => {
+    set((s) => ({
+      tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, agentMode: mode } : t)),
+      // Mirror onto the global field only while this tab is active, so the
+      // mode selector reflects reality. localStorage (the saved default) is
+      // intentionally left untouched.
+      agentMode: s.activeTabId === tabId ? mode : s.agentMode,
     }));
   },
 

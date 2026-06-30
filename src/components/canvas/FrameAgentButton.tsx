@@ -5,6 +5,10 @@ import type { FrameNode } from "@/types/scene";
 import { useViewportStore } from "@/store/viewportStore";
 import { embedScreenRect } from "@/components/canvas/embedLayerGeometry";
 import { launchFrameAgentChat } from "@/lib/launchFrameAgentChat";
+import {
+  FRAME_QUICK_ACTIONS,
+  type FrameQuickAction,
+} from "@/components/canvas/frameQuickActions";
 
 interface FrameAgentButtonProps {
   node: FrameNode;
@@ -66,6 +70,15 @@ export function FrameAgentButton({
     setOpen(false);
   }, [text, node.id]);
 
+  const runQuickAction = useCallback(
+    (action: FrameQuickAction) => {
+      void launchFrameAgentChat(node.id, action.prompt, action.mode);
+      setText("");
+      setOpen(false);
+    },
+    [node.id],
+  );
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Enter" && !e.shiftKey) {
@@ -101,27 +114,51 @@ export function FrameAgentButton({
           <SparkleIcon className="size-3.5" weight="fill" />
         </Button>
       ) : (
-        <div className="flex w-72 items-end gap-1.5 rounded-xl border border-border-default bg-surface-panel/95 p-1.5 shadow-[0_0px_3px_rgba(0,0,0,0.04)]">
-          <textarea
-            ref={textareaRef}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            rows={2}
-            placeholder="Ask the agent about this frame…"
-            className="flex-1 resize-none bg-transparent px-1.5 py-1 text-[13px] text-text-primary outline-none placeholder:text-text-muted"
-          />
-          <Button
-            variant="default"
-            size="icon-sm"
-            className="size-5 shrink-0 rounded-lg bg-accent-primary text-white hover:bg-accent-primary/90"
-            title="Send"
-            aria-label="Send"
-            disabled={!canSend}
-            onClick={submit}
-          >
-            <ArrowUpIcon className="size-3" weight="regular" />
-          </Button>
+        <div className="flex w-72 flex-col gap-1 rounded-xl border border-border-default bg-surface-panel/95 p-1.5 shadow-[0_0px_3px_rgba(0,0,0,0.04)]">
+          <div className="flex items-end gap-1.5">
+            <textarea
+              ref={textareaRef}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={2}
+              placeholder="Ask the agent about this frame…"
+              className="flex-1 resize-none bg-transparent px-1.5 py-1 text-[13px] text-text-primary outline-none placeholder:text-text-muted"
+            />
+            <Button
+              variant="default"
+              size="icon-sm"
+              className="size-5 shrink-0 rounded-lg bg-accent-primary text-white hover:bg-accent-primary/90"
+              title="Send"
+              aria-label="Send"
+              disabled={!canSend}
+              onClick={submit}
+            >
+              <ArrowUpIcon className="size-3" weight="regular" />
+            </Button>
+          </div>
+          {/* Full-bleed divider: negative margins cancel the container padding. */}
+          <div className="-mx-1.5 my-0.5 h-px bg-border-default" />
+          <ul className="flex flex-col">
+            {FRAME_QUICK_ACTIONS.map((action) => {
+              const Icon = action.icon;
+              return (
+                <li key={action.id}>
+                  <button
+                    type="button"
+                    onClick={() => runQuickAction(action)}
+                    className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-[13px] text-text-primary hover:bg-secondary"
+                  >
+                    <Icon
+                      className="size-3.5 shrink-0 text-text-muted"
+                      weight="regular"
+                    />
+                    <span className="truncate">{action.label}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
     </div>
