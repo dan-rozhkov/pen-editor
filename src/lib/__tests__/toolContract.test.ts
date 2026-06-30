@@ -19,6 +19,7 @@ const EXPECTED_CLIENT_TOOLS = [
   "replace_all_matching_properties",
   "find_empty_space_on_canvas",
   "search_all_unique_properties",
+  "rename_layers",
   "get_guidelines",
   "get_style_guide_tags",
   "get_style_guide",

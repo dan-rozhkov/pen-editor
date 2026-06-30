@@ -8,6 +8,7 @@ import { setVariables } from "./tools/setVariables";
 import { replaceAllMatchingProperties } from "./tools/replaceAllMatchingProperties";
 import { searchAllUniqueProperties } from "./tools/searchAllUniqueProperties";
 import { findEmptySpace } from "./tools/findEmptySpace";
+import { renameLayers } from "./tools/renameLayers";
 import { getGuidelines, getStyleGuide, getStyleGuideTags } from "./tools/staticTools";
 export type ToolHandler = (
   args: Record<string, unknown>
@@ -24,6 +25,7 @@ export const toolHandlers: Record<string, ToolHandler> = {
   replace_all_matching_properties: replaceAllMatchingProperties,
   find_empty_space_on_canvas: findEmptySpace,
   search_all_unique_properties: searchAllUniqueProperties,
+  rename_layers: renameLayers,
   get_guidelines: getGuidelines,
   get_style_guide_tags: getStyleGuideTags,
   get_style_guide: getStyleGuide,
