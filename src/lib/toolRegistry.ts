@@ -10,6 +10,7 @@ import { searchAllUniqueProperties } from "./tools/searchAllUniqueProperties";
 import { findEmptySpace } from "./tools/findEmptySpace";
 import { renameLayers } from "./tools/renameLayers";
 import { getGuidelines, getStyleGuide, getStyleGuideTags } from "./tools/staticTools";
+import { generateImage, generateFrameImage } from "./tools/generateImage";
 export type ToolHandler = (
   args: Record<string, unknown>
 ) => Promise<string>;
@@ -29,4 +30,6 @@ export const toolHandlers: Record<string, ToolHandler> = {
   get_guidelines: getGuidelines,
   get_style_guide_tags: getStyleGuideTags,
   get_style_guide: getStyleGuide,
+  generate_image: generateImage,
+  generate_frame_image: generateFrameImage,
 };

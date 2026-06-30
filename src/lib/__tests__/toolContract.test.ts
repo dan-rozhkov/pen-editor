@@ -23,6 +23,8 @@ const EXPECTED_CLIENT_TOOLS = [
   "get_guidelines",
   "get_style_guide_tags",
   "get_style_guide",
+  "generate_image",
+  "generate_frame_image",
 ];
 
 // Tools whose schema also has a backend `execute` — they run server-side, the
