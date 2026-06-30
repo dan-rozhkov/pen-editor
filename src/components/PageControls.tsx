@@ -81,7 +81,7 @@ export function PageControls() {
         <Button
           variant="default"
           size="sm"
-          className="ml-auto gap-1.5 h-auto px-3 py-2 -my-2 bg-accent-primary text-white hover:bg-accent-primary/90"
+          className="ml-auto gap-1.5 h-auto px-3 py-1.5 -my-1.5 bg-accent-primary text-white hover:bg-accent-primary/90"
           onClick={() => enterPresent()}
           title="Present (fullscreen)"
           data-testid="page-present"
