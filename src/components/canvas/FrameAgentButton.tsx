@@ -85,7 +85,7 @@ export function FrameAgentButton({
       style={{
         left: rect.left + rect.width,
         top: rect.top,
-        transform: "translate(-100%, calc(-100% - 8px))",
+        transform: "translate(8px, 0)",
       }}
       onPointerDown={stopCanvasPointer}
     >
@@ -93,15 +93,15 @@ export function FrameAgentButton({
         <Button
           variant="default"
           size="icon-sm"
-          className="size-9 rounded-full shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
+          className="size-6 rounded-lg bg-accent-primary text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)] hover:bg-accent-primary/90"
           title="Ask agent"
           aria-label="Ask agent"
           onClick={() => setOpen(true)}
         >
-          <SparkleIcon className="size-5" weight="fill" />
+          <SparkleIcon className="size-3.5" weight="fill" />
         </Button>
       ) : (
-        <div className="flex w-72 items-end gap-1.5 rounded-xl border border-border bg-surface-panel/95 p-1.5 shadow-[0_2px_8px_rgba(0,0,0,0.12)]">
+        <div className="flex w-72 items-end gap-1.5 rounded-xl border border-border-default bg-surface-panel/95 p-1.5 shadow-[0_0px_3px_rgba(0,0,0,0.04)]">
           <textarea
             ref={textareaRef}
             value={text}
@@ -114,13 +114,13 @@ export function FrameAgentButton({
           <Button
             variant="default"
             size="icon-sm"
-            className="size-8 shrink-0 rounded-full"
+            className="size-5 shrink-0 rounded-lg bg-accent-primary text-white hover:bg-accent-primary/90"
             title="Send"
             aria-label="Send"
             disabled={!canSend}
             onClick={submit}
           >
-            <ArrowUpIcon className="size-4" weight="bold" />
+            <ArrowUpIcon className="size-3" weight="regular" />
           </Button>
         </div>
       )}
