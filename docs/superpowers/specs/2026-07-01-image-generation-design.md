@@ -11,7 +11,7 @@ Let the AI design agent generate images:
 1. **Design agent path** — the agent generates an image from a prompt and it is viewable inline in the chat.
 2. **Agent-on-canvas path** — when an image is generated through the on-canvas frame agent, the image automatically becomes the image-fill of the attached/selected frame.
 
-Generation uses a cheap OpenRouter model, configurable via env, defaulting to `google/gemini-2.5-flash-image-preview` ("Nano Banana").
+Generation uses a cheap OpenRouter model, configurable via env, defaulting to `google/gemini-3.1-flash-lite-image` (cheapest image-output Gemini tier; verified live to return a `data:image/...` URL).
 
 ## Architecture
 
@@ -62,7 +62,7 @@ export async function generateImage(
 Add:
 
 ```ts
-OPENROUTER_IMAGE_MODEL: z.string().default("google/gemini-2.5-flash-image-preview"),
+OPENROUTER_IMAGE_MODEL: z.string().default("google/gemini-3.1-flash-lite-image"),
 ```
 
 No new API key — reuses `OPENROUTER_API_KEY`.
