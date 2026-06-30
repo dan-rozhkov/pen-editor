@@ -4,6 +4,7 @@ import { InlineNameEditor} from "@/components/InlineNameEditor";
 import { InlineTextEditor } from "@/components/InlineTextEditor";
 import { InlineEmbedEditor } from "@/components/InlineEmbedEditor";
 import { EmbedActionBar } from "@/components/canvas/EmbedActionBar";
+import { EmbedAgentButton } from "@/components/canvas/EmbedAgentButton";
 import { EmbedSelectionFrame } from "@/components/canvas/EmbedSelectionFrame";
 import { EmbedLayer } from "@/components/canvas/EmbedLayer";
 import { FrameAgentButton } from "@/components/canvas/FrameAgentButton";
@@ -367,6 +368,18 @@ export function PixiCanvas() {
           absoluteY={selectedEmbedPosition.y}
         />
       )}
+      {/* On-canvas agent affordance for a selected embed */}
+      {selectedEmbedNode &&
+        selectedEmbedPosition &&
+        editingMode !== "embed" &&
+        canEditScene(editorMode) && (
+          <EmbedAgentButton
+            key={selectedEmbedNode.id}
+            node={selectedEmbedNode}
+            absoluteX={selectedEmbedPosition.x}
+            absoluteY={selectedEmbedPosition.y}
+          />
+        )}
       {/* On-canvas agent affordance for a selected frame */}
       {selectedFrameNode &&
         selectedFramePosition &&
