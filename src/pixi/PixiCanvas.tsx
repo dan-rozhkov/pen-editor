@@ -6,7 +6,8 @@ import { InlineEmbedEditor } from "@/components/InlineEmbedEditor";
 import { EmbedActionBar } from "@/components/canvas/EmbedActionBar";
 import { EmbedSelectionFrame } from "@/components/canvas/EmbedSelectionFrame";
 import { EmbedLayer } from "@/components/canvas/EmbedLayer";
-import type { EmbedNode, TextNode, InstanceOverrideUpdateProps } from "@/types/scene";
+import { FrameAgentButton } from "@/components/canvas/FrameAgentButton";
+import type { EmbedNode, FrameNode, TextNode, InstanceOverrideUpdateProps } from "@/types/scene";
 import { useCanvasKeyboardShortcuts } from "@/components/canvas/useCanvasKeyboardShortcuts";
 import { useCanvasFileDrop } from "@/components/canvas/useCanvasFileDrop";
 import {
@@ -23,6 +24,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
+import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
 import {
   findParentFrame,
   getNodeAbsolutePositionWithLayout,
@@ -72,6 +74,7 @@ export function PixiCanvas() {
   const { activeTool, cancelDrawing, toggleTool } = useDrawModeStore();
   const isCanvasLoading = useLoadingStore((s) => s.isCanvasLoading);
   const setPixiRefs = useCanvasRefStore((s) => s.setPixiRefs);
+  const editorMode = useEditorModeStore((s) => s.mode);
 
   // Selection data for inline editors
   const instanceContext = useSelectionStore((s) => s.instanceContext);
@@ -163,6 +166,17 @@ export function PixiCanvas() {
     if (!selectedEmbedNode) return null;
     return getEditingPosition(selectedEmbedNode.id);
   }, [selectedEmbedNode, getEditingPosition]);
+
+  const selectedFrameNode = useMemo(() => {
+    if (selectedIds.length !== 1) return null;
+    const selectedNode = nodesById[selectedIds[0]];
+    return selectedNode?.type === "frame" ? (selectedNode as FrameNode) : null;
+  }, [selectedIds, nodesById]);
+
+  const selectedFramePosition = useMemo(() => {
+    if (!selectedFrameNode) return null;
+    return getEditingPosition(selectedFrameNode.id);
+  }, [selectedFrameNode, getEditingPosition]);
 
   // Keyboard shortcuts (reuse existing hook)
   useCanvasKeyboardShortcuts({
@@ -353,6 +367,18 @@ export function PixiCanvas() {
           absoluteY={selectedEmbedPosition.y}
         />
       )}
+      {/* On-canvas agent affordance for a selected frame */}
+      {selectedFrameNode &&
+        selectedFramePosition &&
+        !editingNodeId &&
+        canEditScene(editorMode) && (
+          <FrameAgentButton
+            key={selectedFrameNode.id}
+            node={selectedFrameNode}
+            absoluteX={selectedFramePosition.x}
+            absoluteY={selectedFramePosition.y}
+          />
+        )}
       {/* Inline text editor overlay */}
       {editingNode && editingPosition && editingMode === "text" && (
         <InlineTextEditor
