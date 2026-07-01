@@ -11,6 +11,7 @@ import {
   type IconWeight,
   CaretDownIcon,
   CodeIcon,
+  MagicWand,
 } from "@phosphor-icons/react";
 import { useDrawModeStore, type DrawToolType } from "../store/drawModeStore";
 import { Button } from "./ui/button";
@@ -58,6 +59,7 @@ export function PrimitivesPanel() {
     { icon: CircleIcon, label: "Ellipse", tool: "ellipse", shortcut: "O" },
     { icon: TextTIcon, label: "Text", tool: "text", shortcut: "T" },
     { icon: CodeIcon, label: "Embed", tool: "embed", shortcut: "E" },
+    { icon: MagicWand, label: "Shader", tool: "shader", shortcut: "S" },
   ];
 
   const rectSubTools: Array<{

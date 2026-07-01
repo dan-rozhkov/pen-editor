@@ -55,7 +55,7 @@ function ShaderHost({ nodeId }: { nodeId: string }) {
   const width = node?.width;
   const height = node?.height;
   useEffect(() => {
-    if (!isImageShader) { setImage(undefined); return; }
+    if (!isImageShader) return;
     let cancelled = false;
     // Defer so the node's Pixi container exists and has rendered.
     const t = setTimeout(() => {
@@ -67,7 +67,7 @@ function ShaderHost({ nodeId }: { nodeId: string }) {
   if (!node || !shader) return null;
   const desc = SHADER_REGISTRY[shader.kind];
   const Component = desc.Component;
-  const props = buildShaderProps(shader, image);
+  const props = buildShaderProps(shader, isImageShader ? image : undefined);
   const clip = clipFor(node);
 
   return (

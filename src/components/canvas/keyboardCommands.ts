@@ -36,7 +36,7 @@ export interface KeyDownHandlerDeps {
   undo: (snapshot: HistorySnapshot) => HistorySnapshot | null;
   redo: (snapshot: HistorySnapshot) => HistorySnapshot | null;
   fitToContent: (nodes: SceneNode[], width: number, height: number) => void;
-  toggleTool: (tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon" | "embed" | "pencil" | "connector") => void;
+  toggleTool: (tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon" | "embed" | "pencil" | "connector" | "shader") => void;
   cancelDrawing: () => void;
   clearSelection: () => void;
   copySelection: () => void;
@@ -347,6 +347,11 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
       if (e.code === "KeyC") {
         e.preventDefault();
         toggleTool("connector");
+        return;
+      }
+      if (e.code === "KeyS") {
+        e.preventDefault();
+        toggleTool("shader");
         return;
       }
     }

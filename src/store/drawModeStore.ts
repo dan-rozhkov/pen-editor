@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type DrawToolType = 'cursor' | 'frame' | 'rect' | 'ellipse' | 'text' | 'line' | 'polygon' | 'embed' | 'pencil' | 'connector'
+export type DrawToolType = 'cursor' | 'frame' | 'rect' | 'ellipse' | 'text' | 'line' | 'polygon' | 'embed' | 'pencil' | 'connector' | 'shader'
 
 export interface PencilSettings {
   color: string
