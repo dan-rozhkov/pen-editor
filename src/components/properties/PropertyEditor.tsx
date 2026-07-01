@@ -12,6 +12,7 @@ import { AppearanceSection } from "@/components/properties/AppearanceSection";
 import { FillSection } from "@/components/properties/FillSection";
 import { StrokeSection } from "@/components/properties/StrokeSection";
 import { EffectsSection } from "@/components/properties/EffectsSection";
+import { ShaderSection } from "@/components/properties/ShaderSection";
 import { ThemeSection } from "@/components/properties/ThemeSection";
 import { TypographySection } from "@/components/properties/TypographySection";
 import { EmbedContentSection } from "@/components/properties/EmbedContentSection";
@@ -97,6 +98,7 @@ export function PropertyEditor({
         resetOverride={resetOverride}
       />
       <EffectsSection node={node} onUpdate={onUpdate} />
+      <ShaderSection node={node} onUpdate={onUpdate} />
       {frameNode && (
         <ThemeSection node={frameNode} onUpdate={onUpdate} />
       )}
