@@ -42,7 +42,7 @@ The editor uses a single PixiJS renderer (Konva has been removed).
 - Interaction: `src/pixi/interaction/` (`dragController.ts`, `drawController.ts`, `transformController.ts`, etc.)
 - Overlays: `src/pixi/SelectionOverlay.ts`, `src/pixi/OverlayRenderer.ts`
 - Canvas UI hooks: `src/components/canvas/` (`CanvasOverlays.tsx`, `useCanvasFileDrop.ts`, etc.)
-- Shaders (`@paper-design/shaders`): any node may carry a `shader?: ShaderConfig` (a curated `@/lib/shaders/registry` kind + preset + params). These render as a DOM/WebGL overlay in `src/components/canvas/ShaderLayer.tsx` (like `EmbedLayer`), not in Pixi; image-filter shaders rasterize the node via `@/lib/shaders/nodeRaster`. The "Shader" toolbar tool / `S` key creates a shader node. `ShaderLayer`'s host lifecycle/visibility is unit-tested with the shader components mocked (no WebGL); live shader rendering and raster extraction (`nodeRaster`) are not (like `get_screenshot`). The registry, prop-builder, and `ShaderSection` are unit-tested directly.
+- Shaders (`@paper-design/shaders`): any node may carry a `shader?: ShaderConfig` (a curated `@/lib/shaders/registry` kind + preset + params). These render as a DOM/WebGL overlay in `src/components/canvas/ShaderLayer.tsx` (like `EmbedLayer`), not in Pixi; image-filter shaders rasterize the node via `@/lib/shaders/nodeRaster`. A shader is added/removed via the Shader section (`ShaderSection`) in the properties panel (`+`/trash), on any supported node type. `ShaderLayer`'s host lifecycle/visibility is unit-tested with the shader components mocked (no WebGL); live shader rendering and raster extraction (`nodeRaster`) are not (like `get_screenshot`). The registry, prop-builder, and `ShaderSection` are unit-tested directly.
 
 ### State Management — Zustand
 

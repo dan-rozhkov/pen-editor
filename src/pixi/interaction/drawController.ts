@@ -9,15 +9,7 @@ import {
   findTopmostFrameContainingRectWithLayout,
 } from "@/utils/nodeUtils";
 import { generatePolygonPoints } from "@/utils/polygonUtils";
-import { defaultShaderConfig } from "@/lib/shaders/registry";
 import type { InteractionContext, DrawState } from "./types";
-
-/** Build a shader node: a plain rect pre-loaded with the default fill shader. */
-export function makeShaderNode(
-  id: string, x: number, y: number, width: number, height: number,
-): SceneNode {
-  return { id, type: "rect", x, y, width, height, shader: defaultShaderConfig() };
-}
 
 export interface DrawController {
   handlePointerDown(e: PointerEvent, world: { x: number; y: number }): boolean;
@@ -116,9 +108,6 @@ export function createDrawController(_context: InteractionContext): DrawControll
           height,
           htmlContent: '<div style="padding: 16px; font-family: sans-serif; color: #333;"><h2 style="margin: 0 0 8px 0;">HTML Embed</h2><p style="margin: 0;">Edit HTML content in the properties panel.</p></div>',
         };
-        break;
-      case "shader":
-        node = makeShaderNode(id, x, y, width, height);
         break;
       default:
         return;
