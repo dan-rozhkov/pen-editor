@@ -1,3 +1,4 @@
+import { PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import type { SceneNode, ShaderKind } from "@/types/scene";
 import {
   ColorInput,
@@ -5,6 +6,7 @@ import {
   PropertySection,
   SelectInput,
 } from "@/components/ui/PropertyInputs";
+import { Button } from "@/components/ui/button";
 import { SHADER_REGISTRY, SHADER_KINDS, defaultShaderConfig } from "@/lib/shaders/registry";
 import {
   setShaderParam,
@@ -30,18 +32,28 @@ export function ShaderSection({ node, onUpdate }: Props) {
     (k) => SHADER_REGISTRY[k].category === "fill" || canImageFilter || k === shader?.kind,
   );
 
-  const toggle = (
-    <input
-      type="checkbox"
-      aria-label="Enable shader"
-      className="w-4 h-4 rounded bg-secondary accent-accent-bright cursor-pointer"
-      checked={shader != null}
-      onChange={(e) => onUpdate({ shader: e.target.checked ? defaultShaderConfig() : undefined })}
-    />
+  const action = shader ? (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      onClick={() => onUpdate({ shader: undefined })}
+      title="Remove shader"
+    >
+      <TrashIcon />
+    </Button>
+  ) : (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      onClick={() => onUpdate({ shader: defaultShaderConfig() })}
+      title="Add shader"
+    >
+      <PlusIcon />
+    </Button>
   );
 
   return (
-    <PropertySection title="Shader" action={toggle}>
+    <PropertySection title="Shader" action={action}>
       {shader && desc && (
         <div className="flex flex-col gap-2" data-testid="shader-controls">
           <SelectInput
@@ -90,26 +102,24 @@ export function ShaderSection({ node, onUpdate }: Props) {
             if (p.type === "color") {
               const val = typeof current === "string" ? current : (p.default as string);
               return (
-                <div key={p.key} className="flex items-center gap-2">
-                  <span className="text-[11px] w-12 shrink-0 text-text-primary">{p.label}</span>
+                <div key={p.key} className="flex flex-col gap-1">
+                  <span className="text-[11px] text-text-primary">{p.label}</span>
                   <ColorInput value={val} onChange={(v) => onUpdate({ shader: setShaderParam(shader, p.key, v) })} />
                 </div>
               );
             }
-            // 'colors': edit up to four swatches inline.
+            // 'colors': edit up to four full-width swatches, stacked.
             const arr = Array.isArray(current) ? current : (p.default as string[]);
             return (
-              <div key={p.key} className="flex items-center gap-2">
-                <span className="text-[11px] w-12 shrink-0 text-text-primary">{p.label}</span>
-                <div className="flex flex-wrap gap-1">
-                  {arr.slice(0, 4).map((c, i) => (
-                    <ColorInput
-                      key={i}
-                      value={c}
-                      onChange={(v) => onUpdate({ shader: setShaderColorAt(shader, p.key, i, v, arr) })}
-                    />
-                  ))}
-                </div>
+              <div key={p.key} className="flex flex-col gap-1">
+                <span className="text-[11px] text-text-primary">{p.label}</span>
+                {arr.slice(0, 4).map((c, i) => (
+                  <ColorInput
+                    key={i}
+                    value={c}
+                    onChange={(v) => onUpdate({ shader: setShaderColorAt(shader, p.key, i, v, arr) })}
+                  />
+                ))}
               </div>
             );
           })}

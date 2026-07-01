@@ -17,22 +17,22 @@ describe("<ShaderSection />", () => {
     expect(container.textContent).not.toContain("Shader");
   });
 
-  it("shows only the enable toggle when no shader is set", () => {
+  it("shows only the add button when no shader is set", () => {
     render(<ShaderSection node={rect()} onUpdate={vi.fn()} />);
-    expect(screen.getByLabelText("Enable shader")).toBeTruthy();
+    expect(screen.getByTitle("Add shader")).toBeTruthy();
     expect(screen.queryByTestId("shader-controls")).toBeNull();
   });
 
-  it("enabling the toggle adds a default shader config", () => {
+  it("clicking the add button adds a default shader config", () => {
     const onUpdate = vi.fn();
     render(<ShaderSection node={rect()} onUpdate={onUpdate} />);
-    fireEvent.click(screen.getByLabelText("Enable shader"));
+    fireEvent.click(screen.getByTitle("Add shader"));
     expect(onUpdate).toHaveBeenCalledWith({
       shader: expect.objectContaining({ kind: "meshGradient" }),
     });
   });
 
-  it("disabling the toggle clears the shader", () => {
+  it("clicking the remove button clears the shader", () => {
     const onUpdate = vi.fn();
     render(
       <ShaderSection
@@ -40,7 +40,7 @@ describe("<ShaderSection />", () => {
         onUpdate={onUpdate}
       />,
     );
-    fireEvent.click(screen.getByLabelText("Enable shader"));
+    fireEvent.click(screen.getByTitle("Remove shader"));
     expect(onUpdate).toHaveBeenCalledWith({ shader: undefined });
   });
 
