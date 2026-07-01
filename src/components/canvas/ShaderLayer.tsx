@@ -9,6 +9,26 @@ import { extractNodeImage } from "@/lib/shaders/nodeRaster";
 import type { SceneNode } from "@/types/scene";
 import { embedScreenRect } from "./embedLayerGeometry";
 
+/**
+ * Whether any ancestor frame/group hides this node. The Pixi tree hides a node
+ * transitively when a parent container's `visible` is false, but this flat DOM
+ * overlay must walk the hierarchy itself or the shader canvas leaks over a
+ * hidden layer.
+ */
+function isHiddenByAncestor(
+  nodeId: string,
+  nodesById: Record<string, { visible?: boolean; enabled?: boolean } | undefined>,
+  parentById: Record<string, string | null>,
+): boolean {
+  let cur = parentById[nodeId] ?? null;
+  while (cur) {
+    const parent = nodesById[cur];
+    if (parent && (parent.visible === false || parent.enabled === false)) return true;
+    cur = parentById[cur] ?? null;
+  }
+  return false;
+}
+
 /** CSS clip for the shader host derived from the node shape. */
 function clipFor(node: SceneNode): { borderRadius?: string; clipPath?: string } {
   if (node.type === "ellipse") return { borderRadius: "50%" };
@@ -50,8 +70,12 @@ function ShaderHost({ nodeId }: { nodeId: string }) {
     return () => { unsubViewport(); unsubLayout(); unsubScene(); };
   }, [position]);
 
+  // Look up the descriptor defensively: a .pen file may carry an unknown
+  // shader.kind (renamed/older/hand-edited) — render nothing rather than crash.
+  const desc = shader ? SHADER_REGISTRY[shader.kind] : undefined;
+
   // For image-filter shaders, rasterize the node and re-run on size change.
-  const isImageShader = shader ? SHADER_REGISTRY[shader.kind].category === "image" : false;
+  const isImageShader = desc?.category === "image";
   const width = node?.width;
   const height = node?.height;
   useEffect(() => {
@@ -64,8 +88,7 @@ function ShaderHost({ nodeId }: { nodeId: string }) {
     return () => { cancelled = true; clearTimeout(t); };
   }, [nodeId, isImageShader, width, height]);
 
-  if (!node || !shader) return null;
-  const desc = SHADER_REGISTRY[shader.kind];
+  if (!node || !shader || !desc) return null;
   const Component = desc.Component;
   const props = buildShaderProps(shader, isImageShader ? image : undefined);
   const clip = clipFor(node);
@@ -89,13 +112,19 @@ function ShaderHost({ nodeId }: { nodeId: string }) {
  */
 export function ShaderLayer() {
   const nodesById = useSceneStore((s) => s.nodesById);
+  const parentById = useSceneStore((s) => s.parentById);
   const shaderIds = useMemo(
     () =>
       Object.keys(nodesById).filter((id) => {
         const n = nodesById[id];
-        return n?.shader != null && n.visible !== false && n.enabled !== false;
+        return (
+          n?.shader != null &&
+          n.visible !== false &&
+          n.enabled !== false &&
+          !isHiddenByAncestor(id, nodesById, parentById)
+        );
       }),
-    [nodesById],
+    [nodesById, parentById],
   );
 
   return (

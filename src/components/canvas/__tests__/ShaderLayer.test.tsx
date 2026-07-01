@@ -58,4 +58,27 @@ describe("<ShaderLayer />", () => {
     act(() => { useSceneStore.getState().updateNode("r1", { shader: undefined }); });
     expect(container.querySelector('[data-shader-id="r1"]')).toBeNull();
   });
+
+  it("renders no host when an ancestor frame is hidden", () => {
+    useSceneStore.setState({
+      nodesById: {
+        f1: { id: "f1", type: "frame", x: 0, y: 0, width: 200, height: 200, visible: false, children: [] } as unknown as FlatSceneNode,
+        r1: { id: "r1", type: "rect", x: 0, y: 0, width: 100, height: 80,
+          shader: { kind: "meshGradient", preset: "default", params: {} } } as unknown as FlatSceneNode,
+      },
+      parentById: { f1: null, r1: "f1" },
+      childrenById: { f1: ["r1"] },
+      rootIds: ["f1"],
+      componentArtifactsById: {},
+      _cachedTree: null,
+    });
+    const { container } = render(<ShaderLayer />);
+    expect(container.querySelector('[data-shader-id="r1"]')).toBeNull();
+  });
+
+  it("renders no host for an unknown shader kind instead of crashing", () => {
+    seedRect({ kind: "notARealShader" as ShaderConfig["kind"], preset: "x", params: {} });
+    const { container } = render(<ShaderLayer />);
+    expect(container.querySelector('[data-shader-id="r1"]')).toBeNull();
+  });
 });
