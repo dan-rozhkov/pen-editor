@@ -42,6 +42,7 @@ The editor uses a single PixiJS renderer (Konva has been removed).
 - Interaction: `src/pixi/interaction/` (`dragController.ts`, `drawController.ts`, `transformController.ts`, etc.)
 - Overlays: `src/pixi/SelectionOverlay.ts`, `src/pixi/OverlayRenderer.ts`
 - Canvas UI hooks: `src/components/canvas/` (`CanvasOverlays.tsx`, `useCanvasFileDrop.ts`, etc.)
+- Shaders (`@paper-design/shaders`): any node may carry a `shader?: ShaderConfig` (a curated `@/lib/shaders/registry` kind + preset + params). These render as a DOM/WebGL overlay in `src/components/canvas/ShaderLayer.tsx` (like `EmbedLayer`), not in Pixi; image-filter shaders rasterize the node via `@/lib/shaders/nodeRaster`. The "Shader" toolbar tool / `S` key creates a shader node. WebGL — `ShaderLayer` and raster extraction are not unit-tested (like `get_screenshot`); the registry, prop-builder, and `ShaderSection` are.
 
 ### State Management — Zustand
 
