@@ -43,7 +43,7 @@ const presets = (arr: readonly unknown[]): { name: string; params: Record<string
 export const SHADER_REGISTRY: Record<ShaderKind, ShaderDescriptor> = {
   meshGradient: {
     kind: "meshGradient", label: "Mesh Gradient", category: "fill",
-    Component: MeshGradient as React.ComponentType<Record<string, unknown>>,
+    Component: MeshGradient as unknown as React.ComponentType<Record<string, unknown>>,
     presets: presets(meshGradientPresets),
     params: [
       { key: "colors", type: "colors", label: "Colors", default: ["#e0eaff", "#241d9a", "#f75092", "#9f50d3"] },
@@ -54,7 +54,7 @@ export const SHADER_REGISTRY: Record<ShaderKind, ShaderDescriptor> = {
   },
   waves: {
     kind: "waves", label: "Waves", category: "fill",
-    Component: Waves as React.ComponentType<Record<string, unknown>>,
+    Component: Waves as unknown as React.ComponentType<Record<string, unknown>>,
     presets: presets(wavesPresets),
     params: [
       { key: "colorFront", type: "color", label: "Front", default: "#1a1a1a" },
@@ -67,7 +67,7 @@ export const SHADER_REGISTRY: Record<ShaderKind, ShaderDescriptor> = {
   },
   warp: {
     kind: "warp", label: "Warp", category: "fill",
-    Component: Warp as React.ComponentType<Record<string, unknown>>,
+    Component: Warp as unknown as React.ComponentType<Record<string, unknown>>,
     presets: presets(warpPresets),
     params: [
       { key: "colors", type: "colors", label: "Colors", default: ["#5100ff", "#00c2ff", "#ffffff"] },
@@ -81,7 +81,7 @@ export const SHADER_REGISTRY: Record<ShaderKind, ShaderDescriptor> = {
   },
   spiral: {
     kind: "spiral", label: "Spiral", category: "fill",
-    Component: Spiral as React.ComponentType<Record<string, unknown>>,
+    Component: Spiral as unknown as React.ComponentType<Record<string, unknown>>,
     presets: presets(spiralPresets),
     params: [
       { key: "colorFront", type: "color", label: "Front", default: "#ffffff" },
@@ -94,7 +94,7 @@ export const SHADER_REGISTRY: Record<ShaderKind, ShaderDescriptor> = {
   },
   metaballs: {
     kind: "metaballs", label: "Metaballs", category: "fill",
-    Component: Metaballs as React.ComponentType<Record<string, unknown>>,
+    Component: Metaballs as unknown as React.ComponentType<Record<string, unknown>>,
     presets: presets(metaballsPresets),
     params: [
       { key: "colors", type: "colors", label: "Colors", default: ["#ff0080", "#00c2ff", "#ffe600"] },
@@ -105,7 +105,7 @@ export const SHADER_REGISTRY: Record<ShaderKind, ShaderDescriptor> = {
   },
   godRays: {
     kind: "godRays", label: "God Rays", category: "fill",
-    Component: GodRays as React.ComponentType<Record<string, unknown>>,
+    Component: GodRays as unknown as React.ComponentType<Record<string, unknown>>,
     presets: presets(godRaysPresets),
     params: [
       { key: "colors", type: "colors", label: "Colors", default: ["#ffd600", "#ff9500"] },
@@ -117,7 +117,7 @@ export const SHADER_REGISTRY: Record<ShaderKind, ShaderDescriptor> = {
   },
   voronoi: {
     kind: "voronoi", label: "Voronoi", category: "fill",
-    Component: Voronoi as React.ComponentType<Record<string, unknown>>,
+    Component: Voronoi as unknown as React.ComponentType<Record<string, unknown>>,
     presets: presets(voronoiPresets),
     params: [
       { key: "colors", type: "colors", label: "Colors", default: ["#ffffff", "#7c5cff", "#00c2ff"] },
@@ -128,7 +128,7 @@ export const SHADER_REGISTRY: Record<ShaderKind, ShaderDescriptor> = {
   },
   dithering: {
     kind: "dithering", label: "Dithering", category: "fill",
-    Component: Dithering as React.ComponentType<Record<string, unknown>>,
+    Component: Dithering as unknown as React.ComponentType<Record<string, unknown>>,
     presets: presets(ditheringPresets),
     params: [
       { key: "colorFront", type: "color", label: "Front", default: "#ffffff" },
@@ -140,7 +140,7 @@ export const SHADER_REGISTRY: Record<ShaderKind, ShaderDescriptor> = {
   },
   water: {
     kind: "water", label: "Water", category: "image",
-    Component: Water as React.ComponentType<Record<string, unknown>>,
+    Component: Water as unknown as React.ComponentType<Record<string, unknown>>,
     presets: presets(waterPresets),
     params: [
       { key: "speed", type: "number", label: "Speed", min: 0, max: 3, step: 0.05, default: 1 },
@@ -150,7 +150,7 @@ export const SHADER_REGISTRY: Record<ShaderKind, ShaderDescriptor> = {
   },
   flutedGlass: {
     kind: "flutedGlass", label: "Fluted Glass", category: "image",
-    Component: FlutedGlass as React.ComponentType<Record<string, unknown>>,
+    Component: FlutedGlass as unknown as React.ComponentType<Record<string, unknown>>,
     presets: presets(flutedGlassPresets),
     params: [
       { key: "distortion", type: "number", label: "Distortion", min: 0, max: 1, step: 0.01, default: 0.4 },
@@ -160,7 +160,7 @@ export const SHADER_REGISTRY: Record<ShaderKind, ShaderDescriptor> = {
   },
   halftoneDots: {
     kind: "halftoneDots", label: "Halftone Dots", category: "image",
-    Component: HalftoneDots as React.ComponentType<Record<string, unknown>>,
+    Component: HalftoneDots as unknown as React.ComponentType<Record<string, unknown>>,
     presets: presets(halftoneDotsPresets),
     params: [
       { key: "colorFront", type: "color", label: "Front", default: "#000000" },
@@ -171,7 +171,7 @@ export const SHADER_REGISTRY: Record<ShaderKind, ShaderDescriptor> = {
   },
   imageDithering: {
     kind: "imageDithering", label: "Image Dithering", category: "image",
-    Component: ImageDithering as React.ComponentType<Record<string, unknown>>,
+    Component: ImageDithering as unknown as React.ComponentType<Record<string, unknown>>,
     presets: presets(imageDitheringPresets),
     params: [
       { key: "colorFront", type: "color", label: "Front", default: "#000000" },
