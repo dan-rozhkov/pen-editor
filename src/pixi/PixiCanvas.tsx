@@ -7,6 +7,7 @@ import { EmbedActionBar } from "@/components/canvas/EmbedActionBar";
 import { EmbedAgentButton } from "@/components/canvas/EmbedAgentButton";
 import { EmbedSelectionFrame } from "@/components/canvas/EmbedSelectionFrame";
 import { EmbedLayer } from "@/components/canvas/EmbedLayer";
+import { ShaderLayer } from "@/components/canvas/ShaderLayer";
 import { FrameAgentButton } from "@/components/canvas/FrameAgentButton";
 import type { EmbedNode, FrameNode, TextNode, InstanceOverrideUpdateProps } from "@/types/scene";
 import { useCanvasKeyboardShortcuts } from "@/components/canvas/useCanvasKeyboardShortcuts";
@@ -350,6 +351,8 @@ export function PixiCanvas() {
         position: "relative",
       }}
     >
+      {/* Shader overlays rendered as live WebGL canvases above the Pixi canvas */}
+      <ShaderLayer />
       {/* Code layers rendered as live DOM above the Pixi canvas */}
       <EmbedLayer />
       {/* Selection frame + resize handles mirrored as DOM above the embed
