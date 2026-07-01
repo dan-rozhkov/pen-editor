@@ -1,4 +1,4 @@
-import { PlusIcon, TrashIcon } from "@phosphor-icons/react";
+import { PlusIcon, MinusIcon } from "@phosphor-icons/react";
 import type { SceneNode, ShaderKind } from "@/types/scene";
 import {
   ColorInput,
@@ -39,7 +39,7 @@ export function ShaderSection({ node, onUpdate }: Props) {
       onClick={() => onUpdate({ shader: undefined })}
       title="Remove shader"
     >
-      <TrashIcon />
+      <MinusIcon />
     </Button>
   ) : (
     <Button
