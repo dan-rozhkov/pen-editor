@@ -7,6 +7,7 @@ import {
   SelectInput,
 } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { SHADER_REGISTRY, SHADER_KINDS, defaultShaderConfig } from "@/lib/shaders/registry";
 import {
   setShaderParam,
@@ -58,6 +59,7 @@ export function ShaderSection({ node, onUpdate }: Props) {
         <div className="flex flex-col gap-2" data-testid="shader-controls">
           <SelectInput
             label="Type"
+            labelOutside
             value={shader.kind}
             options={kindOptions.map((k) => ({ value: k, label: SHADER_REGISTRY[k].label }))}
             onChange={(v) => onUpdate({ shader: defaultShaderConfig(v as ShaderKind) })}
@@ -65,6 +67,7 @@ export function ShaderSection({ node, onUpdate }: Props) {
           {desc.presets.length > 0 && (
             <SelectInput
               label="Preset"
+              labelOutside
               value={shader.preset ?? desc.presets[0].name}
               options={desc.presets.map((p) => ({ value: p.name, label: p.name }))}
               onChange={(v) => onUpdate({ shader: { ...shader, preset: v, params: {} } })}
@@ -93,6 +96,7 @@ export function ShaderSection({ node, onUpdate }: Props) {
                 <SelectInput
                   key={p.key}
                   label={p.label}
+                  labelOutside
                   value={val}
                   options={(p.options ?? []).map((o) => ({ value: o, label: o }))}
                   onChange={(v) => onUpdate({ shader: setShaderParam(shader, p.key, v) })}
@@ -103,7 +107,7 @@ export function ShaderSection({ node, onUpdate }: Props) {
               const val = typeof current === "string" ? current : (p.default as string);
               return (
                 <div key={p.key} className="flex flex-col gap-1">
-                  <span className="text-[11px] text-text-primary">{p.label}</span>
+                  <Label className="text-[10px] font-normal">{p.label}</Label>
                   <ColorInput value={val} onChange={(v) => onUpdate({ shader: setShaderParam(shader, p.key, v) })} />
                 </div>
               );
@@ -112,7 +116,7 @@ export function ShaderSection({ node, onUpdate }: Props) {
             const arr = Array.isArray(current) ? current : (p.default as string[]);
             return (
               <div key={p.key} className="flex flex-col gap-1">
-                <span className="text-[11px] text-text-primary">{p.label}</span>
+                <Label className="text-[10px] font-normal">{p.label}</Label>
                 {arr.slice(0, 4).map((c, i) => (
                   <ColorInput
                     key={i}
