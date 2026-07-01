@@ -287,12 +287,20 @@ export const LayerItem = memo(function LayerItem({
           )}
         </div>
         <div
-          className="sticky right-0 shrink-0 flex items-center pl-2 pr-3"
-          style={{ backgroundColor: "inherit" }}
+          className={clsx(
+            "relative sticky right-0 shrink-0 flex items-center pl-2 pr-3 bg-surface-panel",
+            !isSelected && "group-hover:bg-secondary",
+          )}
         >
+          {/* Paint the translucent selection tint exactly once over the opaque
+              panel base so the eye-icon region matches the row instead of
+              double-stacking the alpha (which would read as a second shade). */}
+          {isSelected && (
+            <div className="absolute inset-0 pointer-events-none bg-accent-selection group-hover:bg-accent-selection/80" />
+          )}
           <button
             className={clsx(
-              "bg-transparent border-none cursor-pointer p-1 flex items-center justify-center rounded group-hover:opacity-100 opacity-0",
+              "relative bg-transparent border-none cursor-pointer p-1 flex items-center justify-center rounded group-hover:opacity-100 opacity-0",
             )}
             onClick={handleVisibilityClick}
             title={isVisible ? "Hide layer" : "Show layer"}
