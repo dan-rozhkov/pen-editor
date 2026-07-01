@@ -141,6 +141,22 @@ export interface PerCornerRadius {
   bottomLeft?: number
 }
 
+/** Curated set of paper-design/shaders exposed in the editor. */
+export type ShaderKind =
+  | 'meshGradient' | 'waves' | 'warp' | 'spiral'
+  | 'metaballs' | 'godRays' | 'voronoi' | 'dithering'
+  | 'water' | 'flutedGlass' | 'halftoneDots' | 'imageDithering'
+
+/**
+ * A live shader overlay attached to a node (rendered by ShaderLayer, not Pixi).
+ * `params` holds prop overrides on top of the selected preset.
+ */
+export interface ShaderConfig {
+  kind: ShaderKind
+  preset?: string
+  params: Record<string, number | string | string[]>
+}
+
 export interface BaseNode {
   id: string
   type: 'frame' | 'group' | 'rect' | 'ellipse' | 'text' | 'path' | 'line' | 'polygon' | 'embed' | 'ref' | 'connector'
@@ -193,6 +209,8 @@ export interface BaseNode {
    * legacy `effect` field. Use `getEffects()` from `@/utils/fillUtils`.
    */
   effects?: Effect[]
+  /** Live shader overlay (paper-design/shaders). Rendered by ShaderLayer. */
+  shader?: ShaderConfig
   // Aspect ratio lock for proportional resize
   aspectRatioLocked?: boolean
   // Stored aspect ratio (width/height) when lock is enabled
