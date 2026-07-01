@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useSceneStore } from "@/store/sceneStore";
-import { useLayoutStore } from "@/store/layoutStore";
-import { useViewportStore } from "@/store/viewportStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { mountHtmlWithBodyStyles } from "@/utils/embedHtmlUtils";
 import { buildVariableStyleBlock } from "@/utils/variableCssUtils";
 import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
-import { getNodeAbsolutePositionWithLayout } from "@/utils/nodeUtils";
 import type { EmbedNode } from "@/types/scene";
-import { embedScreenRect } from "./embedLayerGeometry";
+import { useOverlayHostRect } from "./useOverlayHostRect";
 
 /** One Shadow-DOM host for a single embed node, synced to the viewport. */
 function EmbedHost({ nodeId }: { nodeId: string }) {
@@ -22,37 +19,16 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
   const width = node?.width;
   const height = node?.height;
 
-  // Position/scale the host imperatively from the scene + viewport (no React
-  // re-render). Geometry lives here — not in the inline style — so a React
-  // re-render (e.g. on active toggle) never clobbers the imperative values.
-  const position = useCallback(() => {
-    const host = hostRef.current;
-    if (!host) return;
-    const scene = useSceneStore.getState();
-    const n = scene.nodesById[nodeId] as EmbedNode | undefined;
-    if (!n) return;
-    const calc = useLayoutStore.getState().calculateLayoutForFrame;
-    const abs = getNodeAbsolutePositionWithLayout(scene.getNodes(), nodeId, calc);
-    if (!abs) return;
-    const { scale, x: panX, y: panY } = useViewportStore.getState();
-    const dpr = window.devicePixelRatio || 1;
-    const rect = embedScreenRect(abs.x, abs.y, n.width, n.height, scale, panX, panY, dpr);
-    host.style.left = `${rect.left}px`;
-    host.style.top = `${rect.top}px`;
-    host.style.width = `${rect.width}px`;
-    host.style.height = `${rect.height}px`;
+  // Scale the inner content to match the viewport zoom. The outer host rect and
+  // the store subscriptions are handled by the shared overlay hook; this callback
+  // is the embed-specific extra. (Geometry stays imperative so a React re-render —
+  // e.g. on active toggle — never clobbers it.)
+  const syncContentScale = useCallback((scale: number) => {
     const content = contentRef.current;
     if (content) content.style.transform = `scale(${scale})`;
-  }, [nodeId]);
+  }, []);
 
-  // Keep the host positioned as the scene, layout, or viewport changes.
-  useEffect(() => {
-    position();
-    const unsubViewport = useViewportStore.subscribe(position);
-    const unsubLayout = useLayoutStore.subscribe(position);
-    const unsubScene = useSceneStore.subscribe(position);
-    return () => { unsubViewport(); unsubLayout(); unsubScene(); };
-  }, [position]);
+  const position = useOverlayHostRect(hostRef, nodeId, syncContentScale);
 
   // (Re)mount embed content into the shadow root on html/size/theme change.
   useEffect(() => {

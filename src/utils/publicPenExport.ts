@@ -4,6 +4,7 @@ import type {
   GroupNode,
   JustifyContent,
   SceneNode,
+  ShaderConfig,
   TextNode,
 } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
@@ -75,6 +76,7 @@ interface PenBaseNode {
   flipY?: boolean;
   reusable?: boolean;
   theme?: PenTheme;
+  shader?: ShaderConfig;
 }
 
 interface PenFrameNode extends PenBaseNode {
@@ -406,6 +408,7 @@ function exportNodeBase(node: SceneNode, context: ExportContext, parentUsesLayou
     ...(node.type === "frame" && node.themeOverride
       ? { theme: { [THEME_AXIS]: node.themeOverride } }
       : {}),
+    ...(node.shader ? { shader: node.shader } : {}),
   };
 }
 

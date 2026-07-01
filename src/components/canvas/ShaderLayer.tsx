@@ -1,13 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSceneStore } from "@/store/sceneStore";
-import { useLayoutStore } from "@/store/layoutStore";
-import { useViewportStore } from "@/store/viewportStore";
-import { getNodeAbsolutePositionWithLayout } from "@/utils/nodeUtils";
 import { SHADER_REGISTRY } from "@/lib/shaders/registry";
 import { buildShaderProps } from "@/lib/shaders/buildShaderProps";
 import { extractNodeImage } from "@/lib/shaders/nodeRaster";
 import type { SceneNode } from "@/types/scene";
-import { embedScreenRect } from "./embedLayerGeometry";
+import { useOverlayHostRect } from "./useOverlayHostRect";
 
 /**
  * Whether any ancestor frame/group hides this node. The Pixi tree hides a node
@@ -29,12 +26,22 @@ function isHiddenByAncestor(
   return false;
 }
 
-/** CSS clip for the shader host derived from the node shape. */
-function clipFor(node: SceneNode): { borderRadius?: string; clipPath?: string } {
-  if (node.type === "ellipse") return { borderRadius: "50%" };
-  if (node.type === "path" && node.geometry) return { clipPath: `path('${node.geometry}')` };
+/**
+ * Apply the node's shape as a CSS clip on the host, scaled to the current zoom
+ * so it stays aligned (the host is sized in screen px). Ellipse → circle,
+ * rounded rect → scaled border-radius, everything else → no clip (fills the
+ * bounding box). Path geometry is intentionally NOT used as a `clip-path:
+ * path()` — it is in unscaled local units and would be raw-interpolated, so it
+ * both misaligns at zoom and risks malformed CSS.
+ */
+function applyClip(host: HTMLDivElement, node: SceneNode, scale: number): void {
+  host.style.clipPath = "";
+  if (node.type === "ellipse") {
+    host.style.borderRadius = "50%";
+    return;
+  }
   const r = (node as { cornerRadius?: number }).cornerRadius;
-  return r ? { borderRadius: `${r}px` } : {};
+  host.style.borderRadius = r ? `${r * scale}px` : "";
 }
 
 /** One shader canvas host for a single node, synced to the viewport. */
@@ -44,31 +51,14 @@ function ShaderHost({ nodeId }: { nodeId: string }) {
   const shader = node?.shader;
   const [image, setImage] = useState<string | undefined>(undefined);
 
-  const position = useCallback(() => {
-    const host = hostRef.current;
-    if (!host) return;
-    const scene = useSceneStore.getState();
-    const n = scene.nodesById[nodeId] as SceneNode | undefined;
-    if (!n) return;
-    const calc = useLayoutStore.getState().calculateLayoutForFrame;
-    const abs = getNodeAbsolutePositionWithLayout(scene.getNodes(), nodeId, calc);
-    if (!abs) return;
-    const { scale, x: panX, y: panY } = useViewportStore.getState();
-    const dpr = window.devicePixelRatio || 1;
-    const rect = embedScreenRect(abs.x, abs.y, n.width, n.height, scale, panX, panY, dpr);
-    host.style.left = `${rect.left}px`;
-    host.style.top = `${rect.top}px`;
-    host.style.width = `${rect.width}px`;
-    host.style.height = `${rect.height}px`;
-  }, [nodeId]);
-
-  useEffect(() => {
-    position();
-    const unsubViewport = useViewportStore.subscribe(position);
-    const unsubLayout = useLayoutStore.subscribe(position);
-    const unsubScene = useSceneStore.subscribe(position);
-    return () => { unsubViewport(); unsubLayout(); unsubScene(); };
-  }, [position]);
+  const onSync = useCallback(
+    (scale: number) => {
+      const host = hostRef.current;
+      if (host && node) applyClip(host, node, scale);
+    },
+    [node],
+  );
+  useOverlayHostRect(hostRef, nodeId, onSync);
 
   // Look up the descriptor defensively: a .pen file may carry an unknown
   // shader.kind (renamed/older/hand-edited) — render nothing rather than crash.
@@ -91,13 +81,12 @@ function ShaderHost({ nodeId }: { nodeId: string }) {
   if (!node || !shader || !desc) return null;
   const Component = desc.Component;
   const props = buildShaderProps(shader, isImageShader ? image : undefined);
-  const clip = clipFor(node);
 
   return (
     <div
       ref={hostRef}
       data-shader-id={nodeId}
-      style={{ position: "absolute", overflow: "hidden", pointerEvents: "none", ...clip }}
+      style={{ position: "absolute", overflow: "hidden", pointerEvents: "none" }}
     >
       <Component {...props} width="100%" height="100%" style={{ width: "100%", height: "100%" }} />
     </div>

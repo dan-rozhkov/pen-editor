@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { setShaderParam, setShaderColorAt, SHADER_SUPPORTED_TYPES } from "../shaderSectionUtils";
-import type { ShaderConfig } from "@/types/scene";
+import { setShaderParam, setShaderColorAt, SHADER_SUPPORTED_TYPES, nodeHasRasterContent } from "../shaderSectionUtils";
+import type { SceneNode, ShaderConfig } from "@/types/scene";
 
 const base: ShaderConfig = { kind: "meshGradient", preset: "Default", params: { speed: 1 } };
 
@@ -25,5 +25,18 @@ describe("shaderSectionUtils", () => {
   it("SHADER_SUPPORTED_TYPES covers visual node types only", () => {
     expect(SHADER_SUPPORTED_TYPES.has("rect")).toBe(true);
     expect(SHADER_SUPPORTED_TYPES.has("line")).toBe(false);
+  });
+
+  const rect = (over: Partial<SceneNode> = {}): SceneNode =>
+    ({ id: "n", type: "rect", x: 0, y: 0, width: 10, height: 10, ...over }) as SceneNode;
+
+  it("nodeHasRasterContent: bare rect (no fill) has none, filled rect does", () => {
+    expect(nodeHasRasterContent(rect())).toBe(false);
+    expect(nodeHasRasterContent(rect({ fill: "#3366ff" }))).toBe(true);
+  });
+
+  it("nodeHasRasterContent: text and frame always count as content", () => {
+    expect(nodeHasRasterContent({ id: "t", type: "text", x: 0, y: 0, width: 10, height: 10, text: "hi" } as SceneNode)).toBe(true);
+    expect(nodeHasRasterContent({ id: "f", type: "frame", x: 0, y: 0, width: 10, height: 10, children: [] } as SceneNode)).toBe(true);
   });
 });

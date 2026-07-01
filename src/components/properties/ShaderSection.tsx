@@ -10,6 +10,7 @@ import {
   setShaderParam,
   setShaderColorAt,
   SHADER_SUPPORTED_TYPES,
+  nodeHasRasterContent,
 } from "./shaderSectionUtils";
 
 interface Props {
@@ -21,6 +22,13 @@ export function ShaderSection({ node, onUpdate }: Props) {
   if (!SHADER_SUPPORTED_TYPES.has(node.type)) return null;
   const shader = node.shader;
   const desc = shader ? SHADER_REGISTRY[shader.kind] : null;
+
+  // Image-filter shaders need rasterizable node content; hide them otherwise
+  // (but always keep the currently-selected kind so the dropdown stays valid).
+  const canImageFilter = nodeHasRasterContent(node);
+  const kindOptions = SHADER_KINDS.filter(
+    (k) => SHADER_REGISTRY[k].category === "fill" || canImageFilter || k === shader?.kind,
+  );
 
   const toggle = (
     <input
@@ -39,7 +47,7 @@ export function ShaderSection({ node, onUpdate }: Props) {
           <SelectInput
             label="Type"
             value={shader.kind}
-            options={SHADER_KINDS.map((k) => ({ value: k, label: SHADER_REGISTRY[k].label }))}
+            options={kindOptions.map((k) => ({ value: k, label: SHADER_REGISTRY[k].label }))}
             onChange={(v) => onUpdate({ shader: defaultShaderConfig(v as ShaderKind) })}
           />
           {desc.presets.length > 0 && (
