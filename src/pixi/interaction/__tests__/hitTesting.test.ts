@@ -150,3 +150,144 @@ describe("findNodeAtPoint", () => {
     expect(findNodeAtPoint(160, 160)).toBe("frameA");
   });
 });
+
+/**
+ * Fixture scene for scope-chain drill tests:
+ *
+ *   frameA (0,0 400x400)
+ *     └─ frameB (50,50 200x200)
+ *          ├─ c1 (10,10 50x50)   -> abs (60,60 .. 110,110)
+ *          └─ c2 (100,10 50x50) -> abs (150,60 .. 200,110)
+ *   frameC (500,0 100x100)
+ *     └─ d1 (10,10 50x50)        -> abs (510,10 .. 560,60)
+ */
+function seedDrillScopeScene(): void {
+  const frameA = {
+    id: "frameA",
+    type: "frame",
+    name: "Frame A",
+    x: 0,
+    y: 0,
+    width: 400,
+    height: 400,
+    fill: "#ffffff",
+    layout: { autoLayout: false },
+  } as unknown as FlatSceneNode;
+
+  const frameB = {
+    id: "frameB",
+    type: "frame",
+    name: "Frame B",
+    x: 50,
+    y: 50,
+    width: 200,
+    height: 200,
+    fill: "#eeeeee",
+    layout: { autoLayout: false },
+  } as unknown as FlatSceneNode;
+
+  const c1 = {
+    id: "c1",
+    type: "rect",
+    name: "C1",
+    x: 10,
+    y: 10,
+    width: 50,
+    height: 50,
+    fill: "#ff0000",
+  } as unknown as FlatSceneNode;
+
+  const c2 = {
+    id: "c2",
+    type: "rect",
+    name: "C2",
+    x: 100,
+    y: 10,
+    width: 50,
+    height: 50,
+    fill: "#0000ff",
+  } as unknown as FlatSceneNode;
+
+  const frameC = {
+    id: "frameC",
+    type: "frame",
+    name: "Frame C",
+    x: 500,
+    y: 0,
+    width: 100,
+    height: 100,
+    fill: "#dddddd",
+    layout: { autoLayout: false },
+  } as unknown as FlatSceneNode;
+
+  const d1 = {
+    id: "d1",
+    type: "rect",
+    name: "D1",
+    x: 10,
+    y: 10,
+    width: 50,
+    height: 50,
+    fill: "#00ff00",
+  } as unknown as FlatSceneNode;
+
+  useSceneStore.setState({
+    nodesById: { frameA, frameB, c1, c2, frameC, d1 },
+    parentById: {
+      frameA: null,
+      frameB: "frameA",
+      c1: "frameB",
+      c2: "frameB",
+      frameC: null,
+      d1: "frameC",
+    },
+    childrenById: {
+      frameA: ["frameB"],
+      frameB: ["c1", "c2"],
+      c1: [],
+      c2: [],
+      frameC: ["d1"],
+      d1: [],
+    },
+    rootIds: ["frameA", "frameC"],
+    componentArtifactsById: {},
+    _cachedTree: null,
+  });
+}
+
+describe("scope-chain hit testing (Figma drill scope)", () => {
+  // drill state: selection c1 (inside frameA > frameB)
+  beforeEach(() => {
+    resetStores();
+    seedDrillScopeScene();
+    useSelectionStore.getState().enterContainer("frameB");
+    useSelectionStore.getState().select("c1");
+  });
+
+  it("click on a deep sibling selects the sibling, not the top-level frame", () => {
+    // point inside c2 (absolute ~160,70) -> findNodeAtPoint -> "c2"
+    expect(findNodeAtPoint(160, 70)).toBe("c2");
+  });
+
+  it("click on the selected node keeps it", () => {
+    // point inside c1 -> "c1"
+    expect(findNodeAtPoint(70, 70)).toBe("c1");
+  });
+
+  it("click inside the scope but not on any child of frameB selects frameB", () => {
+    // point inside frameA within frameB's bounds but outside c1/c2 -> "frameB"
+    expect(findNodeAtPoint(240, 240)).toBe("frameB");
+  });
+
+  it("click on another top-level frame pops the scope and clamps to it", () => {
+    // point inside d1 (inside frameC) -> "frameC" (scope does not extend there)
+    expect(findNodeAtPoint(520, 20)).toBe("frameC");
+  });
+
+  it("no drill state: clicks still clamp to the top-level frame", () => {
+    resetStores();
+    seedDrillScopeScene();
+    // point inside c1 -> "frameA"
+    expect(findNodeAtPoint(70, 70)).toBe("frameA");
+  });
+});

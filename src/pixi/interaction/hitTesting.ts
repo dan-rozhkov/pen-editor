@@ -168,6 +168,25 @@ export function findCanvasHitTargetAtPoint(
   const enteredContainerId = selectionState?.enteredContainerId ?? null;
   const enteredInstanceDescendantPath = selectionState?.enteredInstanceDescendantPath ?? null;
 
+  // Figma-style drill scope: the entered container and its ancestors, plus
+  // the ancestors of every selected node. A hit resolved inside this chain
+  // is returned as-is instead of being clamped to the top-level node.
+  const scopeSet = new Set<string>();
+  if (selectionState) {
+    const addAncestors = (startId: string | null | undefined): void => {
+      let cur = startId ?? null;
+      while (cur) {
+        if (scopeSet.has(cur)) break;
+        scopeSet.add(cur);
+        cur = state.parentById[cur] ?? null;
+      }
+    };
+    addAncestors(enteredContainerId);
+    for (const id of selectionState.selectedIds) {
+      addAncestors(state.parentById[id] ?? null);
+    }
+  }
+
   const hitNode = (
     node: SceneNode,
     parentAbsX: number,
@@ -332,8 +351,7 @@ export function findCanvasHitTargetAtPoint(
       if (deepSelect) return childHit;
       if (childHit.kind === "instance-descendant") return childHit;
       if (selectedSet?.has(childHit.nodeId)) return childHit;
-      if (enteredContainerId === node.id) return childHit;
-      if (state.parentById[node.id] === null) return { kind: "node", nodeId: node.id };
+      if (scopeSet.has(node.id)) return childHit;
       return { kind: "node", nodeId: node.id };
     }
 
