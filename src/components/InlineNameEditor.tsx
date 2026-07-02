@@ -3,6 +3,7 @@ import type { FlatSceneNode } from '../types/scene'
 import { useSceneStore } from '../store/sceneStore'
 import { useSelectionStore } from '../store/selectionStore'
 import { useViewportStore } from '../store/viewportStore'
+import { LABEL_FONT_SIZE, LABEL_OFFSET_Y } from '../pixi/selectionOverlay/constants'
 
 interface InlineNameEditorProps {
   node: FlatSceneNode
@@ -10,8 +11,6 @@ interface InlineNameEditorProps {
   absoluteY: number
 }
 
-const LABEL_FONT_SIZE = 11
-const LABEL_OFFSET_Y = 4
 const MIN_WIDTH = 20
 const PADDING = 4
 
