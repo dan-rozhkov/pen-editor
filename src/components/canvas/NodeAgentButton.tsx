@@ -116,7 +116,7 @@ export function NodeAgentButton({
           <SparkleIcon className="size-3.5" weight="fill" />
         </Button>
       ) : (
-        <div className="flex w-72 flex-col gap-1 rounded-xl border border-border-default bg-surface-panel/95 p-1.5 shadow-[0_0px_3px_rgba(0,0,0,0.04)]">
+        <div className="flex w-72 flex-col gap-1 rounded-xl border border-border-default bg-surface-panel p-1.5 shadow-[0_0px_3px_rgba(0,0,0,0.04)]">
           <div className="flex items-end gap-1.5">
             <textarea
               ref={textareaRef}
