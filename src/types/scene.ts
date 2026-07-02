@@ -148,8 +148,9 @@ export type ShaderKind =
   | 'water' | 'flutedGlass' | 'halftoneDots' | 'imageDithering'
 
 /**
- * A live shader overlay attached to a node (rendered by ShaderLayer, not Pixi).
- * `params` holds prop overrides on top of the selected preset.
+ * A shader attached to a node. Baked to a static texture and rendered inside the
+ * node's Pixi container (so it obeys scene z-order). `params` holds prop
+ * overrides on top of the selected preset.
  */
 export interface ShaderConfig {
   kind: ShaderKind
@@ -209,7 +210,7 @@ export interface BaseNode {
    * legacy `effect` field. Use `getEffects()` from `@/utils/fillUtils`.
    */
   effects?: Effect[]
-  /** Live shader overlay (paper-design/shaders). Rendered by ShaderLayer. */
+  /** Shader (paper-design/shaders), baked to a texture and rendered in Pixi. */
   shader?: ShaderConfig
   // Aspect ratio lock for proportional resize
   aspectRatioLocked?: boolean

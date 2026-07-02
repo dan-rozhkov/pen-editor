@@ -28,6 +28,7 @@ import { drawLayoutGrids } from "./layoutGridRenderer";
 import { createGroupContainer } from "./groupRenderer";
 import { createEmbedContainer, updateEmbedContainer } from "./embedRenderer";
 import { createConnectorContainer, updateConnectorContainer } from "./connectorRenderer";
+import { applyShaderFill, shouldRebakeShader, resizeShaderFill } from "./shaderFillHelpers";
 import type { ConnectorNode } from "@/types/scene";
 import type { ShadowShape } from "./shadowHelpers";
 import { resolveRefToTree } from "@/utils/instanceRuntime";
@@ -405,6 +406,9 @@ export function createNodeContainer(
     getNodeCornerRadiusPerCorner(node),
   );
 
+  // Shader fill (baked texture in-scene, so it obeys z-order)
+  if (node.shader) applyShaderFill(container, node);
+
   return container;
 }
 
@@ -531,6 +535,9 @@ export function updateNodeContainer(
       getNodeCornerRadiusPerCorner(node),
     );
   }
+
+  // Shader fill: re-bake when the shader config or box size changed.
+  if (shouldRebakeShader(node, prev)) applyShaderFill(container, node);
 }
 
 /**
@@ -656,4 +663,8 @@ export function applyLayoutSize(
     }
     // Text and other types don't need size updates for layout
   }
+
+  // Shader fill: the layout-driven size change bypasses node.width/height (and
+  // thus shouldRebakeShader), so resize the baked sprite here and debounce-rebake.
+  if (node.shader) resizeShaderFill(container, node, layoutWidth, layoutHeight);
 }
