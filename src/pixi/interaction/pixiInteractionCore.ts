@@ -12,11 +12,11 @@ import {
 } from "@/store/editorModeStore";
 import {
   findNodeById,
-  findDeepestChildAtPosition,
   getNodeAbsolutePositionWithLayout,
   getNodeEffectiveSize,
   isDescendantOfFlat,
 } from "@/utils/nodeUtils";
+import { resolveDrillChild } from "./drillDown";
 import type { InteractionContext } from "./types";
 import {
   screenToWorld,
@@ -35,7 +35,6 @@ import { createConnectorController } from "./connectorController";
 import { createDragController, DRAG_CLICK_THRESHOLD } from "./dragController";
 import { createMarqueeController } from "./marqueeController";
 import { createMeasurementController } from "./measurementController";
-import { prepareFrameNode } from "@/utils/instanceUtils";
 import { resolveRefToTree, findNodeByPath } from "@/utils/instanceRuntime";
 import type { SceneNode, RefNode, TextNode } from "@/types/scene";
 import { resolveTextHandleReset } from "./textResize";
@@ -513,31 +512,15 @@ export function setupPixiInteraction(
       }
       if (selectedNode && (selectedNode.type === "frame" || selectedNode.type === "group")) {
         useSelectionStore.getState().enterContainer(selectedNode.id);
-
-        const absPos = getNodeAbsolutePositionWithLayout(
+        const childId = resolveDrillChild(
+          selectedNode,
+          world.x,
+          world.y,
           currentNodes,
-          selectedNode.id,
           calculateLayoutForFrame,
         );
-        if (!absPos) return;
-
-        const localX = world.x - absPos.x;
-        const localY = world.y - absPos.y;
-        const hitChildren =
-          selectedNode.type === "frame" && selectedNode.layout?.autoLayout
-            ? prepareFrameNode(selectedNode, calculateLayoutForFrame).layoutChildren
-            : selectedNode.children;
-        const childId = findDeepestChildAtPosition(hitChildren, localX, localY);
         if (childId) {
           useSelectionStore.getState().select(childId);
-
-          // Start inline editing immediately if the deepest child is text/embed
-          const childNode = useSceneStore.getState().nodesById[childId];
-          if (childNode?.type === "text") {
-            useSelectionStore.getState().startEditing(childId);
-          } else if (childNode?.type === "embed") {
-            useSelectionStore.getState().setActiveEmbed(childId);
-          }
         }
         return;
       }
@@ -559,6 +542,19 @@ export function setupPixiInteraction(
     } else if (node.type === "frame" || node.type === "group") {
       // Enter container (fallback when no selected container context)
       useSelectionStore.getState().enterContainer(hitId);
+      const container = findNodeById(state.getNodes(), hitId);
+      if (container && (container.type === "frame" || container.type === "group")) {
+        const childId = resolveDrillChild(
+          container,
+          world.x,
+          world.y,
+          state.getNodes(),
+          calculateLayoutForFrame,
+        );
+        if (childId) {
+          useSelectionStore.getState().select(childId);
+        }
+      }
     }
   }
 
