@@ -12,7 +12,11 @@ import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { findNodeById, findParentFrame } from "@/utils/nodeUtils";
 import { isTypingTarget } from "./keyboardShortcutUtils";
-import { handleArrowKeys, handleEnterEditing } from "./keyboardNavigation";
+import {
+  handleArrowKeys,
+  handleEnterEditing,
+  handleTabNavigation,
+} from "./keyboardNavigation";
 
 /**
  * Dependencies the keydown handler needs from the host hook. These mirror the
@@ -104,6 +108,17 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
       e.preventDefault();
       useEditorModeStore.getState().enterPresent();
       return;
+    }
+
+    // Tab / Shift+Tab: move selection to the next/previous sibling node. Purely
+    // a selection change (non-mutating), so it's allowed in read-only mode too —
+    // handle it before the read-only guard below.
+    if (e.code === "Tab") {
+      if (isTyping) return;
+      if (handleTabNavigation(e)) {
+        e.preventDefault();
+        return;
+      }
     }
 
     // Read-only (view) mode: allow only non-mutating commands and swallow every

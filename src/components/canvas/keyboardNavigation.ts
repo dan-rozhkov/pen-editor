@@ -55,6 +55,44 @@ export function handleEnterEditing(
   return false;
 }
 
+/**
+ * Handle the Tab key to move the selection to the next sibling node (Shift+Tab
+ * for the previous one). Selection wraps around within the current parent's
+ * children (or the root nodes for a top-level selection). Hidden nodes are
+ * skipped. No-op unless exactly one node is selected. Returns `true` if the
+ * event was consumed.
+ */
+export function handleTabNavigation(e: KeyboardEvent): boolean {
+  const { selectedIds } = useSelectionStore.getState();
+  if (selectedIds.length !== 1) return false;
+
+  const currentId = selectedIds[0];
+  const scene = useSceneStore.getState();
+  const parentId = scene.parentById[currentId] ?? null;
+  const siblingIds = parentId
+    ? scene.childrenById[parentId] ?? []
+    : scene.rootIds;
+
+  // Only navigate among visible siblings so Tab doesn't land on hidden nodes.
+  const visibleSiblings = siblingIds.filter(
+    (id) => scene.nodesById[id]?.visible !== false,
+  );
+  if (visibleSiblings.length === 0) return false;
+
+  const currentIndex = visibleSiblings.indexOf(currentId);
+  if (currentIndex === -1) return false;
+
+  const delta = e.shiftKey ? -1 : 1;
+  const nextIndex =
+    (currentIndex + delta + visibleSiblings.length) % visibleSiblings.length;
+  const nextId = visibleSiblings[nextIndex];
+
+  if (nextId && nextId !== currentId) {
+    useSelectionStore.getState().select(nextId);
+  }
+  return true;
+}
+
 interface ArrowKeyDeps {
   updateNode: (id: string, updates: Partial<SceneNode>) => void;
   moveNode: (nodeId: string, targetParentId: string, index: number) => void;
