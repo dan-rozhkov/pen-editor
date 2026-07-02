@@ -361,7 +361,7 @@ export function ChatPanelContent() {
               if (value) setModel(value);
             }}
             size="sm"
-            className="w-fit"
+            className="min-w-0 flex-1"
           />
           <SelectWithOptions
             value={String(parallelCount)}
