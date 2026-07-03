@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { Container, Graphics, Sprite, Texture } from "pixi.js";
-import { placeShaderSprite, shouldRebakeShader, destroyShaderFill, resizeShaderFill } from "../shaderFillHelpers";
+import {
+  placeShaderSprite,
+  shouldRebakeShader,
+  destroyShaderFill,
+  resizeShaderFill,
+  isSizeOnlyShaderChange,
+} from "../shaderFillHelpers";
 import type { FlatSceneNode } from "@/types/scene";
 
 function rectNode(over: Partial<FlatSceneNode> = {}): FlatSceneNode {
@@ -91,5 +97,29 @@ describe("shaderFillHelpers", () => {
     expect(resized.width).toBe(300);
     expect(resized.height).toBe(90);
     expect(resized.mask).toBeTruthy();
+  });
+
+  describe("isSizeOnlyShaderChange", () => {
+    const shader = { kind: "waves", params: {} } as FlatSceneNode["shader"];
+    const base = rectNode({ shader });
+
+    it("true when only width/height changed", () => {
+      expect(isSizeOnlyShaderChange({ ...base, width: 200 }, base)).toBe(true);
+      expect(isSizeOnlyShaderChange({ ...base, height: 120 }, base)).toBe(true);
+    });
+
+    it("false when the shader config changed", () => {
+      const next = { ...base, width: 200, shader: { kind: "waves", params: {} } as FlatSceneNode["shader"] };
+      expect(isSizeOnlyShaderChange(next, base)).toBe(false);
+    });
+
+    it("false when the node just became renderable (needs a real bake)", () => {
+      const hidden = { ...base, visible: false };
+      expect(isSizeOnlyShaderChange({ ...base, width: 200 }, hidden)).toBe(false);
+    });
+
+    it("false when nothing changed", () => {
+      expect(isSizeOnlyShaderChange(base, base)).toBe(false);
+    });
   });
 });
