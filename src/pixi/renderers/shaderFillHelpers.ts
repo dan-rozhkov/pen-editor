@@ -1,5 +1,5 @@
-import { Container, Graphics, Sprite } from "pixi.js";
-import type { FlatSceneNode, PerCornerRadius } from "@/types/scene";
+import { Container, Graphics, Sprite, Texture } from "pixi.js";
+import type { FlatSceneNode, PerCornerRadius, ShaderConfig } from "@/types/scene";
 import { drawRoundedShape } from "./fillStrokeHelpers";
 import { SHADER_REGISTRY } from "@/lib/shaders/registry";
 import { rasterizeShader } from "@/lib/shaders/shaderRaster";
@@ -21,6 +21,54 @@ const SHADER_RESIZE_REBAKE_DEBOUNCE_MS = 180;
 const generationByContainer = new WeakMap<Container, number>();
 /** Pending debounced rebake per container (auto-layout resize). */
 const rebakeTimerByContainer = new WeakMap<Container, ReturnType<typeof setTimeout>>();
+/** True while a bake (including its bounded retry) is running for a container. */
+const inFlightByContainer = new WeakMap<Container, Promise<void>>();
+/**
+ * Latest requested bake args for a container that arrived while a bake was
+ * already in flight — each bake mounts its own offscreen WebGL context, so
+ * we coalesce rapid successive requests (e.g. a resize storm) into exactly
+ * one follow-up bake with the newest size, instead of starting one per call.
+ */
+const pendingBakeByContainer = new WeakMap<Container, { node: FlatSceneNode; width: number; height: number }>();
+
+/** Delay before retrying a failed bake, and the shared retry-delay helper. */
+const BAKE_RETRY_DELAY_MS = 300;
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Bake once, and if the result is null, retry exactly once after a short
+ * delay. A null result is often a transient WebGL-context-exhaustion failure
+ * (browsers cap live contexts; the shader library's own getContext() call
+ * fails silently once the cap is hit) rather than a permanent one — by the
+ * time the retry fires, other in-flight bakes have likely released their
+ * contexts. Bails early (without warning) if a newer bake or destroy already
+ * superseded this attempt, via the generation counter.
+ */
+async function bakeWithRetry(
+  shader: ShaderConfig,
+  width: number,
+  height: number,
+  baseImage: string | undefined,
+  container: Container,
+  gen: number,
+): Promise<Texture | null> {
+  const first = await rasterizeShader(shader, width, height, baseImage);
+  if (first) return first;
+  if (generationByContainer.get(container) !== gen || container.destroyed) return null;
+
+  await delay(BAKE_RETRY_DELAY_MS);
+  if (generationByContainer.get(container) !== gen || container.destroyed) return null;
+
+  const retry = await rasterizeShader(shader, width, height, baseImage);
+  if (!retry) {
+    // The current total silence on bake failure made this bug invisible in
+    // the wild; warn once per final failure (not per attempt) so it's diagnosable.
+    console.warn(`[shaderFillHelpers] shader bake failed after retry (kind: ${shader.kind})`);
+  }
+  return retry;
+}
 
 type CornerNode = FlatSceneNode & {
   cornerRadius?: number;
@@ -189,6 +237,15 @@ export function applyShaderFill(
   // An existing sprite is kept — Pixi's container.visible already hides it.
   if (!isNodeRenderable(node)) return;
 
+  // A bake is already running for this container (each mounts its own offscreen
+  // WebGL context) — don't start a second one concurrently. Remember only the
+  // newest request; when the in-flight bake settles it fires exactly one
+  // follow-up with these latest args (see the `.finally` below).
+  if (inFlightByContainer.has(container)) {
+    pendingBakeByContainer.set(container, { node, width, height });
+    return;
+  }
+
   const gen = (generationByContainer.get(container) ?? 0) + 1;
   generationByContainer.set(container, gen);
 
@@ -204,14 +261,14 @@ export function applyShaderFill(
       baseImage = (await extractNodeImage(node.id)) ?? undefined;
     }
 
-    const texture = await rasterizeShader(shader, width, height, baseImage);
+    const texture = await bakeWithRetry(shader, width, height, baseImage, container, gen);
 
     // Discard results superseded by a newer bake or a destroyed container.
     if (generationByContainer.get(container) !== gen || container.destroyed) return;
 
-    // Bake failed (unknown kind, hidden-tab, transient WebGL failure): clear any
-    // stale sprite so the node degrades to shader-less rather than keeping an
-    // out-of-date or wrong-shape fill stuck on it.
+    // Bake failed (unknown kind, hidden-tab, or a transient WebGL failure that
+    // survived the retry): clear any stale sprite so the node degrades to
+    // shader-less rather than keeping an out-of-date or wrong-shape fill stuck on it.
     if (!texture) {
       destroyShaderFill(container);
       return;
@@ -222,5 +279,12 @@ export function applyShaderFill(
     placeShaderSprite(container, new Sprite(texture), node, width, height);
   };
 
-  void run();
+  const promise = run().finally(() => {
+    inFlightByContainer.delete(container);
+    const pending = pendingBakeByContainer.get(container);
+    if (!pending) return;
+    pendingBakeByContainer.delete(container);
+    if (!container.destroyed) applyShaderFill(container, pending.node, pending.width, pending.height);
+  });
+  inFlightByContainer.set(container, promise);
 }

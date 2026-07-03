@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { Texture } from "pixi.js";
 import { SHADER_REGISTRY } from "@/lib/shaders/registry";
 import { buildShaderProps } from "@/lib/shaders/buildShaderProps";
+import { createSemaphore } from "@/lib/shaders/bakeSemaphore";
 import type { ShaderConfig } from "@/types/scene";
 
 /**
@@ -18,6 +19,18 @@ import type { ShaderConfig } from "@/types/scene";
 
 const CACHE_MAX_ENTRIES = 64;
 const cache = new Map<string, Texture>();
+
+/**
+ * Caps concurrent offscreen bakes well under the browser's ~16-context cap.
+ * Nothing previously bounded this (per-container or page-wide), so a resize
+ * storm across one or more shader nodes could mount many bakes at once and
+ * exhaust the cap; once exhausted, context creation fails silently and does
+ * not recover on its own (see rasterizeShader's context-release comment).
+ * `nodeRaster.ts`'s extractNodeImage reuses the app's existing Pixi/WebGL
+ * context via renderer.extract rather than creating a new one, so it doesn't
+ * need to share this semaphore.
+ */
+const BAKE_SEMAPHORE = createSemaphore(3);
 
 /** djb2 hash — cheap content fingerprint for the base image data-URL. */
 function hashString(s: string): number {
@@ -125,6 +138,9 @@ export async function rasterizeShader(
     return cached;
   }
 
+  // Bound how many offscreen WebGL bakes run at once (see BAKE_SEMAPHORE comment).
+  const release = await BAKE_SEMAPHORE.acquire();
+
   // Mount in-viewport but invisible: the shader library measures the host to
   // size its canvas and only paints when on-screen, so an off-screen (e.g.
   // left:-99999px) host yields a 0×0, unpainted canvas. opacity:0 keeps it
@@ -185,6 +201,9 @@ export async function rasterizeShader(
       /* context already gone */
     }
     host.remove();
+    // Release only after the context is torn down above, so the next queued
+    // bake doesn't start while this one's context is still alive.
+    release();
   }
 }
 
