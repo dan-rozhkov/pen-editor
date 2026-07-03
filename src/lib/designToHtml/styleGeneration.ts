@@ -1,4 +1,4 @@
-import type { BaseNode, TextNode, FrameNode, RectNode, ShadowEffect, GradientFill, ImageFill, PerSideStroke, ColorBinding, SolidPaint, GradientPaint, ImagePaint } from "@/types/scene";
+import type { BaseNode, TextNode, FrameNode, RectNode, ShadowEffect, BlurEffect, GradientFill, ImageFill, PerSideStroke, ColorBinding, SolidPaint, GradientPaint, ImagePaint } from "@/types/scene";
 import type { Variable } from "@/types/variable";
 import { applyOpacity } from "@/utils/colorUtils";
 import { hasPerCornerRadius } from "@/utils/renderUtils";
@@ -84,17 +84,25 @@ export function generateVisualStyles(node: BaseNode): Record<string, string> {
     styles.opacity = String(node.opacity);
   }
 
-  // Shadow effects — from the effect stack (bottom-to-top).
+  // Effects — from the effect stack (bottom-to-top).
   // CSS box-shadow lists paint the FIRST shadow on top, but our stack is
   // bottom-to-top, so reverse the stack to get correct visual stacking.
   const effects = getRenderableEffects(node);
-  if (effects.length > 0) {
-    styles["box-shadow"] = effects
-      .filter((e): e is ShadowEffect => e.type === "shadow")
-      .slice()
-      .reverse()
-      .map(generateShadowCss)
-      .join(", ");
+  const shadowCss = effects
+    .filter((e): e is ShadowEffect => e.type === "shadow")
+    .slice()
+    .reverse()
+    .map(generateShadowCss)
+    .join(", ");
+  if (shadowCss) {
+    styles["box-shadow"] = shadowCss;
+  }
+  // Layer blur: first visible blur with radius > 0 wins (matches the renderer).
+  const blurEffect = effects.find(
+    (e): e is BlurEffect => e.type === "blur" && e.radius > 0,
+  );
+  if (blurEffect) {
+    styles.filter = `blur(${blurEffect.radius}px)`;
   }
 
   // Rotation and flip transforms

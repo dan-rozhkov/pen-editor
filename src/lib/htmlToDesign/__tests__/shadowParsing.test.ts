@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseShadow, parseShadows } from "../styleApplication";
+import { parseShadow, parseShadows, parseBlurRadius } from "../styleApplication";
 
 describe("parseShadow (single)", () => {
   it("parses offset/blur/spread/color", () => {
@@ -40,5 +40,22 @@ describe("parseShadows (list)", () => {
     expect(list[1].shadowType).toBe("outer");
     // commas inside rgba() not split
     expect(list[1].offset).toEqual({ x: 0, y: 2 });
+  });
+});
+
+describe("parseBlurRadius", () => {
+  it("parses filter: blur(6px)", () => {
+    expect(parseBlurRadius("blur(6px)")).toBe(6);
+  });
+
+  it("parses blur() inside a filter list", () => {
+    expect(parseBlurRadius("drop-shadow(0 1px 2px black) blur(4.5px)")).toBe(4.5);
+  });
+
+  it("returns null for none, empty, unrelated, or zero-radius filters", () => {
+    expect(parseBlurRadius("none")).toBeNull();
+    expect(parseBlurRadius("")).toBeNull();
+    expect(parseBlurRadius("grayscale(1)")).toBeNull();
+    expect(parseBlurRadius("blur(0px)")).toBeNull();
   });
 });

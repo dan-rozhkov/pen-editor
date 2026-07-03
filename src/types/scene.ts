@@ -118,12 +118,20 @@ export interface ShadowEffect {
   visible?: boolean   // defaults to true
 }
 
+export interface BlurEffect {
+  type: 'blur'
+  radius: number      // px, 0-100 in the UI; <= 0 renders nothing
+  // Stable id for UI list keys when used inside `effects: Effect[]`
+  id?: string
+  visible?: boolean   // defaults to true
+}
+
 /**
  * One effect layer in an effect stack. `effects: Effect[]` is ordered
- * bottom-to-top like `fills`. Currently only shadows; future effect kinds
- * (blur, etc.) extend this union.
+ * bottom-to-top like `fills`. Shadows and layer blur; future effect kinds
+ * extend this union.
  */
-export type Effect = ShadowEffect
+export type Effect = ShadowEffect | BlurEffect
 
 // Per-side stroke widths (like CSS border-top, border-right, etc.)
 export interface PerSideStroke {

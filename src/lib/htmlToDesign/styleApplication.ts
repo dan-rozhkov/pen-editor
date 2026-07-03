@@ -160,12 +160,16 @@ export function applyBaseProps(
     node.clip = true;
   }
 
-  // Box shadow → effect (single) or effects (multiple)
+  // Box shadow + filter blur → effect (single shadow) or effects (stack)
   const shadows = parseShadows(style.boxShadow);
-  if (shadows.length === 1) {
-    node.effect = shadows[0];
-  } else if (shadows.length > 1) {
-    node.effects = shadows;
+  const blurRadius = parseBlurRadius(style.filter);
+  const allEffects: Effect[] = blurRadius != null
+    ? [...shadows, { type: "blur", radius: blurRadius }]
+    : shadows;
+  if (allEffects.length === 1 && allEffects[0].type === "shadow") {
+    node.effect = allEffects[0];
+  } else if (allEffects.length > 0) {
+    node.effects = allEffects;
   }
 }
 
@@ -297,6 +301,15 @@ export function parseShadows(boxShadow: string): ShadowEffect[] {
   }
   // CSS top-to-bottom → bottom-to-top stack.
   return (shadows.reverse() as ShadowEffect[]);
+}
+
+/** Parse a CSS `filter` value; returns the blur radius in px, or null. */
+export function parseBlurRadius(filter: string): number | null {
+  if (!filter || filter === "none") return null;
+  const match = filter.match(/(?:^|\s)blur\(\s*([\d.]+)px\s*\)/);
+  if (!match) return null;
+  const radius = parseFloat(match[1]);
+  return radius > 0 ? radius : null;
 }
 
 /** Create a RectNode from an <hr> element */

@@ -76,3 +76,32 @@ describe("applyBaseProps — legacy single-background-layer path", () => {
     expect(node.imageFill).toEqual({ url: "http://x/y.png", mode: "fit" });
   });
 });
+
+describe("applyBaseProps — box-shadow + filter blur → effects stack", () => {
+  it("shadow + blur → effects of length 2, [shadow, blur], no legacy single effect", () => {
+    const node = rect();
+    applyBaseProps(
+      node,
+      styleStub({
+        boxShadow: "2px 4px 6px rgba(0,0,0,0.25)",
+        filter: "blur(6px)",
+      }),
+    );
+    expect(node.effect).toBeUndefined();
+    expect(node.effects).toHaveLength(2);
+    expect(node.effects![0].type).toBe("shadow");
+    expect(node.effects![1]).toEqual({ type: "blur", radius: 6 });
+  });
+
+  it("blur only, no box-shadow → effects [blur], no legacy single effect", () => {
+    const node = rect();
+    applyBaseProps(
+      node,
+      styleStub({
+        filter: "blur(5px)",
+      }),
+    );
+    expect(node.effect).toBeUndefined();
+    expect(node.effects).toEqual([{ type: "blur", radius: 5 }]);
+  });
+});

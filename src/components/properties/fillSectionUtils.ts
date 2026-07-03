@@ -2,7 +2,6 @@ import type {
   Effect,
   GradientType,
   Paint,
-  ShadowEffect,
 } from "@/types/scene";
 import {
   createGradientPaint,
@@ -135,8 +134,8 @@ export function convertFillKind(fills: Paint[], index: number, kind: FillKind): 
 
 // --- Effects ---
 
-/** Append a new shadow effect to the top of the stack. */
-export function addEffect(effects: Effect[], effect: ShadowEffect): Effect[] {
+/** Append a new effect to the top of the stack. */
+export function addEffect(effects: Effect[], effect: Effect): Effect[] {
   return [...effects, effect];
 }
 

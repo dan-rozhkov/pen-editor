@@ -1,5 +1,6 @@
 import {
   generateId,
+  type BlurEffect,
   type Effect,
   type FlatSceneNode,
   type GradientFill,
@@ -150,6 +151,15 @@ export function getRenderableEffects(node: EffectSource): Effect[] {
 export function createShadowEffect(init?: Partial<Omit<ShadowEffect, 'type'>>): ShadowEffect {
   return {
     ...getDefaultShadow(),
+    id: generateId(),
+    ...init,
+  }
+}
+
+export function createBlurEffect(init?: Partial<Omit<BlurEffect, 'type'>>): BlurEffect {
+  return {
+    type: 'blur',
+    radius: 4,
     id: generateId(),
     ...init,
   }

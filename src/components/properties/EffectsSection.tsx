@@ -9,9 +9,16 @@ import {
 } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ArrowDown, ArrowUp, Eye, EyeSlash, PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import { parseHexAlpha } from "@/utils/shadowUtils";
 import {
+  createBlurEffect,
   createShadowEffect,
   getEffects,
   clearLegacyEffectProps,
@@ -26,6 +33,7 @@ import {
 
 /** Human label for an effect row, derived from the effect (not hardcoded). */
 function effectLabel(effect: Effect): string {
+  if (effect.type === "blur") return "Layer Blur";
   return effect.shadowType === "inner" ? "Inner Shadow" : "Drop Shadow";
 }
 
@@ -50,8 +58,8 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
     onUpdate({ effects: next, ...clearLegacyEffectProps() } as Partial<SceneNode>);
   };
 
-  const handleAdd = () => {
-    commit(addEffect(effects, createShadowEffect()));
+  const handleAdd = (effect: Effect) => {
+    commit(addEffect(effects, effect));
   };
 
   const updateShadow = (index: number, shadow: ShadowEffect) => {
@@ -62,9 +70,21 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
     <PropertySection
       title="Effects"
       action={
-        <Button variant="ghost" size="icon-sm" onClick={handleAdd} title="Add effect">
-          <PlusIcon />
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={<Button variant="ghost" size="icon-sm" title="Add effect" />}
+          >
+            <PlusIcon />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => handleAdd(createShadowEffect())}>
+              Drop shadow
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleAdd(createBlurEffect())}>
+              Layer blur
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       }
     >
       {isMixed ? (
@@ -90,7 +110,7 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
                     >
                       <div
                         className="h-4 w-4 shrink-0 rounded border border-border-default"
-                        style={{ backgroundColor: effect.color }}
+                        style={effect.type === "shadow" ? { backgroundColor: effect.color } : undefined}
                       />
                       <span className="min-w-0 flex-1 truncate text-xs text-text-primary">
                         {effectLabel(effect)}
@@ -122,79 +142,104 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
                         </Button>
                       </div>
 
-                      {/* Color + opacity */}
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1">
-                          <ColorInput
-                            value={effect.color}
-                            onChange={(v) =>
-                              updateShadow(arrayIndex, { ...effect, color: v || "#00000040" })
-                            }
-                          />
-                        </div>
-                        <div className="w-16 shrink-0">
+                      {effect.type === "shadow" && (
+                        <>
+                          {/* Color + opacity */}
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1">
+                              <ColorInput
+                                value={effect.color}
+                                onChange={(v) =>
+                                  updateShadow(arrayIndex, { ...effect, color: v || "#00000040" })
+                                }
+                              />
+                            </div>
+                            <div className="w-16 shrink-0">
+                              <NumberInput
+                                label="%"
+                                value={Math.round(parseHexAlpha(effect.color).opacity * 100)}
+                                onChange={(v) => {
+                                  const opacity = Math.max(0, Math.min(100, v)) / 100;
+                                  const alpha = Math.round(opacity * 255)
+                                    .toString(16)
+                                    .padStart(2, "0");
+                                  const baseColor = effect.color.slice(0, 7);
+                                  updateShadow(arrayIndex, { ...effect, color: baseColor + alpha });
+                                }}
+                                min={0}
+                                max={100}
+                                step={1}
+                              />
+                            </div>
+                          </div>
+
+                          <PropertyRow>
+                            <NumberInput
+                              label="X"
+                              value={effect.offset.x}
+                              onChange={(v) =>
+                                updateShadow(arrayIndex, {
+                                  ...effect,
+                                  offset: { ...effect.offset, x: v },
+                                })
+                              }
+                              step={1}
+                            />
+                            <NumberInput
+                              label="Y"
+                              value={effect.offset.y}
+                              onChange={(v) =>
+                                updateShadow(arrayIndex, {
+                                  ...effect,
+                                  offset: { ...effect.offset, y: v },
+                                })
+                              }
+                              step={1}
+                            />
+                          </PropertyRow>
+
+                          <PropertyRow>
+                            <NumberInput
+                              label="Blur"
+                              labelOutside
+                              value={effect.blur}
+                              onChange={(v) =>
+                                updateShadow(arrayIndex, { ...effect, blur: Math.max(0, v) })
+                              }
+                              min={0}
+                              step={1}
+                            />
+                            <NumberInput
+                              label="Spread"
+                              labelOutside
+                              value={effect.spread}
+                              onChange={(v) => updateShadow(arrayIndex, { ...effect, spread: v })}
+                              step={1}
+                            />
+                          </PropertyRow>
+                        </>
+                      )}
+
+                      {effect.type === "blur" && (
+                        <PropertyRow>
                           <NumberInput
-                            label="%"
-                            value={Math.round(parseHexAlpha(effect.color).opacity * 100)}
-                            onChange={(v) => {
-                              const opacity = Math.max(0, Math.min(100, v)) / 100;
-                              const alpha = Math.round(opacity * 255)
-                                .toString(16)
-                                .padStart(2, "0");
-                              const baseColor = effect.color.slice(0, 7);
-                              updateShadow(arrayIndex, { ...effect, color: baseColor + alpha });
-                            }}
+                            label="Blur"
+                            labelOutside
+                            value={effect.radius}
+                            onChange={(v) =>
+                              commit(
+                                updateEffectAt(effects, arrayIndex, {
+                                  ...effect,
+                                  radius: Math.max(0, Math.min(100, v)),
+                                }),
+                              )
+                            }
                             min={0}
                             max={100}
                             step={1}
                           />
-                        </div>
-                      </div>
-
-                      <PropertyRow>
-                        <NumberInput
-                          label="X"
-                          value={effect.offset.x}
-                          onChange={(v) =>
-                            updateShadow(arrayIndex, {
-                              ...effect,
-                              offset: { ...effect.offset, x: v },
-                            })
-                          }
-                          step={1}
-                        />
-                        <NumberInput
-                          label="Y"
-                          value={effect.offset.y}
-                          onChange={(v) =>
-                            updateShadow(arrayIndex, {
-                              ...effect,
-                              offset: { ...effect.offset, y: v },
-                            })
-                          }
-                          step={1}
-                        />
-                      </PropertyRow>
-
-                      <PropertyRow>
-                        <NumberInput
-                          label="Blur"
-                          labelOutside
-                          value={effect.blur}
-                          onChange={(v) =>
-                            updateShadow(arrayIndex, { ...effect, blur: Math.max(0, v) })
-                          }
-                          min={0}
-                          step={1}
-                        />
-                        <NumberInput
-                          label="Spread"
-                          labelOutside
-                          value={effect.spread}
-                          onChange={(v) => updateShadow(arrayIndex, { ...effect, spread: v })}
-                          step={1}
-                        />
-                      </PropertyRow>
+                        </PropertyRow>
+                      )}
                     </PopoverContent>
                   </Popover>
 
