@@ -1,5 +1,60 @@
-import type { PathNode, LineNode, PolygonNode } from "@/types/scene";
+import type {
+  ColorBinding,
+  GradientFill,
+  ImageFill,
+  LineNode,
+  Paint,
+  PathNode,
+  PolygonNode,
+} from "@/types/scene";
 import { applyOpacity } from "@/utils/colorUtils";
+import { getRenderableFills } from "@/utils/fillUtils";
+
+let gradientIdCounter = 0;
+
+/** Build fill attribute values (bottom-to-top) + <defs> markup for a node's paint stack. */
+function buildSvgFillLayers(node: {
+  fills?: Paint[];
+  fill?: string;
+  fillOpacity?: number;
+  fillBinding?: ColorBinding;
+  gradientFill?: GradientFill;
+  imageFill?: ImageFill;
+}): { layers: { fill: string; opacity?: number }[]; defs: string } {
+  const paints = getRenderableFills(node);
+  const layers: { fill: string; opacity?: number }[] = [];
+  let defs = "";
+  for (const paint of paints) {
+    if (paint.type === "solid") {
+      layers.push({
+        fill: applyOpacity(paint.color, paint.opacity),
+      });
+    } else if (paint.type === "gradient") {
+      const id = `pen-svg-grad-${++gradientIdCounter}`;
+      defs += gradientToSvgDef(paint.gradient, id);
+      layers.push({ fill: `url(#${id})`, opacity: paint.opacity });
+    }
+    // image paints: skipped in SVG output (matches pathRenderer scope)
+  }
+  return { layers, defs };
+}
+
+function gradientToSvgDef(g: GradientFill, id: string): string {
+  const stops = [...g.stops]
+    .sort((a, b) => a.position - b.position)
+    .map(
+      (s) =>
+        `<stop offset="${s.position}" stop-color="${s.color}"${
+          s.opacity != null && s.opacity !== 1 ? ` stop-opacity="${s.opacity}"` : ""
+        }/>`,
+    )
+    .join("");
+  if (g.type === "radial") {
+    const r = g.endRadius ?? (Math.hypot(g.endX - g.startX, g.endY - g.startY) || 0.5);
+    return `<radialGradient id="${id}" cx="${g.startX}" cy="${g.startY}" r="${r}">${stops}</radialGradient>`;
+  }
+  return `<linearGradient id="${id}" x1="${g.startX}" y1="${g.startY}" x2="${g.endX}" y2="${g.endY}">${stops}</linearGradient>`;
+}
 
 function getStrokeAlignPaddingUnits(
   strokeWidth: number,
@@ -31,7 +86,7 @@ function safeRatio(num: number, den: number): number {
  * Convert a PathNode to inline SVG markup
  */
 export function pathNodeToSvg(node: PathNode): string {
-  const fill = node.fill ? applyOpacity(node.fill, node.fillOpacity) : "none";
+  const { layers, defs } = buildSvgFillLayers(node);
   const fillRule = node.fillRule ?? "nonzero";
 
   let strokeWidth = 0;
@@ -70,7 +125,18 @@ export function pathNodeToSvg(node: PathNode): string {
   const paddedVbW = vbW + padUnits * 2;
   const paddedVbH = vbH + padUnits * 2;
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="${paddedVbX} ${paddedVbY} ${paddedVbW} ${paddedVbH}" style="${style}"><path d="${node.geometry}" fill="${fill}" fill-rule="${fillRule}"${strokeAttr}/></svg>`;
+  const shapeEls =
+    layers.length === 0
+      ? `<path d="${node.geometry}" fill="none" fill-rule="${fillRule}"${strokeAttr}/>`
+      : layers
+          .map(
+            (l, i) =>
+              `<path d="${node.geometry}" fill="${l.fill}"${
+                l.opacity != null && l.opacity !== 1 ? ` fill-opacity="${l.opacity}"` : ""
+              } fill-rule="${fillRule}"${i === layers.length - 1 ? strokeAttr : ""}/>`,
+          )
+          .join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="${paddedVbX} ${paddedVbY} ${paddedVbW} ${paddedVbH}" style="${style}">${defs ? `<defs>${defs}</defs>` : ""}${shapeEls}</svg>`;
 }
 
 /**
@@ -101,7 +167,7 @@ export function polygonNodeToSvg(node: PolygonNode): string {
   }
   const pointsStr = points.join(" ");
 
-  const fill = node.fill ? applyOpacity(node.fill, node.fillOpacity) : "none";
+  const { layers, defs } = buildSvgFillLayers(node);
   let strokeWidth = 0;
   let strokeAttr = "";
   if (node.stroke && node.strokeWidth) {
@@ -114,5 +180,16 @@ export function polygonNodeToSvg(node: PolygonNode): string {
   const padY = padUnits;
   const style = buildSvgRenderStyle(padX, padY);
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${node.width + padX * 2}" height="${node.height + padY * 2}" viewBox="${-padUnits} ${-padUnits} ${node.width + padUnits * 2} ${node.height + padUnits * 2}" style="${style}"><polygon points="${pointsStr}" fill="${fill}"${strokeAttr}/></svg>`;
+  const shapeEls =
+    layers.length === 0
+      ? `<polygon points="${pointsStr}" fill="none"${strokeAttr}/>`
+      : layers
+          .map(
+            (l, i) =>
+              `<polygon points="${pointsStr}" fill="${l.fill}"${
+                l.opacity != null && l.opacity !== 1 ? ` fill-opacity="${l.opacity}"` : ""
+              }${i === layers.length - 1 ? strokeAttr : ""}/>`,
+          )
+          .join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${node.width + padX * 2}" height="${node.height + padY * 2}" viewBox="${-padUnits} ${-padUnits} ${node.width + padUnits * 2} ${node.height + padUnits * 2}" style="${style}">${defs ? `<defs>${defs}</defs>` : ""}${shapeEls}</svg>`;
 }
