@@ -9,7 +9,7 @@ import type {
   TextNode,
 } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
-import { getFills } from "@/utils/fillUtils";
+import { getEffects, getFills } from "@/utils/fillUtils";
 
 type PenTheme = Record<string, string>;
 type PenSize = number | "fill_container" | "fit_content";
@@ -59,7 +59,16 @@ interface PenShadowEffect {
   spread?: number;
   blur?: number;
   color?: string;
+  visible?: boolean;
 }
+
+interface PenBlurEffect {
+  type: "blur";
+  radius: number;
+  visible?: boolean;
+}
+
+type PenEffect = PenShadowEffect | PenBlurEffect;
 
 interface PenBaseNode {
   id: string;
@@ -72,7 +81,7 @@ interface PenBaseNode {
   // Paint stack, bottom-to-top; present instead of "fill" when a node has 2+ fills
   fills?: PenFill[];
   stroke?: PenStroke;
-  effect?: PenShadowEffect[];
+  effect?: PenEffect[];
   opacity?: number;
   enabled?: boolean;
   rotation?: number;
@@ -337,18 +346,26 @@ function exportStroke(node: StrokeSource, context: ExportContext): PenStroke | u
   };
 }
 
-function exportEffects(node: SceneNode): PenShadowEffect[] | undefined {
-  if (!node.effect) return undefined;
-  return [
-    {
-      type: "shadow",
-      shadowType: node.effect.shadowType,
-      offset: node.effect.offset,
-      spread: node.effect.spread,
-      blur: node.effect.blur,
-      color: node.effect.color,
-    },
-  ];
+function exportEffects(node: SceneNode): PenEffect[] | undefined {
+  const effects = getEffects(node);
+  if (effects.length === 0) return undefined;
+  return effects.map((e): PenEffect =>
+    e.type === "blur"
+      ? {
+          type: "blur",
+          radius: e.radius,
+          ...(e.visible === false ? { visible: false } : {}),
+        }
+      : {
+          type: "shadow",
+          shadowType: e.shadowType,
+          offset: e.offset,
+          spread: e.spread,
+          blur: e.blur,
+          color: e.color,
+          ...(e.visible === false ? { visible: false } : {}),
+        },
+  );
 }
 
 function mapAlignItems(value: AlignItems | undefined) {
