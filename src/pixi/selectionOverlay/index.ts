@@ -7,7 +7,7 @@ import { useEditorModeStore } from "@/store/editorModeStore";
 import { createOverlayHelpers } from "./helpers";
 import { redrawSelection } from "./drawSelection";
 import { redrawHover, cleanupSpacingPool } from "./drawHover";
-import { redrawFrameNames, cleanupFrameNamePool } from "./drawFrameNames";
+import { createFrameNameRenderer } from "./drawFrameNames";
 
 // Dirty flags for RAF batching
 const DIRTY_SELECTION = 1;
@@ -56,6 +56,10 @@ export function createSelectionOverlay(
   frameNamesContainer.label = "frame-names";
   selectionContainer.addChild(frameNamesContainer);
 
+  // Instance-scoped so two coexisting overlays never share a Text pool
+  // (a shared pool orphans labels into the wrong container → duplicates).
+  const frameNameRenderer = createFrameNameRenderer();
+
   const sizeLabelsContainer = new Container();
   sizeLabelsContainer.label = "size-labels";
   selectionContainer.addChild(sizeLabelsContainer);
@@ -85,7 +89,7 @@ export function createSelectionOverlay(
   }
 
   function doRedrawFrameNames() {
-    redrawFrameNames(frameNamesContainer);
+    frameNameRenderer.redraw(frameNamesContainer);
   }
 
   function flushSelectionRedraw(): void {
@@ -197,7 +201,7 @@ export function createSelectionOverlay(
     unsubScene();
     unsubViewport();
     unsubMode();
-    cleanupFrameNamePool();
+    frameNameRenderer.cleanup();
     cleanupSpacingPool();
     outlinesContainer.destroy({ children: true });
     hovOutline.destroy();
