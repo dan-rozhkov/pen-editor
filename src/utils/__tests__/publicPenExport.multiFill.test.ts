@@ -85,6 +85,72 @@ describe("publicPenExport — paint stack", () => {
     expect(exported.fills).toBeUndefined();
   });
 
+  it("keeps back-compat: legacy gradientFill + fillOpacity exports gradient with opacity", () => {
+    const node = baseRect({
+      gradientFill: {
+        type: "linear",
+        stops: [
+          { color: "#000000", position: 0 },
+          { color: "#ffffff", position: 1 },
+        ],
+        startX: 0,
+        startY: 0,
+        endX: 1,
+        endY: 0,
+      },
+      fillOpacity: 0.5,
+    });
+
+    const doc = exportNodes([node]);
+    const exported = doc.children[0];
+
+    expect(exported.fills).toBeUndefined();
+    expect(exported.fill).toEqual({
+      type: "gradient",
+      gradientType: "linear",
+      colors: [
+        { color: "#000000", position: 0 },
+        { color: "#ffffff", position: 1 },
+      ],
+      center: { x: 0.5, y: 0 },
+      size: { height: 1 },
+      opacity: 0.5,
+    });
+  });
+
+  it("keeps back-compat: legacy imageFill + fillOpacity exports image with opacity", () => {
+    const node = baseRect({
+      imageFill: { url: "https://example.com/img.png", mode: "fill" },
+      fillOpacity: 0.5,
+    });
+
+    const doc = exportNodes([node]);
+    const exported = doc.children[0];
+
+    expect(exported.fills).toBeUndefined();
+    expect(exported.fill).toEqual({
+      type: "image",
+      url: "https://example.com/img.png",
+      mode: "fill",
+      opacity: 0.5,
+    });
+  });
+
+  it("collapses to scalar fill when only one paint remains after hiding", () => {
+    const node = baseRect({
+      fills: [
+        createSolidPaint("#ff0000"),
+        createSolidPaint("#00ff00", { visible: false }),
+      ],
+    });
+
+    const doc = exportNodes([node]);
+    const exported = doc.children[0];
+
+    expect(exported.fill).toBe("#ff0000");
+    expect(exported.fills).toBeUndefined();
+  });
+
   it("exports a scalar fill (no fills key) when fills has exactly one paint", () => {
     const node = baseRect({
       fills: [createSolidPaint("#abcdef")],

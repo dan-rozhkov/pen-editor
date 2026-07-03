@@ -261,9 +261,13 @@ function exportSolidFill(
   return { type: "color", color: applyOpacityToHex(color, opacity) };
 }
 
-function exportPaint(paint: Paint, context: ExportContext): PenFill | undefined {
+function exportPaint(
+  paint: Paint,
+  context: ExportContext,
+  fallbackOpacity?: number,
+): PenFill | undefined {
   if (paint.visible === false) return undefined;
-  const layerOpacity = paint.opacity;
+  const layerOpacity = paint.opacity ?? fallbackOpacity;
   if (paint.type === "image") {
     return {
       type: "image",
@@ -303,8 +307,12 @@ function exportFills(
   context: ExportContext,
 ): { fill?: PenFill; fills?: PenFill[] } {
   const paints = getFills(node).filter((p) => p.visible !== false);
+  // Legacy-derived stacks (no `fills` on the node): legacyFillsToPaints only
+  // copies `fillOpacity` onto solid paints, but the pre-stack exporter applied
+  // it to gradient/image fills too — keep that output identical via fallback.
+  const fallbackOpacity = node.fills ? undefined : node.fillOpacity;
   const exported = paints
-    .map((p) => exportPaint(p, context))
+    .map((p) => exportPaint(p, context, fallbackOpacity))
     .filter((f): f is PenFill => f !== undefined);
   if (exported.length === 0) return {};
   if (exported.length === 1) return { fill: exported[0] };
