@@ -46,6 +46,20 @@ export function shouldRebakeShader(node: FlatSceneNode, prev: FlatSceneNode): bo
   );
 }
 
+/**
+ * True when shouldRebakeShader fired ONLY because the box size changed —
+ * i.e. an interactive resize. Such changes take the cheap path
+ * (resizeShaderFill: stretch now, debounced re-bake); config changes and
+ * hidden→visible transitions need an immediate real bake.
+ */
+export function isSizeOnlyShaderChange(node: FlatSceneNode, prev: FlatSceneNode): boolean {
+  return (
+    node.shader === prev.shader &&
+    !(isNodeRenderable(node) && !isNodeRenderable(prev)) &&
+    (node.width !== prev.width || node.height !== prev.height)
+  );
+}
+
 /** Remove the shader sprite + mask from a container (texture is owned by the cache). */
 export function destroyShaderFill(container: Container): void {
   generationByContainer.set(container, (generationByContainer.get(container) ?? 0) + 1);

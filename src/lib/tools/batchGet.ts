@@ -14,7 +14,9 @@ interface SearchPattern {
 /**
  * Wire protocol → internal node type aliases. The backend schema (and the
  * LLM) speak "rectangle"/"connector"; the scene graph stores "rect"/"connector".
- * Must stay in sync with TYPE_MAP in batchDesign/nodeMapper.ts.
+ * A superset of TYPE_MAP in batchDesign/nodeMapper.ts (which only maps live
+ * wire names on the create path): "connection" is a legacy alias the current
+ * schema no longer emits, kept for tolerance of old sessions/prompts.
  */
 const WIRE_TYPE_ALIASES: Record<string, string> = {
   rectangle: "rect",

@@ -28,7 +28,7 @@ import { drawLayoutGrids } from "./layoutGridRenderer";
 import { createGroupContainer } from "./groupRenderer";
 import { createEmbedContainer, updateEmbedContainer } from "./embedRenderer";
 import { createConnectorContainer, updateConnectorContainer } from "./connectorRenderer";
-import { applyShaderFill, shouldRebakeShader, resizeShaderFill } from "./shaderFillHelpers";
+import { applyShaderFill, shouldRebakeShader, resizeShaderFill, isSizeOnlyShaderChange } from "./shaderFillHelpers";
 import type { ConnectorNode } from "@/types/scene";
 import type { ShadowShape } from "./shadowHelpers";
 import { resolveRefToTree } from "@/utils/instanceRuntime";
@@ -536,8 +536,17 @@ export function updateNodeContainer(
     );
   }
 
-  // Shader fill: re-bake when the shader config or box size changed.
-  if (shouldRebakeShader(node, prev)) applyShaderFill(container, node);
+  // Shader fill: config change / became-visible → immediate re-bake; size-only
+  // change (interactive resize) → cheap stretch + debounced re-bake, mirroring
+  // the auto-layout path in applyLayoutSize. Direct re-bake at RAF rate spawns
+  // parallel offscreen WebGL contexts and can exhaust the browser's limit.
+  if (shouldRebakeShader(node, prev)) {
+    if (isSizeOnlyShaderChange(node, prev)) {
+      resizeShaderFill(container, node, node.width, node.height);
+    } else {
+      applyShaderFill(container, node);
+    }
+  }
 }
 
 /**
