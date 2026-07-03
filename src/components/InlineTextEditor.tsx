@@ -1,5 +1,6 @@
-import { useRef, useEffect, useCallback } from 'react'
+import { useRef, useEffect, useCallback, useMemo } from 'react'
 import type { TextNode } from '../types/scene'
+import { measureTextEditorVerticalOffset } from '../utils/textEditorMetrics'
 import { useSceneStore, createSnapshot } from '../store/sceneStore'
 import { useHistoryStore } from '../store/historyStore'
 import { useSelectionStore } from '../store/selectionStore'
@@ -297,7 +298,17 @@ export function InlineTextEditor({
   const widthStyle: React.CSSProperties['width'] = shouldUseDynamicAutoSize ? 'max-content' : fixedScreenWidth
   const heightStyle: React.CSSProperties['height'] = shouldUseDynamicAutoSize ? 'auto' : fixedScreenHeight
   const minWidthStyle: React.CSSProperties['minWidth'] = shouldUseDynamicAutoSize ? fixedScreenWidth : undefined
-  const lineHeightPx = `${(node.lineHeight ?? 1.2) * screenFontSize}px`
+  const lineHeightValue = (node.lineHeight ?? 1.2) * screenFontSize
+  const lineHeightPx = `${lineHeightValue}px`
+
+  // Reconcile the DOM line-box centering with Pixi's baseline placement so the
+  // text does not "jump" vertically when entering/leaving edit mode (most
+  // visible at tight line-heights, e.g. lineHeight = 1). See the util for the
+  // full explanation. Recomputed whenever the font metrics or zoom change.
+  const textYOffset = useMemo(
+    () => measureTextEditorVerticalOffset(editorFontShorthand, lineHeightValue),
+    [editorFontShorthand, lineHeightValue],
+  )
 
   return (
     <div
@@ -347,6 +358,8 @@ export function InlineTextEditor({
           : undefined,
         // Reset any inherited styles
         textIndent: 0,
+        // Align the DOM text baseline with Pixi's (see textEditorMetrics).
+        transform: textYOffset ? `translateY(${textYOffset}px)` : undefined,
       }}
     />
   )
