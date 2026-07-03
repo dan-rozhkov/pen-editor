@@ -29,6 +29,9 @@ interface TypographySectionProps {
   onUpdate: (updates: Partial<SceneNode>) => void;
 }
 
+const segmentedButtonGroupClass =
+  "h-6 rounded-md bg-secondary gap-px [&>[data-slot]]:rounded-[5px]! [&>[data-slot]]:border [&>[data-slot]~[data-slot]]:border-l";
+
 function TruncateTextIcon() {
   return (
     <svg
@@ -126,7 +129,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             size="sm"
             className={`flex-1 ${
               node.fontStyle === "italic"
-                ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
+                ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
                 : ""
             }`}
             onClick={() =>
@@ -140,13 +143,13 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
           </Button>
         </div>
         <div className="flex items-center gap-1 flex-1">
-          <ButtonGroup orientation="horizontal" className="flex-1">
+          <ButtonGroup orientation="horizontal" className={`flex-1 ${segmentedButtonGroupClass}`}>
             <Button
               variant={node.underline ? "default" : "secondary"}
               size="sm"
               className={`flex-1 ${
                 node.underline
-                  ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
+                  ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
                   : ""
               }`}
               onClick={() =>
@@ -162,7 +165,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
               size="sm"
               className={`flex-1 ${
                 node.strikethrough
-                  ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
+                  ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
                   : ""
               }`}
               onClick={() =>
@@ -199,7 +202,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
         </div>
         <PropertyRow>
           <div className="flex items-center gap-1 flex-1">
-            <ButtonGroup orientation="horizontal" className="flex-1">
+            <ButtonGroup orientation="horizontal" className={`flex-1 ${segmentedButtonGroupClass}`}>
               <Button
                 variant={
                   node.textAlign === "left" ? "default" : "secondary"
@@ -207,7 +210,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 size="sm"
                 className={`flex-1 ${
                   node.textAlign === "left"
-                    ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
+                    ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
                     : ""
                 }`}
                 onClick={() =>
@@ -223,7 +226,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 size="sm"
                 className={`flex-1 ${
                   node.textAlign === "center"
-                    ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
+                    ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
                     : ""
                 }`}
                 onClick={() =>
@@ -239,7 +242,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 size="sm"
                 className={`flex-1 ${
                   node.textAlign === "right"
-                    ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
+                    ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
                     : ""
                 }`}
                 onClick={() =>
@@ -251,7 +254,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             </ButtonGroup>
           </div>
           <div className="flex items-center gap-1 flex-1">
-            <ButtonGroup orientation="horizontal" className="flex-1">
+            <ButtonGroup orientation="horizontal" className={`flex-1 ${segmentedButtonGroupClass}`}>
               <Button
                 variant={
                   node.textAlignVertical === "top"
@@ -261,7 +264,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 size="sm"
                 className={`flex-1 ${
                   node.textAlignVertical === "top"
-                    ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
+                    ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
                     : ""
                 }`}
                 onClick={() =>
@@ -281,7 +284,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 size="sm"
                 className={`flex-1 ${
                   node.textAlignVertical === "middle"
-                    ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
+                    ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
                     : ""
                 }`}
                 onClick={() =>
@@ -301,7 +304,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 size="sm"
                 className={`flex-1 ${
                   node.textAlignVertical === "bottom"
-                    ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
+                    ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
                     : ""
                 }`}
                 onClick={() =>
@@ -320,7 +323,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
         <div className="text-[10px] font-normal text-text-muted">
           Resizing
         </div>
-        <ButtonGroup orientation="horizontal" className="w-full">
+        <ButtonGroup orientation="horizontal" className={`w-full ${segmentedButtonGroupClass}`}>
           <Button
             variant={
               node.textWidthMode === "auto" ? "default" : "secondary"
@@ -330,7 +333,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             aria-label="Auto width"
             className={`flex-1 ${
               node.textWidthMode === "auto"
-                ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
+                ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
                 : ""
             }`}
             onClick={() => setTextWidthMode("auto")}
@@ -346,7 +349,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             aria-label="Fixed width"
             className={`flex-1 ${
               node.textWidthMode === "fixed"
-                ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
+                ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
                 : ""
             }`}
             onClick={() => setTextWidthMode("fixed")}
@@ -364,7 +367,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             aria-label="Fixed size"
             className={`flex-1 ${
               node.textWidthMode === "fixed-height"
-                ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
+                ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
                 : ""
             }`}
             onClick={() => setTextWidthMode("fixed-height")}
@@ -379,7 +382,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             <div className="text-[10px] font-normal text-text-muted">
               Truncate text
             </div>
-            <ButtonGroup orientation="horizontal" className="w-full">
+            <ButtonGroup orientation="horizontal" className={`w-full ${segmentedButtonGroupClass}`}>
               <Button
                 variant={!node.truncateText ? "default" : "secondary"}
                 size="sm"
@@ -388,7 +391,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 aria-pressed={!node.truncateText}
                 className={`flex-1 ${
                   !node.truncateText
-                    ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
+                    ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
                     : ""
                 }`}
                 onClick={() =>
@@ -407,7 +410,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 aria-pressed={!!node.truncateText}
                 className={`flex-1 ${
                   node.truncateText
-                    ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
+                    ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
                     : ""
                 }`}
                 onClick={() =>

@@ -40,6 +40,15 @@ const sizingOptions = [
   { value: "fit_content", label: "Fit" },
 ];
 
+const sizingModeGroupClass =
+  "flex-1 h-6 rounded-md bg-secondary gap-px [&>[data-slot]]:rounded-[5px]! [&>[data-slot]]:border [&>[data-slot]~[data-slot]]:border-l";
+
+const sizingModeButtonClass =
+  "flex-1 h-full border-transparent bg-transparent text-text-muted hover:bg-surface-elevated hover:text-text-primary";
+
+const activeSizingModeButtonClass =
+  "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel";
+
 function computeFrameFitToContentSize(
   frame: FrameNode,
   allNodes: SceneNode[],
@@ -363,21 +372,18 @@ export function SizeSection({
             <span className="text-[11px] text-text-muted w-4 shrink-0">
               W
             </span>
-            <ButtonGroup orientation="horizontal" className="flex-1">
+            <ButtonGroup orientation="horizontal" className={sizingModeGroupClass}>
               {sizingOptions.map((option) => (
                 <Button
                   key={option.value}
-                  variant={
-                    !mixedKeys?.has("sizing") && (node.sizing?.widthMode ?? "fixed") === option.value
-                      ? "default"
-                      : "secondary"
-                  }
+                  variant="ghost"
                   size="sm"
-                  className={`flex-1 ${
-                    !mixedKeys?.has("sizing") && (node.sizing?.widthMode ?? "fixed") === option.value
-                      ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
-                      : ""
-                  }`}
+                  className={cn(
+                    sizingModeButtonClass,
+                    !mixedKeys?.has("sizing") &&
+                      (node.sizing?.widthMode ?? "fixed") === option.value &&
+                      activeSizingModeButtonClass,
+                  )}
                   onClick={() => {
                     const newMode = option.value as SizingMode;
                     const computedWidth = computeSizeForMode(
@@ -421,21 +427,18 @@ export function SizeSection({
             <span className="text-[11px] text-text-muted w-4 shrink-0">
               H
             </span>
-            <ButtonGroup orientation="horizontal" className="flex-1">
+            <ButtonGroup orientation="horizontal" className={sizingModeGroupClass}>
               {sizingOptions.map((option) => (
                 <Button
                   key={option.value}
-                  variant={
-                    !mixedKeys?.has("sizing") && (node.sizing?.heightMode ?? "fixed") === option.value
-                      ? "default"
-                      : "secondary"
-                  }
+                  variant="ghost"
                   size="sm"
-                  className={`flex-1 ${
-                    !mixedKeys?.has("sizing") && (node.sizing?.heightMode ?? "fixed") === option.value
-                      ? "bg-accent-selection hover:bg-accent-selection/80 text-text-primary"
-                      : ""
-                  }`}
+                  className={cn(
+                    sizingModeButtonClass,
+                    !mixedKeys?.has("sizing") &&
+                      (node.sizing?.heightMode ?? "fixed") === option.value &&
+                      activeSizingModeButtonClass,
+                  )}
                   onClick={() => {
                     const newMode = option.value as SizingMode;
                     const computedHeight = computeSizeForMode(
@@ -553,9 +556,9 @@ export function SizeSection({
         {node.type !== "text" && <button
           type="button"
           className={cn(
-            "shrink-0 flex items-center justify-center w-6 h-6 rounded",
+            "shrink-0 flex items-center justify-center w-6 h-6 rounded border border-transparent",
             node.aspectRatioLocked
-              ? "text-accent-light bg-accent-selection hover:bg-accent-selection/80"
+              ? "border-border-default bg-surface-panel text-text-primary hover:bg-surface-panel"
               : "text-text-muted hover:bg-secondary"
           )}
           title={node.aspectRatioLocked ? "Unlock aspect ratio" : "Lock aspect ratio"}

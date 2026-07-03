@@ -13,6 +13,16 @@ import {
   SelectInput,
 } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+const alignmentGridClass =
+  "grid grid-cols-3 rounded-md bg-secondary gap-px justify-center items-center";
+
+const alignmentButtonClass =
+  "h-6 rounded-[5px] border border-transparent flex items-center justify-center text-text-muted hover:bg-surface-elevated hover:text-text-primary";
+
+const activeAlignmentButtonClass =
+  "border-border-default bg-surface-panel text-text-primary hover:bg-surface-panel";
 
 interface AutoLayoutSectionProps {
   node: FrameNode;
@@ -82,7 +92,7 @@ export function AutoLayoutSection({ node, onUpdate, mixedKeys }: AutoLayoutSecti
               <div className="text-[10px] font-normal text-text-muted">
                 Alignment
               </div>
-              <div className="grid grid-cols-3 bg-secondary rounded-md justify-center items-center p-0.5">
+              <div className={alignmentGridClass}>
                 {Array.from({ length: 9 }).map((_, index) => {
                   const currentDirection =
                     node.layout?.flexDirection ?? "row";
@@ -158,13 +168,11 @@ export function AutoLayoutSection({ node, onUpdate, mixedKeys }: AutoLayoutSecti
                   return (
                     <button
                       key={index}
-                      className={`h-6 rounded flex items-center justify-center ${
-                        isActive
-                          ? "bg-accent-selection text-text-primary"
-                          : "text-text-muted hover:bg-secondary"
-                      } ${
-                        showSpaceBetweenIcon ? "ring-2 ring-accent-light" : ""
-                      }`}
+                      className={cn(
+                        alignmentButtonClass,
+                        isActive && activeAlignmentButtonClass,
+                        showSpaceBetweenIcon && "ring-1 ring-border-hover",
+                      )}
                       onClick={handleClick}
                       onDoubleClick={handleDoubleClick}
                       title={

@@ -105,9 +105,9 @@ export function AppearanceSection({
             type="button"
             title={cornerMode === "unified" ? "Per corner radius" : "Unified radius"}
             className={clsx(
-              "shrink-0 flex items-center justify-center w-6 h-6 rounded self-end",
+              "shrink-0 flex items-center justify-center w-6 h-6 rounded self-end border border-transparent",
               cornerMode === "per-corner"
-                ? "text-accent-light bg-accent-selection hover:bg-accent-selection/80"
+                ? "border-border-default bg-surface-panel text-text-primary hover:bg-surface-panel"
                 : "text-text-muted hover:bg-secondary"
             )}
             onClick={() => handleModeChange(cornerMode === "unified" ? "per-corner" : "unified")}
