@@ -4,6 +4,7 @@ import type { FlatSceneNode, GradientFill, Paint } from '@/types/scene'
 import {
   clearLegacyEffectProps,
   clearLegacyFillProps,
+  createBlurEffect,
   createImagePaint,
   createShadowEffect,
   createSolidPaint,
@@ -139,5 +140,23 @@ describe('clear helpers', () => {
       imageFill: undefined,
     })
     expect(clearLegacyEffectProps()).toEqual({ effect: undefined })
+  })
+})
+
+describe('createBlurEffect', () => {
+  it('defaults to radius 4 with a fresh id', () => {
+    const a = createBlurEffect()
+    const b = createBlurEffect()
+    expect(a).toMatchObject({ type: 'blur', radius: 4 })
+    expect(a.id).toBeTruthy()
+    expect(a.id).not.toBe(b.id)
+  })
+
+  it('accepts overrides', () => {
+    expect(createBlurEffect({ radius: 12, visible: false })).toMatchObject({
+      type: 'blur',
+      radius: 12,
+      visible: false,
+    })
   })
 })
