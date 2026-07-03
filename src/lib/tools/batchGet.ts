@@ -12,10 +12,24 @@ interface SearchPattern {
 }
 
 /**
+ * Wire protocol → internal node type aliases. The backend schema (and the
+ * LLM) speak "rectangle"/"connector"; the scene graph stores "rect"/"connector".
+ * Must stay in sync with TYPE_MAP in batchDesign/nodeMapper.ts.
+ */
+const WIRE_TYPE_ALIASES: Record<string, string> = {
+  rectangle: "rect",
+  connection: "connector", // legacy wire name
+};
+
+function normalizeWireType(type: string): string {
+  return WIRE_TYPE_ALIASES[type] ?? type;
+}
+
+/**
  * Check if a node matches a search pattern.
  */
 function matchesPattern(node: FlatSceneNode, pattern: SearchPattern): boolean {
-  if (pattern.type !== undefined && node.type !== pattern.type) return false;
+  if (pattern.type !== undefined && node.type !== normalizeWireType(pattern.type)) return false;
   if (pattern.name !== undefined) {
     const regex = new RegExp(pattern.name, "i");
     if (!regex.test(node.name ?? "")) return false;
