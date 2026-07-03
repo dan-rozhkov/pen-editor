@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import type { ComponentProps, ReactNode } from "react";
 import { EffectsSection } from "../EffectsSection";
-import type { SceneNode, ShadowEffect } from "@/types/scene";
+import type { BlurEffect, Effect, SceneNode, ShadowEffect } from "@/types/scene";
 
 // The ColorInput in PropertyInputs renders CustomColorPicker, which mounts a
 // portal/popover. Stub it so the component tree is deterministic and free of
@@ -23,6 +23,18 @@ vi.mock("@/components/ui/popover", () => ({
   PopoverContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
+// The add-effect menu is a base-ui dropdown; render it inline like the popover.
+vi.mock("@/components/ui/dropdown-menu", () => ({
+  DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DropdownMenuTrigger: ({ children }: { children?: ReactNode }) => (
+    <button title="Add effect">{children}</button>
+  ),
+  DropdownMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DropdownMenuItem: ({ children, onClick }: ComponentProps<"button">) => (
+    <button onClick={onClick}>{children}</button>
+  ),
+}));
+
 function shadow(extra: Partial<ShadowEffect> = {}): ShadowEffect {
   return {
     type: "shadow",
@@ -36,7 +48,7 @@ function shadow(extra: Partial<ShadowEffect> = {}): ShadowEffect {
   } as ShadowEffect;
 }
 
-function makeNode(effects?: ShadowEffect[]): SceneNode {
+function makeNode(effects?: Effect[]): SceneNode {
   return {
     id: "n1",
     type: "rect",
@@ -46,6 +58,10 @@ function makeNode(effects?: ShadowEffect[]): SceneNode {
     height: 50,
     ...(effects ? { effects } : {}),
   } as unknown as SceneNode;
+}
+
+function blurFx(extra: Partial<BlurEffect> = {}): BlurEffect {
+  return { type: "blur", id: "b1", radius: 8, ...extra };
 }
 
 afterEach(() => cleanup());
@@ -93,18 +109,61 @@ describe("<EffectsSection />", () => {
     expect(inputs[4].value).toBe("1"); // spread
   });
 
-  it("adds a new shadow effect via the Add action", () => {
+  it("adds a new shadow effect via the add menu", () => {
     const onUpdate = vi.fn();
     render(<EffectsSection node={makeNode()} onUpdate={onUpdate} />);
 
-    fireEvent.click(screen.getByTitle("Add effect"));
+    fireEvent.click(screen.getByText("Drop shadow"));
 
     expect(onUpdate).toHaveBeenCalledTimes(1);
     const arg = onUpdate.mock.calls[0][0];
     expect(arg.effects).toHaveLength(1);
     expect(arg.effects[0]).toMatchObject({ type: "shadow", shadowType: "outer" });
-    // legacy single-effect field is cleared on every commit
     expect(arg.effect).toBeUndefined();
+  });
+
+  it("adds a layer blur via the add menu", () => {
+    const onUpdate = vi.fn();
+    render(<EffectsSection node={makeNode()} onUpdate={onUpdate} />);
+
+    fireEvent.click(screen.getByText("Layer blur"));
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    const arg = onUpdate.mock.calls[0][0];
+    expect(arg.effects).toHaveLength(1);
+    expect(arg.effects[0]).toMatchObject({ type: "blur", radius: 4 });
+    expect(arg.effect).toBeUndefined();
+  });
+
+  it("renders a blur effect row with its radius", () => {
+    render(<EffectsSection node={makeNode([blurFx()])} onUpdate={vi.fn()} />);
+
+    expect(screen.getAllByText("Layer Blur").length).toBeGreaterThan(0);
+    const inputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    expect(inputs).toHaveLength(1); // blur editor: just the radius input
+    expect(inputs[0].value).toBe("8");
+  });
+
+  it("edits the blur radius, clamped to 0-100", () => {
+    const onUpdate = vi.fn();
+    render(<EffectsSection node={makeNode([blurFx()])} onUpdate={onUpdate} />);
+    const input = screen.getByRole("spinbutton");
+
+    fireEvent.change(input, { target: { value: "24" } });
+    expect(onUpdate.mock.calls[0][0].effects[0].radius).toBe(24);
+
+    fireEvent.change(input, { target: { value: "250" } });
+    expect(onUpdate.mock.calls[1][0].effects[0].radius).toBe(100);
+  });
+
+  it("renders shadow and blur rows together", () => {
+    render(
+      <EffectsSection node={makeNode([shadow(), blurFx()])} onUpdate={vi.fn()} />,
+    );
+    expect(screen.getAllByText("Drop Shadow").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Layer Blur").length).toBeGreaterThan(0);
+    // 5 shadow spinbuttons + 1 blur spinbutton
+    expect(screen.getAllByRole("spinbutton")).toHaveLength(6);
   });
 
   it("removes an effect via the trash button", () => {

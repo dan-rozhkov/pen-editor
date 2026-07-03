@@ -9,9 +9,16 @@ import {
 } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ArrowDown, ArrowUp, Eye, EyeSlash, PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import { parseHexAlpha } from "@/utils/shadowUtils";
 import {
+  createBlurEffect,
   createShadowEffect,
   getEffects,
   clearLegacyEffectProps,
@@ -51,8 +58,8 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
     onUpdate({ effects: next, ...clearLegacyEffectProps() } as Partial<SceneNode>);
   };
 
-  const handleAdd = () => {
-    commit(addEffect(effects, createShadowEffect()));
+  const handleAdd = (effect: Effect) => {
+    commit(addEffect(effects, effect));
   };
 
   const updateShadow = (index: number, shadow: ShadowEffect) => {
@@ -63,9 +70,21 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
     <PropertySection
       title="Effects"
       action={
-        <Button variant="ghost" size="icon-sm" onClick={handleAdd} title="Add effect">
-          <PlusIcon />
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={<Button variant="ghost" size="icon-sm" title="Add effect" />}
+          >
+            <PlusIcon />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => handleAdd(createShadowEffect())}>
+              Drop shadow
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleAdd(createBlurEffect())}>
+              Layer blur
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       }
     >
       {isMixed ? (
@@ -199,6 +218,27 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
                             />
                           </PropertyRow>
                         </>
+                      )}
+
+                      {effect.type === "blur" && (
+                        <PropertyRow>
+                          <NumberInput
+                            label="Blur"
+                            labelOutside
+                            value={effect.radius}
+                            onChange={(v) =>
+                              commit(
+                                updateEffectAt(effects, arrayIndex, {
+                                  ...effect,
+                                  radius: Math.max(0, Math.min(100, v)),
+                                }),
+                              )
+                            }
+                            min={0}
+                            max={100}
+                            step={1}
+                          />
+                        </PropertyRow>
                       )}
                     </PopoverContent>
                   </Popover>
