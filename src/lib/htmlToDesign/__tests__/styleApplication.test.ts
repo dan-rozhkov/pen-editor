@@ -92,4 +92,16 @@ describe("applyBaseProps — box-shadow + filter blur → effects stack", () => 
     expect(node.effects![0].type).toBe("shadow");
     expect(node.effects![1]).toEqual({ type: "blur", radius: 6 });
   });
+
+  it("blur only, no box-shadow → effects [blur], no legacy single effect", () => {
+    const node = rect();
+    applyBaseProps(
+      node,
+      styleStub({
+        filter: "blur(5px)",
+      }),
+    );
+    expect(node.effect).toBeUndefined();
+    expect(node.effects).toEqual([{ type: "blur", radius: 5 }]);
+  });
 });

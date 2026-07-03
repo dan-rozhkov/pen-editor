@@ -597,6 +597,8 @@ export function applyLayoutSize(
         drawRect(gfx, { ...node, width: layoutWidth, height: layoutHeight } as RectNode);
       }
       const shadowRectNode = { ...node, width: layoutWidth, height: layoutHeight } as RectNode;
+      // Shadows are redrawn at the new size; layer blur is a size-independent container
+      // filter and needs no re-apply here.
       applyShadows(
         container,
         getRenderableEffects(shadowRectNode),
