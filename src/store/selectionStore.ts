@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import type { HistorySnapshot, SelectionSnapshot } from '../types/scene'
+import type { SelectionSnapshot } from '../types/scene'
+import { buildHistorySnapshot } from './historySnapshot'
 import { useHistoryStore } from './historyStore'
 import { useSceneStore } from './sceneStore'
 import { useVariableStore } from './variableStore'
@@ -75,19 +76,11 @@ function saveSelectionHistoryIfChanged(
   if (same) return
 
   const scene = useSceneStore.getState()
-  const snapshot: HistorySnapshot = {
-    nodesById: { ...scene.nodesById },
-    parentById: { ...scene.parentById },
-    childrenById: { ...scene.childrenById },
-    rootIds: [...scene.rootIds],
-    // Must carry component artifacts: restoreSnapshot replaces the artifact map
-    // with `snapshot.componentArtifactsById ?? {}`, so omitting it here would
-    // wipe all component sync-state on undo of a selection change.
-    componentArtifactsById: { ...scene.componentArtifactsById },
-    // Keep variables on the snapshot too so full-state restore stays consistent.
-    variables: [...useVariableStore.getState().variables],
-    selection: current,
-  }
+  const snapshot = buildHistorySnapshot(
+    scene,
+    useVariableStore.getState().variables,
+    current,
+  )
   useHistoryStore.getState().saveHistory(snapshot)
 }
 

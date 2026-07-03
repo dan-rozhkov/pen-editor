@@ -59,6 +59,21 @@ describe("batch_get", () => {
     expect(deep[0].children[0].id).toBe("rect1");
   });
 
+  it('aliases wire type "rectangle" to internal "rect" nodes', async () => {
+    const byWireType = JSON.parse(
+      await batchGet({ patterns: [{ type: "rectangle" }] })
+    );
+    expect(byWireType.map((r: { id: string }) => r.id).sort()).toEqual([
+      "rect1",
+      "rect2",
+    ]);
+
+    const byBogusType = JSON.parse(
+      await batchGet({ patterns: [{ type: "nonexistent" }] })
+    );
+    expect(byBogusType).toEqual([]);
+  });
+
   it("resolves variable bindings when resolveVariables is set", async () => {
     seedVariables();
     useSceneStore.setState((state) => ({

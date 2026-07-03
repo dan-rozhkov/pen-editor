@@ -40,3 +40,31 @@ jobs:
           name: playwright-traces
           path: test-results/
           retention-days: 7
+
+  # Cross-repo tool contract: checks out the sibling backend repo so the
+  # toolContract test actually runs instead of self-skipping.
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: pen-editor
+      - uses: actions/checkout@v5
+        with:
+          repository: dan-rozhkov/pen-editor-backend
+          path: pen-editor-backend
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: pen-editor/package-lock.json
+      - run: npm ci
+        working-directory: pen-editor
+      # The contract test imports ../pen-editor-backend/src/ai/tools.ts, which
+      # needs the backend's node_modules (ai, zod) to resolve.
+      - run: npm ci
+        working-directory: pen-editor-backend
+      - run: npx vitest run src/lib/__tests__/toolContract.test.ts
+        working-directory: pen-editor
+        env:
+          CONTRACT_REQUIRE_BACKEND: "1"

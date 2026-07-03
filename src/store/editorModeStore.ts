@@ -81,6 +81,10 @@ export const useEditorModeStore = create<EditorModeState>((set) => ({
       const found = ids.indexOf(top);
       if (found >= 0) index = found;
     }
+    // Present is read-only fullscreen — drop the selection so no outline /
+    // handles / embed frame render over the presented design (mirrors enterView).
+    useSelectionStore.getState().clearSelection();
+    useHoverStore.getState().clearHovered();
     set({ mode: "present", presentFrameIds: ids, presentIndex: index });
   },
 

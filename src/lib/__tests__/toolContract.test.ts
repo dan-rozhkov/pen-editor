@@ -60,6 +60,14 @@ const backendToolsPath = resolve(
 );
 const backendExists = existsSync(backendToolsPath);
 
+// In the cross-repo CI job the sibling checkout is mandatory — a missing
+// backend must fail the job, not silently skip the contract.
+if (process.env.CONTRACT_REQUIRE_BACKEND && !backendExists) {
+  throw new Error(
+    `CONTRACT_REQUIRE_BACKEND is set but ${backendToolsPath} does not exist`
+  );
+}
+
 describe.runIf(backendExists)("backend penTools sync", () => {
   async function loadPenTools(): Promise<Record<string, { execute?: unknown }>> {
     const mod = (await import(
