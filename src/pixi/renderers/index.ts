@@ -16,6 +16,7 @@ import type {
 import { flattenTree } from "@/types/scene";
 import { getRenderableEffects } from "@/utils/fillUtils";
 import { applyShadows } from "./shadowHelpers";
+import { applyLayerBlur } from "./blurHelpers";
 import { createRectContainer, updateRectContainer, drawRect } from "./rectRenderer";
 import { createEllipseContainer, updateEllipseContainer, drawEllipse } from "./ellipseRenderer";
 import { createTextContainer, updateTextContainer } from "./textRenderer";
@@ -406,6 +407,9 @@ export function createNodeContainer(
     getNodeCornerRadiusPerCorner(node),
   );
 
+  // Layer blur (container-level filter; first visible blur in the stack wins)
+  applyLayerBlur(container, getRenderableEffects(node));
+
   // Shader fill (baked texture in-scene, so it obeys z-order)
   if (node.shader) applyShaderFill(container, node);
 
@@ -534,6 +538,7 @@ export function updateNodeContainer(
       getNodeShadowShape(node),
       getNodeCornerRadiusPerCorner(node),
     );
+    applyLayerBlur(container, getRenderableEffects(node));
   }
 
   // Shader fill: config change / became-visible → immediate re-bake; size-only
