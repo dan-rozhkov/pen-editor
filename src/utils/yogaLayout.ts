@@ -8,6 +8,7 @@
 import type {
   SceneNode,
   FrameNode,
+  GroupNode,
   TextNode,
   AlignItems,
   JustifyContent,
@@ -155,9 +156,54 @@ function resolveEffectiveSize(
         if (heightMode === "fit_content") effectiveHeight = measured.height;
       }
     }
+  } else if (child.type === "group") {
+    // A group has no independent size: its extent is the bounding box of its
+    // VISIBLE children. The stored width/height is a stale snapshot (set once
+    // at creation and never updated on visibility changes), so always recompute
+    // it here — otherwise hiding a node inside a group would not shrink an
+    // auto-layout ancestor. Always recompute regardless of sizing mode.
+    const size = computeGroupIntrinsicSize(child as GroupNode);
+    effectiveWidth = size.width;
+    effectiveHeight = size.height;
   }
 
   return { width: effectiveWidth, height: effectiveHeight };
+}
+
+/**
+ * Intrinsic (shrink-wrap) size of a group: the tight bounding box of its
+ * visible children, mirroring how `groupNodes` computes group bounds at
+ * creation (maxX - minX, maxY - minY). Child positions are relative to the
+ * group origin. Recurses through resolveEffectiveSize so nested groups,
+ * fit_content frames, and text children contribute their live sizes.
+ * No visible children => zero extent (the group contributes nothing but still
+ * occupies its flow slot in an auto-layout parent).
+ */
+function computeGroupIntrinsicSize(group: GroupNode): {
+  width: number;
+  height: number;
+} {
+  const children = Array.isArray(group.children) ? group.children : [];
+  const visible = children.filter(
+    (c) => c.visible !== false && c.enabled !== false,
+  );
+  if (visible.length === 0) return { width: 0, height: 0 };
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const c of visible) {
+    const widthMode: SizingMode = c.sizing?.widthMode ?? "fixed";
+    const heightMode: SizingMode = c.sizing?.heightMode ?? "fixed";
+    const { width, height } = resolveEffectiveSize(c, widthMode, heightMode);
+    minX = Math.min(minX, c.x);
+    minY = Math.min(minY, c.y);
+    maxX = Math.max(maxX, c.x + width);
+    maxY = Math.max(maxY, c.y + height);
+  }
+
+  return { width: maxX - minX, height: maxY - minY };
 }
 
 function buildFlexItem(child: SceneNode, container: FlexContainer): FlexItem {
