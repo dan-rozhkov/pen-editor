@@ -153,4 +153,37 @@ describe("designToHtml effect stack", () => {
       "inset 1px 1px 2px 1px #ffffff80, 0px 2px 4px 0px #00000040",
     );
   });
+
+  it("converts a layer blur effect to css filter: blur()", () => {
+    const effects: Effect[] = [{ type: "blur", radius: 6 }];
+    const styles = generateVisualStyles(rect({ effects }));
+    expect(styles.filter).toBe("blur(6px)");
+    expect(styles["box-shadow"]).toBeUndefined();
+  });
+
+  it("emits both box-shadow and filter for a shadow + blur stack", () => {
+    const effects: Effect[] = [
+      {
+        type: "shadow",
+        shadowType: "outer",
+        color: "#00000040",
+        offset: { x: 0, y: 2 },
+        blur: 4,
+        spread: 0,
+      },
+      { type: "blur", radius: 10 },
+    ];
+    const styles = generateVisualStyles(rect({ effects }));
+    expect(styles["box-shadow"]).toBe("0px 2px 4px 0px #00000040");
+    expect(styles.filter).toBe("blur(10px)");
+  });
+
+  it("skips invisible and zero-radius blurs", () => {
+    const effects: Effect[] = [
+      { type: "blur", radius: 6, visible: false },
+      { type: "blur", radius: 0 },
+    ];
+    const styles = generateVisualStyles(rect({ effects }));
+    expect(styles.filter).toBeUndefined();
+  });
 });
