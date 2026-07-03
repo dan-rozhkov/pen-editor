@@ -3,11 +3,13 @@ import type {
   FrameNode,
   GroupNode,
   JustifyContent,
+  Paint,
   SceneNode,
   ShaderConfig,
   TextNode,
 } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
+import { getFills } from "@/utils/fillUtils";
 
 type PenTheme = Record<string, string>;
 type PenSize = number | "fill_container" | "fit_content";
@@ -67,6 +69,8 @@ interface PenBaseNode {
   width?: PenSize;
   height?: PenSize;
   fill?: PenFill;
+  // Paint stack, bottom-to-top; present instead of "fill" when a node has 2+ fills
+  fills?: PenFill[];
   stroke?: PenStroke;
   effect?: PenShadowEffect[];
   opacity?: number;
@@ -142,7 +146,7 @@ const PUBLIC_PEN_VERSION = "2.6";
 
 type FillSource = Pick<
   SceneNode,
-  "fill" | "fillBinding" | "fillOpacity" | "imageFill" | "gradientFill"
+  "fill" | "fillBinding" | "fillOpacity" | "imageFill" | "gradientFill" | "fills"
 >;
 
 type StrokeSource = Pick<
@@ -257,48 +261,54 @@ function exportSolidFill(
   return { type: "color", color: applyOpacityToHex(color, opacity) };
 }
 
-function exportFill(node: FillSource, context: ExportContext): PenFill | undefined {
-  if (node.imageFill) {
+function exportPaint(paint: Paint, context: ExportContext): PenFill | undefined {
+  if (paint.visible === false) return undefined;
+  const layerOpacity = paint.opacity;
+  if (paint.type === "image") {
     return {
       type: "image",
-      url: node.imageFill.url,
-      mode: node.imageFill.mode,
-      ...(node.fillOpacity != null ? { opacity: node.fillOpacity } : {}),
+      url: paint.image.url,
+      mode: paint.image.mode,
+      ...(layerOpacity != null ? { opacity: layerOpacity } : {}),
     };
   }
-
-  if (node.gradientFill) {
+  if (paint.type === "gradient") {
+    const g = paint.gradient;
     return {
       type: "gradient",
-      gradientType: node.gradientFill.type,
-      colors: node.gradientFill.stops.map((stop) => ({
+      gradientType: g.type,
+      colors: g.stops.map((stop) => ({
         color:
           stop.opacity == null || stop.opacity === 1
             ? stop.color
             : applyOpacityToHex(stop.color, stop.opacity),
         position: stop.position,
       })),
-      center: {
-        x: (node.gradientFill.startX + node.gradientFill.endX) / 2,
-        y: (node.gradientFill.startY + node.gradientFill.endY) / 2,
-      },
+      center: { x: (g.startX + g.endX) / 2, y: (g.startY + g.endY) / 2 },
       size:
-        node.gradientFill.type === "radial"
+        g.type === "radial"
           ? {
-              width: Math.abs(node.gradientFill.endX - node.gradientFill.startX) * 2,
-              height: Math.abs(node.gradientFill.endY - node.gradientFill.startY) * 2,
+              width: Math.abs(g.endX - g.startX) * 2,
+              height: Math.abs(g.endY - g.startY) * 2,
             }
-          : {
-              height: Math.hypot(
-                node.gradientFill.endX - node.gradientFill.startX,
-                node.gradientFill.endY - node.gradientFill.startY,
-              ),
-            },
-      ...(node.fillOpacity != null ? { opacity: node.fillOpacity } : {}),
+          : { height: Math.hypot(g.endX - g.startX, g.endY - g.startY) },
+      ...(layerOpacity != null ? { opacity: layerOpacity } : {}),
     };
   }
+  return exportSolidFill(paint.color, paint.colorBinding?.variableId, layerOpacity, context);
+}
 
-  return exportSolidFill(node.fill, node.fillBinding?.variableId, node.fillOpacity, context);
+function exportFills(
+  node: FillSource,
+  context: ExportContext,
+): { fill?: PenFill; fills?: PenFill[] } {
+  const paints = getFills(node).filter((p) => p.visible !== false);
+  const exported = paints
+    .map((p) => exportPaint(p, context))
+    .filter((f): f is PenFill => f !== undefined);
+  if (exported.length === 0) return {};
+  if (exported.length === 1) return { fill: exported[0] };
+  return { fills: exported };
 }
 
 function exportStroke(node: StrokeSource, context: ExportContext): PenStroke | undefined {
@@ -387,7 +397,7 @@ function exportSize(node: SceneNode, parentUsesLayout: boolean): Pick<PenBaseNod
 }
 
 function exportNodeBase(node: SceneNode, context: ExportContext, parentUsesLayout: boolean): PenBaseNode {
-  const fill = exportFill(node, context);
+  const { fill, fills } = exportFills(node, context);
   const stroke = exportStroke(node, context);
   const effect = exportEffects(node);
 
@@ -396,7 +406,8 @@ function exportNodeBase(node: SceneNode, context: ExportContext, parentUsesLayou
     ...(node.name ? { name: node.name } : {}),
     ...(!parentUsesLayout || node.absolutePosition ? { x: node.x, y: node.y } : {}),
     ...exportSize(node, parentUsesLayout),
-    ...(fill ? { fill } : {}),
+    ...(fill !== undefined ? { fill } : {}),
+    ...(fills ? { fills } : {}),
     ...(stroke ? { stroke } : {}),
     ...(effect ? { effect } : {}),
     ...(node.opacity != null && node.opacity !== 1 ? { opacity: node.opacity } : {}),
