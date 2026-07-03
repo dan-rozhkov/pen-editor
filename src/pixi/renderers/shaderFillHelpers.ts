@@ -60,6 +60,12 @@ async function bakeWithRetry(
 
   await delay(BAKE_RETRY_DELAY_MS);
   if (generationByContainer.get(container) !== gen || container.destroyed) return null;
+  // A newer request was coalesced while we waited (coalescing doesn't bump the
+  // generation, so the check above can't see it). Retrying would re-bake at
+  // this attempt's now-stale size and briefly place a wrong-sized sprite before
+  // the follow-up corrects it — skip and let the `.finally` follow-up bake with
+  // the latest args instead. Being superseded is not a final failure: no warn.
+  if (pendingBakeByContainer.has(container)) return null;
 
   const retry = await rasterizeShader(shader, width, height, baseImage);
   if (!retry) {

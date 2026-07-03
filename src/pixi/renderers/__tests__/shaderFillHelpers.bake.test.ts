@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { Container, Graphics, Texture } from "pixi.js";
+import { Container, Graphics, Sprite, Texture } from "pixi.js";
 import type { FlatSceneNode } from "@/types/scene";
 
 // applyShaderFill's async bake pipeline (in-flight coalescing + bounded retry)
@@ -135,6 +135,43 @@ describe("applyShaderFill — bounded retry on null bake", () => {
     expect(mockRasterize).toHaveBeenCalledTimes(2);
     expect(c.getChildByLabel("shader-fill")).toBeNull();
     expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it("skips the stale-size retry (no warn) when a newer request is coalesced during the retry window; follow-up uses the latest args", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // First bake attempt (size 100x80) fails and enters the 300ms retry wait.
+    mockRasterize.mockResolvedValueOnce(null);
+
+    const c = containerWithBg();
+    applyShaderFill(c, rectNode(), 100, 80);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mockRasterize).toHaveBeenCalledTimes(1);
+
+    // Resize arrives mid-retry-window; it must coalesce, not bake concurrently.
+    applyShaderFill(c, rectNode(), 300, 90);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mockRasterize).toHaveBeenCalledTimes(1);
+
+    // Next bake is the follow-up at the NEW size; it succeeds.
+    mockRasterize.mockResolvedValueOnce(Texture.WHITE);
+    await vi.advanceTimersByTimeAsync(300);
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Exactly 2 rasterize calls total: the stale-size (100x80) retry never ran.
+    expect(mockRasterize).toHaveBeenCalledTimes(2);
+    expect(mockRasterize).toHaveBeenLastCalledWith(
+      expect.objectContaining({ kind: "waves" }),
+      300,
+      90,
+      undefined,
+    );
+    const sprite = c.getChildByLabel("shader-fill") as Sprite;
+    expect(sprite).toBeTruthy();
+    expect(sprite.width).toBe(300);
+    expect(sprite.height).toBe(90);
+    // Being superseded is not a final failure — no warn.
+    expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
   });
 });
