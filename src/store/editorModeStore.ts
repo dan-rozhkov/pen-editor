@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { useSceneStore } from "./sceneStore";
 import { useSelectionStore } from "./selectionStore";
+import { useHoverStore } from "./hoverStore";
 import type { FlatSceneNode, SceneNode } from "@/types/scene";
 
 export type EditorMode = "edit" | "view" | "present";
@@ -63,7 +64,11 @@ export const useEditorModeStore = create<EditorModeState>((set) => ({
   presentFrameIds: [],
   presentIndex: 0,
 
-  enterView: () => set({ mode: "view" }),
+  enterView: () => {
+    useSelectionStore.getState().clearSelection();
+    useHoverStore.getState().clearHovered();
+    set({ mode: "view" });
+  },
 
   enterPresent: () => {
     const scene = useSceneStore.getState();

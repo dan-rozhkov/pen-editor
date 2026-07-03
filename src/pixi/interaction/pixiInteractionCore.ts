@@ -372,6 +372,12 @@ export function setupPixiInteraction(
     // The next pointermove after zoom completes will restore the correct hover state.
     if (useViewportStore.getState().animationFrameId !== null) return;
 
+    // View/present modes are read-only — never show a hover highlight.
+    if (!canEditScene(useEditorModeStore.getState().mode)) {
+      useHoverStore.getState().clearHovered();
+      return;
+    }
+
     // Hover/hit-test path is expensive on big scenes; run at most once per frame.
     scheduleHoverPass(world);
   }

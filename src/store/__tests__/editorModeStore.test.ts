@@ -50,6 +50,13 @@ describe("editorModeStore", () => {
     expect(useEditorModeStore.getState().mode).toBe("edit");
   });
 
+  it("enterView clears the current selection", () => {
+    useSelectionStore.getState().setSelectedIds(["A"]);
+    useEditorModeStore.getState().enterView();
+    expect(useEditorModeStore.getState().mode).toBe("view");
+    expect(useSelectionStore.getState().selectedIds).toEqual([]);
+  });
+
   it("enterPresent captures ordered frames and starts at selected frame", () => {
     useSelectionStore.setState({ selectedIds: ["A"] } as never);
     useEditorModeStore.getState().enterPresent();
