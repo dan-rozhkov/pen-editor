@@ -24,7 +24,6 @@ export function LeftSidebar() {
   const isMobile = useIsMobile();
   const isChatExpanded = useChatStore((s) => s.isExpanded);
   const collapseAllFrames = useSceneStore((s) => s.collapseAllFrames);
-  const hasExpanded = useSceneStore((s) => s.expandedFrameIds.size > 0);
   const fileName = useDocumentStore((s) => s.fileName);
   const setFileName = useDocumentStore((s) => s.setFileName);
   const [isEditing, setIsEditing] = useState(false);
@@ -105,17 +104,18 @@ export function LeftSidebar() {
         {activeSection === "pages" && (
           <div className="absolute inset-0 flex flex-col overflow-hidden">
             <PagesPanelSection />
-            {hasExpanded && (
-              <div className="px-1 pt-1 pb-1 flex items-center justify-end">
-                <button
-                  onClick={collapseAllFrames}
-                  className="p-1 rounded text-text-muted hover:text-text-default hover:bg-secondary transition-colors"
-                  title="Collapse all"
-                >
-                  <ArrowsInLineVertical size={14} />
-                </button>
-              </div>
-            )}
+            <div className="flex items-center justify-between px-4 pt-3 pb-1">
+              <span className="text-xs font-medium text-secondary-foreground">
+                Layers
+              </span>
+              <button
+                onClick={collapseAllFrames}
+                className="p-0.5 rounded text-text-muted hover:text-text-default hover:bg-secondary transition-colors"
+                title="Collapse all"
+              >
+                <ArrowsInLineVertical size={14} />
+              </button>
+            </div>
             <div className="flex-1 overflow-hidden">
               <LayersPanel />
             </div>

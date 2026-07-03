@@ -14,7 +14,7 @@ export function PresentOverlay() {
 
   return (
     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 pointer-events-auto">
-      <div className="flex items-center gap-1 p-2 bg-surface-panel border border-border-default rounded-2xl shadow-[0_0px_3px_rgba(0,0,0,0.04)]">
+      <div className="flex items-center gap-1 p-1.5 bg-surface-panel border border-border-default rounded-2xl shadow-[0_0px_3px_rgba(0,0,0,0.04)]">
         <Button
           data-testid="present-prev"
           onClick={() => prev()}
