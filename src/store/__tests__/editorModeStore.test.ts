@@ -66,6 +66,13 @@ describe("editorModeStore", () => {
     expect(st.presentIndex).toBe(1); // A is second
   });
 
+  it("enterPresent clears the selection but still starts at the selected frame", () => {
+    useSelectionStore.getState().setSelectedIds(["A"]);
+    useEditorModeStore.getState().enterPresent();
+    expect(useEditorModeStore.getState().presentIndex).toBe(1); // A resolved first
+    expect(useSelectionStore.getState().selectedIds).toEqual([]);
+  });
+
   it("enterPresent is a no-op when there are no frames", () => {
     useSceneStore.setState({ nodesById: {} as never, parentById: {}, childrenById: {}, rootIds: [] });
     useEditorModeStore.getState().enterPresent();
