@@ -47,6 +47,8 @@ export function cloneNodeWithNewId(
         strokeWidth: node.strokeWidth,
         visible: node.visible,
         enabled: node.enabled,
+        ...(node.fills ? { fills: node.fills } : {}),
+        ...(node.effects ? { effects: node.effects } : {}),
         ...(node.shader ? { shader: node.shader } : {}),
       } as RefNode;
     }
