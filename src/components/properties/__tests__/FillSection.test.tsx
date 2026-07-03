@@ -231,4 +231,40 @@ describe("<FillSection />", () => {
     render(<FillSection {...baseProps(makeNode([solid("a", "#ff0000")], "line"))} />);
     expect(screen.getByPlaceholderText("#000000")).toBeTruthy();
   });
+
+  it("shows the fill opacity as a percent in the Opacity input", () => {
+    render(
+      <FillSection {...baseProps(makeNode([solid("a", "#ff0000", { opacity: 0.5 })]))} />,
+    );
+    expect(screen.getByText("Opacity")).toBeTruthy();
+    const opacityInput = screen.getByRole("spinbutton") as HTMLInputElement;
+    expect(opacityInput.value).toBe("50");
+  });
+
+  it("defaults the Opacity input to 100 when the paint has no opacity", () => {
+    render(<FillSection {...baseProps(makeNode([solid("a", "#ff0000")]))} />);
+    const opacityInput = screen.getByRole("spinbutton") as HTMLInputElement;
+    expect(opacityInput.value).toBe("100");
+  });
+
+  it("updates fill opacity when the Opacity input changes", () => {
+    const onUpdate = vi.fn();
+    render(
+      <FillSection
+        {...baseProps(makeNode([solid("a", "#ff0000", { opacity: 0.5 })]), onUpdate)}
+      />,
+    );
+
+    const opacityInput = screen.getByRole("spinbutton");
+    fireEvent.change(opacityInput, { target: { value: "25" } });
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    const arg = onUpdate.mock.calls[0][0];
+    expect(arg.fills[0]).toMatchObject({ id: "a", opacity: 0.25 });
+    expect(arg).toMatchObject({
+      fill: undefined,
+      gradientFill: undefined,
+      imageFill: undefined,
+    });
+  });
 });

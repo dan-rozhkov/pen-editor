@@ -11,6 +11,7 @@ import { PAINT_BLEND_MODES } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
 import {
   ColorInput,
+  NumberInput,
   PropertySection,
   SelectInput,
 } from "@/components/ui/PropertyInputs";
@@ -311,6 +312,23 @@ export function FillSection({
                           }}
                         />
                       )}
+
+                      {/* Layer opacity (percent in UI, 0-1 in the model) */}
+                      <NumberInput
+                        label="Opacity"
+                        labelOutside
+                        value={Math.round((paint.opacity ?? 1) * 100)}
+                        min={0}
+                        max={100}
+                        onChange={(v) =>
+                          commit(
+                            updateFillAt(fills, arrayIndex, {
+                              ...paint,
+                              opacity: Math.min(100, Math.max(0, v)) / 100,
+                            }),
+                          )
+                        }
+                      />
 
                       {/* Blend mode */}
                       <SelectInput
