@@ -1,4 +1,4 @@
-import type { FlatSceneNode, EmbedNode } from "@/types/scene";
+import type { FlatSceneNode, EmbedNode, Paint } from "@/types/scene";
 
 /**
  * Serialize a flat node to a plain JSON object with depth-limited children.
@@ -44,6 +44,14 @@ export function serializeNodeToDepth(
     const strokeBinding = rec.strokeBinding as { variableId: string } | undefined;
     if (strokeBinding?.variableId && options.variableLookup[strokeBinding.variableId]) {
       result.stroke = options.variableLookup[strokeBinding.variableId];
+    }
+    const fills = rec.fills as Paint[] | undefined;
+    if (fills?.some((p) => p.type === "solid" && p.colorBinding?.variableId)) {
+      result.fills = fills.map((p) => {
+        if (p.type !== "solid" || !p.colorBinding?.variableId) return p;
+        const resolved = options.variableLookup![p.colorBinding.variableId];
+        return resolved ? { ...p, color: resolved } : p;
+      });
     }
   }
 
