@@ -190,27 +190,23 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
     // Phase 4: Combined change detection + theme override check in a single pass
     const changedIds = new Set<string>();
-    let needsThemeRebuild = false;
+    const themeChangedFrameIds: string[] = [];
 
     for (const id of Object.keys(state.nodesById)) {
       const node = state.nodesById[id];
       const prevNode = prev.nodesById[id];
       if (node !== prevNode) {
         changedIds.add(id);
-        // Check theme override only on changed frame nodes
+        // A frame's themeOverride recolors its whole subtree — collect it for
+        // a targeted THEME_SENTINEL pass below instead of a full scene rebuild.
         if (
           node && prevNode &&
           isFlatFrameNode(node) &&
           node.themeOverride !== (isFlatFrameNode(prevNode) ? prevNode.themeOverride : undefined)
         ) {
-          needsThemeRebuild = true;
+          themeChangedFrameIds.push(id);
         }
       }
-    }
-
-    if (needsThemeRebuild) {
-      fullRebuild(state);
-      return;
     }
 
     // Removed nodes
@@ -344,6 +340,45 @@ export function createPixiSync(sceneRoot: Container): () => void {
       });
       entry.node = node;
       changedIds.add(id);
+    }
+
+    // Targeted theme refresh: re-resolve variable-bound colors for descendants
+    // of frames whose themeOverride changed. Mirrors incrementalThemeUpdate but
+    // limited to the affected subtrees — the frames themselves were already
+    // updated with their new node objects above.
+    if (themeChangedFrameIds.length > 0) {
+      const subtreeIds = new Set<string>();
+      const collect = (rootId: string): void => {
+        const children = state.childrenById[rootId];
+        if (!children) return;
+        for (const childId of children) {
+          if (subtreeIds.has(childId)) continue;
+          subtreeIds.add(childId);
+          collect(childId);
+        }
+      };
+      for (const frameId of themeChangedFrameIds) collect(frameId);
+
+      for (const id of subtreeIds) {
+        if (changedIds.has(id)) continue; // already updated with its fresh node
+        const node = state.nodesById[id];
+        if (!node) continue;
+        if (!variableDependentIds.has(id) && node.type !== "ref") continue;
+        const entry = registry.get(id);
+        if (!entry) continue;
+        withAncestorThemes(id, state.parentById, state.nodesById, () => {
+          updateNodeContainer(
+            entry.container,
+            entry.node,
+            THEME_SENTINEL,
+            state.nodesById,
+            state.childrenById,
+            true, // skipPosition — positions haven't changed
+            entry.node.type === "ref", // forceRebuild refs to re-resolve internal colors
+          );
+        });
+      }
+      nodeTreeMgr.applyTextEditingVisibility();
     }
 
     // Update connectors when connected nodes move/resize. Collect the changed
