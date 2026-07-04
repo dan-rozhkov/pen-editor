@@ -2,10 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getUpdateSW, registerServiceWorker } from "@/pwa/registerServiceWorker";
 import { registerSW } from "@/test/virtualPwaRegister";
+import { usePwaStore } from "@/store/pwaStore";
 
 describe("registerServiceWorker", () => {
   beforeEach(() => {
     registerSW.mockReset();
+    usePwaStore.setState({ updateReady: false, offlineReady: false });
   });
 
   afterEach(() => {
@@ -20,7 +22,7 @@ describe("registerServiceWorker", () => {
     expect(registerSW).not.toHaveBeenCalled();
   });
 
-  it("registers the service worker and dispatches update/offline events", () => {
+  it("registers the service worker and updates pwaStore on refresh/offline-ready callbacks", () => {
     vi.stubGlobal("navigator", { serviceWorker: {} });
     const updateSWFn = vi.fn();
     registerSW.mockReturnValue(updateSWFn);
@@ -36,19 +38,15 @@ describe("registerServiceWorker", () => {
     };
     expect(options.immediate).toBe(true);
 
-    const updateListener = vi.fn();
-    const offlineListener = vi.fn();
-    window.addEventListener("pen:pwa-update-ready", updateListener);
-    window.addEventListener("pen:pwa-offline-ready", offlineListener);
+    expect(usePwaStore.getState().updateReady).toBe(false);
+    expect(usePwaStore.getState().offlineReady).toBe(false);
 
     options.onNeedRefresh();
+    expect(usePwaStore.getState().updateReady).toBe(true);
+
     options.onOfflineReady();
+    expect(usePwaStore.getState().offlineReady).toBe(true);
 
-    expect(updateListener).toHaveBeenCalledTimes(1);
-    expect(offlineListener).toHaveBeenCalledTimes(1);
     expect(getUpdateSW()).toBe(updateSWFn);
-
-    window.removeEventListener("pen:pwa-update-ready", updateListener);
-    window.removeEventListener("pen:pwa-offline-ready", offlineListener);
   });
 });
