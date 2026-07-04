@@ -473,4 +473,53 @@ describe("useDesignChat (hook + UI message stream)", () => {
     });
     expect(result.current.error).toBeUndefined();
   });
+
+  // Regression: a parallel-tab launch (ChatPanel.handleSubmit -> queueLaunchPayload
+  // for extra tabs) used to be consumed from the store the instant the tab's
+  // useDesignChat mounted, even while offline — sendPayload's offline guard
+  // then rejected it, and the one-shot consumeLaunchPayload had already
+  // deleted it, destroying the queued message permanently.
+  it("keeps a queued launch payload queued while offline, and sends it once back online", async () => {
+    const fetchMock = vi.fn(async () =>
+      sseResponse([
+        { type: "start" },
+        { type: "start-step" },
+        { type: "text-start", id: "t1" },
+        { type: "text-delta", id: "t1", delta: "ok" },
+        { type: "text-end", id: "t1" },
+        { type: "finish-step" },
+        { type: "finish" },
+      ])
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const nav = { onLine: false };
+    vi.stubGlobal("navigator", nav);
+
+    const sessionId = `test-session-queued-${Date.now()}`;
+    useChatStore.getState().queueLaunchPayload(sessionId, {
+      text: "queued while offline",
+    });
+
+    renderHook(() => useDesignChat({ sessionId }));
+
+    // Give the mount effect a tick to (not) run, then assert the payload was
+    // neither sent nor deleted from the queue.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(useChatStore.getState().launchQueue[sessionId]).toEqual({
+      text: "queued while offline",
+    });
+
+    // Connectivity returns — the effect re-runs (isOnline dependency) and
+    // consumes+sends the still-queued payload.
+    nav.onLine = true;
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+    });
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(useChatStore.getState().launchQueue[sessionId]).toBeUndefined();
+  });
 });

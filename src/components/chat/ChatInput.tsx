@@ -12,6 +12,7 @@ import { useChatStore } from "@/store/chatStore";
 import { modelSupportsVision } from "@/lib/chatModels";
 import { useSelectionScreenshots } from "@/hooks/useSelectionScreenshots";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { OFFLINE_SEND_TITLE } from "@/lib/apiBase";
 
 // Maximum images per message (mirrored by MAX_IMAGE_PARTS on the backend).
 const MAX_IMAGES = 4;
@@ -19,7 +20,11 @@ const MAX_IMAGES = 4;
 interface ChatInputProps {
   input: string;
   setInput: (value: string) => void;
-  onSubmit: (payload: ChatLaunchPayload) => void;
+  // Returns whether the message was actually sent. ChatInput only clears
+  // attachments/dismissed-selection on `true` — a `false` (offline, chat not
+  // ready, …) leaves the draft and its attachments intact so the user can
+  // retry once the underlying condition clears.
+  onSubmit: (payload: ChatLaunchPayload) => boolean;
   isLoading: boolean;
   stop: () => void;
 }
@@ -171,18 +176,27 @@ export function ChatInput({
       const images = supportsVision
         ? [...selectionImages, ...attachedImages]
         : [];
-      if ((input.trim() || images.length > 0) && !isLoading && isOnline) {
-        onSubmit({
+      // Deliberately not gated on `isOnline`: the send button is already
+      // disabled while offline, but Enter bypasses it. Calling onSubmit
+      // unconditionally lets its offline guard (in useDesignChat) surface a
+      // visible per-message error instead of Enter being a silent no-op.
+      if ((input.trim() || images.length > 0) && !isLoading) {
+        const didSend = onSubmit({
           text: input.trim(),
           images: images.length > 0 ? images : undefined,
         });
-        setAttachedImages([]);
-        // Reset per-message dismissals so the next message re-includes the
-        // still-selected nodes.
-        setDismissedSelection(new Set());
+        // Only clear attachments once the message actually sent — a failed
+        // send (offline, chat not ready, …) must leave them intact so the
+        // user can retry without re-attaching everything.
+        if (didSend) {
+          setAttachedImages([]);
+          // Reset per-message dismissals so the next message re-includes the
+          // still-selected nodes.
+          setDismissedSelection(new Set());
+        }
       }
     },
-    [input, attachedImages, visibleSelection, supportsVision, isLoading, isOnline, onSubmit]
+    [input, attachedImages, visibleSelection, supportsVision, isLoading, onSubmit]
   );
 
   const handleKeyDown = useCallback(
@@ -397,7 +411,7 @@ export function ChatInput({
                 visibleSelection.length === 0)
             }
             className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted disabled:text-text-disabled transition-colors"
-            title={isOnline ? "Send" : "Offline — sending is disabled"}
+            title={isOnline ? "Send" : OFFLINE_SEND_TITLE}
           >
             <PaperPlaneRightIcon size={18} />
           </button>

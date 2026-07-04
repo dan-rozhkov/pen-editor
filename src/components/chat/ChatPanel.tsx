@@ -219,11 +219,11 @@ function ChatSession({
     return <PresetList onSelect={handleSelectPreset} />;
   }
 
-  const handleSubmit = (payload: ChatLaunchPayload) => {
+  const handleSubmit = (payload: ChatLaunchPayload): boolean => {
     const launchPayload = cloneLaunchPayload(payload);
     const didSend = submitLaunchPayload(launchPayload);
     if (!didSend) {
-      return;
+      return false;
     }
 
     setInput("");
@@ -234,6 +234,7 @@ function ChatSession({
     }
 
     setParallelCount(1);
+    return true;
   };
 
   const handleRollback = (messageId: string) => {

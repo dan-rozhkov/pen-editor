@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { ChatInput } from "../ChatInput";
 import { useChatStore } from "@/store/chatStore";
@@ -24,7 +24,7 @@ beforeEach(() => {
 });
 
 interface HarnessProps {
-  onSubmit: (payload: ChatLaunchPayload) => void;
+  onSubmit: (payload: ChatLaunchPayload) => boolean;
   isLoading?: boolean;
   stop?: () => void;
   initialInput?: string;
@@ -164,12 +164,59 @@ describe("<ChatInput />", () => {
       expect(onSubmit).not.toHaveBeenCalled();
     });
 
-    it("does not submit on Enter while offline", () => {
+    it("still calls onSubmit on Enter while offline, so the per-message offline error can surface", () => {
+      // The send button stays disabled (covered above), but Enter bypasses
+      // it entirely — doSubmit must not silently swallow the attempt.
+      // sendPayload's own offline guard (useDesignChat) is what actually
+      // blocks the send and shows the error; ChatInput's job is only to not
+      // gate on isOnline itself.
       vi.stubGlobal("navigator", { onLine: false });
-      const onSubmit = vi.fn();
+      const onSubmit = vi.fn(() => false);
       render(<Harness onSubmit={onSubmit} initialInput="hello" />);
       fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
-      expect(onSubmit).not.toHaveBeenCalled();
+      expect(onSubmit).toHaveBeenCalledWith({ text: "hello", images: undefined });
+    });
+
+    it("keeps attachments and dismissed-selection state when onSubmit reports the send failed", () => {
+      const selection: SelectionScreenshot[] = [
+        { nodeId: "frame1", name: "Screen", dataUrl: "data:image/png;base64,a" },
+      ];
+      mockSelection = selection;
+      vi.stubGlobal("navigator", { onLine: false });
+      const onSubmit = vi.fn(() => false);
+      render(<Harness onSubmit={onSubmit} initialInput="hello" />);
+
+      // Dismiss the selection preview before attempting to send.
+      fireEvent.click(screen.getByTitle("Remove from context"));
+      expect(screen.queryByAltText("Screen")).toBeNull();
+
+      fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+
+      // A failed send must not reset the dismissal — the previous (buggy)
+      // behavior cleared it unconditionally, silently restoring the
+      // dismissed preview as if the message had actually gone out.
+      expect(screen.queryByAltText("Screen")).toBeNull();
+    });
+
+    it("keeps an explicitly attached image when onSubmit reports the send failed", async () => {
+      const onSubmit = vi.fn(() => false);
+      render(<Harness onSubmit={onSubmit} initialInput="hello" />);
+
+      const fileInput = document.querySelector(
+        'input[type="file"]'
+      ) as HTMLInputElement;
+      const file = new File(["fake-bytes"], "photo.png", { type: "image/png" });
+      fireEvent.change(fileInput, { target: { files: [file] } });
+
+      await waitFor(() => expect(screen.getByAltText("photo.png")).toBeTruthy());
+
+      vi.stubGlobal("navigator", { onLine: false });
+      fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      // The failed send must not have cleared the attachment.
+      expect(screen.getByAltText("photo.png")).toBeTruthy();
     });
   });
 

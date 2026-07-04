@@ -6,7 +6,8 @@ import {
   type UIMessage,
 } from "ai";
 import { modelSupportsVision, resolveModel } from "@/lib/chatModels";
-import { resolveApiUrl } from "@/lib/apiBase";
+import { resolveApiUrl, isOffline, OFFLINE_MESSAGE } from "@/lib/apiBase";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
@@ -198,6 +199,10 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     },
   });
 
+  // Drives re-running the queued-payload effect below once connectivity
+  // returns (see the effect for why offline must not consume the queue).
+  const isOnline = useOnlineStatus();
+
   // Register/unregister abort capability for this session
   const registerAbortController = useChatStore((s) => s.registerAbortController);
   const unregisterAbortController = useChatStore((s) => s.unregisterAbortController);
@@ -232,12 +237,8 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       }
       // Fail fast and locally instead of issuing a request that will hang or
       // reject once the browser notices it has no connection.
-      if (!navigator.onLine) {
-        setOfflineError(
-          new Error(
-            "Offline. AI and backend features are disabled until the connection is restored."
-          )
-        );
+      if (isOffline()) {
+        setOfflineError(new Error(OFFLINE_MESSAGE));
         return false;
       }
       // A failed request leaves the chat in "error" status; clear it so the
@@ -268,7 +269,12 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   );
 
   useEffect(() => {
-    if (chat.status !== "ready") {
+    if (chat.status !== "ready" || !isOnline) {
+      // Consuming while offline would delete the queued payload from the
+      // store without ever sending it (sendPayload's offline guard rejects
+      // it), destroying a parallel-tab launch permanently. Leave it queued;
+      // the isOnline dependency reruns this effect once connectivity
+      // returns, at which point it's consumed and sent normally.
       return;
     }
 
@@ -278,7 +284,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     }
 
     sendPayload(cloneLaunchPayload(queuedPayload));
-  }, [chat.status, consumeLaunchPayload, sendPayload, sessionId]);
+  }, [chat.status, isOnline, consumeLaunchPayload, sendPayload, sessionId]);
 
   const sendMessage = useCallback((): boolean => {
     const didSend = sendPayload({ text: input.trim() });
