@@ -14,6 +14,7 @@ import { useEditorModeStore } from "./store/editorModeStore";
 import { useIsMobile } from "./hooks/useIsMobile";
 import { useOnlineStatus } from "./hooks/useOnlineStatus";
 import { OfflineBanner } from "./components/pwa/OfflineBanner";
+import { PwaUpdateToast } from "./components/pwa/PwaUpdateToast";
 import "./store/uiThemeStore"; // Initialize UI theme (applies .dark class before first render)
 
 const PixiCanvas = lazy(() => import("./pixi/PixiCanvas").then((m) => ({ default: m.PixiCanvas })));
@@ -64,6 +65,12 @@ function App() {
           interaction. PixiCanvas stays mounted; only backend-dependent
           features are unavailable while offline. */}
       {!isOnline && !isPresent && <OfflineBanner />}
+
+      {/* Update-available toast — appears once a new service worker version
+          has installed and is waiting to activate. Sits below OfflineBanner
+          so the two never overlap; unlike the banner, its button is
+          interactive. */}
+      {!isPresent && <PwaUpdateToast />}
 
       {/* UI panels — overlay on top of canvas */}
       {!isUIHidden && !isPresent && (
