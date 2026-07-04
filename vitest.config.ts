@@ -7,6 +7,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // vite-plugin-pwa's virtual module isn't available under this
+      // standalone Vitest config; alias it to a test stub. See
+      // src/test/virtualPwaRegister.ts.
+      "virtual:pwa-register": path.resolve(__dirname, "./src/test/virtualPwaRegister.ts"),
     },
   },
   server: {

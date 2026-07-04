@@ -1,7 +1,16 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+
+import { registerServiceWorker } from '@/pwa/registerServiceWorker'
+
 import './index.css'
 import App from './App.tsx'
+
+// vite-plugin-pwa's generateSW output only exists for production builds
+// (no devOptions are enabled), so only register there.
+if (import.meta.env.PROD) {
+  registerServiceWorker()
+}
 
 // Dev-only: expose internals for E2E testing
 if (import.meta.env.DEV) {
