@@ -12,7 +12,10 @@ vi.mock("@/hooks/useSelectionScreenshots", () => ({
   useSelectionScreenshots: () => mockSelection,
 }));
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 beforeEach(() => {
   // A known vision-capable model so the attach button is enabled.
@@ -146,6 +149,28 @@ describe("<ChatInput />", () => {
     // A space means it's no longer a single-token slash query.
     fireEvent.change(textarea, { target: { value: "/audit now" } });
     expect(screen.queryByText("/audit")).toBeNull();
+  });
+
+  describe("offline", () => {
+    it("disables the send button and labels it as offline", () => {
+      vi.stubGlobal("navigator", { onLine: false });
+      const onSubmit = vi.fn();
+      render(<Harness onSubmit={onSubmit} initialInput="hello" />);
+      const sendBtn = screen.getByTitle(
+        "Offline — sending is disabled"
+      ) as HTMLButtonElement;
+      expect(sendBtn.disabled).toBe(true);
+      fireEvent.click(sendBtn);
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it("does not submit on Enter while offline", () => {
+      vi.stubGlobal("navigator", { onLine: false });
+      const onSubmit = vi.fn();
+      render(<Harness onSubmit={onSubmit} initialInput="hello" />);
+      fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
   });
 
   it("offers an enabled Attach image button for a vision-capable model", () => {

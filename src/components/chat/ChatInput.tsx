@@ -11,6 +11,7 @@ import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
 import { useChatStore } from "@/store/chatStore";
 import { modelSupportsVision } from "@/lib/chatModels";
 import { useSelectionScreenshots } from "@/hooks/useSelectionScreenshots";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 
 // Maximum images per message (mirrored by MAX_IMAGE_PARTS on the backend).
 const MAX_IMAGES = 4;
@@ -54,6 +55,9 @@ export function ChatInput({
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const model = useChatStore((s) => s.model);
   const supportsVision = modelSupportsVision(model);
+  // Sending always needs the backend — disable the send control while offline
+  // (the pre-send guard in useDesignChat is kept as defense in depth).
+  const isOnline = useOnlineStatus();
 
   // Screenshots of the currently selected canvas nodes, attached to the message
   // as visual context. The user can drop individual ones for the message they
@@ -167,7 +171,7 @@ export function ChatInput({
       const images = supportsVision
         ? [...selectionImages, ...attachedImages]
         : [];
-      if ((input.trim() || images.length > 0) && !isLoading) {
+      if ((input.trim() || images.length > 0) && !isLoading && isOnline) {
         onSubmit({
           text: input.trim(),
           images: images.length > 0 ? images : undefined,
@@ -178,7 +182,7 @@ export function ChatInput({
         setDismissedSelection(new Set());
       }
     },
-    [input, attachedImages, visibleSelection, supportsVision, isLoading, onSubmit]
+    [input, attachedImages, visibleSelection, supportsVision, isLoading, isOnline, onSubmit]
   );
 
   const handleKeyDown = useCallback(
@@ -387,12 +391,13 @@ export function ChatInput({
           <button
             type="submit"
             disabled={
-              !input.trim() &&
-              attachedImages.length === 0 &&
-              visibleSelection.length === 0
+              !isOnline ||
+              (!input.trim() &&
+                attachedImages.length === 0 &&
+                visibleSelection.length === 0)
             }
             className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted disabled:text-text-disabled transition-colors"
-            title="Send"
+            title={isOnline ? "Send" : "Offline — sending is disabled"}
           >
             <PaperPlaneRightIcon size={18} />
           </button>
