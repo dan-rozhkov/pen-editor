@@ -5,6 +5,10 @@ import { defineConfig, devices } from "@playwright/test";
 // page.route, so only the frontend + the in-browser tool execution is covered.
 export default defineConfig({
   testDir: "e2e",
+  // e2e/pwa/ needs a production build + `vite preview` (the service worker
+  // doesn't exist in dev builds) and has its own config: playwright.pwa.config.ts,
+  // run via `npm run test:e2e:pwa`.
+  testIgnore: "**/pwa/**",
   timeout: 60_000,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

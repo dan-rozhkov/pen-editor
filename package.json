@@ -10,6 +10,7 @@
     "test": "vitest run",
     "preview": "vite preview",
     "test:e2e": "playwright test",
+    "test:e2e:pwa": "playwright test --config=playwright.pwa.config.ts",
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
