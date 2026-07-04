@@ -4,6 +4,12 @@ import { useSceneStore } from "@/store/sceneStore";
 import { createImagePaint, clearLegacyFillProps } from "@/utils/fillUtils";
 
 async function requestGeneratedImage(prompt: string): Promise<string> {
+  // Fail immediately instead of letting a request hang or reject once the
+  // browser notices there's no connection — image generation always needs
+  // the backend, there's no offline fallback.
+  if (!navigator.onLine) {
+    throw new Error("Offline: image generation requires a network connection.");
+  }
   const res = await fetch(resolveApiUrl("/api/generate-image"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },

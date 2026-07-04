@@ -34,6 +34,15 @@ describe("generate_image (chat)", () => {
     expect(result.error).toBeTruthy();
     expect(result.url).toBeUndefined();
   });
+
+  it("fails locally without a network request when offline", async () => {
+    vi.stubGlobal("navigator", { onLine: false });
+    const fetchMock = vi.fn(async () => jsonResponse({ url: "https://cdn/x.png" }));
+    vi.stubGlobal("fetch", fetchMock);
+    const result = JSON.parse(await generateImage({ prompt: "x" }));
+    expect(result.error).toBeTruthy();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("generate_frame_image (canvas)", () => {

@@ -155,6 +155,11 @@ function cloneLaunchPayload(payload: ChatLaunchPayload): ChatLaunchPayload {
 
 export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   const [input, setInput] = useState("");
+  // Set when a send is attempted while offline. Surfaced the same way as
+  // `chat.error` (network/provider errors) so the chat UI doesn't need a
+  // second error path, but it never touches the network — the request is
+  // never issued, so there is nothing to hang.
+  const [offlineError, setOfflineError] = useState<Error | undefined>();
 
   const transport = useMemo(
     () =>
@@ -225,6 +230,16 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       if (!text && (!images || images.length === 0)) {
         return false;
       }
+      // Fail fast and locally instead of issuing a request that will hang or
+      // reject once the browser notices it has no connection.
+      if (!navigator.onLine) {
+        setOfflineError(
+          new Error(
+            "Offline. AI and backend features are disabled until the connection is restored."
+          )
+        );
+        return false;
+      }
       // A failed request leaves the chat in "error" status; clear it so the
       // user can retry instead of the chat being stuck.
       if (chat.status === "error") {
@@ -232,6 +247,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       } else if (chat.status !== "ready") {
         return false;
       }
+      setOfflineError(undefined);
 
       if (images && images.length > 0) {
         const parts: Array<{ type: "text"; text: string } | { type: "file"; mediaType: string; url: string }> = [];
@@ -283,6 +299,11 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     [input, sendPayload]
   );
 
+  const clearError = useCallback(() => {
+    setOfflineError(undefined);
+    chat.clearError();
+  }, [chat]);
+
   return {
     messages: chat.messages,
     input,
@@ -292,8 +313,8 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     status: chat.status,
     isLoading: chat.status === "submitted" || chat.status === "streaming",
     stop: chat.stop,
-    error: chat.error,
-    clearError: chat.clearError,
+    error: offlineError ?? chat.error,
+    clearError,
     setMessages: chat.setMessages,
   };
 }

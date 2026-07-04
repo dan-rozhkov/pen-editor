@@ -446,4 +446,31 @@ describe("useDesignChat (hook + UI message stream)", () => {
     expect(toolPart!.toolName).toBe("refero_search_screens");
     expect(toolPart!.state).toBe("output-available");
   });
+
+  it("fails locally without a network request when offline", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("navigator", { onLine: false });
+
+    const sessionId = `test-session-offline-${Date.now()}`;
+    const { result } = renderHook(() => useDesignChat({ sessionId }));
+
+    act(() => {
+      result.current.setInput("do something");
+    });
+    act(() => {
+      const didSend = result.current.sendMessage();
+      expect(didSend).toBe(false);
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.current.error?.message).toMatch(/offline/i);
+    // The unsent draft is preserved so the user can retry once back online.
+    expect(result.current.input).toBe("do something");
+
+    act(() => {
+      result.current.clearError();
+    });
+    expect(result.current.error).toBeUndefined();
+  });
 });

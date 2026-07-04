@@ -12,6 +12,8 @@ import { FpsDisplay } from "./components/canvas/CanvasOverlays";
 import { useUIVisibilityStore } from "./store/uiVisibilityStore";
 import { useEditorModeStore } from "./store/editorModeStore";
 import { useIsMobile } from "./hooks/useIsMobile";
+import { useOnlineStatus } from "./hooks/useOnlineStatus";
+import { OfflineBanner } from "./components/pwa/OfflineBanner";
 import "./store/uiThemeStore"; // Initialize UI theme (applies .dark class before first render)
 
 const PixiCanvas = lazy(() => import("./pixi/PixiCanvas").then((m) => ({ default: m.PixiCanvas })));
@@ -20,6 +22,7 @@ function App() {
   const isUIHidden = useUIVisibilityStore((s) => s.isUIHidden);
   const mode = useEditorModeStore((s) => s.mode);
   const isMobile = useIsMobile();
+  const isOnline = useOnlineStatus();
 
   const isPresent = mode === "present";
   const isView = mode === "view";
@@ -55,6 +58,12 @@ function App() {
 
       {/* Present mode hides all editor chrome and shows only the slide controls. */}
       {isPresent && <PresentOverlay />}
+
+      {/* Offline status pill — rendered above the canvas/UI stack. Non-blocking
+          (pointer-events-none), so it never intercepts canvas or sidebar
+          interaction. PixiCanvas stays mounted; only backend-dependent
+          features are unavailable while offline. */}
+      {!isOnline && !isPresent && <OfflineBanner />}
 
       {/* UI panels — overlay on top of canvas */}
       {!isUIHidden && !isPresent && (
