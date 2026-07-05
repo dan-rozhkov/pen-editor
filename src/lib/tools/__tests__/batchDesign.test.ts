@@ -633,7 +633,16 @@ describe("batch_design", () => {
       expect(inst.componentId).toBe(compId);
     });
 
-    it("switches an instance's property value via propertyValues without touching its overrides", async () => {
+    /**
+     * Create a component (with a "label" text child), declare `state` (variant)
+     * and `showIcon` (boolean) properties on it, and instantiate it. Returns
+     * the real ids: { compId, labelId, instId }.
+     */
+    async function seedComponentWithPropertiesAndInstance(): Promise<{
+      compId: string;
+      labelId: string;
+      instId: string;
+    }> {
       const setup = JSON.parse(
         await batchDesign({
           operations: [
@@ -644,12 +653,24 @@ describe("batch_design", () => {
       );
       const [compId, labelId] = setup.createdNodes.map((n: { id: string }) => n.id);
 
-      const instSetup = JSON.parse(
+      const declared = JSON.parse(
         await batchDesign({
-          operations: `inst=I(document, {type: "ref", componentId: "${compId}", width: 120, height: 40})`,
+          operations: [
+            `U("${compId}", {properties: [` +
+              `{id: "state", name: "State", type: "variant", variantOptions: ["default", "hover"], defaultValue: "default", bindingPath: "${labelId}", bindingProp: "fill"}, ` +
+              `{id: "showIcon", name: "Show icon", type: "boolean", defaultValue: true, bindingPath: "${labelId}", bindingProp: "visible"}` +
+              `]})`,
+            `inst=I(document, {type: "ref", componentId: "${compId}", width: 120, height: 40})`,
+          ].join("\n"),
         })
       );
-      const [instId] = instSetup.createdNodes.map((n: { id: string }) => n.id);
+      expect(declared.success).toBe(true);
+      const [instId] = declared.createdNodes.map((n: { id: string }) => n.id);
+      return { compId, labelId, instId };
+    }
+
+    it("switches an instance's property value via propertyValues without touching its overrides", async () => {
+      const { labelId, instId } = await seedComponentWithPropertiesAndInstance();
 
       // An explicit override, set independently of any property.
       sceneState().updateInstanceOverride(instId, labelId, { x: 5 });
@@ -670,18 +691,7 @@ describe("batch_design", () => {
     });
 
     it("merges propertyValues by key on repeated U() calls instead of replacing the whole object", async () => {
-      const setup = JSON.parse(
-        await batchDesign({
-          operations: 'comp=I(document, {type: "frame", name: "Button", reusable: true, width: 120, height: 40})',
-        })
-      );
-      const [compId] = setup.createdNodes.map((n: { id: string }) => n.id);
-      const instSetup = JSON.parse(
-        await batchDesign({
-          operations: `inst=I(document, {type: "ref", componentId: "${compId}", width: 120, height: 40})`,
-        })
-      );
-      const [instId] = instSetup.createdNodes.map((n: { id: string }) => n.id);
+      const { instId } = await seedComponentWithPropertiesAndInstance();
 
       await batchDesign({ operations: `U("${instId}", {propertyValues: {state: "hover"}})` });
       await batchDesign({ operations: `U("${instId}", {propertyValues: {showIcon: false}})` });
@@ -690,6 +700,79 @@ describe("batch_design", () => {
         propertyValues?: Record<string, unknown>;
       };
       expect(inst.propertyValues).toEqual({ state: "hover", showIcon: false });
+    });
+
+    it("rejects a variant value outside the declared options and leaves the instance unchanged", async () => {
+      const { instId } = await seedComponentWithPropertiesAndInstance();
+
+      const result = JSON.parse(
+        await batchDesign({
+          operations: `U("${instId}", {propertyValues: {state: "disabled"}})`,
+        })
+      );
+      expect(result.success).toBeUndefined();
+      expect(result.error).toMatch(/state.*disabled|disabled.*state/i);
+
+      const inst = sceneState().nodesById[instId] as FlatSceneNode & {
+        propertyValues?: Record<string, unknown>;
+      };
+      expect(inst.propertyValues).toBeUndefined();
+    });
+
+    it("rejects a wrong-typed value for a boolean property", async () => {
+      const { instId } = await seedComponentWithPropertiesAndInstance();
+
+      const result = JSON.parse(
+        await batchDesign({
+          operations: `U("${instId}", {propertyValues: {showIcon: "false"}})`,
+        })
+      );
+      expect(result.success).toBeUndefined();
+      expect(result.error).toMatch(/showIcon/);
+
+      const inst = sceneState().nodesById[instId] as FlatSceneNode & {
+        propertyValues?: Record<string, unknown>;
+      };
+      expect(inst.propertyValues).toBeUndefined();
+    });
+
+    it("rejects a propertyValues key the component never declared", async () => {
+      const { instId } = await seedComponentWithPropertiesAndInstance();
+
+      const result = JSON.parse(
+        await batchDesign({
+          operations: `U("${instId}", {propertyValues: {doesNotExist: "x"}})`,
+        })
+      );
+      expect(result.success).toBeUndefined();
+      expect(result.error).toMatch(/doesNotExist/);
+    });
+
+    it("rejects propertyValues on a non-ref node", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations: 'U(rect2, {propertyValues: {state: "hover"}})',
+        })
+      );
+      expect(result.success).toBeUndefined();
+      expect(result.error).toMatch(/propertyValues/);
+      expect(
+        (sceneState().nodesById["rect2"] as FlatSceneNode & { propertyValues?: unknown }).propertyValues,
+      ).toBeUndefined();
+    });
+
+    it("rejects a properties declaration on a non-reusable node", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'U(rect2, {properties: [{id: "state", name: "State", type: "variant", variantOptions: ["a"], defaultValue: "a", bindingPath: "x", bindingProp: "fill"}]})',
+        })
+      );
+      expect(result.success).toBeUndefined();
+      expect(result.error).toMatch(/properties/);
+      expect(
+        (sceneState().nodesById["rect2"] as FlatSceneNode & { properties?: unknown }).properties,
+      ).toBeUndefined();
     });
   });
 

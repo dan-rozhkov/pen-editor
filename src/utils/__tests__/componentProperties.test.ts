@@ -3,6 +3,7 @@ import type { ComponentPropertyDef, FlatFrameNode, InstanceOverrideUpdateProps, 
 import {
   buildPropertyOverrides,
   getEffectiveOverrides,
+  getPropertyValuesUpdateError,
   resolvePropertyValue,
   validatePropertyValue,
 } from "@/utils/componentProperties";
@@ -91,6 +92,28 @@ describe("validatePropertyValue", () => {
   it("only accepts strings for text properties", () => {
     expect(validatePropertyValue(textProp, "hello")).toBe(true);
     expect(validatePropertyValue(textProp, true)).toBe(false);
+  });
+});
+
+describe("getPropertyValuesUpdateError", () => {
+  it("returns null for a fully valid update", () => {
+    expect(
+      getPropertyValuesUpdateError([variantProp, booleanProp], { state: "hover", showIcon: false }),
+    ).toBeNull();
+  });
+
+  it("names an unknown property id", () => {
+    expect(getPropertyValuesUpdateError([variantProp], { nope: "x" })).toMatch(/unknown component property "nope"/);
+  });
+
+  it("names an out-of-options variant value and lists the allowed options", () => {
+    const error = getPropertyValuesUpdateError([variantProp], { state: "disabled" });
+    expect(error).toMatch(/"state"/);
+    expect(error).toMatch(/"default", "hover", "pressed"/);
+  });
+
+  it("rejects a wrong-typed boolean value", () => {
+    expect(getPropertyValuesUpdateError([booleanProp], { showIcon: "true" })).toMatch(/"showIcon"/);
   });
 });
 

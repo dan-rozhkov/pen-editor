@@ -5,6 +5,7 @@ import type {
   EmbedNode,
   ImageFill,
   Paint,
+  RefNode,
 } from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
 import {
@@ -28,6 +29,7 @@ import {
   getFills,
 } from "@/utils/fillUtils";
 import { normalizeEmbedHtmlForStorage } from "@/utils/embedTemplateUtils";
+import { getPropertyValuesUpdateError } from "@/utils/componentProperties";
 import type { ParsedArg, ParsedOperation, ExecutionContext } from "./types";
 import {
   createNodeFromAiDataWithTheme,
@@ -442,6 +444,57 @@ function reconcileLegacyFillUpdate(
 }
 
 /**
+ * Enforce the same component-property rules the sceneStore actions
+ * (`setComponentProperties` / `setInstancePropertyValue`) apply, on the AI
+ * batch_design path — which merges node data directly into ctx and commits
+ * via a raw setState, bypassing those store actions. Throws (surfaced as a
+ * batch_design error string) instead of silently no-oping so the model gets
+ * actionable feedback.
+ */
+function assertValidComponentPropertyUpdate(
+  mapped: Record<string, unknown>,
+  node: FlatSceneNode,
+  ctx: ExecutionContext,
+  line: number,
+): void {
+  if (mapped.properties !== undefined) {
+    if (node.type !== "frame" || !(node as FlatFrameNode).reusable) {
+      throw new Error(
+        `Line ${line}: 'properties' can only be declared on a reusable component frame — node "${node.id}" is a ${node.type}${
+          node.type === "frame" ? " without reusable: true" : ""
+        }`,
+      );
+    }
+  }
+
+  if (mapped.propertyValues !== undefined) {
+    if (node.type !== "ref") {
+      throw new Error(
+        `Line ${line}: 'propertyValues' can only be set on a component instance (type "ref") — node "${node.id}" is a ${node.type}`,
+      );
+    }
+    const componentId = (node as RefNode).componentId;
+    const component = ctx.nodesById[componentId];
+    if (!component || component.type !== "frame" || !(component as FlatFrameNode).reusable) {
+      throw new Error(
+        `Line ${line}: instance "${node.id}" references component "${componentId}" which is not a reusable frame`,
+      );
+    }
+    const values = mapped.propertyValues;
+    if (!values || typeof values !== "object" || Array.isArray(values)) {
+      throw new Error(`Line ${line}: 'propertyValues' must be an object keyed by property id`);
+    }
+    const error = getPropertyValuesUpdateError(
+      (component as FlatFrameNode).properties,
+      values as Record<string, unknown>,
+    );
+    if (error) {
+      throw new Error(`Line ${line}: ${error}`);
+    }
+  }
+}
+
+/**
  * Execute an Update operation.
  * U(nodeId, updateData)
  */
@@ -467,6 +520,8 @@ function executeUpdate(op: ParsedOperation, ctx: ExecutionContext): void {
     ),
   });
   delete (mapped as Record<string, unknown>)._children;
+
+  assertValidComponentPropertyUpdate(mapped as Record<string, unknown>, node, ctx, op.line);
 
   let updated = { ...node, ...reconcileLegacyFillUpdate(node, mapped) } as FlatSceneNode;
 

@@ -33,6 +33,36 @@ export function validatePropertyValue(
 }
 
 /**
+ * Validate a whole `propertyValues` update against a component's declared
+ * properties. Returns a human-readable error string for the first invalid
+ * entry (unknown property id, or a value failing `validatePropertyValue`),
+ * or null when every entry is valid. Shared by the AI `batch_design`
+ * executor (which surfaces the string as a tool error) so the AI path
+ * enforces exactly the same rules as the panel/store path.
+ */
+export function getPropertyValuesUpdateError(
+  properties: ComponentPropertyDef[] | undefined,
+  values: Record<string, unknown>,
+): string | null {
+  for (const [propertyId, value] of Object.entries(values)) {
+    const property = properties?.find((p) => p.id === propertyId);
+    if (!property) {
+      return `unknown component property "${propertyId}" (declared: ${
+        properties?.map((p) => p.id).join(", ") || "none"
+      })`;
+    }
+    if (!validatePropertyValue(property, value)) {
+      const expected =
+        property.type === "variant"
+          ? `one of ${(property.variantOptions ?? []).map((o) => `"${o}"`).join(", ")}`
+          : `a ${property.type === "boolean" ? "boolean" : "string"}`;
+      return `invalid value ${JSON.stringify(value)} for ${property.type} property "${propertyId}" — expected ${expected}`;
+    }
+  }
+  return null;
+}
+
+/**
  * Build the "update" overrides implied by a component's property declarations
  * and an instance's selected property values. Multiple properties that target
  * the same `bindingPath` are merged into a single override's `props`.
