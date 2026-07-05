@@ -335,7 +335,7 @@ export function Rulers() {
       {/* Preview line while dragging a new guide out from a ruler */}
       {creatingGuide && (
         <div
-          className="absolute bg-blue-500/70 pointer-events-none z-20"
+          className="absolute bg-[#ff3366]/70 pointer-events-none z-20"
           style={
             creatingGuide.orientation === "horizontal"
               ? { left: 0, right: 0, top: creatingGuide.screenPos, height: 1 }

@@ -22,7 +22,7 @@ import {
 } from "./selectionOverlay/constants";
 
 const GUIDE_COLOR = 0xff3366;
-const PERSISTENT_GUIDE_COLOR = 0x0d99ff;
+const PERSISTENT_GUIDE_COLOR = GUIDE_COLOR;
 const DROP_INDICATOR_COLOR = 0x0d99ff;
 const MEASURE_COLOR = 0xf24822;
 const MARQUEE_FILL = 0x0d99ff;
