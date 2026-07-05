@@ -403,6 +403,88 @@ describe("batch_design", () => {
       // Stubbed measurement: 8px per character
       expect(text.width).toBe("Hello world, longer".length * 8);
     });
+
+    it("maps a cornerRadius array to per-corner radii and clears the unified value", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations: "U(rect1, {cornerRadius: [12, 8, 4, 0]})",
+        })
+      );
+      expect(result.success).toBe(true);
+      const rect = sceneState().nodesById["rect1"] as FlatSceneNode & {
+        cornerRadius?: number;
+        cornerRadiusPerCorner?: {
+          topLeft?: number;
+          topRight?: number;
+          bottomRight?: number;
+          bottomLeft?: number;
+        };
+      };
+      expect(rect.cornerRadiusPerCorner).toEqual({
+        topLeft: 12,
+        topRight: 8,
+        bottomRight: 4,
+        bottomLeft: 0,
+      });
+      // The fixture's unified cornerRadius (4) is cleared.
+      expect(rect.cornerRadius).toBeUndefined();
+    });
+
+    it("expands CSS-shorthand cornerRadius arrays (2 values)", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations: "U(rect1, {cornerRadius: [10, 20]})",
+        })
+      );
+      expect(result.success).toBe(true);
+      const rect = sceneState().nodesById["rect1"] as FlatSceneNode & {
+        cornerRadiusPerCorner?: Record<string, number>;
+      };
+      expect(rect.cornerRadiusPerCorner).toEqual({
+        topLeft: 10,
+        topRight: 20,
+        bottomRight: 10,
+        bottomLeft: 20,
+      });
+    });
+
+    it("accepts a cornerRadiusPerCorner object and clears the unified radius", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            "U(rect1, {cornerRadiusPerCorner: {topLeft: 6, bottomRight: 6}})",
+        })
+      );
+      expect(result.success).toBe(true);
+      const rect = sceneState().nodesById["rect1"] as FlatSceneNode & {
+        cornerRadius?: number;
+        cornerRadiusPerCorner?: Record<string, number | undefined>;
+      };
+      expect(rect.cornerRadiusPerCorner).toEqual({
+        topLeft: 6,
+        topRight: undefined,
+        bottomRight: 6,
+        bottomLeft: undefined,
+      });
+      expect(rect.cornerRadius).toBeUndefined();
+    });
+
+    it("keeps a numeric cornerRadius unified and clears any per-corner radii", async () => {
+      // First set per-corner, then overwrite with a unified number.
+      await batchDesign({
+        operations: "U(rect1, {cornerRadius: [1, 2, 3, 4]})",
+      });
+      const result = JSON.parse(
+        await batchDesign({ operations: "U(rect1, {cornerRadius: 9})" })
+      );
+      expect(result.success).toBe(true);
+      const rect = sceneState().nodesById["rect1"] as FlatSceneNode & {
+        cornerRadius?: number;
+        cornerRadiusPerCorner?: unknown;
+      };
+      expect(rect.cornerRadius).toBe(9);
+      expect(rect.cornerRadiusPerCorner).toBeUndefined();
+    });
   });
 
   describe("delete (D) and move (M)", () => {

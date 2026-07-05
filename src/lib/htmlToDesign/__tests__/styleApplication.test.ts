@@ -77,6 +77,50 @@ describe("applyBaseProps — legacy single-background-layer path", () => {
   });
 });
 
+describe("applyBaseProps — corner radius", () => {
+  it("uniform border-radius → single cornerRadius, no per-corner", () => {
+    const node = rect();
+    applyBaseProps(
+      node,
+      styleStub({
+        borderTopLeftRadius: "8px",
+        borderTopRightRadius: "8px",
+        borderBottomRightRadius: "8px",
+        borderBottomLeftRadius: "8px",
+      }),
+    );
+    expect(node.cornerRadius).toBe(8);
+    expect(node.cornerRadiusPerCorner).toBeUndefined();
+  });
+
+  it("mixed border-radius → cornerRadiusPerCorner, no unified value", () => {
+    const node = rect();
+    applyBaseProps(
+      node,
+      styleStub({
+        borderTopLeftRadius: "12px",
+        borderTopRightRadius: "8px",
+        borderBottomRightRadius: "4px",
+        borderBottomLeftRadius: "0px",
+      }),
+    );
+    expect(node.cornerRadius).toBeUndefined();
+    expect(node.cornerRadiusPerCorner).toEqual({
+      topLeft: 12,
+      topRight: 8,
+      bottomRight: 4,
+      bottomLeft: undefined,
+    });
+  });
+
+  it("no border-radius → neither field set", () => {
+    const node = rect();
+    applyBaseProps(node, styleStub({}));
+    expect(node.cornerRadius).toBeUndefined();
+    expect(node.cornerRadiusPerCorner).toBeUndefined();
+  });
+});
+
 describe("applyBaseProps — box-shadow + filter blur → effects stack", () => {
   it("shadow + blur → effects of length 2, [shadow, blur], no legacy single effect", () => {
     const node = rect();

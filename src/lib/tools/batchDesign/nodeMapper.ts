@@ -6,6 +6,7 @@ import type {
   ImageFill,
   Paint,
   GradientFill,
+  PerCornerRadius,
 } from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
 import { generateId } from "@/types/scene";
@@ -140,6 +141,43 @@ function normalizeFills(value: unknown, theme?: ThemeName): Paint[] {
 }
 
 /**
+ * Expand an AI-provided cornerRadius array into a PerCornerRadius object.
+ * Follows CSS `border-radius` shorthand ordering so a model can pass 1, 2, 3,
+ * or 4 values just like CSS:
+ *   [all]                → tl = tr = br = bl
+ *   [tl_br, tr_bl]       → topLeft/bottomRight, topRight/bottomLeft
+ *   [tl, tr_bl, br]      → topLeft, topRight/bottomLeft, bottomRight
+ *   [tl, tr, br, bl]     → each corner independently
+ * Non-finite entries fall back to 0.
+ */
+function expandCornerRadiusArray(value: unknown[]): PerCornerRadius {
+  const n = value.map((v) =>
+    typeof v === "number" && Number.isFinite(v) ? v : 0,
+  );
+  let tl: number, tr: number, br: number, bl: number;
+  switch (n.length) {
+    case 0:
+      tl = tr = br = bl = 0;
+      break;
+    case 1:
+      tl = tr = br = bl = n[0];
+      break;
+    case 2:
+      tl = br = n[0];
+      tr = bl = n[1];
+      break;
+    case 3:
+      tl = n[0];
+      tr = bl = n[1];
+      br = n[2];
+      break;
+    default:
+      [tl, tr, br, bl] = [n[0], n[1], n[2], n[3]];
+  }
+  return { topLeft: tl, topRight: tr, bottomRight: br, bottomLeft: bl };
+}
+
+/**
  * Parse a sizing string like "fill_container" or "fill_container(500)".
  * Returns { mode, numericValue? }
  */
@@ -252,6 +290,41 @@ export function mapNodeData(
         if (typeof value === "number") {
           hasLayout = true;
           layout.gap = value;
+        }
+        break;
+      }
+
+      // Corner radius: accept a single number (unified) or an array of radii
+      // ([tl, tr, br, bl], CSS-shorthand lengths also allowed) which maps to
+      // per-corner radii. Setting one representation clears the other so they
+      // never diverge.
+      case "cornerRadius": {
+        if (Array.isArray(value)) {
+          result.cornerRadiusPerCorner = expandCornerRadiusArray(value);
+          result.cornerRadius = undefined;
+        } else if (typeof value === "number") {
+          result.cornerRadius = value;
+          result.cornerRadiusPerCorner = undefined;
+        }
+        break;
+      }
+
+      // Per-corner radius object ({topLeft, topRight, bottomRight, bottomLeft}).
+      // Clears the unified radius so per-corner takes effect unambiguously.
+      case "cornerRadiusPerCorner": {
+        if (value && typeof value === "object" && !Array.isArray(value)) {
+          const pcr = value as Record<string, unknown>;
+          const pick = (k: string): number | undefined =>
+            typeof pcr[k] === "number" && Number.isFinite(pcr[k])
+              ? (pcr[k] as number)
+              : undefined;
+          result.cornerRadiusPerCorner = {
+            topLeft: pick("topLeft"),
+            topRight: pick("topRight"),
+            bottomRight: pick("bottomRight"),
+            bottomLeft: pick("bottomLeft"),
+          };
+          result.cornerRadius = undefined;
         }
         break;
       }
