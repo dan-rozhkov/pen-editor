@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
 import { useViewportStore } from "@/store/viewportStore";
 import { useGuidesStore } from "@/store/guidesStore";
 import { useUIThemeStore } from "@/store/uiThemeStore";
@@ -51,11 +51,12 @@ export function Rulers() {
   const [creatingGuide, setCreatingGuide] = useState<CreatingGuide | null>(null);
   const draggingGuideId = useRef<string | null>(null);
 
-  // Local-screen positions for each guide's invisible hit sensor, keyed by
-  // guide id. Kept in state (not computed during render) so we never read refs
-  // mid-render, and recomputed on viewport/size changes so the sensors track
-  // pan/zoom like the ruler ticks do.
-  const [guidePositions, setGuidePositions] = useState<Record<string, number>>({});
+  // Invisible hit-sensor DOM nodes for each guide, keyed by guide id. Positioned
+  // imperatively (see the layout effect below) rather than via React state so a
+  // pan/zoom doesn't re-render this component every animation frame — the
+  // visible guide line is drawn by Pixi; these sensors only need their local
+  // offset nudged to keep tracking it.
+  const sensorRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   // Track this component's own (flex-sized) box — it changes whenever a side
   // panel is toggled/resized, not just on window resize.
@@ -114,6 +115,57 @@ export function Rulers() {
       return pow * 10;
     }
 
+    // Draw one ruler strip. axis "x" = the top (horizontal) ruler, "y" = the
+    // left (vertical) ruler; the two differ only by which dimension spans and
+    // whether the tick labels are upright or rotated.
+    function drawRuler(
+      canvas: HTMLCanvasElement | null,
+      axis: "x" | "y",
+      sizePx: number,
+      pan: number,
+      offset: number,
+      scale: number,
+      step: number,
+      dpr: number,
+    ): void {
+      if (!canvas) return;
+      const isVertical = axis === "y";
+      const span = Math.max(0, sizePx - RULER_SIZE);
+      canvas.width = (isVertical ? RULER_SIZE : span) * dpr;
+      canvas.height = (isVertical ? span : RULER_SIZE) * dpr;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, isVertical ? RULER_SIZE : span, isVertical ? span : RULER_SIZE);
+      const worldMin = (RULER_SIZE + offset - pan) / scale;
+      const worldMax = (RULER_SIZE + span + offset - pan) / scale;
+      const start = Math.floor(worldMin / step) * step;
+      ctx.font = "9px system-ui, sans-serif";
+      ctx.fillStyle = labelColor;
+      ctx.strokeStyle = tickColor;
+      ctx.lineWidth = 1;
+      for (let w = start; w <= worldMax; w += step) {
+        const s = w * scale + pan - offset - RULER_SIZE;
+        ctx.beginPath();
+        if (isVertical) {
+          ctx.moveTo(RULER_SIZE * 0.4, s + 0.5);
+          ctx.lineTo(RULER_SIZE, s + 0.5);
+          ctx.stroke();
+          ctx.save();
+          ctx.translate(RULER_SIZE * 0.6, s - 2);
+          ctx.rotate(-Math.PI / 2);
+          ctx.fillText(String(Math.round(w)), 0, 0);
+          ctx.restore();
+        } else {
+          ctx.moveTo(s + 0.5, RULER_SIZE * 0.4);
+          ctx.lineTo(s + 0.5, RULER_SIZE);
+          ctx.stroke();
+          ctx.fillText(String(Math.round(w)), s + 2, RULER_SIZE * 0.6);
+        }
+      }
+    }
+
     function draw(): void {
       const vs = useViewportStore.getState();
       const canvasRect = getPixiCanvasRect();
@@ -124,65 +176,8 @@ export function Rulers() {
       const offsetX = rootRect.left - canvasRect.left;
       const offsetY = rootRect.top - canvasRect.top;
 
-      const topCanvas = topCanvasRef.current;
-      if (topCanvas) {
-        const w = Math.max(0, size.width - RULER_SIZE);
-        topCanvas.width = w * dpr;
-        topCanvas.height = RULER_SIZE * dpr;
-        const ctx = topCanvas.getContext("2d");
-        if (ctx) {
-          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-          ctx.fillStyle = bg;
-          ctx.fillRect(0, 0, w, RULER_SIZE);
-          const worldMin = (RULER_SIZE + offsetX - vs.x) / vs.scale;
-          const worldMax = (RULER_SIZE + w + offsetX - vs.x) / vs.scale;
-          const start = Math.floor(worldMin / step) * step;
-          ctx.font = "9px system-ui, sans-serif";
-          ctx.fillStyle = labelColor;
-          ctx.strokeStyle = tickColor;
-          ctx.lineWidth = 1;
-          for (let wx = start; wx <= worldMax; wx += step) {
-            const sx = wx * vs.scale + vs.x - offsetX - RULER_SIZE;
-            ctx.beginPath();
-            ctx.moveTo(sx + 0.5, RULER_SIZE * 0.4);
-            ctx.lineTo(sx + 0.5, RULER_SIZE);
-            ctx.stroke();
-            ctx.fillText(String(Math.round(wx)), sx + 2, RULER_SIZE * 0.6);
-          }
-        }
-      }
-
-      const leftCanvas = leftCanvasRef.current;
-      if (leftCanvas) {
-        const h = Math.max(0, size.height - RULER_SIZE);
-        leftCanvas.width = RULER_SIZE * dpr;
-        leftCanvas.height = h * dpr;
-        const ctx = leftCanvas.getContext("2d");
-        if (ctx) {
-          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-          ctx.fillStyle = bg;
-          ctx.fillRect(0, 0, RULER_SIZE, h);
-          const worldMin = (RULER_SIZE + offsetY - vs.y) / vs.scale;
-          const worldMax = (RULER_SIZE + h + offsetY - vs.y) / vs.scale;
-          const start = Math.floor(worldMin / step) * step;
-          ctx.font = "9px system-ui, sans-serif";
-          ctx.fillStyle = labelColor;
-          ctx.strokeStyle = tickColor;
-          ctx.lineWidth = 1;
-          for (let wy = start; wy <= worldMax; wy += step) {
-            const sy = wy * vs.scale + vs.y - offsetY - RULER_SIZE;
-            ctx.beginPath();
-            ctx.moveTo(RULER_SIZE * 0.4, sy + 0.5);
-            ctx.lineTo(RULER_SIZE, sy + 0.5);
-            ctx.stroke();
-            ctx.save();
-            ctx.translate(RULER_SIZE * 0.6, sy - 2);
-            ctx.rotate(-Math.PI / 2);
-            ctx.fillText(String(Math.round(wy)), 0, 0);
-            ctx.restore();
-          }
-        }
-      }
+      drawRuler(topCanvasRef.current, "x", size.width, vs.x, offsetX, vs.scale, step, dpr);
+      drawRuler(leftCanvasRef.current, "y", size.height, vs.y, offsetY, vs.scale, step, dpr);
     }
 
     draw();
@@ -190,23 +185,31 @@ export function Rulers() {
     return () => unsubscribe();
   }, [showRulers, uiTheme, size]);
 
-  // Recompute guide hit-sensor screen positions off-render (refs are only read
-  // here, never during render) and keep them in sync with viewport pan/zoom.
-  useEffect(() => {
-    const recompute = (): void => {
-      const next: Record<string, number> = {};
-      for (const guide of guides) {
-        next[guide.id] = worldToLocal(
-          guide.position,
-          guide.orientation === "vertical" ? "x" : "y",
-        );
+  // Position the guide hit-sensors imperatively (no setState → no per-frame
+  // re-render) and keep them tracking viewport pan/zoom. useLayoutEffect so a
+  // freshly-mounted sensor is placed before paint (guides only change on
+  // add/remove/move, not on pan).
+  const layoutSensors = useCallback((): void => {
+    for (const guide of guides) {
+      const el = sensorRefs.current.get(guide.id);
+      if (!el) continue;
+      const screenPos = worldToLocal(
+        guide.position,
+        guide.orientation === "vertical" ? "x" : "y",
+      );
+      if (guide.orientation === "vertical") {
+        el.style.left = `${screenPos - GUIDE_HIT_SIZE / 2}px`;
+      } else {
+        el.style.top = `${screenPos - GUIDE_HIT_SIZE / 2}px`;
       }
-      setGuidePositions(next);
-    };
-    recompute();
-    const unsubscribe = useViewportStore.subscribe(recompute);
+    }
+  }, [guides, worldToLocal]);
+
+  useLayoutEffect(() => {
+    layoutSensors();
+    const unsubscribe = useViewportStore.subscribe(layoutSensors);
     return () => unsubscribe();
-  }, [guides, size, worldToLocal]);
+  }, [guides, size, layoutSensors]);
 
   const handleCreateGuidePointerDown = useCallback(
     (orientation: "horizontal" | "vertical") =>
@@ -346,25 +349,28 @@ export function Rulers() {
 
       {/* Invisible drag/delete sensors for existing persistent guides — kept
           interactive even when the rulers themselves are hidden. */}
-      {guides.map((guide) => {
-        const screenPos = guidePositions[guide.id] ?? 0;
-        return (
-          <div
-            key={guide.id}
-            className={
-              "absolute pointer-events-auto z-10 " +
-              (guide.orientation === "vertical" ? "cursor-col-resize" : "cursor-row-resize")
-            }
-            style={
-              guide.orientation === "vertical"
-                ? { left: screenPos - GUIDE_HIT_SIZE / 2, top: 0, bottom: 0, width: GUIDE_HIT_SIZE }
-                : { top: screenPos - GUIDE_HIT_SIZE / 2, left: 0, right: 0, height: GUIDE_HIT_SIZE }
-            }
-            onPointerDown={handleGuidePointerDown(guide.id, guide.orientation)}
-            title="Drag to move, drop on ruler to delete"
-          />
-        );
-      })}
+      {guides.map((guide) => (
+        <div
+          key={guide.id}
+          ref={(el) => {
+            if (el) sensorRefs.current.set(guide.id, el);
+            else sensorRefs.current.delete(guide.id);
+          }}
+          className={
+            "absolute pointer-events-auto z-10 " +
+            (guide.orientation === "vertical" ? "cursor-col-resize" : "cursor-row-resize")
+          }
+          // The cross-axis extents are static; the along-axis offset (left for
+          // vertical, top for horizontal) is set imperatively by layoutSensors.
+          style={
+            guide.orientation === "vertical"
+              ? { top: 0, bottom: 0, width: GUIDE_HIT_SIZE }
+              : { left: 0, right: 0, height: GUIDE_HIT_SIZE }
+          }
+          onPointerDown={handleGuidePointerDown(guide.id, guide.orientation)}
+          title="Drag to move, drop on ruler to delete"
+        />
+      ))}
     </div>
   );
 }

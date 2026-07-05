@@ -279,3 +279,34 @@ export function snapValueToGuides(
   }
   return best;
 }
+
+/**
+ * Snap one resizing edge of a box to nearby persistent guides on a single axis.
+ * `edge` is which edge moves: "far" = the right/bottom edge (near edge fixed,
+ * only size grows), "near" = the left/top edge (position shifts, size shrinks),
+ * `null` = this axis isn't resizing. `nearAbs` is the absolute (world) near
+ * coordinate. Returns the delta to apply to the box's position on this axis and
+ * the resulting size; a "near" snap is rejected if it would push size below
+ * `minSize`. Pure — shared by all four resize corners.
+ */
+export function snapResizeEdge(
+  edge: "far" | "near" | null,
+  nearAbs: number,
+  size: number,
+  orientation: "vertical" | "horizontal",
+  guides: Guide[],
+  threshold: number,
+  minSize: number,
+): { posDelta: number; size: number } {
+  if (edge === "far") {
+    const farAbs = nearAbs + size;
+    const snapped = snapValueToGuides(farAbs, orientation, guides, threshold);
+    return { posDelta: 0, size: Math.max(minSize, size + (snapped - farAbs)) };
+  }
+  if (edge === "near") {
+    const snapped = snapValueToGuides(nearAbs, orientation, guides, threshold);
+    const delta = snapped - nearAbs;
+    if (size - delta >= minSize) return { posDelta: delta, size: size - delta };
+  }
+  return { posDelta: 0, size };
+}

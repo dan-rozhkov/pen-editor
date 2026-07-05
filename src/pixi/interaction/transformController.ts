@@ -10,7 +10,7 @@ import { findResolvedDescendantByPath } from "@/utils/instanceRuntime";
 import { getNodeEffectiveSize } from "@/utils/nodeUtils";
 import { resolveTextResize, minTextWidth } from "./textResize";
 import { computeConstrainedRect } from "@/utils/constraintsLayout";
-import { snapValueToGuides } from "@/utils/smartGuideUtils";
+import { snapResizeEdge } from "@/utils/smartGuideUtils";
 
 export interface TransformController {
   handlePointerDown(e: PointerEvent, world: { x: number; y: number }): boolean;
@@ -184,38 +184,20 @@ export function createTransformController(context: InteractionContext): Transfor
         if (persistentGuides.length > 0) {
           const scale = useViewportStore.getState().scale;
           const threshold = 4 / scale;
-          const movesRight = corner === "br" || corner === "tr" || corner === "r";
-          const movesLeft = corner === "bl" || corner === "tl" || corner === "l";
-          const movesBottom = corner === "br" || corner === "bl" || corner === "b";
-          const movesTop = corner === "tr" || corner === "tl" || corner === "t";
+          const xEdge = corner.includes("r") ? "far" : corner.includes("l") ? "near" : null;
+          const yEdge = corner.includes("b") ? "far" : corner.includes("t") ? "near" : null;
 
-          if (movesRight) {
-            const absRight = state.parentOffsetX + newX + newW;
-            const snapped = snapValueToGuides(absRight, "vertical", persistentGuides, threshold);
-            newW = Math.max(MIN_SIZE, newW + (snapped - absRight));
-          } else if (movesLeft) {
-            const absLeft = state.parentOffsetX + newX;
-            const snapped = snapValueToGuides(absLeft, "vertical", persistentGuides, threshold);
-            const delta = snapped - absLeft;
-            if (newW - delta >= MIN_SIZE) {
-              newX += delta;
-              newW -= delta;
-            }
-          }
+          const xSnap = snapResizeEdge(
+            xEdge, state.parentOffsetX + newX, newW, "vertical", persistentGuides, threshold, MIN_SIZE,
+          );
+          newX += xSnap.posDelta;
+          newW = xSnap.size;
 
-          if (movesBottom) {
-            const absBottom = state.parentOffsetY + newY + newH;
-            const snapped = snapValueToGuides(absBottom, "horizontal", persistentGuides, threshold);
-            newH = Math.max(MIN_SIZE, newH + (snapped - absBottom));
-          } else if (movesTop) {
-            const absTop = state.parentOffsetY + newY;
-            const snapped = snapValueToGuides(absTop, "horizontal", persistentGuides, threshold);
-            const delta = snapped - absTop;
-            if (newH - delta >= MIN_SIZE) {
-              newY += delta;
-              newH -= delta;
-            }
-          }
+          const ySnap = snapResizeEdge(
+            yEdge, state.parentOffsetY + newY, newH, "horizontal", persistentGuides, threshold, MIN_SIZE,
+          );
+          newY += ySnap.posDelta;
+          newH = ySnap.size;
         }
 
         const roundedW = Math.round(newW);
