@@ -1,4 +1,9 @@
 import { REMOVE_BG_INPUT_SIZE, REMOVE_BG_MODEL_URL } from "./constants";
+import {
+  assertImageSizeWithinLimit,
+  maskDimsFromTensor,
+  maskToAlpha,
+} from "./maskUtils";
 
 // `onnxruntime-web` (WASM runtime + model weights) is only ever needed when
 // the user actually removes a background, so it must never be part of the
@@ -54,6 +59,10 @@ async function loadImageBitmap(url: string): Promise<ImageBitmap> {
   return createImageBitmap(blob);
 }
 
+// Preprocessing per the official briaai/RMBG-1.4 model card
+// (https://huggingface.co/briaai/RMBG-1.4): resize to 1024×1024, scale to
+// [0, 1], then `normalize(image, [0.5, 0.5, 0.5], [1.0, 1.0, 1.0])` — i.e.
+// x/255 − 0.5, giving the [−0.5, 0.5] range, in NCHW float32 layout.
 function preprocess(bitmap: ImageBitmap): Float32Array {
   const size = REMOVE_BG_INPUT_SIZE;
   const canvas = document.createElement("canvas");
@@ -64,7 +73,6 @@ function preprocess(bitmap: ImageBitmap): Float32Array {
   ctx.drawImage(bitmap, 0, 0, size, size);
   const { data } = ctx.getImageData(0, 0, size, size);
 
-  // NCHW float32, normalized to [-1, 1] (RMBG-1.4's expected preprocessing).
   const channelSize = size * size;
   const floatData = new Float32Array(3 * channelSize);
   for (let i = 0; i < channelSize; i++) {
@@ -75,20 +83,30 @@ function preprocess(bitmap: ImageBitmap): Float32Array {
   return floatData;
 }
 
-async function runModel(bitmap: ImageBitmap): Promise<Float32Array> {
+async function runModel(
+  bitmap: ImageBitmap,
+): Promise<{ mask: Float32Array; maskWidth: number; maskHeight: number }> {
   const { ort, session } = await loadSession();
   const size = REMOVE_BG_INPUT_SIZE;
   const tensor = new ort.Tensor("float32", preprocess(bitmap), [1, 3, size, size]);
   const inputName = session.inputNames[0];
   const outputName = session.outputNames[0];
   const results = await session.run({ [inputName]: tensor });
-  return results[outputName].data as Float32Array;
+  const output = results[outputName];
+  // Validate the output shape instead of assuming a 1024² flat buffer.
+  const { height, width } = maskDimsFromTensor(output.dims);
+  return { mask: output.data as Float32Array, maskWidth: width, maskHeight: height };
 }
 
-/** Resample the model's size×size mask onto the image's own dimensions and
- * write it into the image's alpha channel (nearest-neighbor, normalized to
- * the mask's own min/max so contrast doesn't depend on absolute logit scale). */
-function compositeAlpha(bitmap: ImageBitmap, mask: Float32Array): Promise<Blob> {
+/** Resample the model's mask onto the image's own dimensions and write it
+ * into the image's alpha channel (see `maskToAlpha` for the min-max stretch
+ * matching the official RMBG-1.4 postprocess). */
+function compositeAlpha(
+  bitmap: ImageBitmap,
+  mask: Float32Array,
+  maskWidth: number,
+  maskHeight: number,
+): Promise<Blob> {
   const { width, height } = bitmap;
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -98,22 +116,9 @@ function compositeAlpha(bitmap: ImageBitmap, mask: Float32Array): Promise<Blob> 
   ctx.drawImage(bitmap, 0, 0);
   const imageData = ctx.getImageData(0, 0, width, height);
 
-  let min = Infinity;
-  let max = -Infinity;
-  for (const v of mask) {
-    if (v < min) min = v;
-    if (v > max) max = v;
-  }
-  const range = max - min || 1;
-
-  const maskSize = REMOVE_BG_INPUT_SIZE;
-  for (let y = 0; y < height; y++) {
-    const my = Math.min(maskSize - 1, Math.floor((y / height) * maskSize));
-    for (let x = 0; x < width; x++) {
-      const mx = Math.min(maskSize - 1, Math.floor((x / width) * maskSize));
-      const alpha = Math.round(((mask[my * maskSize + mx] - min) / range) * 255);
-      imageData.data[(y * width + x) * 4 + 3] = alpha;
-    }
+  const alpha = maskToAlpha(mask, maskWidth, maskHeight, width, height);
+  for (let i = 0; i < alpha.length; i++) {
+    imageData.data[i * 4 + 3] = alpha[i];
   }
   ctx.putImageData(imageData, 0, 0);
 
@@ -131,10 +136,16 @@ function compositeAlpha(bitmap: ImageBitmap, mask: Float32Array): Promise<Blob> 
  *
  * Lazily loads `onnxruntime-web` and the model weights (see `./constants`)
  * on first call; the session is cached and reused by subsequent calls.
- * Rejects with a user-facing message on load/network/runtime failure.
+ * Rejects with a user-facing message on load/network/runtime failure or when
+ * the image exceeds the canvas-safe size limit.
  */
 export async function removeBackground(imageUrl: string): Promise<Blob> {
   const bitmap = await loadImageBitmap(imageUrl);
-  const mask = await runModel(bitmap);
-  return compositeAlpha(bitmap, mask);
+  try {
+    assertImageSizeWithinLimit(bitmap.width, bitmap.height);
+    const { mask, maskWidth, maskHeight } = await runModel(bitmap);
+    return await compositeAlpha(bitmap, mask, maskWidth, maskHeight);
+  } finally {
+    bitmap.close();
+  }
 }

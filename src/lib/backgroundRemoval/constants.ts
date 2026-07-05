@@ -15,3 +15,11 @@ export const REMOVE_BG_MODEL_URL =
 
 // RMBG-1.4 expects a fixed square input.
 export const REMOVE_BG_INPUT_SIZE = 1024;
+
+// Browsers cap canvas dimensions/area (engine-dependent; commonly 16384px
+// per side, tighter on some Safari contexts). Past the cap, canvas ops throw
+// opaque DOMExceptions — so we check up front with a conservative per-side
+// limit and show a clear message instead. 8192px per side (≤64MP area)
+// comfortably covers any realistic design-fill image while staying inside
+// every mainstream engine's limits.
+export const REMOVE_BG_MAX_DIMENSION = 8192;
