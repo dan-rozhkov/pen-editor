@@ -3,6 +3,7 @@ import {
   type SceneNode,
   type HistorySnapshot,
 } from "@/types/scene";
+import type { BooleanOpKind } from "@/lib/booleanOps";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useUIVisibilityStore } from "@/store/uiVisibilityStore";
 import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
@@ -33,6 +34,7 @@ export interface KeyDownHandlerDeps {
   groupNodes: (ids: string[]) => string | null;
   ungroupNodes: (ids: string[]) => string[];
   wrapInAutoLayoutFrame: (ids: string[]) => string | null;
+  booleanOperation: (ids: string[], op: BooleanOpKind) => string | null;
   restoreSnapshot: (snapshot: HistorySnapshot) => void;
   saveHistory: (snapshot: HistorySnapshot) => void;
   startBatch: () => void;
@@ -62,6 +64,7 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
     groupNodes,
     ungroupNodes,
     wrapInAutoLayoutFrame,
+    booleanOperation,
     restoreSnapshot,
     saveHistory,
     startBatch,
@@ -160,6 +163,30 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
         }
       }
       return;
+    }
+
+    // Cmd/Ctrl+Alt+U/S/I/X: Union/Subtract/Intersect/Exclude selected shapes.
+    // Cmd/Ctrl+Alt+E: Flatten. Checked before Copy/Cut below (which don't
+    // exclude Alt) so these combos aren't shadowed by Cmd+Alt+X == "cut".
+    if ((e.metaKey || e.ctrlKey) && e.altKey && !e.shiftKey) {
+      const opByCode: Record<string, "union" | "subtract" | "intersect" | "exclude" | "flatten"> = {
+        KeyU: "union",
+        KeyS: "subtract",
+        KeyI: "intersect",
+        KeyX: "exclude",
+        KeyE: "flatten",
+      };
+      const op = opByCode[e.code];
+      if (op) {
+        if (isTyping) return;
+        e.preventDefault();
+        const ids = useSelectionStore.getState().selectedIds;
+        if (ids.length >= 2) {
+          const resultId = booleanOperation(ids, op);
+          if (resultId) useSelectionStore.getState().select(resultId);
+        }
+        return;
+      }
     }
 
     if ((e.metaKey || e.ctrlKey) && e.code === "KeyC") {

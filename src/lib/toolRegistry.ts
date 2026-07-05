@@ -9,6 +9,7 @@ import { replaceAllMatchingProperties } from "./tools/replaceAllMatchingProperti
 import { searchAllUniqueProperties } from "./tools/searchAllUniqueProperties";
 import { findEmptySpace } from "./tools/findEmptySpace";
 import { renameLayers } from "./tools/renameLayers";
+import { booleanOperation } from "./tools/booleanOperation";
 import { getGuidelines, getStyleGuide, getStyleGuideTags } from "./tools/staticTools";
 import { generateImage, generateFrameImage } from "./tools/generateImage";
 export type ToolHandler = (
@@ -27,6 +28,7 @@ export const toolHandlers: Record<string, ToolHandler> = {
   find_empty_space_on_canvas: findEmptySpace,
   search_all_unique_properties: searchAllUniqueProperties,
   rename_layers: renameLayers,
+  boolean_operation: booleanOperation,
   get_guidelines: getGuidelines,
   get_style_guide_tags: getStyleGuideTags,
   get_style_guide: getStyleGuide,

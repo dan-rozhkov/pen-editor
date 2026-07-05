@@ -66,6 +66,7 @@ export function PixiCanvas() {
   const wrapInAutoLayoutFrame = useSceneStore(
     (state) => state.wrapInAutoLayoutFrame,
   );
+  const booleanOperation = useSceneStore((state) => state.booleanOperation);
   const restoreSnapshot = useSceneStore((state) => state.restoreSnapshot);
   const { copiedNodes, copyNodes } = useClipboardStore();
   const { clearSelection, editingNodeId, editingMode } =
@@ -194,6 +195,7 @@ export function PixiCanvas() {
     groupNodes,
     ungroupNodes,
     wrapInAutoLayoutFrame,
+    booleanOperation,
     restoreSnapshot,
     saveHistory,
     startBatch,

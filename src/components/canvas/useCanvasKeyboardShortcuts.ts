@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import type { SceneNode, HistorySnapshot } from "@/types/scene";
+import type { BooleanOpKind } from "@/lib/booleanOps";
 import { createClipboardActions } from "./clipboardActions";
 import { createKeyDownHandler } from "./keyboardCommands";
 
@@ -17,6 +18,7 @@ interface CanvasKeyboardShortcutsParams {
   groupNodes: (ids: string[]) => string | null;
   ungroupNodes: (ids: string[]) => string[];
   wrapInAutoLayoutFrame: (ids: string[]) => string | null;
+  booleanOperation: (ids: string[], op: BooleanOpKind) => string | null;
   restoreSnapshot: (snapshot: HistorySnapshot) => void;
   saveHistory: (snapshot: HistorySnapshot) => void;
   startBatch: () => void;
@@ -44,6 +46,7 @@ export function useCanvasKeyboardShortcuts({
   groupNodes,
   ungroupNodes,
   wrapInAutoLayoutFrame,
+  booleanOperation,
   restoreSnapshot,
   saveHistory,
   startBatch,
@@ -84,6 +87,7 @@ export function useCanvasKeyboardShortcuts({
       groupNodes,
       ungroupNodes,
       wrapInAutoLayoutFrame,
+      booleanOperation,
       restoreSnapshot,
       saveHistory,
       startBatch,
@@ -130,6 +134,7 @@ export function useCanvasKeyboardShortcuts({
   }, [
     addChildToFrame,
     addNode,
+    booleanOperation,
     cancelDrawing,
     clearSelection,
     copiedNodes,

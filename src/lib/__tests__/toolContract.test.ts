@@ -20,6 +20,7 @@ const EXPECTED_CLIENT_TOOLS = [
   "find_empty_space_on_canvas",
   "search_all_unique_properties",
   "rename_layers",
+  "boolean_operation",
   "get_guidelines",
   "get_style_guide_tags",
   "get_style_guide",

@@ -15,6 +15,7 @@ function makeDeps(): KeyDownHandlerDeps {
     groupNodes: vi.fn(() => null),
     ungroupNodes: vi.fn(() => []),
     wrapInAutoLayoutFrame: vi.fn(() => null),
+    booleanOperation: vi.fn(() => null),
     restoreSnapshot: vi.fn(),
     saveHistory: vi.fn(),
     startBatch: vi.fn(),

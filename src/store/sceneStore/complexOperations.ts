@@ -3,6 +3,7 @@ import type {
   FrameNode,
   FlatFrameNode,
   EmbedNode,
+  PathNode,
   SceneNode,
 } from "../../types/scene";
 import { generateId, buildTree } from "../../types/scene";
@@ -17,6 +18,7 @@ import {
   removeNodeAndDescendants,
   removeOrphanedConnectors,
 } from "./helpers/flatStoreHelpers";
+import { computeBooleanOp, BOOLEAN_SUPPORTED_TYPES, type BooleanOpKind } from "../../lib/booleanOps";
 import type { SceneState } from "./types";
 
 type Bounds = { x: number; y: number; width: number; height: number };
@@ -443,6 +445,111 @@ export function createComplexOperations(
         _cachedTree: null,
       });
       return frameId;
+    },
+
+    /**
+     * Union / Subtract / Intersect / Exclude / Flatten: combine the selected
+     * shapes (rect/ellipse/polygon/path) into a single destructive path node,
+     * replacing the originals. Only nodes that share a parent and are
+     * boolean-eligible shape types are accepted. Geometry is computed by
+     * `src/lib/booleanOps` (martinez-polygon-clipping under the hood); this
+     * function only owns the store-side node replacement + undo/redo.
+     */
+    booleanOperation: (ids: string[], op: BooleanOpKind): string | null => {
+      const state = get();
+      if (ids.length < 1) return null;
+
+      const parentId = state.parentById[ids[0]];
+      if (!ids.every((id) => state.parentById[id] === parentId)) return null;
+
+      const selectedNodes = ids.map((id) => state.nodesById[id]).filter(Boolean);
+      if (selectedNodes.length !== ids.length) return null;
+      if (!selectedNodes.every((node) => BOOLEAN_SUPPORTED_TYPES.has(node.type))) return null;
+
+      const layoutMap = buildLayoutMap(parentId, state);
+      const boundsMap = new Map<string, Bounds>();
+      for (const node of selectedNodes) {
+        boundsMap.set(node.id, getEffectiveBounds(node, layoutMap, state));
+      }
+
+      // Boolean ops are order-sensitive (subtract/exclude reduce bottom-to-top),
+      // so re-derive z-order from the shared parent's children array rather
+      // than trusting the caller's (selection-order) `ids` array.
+      const siblingIds = parentId != null ? (state.childrenById[parentId] ?? []) : state.rootIds;
+      const idSet = new Set(ids);
+      const orderedIds = siblingIds.filter((id) => idSet.has(id));
+      if (orderedIds.length !== ids.length) return null;
+
+      const orderedNodes = orderedIds.map((id) => state.nodesById[id]);
+      const inputs = orderedNodes.map((node) => ({ node, bounds: boundsMap.get(node.id)! }));
+
+      const result = computeBooleanOp(op, inputs);
+      if (!result) return null;
+
+      // Bottom-most shape's paint/stroke/effects carry over to the result,
+      // matching Figma's boolean-group styling convention.
+      const baseNode = orderedNodes[0];
+      const insertIndex = Math.min(...ids.map((id) => siblingIds.indexOf(id)).filter((i) => i >= 0));
+
+      saveHistory(state);
+
+      const pathId = generateId();
+      const pathNode: PathNode = {
+        id: pathId,
+        type: "path",
+        name: op.charAt(0).toUpperCase() + op.slice(1),
+        x: result.bounds.x,
+        y: result.bounds.y,
+        width: result.bounds.width,
+        height: result.bounds.height,
+        geometry: result.geometry,
+        geometryBounds: result.bounds,
+        fillRule: "evenodd",
+        fill: baseNode.fill,
+        fillBinding: baseNode.fillBinding,
+        fillOpacity: baseNode.fillOpacity,
+        fills: baseNode.fills,
+        gradientFill: baseNode.gradientFill,
+        imageFill: baseNode.imageFill,
+        stroke: baseNode.stroke,
+        strokeBinding: baseNode.strokeBinding,
+        strokeWidth: baseNode.strokeWidth,
+        strokeOpacity: baseNode.strokeOpacity,
+        strokeAlign: baseNode.strokeAlign,
+        strokeWidthPerSide: baseNode.strokeWidthPerSide,
+        effect: baseNode.effect,
+        effects: baseNode.effects,
+        opacity: baseNode.opacity,
+      };
+
+      const newNodesById = { ...state.nodesById, [pathId]: pathNode };
+      const newParentById = { ...state.parentById, [pathId]: parentId ?? null };
+      const newChildrenById = { ...state.childrenById };
+
+      for (const id of ids) {
+        removeNodeAndDescendants(id, newNodesById, newParentById, newChildrenById);
+      }
+
+      let newRootIds = state.rootIds;
+      if (parentId != null) {
+        const filtered = (state.childrenById[parentId] ?? []).filter((cid) => !idSet.has(cid));
+        filtered.splice(Math.min(insertIndex, filtered.length), 0, pathId);
+        newChildrenById[parentId] = filtered;
+      } else {
+        const filtered = state.rootIds.filter((rid) => !idSet.has(rid));
+        filtered.splice(Math.min(insertIndex, filtered.length), 0, pathId);
+        newRootIds = filtered;
+      }
+
+      setState({
+        nodesById: newNodesById,
+        parentById: newParentById,
+        childrenById: newChildrenById,
+        rootIds: newRootIds,
+        _cachedTree: null,
+      });
+
+      return pathId;
     },
 
     convertEmbedToDesign: async (id: string): Promise<string | null> => {

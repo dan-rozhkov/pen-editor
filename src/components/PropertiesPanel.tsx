@@ -14,6 +14,7 @@ import {
   type ParentContext,
 } from "@/utils/nodeUtils";
 import { AlignmentSection } from "@/components/properties/AlignmentSection";
+import { BooleanOperationsSection } from "@/components/properties/BooleanOperationsSection";
 import { DescendantPropertyEditor } from "@/components/properties/DescendantPropertyEditor";
 import { ExportSection } from "@/components/properties/ExportSection";
 import { MultiSelectPropertyEditor } from "@/components/properties/MultiSelectPropertyEditor";
@@ -221,6 +222,9 @@ export function PropertiesPanel() {
             nodes={nodes}
             parentFrame={parentContext.parent}
           />
+        )}
+        {selectedNodes.length > 1 && activeTool !== "frame" && (
+          <BooleanOperationsSection selectedIds={selectedIds} selectedNodes={selectedNodes} />
         )}
         {/* Multi-select property editor */}
         {selectedNodes.length > 1 && activeTool !== "frame" && (

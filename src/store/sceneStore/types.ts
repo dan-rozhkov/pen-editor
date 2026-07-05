@@ -6,6 +6,7 @@ import type {
   ComponentArtifact,
   InstanceOverrideUpdateProps,
 } from "../../types/scene";
+import type { BooleanOpKind } from "../../lib/booleanOps";
 
 // ----- SceneState Interface -----
 
@@ -59,6 +60,7 @@ export interface SceneState {
   ungroupNodes: (ids: string[]) => string[];
   convertNodeType: (id: string) => boolean;
   wrapInAutoLayoutFrame: (ids: string[]) => string | null;
+  booleanOperation: (ids: string[], op: BooleanOpKind) => string | null;
   convertEmbedToDesign: (id: string) => Promise<string | null>;
   convertDesignToEmbed: (id: string) => string | null;
   updateInstanceOverride: (instanceId: string, path: string, updates: InstanceOverrideUpdateProps) => void;
