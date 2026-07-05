@@ -3,6 +3,7 @@ import { usePenToolStore } from "@/store/penToolStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { isNearWorldPoint } from "./pathEditGeometry";
 import { finishPenDraft } from "./penDraftCommit";
+import { DRAG_CLICK_THRESHOLD } from "./dragController";
 import type { InteractionContext } from "./types";
 
 export interface PenController {
@@ -11,11 +12,6 @@ export interface PenController {
   handlePointerUp(e: PointerEvent, world: { x: number; y: number }): boolean;
   isDrawing: () => boolean;
 }
-
-// Movement (in world units) beyond which a click-and-hold becomes a
-// click-drag (smooth anchor) rather than a plain click (corner anchor).
-// Mirrors DRAG_CLICK_THRESHOLD in dragController.ts.
-const DRAG_THRESHOLD = 3;
 
 export function createPenController(_context: InteractionContext): PenController {
   let isPlacingAnchor = false;
@@ -54,7 +50,9 @@ export function createPenController(_context: InteractionContext): PenController
       if (isPlacingAnchor) {
         const dx = world.x - anchorStartWorld.x;
         const dy = world.y - anchorStartWorld.y;
-        if (dragExceededThreshold || Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+        // Movement (in world units) beyond which a click-and-hold becomes a
+        // click-drag (smooth anchor) rather than a plain click (corner anchor).
+        if (dragExceededThreshold || Math.hypot(dx, dy) > DRAG_CLICK_THRESHOLD) {
           dragExceededThreshold = true;
           pen.updatePlacingAnchorHandle(world);
         }

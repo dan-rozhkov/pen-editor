@@ -3,6 +3,8 @@ import { resetStores, seedScene } from "@/test/fixtures";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useHistoryStore } from "@/store/historyStore";
+import { useDrawModeStore } from "@/store/drawModeStore";
+import { usePenToolStore } from "@/store/penToolStore";
 import { saveHistory } from "@/store/sceneStore/helpers/history";
 import { applyAnchorEditToNode, moveAnchorPoint } from "@/utils/pathAnchors";
 import type { PathNode, SceneNode } from "@/types/scene";
@@ -26,6 +28,8 @@ describe("enterPathEditMode", () => {
   beforeEach(() => {
     resetStores();
     seedScene();
+    usePenToolStore.getState().resetDraft();
+    useDrawModeStore.setState({ activeTool: null, isDrawing: false, drawStart: null, drawCurrent: null, pencilPoints: [] });
   });
 
   it("lazily derives structured points from a legacy path's geometry and enters edit mode", () => {
@@ -96,10 +100,75 @@ describe("enterPathEditMode", () => {
   });
 });
 
+describe("mutual exclusion between pen draft and path edit mode", () => {
+  beforeEach(() => {
+    resetStores();
+    seedScene();
+    usePenToolStore.getState().resetDraft();
+    useDrawModeStore.setState({ activeTool: null, isDrawing: false, drawStart: null, drawCurrent: null, pencilPoints: [] });
+  });
+
+  it("activating the pen tool exits path edit mode (setActiveTool)", () => {
+    const path = makePencilPath("mutexPath1");
+    useSceneStore.getState().addNode(path);
+    enterPathEditMode("mutexPath1");
+    expect(useSelectionStore.getState().editingMode).toBe("path");
+
+    useDrawModeStore.getState().setActiveTool("pen");
+
+    expect(useSelectionStore.getState().editingMode).toBeNull();
+    expect(useSelectionStore.getState().editingNodeId).toBeNull();
+  });
+
+  it("toggling the pen tool (hotkey path) exits path edit mode", () => {
+    const path = makePencilPath("mutexPath2");
+    useSceneStore.getState().addNode(path);
+    enterPathEditMode("mutexPath2");
+    expect(useSelectionStore.getState().editingMode).toBe("path");
+
+    useDrawModeStore.getState().toggleTool("pen");
+
+    expect(useSelectionStore.getState().editingMode).toBeNull();
+  });
+
+  it("does not disturb other inline editing modes on tool switch", () => {
+    // Text editing has its own exit flow — the mutual-exclusion guard is
+    // specific to path edit mode.
+    useSelectionStore.getState().select("text1");
+    useSelectionStore.getState().startEditing("text1", "text");
+    expect(useSelectionStore.getState().editingMode).toBe("text");
+
+    useDrawModeStore.getState().setActiveTool("rect");
+
+    expect(useSelectionStore.getState().editingMode).toBe("text");
+  });
+
+  it("enterPathEditMode is a no-op while a pen draft is in progress (covers dblclick and Enter)", () => {
+    const path = makePencilPath("mutexPath3");
+    useSceneStore.getState().addNode(path);
+
+    useDrawModeStore.getState().setActiveTool("pen");
+    const pen = usePenToolStore.getState();
+    pen.startDraft();
+    pen.beginPlacingAnchor({ x: 0, y: 0 });
+    pen.commitPendingAnchor();
+
+    const ok = enterPathEditMode("mutexPath3");
+
+    expect(ok).toBe(false);
+    expect(useSelectionStore.getState().editingMode).toBeNull();
+    // The draft is untouched — the user finishes/cancels it explicitly.
+    expect(usePenToolStore.getState().isDrafting).toBe(true);
+    expect(usePenToolStore.getState().anchors).toHaveLength(1);
+  });
+});
+
 describe("path point edits integrate with undo/redo", () => {
   beforeEach(() => {
     resetStores();
     seedScene();
+    usePenToolStore.getState().resetDraft();
+    useDrawModeStore.setState({ activeTool: null, isDrawing: false, drawStart: null, drawCurrent: null, pencilPoints: [] });
   });
 
   it("restores the pre-edit geometry/points after undo, and re-applies it after redo", () => {

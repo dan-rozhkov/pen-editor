@@ -1,5 +1,6 @@
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
+import { usePenToolStore } from "@/store/penToolStore";
 import { svgPathToAnchors } from "@/utils/pathAnchors";
 import type { PathNode } from "@/types/scene";
 
@@ -11,11 +12,17 @@ import type { PathNode } from "@/types/scene";
  * parser used everywhere else, so pencil-drawn paths are editable through
  * the exact same mode as pen-tool-drawn ones.
  *
- * Returns false (no-op) for non-path nodes, or for paths whose geometry is
+ * Returns false (no-op) for non-path nodes, for paths whose geometry is
  * structurally out of scope for point-editing (compound paths with multiple
- * subpaths, or arcs) — a known, documented limitation.
+ * subpaths, or arcs) — a known, documented limitation — and while a pen-tool
+ * draft is in progress: a draft and edit mode are mutually exclusive
+ * interaction states, so a double-click on an existing path mid-draft is
+ * simply ignored (the draft keeps its anchors; the user finishes or cancels
+ * it explicitly with a close-click/Enter/Esc).
  */
 export function enterPathEditMode(nodeId: string): boolean {
+  if (usePenToolStore.getState().isDrafting) return false;
+
   const scene = useSceneStore.getState();
   const node = scene.nodesById[nodeId];
   if (!node || node.type !== "path") return false;
