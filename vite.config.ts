@@ -63,6 +63,15 @@ export default defineConfig({
         // for an API path — under any base.
         navigateFallbackDenylist: [/\/api\//],
         globPatterns: ["**/*.{js,css,html,ico,png,svg,webp,woff2}"],
+        // The background-removal ML runtime (onnxruntime-web) is loaded on
+        // demand only, when the "Remove Background" feature is actually
+        // used — it must not be precached for every install, or the PWA's
+        // offline-shell install would silently download it for users who
+        // never touch the feature. Its multi-MB WASM binary is already
+        // excluded by globPatterns (no .wasm extension); this excludes its
+        // JS wrapper chunk too (onnxruntime-web names its own chunk
+        // "ort.bundle.min-*").
+        globIgnores: ["**/ort.bundle.min-*.js"],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
       },
     }),
@@ -80,6 +89,14 @@ export default defineConfig({
           if (id.includes("node_modules/react") || id.includes("node_modules/react-dom")) {
             return "react-vendor";
           }
+          // Deliberately no manualChunks entry for onnxruntime-web: naming it
+          // explicitly made Vite's import-analysis treat it as eagerly
+          // needed (added it to index.html's modulepreload list) even though
+          // it's only ever reached via a dynamic import() behind the
+          // "Remove Background" feature. Left to its own default chunking
+          // (onnxruntime-web ships its own "ort.bundle.min" chunk name), it
+          // correctly stays out of modulepreload and out of the initial
+          // load — see the globIgnores note below for the matching name.
         },
       },
     },

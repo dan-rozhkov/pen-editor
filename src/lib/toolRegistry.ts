@@ -12,6 +12,7 @@ import { renameLayers } from "./tools/renameLayers";
 import { booleanOperation } from "./tools/booleanOperation";
 import { getGuidelines, getStyleGuide, getStyleGuideTags } from "./tools/staticTools";
 import { generateImage, generateFrameImage } from "./tools/generateImage";
+import { removeBackgroundTool } from "./tools/removeBackground";
 export type ToolHandler = (
   args: Record<string, unknown>
 ) => Promise<string>;
@@ -34,4 +35,5 @@ export const toolHandlers: Record<string, ToolHandler> = {
   get_style_guide: getStyleGuide,
   generate_image: generateImage,
   generate_frame_image: generateFrameImage,
+  remove_background: removeBackgroundTool,
 };
