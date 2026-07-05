@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { FlatSceneNode } from "@/types/scene";
+import type { FlatSceneNode, RefNode } from "@/types/scene";
 import { getEffects, getFills } from "@/utils/fillUtils";
 import { extractNodeStyle, pickStyleUpdatesForNode } from "@/utils/styleClipboard";
 
@@ -250,5 +250,146 @@ describe("pickStyleUpdatesForNode", () => {
       expect("effect" in updates).toBe(false);
       expect(updates.opacity).toBe(0.5);
     });
+  });
+
+  // Regression: pasting style properties onto a component instance (`ref`
+  // node) used to write COMMON_STYLE_KEYS verbatim — including `fills`,
+  // `effects`, `opacity` — even though `resolveRefToTree`
+  // (`@/utils/instanceRuntime`) only ever forwards `fill`/`stroke`/
+  // `strokeWidth`/`fillBinding`/`strokeBinding` from the ref node to the
+  // resolved render tree. Writing the rest mutated data (and created an undo
+  // entry) but rendered nothing, i.e. a silent no-op paste.
+  describe("pasting onto a component instance (ref)", () => {
+    const refTarget: RefNode = {
+      id: "ref1",
+      type: "ref",
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 50,
+      componentId: "comp1",
+      fill: "#ffffff",
+    } as RefNode;
+
+    it("only carries over the properties resolveRefToTree actually forwards", () => {
+      const style = extractNodeStyle(rectSource);
+      const updates = pickStyleUpdatesForNode(refTarget as unknown as FlatSceneNode, style) as Record<
+        string,
+        unknown
+      >;
+
+      expect(updates.fill).toBe("#ff0000");
+      expect(updates.stroke).toBe("#000000");
+      expect(updates.strokeWidth).toBe(2);
+
+      // Not honored by resolveRefToTree — must never be written as dead data.
+      expect("fills" in updates).toBe(false);
+      expect("effects" in updates).toBe(false);
+      expect("effect" in updates).toBe(false);
+      expect("opacity" in updates).toBe(false);
+      expect("fillOpacity" in updates).toBe(false);
+      expect("cornerRadius" in updates).toBe(false);
+    });
+
+    it("carries fillBinding/strokeBinding, which resolveRefToTree also forwards", () => {
+      const boundSource = {
+        ...rectSource,
+        fillBinding: { variableId: "var1" },
+        strokeBinding: { variableId: "var2" },
+      } as FlatSceneNode;
+      const style = extractNodeStyle(boundSource);
+      const updates = pickStyleUpdatesForNode(refTarget as unknown as FlatSceneNode, style) as Record<
+        string,
+        unknown
+      >;
+
+      expect(updates.fillBinding).toEqual({ variableId: "var1" });
+      expect(updates.strokeBinding).toEqual({ variableId: "var2" });
+    });
+  });
+
+  // Regression: pen-drawn `path` nodes style their stroke via `pathStroke`,
+  // not `stroke`/`strokeWidth` — copying style from one path to another used
+  // to drop the visible stroke entirely.
+  describe("path -> path carries pathStroke", () => {
+    const pathSource = {
+      id: "path1",
+      type: "path",
+      x: 0,
+      y: 0,
+      width: 40,
+      height: 40,
+      geometry: "M0 0 L40 40",
+      pathStroke: { align: "center", thickness: 3, join: "round", cap: "round", fill: "#ff00ff" },
+    } as FlatSceneNode;
+
+    const pathTarget = {
+      id: "path2",
+      type: "path",
+      x: 0,
+      y: 0,
+      width: 20,
+      height: 20,
+      geometry: "M0 0 L20 20",
+    } as FlatSceneNode;
+
+    it("extractNodeStyle captures pathStroke from a path source", () => {
+      const style = extractNodeStyle(pathSource);
+      expect((style as Record<string, unknown>).pathStroke).toEqual({
+        align: "center",
+        thickness: 3,
+        join: "round",
+        cap: "round",
+        fill: "#ff00ff",
+      });
+    });
+
+    it("pickStyleUpdatesForNode applies pathStroke path -> path", () => {
+      const style = extractNodeStyle(pathSource);
+      const updates = pickStyleUpdatesForNode(pathTarget, style) as Record<string, unknown>;
+      expect(updates.pathStroke).toEqual({
+        align: "center",
+        thickness: 3,
+        join: "round",
+        cap: "round",
+        fill: "#ff00ff",
+      });
+    });
+
+    it("does not leak pathStroke onto a non-path target", () => {
+      const style = extractNodeStyle(pathSource);
+      const updates = pickStyleUpdatesForNode(rectTarget, style) as Record<string, unknown>;
+      expect("pathStroke" in updates).toBe(false);
+    });
+  });
+});
+
+// Regression: `extractNodeStyle` used to copy `fills`/`effects` (and other
+// array/object style fields) by reference, so the clipboard, the source node,
+// and any paste target ended up sharing the same array/object instances —
+// mutating one silently mutated the others.
+describe("extractNodeStyle deep-copies array/object style fields", () => {
+  it("mutating the source node's fills array after copy does not affect the clipboard snapshot", () => {
+    const source = {
+      id: "rectA",
+      type: "rect",
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      fills: [{ id: "p1", type: "solid", color: "#0000ff" }],
+      effects: [{ type: "blur", radius: 4 }],
+    } as unknown as FlatSceneNode;
+
+    const style = extractNodeStyle(source);
+
+    // Mutate the source's arrays/objects after the copy.
+    (source as unknown as { fills: Array<{ color: string }> }).fills[0].color = "#ff0000";
+    (source as unknown as { effects: Array<{ radius: number }> }).effects[0].radius = 999;
+    (source as unknown as { fills: unknown[] }).fills.push({ id: "p2", type: "solid", color: "#00ff00" });
+
+    expect(style.fills?.[0]).toMatchObject({ color: "#0000ff" });
+    expect(style.fills).toHaveLength(1);
+    expect((style.effects?.[0] as unknown as { radius: number }).radius).toBe(4);
   });
 });

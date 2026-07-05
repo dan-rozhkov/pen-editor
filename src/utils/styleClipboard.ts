@@ -5,6 +5,7 @@ import type {
   GradientFill,
   ImageFill,
   Paint,
+  PathStroke,
   PerCornerRadius,
   PerSideStroke,
   SceneNode,
@@ -51,6 +52,9 @@ export interface NodeStyleSnapshot {
   cornerRadius?: number;
   cornerRadiusPerCorner?: PerCornerRadius;
 
+  // Pen-drawn stroke (path only)
+  pathStroke?: PathStroke;
+
   // Typography (text only)
   fontSize?: number;
   fontFamily?: string;
@@ -88,6 +92,25 @@ const COMMON_STYLE_KEYS = [
 const CORNER_RADIUS_KEYS = [
   "cornerRadius",
   "cornerRadiusPerCorner",
+] as const satisfies readonly (keyof NodeStyleSnapshot)[];
+
+const PATH_STYLE_KEYS = ["pathStroke"] as const satisfies readonly (keyof NodeStyleSnapshot)[];
+
+/**
+ * `resolveRefToTree` (`@/utils/instanceRuntime`) only ever forwards these
+ * fields from a `ref` (component instance) node onto the resolved render
+ * tree — everything else in `NodeStyleSnapshot` (fills/effects stacks,
+ * opacity, corner radius, ...) has nowhere to render for a `ref` target, so
+ * writing it would mutate data and create an undo entry that silently does
+ * nothing visually. Keep this in sync with the fields `resolveRefToTree`
+ * actually reads off `refNode`.
+ */
+const REF_HONORED_KEYS = [
+  "fill",
+  "stroke",
+  "strokeWidth",
+  "fillBinding",
+  "strokeBinding",
 ] as const satisfies readonly (keyof NodeStyleSnapshot)[];
 
 const TEXT_STYLE_KEYS = [
@@ -155,6 +178,21 @@ function pickDefined<T extends object, K extends keyof T>(source: T, keys: reado
 }
 
 /**
+ * Deep-clone every own value of `obj` (structuredClone) so the returned
+ * object shares no array/object references with the source. Used when
+ * building the clipboard snapshot so the clipboard, the source node, and any
+ * future paste target never alias the same `fills`/`effects`/etc. arrays.
+ */
+function deepCloneOwnProperties<T extends object>(obj: T): T {
+  const result = {} as T;
+  for (const key of Object.keys(obj) as (keyof T)[]) {
+    const value = obj[key];
+    result[key] = (value !== null && typeof value === "object" ? structuredClone(value) : value) as T[keyof T];
+  }
+  return result;
+}
+
+/**
  * Extract the copyable style snapshot from a node. Group-gated by the
  * *source* node's type: corner radius only comes from frame/rect, typography
  * only from text — so a rect never "leaks" phantom font properties into the
@@ -172,7 +210,15 @@ export function extractNodeStyle(node: FlatSceneNode): NodeStyleSnapshot {
     style = { ...style, ...pickDefined(source, TEXT_STYLE_KEYS as readonly string[]) };
   }
 
-  return style;
+  if (node.type === "path") {
+    style = { ...style, ...pickDefined(source, PATH_STYLE_KEYS as readonly string[]) };
+  }
+
+  // The clipboard must own its data: deep-clone array/object fields (fills,
+  // effects, cornerRadiusPerCorner, pathStroke, ...) so mutating the source
+  // node (or a later paste target) after copying can never reach back into
+  // this snapshot.
+  return deepCloneOwnProperties(style);
 }
 
 /**
@@ -191,6 +237,16 @@ export function pickStyleUpdatesForNode(
   style: NodeStyleSnapshot,
 ): Partial<SceneNode> {
   const styleSource = style as unknown as Record<string, unknown>;
+
+  // Component instances (`ref` nodes) resolve to their render tree via
+  // `resolveRefToTree`, which only forwards a handful of fields from the ref
+  // node itself (see `REF_HONORED_KEYS`). Every other style key is dead data
+  // on a `ref` — restrict the paste to what actually renders instead of
+  // silently no-op'ing.
+  if (target.type === "ref") {
+    return pickDefined(styleSource, REF_HONORED_KEYS as readonly string[]) as Partial<SceneNode>;
+  }
+
   const updatesBase: Record<string, unknown> = pickDefined(styleSource, COMMON_STYLE_KEYS as readonly string[]);
   normalizeDualRepresentations(updatesBase, styleSource);
   let updates = updatesBase;
@@ -201,6 +257,10 @@ export function pickStyleUpdatesForNode(
 
   if (target.type === "text") {
     updates = { ...updates, ...pickDefined(styleSource, TEXT_STYLE_KEYS as readonly string[]) };
+  }
+
+  if (target.type === "path") {
+    updates = { ...updates, ...pickDefined(styleSource, PATH_STYLE_KEYS as readonly string[]) };
   }
 
   return updates as Partial<SceneNode>;
