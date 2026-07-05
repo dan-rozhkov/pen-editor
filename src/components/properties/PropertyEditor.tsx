@@ -6,6 +6,7 @@ import { isInsideReusableComponent } from "@/utils/componentUtils";
 import { TypeSection } from "@/components/properties/TypeSection";
 import { PositionSection } from "@/components/properties/PositionSection";
 import { SizeSection } from "@/components/properties/SizeSection";
+import { ConstraintsSection } from "@/components/properties/ConstraintsSection";
 import { AutoLayoutSection } from "@/components/properties/AutoLayoutSection";
 import { LayoutGridSection } from "@/components/properties/LayoutGridSection";
 import { AppearanceSection } from "@/components/properties/AppearanceSection";
@@ -72,6 +73,11 @@ export function PropertyEditor({
       />
       <PositionSection node={node} onUpdate={onUpdate} parentContext={parentContext} />
       <SizeSection node={node} onUpdate={onUpdate} parentContext={parentContext} />
+      {parentContext.parent &&
+        parentContext.parent.type === "frame" &&
+        !parentContext.isInsideAutoLayout && (
+          <ConstraintsSection node={node} onUpdate={onUpdate} />
+        )}
       {node.type === "frame" && (
         <AutoLayoutSection node={node} onUpdate={onUpdate} />
       )}

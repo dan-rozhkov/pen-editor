@@ -36,6 +36,8 @@ export interface SceneState {
   updateNodesWithoutHistory: (
     updatesById: Record<string, Partial<SceneNode>>,
   ) => void;
+  /** Batched per-id update (each id gets its own partial updates), recorded as a single history entry. */
+  updateNodesById: (updatesById: Record<string, Partial<SceneNode>>) => void;
   deleteNode: (id: string) => void;
   clearNodes: () => void;
   setNodes: (nodes: SceneNode[]) => void;

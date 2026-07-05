@@ -3,6 +3,7 @@ export type HandleSide = "l" | "r" | "t" | "b";
 export type TransformHandle = HandleCorner | HandleSide;
 
 import type { SnapTarget } from "@/utils/smartGuideUtils";
+import type { NodeConstraints } from "@/types/scene";
 
 export interface DragItem {
   id: string;
@@ -86,6 +87,20 @@ export interface TransformState {
   startLinePoints: number[] | null;
   /** Instance slot context (when resizing a slot inside an instance) */
   slotContext: { instanceId: string; descendantPath: string } | null;
+  /**
+   * Snapshot of direct children (with their constraints) of a non-auto-layout
+   * frame being resized, captured at pointer-down. Null when the resized node
+   * isn't such a frame, or has no children. Recomputed relative to this
+   * snapshot (not incrementally) so repeated drags stay numerically stable.
+   */
+  frameChildrenStart: Array<{
+    id: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    constraints: NodeConstraints | undefined;
+  }> | null;
 }
 
 export interface InteractionContext {

@@ -175,6 +175,32 @@ export function createBasicMutations(set: SetState, get: GetState) {
         return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
       }),
 
+    updateNodesById: (updatesById: Record<string, Partial<SceneNode>>) =>
+      set((state) => {
+        const ids = Object.keys(updatesById).filter((id) => state.nodesById[id]);
+        if (ids.length === 0) return state;
+        saveHistory(state);
+
+        const newNodesById = { ...state.nodesById };
+        const staleSources: FlatSceneNode[] = [];
+        for (const id of ids) {
+          const existing = state.nodesById[id];
+          const updates = updatesById[id];
+          let updated = { ...existing, ...updates } as FlatSceneNode;
+          if (updated.type === "text" && hasTextMeasureProps(updates)) {
+            updated = syncTextDimensions(updated);
+          }
+          newNodesById[id] = updated;
+          staleSources.push(existing);
+        }
+        const componentArtifactsById = markComponentArtifactsStaleFromNative(
+          state.componentArtifactsById,
+          staleSources,
+        );
+
+        return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
+      }),
+
     deleteNode: (id: string) =>
       set((state) => {
         if (!state.nodesById[id]) return state;

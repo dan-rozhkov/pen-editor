@@ -3,10 +3,11 @@ import { useLayoutStore } from "@/store/layoutStore";
 import type { InteractionContext, TransformState } from "./types";
 import { hitTestTransformHandle, getResizeCursor } from "./hitTesting";
 import { generatePolygonPoints } from "@/utils/polygonUtils";
-import type { PolygonNode, LineNode, RefNode, TextNode, InstanceOverrideUpdateProps } from "@/types/scene";
+import type { PolygonNode, LineNode, RefNode, TextNode, InstanceOverrideUpdateProps, SceneNode } from "@/types/scene";
 import { findResolvedDescendantByPath } from "@/utils/instanceRuntime";
 import { getNodeEffectiveSize } from "@/utils/nodeUtils";
 import { resolveTextResize, minTextWidth } from "./textResize";
+import { computeConstrainedRect } from "@/utils/constraintsLayout";
 
 export interface TransformController {
   handlePointerDown(e: PointerEvent, world: { x: number; y: number }): boolean;
@@ -30,6 +31,7 @@ export function createTransformController(context: InteractionContext): Transfor
     parentOffsetY: 0,
     startLinePoints: null,
     slotContext: null,
+    frameChildrenStart: null,
   };
 
   return {
@@ -68,6 +70,7 @@ export function createTransformController(context: InteractionContext): Transfor
             state.parentOffsetX = 0;
             state.parentOffsetY = 0;
             state.startLinePoints = null;
+            state.frameChildrenStart = null;
             context.canvas.style.cursor = getResizeCursor(handleHit.corner);
             return true;
           }
@@ -88,6 +91,22 @@ export function createTransformController(context: InteractionContext): Transfor
             state.parentOffsetX = handleHit.absX - node.x;
             state.parentOffsetY = handleHit.absY - node.y;
             state.startLinePoints = node.type === "line" ? [...(node as LineNode).points] : null;
+            // Constraints apply only to direct children of a frame WITHOUT
+            // auto-layout (auto-layout frames size children via Yoga).
+            state.frameChildrenStart =
+              node.type === "frame" && !node.layout?.autoLayout
+                ? (sceneState.childrenById[node.id] ?? [])
+                    .map((childId) => sceneState.nodesById[childId])
+                    .filter((child): child is NonNullable<typeof child> => !!child)
+                    .map((child) => ({
+                      id: child.id,
+                      x: child.x,
+                      y: child.y,
+                      width: child.width,
+                      height: child.height,
+                      constraints: child.constraints,
+                    }))
+                : null;
             context.canvas.style.cursor = getResizeCursor(handleHit.corner);
             return true;
           }
@@ -210,6 +229,31 @@ export function createTransformController(context: InteractionContext): Transfor
           );
         }
 
+        // Resizing a non-auto-layout frame: recompute its children's
+        // position/size against their constraints, relative to the
+        // pointer-down snapshot (not incrementally, to stay numerically stable).
+        if (node?.type === "frame" && state.frameChildrenStart && state.frameChildrenStart.length > 0) {
+          const updatesById: Record<string, Partial<SceneNode>> = {
+            [state.nodeId]: updates as Partial<SceneNode>,
+          };
+          for (const child of state.frameChildrenStart) {
+            const rect = computeConstrainedRect(
+              { x: child.x, y: child.y, width: child.width, height: child.height },
+              child.constraints,
+              { width: state.startNodeW, height: state.startNodeH },
+              { width: roundedW, height: roundedH },
+            );
+            updatesById[child.id] = {
+              x: Math.round(rect.x),
+              y: Math.round(rect.y),
+              width: Math.round(rect.width),
+              height: Math.round(rect.height),
+            };
+          }
+          useSceneStore.getState().updateNodesWithoutHistory(updatesById);
+          return true;
+        }
+
         useSceneStore.getState().updateNodeWithoutHistory(state.nodeId, updates);
         return true;
       }
@@ -230,6 +274,7 @@ export function createTransformController(context: InteractionContext): Transfor
           state.nodeId = null;
           state.corner = null;
           state.slotContext = null;
+          state.frameChildrenStart = null;
           context.canvas.style.cursor = "";
           return true;
         }
@@ -253,12 +298,34 @@ export function createTransformController(context: InteractionContext): Transfor
             // history record and syncTextDimensions use the new mode.
             commitUpdates.textWidthMode = (node as TextNode).textWidthMode;
           }
-          useSceneStore.getState().updateNode(state.nodeId, commitUpdates);
+
+          if (state.frameChildrenStart && state.frameChildrenStart.length > 0) {
+            // Children were already repositioned live (WithoutHistory) during
+            // the drag; re-commit their current values as a single history
+            // entry alongside the frame's own resize.
+            const updatesById: Record<string, Partial<SceneNode>> = {
+              [state.nodeId]: commitUpdates as Partial<SceneNode>,
+            };
+            for (const child of state.frameChildrenStart) {
+              const childNode = sceneState.nodesById[child.id];
+              if (!childNode) continue;
+              updatesById[child.id] = {
+                x: childNode.x,
+                y: childNode.y,
+                width: childNode.width,
+                height: childNode.height,
+              };
+            }
+            useSceneStore.getState().updateNodesById(updatesById);
+          } else {
+            useSceneStore.getState().updateNode(state.nodeId, commitUpdates);
+          }
         }
         state.isTransforming = false;
         state.nodeId = null;
         state.corner = null;
         state.slotContext = null;
+        state.frameChildrenStart = null;
         context.canvas.style.cursor = "";
         return true;
       }

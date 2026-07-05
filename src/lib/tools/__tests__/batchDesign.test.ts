@@ -485,6 +485,49 @@ describe("batch_design", () => {
       expect(rect.cornerRadius).toBe(9);
       expect(rect.cornerRadiusPerCorner).toBeUndefined();
     });
+
+    it("sets constraints on a node", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'U(rect1, {constraints: {horizontal: "stretch", vertical: "center"}})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const rect = sceneState().nodesById["rect1"] as FlatSceneNode & {
+        constraints?: { horizontal: string; vertical: string };
+      };
+      expect(rect.constraints).toEqual({ horizontal: "stretch", vertical: "center" });
+    });
+
+    it("normalizes Figma-ish constraint aliases and falls back to 'min' for unknown modes", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'U(rect1, {constraints: {horizontal: "left-right", vertical: "bogus"}})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const rect = sceneState().nodesById["rect1"] as FlatSceneNode & {
+        constraints?: { horizontal: string; vertical: string };
+      };
+      expect(rect.constraints).toEqual({ horizontal: "stretch", vertical: "min" });
+    });
+
+    it("accepts constraints on insert", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'child=I(frame1, {type: "rect", width: 40, height: 40, constraints: {horizontal: "scale", vertical: "max"}})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const id = result.createdNodes[0].id;
+      const inserted = sceneState().nodesById[id] as FlatSceneNode & {
+        constraints?: unknown;
+      };
+      expect(inserted.constraints).toEqual({ horizontal: "scale", vertical: "max" });
+    });
   });
 
   describe("delete (D) and move (M)", () => {

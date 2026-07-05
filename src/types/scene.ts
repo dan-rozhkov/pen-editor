@@ -226,6 +226,23 @@ export interface BaseNode {
   aspectRatio?: number
   // Absolute position inside auto-layout parent (excluded from flex flow)
   absolutePosition?: boolean
+  /**
+   * Figma-style constraints controlling how a child repositions/resizes when
+   * its parent frame is resized. Only meaningful for direct children of a
+   * `frame` node WITHOUT auto-layout enabled — auto-layout (Yoga) frames
+   * ignore constraints entirely, sizing children via `sizing`/flex rules
+   * instead. Undefined per axis defaults to `'min'` (pinned to the
+   * left/top edge, fixed size) — matching pre-constraints behavior.
+   */
+  constraints?: NodeConstraints
+}
+
+/** Per-axis constraint mode (Figma parity). */
+export type ConstraintMode = 'min' | 'max' | 'center' | 'stretch' | 'scale'
+
+export interface NodeConstraints {
+  horizontal: ConstraintMode
+  vertical: ConstraintMode
 }
 
 // Auto-layout properties for Frame nodes

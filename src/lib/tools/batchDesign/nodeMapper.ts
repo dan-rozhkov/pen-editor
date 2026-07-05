@@ -7,6 +7,8 @@ import type {
   Paint,
   GradientFill,
   PerCornerRadius,
+  ConstraintMode,
+  NodeConstraints,
 } from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
 import { generateId } from "@/types/scene";
@@ -195,6 +197,37 @@ function parseSizingValue(
   };
 }
 
+const CONSTRAINT_MODES: ConstraintMode[] = ["min", "max", "center", "stretch", "scale"];
+
+/**
+ * Normalize an AI-format `constraints` value into a well-formed
+ * {horizontal, vertical} pair. Accepts Figma-ish aliases (`left`/`top` →
+ * `min`, `right`/`bottom` → `max`, `left-right`/`top-bottom` → `stretch`).
+ * Unknown/missing axes fall back to `"min"` (fixed, pre-constraints behavior).
+ */
+function normalizeConstraintMode(value: unknown): ConstraintMode {
+  if (typeof value !== "string") return "min";
+  const aliases: Record<string, ConstraintMode> = {
+    left: "min",
+    top: "min",
+    right: "max",
+    bottom: "max",
+    "left-right": "stretch",
+    "top-bottom": "stretch",
+  };
+  const normalized = aliases[value] ?? (value as ConstraintMode);
+  return CONSTRAINT_MODES.includes(normalized) ? normalized : "min";
+}
+
+function normalizeConstraints(value: unknown): NodeConstraints | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const raw = value as Record<string, unknown>;
+  return {
+    horizontal: normalizeConstraintMode(raw.horizontal),
+    vertical: normalizeConstraintMode(raw.vertical),
+  };
+}
+
 /**
  * Map AI-format node data to internal SceneNode properties.
  * For Insert: generates id and defaults.
@@ -325,6 +358,16 @@ export function mapNodeData(
             bottomLeft: pick("bottomLeft"),
           };
           result.cornerRadius = undefined;
+        }
+        break;
+      }
+
+      // Resize constraints (Figma-style). Only meaningful for a direct child
+      // of a frame WITHOUT auto-layout — ignored by auto-layout frames.
+      case "constraints": {
+        const normalized = normalizeConstraints(value);
+        if (normalized) {
+          result.constraints = normalized;
         }
         break;
       }
