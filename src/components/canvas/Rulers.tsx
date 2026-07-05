@@ -42,6 +42,7 @@ export function Rulers() {
   const removeGuide = useGuidesStore((s) => s.removeGuide);
   const updateGuidePosition = useGuidesStore((s) => s.updateGuidePosition);
   const uiTheme = useUIThemeStore((s) => s.uiTheme);
+  const hasPixiCanvas = useCanvasRefStore((s) => Boolean(s.pixiRefs?.app.canvas));
 
   const rootRef = useRef<HTMLDivElement | null>(null);
   const topCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -145,23 +146,26 @@ export function Rulers() {
       ctx.fillStyle = labelColor;
       ctx.strokeStyle = tickColor;
       ctx.lineWidth = 1;
+      ctx.textBaseline = "top";
       for (let w = start; w <= worldMax; w += step) {
         const s = w * scale + pan - offset - RULER_SIZE;
         ctx.beginPath();
         if (isVertical) {
-          ctx.moveTo(RULER_SIZE * 0.4, s + 0.5);
+          ctx.moveTo(RULER_SIZE - 6, s + 0.5);
           ctx.lineTo(RULER_SIZE, s + 0.5);
           ctx.stroke();
           ctx.save();
-          ctx.translate(RULER_SIZE * 0.6, s - 2);
+          ctx.translate(RULER_SIZE * 0.5, s);
           ctx.rotate(-Math.PI / 2);
-          ctx.fillText(String(Math.round(w)), 0, 0);
+          ctx.textAlign = "center";
+          ctx.fillText(String(Math.round(w)), 0, -8);
           ctx.restore();
         } else {
-          ctx.moveTo(s + 0.5, RULER_SIZE * 0.4);
+          ctx.moveTo(s + 0.5, RULER_SIZE - 6);
           ctx.lineTo(s + 0.5, RULER_SIZE);
           ctx.stroke();
-          ctx.fillText(String(Math.round(w)), s + 2, RULER_SIZE * 0.6);
+          ctx.textAlign = "center";
+          ctx.fillText(String(Math.round(w)), s, 1);
         }
       }
     }
@@ -183,7 +187,7 @@ export function Rulers() {
     draw();
     const unsubscribe = useViewportStore.subscribe(draw);
     return () => unsubscribe();
-  }, [showRulers, uiTheme, size]);
+  }, [showRulers, uiTheme, size, hasPixiCanvas]);
 
   // Position the guide hit-sensors imperatively (no setState → no per-frame
   // re-render) and keep them tracking viewport pan/zoom. useLayoutEffect so a

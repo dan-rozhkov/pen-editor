@@ -52,7 +52,7 @@ const SECTIONS: {
 }[] = [
   { section: "pages", testid: "rail-pages", title: "Pages", icon: <FileIcon size={20} weight="light" /> },
   { section: "agents", testid: "rail-agents", title: "Agents", icon: <SparkleIcon size={20} weight="light" /> },
-  { section: "components", testid: "rail-components", title: "Assets", icon: <DiamondsFourIcon size={20} weight="light" /> },
+  { section: "components", testid: "rail-components", title: "Assets", icon: <DiamondsFourIcon size={18} weight="light" /> },
 ];
 
 export function LeftRail() {
