@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { toast } from "sonner";
-import { ArrowsClockwiseIcon, XIcon } from "@phosphor-icons/react";
+import { XIcon } from "@phosphor-icons/react";
 import { getUpdateSW } from "@/pwa/registerServiceWorker";
 import { usePwaStore } from "@/store/pwaStore";
 import { Button } from "@/components/ui/button";
@@ -32,17 +32,20 @@ export function PwaUpdateToast() {
     if (!updateReady) return;
     toast.custom(
       () => (
+          // toast.custom renders unstyled (no sonner background/border/shadow),
+          // so the panel chrome lives here. Use the app's own theme-aware
+          // surface token (white in light, dark in the dark theme) rather than
+          // --popover, which is dark in both themes in this shadcn preset.
           <div
             data-testid="pwa-update-toast"
-            className="flex items-center gap-3 text-xs text-text-muted"
+            className="flex w-full items-center gap-3 rounded-lg border border-border bg-surface-panel px-4 py-3 text-xs text-text-muted shadow-lg"
           >
             <span>A new version is available.</span>
             <Button
-              variant="secondary"
               size="sm"
               onClick={() => getUpdateSW()?.(true)}
+              className="bg-accent-primary text-white hover:bg-accent-primary/90"
             >
-              <ArrowsClockwiseIcon />
               Update
             </Button>
             <Button
