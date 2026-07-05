@@ -403,6 +403,25 @@ export interface GroupNode extends BaseNode {
   clipBounds?: { x: number; y: number; width: number; height: number }
 }
 
+export interface PathHandle {
+  x: number
+  y: number
+}
+
+// Structured anchor for the pen tool / path point-edit mode. Coordinates live
+// in the same space as `PathNode.geometry`/`geometryBounds` (see pathAnchors.ts).
+// Optional so existing/legacy paths (pencil strokes drawn before this model,
+// imported SVGs, old .pen files) keep loading and rendering from `geometry`
+// alone — `points`/`closed` are lazily derived from `geometry` the first time
+// a path is entered into point-edit mode, and kept as the source of truth
+// (with `geometry` regenerated from them) from then on.
+export interface PathAnchor {
+  x: number
+  y: number
+  handleIn?: PathHandle | null
+  handleOut?: PathHandle | null
+}
+
 export interface PathNode extends BaseNode {
   type: 'path'
   geometry: string           // SVG path data (d attribute)
@@ -414,6 +433,11 @@ export interface PathNode extends BaseNode {
   clipBounds?: { x: number; y: number; width: number; height: number }
   // SVG fill-rule for complex paths with holes (evenodd creates cutouts)
   fillRule?: 'nonzero' | 'evenodd'
+  // Structured anchor model backing `geometry` for the pen tool / point-edit
+  // mode (see PathAnchor doc comment). Absent on legacy/imported paths until
+  // first edited.
+  points?: PathAnchor[]
+  closed?: boolean
 }
 
 export interface LineNode extends BaseNode {

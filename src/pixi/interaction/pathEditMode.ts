@@ -1,0 +1,35 @@
+import { useSceneStore } from "@/store/sceneStore";
+import { useSelectionStore } from "@/store/selectionStore";
+import { svgPathToAnchors } from "@/utils/pathAnchors";
+import type { PathNode } from "@/types/scene";
+
+/**
+ * Enter point-edit mode on a path node (double-click on the node, or Enter
+ * while it's the sole selection). Legacy paths (pencil-drawn strokes, loaded
+ * .pen files, imported SVGs) don't carry a structured `points` array yet —
+ * this lazily derives one from `geometry` the first time, via the same
+ * parser used everywhere else, so pencil-drawn paths are editable through
+ * the exact same mode as pen-tool-drawn ones.
+ *
+ * Returns false (no-op) for non-path nodes, or for paths whose geometry is
+ * structurally out of scope for point-editing (compound paths with multiple
+ * subpaths, or arcs) — a known, documented limitation.
+ */
+export function enterPathEditMode(nodeId: string): boolean {
+  const scene = useSceneStore.getState();
+  const node = scene.nodesById[nodeId];
+  if (!node || node.type !== "path") return false;
+
+  const pathNode = node as PathNode;
+  if (!pathNode.points || pathNode.points.length === 0) {
+    const parsed = svgPathToAnchors(pathNode.geometry);
+    if (!parsed) return false;
+    // Purely additive metadata (geometry itself is unchanged) — no history
+    // entry for this passive migration step.
+    scene.updateNodeWithoutHistory(nodeId, { points: parsed.points, closed: parsed.closed });
+  }
+
+  useSelectionStore.getState().select(nodeId);
+  useSelectionStore.getState().startEditing(nodeId, "path");
+  return true;
+}

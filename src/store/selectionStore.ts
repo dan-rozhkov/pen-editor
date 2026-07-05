@@ -6,7 +6,7 @@ import { useHistoryStore } from './historyStore'
 import { useSceneStore } from './sceneStore'
 import { useVariableStore } from './variableStore'
 
-type EditingMode = 'text' | 'name' | 'embed' | null
+type EditingMode = 'text' | 'name' | 'embed' | 'path' | null
 
 export interface InstanceContext {
   instanceId: string

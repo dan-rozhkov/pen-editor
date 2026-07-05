@@ -1,6 +1,7 @@
 import { create } from 'zustand'
+import { usePenToolStore } from './penToolStore'
 
-export type DrawToolType = 'cursor' | 'frame' | 'rect' | 'ellipse' | 'text' | 'line' | 'polygon' | 'embed' | 'pencil' | 'connector'
+export type DrawToolType = 'cursor' | 'frame' | 'rect' | 'ellipse' | 'text' | 'line' | 'polygon' | 'embed' | 'pencil' | 'connector' | 'pen'
 
 export interface PencilSettings {
   color: string
@@ -44,9 +45,13 @@ export const useDrawModeStore = create<DrawModeState>((set) => ({
   pencilPoints: [],
   pencilSettings: { ...DEFAULT_PENCIL_SETTINGS },
 
-  setActiveTool: (tool) => set({ activeTool: tool, isDrawing: false, drawStart: null, drawCurrent: null, pencilPoints: [] }),
+  setActiveTool: (tool) => {
+    usePenToolStore.getState().resetDraft()
+    set({ activeTool: tool, isDrawing: false, drawStart: null, drawCurrent: null, pencilPoints: [] })
+  },
 
   toggleTool: (tool) => set((state) => {
+    usePenToolStore.getState().resetDraft()
     if (state.activeTool === tool) {
       return { activeTool: null, isDrawing: false, drawStart: null, drawCurrent: null, pencilPoints: [] }
     }
@@ -61,7 +66,10 @@ export const useDrawModeStore = create<DrawModeState>((set) => ({
 
   endDrawing: () => set({ activeTool: null, isDrawing: false, drawStart: null, drawCurrent: null, pencilPoints: [] }),
 
-  cancelDrawing: () => set({ activeTool: null, isDrawing: false, drawStart: null, drawCurrent: null, pencilPoints: [] }),
+  cancelDrawing: () => {
+    usePenToolStore.getState().resetDraft()
+    set({ activeTool: null, isDrawing: false, drawStart: null, drawCurrent: null, pencilPoints: [] })
+  },
 
   setPencilSettings: (updates) => set((state) => ({
     pencilSettings: { ...state.pencilSettings, ...updates },

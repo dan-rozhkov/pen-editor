@@ -9,10 +9,17 @@ import { usePixelGridStore } from "@/store/pixelGridStore";
 import { useUIThemeStore } from "@/store/uiThemeStore";
 import { useConnectorStore } from "@/store/connectorStore";
 import { useSceneStore } from "@/store/sceneStore";
+import { useSelectionStore } from "@/store/selectionStore";
 import { useLayoutStore } from "@/store/layoutStore";
-import type { AnchorPosition } from "@/types/scene";
+import { usePenToolStore } from "@/store/penToolStore";
+import type { AnchorPosition, PathAnchor } from "@/types/scene";
 import { getAnchorWorldPosition, drawArrowhead, shortenLineEnd } from "@/utils/connectorUtils";
 import { getMarqueeRect, subscribeOverlayState } from "./pixiOverlayState";
+import {
+  getAnchorScreenPoints,
+  getEditedPathNode,
+  getNodeAbsolutePosition,
+} from "./interaction/pathEditGeometry";
 import {
   FLOATING_LABEL_FONT_SIZE,
   FLOATING_LABEL_PADDING_X,
@@ -36,6 +43,7 @@ const PIXEL_GRID_FADE_SCALE = 10;
 const PIXEL_GRID_BASE_OPACITY = 0.03;
 const PIXEL_GRID_LIGHT_COLOR = 0x000000;
 const PIXEL_GRID_DARK_COLOR = 0xffffff;
+const PEN_ACCENT_COLOR = 0x0d99ff;
 
 type MeasureLabelEntry = {
   group: Container;
@@ -88,6 +96,14 @@ export function createOverlayRenderer(
   const connectorPreviewGfx = new Graphics();
   connectorPreviewGfx.label = "connector-preview";
   overlayContainer.addChild(connectorPreviewGfx);
+
+  const penPreviewGfx = new Graphics();
+  penPreviewGfx.label = "pen-preview";
+  overlayContainer.addChild(penPreviewGfx);
+
+  const pathEditGfx = new Graphics();
+  pathEditGfx.label = "path-edit";
+  overlayContainer.addChild(pathEditGfx);
 
   const measureLabelPool: MeasureLabelEntry[] = [];
   const activeMeasureLabels: MeasureLabelEntry[] = [];
@@ -410,6 +426,109 @@ export function createOverlayRenderer(
     }
   }
 
+  function drawAnchorMarker(gfx: Graphics, x: number, y: number, radius: number, scale: number, filled: boolean): void {
+    gfx.rect(x - radius, y - radius, radius * 2, radius * 2);
+    gfx.fill({ color: filled ? PEN_ACCENT_COLOR : 0xffffff });
+    gfx.stroke({ color: PEN_ACCENT_COLOR, width: 1 / scale });
+  }
+
+  function drawHandleMarker(gfx: Graphics, anchorX: number, anchorY: number, hx: number, hy: number, radius: number, scale: number, filled: boolean): void {
+    gfx.moveTo(anchorX, anchorY);
+    gfx.lineTo(hx, hy);
+    gfx.stroke({ color: PEN_ACCENT_COLOR, width: 1 / scale });
+    gfx.circle(hx, hy, radius);
+    gfx.fill({ color: filled ? PEN_ACCENT_COLOR : 0xffffff });
+    gfx.stroke({ color: PEN_ACCENT_COLOR, width: 1 / scale });
+  }
+
+  /** Pen-tool draw preview: committed segments so far + the live "next segment" to the cursor. */
+  function redrawPenPreview(): void {
+    penPreviewGfx.clear();
+    const { activeTool } = useDrawModeStore.getState();
+    if (activeTool !== "pen") return;
+    const pen = usePenToolStore.getState();
+    if (!pen.isDrafting) return;
+
+    const scale = useViewportStore.getState().scale || 1;
+    const anchorRadius = 4 / scale;
+    const handleRadius = 3 / scale;
+    const strokeWidth = 1.5 / scale;
+
+    const anchors: PathAnchor[] = pen.pendingAnchor ? [...pen.anchors, pen.pendingAnchor] : pen.anchors;
+
+    if (anchors.length > 0) {
+      penPreviewGfx.moveTo(anchors[0].x, anchors[0].y);
+      for (let i = 0; i < anchors.length - 1; i++) {
+        const a = anchors[i];
+        const b = anchors[i + 1];
+        if (a.handleOut || b.handleIn) {
+          const cp1 = a.handleOut ?? { x: a.x, y: a.y };
+          const cp2 = b.handleIn ?? { x: b.x, y: b.y };
+          penPreviewGfx.bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, b.x, b.y);
+        } else {
+          penPreviewGfx.lineTo(b.x, b.y);
+        }
+      }
+      penPreviewGfx.stroke({ color: PEN_ACCENT_COLOR, width: strokeWidth });
+    }
+
+    // Live segment following the cursor to where the next click will land.
+    const last = anchors[anchors.length - 1];
+    if (last && !pen.pendingAnchor && pen.cursorWorld) {
+      penPreviewGfx.moveTo(last.x, last.y);
+      if (last.handleOut) {
+        penPreviewGfx.bezierCurveTo(
+          last.handleOut.x, last.handleOut.y,
+          pen.cursorWorld.x, pen.cursorWorld.y,
+          pen.cursorWorld.x, pen.cursorWorld.y,
+        );
+      } else {
+        penPreviewGfx.lineTo(pen.cursorWorld.x, pen.cursorWorld.y);
+      }
+      penPreviewGfx.stroke({ color: PEN_ACCENT_COLOR, width: strokeWidth, alpha: 0.6 });
+    }
+
+    for (let i = 0; i < anchors.length; i++) {
+      const a = anchors[i];
+      if (a.handleOut) drawHandleMarker(penPreviewGfx, a.x, a.y, a.handleOut.x, a.handleOut.y, handleRadius, scale, false);
+      if (a.handleIn) drawHandleMarker(penPreviewGfx, a.x, a.y, a.handleIn.x, a.handleIn.y, handleRadius, scale, false);
+      // Highlight the first anchor when it's close enough to close the contour.
+      const isCloseTarget = i === 0 && pen.cursorWorld && anchors.length >= 2 &&
+        Math.hypot(pen.cursorWorld.x - a.x, pen.cursorWorld.y - a.y) <= 7 / scale;
+      drawAnchorMarker(penPreviewGfx, a.x, a.y, isCloseTarget ? anchorRadius * 1.5 : anchorRadius, scale, !!isCloseTarget);
+    }
+  }
+
+  /** Path point-edit mode overlay: anchors + bezier handles as a screen-space (world-drawn) Graphics layer. */
+  function redrawPathEdit(): void {
+    pathEditGfx.clear();
+    const edited = getEditedPathNode();
+    if (!edited) return;
+    const absPos = getNodeAbsolutePosition(edited.id);
+    if (!absPos) return;
+
+    const scale = useViewportStore.getState().scale || 1;
+    const anchorRadius = 4 / scale;
+    const handleRadius = 3 / scale;
+    const pen = usePenToolStore.getState();
+
+    const screenPoints = getAnchorScreenPoints(edited.node, absPos);
+    for (const sp of screenPoints) {
+      if (sp.handleOut) {
+        const isHovered = pen.hoveredHandle?.anchorIndex === sp.index && pen.hoveredHandle.which === "out";
+        drawHandleMarker(pathEditGfx, sp.pos.x, sp.pos.y, sp.handleOut.x, sp.handleOut.y, isHovered ? handleRadius * 1.3 : handleRadius, scale, isHovered);
+      }
+      if (sp.handleIn) {
+        const isHovered = pen.hoveredHandle?.anchorIndex === sp.index && pen.hoveredHandle.which === "in";
+        drawHandleMarker(pathEditGfx, sp.pos.x, sp.pos.y, sp.handleIn.x, sp.handleIn.y, isHovered ? handleRadius * 1.3 : handleRadius, scale, isHovered);
+      }
+    }
+    for (const sp of screenPoints) {
+      const isHovered = pen.hoveredAnchorIndex === sp.index;
+      drawAnchorMarker(pathEditGfx, sp.pos.x, sp.pos.y, isHovered ? anchorRadius * 1.3 : anchorRadius, scale, isHovered);
+    }
+  }
+
   // Phase 5: Batch viewport-triggered overlay redraws via dirty flags + RAF.
   // Interactive store subscriptions stay synchronous to avoid perceptible lag
   // on guides/draw preview/drop indicators during drag/draw.
@@ -452,6 +571,13 @@ export function createOverlayRenderer(
   const unsubMarquee = subscribeOverlayState(redrawMarquee);
   const unsubMeasure = useMeasureStore.subscribe(redrawMeasureLines);
   const unsubConnector = useConnectorStore.subscribe(redrawConnectorPreview);
+  const unsubDrawModeForPen = useDrawModeStore.subscribe(redrawPenPreview);
+  const unsubPenTool = usePenToolStore.subscribe(() => {
+    redrawPenPreview();
+    redrawPathEdit();
+  });
+  const unsubSelectionForPathEdit = useSelectionStore.subscribe(redrawPathEdit);
+  const unsubSceneForPathEdit = useSceneStore.subscribe(redrawPathEdit);
   // Persistent guides are interactively dragged (like smart guides) — redraw
   // synchronously so the line tracks the pointer with zero added latency.
   const unsubPersistentGuides = useGuidesStore.subscribe(redrawPersistentGuides);
@@ -480,6 +606,8 @@ export function createOverlayRenderer(
   redrawDrawPreview();
   redrawMarquee();
   redrawConnectorPreview();
+  redrawPenPreview();
+  redrawPathEdit();
 
   return () => {
     if (overlayRafId !== null) {
@@ -495,6 +623,10 @@ export function createOverlayRenderer(
     unsubDrawMode();
     unsubMarquee();
     unsubConnector();
+    unsubDrawModeForPen();
+    unsubPenTool();
+    unsubSelectionForPathEdit();
+    unsubSceneForPathEdit();
     unsubViewport();
     pixelGridGfx.destroy();
     guidesGfx.destroy();
@@ -511,5 +643,7 @@ export function createOverlayRenderer(
     drawPreviewGfx.destroy();
     marqueeGfx.destroy();
     connectorPreviewGfx.destroy();
+    penPreviewGfx.destroy();
+    pathEditGfx.destroy();
   };
 }

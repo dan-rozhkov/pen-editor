@@ -7,6 +7,7 @@ import {
   HexagonIcon,
   HashStraight,
   PencilSimple,
+  PenNibIcon,
   FlowArrow,
   type IconWeight,
   CaretDownIcon,
@@ -54,6 +55,7 @@ export function PrimitivesPanel() {
     tool: DrawToolType;
     shortcut: string;
   }> = [
+    { icon: PenNibIcon, label: "Pen", tool: "pen", shortcut: "P" },
     { icon: PencilSimple, label: "Pencil", tool: "pencil", shortcut: "D" },
     { icon: CircleIcon, label: "Ellipse", tool: "ellipse", shortcut: "O" },
     { icon: TextTIcon, label: "Text", tool: "text", shortcut: "T" },
@@ -71,7 +73,7 @@ export function PrimitivesPanel() {
     shortcut: string;
   }> = [
     { icon: LineSegmentIcon, label: "Line", tool: "line", shortcut: "L" },
-    { icon: HexagonIcon, label: "Polygon", tool: "polygon", shortcut: "P" },
+    { icon: HexagonIcon, label: "Polygon", tool: "polygon", shortcut: "G" },
     { icon: FlowArrow, label: "Connector", tool: "connector", shortcut: "C" },
   ];
 

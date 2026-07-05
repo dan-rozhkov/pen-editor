@@ -31,6 +31,9 @@ import { createTouchController } from "./touchController";
 import { createTransformController } from "./transformController";
 import { createDrawController } from "./drawController";
 import { createPencilController } from "./pencilController";
+import { createPenController } from "./penController";
+import { createPathEditController } from "./pathEditController";
+import { enterPathEditMode } from "./pathEditMode";
 import { createConnectorController } from "./connectorController";
 import { createDragController, DRAG_CLICK_THRESHOLD } from "./dragController";
 import { createMarqueeController } from "./marqueeController";
@@ -155,6 +158,8 @@ export function setupPixiInteraction(
   const transform = createTransformController(context);
   const draw = createDrawController(context);
   const pencil = createPencilController(context);
+  const pen = createPenController(context);
+  const pathEdit = createPathEditController(context);
   const connector = createConnectorController(context);
   const drag = createDragController(context);
   const marquee = createMarqueeController(context);
@@ -231,10 +236,19 @@ export function setupPixiInteraction(
 
     // Priorities 2-3: scene-editing controllers only run in edit mode.
     if (canEditScene(mode)) {
+      // Path point-edit mode: anchors/handles take priority over the resize
+      // handles of the (still-selected) node underneath them. A click that
+      // misses every anchor/handle exits edit mode and falls through to
+      // normal selection below (e.g. clicking away commits the edit).
+      if (pathEdit.isActive()) {
+        if (pathEdit.handlePointerDown(e, world)) return;
+        useSelectionStore.getState().stopEditing();
+      }
       // Transform (resize handles)
       if (transform.handlePointerDown(e, world)) return;
-      // Drawing mode (pencil first, then connector, then standard draw)
+      // Drawing mode (pencil/pen first, then connector, then standard draw)
       if (pencil.handlePointerDown(e, world)) return;
+      if (pen.handlePointerDown(e, world)) return;
       if (connector.handlePointerDown(e, world)) return;
       if (draw.handlePointerDown(e, world)) return;
     }
@@ -357,7 +371,9 @@ export function setupPixiInteraction(
 
     // Handle active interactions
     if (pan.handlePointerMove(e)) return;
+    if (pathEdit.handlePointerMove(e, world)) return;
     if (pencil.handlePointerMove(e, world)) return;
+    if (pen.handlePointerMove(e, world)) return;
     if (connector.handlePointerMove(e, world)) return;
     if (draw.handlePointerMove(e, world)) return;
     if (transform.handlePointerMove(e, world)) return;
@@ -409,8 +425,10 @@ export function setupPixiInteraction(
 
     // Handle interaction cleanup in order
     if (pan.handlePointerUp(e)) return;
+    if (pathEdit.handlePointerUp(e, world)) return;
     if (transform.handlePointerUp(e, world)) return;
     if (pencil.handlePointerUp(e, world)) return;
+    if (pen.handlePointerUp(e, world)) return;
     if (connector.handlePointerUp(e, world)) return;
     if (draw.handlePointerUp(e, world)) return;
     if (drag.handlePointerUp(e, world)) return;
@@ -543,6 +561,8 @@ export function setupPixiInteraction(
     if (node.type === "text") {
       // Enter text editing mode
       useSelectionStore.getState().startEditing(hitId);
+    } else if (node.type === "path") {
+      enterPathEditMode(hitId);
     } else if (node.type === "embed") {
       useSelectionStore.getState().setActiveEmbed(hitId);
     } else if (node.type === "frame" || node.type === "group") {

@@ -5,6 +5,7 @@ import {
 } from "@/types/scene";
 import type { BooleanOpKind } from "@/lib/booleanOps";
 import { useDrawModeStore } from "@/store/drawModeStore";
+import { usePenToolStore } from "@/store/penToolStore";
 import { useUIVisibilityStore } from "@/store/uiVisibilityStore";
 import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
 import { useConnectorStore } from "@/store/connectorStore";
@@ -13,6 +14,8 @@ import { useGuidesStore } from "@/store/guidesStore";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { findNodeById, findParentFrame } from "@/utils/nodeUtils";
+import { finishPenDraft, cancelPenDraft } from "@/pixi/interaction/penDraftCommit";
+import { enterPathEditMode } from "@/pixi/interaction/pathEditMode";
 import { isTypingTarget } from "./keyboardShortcutUtils";
 import {
   handleArrowKeys,
@@ -43,7 +46,7 @@ export interface KeyDownHandlerDeps {
   undo: (snapshot: HistorySnapshot) => HistorySnapshot | null;
   redo: (snapshot: HistorySnapshot) => HistorySnapshot | null;
   fitToContent: (nodes: SceneNode[], width: number, height: number) => void;
-  toggleTool: (tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon" | "embed" | "pencil" | "connector") => void;
+  toggleTool: (tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon" | "embed" | "pencil" | "connector" | "pen") => void;
   cancelDrawing: () => void;
   clearSelection: () => void;
   copySelection: () => void;
@@ -153,6 +156,22 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
 
     if (e.key === "Enter" && !e.shiftKey) {
       if (isTyping) return;
+      // Pen tool: Enter finishes the in-progress draft as an open path.
+      if (useDrawModeStore.getState().activeTool === "pen" && usePenToolStore.getState().isDrafting) {
+        e.preventDefault();
+        finishPenDraft(false);
+        return;
+      }
+      // A single selected path node: Enter enters point-edit mode.
+      const { selectedIds: soleSelection, editingNodeId, editingMode } = useSelectionStore.getState();
+      if (!editingNodeId && !editingMode && soleSelection.length === 1) {
+        const soleNode = findNodeById(nodes, soleSelection[0]);
+        if (soleNode?.type === "path") {
+          e.preventDefault();
+          enterPathEditMode(soleNode.id);
+          return;
+        }
+      }
       if (handleEnterEditing(e, nodes)) return;
     }
 
@@ -403,6 +422,11 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
       }
       if (e.code === "KeyP") {
         e.preventDefault();
+        toggleTool("pen");
+        return;
+      }
+      if (e.code === "KeyG") {
+        e.preventDefault();
         toggleTool("polygon");
         return;
       }
@@ -460,6 +484,16 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
       }
 
       const drawState = useDrawModeStore.getState();
+      if (drawState.activeTool === "pen") {
+        // Esc finishes an in-progress draft as an open path (like Enter);
+        // with nothing drawn yet, it just exits the tool.
+        if (usePenToolStore.getState().isDrafting) {
+          finishPenDraft(false);
+        } else {
+          cancelPenDraft();
+        }
+        return;
+      }
       if (drawState.activeTool || drawState.isDrawing) {
         useConnectorStore.getState().cancelConnectorDraw();
         cancelDrawing();
