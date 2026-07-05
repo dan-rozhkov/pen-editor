@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import type { ImageFillMode, SceneNode } from "@/types/scene";
 import { Button } from "@/components/ui/button";
 import { SelectInput } from "@/components/ui/PropertyInputs";
@@ -11,13 +11,10 @@ export function ImageFillEditor({
   onUpdate: (updates: Partial<SceneNode>) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isRemovingBg, setIsRemovingBg] = useState(false);
-  const [bgError, setBgError] = useState<string | null>(null);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setBgError(null);
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result as string;
@@ -34,33 +31,6 @@ export function ImageFillEditor({
     onUpdate({
       imageFill: { ...imageFill, mode: mode as ImageFillMode },
     } as Partial<SceneNode>);
-  };
-
-  const handleRemoveBackground = async () => {
-    if (!imageFill?.url) {
-      setBgError("Add an image before removing its background.");
-      return;
-    }
-    setIsRemovingBg(true);
-    setBgError(null);
-    try {
-      // Lazy-loaded: onnxruntime-web + model weights are only fetched here,
-      // on first actual use, never at app/module load time.
-      const { removeBackground, blobToDataUrl } = await import(
-        "@/lib/backgroundRemoval"
-      );
-      const resultBlob = await removeBackground(imageFill.url);
-      const dataUrl = await blobToDataUrl(resultBlob);
-      onUpdate({
-        imageFill: { url: dataUrl, mode: imageFill.mode },
-      } as Partial<SceneNode>);
-    } catch (err) {
-      setBgError(
-        err instanceof Error ? err.message : "Failed to remove background.",
-      );
-    } finally {
-      setIsRemovingBg(false);
-    }
   };
 
   return (
@@ -101,21 +71,6 @@ export function ImageFillEditor({
           >
             Replace Image
           </Button>
-
-          <Button
-            onClick={handleRemoveBackground}
-            variant="secondary"
-            className="w-full"
-            disabled={isRemovingBg}
-          >
-            {isRemovingBg ? "Removing background…" : "Remove Background"}
-          </Button>
-
-          {bgError && (
-            <span className="text-xs text-destructive" role="alert">
-              {bgError}
-            </span>
-          )}
         </div>
       ) : (
         <Button
