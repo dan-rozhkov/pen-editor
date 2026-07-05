@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FlatSceneNode } from "@/types/scene";
+import { getEffects, getFills } from "@/utils/fillUtils";
 import { extractNodeStyle, pickStyleUpdatesForNode } from "@/utils/styleClipboard";
 
 const rectSource: FlatSceneNode = {
@@ -136,5 +137,118 @@ describe("pickStyleUpdatesForNode", () => {
     const updates = pickStyleUpdatesForNode(rectSource, style);
     expect("stroke" in updates).toBe(false);
     expect("cornerRadius" in updates).toBe(false);
+  });
+
+  // Legacy-vs-paint-stack invariant (see fillUtils.ts): when `fills` is set it
+  // supersedes the legacy `fill`/`gradientFill`/`imageFill` fields, so a paste
+  // that writes one representation must clear the counterpart on the target.
+  describe("legacy fill vs `fills` normalization", () => {
+    const legacyFillSource = {
+      id: "s1",
+      type: "rect",
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      fill: "#ff0000",
+    } as FlatSceneNode;
+
+    const paintStackTarget = {
+      id: "t1",
+      type: "rect",
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      fills: [{ id: "p1", type: "solid", color: "#0000ff" }],
+    } as FlatSceneNode;
+
+    it("clears the target's stale `fills` when pasting a legacy-only fill", () => {
+      const style = extractNodeStyle(legacyFillSource);
+      const updates = pickStyleUpdatesForNode(paintStackTarget, style);
+      const merged = { ...paintStackTarget, ...updates } as FlatSceneNode;
+      const fills = getFills(merged);
+      expect(fills).toHaveLength(1);
+      expect(fills[0]).toMatchObject({ type: "solid", color: "#ff0000" });
+    });
+
+    it("clears the target's stale legacy fill fields when pasting a paint stack", () => {
+      const paintStackSource = {
+        ...legacyFillSource,
+        fill: undefined,
+        fills: [{ id: "p2", type: "solid", color: "#00ff00" }],
+      } as FlatSceneNode;
+      const legacyTarget = {
+        ...paintStackTarget,
+        fills: undefined,
+        fill: "#123456",
+        gradientFill: { type: "linear", stops: [], startX: 0, startY: 0, endX: 1, endY: 1 },
+      } as FlatSceneNode;
+
+      const style = extractNodeStyle(paintStackSource);
+      const updates = pickStyleUpdatesForNode(legacyTarget, style);
+      const merged = { ...legacyTarget, ...updates } as FlatSceneNode;
+      expect(merged.fill).toBeUndefined();
+      expect(merged.gradientFill).toBeUndefined();
+      const fills = getFills(merged);
+      expect(fills).toHaveLength(1);
+      expect(fills[0]).toMatchObject({ type: "solid", color: "#00ff00" });
+    });
+
+    it("clears the target's stale `effects` when pasting a legacy-only `effect`", () => {
+      const legacyEffectSource = {
+        ...legacyFillSource,
+        effect: { type: "shadow", shadowType: "outer", color: "#00000040", offset: { x: 0, y: 2 }, blur: 6, spread: 0 },
+      } as FlatSceneNode;
+      const effectsTarget = {
+        ...paintStackTarget,
+        effects: [{ type: "blur", radius: 12 }],
+      } as FlatSceneNode;
+
+      const style = extractNodeStyle(legacyEffectSource);
+      const updates = pickStyleUpdatesForNode(effectsTarget, style);
+      const merged = { ...effectsTarget, ...updates } as FlatSceneNode;
+      const effects = getEffects(merged);
+      expect(effects).toHaveLength(1);
+      expect(effects[0]).toMatchObject({ type: "shadow", blur: 6 });
+    });
+
+    it("clears the target's stale legacy `effect` when pasting an effect stack", () => {
+      const effectsSource = {
+        ...legacyFillSource,
+        effects: [{ type: "blur", radius: 8 }],
+      } as FlatSceneNode;
+      const legacyEffectTarget = {
+        ...paintStackTarget,
+        effect: { type: "shadow", shadowType: "outer", color: "#00000040", offset: { x: 0, y: 2 }, blur: 6, spread: 0 },
+      } as FlatSceneNode;
+
+      const style = extractNodeStyle(effectsSource);
+      const updates = pickStyleUpdatesForNode(legacyEffectTarget, style);
+      const merged = { ...legacyEffectTarget, ...updates } as FlatSceneNode;
+      expect(merged.effect).toBeUndefined();
+      const effects = getEffects(merged);
+      expect(effects).toHaveLength(1);
+      expect(effects[0]).toMatchObject({ type: "blur", radius: 8 });
+    });
+
+    it("leaves the target's fills and effects untouched when the source has neither", () => {
+      const bareSource = {
+        id: "s2",
+        type: "rect",
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+        opacity: 0.5,
+      } as FlatSceneNode;
+      const style = extractNodeStyle(bareSource);
+      const updates = pickStyleUpdatesForNode(paintStackTarget, style) as Record<string, unknown>;
+      expect("fills" in updates).toBe(false);
+      expect("fill" in updates).toBe(false);
+      expect("effects" in updates).toBe(false);
+      expect("effect" in updates).toBe(false);
+      expect(updates.opacity).toBe(0.5);
+    });
   });
 });

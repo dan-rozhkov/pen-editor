@@ -108,6 +108,41 @@ const TEXT_STYLE_KEYS = [
 
 const CORNER_RADIUS_NODE_TYPES = new Set<FlatSceneNode["type"]>(["frame", "rect"]);
 
+/**
+ * Dual-representation property groups (legacy single-value fields vs the
+ * modern stacks — see the contract at the top of `@/utils/fillUtils`):
+ * `fills` supersedes `fill`/`gradientFill`/`imageFill`/`fillOpacity`/
+ * `fillBinding` when set, and `effects` supersedes `effect`. A paste that
+ * writes one representation must explicitly clear the counterpart on the
+ * target (write `undefined` — the same pattern as `clearLegacyFillProps` /
+ * `clearLegacyEffectProps` used by the fill/effects panels), otherwise a
+ * target carrying the higher-priority representation would silently keep its
+ * old look.
+ */
+const DUAL_REPRESENTATION_GROUPS: readonly (readonly string[])[] = [
+  ["fills", "fill", "fillOpacity", "fillBinding", "gradientFill", "imageFill"],
+  ["effects", "effect"],
+];
+
+/**
+ * For each dual-representation group where the style carries *any* data,
+ * write every key of the group into `updates` — the source's value where it
+ * has one, explicit `undefined` for the rest — so the pasted style fully
+ * replaces the target's fill/effect state regardless of which representation
+ * either side uses. Groups the style says nothing about are left untouched.
+ */
+function normalizeDualRepresentations(
+  updates: Record<string, unknown>,
+  styleSource: Record<string, unknown>,
+): void {
+  for (const group of DUAL_REPRESENTATION_GROUPS) {
+    if (!group.some((key) => styleSource[key] !== undefined)) continue;
+    for (const key of group) {
+      updates[key] = styleSource[key];
+    }
+  }
+}
+
 function pickDefined<T extends object, K extends keyof T>(source: T, keys: readonly K[]): Pick<T, K> {
   const result = {} as Pick<T, K>;
   for (const key of keys) {
@@ -145,14 +180,20 @@ export function extractNodeStyle(node: FlatSceneNode): NodeStyleSnapshot {
  * compatible with `target`'s node type — e.g. text typography is dropped
  * when pasting onto a rectangle, corner radius is dropped for anything but
  * frame/rect. Only properties actually present in `style` are included, so
- * applying the result never clobbers the target with `undefined`.
+ * applying the result never clobbers the target with `undefined` — with one
+ * deliberate exception: for the dual-representation fill/effect groups, when
+ * the style carries any data the counterpart representation is explicitly
+ * written as `undefined` so the target's stale `fills`/`effects` (or legacy
+ * fields) can't override the pasted style.
  */
 export function pickStyleUpdatesForNode(
   target: FlatSceneNode,
   style: NodeStyleSnapshot,
 ): Partial<SceneNode> {
   const styleSource = style as unknown as Record<string, unknown>;
-  let updates: Record<string, unknown> = pickDefined(styleSource, COMMON_STYLE_KEYS as readonly string[]);
+  const updatesBase: Record<string, unknown> = pickDefined(styleSource, COMMON_STYLE_KEYS as readonly string[]);
+  normalizeDualRepresentations(updatesBase, styleSource);
+  let updates = updatesBase;
 
   if (CORNER_RADIUS_NODE_TYPES.has(target.type)) {
     updates = { ...updates, ...pickDefined(styleSource, CORNER_RADIUS_KEYS as readonly string[]) };
