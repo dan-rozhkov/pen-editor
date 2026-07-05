@@ -26,6 +26,9 @@ if (import.meta.env.DEV) {
   import('@/store/themeStore').then(({ useThemeStore }) => {
     (window as unknown as Record<string, unknown>).__themeStore = useThemeStore;
   });
+  import('@/store/pwaStore').then(({ usePwaStore }) => {
+    (window as unknown as Record<string, unknown>).__pwaStore = usePwaStore;
+  });
   import('@/store/variableStore').then(({ useVariableStore }) => {
     (window as unknown as Record<string, unknown>).__variableStore = useVariableStore;
   });

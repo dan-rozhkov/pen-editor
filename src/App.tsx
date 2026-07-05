@@ -16,6 +16,7 @@ import { useIsMobile } from "./hooks/useIsMobile";
 import { useOnlineStatus } from "./hooks/useOnlineStatus";
 import { OfflineBanner } from "./components/pwa/OfflineBanner";
 import { PwaUpdateToast } from "./components/pwa/PwaUpdateToast";
+import { Toaster } from "./components/ui/sonner";
 import "./store/uiThemeStore"; // Initialize UI theme (applies .dark class before first render)
 
 const PixiCanvas = lazy(() => import("./pixi/PixiCanvas").then((m) => ({ default: m.PixiCanvas })));
@@ -68,10 +69,12 @@ function App() {
       {!isOnline && !isPresent && <OfflineBanner />}
 
       {/* Update-available toast — appears once a new service worker version
-          has installed and is waiting to activate. Sits below OfflineBanner
-          so the two never overlap; unlike the banner, its button is
-          interactive. */}
+          has installed and is waiting to activate. Headless: it fires a sonner
+          toast into the <Toaster /> portal below. */}
       {!isPresent && <PwaUpdateToast />}
+
+      {/* Sonner toast portal (hosts PwaUpdateToast's toast). */}
+      <Toaster />
 
       {/* UI panels — overlay on top of canvas */}
       {!isUIHidden && !isPresent && (

@@ -1,82 +1,68 @@
-import { useState } from "react";
-import { ArrowsClockwiseIcon } from "@phosphor-icons/react";
+import { useEffect } from "react";
+import { toast } from "sonner";
+import { ArrowsClockwiseIcon, XIcon } from "@phosphor-icons/react";
 import { getUpdateSW } from "@/pwa/registerServiceWorker";
 import { usePwaStore } from "@/store/pwaStore";
-import { StatusPill } from "./StatusPill";
+import { Button } from "@/components/ui/button";
 
-// Small toast that appears once a new service worker version has installed
-// and is waiting to activate (registerServiceWorker sets pwaStore's
-// updateReady when that happens). Reading from pwaStore rather than a
-// one-shot event means state set before this component mounts, or while it's
-// unmounted (e.g. present mode: `{!isPresent && <PwaUpdateToast />}`), is
-// still picked up as soon as it (re)mounts.
+// Headless component: once a new service worker version has installed and is
+// waiting to activate (registerServiceWorker sets pwaStore's updateReady), it
+// fires a persistent sonner toast (rendered by the app-level <Toaster />).
+// Reading from pwaStore rather than a one-shot event means state set before
+// this component mounts, or while it's unmounted (e.g. present mode:
+// `{!isPresent && <PwaUpdateToast />}`), is still picked up as soon as it
+// (re)mounts and the subscription reads current state.
 //
-// Reloading destroys any in-memory scene graph work (there's no autosave —
-// only manual .pen export), so "Update" doesn't reload immediately: the
-// first click switches the toast into a confirm step; only a second click
-// actually reloads. "Not now" dismisses the toast for the rest of this
-// session by clearing updateReady — the waiting worker still activates on
-// the next natural page load, nothing about the update itself is cancelled.
-//
-// Placed below OfflineBanner (which sits at top-2) so the two never overlap;
-// unlike the banner, this toast is interactive, so it (and only it) accepts
-// pointer events.
+// The toast shows a single "Update" button that reloads immediately on the
+// first click via getUpdateSW()?.(true) — no confirm step. Its dismiss (X)
+// button clears updateReady so the toast doesn't reappear this session; the
+// waiting worker still activates on the next natural page load, nothing about
+// the update itself is cancelled. (Custom sonner toasts don't render sonner's
+// built-in close button, so we provide our own.)
+// Stable id so re-firing (e.g. after this component unmounts/remounts on a
+// present-mode toggle while updateReady stays true) reuses the same toast
+// instead of stacking a duplicate.
+const TOAST_ID = "pwa-update";
+
 export function PwaUpdateToast() {
   const updateReady = usePwaStore((s) => s.updateReady);
   const setUpdateReady = usePwaStore((s) => s.setUpdateReady);
-  const [confirming, setConfirming] = useState(false);
 
-  // Reset the confirm step whenever the toast goes away (dismissed, or a
-  // fresh update-ready cycle starts later) so it doesn't reappear pre-armed.
-  // Adjusted during render (React's recommended pattern for resetting state
-  // in response to a prop/store change) rather than in an effect, which
-  // would cause an extra render pass.
-  const [prevUpdateReady, setPrevUpdateReady] = useState(updateReady);
-  if (updateReady !== prevUpdateReady) {
-    setPrevUpdateReady(updateReady);
-    if (!updateReady) {
-      setConfirming(false);
-    }
-  }
+  useEffect(() => {
+    if (!updateReady) return;
+    toast.custom(
+      () => (
+          <div
+            data-testid="pwa-update-toast"
+            className="flex items-center gap-3 text-xs text-text-muted"
+          >
+            <span>A new version is available.</span>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => getUpdateSW()?.(true)}
+            >
+              <ArrowsClockwiseIcon />
+              Update
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Dismiss"
+              onClick={() => setUpdateReady(false)}
+            >
+              <XIcon />
+            </Button>
+          </div>
+        ),
+        { id: TOAST_ID, duration: Infinity },
+      );
+    // Dismiss on unmount (e.g. entering present mode) so the toast doesn't
+    // linger in the always-mounted <Toaster /> portal after its owner is gone.
+    return () => {
+      toast.dismiss(TOAST_ID);
+    };
+  }, [updateReady, setUpdateReady]);
 
-  if (!updateReady) {
-    return null;
-  }
-
-  return (
-    <StatusPill top="top-12" interactive gap={3} testId="pwa-update-toast">
-      {confirming ? (
-        <>
-          <span>Reloads the editor; unsaved work will be lost.</span>
-          <button
-            type="button"
-            onClick={() => getUpdateSW()?.(true)}
-            className="flex items-center gap-1 rounded-full bg-text-muted/10 px-2 py-1 font-medium text-text-primary hover:bg-text-muted/20"
-          >
-            <ArrowsClockwiseIcon size={14} className="shrink-0" />
-            Update
-          </button>
-          <button
-            type="button"
-            onClick={() => setUpdateReady(false)}
-            className="rounded-full px-2 py-1 font-medium text-text-muted hover:bg-text-muted/10"
-          >
-            Not now
-          </button>
-        </>
-      ) : (
-        <>
-          <span>A new version is available.</span>
-          <button
-            type="button"
-            onClick={() => setConfirming(true)}
-            className="flex items-center gap-1 rounded-full bg-text-muted/10 px-2 py-1 font-medium text-text-primary hover:bg-text-muted/20"
-          >
-            <ArrowsClockwiseIcon size={14} className="shrink-0" />
-            Update
-          </button>
-        </>
-      )}
-    </StatusPill>
-  );
+  return null;
 }

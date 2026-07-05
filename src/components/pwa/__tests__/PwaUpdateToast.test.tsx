@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
+import {
+  render,
+  screen,
+  cleanup,
+  fireEvent,
+  waitFor,
+  act,
+} from "@testing-library/react";
+import { Toaster } from "@/components/ui/sonner";
 import { PwaUpdateToast } from "@/components/pwa/PwaUpdateToast";
 import { getUpdateSW } from "@/pwa/registerServiceWorker";
 import { usePwaStore } from "@/store/pwaStore";
@@ -7,6 +15,17 @@ import { usePwaStore } from "@/store/pwaStore";
 vi.mock("@/pwa/registerServiceWorker", () => ({
   getUpdateSW: vi.fn(),
 }));
+
+// PwaUpdateToast is headless — it fires a sonner toast into the portal that a
+// <Toaster /> renders. Mount both together, exactly as App.tsx does.
+function renderToast() {
+  return render(
+    <>
+      <Toaster />
+      <PwaUpdateToast />
+    </>,
+  );
+}
 
 beforeEach(() => {
   usePwaStore.setState({ updateReady: false, offlineReady: false });
@@ -19,65 +38,59 @@ afterEach(() => {
 
 describe("PwaUpdateToast", () => {
   it("renders nothing until an update is announced", () => {
-    render(<PwaUpdateToast />);
+    renderToast();
     expect(screen.queryByTestId("pwa-update-toast")).toBeNull();
   });
 
-  it("shows the toast once pwaStore reports an update is ready", () => {
-    render(<PwaUpdateToast />);
+  it("shows the toast once pwaStore reports an update is ready", async () => {
+    renderToast();
 
     act(() => usePwaStore.getState().setUpdateReady(true));
 
-    expect(screen.getByTestId("pwa-update-toast")).toBeTruthy();
+    expect(await screen.findByTestId("pwa-update-toast")).toBeTruthy();
   });
 
-  it("state set before mount is still shown once the toast mounts (present-mode / mount gaps)", () => {
+  it("state set before mount is still shown once the toast mounts (present-mode / mount gaps)", async () => {
     // Simulates registerServiceWorker firing while the toast isn't mounted
     // (e.g. present mode, or before App has rendered it at all).
     usePwaStore.setState({ updateReady: true });
 
-    render(<PwaUpdateToast />);
+    renderToast();
 
-    expect(screen.getByTestId("pwa-update-toast")).toBeTruthy();
+    expect(await screen.findByTestId("pwa-update-toast")).toBeTruthy();
   });
 
-  it("stays reflected across unmount/remount, since the state lives in the store, not local state", () => {
-    const { unmount } = render(<PwaUpdateToast />);
-    act(() => usePwaStore.getState().setUpdateReady(true));
-    unmount();
-
-    render(<PwaUpdateToast />);
-
-    expect(screen.getByTestId("pwa-update-toast")).toBeTruthy();
-  });
-
-  it("requires a confirm step before reloading, since reloading discards unsaved work", () => {
+  it("reloads immediately on the first Update click — no confirm step", async () => {
     const updateSW = vi.fn();
     vi.mocked(getUpdateSW).mockReturnValue(updateSW);
     usePwaStore.setState({ updateReady: true });
 
-    render(<PwaUpdateToast />);
+    renderToast();
+    await screen.findByTestId("pwa-update-toast");
 
     fireEvent.click(screen.getByRole("button", { name: /update/i }));
-    expect(updateSW).not.toHaveBeenCalled();
-    expect(screen.getByText(/unsaved work will be lost/i)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /update/i }));
+    // A single click applies the update — there is no "unsaved work" confirm.
     expect(updateSW).toHaveBeenCalledWith(true);
+    expect(screen.queryByText(/unsaved work/i)).toBeNull();
   });
 
-  it("'Not now' dismisses the toast for the session without applying the update", () => {
+  it("dismissing clears updateReady without applying the update", async () => {
     const updateSW = vi.fn();
     vi.mocked(getUpdateSW).mockReturnValue(updateSW);
     usePwaStore.setState({ updateReady: true });
 
-    render(<PwaUpdateToast />);
+    renderToast();
+    await screen.findByTestId("pwa-update-toast");
 
-    fireEvent.click(screen.getByRole("button", { name: /update/i }));
-    fireEvent.click(screen.getByRole("button", { name: /not now/i }));
+    fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
 
+    await waitFor(() =>
+      expect(usePwaStore.getState().updateReady).toBe(false),
+    );
     expect(updateSW).not.toHaveBeenCalled();
-    expect(screen.queryByTestId("pwa-update-toast")).toBeNull();
-    expect(usePwaStore.getState().updateReady).toBe(false);
+    await waitFor(() =>
+      expect(screen.queryByTestId("pwa-update-toast")).toBeNull(),
+    );
   });
 });
