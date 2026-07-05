@@ -80,6 +80,11 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
             <DropdownMenuItem onClick={() => handleAdd(createShadowEffect())}>
               Drop shadow
             </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => handleAdd(createShadowEffect({ shadowType: "inner" }))}
+            >
+              Inner shadow
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => handleAdd(createBlurEffect())}>
               Layer blur
             </DropdownMenuItem>

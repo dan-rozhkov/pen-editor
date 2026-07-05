@@ -3,7 +3,7 @@ import { batchDesign } from "@/lib/tools/batchDesign";
 import { useSceneStore } from "@/store/sceneStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { resetStores, seedScene, seedVariables } from "@/test/fixtures";
-import type { FlatFrameNode, FlatSceneNode, Paint, TextNode, ConnectorNode } from "@/types/scene";
+import type { Effect, FlatFrameNode, FlatSceneNode, Paint, ShadowEffect, TextNode, ConnectorNode } from "@/types/scene";
 
 function sceneState() {
   return useSceneStore.getState();
@@ -143,6 +143,44 @@ describe("batch_design", () => {
         widthMode: "fill_container",
         heightMode: "fit_content",
       });
+    });
+  });
+
+  describe("effects (shadow/blur stack)", () => {
+    it("creates a node with an inner shadow effect", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'r=I(document, {type: "rectangle", name: "Inset", width: 10, height: 10, effects: [{type: "shadow", shadowType: "inner", color: "#00000080", offset: {x: 2, y: 2}, blur: 4, spread: 0}]})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const node = sceneState().nodesById[result.createdNodes[0].id];
+      const effects = node.effects as Effect[];
+      expect(effects).toHaveLength(1);
+      expect(effects[0]).toMatchObject({
+        type: "shadow",
+        shadowType: "inner",
+        color: "#00000080",
+        offset: { x: 2, y: 2 },
+        blur: 4,
+      });
+    });
+
+    it("U() with effects replaces the stack, supporting both drop and inner shadow together", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations: [
+            'r=I(document, {type: "rectangle", name: "Combo", width: 10, height: 10})',
+            'U(r, {effects: [{type: "shadow", shadowType: "outer", color: "#00000040", offset: {x: 0, y: 4}, blur: 8, spread: 0}, {type: "shadow", shadowType: "inner", color: "#00000080", offset: {x: 0, y: 2}, blur: 4, spread: 0}]})',
+          ].join("\n"),
+        })
+      );
+      expect(result.success).toBe(true);
+      const effects = sceneState().nodesById[result.createdNodes[0].id].effects as ShadowEffect[];
+      expect(effects).toHaveLength(2);
+      expect(effects[0].shadowType).toBe("outer");
+      expect(effects[1].shadowType).toBe("inner");
     });
   });
 

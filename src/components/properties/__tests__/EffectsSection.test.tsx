@@ -122,6 +122,19 @@ describe("<EffectsSection />", () => {
     expect(arg.effect).toBeUndefined();
   });
 
+  it("adds a new inner shadow effect via the add menu", () => {
+    const onUpdate = vi.fn();
+    render(<EffectsSection node={makeNode()} onUpdate={onUpdate} />);
+
+    fireEvent.click(screen.getByText("Inner shadow"));
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    const arg = onUpdate.mock.calls[0][0];
+    expect(arg.effects).toHaveLength(1);
+    expect(arg.effects[0]).toMatchObject({ type: "shadow", shadowType: "inner" });
+    expect(arg.effect).toBeUndefined();
+  });
+
   it("adds a layer blur via the add menu", () => {
     const onUpdate = vi.fn();
     render(<EffectsSection node={makeNode()} onUpdate={onUpdate} />);
