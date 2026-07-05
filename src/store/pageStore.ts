@@ -12,6 +12,7 @@ import { useHistoryStore } from "./historyStore";
 import { useLoadingStore } from "./loadingStore";
 import { useViewportStore } from "./viewportStore";
 import { useSelectionStore } from "./selectionStore";
+import { useGuidesStore, type Guide } from "./guidesStore";
 
 export interface PageData {
   id: string;
@@ -27,6 +28,8 @@ export interface PageData {
   viewport: { scale: number; x: number; y: number };
   // Per-page history stacks
   history: { past: HistorySnapshot[]; future: HistorySnapshot[] };
+  // Per-page ruler guides
+  guides: Guide[];
 }
 
 interface PageStoreState {
@@ -61,6 +64,7 @@ function createEmptyPage(name: string): PageData {
     expandedFrameIds: new Set<string>(),
     viewport: { scale: 1, x: 0, y: 0 },
     history: { past: [], future: [] },
+    guides: [],
   };
 }
 
@@ -158,6 +162,7 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
       expandedFrameIds: new Set(sourceAfterSave.expandedFrameIds),
       viewport: { ...sourceAfterSave.viewport },
       history: { past: [], future: [] },
+      guides: sourceAfterSave.guides.map((g) => ({ ...g })),
     };
 
     const sourceIndex = currentPages.findIndex((p) => p.id === pageId);
@@ -208,6 +213,7 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
       expandedFrameIds: new Set(scene.expandedFrameIds),
       viewport: { scale: viewport.scale, x: viewport.x, y: viewport.y },
       history: history.getStacks(),
+      guides: useGuidesStore.getState().guides,
     };
 
     // Sync componentArtifactsById from sceneStore
@@ -286,6 +292,9 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
 
     // Load history
     useHistoryStore.getState().setStacks(targetPage.history);
+
+    // Load ruler guides
+    useGuidesStore.getState().setGuides(targetPage.guides);
 
     // Clear selection
     useSelectionStore.setState({

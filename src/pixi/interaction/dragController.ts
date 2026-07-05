@@ -3,6 +3,7 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
 import { useSmartGuideStore } from "@/store/smartGuideStore";
+import { useGuidesStore } from "@/store/guidesStore";
 import { useHoverStore } from "@/store/hoverStore";
 import { useDragStore } from "@/store/dragStore";
 import { useLayoutStore } from "@/store/layoutStore";
@@ -13,6 +14,7 @@ import {
   collectSnapTargets,
   getSnapEdges,
   calculateSnap,
+  calculatePersistentGuideSnap,
 } from "@/utils/smartGuideUtils";
 import { getNodeAbsolutePositionWithLayout, getNodeEffectiveSize } from "@/utils/nodeUtils";
 import {
@@ -550,43 +552,59 @@ export function createDragController(context: InteractionContext): DragControlle
           }
         }
 
-        // Smart guide snapping
-        if (state.snapTargets.length > 0) {
-          if (state.dragItems.length > 0) {
-            const scale = useViewportStore.getState().scale;
-            const threshold = 2 / scale;
+        // Smart guide snapping (node-to-node) + persistent ruler guide snapping
+        const persistentGuides = useGuidesStore.getState().guides;
+        if (state.dragItems.length > 0 && (state.snapTargets.length > 0 || persistentGuides.length > 0)) {
+          const scale = useViewportStore.getState().scale;
+          const threshold = 2 / scale;
 
-            const draggedEdges = getSnapEdges(
-              state.startBoundsX + adjustedDeltaX,
-              state.startBoundsY + adjustedDeltaY,
-              state.startBoundsWidth,
-              state.startBoundsHeight,
-            );
-            const result = calculateSnap(draggedEdges, state.snapTargets, threshold);
+          const draggedEdges = getSnapEdges(
+            state.startBoundsX + adjustedDeltaX,
+            state.startBoundsY + adjustedDeltaY,
+            state.startBoundsWidth,
+            state.startBoundsHeight,
+          );
+          const result = calculateSnap(draggedEdges, state.snapTargets, threshold);
+          const guideResult =
+            persistentGuides.length > 0
+              ? calculatePersistentGuideSnap(draggedEdges, persistentGuides, threshold)
+              : { deltaX: 0, deltaY: 0 };
 
-            // Filter snap deltas based on axis lock
-            let snapDeltaX = result.deltaX;
-            let snapDeltaY = result.deltaY;
-            let filteredGuides = result.guides;
+          // Prefer whichever source snapped closer on each axis.
+          let snapDeltaX = result.deltaX;
+          if (
+            guideResult.deltaX !== 0 &&
+            (snapDeltaX === 0 || Math.abs(guideResult.deltaX) < Math.abs(snapDeltaX))
+          ) {
+            snapDeltaX = guideResult.deltaX;
+          }
+          let snapDeltaY = result.deltaY;
+          if (
+            guideResult.deltaY !== 0 &&
+            (snapDeltaY === 0 || Math.abs(guideResult.deltaY) < Math.abs(snapDeltaY))
+          ) {
+            snapDeltaY = guideResult.deltaY;
+          }
+          let filteredGuides = result.guides;
 
-            if (state.isShiftHeld && state.axisLock !== null) {
-              if (state.axisLock === "x") {
-                snapDeltaY = 0; // Don't snap locked Y axis
-                filteredGuides = result.guides.filter(g => g.orientation === "horizontal");
-              } else {
-                snapDeltaX = 0; // Don't snap locked X axis
-                filteredGuides = result.guides.filter(g => g.orientation === "vertical");
-              }
-            }
-
-            adjustedDeltaX += snapDeltaX;
-            adjustedDeltaY += snapDeltaY;
-
-            if (filteredGuides.length > 0) {
-              useSmartGuideStore.getState().setGuides(filteredGuides);
+          // Filter snap deltas based on axis lock
+          if (state.isShiftHeld && state.axisLock !== null) {
+            if (state.axisLock === "x") {
+              snapDeltaY = 0; // Don't snap locked Y axis
+              filteredGuides = result.guides.filter(g => g.orientation === "horizontal");
             } else {
-              useSmartGuideStore.getState().clearGuides();
+              snapDeltaX = 0; // Don't snap locked X axis
+              filteredGuides = result.guides.filter(g => g.orientation === "vertical");
             }
+          }
+
+          adjustedDeltaX += snapDeltaX;
+          adjustedDeltaY += snapDeltaY;
+
+          if (filteredGuides.length > 0) {
+            useSmartGuideStore.getState().setGuides(filteredGuides);
+          } else {
+            useSmartGuideStore.getState().clearGuides();
           }
         }
 

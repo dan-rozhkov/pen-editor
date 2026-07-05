@@ -9,6 +9,7 @@ import { PresentOverlay } from "./components/PresentOverlay";
 import { PresentController } from "./components/PresentController";
 import { ReadOnlyProvider } from "./components/ReadOnlyProvider";
 import { FpsDisplay } from "./components/canvas/CanvasOverlays";
+import { Rulers } from "./components/canvas/Rulers";
 import { useUIVisibilityStore } from "./store/uiVisibilityStore";
 import { useEditorModeStore } from "./store/editorModeStore";
 import { useIsMobile } from "./hooks/useIsMobile";
@@ -93,6 +94,7 @@ function App() {
                     <PrimitivesPanel />
                   </div>
                 )}
+                {!isView && <Rulers />}
                 <FpsDisplay />
               </div>
               {/* Right sidebar — read-only in view mode (inspect, no edits). */}

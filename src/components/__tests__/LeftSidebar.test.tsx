@@ -43,6 +43,7 @@ function setPages(count: number) {
     expandedFrameIds: new Set<string>(),
     viewport: { scale: 1, x: 0, y: 0 },
     history: { past: [], future: [] },
+    guides: [],
   }));
   usePageStore.setState({ pages, activePageId: pages[0]?.id ?? "" });
 }

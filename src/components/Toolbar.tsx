@@ -5,6 +5,7 @@ import { useVariableStore } from "../store/variableStore";
 import { useThemeStore } from "../store/themeStore";
 import { useUIThemeStore } from "../store/uiThemeStore";
 import { usePixelGridStore } from "../store/pixelGridStore";
+import { useGuidesStore } from "../store/guidesStore";
 import { useViewportStore } from "../store/viewportStore";
 import { usePageStore } from "../store/pageStore";
 import { buildTree } from "../types/scene";
@@ -40,6 +41,8 @@ export function Toolbar() {
   const uiTheme = useUIThemeStore((s) => s.uiTheme);
   const showPixelGrid = usePixelGridStore((s) => s.showPixelGrid);
   const togglePixelGrid = usePixelGridStore((s) => s.togglePixelGrid);
+  const showRulers = useGuidesStore((s) => s.showRulers);
+  const toggleShowRulers = useGuidesStore((s) => s.toggleShowRulers);
 
   const [importOpen, setImportOpen] = useState(false);
   const [jsonText, setJsonText] = useState("");
@@ -55,6 +58,7 @@ export function Toolbar() {
       name: page.name,
       nodes: buildTree(page.rootIds, page.nodesById, page.childrenById),
       pageBackground: page.pageBackground,
+      guides: page.guides,
     }));
 
     const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
@@ -184,6 +188,9 @@ export function Toolbar() {
               <DropdownMenuSeparator />
               <DropdownMenuCheckboxItem checked={showPixelGrid} onCheckedChange={togglePixelGrid}>
                 Pixel grid
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={showRulers} onCheckedChange={toggleShowRulers}>
+                Rulers (Shift+R)
               </DropdownMenuCheckboxItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>

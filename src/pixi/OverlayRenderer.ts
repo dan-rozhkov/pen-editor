@@ -1,5 +1,6 @@
 import { Container, Graphics, Text } from "pixi.js";
 import { useSmartGuideStore } from "@/store/smartGuideStore";
+import { useGuidesStore } from "@/store/guidesStore";
 import { useDragStore } from "@/store/dragStore";
 import { useMeasureStore } from "@/store/measureStore";
 import { useViewportStore } from "@/store/viewportStore";
@@ -21,6 +22,7 @@ import {
 } from "./selectionOverlay/constants";
 
 const GUIDE_COLOR = 0xff3366;
+const PERSISTENT_GUIDE_COLOR = 0x0d99ff;
 const DROP_INDICATOR_COLOR = 0x0d99ff;
 const MEASURE_COLOR = 0xf24822;
 const MARQUEE_FILL = 0x0d99ff;
@@ -58,6 +60,10 @@ export function createOverlayRenderer(
   const guidesGfx = new Graphics();
   guidesGfx.label = "smart-guides";
   overlayContainer.addChild(guidesGfx);
+
+  const persistentGuidesGfx = new Graphics();
+  persistentGuidesGfx.label = "persistent-guides";
+  overlayContainer.addChild(persistentGuidesGfx);
 
   const dropGfx = new Graphics();
   dropGfx.label = "drop-indicator";
@@ -171,6 +177,36 @@ export function createOverlayRenderer(
         guidesGfx.lineTo(guide.end, guide.position);
       }
       guidesGfx.stroke({ color: GUIDE_COLOR, width: strokeWidth });
+    }
+  }
+
+  function redrawPersistentGuides(): void {
+    persistentGuidesGfx.clear();
+    // Guides stay visible/functional even if the ruler strips are hidden —
+    // only guide *creation* requires the rulers to be shown.
+    const { guides } = useGuidesStore.getState();
+    if (guides.length === 0) return;
+
+    const { scale, x, y } = useViewportStore.getState();
+    const { width: viewportWidth, height: viewportHeight } = getViewportSize();
+    if (viewportWidth <= 0 || viewportHeight <= 0) return;
+
+    const worldMinX = -x / scale;
+    const worldMaxX = (-x + viewportWidth) / scale;
+    const worldMinY = -y / scale;
+    const worldMaxY = (-y + viewportHeight) / scale;
+
+    const strokeWidth = 1 / scale;
+
+    for (const guide of guides) {
+      if (guide.orientation === "vertical") {
+        persistentGuidesGfx.moveTo(guide.position, worldMinY);
+        persistentGuidesGfx.lineTo(guide.position, worldMaxY);
+      } else {
+        persistentGuidesGfx.moveTo(worldMinX, guide.position);
+        persistentGuidesGfx.lineTo(worldMaxX, guide.position);
+      }
+      persistentGuidesGfx.stroke({ color: PERSISTENT_GUIDE_COLOR, width: strokeWidth });
     }
   }
 
@@ -384,7 +420,8 @@ export function createOverlayRenderer(
   const DIRTY_DRAW = 16;
   const DIRTY_MARQUEE = 32;
   const DIRTY_CONNECTOR = 64;
-  const DIRTY_ALL_SCALE = DIRTY_GUIDES | DIRTY_DROP | DIRTY_MEASURE | DIRTY_DRAW | DIRTY_MARQUEE | DIRTY_CONNECTOR;
+  const DIRTY_PERSISTENT_GUIDES = 128;
+  const DIRTY_ALL_SCALE = DIRTY_GUIDES | DIRTY_DROP | DIRTY_MEASURE | DIRTY_DRAW | DIRTY_MARQUEE | DIRTY_CONNECTOR | DIRTY_PERSISTENT_GUIDES;
   let dirtyFlags = 0;
   let overlayRafId: number | null = null;
 
@@ -399,6 +436,7 @@ export function createOverlayRenderer(
     if (flags & DIRTY_DRAW) redrawDrawPreview();
     if (flags & DIRTY_MARQUEE) redrawMarquee();
     if (flags & DIRTY_CONNECTOR) redrawConnectorPreview();
+    if (flags & DIRTY_PERSISTENT_GUIDES) redrawPersistentGuides();
   }
 
   function scheduleOverlayRedraw(flags: number): void {
@@ -414,6 +452,9 @@ export function createOverlayRenderer(
   const unsubMarquee = subscribeOverlayState(redrawMarquee);
   const unsubMeasure = useMeasureStore.subscribe(redrawMeasureLines);
   const unsubConnector = useConnectorStore.subscribe(redrawConnectorPreview);
+  // Persistent guides are interactively dragged (like smart guides) — redraw
+  // synchronously so the line tracks the pointer with zero added latency.
+  const unsubPersistentGuides = useGuidesStore.subscribe(redrawPersistentGuides);
   // Non-interactive — batched via RAF
   const unsubPixelGrid = usePixelGridStore.subscribe(() => scheduleOverlayRedraw(DIRTY_GRID));
   const unsubUITheme = useUIThemeStore.subscribe(() => scheduleOverlayRedraw(DIRTY_GRID));
@@ -423,7 +464,7 @@ export function createOverlayRenderer(
     const panChanged = state.x !== lastViewport.x || state.y !== lastViewport.y;
     lastViewport = state;
     if (panChanged || scaleChanged) {
-      scheduleOverlayRedraw(DIRTY_GRID);
+      scheduleOverlayRedraw(DIRTY_GRID | DIRTY_PERSISTENT_GUIDES);
     }
     if (scaleChanged) {
       scheduleOverlayRedraw(DIRTY_ALL_SCALE);
@@ -433,6 +474,7 @@ export function createOverlayRenderer(
   // Initial draw
   redrawPixelGrid();
   redrawGuides();
+  redrawPersistentGuides();
   redrawDropIndicator();
   redrawMeasureLines();
   redrawDrawPreview();
@@ -446,6 +488,7 @@ export function createOverlayRenderer(
     }
     unsubPixelGrid();
     unsubUITheme();
+    unsubPersistentGuides();
     unsubGuides();
     unsubDrop();
     unsubMeasure();
@@ -455,6 +498,7 @@ export function createOverlayRenderer(
     unsubViewport();
     pixelGridGfx.destroy();
     guidesGfx.destroy();
+    persistentGuidesGfx.destroy();
     dropGfx.destroy();
     measureGfx.destroy();
     recycleMeasureLabels();

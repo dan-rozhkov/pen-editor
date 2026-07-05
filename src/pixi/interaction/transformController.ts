@@ -1,5 +1,7 @@
 import { useSceneStore } from "@/store/sceneStore";
 import { useLayoutStore } from "@/store/layoutStore";
+import { useViewportStore } from "@/store/viewportStore";
+import { useGuidesStore } from "@/store/guidesStore";
 import type { InteractionContext, TransformState } from "./types";
 import { hitTestTransformHandle, getResizeCursor } from "./hitTesting";
 import { generatePolygonPoints } from "@/utils/polygonUtils";
@@ -8,6 +10,7 @@ import { findResolvedDescendantByPath } from "@/utils/instanceRuntime";
 import { getNodeEffectiveSize } from "@/utils/nodeUtils";
 import { resolveTextResize, minTextWidth } from "./textResize";
 import { computeConstrainedRect } from "@/utils/constraintsLayout";
+import { snapValueToGuides } from "@/utils/smartGuideUtils";
 
 export interface TransformController {
   handlePointerDown(e: PointerEvent, world: { x: number; y: number }): boolean;
@@ -171,6 +174,45 @@ export function createTransformController(context: InteractionContext): Transfor
           const newTop = Math.min(absWorldY, newBottom - MIN_SIZE);
           newH = newBottom - newTop;
           newY = state.startNodeY + (newTop - origTop);
+        }
+
+        // Snap the moving edge(s) to nearby persistent ruler guides.
+        const persistentGuides = useGuidesStore.getState().guides;
+        if (persistentGuides.length > 0) {
+          const scale = useViewportStore.getState().scale;
+          const threshold = 4 / scale;
+          const movesRight = corner === "br" || corner === "tr" || corner === "r";
+          const movesLeft = corner === "bl" || corner === "tl" || corner === "l";
+          const movesBottom = corner === "br" || corner === "bl" || corner === "b";
+          const movesTop = corner === "tr" || corner === "tl" || corner === "t";
+
+          if (movesRight) {
+            const absRight = state.parentOffsetX + newX + newW;
+            const snapped = snapValueToGuides(absRight, "vertical", persistentGuides, threshold);
+            newW = Math.max(MIN_SIZE, newW + (snapped - absRight));
+          } else if (movesLeft) {
+            const absLeft = state.parentOffsetX + newX;
+            const snapped = snapValueToGuides(absLeft, "vertical", persistentGuides, threshold);
+            const delta = snapped - absLeft;
+            if (newW - delta >= MIN_SIZE) {
+              newX += delta;
+              newW -= delta;
+            }
+          }
+
+          if (movesBottom) {
+            const absBottom = state.parentOffsetY + newY + newH;
+            const snapped = snapValueToGuides(absBottom, "horizontal", persistentGuides, threshold);
+            newH = Math.max(MIN_SIZE, newH + (snapped - absBottom));
+          } else if (movesTop) {
+            const absTop = state.parentOffsetY + newY;
+            const snapped = snapValueToGuides(absTop, "horizontal", persistentGuides, threshold);
+            const delta = snapped - absTop;
+            if (newH - delta >= MIN_SIZE) {
+              newY += delta;
+              newH -= delta;
+            }
+          }
         }
 
         const roundedW = Math.round(newW);

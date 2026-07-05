@@ -9,6 +9,7 @@ import { useUIVisibilityStore } from "@/store/uiVisibilityStore";
 import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
 import { useConnectorStore } from "@/store/connectorStore";
 import { useDragStore } from "@/store/dragStore";
+import { useGuidesStore } from "@/store/guidesStore";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { findNodeById, findParentFrame } from "@/utils/nodeUtils";
@@ -337,6 +338,14 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
           } as Partial<SceneNode>);
         }
       }
+      return;
+    }
+
+    // Shift+R: Toggle rulers
+    if (e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && e.code === "KeyR") {
+      if (isTyping) return;
+      e.preventDefault();
+      useGuidesStore.getState().toggleShowRulers();
       return;
     }
 

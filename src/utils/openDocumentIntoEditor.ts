@@ -41,6 +41,7 @@ export function applyOpenedDocument(
       expandedFrameIds: new Set<string>(),
       viewport: { scale: 1, x: 0, y: 0 },
       history: { past: [], future: [] },
+      guides: page.guides ?? [],
     };
   });
 

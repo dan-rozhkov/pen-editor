@@ -3,12 +3,14 @@ import type { Variable, ThemeName } from '../types/variable'
 import { ensureThemeValues } from '../types/variable'
 import { generateId } from '../types/scene'
 import { serializePublicPenDocument } from "@/utils/publicPenExport";
+import type { Guide } from "@/store/guidesStore";
 
 export interface PenPage {
   id: string
   name: string
   nodes: SceneNode[]
   pageBackground?: string
+  guides?: Guide[]
 }
 
 export interface PenDocument {
@@ -27,6 +29,7 @@ export interface DocumentPageData {
   name: string
   nodes: SceneNode[]
   pageBackground: string
+  guides: Guide[]
 }
 
 export interface DocumentData {
@@ -39,7 +42,7 @@ export interface DocumentData {
 const CURRENT_VERSION = '1.1'
 
 export function serializeDocument(
-  pages: { id: string; name: string; nodes: SceneNode[]; pageBackground: string }[],
+  pages: { id: string; name: string; nodes: SceneNode[]; pageBackground: string; guides?: Guide[] }[],
   variables: Variable[],
   activeTheme: ThemeName,
   componentArtifacts: Record<string, ComponentArtifact> = {},
@@ -51,6 +54,7 @@ export function serializeDocument(
       name: p.name,
       nodes: p.nodes,
       ...(p.pageBackground !== '#f5f5f5' ? { pageBackground: p.pageBackground } : {}),
+      ...(p.guides && p.guides.length > 0 ? { guides: p.guides } : {}),
     })),
     variables,
     activeTheme,
@@ -71,6 +75,7 @@ export function deserializeDocument(json: string): DocumentData {
       name: p.name,
       nodes: p.nodes,
       pageBackground: p.pageBackground ?? '#f5f5f5',
+      guides: p.guides ?? [],
     }))
   } else {
     // Legacy single-page: wrap in a single page
@@ -79,6 +84,7 @@ export function deserializeDocument(json: string): DocumentData {
       name: 'Page 1',
       nodes: doc.nodes ?? [],
       pageBackground: '#f5f5f5',
+      guides: [],
     }]
   }
 

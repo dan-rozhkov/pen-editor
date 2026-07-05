@@ -1,6 +1,7 @@
 import type { SceneNode } from "@/types/scene";
 import { isContainerNode } from "@/types/scene";
 import type { GuideLine } from "@/store/smartGuideStore";
+import type { Guide } from "@/store/guidesStore";
 
 export interface SnapEdges {
   left: number;
@@ -195,4 +196,86 @@ export function calculateSnap(
   }
 
   return { deltaX, deltaY, guides };
+}
+
+interface PersistentGuideSnapResult {
+  deltaX: number;
+  deltaY: number;
+}
+
+/**
+ * Calculate the snap delta for a dragged element against persistent ruler
+ * guides. Unlike `calculateSnap` (node-to-node smart guides), a persistent
+ * guide is a single axis + position and has no bounding box, so it only
+ * contributes a delta — the guide line itself is already rendered
+ * persistently regardless of whether anything is currently snapped to it.
+ */
+export function calculatePersistentGuideSnap(
+  draggedEdges: SnapEdges,
+  guides: Guide[],
+  threshold: number,
+): PersistentGuideSnapResult {
+  let bestDx = 0;
+  let bestDiffX = threshold;
+  let bestDy = 0;
+  let bestDiffY = threshold;
+
+  const draggedXValues = [
+    draggedEdges.left,
+    draggedEdges.centerX,
+    draggedEdges.right,
+  ];
+  const draggedYValues = [
+    draggedEdges.top,
+    draggedEdges.centerY,
+    draggedEdges.bottom,
+  ];
+
+  for (const guide of guides) {
+    if (guide.orientation === "vertical") {
+      for (const dx of draggedXValues) {
+        const diff = guide.position - dx;
+        const absDiff = Math.abs(diff);
+        if (absDiff < bestDiffX) {
+          bestDiffX = absDiff;
+          bestDx = diff;
+        }
+      }
+    } else {
+      for (const dy of draggedYValues) {
+        const diff = guide.position - dy;
+        const absDiff = Math.abs(diff);
+        if (absDiff < bestDiffY) {
+          bestDiffY = absDiff;
+          bestDy = diff;
+        }
+      }
+    }
+  }
+
+  return { deltaX: bestDx, deltaY: bestDy };
+}
+
+/**
+ * Snap a single absolute coordinate (e.g. a resize handle's moving edge) to
+ * the nearest persistent guide on the given axis, within `threshold`.
+ * Returns the original value unchanged if no guide is close enough.
+ */
+export function snapValueToGuides(
+  value: number,
+  orientation: "vertical" | "horizontal",
+  guides: Guide[],
+  threshold: number,
+): number {
+  let best = value;
+  let bestDiff = threshold;
+  for (const guide of guides) {
+    if (guide.orientation !== orientation) continue;
+    const diff = Math.abs(guide.position - value);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = guide.position;
+    }
+  }
+  return best;
 }

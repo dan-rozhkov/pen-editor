@@ -26,6 +26,7 @@ import { useHoverStore } from "@/store/hoverStore";
 import { useDragStore } from "@/store/dragStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useSmartGuideStore } from "@/store/smartGuideStore";
+import { useGuidesStore } from "@/store/guidesStore";
 import { useMeasureStore } from "@/store/measureStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useConnectorStore } from "@/store/connectorStore";
@@ -85,6 +86,7 @@ export function setupRenderScheduler(app: Application): () => void {
     useDragStore.subscribe(markActivity),
     useVariableStore.subscribe(markActivity),
     useSmartGuideStore.subscribe(markActivity),
+    useGuidesStore.subscribe(markActivity),
     useMeasureStore.subscribe(markActivity),
     useDrawModeStore.subscribe(markActivity),
     useConnectorStore.subscribe(markActivity),
