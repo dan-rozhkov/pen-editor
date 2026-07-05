@@ -25,12 +25,21 @@ function RailButton({ testid, title, active, onClick, children }: RailButtonProp
       title={title}
       onClick={onClick}
       className={
-        active
-          ? "p-2 rounded-lg bg-accent-primary/10 text-accent-primary transition-colors"
-          : "p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-secondary transition-colors"
+        "group flex w-full flex-col items-center gap-0.5 text-text-primary transition-colors"
       }
     >
-      {children}
+      <span
+        className={
+          active
+            ? "flex size-9 items-center justify-center rounded-lg bg-accent-primary/10 text-accent-primary"
+            : "flex size-9 items-center justify-center rounded-lg group-hover:bg-secondary"
+        }
+      >
+        {children}
+      </span>
+      <span className="max-w-full px-0.5 text-center text-[9px] leading-3">
+        {title}
+      </span>
     </button>
   );
 }
@@ -43,7 +52,7 @@ const SECTIONS: {
 }[] = [
   { section: "pages", testid: "rail-pages", title: "Pages", icon: <FileIcon size={20} weight="light" /> },
   { section: "agents", testid: "rail-agents", title: "Agents", icon: <SparkleIcon size={20} weight="light" /> },
-  { section: "components", testid: "rail-components", title: "Components", icon: <DiamondsFourIcon size={20} weight="light" /> },
+  { section: "components", testid: "rail-components", title: "Assets", icon: <DiamondsFourIcon size={20} weight="light" /> },
 ];
 
 export function LeftRail() {
@@ -70,7 +79,7 @@ export function LeftRail() {
   };
 
   return (
-    <div className="w-14 h-full flex flex-col items-center gap-2 pt-2 pb-4 bg-surface-panel border-r border-border-default">
+    <div className="w-14 h-full flex flex-col items-center gap-3 pt-2 pb-4 bg-surface-panel border-r border-border-default">
       {SECTIONS.map((item) => (
         <RailButton
           key={item.section}
@@ -86,6 +95,7 @@ export function LeftRail() {
           {item.icon}
         </RailButton>
       ))}
+      <div className="h-px w-5 bg-border-default" />
       <RailButton
         testid="rail-variables"
         title="Variables"

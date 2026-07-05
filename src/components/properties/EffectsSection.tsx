@@ -15,7 +15,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ArrowDown, ArrowUp, Eye, EyeSlash, PlusIcon, TrashIcon } from "@phosphor-icons/react";
+import { ArrowDown, ArrowUp, Eye, EyeSlash, MinusIcon, PlusIcon } from "@phosphor-icons/react";
 import { parseHexAlpha } from "@/utils/shadowUtils";
 import {
   createBlurEffect,
@@ -105,7 +105,7 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
                   {/* Compact trigger: swatch + label opens the detail popover */}
                   <Popover>
                     <PopoverTrigger
-                      className="flex min-w-0 flex-1 items-center gap-2 rounded px-1.5 py-1 text-left hover:bg-secondary"
+                      className="flex min-w-0 flex-1 items-center gap-2 rounded bg-secondary px-1.5 py-1 text-left"
                       title="Edit effect"
                     >
                       <div
@@ -257,7 +257,7 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
                     onClick={() => commit(removeEffectAt(effects, arrayIndex))}
                     title="Remove effect"
                   >
-                    <TrashIcon />
+                    <MinusIcon />
                   </Button>
                 </div>
               );
