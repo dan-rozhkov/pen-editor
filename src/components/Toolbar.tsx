@@ -95,6 +95,14 @@ export function Toolbar() {
     window.dispatchEvent(new Event("pen-editor:paste"));
   };
 
+  const handleCopyStyle = () => {
+    window.dispatchEvent(new Event("pen-editor:copy-style"));
+  };
+
+  const handlePasteStyle = () => {
+    window.dispatchEvent(new Event("pen-editor:paste-style"));
+  };
+
   const handleImport = () => {
     setError(null);
     if (!jsonText.trim()) {
@@ -142,6 +150,13 @@ export function Toolbar() {
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handlePaste}>
                 Paste
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleCopyStyle}>
+                Copy properties
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handlePasteStyle}>
+                Paste properties
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>

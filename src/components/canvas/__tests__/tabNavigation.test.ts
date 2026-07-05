@@ -28,6 +28,8 @@ function makeDeps(): KeyDownHandlerDeps {
     clearSelection: vi.fn(),
     copySelection: vi.fn(),
     cutSelection: vi.fn(),
+    copyStyleSelection: vi.fn(),
+    pasteStyleSelection: vi.fn(),
   };
 }
 

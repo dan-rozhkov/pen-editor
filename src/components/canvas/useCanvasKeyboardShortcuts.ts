@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import type { SceneNode, HistorySnapshot } from "@/types/scene";
 import type { BooleanOpKind } from "@/lib/booleanOps";
 import { createClipboardActions } from "./clipboardActions";
+import { createStyleClipboardActions } from "./styleClipboardActions";
 import { createKeyDownHandler } from "./keyboardCommands";
 
 interface CanvasKeyboardShortcutsParams {
@@ -77,6 +78,13 @@ export function useCanvasKeyboardShortcuts({
       copyNodes,
     });
 
+    const { copyStyleSelection, pasteStyleSelection } = createStyleClipboardActions({
+      updateNode,
+      saveHistory,
+      startBatch,
+      endBatch,
+    });
+
     const handleKeyDown = createKeyDownHandler({
       dimensions,
       setIsSpacePressed,
@@ -100,6 +108,8 @@ export function useCanvasKeyboardShortcuts({
       clearSelection,
       copySelection,
       cutSelection,
+      copyStyleSelection,
+      pasteStyleSelection,
     });
 
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -119,17 +129,29 @@ export function useCanvasKeyboardShortcuts({
       pasteFromInternalClipboard();
     };
 
+    const handleMenuCopyStyle = () => {
+      copyStyleSelection();
+    };
+
+    const handleMenuPasteStyle = () => {
+      pasteStyleSelection();
+    };
+
     window.addEventListener("keydown", handleKeyDown, { capture: true });
     window.addEventListener("keyup", handleKeyUp);
     window.addEventListener("paste", handlePaste);
     window.addEventListener("pen-editor:copy", handleMenuCopy);
     window.addEventListener("pen-editor:paste", handleMenuPaste);
+    window.addEventListener("pen-editor:copy-style", handleMenuCopyStyle);
+    window.addEventListener("pen-editor:paste-style", handleMenuPasteStyle);
     return () => {
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("paste", handlePaste);
       window.removeEventListener("pen-editor:copy", handleMenuCopy);
       window.removeEventListener("pen-editor:paste", handleMenuPaste);
+      window.removeEventListener("pen-editor:copy-style", handleMenuCopyStyle);
+      window.removeEventListener("pen-editor:paste-style", handleMenuPasteStyle);
     };
   }, [
     addChildToFrame,

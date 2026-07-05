@@ -48,6 +48,8 @@ export interface KeyDownHandlerDeps {
   clearSelection: () => void;
   copySelection: () => void;
   cutSelection: () => void;
+  copyStyleSelection: () => void;
+  pasteStyleSelection: () => void;
 }
 
 /**
@@ -78,6 +80,8 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
     clearSelection,
     copySelection,
     cutSelection,
+    copyStyleSelection,
+    pasteStyleSelection,
   } = deps;
 
   return (e: KeyboardEvent) => {
@@ -188,6 +192,23 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
         }
         return;
       }
+    }
+
+    // Cmd/Ctrl+Opt+C / Cmd/Ctrl+Opt+V: "Copy/paste properties" (Figma-style
+    // style clipboard) — checked before the plain Copy/Paste below so Opt
+    // doesn't fall through to node copy/paste.
+    if ((e.metaKey || e.ctrlKey) && e.altKey && !e.shiftKey && e.code === "KeyC") {
+      if (isTyping) return;
+      e.preventDefault();
+      copyStyleSelection();
+      return;
+    }
+
+    if ((e.metaKey || e.ctrlKey) && e.altKey && !e.shiftKey && e.code === "KeyV") {
+      if (isTyping) return;
+      e.preventDefault();
+      pasteStyleSelection();
+      return;
     }
 
     if ((e.metaKey || e.ctrlKey) && e.code === "KeyC") {

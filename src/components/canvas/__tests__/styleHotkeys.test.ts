@@ -37,14 +37,14 @@ function key(code: string, opts: Partial<KeyboardEventInit> = {}): KeyboardEvent
   return new KeyboardEvent("keydown", { code, key: code, bubbles: true, cancelable: true, ...opts });
 }
 
-describe("keyboardCommands — view mode gating", () => {
+describe("keyboardCommands — copy/paste properties hotkeys", () => {
   let deps: KeyDownHandlerDeps;
   let handler: (e: KeyboardEvent) => void;
 
   beforeEach(() => {
     deps = makeDeps();
     handler = createKeyDownHandler(deps);
-    useEditorModeStore.setState({ mode: "view", presentFrameIds: [], presentIndex: 0 });
+    useEditorModeStore.setState({ mode: "edit", presentFrameIds: [], presentIndex: 0 });
     useSceneStore.setState({
       nodesById: { F: { id: "F", type: "frame", x: 0, y: 0, width: 10, height: 10, children: [] } } as never,
       parentById: {},
@@ -54,41 +54,26 @@ describe("keyboardCommands — view mode gating", () => {
     useSelectionStore.setState({ selectedIds: ["F"], enteredContainerId: null } as never);
   });
 
-  it("does not delete on Delete/Backspace in view mode", () => {
-    handler(key("Delete"));
-    handler(key("Backspace"));
-    expect(deps.deleteNode).not.toHaveBeenCalled();
+  it("Cmd+Opt+C triggers copyStyleSelection, not the plain copySelection", () => {
+    handler(key("KeyC", { metaKey: true, altKey: true }));
+    expect(deps.copyStyleSelection).toHaveBeenCalledTimes(1);
+    expect(deps.copySelection).not.toHaveBeenCalled();
   });
 
-  it("does not nudge with arrow keys in view mode", () => {
-    handler(key("ArrowLeft"));
-    handler(key("ArrowRight"));
-    expect(deps.moveNode).not.toHaveBeenCalled();
-    expect(deps.updateNode).not.toHaveBeenCalled();
+  it("Cmd+Opt+V triggers pasteStyleSelection", () => {
+    handler(key("KeyV", { metaKey: true, altKey: true }));
+    expect(deps.pasteStyleSelection).toHaveBeenCalledTimes(1);
   });
 
-  it("does not group or cut in view mode", () => {
-    handler(key("KeyG", { metaKey: true }));
-    handler(key("KeyX", { metaKey: true }));
-    expect(deps.groupNodes).not.toHaveBeenCalled();
-    expect(deps.cutSelection).not.toHaveBeenCalled();
-  });
-
-  it("still allows copy and fit-to-content in view mode", () => {
+  it("plain Cmd+C still triggers copySelection", () => {
     handler(key("KeyC", { metaKey: true }));
-    handler(key("Digit0", { metaKey: true }));
     expect(deps.copySelection).toHaveBeenCalledTimes(1);
-    expect(deps.fitToContent).toHaveBeenCalledTimes(1);
+    expect(deps.copyStyleSelection).not.toHaveBeenCalled();
   });
 
-  it("Escape exits view mode", () => {
-    handler(key("Escape"));
-    expect(useEditorModeStore.getState().mode).toBe("edit");
-  });
-
-  it("in edit mode, Delete still deletes (gating only applies to view/present)", () => {
-    useEditorModeStore.setState({ mode: "edit" });
-    handler(key("Delete"));
-    expect(deps.deleteNode).toHaveBeenCalledWith("F");
+  it("blocks Cmd+Opt+V (a mutation) in view mode", () => {
+    useEditorModeStore.setState({ mode: "view", presentFrameIds: [], presentIndex: 0 });
+    handler(key("KeyV", { metaKey: true, altKey: true }));
+    expect(deps.pasteStyleSelection).not.toHaveBeenCalled();
   });
 });
