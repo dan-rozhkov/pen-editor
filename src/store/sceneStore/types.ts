@@ -4,6 +4,7 @@ import type {
   FlatSnapshot,
   HistorySnapshot,
   ComponentArtifact,
+  ComponentPropertyDef,
   InstanceOverrideUpdateProps,
 } from "../../types/scene";
 import type { BooleanOpKind } from "../../lib/booleanOps";
@@ -70,6 +71,8 @@ export interface SceneState {
   resetInstanceOverride: (instanceId: string, path: string, property?: keyof InstanceOverrideUpdateProps) => void;
   toggleSlot: (frameId: string) => void;
   detachInstance: (instanceId: string) => string | null;
+  setComponentProperties: (componentId: string, properties: ComponentPropertyDef[]) => void;
+  setInstancePropertyValue: (instanceId: string, propertyId: string, value: string | boolean) => void;
   syncComponentToHtml: (componentId: string) => void;
   setPageBackground: (color: string) => void;
 }

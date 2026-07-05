@@ -4,6 +4,7 @@ import type {
   FlatFrameNode,
   FrameNode,
   InstanceOverrideUpdateProps,
+  ComponentPropertyDef,
   RefNode,
 } from "../../types/scene";
 import { saveHistory } from "./helpers/history";
@@ -16,6 +17,7 @@ import type { SceneState } from "./types";
 import { deepCloneNode } from "@/utils/cloneNode";
 import { resolveRefToFrame } from "@/utils/instanceRuntime";
 import { isInsideReusableComponent } from "@/utils/componentUtils";
+import { validatePropertyValue } from "@/utils/componentProperties";
 import type { StoreApi } from "zustand";
 
 type SetState = StoreApi<SceneState>["setState"];
@@ -328,5 +330,47 @@ export function createInstanceOperations(set: SetState, get: GetState) {
       });
       return resolved.id;
     },
+
+    setComponentProperties: (componentId: string, properties: ComponentPropertyDef[]) =>
+      set((state) => {
+        const existing = state.nodesById[componentId];
+        if (!existing || existing.type !== "frame" || !(existing as FlatFrameNode).reusable) return state;
+        saveHistory(state);
+
+        return {
+          nodesById: {
+            ...state.nodesById,
+            [componentId]: { ...existing, properties } as FlatSceneNode,
+          },
+          _cachedTree: null,
+        };
+      }),
+
+    setInstancePropertyValue: (instanceId: string, propertyId: string, value: string | boolean) =>
+      set((state) => {
+        const existing = state.nodesById[instanceId];
+        if (!existing || existing.type !== "ref") return state;
+        const refNode = existing as RefNode;
+
+        const component = state.nodesById[refNode.componentId];
+        if (!component || component.type !== "frame" || !(component as FlatFrameNode).reusable) return state;
+
+        const property = (component as FlatFrameNode).properties?.find((p) => p.id === propertyId);
+        if (!property) return state;
+        if (!validatePropertyValue(property, value)) return state;
+
+        saveHistory(state);
+
+        return {
+          nodesById: {
+            ...state.nodesById,
+            [instanceId]: {
+              ...refNode,
+              propertyValues: { ...refNode.propertyValues, [propertyId]: value },
+            } as FlatSceneNode,
+          },
+          _cachedTree: null,
+        };
+      }),
   };
 }

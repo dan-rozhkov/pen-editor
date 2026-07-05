@@ -18,6 +18,8 @@ import { ThemeSection } from "@/components/properties/ThemeSection";
 import { TypographySection } from "@/components/properties/TypographySection";
 import { EmbedContentSection } from "@/components/properties/EmbedContentSection";
 import { FrameActionsSection } from "@/components/properties/FrameActionsSection";
+import { ComponentPropertiesSection } from "@/components/properties/ComponentPropertiesSection";
+import { InstancePropertiesSection } from "@/components/properties/InstancePropertiesSection";
 
 interface PropertyEditorProps {
   node: SceneNode;
@@ -110,6 +112,12 @@ export function PropertyEditor({
       )}
       {node.type === "text" && (
         <TypographySection node={node} onUpdate={onUpdate} />
+      )}
+      {node.type === "ref" && (
+        <InstancePropertiesSection node={node} component={component} />
+      )}
+      {frameNode?.reusable && (
+        <ComponentPropertiesSection node={frameNode} />
       )}
       {(node.type === "frame" || node.type === "group") && (
         <FrameActionsSection node={node} />

@@ -299,6 +299,42 @@ export interface FrameNode extends BaseNode {
   isSlot?: boolean
   // Layout grid overlays (visual design aid, not part of exported design)
   layoutGrids?: LayoutGridConfig[]
+  /**
+   * Component properties declaration (only meaningful when `reusable` is true).
+   * Each property is a typed axis (Figma-style component-set variant) that a
+   * RefNode instance can select a value for via `RefNode.propertyValues`.
+   */
+  properties?: ComponentPropertyDef[]
+}
+
+/** Property types a reusable component can declare (variant enum, boolean, text). */
+export type ComponentPropertyType = 'variant' | 'boolean' | 'text'
+
+/**
+ * Declares one switchable property on a reusable component. `bindingPath` is
+ * the path of a descendant node (same addressing scheme as
+ * `InstanceOverrides` keys — the child's id, or `parentId/childId` for nested
+ * descendants) whose `bindingProp` the property controls. Resolving a
+ * property's current value produces an "update" override at that path, so
+ * property switching reuses the exact override-application machinery
+ * instances already use (see `resolveRefToTree` / `@/utils/componentProperties`).
+ */
+export interface ComponentPropertyDef {
+  id: string
+  name: string
+  type: ComponentPropertyType
+  /** Allowed values for a `variant` property (required when type === 'variant'). */
+  variantOptions?: string[]
+  defaultValue: string | boolean
+  bindingPath: string
+  /**
+   * Name of the node property at `bindingPath` this property controls (e.g.
+   * `"text"`, `"visible"`, `"fill"`). Loosely typed (not `keyof
+   * InstanceOverrideUpdateProps`) because that alias only exposes fields
+   * common to every node type (an artifact of `keyof` over a union) — this
+   * needs to reach type-specific fields like `TextNode.text` too.
+   */
+  bindingProp: string
 }
 
 export interface RectNode extends BaseNode {
@@ -432,6 +468,8 @@ export interface RefNode extends BaseNode {
   type: 'ref'
   componentId: string
   overrides?: InstanceOverrides
+  /** Selected values for the component's declared `properties`, keyed by property id. */
+  propertyValues?: Record<string, string | boolean>
 }
 
 export type SceneNode = FrameNode | GroupNode | RectNode | EllipseNode | TextNode | PathNode | LineNode | PolygonNode | EmbedNode | RefNode | ConnectorNode

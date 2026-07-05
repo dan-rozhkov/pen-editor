@@ -568,6 +568,131 @@ describe("batch_design", () => {
     });
   });
 
+  describe("component properties (variants)", () => {
+    // Bindings created within one batch_design call only resolve as top-level
+    // I()/C()/U() arguments (parent/sourceId/path) — not inside nested JSON
+    // object literals (see parser.ts classifyToken). So declaring properties
+    // whose bindingPath points at a just-created descendant, or creating a ref
+    // whose componentId points at a just-created component, needs the real ids
+    // back from a first call before referencing them (quoted) in a follow-up
+    // call — exactly the flow the tool description tells the AI to use for
+    // "existing node IDs from previous tool results".
+
+    it("creates a reusable component with a descendant, then declares a variant property targeting it by its real id", async () => {
+      const setup = JSON.parse(
+        await batchDesign({
+          operations: [
+            'comp=I(document, {type: "frame", name: "Button", reusable: true, width: 120, height: 40})',
+            'label=I(comp, {type: "text", name: "Label", content: "Click me", width: 80, height: 20})',
+          ].join("\n"),
+        })
+      );
+      expect(setup.success).toBe(true);
+      const [compId, labelId] = setup.createdNodes.map((n: { id: string }) => n.id);
+
+      const result = JSON.parse(
+        await batchDesign({
+          operations: `U("${compId}", {properties: [{id: "state", name: "State", type: "variant", variantOptions: ["default", "hover"], defaultValue: "default", bindingPath: "${labelId}", bindingProp: "fill"}]})`,
+        })
+      );
+      expect(result.success).toBe(true);
+
+      const comp = sceneState().nodesById[compId] as FlatFrameNode & { properties?: unknown };
+      expect(comp.reusable).toBe(true);
+      expect(comp.properties).toEqual([
+        {
+          id: "state",
+          name: "State",
+          type: "variant",
+          variantOptions: ["default", "hover"],
+          defaultValue: "default",
+          bindingPath: labelId,
+          bindingProp: "fill",
+        },
+      ]);
+    });
+
+    it("creates an instance of an existing component by its (quoted) id", async () => {
+      const setup = JSON.parse(
+        await batchDesign({
+          operations: 'comp=I(document, {type: "frame", name: "Button", reusable: true, width: 120, height: 40})',
+        })
+      );
+      const [compId] = setup.createdNodes.map((n: { id: string }) => n.id);
+
+      const result = JSON.parse(
+        await batchDesign({
+          operations: `inst=I(document, {type: "ref", componentId: "${compId}", width: 120, height: 40})`,
+        })
+      );
+      expect(result.success).toBe(true);
+      const [instId] = result.createdNodes.map((n: { id: string }) => n.id);
+
+      const inst = sceneState().nodesById[instId] as FlatSceneNode & { componentId?: string };
+      expect(inst.type).toBe("ref");
+      expect(inst.componentId).toBe(compId);
+    });
+
+    it("switches an instance's property value via propertyValues without touching its overrides", async () => {
+      const setup = JSON.parse(
+        await batchDesign({
+          operations: [
+            'comp=I(document, {type: "frame", name: "Button", reusable: true, width: 120, height: 40})',
+            'label=I(comp, {type: "text", name: "Label", content: "Click me", width: 80, height: 20})',
+          ].join("\n"),
+        })
+      );
+      const [compId, labelId] = setup.createdNodes.map((n: { id: string }) => n.id);
+
+      const instSetup = JSON.parse(
+        await batchDesign({
+          operations: `inst=I(document, {type: "ref", componentId: "${compId}", width: 120, height: 40})`,
+        })
+      );
+      const [instId] = instSetup.createdNodes.map((n: { id: string }) => n.id);
+
+      // An explicit override, set independently of any property.
+      sceneState().updateInstanceOverride(instId, labelId, { x: 5 });
+
+      const result = JSON.parse(
+        await batchDesign({
+          operations: `U("${instId}", {propertyValues: {state: "hover"}})`,
+        })
+      );
+      expect(result.success).toBe(true);
+
+      const inst = sceneState().nodesById[instId] as FlatSceneNode & {
+        propertyValues?: Record<string, unknown>;
+        overrides?: Record<string, unknown>;
+      };
+      expect(inst.propertyValues).toEqual({ state: "hover" });
+      expect(inst.overrides?.[labelId]).toEqual({ kind: "update", props: { x: 5 } });
+    });
+
+    it("merges propertyValues by key on repeated U() calls instead of replacing the whole object", async () => {
+      const setup = JSON.parse(
+        await batchDesign({
+          operations: 'comp=I(document, {type: "frame", name: "Button", reusable: true, width: 120, height: 40})',
+        })
+      );
+      const [compId] = setup.createdNodes.map((n: { id: string }) => n.id);
+      const instSetup = JSON.parse(
+        await batchDesign({
+          operations: `inst=I(document, {type: "ref", componentId: "${compId}", width: 120, height: 40})`,
+        })
+      );
+      const [instId] = instSetup.createdNodes.map((n: { id: string }) => n.id);
+
+      await batchDesign({ operations: `U("${instId}", {propertyValues: {state: "hover"}})` });
+      await batchDesign({ operations: `U("${instId}", {propertyValues: {showIcon: false}})` });
+
+      const inst = sceneState().nodesById[instId] as FlatSceneNode & {
+        propertyValues?: Record<string, unknown>;
+      };
+      expect(inst.propertyValues).toEqual({ state: "hover", showIcon: false });
+    });
+  });
+
   describe("delete (D) and move (M)", () => {
     it("deletes a frame together with all descendants", async () => {
       const result = JSON.parse(

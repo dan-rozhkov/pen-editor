@@ -434,6 +434,24 @@ export function mapNodeData(
         result[key] = value;
         break;
 
+      // Component instance property selections (RefNode.propertyValues): merge by
+      // key on update so switching one property doesn't clobber others the AI
+      // didn't mention in this call.
+      case "propertyValues": {
+        if (value && typeof value === "object") {
+          const existingValues =
+            mode === "update" && existingNode
+              ? ((existingNode as unknown as Record<string, unknown>).propertyValues as
+                  | Record<string, unknown>
+                  | undefined)
+              : undefined;
+          result.propertyValues = { ...existingValues, ...(value as Record<string, unknown>) };
+        } else {
+          result.propertyValues = value;
+        }
+        break;
+      }
+
       // Everything else: pass through directly
       default:
         result[key] = value;

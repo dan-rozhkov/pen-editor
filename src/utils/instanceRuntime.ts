@@ -11,6 +11,7 @@ import { deepCloneNode } from "@/utils/cloneNode";
 import { getPreparedNodeEffectiveSize, prepareFrameNode } from "@/utils/instanceUtils";
 import { getAbsolutePositionFlat, getNodeAbsolutePositionWithLayout } from "@/utils/nodeUtils";
 import { syncTextDimensions, hasTextMeasureProps } from "@/store/sceneStore/helpers/textSync";
+import { getEffectiveOverrides } from "@/utils/componentProperties";
 
 export interface ResolvedDescendant {
   path: string
@@ -229,8 +230,9 @@ export function resolveRefToTree(
   const tree = buildTree([refNode.componentId], nodesById, childrenById)[0];
   if (!tree || tree.type !== "frame") return null;
 
+  const effectiveOverrides = getEffectiveOverrides(component as FlatFrameNode, refNode);
   const resolvedChildren = tree.children
-    .map((child) => resolveNodeAtPath(child, child.id, refNode.overrides, nodesById, childrenById, visitedComponentIds))
+    .map((child) => resolveNodeAtPath(child, child.id, effectiveOverrides, nodesById, childrenById, visitedComponentIds))
     .filter(Boolean) as SceneNode[];
 
   return {
