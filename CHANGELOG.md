@@ -8,6 +8,33 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-05
+
+P0 gap-closing batch versus Figma: vector, export, layout, and precision tooling.
+
+### Added
+- **Boolean operations** — Union / Subtract / Intersect / Exclude / Flatten for
+  rect/ellipse/polygon/path via `martinez-polygon-clipping`; destructive result
+  is a single path node with undo support. Exposed through a Properties Panel
+  section, hotkeys (Cmd/Ctrl+Alt+U/S/I/X/E), and a new client-executed
+  `boolean_operation` AI tool.
+- **SVG export** — scene-graph → SVG serializer (shapes as native primitives,
+  linear/radial gradients, drop shadow, layer blur, stroke-align emulation);
+  embed/shader/ref nodes degrade to a placeholder with a warning. New "SVG"
+  option in the Export panel.
+- **Layout constraints** — per-child min/max/center/stretch/scale on each axis;
+  children recompute when a non-auto-layout frame is resized. Constraints
+  section (cross widget + H/V selects) and `batch_design` support for the AI.
+- **Rulers & guides** — toggleable rulers (Shift+R) with zoom-aware labels and
+  persistent draggable guides that objects snap to; guides round-trip through
+  `.pen`.
+- **Per-corner radius via AI** — `batch_design` accepts `cornerRadius` as a
+  number or `[tl, tr, br, bl]` array (CSS-shorthand aware).
+
+### Note
+- Changelog gap: releases 0.6.0 (layer blur) and 0.7.0/0.7.1 (PWA) shipped but
+  were not logged here at the time.
+
 ## [0.5.0] - 2026-07-03
 
 Multi-fill (Figma-style paint stack) parity: paint stacks now survive the full
@@ -57,6 +84,7 @@ First tracked release. Summarizes the features shipped up to this point.
 - Align inline frame-name editor with the canvas label position.
 - Remove double-shaded blue on the selected layer row.
 
-[Unreleased]: https://github.com/dan-rozhkov/pen-editor/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/dan-rozhkov/pen-editor/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/dan-rozhkov/pen-editor/compare/v0.5.0...v0.8.0
 [0.5.0]: https://github.com/dan-rozhkov/pen-editor/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/dan-rozhkov/pen-editor/releases/tag/v0.4.0
