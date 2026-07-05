@@ -70,8 +70,11 @@ export function createTransformController(context: InteractionContext): Transfor
             state.startNodeH = handleHit.height;
             state.absX = handleHit.absX; // absolute X for resize math
             state.absY = handleHit.absY;
-            state.parentOffsetX = 0;
-            state.parentOffsetY = 0;
+            // World-space offset between the slot's local coords and its
+            // absolute position, so guide snapping (which compares against
+            // world-space guide positions) works the same as the normal branch.
+            state.parentOffsetX = handleHit.absX - resolved.node.x;
+            state.parentOffsetY = handleHit.absY - resolved.node.y;
             state.startLinePoints = null;
             state.frameChildrenStart = null;
             context.canvas.style.cursor = getResizeCursor(handleHit.corner);

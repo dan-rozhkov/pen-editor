@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { SelectionSnapshot } from '../types/scene'
 import { buildHistorySnapshot } from './historySnapshot'
+import { useGuidesStore } from './guidesStore'
 import { useHistoryStore } from './historyStore'
 import { useSceneStore } from './sceneStore'
 import { useVariableStore } from './variableStore'
@@ -80,6 +81,7 @@ function saveSelectionHistoryIfChanged(
     scene,
     useVariableStore.getState().variables,
     current,
+    useGuidesStore.getState().guides,
   )
   useHistoryStore.getState().saveHistory(snapshot)
 }

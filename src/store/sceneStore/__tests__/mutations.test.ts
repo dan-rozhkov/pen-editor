@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useHistoryStore } from "@/store/historyStore";
+import { useGuidesStore } from "@/store/guidesStore";
 import { resetStores, seedScene } from "@/test/fixtures";
 import type { FlatSceneNode } from "@/types/scene";
 
@@ -208,6 +209,52 @@ describe("sceneStore mutations", () => {
       expect(futureLen()).toBe(0);
       expect(redo()).toBeNull();
       expect(scene().nodesById["text1"]).toBeUndefined();
+    });
+  });
+
+  describe("persistent guides in undo/redo", () => {
+    // Mirrors how Rulers.tsx saves history: snapshot the pre-mutation state,
+    // then mutate useGuidesStore directly (guides live outside sceneStore).
+    it("round-trips a guide create through undo/redo", () => {
+      useHistoryStore.getState().saveHistory(createSnapshot(useSceneStore.getState()));
+      useGuidesStore.getState().addGuide("vertical", 120);
+      expect(useGuidesStore.getState().guides).toHaveLength(1);
+
+      undo();
+      expect(useGuidesStore.getState().guides).toHaveLength(0);
+
+      redo();
+      expect(useGuidesStore.getState().guides).toHaveLength(1);
+      expect(useGuidesStore.getState().guides[0]).toMatchObject({
+        orientation: "vertical",
+        position: 120,
+      });
+    });
+
+    it("round-trips a guide move through undo/redo", () => {
+      const id = useGuidesStore.getState().addGuide("horizontal", 50);
+
+      useHistoryStore.getState().saveHistory(createSnapshot(useSceneStore.getState()));
+      useGuidesStore.getState().updateGuidePosition(id, 200);
+      expect(useGuidesStore.getState().guides[0].position).toBe(200);
+
+      undo();
+      expect(useGuidesStore.getState().guides[0].position).toBe(50);
+
+      redo();
+      expect(useGuidesStore.getState().guides[0].position).toBe(200);
+    });
+
+    it("round-trips a guide delete through undo/redo", () => {
+      const id = useGuidesStore.getState().addGuide("vertical", 75);
+
+      useHistoryStore.getState().saveHistory(createSnapshot(useSceneStore.getState()));
+      useGuidesStore.getState().removeGuide(id);
+      expect(useGuidesStore.getState().guides).toHaveLength(0);
+
+      undo();
+      expect(useGuidesStore.getState().guides).toHaveLength(1);
+      expect(useGuidesStore.getState().guides[0].id).toBe(id);
     });
   });
 });

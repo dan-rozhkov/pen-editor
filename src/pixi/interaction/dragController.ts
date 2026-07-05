@@ -570,18 +570,23 @@ export function createDragController(context: InteractionContext): DragControlle
               ? calculatePersistentGuideSnap(draggedEdges, persistentGuides, threshold)
               : { deltaX: 0, deltaY: 0 };
 
-          // Prefer whichever source snapped closer on each axis.
+          // Prefer whichever source snapped closer on each axis. A node-to-node
+          // snap can legitimately produce a delta of exactly 0 (perfect
+          // alignment) — use the emitted guide lines, not the delta value, to
+          // tell "snapped" apart from "no match".
+          const nodeSnappedX = result.guides.some((g) => g.orientation === "vertical");
+          const nodeSnappedY = result.guides.some((g) => g.orientation === "horizontal");
           let snapDeltaX = result.deltaX;
           if (
             guideResult.deltaX !== 0 &&
-            (snapDeltaX === 0 || Math.abs(guideResult.deltaX) < Math.abs(snapDeltaX))
+            (!nodeSnappedX || Math.abs(guideResult.deltaX) < Math.abs(snapDeltaX))
           ) {
             snapDeltaX = guideResult.deltaX;
           }
           let snapDeltaY = result.deltaY;
           if (
             guideResult.deltaY !== 0 &&
-            (snapDeltaY === 0 || Math.abs(guideResult.deltaY) < Math.abs(snapDeltaY))
+            (!nodeSnappedY || Math.abs(guideResult.deltaY) < Math.abs(snapDeltaY))
           ) {
             snapDeltaY = guideResult.deltaY;
           }

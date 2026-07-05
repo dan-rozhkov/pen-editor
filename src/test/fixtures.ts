@@ -5,6 +5,7 @@ import { useHistoryStore } from "@/store/historyStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useViewportStore } from "@/store/viewportStore";
+import { useGuidesStore } from "@/store/guidesStore";
 
 /** Reset every store the tool handlers touch to a clean baseline. */
 export function resetStores(): void {
@@ -32,6 +33,7 @@ export function resetStores(): void {
   useVariableStore.setState({ variables: [] });
   useThemeStore.setState({ activeTheme: "light" });
   useViewportStore.setState({ scale: 1, x: 0, y: 0 });
+  useGuidesStore.setState({ guides: [] });
 }
 
 /**

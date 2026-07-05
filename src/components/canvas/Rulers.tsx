@@ -3,6 +3,8 @@ import { useViewportStore } from "@/store/viewportStore";
 import { useGuidesStore } from "@/store/guidesStore";
 import { useUIThemeStore } from "@/store/uiThemeStore";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
+import { useSceneStore, createSnapshot } from "@/store/sceneStore";
+import { useHistoryStore } from "@/store/historyStore";
 
 export const RULER_SIZE = 20;
 const GUIDE_HIT_SIZE = 6;
@@ -99,7 +101,7 @@ export function Rulers() {
     if (!showRulers) return;
 
     const isDark = uiTheme === "dark";
-    const bg = isDark ? "#2b2b2b" : "#f5f5f5";
+    const bg = isDark ? "#2b2b2b" : "#ffffff";
     const tickColor = isDark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.3)";
     const labelColor = isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)";
 
@@ -235,12 +237,18 @@ export function Rulers() {
           if (!rect) return;
           const localX = ev.clientX - rect.left;
           const localY = ev.clientY - rect.top;
-          // Dropped back onto the ruler strip (or outside the canvas) — no-op.
-          if (localX < RULER_SIZE || localY < RULER_SIZE) return;
+          // Dropped back onto this guide's own ruler — no-op. Only gate on
+          // the axis the guide belongs to (a vertical guide shouldn't be
+          // cancelled just because it's hovering over the horizontal ruler).
+          const droppedOnOwnRuler = orientation === "horizontal" ? localY < RULER_SIZE : localX < RULER_SIZE;
+          if (droppedOnOwnRuler) return;
           const worldPos = localToWorld(
             orientation === "horizontal" ? localY : localX,
             orientation === "horizontal" ? "y" : "x",
           );
+          // Snapshot the pre-mutation state (guides not yet changed by this
+          // gesture) so a single undo removes the newly created guide.
+          useHistoryStore.getState().saveHistory(createSnapshot(useSceneStore.getState()));
           addGuide(orientation, Math.round(worldPos));
         };
         window.addEventListener("pointermove", onMove);
@@ -255,12 +263,20 @@ export function Rulers() {
         e.currentTarget.setPointerCapture(e.pointerId);
         draggingGuideId.current = id;
 
+        // Snapshot before this gesture mutates anything, so a single undo
+        // reverts the whole move (or move+delete) as one step. Saved lazily
+        // at gesture end (not on every pointermove) but captures the
+        // pre-drag guide positions since it's built now.
+        const preDragSnapshot = createSnapshot(useSceneStore.getState());
+        let moved = false;
+
         const onMove = (ev: PointerEvent): void => {
           const rect = rootRef.current?.getBoundingClientRect();
           if (!rect || draggingGuideId.current !== id) return;
           const localPos =
             orientation === "horizontal" ? ev.clientY - rect.top : ev.clientX - rect.left;
           const worldPos = localToWorld(localPos, orientation === "horizontal" ? "y" : "x");
+          moved = true;
           updateGuidePosition(id, Math.round(worldPos));
         };
         const onUp = (ev: PointerEvent): void => {
@@ -273,7 +289,12 @@ export function Rulers() {
           const localY = ev.clientY - rect.top;
           const droppedOnRuler =
             orientation === "horizontal" ? localY < RULER_SIZE : localX < RULER_SIZE;
-          if (droppedOnRuler) removeGuide(id);
+          if (droppedOnRuler) {
+            useHistoryStore.getState().saveHistory(preDragSnapshot);
+            removeGuide(id);
+          } else if (moved) {
+            useHistoryStore.getState().saveHistory(preDragSnapshot);
+          }
         };
         window.addEventListener("pointermove", onMove);
         window.addEventListener("pointerup", onUp);
@@ -302,11 +323,10 @@ export function Rulers() {
             <canvas ref={leftCanvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
           </div>
           <div
-            className="absolute top-0 left-0 z-20"
+            className="absolute top-0 left-0 z-20 bg-surface-panel"
             style={{
               width: RULER_SIZE,
               height: RULER_SIZE,
-              background: uiTheme === "dark" ? "#2b2b2b" : "#f5f5f5",
             }}
           />
         </>

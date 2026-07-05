@@ -4,6 +4,7 @@ import type {
   HistorySnapshot,
   SelectionSnapshot,
 } from "@/types/scene";
+import type { Guide } from "./guidesStore";
 
 export interface SnapshotSceneSlice {
   nodesById: Record<string, FlatSceneNode>;
@@ -22,12 +23,15 @@ export interface SnapshotSceneSlice {
  * componentArtifactsById is always carried (empty object when the slice has
  * none): restoreSnapshot replaces the artifact map with
  * `snapshot.componentArtifactsById ?? {}`, so omitting it would wipe component
- * sync-state on undo.
+ * sync-state on undo. guides is likewise always carried (current page's
+ * persistent ruler guides) so guide create/move/delete round-trips through
+ * undo/redo.
  */
 export function buildHistorySnapshot(
   scene: SnapshotSceneSlice,
   variables: HistorySnapshot["variables"],
   selection: SelectionSnapshot,
+  guides: Guide[],
 ): HistorySnapshot {
   return {
     nodesById: { ...scene.nodesById },
@@ -36,6 +40,7 @@ export function buildHistorySnapshot(
     rootIds: [...scene.rootIds],
     componentArtifactsById: { ...(scene.componentArtifactsById ?? {}) },
     variables: [...(variables ?? [])],
+    guides: [...(guides ?? [])],
     selection: {
       selectedIds: [...selection.selectedIds],
       enteredContainerId: selection.enteredContainerId,

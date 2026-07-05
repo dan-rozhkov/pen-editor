@@ -1,4 +1,5 @@
 import type { ThemeName, Variable } from './variable'
+import type { Guide } from '../store/guidesStore'
 
 // Variable binding to a variable (generic)
 export interface VariableBinding {
@@ -582,6 +583,8 @@ export interface FlatSnapshot {
   rootIds: string[]
   componentArtifactsById?: Record<string, ComponentArtifact>
   variables?: Variable[]
+  /** Persistent ruler guides for the current page, at the time of the snapshot. */
+  guides?: Guide[]
 }
 
 export interface ComponentArtifact {

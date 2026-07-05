@@ -13,6 +13,7 @@ import {
 } from "../../types/scene";
 import { loadGoogleFontsFromNodes } from "../../utils/fontUtils";
 import { saveHistory } from "./helpers/history";
+import { useGuidesStore } from "../guidesStore";
 import { useSelectionStore } from "../selectionStore";
 import { useVariableStore } from "../variableStore";
 import {
@@ -338,6 +339,12 @@ export function createBasicMutations(set: SetState, get: GetState) {
       // omit variables (unknown sources) leave the variable store untouched.
       if (snapshot.variables) {
         useVariableStore.setState({ variables: snapshot.variables });
+      }
+      // Restore persistent ruler guides when the snapshot carries them (all
+      // createSnapshot-based snapshots do), mirroring the variables restore
+      // above, so guide create/move/delete round-trips through undo/redo.
+      if (snapshot.guides) {
+        useGuidesStore.getState().setGuides(snapshot.guides);
       }
       if (!historySelection) return;
       useSelectionStore.setState({
