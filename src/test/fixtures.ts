@@ -30,7 +30,7 @@ export function resetStores(): void {
     enteredInstanceDescendantPath: null,
     lastSelectedId: null,
   });
-  useHistoryStore.setState({ past: [], future: [], batchMode: false });
+  useHistoryStore.setState({ past: [], future: [], batchMode: false, batchDepth: 0 });
   useVariableStore.setState({ variables: [] });
   useTextStyleStore.setState({ textStyles: [] });
   useThemeStore.setState({ activeTheme: "light" });

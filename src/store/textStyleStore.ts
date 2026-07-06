@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import type { TextStyle } from "../types/textStyle";
-import { generateTextStyleId } from "../types/textStyle";
+import {
+  generateTextStyleId,
+  TEXT_STYLE_PROPERTY_KEYS,
+  assignTextStyleProperty,
+} from "../types/textStyle";
 import { resolveTextStyleProperties } from "../utils/textStyleResolve";
 import { useHistoryStore } from "./historyStore";
 import { useSceneStore, createSnapshot } from "./sceneStore";
@@ -129,16 +133,10 @@ export const useTextStyleStore = create<TextStyleState>((set, get) => ({
     const node = scene.nodesById[nodeId] as TextNode | undefined;
     if (!node || node.type !== "text") return null;
 
-    const style: TextStyle = {
-      id: generateTextStyleId(),
-      name,
-      fontFamily: node.fontFamily,
-      fontSize: node.fontSize,
-      fontWeight: node.fontWeight,
-      lineHeight: node.lineHeight,
-      letterSpacing: node.letterSpacing,
-      textTransform: node.textTransform,
-    };
+    const style: TextStyle = { id: generateTextStyleId(), name };
+    for (const key of TEXT_STYLE_PROPERTY_KEYS) {
+      assignTextStyleProperty(style, key, node[key]);
+    }
 
     // One undo step for "add the style" + "bind this node to it".
     saveTextStyleHistory();

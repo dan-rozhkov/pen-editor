@@ -7,6 +7,14 @@ interface HistoryState {
   past: HistorySnapshot[]
   future: HistorySnapshot[]
   batchMode: boolean
+  /**
+   * Reference count backing `batchMode`/`startBatch`/`endBatch`. Batches can
+   * nest (e.g. a tool handler wraps a whole loop in startBatch/endBatch while
+   * each per-item store mutation it calls does the same internally), so a
+   * plain boolean would let an inner `endBatch()` end the outer batch early.
+   * `batchMode` stays true as long as this is > 0.
+   */
+  batchDepth: number
 
   // Save current state to history (called before mutations)
   saveHistory: (currentSnapshot: HistorySnapshot) => void
@@ -37,6 +45,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
   past: [],
   future: [],
   batchMode: false,
+  batchDepth: 0,
 
   saveHistory: (currentSnapshot) => {
     const { batchMode, past } = get()
@@ -98,9 +107,13 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 
   clear: () => set({ past: [], future: [] }),
 
-  startBatch: () => set({ batchMode: true }),
+  startBatch: () => set((state) => ({ batchMode: true, batchDepth: state.batchDepth + 1 })),
 
-  endBatch: () => set({ batchMode: false }),
+  endBatch: () =>
+    set((state) => {
+      const batchDepth = Math.max(0, state.batchDepth - 1)
+      return { batchDepth, batchMode: batchDepth > 0 }
+    }),
 
   getStacks: () => {
     const { past, future } = get()

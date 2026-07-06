@@ -4,6 +4,7 @@ import { setTextStyles } from "@/lib/tools/setTextStyles";
 import { applyTextStyle } from "@/lib/tools/applyTextStyle";
 import { useTextStyleStore } from "@/store/textStyleStore";
 import { useSceneStore } from "@/store/sceneStore";
+import { useHistoryStore } from "@/store/historyStore";
 import type { TextNode } from "@/types/scene";
 import { resetStores, seedScene, seedTextStyles } from "@/test/fixtures";
 
@@ -86,6 +87,60 @@ describe("set_text_styles", () => {
     );
     expect(result).toEqual({ success: true, textStyleCount: 1 });
     expect(useTextStyleStore.getState().textStyles.map((s) => s.name)).toEqual(["Only"]);
+  });
+
+  it("a partial update by id preserves the existing name instead of clobbering it with 'Untitled'", async () => {
+    seedTextStyles();
+
+    const result = JSON.parse(
+      await setTextStyles({
+        textStyles: [
+          { id: "style-heading", fontSize: 48 },
+        ] as unknown as Record<string, unknown>,
+      }),
+    );
+    expect(result).toEqual({ success: true, textStyleCount: 1 });
+
+    const styles = useTextStyleStore.getState().textStyles;
+    expect(styles[0].name).toBe("Heading/L");
+    expect(styles[0].fontSize).toBe(48);
+  });
+
+  it("collapses a multi-style call into a single undo step", async () => {
+    seedTextStyles();
+    const pastBefore = useHistoryStore.getState().past.length;
+
+    await setTextStyles({
+      textStyles: [
+        { name: "Heading/L", fontSize: 48 },
+        { name: "Body/M", fontFamily: "Arial", fontSize: 14 },
+        { name: "Caption/S", fontFamily: "Arial", fontSize: 11 },
+      ] as unknown as Record<string, unknown>,
+    });
+
+    expect(useHistoryStore.getState().past.length).toBe(pastBefore + 1);
+    expect(useTextStyleStore.getState().textStyles).toHaveLength(3);
+  });
+
+  it("matches a later entry against a style added earlier in the same call instead of duplicating it", async () => {
+    const result = JSON.parse(
+      await setTextStyles({
+        textStyles: [
+          { name: "Body/M", fontFamily: "Inter", fontSize: 14 },
+          { name: "Body/M", fontWeight: "700" },
+        ] as unknown as Record<string, unknown>,
+      }),
+    );
+    expect(result).toEqual({ success: true, textStyleCount: 1 });
+
+    const styles = useTextStyleStore.getState().textStyles;
+    expect(styles).toHaveLength(1);
+    expect(styles[0]).toMatchObject({
+      name: "Body/M",
+      fontFamily: "Inter",
+      fontSize: 14,
+      fontWeight: "700",
+    });
   });
 });
 

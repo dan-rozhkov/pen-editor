@@ -16,6 +16,7 @@ import { saveHistory } from "./helpers/history";
 import { useGuidesStore } from "../guidesStore";
 import { useSelectionStore } from "../selectionStore";
 import { useVariableStore } from "../variableStore";
+import { useTextStyleStore } from "../textStyleStore";
 import {
   syncTextDimensions,
   hasTextMeasureProps,
@@ -345,6 +346,12 @@ export function createBasicMutations(set: SetState, get: GetState) {
       // above, so guide create/move/delete round-trips through undo/redo.
       if (snapshot.guides) {
         useGuidesStore.getState().setGuides(snapshot.guides);
+      }
+      // Restore text styles when the snapshot carries them (all createSnapshot-based
+      // snapshots do), mirroring the variables restore above, so text-style
+      // add/update/delete round-trips through undo/redo.
+      if (snapshot.textStyles) {
+        useTextStyleStore.setState({ textStyles: snapshot.textStyles });
       }
       if (!historySelection) return;
       useSelectionStore.setState({

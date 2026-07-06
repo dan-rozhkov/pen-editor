@@ -25,13 +25,15 @@ export interface SnapshotSceneSlice {
  * `snapshot.componentArtifactsById ?? {}`, so omitting it would wipe component
  * sync-state on undo. guides is likewise always carried (current page's
  * persistent ruler guides) so guide create/move/delete round-trips through
- * undo/redo.
+ * undo/redo. textStyles is carried the same way (named reusable text styles)
+ * so text-style add/update/delete round-trips through undo/redo too.
  */
 export function buildHistorySnapshot(
   scene: SnapshotSceneSlice,
   variables: HistorySnapshot["variables"],
   selection: SelectionSnapshot,
   guides: Guide[],
+  textStyles: HistorySnapshot["textStyles"],
 ): HistorySnapshot {
   return {
     nodesById: { ...scene.nodesById },
@@ -41,6 +43,7 @@ export function buildHistorySnapshot(
     componentArtifactsById: { ...(scene.componentArtifactsById ?? {}) },
     variables: [...(variables ?? [])],
     guides: [...(guides ?? [])],
+    textStyles: [...(textStyles ?? [])],
     selection: {
       selectedIds: [...selection.selectedIds],
       enteredContainerId: selection.enteredContainerId,

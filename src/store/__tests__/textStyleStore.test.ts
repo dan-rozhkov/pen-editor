@@ -1,12 +1,21 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useTextStyleStore } from "@/store/textStyleStore";
-import { useSceneStore } from "@/store/sceneStore";
+import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useHistoryStore } from "@/store/historyStore";
 import type { TextNode } from "@/types/scene";
 import { resetStores, seedScene, seedTextStyles } from "@/test/fixtures";
 
 function text1(): TextNode {
   return useSceneStore.getState().nodesById["text1"] as unknown as TextNode;
+}
+
+// Replicate the real undo cycle (see sceneStore/__tests__/mutations.test.ts):
+// snapshot current -> ask history for the target -> restore it if present.
+function undo() {
+  const snapshot = createSnapshot(useSceneStore.getState());
+  const prev = useHistoryStore.getState().undo(snapshot);
+  if (prev) useSceneStore.getState().restoreSnapshot(prev);
+  return prev;
 }
 
 describe("textStyleStore", () => {
@@ -78,5 +87,31 @@ describe("textStyleStore", () => {
     expect(style?.fontSize).toBe(16);
     expect(text1().textStyleId).toBe(style?.id);
     expect(useTextStyleStore.getState().textStyles).toHaveLength(2);
+  });
+
+  describe("undo/redo", () => {
+    it("undoing a style edit reverts the style record, not just the node", () => {
+      useTextStyleStore.getState().applyStyleToNode("text1", "style-heading");
+      useTextStyleStore.getState().updateTextStyle("style-heading", { fontSize: 40 });
+      expect(useTextStyleStore.getState().textStyles[0].fontSize).toBe(40);
+
+      undo();
+
+      expect(useTextStyleStore.getState().textStyles[0].fontSize).toBe(32);
+      expect(text1().fontSize).toBe(32);
+    });
+
+    it("undoing a style deletion restores the style record so the node's textStyleId is valid again", () => {
+      useTextStyleStore.getState().applyStyleToNode("text1", "style-heading");
+      useTextStyleStore.getState().deleteTextStyle("style-heading");
+      expect(useTextStyleStore.getState().textStyles).toEqual([]);
+
+      undo();
+
+      const styles = useTextStyleStore.getState().textStyles;
+      expect(styles).toHaveLength(1);
+      expect(styles[0].id).toBe("style-heading");
+      expect(text1().textStyleId).toBe("style-heading");
+    });
   });
 });
