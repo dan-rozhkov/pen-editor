@@ -8,6 +8,50 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-06
+
+Third gap-closing batch versus Figma: typography system, flexible layouts, and
+squircle corners.
+
+### Added
+- **Text styles** — named reusable text styles (family, size, weight,
+  line-height, letter-spacing, transform): create from a selected text node,
+  apply from the Typography section, edit centrally with propagation to every
+  bound node, local override and detach (tracked via `textStyleId` +
+  `textStyleOverrides`). New Text styles panel, `.pen` serialization, and
+  three AI tools: `get_text_styles`, `set_text_styles`, `apply_text_style`.
+- **Auto-layout wrap & min/max** — flex wrap with independent row/column gaps
+  and per-child `minWidth`/`maxWidth`/`minHeight`/`maxHeight` clamps, wired
+  through the layout engine, properties panel, `batch_design`, HTML
+  conversion in both directions, and public `.pen` export.
+- **Corner smoothing (squircle)** — Figma-formula corner smoothing (0–100%,
+  60% ≈ iOS) on rectangles and frames, composing with per-corner radii; one
+  shared contour implementation drives both Pixi rendering and SVG export.
+- Drawing tool variants are now grouped in the toolbar.
+
+### Changed
+- The flex layout engine resolves flexible lengths iteratively per the CSS
+  spec (freeze min/max violators, redistribute), so clamped children no
+  longer overflow or under-fill their container; line wrapping uses clamped
+  hypothetical sizes; stretch children fill the line even in hug-sized
+  containers.
+- History batching is reference-counted (`batchDepth`), so nested batch
+  scopes compose — one AI tool call is always one undo step.
+- PWA update prompt migrated to a styled sonner toast.
+
+### Fixed
+- Vector point-edit anchors no longer drift from the path shape.
+- Editing a text style, deleting it, or undoing either now keeps the style
+  collection and bound nodes consistent (styles are part of history
+  snapshots); partial AI style updates no longer rename styles to
+  "Untitled"; multi-style AI calls no longer create duplicates.
+- Row-gap-only auto-layout frames survive public `.pen` export; disabling
+  wrap migrates the per-axis gap back into the single gap field so the Gap
+  control keeps working; interactive resize respects min/max clamps live
+  instead of popping back after commit.
+- Copy/paste styles transfers corner smoothing; shader-filled nodes re-bake
+  their clip mask when corner geometry changes.
+
 ## [0.9.0] - 2026-07-05
 
 Second gap-closing batch versus Figma: effects, workflow, components, AI image
@@ -123,7 +167,9 @@ First tracked release. Summarizes the features shipped up to this point.
 - Align inline frame-name editor with the canvas label position.
 - Remove double-shaded blue on the selected layer row.
 
-[Unreleased]: https://github.com/dan-rozhkov/pen-editor/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/dan-rozhkov/pen-editor/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/dan-rozhkov/pen-editor/compare/v0.9.0...v0.10.0
+[0.9.0]: https://github.com/dan-rozhkov/pen-editor/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/dan-rozhkov/pen-editor/compare/v0.5.0...v0.8.0
 [0.5.0]: https://github.com/dan-rozhkov/pen-editor/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/dan-rozhkov/pen-editor/releases/tag/v0.4.0
