@@ -101,6 +101,46 @@ describe("<SizeSection />", () => {
     );
   });
 
+  describe("min/max clamps", () => {
+    const AUTO_LAYOUT_CONTEXT = {
+      isInsideAutoLayout: true,
+      parent: null,
+    } as unknown as ParentContext;
+
+    it("shows Min/Max inputs only when inside an auto-layout parent", () => {
+      render(
+        <SizeSection node={sceneNode("rect2")} onUpdate={vi.fn()} parentContext={ROOT_CONTEXT} />,
+      );
+      expect(screen.queryByText("Min / Max")).toBeNull();
+    });
+
+    it("renders Min/Max inputs from the node's sizing constraints", () => {
+      const node = {
+        ...sceneNode("rect2"),
+        sizing: { minWidth: 50, maxWidth: 400, minHeight: 20, maxHeight: 200 },
+      } as SceneNode;
+      render(
+        <SizeSection node={node} onUpdate={vi.fn()} parentContext={AUTO_LAYOUT_CONTEXT} />,
+      );
+      expect(screen.getByText("Min / Max")).toBeTruthy();
+      const inputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+      // DOM order: W, H, Min W, Max W, Min H, Max H
+      expect(inputs.map((i) => i.value)).toEqual(["200", "100", "50", "400", "20", "200"]);
+    });
+
+    it("updates sizing.maxWidth via its input", () => {
+      const onUpdate = vi.fn();
+      render(
+        <SizeSection node={sceneNode("rect2")} onUpdate={onUpdate} parentContext={AUTO_LAYOUT_CONTEXT} />,
+      );
+      const inputs = screen.getAllByRole("spinbutton");
+      fireEvent.change(inputs[3], { target: { value: "320" } }); // Max W
+      expect(onUpdate).toHaveBeenCalledWith({
+        sizing: expect.objectContaining({ maxWidth: 320 }),
+      });
+    });
+  });
+
   it("toggles clip content for frames only", () => {
     const onUpdate = vi.fn();
     const { unmount } = render(

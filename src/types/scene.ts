@@ -97,6 +97,12 @@ export type SizingMode = 'fixed' | 'fill_container' | 'fit_content'
 export interface SizingProperties {
   widthMode?: SizingMode   // default: 'fixed'
   heightMode?: SizingMode  // default: 'fixed'
+  // Min/max clamps applied to the resolved width/height inside an auto-layout
+  // parent (fixed/fill/fit sizes are all clamped to this range). Figma parity.
+  minWidth?: number
+  maxWidth?: number
+  minHeight?: number
+  maxHeight?: number
 }
 
 // Stroke properties for path nodes (SVG-style)
@@ -255,7 +261,17 @@ export type JustifyContent = 'flex-start' | 'center' | 'flex-end' | 'space-betwe
 export interface LayoutProperties {
   autoLayout?: boolean // whether auto-layout is enabled
   flexDirection?: FlexDirection
+  // Wrap children onto multiple lines (rows for a row container, columns for
+  // a column container) once the main axis runs out of space. Default: false.
+  flexWrap?: boolean
+  // Single-value gap, applied to both axes when rowGap/columnGap are unset.
+  // Kept for backward compatibility with existing .pen files.
   gap?: number
+  // Per-axis gaps (CSS row-gap/column-gap semantics): rowGap is the space
+  // between wrapped lines/rows, columnGap is the space between items within
+  // a row. Either falls back to `gap` when unset.
+  rowGap?: number
+  columnGap?: number
   paddingTop?: number
   paddingRight?: number
   paddingBottom?: number

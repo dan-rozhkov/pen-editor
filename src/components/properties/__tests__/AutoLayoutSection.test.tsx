@@ -87,6 +87,85 @@ describe("<AutoLayoutSection />", () => {
     });
   });
 
+  describe("wrap", () => {
+    it("toggles flexWrap via the checkbox", () => {
+      const onUpdate = vi.fn();
+      render(
+        <AutoLayoutSection
+          node={frame({ autoLayout: true, flexDirection: "row" })}
+          onUpdate={onUpdate}
+        />,
+      );
+      fireEvent.click(screen.getByLabelText("Wrap"));
+      expect(onUpdate).toHaveBeenCalledWith({
+        layout: expect.objectContaining({ flexWrap: true }),
+      });
+    });
+
+    it("shows separate row/column gap inputs instead of a single Gap when wrapping", () => {
+      render(
+        <AutoLayoutSection
+          node={frame({
+            autoLayout: true,
+            flexDirection: "row",
+            flexWrap: true,
+            rowGap: 10,
+            columnGap: 5,
+          })}
+          onUpdate={vi.fn()}
+        />,
+      );
+      expect(screen.getByText("Row gap")).toBeTruthy();
+      expect(screen.getByText("Column gap")).toBeTruthy();
+      expect(screen.queryByText("Gap")).toBeNull();
+      const inputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+      // DOM order: Row gap, Column gap, T, R, B, L
+      expect(inputs.map((i) => i.value)).toEqual(["10", "5", "0", "0", "0", "0"]);
+    });
+
+    it("falls back to gap for row/column gap display when unset", () => {
+      render(
+        <AutoLayoutSection
+          node={frame({
+            autoLayout: true,
+            flexDirection: "row",
+            flexWrap: true,
+            gap: 12,
+          })}
+          onUpdate={vi.fn()}
+        />,
+      );
+      const inputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+      expect(inputs[0].value).toBe("12"); // row gap falls back to gap
+      expect(inputs[1].value).toBe("12"); // column gap falls back to gap
+    });
+
+    it("updates rowGap/columnGap independently via their inputs", () => {
+      const onUpdate = vi.fn();
+      render(
+        <AutoLayoutSection
+          node={frame({
+            autoLayout: true,
+            flexDirection: "row",
+            flexWrap: true,
+            rowGap: 10,
+            columnGap: 5,
+          })}
+          onUpdate={onUpdate}
+        />,
+      );
+      const inputs = screen.getAllByRole("spinbutton");
+      fireEvent.change(inputs[0], { target: { value: "20" } });
+      expect(onUpdate).toHaveBeenCalledWith({
+        layout: expect.objectContaining({ rowGap: 20 }),
+      });
+      fireEvent.change(inputs[1], { target: { value: "7" } });
+      expect(onUpdate).toHaveBeenCalledWith({
+        layout: expect.objectContaining({ columnGap: 7 }),
+      });
+    });
+  });
+
   describe("alignment grid", () => {
     it("sets alignItems/justifyContent on a grid cell click (row direction)", () => {
       const onUpdate = vi.fn();

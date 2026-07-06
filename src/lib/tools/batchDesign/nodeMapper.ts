@@ -327,6 +327,46 @@ export function mapNodeData(
         break;
       }
 
+      // Per-axis gaps (CSS row-gap/column-gap semantics) — used together with
+      // wrap for card grids/tag lists; each falls back to `gap` when unset.
+      case "rowGap": {
+        if (typeof value === "number") {
+          hasLayout = true;
+          layout.rowGap = value;
+        }
+        break;
+      }
+      case "columnGap": {
+        if (typeof value === "number") {
+          hasLayout = true;
+          layout.columnGap = value;
+        }
+        break;
+      }
+
+      // Wrap toggle: children flow onto new lines when the main axis runs out
+      // of space.
+      case "wrap": {
+        if (typeof value === "boolean") {
+          hasLayout = true;
+          layout.flexWrap = value;
+        }
+        break;
+      }
+
+      // Min/max clamps applied to a child's resolved width/height inside an
+      // auto-layout parent, regardless of its sizing mode.
+      case "minWidth":
+      case "maxWidth":
+      case "minHeight":
+      case "maxHeight": {
+        if (typeof value === "number") {
+          hasSizing = true;
+          (sizing as Record<string, number>)[key] = value;
+        }
+        break;
+      }
+
       // Corner radius: accept a single number (unified) or an array of radii
       // ([tl, tr, br, bl], CSS-shorthand lengths also allowed) which maps to
       // per-corner radii. Setting one representation clears the other so they

@@ -12,6 +12,17 @@ import { inferAutoLayout, groupGridChildrenIntoRows, inferChildSizing } from "./
 import { serializeSvgWithComputedStyles, svgTextToDataUrl, scaleAndOffsetNode, normalizeSvgNodeToViewport } from "./svgHandling";
 import { measureNodeContents } from "./textMeasurement";
 
+/**
+ * Parse a computed CSS length (e.g. "120px") into a positive px number, or
+ * undefined for the CSS defaults ("none", "auto", "0px" — indistinguishable
+ * from "unset" for min-width/min-height).
+ */
+export function parsePositiveCssLength(value: string | undefined): number | undefined {
+  if (!value || value === "none" || value === "auto") return undefined;
+  const n = parseFloat(value);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
 /** Convert a DOM node (element or text) into a SceneNode, or null if empty/invisible */
 export function convertNode(
   domNode: Node,
@@ -203,14 +214,35 @@ function convertElement(
 
   // Mark absolute/fixed positioned children using the element→node map
   // built during child conversion (avoids O(n²) position-based matching).
+  // Also pick up min/max width/height clamps (apply regardless of sizing mode).
   const domChildren = el.children;
   for (let i = 0; i < domChildren.length; i++) {
     const childStyle = window.getComputedStyle(domChildren[i]);
     const pos = childStyle.position;
+    const matchingNode = elementNodeMap.get(domChildren[i]);
     if (pos === "absolute" || pos === "fixed") {
-      const matchingNode = elementNodeMap.get(domChildren[i]);
       if (matchingNode) {
         matchingNode.absolutePosition = true;
+      }
+    }
+    if (matchingNode) {
+      const minWidth = parsePositiveCssLength(childStyle.minWidth);
+      const maxWidth = parsePositiveCssLength(childStyle.maxWidth);
+      const minHeight = parsePositiveCssLength(childStyle.minHeight);
+      const maxHeight = parsePositiveCssLength(childStyle.maxHeight);
+      if (
+        minWidth !== undefined ||
+        maxWidth !== undefined ||
+        minHeight !== undefined ||
+        maxHeight !== undefined
+      ) {
+        matchingNode.sizing = {
+          ...matchingNode.sizing,
+          ...(minWidth !== undefined ? { minWidth } : {}),
+          ...(maxWidth !== undefined ? { maxWidth } : {}),
+          ...(minHeight !== undefined ? { minHeight } : {}),
+          ...(maxHeight !== undefined ? { maxHeight } : {}),
+        };
       }
     }
   }

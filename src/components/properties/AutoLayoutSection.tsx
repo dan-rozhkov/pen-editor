@@ -7,6 +7,7 @@ import type {
   SceneNode,
 } from "@/types/scene";
 import {
+  CheckboxInput,
   NumberInput,
   PropertyRow,
   PropertySection,
@@ -86,6 +87,15 @@ export function AutoLayoutSection({ node, onUpdate, mixedKeys }: AutoLayoutSecti
               } as Partial<SceneNode>)
             }
             isMixed={isMixed("layout.flexDirection")}
+          />
+          <CheckboxInput
+            label="Wrap"
+            checked={node.layout?.flexWrap ?? false}
+            onChange={(checked) =>
+              onUpdate({
+                layout: { ...node.layout, flexWrap: checked },
+              } as Partial<SceneNode>)
+            }
           />
           <PropertyRow>
             <div className="flex flex-col gap-1 flex-1">
@@ -215,18 +225,47 @@ export function AutoLayoutSection({ node, onUpdate, mixedKeys }: AutoLayoutSecti
                 })}
               </div>
             </div>
-            <NumberInput
-              label="Gap"
-              value={node.layout?.gap ?? 0}
-              onChange={(v) =>
-                onUpdate({
-                  layout: { ...node.layout, gap: v },
-                } as Partial<SceneNode>)
-              }
-              labelOutside={true}
-              isMixed={isMixed("layout.gap")}
-            />
+            {node.layout?.flexWrap ? (
+              <NumberInput
+                label="Row gap"
+                value={node.layout?.rowGap ?? node.layout?.gap ?? 0}
+                onChange={(v) =>
+                  onUpdate({
+                    layout: { ...node.layout, rowGap: v },
+                  } as Partial<SceneNode>)
+                }
+                labelOutside={true}
+                isMixed={isMixed("layout.rowGap")}
+              />
+            ) : (
+              <NumberInput
+                label="Gap"
+                value={node.layout?.gap ?? 0}
+                onChange={(v) =>
+                  onUpdate({
+                    layout: { ...node.layout, gap: v },
+                  } as Partial<SceneNode>)
+                }
+                labelOutside={true}
+                isMixed={isMixed("layout.gap")}
+              />
+            )}
           </PropertyRow>
+          {node.layout?.flexWrap && (
+            <PropertyRow>
+              <NumberInput
+                label="Column gap"
+                value={node.layout?.columnGap ?? node.layout?.gap ?? 0}
+                onChange={(v) =>
+                  onUpdate({
+                    layout: { ...node.layout, columnGap: v },
+                  } as Partial<SceneNode>)
+                }
+                labelOutside={true}
+                isMixed={isMixed("layout.columnGap")}
+              />
+            </PropertyRow>
+          )}
           <label className="text-[10px] text-text-muted tracking-wide mt-2">
             Padding
           </label>

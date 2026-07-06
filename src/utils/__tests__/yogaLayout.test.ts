@@ -231,6 +231,143 @@ describe("calculateFrameLayout", () => {
   });
 });
 
+describe("flex-wrap", () => {
+  it("keeps items on one line when wrap is off, even if they overflow", () => {
+    const f = frame(
+      { flexDirection: "row", gap: 10 },
+      { width: 100, height: 100 },
+      [rect("a", 60, 40), rect("b", 60, 40)],
+    );
+    const r = byId(calculateFrameLayout(f));
+    expect(r.a).toMatchObject({ x: 0, y: 0 });
+    expect(r.b).toMatchObject({ x: 70, y: 0 }); // still on the same row
+  });
+
+  it("wraps a second item onto a new row when it doesn't fit", () => {
+    const f = frame(
+      { flexDirection: "row", flexWrap: true, gap: 10 },
+      { width: 100, height: 999 },
+      [rect("a", 60, 40), rect("b", 60, 40)],
+      { sizing: { heightMode: "fit_content" } },
+    );
+    const r = byId(calculateFrameLayout(f));
+    expect(r.a).toMatchObject({ x: 0, y: 0 });
+    expect(r.b).toMatchObject({ x: 0, y: 50 }); // new row: y = 40 (row 1 height) + rowGap 10
+  });
+
+  it("keeps items that fit on the same line", () => {
+    const f = frame(
+      { flexDirection: "row", flexWrap: true, gap: 10 },
+      { width: 200, height: 999 },
+      [rect("a", 60, 40), rect("b", 60, 40)],
+      { sizing: { heightMode: "fit_content" } },
+    );
+    const r = byId(calculateFrameLayout(f));
+    expect(r.a).toMatchObject({ x: 0, y: 0 });
+    expect(r.b).toMatchObject({ x: 70, y: 0 });
+  });
+
+  it("uses rowGap/columnGap independently when wrapping in a row container", () => {
+    const f = frame(
+      { flexDirection: "row", flexWrap: true, rowGap: 20, columnGap: 5 },
+      { width: 100, height: 999 },
+      [rect("a", 60, 40), rect("b", 60, 40), rect("c", 60, 40)],
+      { sizing: { heightMode: "fit_content" } },
+    );
+    const r = byId(calculateFrameLayout(f));
+    // a and b each go on their own row (60+5+60=125 > 100)
+    expect(r.a).toMatchObject({ x: 0, y: 0 });
+    expect(r.b).toMatchObject({ x: 0, y: 60 }); // 40 + rowGap 20
+    expect(r.c).toMatchObject({ x: 0, y: 120 }); // 60 + 40 + rowGap 20
+  });
+
+  it("wraps in a column container using columnGap between columns", () => {
+    const f = frame(
+      { flexDirection: "column", flexWrap: true, gap: 10 },
+      { width: 999, height: 100 },
+      [rect("a", 50, 60), rect("b", 50, 60)],
+      { sizing: { widthMode: "fit_content" } },
+    );
+    const r = byId(calculateFrameLayout(f));
+    expect(r.a).toMatchObject({ x: 0, y: 0 });
+    expect(r.b).toMatchObject({ x: 60, y: 0 }); // new column: x = 50 (col width) + gap 10
+  });
+
+  it("grows fit-content height as children wrap onto more rows", () => {
+    const wrapped = frame(
+      { flexDirection: "row", flexWrap: true, gap: 10 },
+      { width: 100, height: 999 },
+      [rect("a", 60, 40), rect("b", 60, 30)],
+      { sizing: { heightMode: "fit_content" } },
+    );
+    // Two rows: row1 height 40, row2 height 30, gap 10 between them
+    expect(calculateFrameIntrinsicHeight(wrapped)).toBe(80);
+
+    const singleRow = frame(
+      { flexDirection: "row", flexWrap: true, gap: 10 },
+      { width: 999, height: 999 },
+      [rect("a", 60, 40), rect("b", 60, 30)],
+      { sizing: { heightMode: "fit_content" } },
+    );
+    // Both items fit on one row -> height is just the row's max cross size
+    expect(calculateFrameIntrinsicHeight(singleRow)).toBe(40);
+  });
+
+  it("distributes leftover cross space across lines when the container has a fixed cross size", () => {
+    const f = frame(
+      { flexDirection: "row", flexWrap: true, gap: 0, alignItems: "stretch" },
+      { width: 100, height: 200 },
+      [rect("a", 60, 40), rect("b", 60, 40)],
+    );
+    const r = byId(calculateFrameLayout(f));
+    // naturals: 40 + 40 = 80, free space 120 split across 2 lines = 60 each
+    expect(r.a.height).toBe(100);
+    expect(r.b.height).toBe(100);
+    expect(r.b.y).toBe(100);
+  });
+});
+
+describe("min/max width/height clamps", () => {
+  it("clamps a fixed-size child's width to maxWidth", () => {
+    const f = frame({ flexDirection: "row" }, { width: 300, height: 100 }, [
+      rect("a", 500, 40, { sizing: { maxWidth: 200 } }),
+    ]);
+    expect(byId(calculateFrameLayout(f)).a.width).toBe(200);
+  });
+
+  it("clamps a fixed-size child's width to minWidth", () => {
+    const f = frame({ flexDirection: "row" }, { width: 300, height: 100 }, [
+      rect("a", 10, 40, { sizing: { minWidth: 80 } }),
+    ]);
+    expect(byId(calculateFrameLayout(f)).a.width).toBe(80);
+  });
+
+  it("clamps a fill_container child's grown width to maxWidth", () => {
+    const f = frame({ flexDirection: "row" }, { width: 300, height: 100 }, [
+      rect("a", 10, 40, {
+        sizing: { widthMode: "fill_container", maxWidth: 120 },
+      }),
+    ]);
+    expect(byId(calculateFrameLayout(f)).a.width).toBe(120);
+  });
+
+  it("clamps a stretched child's cross size to maxHeight", () => {
+    const f = frame(
+      { flexDirection: "row", alignItems: "stretch" },
+      { width: 300, height: 100 },
+      [rect("a", 50, 40, { sizing: { maxHeight: 60 } })],
+    );
+    expect(byId(calculateFrameLayout(f)).a.height).toBe(60);
+  });
+
+  it("clamps min/max height for a fit_content column's hug height via minHeight on a child", () => {
+    const f = frame({ flexDirection: "column" }, { width: 100, height: 300 }, [
+      rect("a", 50, 10, { sizing: { minHeight: 40 } }),
+    ]);
+    expect(byId(calculateFrameLayout(f)).a.height).toBe(40);
+  });
+});
+
 describe("calculateFrameIntrinsicSize", () => {
   it("returns frame size for a non-auto-layout frame", () => {
     const f = frame({ autoLayout: false }, { width: 300, height: 100 }, [

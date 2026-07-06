@@ -19,7 +19,15 @@ export function generateLayoutStyles(
     if (frame.layout?.autoLayout) {
       styles.display = "flex";
       styles["flex-direction"] = frame.layout.flexDirection ?? "column";
-      if (frame.layout.gap !== undefined && frame.layout.gap > 0) {
+      if (frame.layout.flexWrap) {
+        styles["flex-wrap"] = "wrap";
+      }
+      if (frame.layout.rowGap !== undefined || frame.layout.columnGap !== undefined) {
+        const rowGap = frame.layout.rowGap ?? frame.layout.gap ?? 0;
+        const columnGap = frame.layout.columnGap ?? frame.layout.gap ?? 0;
+        if (rowGap > 0) styles["row-gap"] = `${rowGap}px`;
+        if (columnGap > 0) styles["column-gap"] = `${columnGap}px`;
+      } else if (frame.layout.gap !== undefined && frame.layout.gap > 0) {
         styles.gap = `${frame.layout.gap}px`;
       }
       if (frame.layout.alignItems) {
@@ -112,6 +120,13 @@ function generateFlexChildStyles(
       styles["flex-shrink"] = "0";
     }
   }
+
+  // Min/max clamps apply regardless of sizing mode; an explicit minWidth
+  // overrides the `min-width: 0` flex-shrink reset above.
+  if (sizing?.minWidth !== undefined) styles["min-width"] = `${sizing.minWidth}px`;
+  if (sizing?.maxWidth !== undefined) styles["max-width"] = `${sizing.maxWidth}px`;
+  if (sizing?.minHeight !== undefined) styles["min-height"] = `${sizing.minHeight}px`;
+  if (sizing?.maxHeight !== undefined) styles["max-height"] = `${sizing.maxHeight}px`;
 
   // Cross axis sizing
   if (isRow) {

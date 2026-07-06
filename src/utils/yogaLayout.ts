@@ -1,8 +1,10 @@
 /**
  * Pure TypeScript flexbox layout engine.
  * Replaces yoga-layout (WASM) with a zero-dependency implementation
- * supporting: direction, gap, padding, align-items, justify-content,
- * flex-grow/shrink, and sizing modes (fixed, fill_container, fit_content).
+ * supporting: direction, gap (+ per-axis rowGap/columnGap), flex-wrap,
+ * padding, align-items, justify-content, flex-grow/shrink, sizing modes
+ * (fixed, fill_container, fit_content), and per-child min/max width/height
+ * clamps.
  */
 
 import type {
@@ -32,6 +34,11 @@ interface FlexItem {
   flexShrink: number;
   flexBasis: number;
   alignSelf: AlignItems | null;
+  // Min/max clamps (main/cross axis, already oriented for the container direction)
+  mainMin?: number;
+  mainMax?: number;
+  crossMin?: number;
+  crossMax?: number;
   // Computed output
   computedMainSize: number;
   computedCrossSize: number;
@@ -43,10 +50,21 @@ interface FlexContainer {
   direction: "row" | "column";
   mainSize: number | undefined; // undefined = shrink-to-fit
   crossSize: number | undefined;
-  gap: number;
+  // Gap between items along the main axis (within a line)
+  mainGap: number;
+  // Gap between lines along the cross axis (only relevant when flexWrap is set)
+  crossGap: number;
+  flexWrap: boolean;
   padding: [number, number, number, number]; // [top, right, bottom, left]
   alignItems: AlignItems;
   justifyContent: JustifyContent;
+}
+
+function clamp(value: number, min?: number, max?: number): number {
+  let v = value;
+  if (min !== undefined) v = Math.max(v, min);
+  if (max !== undefined) v = Math.min(v, max);
+  return v;
 }
 
 interface ResolvedPadding {
@@ -87,6 +105,13 @@ function buildContainer(
   const fitWidth = options?.fitWidth ?? false;
   const fitHeight = options?.fitHeight ?? false;
 
+  const gap = layout?.gap ?? 0;
+  const rowGap = layout?.rowGap ?? gap;
+  const columnGap = layout?.columnGap ?? gap;
+  // Main axis = between items in the same line; cross axis = between lines.
+  const mainGap = isHorizontal ? columnGap : rowGap;
+  const crossGap = isHorizontal ? rowGap : columnGap;
+
   return {
     direction,
     mainSize: isHorizontal
@@ -103,7 +128,9 @@ function buildContainer(
       : fitWidth
         ? undefined
         : frame.width,
-    gap: layout?.gap ?? 0,
+    mainGap,
+    crossGap,
+    flexWrap: layout?.flexWrap ?? false,
     padding: [
       layout?.paddingTop ?? 0,
       layout?.paddingRight ?? 0,
@@ -218,8 +245,22 @@ function buildFlexItem(child: SceneNode, container: FlexContainer): FlexItem {
   const { width: effectiveWidth, height: effectiveHeight } =
     resolveEffectiveSize(child, widthMode, heightMode);
 
-  const mainBaseSize = isHorizontal ? effectiveWidth : effectiveHeight;
-  const crossBaseSize = isHorizontal ? effectiveHeight : effectiveWidth;
+  const sizing = child.sizing;
+  const mainMin = isHorizontal ? sizing?.minWidth : sizing?.minHeight;
+  const mainMax = isHorizontal ? sizing?.maxWidth : sizing?.maxHeight;
+  const crossMin = isHorizontal ? sizing?.minHeight : sizing?.minWidth;
+  const crossMax = isHorizontal ? sizing?.maxHeight : sizing?.maxWidth;
+
+  const mainBaseSize = clamp(
+    isHorizontal ? effectiveWidth : effectiveHeight,
+    mainMin,
+    mainMax,
+  );
+  const crossBaseSize = clamp(
+    isHorizontal ? effectiveHeight : effectiveWidth,
+    crossMin,
+    crossMax,
+  );
 
   let flexGrow = 0;
   let flexShrink = 0;
@@ -246,6 +287,10 @@ function buildFlexItem(child: SceneNode, container: FlexContainer): FlexItem {
     flexShrink,
     flexBasis,
     alignSelf,
+    mainMin,
+    mainMax,
+    crossMin,
+    crossMax,
     computedMainSize: 0,
     computedCrossSize: 0,
     mainPos: 0,
@@ -263,7 +308,8 @@ function resolveMainAxisSizes(
   container: FlexContainer,
 ): void {
   const pad = resolvePadding(container);
-  const totalGap = items.length > 1 ? container.gap * (items.length - 1) : 0;
+  const totalGap =
+    items.length > 1 ? container.mainGap * (items.length - 1) : 0;
 
   if (container.mainSize !== undefined) {
     const contentSpace = container.mainSize - pad.mainStart - pad.mainEnd;
@@ -311,33 +357,118 @@ function resolveMainAxisSizes(
       item.computedMainSize = item.flexBasis;
     }
   }
+
+  // Clamp grow/shrink results into the item's min/max range. This is a
+  // single-pass clamp (not a full iterative CSS flex-basis redistribution) —
+  // acceptable simplification: it can leave a little free/negative space when
+  // clamped items exist alongside grow/shrink siblings, but keeps every
+  // computed size within its configured bounds.
+  for (const item of items) {
+    item.computedMainSize = clamp(item.computedMainSize, item.mainMin, item.mainMax);
+  }
 }
 
 /**
- * Phase 2: Resolve cross-axis sizes (stretch vs base size).
+ * Split items into wrapped lines based on their hypothetical (flex-basis)
+ * main-axis size. When wrap is off, or the main axis has no fixed size to
+ * wrap within (shrink-to-fit), everything stays on a single line — this is
+ * the pre-wrap behavior and keeps single-line layouts byte-for-byte
+ * unchanged.
  */
-function resolveCrossAxisSizes(
+function layoutLines(
   items: FlexItem[],
   container: FlexContainer,
-): void {
+): FlexItem[][] {
+  if (items.length === 0) return [];
+  if (!container.flexWrap || container.mainSize === undefined) {
+    return [items];
+  }
+
   const pad = resolvePadding(container);
+  const contentMain = container.mainSize - pad.mainStart - pad.mainEnd;
 
-  if (container.crossSize !== undefined) {
-    const contentCrossSpace =
-      container.crossSize - pad.crossStart - pad.crossEnd;
+  const lines: FlexItem[][] = [];
+  let current: FlexItem[] = [];
+  let currentMain = 0;
 
-    for (const item of items) {
-      const effectiveAlign = item.alignSelf ?? container.alignItems;
-      if (effectiveAlign === "stretch") {
-        item.computedCrossSize = contentCrossSpace;
-      } else {
-        item.computedCrossSize = item.crossBaseSize;
-      }
+  for (const item of items) {
+    const itemMain = item.flexBasis;
+    if (
+      current.length > 0 &&
+      currentMain + container.mainGap + itemMain > contentMain
+    ) {
+      lines.push(current);
+      current = [item];
+      currentMain = itemMain;
+    } else {
+      currentMain += current.length > 0 ? container.mainGap + itemMain : itemMain;
+      current.push(item);
     }
-  } else {
-    // Intrinsic mode: no stretching
-    for (const item of items) {
-      item.computedCrossSize = item.crossBaseSize;
+  }
+  if (current.length > 0) lines.push(current);
+  return lines;
+}
+
+/** Natural (unstretched) cross size of a line: the max crossBaseSize in it. */
+function lineNaturalCrossSize(line: FlexItem[]): number {
+  return line.length > 0
+    ? Math.max(...line.map((item) => item.crossBaseSize))
+    : 0;
+}
+
+/**
+ * Resolve the cross-axis size of each line. Single line: mirrors the old
+ * (pre-wrap) resolveCrossAxisSizes contentCrossSpace exactly, so stretch
+ * behavior is unchanged when wrap is off. Multi-line with a fixed container
+ * cross size: distributes leftover space evenly across lines (basic
+ * align-content: stretch equivalent). Multi-line with no fixed cross size:
+ * each line keeps its natural size (the container hugs the summed lines).
+ */
+function resolveLineCrossSizes(
+  lines: FlexItem[][],
+  container: FlexContainer,
+): number[] {
+  const naturals = lines.map(lineNaturalCrossSize);
+
+  if (lines.length <= 1) {
+    if (container.crossSize !== undefined) {
+      const pad = resolvePadding(container);
+      return [container.crossSize - pad.crossStart - pad.crossEnd];
+    }
+    return naturals;
+  }
+
+  if (container.crossSize === undefined) return naturals;
+
+  const pad = resolvePadding(container);
+  const contentCross = container.crossSize - pad.crossStart - pad.crossEnd;
+  const totalGap = (lines.length - 1) * container.crossGap;
+  const totalNatural = naturals.reduce((sum, n) => sum + n, 0);
+  const freeSpace = Math.max(0, contentCross - totalNatural - totalGap);
+  const extra = freeSpace / lines.length;
+  return naturals.map((n) => n + extra);
+}
+
+/**
+ * Phase 2: Resolve cross-axis sizes (stretch vs base size), per line, and
+ * clamp into each item's min/max cross range.
+ */
+function assignLineCrossSizes(
+  lines: FlexItem[][],
+  lineCrossSizes: number[],
+  container: FlexContainer,
+): void {
+  for (let li = 0; li < lines.length; li++) {
+    const lineCrossSize = lineCrossSizes[li];
+    for (const item of lines[li]) {
+      const effectiveAlign = item.alignSelf ?? container.alignItems;
+      item.computedCrossSize =
+        effectiveAlign === "stretch" ? lineCrossSize : item.crossBaseSize;
+      item.computedCrossSize = clamp(
+        item.computedCrossSize,
+        item.crossMin,
+        item.crossMax,
+      );
     }
   }
 }
@@ -349,7 +480,8 @@ function positionMainAxis(items: FlexItem[], container: FlexContainer): void {
   if (items.length === 0) return;
 
   const pad = resolvePadding(container);
-  const totalGap = items.length > 1 ? container.gap * (items.length - 1) : 0;
+  const totalGap =
+    items.length > 1 ? container.mainGap * (items.length - 1) : 0;
   const totalItemSize = items.reduce(
     (sum, item) => sum + item.computedMainSize,
     0,
@@ -411,44 +543,51 @@ function positionMainAxis(items: FlexItem[], container: FlexContainer): void {
     items[i].mainPos = cursor;
     cursor += items[i].computedMainSize;
     if (i < items.length - 1) {
-      cursor += container.gap + extraPerGap;
+      cursor += container.mainGap + extraPerGap;
     }
   }
 }
 
 /**
- * Phase 4: Position items on the cross axis (align-items / align-self).
+ * Phase 4: Position items on the main axis (per line) and the cross axis
+ * (align-items / align-self within the line, lines stacked with crossGap
+ * between them). Single line reproduces the old positionCrossAxis exactly.
  */
-function positionCrossAxis(items: FlexItem[], container: FlexContainer): void {
+function positionLines(
+  lines: FlexItem[][],
+  lineCrossSizes: number[],
+  container: FlexContainer,
+): void {
   const pad = resolvePadding(container);
+  let crossCursor = pad.crossStart;
 
-  let contentCrossSpace: number;
-  if (container.crossSize !== undefined) {
-    contentCrossSpace = container.crossSize - pad.crossStart - pad.crossEnd;
-  } else {
-    contentCrossSpace =
-      items.length > 0 ? Math.max(...items.map((i) => i.computedCrossSize)) : 0;
-  }
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    const lineCrossSize = lineCrossSizes[li];
 
-  for (const item of items) {
-    const effectiveAlign = item.alignSelf ?? container.alignItems;
+    positionMainAxis(line, container);
 
-    switch (effectiveAlign) {
-      case "flex-start":
-      case "stretch":
-        item.crossPos = pad.crossStart;
-        break;
-      case "center":
-        item.crossPos =
-          pad.crossStart + (contentCrossSpace - item.computedCrossSize) / 2;
-        break;
-      case "flex-end":
-        item.crossPos =
-          pad.crossStart + contentCrossSpace - item.computedCrossSize;
-        break;
-      default:
-        item.crossPos = pad.crossStart;
+    for (const item of line) {
+      const effectiveAlign = item.alignSelf ?? container.alignItems;
+
+      switch (effectiveAlign) {
+        case "flex-start":
+        case "stretch":
+          item.crossPos = crossCursor;
+          break;
+        case "center":
+          item.crossPos =
+            crossCursor + (lineCrossSize - item.computedCrossSize) / 2;
+          break;
+        case "flex-end":
+          item.crossPos = crossCursor + lineCrossSize - item.computedCrossSize;
+          break;
+        default:
+          item.crossPos = crossCursor;
+      }
     }
+
+    crossCursor += lineCrossSize + container.crossGap;
   }
 }
 
@@ -518,7 +657,8 @@ function computeIntrinsicSize(frame: FrameNode): {
     item.computedCrossSize = item.crossBaseSize;
   }
 
-  const totalGap = items.length > 1 ? container.gap * (items.length - 1) : 0;
+  const totalGap =
+    items.length > 1 ? container.mainGap * (items.length - 1) : 0;
 
   const totalMainSize =
     items.reduce((s, i) => s + i.computedMainSize, 0) +
@@ -630,16 +770,18 @@ export function calculateFrameLayout(frame: FrameNode): LayoutResult[] {
 
   const items = visibleChildren.map((child) => buildFlexItem(child, container));
 
-  resolveMainAxisSizes(items, container);
-  resolveCrossAxisSizes(items, container);
+  const lines = layoutLines(items, container);
+  for (const line of lines) resolveMainAxisSizes(line, container);
+
+  const lineCrossSizes = resolveLineCrossSizes(lines, container);
+  assignLineCrossSizes(lines, lineCrossSizes, container);
 
   // Second pass: re-measure text heights using layout-computed widths.
   // Text wrapping depends on the final width, which is only known after
   // main/cross sizing resolves fill_container widths.
   remeasureTextHeights(items, visibleChildren, container);
 
-  positionMainAxis(items, container);
-  positionCrossAxis(items, container);
+  positionLines(lines, lineCrossSizes, container);
 
   return toLayoutResults(items, container.direction);
 }
@@ -681,11 +823,14 @@ export function calculateFrameIntrinsicSize(
   const items = visibleChildren.map((child) => buildFlexItem(child, container));
 
   // Run sizing phases to get accurate sizes
-  resolveMainAxisSizes(items, container);
-  resolveCrossAxisSizes(items, container);
+  const lines = layoutLines(items, container);
+  for (const line of lines) resolveMainAxisSizes(line, container);
+  const lineCrossSizes = resolveLineCrossSizes(lines, container);
+  assignLineCrossSizes(lines, lineCrossSizes, container);
   remeasureTextHeights(items, visibleChildren, container);
 
-  const totalGap = items.length > 1 ? container.gap * (items.length - 1) : 0;
+  const totalGap =
+    items.length > 1 ? container.mainGap * (items.length - 1) : 0;
 
   const intrinsicMain =
     items.reduce((s, i) => s + i.computedMainSize, 0) +
@@ -693,10 +838,16 @@ export function calculateFrameIntrinsicSize(
     pad.mainStart +
     pad.mainEnd;
 
+  // Wrapped multi-line: the cross size hugs the summed line sizes (+ gaps
+  // between lines) instead of a single line's max. Single line: identical to
+  // the pre-wrap `Math.max(...computedCrossSize)` result.
+  const totalCrossGap =
+    lineCrossSizes.length > 1
+      ? container.crossGap * (lineCrossSizes.length - 1)
+      : 0;
   const intrinsicCross =
-    (items.length > 0
-      ? Math.max(...items.map((i) => i.computedCrossSize))
-      : 0) +
+    lineCrossSizes.reduce((s, c) => s + c, 0) +
+    totalCrossGap +
     pad.crossStart +
     pad.crossEnd;
 
@@ -740,8 +891,20 @@ export function applyLayoutToChildren(
       const widthMode = child.sizing?.widthMode ?? "fixed";
       const heightMode = child.sizing?.heightMode ?? "fixed";
 
-      const newWidth = widthMode !== "fixed" ? result.width : child.width;
-      const newHeight = heightMode !== "fixed" ? result.height : child.height;
+      // Min/max clamps apply regardless of sizing mode — a "fixed" child
+      // with minWidth/maxWidth still needs its clamped (computed) width, not
+      // its raw stored width.
+      const widthClamped =
+        child.sizing?.minWidth !== undefined ||
+        child.sizing?.maxWidth !== undefined;
+      const heightClamped =
+        child.sizing?.minHeight !== undefined ||
+        child.sizing?.maxHeight !== undefined;
+
+      const newWidth =
+        widthMode !== "fixed" || widthClamped ? result.width : child.width;
+      const newHeight =
+        heightMode !== "fixed" || heightClamped ? result.height : child.height;
 
       return {
         ...child,

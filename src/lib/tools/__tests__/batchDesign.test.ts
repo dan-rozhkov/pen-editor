@@ -429,6 +429,38 @@ describe("batch_design", () => {
       expect(frame.layout?.paddingTop).toBe(16);
     });
 
+    it("sets wrap and per-axis gaps on an existing frame", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations: "U(frame1, {wrap: true, rowGap: 12, columnGap: 4})",
+        })
+      );
+      expect(result.success).toBe(true);
+      const frame = sceneState().nodesById["frame1"] as FlatFrameNode;
+      expect(frame.layout?.flexWrap).toBe(true);
+      expect(frame.layout?.rowGap).toBe(12);
+      expect(frame.layout?.columnGap).toBe(4);
+      // Pre-existing padding from the fixture is preserved
+      expect(frame.layout?.paddingTop).toBe(16);
+    });
+
+    it("sets min/max width/height sizing constraints on an existing node", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            "U(rect2, {minWidth: 50, maxWidth: 400, minHeight: 20, maxHeight: 300})",
+        })
+      );
+      expect(result.success).toBe(true);
+      const node = sceneState().nodesById["rect2"] as FlatSceneNode;
+      expect(node.sizing).toMatchObject({
+        minWidth: 50,
+        maxWidth: 400,
+        minHeight: 20,
+        maxHeight: 300,
+      });
+    });
+
     it("re-measures text dimensions when updating a text node", async () => {
       const result = JSON.parse(
         await batchDesign({

@@ -645,6 +645,61 @@ export function SizeSection({
           Clip content
         </Label>
       )}
+      {parentContext.isInsideAutoLayout && (
+        <>
+          <label className="text-[10px] text-text-muted tracking-wide mt-2">
+            Min / Max
+          </label>
+          <PropertyRow>
+            <NumberInput
+              label="Min W"
+              value={node.sizing?.minWidth ?? 0}
+              onChange={(v) =>
+                onUpdate({
+                  sizing: { ...node.sizing, minWidth: v },
+                } as Partial<SceneNode>)
+              }
+              min={0}
+              isMixed={mixedKeys?.has("sizing.minWidth")}
+            />
+            <NumberInput
+              label="Max W"
+              value={node.sizing?.maxWidth ?? 0}
+              onChange={(v) =>
+                onUpdate({
+                  sizing: { ...node.sizing, maxWidth: v },
+                } as Partial<SceneNode>)
+              }
+              min={0}
+              isMixed={mixedKeys?.has("sizing.maxWidth")}
+            />
+          </PropertyRow>
+          <PropertyRow>
+            <NumberInput
+              label="Min H"
+              value={node.sizing?.minHeight ?? 0}
+              onChange={(v) =>
+                onUpdate({
+                  sizing: { ...node.sizing, minHeight: v },
+                } as Partial<SceneNode>)
+              }
+              min={0}
+              isMixed={mixedKeys?.has("sizing.minHeight")}
+            />
+            <NumberInput
+              label="Max H"
+              value={node.sizing?.maxHeight ?? 0}
+              onChange={(v) =>
+                onUpdate({
+                  sizing: { ...node.sizing, maxHeight: v },
+                } as Partial<SceneNode>)
+              }
+              min={0}
+              isMixed={mixedKeys?.has("sizing.maxHeight")}
+            />
+          </PropertyRow>
+        </>
+      )}
     </PropertySection>
   );
 }

@@ -90,13 +90,23 @@ interface PenBaseNode {
   reusable?: boolean;
   theme?: PenTheme;
   shader?: ShaderConfig;
+  // Min/max clamps applied to the resolved width/height inside an auto-layout
+  // parent, regardless of sizing mode.
+  minWidth?: number;
+  maxWidth?: number;
+  minHeight?: number;
+  maxHeight?: number;
 }
 
 interface PenFrameNode extends PenBaseNode {
   type: "frame";
   children: PenNode[];
   layout?: "none" | "vertical" | "horizontal";
+  wrap?: boolean;
   gap?: number;
+  // Present instead of `gap` when row/column gaps diverge.
+  rowGap?: number;
+  columnGap?: number;
   padding?: number | [number, number] | [number, number, number, number];
   justifyContent?: "start" | "center" | "end" | "space_between" | "space_around";
   alignItems?: "start" | "center" | "end";
@@ -445,6 +455,10 @@ function exportNodeBase(node: SceneNode, context: ExportContext, parentUsesLayou
       ? { theme: { [THEME_AXIS]: node.themeOverride } }
       : {}),
     ...(node.shader ? { shader: node.shader } : {}),
+    ...(node.sizing?.minWidth != null ? { minWidth: node.sizing.minWidth } : {}),
+    ...(node.sizing?.maxWidth != null ? { maxWidth: node.sizing.maxWidth } : {}),
+    ...(node.sizing?.minHeight != null ? { minHeight: node.sizing.minHeight } : {}),
+    ...(node.sizing?.maxHeight != null ? { maxHeight: node.sizing.maxHeight } : {}),
   };
 }
 
@@ -504,6 +518,10 @@ function exportFrameNode(
   const padding = node.type === "frame" ? exportPadding(node.layout) : undefined;
   const justifyContent = node.type === "frame" ? mapJustifyContent(node.layout?.justifyContent) : undefined;
   const alignItems = node.type === "frame" ? mapAlignItems(node.layout?.alignItems) : undefined;
+  const flexWrap = node.type === "frame" && node.layout?.flexWrap;
+  const rowGap = node.type === "frame" ? node.layout?.rowGap : undefined;
+  const columnGap = node.type === "frame" ? node.layout?.columnGap : undefined;
+  const gapDiverges = rowGap != null && columnGap != null && rowGap !== columnGap;
 
   return {
     ...exportNodeBase(node, context, parentUsesLayout),
@@ -512,7 +530,12 @@ function exportFrameNode(
     ...(usesLayout
       ? {
           layout: node.layout?.flexDirection === "column" ? "vertical" : "horizontal",
-          ...(node.layout?.gap != null ? { gap: node.layout.gap } : {}),
+          ...(flexWrap ? { wrap: true } : {}),
+          ...(gapDiverges
+            ? { rowGap, columnGap }
+            : node.layout?.gap != null
+              ? { gap: node.layout.gap }
+              : {}),
           ...(padding != null ? { padding } : {}),
           ...(justifyContent ? { justifyContent } : {}),
           ...(alignItems ? { alignItems } : {}),

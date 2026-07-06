@@ -137,6 +137,19 @@ export function inferAutoLayout(
       ...parsePadding(style),
     };
 
+    if (style.flexWrap === "wrap" || style.flexWrap === "wrap-reverse") {
+      layout.flexWrap = true;
+
+      // When row-gap and column-gap diverge, preserve them independently
+      // instead of collapsing into a single main-axis gap.
+      const rowGap = parseFloat(style.rowGap) || 0;
+      const columnGap = parseFloat(style.columnGap) || 0;
+      if (rowGap !== columnGap) {
+        layout.rowGap = rowGap;
+        layout.columnGap = columnGap;
+      }
+    }
+
     // Align items
     const alignItems = style.alignItems;
     if (alignItems && CSS_ALIGN_ITEMS_MAP[alignItems]) {
