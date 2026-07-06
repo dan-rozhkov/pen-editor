@@ -3,6 +3,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { useVariableStore } from "@/store/variableStore";
+import { useTextStyleStore } from "@/store/textStyleStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useGuidesStore } from "@/store/guidesStore";
@@ -31,6 +32,7 @@ export function resetStores(): void {
   });
   useHistoryStore.setState({ past: [], future: [], batchMode: false });
   useVariableStore.setState({ variables: [] });
+  useTextStyleStore.setState({ textStyles: [] });
   useThemeStore.setState({ activeTheme: "light" });
   useViewportStore.setState({ scale: 1, x: 0, y: 0 });
   useGuidesStore.setState({ guides: [] });
@@ -120,6 +122,23 @@ export function seedVariables(): void {
         name: "--radius-m",
         type: "number",
         value: "8",
+      },
+    ],
+  });
+}
+
+export function seedTextStyles(): void {
+  useTextStyleStore.setState({
+    textStyles: [
+      {
+        id: "style-heading",
+        name: "Heading/L",
+        fontFamily: "Inter",
+        fontSize: 32,
+        fontWeight: "700",
+        lineHeight: 1.1,
+        letterSpacing: -0.5,
+        textTransform: "none",
       },
     ],
   });

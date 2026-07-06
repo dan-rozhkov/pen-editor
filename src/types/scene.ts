@@ -393,6 +393,16 @@ export interface TextNode extends BaseNode {
   // Optional hard cap on the number of rendered lines (>= 1). When the wrapped
   // text exceeds it, the last kept line ends with an ellipsis. Figma "Max lines".
   maxLines?: number
+  // Bound named text style (see `types/textStyle.ts`). When set, the node's own
+  // typography fields above (fontFamily, fontSize, ...) are kept in sync with the
+  // style and are the values actually rendered/measured — `textStyleId` only
+  // tracks provenance so future style edits know which nodes to update and the UI
+  // can show a "linked to style" affordance.
+  textStyleId?: string
+  // Typography property keys (a subset of `TEXT_STYLE_PROPERTY_KEYS`) that have
+  // been locally edited since the style was applied. Centralized style edits skip
+  // these keys for this node ("local override", mirrors ref-instance overrides).
+  textStyleOverrides?: string[]
 }
 
 export interface GroupNode extends BaseNode {

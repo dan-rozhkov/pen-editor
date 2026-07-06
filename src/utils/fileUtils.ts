@@ -1,6 +1,7 @@
 import type { ComponentArtifact, SceneNode } from '../types/scene'
 import type { Variable, ThemeName } from '../types/variable'
 import { ensureThemeValues } from '../types/variable'
+import type { TextStyle } from '../types/textStyle'
 import { generateId } from '../types/scene'
 import { serializePublicPenDocument } from "@/utils/publicPenExport";
 import type { Guide } from "@/store/guidesStore";
@@ -20,6 +21,7 @@ export interface PenDocument {
   // Multi-page format
   pages?: PenPage[]
   variables?: Variable[]
+  textStyles?: TextStyle[]
   activeTheme?: ThemeName
   componentArtifacts?: Record<string, ComponentArtifact>
 }
@@ -35,6 +37,7 @@ export interface DocumentPageData {
 export interface DocumentData {
   pages: DocumentPageData[]
   variables: Variable[]
+  textStyles: TextStyle[]
   activeTheme: ThemeName
   componentArtifacts: Record<string, ComponentArtifact>
 }
@@ -46,6 +49,7 @@ export function serializeDocument(
   variables: Variable[],
   activeTheme: ThemeName,
   componentArtifacts: Record<string, ComponentArtifact> = {},
+  textStyles: TextStyle[] = [],
 ): string {
   const doc: PenDocument = {
     version: CURRENT_VERSION,
@@ -57,6 +61,7 @@ export function serializeDocument(
       ...(p.guides && p.guides.length > 0 ? { guides: p.guides } : {}),
     })),
     variables,
+    textStyles,
     activeTheme,
     componentArtifacts,
   }
@@ -91,6 +96,7 @@ export function deserializeDocument(json: string): DocumentData {
   return {
     pages,
     variables: migratedVariables,
+    textStyles: doc.textStyles ?? [],
     activeTheme: doc.activeTheme ?? 'light',
     componentArtifacts: doc.componentArtifacts ?? {},
   }
@@ -101,9 +107,10 @@ export function downloadDocument(
   variables: Variable[],
   activeTheme: ThemeName,
   componentArtifacts: Record<string, ComponentArtifact> = {},
-  filename = 'document.json'
+  filename = 'document.json',
+  textStyles: TextStyle[] = [],
 ) {
-  const json = serializeDocument(pages, variables, activeTheme, componentArtifacts)
+  const json = serializeDocument(pages, variables, activeTheme, componentArtifacts, textStyles)
   downloadTextFile(json, filename)
 }
 

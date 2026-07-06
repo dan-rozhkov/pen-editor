@@ -5,6 +5,8 @@ import {
   ArrowsOut,
   ArrowRight,
   Article,
+  CaretDownIcon,
+  LinkBreakIcon,
   MinusIcon,
   TextAlignCenter,
   TextAlignLeft,
@@ -23,10 +25,94 @@ import {
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { FontCombobox } from "@/components/ui/FontCombobox";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { useTextStyleStore } from "@/store/textStyleStore";
+import { TEXT_STYLE_PROPERTY_KEYS } from "@/types/textStyle";
 
 interface TypographySectionProps {
   node: TextNode;
   onUpdate: (updates: Partial<SceneNode>) => void;
+}
+
+const STYLE_MANAGED_KEYS: readonly string[] = TEXT_STYLE_PROPERTY_KEYS;
+
+/** Picker for the named text style bound to this node: apply / create / detach. */
+function TextStyleField({ node }: { node: TextNode }) {
+  const textStyles = useTextStyleStore((s) => s.textStyles);
+  const applyStyleToNode = useTextStyleStore((s) => s.applyStyleToNode);
+  const detachStyleFromNode = useTextStyleStore((s) => s.detachStyleFromNode);
+  const createStyleFromNode = useTextStyleStore((s) => s.createStyleFromNode);
+  const boundStyle = node.textStyleId
+    ? textStyles.find((s) => s.id === node.textStyleId)
+    : undefined;
+
+  // applyStyleToNode/detachStyleFromNode/createStyleFromNode mutate the scene
+  // store directly (they need to update literal typography fields to keep
+  // rendering/measurement in sync), so this field bypasses the `onUpdate` prop
+  // entirely — the scene store update re-renders the panel from the fresh node.
+
+  return (
+    <PropertyRow>
+      <DropdownMenu>
+        <DropdownMenuTrigger>
+          <button
+            type="button"
+            className="flex-1 flex items-center justify-between gap-1 h-7 px-2 rounded-md bg-secondary text-xs text-text-primary hover:bg-secondary/80"
+          >
+            <span className="truncate">
+              {boundStyle ? boundStyle.name : "No text style"}
+            </span>
+            <CaretDownIcon size={12} />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="start"
+          className="min-w-[180px] bg-popover text-popover-foreground ring-foreground/10 rounded-lg shadow-md ring-1"
+        >
+          {textStyles.length === 0 && (
+            <div className="px-2 py-1.5 text-[11px] text-text-disabled">
+              No text styles yet
+            </div>
+          )}
+          {textStyles.map((style) => (
+            <DropdownMenuItem
+              key={style.id}
+              className="text-xs cursor-pointer"
+              onClick={() => applyStyleToNode(node.id, style.id)}
+            >
+              {style.name}
+            </DropdownMenuItem>
+          ))}
+          {textStyles.length > 0 && <DropdownMenuSeparator />}
+          <DropdownMenuItem
+            className="text-xs cursor-pointer"
+            onClick={() =>
+              createStyleFromNode(node.id, node.name || "New text style")
+            }
+          >
+            Create style from this text
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {node.textStyleId && (
+        <button
+          type="button"
+          title="Detach from style"
+          aria-label="Detach from style"
+          className="p-1.5 rounded hover:bg-secondary text-text-muted hover:text-text-primary transition-colors"
+          onClick={() => detachStyleFromNode(node.id)}
+        >
+          <LinkBreakIcon size={14} />
+        </button>
+      )}
+    </PropertyRow>
+  );
 }
 
 const segmentedButtonGroupClass =
@@ -61,6 +147,26 @@ function TruncateTextIcon() {
 }
 
 export function TypographySection({ node, onUpdate }: TypographySectionProps) {
+  // Route typography edits: while the node is bound to a text style, changing
+  // a style-managed property (fontFamily/fontSize/...) becomes a local
+  // override — tracked in `textStyleOverrides` (mirrors ref-instance
+  // overrides) — instead of silently drifting from the style with no record
+  // of the divergence, so a later centralized style edit correctly skips it.
+  const updateTypography = (updates: Partial<TextNode>) => {
+    if (node.textStyleId) {
+      const overriddenKeys = Object.keys(updates).filter((k) =>
+        STYLE_MANAGED_KEYS.includes(k),
+      );
+      if (overriddenKeys.length > 0) {
+        const existing = node.textStyleOverrides ?? [];
+        const merged = Array.from(new Set([...existing, ...overriddenKeys]));
+        onUpdate({ ...updates, textStyleOverrides: merged } as Partial<SceneNode>);
+        return;
+      }
+    }
+    onUpdate(updates as Partial<SceneNode>);
+  };
+
   // Switching the text resize mode must not contradict auto-layout sizing:
   // auto-width can't fill its container, and auto-height can't fill vertically.
   const setTextWidthMode = (mode: TextNode["textWidthMode"]) => {
@@ -87,17 +193,18 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
 
   return (
     <PropertySection title="Typography">
+      <TextStyleField node={node} />
       <FontCombobox
         value={node.fontFamily ?? "Arial"}
         onChange={(v) =>
-          onUpdate({ fontFamily: v } as Partial<SceneNode>)
+          updateTypography({ fontFamily: v })
         }
       />
       <PropertyRow>
         <NumberInput
           value={node.fontSize ?? 16}
           onChange={(v) =>
-            onUpdate({ fontSize: v } as Partial<SceneNode>)
+            updateTypography({ fontSize: v })
           }
           min={1}
         />
@@ -116,7 +223,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             { value: "900", label: "900 Black" },
           ]}
           onChange={(v) =>
-            onUpdate({ fontWeight: v } as Partial<SceneNode>)
+            updateTypography({ fontWeight: v })
           }
         />
       </PropertyRow>
@@ -192,7 +299,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             { value: "capitalize", label: "Capitalize" },
           ]}
           onChange={(v) =>
-            onUpdate({ textTransform: v } as Partial<SceneNode>)
+            updateTypography({ textTransform: v as TextNode["textTransform"] })
           }
         />
       </div>
@@ -443,7 +550,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
           labelOutside={true}
           value={node.lineHeight ?? 1.2}
           onChange={(v) =>
-            onUpdate({ lineHeight: v } as Partial<SceneNode>)
+            updateTypography({ lineHeight: v })
           }
           min={0.5}
           max={3}
@@ -454,7 +561,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
           labelOutside={true}
           value={node.letterSpacing ?? 0}
           onChange={(v) =>
-            onUpdate({ letterSpacing: v } as Partial<SceneNode>)
+            updateTypography({ letterSpacing: v })
           }
           min={-5}
           max={50}

@@ -4,10 +4,12 @@ import {
   SparkleIcon,
   DiamondsFourIcon,
   PlusCircleIcon,
+  TextAaIcon,
 } from "@phosphor-icons/react";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import type { LeftSection } from "@/store/leftSidebarStore";
 import { useVariablesDialogStore } from "@/store/variablesDialogStore";
+import { useTextStylesDialogStore } from "@/store/textStylesDialogStore";
 import { useIsMobile } from "@/hooks/useIsMobile";
 
 interface RailButtonProps {
@@ -61,6 +63,7 @@ export function LeftRail() {
   const isPanelOpen = useLeftSidebarStore((s) => s.isPanelOpen);
   const setPanelOpen = useLeftSidebarStore((s) => s.setPanelOpen);
   const openVariables = useVariablesDialogStore((s) => s.setOpen);
+  const openTextStyles = useTextStylesDialogStore((s) => s.setOpen);
   const isMobile = useIsMobile();
 
   // On mobile the panel is a full-width overlay the rail toggles: tapping the
@@ -103,6 +106,14 @@ export function LeftRail() {
         onClick={() => openVariables(true)}
       >
         <PlusCircleIcon size={20} weight="light" />
+      </RailButton>
+      <RailButton
+        testid="rail-text-styles"
+        title="Text styles"
+        active={false}
+        onClick={() => openTextStyles(true)}
+      >
+        <TextAaIcon size={20} weight="light" />
       </RailButton>
     </div>
   );

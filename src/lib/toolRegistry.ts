@@ -5,6 +5,9 @@ import { snapshotLayout } from "./tools/snapshotLayout";
 import { getVariables } from "./tools/getVariables";
 import { getScreenshot } from "./tools/getScreenshot";
 import { setVariables } from "./tools/setVariables";
+import { getTextStyles } from "./tools/getTextStyles";
+import { setTextStyles } from "./tools/setTextStyles";
+import { applyTextStyle } from "./tools/applyTextStyle";
 import { replaceAllMatchingProperties } from "./tools/replaceAllMatchingProperties";
 import { searchAllUniqueProperties } from "./tools/searchAllUniqueProperties";
 import { findEmptySpace } from "./tools/findEmptySpace";
@@ -24,6 +27,9 @@ export const toolHandlers: Record<string, ToolHandler> = {
   get_variables: getVariables,
   batch_design: batchDesign,
   set_variables: setVariables,
+  get_text_styles: getTextStyles,
+  set_text_styles: setTextStyles,
+  apply_text_style: applyTextStyle,
   replace_all_matching_properties: replaceAllMatchingProperties,
   find_empty_space_on_canvas: findEmptySpace,
   search_all_unique_properties: searchAllUniqueProperties,

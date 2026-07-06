@@ -164,6 +164,88 @@ describe("<TypographySection />", () => {
     });
   });
 
+  describe("text style binding", () => {
+    it("shows 'No text style' when unbound and does not tag overrides on plain edits", () => {
+      const onUpdate = vi.fn();
+      render(<TypographySection node={textNode()} onUpdate={onUpdate} />);
+      expect(screen.getByText("No text style")).toBeTruthy();
+
+      const inputs = screen.getAllByRole("spinbutton");
+      fireEvent.change(inputs[0], { target: { value: "24" } });
+      expect(onUpdate).toHaveBeenCalledWith({ fontSize: 24 });
+    });
+
+    it("records the edited property in textStyleOverrides when bound to a style", () => {
+      const onUpdate = vi.fn();
+      render(
+        <TypographySection
+          node={textNode({ textStyleId: "style-1" })}
+          onUpdate={onUpdate}
+        />,
+      );
+      const inputs = screen.getAllByRole("spinbutton");
+      fireEvent.change(inputs[0], { target: { value: "24" } }); // font size
+
+      expect(onUpdate).toHaveBeenCalledWith({
+        fontSize: 24,
+        textStyleOverrides: ["fontSize"],
+      });
+    });
+
+    it("appends to existing overrides without duplicating them", () => {
+      const onUpdate = vi.fn();
+      render(
+        <TypographySection
+          node={textNode({
+            textStyleId: "style-1",
+            textStyleOverrides: ["fontSize"],
+          })}
+          onUpdate={onUpdate}
+        />,
+      );
+      const inputs = screen.getAllByRole("spinbutton");
+      fireEvent.change(inputs[0], { target: { value: "24" } }); // font size again
+      expect(onUpdate).toHaveBeenCalledWith({
+        fontSize: 24,
+        textStyleOverrides: ["fontSize"],
+      });
+
+      fireEvent.change(inputs[2], { target: { value: "3" } }); // letter spacing
+      expect(onUpdate).toHaveBeenCalledWith({
+        letterSpacing: 3,
+        textStyleOverrides: ["fontSize", "letterSpacing"],
+      });
+    });
+
+    it("does not tag non-style properties (e.g. resize mode) as an override", () => {
+      const onUpdate = vi.fn();
+      render(
+        <TypographySection
+          node={textNode({ textStyleId: "style-1", textWidthMode: "fixed" })}
+          onUpdate={onUpdate}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Auto width" }));
+      expect(onUpdate).toHaveBeenCalledWith({ textWidthMode: "auto" });
+    });
+
+    it("shows a Detach button only when bound to a style", () => {
+      const onUpdate = vi.fn();
+      const { rerender } = render(
+        <TypographySection node={textNode()} onUpdate={onUpdate} />,
+      );
+      expect(screen.queryByTitle("Detach from style")).toBeNull();
+
+      rerender(
+        <TypographySection
+          node={textNode({ textStyleId: "style-1" })}
+          onUpdate={onUpdate}
+        />,
+      );
+      expect(screen.getByTitle("Detach from style")).toBeTruthy();
+    });
+  });
+
   it("toggles italic on and off based on current state", () => {
     // The icon-only buttons after italic are, in DOM order: underline,
     // strikethrough, align L/C/R, vAlign T/M/B, resize a/f/fh — 11 buttons —

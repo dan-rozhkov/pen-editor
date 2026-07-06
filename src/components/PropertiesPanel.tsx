@@ -3,6 +3,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useVariablesDialogStore } from "@/store/variablesDialogStore";
+import { useTextStylesDialogStore } from "@/store/textStylesDialogStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useViewportStore } from "@/store/viewportStore";
 import type { SceneNode, FrameNode } from "@/types/scene";
@@ -22,6 +23,7 @@ import { PageProperties } from "@/components/properties/PageProperties";
 import { PencilToolProperties } from "@/components/properties/PencilToolProperties";
 import { PropertyEditor } from "@/components/properties/PropertyEditor";
 import { VariablesDialog } from "@/components/VariablesPanel";
+import { TextStylesDialog } from "@/components/TextStylesPanel";
 import { CaretRightIcon } from "@phosphor-icons/react";
 import clsx from "clsx";
 
@@ -178,6 +180,8 @@ export function PropertiesPanel() {
   const activeTool = useDrawModeStore((s) => s.activeTool);
   const variablesOpen = useVariablesDialogStore((s) => s.open);
   const setVariablesOpen = useVariablesDialogStore((s) => s.setOpen);
+  const textStylesOpen = useTextStylesDialogStore((s) => s.open);
+  const setTextStylesOpen = useTextStylesDialogStore((s) => s.setOpen);
 
   const selectedNode =
     selectedIds.length === 1 ? findNodeById(nodes, selectedIds[0]) : null;
@@ -257,6 +261,7 @@ export function PropertiesPanel() {
         <ExportSection selectedNode={selectedNode} />
       </div>
       <VariablesDialog open={variablesOpen} onOpenChange={setVariablesOpen} />
+      <TextStylesDialog open={textStylesOpen} onOpenChange={setTextStylesOpen} />
     </div>
   );
 }

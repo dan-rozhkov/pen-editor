@@ -7,6 +7,7 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useUIThemeStore } from "@/store/uiThemeStore";
 import { useVariableStore } from "@/store/variableStore";
+import { useTextStyleStore } from "@/store/textStyleStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { usePageStore } from "@/store/pageStore";
 import type { PageData } from "@/store/pageStore";
@@ -47,6 +48,7 @@ export function applyOpenedDocument(
 
   // Set up shared state
   useVariableStore.getState().setVariables(data.variables);
+  useTextStyleStore.getState().setTextStyles(data.textStyles ?? []);
   // Apply the saved theme to BOTH the design-theme store (drives variable
   // resolution) and the editor-chrome theme store, so the document reopens in
   // the theme it was saved with instead of always falling back to light.

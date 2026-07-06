@@ -1,0 +1,263 @@
+import { useState, useRef, useEffect } from "react";
+import { useTextStyleStore } from "../store/textStyleStore";
+import { generateTextStyleId } from "../types/textStyle";
+import type { TextStyle, TextStylePropertyKey } from "../types/textStyle";
+import { Dialog, DialogContent, DialogTitle } from "./ui/dialog";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "./ui/table";
+import { PlusIcon, TrashIcon, TextAaIcon } from "@phosphor-icons/react";
+
+// Inline editable text/number cell (mirrors VariablesPanel's EditableCell).
+function EditableCell({
+  value,
+  onCommit,
+  inputType = "text",
+  placeholder,
+}: {
+  value: string;
+  onCommit: (value: string) => void;
+  inputType?: "text" | "number";
+  placeholder?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  const commit = () => {
+    const trimmed = draft.trim();
+    if (trimmed !== value) onCommit(trimmed);
+    setEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") commit();
+    else if (e.key === "Escape") {
+      setDraft(value);
+      setEditing(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        type={inputType}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={handleKeyDown}
+        className="w-full bg-secondary rounded px-2 py-1 text-xs text-text-primary outline-none"
+      />
+    );
+  }
+
+  return (
+    <span
+      className="text-xs text-text-secondary truncate cursor-text hover:text-text-primary block px-2 py-1 rounded hover:bg-secondary"
+      onClick={() => {
+        setDraft(value);
+        setEditing(true);
+      }}
+    >
+      {value || placeholder || "(empty)"}
+    </span>
+  );
+}
+
+function commitNumberOrClear(
+  raw: string,
+  onChange: (value: number | undefined) => void,
+) {
+  if (raw === "") {
+    onChange(undefined);
+    return;
+  }
+  const parsed = Number(raw);
+  if (!Number.isNaN(parsed)) onChange(parsed);
+}
+
+function TextStyleRow({ style }: { style: TextStyle }) {
+  const updateTextStyle = useTextStyleStore((s) => s.updateTextStyle);
+  const deleteTextStyle = useTextStyleStore((s) => s.deleteTextStyle);
+  const [hovered, setHovered] = useState(false);
+
+  const set = <K extends TextStylePropertyKey | "name">(
+    key: K,
+    value: TextStyle[K],
+  ) => updateTextStyle(style.id, { [key]: value });
+
+  return (
+    <TableRow
+      className="border-border-light hover:bg-secondary/50"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <TableCell className="py-2 px-3">
+        <EditableCell value={style.name} onCommit={(v) => set("name", v)} />
+      </TableCell>
+      <TableCell className="py-2 px-3 border-l border-border-light">
+        <EditableCell
+          value={style.fontFamily ?? ""}
+          onCommit={(v) => set("fontFamily", v || undefined)}
+          placeholder="Arial"
+        />
+      </TableCell>
+      <TableCell className="py-2 px-3 border-l border-border-light">
+        <EditableCell
+          value={style.fontSize !== undefined ? String(style.fontSize) : ""}
+          inputType="number"
+          onCommit={(v) => commitNumberOrClear(v, (n) => set("fontSize", n))}
+          placeholder="16"
+        />
+      </TableCell>
+      <TableCell className="py-2 px-3 border-l border-border-light">
+        <EditableCell
+          value={style.fontWeight ?? ""}
+          onCommit={(v) => set("fontWeight", v || undefined)}
+          placeholder="normal"
+        />
+      </TableCell>
+      <TableCell className="py-2 px-3 border-l border-border-light">
+        <EditableCell
+          value={style.lineHeight !== undefined ? String(style.lineHeight) : ""}
+          inputType="number"
+          onCommit={(v) => commitNumberOrClear(v, (n) => set("lineHeight", n))}
+          placeholder="1.2"
+        />
+      </TableCell>
+      <TableCell className="py-2 px-3 border-l border-border-light">
+        <EditableCell
+          value={style.letterSpacing !== undefined ? String(style.letterSpacing) : ""}
+          inputType="number"
+          onCommit={(v) => commitNumberOrClear(v, (n) => set("letterSpacing", n))}
+          placeholder="0"
+        />
+      </TableCell>
+      <TableCell className="py-2 px-3 border-l border-border-light">
+        {hovered && (
+          <button
+            className="p-1 rounded hover:bg-white/10 text-text-muted hover:text-red-400 transition-colors"
+            onClick={() => deleteTextStyle(style.id)}
+            title="Delete text style"
+          >
+            <TrashIcon className="size-3.5" />
+          </button>
+        )}
+      </TableCell>
+    </TableRow>
+  );
+}
+
+interface TextStylesDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function TextStylesDialog({ open, onOpenChange }: TextStylesDialogProps) {
+  const textStyles = useTextStyleStore((s) => s.textStyles);
+  const addTextStyle = useTextStyleStore((s) => s.addTextStyle);
+
+  const handleAdd = () => {
+    const newStyle: TextStyle = {
+      id: generateTextStyleId(),
+      name: `Style ${textStyles.length + 1}`,
+      fontFamily: "Arial",
+      fontSize: 16,
+      fontWeight: "normal",
+      lineHeight: 1.2,
+      letterSpacing: 0,
+      textTransform: "none",
+    };
+    addTextStyle(newStyle);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="sm:max-w-3xl max-h-[80vh] flex flex-col gap-0 p-0"
+        showCloseButton={false}
+        overlayClassName="backdrop-blur-none bg-black/40"
+      >
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border-light">
+          <DialogTitle className="flex items-center gap-2">
+            <TextAaIcon className="size-4" />
+            Text styles
+          </DialogTitle>
+          <button
+            className="p-1 rounded hover:bg-secondary transition-colors text-text-muted hover:text-text-primary"
+            title="Add text style"
+            onClick={handleAdd}
+          >
+            <PlusIcon className="size-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-auto">
+          <Table className="border-collapse select-none table-fixed min-w-[720px]">
+            <TableHeader>
+              <TableRow className="border-border-light bg-surface-panel sticky top-0 hover:bg-surface-panel">
+                <TableHead className="w-[22%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto">
+                  Name
+                </TableHead>
+                <TableHead className="w-[18%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
+                  Font
+                </TableHead>
+                <TableHead className="w-[12%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
+                  Size
+                </TableHead>
+                <TableHead className="w-[13%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
+                  Weight
+                </TableHead>
+                <TableHead className="w-[13%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
+                  Line height
+                </TableHead>
+                <TableHead className="w-[14%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
+                  Letter spacing
+                </TableHead>
+                <TableHead className="w-[8%] h-auto border-l border-border-light" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {textStyles.length === 0 ? (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell
+                    colSpan={7}
+                    className="text-center text-text-disabled text-xs py-12"
+                  >
+                    No text styles yet — create one from a selected text layer's
+                    properties panel, or add one here.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                textStyles.map((s) => <TextStyleRow key={s.id} style={s} />)
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="border-t border-border-light px-4 py-3">
+          <button
+            className="flex items-center gap-2 text-xs text-text-muted hover:text-text-primary transition-colors"
+            onClick={handleAdd}
+          >
+            <PlusIcon className="size-4" weight="light" />
+            Create text style
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
