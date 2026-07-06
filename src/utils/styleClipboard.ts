@@ -51,6 +51,7 @@ export interface NodeStyleSnapshot {
   // Corner radius (frame / rect only)
   cornerRadius?: number;
   cornerRadiusPerCorner?: PerCornerRadius;
+  cornerSmoothing?: number;
 
   // Pen-drawn stroke (path only)
   pathStroke?: PathStroke;
@@ -92,6 +93,7 @@ const COMMON_STYLE_KEYS = [
 const CORNER_RADIUS_KEYS = [
   "cornerRadius",
   "cornerRadiusPerCorner",
+  "cornerSmoothing",
 ] as const satisfies readonly (keyof NodeStyleSnapshot)[];
 
 const PATH_STYLE_KEYS = ["pathStroke"] as const satisfies readonly (keyof NodeStyleSnapshot)[];

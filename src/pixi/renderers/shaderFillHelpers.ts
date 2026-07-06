@@ -93,10 +93,15 @@ function isNodeRenderable(node: FlatSceneNode): boolean {
  * itself is skipped while hidden to avoid wasted offscreen WebGL work).
  */
 export function shouldRebakeShader(node: FlatSceneNode, prev: FlatSceneNode): boolean {
+  const cn = node as CornerNode;
+  const cp = prev as CornerNode;
   return (
     node.shader !== prev.shader ||
     node.width !== prev.width ||
     node.height !== prev.height ||
+    cn.cornerRadius !== cp.cornerRadius ||
+    cn.cornerRadiusPerCorner !== cp.cornerRadiusPerCorner ||
+    cn.cornerSmoothing !== cp.cornerSmoothing ||
     (isNodeRenderable(node) && !isNodeRenderable(prev))
   );
 }

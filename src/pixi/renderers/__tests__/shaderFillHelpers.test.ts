@@ -71,6 +71,27 @@ describe("shaderFillHelpers", () => {
     expect(shouldRebakeShader(rectNode({ shader: s, height: 200 }), base)).toBe(true);
   });
 
+  it("rebakes when corner geometry changes (radius, per-corner, or smoothing)", () => {
+    const s = { kind: "waves", params: {} } as FlatSceneNode["shader"];
+    const base = rectNode({ shader: s, cornerRadius: 4 });
+    expect(shouldRebakeShader(rectNode({ shader: s, cornerRadius: 8 }), base)).toBe(true);
+
+    const perCorner = { topLeft: 1, topRight: 2, bottomRight: 3, bottomLeft: 4 };
+    const baseWithPerCorner = rectNode({ shader: s, cornerRadiusPerCorner: perCorner });
+    expect(
+      shouldRebakeShader(
+        rectNode({ shader: s, cornerRadiusPerCorner: { ...perCorner, topLeft: 10 } }),
+        baseWithPerCorner,
+      ),
+    ).toBe(true);
+
+    const baseWithSmoothing = rectNode({ shader: s, cornerSmoothing: 0.3 });
+    expect(shouldRebakeShader(rectNode({ shader: s, cornerSmoothing: 0.6 }), baseWithSmoothing)).toBe(true);
+
+    // Unchanged corner geometry: no rebake.
+    expect(shouldRebakeShader(rectNode({ shader: s, cornerRadius: 4 }), base)).toBe(false);
+  });
+
   it("rebakes when a hidden node becomes visible, but not while it stays hidden", () => {
     const s = { kind: "waves", params: {} } as FlatSceneNode["shader"];
     const hidden = rectNode({ shader: s, visible: false });

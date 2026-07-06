@@ -18,6 +18,7 @@ const rectSource: FlatSceneNode = {
   fillOpacity: 0.9,
   cornerRadius: 8,
   cornerRadiusPerCorner: { topLeft: 1, topRight: 2, bottomRight: 3, bottomLeft: 4 },
+  cornerSmoothing: 0.6,
   effects: [{ type: "shadow", shadowType: "outer", color: "#00000080", offset: { x: 1, y: 1 }, blur: 4, spread: 0 }],
 } as FlatSceneNode;
 
@@ -68,6 +69,7 @@ describe("extractNodeStyle", () => {
     expect(style.fillOpacity).toBe(0.9);
     expect(style.cornerRadius).toBe(8);
     expect(style.cornerRadiusPerCorner).toEqual({ topLeft: 1, topRight: 2, bottomRight: 3, bottomLeft: 4 });
+    expect(style.cornerSmoothing).toBe(0.6);
     expect(style.effects).toHaveLength(1);
     // Text-only fields must not appear on a rect-derived style
     expect(style.fontSize).toBeUndefined();
@@ -101,6 +103,7 @@ describe("pickStyleUpdatesForNode", () => {
       bottomRight: 3,
       bottomLeft: 4,
     });
+    expect((updates as Record<string, unknown>).cornerSmoothing).toBe(0.6);
     expect((updates as Record<string, unknown>).effects).toHaveLength(1);
   });
 
@@ -112,6 +115,7 @@ describe("pickStyleUpdatesForNode", () => {
     expect(updates.opacity).toBe(0.8);
     expect((updates as Record<string, unknown>).cornerRadius).toBeUndefined();
     expect((updates as Record<string, unknown>).cornerRadiusPerCorner).toBeUndefined();
+    expect((updates as Record<string, unknown>).cornerSmoothing).toBeUndefined();
   });
 
   it("does not push text styles onto a rectangle", () => {
