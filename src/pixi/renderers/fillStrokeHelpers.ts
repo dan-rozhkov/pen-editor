@@ -10,6 +10,7 @@ import type {
 } from "@/types/scene";
 import { hasPerSideStroke, hasPerCornerRadius } from "@/utils/renderUtils";
 import { getRenderableFills } from "@/utils/fillUtils";
+import { buildSquircleRectPath } from "@/lib/shapePath/squircleCorner";
 import {
   getResolvedSolidPaint,
   getResolvedStroke,
@@ -141,6 +142,53 @@ export function buildPixiGradient(
   });
 }
 
+/**
+ * Draw a squircle-cornered rounded rectangle (`cornerSmoothing > 0`) using the
+ * shared path math from `@/lib/shapePath/squircleCorner`. Only called when
+ * smoothing is strictly positive — the plain-arc `arcTo` path above is kept
+ * untouched for `cornerSmoothing <= 0` so existing renders stay bit-identical.
+ */
+function drawSquircleRoundRect(
+  gfx: Graphics,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  radii: PerCornerRadius,
+  cornerSmoothing: number,
+): void {
+  const path = buildSquircleRectPath(
+    w,
+    h,
+    {
+      topLeft: radii.topLeft ?? 0,
+      topRight: radii.topRight ?? 0,
+      bottomRight: radii.bottomRight ?? 0,
+      bottomLeft: radii.bottomLeft ?? 0,
+    },
+    cornerSmoothing,
+  );
+
+  gfx.moveTo(x + path.start.x, y + path.start.y);
+  for (const seg of path.segments) {
+    if (seg.type === "line") {
+      gfx.lineTo(x + seg.x, y + seg.y);
+    } else if (seg.type === "cubic") {
+      gfx.bezierCurveTo(
+        x + seg.cp1x,
+        y + seg.cp1y,
+        x + seg.cp2x,
+        y + seg.cp2y,
+        x + seg.x,
+        y + seg.y,
+      );
+    } else {
+      gfx.arc(x + seg.cx, y + seg.cy, seg.radius, seg.startAngle, seg.endAngle, seg.anticlockwise);
+    }
+  }
+  gfx.closePath();
+}
+
 /** Draw a rounded rectangle with independent corner radii using arcTo */
 export function drawPerCornerRoundRect(
   gfx: Graphics,
@@ -149,7 +197,13 @@ export function drawPerCornerRoundRect(
   w: number,
   h: number,
   radii: PerCornerRadius,
+  cornerSmoothing?: number,
 ): void {
+  if (cornerSmoothing) {
+    drawSquircleRoundRect(gfx, x, y, w, h, radii, cornerSmoothing);
+    return;
+  }
+
   const tl = Math.min(radii.topLeft ?? 0, w / 2, h / 2);
   const tr = Math.min(radii.topRight ?? 0, w / 2, h / 2);
   const br = Math.min(radii.bottomRight ?? 0, w / 2, h / 2);
@@ -174,7 +228,21 @@ export function drawRoundedShape(
   height: number,
   cornerRadius?: number,
   cornerRadiusPerCorner?: PerCornerRadius,
+  cornerSmoothing?: number,
 ): void {
+  if (cornerSmoothing && (hasPerCornerRadius(cornerRadiusPerCorner) || cornerRadius)) {
+    const radii: PerCornerRadius = hasPerCornerRadius(cornerRadiusPerCorner)
+      ? cornerRadiusPerCorner!
+      : {
+          topLeft: cornerRadius,
+          topRight: cornerRadius,
+          bottomRight: cornerRadius,
+          bottomLeft: cornerRadius,
+        };
+    drawSquircleRoundRect(gfx, 0, 0, width, height, radii, cornerSmoothing);
+    return;
+  }
+
   if (hasPerCornerRadius(cornerRadiusPerCorner)) {
     drawPerCornerRoundRect(gfx, 0, 0, width, height, cornerRadiusPerCorner!);
   } else if (
@@ -220,6 +288,8 @@ export function hasVisualPropsChanged(
       (prev as { cornerRadius?: number }).cornerRadius ||
     (node as { cornerRadiusPerCorner?: PerCornerRadius }).cornerRadiusPerCorner !==
       (prev as { cornerRadiusPerCorner?: PerCornerRadius }).cornerRadiusPerCorner ||
+    (node as { cornerSmoothing?: number }).cornerSmoothing !==
+      (prev as { cornerSmoothing?: number }).cornerSmoothing ||
     node.gradientFill !== prev.gradientFill ||
     node.fills !== prev.fills
   );

@@ -304,6 +304,14 @@ export interface FrameNode extends BaseNode {
   children: SceneNode[]
   cornerRadius?: number
   cornerRadiusPerCorner?: PerCornerRadius
+  /**
+   * Corner smoothing ("squircle") fraction, 0-1 (matches figma-squircle's own
+   * convention; the UI shows it as 0-100%). 0 (or unset) = plain circular-arc
+   * corners (current behavior). Applies uniformly to every rounded corner of
+   * this shape, working alongside independent per-corner radii. See
+   * `@/lib/shapePath/squircleCorner`.
+   */
+  cornerSmoothing?: number
   // Clip content - when true, visually clip children to frame bounds
   clip?: boolean
   // Auto-layout properties
@@ -358,6 +366,8 @@ export interface RectNode extends BaseNode {
   type: 'rect'
   cornerRadius?: number
   cornerRadiusPerCorner?: PerCornerRadius
+  /** See `FrameNode.cornerSmoothing`. */
+  cornerSmoothing?: number
 }
 
 export interface EllipseNode extends BaseNode {

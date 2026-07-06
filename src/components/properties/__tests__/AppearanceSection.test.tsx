@@ -173,6 +173,46 @@ describe("<AppearanceSection />", () => {
     expect(screen.getAllByRole("spinbutton")).toHaveLength(1);
   });
 
+  it("renders a Smoothing % input for a rect, defaulting to 0", () => {
+    render(<AppearanceSection node={makeNode()} onUpdate={vi.fn()} />);
+    expect(screen.getByText("Smoothing %")).toBeTruthy();
+    // [opacity, radius, smoothing]
+    const spinbuttons = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    expect(spinbuttons[2].value).toBe("0");
+  });
+
+  it("displays an existing cornerSmoothing fraction as a 0-100 percent", () => {
+    render(
+      <AppearanceSection node={makeNode({ cornerSmoothing: 0.6 } as Partial<SceneNode>)} onUpdate={vi.fn()} />,
+    );
+    const spinbuttons = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    expect(spinbuttons[2].value).toBe("60");
+  });
+
+  it("updates cornerSmoothing (percent clamped and converted to a 0-1 fraction) on edit", () => {
+    const onUpdate = vi.fn();
+    render(<AppearanceSection node={makeNode()} onUpdate={onUpdate} />);
+    const spinbuttons = screen.getAllByRole("spinbutton");
+    fireEvent.change(spinbuttons[2], { target: { value: "60" } });
+    expect(onUpdate).toHaveBeenCalledWith({ cornerSmoothing: 0.6 });
+  });
+
+  it("still shows the Smoothing % input in per-corner mode", () => {
+    const node = makeNode({
+      cornerRadiusPerCorner: { topLeft: 1, topRight: 2, bottomRight: 3, bottomLeft: 4 },
+      cornerSmoothing: 0.3,
+    } as Partial<SceneNode>);
+    render(<AppearanceSection node={node} onUpdate={vi.fn()} />);
+    // [opacity, TL, TR, BL, BR, smoothing]
+    const spinbuttons = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    expect(spinbuttons[spinbuttons.length - 1].value).toBe("30");
+  });
+
+  it("does not render Smoothing % for a non-corner node (line)", () => {
+    render(<AppearanceSection node={makeNode({ type: "line" })} onUpdate={vi.fn()} />);
+    expect(screen.queryByText("Smoothing %")).toBeNull();
+  });
+
   it("marks opacity as Mixed when listed in mixedKeys", () => {
     render(
       <AppearanceSection

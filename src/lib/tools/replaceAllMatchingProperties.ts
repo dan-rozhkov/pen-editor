@@ -19,6 +19,7 @@ interface PropertyRules {
   fontWeight?: ReplacementRule[];
   cornerRadius?: ReplacementRule[];
   cornerRadiusPerCorner?: ReplacementRule[];
+  cornerSmoothing?: ReplacementRule[];
   padding?: ReplacementRule[];
   gap?: ReplacementRule[];
 }
@@ -212,6 +213,18 @@ export const replaceAllMatchingProperties: ToolHandler = async (args) => {
         if (match) {
           updated = updated ?? { ...node };
           (updated as unknown as Record<string, unknown>).cornerRadiusPerCorner = rule.to;
+          replacements++;
+        }
+      }
+    }
+
+    // cornerSmoothing (frame/rect only)
+    if (rules.cornerSmoothing && (node.type === "frame" || node.type === "rect")) {
+      const nodeAny = node as unknown as Record<string, unknown>;
+      for (const rule of rules.cornerSmoothing) {
+        if (nodeAny.cornerSmoothing === rule.from) {
+          updated = updated ?? { ...node };
+          (updated as unknown as Record<string, unknown>).cornerSmoothing = rule.to;
           replacements++;
         }
       }

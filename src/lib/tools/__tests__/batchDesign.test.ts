@@ -556,6 +556,27 @@ describe("batch_design", () => {
       expect(rect.cornerRadiusPerCorner).toBeUndefined();
     });
 
+    it("maps cornerSmoothing as a 0-1 fraction, clamped to range", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations: "U(rect1, {cornerSmoothing: 0.6})",
+        })
+      );
+      expect(result.success).toBe(true);
+      const rect = sceneState().nodesById["rect1"] as FlatSceneNode & {
+        cornerSmoothing?: number;
+      };
+      expect(rect.cornerSmoothing).toBe(0.6);
+
+      const overRange = JSON.parse(
+        await batchDesign({
+          operations: "U(rect1, {cornerSmoothing: 5})",
+        })
+      );
+      expect(overRange.success).toBe(true);
+      expect((sceneState().nodesById["rect1"] as FlatSceneNode & { cornerSmoothing?: number }).cornerSmoothing).toBe(1);
+    });
+
     it("sets constraints on a node", async () => {
       const result = JSON.parse(
         await batchDesign({

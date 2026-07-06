@@ -167,6 +167,24 @@ export function AppearanceSection({
           </PropertyRow>
         </>
       )}
+      {showCornerRadius && (
+        <PropertyRow>
+          <NumberInput
+            label="Smoothing %"
+            value={Math.round(((node as FrameNode).cornerSmoothing ?? 0) * 100)}
+            onChange={(v) =>
+              onUpdate({
+                cornerSmoothing: Math.max(0, Math.min(100, v)) / 100,
+              } as Partial<SceneNode>)
+            }
+            min={0}
+            max={100}
+            step={1}
+            labelOutside={true}
+            isMixed={mixedKeys?.has("cornerSmoothing")}
+          />
+        </PropertyRow>
+      )}
     </PropertySection>
   );
 }

@@ -8,6 +8,7 @@ import type {
 import { applyOpacity } from "@/utils/colorUtils";
 import { getRenderableEffects, getRenderableFills } from "@/utils/fillUtils";
 import { hasPerCornerRadius } from "@/utils/renderUtils";
+import { buildSquircleRectPath, type PathSegment } from "@/lib/shapePath/squircleCorner";
 
 /** Mutable state threaded through the recursive SVG conversion. */
 export interface SvgConversionContext {
@@ -140,7 +141,12 @@ export function roundedRectPath(
   w: number,
   h: number,
   r: { tl: number; tr: number; br: number; bl: number },
+  cornerSmoothing?: number,
 ): string {
+  if (cornerSmoothing) {
+    return squircleRectPathD(x, y, w, h, r, cornerSmoothing);
+  }
+
   const tl = Math.max(0, Math.min(r.tl, w / 2, h / 2));
   const tr = Math.max(0, Math.min(r.tr, w / 2, h / 2));
   const br = Math.max(0, Math.min(r.br, w / 2, h / 2));
@@ -159,6 +165,50 @@ export function roundedRectPath(
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+/**
+ * Squircle-corner variant of `roundedRectPath`, built from the same shared
+ * geometry (`@/lib/shapePath/squircleCorner`) the Pixi renderer uses. Only
+ * called when `cornerSmoothing > 0` — the plain-arc branch above stays
+ * untouched for `cornerSmoothing <= 0` so existing exports don't change.
+ */
+function squircleRectPathD(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: { tl: number; tr: number; br: number; bl: number },
+  cornerSmoothing: number,
+): string {
+  const path = buildSquircleRectPath(
+    w,
+    h,
+    { topLeft: r.tl, topRight: r.tr, bottomRight: r.br, bottomLeft: r.bl },
+    cornerSmoothing,
+  );
+
+  const commands = [`M${x + path.start.x},${y + path.start.y}`];
+  for (const seg of path.segments) {
+    commands.push(svgCommandForSegment(seg, x, y));
+  }
+  commands.push("Z");
+  return commands.join(" ");
+}
+
+function svgCommandForSegment(seg: PathSegment, x: number, y: number): string {
+  if (seg.type === "line") {
+    return `L${x + seg.x},${y + seg.y}`;
+  }
+  if (seg.type === "cubic") {
+    return `C${x + seg.cp1x},${y + seg.cp1y} ${x + seg.cp2x},${y + seg.cp2y} ${x + seg.x},${y + seg.y}`;
+  }
+  // Circular arc: SVG's native `A` command needs the endpoint (not
+  // start/end angle), so derive it from the same center/radius/angle.
+  const endX = x + seg.cx + seg.radius * Math.cos(seg.endAngle);
+  const endY = y + seg.cy + seg.radius * Math.sin(seg.endAngle);
+  const sweepFlag = seg.anticlockwise ? 0 : 1;
+  return `A${seg.radius},${seg.radius} 0 0 ${sweepFlag} ${endX},${endY}`;
 }
 
 export function hasNonUniformCornerRadius(pcr: PerCornerRadius | undefined): boolean {

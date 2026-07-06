@@ -197,6 +197,41 @@ describe("convertDesignNodesToSvg", () => {
     expect(svg).toContain('fill="#ff0000"');
   });
 
+  it("keeps plain <rect rx/ry> (arc-only) output when cornerSmoothing is unset or 0", () => {
+    const nodesById: Record<string, FlatSceneNode> = {
+      rect1: rect("rect1", { fill: "#ff0000", cornerRadius: 12, cornerSmoothing: 0 }),
+    };
+    const { svg } = convertDesignNodesToSvg("rect1", nodesById, {});
+    expect(svg).toContain("<rect");
+    expect(svg).toContain('rx="12" ry="12"');
+    expect(svg).not.toContain("<path");
+  });
+
+  it("builds a squircle <path> with cubic bezier (C) commands when cornerSmoothing > 0", () => {
+    const nodesById: Record<string, FlatSceneNode> = {
+      rect1: rect("rect1", { fill: "#ff0000", cornerRadius: 12, cornerSmoothing: 0.6 }),
+    };
+    const { svg } = convertDesignNodesToSvg("rect1", nodesById, {});
+    expect(svg).toContain("<path");
+    expect(svg).toMatch(/d="[^"]*C[^"]*"/);
+    // Still has the arc portion for the remaining part of each corner.
+    expect(svg).toMatch(/d="[^"]*A[^"]*"/);
+    expect(svg).not.toContain("<rect");
+  });
+
+  it("applies cornerSmoothing to independent per-corner radii together", () => {
+    const nodesById: Record<string, FlatSceneNode> = {
+      rect1: rect("rect1", {
+        fill: "#ff0000",
+        cornerRadiusPerCorner: { topLeft: 0, topRight: 20, bottomRight: 0, bottomLeft: 0 },
+        cornerSmoothing: 0.6,
+      }),
+    };
+    const { svg } = convertDesignNodesToSvg("rect1", nodesById, {});
+    expect(svg).toContain("<path");
+    expect(svg).toMatch(/d="[^"]*C[^"]*"/);
+  });
+
   it("emulates inside/outside stroke alignment by insetting/expanding rect geometry", () => {
     const insideNodes: Record<string, FlatSceneNode> = {
       r: rect("r", { width: 100, height: 100, stroke: "#000000", strokeWidth: 10, strokeAlign: "inside" }),

@@ -402,6 +402,16 @@ export function mapNodeData(
         break;
       }
 
+      // Corner smoothing ("squircle"), 0-1 fraction — same convention as the
+      // stored field, so no 0-100 normalization is needed here. Clamped to
+      // the valid range; any other input type is ignored.
+      case "cornerSmoothing": {
+        if (typeof value === "number" && Number.isFinite(value)) {
+          result.cornerSmoothing = Math.max(0, Math.min(1, value));
+        }
+        break;
+      }
+
       // Resize constraints (Figma-style). Only meaningful for a direct child
       // of a frame WITHOUT auto-layout — ignored by auto-layout frames.
       case "constraints": {

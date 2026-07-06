@@ -27,6 +27,7 @@ export function applyShadows(
   cornerRadius?: number,
   shape: ShadowShape = "rect",
   cornerRadiusPerCorner?: PerCornerRadius,
+  cornerSmoothing?: number,
 ): void {
   // Remove existing shadow layers
   for (let i = container.children.length - 1; i >= 0; i--) {
@@ -43,7 +44,15 @@ export function applyShadows(
   // Insert each shadow at index 0 in REVERSE order so the first effect ends up
   // furthest back (bottom-to-top stacking, all behind the node content).
   for (let i = outerShadows.length - 1; i >= 0; i--) {
-    const layer = buildShadowLayer(outerShadows[i], width, height, cornerRadius, shape, cornerRadiusPerCorner);
+    const layer = buildShadowLayer(
+      outerShadows[i],
+      width,
+      height,
+      cornerRadius,
+      shape,
+      cornerRadiusPerCorner,
+      cornerSmoothing,
+    );
     container.addChildAt(layer, 0);
   }
 
@@ -52,7 +61,15 @@ export function applyShadows(
   );
   // Appended in stack order (bottom-to-top), on top of existing content.
   for (const effect of innerShadows) {
-    const layer = buildInnerShadowLayer(effect, width, height, cornerRadius, shape, cornerRadiusPerCorner);
+    const layer = buildInnerShadowLayer(
+      effect,
+      width,
+      height,
+      cornerRadius,
+      shape,
+      cornerRadiusPerCorner,
+      cornerSmoothing,
+    );
     container.addChild(layer);
   }
 }
@@ -64,6 +81,7 @@ function buildShadowLayer(
   cornerRadius: number | undefined,
   shape: ShadowShape,
   cornerRadiusPerCorner: PerCornerRadius | undefined,
+  cornerSmoothing?: number,
 ): Container {
   const { color: hexColor, opacity } = parseHexAlpha(effect.color);
 
@@ -72,7 +90,7 @@ function buildShadowLayer(
   shadowContainer.position.set(effect.offset.x, effect.offset.y);
 
   const shadowGfx = new Graphics();
-  drawShadowShape(shadowGfx, shape, width, height, cornerRadius, cornerRadiusPerCorner);
+  drawShadowShape(shadowGfx, shape, width, height, cornerRadius, cornerRadiusPerCorner, cornerSmoothing);
   shadowGfx.fill({ color: parseColor(hexColor), alpha: opacity });
   shadowContainer.addChild(shadowGfx);
 
@@ -93,11 +111,22 @@ function drawShadowShape(
   cornerRadiusPerCorner: PerCornerRadius | undefined,
   x = 0,
   y = 0,
+  cornerSmoothing?: number,
 ): void {
   if (shape === "ellipse") {
     gfx.ellipse(x + width / 2, y + height / 2, width / 2, height / 2);
   } else if (hasPerCornerRadius(cornerRadiusPerCorner)) {
-    drawPerCornerRoundRect(gfx, x, y, width, height, cornerRadiusPerCorner!);
+    drawPerCornerRoundRect(gfx, x, y, width, height, cornerRadiusPerCorner!, cornerSmoothing);
+  } else if (cornerSmoothing && cornerRadius) {
+    drawPerCornerRoundRect(
+      gfx,
+      x,
+      y,
+      width,
+      height,
+      { topLeft: cornerRadius, topRight: cornerRadius, bottomRight: cornerRadius, bottomLeft: cornerRadius },
+      cornerSmoothing,
+    );
   } else {
     const radius = Math.max(0, Math.min(cornerRadius ?? 0, width / 2, height / 2));
     if (radius > 0) {
@@ -128,6 +157,7 @@ function buildInnerShadowLayer(
   cornerRadius: number | undefined,
   shape: ShadowShape,
   cornerRadiusPerCorner: PerCornerRadius | undefined,
+  cornerSmoothing?: number,
 ): Container {
   const { color: hexColor, opacity } = parseHexAlpha(effect.color);
 
@@ -150,7 +180,7 @@ function buildInnerShadowLayer(
   const holeHeight = Math.max(0, height - effect.spread * 2);
   const holeX = effect.offset.x + effect.spread;
   const holeY = effect.offset.y + effect.spread;
-  drawShadowShape(gfx, shape, holeWidth, holeHeight, cornerRadius, cornerRadiusPerCorner, holeX, holeY);
+  drawShadowShape(gfx, shape, holeWidth, holeHeight, cornerRadius, cornerRadiusPerCorner, holeX, holeY, cornerSmoothing);
   gfx.cut();
   shadowContainer.addChild(gfx);
 
@@ -160,7 +190,7 @@ function buildInnerShadowLayer(
 
   // Clip to the node's own shape so the shadow never bleeds past its bounds.
   const maskGfx = new Graphics();
-  drawShadowShape(maskGfx, shape, width, height, cornerRadius, cornerRadiusPerCorner);
+  drawShadowShape(maskGfx, shape, width, height, cornerRadius, cornerRadiusPerCorner, 0, 0, cornerSmoothing);
   maskGfx.fill(0xffffff);
   shadowContainer.addChild(maskGfx);
   shadowContainer.mask = maskGfx;

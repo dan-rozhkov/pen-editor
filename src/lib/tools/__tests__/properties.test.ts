@@ -74,6 +74,22 @@ describe("search_all_unique_properties", () => {
     expect(result.gap).toEqual([8]);
   });
 
+  it("collects cornerSmoothing across the subtree", async () => {
+    useSceneStore.setState((state) => ({
+      nodesById: {
+        ...state.nodesById,
+        rect1: { ...state.nodesById["rect1"], cornerSmoothing: 0.6 },
+      },
+    }));
+    const result = JSON.parse(
+      await searchAllUniqueProperties({
+        parents: ["frame1"],
+        properties: ["cornerSmoothing"],
+      })
+    );
+    expect(result.cornerSmoothing).toEqual(expect.arrayContaining([0.6]));
+  });
+
   it("deduplicates repeated values", async () => {
     // rect2 has the same fill as nothing else; add a second red rect
     useSceneStore.setState((state) => ({
@@ -203,6 +219,24 @@ describe("replace_all_matching_properties", () => {
     const text = useSceneStore.getState().nodesById["text1"] as TextNode;
     expect(text.fontSize).toBe(24);
     expect(text.fill).toBe("#444444");
+  });
+
+  it("replaces cornerSmoothing on matching frame/rect nodes", async () => {
+    useSceneStore.setState((state) => ({
+      nodesById: {
+        ...state.nodesById,
+        rect1: { ...state.nodesById["rect1"], cornerSmoothing: 0 },
+      },
+    }));
+    const result = JSON.parse(
+      await replaceAllMatchingProperties({
+        parents: ["frame1"],
+        properties: { cornerSmoothing: [{ from: 0, to: 0.6 }] },
+      })
+    );
+    expect(result.replacements).toBe(1);
+    const rect = useSceneStore.getState().nodesById["rect1"] as Record<string, unknown>;
+    expect(rect.cornerSmoothing).toBe(0.6);
   });
 
   it("replaces layout padding on frames (all matching sides)", async () => {

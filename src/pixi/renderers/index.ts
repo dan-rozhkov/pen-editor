@@ -58,6 +58,13 @@ function getNodeCornerRadiusPerCorner(node: FlatSceneNode): PerCornerRadius | un
   return undefined;
 }
 
+function getNodeCornerSmoothing(node: FlatSceneNode): number | undefined {
+  if (node.type === "frame" || node.type === "rect") {
+    return node.cornerSmoothing;
+  }
+  return undefined;
+}
+
 function getNodeShadowShape(node: FlatSceneNode): ShadowShape {
   if (node.type === "ellipse") return "ellipse";
   return "rect";
@@ -405,6 +412,7 @@ export function createNodeContainer(
     getNodeCornerRadius(node),
     getNodeShadowShape(node),
     getNodeCornerRadiusPerCorner(node),
+    getNodeCornerSmoothing(node),
   );
 
   // Layer blur (container-level filter; first visible blur in the stack wins)
@@ -525,8 +533,8 @@ export function updateNodeContainer(
     node.width !== prev.width ||
     node.height !== prev.height ||
     (node.type === "frame" && (node.sizing !== (prev as FlatFrameNode).sizing || node.layout !== (prev as FlatFrameNode).layout)) ||
-    (node.type === "frame" && (node.cornerRadius !== (prev as FlatFrameNode).cornerRadius || node.cornerRadiusPerCorner !== (prev as FlatFrameNode).cornerRadiusPerCorner)) ||
-    (node.type === "rect" && (node.cornerRadius !== (prev as RectNode).cornerRadius || node.cornerRadiusPerCorner !== (prev as RectNode).cornerRadiusPerCorner))
+    (node.type === "frame" && (node.cornerRadius !== (prev as FlatFrameNode).cornerRadius || node.cornerRadiusPerCorner !== (prev as FlatFrameNode).cornerRadiusPerCorner || node.cornerSmoothing !== (prev as FlatFrameNode).cornerSmoothing)) ||
+    (node.type === "rect" && (node.cornerRadius !== (prev as RectNode).cornerRadius || node.cornerRadiusPerCorner !== (prev as RectNode).cornerRadiusPerCorner || node.cornerSmoothing !== (prev as RectNode).cornerSmoothing))
   ) {
     const shadowSize = getNodeShadowSize(node, container);
     applyShadows(
@@ -537,6 +545,7 @@ export function updateNodeContainer(
       getNodeCornerRadius(node),
       getNodeShadowShape(node),
       getNodeCornerRadiusPerCorner(node),
+      getNodeCornerSmoothing(node),
     );
     applyLayerBlur(container, getRenderableEffects(node));
   }
@@ -607,6 +616,7 @@ export function applyLayoutSize(
         shadowRectNode.cornerRadius,
         "rect",
         shadowRectNode.cornerRadiusPerCorner,
+        shadowRectNode.cornerSmoothing,
       );
       break;
     }
@@ -638,7 +648,14 @@ export function applyLayoutSize(
       const mask = container.getChildByLabel("frame-mask") as Graphics;
       if (mask && frameNode.clip) {
         mask.clear();
-        drawRoundedShape(mask, layoutWidth, layoutHeight, frameNode.cornerRadius, frameNode.cornerRadiusPerCorner);
+        drawRoundedShape(
+          mask,
+          layoutWidth,
+          layoutHeight,
+          frameNode.cornerRadius,
+          frameNode.cornerRadiusPerCorner,
+          frameNode.cornerSmoothing,
+        );
         mask.fill(0xffffff);
       }
       // Update layout grid overlay
@@ -655,6 +672,7 @@ export function applyLayoutSize(
         frameNode.cornerRadius,
         "rect",
         frameNode.cornerRadiusPerCorner,
+        frameNode.cornerSmoothing,
       );
       break;
     }

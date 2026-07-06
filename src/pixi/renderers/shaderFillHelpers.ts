@@ -79,6 +79,7 @@ async function bakeWithRetry(
 type CornerNode = FlatSceneNode & {
   cornerRadius?: number;
   cornerRadiusPerCorner?: PerCornerRadius;
+  cornerSmoothing?: number;
 };
 
 /** A node whose baked shader is worth rendering (own visible/enabled flags). */
@@ -144,7 +145,7 @@ function buildMask(node: FlatSceneNode, width: number, height: number): Graphics
     mask.ellipse(width / 2, height / 2, width / 2, height / 2);
   } else {
     const cn = node as CornerNode;
-    drawRoundedShape(mask, width, height, cn.cornerRadius, cn.cornerRadiusPerCorner);
+    drawRoundedShape(mask, width, height, cn.cornerRadius, cn.cornerRadiusPerCorner, cn.cornerSmoothing);
   }
   mask.fill(0xffffff);
   return mask;

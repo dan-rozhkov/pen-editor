@@ -85,3 +85,18 @@ describe("publicPenExport effects", () => {
     ]);
   });
 });
+
+describe("publicPenExport cornerSmoothing", () => {
+  it("round-trips cornerSmoothing on a rectangle node", () => {
+    const node = baseRect({ cornerRadius: 12, cornerSmoothing: 0.6 });
+    const doc = exportNodes([node]);
+    expect(doc.children[0].cornerSmoothing).toBe(0.6);
+    expect(doc.children[0].cornerRadius).toBe(12);
+  });
+
+  it("omits cornerSmoothing when unset", () => {
+    const node = baseRect({ cornerRadius: 12 });
+    const doc = exportNodes([node]);
+    expect(doc.children[0].cornerSmoothing).toBeUndefined();
+  });
+});

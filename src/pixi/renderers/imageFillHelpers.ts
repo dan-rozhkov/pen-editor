@@ -315,15 +315,16 @@ export function applyImageFill(
   height: number,
   cornerRadius?: number,
   cornerRadiusPerCorner?: PerCornerRadius,
+  cornerSmoothing?: number,
 ): void {
   const handled = trySvgResizeFastPath(
     container,
     imageFill,
     width,
     height,
-    () => applyImageFill(container, imageFill, width, height, cornerRadius, cornerRadiusPerCorner),
+    () => applyImageFill(container, imageFill, width, height, cornerRadius, cornerRadiusPerCorner, cornerSmoothing),
     (mask) => {
-      drawRoundedShape(mask, width, height, cornerRadius, cornerRadiusPerCorner);
+      drawRoundedShape(mask, width, height, cornerRadius, cornerRadiusPerCorner, cornerSmoothing);
       mask.fill(0xffffff);
     },
   );
@@ -342,7 +343,7 @@ export function applyImageFill(
   if (!imageFill?.url) return;
 
   withTexture(imageFill.url, width, height, container, (texture) => {
-    addImageSprite(container, texture, imageFill, width, height, cornerRadius, cornerRadiusPerCorner);
+    addImageSprite(container, texture, imageFill, width, height, cornerRadius, cornerRadiusPerCorner, cornerSmoothing);
   });
 }
 
@@ -397,6 +398,7 @@ function addImageSprite(
   containerH: number,
   cornerRadius?: number,
   cornerRadiusPerCorner?: PerCornerRadius,
+  cornerSmoothing?: number,
 ): void {
   // Remove any existing image sprite first
   destroyImageSprite(container);
@@ -409,7 +411,7 @@ function addImageSprite(
   if (hasPerCornerRadius(cornerRadiusPerCorner) || (cornerRadius && cornerRadius > 0)) {
     const mask = new Graphics();
     mask.label = "image-mask";
-    drawRoundedShape(mask, containerW, containerH, cornerRadius, cornerRadiusPerCorner);
+    drawRoundedShape(mask, containerW, containerH, cornerRadius, cornerRadiusPerCorner, cornerSmoothing);
     mask.fill(0xffffff);
     container.addChild(mask);
     sprite.mask = mask;
@@ -529,14 +531,30 @@ export function updateImageFillResolution(
   }
 
   if (node.type === "rect") {
-    applyImageFills(container, node, node.width, node.height, node.cornerRadius, node.cornerRadiusPerCorner);
+    applyImageFills(
+      container,
+      node,
+      node.width,
+      node.height,
+      node.cornerRadius,
+      node.cornerRadiusPerCorner,
+      node.cornerSmoothing,
+    );
     return;
   }
 
   if (node.type === "frame") {
     const effectiveWidth = (container as { _effectiveWidth?: number })._effectiveWidth ?? node.width;
     const effectiveHeight = (container as { _effectiveHeight?: number })._effectiveHeight ?? node.height;
-    applyImageFills(container, node, effectiveWidth, effectiveHeight, node.cornerRadius, node.cornerRadiusPerCorner);
+    applyImageFills(
+      container,
+      node,
+      effectiveWidth,
+      effectiveHeight,
+      node.cornerRadius,
+      node.cornerRadiusPerCorner,
+      node.cornerSmoothing,
+    );
   }
 }
 
@@ -586,12 +604,13 @@ function applyImagePaintStack(
   ellipse: boolean,
   cornerRadius?: number,
   cornerRadiusPerCorner?: PerCornerRadius,
+  cornerSmoothing?: number,
 ): void {
   const imagePaints = getImagePaints(node);
   const applyLegacySprite = (image: ImageFill | undefined) =>
     ellipse
       ? applyImageFillEllipse(container, image, width, height)
-      : applyImageFill(container, image, width, height, cornerRadius, cornerRadiusPerCorner);
+      : applyImageFill(container, image, width, height, cornerRadius, cornerRadiusPerCorner, cornerSmoothing);
 
   if (imagePaints.length <= 1) {
     // Single (or no) image: legacy fast path + cache parity.
@@ -618,6 +637,7 @@ function applyImagePaintStack(
         ellipse,
         cornerRadius,
         cornerRadiusPerCorner,
+        cornerSmoothing,
       );
     });
   });
@@ -631,8 +651,9 @@ export function applyImageFills(
   height: number,
   cornerRadius?: number,
   cornerRadiusPerCorner?: PerCornerRadius,
+  cornerSmoothing?: number,
 ): void {
-  applyImagePaintStack(container, node, width, height, false, cornerRadius, cornerRadiusPerCorner);
+  applyImagePaintStack(container, node, width, height, false, cornerRadius, cornerRadiusPerCorner, cornerSmoothing);
 }
 
 /** Apply the node's image paint stack to an ellipse container. */
@@ -668,6 +689,7 @@ function addIndexedImageSprite(
   ellipse: boolean,
   cornerRadius?: number,
   cornerRadiusPerCorner?: PerCornerRadius,
+  cornerSmoothing?: number,
 ): void {
   const sprite = new Sprite(texture);
   sprite.label = `${MULTI_IMAGE_LABEL_PREFIX}${index}`;
@@ -684,7 +706,7 @@ function addIndexedImageSprite(
     if (ellipse) {
       mask.ellipse(containerW / 2, containerH / 2, containerW / 2, containerH / 2);
     } else {
-      drawRoundedShape(mask, containerW, containerH, cornerRadius, cornerRadiusPerCorner);
+      drawRoundedShape(mask, containerW, containerH, cornerRadius, cornerRadiusPerCorner, cornerSmoothing);
     }
     mask.fill(0xffffff);
     container.addChild(mask);

@@ -113,13 +113,28 @@ export function createFrameContainer(
   }
 
   // Image fill stack
-  applyImageFills(container, node, effectiveWidth, effectiveHeight, node.cornerRadius, node.cornerRadiusPerCorner);
+  applyImageFills(
+    container,
+    node,
+    effectiveWidth,
+    effectiveHeight,
+    node.cornerRadius,
+    node.cornerRadiusPerCorner,
+    node.cornerSmoothing,
+  );
 
   // Clipping mask
   if (node.clip) {
     const mask = new Graphics();
     mask.label = "frame-mask";
-    drawRoundedShape(mask, effectiveWidth, effectiveHeight, node.cornerRadius, node.cornerRadiusPerCorner);
+    drawRoundedShape(
+      mask,
+      effectiveWidth,
+      effectiveHeight,
+      node.cornerRadius,
+      node.cornerRadiusPerCorner,
+      node.cornerSmoothing,
+    );
     mask.fill(0xffffff);
     container.addChild(mask);
     container.mask = mask;
@@ -204,9 +219,18 @@ export function updateFrameContainer(
     node.sizing !== prev.sizing ||
     node.layout !== prev.layout ||
     node.cornerRadius !== prev.cornerRadius ||
-    node.cornerRadiusPerCorner !== prev.cornerRadiusPerCorner
+    node.cornerRadiusPerCorner !== prev.cornerRadiusPerCorner ||
+    node.cornerSmoothing !== prev.cornerSmoothing
   ) {
-    applyImageFills(container, node, effectiveWidth, effectiveHeight, node.cornerRadius, node.cornerRadiusPerCorner);
+    applyImageFills(
+      container,
+      node,
+      effectiveWidth,
+      effectiveHeight,
+      node.cornerRadius,
+      node.cornerRadiusPerCorner,
+      node.cornerSmoothing,
+    );
   }
 
   // Update layout grid overlay
@@ -258,6 +282,7 @@ export function updateFrameContainer(
     node.height !== prev.height ||
     node.cornerRadius !== prev.cornerRadius ||
     node.cornerRadiusPerCorner !== prev.cornerRadiusPerCorner ||
+    node.cornerSmoothing !== prev.cornerSmoothing ||
     node.sizing !== prev.sizing ||
     node.layout !== prev.layout
   ) {
@@ -266,7 +291,14 @@ export function updateFrameContainer(
       const mask = existingMask ?? new Graphics();
       mask.label = "frame-mask";
       mask.clear();
-      drawRoundedShape(mask, effectiveWidth, effectiveHeight, node.cornerRadius, node.cornerRadiusPerCorner);
+      drawRoundedShape(
+        mask,
+        effectiveWidth,
+        effectiveHeight,
+        node.cornerRadius,
+        node.cornerRadiusPerCorner,
+        node.cornerSmoothing,
+      );
       mask.fill(0xffffff);
       if (!existingMask) {
         container.addChild(mask);
@@ -350,7 +382,7 @@ export function drawFrameBackground(
   const height = effectiveHeight ?? node.height;
 
   const drawShape = (target: Graphics) =>
-    drawRoundedShape(target, width, height, node.cornerRadius, node.cornerRadiusPerCorner);
+    drawRoundedShape(target, width, height, node.cornerRadius, node.cornerRadiusPerCorner, node.cornerSmoothing);
   const pathReady = applyFills(gfx, node, width, height, drawShape);
   // Skip rebuilding the geometry for the stroke when the last fill already left
   // a reusable path on `gfx`.

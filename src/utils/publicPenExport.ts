@@ -113,12 +113,14 @@ interface PenFrameNode extends PenBaseNode {
   clip?: boolean;
   cornerRadius?: number;
   cornerRadiusPerCorner?: { topLeft?: number; topRight?: number; bottomRight?: number; bottomLeft?: number };
+  cornerSmoothing?: number;
 }
 
 interface PenRectangleNode extends PenBaseNode {
   type: "rectangle";
   cornerRadius?: number;
   cornerRadiusPerCorner?: { topLeft?: number; topRight?: number; bottomRight?: number; bottomLeft?: number };
+  cornerSmoothing?: number;
 }
 
 interface PenEllipseNode extends PenBaseNode {
@@ -555,6 +557,7 @@ function exportFrameNode(
     ...(node.type === "frame" && node.isSlot ? { isSlot: true } : {}),
     ...(node.type === "frame" && node.cornerRadius != null ? { cornerRadius: node.cornerRadius } : {}),
     ...(node.type === "frame" && node.cornerRadiusPerCorner != null ? { cornerRadiusPerCorner: node.cornerRadiusPerCorner } : {}),
+    ...(node.type === "frame" && node.cornerSmoothing != null ? { cornerSmoothing: node.cornerSmoothing } : {}),
   };
 }
 
@@ -569,6 +572,7 @@ function exportNode(node: SceneNode, context: ExportContext, parentUsesLayout: b
         type: "rectangle",
         ...(node.cornerRadius != null ? { cornerRadius: node.cornerRadius } : {}),
         ...(node.cornerRadiusPerCorner != null ? { cornerRadiusPerCorner: node.cornerRadiusPerCorner } : {}),
+        ...(node.cornerSmoothing != null ? { cornerSmoothing: node.cornerSmoothing } : {}),
       };
     case "ellipse":
       return {

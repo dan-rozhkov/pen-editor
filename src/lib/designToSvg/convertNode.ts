@@ -72,14 +72,22 @@ function renderRectLikeShape(node: FlatFrameNode | RectNode, ctx: SvgConversionC
   const layers = buildFillLayers(node, ctx);
   const strokeAttr = buildStrokeAttr(node, ctx);
   const pcr = node.cornerRadiusPerCorner;
+  const smoothing = node.cornerSmoothing;
 
-  if (hasNonUniformCornerRadius(pcr)) {
-    const d = roundedRectPath(0, 0, node.width, node.height, {
-      tl: pcr?.topLeft ?? 0,
-      tr: pcr?.topRight ?? 0,
-      br: pcr?.bottomRight ?? 0,
-      bl: pcr?.bottomLeft ?? 0,
-    });
+  if (hasNonUniformCornerRadius(pcr) || (smoothing && (hasNonUniformCornerRadius(pcr) || node.cornerRadius))) {
+    const d = roundedRectPath(
+      0,
+      0,
+      node.width,
+      node.height,
+      {
+        tl: pcr?.topLeft ?? node.cornerRadius ?? 0,
+        tr: pcr?.topRight ?? node.cornerRadius ?? 0,
+        br: pcr?.bottomRight ?? node.cornerRadius ?? 0,
+        bl: pcr?.bottomLeft ?? node.cornerRadius ?? 0,
+      },
+      smoothing,
+    );
     return fillLayersMarkup("path", `d="${d}"`, layers, strokeAttr);
   }
 
@@ -97,13 +105,22 @@ function renderRectLikeShape(node: FlatFrameNode | RectNode, ctx: SvgConversionC
 function buildClipPathForFrame(node: FlatFrameNode, ctx: SvgConversionContext): string {
   const id = nextSvgId("clip");
   const pcr = node.cornerRadiusPerCorner;
-  const shape = hasNonUniformCornerRadius(pcr)
-    ? `<path d="${roundedRectPath(0, 0, node.width, node.height, {
-        tl: pcr?.topLeft ?? 0,
-        tr: pcr?.topRight ?? 0,
-        br: pcr?.bottomRight ?? 0,
-        bl: pcr?.bottomLeft ?? 0,
-      })}"/>`
+  const smoothing = node.cornerSmoothing;
+  const usesPath = hasNonUniformCornerRadius(pcr) || (smoothing && (hasNonUniformCornerRadius(pcr) || node.cornerRadius));
+  const shape = usesPath
+    ? `<path d="${roundedRectPath(
+        0,
+        0,
+        node.width,
+        node.height,
+        {
+          tl: pcr?.topLeft ?? node.cornerRadius ?? 0,
+          tr: pcr?.topRight ?? node.cornerRadius ?? 0,
+          br: pcr?.bottomRight ?? node.cornerRadius ?? 0,
+          bl: pcr?.bottomLeft ?? node.cornerRadius ?? 0,
+        },
+        smoothing,
+      )}"/>`
     : node.cornerRadius
       ? `<rect width="${node.width}" height="${node.height}" rx="${node.cornerRadius}" ry="${node.cornerRadius}"/>`
       : `<rect width="${node.width}" height="${node.height}"/>`;

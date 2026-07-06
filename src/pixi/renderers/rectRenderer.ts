@@ -17,7 +17,15 @@ export function createRectContainer(node: RectNode): Container {
   drawRect(gfx, node);
 
   // Image fill paint stack
-  applyImageFills(container, node, node.width, node.height, node.cornerRadius, node.cornerRadiusPerCorner);
+  applyImageFills(
+    container,
+    node,
+    node.width,
+    node.height,
+    node.cornerRadius,
+    node.cornerRadiusPerCorner,
+    node.cornerSmoothing,
+  );
 
   return container;
 }
@@ -42,15 +50,31 @@ export function updateRectContainer(
     node.width !== prev.width ||
     node.height !== prev.height ||
     node.cornerRadius !== prev.cornerRadius ||
-    node.cornerRadiusPerCorner !== prev.cornerRadiusPerCorner
+    node.cornerRadiusPerCorner !== prev.cornerRadiusPerCorner ||
+    node.cornerSmoothing !== prev.cornerSmoothing
   ) {
-    applyImageFills(container, node, node.width, node.height, node.cornerRadius, node.cornerRadiusPerCorner);
+    applyImageFills(
+      container,
+      node,
+      node.width,
+      node.height,
+      node.cornerRadius,
+      node.cornerRadiusPerCorner,
+      node.cornerSmoothing,
+    );
   }
 }
 
 export function drawRect(gfx: Graphics, node: RectNode): void {
   const drawShape = (target: Graphics) =>
-    drawRoundedShape(target, node.width, node.height, node.cornerRadius, node.cornerRadiusPerCorner);
+    drawRoundedShape(
+      target,
+      node.width,
+      node.height,
+      node.cornerRadius,
+      node.cornerRadiusPerCorner,
+      node.cornerSmoothing,
+    );
   const pathReady = applyFills(gfx, node, node.width, node.height, drawShape);
   // Skip rebuilding the geometry for the stroke when the last fill already left
   // a reusable path on `gfx`.
