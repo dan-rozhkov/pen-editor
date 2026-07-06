@@ -400,7 +400,10 @@ export function applyAnchorEditToNode(
   points: PathAnchor[],
   closed: boolean,
 ): Partial<PathNode> {
-  const gb = node.geometryBounds ?? { x: node.x, y: node.y, width: node.width, height: node.height };
+  // Absent `geometryBounds` means geometry lives in the node's local 0..width
+  // box (origin 0,0) — the same assumption `pathRenderer.drawPath` makes. Using
+  // {node.x, node.y} here would shift the node's x/y on the first edit.
+  const gb = node.geometryBounds ?? { x: 0, y: 0, width: node.width, height: node.height };
   const scaleX = gb.width !== 0 ? node.width / gb.width : 1;
   const scaleY = gb.height !== 0 ? node.height / gb.height : 1;
   const newGB = computeAnchorsBBox(points, closed);

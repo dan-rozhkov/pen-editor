@@ -41,8 +41,23 @@ export function getNodeAbsolutePosition(nodeId: string): { x: number; y: number 
   return getNodeAbsolutePositionWithLayout(useSceneStore.getState().getNodes(), nodeId, calculateLayoutForFrame);
 }
 
-function getScale(node: Pick<PathNode, "width" | "height" | "geometryBounds" | "x" | "y">): { scaleX: number; scaleY: number } {
-  const gb = node.geometryBounds ?? { x: node.x, y: node.y, width: node.width, height: node.height };
+// When `geometryBounds` is absent (e.g. Figma-pasted vectors), the geometry
+// lives in the node's local 0..width/0..height box, exactly what the renderer
+// assumes: `pathRenderer.drawPath` applies no transform (scale 1, origin 0,0)
+// and the container is placed at (node.x, node.y). The fallback must therefore
+// use origin {0, 0} — NOT {node.x, node.y} — or the overlay draws anchors
+// offset from the shape by (node.x, node.y).
+function fallbackGeometryBounds(node: Pick<PathNode, "width" | "height">): {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+} {
+  return { x: 0, y: 0, width: node.width, height: node.height };
+}
+
+function getScale(node: Pick<PathNode, "width" | "height" | "geometryBounds">): { scaleX: number; scaleY: number } {
+  const gb = node.geometryBounds ?? fallbackGeometryBounds(node);
   return {
     scaleX: gb.width !== 0 ? node.width / gb.width : 1,
     scaleY: gb.height !== 0 ? node.height / gb.height : 1,
@@ -50,11 +65,11 @@ function getScale(node: Pick<PathNode, "width" | "height" | "geometryBounds" | "
 }
 
 export function anchorToWorld(
-  node: Pick<PathNode, "width" | "height" | "geometryBounds" | "x" | "y">,
+  node: Pick<PathNode, "width" | "height" | "geometryBounds">,
   absPos: { x: number; y: number },
   point: { x: number; y: number },
 ): { x: number; y: number } {
-  const gb = node.geometryBounds ?? { x: node.x, y: node.y, width: node.width, height: node.height };
+  const gb = node.geometryBounds ?? fallbackGeometryBounds(node);
   const { scaleX, scaleY } = getScale(node);
   return {
     x: absPos.x + (point.x - gb.x) * scaleX,

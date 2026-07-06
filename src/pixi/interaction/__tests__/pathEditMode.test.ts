@@ -9,6 +9,7 @@ import { saveHistory } from "@/store/sceneStore/helpers/history";
 import { applyAnchorEditToNode, moveAnchorPoint } from "@/utils/pathAnchors";
 import type { PathNode, SceneNode } from "@/types/scene";
 import { enterPathEditMode } from "../pathEditMode";
+import { anchorToWorld } from "../pathEditGeometry";
 
 function makePencilPath(id: string): SceneNode {
   return {
@@ -212,5 +213,33 @@ describe("path point edits integrate with undo/redo", () => {
     const afterRedo = useSceneStore.getState().nodesById["editablePath"] as unknown as PathNode;
     expect(afterRedo.geometry).toBe(afterMove.geometry);
     expect(afterRedo.points![0]).toEqual({ x: 3, y: 4 });
+  });
+});
+
+describe("anchorToWorld", () => {
+  const absPos = { x: 400, y: 300 };
+
+  it("places anchors at the renderer's world position when geometryBounds is defined", () => {
+    // renderer: world = absPos + (P - gb.origin) * (width/gb.width)
+    const node = {
+      width: 20,
+      height: 10,
+      geometryBounds: { x: 0, y: 0, width: 10, height: 5 },
+    } as unknown as PathNode;
+    // P=(10,5) → absPos + (10-0)*2, (5-0)*2 = (420,310)
+    expect(anchorToWorld(node, absPos, { x: 10, y: 5 })).toEqual({ x: 420, y: 310 });
+  });
+
+  it("matches the renderer for a Figma-pasted path with no geometryBounds", () => {
+    // Renderer, gb undefined: scale 1, no offset, container at (node.x,node.y)
+    // == absPos → a geometry point P renders at absPos + P. The overlay must
+    // agree; the old {node.x,node.y} fallback shifted anchors by (node.x,node.y).
+    const node = {
+      width: 21,
+      height: 21,
+      // geometryBounds omitted
+    } as unknown as PathNode;
+    expect(anchorToWorld(node, absPos, { x: 0, y: 0 })).toEqual({ x: 400, y: 300 });
+    expect(anchorToWorld(node, absPos, { x: 21, y: 21 })).toEqual({ x: 421, y: 321 });
   });
 });

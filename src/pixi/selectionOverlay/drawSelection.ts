@@ -199,9 +199,14 @@ export function redrawSelection(
     outlinesContainer.addChild(multiOutline);
   }
 
+  // In point-edit ("vector") mode the path's own anchor/handle overlay owns the
+  // node — the transform (resize) handles and the size badge would just clutter
+  // and mislead (the box no longer matches what's being edited), so hide both.
+  const isPathEditing = editingMode === "path" && editingNodeId != null;
+
   // Transform handles at corners (skipped for a single embed — DOM-rendered).
   // Hidden outside edit mode: view keeps the outline for inspection, no handles.
-  if (!singleEmbedId && canEditScene(useEditorModeStore.getState().mode)) {
+  if (!singleEmbedId && !isPathEditing && canEditScene(useEditorModeStore.getState().mode)) {
     const handleSizeWorld = HANDLE_SIZE / scale;
     const halfHandle = handleSizeWorld / 2;
 
@@ -226,8 +231,8 @@ export function redrawSelection(
     }
   }
 
-  // Size label
-  if (totalW > 0 && totalH > 0) {
+  // Size label (hidden in point-edit mode — see isPathEditing above)
+  if (totalW > 0 && totalH > 0 && !isPathEditing) {
     const isComp = selectedIds.some((id) => helpers.isInComponentContext(id));
 
     let badgeWidthMode: string | undefined;

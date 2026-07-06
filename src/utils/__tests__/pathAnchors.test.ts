@@ -209,4 +209,34 @@ describe("applyAnchorEditToNode", () => {
     expect(updates.points).toEqual(points);
     expect(updates.closed).toBe(true);
   });
+
+  it("treats absent geometryBounds as the local 0..width box (no x/y jump on first edit)", () => {
+    // Figma-pasted paths carry no geometryBounds; geometry lives in the node's
+    // local 0..width box. The fallback must use origin {0,0}, not {node.x,node.y},
+    // or editing an anchor snaps the node to the raw geometry coordinates.
+    const node: PathNode = {
+      id: "p2",
+      type: "path",
+      name: "Path",
+      x: 400,
+      y: 300,
+      width: 21,
+      height: 21,
+      geometry: "M0,0 L21,0 L21,21 L0,21 Z",
+      // geometryBounds intentionally omitted
+    };
+    const points: PathAnchor[] = [
+      { x: 0, y: 0 },
+      { x: 21, y: 0 },
+      { x: 21, y: 21 },
+      { x: 0, y: 21 },
+    ];
+    const updates = applyAnchorEditToNode(node, points, true);
+    // scale = width/gb.width = 21/21 = 1; bbox origin (0,0) unchanged
+    expect(updates.geometryBounds).toEqual({ x: 0, y: 0, width: 21, height: 21 });
+    expect(updates.x).toBe(400); // stays put — no jump to raw geometry origin
+    expect(updates.y).toBe(300);
+    expect(updates.width).toBe(21);
+    expect(updates.height).toBe(21);
+  });
 });
