@@ -54,7 +54,7 @@ describe("publicPenExport: wrap / row-column gap", () => {
     expect(exported.gap).toBeUndefined();
   });
 
-  it("collapses to a single gap when rowGap/columnGap match", () => {
+  it("collapses to a single resolved gap when rowGap/columnGap match, even with no base gap set", () => {
     const node = frame({
       layout: {
         autoLayout: true,
@@ -65,9 +65,33 @@ describe("publicPenExport: wrap / row-column gap", () => {
       },
     });
     const exported = exportNodes([node]).children[0];
-    expect(exported.gap).toBeUndefined(); // layout.gap itself unset in this scenario
+    // Both axes resolve to 12 (rowGap/columnGap, no base `gap` set) — that
+    // resolved value must still round-trip as `gap: 12`, not silently drop
+    // to zero on import.
+    expect(exported.gap).toBe(12);
     expect(exported.rowGap).toBeUndefined();
     expect(exported.columnGap).toBeUndefined();
+  });
+
+  it("resolves a rowGap-only override against the base gap instead of collapsing to it", () => {
+    // { rowGap: 24, gap: 8 } means: row-gap (between lines) is 24, but
+    // column-gap (between items in a row) falls back to the shared gap, 8.
+    // The two resolved values (24 vs 8) diverge, so they must export as
+    // independent rowGap/columnGap — collapsing to `{ gap: 8 }` would lose
+    // the rowGap override entirely.
+    const node = frame({
+      layout: {
+        autoLayout: true,
+        flexDirection: "row",
+        flexWrap: true,
+        rowGap: 24,
+        gap: 8,
+      },
+    });
+    const exported = exportNodes([node]).children[0];
+    expect(exported.rowGap).toBe(24);
+    expect(exported.columnGap).toBe(8);
+    expect(exported.gap).toBeUndefined();
   });
 });
 

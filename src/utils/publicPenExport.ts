@@ -519,9 +519,19 @@ function exportFrameNode(
   const justifyContent = node.type === "frame" ? mapJustifyContent(node.layout?.justifyContent) : undefined;
   const alignItems = node.type === "frame" ? mapAlignItems(node.layout?.alignItems) : undefined;
   const flexWrap = node.type === "frame" && node.layout?.flexWrap;
-  const rowGap = node.type === "frame" ? node.layout?.rowGap : undefined;
-  const columnGap = node.type === "frame" ? node.layout?.columnGap : undefined;
-  const gapDiverges = rowGap != null && columnGap != null && rowGap !== columnGap;
+  const gap = node.type === "frame" ? node.layout?.gap : undefined;
+  const rawRowGap = node.type === "frame" ? node.layout?.rowGap : undefined;
+  const rawColumnGap = node.type === "frame" ? node.layout?.columnGap : undefined;
+  // Mirror the engine's resolution (buildContainer in yogaLayout.ts): each
+  // per-axis gap falls back to the shared `gap` when unset, so a rowGap-only
+  // override (e.g. { rowGap: 24, gap: 8 }) must still export a resolved
+  // columnGap of 8 — not silently collapse to { gap: 8 }.
+  const resolvedRowGap = rawRowGap ?? gap;
+  const resolvedColumnGap = rawColumnGap ?? gap;
+  const gapDiverges =
+    resolvedRowGap != null &&
+    resolvedColumnGap != null &&
+    resolvedRowGap !== resolvedColumnGap;
 
   return {
     ...exportNodeBase(node, context, parentUsesLayout),
@@ -532,9 +542,9 @@ function exportFrameNode(
           layout: node.layout?.flexDirection === "column" ? "vertical" : "horizontal",
           ...(flexWrap ? { wrap: true } : {}),
           ...(gapDiverges
-            ? { rowGap, columnGap }
-            : node.layout?.gap != null
-              ? { gap: node.layout.gap }
+            ? { rowGap: resolvedRowGap, columnGap: resolvedColumnGap }
+            : gap != null || resolvedRowGap != null
+              ? { gap: gap ?? resolvedRowGap }
               : {}),
           ...(padding != null ? { padding } : {}),
           ...(justifyContent ? { justifyContent } : {}),

@@ -12,6 +12,13 @@ import { resolveTextResize, minTextWidth } from "./textResize";
 import { computeConstrainedRect } from "@/utils/constraintsLayout";
 import { snapResizeEdge } from "@/utils/smartGuideUtils";
 
+function clamp(value: number, min?: number, max?: number): number {
+  let v = value;
+  if (min !== undefined) v = Math.max(v, min);
+  if (max !== undefined) v = Math.min(v, max);
+  return v;
+}
+
 export interface TransformController {
   handlePointerDown(e: PointerEvent, world: { x: number; y: number }): boolean;
   handlePointerMove(e: PointerEvent, world: { x: number; y: number }): boolean;
@@ -200,6 +207,32 @@ export function createTransformController(context: InteractionContext): Transfor
           newH = ySnap.size;
         }
 
+        // Clamp to the node's configured min/max width/height (Figma clamps
+        // live during drag, not just on the next layout pass). The anchor
+        // edge (opposite the dragged one) stays fixed, so when a min/max
+        // clamp shrinks/grows the size relative to what the drag computed,
+        // recompute the position of the moving edge from the fixed anchor.
+        const clampingNode = state.nodeId
+          ? useSceneStore.getState().nodesById[state.nodeId]
+          : null;
+        if (clampingNode?.sizing) {
+          const { minWidth, maxWidth, minHeight, maxHeight } = clampingNode.sizing;
+          const clampedW = clamp(newW, minWidth, maxWidth);
+          if (clampedW !== newW) {
+            if (corner.includes("l")) {
+              newX = state.startNodeX + (state.startNodeW - clampedW);
+            }
+            newW = clampedW;
+          }
+          const clampedH = clamp(newH, minHeight, maxHeight);
+          if (clampedH !== newH) {
+            if (corner.includes("t")) {
+              newY = state.startNodeY + (state.startNodeH - clampedH);
+            }
+            newH = clampedH;
+          }
+        }
+
         const roundedW = Math.round(newW);
         const roundedH = Math.round(newH);
 
@@ -219,7 +252,7 @@ export function createTransformController(context: InteractionContext): Transfor
           return true;
         }
 
-        const node = useSceneStore.getState().nodesById[state.nodeId];
+        const node = clampingNode;
 
         // Text: switch sizing mode based on which handle is dragged and
         // re-hug height live for side (auto-height) drags (Figma parity).

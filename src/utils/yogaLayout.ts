@@ -302,78 +302,152 @@ function buildFlexItem(child: SceneNode, container: FlexContainer): FlexItem {
 
 /**
  * Phase 1: Resolve main-axis sizes via flex-grow / flex-shrink distribution.
+ *
+ * Implements the CSS "resolving flexible lengths" algorithm (iterative
+ * freeze-and-redistribute): items that violate their min/max clamp are
+ * frozen at the clamped size, and the remaining free space is redistributed
+ * among the still-unfrozen items, repeating until no violations remain (or
+ * every item is frozen). This avoids the overflow/underflow that a
+ * single-pass clamp-after-distribute would leave when min/max items are
+ * mixed with growing/shrinking siblings in the same line.
  */
 function resolveMainAxisSizes(
   items: FlexItem[],
   container: FlexContainer,
 ): void {
-  const pad = resolvePadding(container);
-  const totalGap =
-    items.length > 1 ? container.mainGap * (items.length - 1) : 0;
-
-  if (container.mainSize !== undefined) {
-    const contentSpace = container.mainSize - pad.mainStart - pad.mainEnd;
-    const totalBasis = items.reduce((sum, item) => sum + item.flexBasis, 0);
-    const freeSpace = contentSpace - totalBasis - totalGap;
-
-    if (freeSpace > 0) {
-      const totalGrow = items.reduce((sum, item) => sum + item.flexGrow, 0);
-      if (totalGrow > 0) {
-        const growUnit = freeSpace / totalGrow;
-        for (const item of items) {
-          item.computedMainSize = item.flexBasis + item.flexGrow * growUnit;
-        }
-      } else {
-        for (const item of items) {
-          item.computedMainSize = item.flexBasis;
-        }
-      }
-    } else if (freeSpace < 0) {
-      const totalShrink = items.reduce(
-        (sum, item) => sum + item.flexShrink * item.flexBasis,
-        0,
-      );
-      if (totalShrink > 0) {
-        for (const item of items) {
-          const shrinkRatio = (item.flexShrink * item.flexBasis) / totalShrink;
-          item.computedMainSize = Math.max(
-            0,
-            item.flexBasis + freeSpace * shrinkRatio,
-          );
-        }
-      } else {
-        for (const item of items) {
-          item.computedMainSize = item.flexBasis;
-        }
-      }
-    } else {
-      for (const item of items) {
-        item.computedMainSize = item.flexBasis;
-      }
-    }
-  } else {
-    // Intrinsic mode: each item gets its basis
+  if (container.mainSize === undefined) {
+    // Intrinsic mode: each item gets its basis (no grow/shrink to resolve).
     for (const item of items) {
       item.computedMainSize = item.flexBasis;
     }
+    return;
   }
 
-  // Clamp grow/shrink results into the item's min/max range. This is a
-  // single-pass clamp (not a full iterative CSS flex-basis redistribution) —
-  // acceptable simplification: it can leave a little free/negative space when
-  // clamped items exist alongside grow/shrink siblings, but keeps every
-  // computed size within its configured bounds.
-  for (const item of items) {
-    item.computedMainSize = clamp(item.computedMainSize, item.mainMin, item.mainMax);
+  if (items.length === 0) return;
+
+  const pad = resolvePadding(container);
+  const totalGap =
+    items.length > 1 ? container.mainGap * (items.length - 1) : 0;
+  const contentSpace = container.mainSize - pad.mainStart - pad.mainEnd;
+  const totalBasis = items.reduce((sum, item) => sum + item.flexBasis, 0);
+  const initialFreeSpace = contentSpace - totalBasis - totalGap;
+  const growing = initialFreeSpace >= 0;
+
+  interface Working {
+    item: FlexItem;
+    frozen: boolean;
+    target: number;
+  }
+
+  const working: Working[] = items.map((item) => ({
+    item,
+    frozen: false,
+    target: item.flexBasis,
+  }));
+
+  // Items with a zero flex factor for the active mode (grow or shrink) never
+  // move — freeze them immediately at their clamped basis.
+  for (const w of working) {
+    const factor = growing ? w.item.flexGrow : w.item.flexShrink;
+    if (factor === 0) {
+      w.frozen = true;
+      w.target = clamp(w.item.flexBasis, w.item.mainMin, w.item.mainMax);
+    }
+  }
+
+  const maxIterations = working.length + 1;
+  for (let iter = 0; iter < maxIterations; iter++) {
+    const unfrozen = working.filter((w) => !w.frozen);
+    if (unfrozen.length === 0) break;
+
+    const frozenSum = working
+      .filter((w) => w.frozen)
+      .reduce((sum, w) => sum + w.target, 0);
+    const unfrozenBasisSum = unfrozen.reduce(
+      (sum, w) => sum + w.item.flexBasis,
+      0,
+    );
+    const remainingFreeSpace =
+      contentSpace - totalGap - frozenSum - unfrozenBasisSum;
+
+    if (growing) {
+      const sumGrow = unfrozen.reduce((sum, w) => sum + w.item.flexGrow, 0);
+      if (sumGrow > 0) {
+        for (const w of unfrozen) {
+          w.target =
+            w.item.flexBasis + remainingFreeSpace * (w.item.flexGrow / sumGrow);
+        }
+      } else {
+        for (const w of unfrozen) w.target = w.item.flexBasis;
+      }
+    } else {
+      const sumScaledShrink = unfrozen.reduce(
+        (sum, w) => sum + w.item.flexShrink * w.item.flexBasis,
+        0,
+      );
+      if (sumScaledShrink > 0) {
+        for (const w of unfrozen) {
+          const scaledShrink = w.item.flexShrink * w.item.flexBasis;
+          w.target = Math.max(
+            0,
+            w.item.flexBasis +
+              remainingFreeSpace * (scaledShrink / sumScaledShrink),
+          );
+        }
+      } else {
+        for (const w of unfrozen) w.target = w.item.flexBasis;
+      }
+    }
+
+    // Fix min/max violations: clamp each unfrozen target, tracking whether
+    // it was a min violation (clamped up), a max violation (clamped down),
+    // or no violation.
+    let totalViolation = 0;
+    const violations = unfrozen.map((w) => {
+      const clamped = clamp(w.target, w.item.mainMin, w.item.mainMax);
+      const violation = clamped - w.target;
+      totalViolation += violation;
+      return { w, clamped, violation };
+    });
+
+    if (totalViolation === 0) {
+      for (const { w, clamped } of violations) w.target = clamped;
+      break;
+    }
+
+    if (totalViolation > 0) {
+      // Net min violations: freeze every item that hit its min.
+      for (const { w, clamped, violation } of violations) {
+        if (violation > 0) {
+          w.frozen = true;
+          w.target = clamped;
+        }
+      }
+    } else {
+      // Net max violations: freeze every item that hit its max.
+      for (const { w, clamped, violation } of violations) {
+        if (violation < 0) {
+          w.frozen = true;
+          w.target = clamped;
+        }
+      }
+    }
+  }
+
+  for (const w of working) {
+    w.item.computedMainSize = clamp(w.target, w.item.mainMin, w.item.mainMax);
   }
 }
 
 /**
- * Split items into wrapped lines based on their hypothetical (flex-basis)
- * main-axis size. When wrap is off, or the main axis has no fixed size to
- * wrap within (shrink-to-fit), everything stays on a single line — this is
- * the pre-wrap behavior and keeps single-line layouts byte-for-byte
- * unchanged.
+ * Split items into wrapped lines based on their hypothetical main-axis size:
+ * clamp(flexBasis, mainMin, mainMax), per the CSS spec (line-breaking uses
+ * the clamped hypothetical size, not the raw flex-basis — a fill_container
+ * item with a mainMin still "hypothetically" occupies at least that much
+ * space, even though its flexBasis is 0 before grow is distributed). When
+ * wrap is off, or the main axis has no fixed size to wrap within
+ * (shrink-to-fit), everything stays on a single line — this is the pre-wrap
+ * behavior and keeps single-line layouts byte-for-byte unchanged.
  */
 function layoutLines(
   items: FlexItem[],
@@ -392,7 +466,7 @@ function layoutLines(
   let currentMain = 0;
 
   for (const item of items) {
-    const itemMain = item.flexBasis;
+    const itemMain = clamp(item.flexBasis, item.mainMin, item.mainMax);
     if (
       current.length > 0 &&
       currentMain + container.mainGap + itemMain > contentMain
@@ -471,6 +545,22 @@ function assignLineCrossSizes(
       );
     }
   }
+}
+
+/**
+ * Convenience wrapper: resolve each line's cross size and assign/clamp every
+ * item's computed cross size against it. Called twice by callers that
+ * remeasure text between the two calls (crossBaseSize can change for
+ * remeasured items), so it's factored out to guarantee both calls stay in
+ * sync rather than duplicating the two-line sequence at each call site.
+ */
+function resolveAndAssignLineCrossSizes(
+  lines: FlexItem[][],
+  container: FlexContainer,
+): number[] {
+  const lineCrossSizes = resolveLineCrossSizes(lines, container);
+  assignLineCrossSizes(lines, lineCrossSizes, container);
+  return lineCrossSizes;
 }
 
 /**
@@ -773,13 +863,18 @@ export function calculateFrameLayout(frame: FrameNode): LayoutResult[] {
   const lines = layoutLines(items, container);
   for (const line of lines) resolveMainAxisSizes(line, container);
 
-  const lineCrossSizes = resolveLineCrossSizes(lines, container);
-  assignLineCrossSizes(lines, lineCrossSizes, container);
+  resolveAndAssignLineCrossSizes(lines, container);
 
-  // Second pass: re-measure text heights using layout-computed widths.
-  // Text wrapping depends on the final width, which is only known after
-  // main/cross sizing resolves fill_container widths.
+  // Second pass: re-measure text heights using layout-computed widths. Text
+  // wrapping depends on the final width, which is only known after
+  // main/cross sizing resolves fill_container widths. This mutates
+  // crossBaseSize for remeasured items (a wrapped-taller text child grows
+  // its line's cross size), so line cross sizes and stretch assignment must
+  // be recomputed from the post-remeasure sizes before positioning —
+  // otherwise a taller remeasured child would overlap the next wrapped line.
   remeasureTextHeights(items, visibleChildren, container);
+
+  const lineCrossSizes = resolveAndAssignLineCrossSizes(lines, container);
 
   positionLines(lines, lineCrossSizes, container);
 
@@ -822,12 +917,15 @@ export function calculateFrameIntrinsicSize(
 
   const items = visibleChildren.map((child) => buildFlexItem(child, container));
 
-  // Run sizing phases to get accurate sizes
+  // Run sizing phases to get accurate sizes. Cross sizes are resolved both
+  // before and after remeasureTextHeights (which can change a remeasured
+  // item's crossBaseSize) so the intrinsicCross sum below reflects the final
+  // sizes — see the same ordering fix in calculateFrameLayout.
   const lines = layoutLines(items, container);
   for (const line of lines) resolveMainAxisSizes(line, container);
-  const lineCrossSizes = resolveLineCrossSizes(lines, container);
-  assignLineCrossSizes(lines, lineCrossSizes, container);
+  resolveAndAssignLineCrossSizes(lines, container);
   remeasureTextHeights(items, visibleChildren, container);
+  const lineCrossSizes = resolveAndAssignLineCrossSizes(lines, container);
 
   const totalGap =
     items.length > 1 ? container.mainGap * (items.length - 1) : 0;

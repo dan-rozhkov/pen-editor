@@ -140,6 +140,63 @@ describe("<AutoLayoutSection />", () => {
       expect(inputs[1].value).toBe("12"); // column gap falls back to gap
     });
 
+    it("migrates the main-axis gap into `gap` and clears rowGap/columnGap when wrap is turned off", () => {
+      // Row direction: the main axis is horizontal, so its gap is
+      // columnGap (falling back to gap). Disabling wrap must migrate that
+      // value into `gap` and clear the per-axis fields — otherwise the
+      // plain "Gap" input (which only ever writes `layout.gap`) would have
+      // no visible effect, since mainGap = columnGap ?? gap would still
+      // read the stale columnGap.
+      const onUpdate = vi.fn();
+      render(
+        <AutoLayoutSection
+          node={frame({
+            autoLayout: true,
+            flexDirection: "row",
+            flexWrap: true,
+            rowGap: 10,
+            columnGap: 5,
+          })}
+          onUpdate={onUpdate}
+        />,
+      );
+      fireEvent.click(screen.getByLabelText("Wrap"));
+      expect(onUpdate).toHaveBeenCalledWith({
+        layout: expect.objectContaining({
+          flexWrap: false,
+          gap: 5,
+          rowGap: undefined,
+          columnGap: undefined,
+        }),
+      });
+    });
+
+    it("migrates the main-axis (rowGap) value for a column direction when wrap is turned off", () => {
+      // Column direction: the main axis is vertical, so its gap is rowGap.
+      const onUpdate = vi.fn();
+      render(
+        <AutoLayoutSection
+          node={frame({
+            autoLayout: true,
+            flexDirection: "column",
+            flexWrap: true,
+            rowGap: 10,
+            columnGap: 5,
+          })}
+          onUpdate={onUpdate}
+        />,
+      );
+      fireEvent.click(screen.getByLabelText("Wrap"));
+      expect(onUpdate).toHaveBeenCalledWith({
+        layout: expect.objectContaining({
+          flexWrap: false,
+          gap: 10,
+          rowGap: undefined,
+          columnGap: undefined,
+        }),
+      });
+    });
+
     it("updates rowGap/columnGap independently via their inputs", () => {
       const onUpdate = vi.fn();
       render(

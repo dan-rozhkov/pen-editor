@@ -91,11 +91,33 @@ export function AutoLayoutSection({ node, onUpdate, mixedKeys }: AutoLayoutSecti
           <CheckboxInput
             label="Wrap"
             checked={node.layout?.flexWrap ?? false}
-            onChange={(checked) =>
+            onChange={(checked) => {
+              if (checked) {
+                onUpdate({
+                  layout: { ...node.layout, flexWrap: true },
+                } as Partial<SceneNode>);
+                return;
+              }
+              // Per-axis gaps are a wrap feature (Figma semantics): when
+              // wrap is turned off, migrate the current main-axis gap value
+              // into the single `gap` field and clear rowGap/columnGap so
+              // the plain "Gap" input (which only ever writes `gap`) isn't
+              // silently overridden by a stale per-axis value the next time
+              // wrap is re-enabled or the layout engine reads mainGap.
+              const isHorizontal = (node.layout?.flexDirection ?? "row") === "row";
+              const mainAxisGap = isHorizontal
+                ? node.layout?.columnGap ?? node.layout?.gap ?? 0
+                : node.layout?.rowGap ?? node.layout?.gap ?? 0;
               onUpdate({
-                layout: { ...node.layout, flexWrap: checked },
-              } as Partial<SceneNode>)
-            }
+                layout: {
+                  ...node.layout,
+                  flexWrap: false,
+                  gap: mainAxisGap,
+                  rowGap: undefined,
+                  columnGap: undefined,
+                },
+              } as Partial<SceneNode>);
+            }}
           />
           <PropertyRow>
             <div className="flex flex-col gap-1 flex-1">
