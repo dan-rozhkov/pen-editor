@@ -55,9 +55,6 @@ export function PrimitivesPanel() {
     tool: DrawToolType;
     shortcut: string;
   }> = [
-    { icon: PenNibIcon, label: "Pen", tool: "pen", shortcut: "P" },
-    { icon: PencilSimple, label: "Pencil", tool: "pencil", shortcut: "D" },
-    { icon: CircleIcon, label: "Ellipse", tool: "ellipse", shortcut: "O" },
     { icon: TextTIcon, label: "Text", tool: "text", shortcut: "T" },
     { icon: CodeIcon, label: "Embed", tool: "embed", shortcut: "E" },
   ];
@@ -72,13 +69,27 @@ export function PrimitivesPanel() {
     tool: DrawToolType;
     shortcut: string;
   }> = [
+    { icon: CircleIcon, label: "Ellipse", tool: "ellipse", shortcut: "O" },
     { icon: LineSegmentIcon, label: "Line", tool: "line", shortcut: "L" },
     { icon: HexagonIcon, label: "Polygon", tool: "polygon", shortcut: "G" },
     { icon: FlowArrow, label: "Connector", tool: "connector", shortcut: "C" },
   ];
 
+  const penSubTools: Array<{
+    icon: React.ComponentType<{
+      className?: string;
+      size?: number;
+      weight?: IconWeight;
+    }>;
+    label: string;
+    tool: DrawToolType;
+    shortcut: string;
+  }> = [{ icon: PencilSimple, label: "Pencil", tool: "pencil", shortcut: "D" }];
+
   const isRectSubToolActive = rectSubTools.some((t) => t.tool === activeTool);
   const isRectangleActive = activeTool === "rect";
+  const isPenSubToolActive = penSubTools.some((t) => t.tool === activeTool);
+  const isPenActive = activeTool === "pen";
   const toolButtonBaseClass =
     "group relative size-9 p-0 rounded-lg transition-none outline-none";
 
@@ -128,7 +139,7 @@ export function PrimitivesPanel() {
               <Button
                 variant="ghost"
                 size="lg"
-                title="Line, Polygon"
+                title="Ellipse, Line, Polygon"
                 className={`${toolButtonBaseClass} w-6 justify-center ${
                   isRectSubToolActive
                     ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
@@ -142,6 +153,60 @@ export function PrimitivesPanel() {
 
           <DropdownMenuContent align="center" sideOffset={8}>
             {rectSubTools.map(({ icon: Icon, label, tool, shortcut }) => {
+              const isActive = activeTool === tool;
+              return (
+                <DropdownMenuItem
+                  key={label}
+                  onClick={() => toggleTool(tool)}
+                  className={`flex items-center gap-2 ${
+                    isActive ? "bg-accent text-accent-foreground" : ""
+                  }`}
+                >
+                  <Icon size={16} weight="light" />
+                  <span>{label}</span>
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {shortcut}
+                  </span>
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu>
+          <ButtonGroup orientation="horizontal" className="gap-0">
+            <Button
+              variant="ghost"
+              size="lg"
+              title="Pen (P)"
+              onClick={() => toggleTool("pen")}
+              className={`${toolButtonBaseClass} ${
+                isPenActive
+                  ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
+                  : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
+              }`}
+            >
+              <PenNibIcon size={40} className="size-6" weight="light" />
+            </Button>
+
+            <DropdownMenuTrigger>
+              <Button
+                variant="ghost"
+                size="lg"
+                title="Pencil"
+                className={`${toolButtonBaseClass} w-6 justify-center ${
+                  isPenSubToolActive
+                    ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
+                    : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
+                }`}
+              >
+                <CaretDownIcon size={12} className="size-3" weight="bold" />
+              </Button>
+            </DropdownMenuTrigger>
+          </ButtonGroup>
+
+          <DropdownMenuContent align="center" sideOffset={8}>
+            {penSubTools.map(({ icon: Icon, label, tool, shortcut }) => {
               const isActive = activeTool === tool;
               return (
                 <DropdownMenuItem
