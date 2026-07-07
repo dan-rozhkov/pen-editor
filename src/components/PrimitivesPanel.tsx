@@ -13,6 +13,7 @@ import {
   type IconWeight,
   CaretDownIcon,
   CodeIcon,
+  ResizeIcon,
 } from "@phosphor-icons/react";
 import { useDrawModeStore, type DrawToolType } from "../store/drawModeStore";
 import { Button } from "./ui/button";
@@ -58,6 +59,7 @@ export function PrimitivesPanel() {
   }> = [
     { icon: TextTIcon, label: "Text", tool: "text", shortcut: "T" },
     { icon: CodeIcon, label: "Embed", tool: "embed", shortcut: "E" },
+    { icon: ResizeIcon, label: "Scale", tool: "scale", shortcut: "K" },
   ];
 
   const rectSubTools: Array<{

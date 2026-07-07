@@ -61,6 +61,24 @@ export interface SceneState {
   ungroupNodes: (ids: string[]) => string[];
   convertNodeType: (id: string) => boolean;
   wrapInAutoLayoutFrame: (ids: string[]) => string | null;
+  /**
+   * Proportionally scale the given nodes AND their entire descendant
+   * subtree by `factor` — geometry, typography, strokes, radii, effects,
+   * and auto-layout gap/padding all scale together as one history entry.
+   * `anchors` (optional, keyed by root id, in that root's parent-local
+   * coordinate space) pins the fixed point of the scale for each root; a
+   * root without an anchor entry scales from {0,0} in its parent's space.
+   * `baseSizes` (per root id) overrides the stored width/height used as the
+   * scale base — pass a gesture's effective (layout) size so the committed
+   * geometry matches what was dragged. Overlapping roots (a root that is a
+   * descendant of another root) are deduped.
+   */
+  scaleNodes: (
+    ids: string[],
+    factor: number,
+    anchors?: Record<string, { x: number; y: number }>,
+    baseSizes?: Record<string, { width: number; height: number }>,
+  ) => void;
   booleanOperation: (ids: string[], op: BooleanOpKind) => string | null;
   convertEmbedToDesign: (id: string) => Promise<string | null>;
   convertDesignToEmbed: (id: string) => string | null;

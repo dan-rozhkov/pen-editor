@@ -27,7 +27,7 @@ interface CanvasKeyboardShortcutsParams {
   undo: (snapshot: HistorySnapshot) => HistorySnapshot | null;
   redo: (snapshot: HistorySnapshot) => HistorySnapshot | null;
   fitToContent: (nodes: SceneNode[], width: number, height: number) => void;
-  toggleTool: (tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon" | "star" | "embed" | "pencil" | "connector" | "pen") => void;
+  toggleTool: (tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon" | "star" | "embed" | "pencil" | "connector" | "pen" | "scale") => void;
   cancelDrawing: () => void;
   clearSelection: () => void;
   copyNodes: (nodes: SceneNode[]) => void;

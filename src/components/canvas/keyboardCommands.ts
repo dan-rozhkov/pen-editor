@@ -15,6 +15,7 @@ import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { findNodeById, findParentFrame } from "@/utils/nodeUtils";
 import { finishPenDraft, cancelPenDraft } from "@/pixi/interaction/penDraftCommit";
+import { cancelActiveScale } from "@/pixi/interaction/scaleController";
 import { enterPathEditMode } from "@/pixi/interaction/pathEditMode";
 import { isTypingTarget } from "./keyboardShortcutUtils";
 import {
@@ -46,7 +47,7 @@ export interface KeyDownHandlerDeps {
   undo: (snapshot: HistorySnapshot) => HistorySnapshot | null;
   redo: (snapshot: HistorySnapshot) => HistorySnapshot | null;
   fitToContent: (nodes: SceneNode[], width: number, height: number) => void;
-  toggleTool: (tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon" | "star" | "embed" | "pencil" | "connector" | "pen") => void;
+  toggleTool: (tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon" | "star" | "embed" | "pencil" | "connector" | "pen" | "scale") => void;
   cancelDrawing: () => void;
   clearSelection: () => void;
   copySelection: () => void;
@@ -450,6 +451,11 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
         toggleTool("connector");
         return;
       }
+      if (e.code === "KeyK") {
+        e.preventDefault();
+        toggleTool("scale");
+        return;
+      }
     }
 
     if (e.code === "Space" && !e.repeat) {
@@ -481,6 +487,11 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
     }
 
     if (e.code === "Escape") {
+      // Cancel an in-progress scale gesture first: revert its live preview
+      // without committing history. (The scaleController state lives in the
+      // interaction closure, reachable only via this escape hatch.)
+      if (cancelActiveScale()) return;
+
       // Cancel auto-layout drag animation if in progress
       const dragCancelFn = useDragStore.getState().cancelDrag;
       if (dragCancelFn) {

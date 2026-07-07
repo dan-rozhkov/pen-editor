@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { usePenToolStore } from './penToolStore'
 import { useSelectionStore } from './selectionStore'
 
-export type DrawToolType = 'cursor' | 'frame' | 'rect' | 'ellipse' | 'text' | 'line' | 'polygon' | 'star' | 'embed' | 'pencil' | 'connector' | 'pen'
+export type DrawToolType = 'cursor' | 'frame' | 'rect' | 'ellipse' | 'text' | 'line' | 'polygon' | 'star' | 'embed' | 'pencil' | 'connector' | 'pen' | 'scale'
 
 export interface PencilSettings {
   color: string

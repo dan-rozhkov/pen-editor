@@ -29,6 +29,7 @@ import {
 import { createPanController } from "./panController";
 import { createTouchController } from "./touchController";
 import { createTransformController } from "./transformController";
+import { createScaleController } from "./scaleController";
 import { createDrawController } from "./drawController";
 import { createPencilController } from "./pencilController";
 import { createPenController } from "./penController";
@@ -156,6 +157,7 @@ export function setupPixiInteraction(
   // interaction the moment a two-finger gesture takes over.
   let lastPointerEvent: PointerEvent | null = null;
   const transform = createTransformController(context);
+  const scaleTool = createScaleController(context);
   const draw = createDrawController(context);
   const pencil = createPencilController(context);
   const pen = createPenController(context);
@@ -202,7 +204,10 @@ export function setupPixiInteraction(
       canvas.style.cursor = getResizeCursor(handleHit.corner);
     } else if (!drag.isDragging() && !pan.isPanning()) {
       const { activeTool } = useDrawModeStore.getState();
-      canvas.style.cursor = activeTool && activeTool !== "cursor" ? "crosshair" : "";
+      // The scale tool only acts on resize handles (handled above); off a
+      // handle it should show the default arrow, not a "draw" crosshair.
+      canvas.style.cursor =
+        activeTool && activeTool !== "cursor" && activeTool !== "scale" ? "crosshair" : "";
     }
   }
 
@@ -244,6 +249,9 @@ export function setupPixiInteraction(
         if (pathEdit.handlePointerDown(e, world)) return;
         useSelectionStore.getState().stopEditing();
       }
+      // Scale tool (K): same handles as resize, but a proportional
+      // whole-subtree scale — takes priority over the plain resize while active.
+      if (scaleTool.handlePointerDown(e, world)) return;
       // Transform (resize handles)
       if (transform.handlePointerDown(e, world)) return;
       // Drawing mode (pencil/pen first, then connector, then standard draw)
@@ -376,6 +384,7 @@ export function setupPixiInteraction(
     if (pen.handlePointerMove(e, world)) return;
     if (connector.handlePointerMove(e, world)) return;
     if (draw.handlePointerMove(e, world)) return;
+    if (scaleTool.handlePointerMove(e, world)) return;
     if (transform.handlePointerMove(e, world)) return;
     if (drag.handlePointerMove(e, world)) return;
     if (marquee.handlePointerMove(e, world)) return;
@@ -426,6 +435,7 @@ export function setupPixiInteraction(
     // Handle interaction cleanup in order
     if (pan.handlePointerUp(e)) return;
     if (pathEdit.handlePointerUp(e, world)) return;
+    if (scaleTool.handlePointerUp(e, world)) return;
     if (transform.handlePointerUp(e, world)) return;
     if (pencil.handlePointerUp(e, world)) return;
     if (pen.handlePointerUp(e, world)) return;

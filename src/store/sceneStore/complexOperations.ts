@@ -19,6 +19,7 @@ import {
   removeOrphanedConnectors,
 } from "./helpers/flatStoreHelpers";
 import { computeBooleanOp, BOOLEAN_SUPPORTED_TYPES, type BooleanOpKind } from "../../lib/booleanOps";
+import { computeScaleUpdates } from "./scaleOperations";
 import type { SceneState } from "./types";
 
 type Bounds = { x: number; y: number; width: number; height: number };
@@ -694,6 +695,28 @@ export function createComplexOperations(
       });
 
       return embedId;
+    },
+
+    scaleNodes: (
+      ids: string[],
+      factor: number,
+      anchors?: Record<string, { x: number; y: number }>,
+      baseSizes?: Record<string, { width: number; height: number }>,
+    ): void => {
+      if (ids.length === 0 || !(factor > 0)) return;
+      const state = get();
+      const validIds = ids.filter((id) => state.nodesById[id]);
+      if (validIds.length === 0) return;
+
+      saveHistory(state);
+
+      const updates = computeScaleUpdates(validIds, factor, state.nodesById, state.childrenById, anchors, baseSizes);
+      const newNodesById = { ...state.nodesById };
+      for (const id in updates) {
+        newNodesById[id] = { ...newNodesById[id], ...updates[id] } as FlatSceneNode;
+      }
+
+      setState({ nodesById: newNodesById, _cachedTree: null });
     },
   };
 }

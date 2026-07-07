@@ -170,7 +170,10 @@ export function createDrawController(_context: InteractionContext): DrawControll
   return {
     handlePointerDown(e: PointerEvent, world: { x: number; y: number }): boolean {
       const { activeTool } = useDrawModeStore.getState();
-      if (activeTool && activeTool !== "cursor" && activeTool !== "connector" && e.button === 0) {
+      // "scale" reuses the resize handles (scaleController) and must never
+      // fall through to drawing a shape — a miss should do nothing, not spawn
+      // a phantom rectangle (and reset the tool on release).
+      if (activeTool && activeTool !== "cursor" && activeTool !== "connector" && activeTool !== "scale" && e.button === 0) {
         state.isDrawing = true;
         state.startWorldX = world.x;
         state.startWorldY = world.y;
