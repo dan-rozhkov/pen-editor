@@ -23,6 +23,7 @@ import {
   TextStrikethrough,
   TextUnderline,
   XIcon,
+  IconContext,
 } from "@phosphor-icons/react";
 import type { SceneNode, TextNode } from "@/types/scene";
 import {
@@ -262,27 +263,26 @@ function TextStylesPopover({ node }: { node: TextNode }) {
 }
 
 const segmentedButtonGroupClass =
-  "h-6 rounded-md bg-secondary gap-px [&_svg]:size-4 [&>[data-slot]]:rounded-[5px]! [&>[data-slot]]:border [&>[data-slot]~[data-slot]]:border-l";
+  "h-6 rounded-md bg-secondary gap-px [&_svg]:size-[18px]! [&>[data-slot]]:rounded-[5px]! [&>[data-slot]]:border [&>[data-slot]~[data-slot]]:border-l";
 
 function TruncateTextIcon() {
   return (
     <svg
       aria-hidden="true"
-      className="size-3.5"
       viewBox="0 0 16 16"
       fill="none"
     >
       <path
         d="M3.2 10.4L6 4H7.3L10.1 10.4"
         stroke="currentColor"
-        strokeWidth="1.2"
+        strokeWidth="0.75"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <path
         d="M4.4 8H8.9"
         stroke="currentColor"
-        strokeWidth="1.2"
+        strokeWidth="0.75"
         strokeLinecap="round"
       />
       <circle cx="5.2" cy="12.2" r="0.7" fill="currentColor" />
@@ -364,10 +364,11 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
   };
 
   return (
-    <PropertySection
-      title="Typography"
-      action={<TextStylesPopover node={node} />}
-    >
+    <IconContext.Provider value={{ weight: "light" }}>
+      <PropertySection
+        title="Typography"
+        action={<TextStylesPopover node={node} />}
+      >
       <PropertyRow>
         <FontCombobox
           value={node.fontFamily ?? "Arial"}
@@ -433,7 +434,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
               } as Partial<SceneNode>)
             }
           >
-            <TextItalic size={14} />
+            <TextItalic className="size-[18px]!" />
           </Button>
         </div>
         <div className="flex items-center gap-1 flex-1">
@@ -820,6 +821,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
           step={0.5}
         />
       </PropertyRow>
-    </PropertySection>
+      </PropertySection>
+    </IconContext.Provider>
   );
 }

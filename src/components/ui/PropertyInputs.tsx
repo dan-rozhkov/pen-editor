@@ -13,7 +13,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "./dropdown-menu";
-import { FlipHorizontalIcon, FlipVerticalIcon } from "@phosphor-icons/react";
+import { FlipHorizontalIcon, FlipVerticalIcon, IconContext } from "@phosphor-icons/react";
 import { CustomColorPicker } from "./ColorPicker";
 import { useScrubLabel } from "@/hooks/useScrubLabel";
 import { useReadOnly } from "@/hooks/useReadOnly";
@@ -534,27 +534,29 @@ export function FlipControls({
 }: FlipControlsProps) {
   const readOnly = useReadOnly();
   return (
-    <ButtonGroup orientation="horizontal" className="w-full">
-      <Button
-        variant="secondary"
-        size="sm"
-        className="flex-1"
-        onClick={() => onFlipXChange(!flipX)}
-        disabled={readOnly}
-        title="Flip horizontal"
-      >
-        <FlipHorizontalIcon size={16} />
-      </Button>
-      <Button
-        variant="secondary"
-        size="sm"
-        className="flex-1"
-        onClick={() => onFlipYChange(!flipY)}
-        disabled={readOnly}
-        title="Flip vertical"
-      >
-        <FlipVerticalIcon size={16} />
-      </Button>
-    </ButtonGroup>
+    <IconContext.Provider value={{ weight: "light" }}>
+      <ButtonGroup orientation="horizontal" className="w-full">
+        <Button
+          variant="secondary"
+          size="sm"
+          className="flex-1"
+          onClick={() => onFlipXChange(!flipX)}
+          disabled={readOnly}
+          title="Flip horizontal"
+        >
+          <FlipHorizontalIcon className="size-[18px]!" />
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="flex-1"
+          onClick={() => onFlipYChange(!flipY)}
+          disabled={readOnly}
+          title="Flip vertical"
+        >
+          <FlipVerticalIcon className="size-[18px]!" />
+        </Button>
+      </ButtonGroup>
+    </IconContext.Provider>
   );
 }

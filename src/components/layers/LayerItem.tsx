@@ -240,7 +240,7 @@ export const LayerItem = memo(function LayerItem({
         <div className="flex items-center gap-1 flex-1">
           {hasChildren ? (
             <button
-              className="bg-transparent border-none cursor-pointer p-0.5 flex items-center justify-center rounded hover:bg-white/10"
+              className="bg-transparent border-none cursor-pointer p-0.5 flex items-center justify-center rounded opacity-0 group-hover/layers:opacity-100 hover:bg-white/10"
               onClick={handleChevronClick}
             >
               <ChevronIcon expanded={isExpanded} />
