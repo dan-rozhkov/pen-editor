@@ -342,3 +342,77 @@ describe("line cap hit testing", () => {
     expect(findNodeAtPoint(50, 200)).toBeNull();
   });
 });
+
+/**
+ * Fixture scene for sibling-mask hit-testing (regression: a sibling masked
+ * by `isMask` shouldn't be clickable outside the masker's shape):
+ *
+ *   frameA (0,0 200x200, no auto-layout)
+ *     ├─ maskShape "Mask Shape" (isMask:true, 20,20 60x60) -> abs (20,20..80,80)
+ *     └─ content   "Content"    (0,0 200x200, covers the whole frame)
+ */
+function seedMaskedHitScene(): void {
+  const frameA = {
+    id: "frameA",
+    type: "frame",
+    name: "Frame A",
+    x: 0,
+    y: 0,
+    width: 200,
+    height: 200,
+    fill: "#ffffff",
+    layout: { autoLayout: false },
+  } as unknown as FlatSceneNode;
+
+  const maskShape = {
+    id: "maskShape",
+    type: "rect",
+    name: "Mask Shape",
+    x: 20,
+    y: 20,
+    width: 60,
+    height: 60,
+    fill: "#000000",
+    isMask: true,
+  } as unknown as FlatSceneNode;
+
+  const content = {
+    id: "content",
+    type: "rect",
+    name: "Content",
+    x: 0,
+    y: 0,
+    width: 200,
+    height: 200,
+    fill: "#ff0000",
+  } as unknown as FlatSceneNode;
+
+  useSceneStore.setState({
+    nodesById: { frameA, maskShape, content },
+    parentById: { frameA: null, maskShape: "frameA", content: "frameA" },
+    // Bottom-to-top: maskShape first, so it masks `content` above it.
+    childrenById: { frameA: ["maskShape", "content"] },
+    rootIds: ["frameA"],
+    componentArtifactsById: {},
+    _cachedTree: null,
+  });
+}
+
+describe("hit testing respects sibling masks (isMask)", () => {
+  beforeEach(() => {
+    resetStores();
+    seedMaskedHitScene();
+  });
+
+  it("hits the masked sibling inside the masker's bounds", () => {
+    expect(findNodeAtPoint(50, 50, { deepSelect: true })).toBe("content");
+  });
+
+  it("falls through the masked sibling outside the masker's bounds, hitting the parent frame instead", () => {
+    // (10,10) is inside `content`'s own 0..200 bbox but outside maskShape's
+    // 20..80 clip region, and outside maskShape's own bbox too — nothing
+    // clickable at this point except the frame itself.
+    expect(findNodeAtPoint(10, 10, { deepSelect: true })).toBe("frameA");
+  });
+
+});

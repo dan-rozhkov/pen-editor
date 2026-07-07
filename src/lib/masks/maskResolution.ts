@@ -27,6 +27,18 @@ export function getMaskMode(node: FlatSceneNode): MaskMode {
   return "vector";
 }
 
+/**
+ * Whether a node is currently acting as a masker. Matches Figma semantics: a
+ * hidden mask layer (`visible: false` or `enabled: false` — the same fields
+ * `pixi/renderers/index.ts` and `pixi/syncNodeTree.ts` treat as "not
+ * rendered") stops masking entirely; its previously-masked siblings render
+ * unmasked again, exactly as if `isMask` had been turned off.
+ */
+export function isActiveMasker(node: Pick<FlatSceneNode, "isMask" | "visible" | "enabled"> | undefined | null): boolean {
+  if (!node?.isMask) return false;
+  return node.visible !== false && node.enabled !== false;
+}
+
 export interface MaskResolution {
   /** Maps a masked sibling's id to the id of the masker node that clips it. */
   maskerIdBySiblingId: Map<string, string>;
@@ -45,6 +57,11 @@ export interface MaskResolution {
  * array) up to — but not including — the next masking sibling, or the end
  * of the list. A masker never masks itself, and a masker with nothing above
  * it has no visible effect (matches Figma).
+ *
+ * A hidden masker (see `isActiveMasker`) is treated as an ordinary,
+ * non-masking node: it doesn't start a new masking region, but it also
+ * doesn't reset one already in progress from an earlier (still-active)
+ * masker — only *its own* masking effect switches off while hidden.
  */
 export function resolveMasking(
   orderedIds: string[],
@@ -57,8 +74,10 @@ export function resolveMasking(
   for (const id of orderedIds) {
     const node = nodesById[id];
     if (node?.isMask) {
-      currentMaskerId = id;
       maskerIds.add(id);
+      if (isActiveMasker(node)) {
+        currentMaskerId = id;
+      }
       continue;
     }
     if (currentMaskerId) {

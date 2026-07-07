@@ -15,6 +15,21 @@ export interface SyncContext {
   registry: Map<string, RegistryEntry>;
 }
 
+/**
+ * Find a frame/group's children-host container — `"frame-children"` for
+ * frames, `"group-children"` for groups (see `frameRenderer.ts` /
+ * `groupRenderer.ts`). Every other node type has no such host and this
+ * returns `null`. Shared so the label pair can't drift between call sites
+ * (previously duplicated 3x in `syncNodeTree.ts` + 1x in `pixiSync.ts`).
+ */
+export function getChildrenHost(container: Container): Container | null {
+  return (
+    (container.getChildByLabel("frame-children") as Container | null) ??
+    (container.getChildByLabel("group-children") as Container | null) ??
+    null
+  );
+}
+
 export interface RegistryEntry {
   container: Container;
   node: FlatSceneNode;

@@ -8,12 +8,14 @@ import type { FlatSceneNode } from "@/types/scene";
 import { isFlatFrameNode, isRefNode, isConnectorNode } from "@/types/scene";
 import { updateNodeContainer } from "./renderers";
 import { applySiblingMasks } from "./renderers/maskHelpers";
+import { isActiveMasker } from "@/lib/masks/maskResolution";
 import { requestCanvasRender } from "./renderScheduler";
 import {
   type RegistryEntry,
   ComponentIdIndex,
   collectAffectedInstanceIds,
   withAncestorThemes,
+  getChildrenHost,
 } from "./syncHelpers";
 import { createResolutionManager } from "./syncResolution";
 import { createNodeTreeManager } from "./syncNodeTree";
@@ -272,10 +274,15 @@ export function createPixiSync(sceneRoot: Container): () => void {
       }
     }
 
-    // Nodes whose isMask flag flipped without a children-order change (that
-    // path is covered by reconcileChildren below) — their parent's sibling
-    // masking must be re-resolved once all container updates below have run.
+    // Nodes whose isMask flag (or masking-relevant visibility) flipped
+    // without a children-order change (that path is covered by
+    // reconcileChildren below) — their parent's sibling masking must be
+    // re-resolved once all container updates below have run. Root-level
+    // nodes (no parentId) have no registry parent entry to key off of, so
+    // they're tracked separately via `rootMaskDirty` and re-resolved against
+    // `sceneRoot` directly.
     const maskDirtyParentIds = new Set<string>();
+    let rootMaskDirty = false;
 
     // Handle updated nodes (reference equality check)
     for (const id of Object.keys(state.nodesById)) {
@@ -284,9 +291,13 @@ export function createPixiSync(sceneRoot: Container): () => void {
       if (node && prevNode && node !== prevNode) {
         const entry = registry.get(id);
         if (entry) {
-          if (node.isMask !== prevNode.isMask) {
+          if (isActiveMasker(node) !== isActiveMasker(prevNode)) {
             const parentId = state.parentById[id];
-            if (parentId) maskDirtyParentIds.add(parentId);
+            if (parentId) {
+              maskDirtyParentIds.add(parentId);
+            } else {
+              rootMaskDirty = true;
+            }
           }
           // Check if node is inside auto-layout frame
           const parentId = state.parentById[id];
@@ -409,11 +420,18 @@ export function createPixiSync(sceneRoot: Container): () => void {
     if (state.childrenById !== prev.childrenById || state.rootIds !== prev.rootIds) {
       nodeTreeMgr.reconcileChildren(state, prev);
       // Any host whose children list changed already had its masking
-      // re-resolved inside reconcileChildren — skip it here.
-      for (const id of Object.keys(state.childrenById)) {
+      // re-resolved inside reconcileChildren — skip it here. Iterate the
+      // (typically tiny) dirty set directly rather than every host key in
+      // the scene.
+      for (const id of maskDirtyParentIds) {
         if (state.childrenById[id] !== prev.childrenById[id]) {
           maskDirtyParentIds.delete(id);
         }
+      }
+      // Root list order/membership changes are likewise already resolved by
+      // reconcileChildren's root-level reconcileChildList call.
+      if (state.rootIds !== prev.rootIds) {
+        rootMaskDirty = false;
       }
     }
 
@@ -422,14 +440,24 @@ export function createPixiSync(sceneRoot: Container): () => void {
     for (const parentId of maskDirtyParentIds) {
       const parentEntry = registry.get(parentId);
       if (!parentEntry) continue;
-      const childrenHost =
-        parentEntry.container.getChildByLabel("frame-children") ??
-        parentEntry.container.getChildByLabel("group-children");
+      const childrenHost = getChildrenHost(parentEntry.container);
       if (!childrenHost) continue;
       applySiblingMasks(
         state.childrenById[parentId] ?? [],
         state.nodesById,
         (id) => childrenHost.getChildByLabel(id),
+        childrenHost,
+      );
+    }
+
+    // Same re-resolution for a root-level node whose isMask/visibility
+    // toggled in place without a rootIds structural change.
+    if (rootMaskDirty) {
+      applySiblingMasks(
+        state.rootIds,
+        state.nodesById,
+        (id) => sceneRoot.getChildByLabel(id),
+        sceneRoot,
       );
     }
 
@@ -446,7 +474,15 @@ export function createPixiSync(sceneRoot: Container): () => void {
     resolutionMgr.refreshTextResolution();
     nodeTreeMgr.applyTextEditingVisibility();
 
-    // Phase 1: Re-apply culling after tree changes
+    // Phase 1: Re-apply culling after tree changes.
+    // NOTE: this call must stay last (and unconditional) in this function.
+    // `applySiblingMasks` above writes `.renderable` on root/child containers
+    // (to hide inert maskers), and `updateCulling` also writes `.renderable`
+    // for viewport culling — whichever runs last wins for any container both
+    // touch. Not currently user-visible (an inert masker is rarely also
+    // outside the viewport), but the ordering is fragile: reordering these
+    // two, or short-circuiting before this line, can silently resurrect a
+    // culled node or re-show an inert masker.
     updateCulling();
   }
 

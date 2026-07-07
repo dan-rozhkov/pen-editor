@@ -4,7 +4,7 @@ import type { FlatSceneNode } from "@/types/scene";
 import type { SceneState } from "@/store/sceneStore";
 import { createNodeContainer } from "./renderers";
 import { applySiblingMasks } from "./renderers/maskHelpers";
-import { withAncestorThemes, type SyncContext } from "./syncHelpers";
+import { withAncestorThemes, getChildrenHost, type SyncContext } from "./syncHelpers";
 
 export function createNodeTreeManager(
   ctx: SyncContext,
@@ -79,6 +79,11 @@ export function createNodeTreeManager(
       // We still need to register them in our registry
       registerChildrenRecursive(id, nodesById, childrenById, container);
     }
+
+    // Root-level nodes are siblings of one another under `parent` too — a
+    // root-level `isMask` node must clip its root-level siblings the same
+    // way frame/group renderers clip their own children internally.
+    applySiblingMasks(ids, nodesById, (id) => parent.getChildByLabel(id), parent);
   }
 
   function registerChildrenRecursive(
@@ -88,9 +93,7 @@ export function createNodeTreeManager(
     parentContainer: Container,
   ): void {
     const childIds = childrenById[nodeId] ?? [];
-    const childrenHost =
-      parentContainer.getChildByLabel("frame-children") ??
-      parentContainer.getChildByLabel("group-children");
+    const childrenHost = getChildrenHost(parentContainer);
 
     if (!childrenHost || childIds.length === 0) return;
 
@@ -137,9 +140,7 @@ export function createNodeTreeManager(
     if (parentId) {
       const parentEntry = registry.get(parentId);
       if (parentEntry) {
-        const childrenHost =
-          parentEntry.container.getChildByLabel("frame-children") ??
-          parentEntry.container.getChildByLabel("group-children");
+        const childrenHost = getChildrenHost(parentEntry.container);
         if (childrenHost) {
           childrenHost.addChild(createdContainer);
           // A new sibling can shift masking (become a masker, or land inside/
@@ -148,6 +149,7 @@ export function createNodeTreeManager(
             state.childrenById[parentId] ?? [],
             state.nodesById,
             (siblingId) => childrenHost.getChildByLabel(siblingId),
+            childrenHost,
           );
         }
       }
@@ -209,9 +211,7 @@ export function createNodeTreeManager(
       if (state.childrenById[id] !== prev.childrenById[id]) {
         const entry = registry.get(id);
         if (entry) {
-          const childrenHost =
-            entry.container.getChildByLabel("frame-children") ??
-            entry.container.getChildByLabel("group-children");
+          const childrenHost = getChildrenHost(entry.container);
           if (childrenHost) {
             reconcileChildList(
               state.childrenById[id],
@@ -277,7 +277,7 @@ export function createNodeTreeManager(
     }
 
     // Reorders/inserts/removals can all shift masking — re-resolve the host.
-    applySiblingMasks(expectedIds, nodesById, (id) => parent.getChildByLabel(id));
+    applySiblingMasks(expectedIds, nodesById, (id) => parent.getChildByLabel(id), parent);
   }
 
   function subtreeHasRegisteredContainer(

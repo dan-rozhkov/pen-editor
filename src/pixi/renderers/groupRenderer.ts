@@ -30,8 +30,11 @@ export function createGroupContainer(
   }
 
   // Figma-style sibling masking (a node with isMask clips siblings above it).
-  applySiblingMasks(childIds, nodesById, (id) =>
-    childrenContainer.getChildByLabel(id),
+  applySiblingMasks(
+    childIds,
+    nodesById,
+    (id) => childrenContainer.getChildByLabel(id),
+    childrenContainer,
   );
 
   return container;

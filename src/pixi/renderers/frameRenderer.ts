@@ -171,8 +171,11 @@ export function createFrameContainer(
   }
 
   // Figma-style sibling masking (a node with isMask clips siblings above it).
-  applySiblingMasks(childIds, nodesById, (id) =>
-    childrenContainer.getChildByLabel(id),
+  applySiblingMasks(
+    childIds,
+    nodesById,
+    (id) => childrenContainer.getChildByLabel(id),
+    childrenContainer,
   );
 
   // Layout grid overlay (rendered above children)

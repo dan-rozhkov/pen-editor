@@ -1,6 +1,6 @@
-import type { Container } from "pixi.js";
+import { Sprite, type Container } from "pixi.js";
 import type { FlatSceneNode } from "@/types/scene";
-import { resolveMasking } from "@/lib/masks/maskResolution";
+import { resolveMasking, getMaskMode } from "@/lib/masks/maskResolution";
 
 /**
  * Apply Figma-style sibling masking to one parent's already-created child
@@ -28,16 +28,101 @@ import { resolveMasking } from "@/lib/masks/maskResolution";
  * unused mask layer still doesn't render its own shape) is never assigned as
  * anyone's `.mask`, so Pixi never hides it — that's the one case this
  * function hides explicitly via `renderable = false`. Any container that is
- * neither a masker nor masked is reset to `renderable = true` / `mask =
- * null`, so toggling `isMask` off (or reordering children) always restores
- * normal rendering.
+ * neither a masker nor masked is reset to `renderable = true`, so toggling
+ * `isMask` off (or reordering children) always restores normal rendering.
+ *
+ * `.mask` ownership: a node's own container can already carry a `.mask` set
+ * by its own renderer for an unrelated reason — currently only
+ * `frameRenderer`'s `clip` handling, via a child labeled `"frame-mask"`.
+ * PixiJS only supports one `.mask` per container, so when a sibling masker
+ * applies to a clipped frame, the sibling mask *wins* and the frame's own
+ * clip is temporarily suppressed for as long as it's masked (matches how an
+ * alpha-mode masker's own render is likewise approximated — see
+ * `maskResolution.ts`). When no sibling masker applies, this function
+ * restores the node's own clip mask (if any) instead of unconditionally
+ * clearing `.mask` to `null` — the previous behavior stole `.mask` ownership
+ * from every clipped frame on every rebuild/reorder, silently breaking
+ * `clip: true` for any frame with siblings.
+ *
+ * Alpha-mode maskers (`getMaskMode` — text or image-fill nodes): PixiJS only
+ * engages true per-pixel `AlphaMask` when the mask object is a literal
+ * `Sprite` (`AlphaMask.test`, `pixi.js`'s mask-effect dispatch) — anything
+ * else falls back to `StencilMask` (a hard silhouette/bbox clip, no soft
+ * edges). An image-fill node's container wraps its image in a child
+ * labeled `"image-fill"` (see `imageFillHelpers.ts`) which *is* a `Sprite`,
+ * so when the masker resolves to that shape, we hand Pixi that Sprite
+ * directly instead of the wrapping container — real per-pixel alpha
+ * masking for image maskers. Text nodes have no equivalent: PixiJS `Text`
+ * is not a `Sprite` subclass, and turning one into a texture sprite here
+ * would mean restructuring `textRenderer.ts` — out of scope for this pass,
+ * so a text masker still falls back to the container's stencil silhouette
+ * (bbox-like clip, current known limitation).
+ *
+ * Perf: resolving/clearing masking touches every sibling's container via
+ * `getContainer` (typically a `getChildByLabel` scan), which is O(children)
+ * per call — O(children²) if done for every sibling on every host on every
+ * sync. The overwhelmingly common case is a host with no masks at all, so
+ * `hostsWithActiveMasking` remembers (by container identity) which hosts
+ * have ever had an active masker; when the optional `host` container is
+ * passed and it has never had one, a zero-masker call is a true O(1)
+ * no-op — no `getContainer` calls at all. Callers that don't pass `host`
+ * still get a correct (if less optimal) cleanup pass.
  */
+const hostsWithActiveMasking = new WeakSet<Container>();
+
+/**
+ * Resolve the actual Pixi object to assign as `.mask` for a given masker
+ * node. Prefers an image-fill masker's own `"image-fill"` Sprite child (true
+ * per-pixel `AlphaMask`) over its wrapping container (bbox-like
+ * `StencilMask`) — see the module doc comment above.
+ */
+function resolveMaskTarget(
+  maskerId: string,
+  nodesById: Record<string, FlatSceneNode>,
+  getContainer: (id: string) => Container | null | undefined,
+): Container | null {
+  const maskerContainer = getContainer(maskerId);
+  if (!maskerContainer) return null;
+
+  const maskerNode = nodesById[maskerId];
+  if (maskerNode && getMaskMode(maskerNode) === "alpha") {
+    const spriteChild = maskerContainer.getChildByLabel("image-fill");
+    if (spriteChild instanceof Sprite) return spriteChild;
+  }
+
+  return maskerContainer;
+}
+
 export function applySiblingMasks(
   orderedIds: string[],
   nodesById: Record<string, FlatSceneNode>,
   getContainer: (id: string) => Container | null | undefined,
+  host?: Container,
 ): void {
   const { maskerIdBySiblingId, maskerIds } = resolveMasking(orderedIds, nodesById);
+
+  if (maskerIds.size === 0) {
+    // Nothing here masks anything now. If this exact host container never
+    // had active masking applied, its containers are already in their
+    // default state (renderable, and `.mask` either unset or the node's own
+    // clip mask, untouched by us) — skip the loop entirely.
+    if (host) {
+      if (!hostsWithActiveMasking.has(host)) return;
+      hostsWithActiveMasking.delete(host);
+    }
+    for (const id of orderedIds) {
+      const container = getContainer(id);
+      if (!container) continue;
+      container.renderable = true;
+      if (!container.mask) continue; // nothing to undo — cheap common case
+      const ownClip = container.getChildByLabel("frame-mask") as Container | null;
+      if (container.mask !== ownClip) container.mask = ownClip;
+    }
+    return;
+  }
+
+  if (host) hostsWithActiveMasking.add(host);
+
   const usedMaskerIds = new Set(maskerIdBySiblingId.values());
 
   for (const id of orderedIds) {
@@ -48,6 +133,12 @@ export function applySiblingMasks(
     container.renderable = !isInertMasker;
 
     const maskerId = maskerIdBySiblingId.get(id);
-    container.mask = maskerId ? (getContainer(maskerId) ?? null) : null;
+    if (maskerId) {
+      container.mask = resolveMaskTarget(maskerId, nodesById, getContainer);
+    } else {
+      // Restore this node's own clip mask, if it has one, instead of
+      // clobbering it with `null`.
+      container.mask = (container.getChildByLabel("frame-mask") as Container | null) ?? null;
+    }
   }
 }

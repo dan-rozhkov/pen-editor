@@ -9,6 +9,9 @@ import type {
 import { generateVisualStyles, generateTextStyles, BACKGROUND_STYLE_KEYS } from "./styleGeneration";
 import { generateLayoutStyles } from "./layoutStyleGeneration";
 import { pathNodeToSvg, lineNodeToSvg, polygonNodeToSvg } from "./svgGeneration";
+import { resolveMasking, getMaskMode } from "@/lib/masks/maskResolution";
+import { getFills } from "@/utils/fillUtils";
+import { imageModeToCssSize } from "@/lib/cssBackground";
 
 /** Stable context threaded through the recursive conversion. */
 export interface ConversionContext {
@@ -66,12 +69,17 @@ function wrapWithSlotIfNeeded(html: string, node: FlatSceneNode, ctx: Conversion
 /**
  * Convert a scene node tree to an HTML string.
  * Works with flat store data, building tree nodes as needed.
+ *
+ * `extraStyles` merges additional CSS declarations onto the node's own
+ * wrapper element — currently used only to apply a Figma-style sibling
+ * mask's `clip-path`/`mask-image` (see `convertChildrenWithMasking` below).
  */
 export function convertNodeToHtml(
   nodeId: string,
   ctx: ConversionContext,
   parentLayout: LayoutProperties | undefined,
   isRoot: boolean,
+  extraStyles?: Record<string, string>,
 ): string {
   const node = lookupNode(ctx, nodeId);
   if (!node) return "";
@@ -84,29 +92,32 @@ export function convertNodeToHtml(
   let html: string;
   switch (node.type) {
     case "frame":
-      html = convertFrameNode(node as FlatFrameNode, nodeId, ctx, parentLayout, isRoot);
+      html = convertFrameNode(node as FlatFrameNode, nodeId, ctx, parentLayout, isRoot, extraStyles);
       break;
     case "group":
-      html = convertGroupNode(nodeId, ctx, parentLayout, isRoot);
+      html = convertGroupNode(nodeId, ctx, parentLayout, isRoot, extraStyles);
       break;
     case "text":
-      html = convertTextNode(node as TextNode, parentLayout, isRoot);
+      html = convertTextNode(node as TextNode, parentLayout, isRoot, extraStyles);
       break;
     case "rect":
     case "ellipse":
-      html = convertShapeNode(node, parentLayout, isRoot);
+      html = convertShapeNode(node, parentLayout, isRoot, extraStyles);
       break;
     case "path":
-      html = convertSvgShapeNode(node, parentLayout, isRoot, pathNodeToSvg);
+      html = convertSvgShapeNode(node, parentLayout, isRoot, pathNodeToSvg, extraStyles);
       break;
     case "line":
-      html = convertSvgShapeNode(node, parentLayout, isRoot, lineNodeToSvg);
+      html = convertSvgShapeNode(node, parentLayout, isRoot, lineNodeToSvg, extraStyles);
       break;
     case "polygon":
-      html = convertSvgShapeNode(node, parentLayout, isRoot, polygonNodeToSvg);
+      html = convertSvgShapeNode(node, parentLayout, isRoot, polygonNodeToSvg, extraStyles);
       break;
     case "embed":
       html = (node as EmbedNode).htmlContent ?? "";
+      if (extraStyles && Object.keys(extraStyles).length > 0 && html) {
+        html = `<div style="${stylesToString(extraStyles)}">${html}</div>`;
+      }
       break;
     default:
       html = "";
@@ -127,17 +138,17 @@ function convertFrameNode(
   ctx: ConversionContext,
   parentLayout: LayoutProperties | undefined,
   isRoot: boolean,
+  extraStyles?: Record<string, string>,
 ): string {
   const styles = {
     ...generateLayoutStyles(node, parentLayout, isRoot),
     ...generateVisualStyles(node),
+    ...extraStyles,
   };
 
   const childIds = lookupChildren(ctx, nodeId);
   const childLayout = node.layout;
-  const childrenHtml = childIds
-    .map((childId) => convertNodeToHtml(childId, ctx, childLayout, false))
-    .join("");
+  const childrenHtml = convertChildrenWithMasking(childIds, ctx, childLayout);
 
   return `<div style="${stylesToString(styles)}">${childrenHtml}</div>`;
 }
@@ -147,31 +158,126 @@ function convertGroupNode(
   ctx: ConversionContext,
   parentLayout: LayoutProperties | undefined,
   isRoot: boolean,
+  extraStyles?: Record<string, string>,
 ): string {
   const node = lookupNode(ctx, nodeId)!;
   const styles: Record<string, string> = {
     position: "relative",
     ...generateLayoutStyles(node, parentLayout, isRoot),
     ...generateVisualStyles(node),
+    ...extraStyles,
   };
 
   const childIds = lookupChildren(ctx, nodeId);
-  const childrenHtml = childIds
-    .map((childId) => convertNodeToHtml(childId, ctx, undefined, false))
-    .join("");
+  const childrenHtml = convertChildrenWithMasking(childIds, ctx, undefined);
 
   return `<div style="${stylesToString(styles)}">${childrenHtml}</div>`;
+}
+
+/**
+ * Render a frame/group's children applying Figma-style sibling masking (see
+ * `resolveMasking`). The masker node itself is never rendered as content
+ * (matching how the SVG exporter's `convertChildrenWithMasking` excludes it
+ * too); every sibling it clips gets a computed `clip-path`/`mask-image`
+ * merged onto its own wrapper element via `extraStyles`.
+ *
+ * Only maskers directly expressible in the sibling's own local box are
+ * supported: rect-like bounds (`inset()`) and ellipses (`ellipse()`) for
+ * vector mode, and a single image-fill layer (`mask-image`) for alpha mode.
+ * Anything else (path/polygon/line geometry, text glyphs, multi-layer
+ * fills, groups with a custom `clipGeometry`) has no cheap CSS equivalent
+ * here — this exporter has no warning plumbing (unlike the SVG exporter's
+ * `ctx.warnings`), so, matching how it already handles other unsupported
+ * features, the masker's clipping effect is simply skipped and the content
+ * renders unmasked.
+ */
+function convertChildrenWithMasking(
+  childIds: string[],
+  ctx: ConversionContext,
+  childLayout: LayoutProperties | undefined,
+): string {
+  const { maskerIdBySiblingId, maskerIds } = resolveMasking(childIds, ctx.nodesById);
+  if (maskerIds.size === 0) {
+    return childIds.map((childId) => convertNodeToHtml(childId, ctx, childLayout, false)).join("");
+  }
+
+  const parts: string[] = [];
+  for (const childId of childIds) {
+    if (maskerIds.has(childId)) continue; // maskers aren't rendered as content
+    const maskerId = maskerIdBySiblingId.get(childId);
+    const maskerNode = maskerId ? ctx.nodesById[maskerId] : undefined;
+    const siblingNode = ctx.nodesById[childId];
+    const clipStyles = maskerNode && siblingNode ? buildMaskClipStyles(maskerNode, siblingNode) : undefined;
+    parts.push(convertNodeToHtml(childId, ctx, childLayout, false, clipStyles));
+  }
+  return parts.join("");
+}
+
+/**
+ * Compute the CSS declarations that approximate a masker's clip for one
+ * sibling, expressed in the sibling's own local box (CSS `clip-path`/
+ * `mask-image` coordinates are relative to the element's own border box,
+ * not the shared parent frame both nodes' `x`/`y` are stored in).
+ * Returns `undefined` when the masker's shape has no cheap CSS equivalent.
+ */
+function buildMaskClipStyles(
+  maskerNode: FlatSceneNode,
+  siblingNode: FlatSceneNode,
+): Record<string, string> | undefined {
+  const localLeft = maskerNode.x - siblingNode.x;
+  const localTop = maskerNode.y - siblingNode.y;
+
+  if (getMaskMode(maskerNode) === "vector") {
+    if (maskerNode.type === "ellipse") {
+      const rx = maskerNode.width / 2;
+      const ry = maskerNode.height / 2;
+      const cx = localLeft + rx;
+      const cy = localTop + ry;
+      return { "clip-path": `ellipse(${rx}px ${ry}px at ${cx}px ${cy}px)` };
+    }
+    if (
+      maskerNode.type === "rect" ||
+      maskerNode.type === "frame" ||
+      maskerNode.type === "group"
+    ) {
+      const right = siblingNode.width - (localLeft + maskerNode.width);
+      const bottom = siblingNode.height - (localTop + maskerNode.height);
+      return { "clip-path": `inset(${localTop}px ${right}px ${bottom}px ${localLeft}px)` };
+    }
+    // path / polygon / line: no simple box/ellipse equivalent — skip.
+    return undefined;
+  }
+
+  // Alpha mode: text glyphs have no cheap CSS mask; a single image-fill
+  // layer maps onto `mask-image` sized/positioned like the masker's own box.
+  const imagePaint = getFills(maskerNode).find((p) => p.type === "image");
+  if (!imagePaint || imagePaint.type !== "image") return undefined;
+  const url = `url("${imagePaint.image.url}")`;
+  const size = imageModeToCssSize(imagePaint.image.mode);
+  const position = `${localLeft}px ${localTop}px`;
+  return {
+    "-webkit-mask-image": url,
+    "-webkit-mask-size": size,
+    "-webkit-mask-position": position,
+    "-webkit-mask-repeat": "no-repeat",
+    "mask-image": url,
+    "mask-size": size,
+    "mask-position": position,
+    "mask-repeat": "no-repeat",
+  };
 }
 
 function convertTextNode(
   node: TextNode,
   parentLayout: LayoutProperties | undefined,
   isRoot: boolean,
+  extraStyles?: Record<string, string>,
 ): string {
   const styles = {
     ...generateLayoutStyles(node, parentLayout, isRoot),
     ...generateVisualStyles(node),
     ...generateTextStyles(node),
+    ...extraStyles,
   };
 
   const text = escapeHtml(node.text);
@@ -188,10 +294,12 @@ function convertShapeNode(
   node: FlatSceneNode,
   parentLayout: LayoutProperties | undefined,
   isRoot: boolean,
+  extraStyles?: Record<string, string>,
 ): string {
   const styles = {
     ...generateLayoutStyles(node, parentLayout, isRoot),
     ...generateVisualStyles(node),
+    ...extraStyles,
   };
 
   return `<div style="${stylesToString(styles)}"></div>`;
@@ -207,6 +315,7 @@ function convertSvgShapeNode(
   parentLayout: LayoutProperties | undefined,
   isRoot: boolean,
   svgFn: (n: never) => string,
+  extraStyles?: Record<string, string>,
 ): string {
   const layoutStyles = generateLayoutStyles(node, parentLayout, isRoot);
   const visualStyles = generateVisualStyles(node);
@@ -214,7 +323,7 @@ function convertSvgShapeNode(
     delete visualStyles[key];
   }
   delete visualStyles.border;
-  const wrapperStyles = { ...layoutStyles, ...visualStyles, overflow: "visible" };
+  const wrapperStyles = { ...layoutStyles, ...visualStyles, overflow: "visible", ...extraStyles };
   return `<div style="${stylesToString(wrapperStyles)}">${svgFn(node as never)}</div>`;
 }
 

@@ -13,6 +13,7 @@ import { buildCapPrimitive, capPrimitiveBounds } from "@/utils/lineCapUtils";
 import type { TransformHandle } from "./types";
 import { measureLabelTextWidth, truncateLabelToWidth } from "@/pixi/frameLabelUtils";
 import { resolveRefToTree, findResolvedDescendantByPath } from "@/utils/instanceRuntime";
+import { resolveMasking } from "@/lib/masks/maskResolution";
 import {
   LABEL_FONT_SIZE,
   LABEL_OFFSET_Y,
@@ -399,8 +400,36 @@ export function findCanvasHitTargetAtPoint(
           ? node.children
           : [];
 
+    // Figma-style sibling masking (see `resolveMasking`): a child clipped by
+    // a masking sibling should not be hit-testable outside the masker's
+    // shape. Vector and alpha maskers are both approximated by their
+    // bounding box here — matches how this same function already
+    // approximates non-rectangular shapes (e.g. ellipse hit-testing uses the
+    // bbox, not the ellipse curve) — good enough to stop clicks landing on
+    // content that's visibly clipped away, without needing per-shape
+    // geometry in the hit-test path.
+    const maskerIdBySiblingId = childNodes.length > 1
+      ? resolveMasking(childNodes.map((c) => c.id), state.nodesById).maskerIdBySiblingId
+      : new Map<string, string>();
+
     for (let i = childNodes.length - 1; i >= 0; i--) {
       const child = childNodes[i];
+
+      const maskerId = maskerIdBySiblingId.get(child.id);
+      if (maskerId) {
+        const maskerChild = childNodes.find((c) => c.id === maskerId);
+        if (maskerChild) {
+          const maskerAbsX = absX + maskerChild.x;
+          const maskerAbsY = absY + maskerChild.y;
+          const outsideMasker =
+            worldX < maskerAbsX ||
+            worldX > maskerAbsX + maskerChild.width ||
+            worldY < maskerAbsY ||
+            worldY > maskerAbsY + maskerChild.height;
+          if (outsideMasker) continue; // masked away at this point
+        }
+      }
+
       const childHit = hitNode(
         child,
         absX,
