@@ -5,6 +5,7 @@ import type {
   SceneNode,
   ImageFill,
   Paint,
+  PatternFill,
   GradientFill,
   PerCornerRadius,
   ConstraintMode,
@@ -18,6 +19,7 @@ import {
   clearLegacyFillProps,
   createGradientPaint,
   createImagePaint,
+  createPatternPaint,
   createSolidPaint,
 } from "@/utils/fillUtils";
 import { generatePolygonPoints } from "@/utils/polygonUtils";
@@ -59,6 +61,8 @@ function applyColorVariable(
  *   gradient: {type:"gradient", gradient:{...}}  OR  flat GradientFill fields
  *             ({type:"gradient", stops, startX, ...})
  *   image:    {type:"image", url, mode}  OR  {type:"image", image:{url, mode}}
+ *   pattern:  {type:"pattern", url, scale?, spacingX?, spacingY?, offsetX?,
+ *             offsetY?, rowOffset?}  OR  {type:"pattern", pattern:{...}}
  *
  * For solid paints a `$--var` reference in `color` is resolved to its value and
  * a `colorBinding` is attached (mirrors the legacy single-`fill` behavior).
@@ -75,6 +79,34 @@ function normalizePaint(entry: unknown, theme?: ThemeName): Paint | null {
   if (typeof raw.visible === "boolean") common.visible = raw.visible;
   if (typeof raw.blendMode === "string") {
     common.blendMode = raw.blendMode as Paint["blendMode"];
+  }
+
+  // ── Pattern paint ──────────────────────────────────────────────
+  // Accept both flat ({type:"pattern", url, scale?, ...}) and nested
+  // ({type:"pattern", pattern:{url, ...}}).
+  if (type === "pattern" || raw.pattern !== undefined) {
+    const nested =
+      raw.pattern && typeof raw.pattern === "object"
+        ? (raw.pattern as Record<string, unknown>)
+        : raw;
+    const url = nested.url;
+    if (typeof url !== "string") return null;
+    const num = (v: unknown): number | undefined =>
+      typeof v === "number" && Number.isFinite(v) ? v : undefined;
+    const pattern: PatternFill = { url };
+    const scale = num(nested.scale);
+    if (scale !== undefined) pattern.scale = scale;
+    const spacingX = num(nested.spacingX);
+    if (spacingX !== undefined) pattern.spacingX = spacingX;
+    const spacingY = num(nested.spacingY);
+    if (spacingY !== undefined) pattern.spacingY = spacingY;
+    const offsetX = num(nested.offsetX);
+    if (offsetX !== undefined) pattern.offsetX = offsetX;
+    const offsetY = num(nested.offsetY);
+    if (offsetY !== undefined) pattern.offsetY = offsetY;
+    const rowOffset = num(nested.rowOffset);
+    if (rowOffset !== undefined) pattern.rowOffset = rowOffset;
+    return createPatternPaint(pattern, common);
   }
 
   // ── Image paint ────────────────────────────────────────────────

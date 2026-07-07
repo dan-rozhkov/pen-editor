@@ -8,6 +8,8 @@ import {
   type ImageFill,
   type ImagePaint,
   type Paint,
+  type PatternFill,
+  type PatternPaint,
   type SceneNode,
   type ShadowEffect,
   type SolidPaint,
@@ -42,6 +44,10 @@ export function createGradientPaint(gradient: GradientFill, init?: Partial<Omit<
 
 export function createImagePaint(image: ImageFill, init?: Partial<Omit<ImagePaint, 'type' | 'image'>>): ImagePaint {
   return { id: generateId(), type: 'image', image, ...init }
+}
+
+export function createPatternPaint(pattern: PatternFill, init?: Partial<Omit<PatternPaint, 'type' | 'pattern'>>): PatternPaint {
+  return { id: generateId(), type: 'pattern', pattern, ...init }
 }
 
 // Deterministic ids for paints derived from legacy fields. Stable across

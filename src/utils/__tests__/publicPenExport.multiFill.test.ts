@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { serializePublicPenDocument } from "@/utils/publicPenExport";
-import { createGradientPaint, createSolidPaint } from "@/utils/fillUtils";
+import {
+  createGradientPaint,
+  createPatternPaint,
+  createSolidPaint,
+} from "@/utils/fillUtils";
 import type { RectNode } from "@/types/scene";
 
 function baseRect(overrides: Partial<RectNode>): RectNode {
@@ -161,5 +165,68 @@ describe("publicPenExport — paint stack", () => {
 
     expect(exported.fill).toBe("#abcdef");
     expect(exported.fills).toBeUndefined();
+  });
+});
+
+describe("publicPenExport — pattern paint", () => {
+  it("exports a bare pattern paint with only the tile url (defaults omitted)", () => {
+    const node = baseRect({
+      fills: [createPatternPaint({ url: "https://example.com/tile.png" })],
+    });
+
+    const doc = exportNodes([node]);
+    expect(doc.children[0].fill).toEqual({
+      type: "pattern",
+      url: "https://example.com/tile.png",
+    });
+  });
+
+  it("exports all tiling params and layer opacity when set", () => {
+    const node = baseRect({
+      fills: [
+        createSolidPaint("#ffffff"),
+        createPatternPaint(
+          {
+            url: "https://example.com/tile.png",
+            scale: 0.5,
+            spacingX: 4,
+            spacingY: 6,
+            offsetX: 2,
+            offsetY: -3,
+            rowOffset: 0.5,
+          },
+          { opacity: 0.8 },
+        ),
+      ],
+    });
+
+    const doc = exportNodes([node]);
+    expect(doc.children[0].fills).toEqual([
+      "#ffffff",
+      {
+        type: "pattern",
+        url: "https://example.com/tile.png",
+        scale: 0.5,
+        spacingX: 4,
+        spacingY: 6,
+        offsetX: 2,
+        offsetY: -3,
+        rowOffset: 0.5,
+        opacity: 0.8,
+      },
+    ]);
+  });
+
+  it("excludes a hidden pattern paint", () => {
+    const node = baseRect({
+      fills: [
+        createSolidPaint("#ff0000"),
+        createPatternPaint({ url: "https://x/t.png" }, { visible: false }),
+      ],
+    });
+
+    const doc = exportNodes([node]);
+    expect(doc.children[0].fill).toBe("#ff0000");
+    expect(doc.children[0].fills).toBeUndefined();
   });
 });

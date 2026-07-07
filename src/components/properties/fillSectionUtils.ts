@@ -6,12 +6,13 @@ import type {
 import {
   createGradientPaint,
   createImagePaint,
+  createPatternPaint,
   createSolidPaint,
 } from "@/utils/fillUtils";
 import { getDefaultGradient } from "@/utils/gradientUtils";
 
 /** Discrete fill kinds shown in the per-paint type selector. */
-export type FillKind = "solid" | "linear" | "radial" | "image";
+export type FillKind = "solid" | "linear" | "radial" | "image" | "pattern";
 
 /** Map a Paint to its UI fill kind. */
 export function getFillKind(paint: Paint): FillKind {
@@ -20,6 +21,8 @@ export function getFillKind(paint: Paint): FillKind {
       return "solid";
     case "image":
       return "image";
+    case "pattern":
+      return "pattern";
     case "gradient":
       return paint.gradient.type;
   }
@@ -104,9 +107,23 @@ export function convertFillKind(fills: Paint[], index: number, kind: FillKind): 
   if (kind === "solid") {
     next = { ...createSolidPaint(representativeColor(current)), ...meta };
   } else if (kind === "image") {
+    // Converting pattern → image keeps the tile as the image source.
     const image =
-      current.type === "image" ? current.image : { url: "", mode: "fill" as const };
+      current.type === "image"
+        ? current.image
+        : current.type === "pattern"
+          ? { url: current.pattern.url, mode: "fill" as const }
+          : { url: "", mode: "fill" as const };
     next = { ...createImagePaint(image), ...meta };
+  } else if (kind === "pattern") {
+    // Converting image → pattern keeps the image as the tile source.
+    const url =
+      current.type === "pattern"
+        ? current.pattern.url
+        : current.type === "image"
+          ? current.image.url
+          : "";
+    next = { ...createPatternPaint({ url }), ...meta };
   } else {
     // linear | radial
     const gradientType = kind as GradientType;

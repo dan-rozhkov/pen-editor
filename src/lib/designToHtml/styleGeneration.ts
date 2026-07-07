@@ -273,6 +273,16 @@ function generateFillCss(node: BaseNode, variables: Variable[]): Record<string, 
       sizes.push("auto");
       positions.push("0% 0%");
       repeats.push("repeat");
+    } else if (paint.type === "pattern") {
+      // Tiled pattern: repeat the tile at its natural size. CSS multiple
+      // backgrounds cannot express tile scale (relative to intrinsic size),
+      // spacing, or row stagger — degrade to plain repeat with the pattern's
+      // whole-offset mapped to background-position (documented simplification).
+      const p = paint.pattern;
+      images.push(`url("${p.url}")`);
+      sizes.push("auto");
+      positions.push(`${p.offsetX ?? 0}px ${p.offsetY ?? 0}px`);
+      repeats.push("repeat");
     } else {
       const layer = imageFillLayerCss((paint as ImagePaint).image);
       images.push(layer.image);

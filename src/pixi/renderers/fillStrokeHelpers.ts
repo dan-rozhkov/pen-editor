@@ -388,7 +388,7 @@ export function applyFills(
 
   const fills = getRenderableFills(node);
   const needsBlend = fills.some(
-    (p) => p.type !== "image" && paintNeedsOwnLayer(p.blendMode),
+    (p) => p.type !== "image" && p.type !== "pattern" && paintNeedsOwnLayer(p.blendMode),
   );
 
   // Rebuild blend layers from scratch — but only scan the children (O(n) for
@@ -406,7 +406,7 @@ export function applyFills(
 
   let pathOnBase = false;
   for (const paint of fills) {
-    if (paint.type === "image") continue; // handled by image sprite layer
+    if (paint.type === "image" || paint.type === "pattern") continue; // handled by sprite layer
 
     let target = baseGfx;
     if (paintNeedsOwnLayer(paint.blendMode) && container) {

@@ -64,9 +64,10 @@ function applyLegacyFill(base: MutableBase, paint: Paint): void {
     if (paint.opacity != null && paint.opacity < 1) base.fillOpacity = paint.opacity
   } else if (paint.type === 'gradient') {
     base.gradientFill = paint.gradient
-  } else {
+  } else if (paint.type === 'image') {
     base.imageFill = paint.image
   }
+  // pattern paints have no legacy single-fill projection
 }
 
 /** Resolve the topmost stroke paint into a color/width/align triple. */

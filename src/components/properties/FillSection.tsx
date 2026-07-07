@@ -28,6 +28,7 @@ import {
 } from "@phosphor-icons/react";
 import { GradientEditor } from "@/components/properties/GradientEditor";
 import { ImageFillEditor } from "@/components/properties/ImageFillSection";
+import { PatternFillEditor } from "@/components/properties/PatternFillSection";
 import { OverrideIndicator } from "@/components/properties/OverrideIndicator";
 import { getFills, clearLegacyFillProps } from "@/utils/fillUtils";
 import { buildCSSGradient } from "@/utils/gradientUtils";
@@ -78,7 +79,13 @@ function PaintSwatch({ paint }: { paint: Paint }) {
     } else {
       style = { background: buildCSSGradient(paint.gradient.stops) };
     }
-  } else if (paint.image.url) {
+  } else if (paint.type === "pattern" && paint.pattern.url) {
+    style = {
+      backgroundImage: `url(${paint.pattern.url})`,
+      backgroundSize: "50%",
+      backgroundRepeat: "repeat",
+    };
+  } else if (paint.type === "image" && paint.image.url) {
     style = {
       backgroundImage: `url(${paint.image.url})`,
       backgroundSize: "cover",
@@ -110,6 +117,7 @@ const FILL_ROW_TRIGGER_CLASS =
 function paintSummary(paint: Paint): string {
   if (paint.type === "solid") return paint.color.toUpperCase();
   if (paint.type === "image") return "Image";
+  if (paint.type === "pattern") return "Pattern";
   return paint.gradient.type === "radial" ? "Radial" : "Linear";
 }
 
@@ -182,7 +190,11 @@ export function FillSection({
                 dropIndex === arrayIndex && dragIndex !== null && dragIndex !== arrayIndex;
 
               const typeOptions = supportsImage
-                ? [...FILL_TYPE_OPTIONS, { value: "image", label: "Image" }]
+                ? [
+                    ...FILL_TYPE_OPTIONS,
+                    { value: "image", label: "Image" },
+                    { value: "pattern", label: "Pattern" },
+                  ]
                 : FILL_TYPE_OPTIONS;
 
               return (
@@ -310,6 +322,18 @@ export function FillSection({
                               updateFillAt(fills, arrayIndex, { ...paint, image: img }),
                             );
                           }}
+                        />
+                      )}
+
+                      {/* Pattern editor */}
+                      {paint.type === "pattern" && (
+                        <PatternFillEditor
+                          pattern={paint.pattern}
+                          onChange={(p) =>
+                            commit(
+                              updateFillAt(fills, arrayIndex, { ...paint, pattern: p }),
+                            )
+                          }
                         />
                       )}
 

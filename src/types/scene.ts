@@ -85,11 +85,29 @@ export interface ImagePaint extends PaintBase {
   image: ImageFill
 }
 
+// Pattern fill: an image tile repeated across the fill area (Figma-style
+// pattern paint). Phase 1 supports image tiles only (node-as-source is a
+// possible later extension).
+export interface PatternFill {
+  url: string         // tile source: data:image/... or https://...
+  scale?: number      // tile scale factor (>0), default 1
+  spacingX?: number   // horizontal gap between tiles, px, default 0
+  spacingY?: number   // vertical gap between tiles (rows), px, default 0
+  offsetX?: number    // whole-pattern horizontal offset, px, default 0
+  offsetY?: number    // whole-pattern vertical offset, px, default 0
+  rowOffset?: number  // fraction (0-1) of a cell each row shifts (brick stagger), default 0
+}
+
+export interface PatternPaint extends PaintBase {
+  type: 'pattern'
+  pattern: PatternFill
+}
+
 /**
  * One paint layer in a fill stack. `fills: Paint[]` is ordered bottom-to-top:
  * fills[0] renders first (bottom), the last element renders on top.
  */
-export type Paint = SolidPaint | GradientPaint | ImagePaint
+export type Paint = SolidPaint | GradientPaint | ImagePaint | PatternPaint
 
 // Sizing modes for elements inside auto-layout containers
 export type SizingMode = 'fixed' | 'fill_container' | 'fit_content'

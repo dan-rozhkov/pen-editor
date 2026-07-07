@@ -323,6 +323,40 @@ describe("batch_design", () => {
       });
     });
 
+    it("normalizes a flat pattern paint and a nested pattern paint", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'r=I(document, {type: "rectangle", name: "Pat", width: 10, height: 10, fills: [{type: "pattern", url: "https://x/tile.png", scale: 0.5, spacingX: 4, rowOffset: 0.5}, {type: "pattern", pattern: {url: "https://x/tile2.png", offsetX: 2, offsetY: 3}, opacity: 0.5, blendMode: "multiply"}]})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const fills = sceneState().nodesById[result.createdNodes[0].id].fills as Paint[];
+      expect(fills[0]).toMatchObject({
+        type: "pattern",
+        pattern: { url: "https://x/tile.png", scale: 0.5, spacingX: 4, rowOffset: 0.5 },
+      });
+      expect(fills[1]).toMatchObject({
+        type: "pattern",
+        pattern: { url: "https://x/tile2.png", offsetX: 2, offsetY: 3 },
+        opacity: 0.5,
+        blendMode: "multiply",
+      });
+    });
+
+    it("drops a pattern paint without a tile url, keeping the rest of the stack", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'r=I(document, {type: "rectangle", name: "BadPat", width: 10, height: 10, fills: [{type: "solid", color: "#112233"}, {type: "pattern", scale: 2}]})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const fills = sceneState().nodesById[result.createdNodes[0].id].fills as Paint[];
+      expect(fills).toHaveLength(1);
+      expect(fills[0]).toMatchObject({ type: "solid", color: "#112233" });
+    });
+
     it("normalizes a flat gradient paint into the nested form", async () => {
       const result = JSON.parse(
         await batchDesign({

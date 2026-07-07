@@ -55,7 +55,9 @@ function buildSvgFillLayers(node: {
       defs += gradientToSvgDef(paint.gradient, id);
       layers.push({ fill: `url(#${id})`, opacity: paint.opacity });
     }
-    // image paints: skipped in SVG output (matches pathRenderer scope)
+    // image/pattern paints: skipped in SVG output (matches pathRenderer
+    // scope; a pattern's tile natural size is unknown at export time, so a
+    // correct <pattern> def cannot be emitted)
   }
   return { layers, defs };
 }

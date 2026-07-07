@@ -3,6 +3,7 @@ import type { GradientPaint, ImagePaint, Paint, SolidPaint } from "@/types/scene
 import {
   createGradientPaint,
   createImagePaint,
+  createPatternPaint,
   createShadowEffect,
   createSolidPaint,
 } from "@/utils/fillUtils";
@@ -29,6 +30,7 @@ describe("getFillKind", () => {
     expect(getFillKind(createImagePaint({ url: "x", mode: "fill" }))).toBe("image");
     expect(getFillKind(createGradientPaint(getDefaultGradient("linear")))).toBe("linear");
     expect(getFillKind(createGradientPaint(getDefaultGradient("radial")))).toBe("radial");
+    expect(getFillKind(createPatternPaint({ url: "x" }))).toBe("pattern");
   });
 });
 
@@ -140,6 +142,26 @@ describe("convertFillKind", () => {
     const next = convertFillKind(fills, 0, "image") as ImagePaint[];
     expect(next[0].type).toBe("image");
     expect(next[0].image.mode).toBe("fill");
+  });
+
+  it("converts to a pattern paint with an empty tile by default", () => {
+    const fills = [solid("#a")];
+    const next = convertFillKind(fills, 0, "pattern");
+    expect(next[0]).toMatchObject({ type: "pattern", pattern: { url: "" } });
+  });
+
+  it("image <-> pattern conversions keep the tile/image url", () => {
+    const fills: Paint[] = [createImagePaint({ url: "https://x/tile.png", mode: "fill" })];
+    const asPattern = convertFillKind(fills, 0, "pattern");
+    expect(asPattern[0]).toMatchObject({
+      type: "pattern",
+      pattern: { url: "https://x/tile.png" },
+    });
+    const backToImage = convertFillKind(asPattern, 0, "image");
+    expect(backToImage[0]).toMatchObject({
+      type: "image",
+      image: { url: "https://x/tile.png", mode: "fill" },
+    });
   });
 });
 

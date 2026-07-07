@@ -44,7 +44,19 @@ interface PenImageFill {
   opacity?: number;
 }
 
-type PenFill = string | PenColorFill | PenGradientFill | PenImageFill;
+interface PenPatternFill {
+  type: "pattern";
+  url: string;
+  scale?: number;
+  spacingX?: number;
+  spacingY?: number;
+  offsetX?: number;
+  offsetY?: number;
+  rowOffset?: number;
+  opacity?: number;
+}
+
+type PenFill = string | PenColorFill | PenGradientFill | PenImageFill | PenPatternFill;
 
 interface PenStroke {
   align?: "inside" | "center" | "outside";
@@ -294,6 +306,20 @@ function exportPaint(
       type: "image",
       url: paint.image.url,
       mode: paint.image.mode,
+      ...(layerOpacity != null ? { opacity: layerOpacity } : {}),
+    };
+  }
+  if (paint.type === "pattern") {
+    const p = paint.pattern;
+    return {
+      type: "pattern",
+      url: p.url,
+      ...(p.scale != null ? { scale: p.scale } : {}),
+      ...(p.spacingX != null ? { spacingX: p.spacingX } : {}),
+      ...(p.spacingY != null ? { spacingY: p.spacingY } : {}),
+      ...(p.offsetX != null ? { offsetX: p.offsetX } : {}),
+      ...(p.offsetY != null ? { offsetY: p.offsetY } : {}),
+      ...(p.rowOffset != null ? { rowOffset: p.rowOffset } : {}),
       ...(layerOpacity != null ? { opacity: layerOpacity } : {}),
     };
   }

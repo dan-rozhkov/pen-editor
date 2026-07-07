@@ -49,6 +49,24 @@ describe("designToHtml fill stack", () => {
     expect(styles["background-image"]).toBeUndefined();
   });
 
+  it("pattern paint → repeating background layer with offset position (degrade: no spacing/stagger in CSS)", () => {
+    const fills: Paint[] = [
+      { id: "p1", type: "solid", color: "#112233" }, // bottom
+      {
+        id: "p2",
+        type: "pattern",
+        pattern: { url: "http://x/tile.png", scale: 0.5, spacingX: 4, offsetX: 8, offsetY: -2, rowOffset: 0.5 },
+      },
+    ];
+    const styles = generateVisualStyles(rect({ fills }));
+
+    expect(styles["background-color"]).toBe("#112233");
+    expect(styles["background-image"]).toBe('url("http://x/tile.png")');
+    expect(styles["background-repeat"]).toBe("repeat");
+    expect(styles["background-size"]).toBe("auto");
+    expect(styles["background-position"]).toBe("8px -2px");
+  });
+
   it("stack [solid, gradient, image] → multiple backgrounds in reverse order", () => {
     const fills: Paint[] = [
       { id: "p1", type: "solid", color: "#112233" }, // bottom

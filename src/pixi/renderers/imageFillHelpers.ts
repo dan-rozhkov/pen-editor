@@ -1,7 +1,8 @@
-import { Container, Graphics, Sprite, Texture, Assets, Rectangle } from "pixi.js";
-import type { FlatSceneNode, ImageFill, ImagePaint, PerCornerRadius } from "@/types/scene";
+import { Container, Graphics, Sprite, Texture, Assets, Rectangle, TilingSprite } from "pixi.js";
+import type { FlatSceneNode, ImageFill, ImagePaint, PatternPaint, PerCornerRadius } from "@/types/scene";
 import { getRenderableFills } from "@/utils/fillUtils";
 import { drawRoundedShape, resolvePaintBlendMode } from "./fillStrokeHelpers";
+import { buildPatternSprite } from "./patternFillHelpers";
 import { hasPerCornerRadius } from "@/utils/renderUtils";
 
 /** Cache for loaded textures by URL (LRU, bounded — SVG keys include size/resolution,
@@ -520,9 +521,9 @@ export function updateImageFillResolution(
   // zoom-resolution step, and most nodes carry no image fill source at all.
   if (!node.fills && !node.imageFill) return;
 
-  // Re-apply image fills only when at least one SVG image paint is present
+  // Re-apply image fills only when at least one SVG tile source is present
   // (raster textures don't need a resolution-driven re-rasterization).
-  const hasSvgImage = getImagePaints(node).some((p) => isSvgUrl(p.image.url));
+  const hasSvgImage = getSpritePaints(node).some((p) => isSvgUrl(spritePaintUrl(p)));
   if (!hasSvgImage) return;
 
   if (node.type === "ellipse") {
@@ -571,9 +572,19 @@ export function updateImageFillResolution(
 const MULTI_IMAGE_LABEL_PREFIX = "image-fill-";
 const MULTI_IMAGE_MASK_PREFIX = "image-mask-";
 
-/** Image paints from the node's renderable fill stack (bottom-to-top). */
-function getImagePaints(node: FlatSceneNode): ImagePaint[] {
-  return getRenderableFills(node).filter((p): p is ImagePaint => p.type === "image");
+/** Paints rendered as sprites: image (Sprite) and pattern (TilingSprite). */
+type SpritePaint = ImagePaint | PatternPaint;
+
+/** Sprite-rendered paints from the node's renderable fill stack (bottom-to-top). */
+function getSpritePaints(node: FlatSceneNode): SpritePaint[] {
+  return getRenderableFills(node).filter(
+    (p): p is SpritePaint => p.type === "image" || p.type === "pattern",
+  );
+}
+
+/** Tile-source URL of a sprite paint (image url or pattern tile url). */
+function spritePaintUrl(paint: SpritePaint): string {
+  return paint.type === "image" ? paint.image.url : paint.pattern.url;
 }
 
 /** Remove all indexed multi-image sprites and their masks. */
@@ -583,10 +594,11 @@ function destroyMultiImageSprites(container: Container): void {
     const label = child.label ?? "";
     if (label.startsWith(MULTI_IMAGE_LABEL_PREFIX) || label.startsWith(MULTI_IMAGE_MASK_PREFIX)) {
       container.removeChildAt(i);
-      if (child instanceof Sprite) {
-        const derived = (child as Sprite & { _derivedImageTexture?: Texture })._derivedImageTexture;
-        if (derived) derived.destroy(false);
-      }
+      // Sprites and TilingSprites may carry a derived texture (cover crop or
+      // baked pattern cell) that must be destroyed with the sprite.
+      const derived = (child as Container & { _derivedImageTexture?: Texture })
+        ._derivedImageTexture;
+      if (derived) derived.destroy(false);
       child.destroy();
     }
   }
@@ -606,32 +618,36 @@ function applyImagePaintStack(
   cornerRadiusPerCorner?: PerCornerRadius,
   cornerSmoothing?: number,
 ): void {
-  const imagePaints = getImagePaints(node);
+  const spritePaints = getSpritePaints(node);
   const applyLegacySprite = (image: ImageFill | undefined) =>
     ellipse
       ? applyImageFillEllipse(container, image, width, height)
       : applyImageFill(container, image, width, height, cornerRadius, cornerRadiusPerCorner, cornerSmoothing);
 
-  if (imagePaints.length <= 1) {
+  const single = spritePaints.length <= 1 ? spritePaints[0] : undefined;
+  if (spritePaints.length <= 1 && single?.type !== "pattern") {
     // Single (or no) image: legacy fast path + cache parity.
     destroyMultiImageSprites(container);
-    applyLegacySprite(imagePaints[0]?.image);
-    applyImagePaintProps(container, "image-fill", imagePaints[0]);
+    applyLegacySprite(single?.image);
+    applyImagePaintProps(container, "image-fill", single);
     return;
   }
 
-  // Multiple images: clear the legacy single sprite and render indexed sprites.
+  // Multiple sprite paints (or any pattern paint): clear the legacy single
+  // sprite and render indexed sprites.
   applyLegacySprite(undefined);
   destroyMultiImageSprites(container);
 
-  imagePaints.forEach((paint, index) => {
-    withTexture(paint.image.url, width, height, container, (texture) => {
+  spritePaints.forEach((paint, index) => {
+    const url = spritePaintUrl(paint);
+    if (!url) return; // e.g. a pattern paint before its tile is uploaded
+    withTexture(url, width, height, container, (texture) => {
       addIndexedImageSprite(
         container,
         texture,
         paint,
         index,
-        imagePaints.length,
+        spritePaints.length,
         width,
         height,
         ellipse,
@@ -681,7 +697,7 @@ function applyImagePaintProps(
 function addIndexedImageSprite(
   container: Container,
   texture: Texture,
-  paint: ImagePaint,
+  paint: SpritePaint,
   index: number,
   count: number,
   containerW: number,
@@ -691,11 +707,16 @@ function addIndexedImageSprite(
   cornerRadiusPerCorner?: PerCornerRadius,
   cornerSmoothing?: number,
 ): void {
-  const sprite = new Sprite(texture);
+  let sprite: Sprite | TilingSprite;
+  if (paint.type === "pattern") {
+    sprite = buildPatternSprite(texture, paint.pattern, containerW, containerH);
+  } else {
+    sprite = new Sprite(texture);
+    scaleImageSprite(sprite, texture, paint.image, containerW, containerH);
+  }
   sprite.label = `${MULTI_IMAGE_LABEL_PREFIX}${index}`;
   sprite.alpha = paint.opacity ?? 1;
   sprite.blendMode = resolvePaintBlendMode(paint.blendMode);
-  scaleImageSprite(sprite, texture, paint.image, containerW, containerH);
 
   // Clip mask: ellipse, per-corner, or single corner radius. A Graphics used as
   // a mask is excluded from normal rendering, so its z-position is irrelevant —
