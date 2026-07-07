@@ -248,10 +248,10 @@ describe("<TypographySection />", () => {
 
   it("toggles italic on and off based on current state", () => {
     // The icon-only buttons after italic are, in DOM order: underline,
-    // strikethrough, align L/C/R, vAlign T/M/B, resize a/f/fh — 11 buttons —
-    // so italic is the 12th from the end (stable regardless of leading
-    // combobox/select triggers).
-    const italicButton = () => screen.getAllByRole("button").slice(-12)[0];
+    // strikethrough, align L/C/R, vAlign T/M/B, list bullet/number/outdent/indent,
+    // resize a/f/fh — 15 buttons — so italic is the 16th from the end (stable
+    // regardless of leading combobox/select triggers).
+    const italicButton = () => screen.getAllByRole("button").slice(-16)[0];
 
     const onUpdate = vi.fn();
     const { unmount } = render(
@@ -265,5 +265,73 @@ describe("<TypographySection />", () => {
     render(<TypographySection node={textNode({ fontStyle: "italic" })} onUpdate={onUpdate} />);
     fireEvent.click(italicButton());
     expect(onUpdate).toHaveBeenCalledWith({ fontStyle: "normal" });
+  });
+
+  describe("list controls", () => {
+    it("turns bullet on for every paragraph of a multi-line node", () => {
+      const onUpdate = vi.fn();
+      render(
+        <TypographySection node={textNode({ text: "one\ntwo" })} onUpdate={onUpdate} />,
+      );
+      fireEvent.click(screen.getByLabelText("Bulleted list"));
+      expect(onUpdate).toHaveBeenCalledWith({
+        paragraphs: [
+          { listType: "bullet", indentLevel: 0 },
+          { listType: "bullet", indentLevel: 0 },
+        ],
+      });
+    });
+
+    it("turns bullet off (toggle) when already applied to every paragraph", () => {
+      const onUpdate = vi.fn();
+      render(
+        <TypographySection
+          node={textNode({ text: "one", paragraphs: [{ listType: "bullet" }] })}
+          onUpdate={onUpdate}
+        />,
+      );
+      fireEvent.click(screen.getByLabelText("Bulleted list"));
+      expect(onUpdate).toHaveBeenCalledWith({ paragraphs: [{ listType: "none" }] });
+    });
+
+    it("switches from bullet to numbered", () => {
+      const onUpdate = vi.fn();
+      render(
+        <TypographySection
+          node={textNode({ text: "one", paragraphs: [{ listType: "bullet" }] })}
+          onUpdate={onUpdate}
+        />,
+      );
+      fireEvent.click(screen.getByLabelText("Numbered list"));
+      expect(onUpdate).toHaveBeenCalledWith({
+        paragraphs: [{ listType: "number", indentLevel: 0 }],
+      });
+    });
+
+    it("indent/outdent buttons change every paragraph's indent level", () => {
+      const onUpdate = vi.fn();
+      render(
+        <TypographySection
+          node={textNode({ text: "one\ntwo", paragraphs: [{ listType: "bullet" }, { listType: "bullet" }] })}
+          onUpdate={onUpdate}
+        />,
+      );
+      fireEvent.click(screen.getByLabelText("Indent"));
+      expect(onUpdate).toHaveBeenCalledWith({
+        paragraphs: [
+          { listType: "bullet", indentLevel: 1 },
+          { listType: "bullet", indentLevel: 1 },
+        ],
+      });
+
+      onUpdate.mockClear();
+      fireEvent.click(screen.getByLabelText("Outdent"));
+      expect(onUpdate).toHaveBeenCalledWith({
+        paragraphs: [
+          { listType: "bullet", indentLevel: 0 },
+          { listType: "bullet", indentLevel: 0 },
+        ],
+      });
+    });
   });
 });

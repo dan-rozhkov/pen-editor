@@ -12,6 +12,8 @@ import { pathNodeToSvg, lineNodeToSvg, polygonNodeToSvg } from "./svgGeneration"
 import { resolveMasking, getMaskMode } from "@/lib/masks/maskResolution";
 import { getFills } from "@/utils/fillUtils";
 import { imageModeToCssSize } from "@/lib/cssBackground";
+import { getParagraphAttrs, hasActiveList, splitParagraphs } from "@/lib/textLists/paragraphs";
+import { computeParagraphMarkerInfos } from "@/lib/textLists/markers";
 
 /** Stable context threaded through the recursive conversion. */
 export interface ConversionContext {
@@ -267,6 +269,103 @@ function buildMaskClipStyles(
   };
 }
 
+interface ListEntry {
+  level: number;
+  type: "bullet" | "number";
+  html: string;
+}
+
+interface ListStackFrame {
+  level: number;
+  type: "bullet" | "number";
+  items: string[];
+}
+
+/**
+ * Build nested `<ul>`/`<ol>` HTML from a flat run of list entries (one per
+ * paragraph, already ordered). Sibling entries at the same level/type share a
+ * list; a deeper `level` opens a nested list inside the previous `<li>`; a
+ * type change at the same level closes the current list and opens a sibling
+ * one (so a bullet run followed by a numbered run at the same depth doesn't
+ * get merged into one invalid mixed list).
+ */
+function renderNestedListHtml(entries: ListEntry[]): string {
+  const stack: ListStackFrame[] = [];
+  const roots: string[] = [];
+
+  const closeFrame = () => {
+    const frame = stack.pop();
+    if (!frame) return;
+    const tag = frame.type === "number" ? "ol" : "ul";
+    const html = `<${tag}>${frame.items.join("")}</${tag}>`;
+    const parent = stack[stack.length - 1];
+    if (parent && parent.items.length > 0) {
+      // Splice the nested list inside the parent's last <li>...</li>, before
+      // its closing tag (not appended after it, which would make the nested
+      // list a sibling instead of nested content).
+      const lastIndex = parent.items.length - 1;
+      const last = parent.items[lastIndex];
+      parent.items[lastIndex] = `${last.slice(0, -"</li>".length)}${html}</li>`;
+    } else {
+      roots.push(html);
+    }
+  };
+
+  for (const entry of entries) {
+    while (
+      stack.length > 0 &&
+      (stack[stack.length - 1].level > entry.level ||
+        (stack[stack.length - 1].level === entry.level && stack[stack.length - 1].type !== entry.type))
+    ) {
+      closeFrame();
+    }
+    if (stack.length === 0 || stack[stack.length - 1].level < entry.level) {
+      stack.push({ level: entry.level, type: entry.type, items: [] });
+    }
+    stack[stack.length - 1].items.push(`<li>${entry.html}</li>`);
+  }
+
+  while (stack.length > 0) closeFrame();
+  return roots.join("");
+}
+
+/**
+ * Serialize a text node's paragraphs to HTML, grouping contiguous list
+ * paragraphs into nested `<ul>`/`<ol>` and contiguous plain paragraphs into
+ * `<br>`-joined text (matching the pre-lists behavior for non-list content).
+ */
+function buildTextBodyHtml(node: TextNode): string {
+  const lines = splitParagraphs(node.text);
+  const markers = computeParagraphMarkerInfos(node);
+  const parts: string[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    if (markers[i]) {
+      const entries: ListEntry[] = [];
+      while (i < lines.length && markers[i]) {
+        const attrs = getParagraphAttrs(node, i);
+        entries.push({
+          level: attrs.indentLevel,
+          type: attrs.listType as "bullet" | "number",
+          html: escapeHtml(lines[i]),
+        });
+        i++;
+      }
+      parts.push(renderNestedListHtml(entries));
+    } else {
+      const plainLines: string[] = [];
+      while (i < lines.length && !markers[i]) {
+        plainLines.push(escapeHtml(lines[i]));
+        i++;
+      }
+      parts.push(plainLines.join("<br>"));
+    }
+  }
+
+  return parts.join("");
+}
+
 function convertTextNode(
   node: TextNode,
   parentLayout: LayoutProperties | undefined,
@@ -279,6 +378,12 @@ function convertTextNode(
     ...generateTextStyles(node),
     ...extraStyles,
   };
+
+  if (hasActiveList(node)) {
+    // ul/ol are block-level — always wrap in a div (a span can't validly
+    // contain them), regardless of textWidthMode/vertical-align.
+    return `<div style="${stylesToString(styles)}">${buildTextBodyHtml(node)}</div>`;
+  }
 
   const text = escapeHtml(node.text);
 

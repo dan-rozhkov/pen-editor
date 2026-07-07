@@ -1,5 +1,7 @@
 import type { TextNode } from '../types/scene'
 import { applyTextTransform } from './textTransform'
+import { LIST_INDENT_WIDTH, LIST_MARKER_GAP, getParagraphAttrs } from '../lib/textLists/paragraphs'
+import { computeParagraphMarkerInfos } from '../lib/textLists/markers'
 
 // Shared offscreen canvas for text measurement.
 let measureCanvas: HTMLCanvasElement | null = null
@@ -76,19 +78,19 @@ function splitSegments(paragraph: string): string[] {
 }
 
 /**
- * Wrap a TextNode's text to lines at the given maximum width.
- *
- * Single source of truth for line breaking — both measurement
- * (`measureTextFixedWidthHeight`) and the Pixi renderer derive their lines from
- * this so they can never diverge. Greedy first-fit at word boundaries; a single
- * segment wider than `maxWidth` is broken mid-word at the last fitting character
- * (CSS `overflow-wrap: break-word` semantics, no hyphen inserted).
+ * Wrap a single paragraph's text to lines at the given maximum width. Greedy
+ * first-fit at word boundaries; a single segment wider than `maxWidth` is
+ * broken mid-word at the last fitting character (CSS `overflow-wrap:
+ * break-word` semantics, no hyphen inserted). Shared by `wrapTextToLines` and
+ * the list-aware `layoutTextParagraphs` so both can never diverge.
  */
-export function wrapTextToLines(node: TextNode, maxWidth: number): string[] {
-  const ctx = getContext()
-  ctx.font = buildFontString(node)
-  const letterSpacing = node.letterSpacing ?? 0
-  const text = applyTextTransform(node.text || '', node.textTransform)
+function wrapParagraphText(
+  paragraph: string,
+  maxWidth: number,
+  ctx: CanvasRenderingContext2D,
+  letterSpacing: number,
+): string[] {
+  if (paragraph === '') return ['']
 
   // Width of a string including letter spacing.
   const widthOf = (s: string): number =>
@@ -114,51 +116,136 @@ export function wrapTextToLines(node: TextNode, maxWidth: number): string[] {
   }
 
   const lines: string[] = []
+  const segments = splitSegments(paragraph)
+  let currentLine = ''
 
-  for (const paragraph of text.split('\n')) {
-    if (paragraph === '') {
-      lines.push('')
-      continue
-    }
-
-    const segments = splitSegments(paragraph)
-    let currentLine = ''
-
-    for (const segment of segments) {
-      const testLine = currentLine + segment
-      // A trailing space on the segment doesn't count against the fit check
-      // (mirrors CSS: trailing whitespace can overflow).
-      const measured = testLine.endsWith(' ') ? testLine.slice(0, -1) : testLine
-      if (widthOf(measured) <= maxWidth || currentLine === '') {
-        // Segment fits, or the line is empty and we must place at least part of it.
-        if (currentLine === '' && widthOf(segment.trimEnd()) > maxWidth) {
-          // Segment alone is wider than the box — break it mid-word.
-          const pieces = breakLongSegment(segment)
-          for (let i = 0; i < pieces.length - 1; i++) {
-            lines.push(pieces[i])
-          }
-          currentLine = pieces[pieces.length - 1]
-        } else {
-          currentLine = testLine
+  for (const segment of segments) {
+    const testLine = currentLine + segment
+    // A trailing space on the segment doesn't count against the fit check
+    // (mirrors CSS: trailing whitespace can overflow).
+    const measured = testLine.endsWith(' ') ? testLine.slice(0, -1) : testLine
+    if (widthOf(measured) <= maxWidth || currentLine === '') {
+      // Segment fits, or the line is empty and we must place at least part of it.
+      if (currentLine === '' && widthOf(segment.trimEnd()) > maxWidth) {
+        // Segment alone is wider than the box — break it mid-word.
+        const pieces = breakLongSegment(segment)
+        for (let i = 0; i < pieces.length - 1; i++) {
+          lines.push(pieces[i])
         }
+        currentLine = pieces[pieces.length - 1]
       } else {
-        // Doesn't fit — wrap. Push the current line and start a new one.
-        lines.push(currentLine)
-        if (widthOf(segment.trimEnd()) > maxWidth) {
-          const pieces = breakLongSegment(segment)
-          for (let i = 0; i < pieces.length - 1; i++) {
-            lines.push(pieces[i])
-          }
-          currentLine = pieces[pieces.length - 1]
-        } else {
-          currentLine = segment
+        currentLine = testLine
+      }
+    } else {
+      // Doesn't fit — wrap. Push the current line and start a new one.
+      lines.push(currentLine)
+      if (widthOf(segment.trimEnd()) > maxWidth) {
+        const pieces = breakLongSegment(segment)
+        for (let i = 0; i < pieces.length - 1; i++) {
+          lines.push(pieces[i])
         }
+        currentLine = pieces[pieces.length - 1]
+      } else {
+        currentLine = segment
       }
     }
-    lines.push(currentLine)
   }
+  lines.push(currentLine)
 
   return lines
+}
+
+/**
+ * Wrap a TextNode's text to lines at the given maximum width.
+ *
+ * Single source of truth for line breaking — both measurement
+ * (`measureTextFixedWidthHeight`) and the Pixi renderer derive their lines from
+ * this so they can never diverge. See `wrapParagraphText` for the per-paragraph
+ * algorithm; list markers/indent are not reflected in the returned strings
+ * (they never affect a non-list paragraph's width, and list rendering uses
+ * `layoutTextParagraphs` instead, which does account for them).
+ */
+export function wrapTextToLines(node: TextNode, maxWidth: number): string[] {
+  const ctx = getContext()
+  ctx.font = buildFontString(node)
+  const letterSpacing = node.letterSpacing ?? 0
+  const text = applyTextTransform(node.text || '', node.textTransform)
+
+  const lines: string[] = []
+  for (const paragraph of text.split('\n')) {
+    lines.push(...wrapParagraphText(paragraph, maxWidth, ctx, letterSpacing))
+  }
+  return lines
+}
+
+export interface LaidOutLine {
+  text: string
+  paragraphIndex: number
+  isFirstLine: boolean
+  /** Left offset, in px, from the node's left edge (indent + hanging indent past a marker). */
+  x: number
+}
+
+export interface ParagraphMarkerLayout {
+  paragraphIndex: number
+  text: string
+  /** Left offset, in px, from the node's left edge (where the marker glyph itself is drawn). */
+  x: number
+  /** Measured width, in px, of the marker text (used to compute the hanging indent). */
+  width: number
+}
+
+/**
+ * List/indent-aware line layout: like `wrapTextToLines`, but reduces the
+ * available width for list paragraphs by their indent + marker width, and
+ * reports each line's paragraph index / left offset plus one marker entry per
+ * list paragraph (positioned at its first line). `maxWidth === null` means
+ * unwrapped ("auto") mode — one line per paragraph, no wrapping.
+ *
+ * This is the single source of truth `measureTextAutoSize` /
+ * `measureTextFixedWidthHeight` / the Pixi text renderer all derive from, so
+ * auto-size and rendering can never disagree about how much room a marker
+ * takes up.
+ */
+export function layoutTextParagraphs(
+  node: TextNode,
+  maxWidth: number | null,
+): { lines: LaidOutLine[]; markers: ParagraphMarkerLayout[] } {
+  const ctx = getContext()
+  ctx.font = buildFontString(node)
+  const letterSpacing = node.letterSpacing ?? 0
+  const text = applyTextTransform(node.text || '', node.textTransform)
+  const paragraphs = text.split('\n')
+  const markerInfos = computeParagraphMarkerInfos(node)
+
+  const widthOf = (s: string): number =>
+    s.length === 0 ? 0 : ctx.measureText(s).width + Math.max(0, s.length - 1) * letterSpacing
+
+  const lines: LaidOutLine[] = []
+  const markers: ParagraphMarkerLayout[] = []
+
+  paragraphs.forEach((paragraph, paragraphIndex) => {
+    const markerInfo = markerInfos[paragraphIndex]
+    const attrs = getParagraphAttrs(node, paragraphIndex)
+    const indentPx = markerInfo ? attrs.indentLevel * LIST_INDENT_WIDTH : 0
+    const markerWidth = markerInfo ? widthOf(markerInfo.text) : 0
+    const hangingPx = markerInfo ? markerWidth + LIST_MARKER_GAP : 0
+    const xOffset = indentPx + hangingPx
+
+    if (markerInfo) {
+      markers.push({ paragraphIndex, text: markerInfo.text, x: indentPx, width: markerWidth })
+    }
+
+    const availWidth = maxWidth !== null ? Math.max(1, maxWidth - xOffset) : Infinity
+    const wrapped =
+      maxWidth !== null ? wrapParagraphText(paragraph, availWidth, ctx, letterSpacing) : [paragraph]
+
+    wrapped.forEach((lineText, i) => {
+      lines.push({ text: lineText, paragraphIndex, isFirstLine: i === 0, x: xOffset })
+    })
+  })
+
+  return { lines, markers }
 }
 
 const ELLIPSIS = '…'

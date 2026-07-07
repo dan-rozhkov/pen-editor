@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback, useMemo } from 'react'
-import type { TextNode } from '../types/scene'
+import type { ParagraphAttrs, TextNode } from '../types/scene'
 import { measureTextEditorVerticalOffset } from '../utils/textEditorMetrics'
 import { useSceneStore, createSnapshot } from '../store/sceneStore'
 import { useHistoryStore } from '../store/historyStore'
@@ -8,15 +8,21 @@ import { useViewportStore } from '../store/viewportStore'
 import { useVariableStore } from '../store/variableStore'
 import { resolveColor } from '../utils/colorUtils'
 import type { ThemeName } from '../types/variable'
+import { LIST_INDENT_WIDTH, LIST_MARKER_GAP, normalizeParagraphs, splitParagraphs } from '../lib/textLists/paragraphs'
+import { computeParagraphMarkerInfos } from '../lib/textLists/markers'
+import { changeIndentLevel, continueListOnEnter, toggleListType } from '../lib/textLists/listEditing'
 
 interface InlineTextEditorProps {
   node: TextNode
   absoluteX: number
   absoluteY: number
   effectiveTheme?: ThemeName
-  onUpdateText?: (text: string) => void
+  onUpdateText?: (text: string, paragraphs?: ParagraphAttrs[]) => void
   isInsideAutoLayoutParent?: boolean
 }
+
+/** Marks a line-prefix span (bullet glyph / number) as non-editable content, so text extraction can skip it. */
+const MARKER_ATTR = 'data-text-list-marker'
 
 function toCssFontFamily(fontFamily: string): string {
   return fontFamily
@@ -57,9 +63,17 @@ function extractEditorText(root: HTMLElement): string {
       return
     }
     if (!(n instanceof HTMLElement)) return
+    if (n.hasAttribute(MARKER_ATTR)) return // list marker prefix — not real content
     if (n.tagName === 'BR') {
       const parent = n.parentElement
-      const isPlaceholder = parent !== root && parent?.childNodes.length === 1
+      // A marker span (if any) doesn't count as "real" sibling content — the
+      // <br> is still the sole content placeholder for an empty list line.
+      const realSiblingCount = parent
+        ? Array.from(parent.childNodes).filter(
+            (c) => !(c instanceof HTMLElement && c.hasAttribute(MARKER_ATTR)),
+          ).length
+        : 0
+      const isPlaceholder = parent !== root && realSiblingCount === 1
       if (isPlaceholder) {
         current = current ?? ''
       } else {
@@ -85,20 +99,147 @@ function extractEditorText(root: HTMLElement): string {
   return lines.join('\n')
 }
 
+/** Minimal font-relevant subset of TextNode needed to measure marker glyph widths. */
+type MeasurableTextNode = Pick<TextNode, 'text' | 'paragraphs' | 'fontFamily' | 'fontSize' | 'fontWeight' | 'fontStyle'>
+
+let markerMeasureCtx: CanvasRenderingContext2D | null = null
+
+/** Measure each paragraph's marker text width in px (0 for non-list paragraphs), same font as the node. */
+function measureMarkerWidths(node: MeasurableTextNode): number[] {
+  if (!markerMeasureCtx) {
+    markerMeasureCtx = document.createElement('canvas').getContext('2d')
+  }
+  const ctx = markerMeasureCtx
+  const markers = computeParagraphMarkerInfos(node)
+  if (!ctx) return markers.map(() => 0)
+  const style = node.fontStyle ?? 'normal'
+  const weight = node.fontWeight ?? 'normal'
+  const size = node.fontSize ?? 16
+  const family = node.fontFamily ?? 'Arial'
+  ctx.font = `${style} ${weight} ${size}px ${family}`
+  return markers.map((m) => (m ? ctx.measureText(m.text).width : 0))
+}
+
 /**
  * Set editor content mirroring Chrome's native contentEditable structure
  * (one <div> per line, <br> placeholder for empty lines) so it round-trips
  * exactly through extractEditorText — including trailing newlines, which the
  * innerText setter would drop.
+ *
+ * List paragraphs additionally get a non-editable marker `<span>` (bullet
+ * glyph / number) prefixed to the line, plus a CSS hanging-indent
+ * (`padding-left` + negative `text-indent`) so wrapped continuation lines
+ * align under the text rather than under the marker — mirrors the Pixi
+ * renderer's `layoutTextParagraphs` geometry closely enough for editing.
  */
-function setEditorText(root: HTMLElement, text: string) {
+function setEditorText(root: HTMLElement, node: MeasurableTextNode) {
   root.textContent = ''
-  for (const line of text.split('\n')) {
+  const lines = splitParagraphs(node.text)
+  const markers = computeParagraphMarkerInfos(node)
+  const markerWidths = measureMarkerWidths(node)
+
+  lines.forEach((line, i) => {
     const div = document.createElement('div')
-    if (line) div.textContent = line
-    else div.appendChild(document.createElement('br'))
+    const marker = markers[i]
+
+    if (marker) {
+      const hangingPx = markerWidths[i] + LIST_MARKER_GAP
+      const indentPx = marker.indentLevel * LIST_INDENT_WIDTH
+      div.style.paddingLeft = `${indentPx + hangingPx}px`
+      div.style.textIndent = `${-hangingPx}px`
+
+      const markerSpan = document.createElement('span')
+      markerSpan.setAttribute(MARKER_ATTR, 'true')
+      markerSpan.contentEditable = 'false'
+      markerSpan.style.userSelect = 'none'
+      markerSpan.style.display = 'inline-block'
+      markerSpan.textContent = marker.text
+      div.appendChild(markerSpan)
+
+      if (line) div.appendChild(document.createTextNode(line))
+      else div.appendChild(document.createElement('br'))
+    } else {
+      if (line) div.textContent = line
+      else div.appendChild(document.createElement('br'))
+    }
+
     root.appendChild(div)
+  })
+}
+
+/** Find which paragraph (line div) the caret is in, and the caret's character offset within that paragraph's real text (marker span excluded). Returns null if there's no selection inside `root`. */
+function getCaretPosition(root: HTMLElement): { paragraphIndex: number; offset: number } | null {
+  const sel = window.getSelection()
+  if (!sel || sel.rangeCount === 0) return null
+  const range = sel.getRangeAt(0)
+
+  let lineDiv: Node | null = range.startContainer
+  while (lineDiv && lineDiv.parentNode !== root) lineDiv = lineDiv.parentNode
+  if (!lineDiv || !(lineDiv instanceof HTMLElement)) return null
+
+  const paragraphIndex = Array.prototype.indexOf.call(root.childNodes, lineDiv)
+  if (paragraphIndex < 0) return null
+
+  let offset = 0
+  let found = false
+  const walk = (n: Node) => {
+    if (found) return
+    if (n === range.startContainer) {
+      offset += range.startOffset
+      found = true
+      return
+    }
+    if (n.nodeType === Node.TEXT_NODE) {
+      offset += n.textContent?.length ?? 0
+      return
+    }
+    if (n instanceof HTMLElement && n.hasAttribute(MARKER_ATTR)) return
+    n.childNodes.forEach(walk)
   }
+  walk(lineDiv)
+
+  return { paragraphIndex, offset: found ? offset : 0 }
+}
+
+/** Place the caret at `offset` characters into paragraph `paragraphIndex`'s real text (marker span excluded). */
+function setCaretPosition(root: HTMLElement, paragraphIndex: number, offset: number): void {
+  const lineDiv = root.childNodes[paragraphIndex]
+  if (!lineDiv || !(lineDiv instanceof HTMLElement)) return
+
+  let remaining = offset
+  let target: Node = lineDiv
+  let targetOffset = 0
+
+  const walk = (n: Node): boolean => {
+    if (n.nodeType === Node.TEXT_NODE) {
+      const len = n.textContent?.length ?? 0
+      if (remaining <= len) {
+        target = n
+        targetOffset = remaining
+        return true
+      }
+      remaining -= len
+      return false
+    }
+    if (n instanceof HTMLElement && n.hasAttribute(MARKER_ATTR)) return false
+    for (const child of Array.from(n.childNodes)) {
+      if (walk(child)) return true
+    }
+    return false
+  }
+
+  const found = walk(lineDiv)
+  if (!found) {
+    target = lineDiv
+    targetOffset = lineDiv.childNodes.length
+  }
+
+  const range = document.createRange()
+  range.setStart(target, targetOffset)
+  range.collapse(true)
+  const sel = window.getSelection()
+  sel?.removeAllRanges()
+  sel?.addRange(range)
 }
 
 export function InlineTextEditor({
@@ -111,6 +252,9 @@ export function InlineTextEditor({
 }: InlineTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const currentTextRef = useRef(node.text) // Track current value for unmount save
+  const currentParagraphsRef = useRef<ParagraphAttrs[]>(
+    normalizeParagraphs(node.paragraphs, splitParagraphs(node.text).length),
+  )
   const pendingTextRef = useRef<string | null>(null)
   const rafIdRef = useRef<number | null>(null)
   const lastCommittedRef = useRef(node.text)
@@ -154,17 +298,105 @@ export function InlineTextEditor({
   if (node.underline) textDecorationParts.push('underline')
   if (node.strikethrough) textDecorationParts.push('line-through')
 
-  const commitText = useCallback(
-    (text: string) => {
-      if (text === lastCommittedRef.current) return
+  const commitTextAndParagraphs = useCallback(
+    (text: string, paragraphs?: ParagraphAttrs[]) => {
+      if (text === lastCommittedRef.current && paragraphs === undefined) return
       lastCommittedRef.current = text
       if (onUpdateText) {
-        onUpdateText(text)
+        onUpdateText(text, paragraphs)
       } else {
-        updateNodeWithoutHistory(node.id, { text })
+        const updates: Partial<TextNode> = { text }
+        if (paragraphs !== undefined) updates.paragraphs = paragraphs
+        updateNodeWithoutHistory(node.id, updates)
       }
     },
     [node.id, updateNodeWithoutHistory, onUpdateText],
+  )
+
+  const commitText = useCallback(
+    (text: string) => commitTextAndParagraphs(text),
+    [commitTextAndParagraphs],
+  )
+
+  /** Rebuild the whole contentEditable DOM from `text`/`paragraphs` (list markers + hanging indent recomputed), restore the caret, and commit both fields. Used by the discrete Enter/Tab list actions below — simpler and safer than trying to patch the DOM incrementally. */
+  const rebuildAndCommit = useCallback(
+    (text: string, paragraphs: ParagraphAttrs[], caretParagraphIndex: number, caretOffset: number) => {
+      const el = editorRef.current
+      if (!el) return
+      setEditorText(el, { ...node, text, paragraphs })
+      setCaretPosition(el, caretParagraphIndex, caretOffset)
+      currentTextRef.current = text
+      currentParagraphsRef.current = paragraphs
+      commitTextAndParagraphs(text, paragraphs)
+    },
+    [node, commitTextAndParagraphs],
+  )
+
+  const handleTabKey = useCallback(
+    (direction: 1 | -1) => {
+      const el = editorRef.current
+      if (!el) return
+      const caret = getCaretPosition(el)
+      if (!caret) return
+      const text = currentTextRef.current
+      const lineCount = splitParagraphs(text).length
+      const updated = changeIndentLevel(
+        currentParagraphsRef.current,
+        lineCount,
+        caret.paragraphIndex,
+        direction,
+      )
+      rebuildAndCommit(text, updated, caret.paragraphIndex, caret.offset)
+    },
+    [rebuildAndCommit],
+  )
+
+  const handleEnterKey = useCallback(() => {
+    const el = editorRef.current
+    if (!el) return
+    const caret = getCaretPosition(el)
+    if (!caret) return
+
+    const lines = splitParagraphs(currentTextRef.current)
+    const { paragraphIndex, offset } = caret
+    const lineText = lines[paragraphIndex] ?? ''
+    const before = lineText.slice(0, offset)
+    const after = lineText.slice(offset)
+    const isEmpty = lineText.trim() === ''
+
+    const { paragraphs: updatedParagraphs } = continueListOnEnter(
+      currentParagraphsRef.current,
+      lines.length,
+      paragraphIndex,
+      isEmpty,
+    )
+
+    const newLines = [...lines]
+    newLines.splice(paragraphIndex, 1, before, after)
+    const text = newLines.join('\n')
+
+    rebuildAndCommit(text, updatedParagraphs, paragraphIndex + 1, 0)
+  }, [rebuildAndCommit])
+
+  /** Cmd/Ctrl+Shift+8 (bullet) / +7 (numbered) — Figma parity — toggles the list type of the current paragraph only. */
+  const handleToggleListHotkey = useCallback(
+    (listType: 'bullet' | 'number') => {
+      const el = editorRef.current
+      if (!el) return
+      const caret = getCaretPosition(el)
+      if (!caret) return
+      const text = currentTextRef.current
+      const lineCount = splitParagraphs(text).length
+      const updated = toggleListType(
+        currentParagraphsRef.current,
+        lineCount,
+        caret.paragraphIndex,
+        caret.paragraphIndex,
+        listType,
+      )
+      rebuildAndCommit(text, updated, caret.paragraphIndex, caret.offset)
+    },
+    [rebuildAndCommit],
   )
 
   const flushPendingText = useCallback(
@@ -229,8 +461,9 @@ export function InlineTextEditor({
     useHistoryStore.getState().saveHistory(createSnapshot(useSceneStore.getState()))
     const el = editorRef.current
     if (!el) return
-    setEditorText(el, node.text)
+    setEditorText(el, node)
     currentTextRef.current = node.text
+    currentParagraphsRef.current = normalizeParagraphs(node.paragraphs, splitParagraphs(node.text).length)
     el.focus()
     // Select all text
     const range = document.createRange()
@@ -238,6 +471,9 @@ export function InlineTextEditor({
     const sel = window.getSelection()
     sel?.removeAllRanges()
     sel?.addRange(range)
+    // Mount-only: intentionally does not react to `node` changes (that's the
+    // sync effect below); only reads the initial value.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Sync external text updates without resetting caret
@@ -251,15 +487,15 @@ export function InlineTextEditor({
       return
     }
     if (node.text !== currentTextRef.current) {
-      setEditorText(el, node.text)
+      setEditorText(el, node)
       currentTextRef.current = node.text
+      currentParagraphsRef.current = normalizeParagraphs(node.paragraphs, splitParagraphs(node.text).length)
     }
     lastCommittedRef.current = node.text
-  }, [node.text])
+  }, [node])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Figma parity: Enter inserts a line break; Esc commits.
-    // (Both plain Enter and Shift+Enter fall through to contentEditable.)
     // Cmd/Ctrl+Enter also commits and exits editing.
     if (e.key === 'Escape') {
       e.preventDefault()
@@ -267,6 +503,22 @@ export function InlineTextEditor({
     } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault()
       submit()
+    } else if (e.key === 'Enter') {
+      // Custom split (rather than falling through to contentEditable) so the
+      // paragraph-attrs array (list continuation) stays in sync with the new
+      // line — see handleEnterKey.
+      e.preventDefault()
+      handleEnterKey()
+    } else if (e.key === 'Tab') {
+      // Indent / outdent the current paragraph instead of shifting focus.
+      e.preventDefault()
+      handleTabKey(e.shiftKey ? -1 : 1)
+    } else if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.code === 'Digit8' || e.code === 'Digit7')) {
+      // Figma parity: Cmd/Ctrl+Shift+8 = bulleted list, +7 = numbered list.
+      // `code` (physical key) rather than `key` so it's layout-independent
+      // (Shift+8 is '*' on a US layout, not the literal character "8").
+      e.preventDefault()
+      handleToggleListHotkey(e.code === 'Digit8' ? 'bullet' : 'number')
     }
     // Stop propagation so canvas shortcuts don't fire
     e.stopPropagation()

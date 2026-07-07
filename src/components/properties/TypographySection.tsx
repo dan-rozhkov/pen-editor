@@ -7,11 +7,15 @@ import {
   Article,
   CaretDownIcon,
   LinkBreakIcon,
+  ListBullets,
+  ListNumbers,
   MinusIcon,
   TextAlignCenter,
   TextAlignLeft,
   TextAlignRight,
+  TextIndent,
   TextItalic,
+  TextOutdent,
   TextStrikethrough,
   TextUnderline,
 } from "@phosphor-icons/react";
@@ -34,6 +38,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useTextStyleStore } from "@/store/textStyleStore";
 import { TEXT_STYLE_PROPERTY_KEYS } from "@/types/textStyle";
+import { getParagraphAttrs, splitParagraphs } from "@/lib/textLists/paragraphs";
+import { changeIndentLevel, toggleListType } from "@/lib/textLists/listEditing";
 
 interface TypographySectionProps {
   node: TextNode;
@@ -190,6 +196,26 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
   // box to overflow, mirroring Figma where "Truncate text" is hidden there.
   const isWrapped =
     node.textWidthMode === "fixed" || node.textWidthMode === "fixed-height";
+
+  // The panel operates at whole-node granularity (no caret/selection context
+  // here — that's InlineTextEditor's job for in-place editing): toggling a
+  // list button applies to every paragraph, and the active/indicator state
+  // reflects the first paragraph's attrs.
+  const paragraphCount = splitParagraphs(node.text).length;
+  const firstParagraphAttrs = getParagraphAttrs(node, 0);
+
+  const applyListType = (type: "bullet" | "number") => {
+    const updated = toggleListType(node.paragraphs, paragraphCount, 0, paragraphCount - 1, type);
+    onUpdate({ paragraphs: updated } as Partial<SceneNode>);
+  };
+
+  const applyIndent = (direction: 1 | -1) => {
+    let updated = node.paragraphs ? node.paragraphs.map((p) => ({ ...p })) : [];
+    for (let i = 0; i < paragraphCount; i++) {
+      updated = changeIndentLevel(updated, paragraphCount, i, direction);
+    }
+    onUpdate({ paragraphs: updated } as Partial<SceneNode>);
+  };
 
   return (
     <PropertySection title="Typography">
@@ -421,6 +447,71 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 }
               >
                 <AlignBottom size={14} />
+              </Button>
+            </ButtonGroup>
+          </div>
+        </PropertyRow>
+      </div>
+      <div className="flex flex-col gap-1">
+        <div className="text-[10px] font-normal text-text-muted">
+          List
+        </div>
+        <PropertyRow>
+          <div className="flex items-center gap-1 flex-1">
+            <ButtonGroup orientation="horizontal" className={`flex-1 ${segmentedButtonGroupClass}`}>
+              <Button
+                variant={firstParagraphAttrs.listType === "bullet" ? "default" : "secondary"}
+                size="sm"
+                title="Bulleted list (⌘⇧8)"
+                aria-label="Bulleted list"
+                aria-pressed={firstParagraphAttrs.listType === "bullet"}
+                className={`flex-1 ${
+                  firstParagraphAttrs.listType === "bullet"
+                    ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
+                    : ""
+                }`}
+                onClick={() => applyListType("bullet")}
+              >
+                <ListBullets size={14} />
+              </Button>
+              <Button
+                variant={firstParagraphAttrs.listType === "number" ? "default" : "secondary"}
+                size="sm"
+                title="Numbered list (⌘⇧7)"
+                aria-label="Numbered list"
+                aria-pressed={firstParagraphAttrs.listType === "number"}
+                className={`flex-1 ${
+                  firstParagraphAttrs.listType === "number"
+                    ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
+                    : ""
+                }`}
+                onClick={() => applyListType("number")}
+              >
+                <ListNumbers size={14} />
+              </Button>
+            </ButtonGroup>
+          </div>
+          <div className="flex items-center gap-1 flex-1">
+            <ButtonGroup orientation="horizontal" className={`flex-1 ${segmentedButtonGroupClass}`}>
+              <Button
+                variant="secondary"
+                size="sm"
+                title="Outdent (Shift+Tab)"
+                aria-label="Outdent"
+                className="flex-1"
+                onClick={() => applyIndent(-1)}
+              >
+                <TextOutdent size={14} />
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                title="Indent (Tab)"
+                aria-label="Indent"
+                className="flex-1"
+                onClick={() => applyIndent(1)}
+              >
+                <TextIndent size={14} />
               </Button>
             </ButtonGroup>
           </div>

@@ -433,9 +433,37 @@ export type TextTransform = 'none' | 'uppercase' | 'lowercase' | 'capitalize'
 // Vertical text alignment
 export type TextAlignVertical = 'top' | 'middle' | 'bottom'
 
+// List kind for a paragraph. 'none' = plain paragraph (default when unset).
+export type ListType = 'none' | 'bullet' | 'number'
+
+/**
+ * Per-paragraph attributes, index-aligned with `TextNode.text.split('\n')`
+ * (one entry per paragraph — a paragraph is a hard line break, same boundary
+ * `wrapTextToLines`/`InlineTextEditor` already use). Missing entries (array
+ * shorter than the paragraph count, or a `{}` entry) default to
+ * `{ listType: 'none', indentLevel: 0 }` — see `getParagraphAttrs` in
+ * `@/lib/textLists/paragraphs`.
+ *
+ * Deliberately a parallel array rather than restructuring `text` into a
+ * richer paragraph/run model: every existing single-string consumer (canvas
+ * measurement, the Pixi renderer's non-list fast path, the contentEditable
+ * round-trip, designToHtml/htmlToDesign, the AI tool contract) keeps working
+ * unchanged when this field is absent.
+ *
+ * Extension point: this is also where future paragraph-level formatting
+ * (e.g. per-paragraph spacing-before/after) should live — add fields to
+ * `ParagraphAttrs` rather than introducing a second parallel array.
+ */
+export interface ParagraphAttrs {
+  listType?: ListType
+  indentLevel?: number // 0-based, clamped to [0, MAX_INDENT_LEVEL] — see textLists/paragraphs.ts
+}
+
 export interface TextNode extends BaseNode {
   type: 'text'
   text: string
+  /** See `ParagraphAttrs` doc comment. Optional — absent means every paragraph is plain. */
+  paragraphs?: ParagraphAttrs[]
   fontSize?: number
   fontFamily?: string
   // Font weight: "normal", "bold", or numeric "100"-"900"

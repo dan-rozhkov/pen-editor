@@ -402,14 +402,15 @@ export function PixiCanvas() {
           absoluteY={editingPosition.y}
           effectiveTheme={editingTextTheme ?? undefined}
           isInsideAutoLayoutParent={editingTextIsInsideAutoLayout}
-          onUpdateText={instanceContext ? (text) => {
+          onUpdateText={instanceContext ? (text, paragraphs) => {
             const store = useSceneStore.getState();
             const inst = store.nodesById[instanceContext.instanceId] as RefNode | undefined;
             const sc = inst?.type === "ref" ? findSlotContext(instanceContext.descendantPath, inst.overrides) : null;
+            const updates: Partial<TextNode> = paragraphs !== undefined ? { text, paragraphs } : { text };
             if (sc) {
-              store.updateSlotChildWithoutHistory(instanceContext.instanceId, sc.slotPath, sc.relativePath, { text });
+              store.updateSlotChildWithoutHistory(instanceContext.instanceId, sc.slotPath, sc.relativePath, updates);
             } else {
-              store.updateInstanceOverride(instanceContext.instanceId, instanceContext.descendantPath, { text } satisfies Partial<TextNode> as InstanceOverrideUpdateProps);
+              store.updateInstanceOverride(instanceContext.instanceId, instanceContext.descendantPath, updates satisfies Partial<TextNode> as InstanceOverrideUpdateProps);
             }
           } : undefined}
         />

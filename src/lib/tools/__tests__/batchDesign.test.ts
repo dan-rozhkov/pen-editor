@@ -1225,4 +1225,45 @@ describe("batch_design", () => {
       expect(conn?.endConnection.nodeId).toBe(newId);
     });
   });
+
+  describe("text lists (paragraphs)", () => {
+    it("I() creates a text node with a bulleted list via a paragraphs array", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'label=I(document, {type: "text", name: "List", text: "Milk\\nEggs\\nBread", paragraphs: [{listType: "bullet"}, {listType: "bullet"}, {listType: "bullet"}]})',
+        })
+      );
+
+      expect(result.success).toBe(true);
+      const created = sceneState().nodesById[result.createdNodes[0].id] as TextNode;
+      expect(created.paragraphs).toEqual([
+        { listType: "bullet" },
+        { listType: "bullet" },
+        { listType: "bullet" },
+      ]);
+      // Auto-size (syncTextDimensions) should widen the node past the bare
+      // text width to make room for the bullet markers + hanging indent.
+      expect(created.width).toBeGreaterThan(0);
+    });
+
+    it("U() re-tags an existing text node's paragraphs (e.g. AI adds a numbered list)", async () => {
+      const textResult = JSON.parse(
+        await batchDesign({
+          operations: 'label=I(document, {type: "text", name: "Steps", text: "Mix\\nBake"})',
+        })
+      );
+      const id = textResult.createdNodes[0].id;
+
+      const result = JSON.parse(
+        await batchDesign({
+          operations: `U("${id}", {paragraphs: [{listType: "number"}, {listType: "number"}]})`,
+        })
+      );
+
+      expect(result.success).toBe(true);
+      const updated = sceneState().nodesById[id] as TextNode;
+      expect(updated.paragraphs).toEqual([{ listType: "number" }, { listType: "number" }]);
+    });
+  });
 });

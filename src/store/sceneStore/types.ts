@@ -95,4 +95,6 @@ export const TEXT_MEASURE_PROPS = new Set([
   "truncateText",
   // sizing can force a textWidthMode normalization (fill width => wrap)
   "sizing",
+  // list markers + indent change wrapping/auto-width (see textWrap.layoutTextParagraphs)
+  "paragraphs",
 ]);
