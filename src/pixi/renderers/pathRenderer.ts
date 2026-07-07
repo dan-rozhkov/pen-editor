@@ -2,9 +2,9 @@ import { Graphics, GraphicsPath } from "pixi.js";
 import { Container } from "pixi.js";
 import type { LineCap, LineJoin } from "pixi.js";
 import type { PathNode } from "@/types/scene";
-import { getRenderableFills } from "@/utils/fillUtils";
 import {
   getResolvedFill,
+  getResolvedRenderableFills,
   getResolvedStroke,
   parseColor,
   parseAlpha,
@@ -195,7 +195,7 @@ function drawPathFillStack(
   geometry: string,
   evenOdd: boolean,
 ): void {
-  const fills = getRenderableFills(node).filter(
+  const fills = getResolvedRenderableFills(node).filter(
     (p) => p.type !== "image" && p.type !== "pattern",
   );
   if (fills.length === 0) {

@@ -27,6 +27,9 @@ export interface SnapshotSceneSlice {
  * persistent ruler guides) so guide create/move/delete round-trips through
  * undo/redo. textStyles is carried the same way (named reusable text styles)
  * so text-style add/update/delete round-trips through undo/redo too.
+ * fillStyles/effectStyles (shared fill/effect styles) are carried the same
+ * way so their create/update/delete/apply/detach round-trips through
+ * undo/redo too.
  */
 export function buildHistorySnapshot(
   scene: SnapshotSceneSlice,
@@ -34,6 +37,8 @@ export function buildHistorySnapshot(
   selection: SelectionSnapshot,
   guides: Guide[],
   textStyles: HistorySnapshot["textStyles"],
+  fillStyles: HistorySnapshot["fillStyles"],
+  effectStyles: HistorySnapshot["effectStyles"],
 ): HistorySnapshot {
   return {
     nodesById: { ...scene.nodesById },
@@ -44,6 +49,8 @@ export function buildHistorySnapshot(
     variables: [...(variables ?? [])],
     guides: [...(guides ?? [])],
     textStyles: [...(textStyles ?? [])],
+    fillStyles: [...(fillStyles ?? [])],
+    effectStyles: [...(effectStyles ?? [])],
     selection: {
       selectedIds: [...selection.selectedIds],
       enteredContainerId: selection.enteredContainerId,

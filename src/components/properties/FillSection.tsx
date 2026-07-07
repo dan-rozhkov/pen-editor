@@ -30,6 +30,8 @@ import { GradientEditor } from "@/components/properties/GradientEditor";
 import { ImageFillEditor } from "@/components/properties/ImageFillSection";
 import { PatternFillEditor } from "@/components/properties/PatternFillSection";
 import { OverrideIndicator } from "@/components/properties/OverrideIndicator";
+import { StylePicker } from "@/components/properties/StylePicker";
+import { useStyleStore } from "@/store/styleStore";
 import { getFills, clearLegacyFillProps } from "@/utils/fillUtils";
 import { buildCSSGradient } from "@/utils/gradientUtils";
 import {
@@ -137,6 +139,8 @@ export function FillSection({
 }: FillSectionProps) {
   const fills = getFills(node);
   const isMixed = mixedKeys?.has("fills") || mixedKeys?.has("fill");
+  const fillStyles = useStyleStore((s) => s.fillStyles);
+  const detachFillStyleFromPaint = useStyleStore((s) => s.detachFillStyleFromPaint);
 
   const supportsImage =
     node.type === "rect" || node.type === "ellipse" || node.type === "frame";
@@ -283,6 +287,17 @@ export function FillSection({
                           <ArrowDown />
                         </Button>
                       </div>
+
+                      {/* Named fill-style binding (apply / detach) */}
+                      <StylePicker
+                        kindLabel="fill style"
+                        styles={fillStyles}
+                        boundId={paint.styleId}
+                        onPick={(styleId) =>
+                          commit(updateFillAt(fills, arrayIndex, { ...paint, styleId }))
+                        }
+                        onDetach={() => detachFillStyleFromPaint(node.id, paint.id)}
+                      />
 
                       {/* Solid color + variable binding */}
                       {paint.type === "solid" && (

@@ -3,6 +3,7 @@ import { useSceneStore } from "../store/sceneStore";
 import { useSelectionStore } from "../store/selectionStore";
 import { useVariableStore } from "../store/variableStore";
 import { useTextStyleStore } from "../store/textStyleStore";
+import { useStyleStore } from "../store/styleStore";
 import { useThemeStore } from "../store/themeStore";
 import { useUIThemeStore } from "../store/uiThemeStore";
 import { usePixelGridStore } from "../store/pixelGridStore";
@@ -40,6 +41,8 @@ export function Toolbar() {
   const addNode = useSceneStore((state) => state.addNode);
   const variables = useVariableStore((state) => state.variables);
   const textStyles = useTextStyleStore((state) => state.textStyles);
+  const fillStyles = useStyleStore((state) => state.fillStyles);
+  const effectStyles = useStyleStore((state) => state.effectStyles);
   const uiTheme = useUIThemeStore((s) => s.uiTheme);
   const showPixelGrid = usePixelGridStore((s) => s.showPixelGrid);
   const togglePixelGrid = usePixelGridStore((s) => s.togglePixelGrid);
@@ -65,7 +68,16 @@ export function Toolbar() {
 
     const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
     const activeTheme = useThemeStore.getState().activeTheme;
-    downloadDocument(pagesForExport, variables, activeTheme, componentArtifactsById, `${name}.json`, textStyles);
+    downloadDocument(
+      pagesForExport,
+      variables,
+      activeTheme,
+      componentArtifactsById,
+      `${name}.json`,
+      textStyles,
+      fillStyles,
+      effectStyles,
+    );
   };
 
   const handleExportPublicPen = () => {

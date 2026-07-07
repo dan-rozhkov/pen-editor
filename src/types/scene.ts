@@ -1,6 +1,7 @@
 import type { ThemeName, Variable } from './variable'
 import type { Guide } from '../store/guidesStore'
 import type { TextStyle } from './textStyle'
+import type { FillStyle, EffectStyle } from './style'
 
 // Variable binding to a variable (generic)
 export interface VariableBinding {
@@ -67,6 +68,16 @@ interface PaintBase {
   visible?: boolean   // defaults to true
   opacity?: number    // 0-1, defaults to 1
   blendMode?: PaintBlendMode // defaults to 'normal'
+  /**
+   * When set, this paint layer is bound to a named `FillStyle` (see
+   * `types/style.ts`) — the layer's own type-specific fields (color/gradient/
+   * image/pattern) are a fallback used only if the referenced style is
+   * missing (e.g. deleted). Resolution happens at render time
+   * (`utils/fillUtils.ts#resolveFillStylePaint`), mirroring how `colorBinding`
+   * resolves a variable reference. `detach` (see `store/styleStore.ts`)
+   * clears this and copies the style's current value onto the layer inline.
+   */
+  styleId?: string
 }
 
 export interface SolidPaint extends PaintBase {
@@ -136,6 +147,10 @@ export interface ShadowEffect {
   type: 'shadow'
   shadowType: 'outer' | 'inner'  // only outer supported for now
   color: string       // hex with alpha, e.g. '#00000040'
+  // Variable binding for the shadow color (resolves like `fillBinding`/
+  // `colorBinding` — enables the style→variable→theme resolution chain when
+  // this shadow lives inside an `EffectStyle`).
+  colorBinding?: ColorBinding
   offset: { x: number; y: number }
   blur: number
   spread: number
@@ -244,6 +259,16 @@ export interface BaseNode {
    * legacy `effect` field. Use `getEffects()` from `@/utils/fillUtils`.
    */
   effects?: Effect[]
+  /**
+   * When set, references a named `EffectStyle` (see `types/style.ts`) whose
+   * `effects` supersede this node's own `effects`/`effect` for rendering —
+   * the whole stack is style-driven, mirroring Figma's "effect style"
+   * (applies to the full shadow/blur stack, not a single layer). Resolved at
+   * render time (`utils/fillUtils.ts#resolveEffectStack`). `detach` (see
+   * `store/styleStore.ts`) clears this and copies the style's current
+   * effects onto `effects` inline.
+   */
+  effectStyleId?: string
   /** Shader (paper-design/shaders), baked to a texture and rendered in Pixi. */
   shader?: ShaderConfig
   // Aspect ratio lock for proportional resize
@@ -778,6 +803,10 @@ export interface FlatSnapshot {
   guides?: Guide[]
   /** Named reusable text styles, at the time of the snapshot. */
   textStyles?: TextStyle[]
+  /** Named reusable fill/color styles, at the time of the snapshot. */
+  fillStyles?: FillStyle[]
+  /** Named reusable effect styles, at the time of the snapshot. */
+  effectStyles?: EffectStyle[]
 }
 
 export interface ComponentArtifact {

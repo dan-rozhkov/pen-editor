@@ -6,6 +6,7 @@ import { useHistoryStore } from './historyStore'
 import { useSceneStore } from './sceneStore'
 import { useVariableStore } from './variableStore'
 import { useTextStyleStore } from './textStyleStore'
+import { useStyleStore } from './styleStore'
 
 type EditingMode = 'text' | 'name' | 'embed' | 'path' | null
 
@@ -84,6 +85,8 @@ function saveSelectionHistoryIfChanged(
     current,
     useGuidesStore.getState().guides,
     useTextStyleStore.getState().textStyles,
+    useStyleStore.getState().fillStyles,
+    useStyleStore.getState().effectStyles,
   )
   useHistoryStore.getState().saveHistory(snapshot)
 }

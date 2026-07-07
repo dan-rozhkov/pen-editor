@@ -1,6 +1,6 @@
 import { Container, Graphics, Sprite, Texture, Assets, Rectangle, TilingSprite } from "pixi.js";
 import type { FlatSceneNode, ImageFill, ImagePaint, PatternFill, PatternPaint, PerCornerRadius } from "@/types/scene";
-import { getRenderableFills } from "@/utils/fillUtils";
+import { getResolvedRenderableFills } from "./colorHelpers";
 import { normalizePattern } from "@/utils/patternUtils";
 import { drawRoundedShape, resolvePaintBlendMode } from "./fillStrokeHelpers";
 import { buildPatternSprite } from "./patternFillHelpers";
@@ -674,7 +674,7 @@ type SpritePaint = ImagePaint | PatternPaint;
 
 /** Sprite-rendered paints from the node's renderable fill stack (bottom-to-top). */
 function getSpritePaints(node: FlatSceneNode): SpritePaint[] {
-  return getRenderableFills(node).filter(
+  return getResolvedRenderableFills(node).filter(
     (p): p is SpritePaint => p.type === "image" || p.type === "pattern",
   );
 }

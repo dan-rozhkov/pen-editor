@@ -2,6 +2,7 @@ import type { ComponentArtifact, SceneNode } from '../types/scene'
 import type { Variable, ThemeName } from '../types/variable'
 import { ensureThemeValues } from '../types/variable'
 import type { TextStyle } from '../types/textStyle'
+import type { FillStyle, EffectStyle } from '../types/style'
 import { generateId } from '../types/scene'
 import { serializePublicPenDocument } from "@/utils/publicPenExport";
 import type { Guide } from "@/store/guidesStore";
@@ -22,6 +23,8 @@ export interface PenDocument {
   pages?: PenPage[]
   variables?: Variable[]
   textStyles?: TextStyle[]
+  fillStyles?: FillStyle[]
+  effectStyles?: EffectStyle[]
   activeTheme?: ThemeName
   componentArtifacts?: Record<string, ComponentArtifact>
 }
@@ -38,6 +41,8 @@ export interface DocumentData {
   pages: DocumentPageData[]
   variables: Variable[]
   textStyles: TextStyle[]
+  fillStyles: FillStyle[]
+  effectStyles: EffectStyle[]
   activeTheme: ThemeName
   componentArtifacts: Record<string, ComponentArtifact>
 }
@@ -50,6 +55,8 @@ export function serializeDocument(
   activeTheme: ThemeName,
   componentArtifacts: Record<string, ComponentArtifact> = {},
   textStyles: TextStyle[] = [],
+  fillStyles: FillStyle[] = [],
+  effectStyles: EffectStyle[] = [],
 ): string {
   const doc: PenDocument = {
     version: CURRENT_VERSION,
@@ -62,6 +69,8 @@ export function serializeDocument(
     })),
     variables,
     textStyles,
+    fillStyles,
+    effectStyles,
     activeTheme,
     componentArtifacts,
   }
@@ -97,6 +106,8 @@ export function deserializeDocument(json: string): DocumentData {
     pages,
     variables: migratedVariables,
     textStyles: doc.textStyles ?? [],
+    fillStyles: doc.fillStyles ?? [],
+    effectStyles: doc.effectStyles ?? [],
     activeTheme: doc.activeTheme ?? 'light',
     componentArtifacts: doc.componentArtifacts ?? {},
   }
@@ -109,8 +120,18 @@ export function downloadDocument(
   componentArtifacts: Record<string, ComponentArtifact> = {},
   filename = 'document.json',
   textStyles: TextStyle[] = [],
+  fillStyles: FillStyle[] = [],
+  effectStyles: EffectStyle[] = [],
 ) {
-  const json = serializeDocument(pages, variables, activeTheme, componentArtifacts, textStyles)
+  const json = serializeDocument(
+    pages,
+    variables,
+    activeTheme,
+    componentArtifacts,
+    textStyles,
+    fillStyles,
+    effectStyles,
+  )
   downloadTextFile(json, filename)
 }
 

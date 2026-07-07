@@ -14,7 +14,7 @@ import type {
   PerCornerRadius,
 } from "@/types/scene";
 import { flattenTree } from "@/types/scene";
-import { getRenderableEffects } from "@/utils/fillUtils";
+import { getResolvedRenderableEffects } from "./colorHelpers";
 import { applyShadows } from "./shadowHelpers";
 import { applyLayerBlur } from "./blurHelpers";
 import { createRectContainer, updateRectContainer, drawRect } from "./rectRenderer";
@@ -406,7 +406,7 @@ export function createNodeContainer(
   const initialShadowSize = getNodeShadowSize(node, container);
   applyShadows(
     container,
-    getRenderableEffects(node),
+    getResolvedRenderableEffects(node),
     initialShadowSize.width,
     initialShadowSize.height,
     getNodeCornerRadius(node),
@@ -416,7 +416,7 @@ export function createNodeContainer(
   );
 
   // Layer blur (container-level filter; first visible blur in the stack wins)
-  applyLayerBlur(container, getRenderableEffects(node));
+  applyLayerBlur(container, getResolvedRenderableEffects(node));
 
   // Shader fill (baked texture in-scene, so it obeys z-order)
   if (node.shader) applyShaderFill(container, node);
@@ -530,6 +530,7 @@ export function updateNodeContainer(
   if (
     node.effect !== prev.effect ||
     node.effects !== prev.effects ||
+    node.effectStyleId !== prev.effectStyleId ||
     node.width !== prev.width ||
     node.height !== prev.height ||
     (node.type === "frame" && (node.sizing !== (prev as FlatFrameNode).sizing || node.layout !== (prev as FlatFrameNode).layout)) ||
@@ -539,7 +540,7 @@ export function updateNodeContainer(
     const shadowSize = getNodeShadowSize(node, container);
     applyShadows(
       container,
-      getRenderableEffects(node),
+      getResolvedRenderableEffects(node),
       shadowSize.width,
       shadowSize.height,
       getNodeCornerRadius(node),
@@ -547,7 +548,7 @@ export function updateNodeContainer(
       getNodeCornerRadiusPerCorner(node),
       getNodeCornerSmoothing(node),
     );
-    applyLayerBlur(container, getRenderableEffects(node));
+    applyLayerBlur(container, getResolvedRenderableEffects(node));
   }
 
   // Shader fill: config change / became-visible → immediate re-bake; size-only
@@ -610,7 +611,7 @@ export function applyLayoutSize(
       // filter and needs no re-apply here.
       applyShadows(
         container,
-        getRenderableEffects(shadowRectNode),
+        getResolvedRenderableEffects(shadowRectNode),
         layoutWidth,
         layoutHeight,
         shadowRectNode.cornerRadius,
@@ -629,7 +630,7 @@ export function applyLayoutSize(
       const shadowEllipseNode = { ...node, width: layoutWidth, height: layoutHeight } as EllipseNode;
       applyShadows(
         container,
-        getRenderableEffects(shadowEllipseNode),
+        getResolvedRenderableEffects(shadowEllipseNode),
         layoutWidth,
         layoutHeight,
         undefined,
@@ -666,7 +667,7 @@ export function applyLayoutSize(
       }
       applyShadows(
         container,
-        getRenderableEffects(frameNode),
+        getResolvedRenderableEffects(frameNode),
         layoutWidth,
         layoutHeight,
         frameNode.cornerRadius,

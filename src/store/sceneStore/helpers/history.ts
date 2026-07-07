@@ -4,6 +4,7 @@ import { useGuidesStore } from "../../guidesStore";
 import { useHistoryStore } from "../../historyStore";
 import { useSelectionStore } from "../../selectionStore";
 import { useVariableStore } from "../../variableStore";
+import { useStyleStore } from "../../styleStore";
 import { useTextStyleStore } from "../../textStyleStore";
 
 /** Create a history snapshot (shallow clone - node refs are immutable) */
@@ -25,6 +26,8 @@ export function createSnapshot(state: {
     },
     useGuidesStore.getState().guides,
     useTextStyleStore.getState().textStyles,
+    useStyleStore.getState().fillStyles,
+    useStyleStore.getState().effectStyles,
   );
 }
 

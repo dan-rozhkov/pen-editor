@@ -9,10 +9,10 @@ import type {
   SolidPaint,
 } from "@/types/scene";
 import { hasPerSideStroke, hasPerCornerRadius } from "@/utils/renderUtils";
-import { getRenderableFills } from "@/utils/fillUtils";
 import { buildSquircleRectPath } from "@/lib/shapePath/squircleCorner";
 import {
   getResolvedSolidPaint,
+  getResolvedRenderableFills,
   getResolvedStroke,
   parseColor,
   parseAlpha,
@@ -386,7 +386,7 @@ export function applyFills(
 ): boolean {
   const container = baseGfx.parent as ContainerWithBlendFlag | null;
 
-  const fills = getRenderableFills(node);
+  const fills = getResolvedRenderableFills(node);
   const needsBlend = fills.some(
     (p) => p.type !== "image" && p.type !== "pattern" && paintNeedsOwnLayer(p.blendMode),
   );

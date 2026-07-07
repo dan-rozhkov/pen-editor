@@ -1,7 +1,12 @@
-import type { FlatSceneNode, SolidPaint } from "@/types/scene";
+import type { Effect, FlatSceneNode, Paint, ShadowEffect, SolidPaint } from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
 import { useVariableStore } from "@/store/variableStore";
+import { useStyleStore } from "@/store/styleStore";
 import { resolveColor, applyOpacity } from "@/utils/colorUtils";
+import {
+  getResolvedRenderableFills as getResolvedRenderableFillsPure,
+  resolveEffectStack,
+} from "@/utils/fillUtils";
 
 /**
  * Render-time theme context stack.
@@ -50,6 +55,37 @@ export function getResolvedSolidPaint(paint: SolidPaint): string | undefined {
   const theme = getEffectiveTheme();
   const raw = resolveColor(paint.color, paint.colorBinding, variables, theme);
   return raw ? applyOpacity(raw, paint.opacity) : raw;
+}
+
+/**
+ * Node's renderable fill stack with any fill-style (`styleId`) references
+ * substituted in from `styleStore`, mirroring `getResolvedFill`'s variable
+ * resolution. Because `resolveFillStylePaint` returns an ordinary `Paint`
+ * (with the style's own `colorBinding`, if any, carried through), the
+ * existing `getResolvedSolidPaint` call downstream resolves the
+ * style → variable → theme chain with no extra code.
+ */
+export function getResolvedRenderableFills(node: FlatSceneNode): Paint[] {
+  const { fillStyles } = useStyleStore.getState();
+  return getResolvedRenderableFillsPure(node, fillStyles);
+}
+
+/**
+ * Node's effective effect stack (style-resolved via `effectStyleId`, see
+ * `resolveEffectStack`), with each shadow's `colorBinding` resolved against
+ * the active theme's variables — completing the style → variable → theme
+ * chain for shadow colors the same way `getResolvedFill` does for fills.
+ */
+export function getResolvedRenderableEffects(node: FlatSceneNode): Effect[] {
+  const { effectStyles } = useStyleStore.getState();
+  const { variables } = useVariableStore.getState();
+  const theme = getEffectiveTheme();
+  return resolveEffectStack(node, effectStyles).map((effect) => {
+    if (effect.type !== "shadow" || !(effect as ShadowEffect).colorBinding) return effect;
+    const shadow = effect as ShadowEffect;
+    const resolved = resolveColor(shadow.color, shadow.colorBinding, variables, theme);
+    return resolved ? { ...shadow, color: resolved } : shadow;
+  });
 }
 
 export function getResolvedStroke(node: FlatSceneNode): string | undefined {

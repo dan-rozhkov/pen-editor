@@ -15,6 +15,7 @@ import {
   type SolidPaint,
 } from '@/types/scene'
 import { getDefaultShadow } from '@/utils/shadowUtils'
+import type { EffectStyle, FillStyle } from '@/types/style'
 
 /**
  * Fill/effect stack helpers.
@@ -174,4 +175,58 @@ export function createBlurEffect(init?: Partial<Omit<BlurEffect, 'type'>>): Blur
 /** Node updates that clear the legacy single-effect field. */
 export function clearLegacyEffectProps(): Pick<FlatSceneNode, 'effect'> {
   return { effect: undefined }
+}
+
+// --- Shared styles (fillStyles/effectStyles) resolution ---
+//
+// Pure, store-free resolution: given the document's style collections,
+// substitute a `styleId` reference for the value it points at. Live theme/
+// variable resolution of any `colorBinding` embedded in the resolved value
+// happens one layer up, in the Pixi-facing wrapper
+// (`pixi/renderers/colorHelpers.ts#getResolvedRenderableFills`/
+// `getResolvedRenderableEffects`) which has access to the variable store —
+// this file stays store-free and unit-testable in isolation.
+
+/**
+ * Resolve a single paint layer: if it references a fill style (`styleId`),
+ * substitute the style's paint definition (color/gradient/image/pattern),
+ * keeping this layer's own id/visible/opacity/blendMode. Falls back to the
+ * layer's own inline fields when the style is missing (dangling reference,
+ * e.g. the style was deleted).
+ */
+export function resolveFillStylePaint(paint: Paint, fillStyles: FillStyle[]): Paint {
+  if (!paint.styleId) return paint
+  const style = fillStyles.find((s) => s.id === paint.styleId)
+  if (!style) return paint
+  return {
+    ...style.paint,
+    id: paint.id,
+    visible: paint.visible,
+    opacity: paint.opacity,
+    blendMode: paint.blendMode,
+    styleId: paint.styleId,
+  }
+}
+
+/** Node's renderable fill stack with any fill-style references substituted in. */
+export function getResolvedRenderableFills(node: FillSource, fillStyles: FillStyle[]): Paint[] {
+  return getRenderableFills(node).map((p) => resolveFillStylePaint(p, fillStyles))
+}
+
+/**
+ * Resolve a node's effective effect stack: when `effectStyleId` is set, the
+ * whole stack is sourced from the referenced effect style (falling back to
+ * the node's own `effects`/`effect` when the style is missing). Effect
+ * styles apply to the full stack at once (Figma parity), unlike fill styles
+ * which are per-layer.
+ */
+export function resolveEffectStack(
+  node: EffectSource & { effectStyleId?: string },
+  effectStyles: EffectStyle[],
+): Effect[] {
+  if (node.effectStyleId) {
+    const style = effectStyles.find((s) => s.id === node.effectStyleId)
+    if (style) return style.effects.filter((e) => e.visible !== false)
+  }
+  return getRenderableEffects(node)
 }

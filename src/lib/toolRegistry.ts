@@ -8,6 +8,10 @@ import { setVariables } from "./tools/setVariables";
 import { getTextStyles } from "./tools/getTextStyles";
 import { setTextStyles } from "./tools/setTextStyles";
 import { applyTextStyle } from "./tools/applyTextStyle";
+import { getStyles } from "./tools/getStyles";
+import { setStyles } from "./tools/setStyles";
+import { applyFillStyle } from "./tools/applyFillStyle";
+import { applyEffectStyle } from "./tools/applyEffectStyle";
 import { replaceAllMatchingProperties } from "./tools/replaceAllMatchingProperties";
 import { searchAllUniqueProperties } from "./tools/searchAllUniqueProperties";
 import { findEmptySpace } from "./tools/findEmptySpace";
@@ -30,6 +34,10 @@ export const toolHandlers: Record<string, ToolHandler> = {
   get_text_styles: getTextStyles,
   set_text_styles: setTextStyles,
   apply_text_style: applyTextStyle,
+  get_styles: getStyles,
+  set_styles: setStyles,
+  apply_fill_style: applyFillStyle,
+  apply_effect_style: applyEffectStyle,
   replace_all_matching_properties: replaceAllMatchingProperties,
   find_empty_space_on_canvas: findEmptySpace,
   search_all_unique_properties: searchAllUniqueProperties,

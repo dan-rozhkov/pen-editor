@@ -2,6 +2,7 @@ import { Container } from "pixi.js";
 import { useSceneStore, type SceneState } from "@/store/sceneStore";
 import { useDragStore } from "@/store/dragStore";
 import { useVariableStore } from "@/store/variableStore";
+import { useStyleStore } from "@/store/styleStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import type { FlatSceneNode } from "@/types/scene";
@@ -47,7 +48,11 @@ const THEME_SENTINEL = Object.freeze({ type: "none" }) as unknown as FlatSceneNo
  * - `ref`: the resolved component subtree may contain bindings anywhere;
  * - `embed`: variables are injected as a CSS block into the HTML;
  * - any node with a `fillBinding` or `strokeBinding`;
- * - any node whose `fills` stack contains a solid paint with a `colorBinding`.
+ * - any node whose `fills` stack contains a solid paint with a `colorBinding`;
+ * - any node whose `fills` stack contains a paint bound to a fill style
+ *   (`styleId`) — the style may itself carry a `colorBinding`;
+ * - any node with an `effectStyleId`, or an `effects` stack containing a
+ *   shadow with a `colorBinding`.
  *
  * NOTE: if a new `*Binding` field is added to scene nodes (see
  * `src/types/scene.ts`), it MUST be added here, or bound nodes will stop
@@ -59,12 +64,15 @@ export function isVariableDependent(node: FlatSceneNode): boolean {
     node.type === "embed" || // variables are injected as CSS into the HTML
     node.fillBinding != null ||
     node.strokeBinding != null ||
+    node.effectStyleId != null ||
     // Deliberately scans the raw `node.fills` instead of `getFills()`: this
     // runs for every node on registration and must not manufacture a derived
     // legacy paint stack. Legacy-only nodes are covered by the `fillBinding`
     // check above.
     (node.fills != null &&
-      node.fills.some((p) => p.type === "solid" && p.colorBinding != null))
+      node.fills.some((p) => (p.type === "solid" && p.colorBinding != null) || p.styleId != null)) ||
+    (node.effects != null &&
+      node.effects.some((e) => e.type === "shadow" && e.colorBinding != null))
   );
 }
 
@@ -594,6 +602,14 @@ export function createPixiSync(sceneRoot: Container): () => void {
     scheduleThemeUpdate();
   });
 
+  // Fill/effect style edits (color, gradient, shadow stack, etc.) must
+  // re-resolve every referencing node the same way a variable edit does —
+  // both `getResolvedRenderableFills`/`getResolvedRenderableEffects` read
+  // live from `styleStore`, so a plain theme-update pass picks up the change.
+  const unsubStyles = useStyleStore.subscribe(() => {
+    scheduleThemeUpdate();
+  });
+
   const unsubSelection = useSelectionStore.subscribe(() => {
     nodeTreeMgr.applyTextEditingVisibility();
   });
@@ -646,6 +662,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
     }
     unsubScene();
     unsubVariables();
+    unsubStyles();
     unsubSelection();
     unsubDrag();
     unsubViewport();

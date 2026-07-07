@@ -4,6 +4,7 @@ import { LeftRail } from "@/components/LeftRail";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import { useVariablesDialogStore } from "@/store/variablesDialogStore";
 import { useTextStylesDialogStore } from "@/store/textStylesDialogStore";
+import { useStylesDialogStore } from "@/store/stylesDialogStore";
 
 afterEach(() => cleanup());
 
@@ -12,6 +13,7 @@ describe("<LeftRail />", () => {
     useLeftSidebarStore.setState({ activeSection: "pages" });
     useVariablesDialogStore.setState({ open: false });
     useTextStylesDialogStore.setState({ open: false });
+    useStylesDialogStore.setState({ open: false });
   });
 
   it("renders the rail items", () => {
@@ -21,6 +23,14 @@ describe("<LeftRail />", () => {
     expect(screen.getByTestId("rail-components")).toBeTruthy();
     expect(screen.getByTestId("rail-variables")).toBeTruthy();
     expect(screen.getByTestId("rail-text-styles")).toBeTruthy();
+    expect(screen.getByTestId("rail-styles")).toBeTruthy();
+  });
+
+  it("opens the styles dialog without changing the section", () => {
+    render(<LeftRail />);
+    fireEvent.click(screen.getByTestId("rail-styles"));
+    expect(useStylesDialogStore.getState().open).toBe(true);
+    expect(useLeftSidebarStore.getState().activeSection).toBe("pages");
   });
 
   it("switches the active section when a section icon is clicked", () => {

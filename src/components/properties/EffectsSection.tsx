@@ -30,6 +30,8 @@ import {
   toggleEffectVisibleAt,
   updateEffectAt,
 } from "@/components/properties/fillSectionUtils";
+import { StylePicker } from "@/components/properties/StylePicker";
+import { useStyleStore } from "@/store/styleStore";
 
 /** Human label for an effect row, derived from the effect (not hardcoded). */
 function effectLabel(effect: Effect): string {
@@ -53,6 +55,11 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
     [rawEffects],
   );
   const isMixed = mixedKeys?.has("effects") || mixedKeys?.has("effect");
+
+  const effectStyles = useStyleStore((s) => s.effectStyles);
+  const applyEffectStyleToNode = useStyleStore((s) => s.applyEffectStyleToNode);
+  const detachEffectStyleFromNode = useStyleStore((s) => s.detachEffectStyleFromNode);
+  const boundEffectStyleId = node.effectStyleId;
 
   const commit = (next: Effect[]) => {
     onUpdate({ effects: next, ...clearLegacyEffectProps() } as Partial<SceneNode>);
@@ -94,8 +101,26 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
     >
       {isMixed ? (
         <span className="text-xs italic text-text-muted">Mixed</span>
-      ) : effects.length === 0 ? null : (
+      ) : boundEffectStyleId ? (
+        // Bound to a named effect style: the whole stack is style-driven, so the
+        // per-effect editors are suppressed in favor of the binding control.
+        <StylePicker
+          kindLabel="effect style"
+          styles={effectStyles}
+          boundId={boundEffectStyleId}
+          onPick={(styleId) => applyEffectStyleToNode(node.id, styleId)}
+          onDetach={() => detachEffectStyleFromNode(node.id)}
+        />
+      ) : (
         <div className="flex flex-col gap-1">
+          {effectStyles.length > 0 && (
+            <StylePicker
+              kindLabel="effect style"
+              styles={effectStyles}
+              onPick={(styleId) => applyEffectStyleToNode(node.id, styleId)}
+              onDetach={() => detachEffectStyleFromNode(node.id)}
+            />
+          )}
           {effects
             .map((effect, arrayIndex) => ({ effect, arrayIndex }))
             .reverse()

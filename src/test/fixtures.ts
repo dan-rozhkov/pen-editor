@@ -4,6 +4,7 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useTextStyleStore } from "@/store/textStyleStore";
+import { useStyleStore } from "@/store/styleStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useGuidesStore } from "@/store/guidesStore";
@@ -33,6 +34,7 @@ export function resetStores(): void {
   useHistoryStore.setState({ past: [], future: [], batchMode: false, batchDepth: 0 });
   useVariableStore.setState({ variables: [] });
   useTextStyleStore.setState({ textStyles: [] });
+  useStyleStore.setState({ fillStyles: [], effectStyles: [] });
   useThemeStore.setState({ activeTheme: "light" });
   useViewportStore.setState({ scale: 1, x: 0, y: 0 });
   useGuidesStore.setState({ guides: [] });
@@ -122,6 +124,40 @@ export function seedVariables(): void {
         name: "--radius-m",
         type: "number",
         value: "8",
+      },
+    ],
+  });
+}
+
+export function seedFillStyles(): void {
+  useStyleStore.setState({
+    fillStyles: [
+      {
+        id: "fillstyle-brand",
+        name: "Brand/Primary",
+        paint: { id: "p1", type: "solid", color: "#3366ff" },
+      },
+    ],
+  });
+}
+
+export function seedEffectStyles(): void {
+  useStyleStore.setState({
+    effectStyles: [
+      {
+        id: "effectstyle-card",
+        name: "Card/Shadow",
+        effects: [
+          {
+            type: "shadow",
+            shadowType: "outer",
+            color: "#00000040",
+            offset: { x: 0, y: 4 },
+            blur: 8,
+            spread: 0,
+            id: "e1",
+          },
+        ],
       },
     ],
   });

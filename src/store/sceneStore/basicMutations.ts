@@ -17,6 +17,7 @@ import { useGuidesStore } from "../guidesStore";
 import { useSelectionStore } from "../selectionStore";
 import { useVariableStore } from "../variableStore";
 import { useTextStyleStore } from "../textStyleStore";
+import { useStyleStore } from "../styleStore";
 import {
   syncTextDimensions,
   hasTextMeasureProps,
@@ -352,6 +353,15 @@ export function createBasicMutations(set: SetState, get: GetState) {
       // add/update/delete round-trips through undo/redo.
       if (snapshot.textStyles) {
         useTextStyleStore.setState({ textStyles: snapshot.textStyles });
+      }
+      // Restore shared fill/effect styles the same way (all createSnapshot-based
+      // snapshots carry them), so style add/update/delete/apply/detach
+      // round-trips through undo/redo.
+      if (snapshot.fillStyles) {
+        useStyleStore.setState({ fillStyles: snapshot.fillStyles });
+      }
+      if (snapshot.effectStyles) {
+        useStyleStore.setState({ effectStyles: snapshot.effectStyles });
       }
       if (!historySelection) return;
       useSelectionStore.setState({
