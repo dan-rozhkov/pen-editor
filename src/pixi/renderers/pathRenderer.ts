@@ -184,9 +184,10 @@ export function drawPath(gfx: Graphics, node: PathNode): void {
 /**
  * Render an explicit paint stack onto a path Graphics. Each visible solid or
  * gradient layer (bottom-to-top) re-issues the geometry and fills it; per-layer
- * blend modes are NOT supported for paths (single Graphics) and image paints are
- * ignored here (paths don't carry image fills in practice). The topmost fill's
- * path is left available so the caller's stroke can reuse it.
+ * blend modes are NOT supported for paths (single Graphics) and image/pattern
+ * paints are skipped here — paths have no sprite-fill rendering path, so
+ * silently dropping them (rather than half-rendering) is the safe fallback.
+ * The topmost fill's path is left available so the caller's stroke can reuse it.
  */
 function drawPathFillStack(
   gfx: Graphics,
@@ -194,7 +195,9 @@ function drawPathFillStack(
   geometry: string,
   evenOdd: boolean,
 ): void {
-  const fills = getRenderableFills(node).filter((p) => p.type !== "image");
+  const fills = getRenderableFills(node).filter(
+    (p) => p.type !== "image" && p.type !== "pattern",
+  );
   if (fills.length === 0) {
     // No fillable layer: still lay down the path so a stroke can use it.
     gfx.path(new GraphicsPath(geometry, evenOdd));

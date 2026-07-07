@@ -55,8 +55,9 @@ export function buildFillLayers(node: FlatSceneNode, ctx: SvgConversionContext):
       ctx.defs.push(gradientToSvgDef(paint.gradient, id));
       layers.push({ fill: `url(#${id})`, opacity: paint.opacity });
     } else {
+      const paintLabel = paint.type === "pattern" ? "Pattern fill" : "Image fill";
       ctx.warnings.push(
-        `Image fill on node "${nodeLabel(node)}" is not supported in SVG export and was skipped.`,
+        `${paintLabel} on node "${nodeLabel(node)}" is not supported in SVG export and was skipped.`,
       );
     }
   }

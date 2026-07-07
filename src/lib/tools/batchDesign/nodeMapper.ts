@@ -36,6 +36,15 @@ function mapNodeType(mcpType: string): string {
   return TYPE_MAP[mcpType] ?? mcpType;
 }
 
+/**
+ * Node types that can render a pattern (or image) sprite paint. Mirrors the UI
+ * gate (`FillSection.tsx` `supportsImage`) — path/line/polygon/text/etc. have
+ * no image-fill rendering path, so a pattern paint on them would silently
+ * paint nothing (see `drawPathFillStack` for paths, which explicitly skips
+ * pattern/image paints).
+ */
+const PATTERN_SUPPORTED_NODE_TYPES = new Set(["rect", "ellipse", "frame"]);
+
 /** Resolve a color variable reference (e.g. "$color") and set both value and binding. */
 function applyColorVariable(
   result: Record<string, unknown>,
@@ -68,7 +77,12 @@ function applyColorVariable(
  * a `colorBinding` is attached (mirrors the legacy single-`fill` behavior).
  * Returns null for entries that cannot be interpreted.
  */
-function normalizePaint(entry: unknown, theme?: ThemeName): Paint | null {
+function normalizePaint(
+  entry: unknown,
+  theme?: ThemeName,
+  nodeType?: string,
+  warnings?: string[],
+): Paint | null {
   if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
   const raw = entry as Record<string, unknown>;
   const type = typeof raw.type === "string" ? raw.type : undefined;
@@ -83,8 +97,17 @@ function normalizePaint(entry: unknown, theme?: ThemeName): Paint | null {
 
   // ── Pattern paint ──────────────────────────────────────────────
   // Accept both flat ({type:"pattern", url, scale?, ...}) and nested
-  // ({type:"pattern", pattern:{url, ...}}).
-  if (type === "pattern" || raw.pattern !== undefined) {
+  // ({type:"pattern", pattern:{url, ...}}). Honor the discriminator: only
+  // treat as pattern when explicitly typed "pattern", or when untyped AND a
+  // `pattern` object is present — an explicit `{type:"image", pattern:{...}}`
+  // (or any other typed entry) must not be silently reinterpreted.
+  if (type === "pattern" || (type === undefined && raw.pattern !== undefined)) {
+    if (nodeType !== undefined && !PATTERN_SUPPORTED_NODE_TYPES.has(nodeType)) {
+      warnings?.push(
+        `Pattern fill is not supported on "${nodeType}" nodes (only rect/ellipse/frame) — the paint was dropped.`,
+      );
+      return null;
+    }
     const nested =
       raw.pattern && typeof raw.pattern === "object"
         ? (raw.pattern as Record<string, unknown>)
@@ -165,11 +188,16 @@ function normalizePaint(entry: unknown, theme?: ThemeName): Paint | null {
  * Normalize an AI-format `fills` value (expected: an array bottom-to-top) into a
  * typed Paint[]. Unparseable entries are dropped.
  */
-function normalizeFills(value: unknown, theme?: ThemeName): Paint[] {
+function normalizeFills(
+  value: unknown,
+  theme?: ThemeName,
+  nodeType?: string,
+  warnings?: string[],
+): Paint[] {
   if (!Array.isArray(value)) return [];
   const paints: Paint[] = [];
   for (const entry of value) {
-    const paint = normalizePaint(entry, theme);
+    const paint = normalizePaint(entry, theme, nodeType, warnings);
     if (paint) paints.push(paint);
   }
   return paints;
@@ -271,13 +299,19 @@ export function mapNodeData(
   mode: "insert" | "update",
   existingNode?: FlatSceneNode,
   options?: { theme?: ThemeName }
-): Partial<FlatSceneNode> & { _children?: AiNodeData[] } {
+): Partial<FlatSceneNode> & { _children?: AiNodeData[]; _warnings?: string[] } {
   const result: Record<string, unknown> = {};
   const layout: Partial<LayoutProperties> = {};
   const sizing: Partial<SizingProperties> = {};
   let hasLayout = false;
   let hasSizing = false;
   let children: AiNodeData[] | undefined;
+  const warnings: string[] = [];
+  // Effective node type for this data, used to gate paints that only some
+  // node types can render (e.g. pattern fills — see PATTERN_SUPPORTED_NODE_TYPES).
+  const nodeTypeForFills =
+    (typeof data.type === "string" ? mapNodeType(data.type) : undefined) ??
+    existingNode?.type;
 
   for (const [key, value] of Object.entries(data)) {
     switch (key) {
@@ -313,7 +347,7 @@ export function mapNodeData(
       // source of truth — clear the legacy single-fill fields so the two
       // representations never diverge.
       case "fills": {
-        const paints = normalizeFills(value, options?.theme);
+        const paints = normalizeFills(value, options?.theme, nodeTypeForFills, warnings);
         result.fills = paints;
         Object.assign(result, clearLegacyFillProps());
         break;
@@ -588,7 +622,11 @@ export function mapNodeData(
     (result as Record<string, unknown>)._children = children;
   }
 
-  return result as Partial<FlatSceneNode> & { _children?: AiNodeData[] };
+  if (warnings.length > 0) {
+    (result as Record<string, unknown>)._warnings = warnings;
+  }
+
+  return result as Partial<FlatSceneNode> & { _children?: AiNodeData[]; _warnings?: string[] };
 }
 
 /**
@@ -602,6 +640,7 @@ export function createNodeFromAiData(data: AiNodeData): SceneNode {
 export function createNodeFromAiDataWithTheme(
   data: AiNodeData,
   inheritedTheme?: ThemeName,
+  warnings?: string[],
 ): SceneNode {
   const type = mapNodeType((data.type as string) ?? "frame");
   const mapped = mapNodeData(data, "insert", undefined, {
@@ -609,6 +648,10 @@ export function createNodeFromAiDataWithTheme(
   });
   const childrenData = mapped._children;
   delete (mapped as Record<string, unknown>)._children;
+  if (mapped._warnings) {
+    warnings?.push(...mapped._warnings);
+    delete (mapped as Record<string, unknown>)._warnings;
+  }
   const sizing = (mapped as { sizing?: SizingProperties }).sizing;
   const defaultWidth =
     sizing?.widthMode && sizing.widthMode !== "fixed" ? 0 : 100;
@@ -636,7 +679,7 @@ export function createNodeFromAiDataWithTheme(
         : inheritedTheme;
     if (childrenData) {
       for (const childData of childrenData) {
-        children.push(createNodeFromAiDataWithTheme(childData, thisTheme));
+        children.push(createNodeFromAiDataWithTheme(childData, thisTheme, warnings));
       }
     }
     return { ...base, children } as SceneNode;

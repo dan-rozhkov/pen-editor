@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { isSvgUrl, getTextureCacheKey } from "@/pixi/renderers/imageFillHelpers";
+import {
+  isSvgUrl,
+  getTextureCacheKey,
+  getPatternTextureCacheKey,
+} from "@/pixi/renderers/imageFillHelpers";
 
 describe("isSvgUrl", () => {
   it("treats SVG data URIs as SVG", () => {
@@ -58,5 +62,31 @@ describe("getTextureCacheKey", () => {
     // round(0.1 * 4)/4 = round(0.4)/4 = 0/4 = 0 → Math.max(1, 0) = 1
     const key = getTextureCacheKey(url, 100, 100, 0.1);
     expect(key).toBe("svg:https://example.com/icon.svg:100x100@1");
+  });
+});
+
+describe("getPatternTextureCacheKey", () => {
+  it("is independent of container size for SVG tiles (only url/scale/resolution matter)", () => {
+    const url = "https://example.com/tile.svg";
+    // A pattern tile's cache key must never vary with the node's fill area —
+    // that's the whole point of loading it at natural size (finding #2) and
+    // getting a 100% cache hit rate across resize (finding #6a).
+    const a = getPatternTextureCacheKey(url, 1, 1);
+    const b = getPatternTextureCacheKey(url, 1, 1);
+    expect(a).toBe(b);
+    expect(a).toBe("svg-pattern:https://example.com/tile.svg:1@1");
+  });
+
+  it("varies with scale", () => {
+    const url = "https://example.com/tile.svg";
+    const a = getPatternTextureCacheKey(url, 1, 1);
+    const b = getPatternTextureCacheKey(url, 2, 1);
+    expect(a).not.toBe(b);
+  });
+
+  it("ignores size/scale for raster tile sources", () => {
+    const url = "https://example.com/tile.png";
+    expect(getPatternTextureCacheKey(url, 1, 1)).toBe(getPatternTextureCacheKey(url, 5, 3));
+    expect(getPatternTextureCacheKey(url, 1, 1)).toBe("img:https://example.com/tile.png");
   });
 });

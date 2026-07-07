@@ -80,9 +80,13 @@ function PaintSwatch({ paint }: { paint: Paint }) {
       style = { background: buildCSSGradient(paint.gradient.stops) };
     }
   } else if (paint.type === "pattern" && paint.pattern.url) {
+    // Approximate the tile's actual scale: clamp so the swatch preview stays
+    // legible at both extremes (a huge tile would otherwise render as one
+    // solid color; a tiny one as unrecognizable noise).
+    const scalePercent = Math.round(Math.min(1, Math.max(0.1, paint.pattern.scale ?? 1)) * 50);
     style = {
       backgroundImage: `url(${paint.pattern.url})`,
-      backgroundSize: "50%",
+      backgroundSize: `${scalePercent}%`,
       backgroundRepeat: "repeat",
     };
   } else if (paint.type === "image" && paint.image.url) {

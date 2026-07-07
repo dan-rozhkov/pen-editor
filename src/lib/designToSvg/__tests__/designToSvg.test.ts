@@ -206,6 +206,36 @@ describe("convertDesignNodesToSvg", () => {
     expect(warnings.some((w) => w.includes("Inner shadow"))).toBe(true);
   });
 
+  it("warns with a paint-specific message and skips an image fill", () => {
+    const nodesById: Record<string, FlatSceneNode> = {
+      rect1: rect("rect1", {
+        fills: [
+          { id: "p1", type: "image", image: { url: "https://example.com/a.png", mode: "fill" } },
+        ] as unknown as Paint[],
+      }),
+    };
+    const { warnings } = convertDesignNodesToSvg("rect1", nodesById, {});
+    expect(warnings.some((w) => w.includes("Image fill") && w.includes("not supported"))).toBe(
+      true,
+    );
+    expect(warnings.some((w) => w.includes("Pattern fill"))).toBe(false);
+  });
+
+  it("warns with a paint-specific message and skips a pattern fill", () => {
+    const nodesById: Record<string, FlatSceneNode> = {
+      rect1: rect("rect1", {
+        fills: [
+          { id: "p1", type: "pattern", pattern: { url: "https://example.com/tile.png" } },
+        ] as unknown as Paint[],
+      }),
+    };
+    const { warnings } = convertDesignNodesToSvg("rect1", nodesById, {});
+    expect(warnings.some((w) => w.includes("Pattern fill") && w.includes("not supported"))).toBe(
+      true,
+    );
+    expect(warnings.some((w) => w.includes("Image fill"))).toBe(false);
+  });
+
   it("renders an ellipse as a real <ellipse> element", () => {
     const nodesById: Record<string, FlatSceneNode> = {
       ellipse1: ellipse("ellipse1", { fill: "#00ff00" }),

@@ -188,7 +188,7 @@ function executeInsert(op: ParsedOperation, ctx: ExecutionContext): void {
     ctx.nodesById,
     ctx.parentById,
   );
-  const node = createNodeFromAiDataWithTheme(nodeData, inheritedTheme);
+  const node = createNodeFromAiDataWithTheme(nodeData, inheritedTheme, ctx.issues);
 
   // Expand document component tags in embed HTML
   normalizeEmbedNode(node, ctx);
@@ -273,6 +273,10 @@ function executeCopy(op: ParsedOperation, ctx: ExecutionContext): void {
       { theme: inheritedTheme },
     );
     delete (mapped as Record<string, unknown>)._children;
+    if (mapped._warnings) {
+      ctx.issues.push(...mapped._warnings);
+      delete (mapped as Record<string, unknown>)._warnings;
+    }
     Object.assign(cloned, mapped);
   }
 
@@ -299,6 +303,10 @@ function executeCopy(op: ParsedOperation, ctx: ExecutionContext): void {
           },
         );
         delete (mapped as Record<string, unknown>)._children;
+        if (mapped._warnings) {
+          ctx.issues.push(...mapped._warnings);
+          delete (mapped as Record<string, unknown>)._warnings;
+        }
         Object.assign(newNode, mapped);
       }
     }
@@ -520,6 +528,10 @@ function executeUpdate(op: ParsedOperation, ctx: ExecutionContext): void {
     ),
   });
   delete (mapped as Record<string, unknown>)._children;
+  if (mapped._warnings) {
+    ctx.issues.push(...mapped._warnings);
+    delete (mapped as Record<string, unknown>)._warnings;
+  }
 
   assertValidComponentPropertyUpdate(mapped as Record<string, unknown>, node, ctx, op.line);
 
@@ -557,6 +569,7 @@ function executeReplace(op: ParsedOperation, ctx: ExecutionContext): void {
   const newNode = createNodeFromAiDataWithTheme(
     nodeData,
     resolveInheritedTheme(parentId ?? null, ctx.nodesById, ctx.parentById),
+    ctx.issues,
   );
 
   // Expand document component tags in embed HTML

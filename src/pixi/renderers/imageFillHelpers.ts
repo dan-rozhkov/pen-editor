@@ -1,6 +1,7 @@
 import { Container, Graphics, Sprite, Texture, Assets, Rectangle, TilingSprite } from "pixi.js";
-import type { FlatSceneNode, ImageFill, ImagePaint, PatternPaint, PerCornerRadius } from "@/types/scene";
+import type { FlatSceneNode, ImageFill, ImagePaint, PatternFill, PatternPaint, PerCornerRadius } from "@/types/scene";
 import { getRenderableFills } from "@/utils/fillUtils";
+import { normalizePattern } from "@/utils/patternUtils";
 import { drawRoundedShape, resolvePaintBlendMode } from "./fillStrokeHelpers";
 import { buildPatternSprite } from "./patternFillHelpers";
 import { hasPerCornerRadius } from "@/utils/renderUtils";
@@ -139,6 +140,102 @@ async function loadSvgTextureFromUrl(
   ctx.clearRect(0, 0, targetWidth, targetHeight);
   ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
   return Texture.from(canvas);
+}
+
+/**
+ * Rasterize an SVG tile at its *natural* size × pattern scale × resolution —
+ * NOT the node's fill-area size. A pattern tile is meant to repeat at a fixed
+ * physical size regardless of how big the container is; rasterizing it at
+ * container size (like a cover-fit image fill) would stretch a single tile to
+ * fill the whole node instead of tiling it.
+ */
+async function loadSvgPatternTextureFromUrl(
+  url: string,
+  scale: number,
+  resolution: number,
+): Promise<Texture> {
+  const image = await loadImageElement(url, true).catch(() => loadImageElement(url, false));
+
+  const sourceWidth = Math.max(1, image.naturalWidth || 1);
+  const sourceHeight = Math.max(1, image.naturalHeight || 1);
+  const targetScale = Math.max(1, scale * Math.max(1, resolution));
+
+  const targetWidth = clampTextureDimension(sourceWidth * targetScale);
+  const targetHeight = clampTextureDimension(sourceHeight * targetScale);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return createTextureFromImage(image);
+  ctx.clearRect(0, 0, targetWidth, targetHeight);
+  ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
+  return Texture.from(canvas);
+}
+
+/**
+ * Load a pattern paint's tile texture with caching/deduplication, keyed on the
+ * pattern's own params (url, scale, resolution) — never on the node's fill
+ * area — so a resize never invalidates the cache (see `buildPatternSprite`,
+ * which applies spacing/stagger/tileScale on top of this natural-size tile).
+ * Raster tile sources (png/jpeg/dataURL) are unaffected: they already load at
+ * their native pixel size via the plain `withTexture` raster path.
+ */
+/**
+ * Cache key for a pattern tile's rasterized texture — deliberately independent
+ * of the node's fill-area size (unlike `getTextureCacheKey`), since the tile
+ * always rasterizes at its own natural size × scale regardless of container.
+ * Exported for unit testing.
+ */
+export function getPatternTextureCacheKey(
+  url: string,
+  scale: number,
+  resolution: number,
+): string {
+  if (!isSvgUrl(url)) return `img:${url}`;
+  const resolutionBucket = Math.max(1, Math.round(resolution * 4) / 4);
+  return `svg-pattern:${url}:${scale}@${resolutionBucket}`;
+}
+
+function withPatternTileTexture(
+  url: string,
+  pattern: PatternFill,
+  container: Container,
+  onReady: (texture: Texture) => void,
+): void {
+  if (!isSvgUrl(url)) {
+    withTexture(url, 0, 0, container, onReady);
+    return;
+  }
+
+  const p = normalizePattern(pattern);
+  const cacheKey = getPatternTextureCacheKey(url, p.scale, currentImageFillResolution);
+
+  const cached = getCachedTexture(cacheKey);
+  if (cached) {
+    onReady(cached);
+    return;
+  }
+
+  if (loadingCallbacks.has(cacheKey)) {
+    loadingCallbacks.get(cacheKey)!.push(() => {
+      const tex = textureCache.get(cacheKey);
+      if (tex && !container.destroyed) onReady(tex);
+    });
+    return;
+  }
+
+  loadingCallbacks.set(cacheKey, []);
+  loadSvgPatternTextureFromUrl(url, p.scale, currentImageFillResolution).then((texture) => {
+    setCachedTexture(cacheKey, texture);
+    if (!container.destroyed) onReady(texture);
+    const cbs = loadingCallbacks.get(cacheKey);
+    loadingCallbacks.delete(cacheKey);
+    cbs?.forEach((cb) => cb());
+  }).catch(() => {
+    loadingCallbacks.delete(cacheKey);
+    console.warn("[pixi] Failed to load pattern tile", url);
+  });
 }
 
 async function loadTextureFromUrl(
@@ -587,6 +684,94 @@ function spritePaintUrl(paint: SpritePaint): string {
   return paint.type === "image" ? paint.image.url : paint.pattern.url;
 }
 
+/** Last applied sprite-paint stack per container, so a size-only change can
+ *  resize the existing sprites in place instead of destroy+rebuild (mirrors
+ *  `restretchExistingSprite`'s single-image fast path). */
+interface AppliedSpritePaints {
+  paints: SpritePaint[];
+  width: number;
+  height: number;
+}
+const appliedSpritePaintsByContainer = new WeakMap<Container, AppliedSpritePaints>();
+
+/** Reference-equal paint stacks: true when neither the paint objects nor the
+ *  stack order changed — the cheap, safe signal that only size changed
+ *  (scene data is replaced wholesale on any real edit, never mutated in place). */
+function spritePaintsUnchanged(a: SpritePaint[], b: SpritePaint[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+/** Redraw a paint's clip mask (if any) at the new size. */
+function redrawIndexedMask(
+  container: Container,
+  index: number,
+  width: number,
+  height: number,
+  ellipse: boolean,
+  cornerRadius?: number,
+  cornerRadiusPerCorner?: PerCornerRadius,
+  cornerSmoothing?: number,
+): void {
+  const mask = container.getChildByLabel(`${MULTI_IMAGE_MASK_PREFIX}${index}`);
+  if (!(mask instanceof Graphics)) return;
+  mask.clear();
+  if (ellipse) {
+    mask.ellipse(width / 2, height / 2, width / 2, height / 2);
+  } else {
+    drawRoundedShape(mask, width, height, cornerRadius, cornerRadiusPerCorner, cornerSmoothing);
+  }
+  mask.fill(0xffffff);
+}
+
+/**
+ * Fast path for a size-only change of the multi/pattern sprite stack:
+ * resize each existing sprite in place (cheap) instead of tearing everything
+ * down and re-issuing texture loads. Returns true when it handled the call
+ * (including "nothing changed"), false when the caller must fall through to
+ * the full rebuild (first apply, or the paint stack itself changed).
+ */
+function tryResizeExistingSpritePaints(
+  container: Container,
+  spritePaints: SpritePaint[],
+  width: number,
+  height: number,
+  ellipse: boolean,
+  cornerRadius?: number,
+  cornerRadiusPerCorner?: PerCornerRadius,
+  cornerSmoothing?: number,
+): boolean {
+  const prev = appliedSpritePaintsByContainer.get(container);
+  if (!prev || !spritePaintsUnchanged(prev.paints, spritePaints)) return false;
+  if (prev.width === width && prev.height === height) return true; // no-op
+
+  for (let i = 0; i < spritePaints.length; i++) {
+    const paint = spritePaints[i];
+    const sprite = container.getChildByLabel(`${MULTI_IMAGE_LABEL_PREFIX}${i}`);
+    if (!sprite) return false; // structural mismatch (e.g. texture still loading) — full rebuild
+
+    if (paint.type === "pattern") {
+      if (!(sprite instanceof TilingSprite)) return false;
+      const p = normalizePattern(paint.pattern);
+      sprite.width = width;
+      sprite.height = height;
+      sprite.tilePosition.set(p.offsetX, p.offsetY);
+    } else {
+      if (!(sprite instanceof Sprite)) return false;
+      const typed = sprite as Sprite & { _baseImageTexture?: Texture };
+      scaleImageSprite(sprite, typed._baseImageTexture ?? sprite.texture, paint.image, width, height);
+    }
+
+    redrawIndexedMask(container, i, width, height, ellipse, cornerRadius, cornerRadiusPerCorner, cornerSmoothing);
+  }
+
+  appliedSpritePaintsByContainer.set(container, { paints: spritePaints, width, height });
+  return true;
+}
+
 /** Remove all indexed multi-image sprites and their masks. */
 function destroyMultiImageSprites(container: Container): void {
   for (let i = container.children.length - 1; i >= 0; i--) {
@@ -627,21 +812,39 @@ function applyImagePaintStack(
   const single = spritePaints.length <= 1 ? spritePaints[0] : undefined;
   if (spritePaints.length <= 1 && single?.type !== "pattern") {
     // Single (or no) image: legacy fast path + cache parity.
+    appliedSpritePaintsByContainer.delete(container);
     destroyMultiImageSprites(container);
     applyLegacySprite(single?.image);
     applyImagePaintProps(container, "image-fill", single);
     return;
   }
 
-  // Multiple sprite paints (or any pattern paint): clear the legacy single
-  // sprite and render indexed sprites.
+  // Multiple sprite paints (or any pattern paint): a size-only change of the
+  // same stack resizes the existing sprites in place instead of destroying
+  // and re-issuing texture loads for every resize tick.
+  if (
+    tryResizeExistingSpritePaints(
+      container,
+      spritePaints,
+      width,
+      height,
+      ellipse,
+      cornerRadius,
+      cornerRadiusPerCorner,
+      cornerSmoothing,
+    )
+  ) {
+    return;
+  }
+
+  // Clear the legacy single sprite and render indexed sprites from scratch.
   applyLegacySprite(undefined);
   destroyMultiImageSprites(container);
 
   spritePaints.forEach((paint, index) => {
     const url = spritePaintUrl(paint);
     if (!url) return; // e.g. a pattern paint before its tile is uploaded
-    withTexture(url, width, height, container, (texture) => {
+    const onTexture = (texture: Texture) => {
       addIndexedImageSprite(
         container,
         texture,
@@ -655,8 +858,20 @@ function applyImagePaintStack(
         cornerRadiusPerCorner,
         cornerSmoothing,
       );
-    });
+    };
+    // Pattern tiles rasterize at their own natural size (× scale), never the
+    // node's fill area — see `withPatternTileTexture`.
+    if (paint.type === "pattern") {
+      withPatternTileTexture(url, paint.pattern, container, onTexture);
+    } else {
+      withTexture(url, width, height, container, onTexture);
+    }
   });
+
+  // Record the applied stack (even though sprites may still be loading
+  // asynchronously) so the NEXT call — e.g. a resize tick — can recognize an
+  // unchanged paint stack and take the resize fast path above.
+  appliedSpritePaintsByContainer.set(container, { paints: spritePaints, width, height });
 }
 
 /** Apply the node's image paint stack to a rect/frame container. */
@@ -709,7 +924,10 @@ function addIndexedImageSprite(
 ): void {
   let sprite: Sprite | TilingSprite;
   if (paint.type === "pattern") {
-    sprite = buildPatternSprite(texture, paint.pattern, containerW, containerH);
+    // Pass the tile's own url as the baked-cell cache key so a resize (where
+    // width/height change but the pattern params don't) hits the cache
+    // instead of re-baking from scratch every tick.
+    sprite = buildPatternSprite(texture, paint.pattern, containerW, containerH, paint.pattern.url);
   } else {
     sprite = new Sprite(texture);
     scaleImageSprite(sprite, texture, paint.image, containerW, containerH);

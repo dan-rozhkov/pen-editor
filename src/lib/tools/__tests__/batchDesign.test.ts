@@ -357,6 +357,39 @@ describe("batch_design", () => {
       expect(fills[0]).toMatchObject({ type: "solid", color: "#112233" });
     });
 
+    it("drops a pattern paint on a node type that can't render sprite fills, with an issue message", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'p=I(document, {type: "path", name: "PatPath", geometry: "M0,0 L10,0 L10,10 Z", width: 10, height: 10, fills: [{type: "solid", color: "#112233"}, {type: "pattern", url: "https://x/tile.png"}]})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const fills = sceneState().nodesById[result.createdNodes[0].id].fills as Paint[];
+      expect(fills).toHaveLength(1);
+      expect(fills[0]).toMatchObject({ type: "solid", color: "#112233" });
+      expect(result.issues).toBeDefined();
+      expect(result.issues.some((i: string) => i.includes("Pattern fill") && i.includes("path"))).toBe(
+        true,
+      );
+    });
+
+    it("honors the type discriminator: an image-typed paint with a `pattern` object stays an image paint", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'r=I(document, {type: "rectangle", name: "Mixed", width: 10, height: 10, fills: [{type: "image", url: "https://x/a.png", mode: "fit", pattern: {url: "https://x/tile.png"}}]})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const fills = sceneState().nodesById[result.createdNodes[0].id].fills as Paint[];
+      expect(fills).toHaveLength(1);
+      expect(fills[0]).toMatchObject({
+        type: "image",
+        image: { url: "https://x/a.png", mode: "fit" },
+      });
+    });
+
     it("normalizes a flat gradient paint into the nested form", async () => {
       const result = JSON.parse(
         await batchDesign({
