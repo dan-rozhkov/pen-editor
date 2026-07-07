@@ -112,7 +112,16 @@ describe("<SizeSection />", () => {
       render(
         <SizeSection node={sceneNode("rect2")} onUpdate={vi.fn()} parentContext={ROOT_CONTEXT} />,
       );
-      expect(screen.queryByText("Min / Max")).toBeNull();
+      expect(screen.queryByText("Set min/max sizes")).toBeNull();
+    });
+
+    it("hides Min/Max inputs behind an unchecked checkbox when no constraints are set", () => {
+      render(
+        <SizeSection node={sceneNode("rect2")} onUpdate={vi.fn()} parentContext={AUTO_LAYOUT_CONTEXT} />,
+      );
+      expect((screen.getByLabelText("Set min/max sizes") as HTMLInputElement).checked).toBe(false);
+      const inputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+      expect(inputs.map((i) => i.value)).toEqual(["200", "100"]);
     });
 
     it("renders Min/Max inputs from the node's sizing constraints", () => {
@@ -123,7 +132,7 @@ describe("<SizeSection />", () => {
       render(
         <SizeSection node={node} onUpdate={vi.fn()} parentContext={AUTO_LAYOUT_CONTEXT} />,
       );
-      expect(screen.getByText("Min / Max")).toBeTruthy();
+      expect(screen.getByText("Set min/max sizes")).toBeTruthy();
       const inputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
       // DOM order: W, H, Min W, Max W, Min H, Max H
       expect(inputs.map((i) => i.value)).toEqual(["200", "100", "50", "400", "20", "200"]);
@@ -134,6 +143,7 @@ describe("<SizeSection />", () => {
       render(
         <SizeSection node={sceneNode("rect2")} onUpdate={onUpdate} parentContext={AUTO_LAYOUT_CONTEXT} />,
       );
+      fireEvent.click(screen.getByLabelText("Set min/max sizes"));
       const inputs = screen.getAllByRole("spinbutton");
       fireEvent.change(inputs[3], { target: { value: "320" } }); // Max W
       expect(onUpdate).toHaveBeenCalledWith({

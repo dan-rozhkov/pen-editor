@@ -1,4 +1,4 @@
-import { MinusIcon, PlusIcon } from "@phosphor-icons/react";
+import { ArrowUDownLeftIcon, MinusIcon, PlusIcon } from "@phosphor-icons/react";
 import type {
   AlignItems,
   FlexDirection,
@@ -7,7 +7,6 @@ import type {
   SceneNode,
 } from "@/types/scene";
 import {
-  CheckboxInput,
   NumberInput,
   PropertyRow,
   PropertySection,
@@ -52,6 +51,34 @@ export function AutoLayoutSection({ node, onUpdate, mixedKeys }: AutoLayoutSecti
   };
 
   const isMixed = (key: string) => mixedKeys?.has(key) ?? false;
+  const flexWrap = node.layout?.flexWrap ?? false;
+  const setFlexWrap = (checked: boolean) => {
+    if (checked) {
+      onUpdate({
+        layout: { ...node.layout, flexWrap: true },
+      } as Partial<SceneNode>);
+      return;
+    }
+    // Per-axis gaps are a wrap feature (Figma semantics): when
+    // wrap is turned off, migrate the current main-axis gap value
+    // into the single `gap` field and clear rowGap/columnGap so
+    // the plain "Gap" input (which only ever writes `gap`) isn't
+    // silently overridden by a stale per-axis value the next time
+    // wrap is re-enabled or the layout engine reads mainGap.
+    const isHorizontal = (node.layout?.flexDirection ?? "row") === "row";
+    const mainAxisGap = isHorizontal
+      ? node.layout?.columnGap ?? node.layout?.gap ?? 0
+      : node.layout?.rowGap ?? node.layout?.gap ?? 0;
+    onUpdate({
+      layout: {
+        ...node.layout,
+        flexWrap: false,
+        gap: mainAxisGap,
+        rowGap: undefined,
+        columnGap: undefined,
+      },
+    } as Partial<SceneNode>);
+  };
 
   return (
     <PropertySection
@@ -70,55 +97,42 @@ export function AutoLayoutSection({ node, onUpdate, mixedKeys }: AutoLayoutSecti
     >
       {hasAutoLayout && (
         <>
-          <SelectInput
-            label="Direction"
-            labelOutside
-            value={node.layout?.flexDirection ?? "row"}
-            options={[
-              { value: "row", label: "Horizontal" },
-              { value: "column", label: "Vertical" },
-            ]}
-            onChange={(v) =>
-              onUpdate({
-                layout: {
-                  ...node.layout,
-                  flexDirection: v as FlexDirection,
-                },
-              } as Partial<SceneNode>)
-            }
-            isMixed={isMixed("layout.flexDirection")}
-          />
-          <CheckboxInput
-            label="Wrap"
-            checked={node.layout?.flexWrap ?? false}
-            onChange={(checked) => {
-              if (checked) {
+          <PropertyRow>
+            <SelectInput
+              label="Direction"
+              labelOutside
+              value={node.layout?.flexDirection ?? "row"}
+              options={[
+                { value: "row", label: "Horizontal" },
+                { value: "column", label: "Vertical" },
+              ]}
+              onChange={(v) =>
                 onUpdate({
-                  layout: { ...node.layout, flexWrap: true },
-                } as Partial<SceneNode>);
-                return;
+                  layout: {
+                    ...node.layout,
+                    flexDirection: v as FlexDirection,
+                  },
+                } as Partial<SceneNode>)
               }
-              // Per-axis gaps are a wrap feature (Figma semantics): when
-              // wrap is turned off, migrate the current main-axis gap value
-              // into the single `gap` field and clear rowGap/columnGap so
-              // the plain "Gap" input (which only ever writes `gap`) isn't
-              // silently overridden by a stale per-axis value the next time
-              // wrap is re-enabled or the layout engine reads mainGap.
-              const isHorizontal = (node.layout?.flexDirection ?? "row") === "row";
-              const mainAxisGap = isHorizontal
-                ? node.layout?.columnGap ?? node.layout?.gap ?? 0
-                : node.layout?.rowGap ?? node.layout?.gap ?? 0;
-              onUpdate({
-                layout: {
-                  ...node.layout,
-                  flexWrap: false,
-                  gap: mainAxisGap,
-                  rowGap: undefined,
-                  columnGap: undefined,
-                },
-              } as Partial<SceneNode>);
-            }}
-          />
+              isMixed={isMixed("layout.flexDirection")}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Wrap"
+              aria-pressed={flexWrap}
+              onClick={() => setFlexWrap(!flexWrap)}
+              className={cn(
+                "self-end",
+                flexWrap
+                  ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
+                  : "text-text-primary hover:bg-secondary hover:text-text-primary",
+              )}
+            >
+              <ArrowUDownLeftIcon />
+            </Button>
+          </PropertyRow>
           <PropertyRow>
             <div className="flex flex-col gap-1 flex-1">
               <div className="text-[10px] font-normal text-text-muted">
@@ -248,17 +262,30 @@ export function AutoLayoutSection({ node, onUpdate, mixedKeys }: AutoLayoutSecti
               </div>
             </div>
             {node.layout?.flexWrap ? (
-              <NumberInput
-                label="Row gap"
-                value={node.layout?.rowGap ?? node.layout?.gap ?? 0}
-                onChange={(v) =>
-                  onUpdate({
-                    layout: { ...node.layout, rowGap: v },
-                  } as Partial<SceneNode>)
-                }
-                labelOutside={true}
-                isMixed={isMixed("layout.rowGap")}
-              />
+              <div className="flex flex-1 flex-col gap-2">
+                <NumberInput
+                  label="Row gap"
+                  value={node.layout?.rowGap ?? node.layout?.gap ?? 0}
+                  onChange={(v) =>
+                    onUpdate({
+                      layout: { ...node.layout, rowGap: v },
+                    } as Partial<SceneNode>)
+                  }
+                  labelOutside={true}
+                  isMixed={isMixed("layout.rowGap")}
+                />
+                <NumberInput
+                  label="Column gap"
+                  value={node.layout?.columnGap ?? node.layout?.gap ?? 0}
+                  onChange={(v) =>
+                    onUpdate({
+                      layout: { ...node.layout, columnGap: v },
+                    } as Partial<SceneNode>)
+                  }
+                  labelOutside={true}
+                  isMixed={isMixed("layout.columnGap")}
+                />
+              </div>
             ) : (
               <NumberInput
                 label="Gap"
@@ -273,21 +300,6 @@ export function AutoLayoutSection({ node, onUpdate, mixedKeys }: AutoLayoutSecti
               />
             )}
           </PropertyRow>
-          {node.layout?.flexWrap && (
-            <PropertyRow>
-              <NumberInput
-                label="Column gap"
-                value={node.layout?.columnGap ?? node.layout?.gap ?? 0}
-                onChange={(v) =>
-                  onUpdate({
-                    layout: { ...node.layout, columnGap: v },
-                  } as Partial<SceneNode>)
-                }
-                labelOutside={true}
-                isMixed={isMixed("layout.columnGap")}
-              />
-            </PropertyRow>
-          )}
           <label className="text-[10px] text-text-muted tracking-wide mt-2">
             Padding
           </label>

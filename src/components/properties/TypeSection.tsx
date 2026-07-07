@@ -1,10 +1,11 @@
-import { Diamond, DiamondsFour, Minus } from "@phosphor-icons/react";
+import { CircleHalf, Diamond, DiamondsFour, Minus } from "@phosphor-icons/react";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import type { FlatFrameNode, SceneNode } from "@/types/scene";
 import { PropertySection, SelectInput } from "@/components/ui/PropertyInputs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 
 interface TypeSectionProps {
   node: SceneNode;
@@ -21,6 +22,24 @@ export function TypeSection({ node, onUpdate, typeLabelOverride, slotNode }: Typ
   const isContainerType = node.type === "frame" || node.type === "group";
   const isFrame = node.type === "frame";
   const isInstance = node.type === "ref";
+  const canUseAsMask = node.type !== "connector";
+  const maskButton = canUseAsMask ? (
+    <button
+      type="button"
+      className={cn(
+        "shrink-0 flex items-center justify-center w-6 h-6 rounded border border-transparent",
+        node.isMask
+          ? "border-border-default bg-surface-panel text-text-primary hover:bg-surface-panel"
+          : "text-text-primary hover:bg-secondary"
+      )}
+      title={node.isMask ? "Disable mask" : "Use as mask"}
+      aria-label={node.isMask ? "Disable mask" : "Use as mask"}
+      aria-pressed={node.isMask === true}
+      onClick={() => onUpdate({ isMask: !node.isMask } as Partial<SceneNode>)}
+    >
+      <CircleHalf size={18} weight="light" />
+    </button>
+  ) : null;
 
   return (
     <PropertySection title="Type">
@@ -51,7 +70,7 @@ export function TypeSection({ node, onUpdate, typeLabelOverride, slotNode }: Typ
                 }}
                 title={node.reusable ? "Detach Component" : "Create Component"}
                 aria-label={node.reusable ? "Detach Component" : "Create Component"}
-                className="p-1 rounded hover:bg-secondary text-text-muted transition-colors relative"
+                className="p-1 rounded hover:bg-secondary text-text-primary transition-colors relative"
               >
                 {node.reusable ? (
                   <>
@@ -63,12 +82,14 @@ export function TypeSection({ node, onUpdate, typeLabelOverride, slotNode }: Typ
                 )}
               </button>
             )}
+            {maskButton}
           </>
         ) : (
           <>
             <div className="text-xs text-text-secondary capitalize flex-1">
               {typeLabel}
             </div>
+            {maskButton}
             {isInstance && (
               <button
                 type="button"
@@ -80,7 +101,7 @@ export function TypeSection({ node, onUpdate, typeLabelOverride, slotNode }: Typ
                 }}
                 title="Detach Instance"
                 aria-label="Detach Instance"
-                className="p-1 rounded hover:bg-secondary text-text-muted transition-colors relative"
+                className="p-1 rounded hover:bg-secondary text-text-primary transition-colors relative"
               >
                 <Diamond size={16} />
                 <Minus size={8} weight="bold" className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />

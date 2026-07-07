@@ -1,13 +1,12 @@
 import type { EllipseNode, FrameNode, PerCornerRadius, PolygonNode, SceneNode } from "@/types/scene";
 import {
-  CheckboxInput,
   NumberInput,
   PropertyRow,
   PropertySection,
 } from "@/components/ui/PropertyInputs";
 import { generatePolygonPoints, isStarRatio } from "@/utils/polygonUtils";
 import { hasPerCornerRadius } from "@/utils/renderUtils";
-import { CornersOut } from "@phosphor-icons/react";
+import { Angle, Asterisk, CornersOut } from "@phosphor-icons/react";
 import clsx from "clsx";
 
 interface AppearanceSectionProps {
@@ -36,6 +35,8 @@ export function AppearanceSection({
     : (node.type === "frame" || node.type === "rect");
 
   const cornerMode = showCornerRadius ? getCornerRadiusMode(node) : "unified";
+  const polygonNode = node.type === "polygon" ? (node as PolygonNode) : null;
+  const isStar = isStarRatio(polygonNode?.innerRadiusRatio);
 
   const handleModeChange = (mode: string) => {
     if (mode === "per-corner") {
@@ -113,16 +114,16 @@ export function AppearanceSection({
             )}
             onClick={() => handleModeChange(cornerMode === "unified" ? "per-corner" : "unified")}
           >
-            <CornersOut size={14} />
+            <CornersOut size={18} />
           </button>
         )}
-        {node.type === "polygon" && (
+        {polygonNode && !isStar && (
           <NumberInput
-            label={isStarRatio((node as PolygonNode).innerRadiusRatio) ? "Points" : "Sides"}
-            value={(node as PolygonNode).sides ?? 6}
+            label="Sides"
+            value={polygonNode.sides ?? 6}
             onChange={(v) => {
               const sides = Math.max(3, Math.min(12, v));
-              const innerRadiusRatio = (node as PolygonNode).innerRadiusRatio;
+              const innerRadiusRatio = polygonNode.innerRadiusRatio;
               const points = generatePolygonPoints(
                 sides,
                 node.width,
@@ -135,51 +136,47 @@ export function AppearanceSection({
             max={12}
             step={1}
             labelOutside={true}
+            icon={<Asterisk size={14} />}
           />
         )}
       </PropertyRow>
-      {node.type !== "connector" && (
+      {polygonNode && isStar && (
         <PropertyRow>
-          <CheckboxInput
-            label="Use as mask"
-            checked={node.isMask === true}
-            onChange={(checked) => onUpdate({ isMask: checked } as Partial<SceneNode>)}
-          />
-        </PropertyRow>
-      )}
-      {node.type === "polygon" && (
-        <PropertyRow>
-          <CheckboxInput
-            label="Star"
-            checked={isStarRatio((node as PolygonNode).innerRadiusRatio)}
-            onChange={(checked) => {
-              const sides = (node as PolygonNode).sides ?? 6;
-              if (checked) {
-                const innerRadiusRatio = 0.5;
-                const points = generatePolygonPoints(sides, node.width, node.height, innerRadiusRatio);
-                onUpdate({ innerRadiusRatio, points } as Partial<SceneNode>);
-              } else {
-                const points = generatePolygonPoints(sides, node.width, node.height, undefined);
-                onUpdate({ innerRadiusRatio: undefined, points } as Partial<SceneNode>);
-              }
+          <NumberInput
+            label="Points"
+            value={polygonNode.sides ?? 6}
+            onChange={(v) => {
+              const sides = Math.max(3, Math.min(12, v));
+              const innerRadiusRatio = polygonNode.innerRadiusRatio;
+              const points = generatePolygonPoints(
+                sides,
+                node.width,
+                node.height,
+                innerRadiusRatio
+              );
+              onUpdate({ sides, points } as Partial<SceneNode>);
             }}
+            min={3}
+            max={12}
+            step={1}
+            labelOutside={true}
+            icon={<Asterisk size={14} />}
           />
-          {isStarRatio((node as PolygonNode).innerRadiusRatio) && (
-            <NumberInput
-              label="Ratio %"
-              value={Math.round(((node as PolygonNode).innerRadiusRatio ?? 0.5) * 100)}
-              onChange={(v) => {
-                const innerRadiusRatio = Math.max(1, Math.min(99, v)) / 100;
-                const sides = (node as PolygonNode).sides ?? 6;
-                const points = generatePolygonPoints(sides, node.width, node.height, innerRadiusRatio);
-                onUpdate({ innerRadiusRatio, points } as Partial<SceneNode>);
-              }}
-              min={1}
-              max={99}
-              step={1}
-              labelOutside={true}
-            />
-          )}
+          <NumberInput
+            label="Ratio, %"
+            value={Math.round((polygonNode.innerRadiusRatio ?? 0.5) * 100)}
+            onChange={(v) => {
+              const innerRadiusRatio = Math.max(1, Math.min(99, v)) / 100;
+              const sides = polygonNode.sides ?? 6;
+              const points = generatePolygonPoints(sides, node.width, node.height, innerRadiusRatio);
+              onUpdate({ innerRadiusRatio, points } as Partial<SceneNode>);
+            }}
+            min={1}
+            max={99}
+            step={1}
+            labelOutside={true}
+            icon={<Angle size={14} />}
+          />
         </PropertyRow>
       )}
       {node.type === "ellipse" && (
@@ -206,7 +203,7 @@ export function AppearanceSection({
           </PropertyRow>
           <PropertyRow>
             <NumberInput
-              label="Ratio %"
+              label="Ratio, %"
               value={Math.round(((node as EllipseNode).innerRadiusRatio ?? 0) * 100)}
               onChange={(v) =>
                 onUpdate({

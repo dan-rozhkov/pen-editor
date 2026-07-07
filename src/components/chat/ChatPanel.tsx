@@ -92,7 +92,7 @@ function TabBar() {
           onClick={() => createTab()}
           title="New chat"
         >
-          <PlusIcon />
+          <PlusIcon className="size-4" weight="light" />
         </Button>
         {activeActions?.hasMessages && (
           <DropdownMenu>

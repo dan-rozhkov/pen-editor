@@ -171,31 +171,6 @@ describe("<AppearanceSection />", () => {
     expect(screen.queryByText("Sides")).toBeNull();
   });
 
-  it("toggles a polygon into a star, defaulting innerRadiusRatio to 0.5", () => {
-    const onUpdate = vi.fn();
-    const node = makeNode({ type: "polygon", sides: 5 } as Partial<SceneNode>);
-    render(<AppearanceSection node={node} onUpdate={onUpdate} />);
-
-    fireEvent.click(screen.getByLabelText("Star"));
-
-    expect(onUpdate).toHaveBeenCalledTimes(1);
-    const arg = onUpdate.mock.calls[0][0] as { innerRadiusRatio: number; points: number[] };
-    expect(arg.innerRadiusRatio).toBe(0.5);
-    expect(arg.points).toHaveLength(20); // 5 rays -> 10 vertices
-  });
-
-  it("toggles a star back to a plain polygon, clearing innerRadiusRatio", () => {
-    const onUpdate = vi.fn();
-    const node = makeNode({ type: "polygon", sides: 5, innerRadiusRatio: 0.5 } as Partial<SceneNode>);
-    render(<AppearanceSection node={node} onUpdate={onUpdate} />);
-
-    fireEvent.click(screen.getByLabelText("Star"));
-
-    const arg = onUpdate.mock.calls[0][0] as { innerRadiusRatio: number | undefined; points: number[] };
-    expect(arg.innerRadiusRatio).toBeUndefined();
-    expect(arg.points).toHaveLength(10); // 5 sides -> 5 vertices
-  });
-
   it("edits a star's ratio, regenerating points", () => {
     const onUpdate = vi.fn();
     const node = makeNode({ type: "polygon", sides: 5, innerRadiusRatio: 0.5 } as Partial<SceneNode>);
@@ -293,36 +268,6 @@ describe("<AppearanceSection />", () => {
   it("does not render Smoothing % for a non-corner node (line)", () => {
     render(<AppearanceSection node={makeNode({ type: "line" })} onUpdate={vi.fn()} />);
     expect(screen.queryByText("Smoothing %")).toBeNull();
-  });
-
-  it("renders an unchecked 'Use as mask' checkbox by default", () => {
-    render(<AppearanceSection node={makeNode()} onUpdate={vi.fn()} />);
-    const checkbox = screen.getByLabelText("Use as mask") as HTMLInputElement;
-    expect(checkbox.checked).toBe(false);
-  });
-
-  it("renders 'Use as mask' as checked when node.isMask is true", () => {
-    render(
-      <AppearanceSection node={makeNode({ isMask: true } as Partial<SceneNode>)} onUpdate={vi.fn()} />,
-    );
-    const checkbox = screen.getByLabelText("Use as mask") as HTMLInputElement;
-    expect(checkbox.checked).toBe(true);
-  });
-
-  it("toggles isMask on via the 'Use as mask' checkbox", () => {
-    const onUpdate = vi.fn();
-    render(<AppearanceSection node={makeNode()} onUpdate={onUpdate} />);
-    fireEvent.click(screen.getByLabelText("Use as mask"));
-    expect(onUpdate).toHaveBeenCalledWith({ isMask: true });
-  });
-
-  it("toggles isMask off via the 'Use as mask' checkbox", () => {
-    const onUpdate = vi.fn();
-    render(
-      <AppearanceSection node={makeNode({ isMask: true } as Partial<SceneNode>)} onUpdate={onUpdate} />,
-    );
-    fireEvent.click(screen.getByLabelText("Use as mask"));
-    expect(onUpdate).toHaveBeenCalledWith({ isMask: false });
   });
 
   it("marks opacity as Mixed when listed in mixedKeys", () => {

@@ -262,7 +262,7 @@ function TextStylesPopover({ node }: { node: TextNode }) {
 }
 
 const segmentedButtonGroupClass =
-  "h-6 rounded-md bg-secondary gap-px [&>[data-slot]]:rounded-[5px]! [&>[data-slot]]:border [&>[data-slot]~[data-slot]]:border-l";
+  "h-6 rounded-md bg-secondary gap-px [&_svg]:size-4 [&>[data-slot]]:rounded-[5px]! [&>[data-slot]]:border [&>[data-slot]~[data-slot]]:border-l";
 
 function TruncateTextIcon() {
   return (

@@ -58,6 +58,7 @@ interface NumberInputProps {
   step?: number;
   labelOutside?: boolean;
   isMixed?: boolean;
+  icon?: React.ReactNode;
 }
 
 export function NumberInput({
@@ -69,6 +70,7 @@ export function NumberInput({
   step = 1,
   labelOutside = false,
   isMixed = false,
+  icon,
 }: NumberInputProps) {
   const readOnly = useReadOnly();
   const scrub = useScrubLabel({ value, onChange, step, min, max });
@@ -89,16 +91,34 @@ export function NumberInput({
     return (
       <div className="flex-1 flex flex-col gap-1">
         <Label className="text-[10px] font-normal" onMouseDown={scrubMouseDown} style={scrub.style}>{label}</Label>
-        <Input
-          type="number"
-          value={displayValue}
-          onChange={handleChange}
-          readOnly={readOnly}
-          min={min}
-          max={max}
-          step={step}
-          {...mixedProps}
-        />
+        {icon ? (
+          <InputGroup>
+            <InputGroupAddon align="inline-start">
+              {icon}
+            </InputGroupAddon>
+            <InputGroupInput
+              type="number"
+              value={displayValue}
+              onChange={handleChange}
+              readOnly={readOnly}
+              min={min}
+              max={max}
+              step={step}
+              {...mixedProps}
+            />
+          </InputGroup>
+        ) : (
+          <Input
+            type="number"
+            value={displayValue}
+            onChange={handleChange}
+            readOnly={readOnly}
+            min={min}
+            max={max}
+            step={step}
+            {...mixedProps}
+          />
+        )}
       </div>
     );
   }
@@ -523,7 +543,7 @@ export function FlipControls({
         disabled={readOnly}
         title="Flip horizontal"
       >
-        <FlipHorizontalIcon />
+        <FlipHorizontalIcon size={16} />
       </Button>
       <Button
         variant="secondary"
@@ -533,7 +553,7 @@ export function FlipControls({
         disabled={readOnly}
         title="Flip vertical"
       >
-        <FlipVerticalIcon />
+        <FlipVerticalIcon size={16} />
       </Button>
     </ButtonGroup>
   );

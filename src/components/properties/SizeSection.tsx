@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   LinkSimple,
   LinkSimpleBreak,
@@ -255,6 +255,7 @@ export function SizeSection({
   const updateNode = useSceneStore((s) => s.updateNode);
   const updateNodeWithoutHistory = useSceneStore((s) => s.updateNodeWithoutHistory);
   const [isFitting, setIsFitting] = useState(false);
+  const [minMaxVisibleOverride, setMinMaxVisibleOverride] = useState<boolean | null>(null);
 
   const reflowAutoLayoutSiblings = (
     dimension: "width" | "height",
@@ -360,6 +361,36 @@ export function SizeSection({
     : isMultiSelect
     ? (selectedNodes ?? []).some(n => n.type === "frame" || n.type === "embed")
     : (node.type === "frame" || node.type === "embed");
+  const hasMinMaxConstraints =
+    node.sizing?.minWidth !== undefined ||
+    node.sizing?.maxWidth !== undefined ||
+    node.sizing?.minHeight !== undefined ||
+    node.sizing?.maxHeight !== undefined ||
+    mixedKeys?.has("sizing.minWidth") ||
+    mixedKeys?.has("sizing.maxWidth") ||
+    mixedKeys?.has("sizing.minHeight") ||
+    mixedKeys?.has("sizing.maxHeight") ||
+    false;
+  const showMinMaxConstraints = minMaxVisibleOverride ?? hasMinMaxConstraints;
+
+  useEffect(() => {
+    setMinMaxVisibleOverride(null);
+  }, [node.id]);
+
+  const handleMinMaxVisibleChange = (checked: boolean) => {
+    setMinMaxVisibleOverride(checked);
+    if (!checked) {
+      onUpdate({
+        sizing: {
+          ...node.sizing,
+          minWidth: undefined,
+          maxWidth: undefined,
+          minHeight: undefined,
+          maxHeight: undefined,
+        },
+      } as Partial<SceneNode>);
+    }
+  };
 
   return (
     <PropertySection title="Size">
@@ -572,9 +603,9 @@ export function SizeSection({
           }
         >
           {node.aspectRatioLocked ? (
-            <LinkSimple size={14} />
+            <LinkSimple size={18} />
           ) : (
-            <LinkSimpleBreak size={14} />
+            <LinkSimpleBreak size={18} />
           )}
         </button>}
         {canFitToContent && (
@@ -647,57 +678,69 @@ export function SizeSection({
       )}
       {parentContext.isInsideAutoLayout && (
         <>
-          <label className="text-[10px] text-text-muted tracking-wide mt-2">
-            Min / Max
-          </label>
-          <PropertyRow>
-            <NumberInput
-              label="Min W"
-              value={node.sizing?.minWidth ?? 0}
-              onChange={(v) =>
-                onUpdate({
-                  sizing: { ...node.sizing, minWidth: v },
-                } as Partial<SceneNode>)
-              }
-              min={0}
-              isMixed={mixedKeys?.has("sizing.minWidth")}
+          <Label className="cursor-pointer mt-2">
+            <Checkbox
+              checked={showMinMaxConstraints}
+              onCheckedChange={(checked) => handleMinMaxVisibleChange(!!checked)}
             />
-            <NumberInput
-              label="Max W"
-              value={node.sizing?.maxWidth ?? 0}
-              onChange={(v) =>
-                onUpdate({
-                  sizing: { ...node.sizing, maxWidth: v },
-                } as Partial<SceneNode>)
-              }
-              min={0}
-              isMixed={mixedKeys?.has("sizing.maxWidth")}
-            />
-          </PropertyRow>
-          <PropertyRow>
-            <NumberInput
-              label="Min H"
-              value={node.sizing?.minHeight ?? 0}
-              onChange={(v) =>
-                onUpdate({
-                  sizing: { ...node.sizing, minHeight: v },
-                } as Partial<SceneNode>)
-              }
-              min={0}
-              isMixed={mixedKeys?.has("sizing.minHeight")}
-            />
-            <NumberInput
-              label="Max H"
-              value={node.sizing?.maxHeight ?? 0}
-              onChange={(v) =>
-                onUpdate({
-                  sizing: { ...node.sizing, maxHeight: v },
-                } as Partial<SceneNode>)
-              }
-              min={0}
-              isMixed={mixedKeys?.has("sizing.maxHeight")}
-            />
-          </PropertyRow>
+            Set min/max sizes
+          </Label>
+          {showMinMaxConstraints && (
+            <>
+              <PropertyRow>
+                <NumberInput
+                  label="Min W"
+                  value={node.sizing?.minWidth ?? 0}
+                  onChange={(v) =>
+                    onUpdate({
+                      sizing: { ...node.sizing, minWidth: v },
+                    } as Partial<SceneNode>)
+                  }
+                  min={0}
+                  labelOutside
+                  isMixed={mixedKeys?.has("sizing.minWidth")}
+                />
+                <NumberInput
+                  label="Max W"
+                  value={node.sizing?.maxWidth ?? 0}
+                  onChange={(v) =>
+                    onUpdate({
+                      sizing: { ...node.sizing, maxWidth: v },
+                    } as Partial<SceneNode>)
+                  }
+                  min={0}
+                  labelOutside
+                  isMixed={mixedKeys?.has("sizing.maxWidth")}
+                />
+              </PropertyRow>
+              <PropertyRow>
+                <NumberInput
+                  label="Min H"
+                  value={node.sizing?.minHeight ?? 0}
+                  onChange={(v) =>
+                    onUpdate({
+                      sizing: { ...node.sizing, minHeight: v },
+                    } as Partial<SceneNode>)
+                  }
+                  min={0}
+                  labelOutside
+                  isMixed={mixedKeys?.has("sizing.minHeight")}
+                />
+                <NumberInput
+                  label="Max H"
+                  value={node.sizing?.maxHeight ?? 0}
+                  onChange={(v) =>
+                    onUpdate({
+                      sizing: { ...node.sizing, maxHeight: v },
+                    } as Partial<SceneNode>)
+                  }
+                  min={0}
+                  labelOutside
+                  isMixed={mixedKeys?.has("sizing.maxHeight")}
+                />
+              </PropertyRow>
+            </>
+          )}
         </>
       )}
     </PropertySection>
