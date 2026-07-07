@@ -8,6 +8,53 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-07-07
+
+Fourth gap-closing batch versus Figma: richer vector shapes, pattern fills,
+layer masks, and text lists.
+
+### Added
+- **Shapes: stars, ellipse arcs, arrowheads** — polygons gain a star mode
+  (`innerRadiusRatio` + point count) with a toolbar Star tool; ellipses gain
+  arc/donut parameters (`startAngle`/`sweepAngle`/`innerRadiusRatio`, one
+  shared geometry module for Pixi and SVG export); lines gain start/end caps
+  (arrow, triangle, circle, bar) rendered in Pixi and exported as SVG
+  `<marker>` defs. All editable in the properties panel and creatable via
+  `batch_design`.
+- **Pattern fills** — a repeating image-tile paint type with scale, spacing,
+  and row-offset (stagger), coexisting with the rest of the paint stack and
+  blend modes on rectangles, frames, and ellipses. Baked pattern cells are
+  LRU-cached; SVG tiles load at natural size; the fill editor gets a shared
+  upload control.
+- **Layer masks** — Figma-style `isMask`: a node masks the siblings above it
+  in the same group/frame (vector masks via Graphics; per-pixel alpha masks
+  for image-fill maskers), with LayersPanel indication, hidden-mask
+  semantics, mask-aware hit-testing, and clip-path/mask-image parity in HTML
+  export plus native `<mask>` in SVG export.
+- **Text lists** — bullet and numbered lists with per-paragraph attributes
+  (`paragraphs`: list type + indent level), inline editing (Enter continues
+  or outdents, Tab/Shift+Tab change level on list paragraphs), Cmd+Shift+8/7
+  hotkeys, hanging indents, list-aware wrap/measure/auto-size, nested
+  `<ul>`/`<ol>` HTML export, and AI support via `batch_design`.
+
+### Fixed
+- Copy/paste style now transfers arrowheads, star ratio, and ellipse arc
+  parameters; width/height edits keep stars star-shaped; line cap tips are
+  hit-testable; the root SVG export no longer clips overflowing caps.
+- Nested `clip: true` frames keep their clipping (regression caught in
+  review of the mask feature); toggling `isMask` on root-level nodes takes
+  effect immediately.
+- Native text edits (paste, backspace line-merge, cut) and AI text updates
+  keep paragraph list attributes aligned with the text; Enter deletes a
+  non-collapsed selection; Tab no longer writes hidden state on plain text;
+  center/right alignment is honored in list rendering.
+
+### Performance
+- Pattern sprites resize in place instead of destroy+rebake per resize tick.
+- Sibling-mask resolution early-exits for mask-free scenes (was O(N²) per
+  structural sync); mask dirty-tracking iterates the dirty set, not the tree.
+- List text nodes skip the full Pixi rebuild on position-only updates.
+
 ## [0.10.0] - 2026-07-06
 
 Third gap-closing batch versus Figma: typography system, flexible layouts, and
@@ -167,7 +214,8 @@ First tracked release. Summarizes the features shipped up to this point.
 - Align inline frame-name editor with the canvas label position.
 - Remove double-shaded blue on the selected layer row.
 
-[Unreleased]: https://github.com/dan-rozhkov/pen-editor/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/dan-rozhkov/pen-editor/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/dan-rozhkov/pen-editor/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/dan-rozhkov/pen-editor/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/dan-rozhkov/pen-editor/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/dan-rozhkov/pen-editor/compare/v0.5.0...v0.8.0
