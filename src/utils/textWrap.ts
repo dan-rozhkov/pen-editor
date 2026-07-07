@@ -27,6 +27,25 @@ export function buildFontString(node: TextNode): string {
   return `${style} ${weight} ${size}px ${family}`
 }
 
+/**
+ * Measure a single string's rendered width (letter-spacing aware) using the
+ * node's font, via the same shared measurement canvas as `wrapTextToLines` /
+ * `layoutTextParagraphs`. Single source of truth for "how wide is this text"
+ * so callers outside this module (e.g. the inline editor's marker-width
+ * measurement) can't drift from the wrapping/layout math by omitting
+ * letter-spacing or using a second canvas context.
+ */
+export function measureTextWidth(
+  node: Pick<TextNode, 'fontFamily' | 'fontSize' | 'fontWeight' | 'fontStyle' | 'letterSpacing'>,
+  text: string,
+): number {
+  if (text.length === 0) return 0
+  const ctx = getContext()
+  ctx.font = buildFontString(node as TextNode)
+  const letterSpacing = node.letterSpacing ?? 0
+  return ctx.measureText(text).width + Math.max(0, text.length - 1) * letterSpacing
+}
+
 const NBSP = ' '
 
 /** True if the character is a CJK ideograph / kana / hangul (wraps char-by-char). */
@@ -182,7 +201,7 @@ export interface LaidOutLine {
   text: string
   paragraphIndex: number
   isFirstLine: boolean
-  /** Left offset, in px, from the node's left edge (indent + hanging indent past a marker). */
+  /** Left offset, in px, from the node's left edge (indent + hanging indent past a marker, plus any center/right alignment shift). */
   x: number
 }
 
@@ -224,6 +243,8 @@ export function layoutTextParagraphs(
   const lines: LaidOutLine[] = []
   const markers: ParagraphMarkerLayout[] = []
 
+  const align = node.textAlign ?? 'left'
+
   paragraphs.forEach((paragraph, paragraphIndex) => {
     const markerInfo = markerInfos[paragraphIndex]
     const attrs = getParagraphAttrs(node, paragraphIndex)
@@ -232,16 +253,31 @@ export function layoutTextParagraphs(
     const hangingPx = markerInfo ? markerWidth + LIST_MARKER_GAP : 0
     const xOffset = indentPx + hangingPx
 
-    if (markerInfo) {
-      markers.push({ paragraphIndex, text: markerInfo.text, x: indentPx, width: markerWidth })
-    }
-
     const availWidth = maxWidth !== null ? Math.max(1, maxWidth - xOffset) : Infinity
     const wrapped =
       maxWidth !== null ? wrapParagraphText(paragraph, availWidth, ctx, letterSpacing) : [paragraph]
 
+    // Center/right alignment shifts a line + its marker (if any) as a unit
+    // within the space left after the hanging indent — each wrapped line
+    // aligns independently on its own measured width, same as plain wrapped
+    // text (see `positionTextBlock` for the single-Text-object equivalent).
+    // Left alignment (the default) never shifts anything, so this is a no-op
+    // whenever textAlign is unset — matching pre-existing layout exactly.
+    const alignOffset = (lineText: string): number => {
+      if (maxWidth === null || align === 'left') return 0
+      const trimmed = lineText.endsWith(' ') ? lineText.slice(0, -1) : lineText
+      const lineWidth = widthOf(trimmed)
+      const factor = align === 'center' ? 0.5 : 1
+      return Math.max(0, availWidth - lineWidth) * factor
+    }
+
+    if (markerInfo) {
+      const offset = alignOffset(wrapped[0] ?? '')
+      markers.push({ paragraphIndex, text: markerInfo.text, x: indentPx + offset, width: markerWidth })
+    }
+
     wrapped.forEach((lineText, i) => {
-      lines.push({ text: lineText, paragraphIndex, isFirstLine: i === 0, x: xOffset })
+      lines.push({ text: lineText, paragraphIndex, isFirstLine: i === 0, x: xOffset + alignOffset(lineText) })
     })
   })
 

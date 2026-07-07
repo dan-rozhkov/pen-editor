@@ -10,6 +10,7 @@ import type {
   PerCornerRadius,
   ConstraintMode,
   NodeConstraints,
+  ParagraphAttrs,
 } from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
 import { generateId } from "@/types/scene";
@@ -23,6 +24,7 @@ import {
   createSolidPaint,
 } from "@/utils/fillUtils";
 import { generatePolygonPoints } from "@/utils/polygonUtils";
+import { normalizeParagraphs, splitParagraphs } from "@/lib/textLists/paragraphs";
 
 /** AI node data as received from the operations script */
 type AiNodeData = Record<string, unknown>;
@@ -690,6 +692,16 @@ export function createNodeFromAiDataWithTheme(
   if (type === "text") {
     const rec = node as unknown as Record<string, unknown>;
     if (!rec.text) rec.text = "";
+    // If the AI supplied `paragraphs` alongside `text` (e.g. via R() replacing
+    // a node while echoing back stale formatting), re-align its length to the
+    // actual line count so the parallel-array invariant holds from creation —
+    // mirrors the same normalization executeUpdate applies for U().
+    if (rec.paragraphs !== undefined) {
+      rec.paragraphs = normalizeParagraphs(
+        rec.paragraphs as ParagraphAttrs[],
+        splitParagraphs(rec.text as string).length,
+      );
+    }
     node = syncTextDimensions(node);
   }
   if (type === "line") {

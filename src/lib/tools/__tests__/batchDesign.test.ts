@@ -1265,5 +1265,62 @@ describe("batch_design", () => {
       const updated = sceneState().nodesById[id] as TextNode;
       expect(updated.paragraphs).toEqual([{ listType: "number" }, { listType: "number" }]);
     });
+
+    it("U() re-deriving paragraphs when {text} alone changes the line count keeps the array index-aligned", async () => {
+      const textResult = JSON.parse(
+        await batchDesign({
+          operations:
+            'label=I(document, {type: "text", name: "List", text: "Milk\\nEggs", paragraphs: [{listType: "bullet"}, {listType: "bullet"}]})',
+        })
+      );
+      const id = textResult.createdNodes[0].id;
+
+      // AI sends only {text} (no paragraphs) after merging two lines into one —
+      // without re-deriving, the old 2-entry array would desync from the new
+      // 1-line text.
+      const result = JSON.parse(
+        await batchDesign({
+          operations: `U("${id}", {text: "MilkEggs"})`,
+        })
+      );
+
+      expect(result.success).toBe(true);
+      const updated = sceneState().nodesById[id] as TextNode;
+      expect(updated.text).toBe("MilkEggs");
+      expect(updated.paragraphs).toEqual([{ listType: "bullet" }]);
+    });
+
+    it("U() re-deriving paragraphs when {text} alone adds lines pads with plain defaults", async () => {
+      const textResult = JSON.parse(
+        await batchDesign({
+          operations: 'label=I(document, {type: "text", name: "List", text: "Milk", paragraphs: [{listType: "bullet"}]})',
+        })
+      );
+      const id = textResult.createdNodes[0].id;
+
+      const result = JSON.parse(
+        await batchDesign({
+          operations: `U("${id}", {text: "Milk\\nEggs\\nBread"})`,
+        })
+      );
+
+      expect(result.success).toBe(true);
+      const updated = sceneState().nodesById[id] as TextNode;
+      expect(updated.paragraphs).toEqual([{ listType: "bullet" }, {}, {}]);
+    });
+
+    it("R() re-aligns a stale paragraphs array supplied alongside new multi-line text", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'R(text1, {type: "text", name: "List", text: "Milk\\nEggs\\nBread", paragraphs: [{listType: "bullet"}]})',
+        })
+      );
+
+      expect(result.success).toBe(true);
+      const newId = result.createdNodes[0].id;
+      const created = sceneState().nodesById[newId] as TextNode;
+      expect(created.paragraphs).toEqual([{ listType: "bullet" }, {}, {}]);
+    });
   });
 });

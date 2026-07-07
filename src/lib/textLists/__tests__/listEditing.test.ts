@@ -12,8 +12,29 @@ describe('continueListOnEnter', () => {
     ])
   })
 
-  it('exits the list when Enter is pressed on an empty list paragraph', () => {
+  it('outdents one level and stays in the list when Enter is pressed on an empty nested list paragraph', () => {
     const result = continueListOnEnter([{ listType: 'bullet', indentLevel: 2 }], 1, 0, true)
+    expect(result.exitedList).toBe(false)
+    expect(result.paragraphs).toEqual([
+      { listType: 'bullet', indentLevel: 1 },
+      { listType: 'bullet', indentLevel: 1 },
+    ])
+  })
+
+  it('outdenting repeatedly on empty items eventually reaches level 0 and then exits the list', () => {
+    // Level 1 -> outdent to 0, stays in the list.
+    const first = continueListOnEnter([{ listType: 'bullet', indentLevel: 1 }], 1, 0, true)
+    expect(first.exitedList).toBe(false)
+    expect(first.paragraphs[0]).toEqual({ listType: 'bullet', indentLevel: 0 })
+
+    // Pressing Enter again on the (still-empty) level-0 item now exits the list.
+    const second = continueListOnEnter(first.paragraphs, first.paragraphs.length, 0, true)
+    expect(second.exitedList).toBe(true)
+    expect(second.paragraphs[0]).toEqual({ listType: 'none', indentLevel: 0 })
+  })
+
+  it('exits the list when Enter is pressed on an empty list paragraph already at indent level 0', () => {
+    const result = continueListOnEnter([{ listType: 'bullet', indentLevel: 0 }], 1, 0, true)
     expect(result.exitedList).toBe(true)
     expect(result.paragraphs).toEqual([
       { listType: 'none', indentLevel: 0 },

@@ -1,7 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { cloneNodeWithNewId } from "@/utils/cloneNode";
+import { cloneNodeWithNewId, deepCloneNode } from "@/utils/cloneNode";
 import { createShadowEffect, createSolidPaint } from "@/utils/fillUtils";
-import type { FrameNode } from "@/types/scene";
+import type { FrameNode, TextNode } from "@/types/scene";
+
+function makeTextNode(overrides: Partial<TextNode> = {}): TextNode {
+  return {
+    id: "text-1",
+    type: "text",
+    name: "T",
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 20,
+    text: "one\ntwo",
+    paragraphs: [{ listType: "bullet" }, { listType: "bullet" }],
+    ...overrides,
+  } as TextNode;
+}
 
 function makeReusableFrame(overrides: Partial<FrameNode> = {}): FrameNode {
   return {
@@ -47,5 +62,29 @@ describe("cloneNodeWithNewId — reusable frame -> ref", () => {
     expect(result.type).toBe("ref");
     expect("fills" in result).toBe(false);
     expect("effects" in result).toBe(false);
+  });
+});
+
+describe("text node clones do not alias the paragraphs array (finding 7b)", () => {
+  it("cloneNodeWithNewId copies the array — mutating the clone leaves the original untouched", () => {
+    const original = makeTextNode();
+    const clone = cloneNodeWithNewId(original, false) as TextNode;
+
+    expect(clone.paragraphs).toEqual(original.paragraphs);
+    expect(clone.paragraphs).not.toBe(original.paragraphs);
+
+    clone.paragraphs![0] = { listType: "number" };
+    expect(original.paragraphs![0]).toEqual({ listType: "bullet" });
+  });
+
+  it("deepCloneNode copies the array — mutating the clone leaves the original untouched", () => {
+    const original = makeTextNode();
+    const clone = deepCloneNode(original) as TextNode;
+
+    expect(clone.paragraphs).toEqual(original.paragraphs);
+    expect(clone.paragraphs).not.toBe(original.paragraphs);
+
+    clone.paragraphs![1] = { listType: "number" };
+    expect(original.paragraphs![1]).toEqual({ listType: "bullet" });
   });
 });

@@ -333,5 +333,38 @@ describe("<TypographySection />", () => {
         ],
       });
     });
+
+    it("indents every paragraph independently (mixed starting levels, clamped at the max), not cumulatively (finding 7c)", () => {
+      const onUpdate = vi.fn();
+      const text = ["a", "b", "c", "d"].join("\n");
+      render(
+        <TypographySection
+          node={textNode({
+            text,
+            paragraphs: [
+              { listType: "bullet", indentLevel: 0 },
+              { listType: "bullet", indentLevel: 3 },
+              { listType: "number", indentLevel: 8 }, // already at MAX_INDENT_LEVEL
+              {},
+            ],
+          })}
+          onUpdate={onUpdate}
+        />,
+      );
+
+      fireEvent.click(screen.getByLabelText("Indent"));
+
+      // Each paragraph shifts by exactly one level from its own starting
+      // level (not accumulating extra levels from re-processing earlier
+      // entries), and the already-maxed paragraph stays clamped.
+      expect(onUpdate).toHaveBeenCalledWith({
+        paragraphs: [
+          { listType: "bullet", indentLevel: 1 },
+          { listType: "bullet", indentLevel: 4 },
+          { listType: "number", indentLevel: 8 },
+          { indentLevel: 1 },
+        ],
+      });
+    });
   });
 });

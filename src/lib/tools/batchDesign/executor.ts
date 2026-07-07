@@ -6,6 +6,7 @@ import type {
   ImageFill,
   Paint,
   RefNode,
+  ParagraphAttrs,
 } from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
 import {
@@ -22,6 +23,7 @@ import {
 } from "@/store/sceneStore/helpers/flatStoreHelpers";
 import { syncTextDimensions } from "@/store/sceneStore/helpers/textSync";
 import { cloneNodeWithNewId } from "@/utils/cloneNode";
+import { normalizeParagraphs, splitParagraphs } from "@/lib/textLists/paragraphs";
 import {
   clearLegacyFillProps,
   createImagePaint,
@@ -534,6 +536,23 @@ function executeUpdate(op: ParsedOperation, ctx: ExecutionContext): void {
   }
 
   assertValidComponentPropertyUpdate(mapped as Record<string, unknown>, node, ctx, op.line);
+
+  // The AI commonly sends `{text}` alone to edit a text node's content. If it
+  // changes the line count without also supplying `paragraphs`, the existing
+  // (now index-shifted) paragraph-attrs array would silently desync from the
+  // new text. Re-derive it from the existing array whenever the text changed
+  // but paragraphs did not — same invariant the inline editor keeps.
+  const mappedRecord = mapped as Record<string, unknown>;
+  if (
+    node.type === "text" &&
+    typeof mappedRecord.text === "string" &&
+    mappedRecord.paragraphs === undefined
+  ) {
+    mappedRecord.paragraphs = normalizeParagraphs(
+      (node as unknown as { paragraphs?: ParagraphAttrs[] }).paragraphs,
+      splitParagraphs(mappedRecord.text).length,
+    );
+  }
 
   let updated = { ...node, ...reconcileLegacyFillUpdate(node, mapped) } as FlatSceneNode;
 

@@ -96,4 +96,80 @@ describe("layoutTextParagraphs", () => {
     expect(markers).toHaveLength(1);
     expect(markers[0].paragraphIndex).toBe(1);
   });
+
+  describe("textAlign", () => {
+    it("left (default) never shifts lines or markers", () => {
+      const node = textNode({
+        text: "hi",
+        width: 100,
+        paragraphs: [{ listType: "bullet" }],
+      });
+      const { lines, markers } = layoutTextParagraphs(node, 100);
+      const hangingPx = CHAR + LIST_MARKER_GAP;
+      expect(markers[0].x).toBe(0);
+      expect(lines[0].x).toBe(hangingPx);
+    });
+
+    it("center shifts the marker+line as a unit within the space after the hanging indent", () => {
+      // width 100, marker "•" (8px) + gap(8) = hangingPx; avail = 100 - hangingPx.
+      // line text "hi" = 16px wide. offset = (avail - 16) / 2.
+      const node = textNode({
+        text: "hi",
+        width: 100,
+        textAlign: "center",
+        paragraphs: [{ listType: "bullet" }],
+      });
+      const hangingPx = CHAR + LIST_MARKER_GAP;
+      const avail = 100 - hangingPx;
+      const expectedOffset = (avail - 2 * CHAR) / 2;
+      const { lines, markers } = layoutTextParagraphs(node, 100);
+      expect(markers[0].x).toBeCloseTo(expectedOffset);
+      expect(lines[0].x).toBeCloseTo(hangingPx + expectedOffset);
+    });
+
+    it("right shifts the marker+line so the line's right edge meets the available width", () => {
+      const node = textNode({
+        text: "hi",
+        width: 100,
+        textAlign: "right",
+        paragraphs: [{ listType: "bullet" }],
+      });
+      const hangingPx = CHAR + LIST_MARKER_GAP;
+      const avail = 100 - hangingPx;
+      const expectedOffset = avail - 2 * CHAR;
+      const { lines, markers } = layoutTextParagraphs(node, 100);
+      expect(markers[0].x).toBeCloseTo(expectedOffset);
+      expect(lines[0].x).toBeCloseTo(hangingPx + expectedOffset);
+    });
+
+    it("center aligns each wrapped continuation line independently on its own width", () => {
+      const node = textNode({
+        text: "a bb",
+        textAlign: "center",
+        paragraphs: [{ listType: "bullet" }],
+      });
+      const hangingPx = CHAR + LIST_MARKER_GAP;
+      const localAvail = 3 * CHAR; // budget for text after the hanging indent
+      const { lines } = layoutTextParagraphs(node, hangingPx + localAvail); // forces a wrap to 2 lines
+      expect(lines.length).toBe(2);
+      expect(lines[0].text).toBe("a "); // trailing space kept, trimmed for width below
+      expect(lines[1].text).toBe("bb");
+      // Each line's offset depends on its own (trimmed) text width, so they differ.
+      expect(lines[0].x).toBeCloseTo(hangingPx + (localAvail - 1 * CHAR) / 2);
+      expect(lines[1].x).toBeCloseTo(hangingPx + (localAvail - 2 * CHAR) / 2);
+    });
+
+    it("auto-width mode (maxWidth === null) never applies an alignment offset", () => {
+      const node = textNode({
+        text: "hi",
+        textWidthMode: "auto",
+        textAlign: "center",
+        paragraphs: [{ listType: "bullet" }],
+      });
+      const hangingPx = CHAR + LIST_MARKER_GAP;
+      const { lines, markers } = layoutTextParagraphs(node, null);
+      expect(markers[0].x).toBe(0);
+      expect(lines[0].x).toBe(hangingPx);
+    });
+  });
 });

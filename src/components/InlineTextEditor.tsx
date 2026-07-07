@@ -8,9 +8,16 @@ import { useViewportStore } from '../store/viewportStore'
 import { useVariableStore } from '../store/variableStore'
 import { resolveColor } from '../utils/colorUtils'
 import type { ThemeName } from '../types/variable'
-import { LIST_INDENT_WIDTH, LIST_MARKER_GAP, normalizeParagraphs, splitParagraphs } from '../lib/textLists/paragraphs'
+import {
+  LIST_INDENT_WIDTH,
+  LIST_MARKER_GAP,
+  getParagraphAttrs,
+  normalizeParagraphs,
+  splitParagraphs,
+} from '../lib/textLists/paragraphs'
 import { computeParagraphMarkerInfos } from '../lib/textLists/markers'
 import { changeIndentLevel, continueListOnEnter, toggleListType } from '../lib/textLists/listEditing'
+import { measureTextWidth } from '../utils/textWrap'
 
 interface InlineTextEditorProps {
   node: TextNode
@@ -23,6 +30,30 @@ interface InlineTextEditorProps {
 
 /** Marks a line-prefix span (bullet glyph / number) as non-editable content, so text extraction can skip it. */
 const MARKER_ATTR = 'data-text-list-marker'
+
+/** True for a list-marker prefix span — not "real" editable content. Shared predicate so extractEditorText/getCaretPosition/setCaretPosition can never disagree on what to skip. */
+function isMarkerSpan(n: Node): boolean {
+  return n instanceof HTMLElement && n.hasAttribute(MARKER_ATTR)
+}
+
+/**
+ * Depth-first walk over `root`'s descendants, skipping list-marker spans
+ * (and their subtree). `visit` runs on every non-marker node in document
+ * order; returning `true` stops the walk early (used to locate a specific
+ * node/offset). Shared by `getCaretPosition`/`setCaretPosition`/
+ * `locateEditorPosition` so caret math can't drift between them.
+ */
+function walkEditableNodes(root: Node, visit: (n: Node) => boolean | void): boolean {
+  const walk = (n: Node): boolean => {
+    if (isMarkerSpan(n)) return false
+    if (visit(n)) return true
+    for (const child of Array.from(n.childNodes)) {
+      if (walk(child)) return true
+    }
+    return false
+  }
+  return walk(root)
+}
 
 function toCssFontFamily(fontFamily: string): string {
   return fontFamily
@@ -63,15 +94,13 @@ function extractEditorText(root: HTMLElement): string {
       return
     }
     if (!(n instanceof HTMLElement)) return
-    if (n.hasAttribute(MARKER_ATTR)) return // list marker prefix — not real content
+    if (isMarkerSpan(n)) return // list marker prefix — not real content
     if (n.tagName === 'BR') {
       const parent = n.parentElement
       // A marker span (if any) doesn't count as "real" sibling content — the
       // <br> is still the sole content placeholder for an empty list line.
       const realSiblingCount = parent
-        ? Array.from(parent.childNodes).filter(
-            (c) => !(c instanceof HTMLElement && c.hasAttribute(MARKER_ATTR)),
-          ).length
+        ? Array.from(parent.childNodes).filter((c) => !isMarkerSpan(c)).length
         : 0
       const isPlaceholder = parent !== root && realSiblingCount === 1
       if (isPlaceholder) {
@@ -100,24 +129,21 @@ function extractEditorText(root: HTMLElement): string {
 }
 
 /** Minimal font-relevant subset of TextNode needed to measure marker glyph widths. */
-type MeasurableTextNode = Pick<TextNode, 'text' | 'paragraphs' | 'fontFamily' | 'fontSize' | 'fontWeight' | 'fontStyle'>
+type MeasurableTextNode = Pick<
+  TextNode,
+  'text' | 'paragraphs' | 'fontFamily' | 'fontSize' | 'fontWeight' | 'fontStyle' | 'letterSpacing'
+>
 
-let markerMeasureCtx: CanvasRenderingContext2D | null = null
-
-/** Measure each paragraph's marker text width in px (0 for non-list paragraphs), same font as the node. */
+/**
+ * Measure each paragraph's marker text width in px (0 for non-list
+ * paragraphs), same font as the node. Reuses `measureTextWidth` (the same
+ * shared measurement canvas `wrapTextToLines`/`layoutTextParagraphs` use) so
+ * the marker width includes letter-spacing exactly like the Pixi renderer's
+ * `layoutTextParagraphs` — a separate ad hoc measurement here would drift.
+ */
 function measureMarkerWidths(node: MeasurableTextNode): number[] {
-  if (!markerMeasureCtx) {
-    markerMeasureCtx = document.createElement('canvas').getContext('2d')
-  }
-  const ctx = markerMeasureCtx
   const markers = computeParagraphMarkerInfos(node)
-  if (!ctx) return markers.map(() => 0)
-  const style = node.fontStyle ?? 'normal'
-  const weight = node.fontWeight ?? 'normal'
-  const size = node.fontSize ?? 16
-  const family = node.fontFamily ?? 'Arial'
-  ctx.font = `${style} ${weight} ${size}px ${family}`
-  return markers.map((m) => (m ? ctx.measureText(m.text).width : 0))
+  return markers.map((m) => (m ? measureTextWidth(node, m.text) : 0))
 }
 
 /**
@@ -167,13 +193,19 @@ function setEditorText(root: HTMLElement, node: MeasurableTextNode) {
   })
 }
 
-/** Find which paragraph (line div) the caret is in, and the caret's character offset within that paragraph's real text (marker span excluded). Returns null if there's no selection inside `root`. */
-function getCaretPosition(root: HTMLElement): { paragraphIndex: number; offset: number } | null {
-  const sel = window.getSelection()
-  if (!sel || sel.rangeCount === 0) return null
-  const range = sel.getRangeAt(0)
-
-  let lineDiv: Node | null = range.startContainer
+/**
+ * Locate which paragraph (line div) a DOM (container, offset) position falls
+ * in, and its character offset within that paragraph's real text (marker
+ * span excluded). Returns null if `container` isn't inside `root`. Shared by
+ * `getCaretPosition` (collapsed caret) and `getSelectionExtent` (full
+ * selection, which needs both endpoints).
+ */
+function locateEditorPosition(
+  root: HTMLElement,
+  container: Node,
+  containerOffset: number,
+): { paragraphIndex: number; offset: number } | null {
+  let lineDiv: Node | null = container
   while (lineDiv && lineDiv.parentNode !== root) lineDiv = lineDiv.parentNode
   if (!lineDiv || !(lineDiv instanceof HTMLElement)) return null
 
@@ -182,23 +214,47 @@ function getCaretPosition(root: HTMLElement): { paragraphIndex: number; offset: 
 
   let offset = 0
   let found = false
-  const walk = (n: Node) => {
-    if (found) return
-    if (n === range.startContainer) {
-      offset += range.startOffset
+  walkEditableNodes(lineDiv, (n) => {
+    if (n === container) {
+      offset += containerOffset
       found = true
-      return
+      return true
     }
     if (n.nodeType === Node.TEXT_NODE) {
       offset += n.textContent?.length ?? 0
-      return
     }
-    if (n instanceof HTMLElement && n.hasAttribute(MARKER_ATTR)) return
-    n.childNodes.forEach(walk)
-  }
-  walk(lineDiv)
+    return false
+  })
 
   return { paragraphIndex, offset: found ? offset : 0 }
+}
+
+/** Find which paragraph (line div) the caret is in, and the caret's character offset within that paragraph's real text (marker span excluded). Returns null if there's no selection inside `root`. */
+function getCaretPosition(root: HTMLElement): { paragraphIndex: number; offset: number } | null {
+  const sel = window.getSelection()
+  if (!sel || sel.rangeCount === 0) return null
+  const range = sel.getRangeAt(0)
+  return locateEditorPosition(root, range.startContainer, range.startOffset)
+}
+
+/**
+ * Full (possibly non-collapsed) selection as start/end paragraph+offset
+ * positions, in DOM range order (start === anchor-or-focus whichever comes
+ * first). Returns null if there's no selection inside `root`, or if either
+ * endpoint can't be resolved to a paragraph.
+ */
+function getSelectionExtent(root: HTMLElement): {
+  start: { paragraphIndex: number; offset: number }
+  end: { paragraphIndex: number; offset: number }
+  collapsed: boolean
+} | null {
+  const sel = window.getSelection()
+  if (!sel || sel.rangeCount === 0) return null
+  const range = sel.getRangeAt(0)
+  const start = locateEditorPosition(root, range.startContainer, range.startOffset)
+  const end = locateEditorPosition(root, range.endContainer, range.endOffset)
+  if (!start || !end) return null
+  return { start, end, collapsed: range.collapsed }
 }
 
 /** Place the caret at `offset` characters into paragraph `paragraphIndex`'s real text (marker span excluded). */
@@ -210,7 +266,7 @@ function setCaretPosition(root: HTMLElement, paragraphIndex: number, offset: num
   let target: Node = lineDiv
   let targetOffset = 0
 
-  const walk = (n: Node): boolean => {
+  const found = walkEditableNodes(lineDiv, (n) => {
     if (n.nodeType === Node.TEXT_NODE) {
       const len = n.textContent?.length ?? 0
       if (remaining <= len) {
@@ -219,16 +275,10 @@ function setCaretPosition(root: HTMLElement, paragraphIndex: number, offset: num
         return true
       }
       remaining -= len
-      return false
-    }
-    if (n instanceof HTMLElement && n.hasAttribute(MARKER_ATTR)) return false
-    for (const child of Array.from(n.childNodes)) {
-      if (walk(child)) return true
     }
     return false
-  }
+  })
 
-  const found = walk(lineDiv)
   if (!found) {
     target = lineDiv
     targetOffset = lineDiv.childNodes.length
@@ -313,8 +363,20 @@ export function InlineTextEditor({
     [node.id, updateNodeWithoutHistory, onUpdateText],
   )
 
+  // Always resolves `paragraphs` alongside `text` (via the same normalize
+  // helper the discrete list actions use below), rather than omitting it.
+  // Native contentEditable edits that change the line count — backspace
+  // merging two lines, a multi-line paste (there is no onPaste handler, so
+  // pasted newlines fall through to native insertion), a cross-line cut, or
+  // the blur/unmount save path — all go through this single commit path, so
+  // without re-deriving here the paragraphs array would silently desync
+  // (stale length / index-shifted) from the new text.
   const commitText = useCallback(
-    (text: string) => commitTextAndParagraphs(text),
+    (text: string) => {
+      const paragraphs = normalizeParagraphs(currentParagraphsRef.current, splitParagraphs(text).length)
+      currentParagraphsRef.current = paragraphs
+      commitTextAndParagraphs(text, paragraphs)
+    },
     [commitTextAndParagraphs],
   )
 
@@ -354,18 +416,38 @@ export function InlineTextEditor({
   const handleEnterKey = useCallback(() => {
     const el = editorRef.current
     if (!el) return
-    const caret = getCaretPosition(el)
-    if (!caret) return
+    const extent = getSelectionExtent(el)
+    if (!extent) return
 
-    const lines = splitParagraphs(currentTextRef.current)
-    const { paragraphIndex, offset } = caret
+    let lines = splitParagraphs(currentTextRef.current)
+    let paragraphs = currentParagraphsRef.current
+    let paragraphIndex = extent.start.paragraphIndex
+    let offset = extent.start.offset
+
+    if (!extent.collapsed) {
+      // A non-collapsed selection (possibly spanning multiple lines) must be
+      // deleted before splitting, matching native contentEditable Enter
+      // semantics (which replace the selection rather than splitting around
+      // it — plain Enter used to fall through to native behavior pre-lists,
+      // so this preserves that for the common case of selecting text and
+      // pressing Enter to replace it with a line break).
+      const { start, end } = extent
+      const mergedLine =
+        (lines[start.paragraphIndex] ?? '').slice(0, start.offset) +
+        (lines[end.paragraphIndex] ?? '').slice(end.offset)
+      lines = [...lines.slice(0, start.paragraphIndex), mergedLine, ...lines.slice(end.paragraphIndex + 1)]
+      paragraphs = normalizeParagraphs(paragraphs, lines.length)
+      paragraphIndex = start.paragraphIndex
+      offset = start.offset
+    }
+
     const lineText = lines[paragraphIndex] ?? ''
     const before = lineText.slice(0, offset)
     const after = lineText.slice(offset)
     const isEmpty = lineText.trim() === ''
 
     const { paragraphs: updatedParagraphs } = continueListOnEnter(
-      currentParagraphsRef.current,
+      paragraphs,
       lines.length,
       paragraphIndex,
       isEmpty,
@@ -486,10 +568,17 @@ export function InlineTextEditor({
       lastCommittedRef.current = node.text
       return
     }
+    const normalizedIncoming = normalizeParagraphs(node.paragraphs, splitParagraphs(node.text).length)
     if (node.text !== currentTextRef.current) {
       setEditorText(el, node)
       currentTextRef.current = node.text
-      currentParagraphsRef.current = normalizeParagraphs(node.paragraphs, splitParagraphs(node.text).length)
+      currentParagraphsRef.current = normalizedIncoming
+    } else if (JSON.stringify(normalizedIncoming) !== JSON.stringify(currentParagraphsRef.current)) {
+      // Text is unchanged but paragraphs (list formatting) changed externally
+      // (e.g. a properties-panel edit while not focused) — rebuild so markers
+      // reflect it, and keep the ref in sync either way.
+      setEditorText(el, node)
+      currentParagraphsRef.current = normalizedIncoming
     }
     lastCommittedRef.current = node.text
   }, [node])
@@ -510,9 +599,19 @@ export function InlineTextEditor({
       e.preventDefault()
       handleEnterKey()
     } else if (e.key === 'Tab') {
-      // Indent / outdent the current paragraph instead of shifting focus.
-      e.preventDefault()
-      handleTabKey(e.shiftKey ? -1 : 1)
+      // Only hijack Tab to indent/outdent when the current paragraph is
+      // actually part of a list — on plain text, let native Tab behavior
+      // proceed (e.g. blur out of the editor), and never persist an
+      // indentLevel onto a listType: 'none' paragraph.
+      const el = editorRef.current
+      const caret = el ? getCaretPosition(el) : null
+      const attrs = caret
+        ? getParagraphAttrs({ paragraphs: currentParagraphsRef.current }, caret.paragraphIndex)
+        : null
+      if (attrs && attrs.listType !== 'none') {
+        e.preventDefault()
+        handleTabKey(e.shiftKey ? -1 : 1)
+      }
     } else if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.code === 'Digit8' || e.code === 'Digit7')) {
       // Figma parity: Cmd/Ctrl+Shift+8 = bulleted list, +7 = numbered list.
       // `code` (physical key) rather than `key` so it's layout-independent

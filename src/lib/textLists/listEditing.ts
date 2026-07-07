@@ -15,8 +15,10 @@ export interface EnterResult {
  *
  * Figma/Notion parity: pressing Enter on a non-empty list paragraph continues
  * the list (the new paragraph inherits `listType`/`indentLevel`). Pressing
- * Enter on an *empty* list paragraph exits the list instead (clears that
- * paragraph's own list formatting rather than creating another empty bullet).
+ * Enter on an *empty* list paragraph outdents one level and stays in the list
+ * (`exitedList: false`) if it's nested; only a paragraph already at the root
+ * indent level (0) exits the list entirely, clearing its own list formatting
+ * rather than creating another empty bullet.
  */
 export function continueListOnEnter(
   paragraphs: ParagraphAttrs[] | undefined,
@@ -32,6 +34,12 @@ export function continueListOnEnter(
   const next = [...normalized]
 
   if (currentListType !== 'none' && currentParagraphTextIsEmpty) {
+    if (currentIndentLevel > 0) {
+      const outdented = { listType: currentListType, indentLevel: currentIndentLevel - 1 }
+      next[atIndex] = outdented
+      next.splice(atIndex + 1, 0, { ...outdented })
+      return { paragraphs: next, exitedList: false }
+    }
     next[atIndex] = { listType: 'none', indentLevel: 0 }
     next.splice(atIndex + 1, 0, {})
     return { paragraphs: next, exitedList: true }

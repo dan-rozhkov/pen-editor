@@ -38,8 +38,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useTextStyleStore } from "@/store/textStyleStore";
 import { TEXT_STYLE_PROPERTY_KEYS } from "@/types/textStyle";
-import { getParagraphAttrs, splitParagraphs } from "@/lib/textLists/paragraphs";
-import { changeIndentLevel, toggleListType } from "@/lib/textLists/listEditing";
+import { MAX_INDENT_LEVEL, getParagraphAttrs, normalizeParagraphs, splitParagraphs } from "@/lib/textLists/paragraphs";
+import { toggleListType } from "@/lib/textLists/listEditing";
 
 interface TypographySectionProps {
   node: TextNode;
@@ -210,10 +210,14 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
   };
 
   const applyIndent = (direction: 1 | -1) => {
-    let updated = node.paragraphs ? node.paragraphs.map((p) => ({ ...p })) : [];
-    for (let i = 0; i < paragraphCount; i++) {
-      updated = changeIndentLevel(updated, paragraphCount, i, direction);
-    }
+    // Normalize once, then map every paragraph's indentLevel directly (same
+    // clamp `changeIndentLevel` applies to a single paragraph) instead of
+    // calling changeIndentLevel per paragraph — that re-normalized the whole
+    // (already-normalized) array on every iteration, O(n^2) for n paragraphs.
+    const updated = normalizeParagraphs(node.paragraphs, paragraphCount).map((p) => ({
+      ...p,
+      indentLevel: Math.max(0, Math.min(MAX_INDENT_LEVEL, (p.indentLevel ?? 0) + direction)),
+    }));
     onUpdate({ paragraphs: updated } as Partial<SceneNode>);
   };
 

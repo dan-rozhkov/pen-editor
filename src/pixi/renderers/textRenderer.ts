@@ -70,11 +70,44 @@ export function updateTextContainer(
   const nodeIsList = hasActiveList(node);
   const wasList = container.getChildByLabel(LIST_ROOT_LABEL) != null;
 
-  // Mode transition (plain <-> list) or any update while in list mode: list
-  // layout depends on many interacting fields (markers, wrapping, indent) in
-  // a way that isn't worth diffing incrementally like the plain path below —
-  // list text edits aren't a per-frame hot path, so a full rebuild is fine.
+  // Mode transition (plain <-> list): list layout depends on many interacting
+  // fields (markers, wrapping, indent) in a way that isn't worth diffing
+  // incrementally like the plain path below, so a full rebuild is fine here.
+  // While staying in list mode, though, this runs on *every* node-object
+  // change — including position-only drag ticks and every resize tick — so it
+  // must be gated the same way the plain path gates its own rebuild/restyle
+  // below: only rebuild when a field that actually affects list layout or
+  // appearance changed (text/paragraphs, wrap width, font/style, alignment,
+  // color, decorations). x/y-only updates must skip entirely.
   if (nodeIsList || wasList) {
+    const modeChanged = nodeIsList !== wasList;
+    const listContentChanged =
+      modeChanged ||
+      node.text !== prev.text ||
+      node.paragraphs !== prev.paragraphs ||
+      node.textTransform !== prev.textTransform ||
+      node.textWidthMode !== prev.textWidthMode ||
+      node.width !== prev.width ||
+      node.height !== prev.height ||
+      node.fontSize !== prev.fontSize ||
+      node.fontFamily !== prev.fontFamily ||
+      node.fontWeight !== prev.fontWeight ||
+      node.fontStyle !== prev.fontStyle ||
+      node.letterSpacing !== prev.letterSpacing ||
+      node.lineHeight !== prev.lineHeight ||
+      node.truncateText !== prev.truncateText ||
+      node.maxLines !== prev.maxLines ||
+      node.textAlign !== prev.textAlign ||
+      node.textAlignVertical !== prev.textAlignVertical ||
+      node.underline !== prev.underline ||
+      node.strikethrough !== prev.strikethrough ||
+      node.fill !== prev.fill ||
+      node.fillBinding !== prev.fillBinding ||
+      node.fillOpacity !== prev.fillOpacity ||
+      node.fills !== prev.fills;
+
+    if (!listContentChanged) return;
+
     for (const child of [...container.children]) {
       container.removeChild(child);
       child.destroy();

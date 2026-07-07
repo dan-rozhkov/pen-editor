@@ -3,8 +3,22 @@ import type {
   GroupNode,
   SceneNode,
   RefNode,
+  TextNode,
 } from "@/types/scene";
 import { generateId } from "@/types/scene";
+
+/**
+ * A shallow `{...node}` spread copies the object but not its array-typed
+ * fields, so a cloned text node would still share its `paragraphs` array
+ * reference with the original — mutating one (e.g. via the inline editor)
+ * would silently mutate the other. Copy the array so clones are independent.
+ */
+function withClonedParagraphs<T extends SceneNode>(clone: T): T {
+  if (clone.type === "text" && (clone as TextNode).paragraphs) {
+    return { ...clone, paragraphs: [...(clone as TextNode).paragraphs!] };
+  }
+  return clone;
+}
 
 /** Deep clone a node tree preserving original IDs (for slot content) */
 export function deepCloneNode(node: SceneNode): SceneNode {
@@ -22,7 +36,7 @@ export function deepCloneNode(node: SceneNode): SceneNode {
     } as GroupNode;
   }
 
-  return { ...node } as SceneNode;
+  return withClonedParagraphs({ ...node } as SceneNode);
 }
 
 export function cloneNodeWithNewId(
@@ -88,5 +102,5 @@ export function cloneNodeWithNewId(
     x: node.x + offset,
     y: node.y + offset,
   } as SceneNode;
-  return cloned;
+  return withClonedParagraphs(cloned);
 }
