@@ -102,6 +102,9 @@ interface PenBaseNode {
   reusable?: boolean;
   theme?: PenTheme;
   shader?: ShaderConfig;
+  // Figma-style layer mask: clips siblings rendered above this node within
+  // the same parent. See `BaseNode.isMask` in `@/types/scene`.
+  isMask?: boolean;
   // Min/max clamps applied to the resolved width/height inside an auto-layout
   // parent, regardless of sizing mode.
   minWidth?: number;
@@ -483,6 +486,7 @@ function exportNodeBase(node: SceneNode, context: ExportContext, parentUsesLayou
       ? { theme: { [THEME_AXIS]: node.themeOverride } }
       : {}),
     ...(node.shader ? { shader: node.shader } : {}),
+    ...(node.isMask ? { isMask: true } : {}),
     ...(node.sizing?.minWidth != null ? { minWidth: node.sizing.minWidth } : {}),
     ...(node.sizing?.maxWidth != null ? { maxWidth: node.sizing.maxWidth } : {}),
     ...(node.sizing?.minHeight != null ? { minHeight: node.sizing.minHeight } : {}),

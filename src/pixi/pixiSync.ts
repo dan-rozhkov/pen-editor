@@ -7,6 +7,7 @@ import { useSelectionStore } from "@/store/selectionStore";
 import type { FlatSceneNode } from "@/types/scene";
 import { isFlatFrameNode, isRefNode, isConnectorNode } from "@/types/scene";
 import { updateNodeContainer } from "./renderers";
+import { applySiblingMasks } from "./renderers/maskHelpers";
 import { requestCanvasRender } from "./renderScheduler";
 import {
   type RegistryEntry,
@@ -271,6 +272,11 @@ export function createPixiSync(sceneRoot: Container): () => void {
       }
     }
 
+    // Nodes whose isMask flag flipped without a children-order change (that
+    // path is covered by reconcileChildren below) — their parent's sibling
+    // masking must be re-resolved once all container updates below have run.
+    const maskDirtyParentIds = new Set<string>();
+
     // Handle updated nodes (reference equality check)
     for (const id of Object.keys(state.nodesById)) {
       const node = state.nodesById[id];
@@ -278,6 +284,10 @@ export function createPixiSync(sceneRoot: Container): () => void {
       if (node && prevNode && node !== prevNode) {
         const entry = registry.get(id);
         if (entry) {
+          if (node.isMask !== prevNode.isMask) {
+            const parentId = state.parentById[id];
+            if (parentId) maskDirtyParentIds.add(parentId);
+          }
           // Check if node is inside auto-layout frame
           const parentId = state.parentById[id];
           const parentNode = parentId ? state.nodesById[parentId] : null;
@@ -398,6 +408,29 @@ export function createPixiSync(sceneRoot: Container): () => void {
     // Handle structural changes (children order, parent changes)
     if (state.childrenById !== prev.childrenById || state.rootIds !== prev.rootIds) {
       nodeTreeMgr.reconcileChildren(state, prev);
+      // Any host whose children list changed already had its masking
+      // re-resolved inside reconcileChildren — skip it here.
+      for (const id of Object.keys(state.childrenById)) {
+        if (state.childrenById[id] !== prev.childrenById[id]) {
+          maskDirtyParentIds.delete(id);
+        }
+      }
+    }
+
+    // Re-resolve sibling masking for any parent whose child's isMask flag
+    // toggled in place (no children-order change to trigger reconcileChildren).
+    for (const parentId of maskDirtyParentIds) {
+      const parentEntry = registry.get(parentId);
+      if (!parentEntry) continue;
+      const childrenHost =
+        parentEntry.container.getChildByLabel("frame-children") ??
+        parentEntry.container.getChildByLabel("group-children");
+      if (!childrenHost) continue;
+      applySiblingMasks(
+        state.childrenById[parentId] ?? [],
+        state.nodesById,
+        (id) => childrenHost.getChildByLabel(id),
+      );
     }
 
     // Reapply only affected auto-layout frame chains.

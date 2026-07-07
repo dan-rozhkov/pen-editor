@@ -138,6 +138,15 @@ export function AppearanceSection({
           />
         )}
       </PropertyRow>
+      {node.type !== "connector" && (
+        <PropertyRow>
+          <CheckboxInput
+            label="Use as mask"
+            checked={node.isMask === true}
+            onChange={(checked) => onUpdate({ isMask: checked } as Partial<SceneNode>)}
+          />
+        </PropertyRow>
+      )}
       {node.type === "polygon" && (
         <PropertyRow>
           <CheckboxInput

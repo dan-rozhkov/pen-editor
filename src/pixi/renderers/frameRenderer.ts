@@ -18,6 +18,7 @@ import { applyImageFills } from "./imageFillHelpers";
 import { pushRenderTheme, popRenderTheme } from "./colorHelpers";
 import { createNodeContainer, isInsideRef } from "./index";
 import { drawLayoutGrids } from "./layoutGridRenderer";
+import { applySiblingMasks } from "./maskHelpers";
 
 /** Container with the frame's effective (fit_content-resolved) size attached */
 type FrameContainer = Container & {
@@ -149,9 +150,9 @@ export function createFrameContainer(
   if (node.themeOverride) {
     pushRenderTheme(node.themeOverride);
   }
+  const childIds = childrenById[node.id] ?? [];
   try {
     // Render children
-    const childIds = childrenById[node.id] ?? [];
     for (const childId of childIds) {
       const childNode = nodesById[childId];
       if (childNode) {
@@ -168,6 +169,11 @@ export function createFrameContainer(
       popRenderTheme();
     }
   }
+
+  // Figma-style sibling masking (a node with isMask clips siblings above it).
+  applySiblingMasks(childIds, nodesById, (id) =>
+    childrenContainer.getChildByLabel(id),
+  );
 
   // Layout grid overlay (rendered above children)
   if (node.layoutGrids?.length) {

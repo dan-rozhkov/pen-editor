@@ -261,6 +261,26 @@ export interface BaseNode {
    * left/top edge, fixed size) — matching pre-constraints behavior.
    */
   constraints?: NodeConstraints
+  /**
+   * Figma-style layer mask. When `true`, this node clips its siblings that
+   * render ABOVE it (later in the parent's children order — z-order is
+   * bottom-to-top by array index, see `flattenTree`/`childrenById`) within the
+   * same parent, up to (but not including) the next masking sibling or the
+   * end of the list. The masker itself is not rendered as normal content —
+   * only its shape/alpha is used to clip.
+   *
+   * Mode is inferred from the node, not stored separately (minimum viable
+   * per the Figma-parity spec: vector + alpha, no luminance mode yet):
+   * - "vector": shape nodes (rect/ellipse/path/polygon/...) clip by their
+   *   geometric outline (hard edges).
+   * - "alpha": text nodes, or any node with an image paint. SVG export
+   *   (`designToSvg`) renders these with a true luminance/alpha `<mask>`, but
+   *   the live PixiJS canvas currently clips them to the same bounding shape
+   *   as "vector" — real per-pixel transparency isn't respected there yet
+   *   (see `pixi/renderers/maskHelpers.ts`).
+   * See `@/lib/masks/maskResolution` for the pure resolution logic.
+   */
+  isMask?: boolean
 }
 
 /** Per-axis constraint mode (Figma parity). */

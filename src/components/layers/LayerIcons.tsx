@@ -15,6 +15,7 @@ import {
   HashStraight,
   CodeIcon,
   FlowArrow,
+  ScissorsIcon,
 } from "@phosphor-icons/react";
 import clsx from "clsx";
 import type { SceneNode, LayoutProperties } from "../../types/scene";
@@ -106,14 +107,28 @@ export const NodeIcon = ({
   type,
   isComponent,
   isSlot,
+  isMask,
   layout,
 }: {
   type: SceneNode["type"];
   isComponent?: boolean;
   isSlot?: boolean;
+  isMask?: boolean;
   layout?: LayoutProperties;
 }) => {
   const iconClass = clsx("w-4 h-4 shrink-0", "text-text-muted");
+
+  // Figma-style mask indicator: overrides the type icon so masking layers
+  // (of any node type) are immediately recognizable in the layers panel.
+  if (isMask) {
+    return (
+      <ScissorsIcon
+        size={16}
+        className={clsx("w-4 h-4 shrink-0 text-accent-bright")}
+        weight="regular"
+      />
+    );
+  }
 
   switch (type) {
     case "frame":

@@ -295,6 +295,36 @@ describe("<AppearanceSection />", () => {
     expect(screen.queryByText("Smoothing %")).toBeNull();
   });
 
+  it("renders an unchecked 'Use as mask' checkbox by default", () => {
+    render(<AppearanceSection node={makeNode()} onUpdate={vi.fn()} />);
+    const checkbox = screen.getByLabelText("Use as mask") as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
+  });
+
+  it("renders 'Use as mask' as checked when node.isMask is true", () => {
+    render(
+      <AppearanceSection node={makeNode({ isMask: true } as Partial<SceneNode>)} onUpdate={vi.fn()} />,
+    );
+    const checkbox = screen.getByLabelText("Use as mask") as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+  });
+
+  it("toggles isMask on via the 'Use as mask' checkbox", () => {
+    const onUpdate = vi.fn();
+    render(<AppearanceSection node={makeNode()} onUpdate={onUpdate} />);
+    fireEvent.click(screen.getByLabelText("Use as mask"));
+    expect(onUpdate).toHaveBeenCalledWith({ isMask: true });
+  });
+
+  it("toggles isMask off via the 'Use as mask' checkbox", () => {
+    const onUpdate = vi.fn();
+    render(
+      <AppearanceSection node={makeNode({ isMask: true } as Partial<SceneNode>)} onUpdate={onUpdate} />,
+    );
+    fireEvent.click(screen.getByLabelText("Use as mask"));
+    expect(onUpdate).toHaveBeenCalledWith({ isMask: false });
+  });
+
   it("marks opacity as Mixed when listed in mixedKeys", () => {
     render(
       <AppearanceSection

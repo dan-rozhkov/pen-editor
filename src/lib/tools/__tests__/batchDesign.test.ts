@@ -50,6 +50,23 @@ describe("batch_design", () => {
       });
     });
 
+    it("creates a masked group (masker shape + masked sibling)", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'g=I(document, {type: "frame", name: "Masked", width: 100, height: 100, children: [{type: "ellipse", name: "MaskShape", width: 100, height: 100, isMask: true}, {type: "rectangle", name: "Content", width: 100, height: 100, fill: "#ff00ff"}]})',
+        })
+      );
+      expect(result.success).toBe(true);
+
+      const groupId = result.createdNodes[0].id;
+      const { nodesById, childrenById } = sceneState();
+      const childIds = childrenById[groupId];
+      expect(childIds).toHaveLength(2);
+      expect(nodesById[childIds[0]].isMask).toBe(true);
+      expect(nodesById[childIds[1]].isMask).toBeFalsy();
+    });
+
     it("maps the MCP type 'rectangle' to internal 'rect'", async () => {
       const result = JSON.parse(
         await batchDesign({
@@ -582,6 +599,23 @@ describe("batch_design", () => {
       expect(node.x).toBe(50);
       // Untouched properties survive
       expect(node.width).toBe(200);
+    });
+
+    it("sets isMask on an existing node (layer mask flag)", async () => {
+      const result = JSON.parse(
+        await batchDesign({ operations: "U(rect2, {isMask: true})" })
+      );
+      expect(result.success).toBe(true);
+      expect(sceneState().nodesById["rect2"].isMask).toBe(true);
+    });
+
+    it("unsets isMask on an existing node", async () => {
+      await batchDesign({ operations: "U(rect2, {isMask: true})" });
+      const result = JSON.parse(
+        await batchDesign({ operations: "U(rect2, {isMask: false})" })
+      );
+      expect(result.success).toBe(true);
+      expect(sceneState().nodesById["rect2"].isMask).toBe(false);
     });
 
     it("merges layout updates into the existing layout object", async () => {

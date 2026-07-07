@@ -256,6 +256,7 @@ export const LayerItem = memo(function LayerItem({
               (node as FrameNode).reusable === true
             }
             isSlot={node.type === "frame" && (node as FrameNode).isSlot === true}
+            isMask={node.isMask === true}
             layout={
               node.type === "frame" ? (node as FrameNode).layout : undefined
             }

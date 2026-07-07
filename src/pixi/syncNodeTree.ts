@@ -3,6 +3,7 @@ import { useSelectionStore } from "@/store/selectionStore";
 import type { FlatSceneNode } from "@/types/scene";
 import type { SceneState } from "@/store/sceneStore";
 import { createNodeContainer } from "./renderers";
+import { applySiblingMasks } from "./renderers/maskHelpers";
 import { withAncestorThemes, type SyncContext } from "./syncHelpers";
 
 export function createNodeTreeManager(
@@ -141,6 +142,13 @@ export function createNodeTreeManager(
           parentEntry.container.getChildByLabel("group-children");
         if (childrenHost) {
           childrenHost.addChild(createdContainer);
+          // A new sibling can shift masking (become a masker, or land inside/
+          // outside an existing masked run) — re-resolve the whole host.
+          applySiblingMasks(
+            state.childrenById[parentId] ?? [],
+            state.nodesById,
+            (siblingId) => childrenHost.getChildByLabel(siblingId),
+          );
         }
       }
     } else {
@@ -193,7 +201,7 @@ export function createNodeTreeManager(
   function reconcileChildren(state: SceneState, prev: SceneState): void {
     // Reconcile root level
     if (state.rootIds !== prev.rootIds) {
-      reconcileChildList(state.rootIds, sceneRoot);
+      reconcileChildList(state.rootIds, sceneRoot, state.nodesById);
     }
 
     // Reconcile changed parent containers
@@ -208,6 +216,7 @@ export function createNodeTreeManager(
             reconcileChildList(
               state.childrenById[id],
               childrenHost,
+              state.nodesById,
             );
           }
         }
@@ -218,6 +227,7 @@ export function createNodeTreeManager(
   function reconcileChildList(
     expectedIds: string[],
     parent: Container,
+    nodesById: Record<string, FlatSceneNode>,
   ): void {
     const expectedContainers = new Set<Container>();
     for (let i = 0; i < expectedIds.length; i++) {
@@ -265,6 +275,9 @@ export function createNodeTreeManager(
         }
       }
     }
+
+    // Reorders/inserts/removals can all shift masking — re-resolve the host.
+    applySiblingMasks(expectedIds, nodesById, (id) => parent.getChildByLabel(id));
   }
 
   function subtreeHasRegisteredContainer(

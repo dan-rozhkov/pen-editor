@@ -100,3 +100,17 @@ describe("publicPenExport cornerSmoothing", () => {
     expect(doc.children[0].cornerSmoothing).toBeUndefined();
   });
 });
+
+describe("publicPenExport isMask", () => {
+  it("exports isMask: true when set", () => {
+    const node = baseRect({ isMask: true });
+    const doc = exportNodes([node]);
+    expect(doc.children[0].isMask).toBe(true);
+  });
+
+  it("omits isMask when unset", () => {
+    const node = baseRect({});
+    const doc = exportNodes([node]);
+    expect(doc.children[0].isMask).toBeUndefined();
+  });
+});

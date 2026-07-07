@@ -1,6 +1,7 @@
 import { Container } from "pixi.js";
 import type { FlatSceneNode, FlatGroupNode } from "@/types/scene";
 import { createNodeContainer } from "./index";
+import { applySiblingMasks } from "./maskHelpers";
 
 export function createGroupContainer(
   node: FlatGroupNode,
@@ -27,6 +28,11 @@ export function createGroupContainer(
       childrenContainer.addChild(childContainer);
     }
   }
+
+  // Figma-style sibling masking (a node with isMask clips siblings above it).
+  applySiblingMasks(childIds, nodesById, (id) =>
+    childrenContainer.getChildByLabel(id),
+  );
 
   return container;
 }

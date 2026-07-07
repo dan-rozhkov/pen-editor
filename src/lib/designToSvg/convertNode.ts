@@ -13,6 +13,7 @@ import type {
 import { applyOpacity } from "@/utils/colorUtils";
 import { getPrimarySolidPaint } from "@/utils/fillUtils";
 import { pointsAttr } from "@/utils/lineCapUtils";
+import { resolveMasking } from "@/lib/masks/maskResolution";
 import { buildEllipseArcGeometry, ellipseArcGeometryToSvgPath, hasCustomEllipseArc } from "@/lib/shapePath/ellipseArc";
 import {
   buildCapMarker,
@@ -131,6 +132,53 @@ function buildClipPathForFrame(node: FlatFrameNode, ctx: SvgConversionContext): 
   return id;
 }
 
+/**
+ * Build an SVG `<mask>` def from a masker node's own rendered markup and
+ * register it in `ctx.defs`. SVG masks are luminance-alpha by default, which
+ * conveniently covers both mask modes with one mechanism: a solid-fill
+ * vector shape (rect/ellipse/path/polygon) masks with hard, opaque-white
+ * edges, while a text or image node masks by its own rendered
+ * alpha/luminance — matching `getMaskMode` in `@/lib/masks/maskResolution`
+ * without needing separate code paths.
+ */
+function buildMaskDef(maskerId: string, ctx: SvgConversionContext): string {
+  const id = nextSvgId("mask");
+  const markup = convertNodeToSvg(maskerId, ctx, false);
+  ctx.defs.push(`<mask id="${id}">${markup}</mask>`);
+  return id;
+}
+
+/**
+ * Render a container's children applying Figma-style sibling masking (see
+ * `resolveMasking`): a masker node is not rendered as normal content (only
+ * used to build its `<mask>` def), and every sibling it clips is wrapped in
+ * `<g mask="url(#...)">`. Siblings covered by the same masker share one
+ * `<mask>` def.
+ */
+function convertChildrenWithMasking(childIds: string[], ctx: SvgConversionContext): string {
+  const { maskerIdBySiblingId, maskerIds } = resolveMasking(childIds, ctx.nodesById);
+  const maskDefIdByMaskerId = new Map<string, string>();
+  const parts: string[] = [];
+
+  for (const childId of childIds) {
+    if (maskerIds.has(childId)) continue;
+    const svg = convertNodeToSvg(childId, ctx, false);
+    const maskerId = maskerIdBySiblingId.get(childId);
+    if (!maskerId) {
+      parts.push(svg);
+      continue;
+    }
+    let maskDefId = maskDefIdByMaskerId.get(maskerId);
+    if (!maskDefId) {
+      maskDefId = buildMaskDef(maskerId, ctx);
+      maskDefIdByMaskerId.set(maskerId, maskDefId);
+    }
+    parts.push(`<g mask="url(#${maskDefId})">${svg}</g>`);
+  }
+
+  return parts.join("");
+}
+
 function convertFrameToSvg(
   node: FlatFrameNode,
   nodeId: string,
@@ -141,7 +189,7 @@ function convertFrameToSvg(
   const attrs = commonGroupAttrs(node, filterId, isRoot);
   const background = renderRectLikeShape(node, ctx);
   const childIds = ctx.childrenById[nodeId] ?? [];
-  const childrenSvg = childIds.map((childId) => convertNodeToSvg(childId, ctx, false)).join("");
+  const childrenSvg = convertChildrenWithMasking(childIds, ctx);
   const clipAttr = node.clip ? ` clip-path="url(#${buildClipPathForFrame(node, ctx)})"` : "";
   return `<g ${attrs}${clipAttr}>${background}${childrenSvg}</g>`;
 }
@@ -154,7 +202,7 @@ function convertGroupToSvg(
 ): string {
   const attrs = commonGroupAttrs(node, null, isRoot);
   const childIds = ctx.childrenById[nodeId] ?? [];
-  const childrenSvg = childIds.map((childId) => convertNodeToSvg(childId, ctx, false)).join("");
+  const childrenSvg = convertChildrenWithMasking(childIds, ctx);
   let clipAttr = "";
   if (node.clipGeometry) {
     const id = nextSvgId("clip");

@@ -481,6 +481,56 @@ describe("convertDesignNodesToSvg", () => {
     expect(svg).toContain("M0 0 L50 0 L25 50 Z");
   });
 
+  describe("layer masks", () => {
+    it("wraps a masked sibling in <g mask=...> and builds a <mask> def from the masker", () => {
+      const nodesById: Record<string, FlatSceneNode> = {
+        frame1: frame("frame1"),
+        maskShape: ellipse("maskShape", { x: 0, y: 0, width: 40, height: 40, isMask: true }),
+        picture: rect("picture", { x: 0, y: 0, width: 100, height: 50, fill: "#00ff00" }),
+      };
+      const childrenById = { frame1: ["maskShape", "picture"] };
+
+      const { svg, warnings } = convertDesignNodesToSvg("frame1", nodesById, childrenById);
+
+      expect(warnings).toEqual([]);
+      // The masker itself is not rendered as normal (unmasked) content.
+      expect(svg).not.toMatch(/<g[^>]*>(?!.*mask=)[^<]*<ellipse/);
+      expect(svg).toContain("<mask id=");
+      expect(svg).toContain("<ellipse");
+      expect(svg).toMatch(/<g mask="url\(#pen-svg-mask-\d+\)">.*<rect/);
+      expect(svg).toContain('fill="#00ff00"');
+    });
+
+    it("does not mask a sibling that renders below the masker", () => {
+      const nodesById: Record<string, FlatSceneNode> = {
+        frame1: frame("frame1"),
+        below: rect("below", { fill: "#111111" }),
+        maskShape: rect("maskShape", { isMask: true }),
+      };
+      const childrenById = { frame1: ["below", "maskShape"] };
+
+      const { svg } = convertDesignNodesToSvg("frame1", nodesById, childrenById);
+      expect(svg).not.toContain("mask=\"url(#");
+      expect(svg).toContain('fill="#111111"');
+    });
+
+    it("shares one <mask> def across every sibling covered by the same masker", () => {
+      const nodesById: Record<string, FlatSceneNode> = {
+        frame1: frame("frame1"),
+        maskShape: rect("maskShape", { isMask: true }),
+        a: rect("a", { fill: "#111111" }),
+        b: rect("b", { fill: "#222222" }),
+      };
+      const childrenById = { frame1: ["maskShape", "a", "b"] };
+
+      const { svg } = convertDesignNodesToSvg("frame1", nodesById, childrenById);
+      const maskDefCount = (svg.match(/<mask id=/g) ?? []).length;
+      expect(maskDefCount).toBe(1);
+      const maskRefCount = (svg.match(/mask="url\(#pen-svg-mask-\d+\)"/g) ?? []).length;
+      expect(maskRefCount).toBe(2);
+    });
+  });
+
   it("matches the project's seed-scene fixture (frame1 with rect1 + text1)", () => {
     useSceneStore.getState();
     seedScene();
