@@ -8,7 +8,9 @@ import type {
   FlatGroupNode,
   FlatSceneNode,
   GradientFill,
+  LineNode,
   Paint,
+  PolygonNode,
   RectNode,
   TextNode,
 } from "@/types/scene";
@@ -60,6 +62,35 @@ function text(id: string, extra: Partial<TextNode> = {}): TextNode {
     text: "Hello",
     ...extra,
   } as TextNode;
+}
+
+function line(id: string, extra: Partial<LineNode> = {}): LineNode {
+  return {
+    id,
+    type: "line",
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 0,
+    points: [0, 0, 100, 0],
+    stroke: "#000000",
+    strokeWidth: 2,
+    ...extra,
+  } as LineNode;
+}
+
+function polygon(id: string, extra: Partial<PolygonNode> = {}): PolygonNode {
+  return {
+    id,
+    type: "polygon",
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 100,
+    points: [50, 0, 100, 100, 0, 100],
+    fill: "#0000ff",
+    ...extra,
+  } as PolygonNode;
 }
 
 describe("convertDesignNodesToSvg", () => {
@@ -183,6 +214,71 @@ describe("convertDesignNodesToSvg", () => {
     expect(svg).toContain("<ellipse");
     expect(svg).toContain('cx="20" cy="20" rx="20" ry="20"');
     expect(svg).toContain('fill="#00ff00"');
+  });
+
+  it("renders a plain ellipse as <ellipse> even with explicit default arc params", () => {
+    const nodesById: Record<string, FlatSceneNode> = {
+      ellipse1: ellipse("ellipse1", { startAngle: 0, sweepAngle: 360, innerRadiusRatio: 0 }),
+    };
+    const { svg } = convertDesignNodesToSvg("ellipse1", nodesById, {});
+    expect(svg).toContain("<ellipse");
+  });
+
+  it("renders a pie slice (partial sweep, no hole) as a single <path>", () => {
+    const nodesById: Record<string, FlatSceneNode> = {
+      ellipse1: ellipse("ellipse1", { fill: "#00ff00", sweepAngle: 90 }),
+    };
+    const { svg } = convertDesignNodesToSvg("ellipse1", nodesById, {});
+    expect(svg).not.toContain("<ellipse");
+    expect(svg).toContain("<path");
+    // Single M...Z subpath.
+    expect(svg.match(/M/g)?.length).toBe(1);
+  });
+
+  it("renders a full donut as a <path> with two M...Z subpaths (hole via winding)", () => {
+    const nodesById: Record<string, FlatSceneNode> = {
+      ellipse1: ellipse("ellipse1", { fill: "#00ff00", innerRadiusRatio: 0.5 }),
+    };
+    const { svg } = convertDesignNodesToSvg("ellipse1", nodesById, {});
+    expect(svg).toContain("<path");
+    expect(svg.match(/M/g)?.length).toBe(2);
+  });
+
+  it("renders a star polygon using its explicit points (no special-casing needed)", () => {
+    const nodesById: Record<string, FlatSceneNode> = {
+      star1: polygon("star1", {
+        sides: 5,
+        innerRadiusRatio: 0.5,
+        points: [50, 0, 60, 40, 100, 40, 70, 65, 80, 100, 50, 80, 20, 100, 30, 65, 0, 40, 40, 40],
+      }),
+    };
+    const { svg } = convertDesignNodesToSvg("star1", nodesById, {});
+    expect(svg).toContain("<polygon");
+    expect(svg).toContain('points="50,0 60,40 100,40');
+  });
+
+  it("renders a line with no markers when caps are unset", () => {
+    const nodesById: Record<string, FlatSceneNode> = { line1: line("line1") };
+    const { svg } = convertDesignNodesToSvg("line1", nodesById, {});
+    expect(svg).toContain("<line");
+    expect(svg).not.toContain("marker-start");
+    expect(svg).not.toContain("marker-end");
+    expect(svg).not.toContain("<marker");
+  });
+
+  it("adds marker-start/marker-end defs for line arrowhead caps", () => {
+    const nodesById: Record<string, FlatSceneNode> = {
+      line1: line("line1", { startCap: "circle", endCap: "triangle" }),
+    };
+    const { svg } = convertDesignNodesToSvg("line1", nodesById, {});
+    expect(svg).toContain("marker-start=");
+    expect(svg).toContain("marker-end=");
+    expect(svg.match(/<marker/g)?.length).toBe(2);
+    expect(svg).toContain("<circle");
+    expect(svg).toContain("<polygon");
+    // Start marker auto-reverses, end marker just auto-orients.
+    expect(svg).toContain('orient="auto-start-reverse"');
+    expect(svg).toContain('orient="auto"');
   });
 
   it("builds a per-corner rounded rect as a <path> when radii differ", () => {

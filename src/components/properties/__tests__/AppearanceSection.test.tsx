@@ -160,6 +160,88 @@ describe("<AppearanceSection />", () => {
     expect(Array.isArray(arg.points)).toBe(true);
   });
 
+  it("shows a Points label instead of Sides once the node is a star", () => {
+    render(
+      <AppearanceSection
+        node={makeNode({ type: "polygon", sides: 5, innerRadiusRatio: 0.5 } as Partial<SceneNode>)}
+        onUpdate={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Points")).toBeTruthy();
+    expect(screen.queryByText("Sides")).toBeNull();
+  });
+
+  it("toggles a polygon into a star, defaulting innerRadiusRatio to 0.5", () => {
+    const onUpdate = vi.fn();
+    const node = makeNode({ type: "polygon", sides: 5 } as Partial<SceneNode>);
+    render(<AppearanceSection node={node} onUpdate={onUpdate} />);
+
+    fireEvent.click(screen.getByLabelText("Star"));
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    const arg = onUpdate.mock.calls[0][0] as { innerRadiusRatio: number; points: number[] };
+    expect(arg.innerRadiusRatio).toBe(0.5);
+    expect(arg.points).toHaveLength(20); // 5 rays -> 10 vertices
+  });
+
+  it("toggles a star back to a plain polygon, clearing innerRadiusRatio", () => {
+    const onUpdate = vi.fn();
+    const node = makeNode({ type: "polygon", sides: 5, innerRadiusRatio: 0.5 } as Partial<SceneNode>);
+    render(<AppearanceSection node={node} onUpdate={onUpdate} />);
+
+    fireEvent.click(screen.getByLabelText("Star"));
+
+    const arg = onUpdate.mock.calls[0][0] as { innerRadiusRatio: number | undefined; points: number[] };
+    expect(arg.innerRadiusRatio).toBeUndefined();
+    expect(arg.points).toHaveLength(10); // 5 sides -> 5 vertices
+  });
+
+  it("edits a star's ratio, regenerating points", () => {
+    const onUpdate = vi.fn();
+    const node = makeNode({ type: "polygon", sides: 5, innerRadiusRatio: 0.5 } as Partial<SceneNode>);
+    render(<AppearanceSection node={node} onUpdate={onUpdate} />);
+
+    // [opacity, points, ratio]
+    const spinbuttons = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    fireEvent.change(spinbuttons[2], { target: { value: "30" } });
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    const arg = onUpdate.mock.calls[0][0] as { innerRadiusRatio: number };
+    expect(arg.innerRadiusRatio).toBeCloseTo(0.3);
+  });
+
+  it("shows ellipse arc controls (Start/Sweep/Ratio) for an ellipse node", () => {
+    render(
+      <AppearanceSection
+        node={makeNode({ type: "ellipse", startAngle: 10, sweepAngle: 270, innerRadiusRatio: 0.4 } as Partial<SceneNode>)}
+        onUpdate={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Start °")).toBeTruthy();
+    expect(screen.getByText("Sweep °")).toBeTruthy();
+    // [opacity, start, sweep, ratio]
+    const spinbuttons = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    expect(spinbuttons[1].value).toBe("10");
+    expect(spinbuttons[2].value).toBe("270");
+    expect(spinbuttons[3].value).toBe("40");
+  });
+
+  it("defaults ellipse Sweep to 360 and Ratio to 0", () => {
+    render(<AppearanceSection node={makeNode({ type: "ellipse" } as Partial<SceneNode>)} onUpdate={vi.fn()} />);
+    const spinbuttons = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    expect(spinbuttons[1].value).toBe("0");
+    expect(spinbuttons[2].value).toBe("360");
+    expect(spinbuttons[3].value).toBe("0");
+  });
+
+  it("updates ellipse sweepAngle, clamped to [-360, 360]", () => {
+    const onUpdate = vi.fn();
+    render(<AppearanceSection node={makeNode({ type: "ellipse" } as Partial<SceneNode>)} onUpdate={onUpdate} />);
+    const spinbuttons = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    fireEvent.change(spinbuttons[2], { target: { value: "500" } });
+    expect(onUpdate).toHaveBeenCalledWith({ sweepAngle: 360 });
+  });
+
   it("respects allTypesSupport.cornerRadius=false for mixed selections", () => {
     render(
       <AppearanceSection

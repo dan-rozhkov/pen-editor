@@ -5,6 +5,7 @@ import {
   NavigationArrowIcon,
   LineSegmentIcon,
   HexagonIcon,
+  StarIcon,
   HashStraight,
   PencilSimple,
   PenNibIcon,
@@ -72,6 +73,7 @@ export function PrimitivesPanel() {
     { icon: CircleIcon, label: "Ellipse", tool: "ellipse", shortcut: "O" },
     { icon: LineSegmentIcon, label: "Line", tool: "line", shortcut: "L" },
     { icon: HexagonIcon, label: "Polygon", tool: "polygon", shortcut: "G" },
+    { icon: StarIcon, label: "Star", tool: "star", shortcut: "S" },
     { icon: FlowArrow, label: "Connector", tool: "connector", shortcut: "C" },
   ];
 
@@ -139,7 +141,7 @@ export function PrimitivesPanel() {
               <Button
                 variant="ghost"
                 size="lg"
-                title="Ellipse, Line, Polygon"
+                title="Ellipse, Line, Polygon, Star"
                 className={`${toolButtonBaseClass} w-6 justify-center ${
                   isRectSubToolActive
                     ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"

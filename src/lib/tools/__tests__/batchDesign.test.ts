@@ -146,6 +146,105 @@ describe("batch_design", () => {
     });
   });
 
+  describe("shape params: star/arc/arrowheads", () => {
+    it("creates a regular polygon and auto-generates points from sides alone", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'p=I(document, {type: "polygon", name: "Hex", width: 100, height: 100, sides: 6})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const node = sceneState().nodesById[result.createdNodes[0].id] as Record<string, unknown>;
+      expect(node.sides).toBe(6);
+      expect(Array.isArray(node.points)).toBe(true);
+      expect((node.points as number[]).length).toBe(12);
+    });
+
+    it("creates a star and auto-generates 2x vertices from sides + innerRadiusRatio", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'p=I(document, {type: "polygon", name: "Star", width: 100, height: 100, sides: 5, innerRadiusRatio: 0.5})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const node = sceneState().nodesById[result.createdNodes[0].id] as Record<string, unknown>;
+      expect(node.innerRadiusRatio).toBe(0.5);
+      expect((node.points as number[]).length).toBe(20);
+    });
+
+    it("regenerates star points on update when innerRadiusRatio changes but points isn't passed", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations: [
+            'p=I(document, {type: "polygon", name: "Star", width: 100, height: 100, sides: 5})',
+            'U(p, {innerRadiusRatio: 0.4})',
+          ].join("\n"),
+        })
+      );
+      expect(result.success).toBe(true);
+      const node = sceneState().nodesById[result.createdNodes[0].id] as Record<string, unknown>;
+      expect(node.innerRadiusRatio).toBe(0.4);
+      expect((node.points as number[]).length).toBe(20);
+    });
+
+    it("respects an explicit points array over auto-generation", async () => {
+      const explicitPoints = [1, 2, 3, 4, 5, 6];
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'p=I(document, {type: "polygon", name: "Custom", width: 100, height: 100, sides: 5, innerRadiusRatio: 0.5, points: [1,2,3,4,5,6]})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const node = sceneState().nodesById[result.createdNodes[0].id] as Record<string, unknown>;
+      expect(node.points).toEqual(explicitPoints);
+    });
+
+    it("creates an ellipse with arc/donut params", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'e=I(document, {type: "ellipse", name: "Donut", width: 80, height: 80, startAngle: 10, sweepAngle: 270, innerRadiusRatio: 0.4})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const node = sceneState().nodesById[result.createdNodes[0].id] as Record<string, unknown>;
+      expect(node.startAngle).toBe(10);
+      expect(node.sweepAngle).toBe(270);
+      expect(node.innerRadiusRatio).toBe(0.4);
+    });
+
+    it("creates a line with start/end arrowhead caps", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'l=I(document, {type: "line", name: "Arrow", width: 100, height: 0, points: [0,0,100,0], startCap: "circle", endCap: "triangle"})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const node = sceneState().nodesById[result.createdNodes[0].id] as Record<string, unknown>;
+      expect(node.startCap).toBe("circle");
+      expect(node.endCap).toBe("triangle");
+    });
+
+    it("updates a line's caps in place", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations: [
+            'l=I(document, {type: "line", name: "Arrow", width: 100, height: 0, points: [0,0,100,0]})',
+            'U(l, {startCap: "bar", endCap: "arrow"})',
+          ].join("\n"),
+        })
+      );
+      expect(result.success).toBe(true);
+      const node = sceneState().nodesById[result.createdNodes[0].id] as Record<string, unknown>;
+      expect(node.startCap).toBe("bar");
+      expect(node.endCap).toBe("arrow");
+    });
+  });
+
   describe("effects (shadow/blur stack)", () => {
     it("creates a node with an inner shadow effect", async () => {
       const result = JSON.parse(

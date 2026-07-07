@@ -12,7 +12,9 @@ import type {
 } from "@/types/scene";
 import { applyOpacity } from "@/utils/colorUtils";
 import { getPrimarySolidPaint } from "@/utils/fillUtils";
+import { buildEllipseArcGeometry, ellipseArcGeometryToSvgPath, hasCustomEllipseArc } from "@/lib/shapePath/ellipseArc";
 import {
+  buildCapMarker,
   buildEffectsFilter,
   buildFillLayers,
   buildStrokeAttr,
@@ -172,6 +174,24 @@ function convertEllipseToSvg(node: EllipseNode, ctx: SvgConversionContext, isRoo
   const attrs = commonGroupAttrs(node, filterId, isRoot);
   const layers = buildFillLayers(node, ctx);
   const strokeAttr = buildStrokeAttr(node, ctx);
+
+  const arcParams = {
+    startAngle: node.startAngle,
+    sweepAngle: node.sweepAngle,
+    innerRadiusRatio: node.innerRadiusRatio,
+  };
+  if (hasCustomEllipseArc(arcParams)) {
+    if (node.strokeAlign && node.strokeAlign !== "center" && node.stroke && node.strokeWidth) {
+      ctx.warnings.push(
+        `Stroke align "${node.strokeAlign}" on arc/donut ellipse "${nodeLabel(node)}" is approximated as centered in SVG export.`,
+      );
+    }
+    const geometry = buildEllipseArcGeometry(node.width, node.height, arcParams);
+    const d = ellipseArcGeometryToSvgPath(geometry);
+    const shape = fillLayersMarkup("path", `d="${d}"`, layers, strokeAttr);
+    return `<g ${attrs}>${shape}</g>`;
+  }
+
   const inset = strokeAlignInset(node);
   const cx = node.width / 2;
   const cy = node.height / 2;
@@ -253,12 +273,19 @@ function pointsAttr(points: number[]): string {
   return pairs.join(" ");
 }
 
-function convertLineToSvg(node: LineNode, _ctx: SvgConversionContext, isRoot: boolean): string {
+function convertLineToSvg(node: LineNode, ctx: SvgConversionContext, isRoot: boolean): string {
   const attrs = commonGroupAttrs(node, null, isRoot);
   const [x1, y1, x2, y2] = node.points;
   const strokeColor = node.stroke ? applyOpacity(node.stroke, node.strokeOpacity) : "#000000";
   const strokeWidth = node.strokeWidth ?? 1;
-  return `<g ${attrs}><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${strokeColor}" stroke-width="${strokeWidth}"/></g>`;
+
+  const startMarkerId = buildCapMarker(node.startCap ?? "none", strokeWidth, strokeColor, "auto-start-reverse", ctx);
+  const endMarkerId = buildCapMarker(node.endCap ?? "none", strokeWidth, strokeColor, "auto", ctx);
+  const markerAttrs =
+    (startMarkerId ? ` marker-start="url(#${startMarkerId})"` : "") +
+    (endMarkerId ? ` marker-end="url(#${endMarkerId})"` : "");
+
+  return `<g ${attrs}><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${strokeColor}" stroke-width="${strokeWidth}"${markerAttrs}/></g>`;
 }
 
 function convertConnectorToSvg(node: ConnectorNode, _ctx: SvgConversionContext, isRoot: boolean): string {

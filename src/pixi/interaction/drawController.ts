@@ -98,6 +98,24 @@ export function createDrawController(_context: InteractionContext): DrawControll
         };
         break;
       }
+      case "star": {
+        const sides = 5;
+        const innerRadiusRatio = 0.5;
+        const points = generatePolygonPoints(sides, width, height, innerRadiusRatio);
+        node = {
+          id,
+          type: "polygon",
+          x,
+          y,
+          width,
+          height,
+          fill: "#f2b705",
+          sides,
+          innerRadiusRatio,
+          points,
+        };
+        break;
+      }
       case "embed":
         node = {
           id,

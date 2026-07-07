@@ -1,4 +1,4 @@
-import type { PathStroke, PerSideStroke, SceneNode } from "@/types/scene";
+import type { LineCapShape, LineNode, PathStroke, PerSideStroke, SceneNode } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
 import {
   ColorInput,
@@ -23,6 +23,14 @@ interface StrokeSectionProps {
 }
 
 type StrokeMode = "unified" | "per-side";
+
+const CAP_OPTIONS = [
+  { value: "none", label: "None" },
+  { value: "arrow", label: "Arrow" },
+  { value: "triangle", label: "Triangle" },
+  { value: "circle", label: "Circle" },
+  { value: "bar", label: "Bar" },
+];
 
 function getStrokeMode(node: SceneNode): StrokeMode {
   const perSide = node.strokeWidthPerSide;
@@ -244,6 +252,26 @@ export function StrokeSection({
                 onReset={() => resetOverride("strokeWidth")}
               />
             </div>
+          )}
+
+          {/* Arrowhead caps (line nodes only) */}
+          {node.type === "line" && (
+            <PropertyRow>
+              <SelectInput
+                label="Start cap"
+                labelOutside
+                value={(node as LineNode).startCap ?? "none"}
+                options={CAP_OPTIONS}
+                onChange={(v) => effectiveOnUpdate({ startCap: v as LineCapShape } as Partial<SceneNode>)}
+              />
+              <SelectInput
+                label="End cap"
+                labelOutside
+                value={(node as LineNode).endCap ?? "none"}
+                options={CAP_OPTIONS}
+                onChange={(v) => effectiveOnUpdate({ endCap: v as LineCapShape } as Partial<SceneNode>)}
+              />
+            </PropertyRow>
           )}
 
           {/* Per-side inputs */}

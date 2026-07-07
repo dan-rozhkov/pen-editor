@@ -153,6 +153,10 @@ interface PixsoNode {
   fillGeometry?: PixsoGeometry[];
   strokeGeometry?: PixsoGeometry[];
 
+  // STAR node props (Figma REST API field names)
+  pointCount?: number;
+  innerRadius?: number;
+
   // Component/instance props
   componentProperties?: Record<string, unknown>;
   componentId?: string;
@@ -561,15 +565,21 @@ export function convertPixsoNode(node: PixsoNode): SceneNode | null {
 
     case "POLYGON":
     case "STAR": {
-      const sides = node.type === "STAR" ? 10 : 6;
+      const isStar = node.type === "STAR";
+      // Figma/Pixso STAR nodes carry `pointCount` (rays) and `innerRadius`
+      // (0..1 ratio of the outer radius); fall back to a 5-point star with a
+      // typical ratio when the source omits them.
+      const sides = isStar ? (node.pointCount ?? 5) : 6;
+      const innerRadiusRatio = isStar ? (node.innerRadius ?? 0.5) : undefined;
       const w = base.width as number;
       const h = base.height as number;
-      const points = generatePolygonPoints(sides, w, h);
+      const points = generatePolygonPoints(sides, w, h, innerRadiusRatio);
       const polygon: PolygonNode = {
-        ...(base as Omit<PolygonNode, "type" | "points" | "sides">),
+        ...(base as Omit<PolygonNode, "type" | "points" | "sides" | "innerRadiusRatio">),
         type: "polygon",
         points,
         sides,
+        ...(innerRadiusRatio !== undefined ? { innerRadiusRatio } : {}),
       };
       return polygon;
     }

@@ -188,6 +188,37 @@ describe("<StrokeSection />", () => {
     });
   });
 
+  describe("line arrowhead caps", () => {
+    function lineNode(extra: Partial<SceneNode> = {}) {
+      return makeNode({
+        type: "line",
+        stroke: "#000000",
+        strokeWidth: 2,
+        points: [0, 0, 100, 0],
+        ...extra,
+      } as Partial<SceneNode>);
+    }
+
+    it("shows Start cap / End cap selects for a line, defaulting to None", () => {
+      renderSection(lineNode());
+      expect(screen.getByText("Start cap")).toBeTruthy();
+      expect(screen.getByText("End cap")).toBeTruthy();
+      expect(screen.getAllByText("None")).toHaveLength(2);
+    });
+
+    it("reflects existing cap values", () => {
+      renderSection(lineNode({ startCap: "arrow", endCap: "circle" } as Partial<SceneNode>));
+      expect(screen.getByText("Arrow")).toBeTruthy();
+      expect(screen.getByText("Circle")).toBeTruthy();
+    });
+
+    it("does not show cap selects for non-line nodes", () => {
+      renderSection(makeNode({ type: "ellipse", stroke: "#000", strokeWidth: 2 } as Partial<SceneNode>));
+      expect(screen.queryByText("Start cap")).toBeNull();
+      expect(screen.queryByText("End cap")).toBeNull();
+    });
+  });
+
   describe("mixed keys", () => {
     it("shows a Mixed color swatch and empty mixed spinbuttons", () => {
       renderSection(

@@ -280,7 +280,8 @@ export function createTransformController(context: InteractionContext): Transfor
         // Regenerate points for polygon/line nodes
         if (node?.type === "polygon") {
           const sides = (node as PolygonNode).sides ?? 6;
-          updates.points = generatePolygonPoints(sides, roundedW, roundedH);
+          const innerRadiusRatio = (node as PolygonNode).innerRadiusRatio;
+          updates.points = generatePolygonPoints(sides, roundedW, roundedH, innerRadiusRatio);
         } else if (node?.type === "line" && state.startLinePoints) {
           const scaleFactorX = roundedW / state.startNodeW;
           const scaleFactorY = roundedH / state.startNodeH;

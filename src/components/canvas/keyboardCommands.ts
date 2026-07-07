@@ -46,7 +46,7 @@ export interface KeyDownHandlerDeps {
   undo: (snapshot: HistorySnapshot) => HistorySnapshot | null;
   redo: (snapshot: HistorySnapshot) => HistorySnapshot | null;
   fitToContent: (nodes: SceneNode[], width: number, height: number) => void;
-  toggleTool: (tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon" | "embed" | "pencil" | "connector" | "pen") => void;
+  toggleTool: (tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon" | "star" | "embed" | "pencil" | "connector" | "pen") => void;
   cancelDrawing: () => void;
   clearSelection: () => void;
   copySelection: () => void;
@@ -428,6 +428,11 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
       if (e.code === "KeyG") {
         e.preventDefault();
         toggleTool("polygon");
+        return;
+      }
+      if (e.code === "KeyS") {
+        e.preventDefault();
+        toggleTool("star");
         return;
       }
       if (e.code === "KeyE") {

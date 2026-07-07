@@ -20,6 +20,7 @@ import {
   createImagePaint,
   createSolidPaint,
 } from "@/utils/fillUtils";
+import { generatePolygonPoints } from "@/utils/polygonUtils";
 
 /** AI node data as received from the operations script */
 type AiNodeData = Record<string, unknown>;
@@ -528,6 +529,27 @@ export function mapNodeData(
     } else {
       result.sizing = sizing;
     }
+  }
+
+  // Regular polygon / star: regenerate `points` from `sides`/`innerRadiusRatio`
+  // whenever either changed but the caller didn't also supply explicit
+  // `points` — mirrors the properties-panel behavior (AppearanceSection),
+  // so the AI can create/edit a star with just `{sides, innerRadiusRatio}`.
+  const effectiveType = (result.type as string | undefined) ?? existingNode?.type;
+  if (
+    effectiveType === "polygon" &&
+    !("points" in data) &&
+    (mode === "insert" || "sides" in data || "innerRadiusRatio" in data)
+  ) {
+    const existingPolygon = existingNode as (FlatSceneNode & { sides?: number; innerRadiusRatio?: number }) | undefined;
+    const sides = (result.sides as number | undefined) ?? existingPolygon?.sides ?? 6;
+    const innerRadiusRatio =
+      "innerRadiusRatio" in result
+        ? (result.innerRadiusRatio as number | undefined)
+        : existingPolygon?.innerRadiusRatio;
+    const width = (result.width as number | undefined) ?? existingNode?.width ?? 100;
+    const height = (result.height as number | undefined) ?? existingNode?.height ?? 100;
+    result.points = generatePolygonPoints(sides, width, height, innerRadiusRatio);
   }
 
   if (children) {

@@ -1,7 +1,22 @@
 import { describe, it, expect } from "vitest";
-import { pathNodeToSvg, polygonNodeToSvg } from "../svgGeneration";
+import { lineNodeToSvg, pathNodeToSvg, polygonNodeToSvg } from "../svgGeneration";
 import { applyOpacity } from "@/utils/colorUtils";
-import type { PathNode, PolygonNode, GradientFill, Paint } from "@/types/scene";
+import type { LineNode, PathNode, PolygonNode, GradientFill, Paint } from "@/types/scene";
+
+function lineNode(extra: Partial<LineNode>): LineNode {
+  return {
+    id: "line1",
+    type: "line",
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 0,
+    points: [0, 0, 100, 0],
+    stroke: "#000000",
+    strokeWidth: 2,
+    ...extra,
+  };
+}
 
 function pathNode(extra: Partial<PathNode>): PathNode {
   return {
@@ -103,6 +118,25 @@ describe("pathNodeToSvg", () => {
     const lastPathStart = svg.lastIndexOf("<path");
     const strokeIdx = svg.indexOf('stroke="');
     expect(strokeIdx).toBeGreaterThan(lastPathStart);
+  });
+});
+
+describe("lineNodeToSvg", () => {
+  it("renders a plain <line> with no markers when caps are unset", () => {
+    const svg = lineNodeToSvg(lineNode({}));
+    expect(svg).toContain("<line");
+    expect(svg).not.toContain("marker-start");
+    expect(svg).not.toContain("marker-end");
+    expect(svg).not.toContain("<marker");
+  });
+
+  it("adds marker defs + marker-start/marker-end for arrowhead caps", () => {
+    const svg = lineNodeToSvg(lineNode({ startCap: "bar", endCap: "arrow" }));
+    expect(svg).toContain("marker-start=");
+    expect(svg).toContain("marker-end=");
+    expect(svg.match(/<marker/g)?.length).toBe(2);
+    expect(svg).toContain('orient="auto-start-reverse"');
+    expect(svg).toContain('orient="auto"');
   });
 });
 

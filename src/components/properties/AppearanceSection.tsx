@@ -1,10 +1,11 @@
-import type { FrameNode, PerCornerRadius, PolygonNode, SceneNode } from "@/types/scene";
+import type { EllipseNode, FrameNode, PerCornerRadius, PolygonNode, SceneNode } from "@/types/scene";
 import {
+  CheckboxInput,
   NumberInput,
   PropertyRow,
   PropertySection,
 } from "@/components/ui/PropertyInputs";
-import { generatePolygonPoints } from "@/utils/polygonUtils";
+import { generatePolygonPoints, isStarRatio } from "@/utils/polygonUtils";
 import { hasPerCornerRadius } from "@/utils/renderUtils";
 import { CornersOut } from "@phosphor-icons/react";
 import clsx from "clsx";
@@ -117,14 +118,16 @@ export function AppearanceSection({
         )}
         {node.type === "polygon" && (
           <NumberInput
-            label="Sides"
+            label={isStarRatio((node as PolygonNode).innerRadiusRatio) ? "Points" : "Sides"}
             value={(node as PolygonNode).sides ?? 6}
             onChange={(v) => {
               const sides = Math.max(3, Math.min(12, v));
+              const innerRadiusRatio = (node as PolygonNode).innerRadiusRatio;
               const points = generatePolygonPoints(
                 sides,
                 node.width,
-                node.height
+                node.height,
+                innerRadiusRatio
               );
               onUpdate({ sides, points } as Partial<SceneNode>);
             }}
@@ -135,6 +138,80 @@ export function AppearanceSection({
           />
         )}
       </PropertyRow>
+      {node.type === "polygon" && (
+        <PropertyRow>
+          <CheckboxInput
+            label="Star"
+            checked={isStarRatio((node as PolygonNode).innerRadiusRatio)}
+            onChange={(checked) => {
+              const sides = (node as PolygonNode).sides ?? 6;
+              if (checked) {
+                const innerRadiusRatio = 0.5;
+                const points = generatePolygonPoints(sides, node.width, node.height, innerRadiusRatio);
+                onUpdate({ innerRadiusRatio, points } as Partial<SceneNode>);
+              } else {
+                const points = generatePolygonPoints(sides, node.width, node.height, undefined);
+                onUpdate({ innerRadiusRatio: undefined, points } as Partial<SceneNode>);
+              }
+            }}
+          />
+          {isStarRatio((node as PolygonNode).innerRadiusRatio) && (
+            <NumberInput
+              label="Ratio %"
+              value={Math.round(((node as PolygonNode).innerRadiusRatio ?? 0.5) * 100)}
+              onChange={(v) => {
+                const innerRadiusRatio = Math.max(1, Math.min(99, v)) / 100;
+                const sides = (node as PolygonNode).sides ?? 6;
+                const points = generatePolygonPoints(sides, node.width, node.height, innerRadiusRatio);
+                onUpdate({ innerRadiusRatio, points } as Partial<SceneNode>);
+              }}
+              min={1}
+              max={99}
+              step={1}
+              labelOutside={true}
+            />
+          )}
+        </PropertyRow>
+      )}
+      {node.type === "ellipse" && (
+        <>
+          <PropertyRow>
+            <NumberInput
+              label="Start °"
+              value={(node as EllipseNode).startAngle ?? 0}
+              onChange={(v) => onUpdate({ startAngle: v } as Partial<SceneNode>)}
+              step={1}
+              labelOutside={true}
+            />
+            <NumberInput
+              label="Sweep °"
+              value={(node as EllipseNode).sweepAngle ?? 360}
+              onChange={(v) =>
+                onUpdate({ sweepAngle: Math.max(-360, Math.min(360, v)) } as Partial<SceneNode>)
+              }
+              min={-360}
+              max={360}
+              step={1}
+              labelOutside={true}
+            />
+          </PropertyRow>
+          <PropertyRow>
+            <NumberInput
+              label="Ratio %"
+              value={Math.round(((node as EllipseNode).innerRadiusRatio ?? 0) * 100)}
+              onChange={(v) =>
+                onUpdate({
+                  innerRadiusRatio: Math.max(0, Math.min(99, v)) / 100,
+                } as Partial<SceneNode>)
+              }
+              min={0}
+              max={99}
+              step={1}
+              labelOutside={true}
+            />
+          </PropertyRow>
+        </>
+      )}
       {showCornerRadius && cornerMode === "per-corner" && (
         <>
           <PropertyRow>

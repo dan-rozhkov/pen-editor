@@ -372,6 +372,12 @@ export interface RectNode extends BaseNode {
 
 export interface EllipseNode extends BaseNode {
   type: 'ellipse'
+  /** Arc start angle in degrees (0 = rightmost point, clockwise). Default 0. */
+  startAngle?: number
+  /** Arc sweep in degrees, clamped to [-360, 360]. Default 360 (full ellipse). */
+  sweepAngle?: number
+  /** Donut hole radius as a ratio (0..1) of the outer radius. Default 0 (no hole). */
+  innerRadiusRatio?: number
 }
 
 // Text width mode
@@ -477,9 +483,16 @@ export interface PathNode extends BaseNode {
   closed?: boolean
 }
 
+/** Endpoint decoration for a line/connector. */
+export type LineCapShape = 'none' | 'arrow' | 'triangle' | 'circle' | 'bar'
+
 export interface LineNode extends BaseNode {
   type: 'line'
   points: number[]  // [x1, y1, x2, y2] relative to node x,y
+  /** Cap shape at (points[0], points[1]). Default 'none'. */
+  startCap?: LineCapShape
+  /** Cap shape at (points[2], points[3]). Default 'none'. */
+  endCap?: LineCapShape
 }
 
 export type AnchorPosition = 'top' | 'right' | 'bottom' | 'left'
@@ -499,7 +512,13 @@ export interface ConnectorNode extends BaseNode {
 export interface PolygonNode extends BaseNode {
   type: 'polygon'
   points: number[]  // vertices [x1,y1,x2,y2,...] relative to node x,y
-  sides?: number    // number of sides (default 6)
+  sides?: number    // number of sides (regular polygon) or points/rays (star), default 6
+  /**
+   * Star inner-radius ratio (0..1), relative to the outer radius. When set
+   * (and < 1) the node renders as a star with `sides` rays instead of a
+   * regular polygon. Undefined/1 means a plain regular polygon.
+   */
+  innerRadiusRatio?: number
 }
 
 export interface EmbedNode extends BaseNode {

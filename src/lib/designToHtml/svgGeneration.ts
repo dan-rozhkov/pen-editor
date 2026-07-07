@@ -2,6 +2,7 @@ import type {
   ColorBinding,
   GradientFill,
   ImageFill,
+  LineCapShape,
   LineNode,
   Paint,
   PathNode,
@@ -9,8 +10,79 @@ import type {
 } from "@/types/scene";
 import { applyOpacity } from "@/utils/colorUtils";
 import { getRenderableFills } from "@/utils/fillUtils";
+import { buildCapPrimitive } from "@/utils/lineCapUtils";
 
 let gradientIdCounter = 0;
+let markerIdCounter = 0;
+
+interface CapMarkerBounds {
+  minX: number;
+  minY: number;
+  width: number;
+  height: number;
+}
+
+function capPrimitiveBounds(
+  primitive: NonNullable<ReturnType<typeof buildCapPrimitive>>,
+): CapMarkerBounds {
+  const xs = [0];
+  const ys = [0];
+  if (primitive.kind === "lines") {
+    for (const [x1, y1, x2, y2] of primitive.segments) {
+      xs.push(x1, x2);
+      ys.push(y1, y2);
+    }
+  } else if (primitive.kind === "polygon") {
+    for (let i = 0; i < primitive.points.length; i += 2) {
+      xs.push(primitive.points[i]);
+      ys.push(primitive.points[i + 1]);
+    }
+  } else {
+    xs.push(primitive.cx - primitive.radius, primitive.cx + primitive.radius);
+    ys.push(primitive.cy - primitive.radius, primitive.cy + primitive.radius);
+  }
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  const maxX = Math.max(...xs);
+  const maxY = Math.max(...ys);
+  return { minX, minY, width: maxX - minX, height: maxY - minY };
+}
+
+/** Build a `<marker>` def + its id for one line endpoint's cap shape (or `null` for `'none'`). Mirrors `buildCapMarker` in `@/lib/designToSvg/shapeStyles`. */
+function buildInlineCapMarker(
+  shape: LineCapShape | undefined,
+  strokeWidth: number,
+  color: string,
+  orient: "auto" | "auto-start-reverse",
+): { id: string; def: string } | null {
+  const primitive = buildCapPrimitive(shape ?? "none", strokeWidth);
+  if (!primitive) return null;
+
+  const bounds = capPrimitiveBounds(primitive);
+  const id = `pen-svg-marker-${++markerIdCounter}`;
+  const inner =
+    primitive.kind === "lines"
+      ? primitive.segments
+          .map(
+            ([x1, y1, x2, y2]) =>
+              `<path d="M${x1},${y1} L${x2},${y2}" stroke="${color}" stroke-width="${strokeWidth}" fill="none"/>`,
+          )
+          .join("")
+      : primitive.kind === "polygon"
+        ? `<polygon points="${polylinePointsAttr(primitive.points)}" fill="${color}"/>`
+        : `<circle cx="${primitive.cx}" cy="${primitive.cy}" r="${primitive.radius}" fill="${color}"/>`;
+
+  const def = `<marker id="${id}" markerWidth="${bounds.width}" markerHeight="${bounds.height}" refX="${-bounds.minX}" refY="${-bounds.minY}" viewBox="${bounds.minX} ${bounds.minY} ${bounds.width} ${bounds.height}" markerUnits="userSpaceOnUse" orient="${orient}">${inner}</marker>`;
+  return { id, def };
+}
+
+function polylinePointsAttr(points: number[]): string {
+  const pairs: string[] = [];
+  for (let i = 0; i < points.length; i += 2) {
+    pairs.push(`${points[i]},${points[i + 1]}`);
+  }
+  return pairs.join(" ");
+}
 
 /** Build fill attribute values (bottom-to-top) + <defs> markup for a node's paint stack. */
 function buildSvgFillLayers(node: {
@@ -153,7 +225,14 @@ export function lineNodeToSvg(node: LineNode): string {
   const padY = padUnits;
   const style = buildSvgRenderStyle(padX, padY);
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${node.width + padX * 2}" height="${node.height + padY * 2}" viewBox="${-padUnits} ${-padUnits} ${node.width + padUnits * 2} ${node.height + padUnits * 2}" style="${style}"><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${strokeColor}" stroke-width="${strokeWidth}"/></svg>`;
+  const startMarker = buildInlineCapMarker(node.startCap, strokeWidth, strokeColor, "auto-start-reverse");
+  const endMarker = buildInlineCapMarker(node.endCap, strokeWidth, strokeColor, "auto");
+  const defs = (startMarker?.def ?? "") + (endMarker?.def ?? "");
+  const markerAttrs =
+    (startMarker ? ` marker-start="url(#${startMarker.id})"` : "") +
+    (endMarker ? ` marker-end="url(#${endMarker.id})"` : "");
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${node.width + padX * 2}" height="${node.height + padY * 2}" viewBox="${-padUnits} ${-padUnits} ${node.width + padUnits * 2} ${node.height + padUnits * 2}" style="${style}">${defs ? `<defs>${defs}</defs>` : ""}<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${strokeColor}" stroke-width="${strokeWidth}"${markerAttrs}/></svg>`;
 }
 
 /**
