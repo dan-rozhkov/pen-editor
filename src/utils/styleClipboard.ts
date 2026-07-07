@@ -4,6 +4,7 @@ import type {
   FlatSceneNode,
   GradientFill,
   ImageFill,
+  LineCapShape,
   Paint,
   PathStroke,
   PerCornerRadius,
@@ -56,6 +57,19 @@ export interface NodeStyleSnapshot {
   // Pen-drawn stroke (path only)
   pathStroke?: PathStroke;
 
+  // Line cap shapes (line only)
+  startCap?: LineCapShape;
+  endCap?: LineCapShape;
+
+  // Donut hole / star inner-radius ratio (ellipse arc / polygon-star only) —
+  // style-like (visual proportion), unlike `sides`/`points` which are
+  // excluded as geometry.
+  innerRadiusRatio?: number;
+
+  // Ellipse arc angles (ellipse only)
+  startAngle?: number;
+  sweepAngle?: number;
+
   // Typography (text only)
   fontSize?: number;
   fontFamily?: string;
@@ -98,6 +112,17 @@ const CORNER_RADIUS_KEYS = [
 
 const PATH_STYLE_KEYS = ["pathStroke"] as const satisfies readonly (keyof NodeStyleSnapshot)[];
 
+const LINE_STYLE_KEYS = ["startCap", "endCap"] as const satisfies readonly (keyof NodeStyleSnapshot)[];
+
+const ELLIPSE_ARC_KEYS = [
+  "startAngle",
+  "sweepAngle",
+] as const satisfies readonly (keyof NodeStyleSnapshot)[];
+
+const INNER_RADIUS_RATIO_KEYS = [
+  "innerRadiusRatio",
+] as const satisfies readonly (keyof NodeStyleSnapshot)[];
+
 /**
  * `resolveRefToTree` (`@/utils/instanceRuntime`) only ever forwards these
  * fields from a `ref` (component instance) node onto the resolved render
@@ -132,6 +157,9 @@ const TEXT_STYLE_KEYS = [
 ] as const satisfies readonly (keyof NodeStyleSnapshot)[];
 
 const CORNER_RADIUS_NODE_TYPES = new Set<FlatSceneNode["type"]>(["frame", "rect"]);
+
+/** `innerRadiusRatio` is style-like on both the ellipse donut hole and the polygon star ratio. */
+const INNER_RADIUS_RATIO_NODE_TYPES = new Set<FlatSceneNode["type"]>(["ellipse", "polygon"]);
 
 /**
  * Dual-representation property groups (legacy single-value fields vs the
@@ -216,6 +244,18 @@ export function extractNodeStyle(node: FlatSceneNode): NodeStyleSnapshot {
     style = { ...style, ...pickDefined(source, PATH_STYLE_KEYS as readonly string[]) };
   }
 
+  if (node.type === "line") {
+    style = { ...style, ...pickDefined(source, LINE_STYLE_KEYS as readonly string[]) };
+  }
+
+  if (node.type === "ellipse") {
+    style = { ...style, ...pickDefined(source, ELLIPSE_ARC_KEYS as readonly string[]) };
+  }
+
+  if (INNER_RADIUS_RATIO_NODE_TYPES.has(node.type)) {
+    style = { ...style, ...pickDefined(source, INNER_RADIUS_RATIO_KEYS as readonly string[]) };
+  }
+
   // The clipboard must own its data: deep-clone array/object fields (fills,
   // effects, cornerRadiusPerCorner, pathStroke, ...) so mutating the source
   // node (or a later paste target) after copying can never reach back into
@@ -263,6 +303,18 @@ export function pickStyleUpdatesForNode(
 
   if (target.type === "path") {
     updates = { ...updates, ...pickDefined(styleSource, PATH_STYLE_KEYS as readonly string[]) };
+  }
+
+  if (target.type === "line") {
+    updates = { ...updates, ...pickDefined(styleSource, LINE_STYLE_KEYS as readonly string[]) };
+  }
+
+  if (target.type === "ellipse") {
+    updates = { ...updates, ...pickDefined(styleSource, ELLIPSE_ARC_KEYS as readonly string[]) };
+  }
+
+  if (INNER_RADIUS_RATIO_NODE_TYPES.has(target.type)) {
+    updates = { ...updates, ...pickDefined(styleSource, INNER_RADIUS_RATIO_KEYS as readonly string[]) };
   }
 
   return updates as Partial<SceneNode>;

@@ -368,6 +368,122 @@ describe("pickStyleUpdatesForNode", () => {
   });
 });
 
+// Regression: line caps, ellipse arc angles, and the star/donut
+// innerRadiusRatio are style-like (visual proportion/decoration) by the
+// codebase's own convention (cornerRadius/cornerSmoothing and
+// strokeWidth/strokeAlign are included; only points-count geometry like
+// `sides`/`points` is excluded) but were omitted from the copy/paste
+// allowlists.
+describe("line cap / ellipse arc / star ratio style transfer", () => {
+  const lineSource = {
+    id: "line1",
+    type: "line",
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 0,
+    points: [0, 0, 100, 0],
+    stroke: "#000000",
+    strokeWidth: 2,
+    startCap: "circle",
+    endCap: "triangle",
+  } as unknown as FlatSceneNode;
+
+  const lineTarget = {
+    id: "line2",
+    type: "line",
+    x: 0,
+    y: 0,
+    width: 50,
+    height: 0,
+    points: [0, 0, 50, 0],
+  } as unknown as FlatSceneNode;
+
+  it("carries startCap/endCap line -> line", () => {
+    const style = extractNodeStyle(lineSource);
+    expect((style as Record<string, unknown>).startCap).toBe("circle");
+    expect((style as Record<string, unknown>).endCap).toBe("triangle");
+    const updates = pickStyleUpdatesForNode(lineTarget, style) as Record<string, unknown>;
+    expect(updates.startCap).toBe("circle");
+    expect(updates.endCap).toBe("triangle");
+  });
+
+  it("does not leak caps onto a non-line target", () => {
+    const style = extractNodeStyle(lineSource);
+    const updates = pickStyleUpdatesForNode(rectTarget, style) as Record<string, unknown>;
+    expect("startCap" in updates).toBe(false);
+    expect("endCap" in updates).toBe(false);
+  });
+
+  const ellipseSource = {
+    id: "ellipse1",
+    type: "ellipse",
+    x: 0,
+    y: 0,
+    width: 40,
+    height: 40,
+    fill: "#ff0000",
+    startAngle: 30,
+    sweepAngle: 180,
+    innerRadiusRatio: 0.4,
+  } as unknown as FlatSceneNode;
+
+  const ellipseTarget = {
+    id: "ellipse2",
+    type: "ellipse",
+    x: 0,
+    y: 0,
+    width: 20,
+    height: 20,
+  } as unknown as FlatSceneNode;
+
+  it("carries startAngle/sweepAngle/innerRadiusRatio ellipse -> ellipse", () => {
+    const style = extractNodeStyle(ellipseSource);
+    const updates = pickStyleUpdatesForNode(ellipseTarget, style) as Record<string, unknown>;
+    expect(updates.startAngle).toBe(30);
+    expect(updates.sweepAngle).toBe(180);
+    expect(updates.innerRadiusRatio).toBe(0.4);
+  });
+
+  it("does not leak startAngle/sweepAngle onto a non-ellipse target", () => {
+    const style = extractNodeStyle(ellipseSource);
+    const updates = pickStyleUpdatesForNode(rectTarget, style) as Record<string, unknown>;
+    expect("startAngle" in updates).toBe(false);
+    expect("sweepAngle" in updates).toBe(false);
+  });
+
+  const starSource = {
+    id: "poly1",
+    type: "polygon",
+    x: 0,
+    y: 0,
+    width: 40,
+    height: 40,
+    points: [0, 0],
+    sides: 5,
+    innerRadiusRatio: 0.5,
+  } as unknown as FlatSceneNode;
+
+  const polygonTarget = {
+    id: "poly2",
+    type: "polygon",
+    x: 0,
+    y: 0,
+    width: 20,
+    height: 20,
+    points: [0, 0],
+    sides: 5,
+  } as unknown as FlatSceneNode;
+
+  it("carries innerRadiusRatio (star ratio) polygon -> polygon but not the points-count geometry", () => {
+    const style = extractNodeStyle(starSource);
+    const updates = pickStyleUpdatesForNode(polygonTarget, style) as Record<string, unknown>;
+    expect(updates.innerRadiusRatio).toBe(0.5);
+    expect("sides" in updates).toBe(false);
+    expect("points" in updates).toBe(false);
+  });
+});
+
 // Regression: `extractNodeStyle` used to copy `fills`/`effects` (and other
 // array/object style fields) by reference, so the clipboard, the source node,
 // and any paste target ended up sharing the same array/object instances —

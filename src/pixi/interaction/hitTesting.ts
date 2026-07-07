@@ -3,12 +3,13 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useLayoutStore } from "@/store/layoutStore";
-import type { SceneNode, FrameNode, FlatSceneNode, RefNode, ConnectorNode } from "@/types/scene";
+import type { SceneNode, FrameNode, FlatSceneNode, RefNode, ConnectorNode, LineNode } from "@/types/scene";
 import {
   getPreparedNodeEffectiveSize,
   prepareFrameNode,
 } from "@/utils/instanceUtils";
 import { getNodeEffectiveSize } from "@/utils/nodeUtils";
+import { buildCapPrimitive, capPrimitiveBounds } from "@/utils/lineCapUtils";
 import type { TransformHandle } from "./types";
 import { measureLabelTextWidth, truncateLabelToWidth } from "@/pixi/frameLabelUtils";
 import { resolveRefToTree, findResolvedDescendantByPath } from "@/utils/instanceRuntime";
@@ -27,6 +28,26 @@ const LABEL_TEXT_STYLE = new TextStyle({
   fontFamily: LABEL_FONT_FAMILY,
   fontSize: LABEL_FONT_SIZE,
 });
+
+/**
+ * How far a line's rendered cap shape reaches beyond its raw segment
+ * endpoint: `along` the line's direction (e.g. an arrow/triangle's length)
+ * and `perp`endicular to it (e.g. an arrowhead/bar's spread). Derived from
+ * the same primitive geometry the SVG/Pixi renderers use
+ * (`@/utils/lineCapUtils`) so the hit-test tolerance can't drift from what's
+ * actually drawn.
+ */
+function lineCapReach(shape: LineNode["startCap"], strokeWidth: number): { along: number; perp: number } {
+  const primitive = shape ? buildCapPrimitive(shape, strokeWidth) : null;
+  if (!primitive) return { along: 0, perp: 0 };
+  // Match the floor `buildCapPrimitive` applies internally so the tolerance
+  // lines up with the geometry actually drawn.
+  const bounds = capPrimitiveBounds(primitive, Math.max(strokeWidth, 1));
+  return {
+    along: -bounds.minX,
+    perp: Math.max(Math.abs(bounds.minY), Math.abs(bounds.minY + bounds.height)),
+  };
+}
 
 function pointToSegmentDistance(
   px: number, py: number,
@@ -197,6 +218,46 @@ export function findCanvasHitTargetAtPoint(
 
     const absX = parentAbsX + node.x;
     const absY = parentAbsY + node.y;
+
+    // Line nodes: hit-test against the segment (+ cap extent), not the raw
+    // bounding box. A stroked cap primitive (arrowhead spread, bar, etc. —
+    // see `@/utils/lineCapUtils`) can extend well beyond the two endpoints,
+    // so the plain bbox check below would miss clicks on a rendered cap tip;
+    // it also fails outright for axis-aligned lines where the bbox collapses
+    // to zero width/height on one axis.
+    if (node.type === "line") {
+      const ln = node as LineNode;
+      if (ln.points.length >= 4) {
+        const strokeWidth = ln.strokeWidth ?? 1;
+        const startReach = lineCapReach(ln.startCap, strokeWidth);
+        const endReach = lineCapReach(ln.endCap, strokeWidth);
+        const x1 = absX + ln.points[0];
+        const y1 = absY + ln.points[1];
+        const x2 = absX + ln.points[2];
+        const y2 = absY + ln.points[3];
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const len = Math.hypot(dx, dy) || 1;
+        const ux = dx / len;
+        const uy = dy / len;
+        // Extend each endpoint outward along the line direction to cover a
+        // solid cap's tip (e.g. a triangle/arrow reaching `along` past the
+        // endpoint).
+        const sx1 = x1 - ux * startReach.along;
+        const sy1 = y1 - uy * startReach.along;
+        const sx2 = x2 + ux * endReach.along;
+        const sy2 = y2 + uy * endReach.along;
+        const scale = useViewportStore.getState().scale;
+        const perpTolerance = Math.max(startReach.perp, endReach.perp, strokeWidth / 2);
+        const threshold = Math.max(5, perpTolerance) / scale;
+        const dist = pointToSegmentDistance(worldX, worldY, sx1, sy1, sx2, sy2);
+        if (dist <= threshold) {
+          return { kind: "node", nodeId: node.id };
+        }
+        return null;
+      }
+    }
+
     const { width, height } = getHitNodeEffectiveSize(
       node,
       sceneNodes,

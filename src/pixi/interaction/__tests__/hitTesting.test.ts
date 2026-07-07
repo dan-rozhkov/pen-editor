@@ -291,3 +291,54 @@ describe("scope-chain hit testing (Figma drill scope)", () => {
     expect(findNodeAtPoint(70, 70)).toBe("frameA");
   });
 });
+
+/**
+ * A horizontal line (0,50 .. 100,50 in absolute coords) with an endCap
+ * ("triangle") whose rendered tip reaches ~3x strokeWidth past (100,50), and
+ * whose bare bbox has height 0 (a plain-bbox hit test would reject almost
+ * every click, including one squarely on the cap).
+ */
+function seedCappedLineScene(): void {
+  const line1 = {
+    id: "line1",
+    type: "line",
+    name: "Line 1",
+    x: 0,
+    y: 50,
+    width: 100,
+    height: 0,
+    points: [0, 0, 100, 0],
+    stroke: "#000000",
+    strokeWidth: 4,
+    endCap: "triangle",
+  } as unknown as FlatSceneNode;
+
+  useSceneStore.setState({
+    nodesById: { line1 },
+    parentById: { line1: null },
+    childrenById: { line1: [] },
+    rootIds: ["line1"],
+    componentArtifactsById: {},
+    _cachedTree: null,
+  });
+}
+
+describe("line cap hit testing", () => {
+  beforeEach(() => {
+    resetStores();
+    seedCappedLineScene();
+  });
+
+  it("selects the line when clicking on the segment body", () => {
+    expect(findNodeAtPoint(50, 50)).toBe("line1");
+  });
+
+  it("selects the line when clicking on the rendered cap tip, beyond the raw bbox endpoint", () => {
+    // triangle cap at strokeWidth=4 reaches ~3*4=12 past the (100,50) endpoint.
+    expect(findNodeAtPoint(108, 50)).toBe("line1");
+  });
+
+  it("still returns null well outside the segment + cap tolerance", () => {
+    expect(findNodeAtPoint(50, 200)).toBeNull();
+  });
+});

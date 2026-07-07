@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { buildCapPrimitive, capTrimLength } from "@/utils/lineCapUtils";
+import {
+  buildCapMarkerDef,
+  buildCapPrimitive,
+  capPrimitiveBounds,
+  capTrimLength,
+} from "@/utils/lineCapUtils";
 
 describe("buildCapPrimitive", () => {
   it("returns null for 'none'", () => {
@@ -69,5 +74,67 @@ describe("capTrimLength", () => {
   it("is positive for solid caps that would otherwise be pierced by the line", () => {
     expect(capTrimLength("triangle", 2)).toBeGreaterThan(0);
     expect(capTrimLength("circle", 2)).toBeGreaterThan(0);
+  });
+
+  it("stays derived from (never drifts from) buildCapPrimitive's own geometry", () => {
+    for (const strokeWidth of [1, 2, 5]) {
+      const triangle = buildCapPrimitive("triangle", strokeWidth);
+      const circle = buildCapPrimitive("circle", strokeWidth);
+      if (triangle?.kind === "polygon") {
+        expect(capTrimLength("triangle", strokeWidth)).toBe(-Math.min(...triangle.points.filter((_, i) => i % 2 === 0)));
+      }
+      if (circle?.kind === "circle") {
+        expect(capTrimLength("circle", strokeWidth)).toBe(circle.radius - circle.cx);
+      }
+    }
+  });
+});
+
+describe("capPrimitiveBounds", () => {
+  it("pads 'lines'-kind (stroked) primitives by half the stroke width", () => {
+    const strokeWidth = 4;
+    const primitive = buildCapPrimitive("bar", strokeWidth)!;
+    const unpadded = capPrimitiveBounds(primitive, 0);
+    const padded = capPrimitiveBounds(primitive, strokeWidth);
+    expect(padded.width).toBeGreaterThan(unpadded.width);
+    expect(padded.height).toBe(unpadded.height + strokeWidth);
+  });
+
+  it("never reports a zero-size box for the 'bar' cap (would suppress marker rendering)", () => {
+    const primitive = buildCapPrimitive("bar", 3)!;
+    const bounds = capPrimitiveBounds(primitive, 3);
+    expect(bounds.width).toBeGreaterThan(0);
+    expect(bounds.height).toBeGreaterThan(0);
+  });
+
+  it("does not pad filled ('polygon'/'circle') primitives", () => {
+    const strokeWidth = 4;
+    const triangle = buildCapPrimitive("triangle", strokeWidth)!;
+    expect(capPrimitiveBounds(triangle, 0)).toEqual(capPrimitiveBounds(triangle, strokeWidth));
+  });
+});
+
+describe("buildCapMarkerDef", () => {
+  it("returns null for 'none'", () => {
+    expect(buildCapMarkerDef("m1", "none", 2, "#000", "auto")).toBeNull();
+  });
+
+  it("anchors refX/refY at 0,0 (the primitive tip), in viewBox coordinates", () => {
+    const def = buildCapMarkerDef("m1", "triangle", 4, "#000", "auto")!;
+    expect(def).toMatch(/refX="0"/);
+    expect(def).toMatch(/refY="0"/);
+  });
+
+  it("produces a non-zero-size marker for the 'bar' cap", () => {
+    const def = buildCapMarkerDef("m1", "bar", 4, "#000", "auto")!;
+    const widthMatch = def.match(/markerWidth="([^"]+)"/);
+    const heightMatch = def.match(/markerHeight="([^"]+)"/);
+    expect(Number(widthMatch?.[1])).toBeGreaterThan(0);
+    expect(Number(heightMatch?.[1])).toBeGreaterThan(0);
+  });
+
+  it("is overflow-visible so a stroke-padded viewBox isn't clipped", () => {
+    const def = buildCapMarkerDef("m1", "arrow", 4, "#000", "auto")!;
+    expect(def).toMatch(/overflow="visible"/);
   });
 });

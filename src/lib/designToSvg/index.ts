@@ -1,4 +1,4 @@
-import type { FlatSceneNode } from "@/types/scene";
+import type { FlatFrameNode, FlatSceneNode } from "@/types/scene";
 import { convertNodeToSvg } from "./convertNode";
 import type { SvgConversionContext } from "./shapeStyles";
 
@@ -34,6 +34,14 @@ export function convertDesignNodesToSvg(
   const ctx: SvgConversionContext = { nodesById, childrenById, defs: [], warnings: [] };
   const body = convertNodeToSvg(rootId, ctx, true);
   const defsBlock = ctx.defs.length > 0 ? `<defs>${ctx.defs.join("")}</defs>` : "";
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${root.width}" height="${root.height}" viewBox="0 0 ${root.width} ${root.height}">${defsBlock}${body}</svg>`;
+  // The root `<svg>` element clips its content to its viewBox by default.
+  // Frame clipping is opt-in elsewhere (the live canvas and designToHtml's
+  // `overflow: visible` default), so only clip here when the root frame
+  // explicitly requests it — otherwise content that intentionally overflows
+  // (e.g. a line's cap markers, or children positioned outside the frame)
+  // shouldn't be silently cut off.
+  const rootClips = root.type === "frame" && (root as FlatFrameNode).clip === true;
+  const overflowAttr = rootClips ? "" : ' overflow="visible"';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${root.width}" height="${root.height}" viewBox="0 0 ${root.width} ${root.height}"${overflowAttr}>${defsBlock}${body}</svg>`;
   return { svg, warnings: ctx.warnings };
 }

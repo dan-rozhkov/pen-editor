@@ -3,8 +3,9 @@ import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { SizeSection } from "../SizeSection";
 import { useSceneStore } from "@/store/sceneStore";
 import { resetStores, seedScene } from "@/test/fixtures";
-import type { SceneNode } from "@/types/scene";
+import type { PolygonNode, SceneNode } from "@/types/scene";
 import type { ParentContext } from "@/utils/nodeUtils";
+import { generatePolygonPoints } from "@/utils/polygonUtils";
 
 const ROOT_CONTEXT = { isInsideAutoLayout: false, parent: null } as unknown as ParentContext;
 
@@ -138,6 +139,51 @@ describe("<SizeSection />", () => {
       expect(onUpdate).toHaveBeenCalledWith({
         sizing: expect.objectContaining({ maxWidth: 320 }),
       });
+    });
+  });
+
+  describe("star (polygon with innerRadiusRatio) W/H edits", () => {
+    function starNode(): PolygonNode {
+      const sides = 5;
+      const innerRadiusRatio = 0.5;
+      return {
+        id: "star1",
+        type: "polygon",
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100,
+        sides,
+        innerRadiusRatio,
+        points: generatePolygonPoints(sides, 100, 100, innerRadiusRatio),
+      } as PolygonNode;
+    }
+
+    it("preserves innerRadiusRatio when W is edited (regenerates a star, not a plain pentagon)", () => {
+      const onUpdate = vi.fn();
+      const node = starNode();
+      render(<SizeSection node={node} onUpdate={onUpdate} parentContext={ROOT_CONTEXT} />);
+      const inputs = screen.getAllByRole("spinbutton");
+      fireEvent.change(inputs[0], { target: { value: "150" } });
+
+      const expectedPoints = generatePolygonPoints(5, 150, 100, 0.5);
+      const call = onUpdate.mock.calls.find((c) => "points" in c[0]);
+      expect(call?.[0].points).toEqual(expectedPoints);
+      // A plain pentagon (no ratio) would produce different points.
+      expect(call?.[0].points).not.toEqual(generatePolygonPoints(5, 150, 100));
+    });
+
+    it("preserves innerRadiusRatio when H is edited", () => {
+      const onUpdate = vi.fn();
+      const node = starNode();
+      render(<SizeSection node={node} onUpdate={onUpdate} parentContext={ROOT_CONTEXT} />);
+      const inputs = screen.getAllByRole("spinbutton");
+      fireEvent.change(inputs[1], { target: { value: "150" } });
+
+      const expectedPoints = generatePolygonPoints(5, 100, 150, 0.5);
+      const call = onUpdate.mock.calls.find((c) => "points" in c[0]);
+      expect(call?.[0].points).toEqual(expectedPoints);
+      expect(call?.[0].points).not.toEqual(generatePolygonPoints(5, 100, 150));
     });
   });
 

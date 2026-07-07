@@ -12,6 +12,7 @@ import type {
 } from "@/types/scene";
 import { applyOpacity } from "@/utils/colorUtils";
 import { getPrimarySolidPaint } from "@/utils/fillUtils";
+import { pointsAttr } from "@/utils/lineCapUtils";
 import { buildEllipseArcGeometry, ellipseArcGeometryToSvgPath, hasCustomEllipseArc } from "@/lib/shapePath/ellipseArc";
 import {
   buildCapMarker,
@@ -263,14 +264,6 @@ function convertPathToSvg(node: PathNode, ctx: SvgConversionContext, isRoot: boo
           })
           .join("");
   return `<g ${attrs}>${shapeEls}</g>`;
-}
-
-function pointsAttr(points: number[]): string {
-  const pairs: string[] = [];
-  for (let i = 0; i < points.length; i += 2) {
-    pairs.push(`${points[i]},${points[i + 1]}`);
-  }
-  return pairs.join(" ");
 }
 
 function convertLineToSvg(node: LineNode, ctx: SvgConversionContext, isRoot: boolean): string {

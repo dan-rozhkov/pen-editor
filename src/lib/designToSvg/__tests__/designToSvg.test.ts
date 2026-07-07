@@ -281,6 +281,46 @@ describe("convertDesignNodesToSvg", () => {
     expect(svg).toContain('orient="auto"');
   });
 
+  it("anchors cap markers at refX=0 refY=0 (viewBox coordinates, not an (minX,minY) offset)", () => {
+    const nodesById: Record<string, FlatSceneNode> = {
+      line1: line("line1", { startCap: "triangle", endCap: "triangle" }),
+    };
+    const { svg } = convertDesignNodesToSvg("line1", nodesById, {});
+    const markerDefs = svg.match(/<marker[^>]*>/g) ?? [];
+    expect(markerDefs.length).toBe(2);
+    for (const def of markerDefs) {
+      expect(def).toContain('refX="0"');
+      expect(def).toContain('refY="0"');
+    }
+  });
+
+  it("renders a non-zero-size marker for the 'bar' cap (a naive bbox collapses to width=0)", () => {
+    const nodesById: Record<string, FlatSceneNode> = {
+      line1: line("line1", { startCap: "bar", endCap: "none" }),
+    };
+    const { svg } = convertDesignNodesToSvg("line1", nodesById, {});
+    const def = svg.match(/<marker[^>]*>/)?.[0] ?? "";
+    const width = Number(def.match(/markerWidth="([^"]+)"/)?.[1]);
+    const height = Number(def.match(/markerHeight="([^"]+)"/)?.[1]);
+    expect(width).toBeGreaterThan(0);
+    expect(height).toBeGreaterThan(0);
+  });
+
+  it("root <svg> is overflow:visible so cap markers/overflow aren't clipped when the root doesn't clip", () => {
+    const nodesById: Record<string, FlatSceneNode> = { line1: line("line1", { endCap: "triangle" }) };
+    const { svg } = convertDesignNodesToSvg("line1", nodesById, {});
+    expect(svg).toMatch(/^<svg[^>]*overflow="visible"/);
+  });
+
+  it("root <svg> clips when the root frame has clip:true", () => {
+    const nodesById: Record<string, FlatSceneNode> = {
+      frame1: frame("frame1", { clip: true }),
+    };
+    const { svg } = convertDesignNodesToSvg("frame1", nodesById, {});
+    expect(svg.startsWith("<svg")).toBe(true);
+    expect(svg).not.toMatch(/^<svg[^>]*overflow="visible"/);
+  });
+
   it("builds a per-corner rounded rect as a <path> when radii differ", () => {
     const nodesById: Record<string, FlatSceneNode> = {
       rect1: rect("rect1", {

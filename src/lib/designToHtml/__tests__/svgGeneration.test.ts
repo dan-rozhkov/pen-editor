@@ -138,6 +138,25 @@ describe("lineNodeToSvg", () => {
     expect(svg).toContain('orient="auto-start-reverse"');
     expect(svg).toContain('orient="auto"');
   });
+
+  it("anchors cap markers at refX=0 refY=0, not offset by the viewBox origin", () => {
+    const svg = lineNodeToSvg(lineNode({ startCap: "triangle", endCap: "triangle" }));
+    const markerDefs = svg.match(/<marker[^>]*>/g) ?? [];
+    expect(markerDefs.length).toBe(2);
+    for (const def of markerDefs) {
+      expect(def).toContain('refX="0"');
+      expect(def).toContain('refY="0"');
+    }
+  });
+
+  it("the 'bar' cap marker has non-zero markerWidth/markerHeight (a naive bbox collapses to width=0)", () => {
+    const svg = lineNodeToSvg(lineNode({ startCap: "bar", endCap: "none" }));
+    const def = svg.match(/<marker[^>]*>/)?.[0] ?? "";
+    const width = Number(def.match(/markerWidth="([^"]+)"/)?.[1]);
+    const height = Number(def.match(/markerHeight="([^"]+)"/)?.[1]);
+    expect(width).toBeGreaterThan(0);
+    expect(height).toBeGreaterThan(0);
+  });
 });
 
 describe("polygonNodeToSvg", () => {

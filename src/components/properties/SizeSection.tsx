@@ -498,7 +498,7 @@ export function SizeSection({
               const pn = node as PolygonNode;
               const sides = pn.sides ?? 6;
               (updates as Partial<PolygonNode>).points =
-                generatePolygonPoints(sides, v, newH);
+                generatePolygonPoints(sides, v, newH, pn.innerRadiusRatio);
             } else if (node.type === "line") {
               const scaleX = v / effectiveWidth;
               const scaleY = node.aspectRatioLocked ? newH / effectiveHeight : 1;
@@ -536,7 +536,7 @@ export function SizeSection({
               const pn = node as PolygonNode;
               const sides = pn.sides ?? 6;
               (updates as Partial<PolygonNode>).points =
-                generatePolygonPoints(sides, newW, v);
+                generatePolygonPoints(sides, newW, v, pn.innerRadiusRatio);
             } else if (node.type === "line") {
               const scaleX = node.aspectRatioLocked ? newW / effectiveWidth : 1;
               const scaleY = v / effectiveHeight;

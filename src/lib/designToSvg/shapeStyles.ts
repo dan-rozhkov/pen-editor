@@ -10,7 +10,7 @@ import { applyOpacity } from "@/utils/colorUtils";
 import { getRenderableEffects, getRenderableFills } from "@/utils/fillUtils";
 import { hasPerCornerRadius } from "@/utils/renderUtils";
 import { buildSquircleRectPath, type PathSegment } from "@/lib/shapePath/squircleCorner";
-import { buildCapPrimitive } from "@/utils/lineCapUtils";
+import { buildCapMarkerDef } from "@/utils/lineCapUtils";
 
 /** Mutable state threaded through the recursive SVG conversion. */
 export interface SvgConversionContext {
@@ -263,46 +263,11 @@ export function buildEffectsFilter(node: FlatSceneNode, ctx: SvgConversionContex
   return filterId;
 }
 
-interface CapMarkerBounds {
-  minX: number;
-  minY: number;
-  width: number;
-  height: number;
-}
-
-function capPrimitiveBounds(
-  primitive: NonNullable<ReturnType<typeof buildCapPrimitive>>,
-): CapMarkerBounds {
-  const xs = [0];
-  const ys = [0];
-  if (primitive.kind === "lines") {
-    for (const [x1, y1, x2, y2] of primitive.segments) {
-      xs.push(x1, x2);
-      ys.push(y1, y2);
-    }
-  } else if (primitive.kind === "polygon") {
-    for (let i = 0; i < primitive.points.length; i += 2) {
-      xs.push(primitive.points[i]);
-      ys.push(primitive.points[i + 1]);
-    }
-  } else {
-    xs.push(primitive.cx - primitive.radius, primitive.cx + primitive.radius);
-    ys.push(primitive.cy - primitive.radius, primitive.cy + primitive.radius);
-  }
-  const minX = Math.min(...xs);
-  const minY = Math.min(...ys);
-  const maxX = Math.max(...xs);
-  const maxY = Math.max(...ys);
-  return { minX, minY, width: maxX - minX, height: maxY - minY };
-}
-
 /**
  * Register a `<marker>` def for one line endpoint's cap shape and return its
- * id (or `null` for `'none'`). Uses `markerUnits="userSpaceOnUse"` with a
- * viewBox matching the primitive's own bounding box (already sized by
- * `strokeWidth` — see `@/utils/lineCapUtils`), so no extra scaling math is
- * needed; `orient` lets SVG auto-rotate the shape to the path direction
- * (`"auto"` for an end marker, `"auto-start-reverse"` for a start marker).
+ * id (or `null` for `'none'`). Geometry/markup is built by the shared
+ * `buildCapMarkerDef` helper (`@/utils/lineCapUtils`), which both SVG export
+ * paths use so the anchor and stroke-padding fixes only live in one place.
  */
 export function buildCapMarker(
   shape: LineCapShape,
@@ -311,35 +276,11 @@ export function buildCapMarker(
   orient: "auto" | "auto-start-reverse",
   ctx: SvgConversionContext,
 ): string | null {
-  const primitive = buildCapPrimitive(shape, strokeWidth);
-  if (!primitive) return null;
-
-  const bounds = capPrimitiveBounds(primitive);
   const id = nextSvgId("marker");
-  const inner =
-    primitive.kind === "lines"
-      ? primitive.segments
-          .map(
-            ([x1, y1, x2, y2]) =>
-              `<path d="M${x1},${y1} L${x2},${y2}" stroke="${color}" stroke-width="${strokeWidth}" fill="none"/>`,
-          )
-          .join("")
-      : primitive.kind === "polygon"
-        ? `<polygon points="${polylinePointsAttr(primitive.points)}" fill="${color}"/>`
-        : `<circle cx="${primitive.cx}" cy="${primitive.cy}" r="${primitive.radius}" fill="${color}"/>`;
-
-  ctx.defs.push(
-    `<marker id="${id}" markerWidth="${bounds.width}" markerHeight="${bounds.height}" refX="${-bounds.minX}" refY="${-bounds.minY}" viewBox="${bounds.minX} ${bounds.minY} ${bounds.width} ${bounds.height}" markerUnits="userSpaceOnUse" orient="${orient}">${inner}</marker>`,
-  );
+  const def = buildCapMarkerDef(id, shape, strokeWidth, color, orient);
+  if (!def) return null;
+  ctx.defs.push(def);
   return id;
-}
-
-function polylinePointsAttr(points: number[]): string {
-  const pairs: string[] = [];
-  for (let i = 0; i < points.length; i += 2) {
-    pairs.push(`${points[i]},${points[i + 1]}`);
-  }
-  return pairs.join(" ");
 }
 
 export function escapeXml(text: string): string {
