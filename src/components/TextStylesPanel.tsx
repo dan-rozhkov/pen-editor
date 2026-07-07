@@ -11,7 +11,7 @@ import {
   TableHead,
   TableCell,
 } from "./ui/table";
-import { PlusIcon, TrashIcon, TextAaIcon } from "@phosphor-icons/react";
+import { PlusIcon, TrashIcon } from "@phosphor-icons/react";
 
 // Inline editable text/number cell (mirrors VariablesPanel's EditableCell).
 function EditableCell({
@@ -192,8 +192,7 @@ export function TextStylesDialog({ open, onOpenChange }: TextStylesDialogProps) 
         overlayClassName="backdrop-blur-none bg-black/40"
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-border-light">
-          <DialogTitle className="flex items-center gap-2">
-            <TextAaIcon className="size-4" />
+          <DialogTitle>
             Text styles
           </DialogTitle>
           <button
@@ -209,13 +208,13 @@ export function TextStylesDialog({ open, onOpenChange }: TextStylesDialogProps) 
           <Table className="border-collapse select-none table-fixed min-w-[720px]">
             <TableHeader>
               <TableRow className="border-border-light bg-surface-panel sticky top-0 hover:bg-surface-panel">
-                <TableHead className="w-[22%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto">
+                <TableHead className="w-[21%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto">
                   Name
                 </TableHead>
-                <TableHead className="w-[18%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
+                <TableHead className="w-[17%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
                   Font
                 </TableHead>
-                <TableHead className="w-[12%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
+                <TableHead className="w-[11%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
                   Size
                 </TableHead>
                 <TableHead className="w-[13%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
@@ -224,10 +223,10 @@ export function TextStylesDialog({ open, onOpenChange }: TextStylesDialogProps) 
                 <TableHead className="w-[13%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
                   Line height
                 </TableHead>
-                <TableHead className="w-[14%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
+                <TableHead className="w-[17%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
                   Letter spacing
                 </TableHead>
-                <TableHead className="w-[8%] h-auto border-l border-border-light" />
+                <TableHead className="w-[7%] h-auto border-l border-border-light" />
               </TableRow>
             </TableHeader>
             <TableBody>

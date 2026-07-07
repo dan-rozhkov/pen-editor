@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { TypographySection } from "../TypographySection";
+import { useTextStyleStore } from "@/store/textStyleStore";
 import type { TextNode } from "@/types/scene";
 
 // FontCombobox has a debounced search effect that isn't under test here; stub
@@ -25,7 +26,10 @@ function textNode(extra: Partial<TextNode> = {}): TextNode {
   } as TextNode;
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+  useTextStyleStore.getState().setTextStyles([]);
+  cleanup();
+});
 
 describe("<TypographySection />", () => {
   it("renders font size, line height and letter spacing", () => {
@@ -165,10 +169,13 @@ describe("<TypographySection />", () => {
   });
 
   describe("text style binding", () => {
-    it("shows 'No text style' when unbound and does not tag overrides on plain edits", () => {
+    it("opens text styles from the Typography header and does not tag overrides on plain edits", () => {
       const onUpdate = vi.fn();
       render(<TypographySection node={textNode()} onUpdate={onUpdate} />);
-      expect(screen.getByText("No text style")).toBeTruthy();
+      expect(screen.queryByText("No text style")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Text styles" }));
+      expect(screen.getByText("Text styles")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Create text style" })).toBeTruthy();
 
       const inputs = screen.getAllByRole("spinbutton");
       fireEvent.change(inputs[0], { target: { value: "24" } });
@@ -234,7 +241,9 @@ describe("<TypographySection />", () => {
       const { rerender } = render(
         <TypographySection node={textNode()} onUpdate={onUpdate} />,
       );
-      expect(screen.queryByTitle("Detach from style")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Text styles" }));
+      expect(screen.queryByText("Detach from style")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Detach from style" })).toBeNull();
 
       rerender(
         <TypographySection
@@ -242,7 +251,32 @@ describe("<TypographySection />", () => {
           onUpdate={onUpdate}
         />,
       );
-      expect(screen.getByTitle("Detach from style")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Detach from style" })).toBeTruthy();
+    });
+
+    it("renames a text style inline from the popover", () => {
+      useTextStyleStore.getState().setTextStyles([
+        {
+          id: "style-1",
+          name: "New text style",
+          fontFamily: "Arial",
+          fontSize: 14,
+        },
+      ]);
+      render(
+        <TypographySection
+          node={textNode({ textStyleId: "style-1" })}
+          onUpdate={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Text styles" }));
+      fireEvent.doubleClick(screen.getByText("New text style"));
+      const input = screen.getByDisplayValue("New text style");
+      fireEvent.change(input, { target: { value: "Body / Medium" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+
+      expect(useTextStyleStore.getState().textStyles[0].name).toBe("Body / Medium");
     });
   });
 

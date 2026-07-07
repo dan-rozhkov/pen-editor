@@ -1,3 +1,5 @@
+import { useMemo, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
 import {
   AlignBottom,
   AlignCenterVertical,
@@ -5,11 +7,13 @@ import {
   ArrowsOut,
   ArrowRight,
   Article,
-  CaretDownIcon,
-  LinkBreakIcon,
+  CheckIcon,
+  LinkIcon,
   ListBullets,
   ListNumbers,
+  MagnifyingGlassIcon,
   MinusIcon,
+  PlusIcon,
   TextAlignCenter,
   TextAlignLeft,
   TextAlignRight,
@@ -18,6 +22,7 @@ import {
   TextOutdent,
   TextStrikethrough,
   TextUnderline,
+  XIcon,
 } from "@phosphor-icons/react";
 import type { SceneNode, TextNode } from "@/types/scene";
 import {
@@ -29,15 +34,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { FontCombobox } from "@/components/ui/FontCombobox";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useTextStyleStore } from "@/store/textStyleStore";
-import { TEXT_STYLE_PROPERTY_KEYS } from "@/types/textStyle";
+import { TEXT_STYLE_PROPERTY_KEYS, type TextStyle } from "@/types/textStyle";
 import { MAX_INDENT_LEVEL, getParagraphAttrs, normalizeParagraphs, splitParagraphs } from "@/lib/textLists/paragraphs";
 import { toggleListType } from "@/lib/textLists/listEditing";
 
@@ -47,77 +46,218 @@ interface TypographySectionProps {
 }
 
 const STYLE_MANAGED_KEYS: readonly string[] = TEXT_STYLE_PROPERTY_KEYS;
+const TYPOGRAPHY_POPOVER_PANEL_OFFSET = 252;
 
-/** Picker for the named text style bound to this node: apply / create / detach. */
-function TextStyleField({ node }: { node: TextNode }) {
+function textStyleMeta(style: TextStyle): string {
+  const metrics = [
+    style.fontSize !== undefined ? String(style.fontSize) : null,
+    style.lineHeight !== undefined ? String(style.lineHeight) : null,
+  ].filter(Boolean);
+  return metrics.length > 0 ? metrics.join("/") : style.fontFamily || "";
+}
+
+function TextStyleRow({
+  style,
+  isBound,
+  onApply,
+}: {
+  style: TextStyle;
+  isBound: boolean;
+  onApply: () => void;
+}) {
+  const updateTextStyle = useTextStyleStore((s) => s.updateTextStyle);
+  const [isEditing, setIsEditing] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const meta = textStyleMeta(style);
+
+  const startRename = () => {
+    setIsEditing(true);
+    requestAnimationFrame(() => {
+      inputRef.current?.select();
+    });
+  };
+
+  const commitRename = () => {
+    const trimmed = inputRef.current?.value.trim();
+    if (trimmed) {
+      updateTextStyle(style.id, { name: trimmed });
+    }
+    setIsEditing(false);
+  };
+
+  const handleInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commitRename();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setIsEditing(false);
+    }
+  };
+
+  const handleRowKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (isEditing) return;
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onApply();
+    }
+  };
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-secondary"
+      onClick={() => {
+        if (!isEditing) onApply();
+      }}
+      onKeyDown={handleRowKeyDown}
+    >
+      <span
+        className="w-5 shrink-0 text-sm leading-none text-text-primary"
+        style={{
+          fontFamily: style.fontFamily,
+          fontWeight: style.fontWeight,
+        }}
+        aria-hidden="true"
+      >
+        Ag
+      </span>
+      <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+        {isEditing ? (
+          <input
+            ref={inputRef}
+            type="text"
+            defaultValue={style.name}
+            onKeyDown={handleInputKeyDown}
+            onBlur={commitRename}
+            onClick={(e) => e.stopPropagation()}
+            className="min-w-0 flex-1 bg-transparent text-xs text-text-primary outline-none"
+            autoFocus
+          />
+        ) : (
+          <span
+            className="min-w-0 truncate text-xs text-text-primary"
+            onClick={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              startRename();
+            }}
+          >
+            {style.name}
+          </span>
+        )}
+        {meta && (
+          <span className="shrink-0 text-[11px] text-text-muted">
+            {meta}
+          </span>
+        )}
+      </span>
+      {isBound && <CheckIcon size={14} className="text-text-muted" />}
+    </div>
+  );
+}
+
+/** Popover for applying an existing text style or creating one from this node. */
+function TextStylesPopover({ node }: { node: TextNode }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const textStyles = useTextStyleStore((s) => s.textStyles);
   const applyStyleToNode = useTextStyleStore((s) => s.applyStyleToNode);
-  const detachStyleFromNode = useTextStyleStore((s) => s.detachStyleFromNode);
   const createStyleFromNode = useTextStyleStore((s) => s.createStyleFromNode);
   const boundStyle = node.textStyleId
     ? textStyles.find((s) => s.id === node.textStyleId)
     : undefined;
 
+  const filteredStyles = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return textStyles;
+    return textStyles.filter((style) =>
+      [style.name, style.fontFamily, textStyleMeta(style)]
+        .filter((value): value is string => Boolean(value))
+        .some((value) => value.toLowerCase().includes(normalized)),
+    );
+  }, [query, textStyles]);
+
   // applyStyleToNode/detachStyleFromNode/createStyleFromNode mutate the scene
   // store directly (they need to update literal typography fields to keep
-  // rendering/measurement in sync), so this field bypasses the `onUpdate` prop
+  // rendering/measurement in sync), so this popover bypasses the `onUpdate` prop
   // entirely — the scene store update re-renders the panel from the fresh node.
 
   return (
-    <PropertyRow>
-      <DropdownMenu>
-        <DropdownMenuTrigger>
-          <button
-            type="button"
-            className="flex-1 flex items-center justify-between gap-1 h-7 px-2 rounded-md bg-secondary text-xs text-text-primary hover:bg-secondary/80"
-          >
-            <span className="truncate">
-              {boundStyle ? boundStyle.name : "No text style"}
-            </span>
-            <CaretDownIcon size={12} />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="start"
-          className="min-w-[180px] bg-popover text-popover-foreground ring-foreground/10 rounded-lg shadow-md ring-1"
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          title="Text styles"
+          aria-label="Text styles"
         >
-          {textStyles.length === 0 && (
-            <div className="px-2 py-1.5 text-[11px] text-text-disabled">
-              No text styles yet
-            </div>
-          )}
-          {textStyles.map((style) => (
-            <DropdownMenuItem
-              key={style.id}
-              className="text-xs cursor-pointer"
-              onClick={() => applyStyleToNode(node.id, style.id)}
+          <PlusIcon />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="left"
+        align="start"
+        sideOffset={TYPOGRAPHY_POPOVER_PANEL_OFFSET}
+        className="w-[240px] max-h-[360px] gap-0 overflow-hidden rounded-xl border-border-default p-0"
+      >
+        <div className="flex h-10 items-center justify-between border-b border-input px-3">
+          <div className="text-xs font-semibold text-text-primary">Text styles</div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className="flex size-6 items-center justify-center rounded-md text-text-primary hover:bg-secondary"
+              title="Create text style"
+              aria-label="Create text style"
+              onClick={() => createStyleFromNode(node.id, node.name || "New text style")}
             >
-              {style.name}
-            </DropdownMenuItem>
-          ))}
-          {textStyles.length > 0 && <DropdownMenuSeparator />}
-          <DropdownMenuItem
-            className="text-xs cursor-pointer"
-            onClick={() =>
-              createStyleFromNode(node.id, node.name || "New text style")
-            }
-          >
-            Create style from this text
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      {node.textStyleId && (
-        <button
-          type="button"
-          title="Detach from style"
-          aria-label="Detach from style"
-          className="p-1.5 rounded hover:bg-secondary text-text-muted hover:text-text-primary transition-colors"
-          onClick={() => detachStyleFromNode(node.id)}
-        >
-          <LinkBreakIcon size={14} />
-        </button>
-      )}
-    </PropertyRow>
+              <PlusIcon size={14} />
+            </button>
+            <button
+              type="button"
+              className="flex size-6 items-center justify-center rounded-md text-text-primary hover:bg-secondary"
+              title="Close"
+              aria-label="Close text styles"
+              onClick={() => setOpen(false)}
+            >
+              <XIcon size={14} />
+            </button>
+          </div>
+        </div>
+        <label className="flex h-9 items-center gap-2 px-3 text-text-muted">
+          <MagnifyingGlassIcon size={14} />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search"
+            className="min-w-0 flex-1 bg-transparent text-xs text-text-primary placeholder:text-text-muted outline-none"
+          />
+        </label>
+        <div className="max-h-[270px] overflow-auto py-1">
+          {filteredStyles.length === 0 ? (
+            <div className="px-3 py-5 text-center text-xs text-text-muted">
+              {textStyles.length === 0 ? "No text styles yet" : "No matching text styles"}
+            </div>
+          ) : (
+            filteredStyles.map((style) => {
+              const isBound = style.id === boundStyle?.id;
+              return (
+                <TextStyleRow
+                  key={style.id}
+                  style={style}
+                  isBound={isBound}
+                  onApply={() => {
+                    applyStyleToNode(node.id, style.id);
+                    setOpen(false);
+                  }}
+                />
+              );
+            })
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -153,6 +293,8 @@ function TruncateTextIcon() {
 }
 
 export function TypographySection({ node, onUpdate }: TypographySectionProps) {
+  const detachStyleFromNode = useTextStyleStore((s) => s.detachStyleFromNode);
+
   // Route typography edits: while the node is bound to a text style, changing
   // a style-managed property (fontFamily/fontSize/...) becomes a local
   // override — tracked in `textStyleOverrides` (mirrors ref-instance
@@ -222,14 +364,29 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
   };
 
   return (
-    <PropertySection title="Typography">
-      <TextStyleField node={node} />
-      <FontCombobox
-        value={node.fontFamily ?? "Arial"}
-        onChange={(v) =>
-          updateTypography({ fontFamily: v })
-        }
-      />
+    <PropertySection
+      title="Typography"
+      action={<TextStylesPopover node={node} />}
+    >
+      <PropertyRow>
+        <FontCombobox
+          value={node.fontFamily ?? "Arial"}
+          onChange={(v) =>
+            updateTypography({ fontFamily: v })
+          }
+        />
+        {node.textStyleId && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            title="Detach from style"
+            aria-label="Detach from style"
+            onClick={() => detachStyleFromNode(node.id)}
+          >
+            <LinkIcon />
+          </Button>
+        )}
+      </PropertyRow>
       <PropertyRow>
         <NumberInput
           value={node.fontSize ?? 16}

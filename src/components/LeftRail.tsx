@@ -109,7 +109,7 @@ export function LeftRail() {
       </RailButton>
       <RailButton
         testid="rail-text-styles"
-        title="Text styles"
+        title="Styles"
         active={false}
         onClick={() => openTextStyles(true)}
       >
