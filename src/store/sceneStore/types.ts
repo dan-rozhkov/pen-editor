@@ -88,6 +88,7 @@ export const TEXT_MEASURE_PROPS = new Set([
   "fontStyle",
   "letterSpacing",
   "lineHeight",
+  "paragraphSpacing",
   "textWidthMode",
   "textTransform",
   // maxLines caps auto-height; both re-derive the rendered/measured line set

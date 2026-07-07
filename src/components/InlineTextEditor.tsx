@@ -131,7 +131,14 @@ function extractEditorText(root: HTMLElement): string {
 /** Minimal font-relevant subset of TextNode needed to measure marker glyph widths. */
 type MeasurableTextNode = Pick<
   TextNode,
-  'text' | 'paragraphs' | 'fontFamily' | 'fontSize' | 'fontWeight' | 'fontStyle' | 'letterSpacing'
+  | 'text'
+  | 'paragraphs'
+  | 'paragraphSpacing'
+  | 'fontFamily'
+  | 'fontSize'
+  | 'fontWeight'
+  | 'fontStyle'
+  | 'letterSpacing'
 >
 
 /**
@@ -157,12 +164,19 @@ function measureMarkerWidths(node: MeasurableTextNode): number[] {
  * (`padding-left` + negative `text-indent`) so wrapped continuation lines
  * align under the text rather than under the marker — mirrors the Pixi
  * renderer's `layoutTextParagraphs` geometry closely enough for editing.
+ *
+ * A nonzero `paragraphSpacing` becomes `margin-bottom` on every line's `<div>`
+ * except the last (matching `measureTextAutoSize`/`measureTextFixedWidthHeight`
+ * and the Pixi renderer's `buildListContent`, which all insert exactly
+ * `paragraphCount - 1` gaps) so the WYSIWYG editor's paragraph gaps line up
+ * pixel-for-pixel with the Pixi render.
  */
 function setEditorText(root: HTMLElement, node: MeasurableTextNode) {
   root.textContent = ''
   const lines = splitParagraphs(node.text)
   const markers = computeParagraphMarkerInfos(node)
   const markerWidths = measureMarkerWidths(node)
+  const paragraphSpacing = node.paragraphSpacing ?? 0
 
   lines.forEach((line, i) => {
     const div = document.createElement('div')
@@ -187,6 +201,10 @@ function setEditorText(root: HTMLElement, node: MeasurableTextNode) {
     } else {
       if (line) div.textContent = line
       else div.appendChild(document.createElement('br'))
+    }
+
+    if (paragraphSpacing && i < lines.length - 1) {
+      div.style.marginBottom = `${paragraphSpacing}px`
     }
 
     root.appendChild(div)

@@ -60,6 +60,19 @@ describe("<TypographySection />", () => {
     expect(onUpdate).toHaveBeenCalledWith({ letterSpacing: 3 });
   });
 
+  it("renders and edits Paragraph Spacing", () => {
+    const onUpdate = vi.fn();
+    render(
+      <TypographySection node={textNode({ paragraphSpacing: 8 })} onUpdate={onUpdate} />,
+    );
+    const inputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    // font size, line height, letter spacing, paragraph spacing.
+    expect(inputs[3].value).toBe("8");
+
+    fireEvent.change(inputs[3], { target: { value: "16" } });
+    expect(onUpdate).toHaveBeenCalledWith({ paragraphSpacing: 16 });
+  });
+
   describe("resizing mode (setTextWidthMode)", () => {
     it("sets the width mode without touching sizing when nothing fills", () => {
       const onUpdate = vi.fn();

@@ -483,6 +483,13 @@ export interface TextNode extends BaseNode {
   lineHeight?: number
   // Letter spacing in pixels
   letterSpacing?: number
+  // Extra vertical gap, in px, inserted after each paragraph (a paragraph is a
+  // hard line break — same boundary as `splitParagraphs`/`ParagraphAttrs`).
+  // Default 0 (no extra gap). Included in auto-size/hug height measurement
+  // (`measureTextAutoSize`/`measureTextFixedWidthHeight`) and rendered
+  // identically by the Pixi renderer and the inline contentEditable editor
+  // (as `margin-bottom` on each paragraph's line div).
+  paragraphSpacing?: number
   // Text transform (visual only, applied at render/measure time)
   textTransform?: TextTransform
   // Truncate overflowing text with an ellipsis ("…"). Figma "Truncate text".

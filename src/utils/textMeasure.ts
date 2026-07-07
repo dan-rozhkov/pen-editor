@@ -35,21 +35,28 @@ export function measureTextAutoSize(node: TextNode): { width: number; height: nu
   const fontSize = node.fontSize ?? 16
   const lineHeight = node.lineHeight ?? 1.2
   const letterSpacing = node.letterSpacing ?? 0
+  const paragraphSpacing = node.paragraphSpacing ?? 0
   const ctx = getContext()
   ctx.font = buildFontString(node)
 
   const { lines } = layoutTextParagraphs(node, null)
 
   let maxWidth = 0
+  let paragraphCount = 0
   for (const line of lines) {
     const metrics = ctx.measureText(line.text)
     // Account for letter spacing: (charCount - 1) * spacing, plus the line's
     // own left offset (indent + hanging indent past a list marker).
     const lineWidth = line.x + metrics.width + Math.max(0, line.text.length - 1) * letterSpacing
     maxWidth = Math.max(maxWidth, lineWidth)
+    if (line.isFirstLine) paragraphCount++
   }
 
-  const totalHeight = lines.length * fontSize * lineHeight
+  // One `paragraphSpacing` gap after every paragraph but the last — same
+  // formula the Pixi renderer and `measureTextFixedWidthHeight` use, so
+  // auto-size can never disagree with what's actually drawn.
+  const totalHeight =
+    lines.length * fontSize * lineHeight + Math.max(0, paragraphCount - 1) * paragraphSpacing
 
   return {
     width: Math.ceil(maxWidth),
@@ -68,11 +75,17 @@ export function measureTextAutoSize(node: TextNode): { width: number; height: nu
 export function measureTextFixedWidthHeight(node: TextNode): number {
   const fontSize = node.fontSize ?? 16
   const lineHeight = node.lineHeight ?? 1.2
+  const paragraphSpacing = node.paragraphSpacing ?? 0
   // A maxLines cap shrinks auto-height so the box never grows past the limit.
   // The 'fixed-height' height limit is irrelevant here (that mode keeps its own
   // fixed height), so getLineLimit only contributes maxLines in 'fixed' mode.
   const limit = getLineLimit(node)
-  let lineCount = layoutTextParagraphs(node, node.width).lines.length
-  if (Number.isFinite(limit)) lineCount = Math.min(lineCount, limit)
-  return Math.ceil(Math.max(1, lineCount) * fontSize * lineHeight)
+  const { lines } = layoutTextParagraphs(node, node.width)
+  const keptLines = Number.isFinite(limit) ? lines.slice(0, limit) : lines
+  const lineCount = Math.max(1, keptLines.length)
+  // Paragraph gaps are counted from the *kept* lines only — a paragraph
+  // dropped entirely by maxLines contributes no trailing gap.
+  const paragraphCount = new Set(keptLines.map((line) => line.paragraphIndex)).size
+  const spacingHeight = Math.max(0, paragraphCount - 1) * paragraphSpacing
+  return Math.ceil(lineCount * fontSize * lineHeight + spacingHeight)
 }

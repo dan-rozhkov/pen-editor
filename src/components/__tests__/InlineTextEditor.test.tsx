@@ -88,6 +88,31 @@ describe("<InlineTextEditor />", () => {
     expect(editor.querySelectorAll("[data-text-list-marker]")).toHaveLength(0);
   });
 
+  it("applies paragraphSpacing as margin-bottom on every line div except the last", () => {
+    const { container } = render(
+      <InlineTextEditor
+        node={textNode({ text: "one\ntwo\nthree", paragraphSpacing: 12 })}
+        absoluteX={0}
+        absoluteY={0}
+      />,
+    );
+    const editor = container.querySelector('[contenteditable="true"]') as HTMLElement;
+    const lines = Array.from(editor.children) as HTMLElement[];
+    expect(lines).toHaveLength(3);
+    expect(lines[0].style.marginBottom).toBe("12px");
+    expect(lines[1].style.marginBottom).toBe("12px");
+    expect(lines[2].style.marginBottom).toBe("");
+  });
+
+  it("does not set margin-bottom when paragraphSpacing is 0/unset", () => {
+    const { container } = render(
+      <InlineTextEditor node={textNode({ text: "one\ntwo" })} absoluteX={0} absoluteY={0} />,
+    );
+    const editor = container.querySelector('[contenteditable="true"]') as HTMLElement;
+    const lines = Array.from(editor.children) as HTMLElement[];
+    expect(lines[0].style.marginBottom).toBe("");
+  });
+
   it("renders a bullet marker span for a list paragraph", () => {
     const { container } = render(
       <InlineTextEditor

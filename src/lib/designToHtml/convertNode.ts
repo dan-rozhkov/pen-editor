@@ -273,6 +273,8 @@ interface ListEntry {
   level: number;
   type: "bullet" | "number";
   html: string;
+  /** Extra vertical gap (px) after this paragraph's `<li>`, from `paragraphSpacing`. Undefined = none. */
+  marginBottom?: number;
 }
 
 interface ListStackFrame {
@@ -322,7 +324,9 @@ function renderNestedListHtml(entries: ListEntry[]): string {
     if (stack.length === 0 || stack[stack.length - 1].level < entry.level) {
       stack.push({ level: entry.level, type: entry.type, items: [] });
     }
-    stack[stack.length - 1].items.push(`<li>${entry.html}</li>`);
+    const liStyle =
+      entry.marginBottom !== undefined ? ` style="margin-bottom:${entry.marginBottom}px"` : "";
+    stack[stack.length - 1].items.push(`<li${liStyle}>${entry.html}</li>`);
   }
 
   while (stack.length > 0) closeFrame();
@@ -333,10 +337,20 @@ function renderNestedListHtml(entries: ListEntry[]): string {
  * Serialize a text node's paragraphs to HTML, grouping contiguous list
  * paragraphs into nested `<ul>`/`<ol>` and contiguous plain paragraphs into
  * `<br>`-joined text (matching the pre-lists behavior for non-list content).
+ *
+ * When `paragraphSpacing` is set, every paragraph but the last emits a
+ * `margin-bottom` gap — on its `<li>` for list paragraphs, on a wrapping
+ * `<div>` for plain paragraphs (which then replace the flat `<br>`-join) —
+ * mirroring the `paragraphCount - 1` gap formula the Pixi renderer and the
+ * measurement helpers use, so list/mixed nodes don't drop the gap on export.
  */
 function buildTextBodyHtml(node: TextNode): string {
   const lines = splitParagraphs(node.text);
   const markers = computeParagraphMarkerInfos(node);
+  const spacing = node.paragraphSpacing ?? 0;
+  const lastIndex = lines.length - 1;
+  const marginFor = (i: number): number | undefined =>
+    spacing > 0 && i < lastIndex ? spacing : undefined;
   const parts: string[] = [];
   let i = 0;
 
@@ -349,10 +363,21 @@ function buildTextBodyHtml(node: TextNode): string {
           level: attrs.indentLevel,
           type: attrs.listType as "bullet" | "number",
           html: escapeHtml(lines[i]),
+          marginBottom: marginFor(i),
         });
         i++;
       }
       parts.push(renderNestedListHtml(entries));
+    } else if (spacing > 0) {
+      // Plain paragraphs, with spacing: one <div> each carrying margin-bottom
+      // (except the overall last paragraph), same shape as
+      // `buildSpacedParagraphsHtml`.
+      while (i < lines.length && !markers[i]) {
+        const margin = marginFor(i);
+        const style = margin !== undefined ? ` style="margin-bottom:${margin}px"` : "";
+        parts.push(`<div${style}>${escapeHtml(lines[i])}</div>`);
+        i++;
+      }
     } else {
       const plainLines: string[] = [];
       while (i < lines.length && !markers[i]) {
@@ -379,9 +404,15 @@ function convertTextNode(
     ...extraStyles,
   };
 
-  if (hasActiveList(node)) {
-    // ul/ol are block-level — always wrap in a div (a span can't validly
-    // contain them), regardless of textWidthMode/vertical-align.
+  const paragraphSpacing = node.paragraphSpacing ?? 0;
+  const paragraphs = splitParagraphs(node.text);
+  const spacedMultiParagraph = paragraphSpacing !== 0 && paragraphs.length > 1;
+
+  // Lists and paragraph-spaced multi-paragraph text both need block-level
+  // per-paragraph markup (ul/ol or margin-bottom divs), which a `<span>` can't
+  // validly contain — always wrap in a div. `buildTextBodyHtml` handles both
+  // (grouping list runs, emitting margin-bottom gaps) in one pass.
+  if (hasActiveList(node) || spacedMultiParagraph) {
     return `<div style="${stylesToString(styles)}">${buildTextBodyHtml(node)}</div>`;
   }
 

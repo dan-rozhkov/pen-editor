@@ -2,15 +2,34 @@ import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { TextNode } from "@/types/scene";
 import { getPrimarySolidPaint } from "@/utils/fillUtils";
 import { getResolvedFill, getResolvedSolidPaint } from "./colorHelpers";
-import { applyTextTransform, truncateLines, wrapTextToLines } from "@/utils/textMeasure";
-import { hasActiveList } from "@/lib/textLists/paragraphs";
+import { applyTextTransform, getLineLimit, truncateLines, wrapTextToLines } from "@/utils/textMeasure";
+import { hasActiveList, splitParagraphs } from "@/lib/textLists/paragraphs";
 import { layoutTextParagraphs, type LaidOutLine } from "@/utils/textWrap";
 
-/** Label on the wrapper container used by the list-rendering path (see `buildListContent`). */
+/**
+ * Label on the wrapper container used by the per-line rendering path
+ * (`buildListContent`) — shared by list nodes (bullet/number markers) and
+ * plain multi-paragraph nodes with a nonzero `paragraphSpacing`, since both
+ * need per-line `Text` objects instead of a single monolithic `Text`
+ * (Pixi's own `TextStyle.lineHeight` can't vary line-to-line, which a
+ * paragraph gap requires).
+ */
 const LIST_ROOT_LABEL = "text-list-root";
 
 function isWrappedMode(node: TextNode): boolean {
   return node.textWidthMode === "fixed" || node.textWidthMode === "fixed-height";
+}
+
+/**
+ * True when the node needs the per-line rendering path (`buildListContent`)
+ * rather than the single-`Text` fast path: either it has an active list, or
+ * it has a nonzero `paragraphSpacing` across more than one paragraph (a
+ * single paragraph has no "after each paragraph" gap to insert).
+ */
+function needsLineLayout(node: TextNode): boolean {
+  if (hasActiveList(node)) return true;
+  const spacing = node.paragraphSpacing ?? 0;
+  return spacing !== 0 && splitParagraphs(node.text).length > 1;
 }
 
 /**
@@ -54,7 +73,7 @@ function buildPlainContent(container: Container, node: TextNode): void {
 
 export function createTextContainer(node: TextNode): Container {
   const container = new Container();
-  if (hasActiveList(node)) {
+  if (needsLineLayout(node)) {
     buildListContent(container, node);
   } else {
     buildPlainContent(container, node);
@@ -67,7 +86,7 @@ export function updateTextContainer(
   node: TextNode,
   prev: TextNode,
 ): void {
-  const nodeIsList = hasActiveList(node);
+  const nodeIsList = needsLineLayout(node);
   const wasList = container.getChildByLabel(LIST_ROOT_LABEL) != null;
 
   // Mode transition (plain <-> list): list layout depends on many interacting
@@ -85,6 +104,7 @@ export function updateTextContainer(
       modeChanged ||
       node.text !== prev.text ||
       node.paragraphs !== prev.paragraphs ||
+      node.paragraphSpacing !== prev.paragraphSpacing ||
       node.textTransform !== prev.textTransform ||
       node.textWidthMode !== prev.textWidthMode ||
       node.width !== prev.width ||
@@ -170,11 +190,16 @@ export function updateTextContainer(
 }
 
 /**
- * List-rendering path: one Pixi `Text` per wrapped line (instead of a single
- * monolithic `Text`), so each line can carry its own hanging-indent x-offset,
- * plus one small `Text` per list paragraph for its bullet/number marker.
- * Used only when the node has at least one active list paragraph — plain
- * text keeps the original single-`Text` fast path via `buildPlainContent`.
+ * Per-line rendering path: one Pixi `Text` per wrapped line (instead of a
+ * single monolithic `Text`), so each line can carry its own hanging-indent
+ * x-offset and, between paragraphs, an extra `paragraphSpacing` y-gap on top
+ * of the normal line height — Pixi's own `TextStyle.lineHeight` is uniform
+ * across a `Text` object's internal lines, so it can't express that. Also
+ * draws one small `Text` per list paragraph for its bullet/number marker.
+ * Used whenever `needsLineLayout` is true (an active list, or a nonzero
+ * `paragraphSpacing` across multiple paragraphs) — plain single-paragraph (or
+ * zero-spacing) text keeps the original single-`Text` fast path via
+ * `buildPlainContent`.
  */
 function buildListContent(container: Container, node: TextNode): void {
   const root = new Container();
@@ -183,8 +208,38 @@ function buildListContent(container: Container, node: TextNode): void {
 
   const fontSize = node.fontSize ?? 16;
   const lineHeightPx = fontSize * (node.lineHeight ?? 1.2);
+  const paragraphSpacing = node.paragraphSpacing ?? 0;
   const maxWidth = isWrappedMode(node) ? node.width : null;
-  const { lines, markers } = layoutTextParagraphs(node, maxWidth);
+  const { lines: laidOutLines, markers } = layoutTextParagraphs(node, maxWidth);
+
+  // Apply the same line limit + ellipsis the plain fast path uses
+  // (`buildRenderText`), so a wrapped node with `maxLines`/`truncateText`
+  // still truncates on this per-line path. Without this a list or
+  // paragraph-spaced node would render every line while
+  // `measureTextFixedWidthHeight` shrinks the box to the truncated count —
+  // the text would visibly overflow. `getLineLimit` is Infinity in unwrapped
+  // ("auto") mode, so this is a no-op there.
+  const limit = getLineLimit(node);
+  let lines = laidOutLines;
+  if (Number.isFinite(limit) && lines.length > limit) {
+    const truncatedTexts = truncateLines(node, lines.map((l) => l.text), node.width);
+    lines = truncatedTexts.map((text, i) => ({ ...lines[i], text }));
+  }
+
+  // Each line's y offset: uniform lineHeightPx within a paragraph, plus one
+  // `paragraphSpacing` gap inserted before the first line of every paragraph
+  // after the first. `measureTextAutoSize`/`measureTextFixedWidthHeight` and
+  // the inline editor's per-paragraph margin-bottom use this same formula so
+  // all three can never disagree about where a paragraph gap lands.
+  const lineYs: number[] = [];
+  let y = 0;
+  lines.forEach((line, i) => {
+    if (i > 0 && line.paragraphIndex !== lines[i - 1].paragraphIndex) {
+      y += paragraphSpacing;
+    }
+    lineYs.push(y);
+    y += lineHeightPx;
+  });
 
   const lineStyle = buildTextStyle(node);
   const fillColor = getResolvedTextColor(node) ?? "#000000";
@@ -197,7 +252,7 @@ function buildListContent(container: Container, node: TextNode): void {
     t.label = `text-line-${i}`;
     t.anchor.set(0, 0);
     t.x = line.x;
-    t.y = i * lineHeightPx;
+    t.y = lineYs[i];
     root.addChild(t);
     return t;
   });
@@ -209,24 +264,27 @@ function buildListContent(container: Container, node: TextNode): void {
     const lineIndex = lines.findIndex(
       (l) => l.paragraphIndex === marker.paragraphIndex && l.isFirstLine,
     );
+    // A marker whose paragraph's first line was truncated away has no anchor
+    // line — skip it rather than stacking it at y=0.
+    if (lineIndex < 0) return;
     const t = new Text({ text: marker.text, style: markerStyle });
     t.resolution = dpr;
     t.roundPixels = true;
     t.label = `text-marker-${i}`;
     t.anchor.set(0, 0);
     t.x = marker.x;
-    t.y = lineIndex >= 0 ? lineIndex * lineHeightPx : 0;
+    t.y = lineYs[lineIndex];
     root.addChild(t);
   });
 
-  const totalHeight = lines.length * lineHeightPx;
+  const totalHeight = y;
   if (node.textWidthMode === "fixed-height") {
     const v = node.textAlignVertical ?? "top";
     const factor = v === "middle" ? 0.5 : v === "bottom" ? 1 : 0;
     root.y = (node.height - totalHeight) * factor;
   }
 
-  drawListTextDecorations(root, node, lines, lineTexts, lineHeightPx, fillColor);
+  drawListTextDecorations(root, node, lines, lineTexts, lineYs, fillColor);
 }
 
 function drawListTextDecorations(
@@ -234,7 +292,7 @@ function drawListTextDecorations(
   node: TextNode,
   lines: LaidOutLine[],
   lineTexts: Text[],
-  lineHeightPx: number,
+  lineYs: number[],
   fillColor: string,
 ): void {
   if (!node.underline && !node.strikethrough) return;
@@ -248,11 +306,12 @@ function drawListTextDecorations(
     if (!line.text) return;
     const w = lineTexts[i]?.width ?? 0;
     const x = line.x;
+    const lineY = lineYs[i];
     if (node.underline) {
-      g.rect(x, i * lineHeightPx + fontSize * 1.05, w, thickness).fill(fillColor);
+      g.rect(x, lineY + fontSize * 1.05, w, thickness).fill(fillColor);
     }
     if (node.strikethrough) {
-      g.rect(x, i * lineHeightPx + fontSize * 0.55, w, thickness).fill(fillColor);
+      g.rect(x, lineY + fontSize * 0.55, w, thickness).fill(fillColor);
     }
   });
 

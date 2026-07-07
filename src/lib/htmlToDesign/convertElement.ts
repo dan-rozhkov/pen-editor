@@ -179,7 +179,21 @@ function convertElement(
     return textNode;
   }
 
-  // Element with children → FrameNode
+  // Element with children → FrameNode.
+  //
+  // Known limitation (paragraphSpacing round-trip): designToHtml exports a
+  // multi-paragraph spaced text node as an outer element wrapping one
+  // `<div style="margin-bottom:…">` per paragraph. That element has element
+  // children, so it lands here and each paragraph becomes its own TextNode in
+  // a FrameNode — the single-node structure (and its `paragraphSpacing`) is
+  // not reconstructed. This is deliberate: htmlToDesign is a general importer
+  // for arbitrary HTML, and there is no reliable signal that distinguishes
+  // "one text node that happened to export as paragraph divs" from "a frame of
+  // several genuinely separate text blocks", so collapsing the wrapper would
+  // regress the common case. The editor's own persistence is the .pen JSON
+  // format (which preserves paragraphSpacing directly), not an HTML round-trip;
+  // the single-paragraph element-level `margin-bottom` case is still recovered
+  // by `applyTextProps`.
   const children: SceneNode[] = [];
 
   for (const child of el.childNodes) {

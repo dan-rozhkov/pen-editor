@@ -231,6 +231,16 @@ export function applyTextProps(node: TextNode, style: CSSStyleDeclaration): void
     node.letterSpacing = letterSpacing;
   }
 
+  // Paragraph spacing — best-effort from a `margin-bottom` on the element
+  // itself (common for pasted/imported `<p>`-per-paragraph markup). Our own
+  // designToHtml export instead puts `margin-bottom` on per-paragraph child
+  // `<div>`s (see `buildSpacedParagraphsHtml`), which this element-level read
+  // doesn't see — round-tripping that shape isn't attempted here.
+  const marginBottom = parseFloat(style.marginBottom);
+  if (marginBottom && !isNaN(marginBottom) && marginBottom > 0) {
+    node.paragraphSpacing = marginBottom;
+  }
+
   // Text decoration
   const decoration = style.textDecorationLine || style.textDecoration;
   if (decoration?.includes("underline")) {

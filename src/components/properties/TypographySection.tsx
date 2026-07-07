@@ -821,6 +821,18 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
           step={0.5}
         />
       </PropertyRow>
+      <PropertyRow>
+        <NumberInput
+          label="Paragraph Spacing"
+          labelOutside={true}
+          value={node.paragraphSpacing ?? 0}
+          onChange={(v) =>
+            updateTypography({ paragraphSpacing: v })
+          }
+          min={0}
+          step={1}
+        />
+      </PropertyRow>
       </PropertySection>
     </IconContext.Provider>
   );
