@@ -60,6 +60,7 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
   const applyEffectStyleToNode = useStyleStore((s) => s.applyEffectStyleToNode);
   const detachEffectStyleFromNode = useStyleStore((s) => s.detachEffectStyleFromNode);
   const boundEffectStyleId = node.effectStyleId;
+  const hasEffectControls = effectStyles.length > 0 || effects.length > 0;
 
   const commit = (next: Effect[]) => {
     onUpdate({ effects: next, ...clearLegacyEffectProps() } as Partial<SceneNode>);
@@ -111,7 +112,7 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
           onPick={(styleId) => applyEffectStyleToNode(node.id, styleId)}
           onDetach={() => detachEffectStyleFromNode(node.id)}
         />
-      ) : (
+      ) : hasEffectControls ? (
         <div className="flex flex-col gap-1">
           {effectStyles.length > 0 && (
             <StylePicker
@@ -293,7 +294,7 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
               );
             })}
         </div>
-      )}
+      ) : null}
     </PropertySection>
   );
 }

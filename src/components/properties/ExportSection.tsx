@@ -107,7 +107,7 @@ export function ExportSection({ selectedNode }: ExportSectionProps) {
           </div>
         </div>
         {format === "pdf" && (
-          <label className="flex items-center gap-2 text-xs text-text-muted">
+          <label className="flex items-center gap-2 py-1.5 text-xs text-text-primary">
             <Checkbox checked={allFrames} onCheckedChange={(checked) => setAllFrames(checked === true)} />
             Export all frames of the page
           </label>
