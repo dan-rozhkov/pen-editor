@@ -29,7 +29,12 @@ describe("<PatternFillEditor />", () => {
     );
     const img = screen.getByAltText("Tile preview") as HTMLImageElement;
     expect(img.getAttribute("src")).toBe("data:image/png;base64,abc");
-    expect(screen.getByText("Replace Tile")).toBeTruthy();
+    const replaceButton = screen.getByText("Replace Tile");
+    const overlay = replaceButton.parentElement;
+    expect(overlay?.className).toContain("bg-black/35");
+    expect(overlay?.className).toContain("justify-center");
+    expect(replaceButton.className).toContain("w-auto");
+    expect(img.parentElement?.contains(replaceButton)).toBe(true);
     for (const label of ["Scale", "Gap X", "Gap Y", "Offset X", "Offset Y", "Row offset"]) {
       expect(screen.getByText(label)).toBeTruthy();
     }
@@ -92,6 +97,21 @@ describe("<PatternFillEditor />", () => {
     );
     const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
     const file = new File(["tile-bytes"], "tile.png", { type: "image/png" });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const next = onChange.mock.calls[0][0] as PatternFill;
+    expect(next.url.startsWith("data:")).toBe(true);
+    expect(next.scale).toBe(2);
+  });
+
+  it("replaces an existing tile from the preview overlay and keeps other params", async () => {
+    const onChange = vi.fn();
+    const { container } = render(
+      <PatternFillEditor pattern={pattern({ scale: 2 })} onChange={onChange} />,
+    );
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(["new-tile"], "new-tile.png", { type: "image/png" });
     fireEvent.change(fileInput, { target: { files: [file] } });
 
     await waitFor(() => expect(onChange).toHaveBeenCalled());

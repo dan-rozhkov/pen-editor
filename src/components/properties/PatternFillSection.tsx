@@ -1,5 +1,6 @@
 import type { PatternFill } from "@/types/scene";
 import { NumberInput } from "@/components/ui/PropertyInputs";
+import { Button } from "@/components/ui/button";
 import { useFileUpload } from "@/components/properties/useFileUpload";
 import { FileUploadControl } from "@/components/properties/FileUploadControl";
 
@@ -33,12 +34,30 @@ export function PatternFillEditor({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="w-full h-20 rounded border border-border-light overflow-hidden bg-secondary">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileSelect}
+      />
+      <div className="group/pattern-preview relative h-20 w-full overflow-hidden rounded border border-border-light bg-secondary">
         <img
           src={pattern.url}
           alt="Tile preview"
-          className="w-full h-full object-contain"
+          className="h-full w-full object-contain"
         />
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity group-hover/pattern-preview:opacity-100 group-focus-within/pattern-preview:opacity-100">
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={() => fileInputRef.current?.click()}
+            className="pointer-events-auto w-auto shrink-0 opacity-100 shadow-sm hover:opacity-100 focus-visible:opacity-100"
+          >
+            Replace Tile
+          </Button>
+        </div>
       </div>
 
       <NumberInput
@@ -89,13 +108,6 @@ export function PatternFillEditor({
         }
       />
 
-      <FileUploadControl
-        fileInputRef={fileInputRef}
-        onFileSelect={handleFileSelect}
-        hasValue
-        uploadLabel="Upload Tile"
-        replaceLabel="Replace Tile"
-      />
     </div>
   );
 }
