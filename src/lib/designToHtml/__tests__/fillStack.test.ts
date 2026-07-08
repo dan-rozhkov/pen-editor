@@ -205,3 +205,90 @@ describe("designToHtml effect stack", () => {
     expect(styles.filter).toBeUndefined();
   });
 });
+
+describe("designToHtml image crop", () => {
+  it("uncropped image fill uses the plain mode-based size/position", () => {
+    const styles = generateVisualStyles(
+      rect({ fills: [{ id: "p1", type: "image", image: { url: "http://x/y.png", mode: "fill" } }] }),
+    );
+    expect(styles["background-size"]).toBe("cover");
+    expect(styles["background-position"]).toBe("center");
+  });
+
+  it("a cropped `stretch` image fill maps to oversized background-size + percentage position (no aspect preservation, matches Pixi stretch)", () => {
+    const styles = generateVisualStyles(
+      rect({
+        fills: [
+          {
+            id: "p1",
+            type: "image",
+            image: { url: "http://x/y.png", mode: "stretch", crop: { x: 0.25, y: 0, width: 0.5, height: 1 } },
+          },
+        ],
+      }),
+    );
+    expect(styles["background-size"]).toBe("200% 100%");
+    expect(styles["background-position"]).toBe("50% 0%");
+  });
+
+  it("a cropped `fill` image fill computes the cover-within-crop sub-rect first, so it never stretches non-uniformly on a square box", () => {
+    // A wide crop (0.5 x 1) inside a square (100x100) box: `fill` must further
+    // crop the tall axis to a square sub-rect (like Pixi's coverPixelRect)
+    // instead of just stretching the wide crop non-uniformly onto the box.
+    const styles = generateVisualStyles(
+      rect({
+        width: 100,
+        height: 100,
+        fills: [
+          {
+            id: "p1",
+            type: "image",
+            image: { url: "http://x/y.png", mode: "fill", crop: { x: 0.25, y: 0, width: 0.5, height: 1 } },
+          },
+        ],
+      }),
+    );
+    const [sizeX, sizeY] = (styles["background-size"] as string).split(" ");
+    // Uniform scale on both axes = no distortion (unlike the old "200% 100%").
+    expect(sizeX).toBe(sizeY);
+    expect(styles["background-size"]).toBe("200% 200%");
+    expect(styles["background-position"]).toBe("50% 50%");
+  });
+
+  it("a cropped `fit` image fill pads the crop to the box aspect instead of stretching it", () => {
+    const styles = generateVisualStyles(
+      rect({
+        width: 100,
+        height: 100,
+        fills: [
+          {
+            id: "p1",
+            type: "image",
+            image: { url: "http://x/y.png", mode: "fit", crop: { x: 0.25, y: 0, width: 0.5, height: 1 } },
+          },
+        ],
+      }),
+    );
+    const [sizeX, sizeY] = (styles["background-size"] as string).split(" ");
+    expect(sizeX).toBe(sizeY);
+  });
+
+  it("an identity crop rect ({0,0,1,1}) behaves the same as no crop", () => {
+    const withCrop = generateVisualStyles(
+      rect({
+        fills: [
+          {
+            id: "p1",
+            type: "image",
+            image: { url: "http://x/y.png", mode: "fit", crop: { x: 0, y: 0, width: 1, height: 1 } },
+          },
+        ],
+      }),
+    );
+    const withoutCrop = generateVisualStyles(
+      rect({ fills: [{ id: "p1", type: "image", image: { url: "http://x/y.png", mode: "fit" } }] }),
+    );
+    expect(withCrop["background-size"]).toBe(withoutCrop["background-size"]);
+    expect(withCrop["background-position"]).toBe(withoutCrop["background-position"]);
+  });
+});

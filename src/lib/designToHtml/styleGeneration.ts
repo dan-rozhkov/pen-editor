@@ -5,6 +5,7 @@ import { hasPerCornerRadius } from "@/utils/renderUtils";
 import { useVariableStore } from "@/store/variableStore";
 import { getRenderableFills, getRenderableEffects, getPrimarySolidPaint } from "@/utils/fillUtils";
 import { imageModeToCssSize } from "@/lib/cssBackground";
+import { cropRectToBackgroundCss, isFullCropRect, coverPixelRect, containPixelRect, clampCropRect, FULL_CROP_RECT } from "@/lib/imageCrop/cropRect";
 
 /**
  * CSS properties emitted by `generateFillCss` for a node's background.
@@ -183,13 +184,45 @@ export function generateTextStyles(node: TextNode): Record<string, string> {
  * Build the per-layer CSS properties for an image fill. The `mode` ↔
  * `background-size` mapping is shared with htmlToDesign via
  * `@/lib/cssBackground` so the roundtrip stays in sync (no-repeat always).
+ *
+ * `containerW`/`containerH` (the node's own box) are needed only for the
+ * cropped `fill`/`fit` cases below, to mirror the Pixi renderer
+ * (`imageFillHelpers.ts` `scaleImageSprite`) computing a cover/contain
+ * sub-rect *within* the crop before mapping to CSS percentages.
  */
-function imageFillLayerCss(imageFill: ImageFill): {
+function imageFillLayerCss(
+  imageFill: ImageFill,
+  containerW: number,
+  containerH: number,
+): {
   image: string;
   size: string;
   position: string;
   repeat: string;
 } {
+  // A crop rect takes over size/position entirely (see `cropRectToBackgroundCss`
+  // for the approximation this relies on); otherwise fall back to the plain
+  // mode-based mapping.
+  if (!isFullCropRect(imageFill.crop)) {
+    const crop = clampCropRect(imageFill.crop ?? FULL_CROP_RECT);
+    // `stretch` already means "map the crop directly onto the box, no
+    // aspect preservation" — the plain crop rect is exactly right. `fill`
+    // and `fit` mirror Pixi's cover/contain-within-crop geometry so the
+    // exported HTML doesn't distort the image relative to the canvas.
+    const effectiveRect =
+      imageFill.mode === "fill"
+        ? coverPixelRect(crop, containerW, containerH)
+        : imageFill.mode === "fit"
+          ? containPixelRect(crop, containerW, containerH)
+          : crop;
+    const { size, position } = cropRectToBackgroundCss(effectiveRect);
+    return {
+      image: `url("${imageFill.url}")`,
+      size,
+      position,
+      repeat: "no-repeat",
+    };
+  }
   return {
     image: `url("${imageFill.url}")`,
     size: imageModeToCssSize(imageFill.mode),
@@ -284,7 +317,7 @@ function generateFillCss(node: BaseNode, variables: Variable[]): Record<string, 
       positions.push(`${p.offsetX ?? 0}px ${p.offsetY ?? 0}px`);
       repeats.push("repeat");
     } else {
-      const layer = imageFillLayerCss((paint as ImagePaint).image);
+      const layer = imageFillLayerCss((paint as ImagePaint).image, node.width, node.height);
       images.push(layer.image);
       sizes.push(layer.size);
       positions.push(layer.position);

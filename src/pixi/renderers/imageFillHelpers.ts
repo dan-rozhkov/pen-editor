@@ -1,10 +1,12 @@
-import { Container, Graphics, Sprite, Texture, Assets, Rectangle, TilingSprite } from "pixi.js";
-import type { FlatSceneNode, ImageFill, ImagePaint, PatternFill, PatternPaint, PerCornerRadius } from "@/types/scene";
+import { Container, Graphics, Sprite, Texture, Assets, Rectangle, TilingSprite, ColorMatrixFilter } from "pixi.js";
+import type { FlatSceneNode, ImageAdjustments, ImageFill, ImagePaint, PatternFill, PatternPaint, PerCornerRadius } from "@/types/scene";
 import { getResolvedRenderableFills } from "./colorHelpers";
 import { normalizePattern } from "@/utils/patternUtils";
 import { drawRoundedShape, resolvePaintBlendMode } from "./fillStrokeHelpers";
 import { buildPatternSprite } from "./patternFillHelpers";
 import { hasPerCornerRadius } from "@/utils/renderUtils";
+import { cropRectToPixels, coverPixelRect, type PixelRect } from "@/lib/imageCrop/cropRect";
+import { buildAdjustmentColorMatrix, isDefaultAdjustments } from "@/lib/imageAdjustments/imageAdjustments";
 
 /** Cache for loaded textures by URL (LRU, bounded — SVG keys include size/resolution,
  *  so interactive resize/zoom would otherwise grow it without limit) */
@@ -302,28 +304,30 @@ function destroyImageSprite(container: Container): void {
   existing.destroy();
 }
 
+/**
+ * Build a "cover" (aspect-fill) texture within an optional base pixel rect
+ * (the crop rect, in source pixel coordinates). Defaults to the whole
+ * texture when no base rect is given, matching the original uncropped
+ * behavior. See `coverPixelRect` for the pure geometry.
+ */
 function createCoverTexture(
   texture: Texture,
   containerW: number,
   containerH: number,
+  basePx: PixelRect = { x: 0, y: 0, width: texture.width, height: texture.height },
 ): Texture {
-  const imgAspect = texture.width / texture.height;
-  const containerAspect = containerW / containerH;
-
-  if (imgAspect > containerAspect) {
-    const cropWidth = texture.height * containerAspect;
-    const cropX = (texture.width - cropWidth) / 2;
-    return new Texture({
-      source: texture.source,
-      frame: new Rectangle(cropX, 0, cropWidth, texture.height),
-    });
-  }
-
-  const cropHeight = texture.width / containerAspect;
-  const cropY = (texture.height - cropHeight) / 2;
+  const cover = coverPixelRect(basePx, containerW, containerH);
   return new Texture({
     source: texture.source,
-    frame: new Rectangle(0, cropY, texture.width, cropHeight),
+    frame: new Rectangle(cover.x, cover.y, cover.width, cover.height),
+  });
+}
+
+/** Build a texture cropped to a source pixel rect (no cover-fit, just the raw sub-region). */
+function createCroppedTexture(texture: Texture, cropPx: PixelRect): Texture {
+  return new Texture({
+    source: texture.source,
+    frame: new Rectangle(cropPx.x, cropPx.y, cropPx.width, cropPx.height),
   });
 }
 
@@ -387,6 +391,11 @@ function trySvgResizeFastPath(
   if (pending) clearTimeout(pending);
 
   restretchExistingSprite(existing, imageFill, width, height);
+  // `scaleImageSprite` (called above) already re-derives crop/mode geometry from
+  // `_baseImageTexture`, but it never touches filters — re-apply adjustments here
+  // too so a simultaneous size+adjustments change doesn't leave a stale
+  // ColorMatrixFilter until the debounced full re-render fires.
+  applyImageAdjustments(existing, imageFill.adjustments);
 
   const mask = container.getChildByLabel("image-mask");
   if (mask instanceof Graphics) {
@@ -445,7 +454,15 @@ export function applyImageFill(
   });
 }
 
-/** Apply image scaling mode (stretch/fill/fit) to a sprite */
+/**
+ * Apply image scaling mode (stretch/fill/fit) to a sprite, honoring an
+ * optional crop rect (`imageFill.crop`, normalized 0-1 source coordinates —
+ * see `@/lib/imageCrop/cropRect`). The crop always applies against the
+ * ORIGINAL (uncropped) `texture` passed in — callers always pass the base
+ * texture here (see `_baseImageTexture` bookkeeping), so resizing a node
+ * after cropping re-derives the mode's fit/cover geometry from the crop
+ * rect instead of stretching or compounding crops.
+ */
 function scaleImageSprite(
   sprite: Sprite,
   texture: Texture,
@@ -453,20 +470,32 @@ function scaleImageSprite(
   containerW: number,
   containerH: number,
 ): void {
+  const typed = sprite as Sprite & {
+    _baseImageTexture?: Texture;
+    _derivedImageTexture?: Texture;
+  };
   // Remember the original (uncropped) texture so a later resize fast path can
-  // re-derive the `fill`-mode cover crop from it instead of compounding crops.
-  (sprite as Sprite & { _baseImageTexture?: Texture })._baseImageTexture = texture;
-  const imgAspect = texture.width / texture.height;
+  // re-derive the mode's cover/fit/crop geometry from it instead of compounding.
+  typed._baseImageTexture = texture;
+
+  const cropPx = cropRectToPixels(imageFill.crop, texture.width, texture.height);
+  const hasCrop = !!imageFill.crop;
+  const imgAspect = cropPx.width / cropPx.height;
   const containerAspect = containerW / containerH;
 
+  let derivedTexture: Texture | undefined;
+
   if (imageFill.mode === "stretch") {
+    derivedTexture = hasCrop ? createCroppedTexture(texture, cropPx) : undefined;
+    sprite.texture = derivedTexture ?? texture;
     sprite.width = containerW;
     sprite.height = containerH;
+    sprite.x = 0;
+    sprite.y = 0;
   } else if (imageFill.mode === "fill") {
-    const coverTexture = createCoverTexture(texture, containerW, containerH);
+    const coverTexture = createCoverTexture(texture, containerW, containerH, cropPx);
+    derivedTexture = coverTexture;
     sprite.texture = coverTexture;
-    (sprite as Sprite & { _derivedImageTexture?: Texture })._derivedImageTexture =
-      coverTexture;
     sprite.width = containerW;
     sprite.height = containerH;
     sprite.x = 0;
@@ -481,11 +510,33 @@ function scaleImageSprite(
       sh = containerH;
       sw = containerH * imgAspect;
     }
+    derivedTexture = hasCrop ? createCroppedTexture(texture, cropPx) : undefined;
+    sprite.texture = derivedTexture ?? texture;
     sprite.width = sw;
     sprite.height = sh;
     sprite.x = (containerW - sw) / 2;
     sprite.y = (containerH - sh) / 2;
   }
+
+  typed._derivedImageTexture = derivedTexture;
+}
+
+/**
+ * Apply (or clear) the non-destructive color-correction filter for an image
+ * fill. Skipped entirely (`filters = null`) when `adjustments` is absent/
+ * all-zero, both as a perf fast-path and so an unadjusted export is
+ * pixel-identical to before this feature existed. The matrix itself comes
+ * from the pure, unit-tested `buildAdjustmentColorMatrix` — this function is
+ * the only place that touches the WebGL filter object.
+ */
+function applyImageAdjustments(sprite: Sprite, adjustments: ImageAdjustments | undefined): void {
+  if (isDefaultAdjustments(adjustments)) {
+    sprite.filters = null;
+    return;
+  }
+  const filter = new ColorMatrixFilter();
+  filter.matrix = buildAdjustmentColorMatrix(adjustments!) as ColorMatrixFilter["matrix"];
+  sprite.filters = [filter];
 }
 
 function addImageSprite(
@@ -504,6 +555,7 @@ function addImageSprite(
   const sprite = new Sprite(texture);
   sprite.label = "image-fill";
   scaleImageSprite(sprite, texture, imageFill, containerW, containerH);
+  applyImageAdjustments(sprite, imageFill.adjustments);
 
   // Apply mask for clipping (cornerRadius or bounds)
   if (hasPerCornerRadius(cornerRadiusPerCorner) || (cornerRadius && cornerRadius > 0)) {
@@ -586,6 +638,7 @@ function addImageSpriteEllipse(
   const sprite = new Sprite(texture);
   sprite.label = "image-fill";
   scaleImageSprite(sprite, texture, imageFill, containerW, containerH);
+  applyImageAdjustments(sprite, imageFill.adjustments);
 
   // Elliptical mask
   const mask = new Graphics();
@@ -761,8 +814,17 @@ function tryResizeExistingSpritePaints(
       sprite.tilePosition.set(p.offsetX, p.offsetY);
     } else {
       if (!(sprite instanceof Sprite)) return false;
-      const typed = sprite as Sprite & { _baseImageTexture?: Texture };
-      scaleImageSprite(sprite, typed._baseImageTexture ?? sprite.texture, paint.image, width, height);
+      // Mirror `restretchExistingSprite`: `scaleImageSprite` may derive a new
+      // cropped/cover texture, so destroy the previous derived texture (if
+      // it's about to be replaced) to avoid leaking one Texture per resize tick.
+      const typed = sprite as Sprite & { _baseImageTexture?: Texture; _derivedImageTexture?: Texture };
+      const baseTexture = typed._baseImageTexture ?? sprite.texture;
+      const prevDerived = typed._derivedImageTexture;
+      scaleImageSprite(sprite, baseTexture, paint.image, width, height);
+      const newDerived = typed._derivedImageTexture;
+      if (prevDerived && prevDerived !== newDerived) {
+        prevDerived.destroy(false);
+      }
     }
 
     redrawIndexedMask(container, i, width, height, ellipse, cornerRadius, cornerRadiusPerCorner, cornerSmoothing);
@@ -931,6 +993,7 @@ function addIndexedImageSprite(
   } else {
     sprite = new Sprite(texture);
     scaleImageSprite(sprite, texture, paint.image, containerW, containerH);
+    applyImageAdjustments(sprite, paint.image.adjustments);
   }
   sprite.label = `${MULTI_IMAGE_LABEL_PREFIX}${index}`;
   sprite.alpha = paint.opacity ?? 1;

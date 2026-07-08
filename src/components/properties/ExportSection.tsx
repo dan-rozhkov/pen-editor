@@ -3,22 +3,25 @@ import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useSceneStore } from "@/store/sceneStore";
 import type { ExportFormat, ExportScale } from "@/utils/exportUtils";
+import type { PdfFrameDescriptor } from "@/utils/exportPdfUtils";
 import type { SceneNode } from "@/types/scene";
 import { Button } from "@/components/ui/button";
 import { SelectWithOptions } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { PropertySection } from "@/components/ui/PropertyInputs";
 
 interface ExportSectionProps {
   selectedNode: SceneNode | null;
 }
 
-type UiExportFormat = ExportFormat | "svg";
+type UiExportFormat = ExportFormat | "svg" | "pdf";
 
 export function ExportSection({ selectedNode }: ExportSectionProps) {
   const pixiRefs = useCanvasRefStore((s) => s.pixiRefs);
   const viewportScale = useViewportStore((s) => s.scale);
   const [scale, setScale] = useState<ExportScale>(1);
   const [format, setFormat] = useState<UiExportFormat>("png");
+  const [allFrames, setAllFrames] = useState(false);
 
   const handleExport = async () => {
     const nodeId = selectedNode?.id || null;
@@ -39,6 +42,22 @@ export function ExportSection({ selectedNode }: ExportSectionProps) {
       console.error("Pixi refs are not available");
       return;
     }
+
+    if (format === "pdf") {
+      const { exportFramesToPdf, getFrameDescriptor, getTopLevelFrames } = await import("@/utils/exportPdfUtils");
+      const frames: PdfFrameDescriptor[] = allFrames
+        ? getTopLevelFrames()
+        : nodeId
+          ? [getFrameDescriptor(nodeId, nodeName)]
+          : [];
+      if (frames.length === 0) {
+        console.error("Select a frame, or enable 'Export all frames', to export a PDF");
+        return;
+      }
+      await exportFramesToPdf(pixiRefs, frames, scale, allFrames ? "canvas" : undefined);
+      return;
+    }
+
     const { exportImageFromPixi } = await import("@/utils/exportUtils");
     exportImageFromPixi(pixiRefs, nodeId, nodeName, {
       format,
@@ -57,6 +76,7 @@ export function ExportSection({ selectedNode }: ExportSectionProps) {
     { value: "png", label: "PNG" },
     { value: "jpeg", label: "JPEG" },
     { value: "svg", label: "SVG" },
+    { value: "pdf", label: "PDF" },
   ];
 
   const exportName = selectedNode?.name || "Untitled";
@@ -86,8 +106,16 @@ export function ExportSection({ selectedNode }: ExportSectionProps) {
             />
           </div>
         </div>
+        {format === "pdf" && (
+          <label className="flex items-center gap-2 text-xs text-text-muted">
+            <Checkbox checked={allFrames} onCheckedChange={(checked) => setAllFrames(checked === true)} />
+            Export all frames of the page
+          </label>
+        )}
         <Button onClick={handleExport} variant="secondary" className="w-full min-w-0">
-          <span className="min-w-0 truncate">Export {exportName}</span>
+          <span className="min-w-0 truncate">
+            {format === "pdf" && allFrames ? "Export all frames" : `Export ${exportName}`}
+          </span>
         </Button>
       </div>
     </PropertySection>

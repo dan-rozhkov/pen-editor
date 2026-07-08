@@ -14,9 +14,45 @@ export type ColorBinding = VariableBinding
 // Image fill for shapes
 export type ImageFillMode = 'fill' | 'fit' | 'stretch'
 
+/**
+ * Crop rect in normalized 0-1 source-image coordinates (Figma-style image
+ * "Crop" mode). Selects the sub-region of the source image that is visible;
+ * `x`/`y` is the top-left corner, `width`/`height` the extent, all as
+ * fractions of the source image's natural dimensions. Absent means the whole
+ * image is visible (equivalent to `{ x: 0, y: 0, width: 1, height: 1 }`) —
+ * kept optional so existing `.pen` files without a crop keep loading
+ * unchanged. See `@/lib/imageCrop/cropRect` for the clamp/pan/zoom helpers.
+ */
+export interface ImageCropRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/**
+ * Non-destructive color-correction sliders for an image fill (Figma-style
+ * image "Adjustments" panel). All values are `-100..100`, `0` meaning "no
+ * change" — absent (or all-zero) is equivalent to no adjustments at all, so
+ * existing `.pen` files without this field keep loading unchanged. See
+ * `@/lib/imageAdjustments/imageAdjustments` for the clamp/default helpers and
+ * the pure color-matrix builder used to render these on a Pixi sprite.
+ */
+export interface ImageAdjustments {
+  brightness: number   // -100..100, exposure-style additive shift
+  contrast: number      // -100..100
+  saturation: number    // -100..100, -100 = grayscale
+  temperature: number    // -100..100, negative = cooler/blue, positive = warmer/orange
+  tint: number           // -100..100, negative = green, positive = magenta
+}
+
 export interface ImageFill {
   url: string              // data:image/... or https://...
   mode: ImageFillMode
+  /** Optional crop applied on top of `mode` (see `ImageCropRect`). */
+  crop?: ImageCropRect
+  /** Optional non-destructive color corrections (see `ImageAdjustments`). */
+  adjustments?: ImageAdjustments
 }
 
 // Gradient fill types

@@ -62,7 +62,7 @@ function hidePixiOverlays(pixiRefs: PixiExportRefs): () => void {
   }
 }
 
-function findContainerByLabel(
+export function findContainerByLabel(
   root: PixiContainer,
   label: string,
 ): PixiContainer | null {
