@@ -176,7 +176,11 @@ export interface FigNodeChange {
   // Text
   fontSize?: number
   fontName?: FigFontName
-  styleID?: number // present on textData.styleOverrideTable entries
+  // Present on textData.styleOverrideTable entries — a text *character run*
+  // style id, unrelated to shared paint/effect styles. There is no field
+  // here for a fill/stroke/effect style id or name/definition table; see
+  // the p1-21 note atop `figmaToScene/paints.ts`.
+  styleID?: number
   textData?: FigTextData
   textAlignHorizontal?: 'LEFT' | 'CENTER' | 'RIGHT' | 'JUSTIFIED'
   textAlignVertical?: 'TOP' | 'CENTER' | 'BOTTOM'

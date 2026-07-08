@@ -1,4 +1,25 @@
 // Color, gradient and image-paint helpers shared by the node converters.
+//
+// p1-21: Figma paint/effect *shared styles* (fillStyle/effectStyle in the
+// Figma UI) are intentionally NOT mapped to our shared styles (p1-13,
+// `src/store/styleStore.ts`) here — they are imported as plain inline
+// values. The fig-kiwi clipboard buffer (see `parseFigmaClipboard.ts`) only
+// carries the resolved paint/effect values on each `NodeChange` (fillPaints/
+// strokePaints/effects — see `FigNodeChange` in `../figTypes.ts`); there is
+// no declared or referenced field carrying a paint/effect style id, name, or
+// a style-definition table. The only `styleID` field in the schema
+// (`FigNodeChange.styleID`) is scoped to text *character* run styles inside
+// `textData.styleOverrideTable`, not shared paint/effect styles — see
+// `FigTextData` in `../figTypes.ts`. This matches Figma's own documented
+// clipboard behavior: copying a styled layer across documents detaches the
+// style to a raw inline value unless the destination already resolves the
+// same library style by key, which is further evidence the clipboard does
+// not ship style names/definitions. If a future Figma clipboard revision
+// exposes such a field, `convertPaints`/`applyEffects` (in `./base.ts`)
+// would be the place to resolve it against `useStyleStore` and set
+// `styleId`/`effectStyleId` instead of inlining — see
+// `__tests__/figmaPaste.test.ts` ("does not map paint/effect styles...") for
+// the regression test that locks in today's inline-only behavior.
 
 import { generateId, type GradientColorStop, type GradientFill, type ImageFill, type Paint, type SolidPaint } from '@/types/scene'
 import type { FigColor, FigMatrix, FigPaint } from '../figTypes'

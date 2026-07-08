@@ -754,6 +754,46 @@ describe('convertFigmaClipboardHtml', () => {
     expect(rect.effect).toBeUndefined()
   })
 
+  // p1-21 regression: the fig-kiwi clipboard buffer does not carry Figma
+  // shared paint/effect style ids, names or definitions (see the note atop
+  // `figmaToScene/paints.ts`) — only resolved inline fillPaints/effects, the
+  // same shape whether or not the source layer had a style assigned in
+  // Figma. So a pasted node must never end up with a `styleId`/
+  // `effectStyleId` pointing at `useStyleStore`; this locks that in as a
+  // conscious decision rather than an accident.
+  it('does not map paint/effect styles onto shared styleStore styles — imports fills/effects inline', async () => {
+    const html = clipboardWith([
+      onCanvas({
+        guid: guid(2),
+        type: 'RECTANGLE',
+        name: 'Styled Rect',
+        size: { x: 10, y: 10 },
+        transform: identityTransform(),
+        // Two visible paints force the `fills: Paint[]` stack representation
+        // (rather than the legacy single-string `fill`), so a leaked
+        // `Paint.styleId` would be observable here if we ever started
+        // resolving one from the clipboard.
+        fillPaints: [solidPaint(1, 0, 0), solidPaint(0, 0, 1, 1, 0.5)],
+        effects: [
+          {
+            type: 'DROP_SHADOW',
+            visible: true,
+            color: { r: 0, g: 0, b: 0, a: 0.25 },
+            offset: { x: 0, y: 4 },
+            radius: 8,
+            spread: 2,
+          },
+        ],
+      }),
+    ])
+
+    const rect = (await convertFigmaClipboardHtml(html))!.nodes[0]
+    expect(rect.fills).toHaveLength(2)
+    expect(rect.fills!.every((p) => p.styleId === undefined)).toBe(true)
+    expect(rect.effect).toMatchObject({ type: 'shadow', shadowType: 'outer' })
+    expect(rect.effectStyleId).toBeUndefined()
+  })
+
   it('expands component instances using the embedded master and overrides', async () => {
     const internalCanvas: FigNodeChange = {
       guid: guid(50),

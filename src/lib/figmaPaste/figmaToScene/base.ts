@@ -41,6 +41,10 @@ export function buildBase(change: FigNodeChange, ctx: ConvertContext, withStroke
   return base
 }
 
+// p1-21: fills/effects are always imported as inline values, never as a
+// `styleId`/`effectStyleId` reference into `useStyleStore` — see the
+// clipboard-format note at the top of `./paints.ts` for why shared Figma
+// styles can't be recovered from the clipboard buffer.
 function applyFillPaints(base: MutableBase, change: FigNodeChange, ctx: ConvertContext): void {
   const { paints, hadFailedImage } = convertPaints(change.fillPaints, ctx)
   if (paints.length >= 2) {
