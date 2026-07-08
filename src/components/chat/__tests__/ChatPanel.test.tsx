@@ -75,8 +75,9 @@ describe("<ChatPanelContent />", () => {
     expect(screen.getByText("Design Agent")).toBeTruthy();
     // MessageList empty state
     expect(screen.getByText("Ask the design agent anything")).toBeTruthy();
-    // ChatInput textarea
-    expect(screen.getByRole("textbox")).toBeTruthy();
+    // ChatInput textarea (disambiguated from the FirstDraftEntry textarea,
+    // which also renders in the empty-chat state)
+    expect(screen.getByPlaceholderText("Ask the design agent...")).toBeTruthy();
   });
 
   it("renders messages supplied by the chat hook", () => {

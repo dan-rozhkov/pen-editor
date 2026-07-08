@@ -27,4 +27,5 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: "teach-impeccable", description: "One-time project context gathering", category: "System" },
   { name: "extract", description: "Create design system elements", category: "System" },
   { name: "onboard", description: "Onboarding & empty states", category: "System" },
+  { name: "first-draft", description: "Generate a whole screen from one sentence", category: "System" },
 ];
