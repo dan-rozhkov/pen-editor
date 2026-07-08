@@ -26,6 +26,20 @@ vi.mock("@/components/ui/popover", () => ({
   ),
   PopoverContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
+vi.mock("@/components/ui/dropdown-menu", () => ({
+  DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DropdownMenuTrigger: ({ children, render }: { children?: ReactNode; render: ReactNode }) => (
+    <button
+      {...((render as { props?: Record<string, unknown> }).props ?? {})}
+      type="button"
+    >
+      {children}
+    </button>
+  ),
+  DropdownMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DropdownMenuRadioGroup: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DropdownMenuRadioItem: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+}));
 
 const noop = vi.fn();
 
@@ -191,13 +205,13 @@ describe("<FillSection />", () => {
     expect(screen.getByTestId("image-editor")).toBeTruthy();
   });
 
-  it("exposes the blend-mode select in the fill detail popover", () => {
+  it("exposes the blend-mode icon dropdown in the fill detail popover", () => {
     render(<FillSection {...baseProps(makeNode([solid("a", "#ff0000")]))} />);
 
-    // Details (incl. the blend select) live in the popover; there is no longer
+    // Details (incl. the blend dropdown) live in the popover; there is no longer
     // an inline caret toggle on the row.
     expect(screen.queryByTitle(/Collapse|Expand/)).toBeNull();
-    expect(screen.getByText("Blend")).toBeTruthy();
+    expect(screen.getByTitle("Blend mode: Normal")).toBeTruthy();
   });
 
   it("shows a Mixed placeholder when fills are mixed across the selection", () => {

@@ -17,6 +17,7 @@ import { FlipHorizontalIcon, FlipVerticalIcon, IconContext } from "@phosphor-ico
 import { CustomColorPicker } from "./ColorPicker";
 import { useScrubLabel } from "@/hooks/useScrubLabel";
 import { useReadOnly } from "@/hooks/useReadOnly";
+import { cn } from "@/lib/utils";
 
 function formatVariableNameForDisplay(name: string): string {
   return name.trim().replace(/^\$/, "");
@@ -352,6 +353,7 @@ interface SelectInputProps {
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
   labelOutside?: boolean;
+  labelClassName?: string;
   isMixed?: boolean;
 }
 
@@ -361,6 +363,7 @@ export function SelectInput({
   options,
   onChange,
   labelOutside = false,
+  labelClassName,
   isMixed = false,
 }: SelectInputProps) {
   const readOnly = useReadOnly();
@@ -379,7 +382,7 @@ export function SelectInput({
   if (labelOutside && label) {
     return (
       <div className="flex-1 flex flex-col gap-1">
-        <Label className="text-[10px] font-normal">{label}</Label>
+        <Label className={cn("text-[10px] font-normal", labelClassName)}>{label}</Label>
         <SelectWithOptions
           value={selectValue}
           onValueChange={handleChange}
@@ -394,7 +397,7 @@ export function SelectInput({
   if (label) {
     return (
       <div className="flex-1 flex items-center gap-1">
-        <Label className="text-[11px] w-12 shrink-0">{label}</Label>
+        <Label className={cn("text-[11px] w-12 shrink-0", labelClassName)}>{label}</Label>
         <SelectWithOptions
           value={selectValue}
           onValueChange={handleChange}

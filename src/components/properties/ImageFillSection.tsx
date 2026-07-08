@@ -2,6 +2,8 @@ import { useState } from "react";
 import type { ImageAdjustments, ImageCropRect, ImageFillMode, SceneNode } from "@/types/scene";
 import { NumberInput, SelectInput } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
+import { CropIcon } from "@phosphor-icons/react";
 import { useFileUpload } from "@/components/properties/useFileUpload";
 import { FileUploadControl } from "@/components/properties/FileUploadControl";
 import { FULL_CROP_RECT, clampCropRect, isFullCropRect, cropRectToBackgroundCss } from "@/lib/imageCrop/cropRect";
@@ -27,6 +29,35 @@ const ADJUSTMENT_ROWS: Array<{ key: keyof ImageAdjustments; label: string }> = [
   { key: "temperature", label: "Temperature" },
   { key: "tint", label: "Tint" },
 ];
+
+function ImageAdjustmentSlider({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="truncate text-xs leading-none text-text-primary">{label}</span>
+      <div className="flex min-w-0 items-center gap-2">
+        <Slider
+          value={value}
+          min={-100}
+          max={100}
+          step={1}
+          getAriaLabel={() => label}
+          onValueChange={(next) => onChange(Array.isArray(next) ? next[0] ?? 0 : next)}
+        />
+        <span className="flex h-6 w-9 shrink-0 items-center justify-end rounded-md bg-secondary px-2 text-xs leading-none tabular-nums text-secondary-foreground">
+          {value}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 export function ImageFillEditor({
   imageFill,
@@ -105,45 +136,70 @@ export function ImageFillEditor({
 
   return (
     <div className="flex flex-col gap-2">
-      <div
-        role="img"
-        aria-label="Fill preview"
-        className="w-full h-20 rounded border border-border-light overflow-hidden bg-secondary"
-        style={{
-          backgroundImage: `url("${imageFill.url}")`,
-          backgroundSize: previewSize,
-          backgroundPosition: previewPosition,
-          backgroundRepeat: "no-repeat",
-          filter: adjustmentsToCssFilter(imageFill.adjustments),
-        }}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileSelect}
       />
+      <div className="group/image-preview relative overflow-hidden rounded border border-border-light bg-secondary">
+        <div
+          role="img"
+          aria-label="Fill preview"
+          className="h-20 w-full"
+          style={{
+            backgroundImage: `url("${imageFill.url}")`,
+            backgroundSize: previewSize,
+            backgroundPosition: previewPosition,
+            backgroundRepeat: "no-repeat",
+            filter: adjustmentsToCssFilter(imageFill.adjustments),
+          }}
+        />
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity group-hover/image-preview:opacity-100 group-focus-within/image-preview:opacity-100">
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={() => fileInputRef.current?.click()}
+            className="pointer-events-auto w-auto shrink-0 opacity-100 shadow-sm hover:opacity-100 focus-visible:opacity-100"
+          >
+            Replace Image
+          </Button>
+        </div>
+      </div>
 
-      <SelectInput
-        label="Mode"
-        value={imageFill.mode}
-        options={[
-          { value: "fill", label: "Fill (Cover)" },
-          { value: "fit", label: "Fit (Contain)" },
-          { value: "stretch", label: "Stretch" },
-        ]}
-        onChange={handleModeChange}
-      />
-
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
+        <SelectInput
+          label="Mode"
+          value={imageFill.mode}
+          options={[
+            { value: "fill", label: "Fill (Cover)" },
+            { value: "fit", label: "Fit (Contain)" },
+            { value: "stretch", label: "Stretch" },
+          ]}
+          onChange={handleModeChange}
+          labelClassName="text-xs font-normal"
+        />
         <Button
           type="button"
-          size="sm"
-          variant={cropEditorOpen ? "default" : "outline"}
+          size="icon-sm"
+          variant={cropEditorOpen ? "default" : "ghost"}
           onClick={() => setCropEditorOpen((v) => !v)}
+          title="Crop image"
+          aria-label="Crop image"
         >
-          Crop
+          <CropIcon />
         </Button>
-        {cropped && (
+      </div>
+
+      {cropped && (
+        <div className="flex items-center gap-2">
           <Button type="button" size="sm" variant="ghost" onClick={handleResetCrop}>
             Reset Crop
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       {cropEditorOpen && (
         <div className="grid grid-cols-2 gap-2">
@@ -186,38 +242,30 @@ export function ImageFillEditor({
         </div>
       )}
 
-      <div className="flex flex-col gap-2 border-t border-border-light pt-2">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] font-medium text-text-secondary">Adjustments</span>
-          {!isDefaultAdjustments(imageFill.adjustments) && (
-            <Button type="button" size="sm" variant="ghost" onClick={handleResetAdjustments}>
-              Reset
-            </Button>
-          )}
-        </div>
-        <div className="grid grid-cols-2 gap-2">
+      <div className="-mx-3 flex flex-col gap-2 border-t border-border-default px-3 pt-3">
+        <div className="flex flex-col gap-2">
           {ADJUSTMENT_ROWS.map(({ key, label }) => (
-            <NumberInput
+            <ImageAdjustmentSlider
               key={key}
               label={label}
               value={adjustments[key]}
-              onChange={(v) => handleAdjustmentChange(key, v)}
-              min={-100}
-              max={100}
-              step={1}
-              labelOutside
+              onChange={(value) => handleAdjustmentChange(key, value)}
             />
           ))}
         </div>
+        {!isDefaultAdjustments(imageFill.adjustments) && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="w-full"
+            onClick={handleResetAdjustments}
+          >
+            Reset
+          </Button>
+        )}
       </div>
 
-      <FileUploadControl
-        fileInputRef={fileInputRef}
-        onFileSelect={handleFileSelect}
-        hasValue
-        uploadLabel="Upload Image"
-        replaceLabel="Replace Image"
-      />
     </div>
   );
 }

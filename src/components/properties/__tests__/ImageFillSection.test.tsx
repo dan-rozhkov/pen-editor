@@ -13,7 +13,7 @@ describe("<ImageFillEditor />", () => {
     expect(screen.queryByRole("img", { name: "Fill preview" })).toBeNull();
   });
 
-  it("renders preview, mode selector and Replace button when an image is set", () => {
+  it("renders preview, mode selector and preview-overlay Replace button when an image is set", () => {
     render(
       <ImageFillEditor
         imageFill={{ url: "data:image/png;base64,abc", mode: "fill" }}
@@ -25,7 +25,13 @@ describe("<ImageFillEditor />", () => {
     // Uncropped "fill" mode previews with the same size/position technique as HTML export.
     expect(preview.style.backgroundSize).toBe("cover");
     expect(preview.style.backgroundPosition).toBe("center center");
-    expect(screen.getByText("Replace Image")).toBeTruthy();
+    const replaceButton = screen.getByText("Replace Image");
+    const overlay = replaceButton.parentElement;
+    expect(overlay?.className).toContain("bg-black/35");
+    expect(overlay?.className).toContain("justify-center");
+    expect(replaceButton.className).toContain("w-auto");
+    expect(replaceButton.className).toContain("hover:opacity-100");
+    expect(preview.parentElement?.contains(replaceButton)).toBe(true);
     expect(screen.queryByText("Upload Image")).toBeNull();
     // Mode select shows the current value's label.
     expect(screen.getByText("Fill (Cover)")).toBeTruthy();
@@ -173,10 +179,12 @@ describe("<ImageFillEditor />", () => {
       />,
     );
 
-    fireEvent.click(screen.getByText("Crop"));
+    expect(screen.queryByText("Crop")).toBeNull();
+    fireEvent.click(screen.getByTitle("Crop image"));
     const numberInputs = container.querySelectorAll('input[type="number"]');
-    // Left, Top, Width, Height (crop) + Brightness, Contrast, Saturation, Temperature, Tint (adjustments).
-    expect(numberInputs.length).toBe(9);
+    // Left, Top, Width, Height (crop). Adjustments are sliders.
+    expect(numberInputs.length).toBe(4);
+    expect(screen.getAllByRole("slider")).toHaveLength(5);
     const leftInput = numberInputs[0] as HTMLInputElement;
     fireEvent.change(leftInput, { target: { value: "150" } }); // out-of-range, should clamp
 
@@ -211,35 +219,44 @@ describe("<ImageFillEditor />", () => {
     expect(arg.imageFill.crop).toBeUndefined();
   });
 
-  it("renders an Adjustments section with 5 sliders and no Reset button when unadjusted", () => {
+  it("renders the adjustment sliders with no heading or Reset button when unadjusted", () => {
     render(
       <ImageFillEditor
         imageFill={{ url: "data:image/png;base64,abc", mode: "fill" }}
         onUpdate={vi.fn()}
       />,
     );
-    expect(screen.getByText("Adjustments")).toBeTruthy();
+    expect(screen.queryByText("Adjustments")).toBeNull();
+    expect(screen.getByText("Mode").className).toContain("font-normal");
+    expect(screen.getByText("Mode").className).toContain("text-xs");
     expect(screen.getByText("Brightness")).toBeTruthy();
     expect(screen.getByText("Contrast")).toBeTruthy();
     expect(screen.getByText("Saturation")).toBeTruthy();
     expect(screen.getByText("Temperature")).toBeTruthy();
     expect(screen.getByText("Tint")).toBeTruthy();
+    expect(screen.getAllByRole("slider")).toHaveLength(5);
+    expect(screen.getByText("Brightness").parentElement?.parentElement?.parentElement?.className).toContain("pt-3");
     expect(screen.queryByText("Reset")).toBeNull();
   });
 
   it("emits a clamped adjustments object when a slider changes", () => {
     const onUpdate = vi.fn();
-    const { container } = render(
+    render(
       <ImageFillEditor
         imageFill={{ url: "data:image/png;base64,abc", mode: "fill" }}
         onUpdate={onUpdate}
       />,
     );
 
-    const numberInputs = container.querySelectorAll('input[type="number"]');
-    // Brightness is the first of the 5 adjustment fields.
-    const brightnessInput = numberInputs[0] as HTMLInputElement;
-    fireEvent.change(brightnessInput, { target: { value: "500" } }); // out-of-range, should clamp
+    const brightnessSlider = screen.getByRole("slider", { name: "Brightness" });
+    const previousEvent = (globalThis as { event?: Event }).event;
+    Object.defineProperty(globalThis, "event", { configurable: true, value: new Event("change") });
+    fireEvent.change(brightnessSlider, { target: { value: "500" } }); // out-of-range, should clamp
+    if (previousEvent) {
+      Object.defineProperty(globalThis, "event", { configurable: true, value: previousEvent });
+    } else {
+      delete (globalThis as { event?: Event }).event;
+    }
 
     expect(onUpdate).toHaveBeenCalledTimes(1);
     const arg = onUpdate.mock.calls[0][0] as { imageFill: { adjustments?: Record<string, number> } };
@@ -265,8 +282,12 @@ describe("<ImageFillEditor />", () => {
       />,
     );
 
-    expect(screen.getByText("Reset")).toBeTruthy();
-    fireEvent.click(screen.getByText("Reset"));
+    const resetButton = screen.getByText("Reset");
+    expect(resetButton.className).toContain("w-full");
+    expect(resetButton.compareDocumentPosition(screen.getByText("Tint"))).toBe(
+      Node.DOCUMENT_POSITION_PRECEDING,
+    );
+    fireEvent.click(resetButton);
 
     expect(onUpdate).toHaveBeenCalledTimes(1);
     const arg = onUpdate.mock.calls[0][0] as { imageFill: { adjustments?: unknown } };

@@ -18,8 +18,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   ArrowDown,
   ArrowUp,
+  DropHalfIcon,
   Eye,
   EyeSlash,
   MinusIcon,
@@ -65,6 +73,51 @@ const BLEND_MODE_OPTIONS: { value: PaintBlendMode; label: string }[] =
       .map((word) => word[0].toUpperCase() + word.slice(1))
       .join(" "),
   }));
+
+function blendModeLabel(mode: PaintBlendMode | undefined): string {
+  return BLEND_MODE_OPTIONS.find((option) => option.value === (mode ?? "normal"))?.label ?? "Normal";
+}
+
+function BlendModeDropdown({
+  value,
+  onChange,
+}: {
+  value: PaintBlendMode | undefined;
+  onChange: (value: PaintBlendMode) => void;
+}) {
+  const label = blendModeLabel(value);
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            title={`Blend mode: ${label}`}
+            aria-label={`Blend mode: ${label}`}
+            className="text-text-primary hover:bg-secondary"
+          />
+        }
+      >
+        <DropHalfIcon />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuRadioGroup
+          value={value ?? "normal"}
+          onValueChange={(next) => onChange(next as PaintBlendMode)}
+        >
+          {BLEND_MODE_OPTIONS.map((option) => (
+            <DropdownMenuRadioItem key={option.value} value={option.value}>
+              {option.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 /** Small color/gradient/image preview swatch for a paint row. */
 function PaintSwatch({ paint }: { paint: Paint }) {
@@ -286,6 +339,17 @@ export function FillSection({
                         >
                           <ArrowDown />
                         </Button>
+                        <BlendModeDropdown
+                          value={paint.blendMode ?? "normal"}
+                          onChange={(nextBlendMode) =>
+                            commit(
+                              updateFillAt(fills, arrayIndex, {
+                                ...paint,
+                                blendMode: nextBlendMode,
+                              }),
+                            )
+                          }
+                        />
                       </div>
 
                       {/* Named fill-style binding (apply / detach) */}
@@ -373,21 +437,6 @@ export function FillSection({
                         }
                       />
 
-                      {/* Blend mode */}
-                      <SelectInput
-                        label="Blend"
-                        labelOutside
-                        value={paint.blendMode ?? "normal"}
-                        options={BLEND_MODE_OPTIONS}
-                        onChange={(v) =>
-                          commit(
-                            updateFillAt(fills, arrayIndex, {
-                              ...paint,
-                              blendMode: v as PaintBlendMode,
-                            }),
-                          )
-                        }
-                      />
                     </PopoverContent>
                   </Popover>
 
