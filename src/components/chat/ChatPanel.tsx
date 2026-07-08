@@ -11,7 +11,6 @@ import type { AgentMode, ChatTab, ParallelCount } from "@/store/chatStore";
 import { useDesignChat } from "@/hooks/useDesignChat";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
-import { FirstDraftEntry } from "./FirstDraftEntry";
 import { SelectWithOptions } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -263,14 +262,6 @@ function ChatSession({
           >
             {error.message || "Something went wrong"}
           </InlineAlert>
-        </div>
-      )}
-
-      {/* First draft entry point: shown before the first message so it's the
-          first thing a user sees when starting a new chat. */}
-      {!hasMessages && (
-        <div className="px-3 pt-3">
-          <FirstDraftEntry />
         </div>
       )}
 

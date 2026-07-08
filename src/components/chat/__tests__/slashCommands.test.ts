@@ -44,13 +44,6 @@ describe("SLASH_COMMANDS", () => {
     expect(byName("extract")?.category).toBe("System");
   });
 
-  it("includes first-draft for generating a whole screen from one sentence", () => {
-    const firstDraft = SLASH_COMMANDS.find((c) => c.name === "first-draft");
-    expect(firstDraft).toBeDefined();
-    expect(firstDraft?.category).toBe("System");
-    expect(firstDraft?.description.length).toBeGreaterThan(0);
-  });
-
   it("does not contain leading slashes or whitespace in names", () => {
     for (const cmd of SLASH_COMMANDS) {
       expect(cmd.name).not.toMatch(/^\//);
