@@ -20,6 +20,7 @@ import { EmbedContentSection } from "@/components/properties/EmbedContentSection
 import { FrameActionsSection } from "@/components/properties/FrameActionsSection";
 import { ComponentPropertiesSection } from "@/components/properties/ComponentPropertiesSection";
 import { InstancePropertiesSection } from "@/components/properties/InstancePropertiesSection";
+import { SelectionColorsSection } from "@/components/properties/SelectionColorsSection";
 
 interface PropertyEditorProps {
   node: SceneNode;
@@ -125,6 +126,7 @@ export function PropertyEditor({
       {node.type === "embed" && (
         <EmbedContentSection node={node} />
       )}
+      <SelectionColorsSection nodes={[node]} />
     </div>
   );
 }

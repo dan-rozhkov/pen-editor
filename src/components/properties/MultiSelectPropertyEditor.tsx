@@ -15,6 +15,7 @@ import { FillSection } from "@/components/properties/FillSection";
 import { StrokeSection } from "@/components/properties/StrokeSection";
 import { EffectsSection } from "@/components/properties/EffectsSection";
 import { AutoLayoutSection } from "@/components/properties/AutoLayoutSection";
+import { SelectionColorsSection } from "@/components/properties/SelectionColorsSection";
 
 interface MultiSelectPropertyEditorProps {
   selectedNodes: SceneNode[];
@@ -283,6 +284,7 @@ export function MultiSelectPropertyEditor({
           mixedKeys={merged.mixedKeys}
         />
       )}
+      <SelectionColorsSection nodes={selectedNodes} />
     </div>
   );
 }
