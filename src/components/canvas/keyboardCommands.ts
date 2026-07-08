@@ -14,6 +14,8 @@ import { useGuidesStore } from "@/store/guidesStore";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { findNodeById, findParentFrame } from "@/utils/nodeUtils";
+import { tidyUpNodes } from "@/utils/alignmentUtils";
+import { applyNodeUpdates } from "@/utils/applyNodeUpdates";
 import { finishPenDraft, cancelPenDraft } from "@/pixi/interaction/penDraftCommit";
 import { cancelActiveScale } from "@/pixi/interaction/scaleController";
 import { enterPathEditMode } from "@/pixi/interaction/pathEditMode";
@@ -212,6 +214,20 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
         }
         return;
       }
+    }
+
+    // Cmd/Ctrl+Alt+T: Tidy up — auto-arrange the selection into a neat
+    // row/column/grid with equal spacing (Figma's shortcut for the same
+    // command). Checked alongside the other Cmd/Ctrl+Alt combos above.
+    if ((e.metaKey || e.ctrlKey) && e.altKey && !e.shiftKey && e.code === "KeyT") {
+      if (isTyping) return;
+      e.preventDefault();
+      const ids = useSelectionStore.getState().selectedIds;
+      if (ids.length >= 2) {
+        const updates = tidyUpNodes(ids, nodes);
+        if (updates.length > 0) applyNodeUpdates(nodes, updates);
+      }
+      return;
     }
 
     // Cmd/Ctrl+Opt+C / Cmd/Ctrl+Opt+V: "Copy/paste properties" (Figma-style

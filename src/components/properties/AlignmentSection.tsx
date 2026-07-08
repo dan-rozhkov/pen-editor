@@ -3,61 +3,23 @@ import {
   AlignBottom,
   AlignCenterVertical,
   AlignTop,
+  GridNine,
   TextAlignCenter,
   TextAlignLeft,
   TextAlignRight,
 } from "@phosphor-icons/react";
-import { useHistoryStore } from "@/store/historyStore";
-import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import {
   alignNodes,
   alignNodeInFrame,
   calculateSpacing,
   distributeSpacing,
+  tidyUpNodes,
   type AlignmentType,
 } from "@/utils/alignmentUtils";
+import { applyNodeUpdates } from "@/utils/applyNodeUpdates";
 import type { FrameNode, GroupNode, SceneNode } from "@/types/scene";
 import { PropertySection } from "@/components/ui/PropertyInputs";
 import { Input } from "@/components/ui/input";
-
-function applyUpdateRecursive(
-  nodeList: SceneNode[],
-  id: string,
-  changes: Partial<SceneNode>,
-): SceneNode[] {
-  return nodeList.map((node) => {
-    if (node.id === id) {
-      return { ...node, ...changes } as SceneNode;
-    }
-    if (node.type === "frame" || node.type === "group") {
-      return {
-        ...node,
-        children: applyUpdateRecursive(
-          (node as FrameNode).children,
-          id,
-          changes,
-        ),
-      } as FrameNode;
-    }
-    return node;
-  });
-}
-
-/** Save history, apply position updates, and set nodes */
-function applyNodeUpdates(
-  nodes: SceneNode[],
-  updates: { id: string; x?: number; y?: number }[],
-) {
-  useHistoryStore.getState().saveHistory(createSnapshot(useSceneStore.getState()));
-  let newNodes = nodes;
-  for (const update of updates) {
-    const { id, ...changes } = update;
-    if (Object.keys(changes).length > 0) {
-      newNodes = applyUpdateRecursive(newNodes, id, changes);
-    }
-  }
-  useSceneStore.getState().setNodesWithoutHistory(newNodes);
-}
 
 interface AlignmentSectionProps {
   count: number;
@@ -84,6 +46,12 @@ export function AlignmentSection({
       updates = alignNodes(selectedIds, nodes, alignment);
     }
 
+    if (updates.length === 0) return;
+    applyNodeUpdates(nodes, updates);
+  };
+
+  const handleTidyUp = () => {
+    const updates = tidyUpNodes(selectedIds, nodes);
     if (updates.length === 0) return;
     applyNodeUpdates(nodes, updates);
   };
@@ -139,6 +107,18 @@ export function AlignmentSection({
           >
             <AlignBottom size={iconSize} />
           </button>
+          {!isSingleNodeInFrame && (
+            <>
+              <div className="w-2" />
+              <button
+                className={buttonClass}
+                onClick={handleTidyUp}
+                title="Tidy up (Ctrl+Alt+T)"
+              >
+                <GridNine size={iconSize} />
+              </button>
+            </>
+          )}
         </div>
       </PropertySection>
       {!isSingleNodeInFrame && (

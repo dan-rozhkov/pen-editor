@@ -1,6 +1,7 @@
 import type { FrameNode, GroupNode, SceneNode } from '../types/scene'
 import { findNodeById, findParentFrame, getNodeAbsolutePosition } from './nodeUtils'
 import { calculateFrameIntrinsicSize } from './yogaLayout'
+import { tidyUp, type TidyRect } from '../lib/tidyUp'
 
 export type AlignmentType = 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom'
 
@@ -106,7 +107,7 @@ function getEffectiveDimensions(node: SceneNode): { width: number; height: numbe
   return { width: effectiveWidth, height: effectiveHeight }
 }
 
-function gatherNodeInfos(selectedIds: string[], allNodes: SceneNode[]): NodePositionInfo[] {
+export function gatherNodeInfos(selectedIds: string[], allNodes: SceneNode[]): NodePositionInfo[] {
   const nodeInfos: NodePositionInfo[] = []
 
   for (const id of selectedIds) {
@@ -239,6 +240,42 @@ export function distributeSpacing(
   }
 
   return updates
+}
+
+/**
+ * "Tidy up" the selection: cluster into a row/column/grid (see `tidyUp` in
+ * `@/lib/tidyUp`) and re-place nodes with equal (median) spacing. Operates in
+ * absolute space (like `alignNodes`/`distributeSpacing`) so a selection can
+ * span multiple parents; each node's position is converted back into its own
+ * parent's coordinate space.
+ */
+export function tidyUpNodes(
+  selectedIds: string[],
+  allNodes: SceneNode[]
+): { id: string; x?: number; y?: number }[] {
+  const nodeInfos = gatherNodeInfos(selectedIds, allNodes)
+  if (nodeInfos.length < 2) {
+    return [] // Need at least 2 nodes to tidy up
+  }
+
+  const rects: TidyRect[] = nodeInfos.map((info) => ({
+    id: info.id,
+    x: info.absX,
+    y: info.absY,
+    width: info.effectiveWidth,
+    height: info.effectiveHeight,
+  }))
+
+  const infoById = new Map(nodeInfos.map((info) => [info.id, info]))
+
+  return tidyUp(rects).map((pos) => {
+    const info = infoById.get(pos.id)!
+    return {
+      id: pos.id,
+      x: Math.round(pos.x - info.parentOffsetX),
+      y: Math.round(pos.y - info.parentOffsetY),
+    }
+  })
 }
 
 /**

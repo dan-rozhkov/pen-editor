@@ -71,5 +71,46 @@ describe("<AlignmentSection />", () => {
     // but spacing + count are hidden
     expect(screen.queryByText("Spacing")).toBeNull();
     expect(screen.queryByText(/layers selected/)).toBeNull();
+    // Tidy up is a multi-select-only action, hidden alongside spacing/count
+    expect(screen.queryByTitle("Tidy up (Ctrl+Alt+T)")).toBeNull();
+  });
+
+  it("tidies up a chaotic multi-select as a single undo step", () => {
+    // Extend the seeded scene with a third, off-grid rect so the tidy-up
+    // arrangement actually has to move something.
+    useSceneStore.setState((state) => ({
+      nodesById: {
+        ...state.nodesById,
+        rect3: {
+          id: "rect3",
+          type: "rect",
+          name: "Stray",
+          x: 900,
+          y: 140,
+          width: 50,
+          height: 50,
+          fill: "#0000ff",
+        } as unknown as FrameNode,
+      },
+      rootIds: [...state.rootIds, "rect3"],
+      _cachedTree: null,
+    }));
+
+    render(
+      <AlignmentSection
+        count={3}
+        selectedIds={["frame1", "rect2", "rect3"]}
+        nodes={getNodes()}
+      />,
+    );
+    const before = pastLen();
+
+    fireEvent.click(screen.getByTitle("Tidy up (Ctrl+Alt+T)"));
+
+    // Single undo step for the whole batch.
+    expect(pastLen()).toBe(before + 1);
+    // rect3's off-grid y (140) is realigned to the row's common top (100).
+    expect(useSceneStore.getState().nodesById["rect3"].y).not.toBe(140);
+    expect(useSceneStore.getState().nodesById["rect3"].y).toBe(100);
   });
 });
