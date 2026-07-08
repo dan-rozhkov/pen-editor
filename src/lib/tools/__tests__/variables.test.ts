@@ -59,6 +59,45 @@ describe("set_variables", () => {
     expect(variables[0].id).toBeTruthy();
   });
 
+  it("accepts the flat name→hex shorthand and infers types", async () => {
+    const result = JSON.parse(
+      await setVariables({
+        variables: {
+          "--brand-primary": "#3b82f6",
+          "--brand-bg": "#ffffff",
+          "--radius-lg": "16",
+        },
+      })
+    );
+    expect(result).toEqual({ success: true, variableCount: 3 });
+
+    const { variables } = useVariableStore.getState();
+    expect(variables.find((v) => v.name === "--brand-primary")).toMatchObject({
+      type: "color",
+      value: "#3b82f6",
+    });
+    expect(variables.find((v) => v.name === "--radius-lg")).toMatchObject({
+      type: "number",
+      value: "16",
+    });
+  });
+
+  it("accepts the {color} shorthand for a solid color variable", async () => {
+    const result = JSON.parse(
+      await setVariables({
+        variables: {
+          "--accent": { color: "#ff00ff" },
+        },
+      })
+    );
+    expect(result).toEqual({ success: true, variableCount: 1 });
+    expect(useVariableStore.getState().variables[0]).toMatchObject({
+      name: "--accent",
+      type: "color",
+      value: "#ff00ff",
+    });
+  });
+
   it("accepts nested design-token objects with $type/$value", async () => {
     const result = JSON.parse(
       await setVariables({

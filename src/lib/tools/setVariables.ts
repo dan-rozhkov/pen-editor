@@ -15,9 +15,21 @@ function isVariableDefinition(obj: Record<string, unknown>): boolean {
     "$type" in obj ||
     "value" in obj ||
     "$value" in obj ||
+    "color" in obj ||
+    "$color" in obj ||
     "themeValues" in obj ||
     "$themeValues" in obj
   );
+}
+
+// Infer a variable type from a bare string value so the intuitive shorthand
+// `{ "--brand": "#3b82f6" }` / `{ "--radius": "16" }` works without the caller
+// having to spell out `{type, value}`.
+function inferTypeFromValue(value: string): Variable["type"] {
+  const v = value.trim();
+  if (/^(#|rgb|hsl|\$)/i.test(v)) return "color";
+  if (v !== "" && !Number.isNaN(Number(v))) return "number";
+  return "string";
 }
 
 function extractVariablesFromObject(
@@ -27,13 +39,27 @@ function extractVariablesFromObject(
   const extracted: Variable[] = [];
 
   for (const [key, val] of Object.entries(obj)) {
+    const path = [...parentKeys, key];
+    const leafName = path[path.length - 1];
+
+    // Shorthand: a bare string maps a name straight to a value, e.g.
+    // `{ "--brand-primary": "#3b82f6", "--radius-lg": "16" }`.
+    if (typeof val === "string") {
+      extracted.push(
+        normalizeVariable({
+          name: leafName,
+          type: inferTypeFromValue(val),
+          value: val,
+        })
+      );
+      continue;
+    }
+
     if (!val || typeof val !== "object" || Array.isArray(val)) continue;
 
     const entry = val as Record<string, unknown>;
-    const path = [...parentKeys, key];
 
     if (isVariableDefinition(entry)) {
-      const leafName = path[path.length - 1];
       extracted.push(
         normalizeVariable({
           name: entry.name ?? leafName,
@@ -128,7 +154,7 @@ export const setVariables: ToolHandler = async (args) => {
 
 function normalizeVariable(obj: Record<string, unknown>): Variable {
   const type = ((obj.type ?? obj.$type) as Variable["type"]) || "color";
-  const rawValue = obj.value ?? obj.$value;
+  const rawValue = obj.value ?? obj.$value ?? obj.color ?? obj.$color;
   const value =
     typeof rawValue === "string"
       ? rawValue
