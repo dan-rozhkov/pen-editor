@@ -18,8 +18,38 @@ import {
   type Color,
 } from "react-aria-components";
 import { Eyedropper } from "@phosphor-icons/react";
+import { SegmentedControl } from "@/components/ui/PropertyInputs";
 
 const supportsEyeDropper = typeof window !== "undefined" && "EyeDropper" in window;
+
+type ColorFormat = "hex" | "rgb" | "hsl";
+
+const FORMAT_OPTIONS: { value: ColorFormat; label: string }[] = [
+  { value: "hex", label: "HEX" },
+  { value: "rgb", label: "RGB" },
+  { value: "hsl", label: "HSL" },
+];
+
+// The per-channel numeric inputs shown in RGB / HSL mode. `as const` keeps the
+// `colorSpace`/`channel` literals assignable to react-aria's ColorSpace /
+// ColorChannel prop types without importing them.
+const CHANNEL_CONFIG = {
+  rgb: [
+    { colorSpace: "rgb", channel: "red", label: "Red" },
+    { colorSpace: "rgb", channel: "green", label: "Green" },
+    { colorSpace: "rgb", channel: "blue", label: "Blue" },
+  ],
+  hsl: [
+    { colorSpace: "hsl", channel: "hue", label: "Hue" },
+    { colorSpace: "hsl", channel: "saturation", label: "Saturation" },
+    { colorSpace: "hsl", channel: "lightness", label: "Lightness" },
+  ],
+} as const;
+
+const INPUT_CLASS_BASE =
+  "bg-secondary text-secondary-foreground focus-visible:ring-1 focus-visible:ring-accent-light aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 h-6 rounded-md py-0.5 text-sm transition-colors aria-invalid:ring-[2px] md:text-xs/relaxed placeholder:text-muted-foreground w-full min-w-0 outline-none";
+const HEX_INPUT_CLASS = `${INPUT_CLASS_BASE} px-2`;
+const CHANNEL_INPUT_CLASS = `${INPUT_CLASS_BASE} px-1 text-center`;
 
 interface CustomColorPickerProps {
   value: string;
@@ -33,6 +63,7 @@ export function CustomColorPicker({
   swatchSize = "md",
 }: CustomColorPickerProps) {
   const [open, setOpen] = useState(false);
+  const [format, setFormat] = useState<ColorFormat>("hex");
   const containerRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
@@ -140,20 +171,50 @@ export function CustomColorPicker({
             </ColorArea>
 
             {/* Hue slider */}
-            <ColorSlider colorSpace="hsb" channel="hue" className="w-full">
+            <ColorSlider
+              colorSpace="hsb"
+              channel="hue"
+              aria-label="Hue slider"
+              className="w-full"
+            >
               <SliderTrack className="w-full h-3 rounded-full">
                 <ColorThumb className="w-4 h-4 rounded-full border-3 border-white shadow-[0_0_2px_1px_rgba(0,0,0,0.2)] box-border top-1/2" />
               </SliderTrack>
             </ColorSlider>
 
-            {/* Hex input + eyedropper */}
+            {/* Format selector. A segmented control, NOT a dropdown: a portaled
+                react-aria Select would render outside popoverRef and trip the
+                click-outside handler above, closing the picker. */}
+            <SegmentedControl
+              value={format}
+              options={FORMAT_OPTIONS}
+              onChange={(v) => setFormat(v as ColorFormat)}
+            />
+
+            {/* Input row + eyedropper */}
             <div className="flex items-center gap-1">
-              <ColorField
-                aria-label="Hex color"
-                className="flex items-center gap-1 flex-1 min-w-0"
-              >
-                <Input className="bg-secondary text-secondary-foreground focus-visible:ring-1 focus-visible:ring-accent-light aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 h-6 rounded-md px-2 py-0.5 text-sm transition-colors aria-invalid:ring-[2px] md:text-xs/relaxed placeholder:text-muted-foreground w-full min-w-0 outline-none" />
-              </ColorField>
+              {format === "hex" ? (
+                <ColorField
+                  aria-label="Hex color"
+                  className="flex items-center gap-1 flex-1 min-w-0"
+                >
+                  <Input className={HEX_INPUT_CLASS} />
+                </ColorField>
+              ) : (
+                <div className="flex items-center gap-1 flex-1 min-w-0">
+                  {CHANNEL_CONFIG[format].map(({ colorSpace, channel, label }) => (
+                    <ColorField
+                      key={channel}
+                      colorSpace={colorSpace}
+                      channel={channel}
+                      aria-label={label}
+                      className="min-w-0 flex-1"
+                    >
+                      <Input className={CHANNEL_INPUT_CLASS} />
+                    </ColorField>
+                  ))}
+                </div>
+              )}
               {supportsEyeDropper && (
                 <button
                   type="button"
