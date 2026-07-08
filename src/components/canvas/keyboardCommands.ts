@@ -56,6 +56,8 @@ export interface KeyDownHandlerDeps {
   cutSelection: () => void;
   copyStyleSelection: () => void;
   pasteStyleSelection: () => void;
+  copyAsCss: () => void;
+  copyAsSvg: () => void;
 }
 
 /**
@@ -88,6 +90,8 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
     cutSelection,
     copyStyleSelection,
     pasteStyleSelection,
+    copyAsCss,
+    copyAsSvg,
   } = deps;
 
   return (e: KeyboardEvent) => {
@@ -148,6 +152,7 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
       const mod = e.metaKey || e.ctrlKey;
       const allowed =
         (mod && e.code === "KeyC") || // copy
+        (mod && e.shiftKey && (e.code === "KeyC" || e.code === "KeyS")) || // copy as CSS / SVG
         (mod && e.code === "KeyA") || // select all
         (mod && e.code === "Digit0") || // fit to content
         (mod && e.code === "Backslash") || // toggle UI
@@ -244,6 +249,23 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
       if (isTyping) return;
       e.preventDefault();
       pasteStyleSelection();
+      return;
+    }
+
+    // Cmd/Ctrl+Shift+C / Cmd/Ctrl+Shift+S: "Copy as CSS" / "Copy as SVG" —
+    // Figma-style design-to-code bridge, checked before the plain Copy below
+    // so Shift doesn't fall through to node copy/paste or the star tool.
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.code === "KeyC") {
+      if (isTyping) return;
+      e.preventDefault();
+      copyAsCss();
+      return;
+    }
+
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.code === "KeyS") {
+      if (isTyping) return;
+      e.preventDefault();
+      copyAsSvg();
       return;
     }
 

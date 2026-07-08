@@ -10,6 +10,7 @@ import { PresentController } from "./components/PresentController";
 import { ReadOnlyProvider } from "./components/ReadOnlyProvider";
 import { FpsDisplay } from "./components/canvas/CanvasOverlays";
 import { Rulers } from "./components/canvas/Rulers";
+import { CanvasContextMenu } from "./components/canvas/CanvasContextMenu";
 import { useUIVisibilityStore } from "./store/uiVisibilityStore";
 import { useEditorModeStore } from "./store/editorModeStore";
 import { useIsMobile } from "./hooks/useIsMobile";
@@ -51,9 +52,15 @@ function App() {
           stacking context so the embed DOM overlay (and other canvas overlays,
           which use positive z-index) stay trapped beneath the UI panels below. */}
       <div className="absolute inset-0 isolate">
-        <Suspense fallback={null}>
-          <PixiCanvas />
-        </Suspense>
+        {/* CanvasContextMenu always wraps PixiCanvas — swapping this element
+            based on mode would remount PixiCanvas (destroying/recreating the
+            WebGL context) on every present/view toggle. The menu suppresses
+            itself internally during present mode instead. */}
+        <CanvasContextMenu>
+          <Suspense fallback={null}>
+            <PixiCanvas />
+          </Suspense>
+        </CanvasContextMenu>
       </div>
 
       {/* Keeps the present-mode frame fitted to the window; no-op otherwise. */}

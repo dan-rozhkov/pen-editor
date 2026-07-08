@@ -4,6 +4,7 @@ import type { BooleanOpKind } from "@/lib/booleanOps";
 import { createClipboardActions } from "./clipboardActions";
 import { createStyleClipboardActions } from "./styleClipboardActions";
 import { createKeyDownHandler } from "./keyboardCommands";
+import { copyAsCss, copyAsSvg } from "./copyAsActions";
 
 interface CanvasKeyboardShortcutsParams {
   copiedNodes: SceneNode[];
@@ -110,6 +111,8 @@ export function useCanvasKeyboardShortcuts({
       cutSelection,
       copyStyleSelection,
       pasteStyleSelection,
+      copyAsCss,
+      copyAsSvg,
     });
 
     const handleKeyUp = (e: KeyboardEvent) => {

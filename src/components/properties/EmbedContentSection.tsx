@@ -4,6 +4,7 @@ import { PropertySection } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
+import { writeTextToClipboard } from "@/utils/clipboard";
 
 interface EmbedContentSectionProps {
   node: EmbedNode;
@@ -27,40 +28,11 @@ export function EmbedContentSection({ node }: EmbedContentSectionProps) {
     }, 1200);
   };
 
-  const fallbackCopy = (value: string): boolean => {
-    try {
-      const textarea = document.createElement("textarea");
-      textarea.value = value;
-      textarea.style.position = "fixed";
-      textarea.style.opacity = "0";
-      document.body.appendChild(textarea);
-      textarea.focus();
-      textarea.select();
-      const copied = document.execCommand("copy");
-      document.body.removeChild(textarea);
-      return copied;
-    } catch {
-      return false;
-    }
-  };
-
   const handleCopyAsHtml = async () => {
     const value = node.htmlContent ?? "";
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(value);
-        setCopyStatus("copied");
-        resetCopyStatus();
-        return;
-      }
-      const copied = fallbackCopy(value);
-      setCopyStatus(copied ? "copied" : "error");
-      resetCopyStatus();
-    } catch {
-      const copied = fallbackCopy(value);
-      setCopyStatus(copied ? "copied" : "error");
-      resetCopyStatus();
-    }
+    const copied = await writeTextToClipboard(value);
+    setCopyStatus(copied ? "copied" : "error");
+    resetCopyStatus();
   };
 
   const handleConvertToDesign = async () => {
