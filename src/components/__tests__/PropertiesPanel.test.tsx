@@ -42,11 +42,6 @@ vi.mock("@/components/properties/AlignmentSection", () => ({
     <div data-testid="alignment-section" data-count={count} />
   ),
 }));
-vi.mock("@/components/properties/ExportSection", () => ({
-  ExportSection: ({ selectedNode }: { selectedNode: { id: string } | null }) => (
-    <div data-testid="export-section" data-node-id={selectedNode?.id ?? ""} />
-  ),
-}));
 vi.mock("@/components/properties/TextRewriteSection", () => ({
   TextRewriteSection: ({ nodeIds }: { nodeIds: string[] }) => (
     <div data-testid="text-rewrite-section" data-node-ids={nodeIds.join(",")} />
@@ -81,13 +76,6 @@ describe("<PropertiesPanel /> (orchestration)", () => {
       expect(screen.queryByTestId("multi-select-editor")).toBeNull();
       expect(screen.queryByTestId("alignment-section")).toBeNull();
     });
-
-    it("always renders the Export section (with no selected node)", () => {
-      render(<PropertiesPanel />);
-      const exp = screen.getByTestId("export-section");
-      expect(exp).toBeTruthy();
-      expect(exp.getAttribute("data-node-id")).toBe("");
-    });
   });
 
   describe("single selection", () => {
@@ -102,8 +90,6 @@ describe("<PropertiesPanel /> (orchestration)", () => {
       // Single selection -> no multi-select editor, no page props.
       expect(screen.queryByTestId("multi-select-editor")).toBeNull();
       expect(screen.queryByTestId("page-properties")).toBeNull();
-      // Export section now reflects the selected node.
-      expect(screen.getByTestId("export-section").getAttribute("data-node-id")).toBe("frame1");
     });
 
     it("routes a single text node to the PropertyEditor with its type", () => {
@@ -150,8 +136,6 @@ describe("<PropertiesPanel /> (orchestration)", () => {
       // Multi-select must NOT render the single-node editor or page props.
       expect(screen.queryByTestId("property-editor")).toBeNull();
       expect(screen.queryByTestId("page-properties")).toBeNull();
-      // Export section gets no single node in multi-select.
-      expect(screen.getByTestId("export-section").getAttribute("data-node-id")).toBe("");
     });
   });
 

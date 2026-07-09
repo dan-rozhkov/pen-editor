@@ -1,11 +1,11 @@
 import type { Container as PixiContainer } from "pixi.js";
 import type { PixiExportRefs } from "@/store/canvasRefStore";
-import type { ExportScale } from "./exportUtils";
 import { findContainerByLabel } from "./exportUtils";
 import { assemblePdfFromPngPages, type PdfPageImage } from "@/lib/pdfExport/assemblePdf";
 import { useSceneStore } from "@/store/sceneStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { getNodeEffectiveSize } from "@/utils/nodeUtils";
+import { sanitizeExportBaseName } from "@/utils/exportSettingsUtils";
 
 /** A frame (or any node) to render onto one PDF page. */
 export interface PdfFrameDescriptor {
@@ -49,7 +49,7 @@ export function getTopLevelFrames(): PdfFrameDescriptor[] {
 function extractPngBytes(
   pixiRefs: PixiExportRefs,
   container: PixiContainer,
-  scale: ExportScale,
+  scale: number,
 ): Uint8Array {
   const canvas = pixiRefs.app.renderer.extract.canvas({
     target: container,
@@ -115,22 +115,44 @@ function downloadBlob(bytes: Uint8Array, filename: string, mimeType: string): vo
 }
 
 function safePdfFilename(baseName: string): string {
-  const sanitized = baseName.replace(/[^a-zA-Z0-9_-]/g, "_") || "canvas";
-  return `${sanitized}.pdf`;
+  return `${sanitizeExportBaseName(baseName)}.pdf`;
+}
+
+/**
+ * Resolve the final PDF download filename.
+ *
+ * When `finalFilename` is provided (e.g. by `runExportSettingsForNode`, which
+ * has already built `Icon@2x.pdf` via `buildExportFilename`), it is used
+ * verbatim so the downloaded file matches the reported `ExportRunResult.filename`
+ * — crucially preserving the `@2x` scale label, which the base-name sanitizer
+ * would otherwise mangle into `_2x`. Otherwise (page-level "all frames" export)
+ * a safe name is derived from the frames.
+ */
+export function resolvePdfDownloadFilename(
+  finalFilename: string | undefined,
+  frames: PdfFrameDescriptor[],
+): string {
+  if (finalFilename) return finalFilename;
+  const base = frames.length === 1 ? frames[0].name || frames[0].id : "canvas";
+  return safePdfFilename(base);
 }
 
 /**
  * Render one or more frames to PDF pages (one page per frame, in the given
  * order) and trigger a file download. Rasterizes each frame via Pixi's
- * `renderer.extract` (like `exportImageFromPixi`) at the given export scale,
- * then assembles the pages with the pure `assemblePdfFromPngPages`. This
- * function itself touches Pixi/WebGL/DOM and is intentionally not
- * unit-tested (see `assemblePdf.ts` for the tested logic).
+ * `renderer.extract` at the given export scale, then assembles the pages with
+ * the pure `assemblePdfFromPngPages`. This function itself touches
+ * Pixi/WebGL/DOM and is intentionally not unit-tested (see `assemblePdf.ts`
+ * and `resolvePdfDownloadFilename` for the tested logic).
+ *
+ * `filename`, when given, is the FINAL download filename (already sanitized,
+ * including the `.pdf` extension) and is used verbatim; omit it for the
+ * page-level "all frames" export to derive a safe name from the frames.
  */
 export async function exportFramesToPdf(
   pixiRefs: PixiExportRefs,
   frames: PdfFrameDescriptor[],
-  scale: ExportScale,
+  scale: number,
   filename?: string,
 ): Promise<boolean> {
   if (frames.length === 0) {
@@ -163,8 +185,7 @@ export async function exportFramesToPdf(
     }
 
     const pdfBytes = await assemblePdfFromPngPages(pages);
-    const name = filename ?? (frames.length === 1 ? frames[0].name || frames[0].id : "canvas");
-    downloadBlob(pdfBytes, safePdfFilename(name), "application/pdf");
+    downloadBlob(pdfBytes, resolvePdfDownloadFilename(filename, frames), "application/pdf");
     return true;
   } catch (error) {
     console.error("Failed to export PDF:", error);

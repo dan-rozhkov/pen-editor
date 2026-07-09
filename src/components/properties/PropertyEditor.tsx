@@ -21,6 +21,7 @@ import { FrameActionsSection } from "@/components/properties/FrameActionsSection
 import { ComponentPropertiesSection } from "@/components/properties/ComponentPropertiesSection";
 import { InstancePropertiesSection } from "@/components/properties/InstancePropertiesSection";
 import { SelectionColorsSection } from "@/components/properties/SelectionColorsSection";
+import { ExportSettingsSection } from "@/components/properties/ExportSettingsSection";
 
 interface PropertyEditorProps {
   node: SceneNode;
@@ -108,6 +109,7 @@ export function PropertyEditor({
       />
       <EffectsSection node={node} onUpdate={onUpdate} />
       <ShaderSection node={node} onUpdate={onUpdate} />
+      <ExportSettingsSection node={node} onUpdate={onUpdate} />
       {frameNode && (
         <ThemeSection node={frameNode} onUpdate={onUpdate} />
       )}

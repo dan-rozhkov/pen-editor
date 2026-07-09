@@ -65,6 +65,28 @@ describe("cloneNodeWithNewId — reusable frame -> ref", () => {
   });
 });
 
+describe("exportSettings survive duplicate/clone", () => {
+  it("cloneNodeWithNewId carries exportSettings on an ordinary node", () => {
+    const original = makeTextNode({
+      exportSettings: [{ id: "es1", format: "png", scale: 2, suffix: "@2x" }],
+    });
+
+    const clone = cloneNodeWithNewId(original, false) as TextNode;
+
+    expect(clone.exportSettings).toEqual(original.exportSettings);
+  });
+
+  it("deepCloneNode carries exportSettings on an ordinary node", () => {
+    const original = makeTextNode({
+      exportSettings: [{ id: "es1", format: "svg", scale: 1 }],
+    });
+
+    const clone = deepCloneNode(original) as TextNode;
+
+    expect(clone.exportSettings).toEqual(original.exportSettings);
+  });
+});
+
 describe("text node clones do not alias the paragraphs array (finding 7b)", () => {
   it("cloneNodeWithNewId copies the array — mutating the clone leaves the original untouched", () => {
     const original = makeTextNode();

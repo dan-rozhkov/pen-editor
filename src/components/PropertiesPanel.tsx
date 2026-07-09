@@ -18,7 +18,6 @@ import {
 import { AlignmentSection } from "@/components/properties/AlignmentSection";
 import { BooleanOperationsSection } from "@/components/properties/BooleanOperationsSection";
 import { DescendantPropertyEditor } from "@/components/properties/DescendantPropertyEditor";
-import { ExportSection } from "@/components/properties/ExportSection";
 import { MultiSelectPropertyEditor } from "@/components/properties/MultiSelectPropertyEditor";
 import { PageProperties } from "@/components/properties/PageProperties";
 import { PencilToolProperties } from "@/components/properties/PencilToolProperties";
@@ -272,8 +271,6 @@ export function PropertiesPanel() {
             allNodes={nodes}
           />
         )}
-        {/* Export section - always visible at the bottom */}
-        <ExportSection selectedNode={selectedNode} />
       </div>
       <VariablesDialog open={variablesOpen} onOpenChange={setVariablesOpen} />
       <TextStylesDialog open={textStylesOpen} onOpenChange={setTextStylesOpen} />

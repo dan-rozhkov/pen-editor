@@ -406,6 +406,27 @@ export interface BaseNode {
    * See `@/lib/masks/maskResolution` for the pure resolution logic.
    */
   isMask?: boolean
+  /**
+   * Per-node export presets (Figma-style "Export" panel). Each entry
+   * describes one file to produce when exporting this node: a format, a
+   * scale multiplier, an optional filename suffix (e.g. `@2x`, `_dark`), and
+   * an optional quality (0-1, used for lossy raster formats). Not read by
+   * rendering — purely metadata consumed by the export UI/tooling. See
+   * `@/utils/exportSettingsUtils`.
+   */
+  exportSettings?: ExportSetting[]
+}
+
+/** One configured export output for a node (see `BaseNode.exportSettings`). */
+export type ExportSettingFormat = 'svg' | 'png' | 'jpg' | 'webp' | 'pdf'
+
+export interface ExportSetting {
+  id: string
+  format: ExportSettingFormat
+  scale: number
+  suffix?: string
+  /** Encoder quality 0-1, used for lossy raster formats (jpg/webp). */
+  quality?: number
 }
 
 /** Per-axis constraint mode (Figma parity). */

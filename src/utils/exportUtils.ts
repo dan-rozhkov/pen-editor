@@ -1,15 +1,6 @@
 import type { Container as PixiContainer } from 'pixi.js'
 import type { PixiExportRefs } from '@/store/canvasRefStore'
-
-export type ExportFormat = 'png' | 'jpeg'
-export type ExportScale = 1 | 2 | 3
-
-interface ExportOptions {
-  format: ExportFormat
-  scale: ExportScale
-  viewportScale?: number
-  filename?: string
-}
+import { getExportSettingMimeType } from '@/utils/exportSettingsUtils'
 
 /**
  * Download a data URL as a file
@@ -21,33 +12,6 @@ function downloadDataUrl(dataUrl: string, filename: string): void {
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
-}
-
-/**
- * Get MIME type for export format
- */
-function getMimeType(format: ExportFormat): string {
-  return format === 'jpeg' ? 'image/jpeg' : 'image/png'
-}
-
-/**
- * Get file extension for export format
- */
-function getExtension(format: ExportFormat): string {
-  return format === 'jpeg' ? 'jpg' : 'png'
-}
-
-/**
- * Generate export filename with scale label
- */
-function generateFilename(
-  baseName: string,
-  format: ExportFormat,
-  scale: ExportScale
-): string {
-  const ext = getExtension(format)
-  const scaleLabel = scale > 1 ? `@${scale}x` : ''
-  return `${baseName}${scaleLabel}.${ext}`
 }
 
 function hidePixiOverlays(pixiRefs: PixiExportRefs): () => void {
@@ -78,34 +42,38 @@ export function findContainerByLabel(
   return null
 }
 
-function safeFilename(baseName: string, format: ExportFormat, scale: ExportScale): string {
-  const sanitizedName = baseName.replace(/[^a-zA-Z0-9_-]/g, '_') || 'canvas'
-  return generateFilename(sanitizedName, format, scale)
-}
+/** Raster formats + arbitrary scale, as used by per-node export settings (`exportSettingsUtils`). */
+export type RasterExportFormat = 'png' | 'jpg' | 'webp'
 
-export function exportImageFromPixi(
+/**
+ * Like `exportImageFromPixi`, but takes an arbitrary numeric `scale` (export
+ * settings allow 0.5x/1.5x/custom, not just the fixed 1/2/3 the toolbar
+ * export uses) and an explicit `filename` (export settings compute their own
+ * filename with suffix — see `buildExportFilename`), and supports webp.
+ */
+export function exportImageFromPixiWithFilename(
   pixiRefs: PixiExportRefs,
   nodeId: string | null,
-  nodeName: string | undefined,
-  options: Omit<ExportOptions, 'filename'>,
+  format: RasterExportFormat,
+  scale: number,
+  filename: string,
+  quality?: number,
 ): boolean {
-  const { format, scale } = options
-
   try {
-    const quality = format === 'jpeg' ? 0.92 : undefined
+    const mimeType = getExportSettingMimeType(format)
+    const encoderQuality = quality ?? (format === 'png' ? undefined : 0.92)
 
     if (nodeId) {
       const targetNode = findContainerByLabel(pixiRefs.sceneRoot, nodeId)
-      if (targetNode) {
-        const extracted = pixiRefs.app.renderer.extract.canvas({
-          target: targetNode,
-          resolution: scale,
-          antialias: true,
-        }) as HTMLCanvasElement
-        const dataUrl = extracted.toDataURL(getMimeType(format), quality)
-        downloadDataUrl(dataUrl, safeFilename(nodeName || nodeId, format, scale))
-        return true
-      }
+      if (!targetNode) return false
+      const extracted = pixiRefs.app.renderer.extract.canvas({
+        target: targetNode,
+        resolution: scale,
+        antialias: true,
+      }) as HTMLCanvasElement
+      const dataUrl = extracted.toDataURL(mimeType, encoderQuality)
+      downloadDataUrl(dataUrl, filename)
+      return true
     }
 
     const restoreOverlays = hidePixiOverlays(pixiRefs)
@@ -115,8 +83,8 @@ export function exportImageFromPixi(
         resolution: scale,
         antialias: true,
       }) as HTMLCanvasElement
-      const dataUrl = extracted.toDataURL(getMimeType(format), quality)
-      downloadDataUrl(dataUrl, generateFilename('canvas', format, scale))
+      const dataUrl = extracted.toDataURL(mimeType, encoderQuality)
+      downloadDataUrl(dataUrl, filename)
       return true
     } finally {
       restoreOverlays()

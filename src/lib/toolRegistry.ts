@@ -19,6 +19,7 @@ import { renameLayers } from "./tools/renameLayers";
 import { booleanOperation } from "./tools/booleanOperation";
 import { getGuidelines, getStyleGuide, getStyleGuideTags } from "./tools/staticTools";
 import { generateImage, generateFrameImage } from "./tools/generateImage";
+import { setExportSettings } from "./tools/setExportSettings";
 export type ToolHandler = (
   args: Record<string, unknown>
 ) => Promise<string>;
@@ -48,4 +49,5 @@ export const toolHandlers: Record<string, ToolHandler> = {
   get_style_guide: getStyleGuide,
   generate_image: generateImage,
   generate_frame_image: generateFrameImage,
+  set_export_settings: setExportSettings,
 };

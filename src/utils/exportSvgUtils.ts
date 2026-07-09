@@ -38,10 +38,11 @@ export function exportNodeToSvgFile(
   nodeName: string | undefined,
   nodesById: Record<string, FlatSceneNode>,
   childrenById: Record<string, string[]>,
+  filenameOverride?: string,
 ): { warnings: string[] } {
   const { svg, warnings } = convertDesignNodesToSvg(nodeId, nodesById, childrenById);
   if (svg) {
-    downloadSvgString(svg, safeSvgFilename(nodeName || nodeId));
+    downloadSvgString(svg, filenameOverride ?? safeSvgFilename(nodeName || nodeId));
   }
   if (warnings.length > 0) {
     console.warn("SVG export warnings:", warnings);
