@@ -287,6 +287,10 @@ function LinkPopover({ node, onUpdate }: { node: TextNode; onUpdate: (updates: P
       // canvas-level shortcuts use.
       if (isTypingTarget(e)) return;
       e.preventDefault();
+      // Stop the event before it reaches the command palette's bubble-phase
+      // ⌘K listener — while a text node is selected, ⌘K inserts a link
+      // (contextual) rather than also opening the palette.
+      e.stopPropagation();
       setOpen(true);
     }
     window.addEventListener("keydown", onKeyDown, true);

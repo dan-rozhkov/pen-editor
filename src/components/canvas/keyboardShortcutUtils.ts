@@ -63,6 +63,35 @@ export function resolvePasteTargetContainerId(
 }
 
 /**
+ * Select-all target ids for the current scope: the entered container's
+ * visible children if one is entered, otherwise every visible top-level
+ * node. Shared by the Cmd/Ctrl+A keyboard shortcut and the "Select All"
+ * command palette entry so the two stay in lockstep.
+ *
+ * Returns `null` when a container is entered but no longer resolves (stale
+ * id after an undo/delete): the caller should leave the selection untouched
+ * rather than escaping the container scope by selecting every root node.
+ */
+export function selectAllInScope(
+  nodes: SceneNode[],
+  selectionState: Pick<ReturnType<typeof useSelectionStore.getState>, "enteredContainerId">,
+): string[] | null {
+  const { enteredContainerId } = selectionState;
+
+  if (enteredContainerId) {
+    const container = findNodeById(nodes, enteredContainerId);
+    if (container && isContainerNode(container)) {
+      return container.children
+        .filter((n) => n.visible !== false)
+        .map((n) => n.id);
+    }
+    return null;
+  }
+
+  return nodes.filter((n) => n.visible !== false).map((n) => n.id);
+}
+
+/**
  * Resolve which nodes should be copied based on current selection state.
  * If a descendant inside an instance is selected (instanceContext),
  * resolve the actual descendant node instead of copying the whole instance.

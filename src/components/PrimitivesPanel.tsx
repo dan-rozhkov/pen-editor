@@ -1,21 +1,13 @@
+import { CaretDownIcon } from "@phosphor-icons/react";
+import { useDrawModeStore } from "../store/drawModeStore";
 import {
-  SquareIcon,
-  CircleIcon,
-  TextTIcon,
-  NavigationArrowIcon,
-  LineSegmentIcon,
-  HexagonIcon,
-  StarIcon,
-  HashStraight,
-  PencilSimple,
-  PenNibIcon,
-  FlowArrow,
-  type IconWeight,
-  CaretDownIcon,
-  CodeIcon,
-  ResizeIcon,
-} from "@phosphor-icons/react";
-import { useDrawModeStore, type DrawToolType } from "../store/drawModeStore";
+  LEADING_TOOLS,
+  RECT_TOOL,
+  RECT_SUB_TOOLS,
+  PEN_TOOL,
+  PEN_SUB_TOOLS,
+  TRAILING_TOOLS,
+} from "../lib/toolDefinitions";
 import { Button } from "./ui/button";
 import { ButtonGroup } from "./ui/button-group";
 import {
@@ -28,67 +20,10 @@ import {
 export function PrimitivesPanel() {
   const { activeTool, toggleTool, setActiveTool } = useDrawModeStore();
 
-  const leadingTools: Array<{
-    icon: React.ComponentType<{
-      className?: string;
-      size?: number;
-      weight?: IconWeight;
-    }>;
-    label: string;
-    tool: DrawToolType;
-    shortcut: string;
-  }> = [
-    {
-      icon: NavigationArrowIcon,
-      label: "Select",
-      tool: "cursor",
-      shortcut: "V",
-    },
-    { icon: HashStraight, label: "Frame", tool: "frame", shortcut: "F" },
-  ];
-
-  const trailingTools: Array<{
-    icon: React.ComponentType<{
-      className?: string;
-      size?: number;
-      weight?: IconWeight;
-    }>;
-    label: string;
-    tool: DrawToolType;
-    shortcut: string;
-  }> = [
-    { icon: TextTIcon, label: "Text", tool: "text", shortcut: "T" },
-    { icon: CodeIcon, label: "Embed", tool: "embed", shortcut: "E" },
-    { icon: ResizeIcon, label: "Scale", tool: "scale", shortcut: "K" },
-  ];
-
-  const rectSubTools: Array<{
-    icon: React.ComponentType<{
-      className?: string;
-      size?: number;
-      weight?: IconWeight;
-    }>;
-    label: string;
-    tool: DrawToolType;
-    shortcut: string;
-  }> = [
-    { icon: CircleIcon, label: "Ellipse", tool: "ellipse", shortcut: "O" },
-    { icon: LineSegmentIcon, label: "Line", tool: "line", shortcut: "L" },
-    { icon: HexagonIcon, label: "Polygon", tool: "polygon", shortcut: "G" },
-    { icon: StarIcon, label: "Star", tool: "star", shortcut: "S" },
-    { icon: FlowArrow, label: "Connector", tool: "connector", shortcut: "C" },
-  ];
-
-  const penSubTools: Array<{
-    icon: React.ComponentType<{
-      className?: string;
-      size?: number;
-      weight?: IconWeight;
-    }>;
-    label: string;
-    tool: DrawToolType;
-    shortcut: string;
-  }> = [{ icon: PencilSimple, label: "Pencil", tool: "pencil", shortcut: "D" }];
+  const leadingTools = LEADING_TOOLS;
+  const trailingTools = TRAILING_TOOLS;
+  const rectSubTools = RECT_SUB_TOOLS;
+  const penSubTools = PEN_SUB_TOOLS;
 
   const isRectSubToolActive = rectSubTools.some((t) => t.tool === activeTool);
   const isRectangleActive = activeTool === "rect";
@@ -136,7 +71,7 @@ export function PrimitivesPanel() {
                   : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
               }`}
             >
-              <SquareIcon size={40} className="size-6" weight="light" />
+              <RECT_TOOL.icon size={40} className="size-6" weight="light" />
             </Button>
 
             <DropdownMenuTrigger>
@@ -190,7 +125,7 @@ export function PrimitivesPanel() {
                   : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
               }`}
             >
-              <PenNibIcon size={40} className="size-6" weight="light" />
+              <PEN_TOOL.icon size={40} className="size-6" weight="light" />
             </Button>
 
             <DropdownMenuTrigger>

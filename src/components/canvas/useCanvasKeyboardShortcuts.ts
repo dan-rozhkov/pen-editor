@@ -128,6 +128,10 @@ export function useCanvasKeyboardShortcuts({
       copySelection();
     };
 
+    const handleMenuCut = () => {
+      cutSelection();
+    };
+
     const handleMenuPaste = () => {
       pasteFromInternalClipboard();
     };
@@ -144,6 +148,7 @@ export function useCanvasKeyboardShortcuts({
     window.addEventListener("keyup", handleKeyUp);
     window.addEventListener("paste", handlePaste);
     window.addEventListener("pen-editor:copy", handleMenuCopy);
+    window.addEventListener("pen-editor:cut", handleMenuCut);
     window.addEventListener("pen-editor:paste", handleMenuPaste);
     window.addEventListener("pen-editor:copy-style", handleMenuCopyStyle);
     window.addEventListener("pen-editor:paste-style", handleMenuPasteStyle);
@@ -152,6 +157,7 @@ export function useCanvasKeyboardShortcuts({
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("paste", handlePaste);
       window.removeEventListener("pen-editor:copy", handleMenuCopy);
+      window.removeEventListener("pen-editor:cut", handleMenuCut);
       window.removeEventListener("pen-editor:paste", handleMenuPaste);
       window.removeEventListener("pen-editor:copy-style", handleMenuCopyStyle);
       window.removeEventListener("pen-editor:paste-style", handleMenuPasteStyle);

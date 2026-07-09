@@ -6,6 +6,7 @@ import { LeftSidebar } from "./components/LeftSidebar";
 import { RightSidebar } from "./components/RightSidebar";
 import { PrimitivesPanel } from "./components/PrimitivesPanel";
 import { PresentOverlay } from "./components/PresentOverlay";
+import { CommandPalette } from "./components/CommandPalette";
 import { PresentController } from "./components/PresentController";
 import { ReadOnlyProvider } from "./components/ReadOnlyProvider";
 import { FpsDisplay } from "./components/canvas/CanvasOverlays";
@@ -82,6 +83,12 @@ function App() {
 
       {/* Sonner toast portal (hosts PwaUpdateToast's toast). */}
       <Toaster />
+
+      {/* Cmd+/ or Cmd+K search overlay — lists every tool/menu action from
+          the command registry. Edit-mode only: its commands mutate the scene
+          directly and would otherwise bypass the read-only guarantee that
+          `canEditScene` enforces for view/present mode. */}
+      {mode === "edit" && <CommandPalette />}
 
       {/* UI panels — overlay on top of canvas */}
       {!isUIHidden && !isPresent && (

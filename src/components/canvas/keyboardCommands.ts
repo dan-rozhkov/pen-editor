@@ -1,8 +1,4 @@
-import {
-  isContainerNode,
-  type SceneNode,
-  type HistorySnapshot,
-} from "@/types/scene";
+import type { SceneNode, HistorySnapshot } from "@/types/scene";
 import type { BooleanOpKind } from "@/lib/booleanOps";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { usePenToolStore } from "@/store/penToolStore";
@@ -19,7 +15,7 @@ import { applyNodeUpdates } from "@/utils/applyNodeUpdates";
 import { finishPenDraft, cancelPenDraft } from "@/pixi/interaction/penDraftCommit";
 import { cancelActiveScale } from "@/pixi/interaction/scaleController";
 import { enterPathEditMode } from "@/pixi/interaction/pathEditMode";
-import { isTypingTarget } from "./keyboardShortcutUtils";
+import { isTypingTarget, selectAllInScope } from "./keyboardShortcutUtils";
 import {
   handleArrowKeys,
   handleEnterEditing,
@@ -326,20 +322,8 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
     if ((e.metaKey || e.ctrlKey) && e.code === "KeyA") {
       if (isTyping) return;
       e.preventDefault();
-      const { enteredContainerId } = useSelectionStore.getState();
-
-      if (enteredContainerId) {
-        const container = findNodeById(nodes, enteredContainerId);
-        if (container && isContainerNode(container)) {
-          const ids = container.children
-            .filter((n) => n.visible !== false)
-            .map((n) => n.id);
-          useSelectionStore.getState().setSelectedIds(ids);
-        }
-      } else {
-        const ids = nodes.filter((n) => n.visible !== false).map((n) => n.id);
-        useSelectionStore.getState().setSelectedIds(ids);
-      }
+      const ids = selectAllInScope(nodes, useSelectionStore.getState());
+      if (ids) useSelectionStore.getState().setSelectedIds(ids);
       return;
     }
 

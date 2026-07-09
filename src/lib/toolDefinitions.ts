@@ -1,0 +1,84 @@
+import {
+  SquareIcon,
+  CircleIcon,
+  TextTIcon,
+  NavigationArrowIcon,
+  LineSegmentIcon,
+  HexagonIcon,
+  StarIcon,
+  HashStraight,
+  PencilSimple,
+  PenNibIcon,
+  FlowArrow,
+  type IconWeight,
+  CodeIcon,
+  ResizeIcon,
+} from "@phosphor-icons/react";
+import type { DrawToolType } from "@/store/drawModeStore";
+
+export type ToolIconComponent = React.ComponentType<{
+  className?: string;
+  size?: number;
+  weight?: IconWeight;
+}>;
+
+export interface ToolDefinition {
+  icon: ToolIconComponent;
+  label: string;
+  tool: DrawToolType;
+  shortcut: string;
+}
+
+/**
+ * Single source of truth for every drawing/selection tool: icon, label,
+ * `DrawToolType` id, and displayed keyboard shortcut. `PrimitivesPanel`
+ * (the bottom toolbar) and the command palette (`CommandPalette`) both
+ * render from these lists instead of maintaining their own copies, so the
+ * tool set and its shortcuts can't drift between the two surfaces.
+ */
+export const LEADING_TOOLS: ToolDefinition[] = [
+  { icon: NavigationArrowIcon, label: "Select", tool: "cursor", shortcut: "V" },
+  { icon: HashStraight, label: "Frame", tool: "frame", shortcut: "F" },
+];
+
+export const RECT_TOOL: ToolDefinition = {
+  icon: SquareIcon,
+  label: "Rectangle",
+  tool: "rect",
+  shortcut: "R",
+};
+
+export const RECT_SUB_TOOLS: ToolDefinition[] = [
+  { icon: CircleIcon, label: "Ellipse", tool: "ellipse", shortcut: "O" },
+  { icon: LineSegmentIcon, label: "Line", tool: "line", shortcut: "L" },
+  { icon: HexagonIcon, label: "Polygon", tool: "polygon", shortcut: "G" },
+  { icon: StarIcon, label: "Star", tool: "star", shortcut: "S" },
+  { icon: FlowArrow, label: "Connector", tool: "connector", shortcut: "C" },
+];
+
+export const PEN_TOOL: ToolDefinition = {
+  icon: PenNibIcon,
+  label: "Pen",
+  tool: "pen",
+  shortcut: "P",
+};
+
+export const PEN_SUB_TOOLS: ToolDefinition[] = [
+  { icon: PencilSimple, label: "Pencil", tool: "pencil", shortcut: "D" },
+];
+
+export const TRAILING_TOOLS: ToolDefinition[] = [
+  { icon: TextTIcon, label: "Text", tool: "text", shortcut: "T" },
+  { icon: CodeIcon, label: "Embed", tool: "embed", shortcut: "E" },
+  { icon: ResizeIcon, label: "Scale", tool: "scale", shortcut: "K" },
+];
+
+/** Every tool, flattened into a single list (used by the command palette). */
+export const ALL_TOOLS: ToolDefinition[] = [
+  ...LEADING_TOOLS,
+  RECT_TOOL,
+  ...RECT_SUB_TOOLS,
+  PEN_TOOL,
+  ...PEN_SUB_TOOLS,
+  ...TRAILING_TOOLS,
+];
