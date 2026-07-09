@@ -4,15 +4,17 @@ import type {
   Paint,
 } from "@/types/scene";
 import {
+  createDefaultVideoPlayback,
   createGradientPaint,
   createImagePaint,
   createPatternPaint,
   createSolidPaint,
+  createVideoPaint,
 } from "@/utils/fillUtils";
 import { getDefaultGradient } from "@/utils/gradientUtils";
 
 /** Discrete fill kinds shown in the per-paint type selector. */
-export type FillKind = "solid" | "linear" | "radial" | "image" | "pattern";
+export type FillKind = "solid" | "linear" | "radial" | "image" | "pattern" | "video";
 
 /** Map a Paint to its UI fill kind. */
 export function getFillKind(paint: Paint): FillKind {
@@ -23,6 +25,8 @@ export function getFillKind(paint: Paint): FillKind {
       return "image";
     case "pattern":
       return "pattern";
+    case "video":
+      return "video";
     case "gradient":
       return paint.gradient.type;
   }
@@ -113,7 +117,9 @@ export function convertFillKind(fills: Paint[], index: number, kind: FillKind): 
         ? current.image
         : current.type === "pattern"
           ? { url: current.pattern.url, mode: "fill" as const }
-          : { url: "", mode: "fill" as const };
+          : current.type === "video"
+            ? { url: current.video.src, mode: current.video.mode, crop: current.video.crop }
+            : { url: "", mode: "fill" as const };
     next = { ...createImagePaint(image), ...meta };
   } else if (kind === "pattern") {
     // Converting image → pattern keeps the image as the tile source.
@@ -124,6 +130,21 @@ export function convertFillKind(fills: Paint[], index: number, kind: FillKind): 
           ? current.image.url
           : "";
     next = { ...createPatternPaint({ url }), ...meta };
+  } else if (kind === "video") {
+    // Converting another paint → video keeps any image/pattern url as the
+    // video source (usually empty — the user picks a file next).
+    const src =
+      current.type === "video"
+        ? current.video.src
+        : current.type === "image"
+          ? current.image.url
+          : current.type === "pattern"
+            ? current.pattern.url
+            : "";
+    next = {
+      ...createVideoPaint({ src, mode: "fill", playback: createDefaultVideoPlayback() }),
+      ...meta,
+    };
   } else {
     // linear | radial
     const gradientType = kind as GradientType;

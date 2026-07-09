@@ -9,10 +9,12 @@ import { useSelectionStore } from "@/store/selectionStore";
 import {
   applyImageImportPlans,
   createImageImportPlan,
+  createVideoImportPlan,
   type ImageImportPlan,
 } from "./imageImport";
 
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp)$/i;
+const VIDEO_EXTENSIONS = /\.(mp4|webm)$/i;
 const SVG_EXTENSION = /\.svg$/i;
 const JSON_EXTENSION = /\.json$/i;
 
@@ -55,6 +57,10 @@ function isSvgFile(file: File): boolean {
 
 function isImageFile(file: File): boolean {
   return file.type.startsWith("image/") || IMAGE_EXTENSIONS.test(file.name);
+}
+
+function isVideoFile(file: File): boolean {
+  return file.type.startsWith("video/") || VIDEO_EXTENSIONS.test(file.name);
 }
 
 function isJsonFile(file: File): boolean {
@@ -124,6 +130,25 @@ export function useCanvasFileDrop({
               addNode(result.node);
               useSelectionStore.getState().select(result.node.id);
             }
+          } catch {
+            // skip failed file
+          }
+        } else if (isVideoFile(file)) {
+          try {
+            const plan = await createVideoImportPlan({
+              blob: file,
+              name: file.name,
+              anchorWorld: { x: dropX, y: dropY },
+              canvasSize: {
+                width: container.clientWidth,
+                height: container.clientHeight,
+              },
+              nodes: currentNodes,
+              selectedIds: selectionState.selectedIds,
+              enteredContainerId: selectionState.enteredContainerId,
+              fallbackName: "Video",
+            });
+            imagePlans.push(plan);
           } catch {
             // skip failed file
           }

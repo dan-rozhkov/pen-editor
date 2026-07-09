@@ -1,5 +1,6 @@
 import type { HistorySnapshot, RectNode, SceneNode } from "@/types/scene";
 import { generateId, isContainerNode } from "@/types/scene";
+import { createDefaultVideoPlayback, createVideoPaint } from "@/utils/fillUtils";
 import { useLayoutStore } from "@/store/layoutStore";
 import { createSnapshot, useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
@@ -63,6 +64,21 @@ function loadImageSize(url: string): Promise<Size> {
     img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
     img.onerror = reject;
     img.src = url;
+  });
+}
+
+function loadVideoSize(url: string): Promise<Size> {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.muted = true;
+    video.onloadedmetadata = () =>
+      resolve({
+        width: video.videoWidth || 320,
+        height: video.videoHeight || 180,
+      });
+    video.onerror = () => reject(new Error("Failed to load video metadata"));
+    video.src = url;
   });
 }
 
@@ -202,6 +218,55 @@ export async function createImageImportPlan({
       fill: "#ffffff",
       cornerRadius: 0,
       imageFill: { url: dataUrl, mode: "fill" },
+    },
+  };
+}
+
+/**
+ * Build an import plan for a dropped video file — the video-fill analogue of
+ * `createImageImportPlan`. Creates a rectangle sized to the video's natural
+ * dimensions (clamped to the viewport/container budget) with a single video
+ * paint (autoplay + loop + muted by default — see `createDefaultVideoPlayback`).
+ */
+export async function createVideoImportPlan({
+  blob,
+  name,
+  anchorWorld,
+  canvasSize,
+  nodes,
+  selectedIds,
+  enteredContainerId,
+  fallbackName,
+}: ImageImportParams): Promise<ImageImportPlan> {
+  const dataUrl = await readBlobAsDataURL(blob);
+  const naturalSize = await loadVideoSize(dataUrl);
+  const placement = resolvePlacement(
+    nodes,
+    selectedIds,
+    enteredContainerId,
+    anchorWorld,
+    canvasSize,
+  );
+  const scaledSize = clampSizeToBudget(naturalSize, placement.budget);
+
+  return {
+    parentId: placement.parentId,
+    node: {
+      id: generateId(),
+      type: "rect",
+      name: getImportName(name, fallbackName),
+      x: Math.round(placement.center.x - scaledSize.width / 2),
+      y: Math.round(placement.center.y - scaledSize.height / 2),
+      width: scaledSize.width,
+      height: scaledSize.height,
+      cornerRadius: 0,
+      fills: [
+        createVideoPaint({
+          src: dataUrl,
+          mode: "fill",
+          playback: createDefaultVideoPlayback(),
+        }),
+      ],
     },
   };
 }

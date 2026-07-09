@@ -15,6 +15,7 @@ import {
   drawRoundedShape,
 } from "./fillStrokeHelpers";
 import { applyImageFills } from "./imageFillHelpers";
+import { applyVideoFills } from "./videoFillHelpers";
 import { pushRenderTheme, popRenderTheme } from "./colorHelpers";
 import { createNodeContainer, isInsideRef } from "./index";
 import { drawLayoutGrids } from "./layoutGridRenderer";
@@ -115,6 +116,17 @@ export function createFrameContainer(
 
   // Image fill stack
   applyImageFills(
+    container,
+    node,
+    effectiveWidth,
+    effectiveHeight,
+    node.cornerRadius,
+    node.cornerRadiusPerCorner,
+    node.cornerSmoothing,
+  );
+
+  // Video fill (topmost video paint)
+  applyVideoFills(
     container,
     node,
     effectiveWidth,
@@ -232,6 +244,15 @@ export function updateFrameContainer(
     node.cornerSmoothing !== prev.cornerSmoothing
   ) {
     applyImageFills(
+      container,
+      node,
+      effectiveWidth,
+      effectiveHeight,
+      node.cornerRadius,
+      node.cornerRadiusPerCorner,
+      node.cornerSmoothing,
+    );
+    applyVideoFills(
       container,
       node,
       effectiveWidth,

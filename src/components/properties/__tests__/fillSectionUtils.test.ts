@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { GradientPaint, ImagePaint, Paint, SolidPaint } from "@/types/scene";
 import {
+  createDefaultVideoPlayback,
   createGradientPaint,
   createImagePaint,
   createPatternPaint,
   createShadowEffect,
   createSolidPaint,
+  createVideoPaint,
 } from "@/utils/fillUtils";
 import {
   addEffect,
@@ -31,6 +33,36 @@ describe("getFillKind", () => {
     expect(getFillKind(createGradientPaint(getDefaultGradient("linear")))).toBe("linear");
     expect(getFillKind(createGradientPaint(getDefaultGradient("radial")))).toBe("radial");
     expect(getFillKind(createPatternPaint({ url: "x" }))).toBe("pattern");
+    expect(
+      getFillKind(
+        createVideoPaint({ src: "x", mode: "fill", playback: createDefaultVideoPlayback() }),
+      ),
+    ).toBe("video");
+  });
+});
+
+describe("convertFillKind → video", () => {
+  it("converts a solid paint to a video paint with muted-autoplay defaults", () => {
+    const fills: Paint[] = [solid("#123456")];
+    const next = convertFillKind(fills, 0, "video");
+    expect(next[0]).toMatchObject({
+      type: "video",
+      video: { src: "", mode: "fill", playback: { autoplay: true, loop: true, muted: true } },
+    });
+  });
+
+  it("converts image → video carrying over the url as the video src", () => {
+    const fills: Paint[] = [createImagePaint({ url: "https://x/a.png", mode: "fit" })];
+    const next = convertFillKind(fills, 0, "video");
+    expect(next[0]).toMatchObject({ type: "video", video: { src: "https://x/a.png" } });
+  });
+
+  it("converts video → image carrying over the src as the image url", () => {
+    const fills: Paint[] = [
+      createVideoPaint({ src: "https://x/clip.mp4", mode: "fill", playback: createDefaultVideoPlayback() }),
+    ];
+    const next = convertFillKind(fills, 0, "image") as ImagePaint[];
+    expect(next[0]).toMatchObject({ type: "image", image: { url: "https://x/clip.mp4" } });
   });
 });
 

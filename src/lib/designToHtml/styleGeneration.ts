@@ -1,11 +1,13 @@
-import type { BaseNode, TextNode, FrameNode, RectNode, ShadowEffect, BlurEffect, GradientFill, ImageFill, PerSideStroke, ColorBinding, SolidPaint, GradientPaint, ImagePaint } from "@/types/scene";
+import type { BaseNode, TextNode, FrameNode, RectNode, ShadowEffect, BlurEffect, GradientFill, ImageFill, PerSideStroke, ColorBinding, SolidPaint, GradientPaint, ImagePaint, VideoFill, VideoPaint } from "@/types/scene";
 import type { Variable } from "@/types/variable";
 import { applyOpacity } from "@/utils/colorUtils";
 import { hasPerCornerRadius } from "@/utils/renderUtils";
 import { useVariableStore } from "@/store/variableStore";
 import { getRenderableFills, getRenderableEffects, getPrimarySolidPaint } from "@/utils/fillUtils";
-import { imageModeToCssSize } from "@/lib/cssBackground";
+import { imageModeToCssSize, fillModeToObjectFit } from "@/lib/cssBackground";
 import { cropRectToBackgroundCss, isFullCropRect, coverPixelRect, containPixelRect, clampCropRect, FULL_CROP_RECT } from "@/lib/imageCrop/cropRect";
+import { toFontVariationSettingsCss } from "@/utils/variableFont";
+import { hasEffectiveUnderline, TEXT_LINK_COLOR } from "@/lib/textLink";
 
 /**
  * CSS properties emitted by `generateFillCss` for a node's background.
@@ -141,6 +143,10 @@ export function generateTextStyles(node: TextNode): Record<string, string> {
   if (node.fontStyle === "italic") {
     styles["font-style"] = "italic";
   }
+  const fontVariationSettings = toFontVariationSettingsCss(node.fontVariations);
+  if (fontVariationSettings) {
+    styles["font-variation-settings"] = fontVariationSettings;
+  }
   if (node.textAlign) {
     styles["text-align"] = node.textAlign;
   }
@@ -151,9 +157,10 @@ export function generateTextStyles(node: TextNode): Record<string, string> {
     styles["letter-spacing"] = `${node.letterSpacing}px`;
   }
 
-  // Text decoration
+  // Text decoration. A link forces an underline (Figma parity) — see
+  // `hasEffectiveUnderline`'s doc comment.
   const decorations: string[] = [];
-  if (node.underline) decorations.push("underline");
+  if (hasEffectiveUnderline(node)) decorations.push("underline");
   if (node.strikethrough) decorations.push("line-through");
   if (decorations.length > 0) {
     styles["text-decoration"] = decorations.join(" ");
@@ -255,6 +262,13 @@ function generateFillCss(node: BaseNode, variables: Variable[]): Record<string, 
     if (primary) {
       const rawColor = applyOpacity(primary.color, primary.opacity);
       styles.color = resolveBindingToCssVar(primary.colorBinding, rawColor, variables) ?? rawColor;
+    } else if ((node as TextNode).link) {
+      // Linked text with no resolvable solid color of its own gets the default
+      // link color (same fallback the Pixi renderer and InlineTextEditor apply).
+      // We're already in the no-primary-solid-paint branch, so there's no
+      // explicit color to respect regardless of whether a (non-solid) `fills`
+      // stack exists.
+      styles.color = TEXT_LINK_COLOR;
     }
     return styles;
   }
@@ -316,6 +330,11 @@ function generateFillCss(node: BaseNode, variables: Variable[]): Record<string, 
       sizes.push("auto");
       positions.push(`${p.offsetX ?? 0}px ${p.offsetY ?? 0}px`);
       repeats.push("repeat");
+    } else if (paint.type === "video") {
+      // Video paints are emitted as a real <video> element (see
+      // `generateVideoFillHtml` / convertNode), not a CSS background — skip
+      // here so a video layer doesn't disturb the background list.
+      return;
     } else {
       const layer = imageFillLayerCss((paint as ImagePaint).image, node.width, node.height);
       images.push(layer.image);
@@ -341,6 +360,83 @@ function generateFillCss(node: BaseNode, variables: Variable[]): Record<string, 
   }
 
   return styles;
+}
+
+/**
+ * Build the CSS `clip-path: inset(...)` that clips a video element down to its
+ * crop rect (normalized 0-1 source coordinates). Mirrors the sibling-mask
+ * `inset()` approximation — the visible sub-region matches the crop rect,
+ * expressed as percentages of the element box. Returns `undefined` for a
+ * full/absent crop so no clip-path is emitted.
+ */
+function videoCropClipPath(crop: VideoFill["crop"]): string | undefined {
+  if (isFullCropRect(crop)) return undefined;
+  const c = clampCropRect(crop ?? FULL_CROP_RECT);
+  const pct = (v: number) => `${Math.round(v * 10000) / 100}%`;
+  const top = pct(c.y);
+  const right = pct(1 - (c.x + c.width));
+  const bottom = pct(1 - (c.y + c.height));
+  const left = pct(c.x);
+  return `inset(${top} ${right} ${bottom} ${left})`;
+}
+
+/**
+ * Emit the `<video>` element(s) for a node's renderable video paints (only the
+ * topmost video paint is rendered, matching the Pixi renderer). Returns "" when
+ * the node has no video fill.
+ *
+ * The video is an absolutely-positioned replaced element filling the node's
+ * box: `object-fit` maps the fill `mode` (fill→cover, fit→contain,
+ * stretch→fill), `border-radius: inherit` clips it to the node's rounded/
+ * elliptical corners, and a crop rect becomes a `clip-path: inset(...)`.
+ * Playback attributes come from the fill's `playback` config; `muted` is
+ * forced whenever `autoplay` is set so the browser's autoplay policy permits
+ * playback (see `VideoPlayback`). `playsinline` is always present.
+ */
+export function generateVideoFillHtml(node: BaseNode): string {
+  // Pick the TOPMOST video paint to match the live Pixi renderer
+  // (`videoFillHelpers.topVideoFill`): `fills` is bottom-to-top, so scan from
+  // the end. Using `.find()` would export the bottommost (hidden) video.
+  const fills = getRenderableFills(node);
+  let videoPaint: VideoPaint | undefined;
+  for (let i = fills.length - 1; i >= 0; i--) {
+    if (fills[i].type === "video") {
+      videoPaint = fills[i] as VideoPaint;
+      break;
+    }
+  }
+  if (!videoPaint || !videoPaint.video.src) return "";
+  const video = videoPaint.video;
+
+  const styleParts = [
+    "position:absolute",
+    "top:0",
+    "left:0",
+    "width:100%",
+    "height:100%",
+    `object-fit:${fillModeToObjectFit(video.mode)}`,
+    "border-radius:inherit",
+  ];
+  const clip = videoCropClipPath(video.crop);
+  if (clip) styleParts.push(`clip-path:${clip}`);
+
+  const attrs: string[] = [`src="${escapeHtmlAttr(video.src)}"`];
+  // Unmuted autoplay is blocked by browsers — force muted when autoplay is on.
+  const muted = video.playback.muted || video.playback.autoplay;
+  if (video.playback.autoplay) attrs.push("autoplay");
+  if (video.playback.loop) attrs.push("loop");
+  if (muted) attrs.push("muted");
+  attrs.push("playsinline");
+
+  return `<video ${attrs.join(" ")} style="${styleParts.join(";")}"></video>`;
+}
+
+function escapeHtmlAttr(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 function generateGradientCss(gradient: GradientFill, layerOpacity?: number): string {

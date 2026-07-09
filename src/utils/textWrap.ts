@@ -1,5 +1,6 @@
 import type { TextNode } from '../types/scene'
 import { applyTextTransform } from './textTransform'
+import { resolveEffectiveFontWeight } from './variableFont'
 import { LIST_INDENT_WIDTH, LIST_MARKER_GAP, getParagraphAttrs } from '../lib/textLists/paragraphs'
 import { computeParagraphMarkerInfos } from '../lib/textLists/markers'
 
@@ -21,7 +22,9 @@ function getContext(): CanvasRenderingContext2D {
  */
 export function buildFontString(node: TextNode): string {
   const style = node.fontStyle ?? 'normal'
-  const weight = node.fontWeight ?? 'normal'
+  // Mirror the Pixi renderer: the `wght` variable-font axis overrides the
+  // static weight, so measurement (wrapping/auto-size) matches what's drawn.
+  const weight = resolveEffectiveFontWeight(node.fontVariations, node.fontWeight)
   const size = node.fontSize ?? 16
   const family = node.fontFamily ?? 'Arial'
   return `${style} ${weight} ${size}px ${family}`

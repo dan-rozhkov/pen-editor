@@ -1,4 +1,5 @@
 import type { SceneNode } from '@/types/scene';
+import { getVariableFontAxes, hasItalicVariant, type FontAxis } from '@/utils/variableFont';
 
 export const COMMON_FONTS = [
   'Arial',
@@ -193,6 +194,39 @@ export function registerFontLoadCallback(cb: () => void) {
 const loadedGoogleFonts = new Set<string>();
 const loadingGoogleFonts = new Map<string, Promise<void>>();
 
+/**
+ * Google's CSS2 API supports requesting a whole axis range in one tuple
+ * (e.g. `wght@100..900`) instead of enumerating static instances — the file
+ * it serves for a range request is the actual variable font binary, which is
+ * what makes smooth `font-variation-settings` interpolation possible in the
+ * browser. Axis tags must be given alphabetically sorted, per Google's API.
+ * Known variable fonts (`getVariableFontAxes`) request every registered axis
+ * as a range; families with a true italic variable face (`hasItalicVariant`)
+ * additionally request the roman+italic tuple pair so italic glyphs load.
+ * Everything else falls back to the original static-instance enumeration
+ * (ital/wght cross product) so non-variable fonts are unaffected.
+ */
+function buildFontAxisQuery(normalizedFamily: string): string {
+  const axes = getVariableFontAxes(normalizedFamily);
+  if (!axes || axes.length === 0) {
+    return 'ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900';
+  }
+  const sorted = [...axes].sort((a, b) => a.tag.localeCompare(b.tag));
+  const rangeFor = (a: FontAxis) => (a.min === a.max ? `${a.min}` : `${a.min}..${a.max}`);
+  if (hasItalicVariant(normalizedFamily)) {
+    // `ital` sorts before every registered axis tag alphabetically, so it
+    // leads the tuple; enumerate roman (0) and italic (1) over the same ranges.
+    const tags = ['ital', ...sorted.map((a) => a.tag)].join(',');
+    const ranges = sorted.map(rangeFor);
+    const roman = ['0', ...ranges].join(',');
+    const italic = ['1', ...ranges].join(',');
+    return `${tags}@${roman};${italic}`;
+  }
+  const tags = sorted.map((a) => a.tag).join(',');
+  const ranges = sorted.map(rangeFor).join(',');
+  return `${tags}@${ranges}`;
+}
+
 export function loadGoogleFont(family: string): Promise<void> {
   const normalizedFamily = normalizeFontFamilyName(family);
   if (!normalizedFamily) {
@@ -209,7 +243,7 @@ export function loadGoogleFont(family: string): Promise<void> {
   }
 
   const encodedFamily = normalizedFamily.replace(/ /g, '+');
-  const url = `https://fonts.googleapis.com/css2?family=${encodedFamily}:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap`;
+  const url = `https://fonts.googleapis.com/css2?family=${encodedFamily}:${buildFontAxisQuery(normalizedFamily)}&display=swap`;
 
   const link = document.createElement('link');
   link.rel = 'stylesheet';

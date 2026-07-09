@@ -107,6 +107,8 @@ export const TEXT_MEASURE_PROPS = new Set([
   "letterSpacing",
   "lineHeight",
   "paragraphSpacing",
+  // wght/wdth/opsz axis values change glyph advance widths, same as fontWeight.
+  "fontVariations",
   "textWidthMode",
   "textTransform",
   // maxLines caps auto-height; both re-derive the rendered/measured line set

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import {
   AlignBottom,
@@ -9,6 +9,7 @@ import {
   Article,
   CheckIcon,
   LinkIcon,
+  LinkSimpleIcon,
   ListBullets,
   ListNumbers,
   MagnifyingGlassIcon,
@@ -35,11 +36,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { FontCombobox } from "@/components/ui/FontCombobox";
+import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useTextStyleStore } from "@/store/textStyleStore";
 import { TEXT_STYLE_PROPERTY_KEYS, type TextStyle } from "@/types/textStyle";
 import { MAX_INDENT_LEVEL, getParagraphAttrs, normalizeParagraphs, splitParagraphs } from "@/lib/textLists/paragraphs";
 import { toggleListType } from "@/lib/textLists/listEditing";
+import { isTypingTarget } from "@/components/canvas/keyboardShortcutUtils";
+import { Slider } from "@/components/ui/slider";
+import { getVariableFontAxes, type FontAxis } from "@/utils/variableFont";
 
 interface TypographySectionProps {
   node: TextNode;
@@ -262,6 +267,108 @@ function TextStylesPopover({ node }: { node: TextNode }) {
   );
 }
 
+/**
+ * Popover for adding/editing/removing a text node's `link` attribute (Figma
+ * "Link" panel). Opens on click, or via Cmd/Ctrl+K while the canvas (not
+ * some other text input) has focus — mirrors the ⌘K binding note in the
+ * task spec. Operates at whole-node granularity, same as every other
+ * typography control in this panel (bold/italic/underline/...): there is no
+ * per-character text-range selection in this app's scene graph.
+ */
+function LinkPopover({ node, onUpdate }: { node: TextNode; onUpdate: (updates: Partial<SceneNode>) => void }) {
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    function onKeyDown(e: globalThis.KeyboardEvent) {
+      if (!(e.metaKey || e.ctrlKey) || e.code !== "KeyK") return;
+      // Don't hijack ⌘K while the user is typing elsewhere (chat input,
+      // layer rename, another popover's own field, ...) — same guard the
+      // canvas-level shortcuts use.
+      if (isTypingTarget(e)) return;
+      e.preventDefault();
+      setOpen(true);
+    }
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, []);
+
+  const commitUrl = () => {
+    const trimmed = (inputRef.current?.value ?? "").trim();
+    if (!trimmed) {
+      if (node.link) onUpdate({ link: undefined } as Partial<SceneNode>);
+      return;
+    }
+    if (trimmed === node.link?.url) return;
+    onUpdate({
+      link: node.link?.title ? { url: trimmed, title: node.link.title } : { url: trimmed },
+    } as Partial<SceneNode>);
+  };
+
+  const removeLink = () => {
+    onUpdate({ link: undefined } as Partial<SceneNode>);
+    setOpen(false);
+  };
+
+  return (
+    <Popover
+      open={open}
+      // `onOpenChange` is base-ui's own notification for interactions it
+      // owns (outside click, its internal Escape handling) — it does NOT
+      // fire just because we set `open` ourselves below, so it only needs
+      // to cover the "commit on outside click" case; Enter/Escape inside
+      // the input commit (or intentionally skip) explicitly instead.
+      onOpenChange={(next) => {
+        if (!next) commitUrl();
+        setOpen(next);
+      }}
+    >
+      <PopoverTrigger>
+        <Button
+          variant={node.link ? "default" : "secondary"}
+          size="icon-sm"
+          title="Link (⌘K)"
+          aria-label="Link"
+          className={
+            node.link
+              ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
+              : ""
+          }
+        >
+          <LinkSimpleIcon />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent side="left" align="start" sideOffset={TYPOGRAPHY_POPOVER_PANEL_OFFSET} className="w-[240px] gap-2">
+        <div className="text-xs font-semibold text-text-primary">Link</div>
+        <Input
+          key={`${node.id}:${open}`}
+          ref={inputRef}
+          defaultValue={node.link?.url ?? ""}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.stopPropagation();
+              commitUrl();
+              setOpen(false);
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              e.stopPropagation(); // cancel: skip commitUrl, and don't let base-ui's own Escape handling commit either
+              setOpen(false);
+            }
+          }}
+          placeholder="Paste a URL"
+          autoFocus
+        />
+        {node.link && (
+          <Button variant="secondary" size="sm" onClick={removeLink}>
+            Remove link
+          </Button>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 const segmentedButtonGroupClass =
   "h-6 rounded-md bg-secondary gap-px [&_svg]:size-[18px]! [&>[data-slot]]:rounded-[5px]! [&>[data-slot]]:border [&>[data-slot]~[data-slot]]:border-l";
 
@@ -289,6 +396,41 @@ function TruncateTextIcon() {
       <circle cx="8" cy="12.2" r="0.7" fill="currentColor" />
       <circle cx="10.8" cy="12.2" r="0.7" fill="currentColor" />
     </svg>
+  );
+}
+
+/** One bounded slider for a single OpenType Variable Font axis (Figma-style axis control). */
+function VariableAxisSlider({
+  axis,
+  value,
+  onChange,
+}: {
+  axis: FontAxis;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  // A zero-width range (min === max, e.g. a font that exposes an axis with no
+  // real span) has nothing to interpolate — skip rendering a disabled slider.
+  if (axis.max <= axis.min) return null;
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="truncate text-[10px] font-normal text-text-muted">
+        {axis.name ?? axis.tag}
+      </span>
+      <div className="flex min-w-0 items-center gap-2">
+        <Slider
+          value={value}
+          min={axis.min}
+          max={axis.max}
+          step={1}
+          getAriaLabel={() => axis.name ?? axis.tag}
+          onValueChange={(next) => onChange(Array.isArray(next) ? next[0] ?? axis.default : next)}
+        />
+        <span className="flex h-6 w-12 shrink-0 items-center justify-end rounded-md bg-secondary px-2 text-xs leading-none tabular-nums text-secondary-foreground">
+          {Math.round(value)}
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -338,6 +480,10 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
   // box to overflow, mirroring Figma where "Truncate text" is hidden there.
   const isWrapped =
     node.textWidthMode === "fixed" || node.textWidthMode === "fixed-height";
+
+  // Axis sliders only apply when the selected font is a known variable font.
+  const variableFontAxes = getVariableFontAxes(node.fontFamily);
+  const hasWeightAxis = variableFontAxes?.some((a) => a.tag === "wght") ?? false;
 
   // The panel operates at whole-node granularity (no caret/selection context
   // here — that's InlineTextEditor's job for in-place editing): toggling a
@@ -396,25 +542,48 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
           }
           min={1}
         />
-        <SelectInput
-          value={node.fontWeight ?? "normal"}
-          options={[
-            { value: "normal", label: "Normal" },
-            { value: "100", label: "100 Thin" },
-            { value: "200", label: "200 Extra Light" },
-            { value: "300", label: "300 Light" },
-            { value: "400", label: "400 Regular" },
-            { value: "500", label: "500 Medium" },
-            { value: "600", label: "600 Semi Bold" },
-            { value: "700", label: "700 Bold" },
-            { value: "800", label: "800 Extra Bold" },
-            { value: "900", label: "900 Black" },
-          ]}
-          onChange={(v) =>
-            updateTypography({ fontWeight: v })
-          }
-        />
+        {/* A "wght" axis fully covers the static fontWeight dropdown's range
+            with continuous interpolation, so it replaces (rather than joins)
+            it — same reasoning Figma uses for variable-font weight. */}
+        {!hasWeightAxis && (
+          <SelectInput
+            value={node.fontWeight ?? "normal"}
+            options={[
+              { value: "normal", label: "Normal" },
+              { value: "100", label: "100 Thin" },
+              { value: "200", label: "200 Extra Light" },
+              { value: "300", label: "300 Light" },
+              { value: "400", label: "400 Regular" },
+              { value: "500", label: "500 Medium" },
+              { value: "600", label: "600 Semi Bold" },
+              { value: "700", label: "700 Bold" },
+              { value: "800", label: "800 Extra Bold" },
+              { value: "900", label: "900 Black" },
+            ]}
+            onChange={(v) =>
+              updateTypography({ fontWeight: v })
+            }
+          />
+        )}
       </PropertyRow>
+      {variableFontAxes && (
+        <PropertyRow>
+          <div className="flex w-full flex-col gap-2">
+            {variableFontAxes.map((axis) => (
+              <VariableAxisSlider
+                key={axis.tag}
+                axis={axis}
+                value={node.fontVariations?.[axis.tag] ?? axis.default}
+                onChange={(value) =>
+                  updateTypography({
+                    fontVariations: { ...node.fontVariations, [axis.tag]: value },
+                  })
+                }
+              />
+            ))}
+          </div>
+        </PropertyRow>
+      )}
       <PropertyRow>
         <div className="flex items-center gap-1 flex-1">
           <Button
@@ -472,6 +641,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
               <TextStrikethrough size={14} />
             </Button>
           </ButtonGroup>
+          <LinkPopover node={node} onUpdate={onUpdate} />
         </div>
       </PropertyRow>
       <div className="flex flex-col gap-1">

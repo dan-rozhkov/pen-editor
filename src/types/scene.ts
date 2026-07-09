@@ -55,6 +55,44 @@ export interface ImageFill {
   adjustments?: ImageAdjustments
 }
 
+/**
+ * Playback configuration for a video fill (see `VideoFill`). Mirrors the
+ * subset of HTML `<video>` attributes that make sense for a background/fill.
+ *
+ * `muted` deliberately defaults to `true`: every modern browser blocks
+ * *unmuted* autoplay, so an autoplaying preview must stay muted unless the
+ * user explicitly unmutes it. The Pixi renderer and the HTML exporter both
+ * honor this — an unmuted+autoplay combination simply won't start playing in
+ * most browsers, which is expected behaviour, not a bug.
+ */
+export interface VideoPlayback {
+  autoplay: boolean
+  loop: boolean
+  muted: boolean
+}
+
+/**
+ * A video fill for shapes/frames — the moving-image analogue of `ImageFill`.
+ * Shares the exact same transform model as an image fill (`mode` +
+ * `crop`), so the fill/fit/crop machinery in `@/lib/imageCrop/cropRect` is
+ * reused verbatim for both. Adjustments (color correction) are intentionally
+ * image-only and have no video equivalent here.
+ *
+ * `src` is the playable source (a `data:` or `https://` URL). `videoId` is an
+ * optional asset-library id kept for provenance/future asset management; the
+ * renderer always plays from `src`.
+ */
+export interface VideoFill {
+  /** Optional asset-library id (provenance only — playback uses `src`). */
+  videoId?: string
+  src: string              // data:video/... or https://...
+  playback: VideoPlayback
+  /** Same fit model as an image fill: 'fill' | 'fit' | 'stretch'. */
+  mode: ImageFillMode
+  /** Optional crop applied on top of `mode` (see `ImageCropRect`). */
+  crop?: ImageCropRect
+}
+
 // Gradient fill types
 export interface GradientColorStop {
   color: string
@@ -151,10 +189,22 @@ export interface PatternPaint extends PaintBase {
 }
 
 /**
+ * A video fill paint layer (see `VideoFill`). Rendered by the Pixi renderer as
+ * a masked `<video>`-backed sprite (`pixi/renderers/videoFillHelpers.ts`) and
+ * exported to HTML as a `<video>` element (`designToHtml`). Only one video
+ * paint per node is rendered on the live canvas (the topmost one); additional
+ * video paints below it are a documented no-op.
+ */
+export interface VideoPaint extends PaintBase {
+  type: 'video'
+  video: VideoFill
+}
+
+/**
  * One paint layer in a fill stack. `fills: Paint[]` is ordered bottom-to-top:
  * fills[0] renders first (bottom), the last element renders on top.
  */
-export type Paint = SolidPaint | GradientPaint | ImagePaint | PatternPaint
+export type Paint = SolidPaint | GradientPaint | ImagePaint | PatternPaint | VideoPaint
 
 // Sizing modes for elements inside auto-layout containers
 export type SizingMode = 'fixed' | 'fill_container' | 'fit_content'
@@ -520,6 +570,20 @@ export interface ParagraphAttrs {
   indentLevel?: number // 0-based, clamped to [0, MAX_INDENT_LEVEL] — see textLists/paragraphs.ts
 }
 
+/**
+ * A hyperlink attached to a text node (Figma "Link" attribute). Like every
+ * other typographic attribute in this codebase (bold/italic/underline/color),
+ * there is no per-character span/run model here — `link` applies to the
+ * node's ENTIRE text content, not a sub-string of mixed content. See
+ * `@/lib/textLink` for the shared color constant, markdown-link parser, and
+ * "has an explicit color" helper used by the renderer/inline-editor/HTML
+ * exporter to decide when to fall back to the default link color.
+ */
+export interface TextLink {
+  url: string
+  title?: string
+}
+
 export interface TextNode extends BaseNode {
   type: 'text'
   text: string
@@ -534,6 +598,10 @@ export interface TextNode extends BaseNode {
   // Text decoration
   underline?: boolean
   strikethrough?: boolean
+  // Hyperlink for the whole node's text content. Renders with a forced
+  // underline and a default link color (unless `fill`/`fills` is set) —
+  // see `TextLink` doc comment.
+  link?: TextLink
   // Text width mode: 'auto' = width follows text content, 'fixed' = manual width, 'fixed-height' = manual width+height
   textWidthMode?: TextWidthMode
   // Text alignment within the text block
@@ -551,6 +619,13 @@ export interface TextNode extends BaseNode {
   // identically by the Pixi renderer and the inline contentEditable editor
   // (as `margin-bottom` on each paragraph's line div).
   paragraphSpacing?: number
+  // OpenType Variable Font axis values, e.g. { wght: 530, opsz: 24, wdth: 87 }.
+  // Keys are 4-char axis tags (see `utils/variableFont.ts`'s `AXIS_LABELS` for the
+  // ones with dedicated UI sliders — arbitrary tags are still forwarded to CSS
+  // `font-variation-settings` / Pixi's font-weight approximation). Only meaningful
+  // when `fontFamily` is a known variable font (`getVariableFontAxes`); absent
+  // (or the font isn't variable) means "use static fontWeight/fontStyle only".
+  fontVariations?: Record<string, number>
   // Text transform (visual only, applied at render/measure time)
   textTransform?: TextTransform
   // Truncate overflowing text with an ellipsis ("…"). Figma "Truncate text".

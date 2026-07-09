@@ -6,7 +6,7 @@ import type {
   EmbedNode,
   LayoutProperties,
 } from "@/types/scene";
-import { generateVisualStyles, generateTextStyles, BACKGROUND_STYLE_KEYS } from "./styleGeneration";
+import { generateVisualStyles, generateTextStyles, generateVideoFillHtml, BACKGROUND_STYLE_KEYS } from "./styleGeneration";
 import { generateLayoutStyles } from "./layoutStyleGeneration";
 import { pathNodeToSvg, lineNodeToSvg, polygonNodeToSvg } from "./svgGeneration";
 import { resolveMasking, getMaskMode } from "@/lib/masks/maskResolution";
@@ -14,6 +14,7 @@ import { getFills } from "@/utils/fillUtils";
 import { imageModeToCssSize } from "@/lib/cssBackground";
 import { getParagraphAttrs, hasActiveList, splitParagraphs } from "@/lib/textLists/paragraphs";
 import { computeParagraphMarkerInfos } from "@/lib/textLists/markers";
+import { isSafeLinkHref } from "@/lib/textLink";
 
 /** Stable context threaded through the recursive conversion. */
 export interface ConversionContext {
@@ -152,7 +153,13 @@ function convertFrameNode(
   const childLayout = node.layout;
   const childrenHtml = convertChildrenWithMasking(childIds, ctx, childLayout);
 
-  return `<div style="${stylesToString(styles)}">${childrenHtml}</div>`;
+  // A video fill is an absolutely-positioned <video> element behind the
+  // frame's children (see generateVideoFillHtml). Ensure the frame establishes
+  // a positioning context so the video sizes to the frame box.
+  const videoHtml = generateVideoFillHtml(node);
+  const finalStyles = videoHtml && !styles.position ? { ...styles, position: "relative" } : styles;
+
+  return `<div style="${stylesToString(finalStyles)}">${videoHtml}${childrenHtml}</div>`;
 }
 
 function convertGroupNode(
@@ -413,17 +420,17 @@ function convertTextNode(
   // validly contain — always wrap in a div. `buildTextBodyHtml` handles both
   // (grouping list runs, emitting margin-bottom gaps) in one pass.
   if (hasActiveList(node) || spacedMultiParagraph) {
-    return `<div style="${stylesToString(styles)}">${buildTextBodyHtml(node)}</div>`;
+    return wrapLink(`<div style="${stylesToString(styles)}">${buildTextBodyHtml(node)}</div>`, node);
   }
 
   const text = escapeHtml(node.text);
 
   // For fixed-height text with vertical alignment, wrap in a div
   if (node.textWidthMode === "fixed-height" || node.textAlignVertical) {
-    return `<div style="${stylesToString(styles)}">${text}</div>`;
+    return wrapLink(`<div style="${stylesToString(styles)}">${text}</div>`, node);
   }
 
-  return `<span style="${stylesToString(styles)}">${text}</span>`;
+  return wrapLink(`<span style="${stylesToString(styles)}">${text}</span>`, node);
 }
 
 function convertShapeNode(
@@ -438,7 +445,12 @@ function convertShapeNode(
     ...extraStyles,
   };
 
-  return `<div style="${stylesToString(styles)}"></div>`;
+  // Rect/ellipse with a video fill: emit the <video> element inside the box,
+  // ensuring a positioning context so it sizes to the shape.
+  const videoHtml = generateVideoFillHtml(node);
+  const finalStyles = videoHtml && !styles.position ? { ...styles, position: "relative" } : styles;
+
+  return `<div style="${stylesToString(finalStyles)}">${videoHtml}</div>`;
 }
 
 /**
@@ -476,4 +488,30 @@ function escapeHtml(text: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/\n/g, "<br>");
+}
+
+/** Escape a value for use inside a double-quoted HTML attribute (no `<br>` substitution, unlike `escapeHtml`). */
+function escapeAttr(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/**
+ * Wrap a text node's rendered HTML in an `<a>` tag when it has a `link`
+ * (Figma "Link" attribute, whole-node granularity — see `TextNode.link`'s
+ * doc comment). `target="_blank" rel="noopener"` matches how every other
+ * outbound link in this app opens (see `downloadFile.ts`). HTML5 permits
+ * block content (e.g. a `<div>`) inside an `<a>`, so this wraps every
+ * `convertTextNode` return shape (span/div) the same way.
+ */
+function wrapLink(html: string, node: TextNode): string {
+  if (!node.link) return html;
+  // Drop the anchor for unsafe URL schemes (javascript:, data:, ...) rather
+  // than emitting a dangerous href; the text still renders (link-styled).
+  if (!isSafeLinkHref(node.link.url)) return html;
+  const titleAttr = node.link.title ? ` title="${escapeAttr(node.link.title)}"` : "";
+  return `<a href="${escapeAttr(node.link.url)}"${titleAttr} target="_blank" rel="noopener">${html}</a>`;
 }

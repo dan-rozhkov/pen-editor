@@ -5,6 +5,8 @@ import { getResolvedFill, getResolvedSolidPaint } from "./colorHelpers";
 import { applyTextTransform, getLineLimit, truncateLines, wrapTextToLines } from "@/utils/textMeasure";
 import { hasActiveList, splitParagraphs } from "@/lib/textLists/paragraphs";
 import { layoutTextParagraphs, type LaidOutLine } from "@/utils/textWrap";
+import { resolveEffectiveFontWeight } from "@/utils/variableFont";
+import { hasEffectiveUnderline, TEXT_LINK_COLOR } from "@/lib/textLink";
 
 /**
  * Label on the wrapper container used by the per-line rendering path
@@ -43,6 +45,20 @@ function getResolvedTextColor(node: TextNode): string | undefined {
     return paint ? getResolvedSolidPaint(paint) : undefined;
   }
   return getResolvedFill(node);
+}
+
+/**
+ * Effective text color: the node's own resolved color, falling back to
+ * `TEXT_LINK_COLOR` for a linked node with no resolvable color of its own, and
+ * to black otherwise.
+ */
+function getEffectiveTextColor(node: TextNode): string {
+  const resolved = getResolvedTextColor(node);
+  if (resolved) return resolved;
+  // No resolvable color: a linked node falls back to the default link blue
+  // (an explicit color, if any, already returned above via `resolved`).
+  if (node.link) return TEXT_LINK_COLOR;
+  return "#000000";
 }
 
 /**
@@ -113,6 +129,7 @@ export function updateTextContainer(
       node.fontFamily !== prev.fontFamily ||
       node.fontWeight !== prev.fontWeight ||
       node.fontStyle !== prev.fontStyle ||
+      node.fontVariations !== prev.fontVariations ||
       node.letterSpacing !== prev.letterSpacing ||
       node.lineHeight !== prev.lineHeight ||
       node.truncateText !== prev.truncateText ||
@@ -121,6 +138,7 @@ export function updateTextContainer(
       node.textAlignVertical !== prev.textAlignVertical ||
       node.underline !== prev.underline ||
       node.strikethrough !== prev.strikethrough ||
+      node.link !== prev.link ||
       node.fill !== prev.fill ||
       node.fillBinding !== prev.fillBinding ||
       node.fillOpacity !== prev.fillOpacity ||
@@ -169,6 +187,7 @@ export function updateTextContainer(
     node.fontFamily !== prev.fontFamily ||
     node.fontWeight !== prev.fontWeight ||
     node.fontStyle !== prev.fontStyle ||
+    node.fontVariations !== prev.fontVariations ||
     node.fill !== prev.fill ||
     node.fillBinding !== prev.fillBinding ||
     node.fillOpacity !== prev.fillOpacity ||
@@ -179,6 +198,7 @@ export function updateTextContainer(
     node.textWidthMode !== prev.textWidthMode ||
     node.underline !== prev.underline ||
     node.strikethrough !== prev.strikethrough ||
+    node.link !== prev.link ||
     node.gradientFill !== prev.gradientFill ||
     node.fills !== prev.fills
   ) {
@@ -242,7 +262,7 @@ function buildListContent(container: Container, node: TextNode): void {
   });
 
   const lineStyle = buildTextStyle(node);
-  const fillColor = getResolvedTextColor(node) ?? "#000000";
+  const fillColor = getEffectiveTextColor(node);
   const dpr = window.devicePixelRatio || 1;
 
   const lineTexts: Text[] = lines.map((line, i) => {
@@ -295,7 +315,8 @@ function drawListTextDecorations(
   lineYs: number[],
   fillColor: string,
 ): void {
-  if (!node.underline && !node.strikethrough) return;
+  const underline = hasEffectiveUnderline(node);
+  if (!underline && !node.strikethrough) return;
 
   const g = new Graphics();
   g.label = "text-decorations";
@@ -307,7 +328,7 @@ function drawListTextDecorations(
     const w = lineTexts[i]?.width ?? 0;
     const x = line.x;
     const lineY = lineYs[i];
-    if (node.underline) {
+    if (underline) {
       g.rect(x, lineY + fontSize * 1.05, w, thickness).fill(fillColor);
     }
     if (node.strikethrough) {
@@ -318,15 +339,28 @@ function drawListTextDecorations(
   root.addChild(g);
 }
 
+/**
+ * Resolve the effective font weight: the `wght` variable-font axis (when set)
+ * takes precedence over the static `fontWeight` field, since a variable font's
+ * `wght` value (e.g. 530) is a strictly finer-grained version of the same
+ * concept. Canvas/Pixi text has no `font-variation-settings` support, so
+ * `wght` is the only axis that can be approximated here — the DOM-rendered
+ * paths (`designToHtml`, `InlineTextEditor`) get full-fidelity variation
+ * settings including the other axes (`wdth`/`slnt`/`opsz`/...).
+ */
+function resolveFontWeight(node: TextNode): string {
+  return resolveEffectiveFontWeight(node.fontVariations, node.fontWeight);
+}
+
 export function buildTextStyle(node: TextNode): TextStyle {
-  const fillColor = getResolvedTextColor(node) ?? "#000000";
+  const fillColor = getEffectiveTextColor(node);
   const fontSize = node.fontSize ?? 16;
   const lineHeightMultiplier = node.lineHeight ?? 1.2;
 
   return new TextStyle({
     fontFamily: node.fontFamily || "Arial",
     fontSize: fontSize,
-    fontWeight: (node.fontWeight as TextStyle["fontWeight"]) ?? "normal",
+    fontWeight: resolveFontWeight(node) as TextStyle["fontWeight"],
     fontStyle: (node.fontStyle as TextStyle["fontStyle"]) ?? "normal",
     fill: fillColor,
     // Lines are pre-wrapped via wrapTextToLines, so disable Pixi's own wrapper.
@@ -376,7 +410,8 @@ function drawTextDecorations(
   node: TextNode,
 ): void {
   const existing = container.getChildByLabel("text-decorations") as Graphics | null;
-  if (!node.underline && !node.strikethrough) {
+  const underline = hasEffectiveUnderline(node);
+  if (!underline && !node.strikethrough) {
     if (existing) {
       container.removeChild(existing);
       existing.destroy();
@@ -390,7 +425,7 @@ function drawTextDecorations(
   g.x = textObj.x;
   g.y = textObj.y;
 
-  const fillColor = getResolvedTextColor(node) ?? "#000000";
+  const fillColor = getEffectiveTextColor(node);
   const fontSize = node.fontSize ?? 16;
   const lineHeightMultiplier = node.lineHeight ?? 1.2;
   const lineHeight = fontSize * lineHeightMultiplier;
@@ -405,7 +440,7 @@ function drawTextDecorations(
     // For single-line text, just use textWidth
     const w = textWidth;
 
-    if (node.underline) {
+    if (underline) {
       const y = lineY + fontSize * 1.05;
       g.rect(0, y, w, thickness).fill(fillColor);
     }

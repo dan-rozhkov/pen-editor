@@ -8,6 +8,8 @@ export interface TextStyleProperties {
   lineHeight?: number;
   letterSpacing?: number;
   textTransform?: TextTransform;
+  /** OpenType Variable Font axis values, e.g. { wght: 530 }. See `scene.ts`'s `TextNode.fontVariations`. */
+  fontVariations?: Record<string, number>;
 }
 
 /** A named, reusable text style (Figma-style "Text styles"). */
@@ -24,6 +26,7 @@ export const TEXT_STYLE_PROPERTY_KEYS = [
   "lineHeight",
   "letterSpacing",
   "textTransform",
+  "fontVariations",
 ] as const;
 
 export type TextStylePropertyKey = (typeof TEXT_STYLE_PROPERTY_KEYS)[number];
@@ -48,6 +51,11 @@ const TEXT_STYLE_PROPERTY_VALIDATORS: {
   lineHeight: (v): v is number => typeof v === "number",
   letterSpacing: (v): v is number => typeof v === "number",
   textTransform: (v): v is TextTransform => typeof v === "string",
+  fontVariations: (v): v is Record<string, number> =>
+    typeof v === "object" &&
+    v !== null &&
+    !Array.isArray(v) &&
+    Object.values(v as Record<string, unknown>).every((n) => typeof n === "number"),
 };
 
 /**

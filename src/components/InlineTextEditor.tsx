@@ -18,6 +18,8 @@ import {
 import { computeParagraphMarkerInfos } from '../lib/textLists/markers'
 import { changeIndentLevel, continueListOnEnter, toggleListType } from '../lib/textLists/listEditing'
 import { measureTextWidth } from '../utils/textWrap'
+import { toFontVariationSettingsCss } from '../utils/variableFont'
+import { hasEffectiveUnderline, TEXT_LINK_COLOR } from '../lib/textLink'
 
 interface InlineTextEditorProps {
   node: TextNode
@@ -333,13 +335,16 @@ export function InlineTextEditor({
   const { scale, x, y } = useViewportStore()
   const variables = useVariableStore((state) => state.variables)
 
-  // Resolve the fill color (matching Konva rendering)
-  const fillColor = resolveColor(
+  // Resolve the fill color. An explicit color always wins; a linked node with
+  // no resolvable color of its own falls back to the link accent color — same
+  // rule the Pixi renderer and designToHtml use (see `@/lib/textLink`).
+  const resolvedFill = resolveColor(
     node.fill,
     node.fillBinding,
     variables,
     effectiveTheme ?? 'light',
-  ) ?? '#000000'
+  )
+  const fillColor = resolvedFill ?? (node.link ? TEXT_LINK_COLOR : '#000000')
 
   // Calculate screen position from absolute world coordinates and snap to device pixels.
   const dpr = window.devicePixelRatio || 1
@@ -351,6 +356,7 @@ export function InlineTextEditor({
   const fontWeight = String(node.fontWeight ?? 'normal')
   const fontFamily = toCssFontFamily(node.fontFamily ?? 'Arial')
   const editorFontShorthand = `${fontStyle} normal ${fontWeight} ${screenFontSize}px ${fontFamily}`
+  const fontVariationSettings = toFontVariationSettingsCss(node.fontVariations)
 
   // Width mode
   const isAutoWidth = node.textWidthMode === 'auto' || !node.textWidthMode
@@ -361,9 +367,9 @@ export function InlineTextEditor({
   const shouldUseAutoTextBehavior = isAutoWidth || isFitContentInAutoLayout
   const isWrappedWidth = !shouldUseAutoTextBehavior
 
-  // Build text decoration string
+  // Build text decoration string. A link forces an underline (Figma parity).
   const textDecorationParts: string[] = []
-  if (node.underline) textDecorationParts.push('underline')
+  if (hasEffectiveUnderline(node)) textDecorationParts.push('underline')
   if (node.strikethrough) textDecorationParts.push('line-through')
 
   const commitTextAndParagraphs = useCallback(
@@ -697,6 +703,7 @@ export function InlineTextEditor({
         // Font styles matching Konva
         font: editorFontShorthand,
         fontSynthesis: 'none',
+        fontVariationSettings,
         textDecoration: textDecorationParts.join(' ') || undefined,
         lineHeight: lineHeightPx,
         letterSpacing: screenLetterSpacing,

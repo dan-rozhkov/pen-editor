@@ -37,6 +37,7 @@ import {
 import { GradientEditor } from "@/components/properties/GradientEditor";
 import { ImageFillEditor } from "@/components/properties/ImageFillSection";
 import { PatternFillEditor } from "@/components/properties/PatternFillSection";
+import { VideoFillEditor } from "@/components/properties/VideoFillSection";
 import { OverrideIndicator } from "@/components/properties/OverrideIndicator";
 import { StylePicker } from "@/components/properties/StylePicker";
 import { useStyleStore } from "@/store/styleStore";
@@ -150,6 +151,12 @@ function PaintSwatch({ paint }: { paint: Paint }) {
       backgroundSize: "cover",
       backgroundPosition: "center",
     };
+  } else if (paint.type === "video" && paint.video.src) {
+    // Checkerboard placeholder swatch — a poster frame would require decoding
+    // the video; the row label ("Video") disambiguates it.
+    style = {
+      background: "repeating-conic-gradient(#bbb 0% 25%, #eee 0% 50%) 50% / 6px 6px",
+    };
   } else {
     style = {
       background: "repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 50% / 6px 6px",
@@ -177,6 +184,7 @@ function paintSummary(paint: Paint): string {
   if (paint.type === "solid") return paint.color.toUpperCase();
   if (paint.type === "image") return "Image";
   if (paint.type === "pattern") return "Pattern";
+  if (paint.type === "video") return "Video";
   return paint.gradient.type === "radial" ? "Radial" : "Linear";
 }
 
@@ -255,6 +263,7 @@ export function FillSection({
                     ...FILL_TYPE_OPTIONS,
                     { value: "image", label: "Image" },
                     { value: "pattern", label: "Pattern" },
+                    { value: "video", label: "Video" },
                   ]
                 : FILL_TYPE_OPTIONS;
 
@@ -415,6 +424,18 @@ export function FillSection({
                           onChange={(p) =>
                             commit(
                               updateFillAt(fills, arrayIndex, { ...paint, pattern: p }),
+                            )
+                          }
+                        />
+                      )}
+
+                      {/* Video editor */}
+                      {paint.type === "video" && (
+                        <VideoFillEditor
+                          video={paint.video}
+                          onChange={(v) =>
+                            commit(
+                              updateFillAt(fills, arrayIndex, { ...paint, video: v }),
                             )
                           }
                         />

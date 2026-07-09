@@ -14,6 +14,7 @@ import { applyOpacity } from "@/utils/colorUtils";
 import { getPrimarySolidPaint } from "@/utils/fillUtils";
 import { pointsAttr } from "@/utils/lineCapUtils";
 import { resolveMasking } from "@/lib/masks/maskResolution";
+import { hasEffectiveUnderline, isSafeLinkHref, TEXT_LINK_COLOR } from "@/lib/textLink";
 import { buildEllipseArcGeometry, ellipseArcGeometryToSvgPath, hasCustomEllipseArc } from "@/lib/shapePath/ellipseArc";
 import {
   buildCapMarker,
@@ -257,7 +258,11 @@ function convertTextToSvg(node: TextNode, _ctx: SvgConversionContext, isRoot: bo
     ? applyOpacity(primary.color, primary.opacity)
     : node.fill
       ? applyOpacity(node.fill, node.fillOpacity)
-      : "#000000";
+      : // A linked node with no resolvable color of its own gets the default
+        // link color, matching the canvas render and HTML export.
+        node.link
+        ? TEXT_LINK_COLOR
+        : "#000000";
 
   const fontSize = node.fontSize ?? 16;
   const fontFamily = node.fontFamily ?? "sans-serif";
@@ -265,7 +270,7 @@ function convertTextToSvg(node: TextNode, _ctx: SvgConversionContext, isRoot: bo
     node.fontWeight && node.fontWeight !== "normal" ? ` font-weight="${node.fontWeight}"` : "";
   const fontStyleAttr = node.fontStyle === "italic" ? ` font-style="italic"` : "";
   const decorations: string[] = [];
-  if (node.underline) decorations.push("underline");
+  if (hasEffectiveUnderline(node)) decorations.push("underline");
   if (node.strikethrough) decorations.push("line-through");
   const decorationAttr = decorations.length > 0 ? ` text-decoration="${decorations.join(" ")}"` : "";
 
@@ -281,7 +286,13 @@ function convertTextToSvg(node: TextNode, _ctx: SvgConversionContext, isRoot: bo
     .map((line, i) => `<tspan x="${anchorX}" y="${baseline + i * lineHeightPx}">${escapeXml(line)}</tspan>`)
     .join("");
 
-  return `<g ${attrs}><text font-family="${escapeXml(fontFamily)}" font-size="${fontSize}" fill="${color}" text-anchor="${textAnchor}"${fontWeightAttr}${fontStyleAttr}${decorationAttr}>${tspans}</text></g>`;
+  const g = `<g ${attrs}><text font-family="${escapeXml(fontFamily)}" font-size="${fontSize}" fill="${color}" text-anchor="${textAnchor}"${fontWeightAttr}${fontStyleAttr}${decorationAttr}>${tspans}</text></g>`;
+  // Wrap in an SVG anchor when the node is a link with a safe URL, matching
+  // the HTML export's clickable `<a>` (skip unsafe schemes like javascript:).
+  if (node.link && isSafeLinkHref(node.link.url)) {
+    return `<a href="${escapeXml(node.link.url)}" target="_blank" rel="noopener">${g}</a>`;
+  }
+  return g;
 }
 
 function convertPathToSvg(node: PathNode, ctx: SvgConversionContext, isRoot: boolean): string {

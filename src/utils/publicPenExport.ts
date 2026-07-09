@@ -349,6 +349,10 @@ function exportPaint(
       ...(layerOpacity != null ? { opacity: layerOpacity } : {}),
     };
   }
+  // Video fills have no equivalent in the public .pen export format — drop them
+  // (documented out-of-scope simplification; the live editor + HTML export
+  // handle video, but this static export format has no video paint variant).
+  if (paint.type === "video") return undefined;
   return exportSolidFill(paint.color, paint.colorBinding?.variableId, layerOpacity, context);
 }
 

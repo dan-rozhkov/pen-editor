@@ -123,6 +123,28 @@ describe("convertDesignNodesToSvg", () => {
     expect(svg).toContain(">Hello<");
   });
 
+  it("wraps a linked text node in an <a> anchor with underline and link color", () => {
+    const nodesById: Record<string, FlatSceneNode> = {
+      frame1: frame("frame1"),
+      text1: text("text1", { link: { url: "https://example.com" } }),
+    };
+    const { svg } = convertDesignNodesToSvg("frame1", { ...nodesById }, { frame1: ["text1"] });
+    expect(svg).toContain('<a href="https://example.com" target="_blank" rel="noopener">');
+    // No explicit fill → default link blue, and links force an underline.
+    expect(svg).toContain('fill="#0d99ff"');
+    expect(svg).toContain('text-decoration="underline"');
+  });
+
+  it("omits the anchor for an unsafe javascript: link URL", () => {
+    const nodesById: Record<string, FlatSceneNode> = {
+      frame1: frame("frame1"),
+      text1: text("text1", { link: { url: "javascript:alert(1)" } }),
+    };
+    const { svg } = convertDesignNodesToSvg("frame1", { ...nodesById }, { frame1: ["text1"] });
+    expect(svg).not.toContain("<a ");
+    expect(svg).not.toContain("javascript:");
+  });
+
   it("root node does not get an extra translate offset", () => {
     const nodesById: Record<string, FlatSceneNode> = {
       frame1: frame("frame1", { x: 500, y: 500 }),

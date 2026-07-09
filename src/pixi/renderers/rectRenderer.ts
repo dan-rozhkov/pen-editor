@@ -8,6 +8,7 @@ import {
   drawRoundedShape,
 } from "./fillStrokeHelpers";
 import { applyImageFills } from "./imageFillHelpers";
+import { applyVideoFills } from "./videoFillHelpers";
 
 export function createRectContainer(node: RectNode): Container {
   const container = new Container();
@@ -18,6 +19,17 @@ export function createRectContainer(node: RectNode): Container {
 
   // Image fill paint stack
   applyImageFills(
+    container,
+    node,
+    node.width,
+    node.height,
+    node.cornerRadius,
+    node.cornerRadiusPerCorner,
+    node.cornerSmoothing,
+  );
+
+  // Video fill (topmost video paint)
+  applyVideoFills(
     container,
     node,
     node.width,
@@ -54,6 +66,15 @@ export function updateRectContainer(
     node.cornerSmoothing !== prev.cornerSmoothing
   ) {
     applyImageFills(
+      container,
+      node,
+      node.width,
+      node.height,
+      node.cornerRadius,
+      node.cornerRadiusPerCorner,
+      node.cornerSmoothing,
+    );
+    applyVideoFills(
       container,
       node,
       node.width,

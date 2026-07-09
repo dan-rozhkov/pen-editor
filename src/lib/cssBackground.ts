@@ -29,3 +29,22 @@ export function imageModeFromCssSize(size: string | undefined): ImageFillMode {
   if (v === "100% 100%" || v === "100%" || v === "stretch") return "stretch";
   return "fill";
 }
+
+/**
+ * Map a fill `mode` to the CSS `object-fit` keyword used when the fill is
+ * rendered as a replaced element (an `<img>`/`<video>` sizing to its box)
+ * rather than a `background-image`. Used by the HTML `<video>` exporter.
+ *
+ * fill → cover, fit → contain, stretch → fill.
+ */
+export function fillModeToObjectFit(mode: ImageFillMode): string {
+  switch (mode) {
+    case "fit":
+      return "contain";
+    case "stretch":
+      return "fill";
+    case "fill":
+    default:
+      return "cover";
+  }
+}

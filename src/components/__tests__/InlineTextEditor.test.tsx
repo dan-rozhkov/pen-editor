@@ -436,4 +436,40 @@ describe("<InlineTextEditor />", () => {
       expect(editor.querySelectorAll("[data-text-list-marker]")).toHaveLength(1);
     });
   });
+
+  describe("text links", () => {
+    it("applies the default link color and underline when linked with no explicit fill", () => {
+      const { container } = render(
+        <InlineTextEditor
+          node={textNode({ link: { url: "https://example.com" } })}
+          absoluteX={0}
+          absoluteY={0}
+        />,
+      );
+      const editor = container.querySelector('[contenteditable="true"]') as HTMLElement;
+      expect(editor.style.color).toBe("#0d99ff");
+      expect(editor.style.textDecoration).toContain("underline");
+    });
+
+    it("respects an explicit fill over the default link color", () => {
+      const { container } = render(
+        <InlineTextEditor
+          node={textNode({ link: { url: "https://example.com" }, fill: "#ff0000" })}
+          absoluteX={0}
+          absoluteY={0}
+        />,
+      );
+      const editor = container.querySelector('[contenteditable="true"]') as HTMLElement;
+      expect(editor.style.color).toBe("#ff0000");
+      expect(editor.style.textDecoration).toContain("underline");
+    });
+
+    it("does not force an underline/link color when unlinked", () => {
+      const { container } = render(
+        <InlineTextEditor node={textNode()} absoluteX={0} absoluteY={0} />,
+      );
+      const editor = container.querySelector('[contenteditable="true"]') as HTMLElement;
+      expect(editor.style.textDecoration).toBeFalsy();
+    });
+  });
 });

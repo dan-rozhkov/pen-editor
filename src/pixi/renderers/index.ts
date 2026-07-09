@@ -30,6 +30,7 @@ import { createGroupContainer } from "./groupRenderer";
 import { createEmbedContainer, updateEmbedContainer } from "./embedRenderer";
 import { createConnectorContainer, updateConnectorContainer } from "./connectorRenderer";
 import { applyShaderFill, shouldRebakeShader, resizeShaderFill, isSizeOnlyShaderChange } from "./shaderFillHelpers";
+import { applyVideoFills, applyVideoFillsEllipse } from "./videoFillHelpers";
 import type { ConnectorNode } from "@/types/scene";
 import type { ShadowShape } from "./shadowHelpers";
 import { resolveRefToTree } from "@/utils/instanceRuntime";
@@ -606,6 +607,15 @@ export function applyLayoutSize(
         gfx.clear();
         drawRect(gfx, { ...node, width: layoutWidth, height: layoutHeight } as RectNode);
       }
+      applyVideoFills(
+        container,
+        node,
+        layoutWidth,
+        layoutHeight,
+        (node as RectNode).cornerRadius,
+        (node as RectNode).cornerRadiusPerCorner,
+        (node as RectNode).cornerSmoothing,
+      );
       const shadowRectNode = { ...node, width: layoutWidth, height: layoutHeight } as RectNode;
       // Shadows are redrawn at the new size; layer blur is a size-independent container
       // filter and needs no re-apply here.
@@ -627,6 +637,7 @@ export function applyLayoutSize(
         gfx.clear();
         drawEllipse(gfx, { ...node, width: layoutWidth, height: layoutHeight } as EllipseNode);
       }
+      applyVideoFillsEllipse(container, node, layoutWidth, layoutHeight);
       const shadowEllipseNode = { ...node, width: layoutWidth, height: layoutHeight } as EllipseNode;
       applyShadows(
         container,
@@ -665,6 +676,15 @@ export function applyLayoutSize(
         gridGfx.clear();
         drawLayoutGrids(gridGfx, frameNode.layoutGrids, layoutWidth, layoutHeight);
       }
+      applyVideoFills(
+        container,
+        frameNode,
+        layoutWidth,
+        layoutHeight,
+        frameNode.cornerRadius,
+        frameNode.cornerRadiusPerCorner,
+        frameNode.cornerSmoothing,
+      );
       applyShadows(
         container,
         getResolvedRenderableEffects(frameNode),

@@ -13,6 +13,9 @@ import {
   type SceneNode,
   type ShadowEffect,
   type SolidPaint,
+  type VideoFill,
+  type VideoPaint,
+  type VideoPlayback,
 } from '@/types/scene'
 import { getDefaultShadow } from '@/utils/shadowUtils'
 import type { EffectStyle, FillStyle } from '@/types/style'
@@ -49,6 +52,20 @@ export function createImagePaint(image: ImageFill, init?: Partial<Omit<ImagePain
 
 export function createPatternPaint(pattern: PatternFill, init?: Partial<Omit<PatternPaint, 'type' | 'pattern'>>): PatternPaint {
   return { id: generateId(), type: 'pattern', pattern, ...init }
+}
+
+/**
+ * Default video playback config. Muted is `true` so an autoplaying preview is
+ * allowed by browser autoplay policy (unmuted autoplay is blocked) — see
+ * `VideoPlayback`. Autoplay + loop on by default so a dropped/placed video
+ * behaves like a live background out of the box.
+ */
+export function createDefaultVideoPlayback(): VideoPlayback {
+  return { autoplay: true, loop: true, muted: true }
+}
+
+export function createVideoPaint(video: VideoFill, init?: Partial<Omit<VideoPaint, 'type' | 'video'>>): VideoPaint {
+  return { id: generateId(), type: 'video', video, ...init }
 }
 
 // Deterministic ids for paints derived from legacy fields. Stable across

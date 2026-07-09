@@ -4,8 +4,10 @@ import type {
   SizingProperties,
   SceneNode,
   ImageFill,
+  ImageCropRect,
   Paint,
   PatternFill,
+  VideoFill,
   GradientFill,
   PerCornerRadius,
   ConstraintMode,
@@ -18,13 +20,16 @@ import { syncTextDimensions } from "@/store/sceneStore/helpers/textSync";
 import { resolveVariableReference } from "@/lib/tools/variableResolutionUtils";
 import {
   clearLegacyFillProps,
+  createDefaultVideoPlayback,
   createGradientPaint,
   createImagePaint,
   createPatternPaint,
   createSolidPaint,
+  createVideoPaint,
 } from "@/utils/fillUtils";
 import { generatePolygonPoints } from "@/utils/polygonUtils";
 import { normalizeParagraphs, splitParagraphs } from "@/lib/textLists/paragraphs";
+import { parseMarkdownLink } from "@/lib/textLink";
 
 /** AI node data as received from the operations script */
 type AiNodeData = Record<string, unknown>;
@@ -79,6 +84,22 @@ function applyColorVariable(
  * a `colorBinding` is attached (mirrors the legacy single-`fill` behavior).
  * Returns null for entries that cannot be interpreted.
  */
+/** Parse an AI-provided crop rect ({x,y,width,height} in 0-1) into an ImageCropRect, or undefined. */
+function normalizeCropRect(value: unknown): ImageCropRect | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  const num = (v: unknown): number | undefined =>
+    typeof v === "number" && Number.isFinite(v) ? v : undefined;
+  const x = num(raw.x);
+  const y = num(raw.y);
+  const width = num(raw.width);
+  const height = num(raw.height);
+  if (x === undefined || y === undefined || width === undefined || height === undefined) {
+    return undefined;
+  }
+  return { x, y, width, height };
+}
+
 function normalizePaint(
   entry: unknown,
   theme?: ThemeName,
@@ -132,6 +153,37 @@ function normalizePaint(
     const rowOffset = num(nested.rowOffset);
     if (rowOffset !== undefined) pattern.rowOffset = rowOffset;
     return createPatternPaint(pattern, common);
+  }
+
+  // ── Video paint ────────────────────────────────────────────────
+  // Accept both flat ({type:"video", src|url, mode, loop?, muted?, autoplay?,
+  // crop?}) and nested ({type:"video", video:{...}}). Requires an explicit
+  // "video" discriminator (untyped {url} defaults to image, below) OR a nested
+  // `video` object. Only rect/ellipse/frame can render a video fill.
+  if (type === "video" || (type === undefined && raw.video !== undefined)) {
+    if (nodeType !== undefined && !PATTERN_SUPPORTED_NODE_TYPES.has(nodeType)) {
+      warnings?.push(
+        `Video fill is not supported on "${nodeType}" nodes (only rect/ellipse/frame) — the paint was dropped.`,
+      );
+      return null;
+    }
+    const nested =
+      raw.video && typeof raw.video === "object"
+        ? (raw.video as Record<string, unknown>)
+        : raw;
+    const src = nested.src ?? nested.url;
+    if (typeof src !== "string") return null;
+    const mode =
+      nested.mode === "fit" || nested.mode === "stretch" ? nested.mode : "fill";
+    const playback = createDefaultVideoPlayback();
+    if (typeof nested.autoplay === "boolean") playback.autoplay = nested.autoplay;
+    if (typeof nested.loop === "boolean") playback.loop = nested.loop;
+    if (typeof nested.muted === "boolean") playback.muted = nested.muted;
+    const video: VideoFill = { src, mode, playback };
+    const crop = normalizeCropRect(nested.crop);
+    if (crop) video.crop = crop;
+    if (typeof nested.videoId === "string") video.videoId = nested.videoId;
+    return createVideoPaint(video, common);
   }
 
   // ── Image paint ────────────────────────────────────────────────
@@ -332,9 +384,30 @@ export function mapNodeData(
         break;
       }
 
-      // Content → text property
-      case "content": {
-        result.text = String(value);
+      // Content → text property. A whole-content markdown link
+      // `[text](url)` (optionally `[text](url "title")`) becomes the text
+      // node's `link` attribute — see `parseMarkdownLink`'s doc comment for
+      // why this only matches when the ENTIRE content is one link (no
+      // per-character span model in this codebase).
+      case "content":
+      case "text": {
+        const str = String(value);
+        const link = parseMarkdownLink(str);
+        if (link) {
+          result.text = link.text;
+          result.link = link.title ? { url: link.url, title: link.title } : { url: link.url };
+        } else {
+          result.text = str;
+          // On update, re-setting content to plain (non-markdown) text removes
+          // any existing link — the documented "remove a link" path in
+          // tools.ts. executeUpdate's shallow merge only clears a field when
+          // the key is present, so emit `link: undefined` to override it (and
+          // it's dropped from `.pen` serialization). On insert there's no
+          // stale link to clear, so leave the field unset.
+          if (mode === "update" && existingNode && "link" in existingNode) {
+            result.link = undefined;
+          }
+        }
         break;
       }
 

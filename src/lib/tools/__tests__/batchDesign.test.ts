@@ -361,6 +361,59 @@ describe("batch_design", () => {
       });
     });
 
+    it("normalizes a flat video paint with playback flags and crop", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'r=I(document, {type: "rectangle", name: "Vid", width: 10, height: 10, fills: [{type: "video", src: "https://x/clip.mp4", mode: "fit", autoplay: false, loop: false, muted: false, crop: {x: 0.1, y: 0.2, width: 0.5, height: 0.6}}]})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const fills = sceneState().nodesById[result.createdNodes[0].id].fills as Paint[];
+      expect(fills[0]).toMatchObject({
+        type: "video",
+        video: {
+          src: "https://x/clip.mp4",
+          mode: "fit",
+          playback: { autoplay: false, loop: false, muted: false },
+          crop: { x: 0.1, y: 0.2, width: 0.5, height: 0.6 },
+        },
+      });
+    });
+
+    it("normalizes a nested video paint and defaults playback to autoplay+loop+muted", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'r=I(document, {type: "rectangle", name: "Vid2", width: 10, height: 10, fills: [{type: "video", video: {src: "https://x/clip2.webm", mode: "stretch"}}]})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const fills = sceneState().nodesById[result.createdNodes[0].id].fills as Paint[];
+      expect(fills[0]).toMatchObject({
+        type: "video",
+        video: {
+          src: "https://x/clip2.webm",
+          mode: "stretch",
+          playback: { autoplay: true, loop: true, muted: true },
+        },
+      });
+    });
+
+    it("drops a video paint on a text node (video only supported on rect/ellipse/frame)", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            't=I(document, {type: "text", content: "hi", fills: [{type: "video", src: "https://x/clip.mp4", mode: "fill"}]})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const node = sceneState().nodesById[result.createdNodes[0].id];
+      // No video paint survives on a text node.
+      const fills = (node.fills ?? []) as Paint[];
+      expect(fills.some((p) => p.type === "video")).toBe(false);
+    });
+
     it("drops a pattern paint without a tile url, keeping the rest of the stack", async () => {
       const result = JSON.parse(
         await batchDesign({
@@ -1321,6 +1374,100 @@ describe("batch_design", () => {
       const newId = result.createdNodes[0].id;
       const created = sceneState().nodesById[newId] as TextNode;
       expect(created.paragraphs).toEqual([{ listType: "bullet" }, {}, {}]);
+    });
+  });
+
+  describe("text links (markdown)", () => {
+    it("I() with content: markdown link creates a text node with plain text and a link attribute", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'label=I(document, {type: "text", name: "CTA", content: "[Sign up now](https://example.com/signup)"})',
+        })
+      );
+
+      expect(result.success).toBe(true);
+      const created = sceneState().nodesById[result.createdNodes[0].id] as TextNode;
+      expect(created.text).toBe("Sign up now");
+      expect(created.link).toEqual({ url: "https://example.com/signup" });
+    });
+
+    it("I() with a titled markdown link stores the title too", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'label=I(document, {type: "text", name: "CTA", content: "[Docs](https://example.com/docs \\"Read the docs\\")"})',
+        })
+      );
+
+      expect(result.success).toBe(true);
+      const created = sceneState().nodesById[result.createdNodes[0].id] as TextNode;
+      expect(created.text).toBe("Docs");
+      expect(created.link).toEqual({ url: "https://example.com/docs", title: "Read the docs" });
+    });
+
+    it("I() with plain content (no markdown link) leaves link unset", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations: 'label=I(document, {type: "text", name: "Plain", content: "Just text"})',
+        })
+      );
+
+      expect(result.success).toBe(true);
+      const created = sceneState().nodesById[result.createdNodes[0].id] as TextNode;
+      expect(created.text).toBe("Just text");
+      expect(created.link).toBeUndefined();
+    });
+
+    it("U() with a markdown-link text also sets the link attribute on an existing node", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations: 'U(text1, {text: "[Learn more](https://example.com/learn)"})',
+        })
+      );
+
+      expect(result.success).toBe(true);
+      const updated = sceneState().nodesById["text1"] as TextNode;
+      expect(updated.text).toBe("Learn more");
+      expect(updated.link).toEqual({ url: "https://example.com/learn" });
+    });
+
+    it("U() can clear an existing link directly via {link: null}", async () => {
+      await batchDesign({
+        operations:
+          'label=I(document, {type: "text", name: "CTA", content: "[Go](https://example.com)"})',
+      });
+      const id = sceneState().rootIds[sceneState().rootIds.length - 1];
+      expect((sceneState().nodesById[id] as TextNode).link).toBeDefined();
+
+      const result = JSON.parse(
+        await batchDesign({
+          operations: `U("${id}", {link: null})`,
+        })
+      );
+
+      expect(result.success).toBe(true);
+      expect((sceneState().nodesById[id] as TextNode).link).toBeFalsy();
+    });
+
+    it("U() removes an existing link by re-setting content to plain text", async () => {
+      await batchDesign({
+        operations:
+          'label=I(document, {type: "text", name: "CTA", content: "[Go](https://example.com)"})',
+      });
+      const id = sceneState().rootIds[sceneState().rootIds.length - 1];
+      expect((sceneState().nodesById[id] as TextNode).link).toBeDefined();
+
+      const result = JSON.parse(
+        await batchDesign({
+          operations: `U("${id}", {content: "Go"})`,
+        })
+      );
+
+      expect(result.success).toBe(true);
+      const updated = sceneState().nodesById[id] as TextNode;
+      expect(updated.text).toBe("Go");
+      expect(updated.link).toBeFalsy();
     });
   });
 });

@@ -8,6 +8,7 @@ import {
   hasVisualPropsChanged,
 } from "./fillStrokeHelpers";
 import { applyImageFillsEllipse } from "./imageFillHelpers";
+import { applyVideoFillsEllipse } from "./videoFillHelpers";
 
 export function createEllipseContainer(node: EllipseNode): Container {
   const container = new Container();
@@ -20,6 +21,7 @@ export function createEllipseContainer(node: EllipseNode): Container {
   // a full ellipse — it does not respect arc/donut params (documented gap;
   // combining an image fill with a non-default arc is rare in practice).
   applyImageFillsEllipse(container, node, node.width, node.height);
+  applyVideoFillsEllipse(container, node, node.width, node.height);
 
   return container;
 }
@@ -49,6 +51,7 @@ export function updateEllipseContainer(
     node.height !== prev.height
   ) {
     applyImageFillsEllipse(container, node, node.width, node.height);
+    applyVideoFillsEllipse(container, node, node.width, node.height);
   }
 }
 

@@ -73,6 +73,56 @@ describe("<TypographySection />", () => {
     expect(onUpdate).toHaveBeenCalledWith({ paragraphSpacing: 16 });
   });
 
+  describe("variable font axes", () => {
+    it("hides axis sliders and shows the static weight dropdown for a non-variable font", () => {
+      render(<TypographySection node={textNode({ fontFamily: "Arial" })} onUpdate={vi.fn()} />);
+      expect(screen.queryAllByRole("slider")).toHaveLength(0);
+      expect(screen.getByText("Normal")).toBeDefined();
+    });
+
+    it("shows a weight axis slider and hides the static weight dropdown for a variable font", () => {
+      render(<TypographySection node={textNode({ fontFamily: "Inter" })} onUpdate={vi.fn()} />);
+      expect(screen.getAllByRole("slider")).toHaveLength(1);
+      expect(screen.getByText("Weight")).toBeDefined();
+      expect(screen.queryByText("Normal")).toBeNull();
+    });
+
+    it("shows one slider per registered axis for a multi-axis variable font", () => {
+      render(<TypographySection node={textNode({ fontFamily: "Roboto Flex" })} onUpdate={vi.fn()} />);
+      expect(screen.getAllByRole("slider")).toHaveLength(4); // wght, wdth, opsz, slnt
+      expect(screen.getByText("Weight")).toBeDefined();
+      expect(screen.getByText("Width")).toBeDefined();
+      expect(screen.getByText("Optical Size")).toBeDefined();
+      expect(screen.getByText("Slant")).toBeDefined();
+    });
+
+    it("emits onUpdate with the merged fontVariations map when an axis slider changes", () => {
+      const onUpdate = vi.fn();
+      render(
+        <TypographySection
+          node={textNode({ fontFamily: "Inter", fontVariations: { wght: 400 } })}
+          onUpdate={onUpdate}
+        />,
+      );
+      const slider = screen.getByRole("slider", { name: "Weight" });
+      // Base UI's Slider Thumb reads `event.target` off a global `event`
+      // during its native `change` handler — jsdom's `fireEvent.change`
+      // doesn't set that global itself, so it must be stubbed for the
+      // duration of the dispatch (same workaround as ImageFillSection's
+      // slider test).
+      const previousEvent = (globalThis as { event?: Event }).event;
+      Object.defineProperty(globalThis, "event", { configurable: true, value: new Event("change") });
+      fireEvent.change(slider, { target: { value: "530" } });
+      if (previousEvent) {
+        Object.defineProperty(globalThis, "event", { configurable: true, value: previousEvent });
+      } else {
+        delete (globalThis as { event?: Event }).event;
+      }
+
+      expect(onUpdate).toHaveBeenCalledWith({ fontVariations: { wght: 530 } });
+    });
+  });
+
   describe("resizing mode (setTextWidthMode)", () => {
     it("sets the width mode without touching sizing when nothing fills", () => {
       const onUpdate = vi.fn();
@@ -295,10 +345,12 @@ describe("<TypographySection />", () => {
 
   it("toggles italic on and off based on current state", () => {
     // The icon-only buttons after italic are, in DOM order: underline,
-    // strikethrough, align L/C/R, vAlign T/M/B, list bullet/number/outdent/indent,
-    // resize a/f/fh — 15 buttons — so italic is the 16th from the end (stable
-    // regardless of leading combobox/select triggers).
-    const italicButton = () => screen.getAllByRole("button").slice(-16)[0];
+    // strikethrough, link (a Popover trigger — base-ui renders it as two
+    // nested `role="button"` elements, hence +2 not +1), align L/C/R,
+    // vAlign T/M/B, list bullet/number/outdent/indent, resize a/f/fh — 17
+    // buttons — so italic is the 18th from the end (stable regardless of
+    // leading combobox/select triggers).
+    const italicButton = () => screen.getAllByRole("button").slice(-18)[0];
 
     const onUpdate = vi.fn();
     const { unmount } = render(
@@ -412,6 +464,88 @@ describe("<TypographySection />", () => {
           { indentLevel: 1 },
         ],
       });
+    });
+  });
+
+  describe("link panel", () => {
+    afterEach(() => {
+      // Some tests leave a global capture-phase keydown listener registered
+      // (from the Cmd/Ctrl+K binding) — cleanup() unmounts the component,
+      // whose effect teardown removes it, but be explicit in case a test
+      // fails before unmount.
+      cleanup();
+    });
+
+    it("opens the Link popover when clicking the Link button and adds a link", () => {
+      const onUpdate = vi.fn();
+      render(<TypographySection node={textNode()} onUpdate={onUpdate} />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Link" }));
+      const input = screen.getByPlaceholderText("Paste a URL") as HTMLInputElement;
+      fireEvent.change(input, { target: { value: "https://example.com" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+
+      expect(onUpdate).toHaveBeenCalledWith({ link: { url: "https://example.com" } });
+    });
+
+    it("shows a Remove link button only once a link exists, and it clears the link", () => {
+      const onUpdate = vi.fn();
+      const { rerender } = render(
+        <TypographySection node={textNode()} onUpdate={onUpdate} />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Link" }));
+      expect(screen.queryByText("Remove link")).toBeNull();
+
+      rerender(
+        <TypographySection
+          node={textNode({ link: { url: "https://example.com" } })}
+          onUpdate={onUpdate}
+        />,
+      );
+      fireEvent.click(screen.getByText("Remove link"));
+      expect(onUpdate).toHaveBeenCalledWith({ link: undefined });
+    });
+
+    it("trims the URL and treats a blank submission as removing the link", () => {
+      const onUpdate = vi.fn();
+      render(
+        <TypographySection
+          node={textNode({ link: { url: "https://example.com" } })}
+          onUpdate={onUpdate}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Link" }));
+      const input = screen.getByPlaceholderText("Paste a URL") as HTMLInputElement;
+      fireEvent.change(input, { target: { value: "   " } });
+      fireEvent.keyDown(input, { key: "Enter" });
+
+      expect(onUpdate).toHaveBeenCalledWith({ link: undefined });
+    });
+
+    it("Cmd+K opens the Link panel when focus is on the canvas (not another input)", () => {
+      const onUpdate = vi.fn();
+      render(<TypographySection node={textNode()} onUpdate={onUpdate} />);
+      expect(screen.queryByPlaceholderText("Paste a URL")).toBeNull();
+
+      fireEvent.keyDown(window, { key: "k", code: "KeyK", metaKey: true });
+
+      expect(screen.getByPlaceholderText("Paste a URL")).toBeTruthy();
+    });
+
+    it("Cmd+K does not open the Link panel while typing in an unrelated input", () => {
+      const onUpdate = vi.fn();
+      render(
+        <div>
+          <input aria-label="unrelated" />
+          <TypographySection node={textNode()} onUpdate={onUpdate} />
+        </div>,
+      );
+      const unrelated = screen.getByLabelText("unrelated");
+      unrelated.focus();
+
+      fireEvent.keyDown(unrelated, { key: "k", code: "KeyK", metaKey: true });
+
+      expect(screen.queryByPlaceholderText("Paste a URL")).toBeNull();
     });
   });
 });
