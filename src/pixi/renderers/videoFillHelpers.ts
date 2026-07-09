@@ -3,6 +3,8 @@ import type { FlatSceneNode, PerCornerRadius, VideoFill } from "@/types/scene";
 import { getResolvedRenderableFills } from "./colorHelpers";
 import { drawRoundedShape } from "./fillStrokeHelpers";
 import { computeFillSpriteLayout } from "@/lib/imageCrop/spriteLayout";
+import { withTexture } from "./imageFillHelpers";
+import { parseYouTubeId, youTubeThumbnailUrl } from "@/lib/video/youtube";
 
 /**
  * Video-fill renderer. A node's topmost video paint is rendered as a masked
@@ -17,6 +19,20 @@ import { computeFillSpriteLayout } from "@/lib/imageCrop/spriteLayout";
  * routes through `teardownVideo`, and a `container.once("destroyed", …)` hook
  * guarantees cleanup even when the container is torn down by pixiSync without a
  * fill-change event.
+ *
+ * YOUTUBE SOURCES ARE THE ONE EXCEPTION to all of the above: a YouTube `src`
+ * (`parseYouTubeId(video.src)` non-null) can never be played as a `<video>`
+ * element — YouTube doesn't serve raw media files, and pointing a `<video>`
+ * at a YouTube page URL just errors. Cross-origin canvas playback of
+ * YouTube's actual video pixels isn't something the browser allows either.
+ * So a YouTube video fill renders its static `hqdefault.jpg` thumbnail on the
+ * canvas instead, through the exact texture-load/cache/mask/crop machinery
+ * `imageFillHelpers.ts` already uses for image fills (`withTexture`) — see
+ * `applyYouTubeThumbnail` below. `applyVideoFill` branches on
+ * `parseYouTubeId` BEFORE any `<video>`/`VideoSource` code runs, so a YouTube
+ * src never reaches `createVideoState`/`teardownVideo`. The real, playing,
+ * clickable YouTube embed only exists in the `designToHtml` export/preview
+ * (`generateVideoFillHtml` → `<iframe>`), never inside the WebGL canvas.
  */
 
 const VIDEO_FILL_LABEL = "video-fill";
@@ -89,6 +105,115 @@ function teardownVideo(container: Container): void {
 /** Remove any video fill from a container (public teardown entry point). */
 export function destroyVideoFill(container: Container): void {
   teardownVideo(container);
+  teardownYouTubeThumbnail(container);
+}
+
+// ─── YouTube thumbnail (image-texture) path ────────────────────────────────
+
+interface YouTubeThumbnailState {
+  id: string;
+  /** The full-source (uncropped) thumbnail texture, owned by imageFillHelpers'
+   *  shared cache — never destroyed here, only the derived crop/cover frame. */
+  baseTexture: Texture;
+  derivedTexture?: Texture;
+  sprite: Sprite;
+}
+
+const youtubeStateByContainer = new WeakMap<Container, YouTubeThumbnailState>();
+/** Latest requested YouTube id per container, so an in-flight thumbnail load
+ *  superseded by a newer src change can detect it's stale and no-op. */
+const pendingYouTubeIdByContainer = new WeakMap<Container, string>();
+
+/** Release a YouTube-thumbnail sprite + its derived (crop/cover) texture. The
+ *  shared base thumbnail texture is owned by imageFillHelpers' texture cache
+ *  and is intentionally NOT destroyed here (mirrors `destroyImageSprite`). */
+function teardownYouTubeThumbnail(container: Container): void {
+  const state = youtubeStateByContainer.get(container);
+  if (!state) return;
+  youtubeStateByContainer.delete(container);
+
+  if (container.destroyed) return;
+
+  const { sprite, baseTexture, derivedTexture } = state;
+  const mask = sprite.mask;
+  sprite.mask = null;
+  if (sprite.parent) container.removeChild(sprite);
+  if (mask instanceof Graphics && !mask.destroyed) {
+    if (mask.parent) container.removeChild(mask);
+    mask.destroy();
+  }
+  if (!sprite.destroyed) sprite.destroy({ children: false, texture: false });
+  if (derivedTexture && derivedTexture !== baseTexture) derivedTexture.destroy(false);
+}
+
+/** Apply mode/crop geometry to the YouTube thumbnail sprite (same pure layout
+ *  math as the real-video path, sourced from the thumbnail's own pixel size
+ *  instead of `<video>.videoWidth/videoHeight`). */
+function layoutYouTubeSprite(
+  state: YouTubeThumbnailState,
+  video: VideoFill,
+  containerW: number,
+  containerH: number,
+): void {
+  // Thumbnails carry their own pixel size on the base texture.
+  applySpriteLayout(state, video, state.baseTexture.width, state.baseTexture.height, containerW, containerH);
+}
+
+/**
+ * Render a YouTube video fill as its static thumbnail — the canvas cannot
+ * play YouTube's actual video (cross-origin, no raw media URL), so this
+ * reuses the image-fill texture loader (`withTexture`, with its cache and
+ * in-flight dedup) to load `https://img.youtube.com/vi/<id>/hqdefault.jpg`
+ * and displays it exactly like an image fill: same fit/crop math, same mask
+ * geometry. Fires under the SAME `video-fill` container label as the real
+ * `<video>` path (`applyVideoFill`'s two branches are mutually exclusive per
+ * container) so z-order code elsewhere that looks up `"video-fill"` keeps
+ * working unmodified.
+ */
+function applyYouTubeThumbnail(
+  container: Container,
+  video: VideoFill,
+  id: string,
+  width: number,
+  height: number,
+  ellipse: boolean,
+  cornerRadius?: number,
+  cornerRadiusPerCorner?: PerCornerRadius,
+  cornerSmoothing?: number,
+): void {
+  const prev = youtubeStateByContainer.get(container);
+
+  const rebuildMask = (state: YouTubeThumbnailState) =>
+    rebuildSpriteMask(container, state.sprite, ellipse, width, height, cornerRadius, cornerRadiusPerCorner, cornerSmoothing);
+
+  // Same thumbnail already mounted → just re-layout/re-mask for the new size.
+  if (prev && prev.id === id) {
+    layoutYouTubeSprite(prev, video, width, height);
+    rebuildMask(prev);
+    return;
+  }
+
+  // Track the latest requested id so a slow/stale load (superseded by a
+  // later src change before this one's texture finished loading) discards
+  // itself instead of clobbering the now-current thumbnail.
+  pendingYouTubeIdByContainer.set(container, id);
+
+  const thumbnailUrl = youTubeThumbnailUrl(id);
+  withTexture(thumbnailUrl, width, height, container, (texture) => {
+    if (pendingYouTubeIdByContainer.get(container) !== id) return; // superseded
+
+    teardownYouTubeThumbnail(container);
+
+    const sprite = new Sprite(texture);
+    sprite.label = VIDEO_FILL_LABEL;
+    const state: YouTubeThumbnailState = { id, baseTexture: texture, sprite };
+    youtubeStateByContainer.set(container, state);
+
+    layoutYouTubeSprite(state, video, width, height);
+    const index = videoInsertIndex(container);
+    container.addChildAt(sprite, Math.min(index, container.children.length));
+    rebuildMask(state);
+  });
 }
 
 function buildMask(
@@ -110,35 +235,31 @@ function buildMask(
   return mask;
 }
 
-/** Apply mode/crop geometry to the sprite using the shared pure layout math. */
-function layoutVideoSprite(
-  state: VideoFillState,
+/** A sprite-backed fill state carrying the textures the layout helper mutates. */
+type SpriteLayoutState = { sprite: Sprite; baseTexture: Texture; derivedTexture?: Texture };
+
+/**
+ * Apply mode/crop geometry to a sprite via the shared pure layout math,
+ * deriving a cropped sub-frame texture when needed and releasing the previous
+ * one. Shared by the real-video and YouTube-thumbnail paths — they differ only
+ * in how the source pixel size (`sourceW`/`sourceH`) is obtained.
+ */
+function applySpriteLayout(
+  state: SpriteLayoutState,
   video: VideoFill,
+  sourceW: number,
+  sourceH: number,
   containerW: number,
   containerH: number,
 ): void {
-  const sourceW = state.el.videoWidth || state.baseTexture.width || containerW;
-  const sourceH = state.el.videoHeight || state.baseTexture.height || containerH;
-  const layout = computeFillSpriteLayout(
-    video.mode,
-    video.crop,
-    sourceW,
-    sourceH,
-    containerW,
-    containerH,
-  );
+  const layout = computeFillSpriteLayout(video.mode, video.crop, sourceW, sourceH, containerW, containerH);
 
   const prevDerived = state.derivedTexture;
   let derived: Texture | undefined;
   if (layout.frame) {
     derived = new Texture({
       source: state.baseTexture.source,
-      frame: new Rectangle(
-        layout.frame.x,
-        layout.frame.y,
-        layout.frame.width,
-        layout.frame.height,
-      ),
+      frame: new Rectangle(layout.frame.x, layout.frame.y, layout.frame.width, layout.frame.height),
     });
     state.sprite.texture = derived;
   } else {
@@ -153,6 +274,42 @@ function layoutVideoSprite(
   state.sprite.y = layout.dest.y;
   state.sprite.width = layout.dest.width;
   state.sprite.height = layout.dest.height;
+}
+
+/** Rebuild a sprite's clip mask (remove the old Graphics mask, build + attach a
+ *  new one just above the sprite). Shared by both fill paths. */
+function rebuildSpriteMask(
+  container: Container,
+  sprite: Sprite,
+  ellipse: boolean,
+  width: number,
+  height: number,
+  cornerRadius?: number,
+  cornerRadiusPerCorner?: PerCornerRadius,
+  cornerSmoothing?: number,
+): void {
+  const oldMask = sprite.mask;
+  if (oldMask instanceof Graphics) {
+    if (oldMask.parent) container.removeChild(oldMask);
+    oldMask.destroy();
+  }
+  const mask = buildMask(ellipse, width, height, cornerRadius, cornerRadiusPerCorner, cornerSmoothing);
+  container.addChildAt(mask, container.getChildIndex(sprite) + 1);
+  sprite.mask = mask;
+}
+
+/** Apply mode/crop geometry to the sprite using the shared pure layout math. */
+function layoutVideoSprite(
+  state: VideoFillState,
+  video: VideoFill,
+  containerW: number,
+  containerH: number,
+): void {
+  // Prefer the live element's intrinsic size; fall back to the texture/box
+  // before `loadedmetadata` has fired.
+  const sourceW = state.el.videoWidth || state.baseTexture.width || containerW;
+  const sourceH = state.el.videoHeight || state.baseTexture.height || containerH;
+  applySpriteLayout(state, video, sourceW, sourceH, containerW, containerH);
 }
 
 /** Insertion index: above background + any image fill, below child nodes. */
@@ -232,29 +389,49 @@ function applyVideoFill(
 ): void {
   const video = topVideoFill(node);
   const prev = stateByContainer.get(container);
+  const prevYouTube = youtubeStateByContainer.get(container);
 
   if (!video || !video.src) {
     if (prev) teardownVideo(container);
+    if (prevYouTube) teardownYouTubeThumbnail(container);
     return;
   }
 
-  // Ensure the container tears the video down if it is destroyed out from under
-  // us (pixiSync destroys containers without a fill-change event).
+  // Ensure the container tears down whichever fill it owns if it is
+  // destroyed out from under us (pixiSync destroys containers without a
+  // fill-change event). Registered once regardless of which branch below
+  // ends up mounting, since a container can switch between the two.
   if (!destroyHooked.has(container)) {
     destroyHooked.add(container);
-    container.once("destroyed", () => teardownVideo(container));
+    container.once("destroyed", () => {
+      teardownVideo(container);
+      teardownYouTubeThumbnail(container);
+    });
   }
 
-  const rebuildMask = (state: VideoFillState) => {
-    const oldMask = state.sprite.mask;
-    if (oldMask instanceof Graphics) {
-      if (oldMask.parent) container.removeChild(oldMask);
-      oldMask.destroy();
-    }
-    const mask = buildMask(ellipse, width, height, cornerRadius, cornerRadiusPerCorner, cornerSmoothing);
-    container.addChildAt(mask, container.getChildIndex(state.sprite) + 1);
-    state.sprite.mask = mask;
-  };
+  // A YouTube src can never be a `<video>` element (see the module doc
+  // comment) — branch here, BEFORE any `<video>`/`VideoSource` code, to the
+  // static-thumbnail (image-texture) path instead.
+  const youtubeId = parseYouTubeId(video.src);
+  if (youtubeId) {
+    if (prev) teardownVideo(container);
+    applyYouTubeThumbnail(
+      container,
+      video,
+      youtubeId,
+      width,
+      height,
+      ellipse,
+      cornerRadius,
+      cornerRadiusPerCorner,
+      cornerSmoothing,
+    );
+    return;
+  }
+  if (prevYouTube) teardownYouTubeThumbnail(container);
+
+  const rebuildMask = (state: VideoFillState) =>
+    rebuildSpriteMask(container, state.sprite, ellipse, width, height, cornerRadius, cornerRadiusPerCorner, cornerSmoothing);
 
   // Same source already mounted → update playback + geometry in place.
   if (prev && prev.src === video.src) {

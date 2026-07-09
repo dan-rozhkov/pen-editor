@@ -22,6 +22,16 @@ export default defineConfig({
   },
   test: {
     environment: "happy-dom",
+    // The sanitizer now allowlists a YouTube <iframe> (see
+    // sanitizeEmbedHtml.ts). happy-dom, unlike jsdom, performs a real network
+    // navigation when an <iframe> with a src is attached to a live document —
+    // disable that so any test (now or in the future) that mounts embed HTML
+    // containing an iframe never hits the real network.
+    environmentOptions: {
+      happyDOM: {
+        settings: { disableIframePageLoading: true },
+      },
+    },
     setupFiles: ["./src/test/setup.ts"],
     // Playwright e2e specs live in e2e/ and must not run under Vitest.
     exclude: [...configDefaults.exclude, "e2e/**"],

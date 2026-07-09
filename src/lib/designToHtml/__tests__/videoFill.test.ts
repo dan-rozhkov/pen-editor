@@ -104,3 +104,89 @@ describe("designToHtml video fill", () => {
     expect(html).toContain("position:relative");
   });
 });
+
+describe("designToHtml video fill — YouTube source", () => {
+  it("emits a clickable <iframe> instead of a <video> for a YouTube src", () => {
+    const html = generateVideoFillHtml(
+      rect({ fills: [videoPaint({ src: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" })] }),
+    );
+    expect(html).toContain("<iframe ");
+    expect(html).not.toContain("<video");
+    expect(html).toContain('src="https://www.youtube.com/embed/dQw4w9WgXcQ');
+  });
+
+  it("builds the iframe src from the extracted id only, never the raw URL", () => {
+    const html = generateVideoFillHtml(
+      rect({
+        fills: [
+          videoPaint({
+            src: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&x="><script>alert(1)</script>',
+          }),
+        ],
+      }),
+    );
+    expect(html).toContain('src="https://www.youtube.com/embed/dQw4w9WgXcQ');
+    expect(html).not.toContain("<script>");
+    expect(html).not.toContain("alert(1)");
+  });
+
+  it("maps autoplay to autoplay=1&mute=1 in the embed URL", () => {
+    const html = generateVideoFillHtml(
+      rect({
+        fills: [
+          videoPaint({
+            src: "https://youtu.be/dQw4w9WgXcQ",
+            playback: { autoplay: true, loop: false, muted: false },
+          }),
+        ],
+      }),
+    );
+    expect(html).toContain("autoplay=1");
+    expect(html).toContain("mute=1");
+  });
+
+  it("maps loop to loop=1&playlist=<id> in the embed URL", () => {
+    const html = generateVideoFillHtml(
+      rect({
+        fills: [
+          videoPaint({
+            src: "https://youtu.be/dQw4w9WgXcQ",
+            playback: { autoplay: false, loop: true, muted: false },
+          }),
+        ],
+      }),
+    );
+    expect(html).toContain("loop=1");
+    expect(html).toContain("playlist=dQw4w9WgXcQ");
+  });
+
+  it("keeps border-radius:inherit and object-fit clipping consistent with the <video> path", () => {
+    const html = generateVideoFillHtml(
+      rect({ fills: [videoPaint({ src: "https://youtu.be/dQw4w9WgXcQ", mode: "fit" })] }),
+    );
+    expect(html).toContain("border-radius:inherit");
+    expect(html).toContain("position:absolute");
+    expect(html).toContain("width:100%");
+    expect(html).toContain("height:100%");
+  });
+
+  it("emits a clip-path inset() matching the crop rect for a YouTube fill too", () => {
+    const html = generateVideoFillHtml(
+      rect({
+        fills: [
+          videoPaint({
+            src: "https://youtu.be/dQw4w9WgXcQ",
+            crop: { x: 0.1, y: 0.2, width: 0.5, height: 0.6 },
+          }),
+        ],
+      }),
+    );
+    expect(html).toContain("clip-path:inset(20% 40% 20% 10%)");
+  });
+
+  it("returns '' for a non-YouTube, non-playable src the same as before", () => {
+    expect(
+      generateVideoFillHtml(rect({ fills: [videoPaint({ src: "not a url" })] })),
+    ).toContain("<video");
+  });
+});

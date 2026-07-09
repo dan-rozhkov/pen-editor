@@ -252,8 +252,10 @@ async function loadTextureFromUrl(
   return loadRasterTextureFromUrl(url);
 }
 
-/** Load a texture by URL with caching and deduplication, then invoke callback */
-function withTexture(
+/** Load a texture by URL with caching and deduplication, then invoke callback.
+ *  Exported for `videoFillHelpers.ts`'s YouTube-thumbnail path, which reuses
+ *  this exact loading/caching/dedup machinery instead of duplicating it. */
+export function withTexture(
   url: string,
   width: number,
   height: number,

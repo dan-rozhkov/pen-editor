@@ -8,6 +8,7 @@ import { imageModeToCssSize, fillModeToObjectFit } from "@/lib/cssBackground";
 import { cropRectToBackgroundCss, isFullCropRect, coverPixelRect, containPixelRect, clampCropRect, FULL_CROP_RECT } from "@/lib/imageCrop/cropRect";
 import { toFontVariationSettingsCss } from "@/utils/variableFont";
 import { hasEffectiveUnderline, TEXT_LINK_COLOR } from "@/lib/textLink";
+import { parseYouTubeId, youTubeEmbedUrl } from "@/lib/video/youtube";
 
 /**
  * CSS properties emitted by `generateFillCss` for a node's background.
@@ -381,17 +382,24 @@ function videoCropClipPath(crop: VideoFill["crop"]): string | undefined {
 }
 
 /**
- * Emit the `<video>` element(s) for a node's renderable video paints (only the
- * topmost video paint is rendered, matching the Pixi renderer). Returns "" when
- * the node has no video fill.
+ * Emit the `<video>` (or, for a YouTube source, `<iframe>`) element for a
+ * node's renderable video paints (only the topmost video paint is rendered,
+ * matching the Pixi renderer). Returns "" when the node has no video fill.
  *
- * The video is an absolutely-positioned replaced element filling the node's
- * box: `object-fit` maps the fill `mode` (fill→cover, fit→contain,
+ * The element is an absolutely-positioned replaced element filling the
+ * node's box: `object-fit` maps the fill `mode` (fill→cover, fit→contain,
  * stretch→fill), `border-radius: inherit` clips it to the node's rounded/
  * elliptical corners, and a crop rect becomes a `clip-path: inset(...)`.
  * Playback attributes come from the fill's `playback` config; `muted` is
  * forced whenever `autoplay` is set so the browser's autoplay policy permits
  * playback (see `VideoPlayback`). `playsinline` is always present.
+ *
+ * A YouTube `src` (`parseYouTubeId` non-null) cannot be played as a `<video>`
+ * — YouTube doesn't serve raw media files — so it is exported as a real,
+ * clickable, playing `<iframe src="https://www.youtube.com/embed/<id>?...">`
+ * instead (see `youTubeEmbedUrl` for the playback→param mapping). The iframe
+ * src is built from the EXTRACTED id only, never the raw `video.src`, so a
+ * crafted `src` value cannot inject markup/params into the embed URL.
  */
 export function generateVideoFillHtml(node: BaseNode): string {
   // Pick the TOPMOST video paint to match the live Pixi renderer
@@ -419,6 +427,20 @@ export function generateVideoFillHtml(node: BaseNode): string {
   ];
   const clip = videoCropClipPath(video.crop);
   if (clip) styleParts.push(`clip-path:${clip}`);
+
+  const youtubeId = parseYouTubeId(video.src);
+  if (youtubeId) {
+    const embedSrc = youTubeEmbedUrl(youtubeId, video.playback);
+    const iframeAttrs = [
+      `src="${escapeHtmlAttr(embedSrc)}"`,
+      `title="YouTube video player"`,
+      `frameborder="0"`,
+      `allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"`,
+      `referrerpolicy="strict-origin-when-cross-origin"`,
+      `allowfullscreen`,
+    ];
+    return `<iframe ${iframeAttrs.join(" ")} style="${styleParts.join(";")}"></iframe>`;
+  }
 
   const attrs: string[] = [`src="${escapeHtmlAttr(video.src)}"`];
   // Unmuted autoplay is blocked by browsers — force muted when autoplay is on.
