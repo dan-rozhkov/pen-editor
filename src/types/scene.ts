@@ -254,11 +254,25 @@ export interface BlurEffect {
 }
 
 /**
- * One effect layer in an effect stack. `effects: Effect[]` is ordered
- * bottom-to-top like `fills`. Shadows and layer blur; future effect kinds
- * extend this union.
+ * Background blur (a.k.a. backdrop blur): unlike `BlurEffect`, which blurs the
+ * node itself, this blurs whatever is rendered BEHIND the node (glassmorphism/
+ * iOS-style "frosted glass" cards). Combine with a semi-transparent fill for
+ * the classic frosted-glass look.
  */
-export type Effect = ShadowEffect | BlurEffect
+export interface BackgroundBlurEffect {
+  type: 'background-blur'
+  radius: number      // px, 0-100 in the UI; <= 0 renders nothing
+  // Stable id for UI list keys when used inside `effects: Effect[]`
+  id?: string
+  visible?: boolean   // defaults to true
+}
+
+/**
+ * One effect layer in an effect stack. `effects: Effect[]` is ordered
+ * bottom-to-top like `fills`. Shadows, layer blur, and background blur;
+ * future effect kinds extend this union.
+ */
+export type Effect = ShadowEffect | BlurEffect | BackgroundBlurEffect
 
 // Per-side stroke widths (like CSS border-top, border-right, etc.)
 export interface PerSideStroke {

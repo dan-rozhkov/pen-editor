@@ -141,7 +141,11 @@ function EffectStyleRow({ style }: { style: EffectStyle }) {
 
   const firstShadow = style.effects.find((e) => e.type === "shadow");
   const summary = style.effects
-    .map((e) => (e.type === "blur" ? "Blur" : e.shadowType === "inner" ? "Inner shadow" : "Drop shadow"))
+    .map((e) => {
+      if (e.type === "blur") return "Blur";
+      if (e.type === "background-blur") return "Background blur";
+      return e.shadowType === "inner" ? "Inner shadow" : "Drop shadow";
+    })
     .join(", ");
 
   return (

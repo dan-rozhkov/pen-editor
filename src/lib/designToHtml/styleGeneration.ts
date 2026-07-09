@@ -1,4 +1,4 @@
-import type { BaseNode, TextNode, FrameNode, RectNode, ShadowEffect, BlurEffect, GradientFill, ImageFill, PerSideStroke, ColorBinding, SolidPaint, GradientPaint, ImagePaint, VideoFill, VideoPaint } from "@/types/scene";
+import type { BaseNode, TextNode, FrameNode, RectNode, ShadowEffect, BlurEffect, BackgroundBlurEffect, GradientFill, ImageFill, PerSideStroke, ColorBinding, SolidPaint, GradientPaint, ImagePaint, VideoFill, VideoPaint } from "@/types/scene";
 import type { Variable } from "@/types/variable";
 import { applyOpacity } from "@/utils/colorUtils";
 import { hasPerCornerRadius } from "@/utils/renderUtils";
@@ -107,6 +107,15 @@ export function generateVisualStyles(node: BaseNode): Record<string, string> {
   );
   if (blurEffect) {
     styles.filter = `blur(${blurEffect.radius}px)`;
+  }
+  // Background blur: blurs whatever is rendered behind the node (glassmorphism).
+  // First visible one with radius > 0 wins (matches the renderer).
+  const backgroundBlurEffect = effects.find(
+    (e): e is BackgroundBlurEffect => e.type === "background-blur" && e.radius > 0,
+  );
+  if (backgroundBlurEffect) {
+    styles["backdrop-filter"] = `blur(${backgroundBlurEffect.radius}px)`;
+    styles["-webkit-backdrop-filter"] = `blur(${backgroundBlurEffect.radius}px)`;
   }
 
   // Rotation and flip transforms

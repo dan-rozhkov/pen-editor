@@ -18,6 +18,7 @@ import {
 import { ArrowDown, ArrowUp, Eye, EyeSlash, MinusIcon, PlusIcon } from "@phosphor-icons/react";
 import { parseHexAlpha } from "@/utils/shadowUtils";
 import {
+  createBackgroundBlurEffect,
   createBlurEffect,
   createShadowEffect,
   getEffects,
@@ -36,6 +37,7 @@ import { useStyleStore } from "@/store/styleStore";
 /** Human label for an effect row, derived from the effect (not hardcoded). */
 function effectLabel(effect: Effect): string {
   if (effect.type === "blur") return "Layer Blur";
+  if (effect.type === "background-blur") return "Background Blur";
   return effect.shadowType === "inner" ? "Inner Shadow" : "Drop Shadow";
 }
 
@@ -95,6 +97,9 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => handleAdd(createBlurEffect())}>
               Layer blur
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleAdd(createBackgroundBlurEffect())}>
+              Background blur
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -251,7 +256,7 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
                         </>
                       )}
 
-                      {effect.type === "blur" && (
+                      {(effect.type === "blur" || effect.type === "background-blur") && (
                         <PropertyRow>
                           <NumberInput
                             label="Blur"

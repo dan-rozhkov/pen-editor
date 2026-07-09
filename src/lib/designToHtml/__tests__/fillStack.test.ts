@@ -204,6 +204,33 @@ describe("designToHtml effect stack", () => {
     const styles = generateVisualStyles(rect({ effects }));
     expect(styles.filter).toBeUndefined();
   });
+
+  it("converts a background blur effect to css backdrop-filter: blur()", () => {
+    const effects: Effect[] = [{ type: "background-blur", radius: 12 }];
+    const styles = generateVisualStyles(rect({ effects }));
+    expect(styles["backdrop-filter"]).toBe("blur(12px)");
+    expect(styles["-webkit-backdrop-filter"]).toBe("blur(12px)");
+    expect(styles.filter).toBeUndefined();
+  });
+
+  it("emits both filter and backdrop-filter for a layer blur + background blur stack", () => {
+    const effects: Effect[] = [
+      { type: "background-blur", radius: 12 },
+      { type: "blur", radius: 6 },
+    ];
+    const styles = generateVisualStyles(rect({ effects }));
+    expect(styles.filter).toBe("blur(6px)");
+    expect(styles["backdrop-filter"]).toBe("blur(12px)");
+  });
+
+  it("skips invisible and zero-radius background blurs", () => {
+    const effects: Effect[] = [
+      { type: "background-blur", radius: 6, visible: false },
+      { type: "background-blur", radius: 0 },
+    ];
+    const styles = generateVisualStyles(rect({ effects }));
+    expect(styles["backdrop-filter"]).toBeUndefined();
+  });
 });
 
 describe("designToHtml image crop", () => {

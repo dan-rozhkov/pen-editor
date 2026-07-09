@@ -17,6 +17,12 @@ import { flattenTree } from "@/types/scene";
 import { getResolvedRenderableEffects } from "./colorHelpers";
 import { applyShadows } from "./shadowHelpers";
 import { applyLayerBlur } from "./blurHelpers";
+import {
+  applyBackgroundBlur,
+  shouldRebakeBackgroundBlur,
+  isSizeOnlyBackgroundBlurChange,
+  scheduleBackgroundBlurRebake,
+} from "./backgroundBlurHelpers";
 import { createRectContainer, updateRectContainer, drawRect } from "./rectRenderer";
 import { createEllipseContainer, updateEllipseContainer, drawEllipse } from "./ellipseRenderer";
 import { createTextContainer, updateTextContainer } from "./textRenderer";
@@ -419,6 +425,27 @@ export function createNodeContainer(
   // Layer blur (container-level filter; first visible blur in the stack wins)
   applyLayerBlur(container, getResolvedRenderableEffects(node));
 
+  // Background blur ("backdrop blur"/glassmorphism): needs the container
+  // already mounted at its final position to snapshot what's behind it, which
+  // isn't true yet at this point in tree construction — defer to the next
+  // animation frame (by then layout/mounting for this pass has settled). See
+  // backgroundBlurHelpers.ts for the snapshot/staleness limitation.
+  if (getResolvedRenderableEffects(node).some((e) => e.type === "background-blur")) {
+    requestAnimationFrame(() => {
+      if (container.destroyed) return;
+      // Re-read the CURRENT node from the store rather than the creation-time
+      // `node` closed over above: `updateNode` replaces the node object, so a
+      // synchronous follow-up update (the common `I()` then `U()` batch) will
+      // already have rebaked via `updateNodeContainer`. Baking the stale
+      // creation-time `node` here would clobber that with outdated
+      // effects/size/shape. If the node is gone or lost its background blur,
+      // clear any sprite instead.
+      const current = useSceneStore.getState().nodesById[node.id];
+      if (!current) return;
+      applyBackgroundBlur(container, current, getResolvedRenderableEffects(current));
+    });
+  }
+
   // Shader fill (baked texture in-scene, so it obeys z-order)
   if (node.shader) applyShaderFill(container, node);
 
@@ -550,6 +577,20 @@ export function updateNodeContainer(
       getNodeCornerSmoothing(node),
     );
     applyLayerBlur(container, getResolvedRenderableEffects(node));
+  }
+
+  // Background blur: re-bake the backdrop snapshot when this node's own
+  // effects/size/shape changed (see shouldRebakeBackgroundBlur's doc comment
+  // for why "something behind it changed" alone can't trigger a re-bake). A
+  // size-only change (interactive resize) is debounced — the double GPU
+  // readback is too expensive to run every RAF-coalesced drag frame — while
+  // effect/shape changes rebake immediately, mirroring the shader path below.
+  if (shouldRebakeBackgroundBlur(node, prev)) {
+    if (isSizeOnlyBackgroundBlurChange(node, prev)) {
+      scheduleBackgroundBlurRebake(container, node, getResolvedRenderableEffects(node));
+    } else {
+      applyBackgroundBlur(container, node, getResolvedRenderableEffects(node));
+    }
   }
 
   // Shader fill: config change / became-visible → immediate re-bake; size-only

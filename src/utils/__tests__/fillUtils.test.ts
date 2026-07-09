@@ -5,6 +5,7 @@ import {
   clearLegacyEffectProps,
   clearLegacyFillProps,
   createBlurEffect,
+  createBackgroundBlurEffect,
   createImagePaint,
   createShadowEffect,
   createSolidPaint,
@@ -155,6 +156,24 @@ describe('createBlurEffect', () => {
   it('accepts overrides', () => {
     expect(createBlurEffect({ radius: 12, visible: false })).toMatchObject({
       type: 'blur',
+      radius: 12,
+      visible: false,
+    })
+  })
+})
+
+describe('createBackgroundBlurEffect', () => {
+  it('defaults to radius 4 with a fresh id', () => {
+    const a = createBackgroundBlurEffect()
+    const b = createBackgroundBlurEffect()
+    expect(a).toMatchObject({ type: 'background-blur', radius: 4 })
+    expect(a.id).toBeTruthy()
+    expect(a.id).not.toBe(b.id)
+  })
+
+  it('accepts overrides', () => {
+    expect(createBackgroundBlurEffect({ radius: 12, visible: false })).toMatchObject({
+      type: 'background-blur',
       radius: 12,
       visible: false,
     })

@@ -1,5 +1,6 @@
 import {
   generateId,
+  type BackgroundBlurEffect,
   type BlurEffect,
   type Effect,
   type FlatSceneNode,
@@ -183,6 +184,17 @@ export function createShadowEffect(init?: Partial<Omit<ShadowEffect, 'type'>>): 
 export function createBlurEffect(init?: Partial<Omit<BlurEffect, 'type'>>): BlurEffect {
   return {
     type: 'blur',
+    radius: 4,
+    id: generateId(),
+    ...init,
+  }
+}
+
+export function createBackgroundBlurEffect(
+  init?: Partial<Omit<BackgroundBlurEffect, 'type'>>,
+): BackgroundBlurEffect {
+  return {
+    type: 'background-blur',
     radius: 4,
     id: generateId(),
     ...init,

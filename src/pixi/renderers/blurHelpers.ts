@@ -13,6 +13,18 @@ export function pickLayerBlurRadius(effects: Effect[]): number | null {
   return null;
 }
 
+/**
+ * Effective background-blur radius from a renderable effect stack. Only ONE
+ * background blur applies per node: the first visible one with radius > 0
+ * wins (same convention as layer blur / the CSS export in designToHtml).
+ */
+export function pickBackgroundBlurRadius(effects: Effect[]): number | null {
+  for (const effect of effects) {
+    if (effect.type === "background-blur" && effect.radius > 0) return effect.radius;
+  }
+  return null;
+}
+
 type TaggedFilter = Filter & { __layerBlur?: true };
 
 /**

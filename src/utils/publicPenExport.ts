@@ -80,7 +80,13 @@ interface PenBlurEffect {
   visible?: boolean;
 }
 
-type PenEffect = PenShadowEffect | PenBlurEffect;
+interface PenBackgroundBlurEffect {
+  type: "background-blur";
+  radius: number;
+  visible?: boolean;
+}
+
+type PenEffect = PenShadowEffect | PenBlurEffect | PenBackgroundBlurEffect;
 
 interface PenBaseNode {
   id: string;
@@ -394,23 +400,24 @@ function exportStroke(node: StrokeSource, context: ExportContext): PenStroke | u
 function exportEffects(node: SceneNode): PenEffect[] | undefined {
   const effects = getEffects(node);
   if (effects.length === 0) return undefined;
-  return effects.map((e): PenEffect =>
-    e.type === "blur"
-      ? {
-          type: "blur",
-          radius: e.radius,
-          ...(e.visible === false ? { visible: false } : {}),
-        }
-      : {
-          type: "shadow",
-          shadowType: e.shadowType,
-          offset: e.offset,
-          spread: e.spread,
-          blur: e.blur,
-          color: e.color,
-          ...(e.visible === false ? { visible: false } : {}),
-        },
-  );
+  return effects.map((e): PenEffect => {
+    if (e.type === "blur" || e.type === "background-blur") {
+      return {
+        type: e.type,
+        radius: e.radius,
+        ...(e.visible === false ? { visible: false } : {}),
+      };
+    }
+    return {
+      type: "shadow",
+      shadowType: e.shadowType,
+      offset: e.offset,
+      spread: e.spread,
+      blur: e.blur,
+      color: e.color,
+      ...(e.visible === false ? { visible: false } : {}),
+    };
+  });
 }
 
 function mapAlignItems(value: AlignItems | undefined) {

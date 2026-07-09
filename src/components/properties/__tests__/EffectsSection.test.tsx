@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import type { ComponentProps, ReactNode } from "react";
 import { EffectsSection } from "../EffectsSection";
-import type { BlurEffect, Effect, SceneNode, ShadowEffect } from "@/types/scene";
+import type { BackgroundBlurEffect, BlurEffect, Effect, SceneNode, ShadowEffect } from "@/types/scene";
 
 // The ColorInput in PropertyInputs renders CustomColorPicker, which mounts a
 // portal/popover. Stub it so the component tree is deterministic and free of
@@ -62,6 +62,10 @@ function makeNode(effects?: Effect[]): SceneNode {
 
 function blurFx(extra: Partial<BlurEffect> = {}): BlurEffect {
   return { type: "blur", id: "b1", radius: 8, ...extra };
+}
+
+function backgroundBlurFx(extra: Partial<BackgroundBlurEffect> = {}): BackgroundBlurEffect {
+  return { type: "background-blur", id: "bb1", radius: 8, ...extra };
 }
 
 afterEach(() => cleanup());
@@ -160,6 +164,40 @@ describe("<EffectsSection />", () => {
   it("edits the blur radius, clamped to 0-100", () => {
     const onUpdate = vi.fn();
     render(<EffectsSection node={makeNode([blurFx()])} onUpdate={onUpdate} />);
+    const input = screen.getByRole("spinbutton");
+
+    fireEvent.change(input, { target: { value: "24" } });
+    expect(onUpdate.mock.calls[0][0].effects[0].radius).toBe(24);
+
+    fireEvent.change(input, { target: { value: "250" } });
+    expect(onUpdate.mock.calls[1][0].effects[0].radius).toBe(100);
+  });
+
+  it("adds a background blur via the add menu", () => {
+    const onUpdate = vi.fn();
+    render(<EffectsSection node={makeNode()} onUpdate={onUpdate} />);
+
+    fireEvent.click(screen.getByText("Background blur"));
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    const arg = onUpdate.mock.calls[0][0];
+    expect(arg.effects).toHaveLength(1);
+    expect(arg.effects[0]).toMatchObject({ type: "background-blur", radius: 4 });
+    expect(arg.effect).toBeUndefined();
+  });
+
+  it("renders a background blur effect row with its radius", () => {
+    render(<EffectsSection node={makeNode([backgroundBlurFx()])} onUpdate={vi.fn()} />);
+
+    expect(screen.getAllByText("Background Blur").length).toBeGreaterThan(0);
+    const inputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    expect(inputs).toHaveLength(1); // blur editor: just the radius input
+    expect(inputs[0].value).toBe("8");
+  });
+
+  it("edits the background blur radius, clamped to 0-100", () => {
+    const onUpdate = vi.fn();
+    render(<EffectsSection node={makeNode([backgroundBlurFx()])} onUpdate={onUpdate} />);
     const input = screen.getByRole("spinbutton");
 
     fireEvent.change(input, { target: { value: "24" } });
