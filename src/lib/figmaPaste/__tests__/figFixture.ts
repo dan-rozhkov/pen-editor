@@ -311,6 +311,7 @@ message Message {
   MessageType type = 1;
   NodeChange[] nodeChanges = 2;
   Blob[] blobs = 3;
+  uint blobBaseIndex = 4;
 }
 `
 

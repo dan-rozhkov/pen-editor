@@ -26,7 +26,14 @@ export interface InstanceContext {
 }
 
 export interface ConvertContext {
-  blobs: FigBlob[]
+  /**
+   * Resolve a blob reference (image.dataBlob, commandsBlob, vectorNetworkBlob)
+   * to its bytes. Clipboard payloads ship only a slice of the document's blob
+   * table, so references are absolute indices offset by `message.blobBaseIndex`
+   * (blobs[ref - blobBaseIndex]). This is the ONLY correct way to read a blob —
+   * indexing the raw array directly drops data on any partial copy.
+   */
+  resolveBlob: (index: number | undefined) => FigBlob | undefined
   byGuid: Map<string, FigTreeNode>
   warnings: string[]
   instance?: InstanceContext

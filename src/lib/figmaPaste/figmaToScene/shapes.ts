@@ -26,7 +26,7 @@ function geometryFromPaths(
   const parts: string[] = []
   for (const path of paths) {
     if (path.commandsBlob == null) continue
-    const blob = ctx.blobs[path.commandsBlob]
+    const blob = ctx.resolveBlob(path.commandsBlob)
     if (!blob) continue
     const d = decodePathCommandsBlob(blob.bytes)
     if (d) parts.push(d)
@@ -45,7 +45,7 @@ function geometryFromVectorNetwork(
 ): { d: string; windingRule: 'NONZERO' | 'ODD' } | null {
   const blobIndex = change.vectorData?.vectorNetworkBlob
   if (blobIndex == null) return null
-  const blob = ctx.blobs[blobIndex]
+  const blob = ctx.resolveBlob(blobIndex)
   if (!blob) return null
   const network = decodeVectorNetworkBlob(blob.bytes)
   if (!network) return null

@@ -27,8 +27,10 @@ export type { FigmaConversionResult } from './figmaToScene/types'
 /** Convert a decoded Figma clipboard payload into editor scene nodes (1:1 layout). */
 export function convertFigmaPasteToSceneNodes(data: FigPasteData): FigmaConversionResult {
   const { roots, byGuid } = buildFigTree(data)
+  const blobs = data.message.blobs ?? []
+  const blobBaseIndex = data.message.blobBaseIndex ?? 0
   const ctx: ConvertContext = {
-    blobs: data.message.blobs ?? [],
+    resolveBlob: (index) => (index == null ? undefined : blobs[index - blobBaseIndex]),
     byGuid,
     warnings: [],
   }

@@ -201,8 +201,7 @@ function bytesToDataUrl(bytes: Uint8Array): string {
 }
 
 export function convertImagePaint(paint: FigPaint, ctx: ConvertContext): ImageFill | null {
-  const blobIndex = paint.image?.dataBlob
-  const blob = blobIndex != null ? ctx.blobs[blobIndex] : undefined
+  const blob = ctx.resolveBlob(paint.image?.dataBlob)
   if (!blob || blob.bytes.length === 0) {
     ctx.warnings.push(
       `Image "${paint.image?.name ?? 'unnamed'}" is not embedded in the clipboard payload`,

@@ -20,6 +20,7 @@ function clipboardWith(
   changes: FigNodeChange[],
   blobs: Uint8Array[] = [],
   extraChanges: FigNodeChange[] = [],
+  blobBaseIndex = 0,
 ): string {
   const document: FigNodeChange = { guid: guid(0, 0), type: 'DOCUMENT' }
   const canvas: FigNodeChange = {
@@ -32,6 +33,7 @@ function clipboardWith(
     type: 'NODE_CHANGES',
     nodeChanges: [document, canvas, ...changes, ...extraChanges],
     blobs: blobs.map((bytes) => ({ bytes })),
+    blobBaseIndex,
   })
 }
 
@@ -365,6 +367,67 @@ describe('convertFigmaClipboardHtml', () => {
     expect(rect.imageFill).toBeDefined()
     expect(rect.imageFill!.mode).toBe('fill')
     expect(rect.imageFill!.url.startsWith('data:image/png;base64,')).toBe(true)
+  })
+
+  it('resolves image blobs through the blobBaseIndex offset', async () => {
+    // Real Figma clipboard copies ship only a slice of the document's blob
+    // table, so dataBlob is an ABSOLUTE index that must be offset by
+    // blobBaseIndex. Here the image's bytes are the only blob shipped
+    // (blobs[0]) but its absolute index is 7 (blobBaseIndex 7 + local 0).
+    const html = clipboardWith(
+      [
+        onCanvas({
+          guid: guid(2),
+          type: 'RECTANGLE',
+          name: 'Photo',
+          size: { x: 80, y: 60 },
+          transform: identityTransform(),
+          fillPaints: [
+            {
+              type: 'IMAGE',
+              visible: true,
+              opacity: 1,
+              image: { hash: new Uint8Array([1, 2, 3, 4]), name: 'photo.png', dataBlob: 7 },
+              imageScaleMode: 'FILL',
+            },
+          ],
+        }),
+      ],
+      [PNG_BYTES],
+      [],
+      7,
+    )
+
+    const rect = (await convertFigmaClipboardHtml(html))!.nodes[0]
+    expect(rect.imageFill).toBeDefined()
+    expect(rect.imageFill!.url.startsWith('data:image/png;base64,')).toBe(true)
+    expect(rect.fill).not.toBe('#cccccc')
+  })
+
+  it('resolves path commands blobs through the blobBaseIndex offset', async () => {
+    // Same offset applies to vector geometry: a filled path whose commandsBlob
+    // is an absolute index only resolves once blobBaseIndex is subtracted.
+    const blob = encodePathCommandsBlob(['M', 0, 0, 'L', 10, 0, 'L', 10, 10, 'Z'])
+    const html = clipboardWith(
+      [
+        onCanvas({
+          guid: guid(2),
+          type: 'VECTOR',
+          name: 'Tri',
+          size: { x: 10, y: 10 },
+          transform: identityTransform(),
+          fillPaints: [solidPaint(1, 0, 0)],
+          fillGeometry: [{ windingRule: 'NONZERO', commandsBlob: 3, styleID: 0 }],
+        }),
+      ],
+      [blob],
+      [],
+      3,
+    )
+
+    const path = (await convertFigmaClipboardHtml(html))!.nodes[0] as PathNode
+    expect(path.geometry).toContain('M 0 0')
+    expect(path.fill).toBe('#ff0000')
   })
 
   it('warns when image bytes are not embedded', async () => {

@@ -231,6 +231,12 @@ export interface FigMessage {
   type?: string
   nodeChanges?: FigNodeChange[]
   blobs?: FigBlob[]
+  // Absolute index of the first blob shipped in `blobs`. Clipboard payloads
+  // carry only a *slice* of the document's blob table, so every blob reference
+  // (image.dataBlob, commandsBlob, vectorNetworkBlob) is an absolute index that
+  // must be offset by this value: blobs[ref - blobBaseIndex]. Full .fig files
+  // start at 0; partial copies do not. See parseFigmaClipboard.
+  blobBaseIndex?: number
 }
 
 export interface FigClipboardMeta {
