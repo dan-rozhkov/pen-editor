@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { DownloadSimpleIcon } from "@phosphor-icons/react";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { PropertySection, SelectInput } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
@@ -62,7 +61,6 @@ export function PageExportSection() {
           variant="secondary"
           className="w-full min-w-0"
         >
-          <DownloadSimpleIcon />
           <span className="min-w-0 truncate">
             {isExporting ? "Exporting…" : "Export all frames (PDF)"}
           </span>

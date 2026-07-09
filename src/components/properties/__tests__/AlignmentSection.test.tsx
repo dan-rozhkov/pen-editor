@@ -48,12 +48,12 @@ describe("<AlignmentSection />", () => {
     expect(useSceneStore.getState().nodesById["frame1"].x).toBe(400);
   });
 
-  it("shows the spacing section and selection count for multi-select", () => {
+  it("shows the spacing section without a selection count for multi-select", () => {
     render(
       <AlignmentSection count={2} selectedIds={["frame1", "rect2"]} nodes={getNodes()} />,
     );
     expect(screen.getByText("Spacing")).toBeTruthy();
-    expect(screen.getByText("2 layers selected")).toBeTruthy();
+    expect(screen.queryByText(/layers selected/)).toBeNull();
   });
 
   it("hides spacing and count for a single node inside a frame", () => {

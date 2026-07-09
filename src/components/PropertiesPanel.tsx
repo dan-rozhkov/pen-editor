@@ -22,7 +22,6 @@ import { MultiSelectPropertyEditor } from "@/components/properties/MultiSelectPr
 import { PageProperties } from "@/components/properties/PageProperties";
 import { PencilToolProperties } from "@/components/properties/PencilToolProperties";
 import { PropertyEditor } from "@/components/properties/PropertyEditor";
-import { TextRewriteSection } from "@/components/properties/TextRewriteSection";
 import { VariablesDialog } from "@/components/VariablesPanel";
 import { TextStylesDialog } from "@/components/TextStylesPanel";
 import { StylesDialog } from "@/components/StylesPanel";
@@ -205,13 +204,6 @@ export function PropertiesPanel() {
       .filter(Boolean) as SceneNode[];
   }, [selectedIds, nodesById]);
 
-  // Whether the entire selection (single or multi) is text nodes — drives the
-  // "AI → Rewrite…" action, which targets every selected text node at once.
-  const isTextOnlySelection = useMemo(() => {
-    if (selectedIds.length === 0) return false;
-    return selectedIds.every((id) => nodesById[id]?.type === "text");
-  }, [selectedIds, nodesById]);
-
   const parentContext: ParentContext = selectedNode
     ? findParentFrame(nodes, selectedNode.id)
     : { parent: null, isInsideAutoLayout: false };
@@ -248,9 +240,6 @@ export function PropertiesPanel() {
             variables={variables}
             activeTheme={effectiveTheme}
           />
-        )}
-        {isTextOnlySelection && !instanceContext && activeTool !== "frame" && (
-          <TextRewriteSection nodeIds={selectedIds} />
         )}
         {instanceContext && activeTool !== "frame" && (
           <DescendantPropertyEditor

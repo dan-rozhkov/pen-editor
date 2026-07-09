@@ -19,9 +19,9 @@ describe("CustomColorPicker format selector", () => {
     expect(hexBtn).toBeTruthy();
     expect(rgbBtn).toBeTruthy();
     expect(hslBtn).toBeTruthy();
-    // The shared SegmentedControl marks the active option with `bg-primary`.
-    expect(hexBtn.className).toContain("bg-primary");
-    expect(rgbBtn.className).not.toContain("bg-primary");
+    // The shared properties-panel ButtonGroup marks its active option.
+    expect(hexBtn.getAttribute("aria-pressed")).toBe("true");
+    expect(rgbBtn.getAttribute("aria-pressed")).toBe("false");
 
     // HEX mode: single hex field, no channel inputs
     expect(screen.getByLabelText("Hex color")).toBeTruthy();
@@ -47,6 +47,20 @@ describe("CustomColorPicker format selector", () => {
     expect(red.value).toBe("255");
     expect(green.value).toBe("0");
     expect(blue.value).toBe("0");
+  });
+
+  it("does not bubble a format-button press to document-level popover handlers", () => {
+    render(<CustomColorPicker value="#ff0000" onChange={vi.fn()} />);
+    openPicker();
+    const onDocumentMouseDown = vi.fn();
+    document.addEventListener("mousedown", onDocumentMouseDown);
+
+    try {
+      fireEvent.mouseDown(screen.getByRole("button", { name: "RGB" }));
+      expect(onDocumentMouseDown).not.toHaveBeenCalled();
+    } finally {
+      document.removeEventListener("mousedown", onDocumentMouseDown);
+    }
   });
 
   it("clicking HSL shows three channel inputs reflecting the value", () => {

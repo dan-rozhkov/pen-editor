@@ -47,7 +47,7 @@ A canvas-based design editor with an AI design agent, built with React, TypeScri
 
 ### AI design agent
 - Chat-driven editing of the scene graph (split-execution: tool schemas on the backend, execution in the browser)
-- AI **rewrite text**, image generation, and background removal
+- AI image generation and background removal
 - Skills-based prompts (`/`-commands) and multiple agent modes (edits / prototype / research)
 
 ### Export & interop

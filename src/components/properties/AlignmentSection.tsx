@@ -127,9 +127,6 @@ export function AlignmentSection({
             selectedIds={selectedIds}
             nodes={nodes}
           />
-          <div className="text-text-muted text-xs text-center">
-            {count} layers selected
-          </div>
         </>
       )}
     </div>

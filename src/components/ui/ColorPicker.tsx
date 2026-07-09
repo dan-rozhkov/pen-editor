@@ -1,11 +1,8 @@
 import {
   useState,
-  useRef,
-  useEffect,
   useCallback,
-  useLayoutEffect,
+  type FocusEvent,
 } from "react";
-import { createPortal } from "react-dom";
 import {
   ColorPicker as AriaColorPicker,
   ColorArea,
@@ -18,7 +15,9 @@ import {
   type Color,
 } from "react-aria-components";
 import { Eyedropper } from "@phosphor-icons/react";
-import { SegmentedControl } from "@/components/ui/PropertyInputs";
+import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const supportsEyeDropper = typeof window !== "undefined" && "EyeDropper" in window;
 
@@ -50,6 +49,21 @@ const INPUT_CLASS_BASE =
   "bg-secondary text-secondary-foreground focus-visible:ring-1 focus-visible:ring-accent-light aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 h-6 rounded-md py-0.5 text-sm transition-colors aria-invalid:ring-[2px] md:text-xs/relaxed placeholder:text-muted-foreground w-full min-w-0 outline-none";
 const HEX_INPUT_CLASS = `${INPUT_CLASS_BASE} px-2`;
 const CHANNEL_INPUT_CLASS = `${INPUT_CLASS_BASE} px-1 text-center`;
+const FORMAT_TOGGLE_GROUP_CLASS =
+  "h-6 rounded-md bg-secondary gap-px [&>[data-slot]]:rounded-[5px]! [&>[data-slot]]:border [&>[data-slot]~[data-slot]]:border-l";
+const FORMAT_TOGGLE_BUTTON_CLASS =
+  "flex-1 h-full border-transparent bg-transparent text-text-muted hover:bg-surface-elevated hover:text-text-primary";
+const ACTIVE_FORMAT_TOGGLE_BUTTON_CLASS =
+  "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel";
+
+function retainChannelInputFocus(event: FocusEvent<HTMLInputElement>) {
+  const input = event.currentTarget;
+  requestAnimationFrame(() => {
+    if (input.isConnected && document.activeElement !== input) {
+      input.focus();
+    }
+  });
+}
 
 interface CustomColorPickerProps {
   value: string;
@@ -64,9 +78,6 @@ export function CustomColorPicker({
 }: CustomColorPickerProps) {
   const [open, setOpen] = useState(false);
   const [format, setFormat] = useState<ColorFormat>("hex");
-  const containerRef = useRef<HTMLDivElement>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
 
   const safeValue = value || "#000000";
 
@@ -84,79 +95,22 @@ export function CustomColorPicker({
     [onChange],
   );
 
-  const updatePopoverPosition = useCallback(() => {
-    if (!open) return;
-    const trigger = containerRef.current;
-    const popover = popoverRef.current;
-    if (!trigger || !popover) return;
-
-    const anchor =
-      (trigger.closest("[data-slot='input-group']") as HTMLElement | null) ||
-      trigger;
-    const anchorRect = anchor.getBoundingClientRect();
-    const gap = 20;
-    const popoverWidth = popover.offsetWidth;
-    const popoverHeight = popover.offsetHeight;
-    const maxTop = Math.max(8, window.innerHeight - popoverHeight - 8);
-    const top = Math.min(Math.max(anchorRect.top, 8), maxTop);
-    const left = Math.max(8, anchorRect.left - popoverWidth - gap);
-
-    setPopoverStyle({ position: "fixed", top, left });
-  }, [open]);
-
-  // Close on click outside
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      const target = e.target as Node;
-      const clickedTrigger = containerRef.current?.contains(target);
-      const clickedPopover = popoverRef.current?.contains(target);
-      if (!clickedTrigger && !clickedPopover) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  useLayoutEffect(() => {
-    if (!open) return;
-    updatePopoverPosition();
-  }, [open, updatePopoverPosition]);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleScroll = () => updatePopoverPosition();
-    window.addEventListener("resize", handleScroll);
-    window.addEventListener("scroll", handleScroll, true);
-    return () => {
-      window.removeEventListener("resize", handleScroll);
-      window.removeEventListener("scroll", handleScroll, true);
-    };
-  }, [open, updatePopoverPosition]);
-
   const sizeClass = swatchSize === "sm" ? "w-3 h-3" : "w-4 h-4";
 
   return (
-    <div className="relative flex cursor-default" ref={containerRef}>
-      {/* Swatch trigger */}
-      <button
-        type="button"
+    <div className="relative flex cursor-default">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger
         className={`${sizeClass} rounded-sm cursor-pointer shrink-0`}
         style={{ backgroundColor: safeValue }}
-        onClick={() => setOpen(!open)}
         aria-label="Pick color"
-      />
+        />
 
-      {/* Popover */}
-      {/* `open` can only become true after a user click, so the component is
-          guaranteed to be mounted — no separate `mounted` guard is needed. */}
-      {open &&
-        createPortal(
-        <div
-          ref={popoverRef}
-          style={popoverStyle}
-          className="z-50 bg-surface-panel border border-border-light rounded-xl shadow-lg p-3 flex flex-col gap-2 w-[200px]"
+        <PopoverContent
+          side="left"
+          sideOffset={20}
+          className="w-[200px]"
+          initialFocus={false}
         >
           <AriaColorPicker value={color} onChange={handleChange}>
             {/* Saturation / Brightness area */}
@@ -182,14 +136,29 @@ export function CustomColorPicker({
               </SliderTrack>
             </ColorSlider>
 
-            {/* Format selector. A segmented control, NOT a dropdown: a portaled
-                react-aria Select would render outside popoverRef and trip the
-                click-outside handler above, closing the picker. */}
-            <SegmentedControl
-              value={format}
-              options={FORMAT_OPTIONS}
-              onChange={(v) => setFormat(v as ColorFormat)}
-            />
+            {/* Keep the picker format controls in the same ButtonGroup used by
+                the properties panel; a dropdown would escape this popover. */}
+            <ButtonGroup orientation="horizontal" className={`w-full ${FORMAT_TOGGLE_GROUP_CLASS}`}>
+              {FORMAT_OPTIONS.map((option) => {
+                const isActive = format === option.value;
+                return (
+                  <Button
+                    key={option.value}
+                    variant="ghost"
+                    size="sm"
+                    className={`${FORMAT_TOGGLE_BUTTON_CLASS} ${
+                      isActive ? ACTIVE_FORMAT_TOGGLE_BUTTON_CLASS : ""
+                    }`}
+                    aria-pressed={isActive}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={() => setFormat(option.value)}
+                  >
+                    {option.label}
+                  </Button>
+                );
+              })}
+            </ButtonGroup>
 
             {/* Input row + eyedropper */}
             <div className="flex items-center gap-1">
@@ -210,7 +179,10 @@ export function CustomColorPicker({
                       aria-label={label}
                       className="min-w-0 flex-1"
                     >
-                      <Input className={CHANNEL_INPUT_CLASS} />
+                      <Input
+                        className={CHANNEL_INPUT_CLASS}
+                        onFocus={retainChannelInputFocus}
+                      />
                     </ColorField>
                   ))}
                 </div>
@@ -235,8 +207,8 @@ export function CustomColorPicker({
               )}
             </div>
           </AriaColorPicker>
-        </div>
-      , document.body)}
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }

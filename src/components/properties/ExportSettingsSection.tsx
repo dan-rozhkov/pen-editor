@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PlusIcon, MinusIcon, DownloadSimpleIcon } from "@phosphor-icons/react";
+import { PlusIcon, MinusIcon, DownloadSimpleIcon, SlidersHorizontalIcon } from "@phosphor-icons/react";
 import type { SceneNode } from "@/types/scene";
 import type { ExportSetting } from "@/types/scene";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
@@ -13,6 +13,7 @@ import {
 import { runExportSettingsForNode } from "@/lib/exportSettings/runExportAll";
 import { PropertySection, SelectInput, TextInput } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface Props {
   node: SceneNode;
@@ -41,7 +42,7 @@ function scaleSelectValue(scale: number): string {
 
 /**
  * Per-node "Export" panel section (Figma-style): a list of `ExportSetting`
- * rows (format/scale/suffix), add/remove per row, an "Export all" button
+ * rows (format/scale plus advanced options), add/remove per row, an "Export all" button
  * that runs every configured setting, and global presets (save the first row
  * as a reusable preset / apply a saved preset as a new row). Node mutations
  * go through `onUpdate` like every other property section (`ShaderSection`
@@ -51,12 +52,8 @@ function scaleSelectValue(scale: number): string {
 export function ExportSettingsSection({ node, onUpdate }: Props) {
   const pixiRefs = useCanvasRefStore((s) => s.pixiRefs);
   const presets = useExportPresetStore((s) => s.presets);
-  const addPreset = useExportPresetStore((s) => s.addPreset);
   const [isExporting, setIsExporting] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
-  // Keyed by setting id so each row's "Save as preset" field is independent —
-  // a single shared string would let one row's Save capture another row's name.
-  const [presetNames, setPresetNames] = useState<Record<string, string>>({});
 
   const settings = node.exportSettings ?? [];
 
@@ -83,22 +80,6 @@ export function ExportSettingsSection({ node, onUpdate }: Props) {
     );
   };
 
-  const setPresetName = (settingId: string, value: string) =>
-    setPresetNames((prev) => ({ ...prev, [settingId]: value }));
-
-  const handleSaveAsPreset = (setting: ExportSetting) => {
-    const name = (presetNames[setting.id] ?? "").trim();
-    if (!name) return;
-    addPreset({
-      name,
-      format: setting.format,
-      scale: setting.scale,
-      suffix: setting.suffix,
-      quality: setting.quality,
-    });
-    setPresetName(setting.id, "");
-  };
-
   const handleExportAll = async () => {
     if (settings.length === 0) return;
     setIsExporting(true);
@@ -123,73 +104,62 @@ export function ExportSettingsSection({ node, onUpdate }: Props) {
   );
 
   return (
-    <PropertySection title="Export settings" action={action}>
+    <PropertySection title="Export" action={action}>
       {settings.length > 0 && (
-        <div className="flex flex-col gap-3" data-testid="export-settings-list">
+        <div className="flex flex-col gap-2" data-testid="export-settings-list">
           {settings.map((setting) => (
-            <div key={setting.id} className="flex flex-col gap-2 rounded-md border border-border-default p-2">
-              <div className="flex items-center gap-2">
-                <div className="flex-1">
-                  <SelectInput
-                    value={setting.format}
-                    options={FORMAT_OPTIONS}
-                    onChange={(v) => handleChange(setting.id, { format: v as ExportSetting["format"] })}
-                  />
-                </div>
-                <div className="flex-1">
-                  <SelectInput
-                    value={scaleSelectValue(setting.scale)}
-                    options={SCALE_OPTIONS}
-                    onChange={(v) => {
-                      if (v === "custom") return;
-                      handleChange(setting.id, { scale: Number(v) });
-                    }}
-                  />
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => handleRemove(setting.id)}
-                  title="Remove export setting"
-                >
-                  <MinusIcon />
-                </Button>
-              </div>
-              {scaleSelectValue(setting.scale) === "custom" && (
-                <TextInput
-                  label="Custom scale"
-                  value={String(setting.scale)}
-                  onChange={(v) => {
-                    const n = Number(v);
-                    if (!Number.isNaN(n) && n > 0) handleChange(setting.id, { scale: n });
-                  }}
-                  placeholder="e.g. 1.5"
+            <div key={setting.id} className="flex items-center gap-2">
+              <div className="flex-1">
+                <SelectInput
+                  value={setting.format}
+                  options={FORMAT_OPTIONS}
+                  onChange={(v) => handleChange(setting.id, { format: v as ExportSetting["format"] })}
                 />
-              )}
-              <TextInput
-                label="Suffix"
-                value={setting.suffix ?? ""}
-                onChange={(v) => handleChange(setting.id, { suffix: v || undefined })}
-                placeholder="@2x, _dark, ..."
-              />
-              <div className="flex items-center gap-2">
-                <div className="flex-1">
-                  <TextInput
-                    label="Save as preset"
-                    value={presetNames[setting.id] ?? ""}
-                    onChange={(v) => setPresetName(setting.id, v)}
-                    placeholder="Preset name"
-                  />
-                </div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => handleSaveAsPreset(setting)}
-                  disabled={!(presetNames[setting.id] ?? "").trim()}
-                >
-                  Save
-                </Button>
               </div>
+              <div className="flex-1">
+                <SelectInput
+                  value={scaleSelectValue(setting.scale)}
+                  options={SCALE_OPTIONS}
+                  onChange={(v) => {
+                    if (v === "custom") return;
+                    handleChange(setting.id, { scale: Number(v) });
+                  }}
+                />
+              </div>
+              <Popover>
+                <PopoverTrigger>
+                  <Button variant="ghost" size="icon-sm" title="Export settings">
+                    <SlidersHorizontalIcon />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent side="left" align="start">
+                  {scaleSelectValue(setting.scale) === "custom" && (
+                    <TextInput
+                      label="Custom scale"
+                      value={String(setting.scale)}
+                      onChange={(v) => {
+                        const n = Number(v);
+                        if (!Number.isNaN(n) && n > 0) handleChange(setting.id, { scale: n });
+                      }}
+                      placeholder="e.g. 1.5"
+                    />
+                  )}
+                  <TextInput
+                    label="Suffix"
+                    value={setting.suffix ?? ""}
+                    onChange={(v) => handleChange(setting.id, { suffix: v || undefined })}
+                    placeholder="@2x, _dark, ..."
+                  />
+                </PopoverContent>
+              </Popover>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => handleRemove(setting.id)}
+                title="Remove export setting"
+              >
+                <MinusIcon />
+              </Button>
             </div>
           ))}
         </div>

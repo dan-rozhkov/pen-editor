@@ -109,7 +109,6 @@ export function PropertyEditor({
       />
       <EffectsSection node={node} onUpdate={onUpdate} />
       <ShaderSection node={node} onUpdate={onUpdate} />
-      <ExportSettingsSection node={node} onUpdate={onUpdate} />
       {frameNode && (
         <ThemeSection node={frameNode} onUpdate={onUpdate} />
       )}
@@ -129,6 +128,7 @@ export function PropertyEditor({
         <EmbedContentSection node={node} />
       )}
       <SelectionColorsSection nodes={[node]} />
+      <ExportSettingsSection node={node} onUpdate={onUpdate} />
     </div>
   );
 }

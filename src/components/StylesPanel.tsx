@@ -12,6 +12,12 @@ import { Dialog, DialogContent, DialogTitle } from "./ui/dialog";
 import { CustomColorPicker } from "./ui/ColorPicker";
 import { PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import { buildCSSGradient } from "@/utils/gradientUtils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 
 /** Inline editable name cell (mirrors TextStylesPanel/VariablesPanel EditableCell). */
 function EditableName({
@@ -217,63 +223,29 @@ export function StylesDialog({ open, onOpenChange }: StylesDialogProps) {
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-border-light">
           <DialogTitle>Styles</DialogTitle>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className="p-1 rounded hover:bg-secondary transition-colors text-text-muted hover:text-text-primary"
+              title="Add style"
+            >
+              <PlusIcon className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleAddFill}>Fill style</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleAddEffect}>Effect style</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {/* Fill styles */}
-          <div className="flex items-center justify-between px-3 py-2 bg-surface-panel sticky top-0 z-10 border-b border-border-light">
-            <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wide">
-              Fill styles
-            </span>
-            <button
-              className="p-1 rounded hover:bg-secondary transition-colors text-text-muted hover:text-text-primary"
-              title="Add color style"
-              onClick={handleAddFill}
-            >
-              <PlusIcon className="size-4" />
-            </button>
-          </div>
-          {fillStyles.length === 0 ? (
-            <div className="text-center text-text-disabled text-xs py-6">No fill styles yet</div>
+          {fillStyles.length === 0 && effectStyles.length === 0 ? (
+            <div className="text-center text-text-disabled text-xs py-6">No styles yet</div>
           ) : (
-            fillStyles.map((s) => <FillStyleRow key={s.id} style={s} />)
+            <div data-testid="styles-list">
+              {fillStyles.map((style) => <FillStyleRow key={style.id} style={style} />)}
+              {effectStyles.map((style) => <EffectStyleRow key={style.id} style={style} />)}
+            </div>
           )}
-
-          {/* Effect styles */}
-          <div className="flex items-center justify-between px-3 py-2 bg-surface-panel sticky top-0 z-10 border-b border-y border-border-light">
-            <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wide">
-              Effect styles
-            </span>
-            <button
-              className="p-1 rounded hover:bg-secondary transition-colors text-text-muted hover:text-text-primary"
-              title="Add effect style"
-              onClick={handleAddEffect}
-            >
-              <PlusIcon className="size-4" />
-            </button>
-          </div>
-          {effectStyles.length === 0 ? (
-            <div className="text-center text-text-disabled text-xs py-6">No effect styles yet</div>
-          ) : (
-            effectStyles.map((s) => <EffectStyleRow key={s.id} style={s} />)
-          )}
-        </div>
-
-        <div className="border-t border-border-light px-4 py-3 flex gap-4">
-          <button
-            className="flex items-center gap-2 text-xs text-text-muted hover:text-text-primary transition-colors"
-            onClick={handleAddFill}
-          >
-            <PlusIcon className="size-4" weight="light" />
-            Color style
-          </button>
-          <button
-            className="flex items-center gap-2 text-xs text-text-muted hover:text-text-primary transition-colors"
-            onClick={handleAddEffect}
-          >
-            <PlusIcon className="size-4" weight="light" />
-            Effect style
-          </button>
         </div>
       </DialogContent>
     </Dialog>

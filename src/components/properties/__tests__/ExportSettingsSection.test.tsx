@@ -32,7 +32,7 @@ afterEach(() => {
 describe("<ExportSettingsSection />", () => {
   it("renders the section with no rows and no Export all button when there are no settings", () => {
     render(<ExportSettingsSection node={makeNode()} onUpdate={vi.fn()} />);
-    expect(screen.getByText("Export settings")).toBeTruthy();
+    expect(screen.getByText("Export")).toBeTruthy();
     expect(screen.queryByText("Export all")).toBeNull();
   });
 
@@ -79,11 +79,12 @@ describe("<ExportSettingsSection />", () => {
     });
   });
 
-  it("editing the suffix input updates the matching setting", () => {
+  it("edits a setting suffix from its settings popover", () => {
     const onUpdate = vi.fn();
     const node = makeNode({ exportSettings: [{ id: "a", format: "png", scale: 1 }] });
     render(<ExportSettingsSection node={node} onUpdate={onUpdate} />);
 
+    fireEvent.click(screen.getByTitle("Export settings"));
     fireEvent.change(screen.getByPlaceholderText("@2x, _dark, ..."), {
       target: { value: "@2x" },
     });
@@ -91,32 +92,6 @@ describe("<ExportSettingsSection />", () => {
     expect(onUpdate).toHaveBeenCalledWith({
       exportSettings: [{ id: "a", format: "png", scale: 1, suffix: "@2x" }],
     });
-  });
-
-  it("keeps each row's 'Save as preset' name independent and saves the right row's config", () => {
-    const node = makeNode({
-      exportSettings: [
-        { id: "a", format: "png", scale: 2 },
-        { id: "b", format: "svg", scale: 1 },
-      ],
-    });
-    render(<ExportSettingsSection node={node} onUpdate={vi.fn()} />);
-
-    const presetInputs = screen.getAllByPlaceholderText("Preset name");
-    expect(presetInputs).toHaveLength(2);
-
-    // Type only into the first row's field — the second row must stay empty.
-    fireEvent.change(presetInputs[0], { target: { value: "PNG 2x" } });
-    expect((presetInputs[0] as HTMLInputElement).value).toBe("PNG 2x");
-    expect((presetInputs[1] as HTMLInputElement).value).toBe("");
-
-    // Saving the first row persists that row's format/scale under its own name.
-    const saveButtons = screen.getAllByText("Save");
-    fireEvent.click(saveButtons[0]);
-
-    const presets = useExportPresetStore.getState().presets;
-    expect(presets).toHaveLength(1);
-    expect(presets[0]).toMatchObject({ name: "PNG 2x", format: "png", scale: 2 });
   });
 
   it("skips Export all when there are no pixi refs and no settings need pixi (svg only) — no crash", async () => {

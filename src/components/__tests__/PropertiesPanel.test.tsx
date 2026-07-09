@@ -3,7 +3,6 @@ import { render, screen, cleanup } from "@testing-library/react";
 import { PropertiesPanel } from "../PropertiesPanel";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
-import { useSceneStore } from "@/store/sceneStore";
 import { resetStores, seedScene } from "@/test/fixtures";
 
 /**
@@ -40,11 +39,6 @@ vi.mock("@/components/properties/PencilToolProperties", () => ({
 vi.mock("@/components/properties/AlignmentSection", () => ({
   AlignmentSection: ({ count }: { count: number }) => (
     <div data-testid="alignment-section" data-count={count} />
-  ),
-}));
-vi.mock("@/components/properties/TextRewriteSection", () => ({
-  TextRewriteSection: ({ nodeIds }: { nodeIds: string[] }) => (
-    <div data-testid="text-rewrite-section" data-node-ids={nodeIds.join(",")} />
   ),
 }));
 // VariablesDialog pulls in the color picker / portals; stub it (the panel only
@@ -136,49 +130,6 @@ describe("<PropertiesPanel /> (orchestration)", () => {
       // Multi-select must NOT render the single-node editor or page props.
       expect(screen.queryByTestId("property-editor")).toBeNull();
       expect(screen.queryByTestId("page-properties")).toBeNull();
-    });
-  });
-
-  describe("text rewrite section", () => {
-    it("shows the AI rewrite action for a single selected text node", () => {
-      select(["text1"]);
-      render(<PropertiesPanel />);
-
-      const section = screen.getByTestId("text-rewrite-section");
-      expect(section.getAttribute("data-node-ids")).toBe("text1");
-    });
-
-    it("hides the AI rewrite action for a non-text node", () => {
-      select(["rect1"]);
-      render(<PropertiesPanel />);
-
-      expect(screen.queryByTestId("text-rewrite-section")).toBeNull();
-    });
-
-    it("shows the AI rewrite action for a multi-selection of only text nodes", () => {
-      useSceneStore.setState((s) => ({
-        nodesById: {
-          ...s.nodesById,
-          text2: { ...s.nodesById.text1, id: "text2", name: "Subtitle" },
-        },
-        childrenById: {
-          ...s.childrenById,
-          frame1: [...(s.childrenById.frame1 ?? []), "text2"],
-        },
-        parentById: { ...s.parentById, text2: "frame1" },
-      }));
-      select(["text1", "text2"]);
-      render(<PropertiesPanel />);
-
-      const section = screen.getByTestId("text-rewrite-section");
-      expect(section.getAttribute("data-node-ids")).toBe("text1,text2");
-    });
-
-    it("hides the AI rewrite action when the multi-selection mixes types", () => {
-      select(["rect1", "text1"]);
-      render(<PropertiesPanel />);
-
-      expect(screen.queryByTestId("text-rewrite-section")).toBeNull();
     });
   });
 
