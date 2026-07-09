@@ -33,9 +33,10 @@ export function convertFigmaPasteToSceneNodes(data: FigPasteData): FigmaConversi
     resolveBlob: (index) => (index == null ? undefined : blobs[index - blobBaseIndex]),
     byGuid,
     warnings: [],
+    stats: { unresolvedImages: 0 },
   }
   const nodes = roots
     .map((root) => convertNode(root, ctx))
     .filter((node): node is SceneNode => node != null)
-  return { nodes, warnings: ctx.warnings }
+  return { nodes, warnings: ctx.warnings, unresolvedImageCount: ctx.stats.unresolvedImages }
 }

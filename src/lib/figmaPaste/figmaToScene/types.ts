@@ -13,6 +13,14 @@ import type { FigBlob, FigNodeChange } from '../figTypes'
 export interface FigmaConversionResult {
   nodes: SceneNode[]
   warnings: string[]
+  /**
+   * Number of IMAGE fills that referenced pixels not present in the clipboard
+   * (hash-only, no embedded bytes). Figma's cross-document clipboard omits image
+   * pixels for a plain copy, so these degrade to a gray placeholder. The paste
+   * handler uses this to fall back to a flattened `image/png` clipboard raster
+   * or surface an actionable message. See `paints.ts` `convertImagePaint`.
+   */
+  unresolvedImageCount: number
 }
 
 export interface FigTreeNode {
@@ -36,6 +44,8 @@ export interface ConvertContext {
   resolveBlob: (index: number | undefined) => FigBlob | undefined
   byGuid: Map<string, FigTreeNode>
   warnings: string[]
+  /** Mutable counters shared across the recursive conversion (incl. instances). */
+  stats: { unresolvedImages: number }
   instance?: InstanceContext
 }
 

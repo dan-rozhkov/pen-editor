@@ -18,9 +18,11 @@ import { applyFigmaPasteNodes } from "./figmaPasteImport";
 import {
   applyImageImportPlans,
   createImageImportPlan,
+  readBlobAsDataURL,
   type ImageImportPlan,
   setImportedSelection,
 } from "./imageImport";
+import { toast } from "sonner";
 import {
   INTERNAL_CLIPBOARD_PRIORITY_MS,
   getViewportCenter,
@@ -185,6 +187,11 @@ export function createClipboardActions(deps: ClipboardActionDeps) {
         : Array.from(e.clipboardData.items).filter((item) =>
             item.type.startsWith("image/"),
           );
+    // Extract the first raster File synchronously: the paste event's
+    // DataTransfer is only valid during synchronous dispatch, so getAsFile()
+    // must be called before any `await` (the Figma branch awaits a dynamic
+    // import). A File captured here stays readable afterwards.
+    const firstImageFile = imageItems[0]?.getAsFile() ?? null;
     const shouldPreferInternalClipboard =
       clipboardState.copiedNodes.length > 0 &&
       Date.now() - clipboardState.lastCopiedAt <= INTERNAL_CLIPBOARD_PRIORITY_MS;
@@ -201,6 +208,28 @@ export function createClipboardActions(deps: ClipboardActionDeps) {
       try {
         const result = await convertFigmaClipboardHtml(htmlText);
         if (result && result.nodes.length > 0) {
+          // Figma's cross-document clipboard references image fills by hash only —
+          // the pixels are NOT in the buffer, so those fills come back as a gray
+          // placeholder. When the clipboard ALSO carries a flattened `image/png`
+          // raster (desktop Figma, "Copy as PNG") and the paste is a single node,
+          // use that raster as the fill instead of the placeholder.
+          let recoveredImage = false;
+          if (
+            result.unresolvedImageCount > 0 &&
+            firstImageFile &&
+            result.nodes.length === 1 &&
+            result.nodes[0].fill === "#cccccc"
+          ) {
+            try {
+              const url = await readBlobAsDataURL(firstImageFile);
+              const node = result.nodes[0];
+              node.imageFill = { url, mode: "fill" };
+              delete node.fill;
+              recoveredImage = true;
+            } catch {
+              // keep the gray placeholder if the raster can't be read
+            }
+          }
           applyFigmaPasteNodes({
             nodes: result.nodes,
             viewportCenter: getViewportCenter(dimensions),
@@ -209,6 +238,13 @@ export function createClipboardActions(deps: ClipboardActionDeps) {
             startBatch,
             endBatch,
           });
+          // No raster to recover from — tell the user why image fills are missing
+          // instead of leaving a silent gray box.
+          if (result.unresolvedImageCount > 0 && !recoveredImage) {
+            toast(
+              "Some image fills couldn't be transferred — Figma doesn't put image pixels in the clipboard on a normal copy. Use “Copy as PNG” in Figma, or paste the image directly.",
+            );
+          }
           if (result.warnings.length > 0) {
             console.warn("[figma-paste] imported with warnings:", result.warnings);
           }
