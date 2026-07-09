@@ -49,7 +49,7 @@ interface ApplyImageImportPlansParams {
   endBatch: () => void;
 }
 
-function readBlobAsDataURL(blob: Blob): Promise<string> {
+export function readBlobAsDataURL(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);

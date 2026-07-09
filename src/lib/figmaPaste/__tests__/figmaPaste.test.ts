@@ -453,6 +453,33 @@ describe('convertFigmaClipboardHtml', () => {
     expect(result.nodes[0].imageFill).toBeUndefined()
     expect(result.nodes[0].fill).toBe('#cccccc')
     expect(result.warnings.some((warning) => warning.includes('remote.png'))).toBe(true)
+    expect(result.unresolvedImageCount).toBe(1)
+  })
+
+  it('reports unresolvedImageCount 0 when every image fill embeds', async () => {
+    const html = clipboardWith(
+      [
+        onCanvas({
+          guid: guid(2),
+          type: 'RECTANGLE',
+          size: { x: 80, y: 60 },
+          transform: identityTransform(),
+          fillPaints: [
+            {
+              type: 'IMAGE',
+              visible: true,
+              opacity: 1,
+              image: { hash: new Uint8Array([1, 2, 3, 4]), name: 'photo.png', dataBlob: 0 },
+              imageScaleMode: 'FILL',
+            },
+          ],
+        }),
+      ],
+      [PNG_BYTES],
+    )
+
+    const result = (await convertFigmaClipboardHtml(html))!
+    expect(result.unresolvedImageCount).toBe(0)
   })
 
   it('converts linear gradients with handle positions', async () => {
