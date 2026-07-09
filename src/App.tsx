@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from "react";
 import { loadModels } from "./lib/chatModels";
 import { reconcileModels } from "./store/chatStore";
+import { useCustomFontStore } from "./store/customFontStore";
 import { LeftRail } from "./components/LeftRail";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { RightSidebar } from "./components/RightSidebar";
@@ -36,6 +37,12 @@ function App() {
   // selection it no longer allows. Falls back to the hardcoded list on failure.
   useEffect(() => {
     loadModels().then(reconcileModels);
+  }, []);
+
+  // Re-register every custom (uploaded) font's FontFace with the browser so
+  // text using it renders correctly after a reload, instead of falling back.
+  useEffect(() => {
+    useCustomFontStore.getState().restoreCustomFonts();
   }, []);
 
   // Read-only view mode is entered only via the `?view` URL parameter

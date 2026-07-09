@@ -108,6 +108,30 @@ export interface SystemFont {
   family: string;
   isSystemFont: boolean;
   isGoogleFont?: boolean;
+  isCustomFont?: boolean;
+}
+
+/**
+ * Merge uploaded custom fonts into a base font list (system/Google), for the
+ * font picker's single source of truth. Custom fonts are placed first (the
+ * "Custom / Uploaded" group) and shadow any base entry with the same family
+ * name, case-insensitively, so a font isn't listed twice.
+ */
+export function mergeCustomFontsIntoList(
+  baseFonts: SystemFont[],
+  customFamilies: string[],
+): SystemFont[] {
+  if (customFamilies.length === 0) return baseFonts;
+
+  const customLower = new Set(customFamilies.map((f) => f.toLowerCase()));
+  const customEntries: SystemFont[] = customFamilies.map((family) => ({
+    family,
+    isSystemFont: false,
+    isCustomFont: true,
+  }));
+  const filteredBase = baseFonts.filter((f) => !customLower.has(f.family.toLowerCase()));
+
+  return [...customEntries, ...filteredBase];
 }
 
 let fontCache: SystemFont[] | null = null;
@@ -189,6 +213,19 @@ let fontLoadCallback: (() => void) | null = null;
 
 export function registerFontLoadCallback(cb: () => void) {
   fontLoadCallback = cb;
+}
+
+/**
+ * Trigger the same "a font finished loading" side effect Google Fonts use
+ * (re-syncing text-node dimensions, which re-bakes affected text textures).
+ * Custom fonts register their `FontFace` directly via `document.fonts.add()`
+ * after already awaiting `.load()`, so `document.fonts`'s own `loadingdone`
+ * event does not fire for them — callers must invoke this explicitly after
+ * registering or restoring a custom font so the canvas doesn't keep showing
+ * the fallback font.
+ */
+export function notifyFontsChanged(): void {
+  fontLoadCallback?.();
 }
 
 const loadedGoogleFonts = new Set<string>();
