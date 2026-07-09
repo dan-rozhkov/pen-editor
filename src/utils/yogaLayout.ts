@@ -750,11 +750,18 @@ function computeIntrinsicSize(frame: FrameNode): {
   const totalGap =
     items.length > 1 ? container.mainGap * (items.length - 1) : 0;
 
-  const totalMainSize =
-    items.reduce((s, i) => s + i.computedMainSize, 0) +
-    totalGap +
-    pad.mainStart +
-    pad.mainEnd;
+  // A large negative gap can make the children's content contribution go
+  // below zero (items pulled fully on top of one another and past the
+  // container's own footprint). Floor only that CONTENT contribution at 0,
+  // then add padding — so this degenerate case degrades to exactly the
+  // empty-frame size (the padding sum) rather than below it. The children
+  // themselves still overlap by the full gap amount in
+  // `calculateFrameLayout`, which isn't clamped.
+  const mainContent = Math.max(
+    0,
+    items.reduce((s, i) => s + i.computedMainSize, 0) + totalGap,
+  );
+  const totalMainSize = mainContent + pad.mainStart + pad.mainEnd;
 
   const maxCross =
     items.length > 0 ? Math.max(...items.map((i) => i.crossBaseSize)) : 0;
@@ -930,11 +937,17 @@ export function calculateFrameIntrinsicSize(
   const totalGap =
     items.length > 1 ? container.mainGap * (items.length - 1) : 0;
 
-  const intrinsicMain =
-    items.reduce((s, i) => s + i.computedMainSize, 0) +
-    totalGap +
-    pad.mainStart +
-    pad.mainEnd;
+  // Clamp only the degenerate case: a large negative gap can pull the
+  // children's content contribution below zero. Floor that CONTENT
+  // contribution at 0, then add padding — so this case degrades to exactly
+  // the empty-frame size (the padding sum), never below it. The children
+  // themselves still overlap by the full gap amount when positioned
+  // (`calculateFrameLayout` isn't clamped).
+  const mainContent = Math.max(
+    0,
+    items.reduce((s, i) => s + i.computedMainSize, 0) + totalGap,
+  );
+  const intrinsicMain = mainContent + pad.mainStart + pad.mainEnd;
 
   // Wrapped multi-line: the cross size hugs the summed line sizes (+ gaps
   // between lines) instead of a single line's max. Single line: identical to
@@ -943,11 +956,11 @@ export function calculateFrameIntrinsicSize(
     lineCrossSizes.length > 1
       ? container.crossGap * (lineCrossSizes.length - 1)
       : 0;
-  const intrinsicCross =
-    lineCrossSizes.reduce((s, c) => s + c, 0) +
-    totalCrossGap +
-    pad.crossStart +
-    pad.crossEnd;
+  const crossContent = Math.max(
+    0,
+    lineCrossSizes.reduce((s, c) => s + c, 0) + totalCrossGap,
+  );
+  const intrinsicCross = crossContent + pad.crossStart + pad.crossEnd;
 
   const isHorizontal = container.direction === "row";
 

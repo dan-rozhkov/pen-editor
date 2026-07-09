@@ -87,6 +87,28 @@ describe("<AutoLayoutSection />", () => {
     });
   });
 
+  it("accepts a negative gap value (overlap) with no min clamp on the input", () => {
+    const onUpdate = vi.fn();
+    render(
+      <AutoLayoutSection
+        node={frame({ autoLayout: true, flexDirection: "row", gap: 0 })}
+        onUpdate={onUpdate}
+      />,
+    );
+    const inputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    const gapInput = inputs[0];
+
+    // The gap input must not carry a `min` attribute — that's what would
+    // block negative entry (either via the browser's native validation or
+    // the scrub-drag/steppers, both of which read the `min` prop).
+    expect(gapInput.hasAttribute("min")).toBe(false);
+
+    fireEvent.change(gapInput, { target: { value: "-10" } });
+    expect(onUpdate).toHaveBeenCalledWith({
+      layout: expect.objectContaining({ gap: -10 }),
+    });
+  });
+
   describe("wrap", () => {
     it("toggles flexWrap via the checkbox", () => {
       const onUpdate = vi.fn();

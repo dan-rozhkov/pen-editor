@@ -697,6 +697,15 @@ describe("batch_design", () => {
       expect(frame.layout?.paddingTop).toBe(16);
     });
 
+    it("accepts a negative gap (overlap) on an existing frame", async () => {
+      const result = JSON.parse(
+        await batchDesign({ operations: "U(frame1, {gap: -12})" })
+      );
+      expect(result.success).toBe(true);
+      const frame = sceneState().nodesById["frame1"] as FlatFrameNode;
+      expect(frame.layout?.gap).toBe(-12);
+    });
+
     it("sets min/max width/height sizing constraints on an existing node", async () => {
       const result = JSON.parse(
         await batchDesign({

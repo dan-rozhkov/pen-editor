@@ -585,3 +585,97 @@ describe("align-items: stretch on a hug (fit_content) cross-axis container", () 
     expect(result.b.height).toBe(40);
   });
 });
+
+describe("negative gap (overlap)", () => {
+  it("overlaps children by |gap| in flow order for a row", () => {
+    const f = frame({ flexDirection: "row", gap: -10 }, { width: 300, height: 100 }, [
+      rect("a", 50, 40),
+      rect("b", 60, 40),
+      rect("c", 30, 40),
+    ]);
+    const r = byId(calculateFrameLayout(f));
+    expect(r.a.x).toBe(0);
+    expect(r.b.x).toBe(40); // 50 - 10
+    expect(r.c.x).toBe(90); // 40 + 60 - 10
+  });
+
+  it("overlaps children by |gap| in flow order for a column", () => {
+    const f = frame({ flexDirection: "column", gap: -10 }, { width: 100, height: 300 }, [
+      rect("a", 50, 40),
+      rect("b", 50, 60),
+      rect("c", 50, 30),
+    ]);
+    const r = byId(calculateFrameLayout(f));
+    expect(r.a.y).toBe(0);
+    expect(r.b.y).toBe(30); // 40 - 10
+    expect(r.c.y).toBe(80); // 30 + 60 - 10
+  });
+
+  it("does not produce NaN/negative fit_content size for an extreme negative gap", () => {
+    const f = frame(
+      { flexDirection: "row", gap: -1000 },
+      { width: 999, height: 100 },
+      [rect("a", 10, 40), rect("b", 10, 40), rect("c", 10, 40)],
+    );
+    const size = calculateFrameIntrinsicSize(f, { fitWidth: true });
+    expect(Number.isNaN(size.width)).toBe(false);
+    expect(size.width).toBeGreaterThanOrEqual(0);
+    expect(size.width).toBe(0); // raw sum (30 + gap*2 = -1970) clamps to 0
+  });
+
+  it("does not produce NaN/negative intrinsic size via computeIntrinsicSize's nested-frame path", () => {
+    // Nested auto-layout frame with fit_content sizing measured through the
+    // resolveEffectiveSize -> computeIntrinsicSize path (used when a parent
+    // lays out a fit_content child), not calculateFrameIntrinsicSize.
+    const child = frame(
+      { flexDirection: "column", gap: -500 },
+      { width: 999, height: 999 },
+      [rect("x", 20, 20), rect("y", 20, 20), rect("z", 20, 20)],
+      { id: "child", sizing: { widthMode: "fit_content", heightMode: "fit_content" } },
+    );
+    const parent = frame(
+      { flexDirection: "row" },
+      { width: 999, height: 999 },
+      [child as unknown as SceneNode],
+      { id: "parent" },
+    );
+    const result = byId(calculateFrameLayout(parent));
+    expect(Number.isNaN(result.child.height)).toBe(false);
+    expect(result.child.height).toBeGreaterThanOrEqual(0);
+  });
+
+  it("floors the fit_content row size at the frame's own padding, not 0, for an extreme negative gap", () => {
+    // The many-children + huge-negative-gap case must degrade to exactly the
+    // empty-frame size (padding sum), never below it — otherwise the frame's
+    // background/hit box would collapse below its own padding while the
+    // overlapping children still render outside it.
+    const padded = { paddingLeft: 20, paddingRight: 20 };
+    const empty = frame(
+      { flexDirection: "row", ...padded },
+      { width: 999, height: 100 },
+      [],
+    );
+    const emptySize = calculateFrameIntrinsicSize(empty, { fitWidth: true });
+    expect(emptySize.width).toBe(40); // padding only
+
+    const withChildren = frame(
+      { flexDirection: "row", gap: -1000, ...padded },
+      { width: 999, height: 100 },
+      [rect("a", 10, 40), rect("b", 10, 40)],
+    );
+    const size = calculateFrameIntrinsicSize(withChildren, { fitWidth: true });
+    // Content contribution (10 + 10 - 1000) floors at 0, then padding is
+    // added -> 40, matching the empty-frame result exactly.
+    expect(size.width).toBe(40);
+  });
+
+  it("large negative gap still shrinks the fit_content height in a column, floored at 0", () => {
+    const f = frame(
+      { flexDirection: "column", gap: -15 },
+      { width: 100, height: 999 },
+      [rect("a", 50, 40), rect("b", 50, 30)],
+    );
+    const size = calculateFrameIntrinsicSize(f, { fitHeight: true });
+    expect(size.height).toBe(55); // 40 + 30 - 15
+  });
+});

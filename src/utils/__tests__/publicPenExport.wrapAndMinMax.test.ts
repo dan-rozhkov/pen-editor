@@ -30,6 +30,14 @@ describe("publicPenExport: wrap / row-column gap", () => {
     expect(exported.gap).toBe(10);
   });
 
+  it("round-trips a negative gap (overlap) unchanged", () => {
+    const node = frame({
+      layout: { autoLayout: true, flexDirection: "row", gap: -10 },
+    });
+    const exported = exportNodes([node]).children[0];
+    expect(exported.gap).toBe(-10);
+  });
+
   it("omits wrap for a non-wrapping frame", () => {
     const node = frame({
       layout: { autoLayout: true, flexDirection: "row", gap: 10 },
