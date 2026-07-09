@@ -187,6 +187,11 @@ export function createClipboardActions(deps: ClipboardActionDeps) {
         : Array.from(e.clipboardData.items).filter((item) =>
             item.type.startsWith("image/"),
           );
+    // Extract the first raster File synchronously: the paste event's
+    // DataTransfer is only valid during synchronous dispatch, so getAsFile()
+    // must be called before any `await` (the Figma branch awaits a dynamic
+    // import). A File captured here stays readable afterwards.
+    const firstImageFile = imageItems[0]?.getAsFile() ?? null;
     const shouldPreferInternalClipboard =
       clipboardState.copiedNodes.length > 0 &&
       Date.now() - clipboardState.lastCopiedAt <= INTERNAL_CLIPBOARD_PRIORITY_MS;
@@ -211,21 +216,18 @@ export function createClipboardActions(deps: ClipboardActionDeps) {
           let recoveredImage = false;
           if (
             result.unresolvedImageCount > 0 &&
-            imageItems.length > 0 &&
+            firstImageFile &&
             result.nodes.length === 1 &&
             result.nodes[0].fill === "#cccccc"
           ) {
-            const file = imageItems[0]?.getAsFile();
-            if (file) {
-              try {
-                const url = await readBlobAsDataURL(file);
-                const node = result.nodes[0];
-                node.imageFill = { url, mode: "fill" };
-                delete node.fill;
-                recoveredImage = true;
-              } catch {
-                // keep the gray placeholder if the raster can't be read
-              }
+            try {
+              const url = await readBlobAsDataURL(firstImageFile);
+              const node = result.nodes[0];
+              node.imageFill = { url, mode: "fill" };
+              delete node.fill;
+              recoveredImage = true;
+            } catch {
+              // keep the gray placeholder if the raster can't be read
             }
           }
           applyFigmaPasteNodes({
