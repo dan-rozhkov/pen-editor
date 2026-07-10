@@ -27,11 +27,12 @@ describe("leftSidebarStore", () => {
   });
 
   it("toggles the expanded flag and persists it", () => {
+    useLeftSidebarStore.setState({ isExpanded: true });
+    expect(useLeftSidebarStore.getState().isExpanded).toBe(true);
+    useLeftSidebarStore.getState().toggleExpanded();
     expect(useLeftSidebarStore.getState().isExpanded).toBe(false);
+    expect(localStorage.getItem("left-sidebar-expanded")).toBe("false");
     useLeftSidebarStore.getState().toggleExpanded();
     expect(useLeftSidebarStore.getState().isExpanded).toBe(true);
-    expect(localStorage.getItem("left-sidebar-expanded")).toBe("true");
-    useLeftSidebarStore.getState().toggleExpanded();
-    expect(useLeftSidebarStore.getState().isExpanded).toBe(false);
   });
 });

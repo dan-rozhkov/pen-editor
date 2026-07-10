@@ -51,7 +51,8 @@ export const useLeftSidebarStore = create<LeftSidebarState>((set, get) => ({
   // Closed by default so mobile starts with only the rail visible.
   isPanelOpen: false,
   setPanelOpen: (open) => set({ isPanelOpen: open }),
-  isExpanded: localStorage.getItem(EXPANDED_STORAGE_KEY) === "true",
+  // Expanded by default; only a previously persisted "false" collapses it.
+  isExpanded: localStorage.getItem(EXPANDED_STORAGE_KEY) !== "false",
   toggleExpanded: () => {
     const next = !get().isExpanded;
     localStorage.setItem(EXPANDED_STORAGE_KEY, String(next));
