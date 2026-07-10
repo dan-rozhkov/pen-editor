@@ -15,7 +15,7 @@ import { buildTree } from "../types/scene";
 import { downloadDocument, downloadPublicPen, openFilePicker } from "../utils/fileUtils";
 import { useDocumentStore } from "../store/documentStore";
 import { applyOpenedDocument } from "../utils/openDocumentIntoEditor";
-import { parsePixsoJson } from "../utils/pixsoImportUtils";
+import { parsePixsoNodes } from "../utils/pixsoImportUtils";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -124,15 +124,19 @@ export function Toolbar() {
       return;
     }
     try {
-      const node = parsePixsoJson(jsonText);
-      addNode(node);
-      useSelectionStore.getState().select(node.id);
+      const nodes = parsePixsoNodes(jsonText);
+      if (nodes.length === 0) {
+        setError("No importable nodes found in JSON");
+        return;
+      }
+      nodes.forEach((node) => addNode(node));
+      useSelectionStore.getState().setSelectedIds(nodes.map((n) => n.id));
       const canvasEl = document.querySelector("[data-canvas]");
       const viewportWidth = canvasEl?.clientWidth ?? window.innerWidth - 480;
       const viewportHeight = canvasEl?.clientHeight ?? window.innerHeight;
       useViewportStore
         .getState()
-        .fitToContent([node], viewportWidth, viewportHeight);
+        .fitToContent(nodes, viewportWidth, viewportHeight);
       setImportOpen(false);
       setJsonText("");
       setError(null);

@@ -19,6 +19,8 @@ interface PenDocument {
   pages: PenPage[];
   variables?: Variable[];
   textStyles?: TextStyle[];
+  fillStyles?: FillStyle[];    // reusable named fill styles (see fills[].styleId)
+  effectStyles?: EffectStyle[]; // reusable named effect styles (see effectStyleId)
   activeTheme?: "light" | "dark";
   componentArtifacts?: Record<string, ComponentArtifact>;
 
@@ -236,8 +238,11 @@ interface TextNode extends BaseNode {
   lineHeight?: number; // multiplier, e.g. 1.2
   letterSpacing?: number; // px
   textTransform?: "none" | "uppercase" | "lowercase" | "capitalize";
+  paragraphSpacing?: number; // extra px after each hard-break paragraph
   truncateText?: boolean;
   maxLines?: number;
+  link?: TextLink; // { url: string; title?: string } — applies to whole node
+  fontVariations?: Record<string, number>; // variable-font axes, e.g. { wght: 530 }
   textStyleId?: string;
   textStyleOverrides?: string[];
 }
@@ -349,6 +354,9 @@ interface ConnectorNode extends BaseNode {
 `fills` is ordered bottom-to-top. If `fills` is present, it is the source of
 truth and legacy `fill`/`gradientFill`/`imageFill` fields are ignored.
 
+A `VideoPaint` (`{ type: "video"; video: VideoFill }`) also exists for
+video fills, but is out of scope for a typical Pixso design import.
+
 ```ts
 type Paint = SolidPaint | GradientPaint | ImagePaint | PatternPaint;
 
@@ -440,11 +448,11 @@ interface PerSideStroke {
 legacy single `effect`.
 
 ```ts
-type Effect = ShadowEffect | BlurEffect;
+type Effect = ShadowEffect | BlurEffect | BackgroundBlurEffect;
 
 interface ShadowEffect {
   type: "shadow";
-  shadowType: "outer" | "inner";
+  shadowType: "outer" | "inner"; // Pixso DROP_SHADOW -> outer, INNER_SHADOW -> inner
   color: string; // #RRGGBBAA recommended
   offset: { x: number; y: number };
   blur: number;
@@ -453,16 +461,28 @@ interface ShadowEffect {
   visible?: boolean;
 }
 
+// Layer blur — blurs the node itself (Pixso LAYER_BLUR).
 interface BlurEffect {
   type: "blur";
   radius: number;
   id?: string;
   visible?: boolean;
 }
+
+// Backdrop/background blur — blurs whatever is BEHIND the node, for
+// glassmorphism (Pixso BACKGROUND_BLUR). Supported natively; do NOT rasterize.
+interface BackgroundBlurEffect {
+  type: "background-blur";
+  radius: number;
+  id?: string;
+  visible?: boolean;
+}
 ```
 
-Background blur, layer blend isolation, advanced filter stacks, and effects
-that depend on pixels outside the node should be rasterized for exact import.
+Layer blend isolation, advanced filter stacks, and effects that depend on
+pixels outside the node in ways none of the above express should be rasterized
+for exact import. Drop shadow, inner shadow, layer blur, and background blur all
+map to native effects above.
 
 ## Layout contract
 
@@ -565,8 +585,28 @@ interface TextStyle {
 }
 ```
 
-Use `fillBinding`, `strokeBinding`, `fills[].colorBinding`, or `textStyleId`
-only when the referenced id exists in the same document.
+Reusable fill/effect styles (Figma-style "Color styles" / "Effect styles") are
+also supported at the document level and referenced by id from a node:
+
+```ts
+interface FillStyle {
+  id: string;
+  name: string;
+  paint: Paint; // one full paint (solid/gradient/image/pattern)
+}
+
+interface EffectStyle {
+  id: string;
+  name: string;
+  effects: Effect[]; // a full shadow/blur stack
+}
+```
+
+A paint layer references a fill style via `fills[].styleId`; a node references
+an effect style via `effectStyleId`. Use `fillBinding`, `strokeBinding`,
+`fills[].colorBinding`, `fills[].styleId`, `effectStyleId`, or `textStyleId`
+only when the referenced id exists in the same document (in `variables`,
+`fillStyles`, `effectStyles`, or `textStyles`).
 
 ## Layout grids
 
