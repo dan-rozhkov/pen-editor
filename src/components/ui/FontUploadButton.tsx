@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { MonitorArrowUpIcon } from "@phosphor-icons/react";
-import { IconButton } from "./IconButton";
 import { useCustomFontStore } from "@/store/customFontStore";
+import { IconButton } from "./IconButton";
 
 interface FontUploadButtonProps {
   /** Called with the registered family name once a font file is loaded. */

@@ -211,6 +211,7 @@ function TextStylesPopover({ node }: { node: TextNode }) {
         align="start"
         sideOffset={TYPOGRAPHY_POPOVER_PANEL_OFFSET}
         className="w-[240px] max-h-[360px] gap-0 overflow-hidden rounded-xl border-border-default p-0"
+        draggable
       >
         <div className="flex h-10 items-center justify-between border-b border-input px-3">
           <div className="text-xs font-semibold text-text-primary">Text styles</div>
@@ -364,7 +365,13 @@ function LinkPopover({ node, onUpdate }: { node: TextNode; onUpdate: (updates: P
           </IconButton>
         }
       />
-      <PopoverContent side="left" align="start" sideOffset={TYPOGRAPHY_POPOVER_PANEL_OFFSET} className="w-[240px] gap-2">
+      <PopoverContent
+        side="left"
+        align="start"
+        sideOffset={TYPOGRAPHY_POPOVER_PANEL_OFFSET}
+        className="w-[240px] gap-2"
+        draggable
+      >
         <div className="text-xs font-semibold text-text-primary">Link</div>
         <Input
           key={`${node.id}:${open}`}

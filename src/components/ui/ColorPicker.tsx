@@ -111,6 +111,7 @@ export function CustomColorPicker({
           sideOffset={20}
           className="w-[200px]"
           initialFocus={false}
+          draggable
         >
           <AriaColorPicker value={color} onChange={handleChange}>
             {/* Saturation / Brightness area */}

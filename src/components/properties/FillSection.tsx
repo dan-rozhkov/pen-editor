@@ -318,7 +318,7 @@ export function FillSection({
                         {paintSummary(paint)}
                       </span>
                     </PopoverTrigger>
-                    <PopoverContent>
+                    <PopoverContent draggable>
                       {/* Type + reorder */}
                       <div className="flex items-center gap-1">
                         <div className="min-w-0 flex-1">
