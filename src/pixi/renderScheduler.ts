@@ -30,7 +30,9 @@ import { useGuidesStore } from "@/store/guidesStore";
 import { useMeasureStore } from "@/store/measureStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useConnectorStore } from "@/store/connectorStore";
+import { usePenToolStore } from "@/store/penToolStore";
 import { usePixelGridStore } from "@/store/pixelGridStore";
+import { useStyleStore } from "@/store/styleStore";
 import { useUIThemeStore } from "@/store/uiThemeStore";
 import { useThemeStore } from "@/store/themeStore";
 import { subscribeOverlayState } from "./pixiOverlayState";
@@ -90,6 +92,13 @@ export function setupRenderScheduler(app: Application): () => void {
     useMeasureStore.subscribe(markActivity),
     useDrawModeStore.subscribe(markActivity),
     useConnectorStore.subscribe(markActivity),
+    // Pen tool draft/preview state (cursor tracking, anchor placement) lives
+    // outside sceneStore until the path is committed — without this the pen
+    // preview only repaints on the safety tick (multi-second perceived lag).
+    usePenToolStore.subscribe(markActivity),
+    // Shared fill/effect style edits repaint referencing nodes via pixiSync's
+    // theme-update pass (direct container mutation, no scene write).
+    useStyleStore.subscribe(markActivity),
     usePixelGridStore.subscribe(markActivity),
     useUIThemeStore.subscribe(markActivity),
     useThemeStore.subscribe(markActivity),
