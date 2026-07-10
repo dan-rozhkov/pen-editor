@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { TrashIcon, UploadSimpleIcon } from "@phosphor-icons/react";
+import { TrashIcon } from "@phosphor-icons/react";
 import {
   Combobox,
   ComboboxInput,
@@ -19,8 +19,6 @@ import { useCustomFontStore } from "@/store/customFontStore";
 import { Label } from "./label";
 import { InputGroup, InputGroupAddon } from "./input-group";
 
-const UPLOAD_FONT_ITEM_VALUE = "__upload_custom_font__";
-
 interface FontComboboxProps {
   label?: string;
   value: string;
@@ -33,10 +31,8 @@ export function FontCombobox({ label, value, onChange }: FontComboboxProps) {
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const inputGroupRef = useRef<HTMLDivElement>(null);
-  const fontFileInputRef = useRef<HTMLInputElement>(null);
 
   const customFonts = useCustomFontStore((s) => s.customFonts);
-  const addCustomFont = useCustomFontStore((s) => s.addCustomFont);
   const removeCustomFont = useCustomFontStore((s) => s.removeCustomFont);
 
   useEffect(() => {
@@ -113,21 +109,6 @@ export function FontCombobox({ label, value, onChange }: FontComboboxProps) {
     setOpen(false);
   };
 
-  const handleUploadClick = () => {
-    fontFileInputRef.current?.click();
-  };
-
-  const handleFontFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    // Reset immediately so re-selecting the same file later still fires onChange.
-    e.target.value = "";
-    if (!file) return;
-    const family = await addCustomFont(file);
-    if (family) {
-      handleSelectFont(family);
-    }
-  };
-
   const handleRemoveCustomFontPointerDown = (e: React.PointerEvent) => {
     // Stop base-ui's Combobox.Item from treating this as a selection press.
     e.stopPropagation();
@@ -154,12 +135,6 @@ export function FontCombobox({ label, value, onChange }: FontComboboxProps) {
       </div>
       <ComboboxContent>
         <ComboboxList>
-          <ComboboxItem value={UPLOAD_FONT_ITEM_VALUE} onClick={handleUploadClick}>
-            <span className="flex items-center gap-1.5 text-muted-foreground">
-              <UploadSimpleIcon className="size-3.5" />
-              Upload font…
-            </span>
-          </ComboboxItem>
           {customItems.length > 0 && (
             <>
               <div className="px-2 pt-1.5 pb-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -212,13 +187,6 @@ export function FontCombobox({ label, value, onChange }: FontComboboxProps) {
           <ComboboxEmpty>Type to search or enter custom font</ComboboxEmpty>
         </ComboboxList>
       </ComboboxContent>
-      <input
-        ref={fontFileInputRef}
-        type="file"
-        accept=".ttf,.otf,.woff,.woff2"
-        className="hidden"
-        onChange={handleFontFileChange}
-      />
     </Combobox>
   );
 

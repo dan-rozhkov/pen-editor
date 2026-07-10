@@ -37,6 +37,7 @@ import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { FontCombobox } from "@/components/ui/FontCombobox";
+import { FontUploadButton } from "@/components/ui/FontUploadButton";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -538,7 +539,14 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
     <IconContext.Provider value={{ weight: "light" }}>
       <PropertySection
         title="Typography"
-        action={<TextStylesPopover node={node} />}
+        action={
+          <div className="flex items-center gap-1">
+            <FontUploadButton
+              onUploaded={(family) => updateTypography({ fontFamily: family })}
+            />
+            <TextStylesPopover node={node} />
+          </div>
+        }
       >
       <PropertyRow>
         <FontCombobox

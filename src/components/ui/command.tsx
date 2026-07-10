@@ -22,7 +22,7 @@ function Command({
     <CommandPrimitive
       data-slot="command"
       className={cn(
-        "flex size-full flex-col overflow-hidden rounded-xl bg-popover p-1 text-popover-foreground",
+        "flex size-full flex-col overflow-hidden rounded-xl bg-background p-1 text-foreground",
         className,
       )}
       {...props}
@@ -55,6 +55,7 @@ function CommandDialog({
           "top-1/3 translate-y-0 overflow-hidden rounded-xl! p-0",
           className,
         )}
+        overlayClassName="bg-black/80"
         showCloseButton={showCloseButton}
       >
         {children}
