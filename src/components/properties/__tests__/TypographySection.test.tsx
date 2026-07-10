@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, within } from "@testing-library/react";
 import { TypographySection } from "../TypographySection";
 import { useTextStyleStore } from "@/store/textStyleStore";
 import type { TextNode } from "@/types/scene";
@@ -120,6 +120,67 @@ describe("<TypographySection />", () => {
       }
 
       expect(onUpdate).toHaveBeenCalledWith({ fontVariations: { wght: 530 } });
+    });
+  });
+
+  describe("OpenType features", () => {
+    function toggleCheckbox(name: string): HTMLInputElement {
+      return screen.getByRole("checkbox", { name }) as HTMLInputElement;
+    }
+
+    it("renders the toggle features unchecked and the select groups at their default option", () => {
+      render(<TypographySection node={textNode()} onUpdate={vi.fn()} />);
+      expect(toggleCheckbox("Discretionary ligatures").checked).toBe(false);
+      expect(toggleCheckbox("Small caps").checked).toBe(false);
+      expect(toggleCheckbox("Fractions").checked).toBe(false);
+      expect(toggleCheckbox("Slashed zero").checked).toBe(false);
+
+      const figureStyle = screen.getByText("Figure style").closest("div")!;
+      expect(within(figureStyle).getByRole("combobox").textContent).toContain("Default");
+      const figureSpacing = screen.getByText("Figure spacing").closest("div")!;
+      expect(within(figureSpacing).getByRole("combobox").textContent).toContain("Default");
+      const stylisticSet = screen.getByText("Stylistic set").closest("div")!;
+      expect(within(stylisticSet).getByRole("combobox").textContent).toContain("None");
+    });
+
+    it("reflects a checked toggle feature from fontFeatures", () => {
+      render(
+        <TypographySection node={textNode({ fontFeatures: { smcp: 1 } })} onUpdate={vi.fn()} />,
+      );
+      expect(toggleCheckbox("Small caps").checked).toBe(true);
+      expect(toggleCheckbox("Discretionary ligatures").checked).toBe(false);
+    });
+
+    it("emits onUpdate with the tag added when a toggle feature is checked", () => {
+      const onUpdate = vi.fn();
+      render(<TypographySection node={textNode()} onUpdate={onUpdate} />);
+      fireEvent.click(toggleCheckbox("Fractions"));
+      expect(onUpdate).toHaveBeenCalledWith({ fontFeatures: { frac: 1 } });
+    });
+
+    it("emits onUpdate with the tag removed when an already-checked toggle feature is unchecked", () => {
+      const onUpdate = vi.fn();
+      render(
+        <TypographySection
+          node={textNode({ fontFeatures: { dlig: 1, zero: 1 } })}
+          onUpdate={onUpdate}
+        />,
+      );
+      fireEvent.click(toggleCheckbox("Slashed zero"));
+      expect(onUpdate).toHaveBeenCalledWith({ fontFeatures: { dlig: 1 } });
+    });
+
+    it("shows the active option label for a set numeral-form/spacing selection", () => {
+      render(
+        <TypographySection
+          node={textNode({ fontFeatures: { onum: 1, tnum: 1 } })}
+          onUpdate={vi.fn()}
+        />,
+      );
+      const figureStyle = screen.getByText("Figure style").closest("div")!;
+      expect(within(figureStyle).getByRole("combobox").textContent).toContain("Oldstyle");
+      const figureSpacing = screen.getByText("Figure spacing").closest("div")!;
+      expect(within(figureSpacing).getByRole("combobox").textContent).toContain("Tabular");
     });
   });
 

@@ -661,6 +661,19 @@ export interface TextNode extends BaseNode {
   // when `fontFamily` is a known variable font (`getVariableFontAxes`); absent
   // (or the font isn't variable) means "use static fontWeight/fontStyle only".
   fontVariations?: Record<string, number>
+  // OpenType feature values, e.g. { dlig: 1, tnum: 1, ss03: 1 }. Keys are
+  // 4-char OpenType feature tags (see `utils/openTypeFeatures.ts` for the
+  // curated toggle/select tags with dedicated UI). Maps directly onto CSS
+  // `font-feature-settings` for HTML export and the inline contentEditable
+  // editor, both of which get full fidelity. Pixi's canvas-text renderer has
+  // no `font-feature-settings` support (canvas `ctx.font` has no slot for
+  // it) — tried approximating `smcp` via canvas's `font-variant: small-caps`
+  // token, but verified in-browser it renders as a plain uppercase
+  // substitution (full cap-height, not the reduced-size small-caps glyphs),
+  // which misrepresents the feature rather than approximating it. So
+  // `fontFeatures` is a fully documented no-op in the Pixi editor canvas;
+  // only the DOM-rendered paths (inline editor, HTML export) apply it.
+  fontFeatures?: Record<string, number>
   // Text transform (visual only, applied at render/measure time)
   textTransform?: TextTransform
   // Truncate overflowing text with an ellipsis ("…"). Figma "Truncate text".

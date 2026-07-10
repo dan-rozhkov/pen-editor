@@ -24,6 +24,9 @@ export function buildFontString(node: TextNode): string {
   const style = node.fontStyle ?? 'normal'
   // Mirror the Pixi renderer: the `wght` variable-font axis overrides the
   // static weight, so measurement (wrapping/auto-size) matches what's drawn.
+  // `fontFeatures` (OpenType feature tags) has no canvas font-string
+  // equivalent — see `TextNode.fontFeatures`'s doc comment — so it does not
+  // participate in measurement, matching the Pixi renderer's degradation.
   const weight = resolveEffectiveFontWeight(node.fontVariations, node.fontWeight)
   const size = node.fontSize ?? 16
   const family = node.fontFamily ?? 'Arial'

@@ -7,6 +7,7 @@ import { getRenderableFills, getRenderableEffects, getPrimarySolidPaint } from "
 import { imageModeToCssSize, fillModeToObjectFit } from "@/lib/cssBackground";
 import { cropRectToBackgroundCss, isFullCropRect, coverPixelRect, containPixelRect, clampCropRect, FULL_CROP_RECT } from "@/lib/imageCrop/cropRect";
 import { toFontVariationSettingsCss } from "@/utils/variableFont";
+import { toFontFeatureSettingsCss } from "@/utils/openTypeFeatures";
 import { hasEffectiveUnderline, TEXT_LINK_COLOR } from "@/lib/textLink";
 import { parseYouTubeId, youTubeEmbedUrl } from "@/lib/video/youtube";
 
@@ -156,6 +157,10 @@ export function generateTextStyles(node: TextNode): Record<string, string> {
   const fontVariationSettings = toFontVariationSettingsCss(node.fontVariations);
   if (fontVariationSettings) {
     styles["font-variation-settings"] = fontVariationSettings;
+  }
+  const fontFeatureSettings = toFontFeatureSettingsCss(node.fontFeatures);
+  if (fontFeatureSettings) {
+    styles["font-feature-settings"] = fontFeatureSettings;
   }
   if (node.textAlign) {
     styles["text-align"] = node.textAlign;

@@ -362,6 +362,15 @@ export function buildTextStyle(node: TextNode): TextStyle {
     fontSize: fontSize,
     fontWeight: resolveFontWeight(node) as TextStyle["fontWeight"],
     fontStyle: (node.fontStyle as TextStyle["fontStyle"]) ?? "normal",
+    // `node.fontFeatures` (OpenType feature tags) is intentionally not
+    // applied here. Pixi's `TextStyle.fontVariant` can request canvas
+    // `font-variant: small-caps`, which *parses* — but verified in-browser
+    // this renders as a plain uppercase substitution (full cap-height, no
+    // reduced-size small-caps glyphs), which would misrepresent the
+    // feature rather than approximate it. So every curated feature is a
+    // documented no-op in Pixi; the DOM-rendered `InlineTextEditor` and
+    // HTML/CSS export apply the real `font-feature-settings` string and get
+    // correct glyphs wherever the loaded font actually implements them.
     fill: fillColor,
     // Lines are pre-wrapped via wrapTextToLines, so disable Pixi's own wrapper.
     wordWrap: false,

@@ -19,6 +19,7 @@ import { computeParagraphMarkerInfos } from '../lib/textLists/markers'
 import { changeIndentLevel, continueListOnEnter, toggleListType } from '../lib/textLists/listEditing'
 import { measureTextWidth } from '../utils/textWrap'
 import { toFontVariationSettingsCss } from '../utils/variableFont'
+import { toFontFeatureSettingsCss } from '../utils/openTypeFeatures'
 import { hasEffectiveUnderline, TEXT_LINK_COLOR } from '../lib/textLink'
 
 interface InlineTextEditorProps {
@@ -357,6 +358,7 @@ export function InlineTextEditor({
   const fontFamily = toCssFontFamily(node.fontFamily ?? 'Arial')
   const editorFontShorthand = `${fontStyle} normal ${fontWeight} ${screenFontSize}px ${fontFamily}`
   const fontVariationSettings = toFontVariationSettingsCss(node.fontVariations)
+  const fontFeatureSettings = toFontFeatureSettingsCss(node.fontFeatures)
 
   // Width mode
   const isAutoWidth = node.textWidthMode === 'auto' || !node.textWidthMode
@@ -704,6 +706,7 @@ export function InlineTextEditor({
         font: editorFontShorthand,
         fontSynthesis: 'none',
         fontVariationSettings,
+        fontFeatureSettings,
         textDecoration: textDecorationParts.join(' ') || undefined,
         lineHeight: lineHeightPx,
         letterSpacing: screenLetterSpacing,

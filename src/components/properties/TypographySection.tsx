@@ -28,6 +28,7 @@ import {
 } from "@phosphor-icons/react";
 import type { SceneNode, TextNode } from "@/types/scene";
 import {
+  CheckboxInput,
   NumberInput,
   PropertyRow,
   PropertySection,
@@ -52,6 +53,14 @@ import { toggleListType } from "@/lib/textLists/listEditing";
 import { isTypingTarget } from "@/components/canvas/keyboardShortcutUtils";
 import { Slider } from "@/components/ui/slider";
 import { getVariableFontAxes, type FontAxis } from "@/utils/variableFont";
+import {
+  OPEN_TYPE_TOGGLE_FEATURES,
+  OPEN_TYPE_SELECT_GROUPS,
+  withToggleFeature,
+  getGroupSelection,
+  withGroupSelection,
+  type OpenTypeSelectGroup,
+} from "@/utils/openTypeFeatures";
 
 interface TypographySectionProps {
   node: TextNode;
@@ -60,6 +69,8 @@ interface TypographySectionProps {
 
 const STYLE_MANAGED_KEYS: readonly string[] = TEXT_STYLE_PROPERTY_KEYS;
 const TYPOGRAPHY_POPOVER_PANEL_OFFSET = 252;
+/** `SelectInput` only accepts string values — this sentinel stands in for an `OpenTypeSelectGroup`'s "default/none" (`tag: null`) option. */
+const OPEN_TYPE_GROUP_DEFAULT_VALUE = "__default__";
 
 function textStyleMeta(style: TextStyle): string {
   const metrics = [
@@ -467,6 +478,34 @@ function VariableAxisSlider({
   );
 }
 
+/** One compact select for a mutually-exclusive `OpenTypeSelectGroup` (numeral form/spacing, stylistic sets). */
+function OpenTypeGroupSelect({
+  group,
+  fontFeatures,
+  onChange,
+}: {
+  group: OpenTypeSelectGroup;
+  fontFeatures: Record<string, number> | undefined;
+  onChange: (features: Record<string, number>) => void;
+}) {
+  const value = getGroupSelection(fontFeatures, group) ?? OPEN_TYPE_GROUP_DEFAULT_VALUE;
+  return (
+    <SelectInput
+      label={group.label}
+      labelOutside
+      value={value}
+      options={group.options.map((option) => ({
+        value: option.tag ?? OPEN_TYPE_GROUP_DEFAULT_VALUE,
+        label: option.label,
+      }))}
+      onChange={(next) => {
+        const tag = next === OPEN_TYPE_GROUP_DEFAULT_VALUE ? null : next;
+        onChange(withGroupSelection(fontFeatures, group, tag));
+      }}
+    />
+  );
+}
+
 export function TypographySection({ node, onUpdate }: TypographySectionProps) {
   const detachStyleFromNode = useTextStyleStore((s) => s.detachStyleFromNode);
 
@@ -623,6 +662,43 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
           </div>
         </PropertyRow>
       )}
+      <div className="flex flex-col gap-1.5">
+        <div className="text-[10px] font-normal text-text-muted">
+          OpenType
+        </div>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+          {OPEN_TYPE_TOGGLE_FEATURES.map((feature) => (
+            <CheckboxInput
+              key={feature.tag}
+              label={feature.label}
+              checked={node.fontFeatures?.[feature.tag] === 1}
+              onChange={(checked) =>
+                updateTypography({
+                  fontFeatures: withToggleFeature(node.fontFeatures, feature.tag, checked),
+                })
+              }
+            />
+          ))}
+        </div>
+        <PropertyRow>
+          {OPEN_TYPE_SELECT_GROUPS.filter((g) => g.key !== "stylisticSet").map((group) => (
+            <OpenTypeGroupSelect
+              key={group.key}
+              group={group}
+              fontFeatures={node.fontFeatures}
+              onChange={(fontFeatures) => updateTypography({ fontFeatures })}
+            />
+          ))}
+        </PropertyRow>
+        {OPEN_TYPE_SELECT_GROUPS.filter((g) => g.key === "stylisticSet").map((group) => (
+          <OpenTypeGroupSelect
+            key={group.key}
+            group={group}
+            fontFeatures={node.fontFeatures}
+            onChange={(fontFeatures) => updateTypography({ fontFeatures })}
+          />
+        ))}
+      </div>
       <PropertyRow>
         <div className="flex items-center gap-1 flex-1">
           <IconButton
