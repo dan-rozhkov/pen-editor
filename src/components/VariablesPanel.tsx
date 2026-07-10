@@ -3,7 +3,7 @@ import clsx from "clsx";
 import { useVariableStore } from "../store/variableStore";
 import { generateVariableId, getVariableValue } from "../types/variable";
 import type { Variable, VariableType, ThemeName } from "../types/variable";
-import { Dialog, DialogContent, DialogTitle } from "./ui/dialog";
+import { useLeftSidebarStore } from "../store/leftSidebarStore";
 import { CustomColorPicker } from "./ui/ColorPicker";
 import {
   Table,
@@ -13,13 +13,15 @@ import {
   TableHead,
   TableCell,
 } from "./ui/table";
-import { PlusIcon, TrashIcon } from "@phosphor-icons/react";
+import { PlusIcon, TrashIcon, ArrowLineLeftIcon } from "@phosphor-icons/react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
 } from "./ui/dropdown-menu";
+import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip";
+import { IconButton } from "./ui/IconButton";
 
 // Type badge labels and colors
 const typeBadge: Record<VariableType, { label: string; className: string }> = {
@@ -207,22 +209,24 @@ function VariableRow({ variable }: { variable: Variable }) {
       {/* Actions */}
       <TableCell className="py-2 px-3 border-l border-border-light">
         {hovered && (
-          <button
-            className="p-1 rounded hover:bg-white/10 text-text-muted hover:text-red-400 transition-colors"
-            onClick={() => deleteVariable(variable.id)}
-            title="Delete variable"
-          >
-            <TrashIcon className="size-3.5" />
-          </button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  className="p-1 rounded hover:bg-white/10 text-text-muted hover:text-red-400 transition-colors"
+                  onClick={() => deleteVariable(variable.id)}
+                  title="Delete variable"
+                >
+                  <TrashIcon className="size-3.5" />
+                </button>
+              }
+            />
+            <TooltipContent>Delete variable</TooltipContent>
+          </Tooltip>
         )}
       </TableCell>
     </TableRow>
   );
-}
-
-interface VariablesDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
 }
 
 // Dropdown menu items for adding a variable by type
@@ -265,9 +269,16 @@ function AddVariableDropdown({
   );
 }
 
-export function VariablesDialog({ open, onOpenChange }: VariablesDialogProps) {
+/**
+ * Standalone panel body (no Dialog wrapper) rendered inside the left sidebar's
+ * "Variables" section — mirrors `ChatPanelContent`'s shape (self-contained
+ * header incl. expand/collapse, body below).
+ */
+export function VariablesPanelContent() {
   const variables = useVariableStore((s) => s.variables);
   const addVariable = useVariableStore((s) => s.addVariable);
+  const isExpanded = useLeftSidebarStore((s) => s.isExpanded);
+  const toggleExpanded = useLeftSidebarStore((s) => s.toggleExpanded);
 
   const handleAddVariable = (type: VariableType) => {
     const defaultVal = defaultValues[type];
@@ -286,69 +297,83 @@ export function VariablesDialog({ open, onOpenChange }: VariablesDialogProps) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="sm:max-w-2xl max-h-[80vh] flex flex-col gap-0 p-0"
-        showCloseButton={false}
-        overlayClassName="backdrop-blur-none bg-black/40"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border-light">
-          <DialogTitle>Variables</DialogTitle>
-          <AddVariableDropdown onAdd={handleAddVariable}>
-            <button
-              className="p-1 rounded hover:bg-secondary transition-colors text-text-muted hover:text-text-primary"
-              title="Add variable"
-            >
-              <PlusIcon className="size-4" />
-            </button>
-          </AddVariableDropdown>
-        </div>
+    <div className="w-full h-full bg-surface-panel flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border-default shrink-0">
+        <span className="text-sm font-medium text-text-primary flex-1">
+          Variables
+        </span>
+        <AddVariableDropdown onAdd={handleAddVariable}>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  className="p-1 rounded hover:bg-secondary transition-colors text-text-muted hover:text-text-primary"
+                  title="Add variable"
+                >
+                  <PlusIcon className="size-4" />
+                </button>
+              }
+            />
+            <TooltipContent>Add variable</TooltipContent>
+          </Tooltip>
+        </AddVariableDropdown>
+        <IconButton
+          variant="ghost"
+          size="icon-sm"
+          onClick={toggleExpanded}
+          tooltip={isExpanded ? "Collapse panel" : "Expand panel"}
+        >
+          <ArrowLineLeftIcon
+            size={16}
+            className={isExpanded ? "" : "rotate-180"}
+          />
+        </IconButton>
+      </div>
 
-        {/* Table */}
-        <div className="flex-1 overflow-y-auto">
-          <Table className="border-collapse select-none table-fixed">
-            <TableHeader>
-              <TableRow className="border-border-light bg-surface-panel sticky top-0 hover:bg-surface-panel">
-                <TableHead className="w-[40%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto">
-                  Name
-                </TableHead>
-                <TableHead className="w-[25%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
-                  Light
-                </TableHead>
-                <TableHead className="w-[25%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
-                  Dark
-                </TableHead>
-                <TableHead className="w-[10%] h-auto border-l border-border-light" />
+      {/* Table */}
+      <div className="flex-1 overflow-y-auto">
+        <Table className="border-collapse select-none table-fixed">
+          <TableHeader>
+            <TableRow className="border-border-light bg-surface-panel sticky top-0 hover:bg-surface-panel">
+              <TableHead className="w-[40%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto">
+                Name
+              </TableHead>
+              <TableHead className="w-[25%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
+                Light
+              </TableHead>
+              <TableHead className="w-[25%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
+                Dark
+              </TableHead>
+              <TableHead className="w-[10%] h-auto border-l border-border-light" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {variables.length === 0 ? (
+              <TableRow className="hover:bg-transparent">
+                <TableCell
+                  colSpan={4}
+                  className="text-center text-text-disabled text-xs py-12"
+                >
+                  No variables yet
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {variables.length === 0 ? (
-                <TableRow className="hover:bg-transparent">
-                  <TableCell
-                    colSpan={4}
-                    className="text-center text-text-disabled text-xs py-12"
-                  >
-                    No variables yet
-                  </TableCell>
-                </TableRow>
-              ) : (
-                variables.map((v) => <VariableRow key={v.id} variable={v} />)
-              )}
-            </TableBody>
-          </Table>
-        </div>
+            ) : (
+              variables.map((v) => <VariableRow key={v.id} variable={v} />)
+            )}
+          </TableBody>
+        </Table>
+      </div>
 
-        {/* Footer */}
-        <div className="border-t border-border-light px-4 py-3">
-          <AddVariableDropdown onAdd={handleAddVariable} side="top">
-            <button className="flex items-center gap-2 text-xs text-text-muted hover:text-text-primary transition-colors">
-              <PlusIcon className="size-4" weight="light" />
-              Create variable
-            </button>
-          </AddVariableDropdown>
-        </div>
-      </DialogContent>
-    </Dialog>
+      {/* Footer */}
+      <div className="border-t border-border-light px-4 py-3">
+        <AddVariableDropdown onAdd={handleAddVariable} side="top">
+          <button className="flex items-center gap-2 text-xs text-text-muted hover:text-text-primary transition-colors">
+            <PlusIcon className="size-4" weight="light" />
+            Create variable
+          </button>
+        </AddVariableDropdown>
+      </div>
+    </div>
   );
 }

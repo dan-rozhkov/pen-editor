@@ -15,7 +15,7 @@ import {
   PropertySection,
   SelectInput,
 } from "@/components/ui/PropertyInputs";
-import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   DropdownMenu,
@@ -92,18 +92,18 @@ function BlendModeDropdown({
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button
+          <IconButton
             type="button"
             variant="ghost"
             size="icon-sm"
-            title={`Blend mode: ${label}`}
-            aria-label={`Blend mode: ${label}`}
+            tooltip={`Blend mode: ${label}`}
             className="text-text-primary hover:bg-secondary"
-          />
+          >
+            <DropHalfIcon />
+          </IconButton>
         }
-      >
-        <DropHalfIcon />
-      </DropdownMenuTrigger>
+      />
+
       <DropdownMenuContent align="end">
         <DropdownMenuRadioGroup
           value={value ?? "normal"}
@@ -236,9 +236,9 @@ export function FillSection({
     <PropertySection
       title="Fill"
       action={
-        <Button variant="ghost" size="icon-sm" onClick={handleAddFill} title="Add fill">
+        <IconButton variant="ghost" size="icon-sm" onClick={handleAddFill} tooltip="Add fill">
           <PlusIcon />
-        </Button>
+        </IconButton>
       }
     >
       {isMixed ? (
@@ -330,24 +330,24 @@ export function FillSection({
                             }
                           />
                         </div>
-                        <Button
+                        <IconButton
                           variant="ghost"
                           size="icon-sm"
                           disabled={!canMoveUp}
                           onClick={() => commit(moveItem(fills, arrayIndex, 1))}
-                          title="Move up"
+                          tooltip="Move up"
                         >
                           <ArrowUp />
-                        </Button>
-                        <Button
+                        </IconButton>
+                        <IconButton
                           variant="ghost"
                           size="icon-sm"
                           disabled={!canMoveDown}
                           onClick={() => commit(moveItem(fills, arrayIndex, -1))}
-                          title="Move down"
+                          tooltip="Move down"
                         >
                           <ArrowDown />
-                        </Button>
+                        </IconButton>
                         <BlendModeDropdown
                           value={paint.blendMode ?? "normal"}
                           onChange={(nextBlendMode) =>
@@ -461,22 +461,22 @@ export function FillSection({
                     </PopoverContent>
                   </Popover>
 
-                  <Button
+                  <IconButton
                     variant="ghost"
                     size="icon-sm"
                     onClick={() => commit(toggleFillVisibleAt(fills, arrayIndex))}
-                    title={isVisible ? "Hide fill" : "Show fill"}
+                    tooltip={isVisible ? "Hide fill" : "Show fill"}
                   >
                     {isVisible ? <Eye /> : <EyeSlash />}
-                  </Button>
-                  <Button
+                  </IconButton>
+                  <IconButton
                     variant="ghost"
                     size="icon-sm"
                     onClick={() => commit(removeFillAt(fills, arrayIndex))}
-                    title="Remove fill"
+                    tooltip="Remove fill"
                   >
                     <MinusIcon />
-                  </Button>
+                  </IconButton>
 
                   {rowIndex === 0 && (
                     <OverrideIndicator

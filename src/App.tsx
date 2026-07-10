@@ -20,6 +20,7 @@ import { useOnlineStatus } from "./hooks/useOnlineStatus";
 import { OfflineBanner } from "./components/pwa/OfflineBanner";
 import { PwaUpdateToast } from "./components/pwa/PwaUpdateToast";
 import { Toaster } from "./components/ui/sonner";
+import { TooltipProvider } from "./components/ui/tooltip";
 import "./store/uiThemeStore"; // Initialize UI theme (applies .dark class before first render)
 
 const PixiCanvas = lazy(() => import("./pixi/PixiCanvas").then((m) => ({ default: m.PixiCanvas })));
@@ -55,6 +56,11 @@ function App() {
   }, []);
 
   return (
+    // Single app-wide TooltipProvider: shares hover-delay grouping across
+    // every IconButton/Tooltip so sweeping across a row of icon buttons
+    // doesn't re-trigger the open delay on each one. Do not mount another
+    // provider closer to the leaves.
+    <TooltipProvider delay={400} closeDelay={0}>
     <div className="w-full h-full relative overflow-hidden">
       {/* Canvas — always full window, behind everything. `isolate` creates a
           stacking context so the embed DOM overlay (and other canvas overlays,
@@ -132,6 +138,7 @@ function App() {
         </div>
       )}
     </div>
+    </TooltipProvider>
   );
 }
 

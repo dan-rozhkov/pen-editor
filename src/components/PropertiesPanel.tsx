@@ -2,9 +2,6 @@ import { useState, useMemo } from "react";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useVariableStore } from "@/store/variableStore";
-import { useVariablesDialogStore } from "@/store/variablesDialogStore";
-import { useTextStylesDialogStore } from "@/store/textStylesDialogStore";
-import { useStylesDialogStore } from "@/store/stylesDialogStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useViewportStore } from "@/store/viewportStore";
 import type { SceneNode, FrameNode } from "@/types/scene";
@@ -22,9 +19,6 @@ import { MultiSelectPropertyEditor } from "@/components/properties/MultiSelectPr
 import { PageProperties } from "@/components/properties/PageProperties";
 import { PencilToolProperties } from "@/components/properties/PencilToolProperties";
 import { PropertyEditor } from "@/components/properties/PropertyEditor";
-import { VariablesDialog } from "@/components/VariablesPanel";
-import { TextStylesDialog } from "@/components/TextStylesPanel";
-import { StylesDialog } from "@/components/StylesPanel";
 import { CaretRightIcon } from "@phosphor-icons/react";
 import clsx from "clsx";
 
@@ -179,12 +173,6 @@ export function PropertiesPanel() {
   const { selectedIds, instanceContext } = useSelectionStore();
   const variables = useVariableStore((s) => s.variables);
   const activeTool = useDrawModeStore((s) => s.activeTool);
-  const variablesOpen = useVariablesDialogStore((s) => s.open);
-  const setVariablesOpen = useVariablesDialogStore((s) => s.setOpen);
-  const textStylesOpen = useTextStylesDialogStore((s) => s.open);
-  const setTextStylesOpen = useTextStylesDialogStore((s) => s.setOpen);
-  const stylesOpen = useStylesDialogStore((s) => s.open);
-  const setStylesOpen = useStylesDialogStore((s) => s.setOpen);
 
   const selectedNode =
     selectedIds.length === 1 ? findNodeById(nodes, selectedIds[0]) : null;
@@ -261,9 +249,6 @@ export function PropertiesPanel() {
           />
         )}
       </div>
-      <VariablesDialog open={variablesOpen} onOpenChange={setVariablesOpen} />
-      <TextStylesDialog open={textStylesOpen} onOpenChange={setTextStylesOpen} />
-      <StylesDialog open={stylesOpen} onOpenChange={setStylesOpen} />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import type { ComponentPropertyDef, ComponentPropertyType, FrameNode } from "@/t
 import { generateId } from "@/types/scene";
 import { useSceneStore } from "@/store/sceneStore";
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
 import { CheckboxInput, PropertySection, SelectInput, TextInput } from "@/components/ui/PropertyInputs";
 import { TrashIcon } from "@phosphor-icons/react";
 
@@ -68,16 +69,15 @@ export function ComponentPropertiesSection({ node }: ComponentPropertiesSectionP
                   placeholder="Property name"
                 />
               </div>
-              <Button
+              <IconButton
+                tooltip="Remove property"
                 type="button"
                 variant="secondary"
                 size="icon-sm"
                 onClick={() => removeProperty(property.id)}
-                title="Remove property"
-                aria-label="Remove property"
               >
                 <TrashIcon size={14} />
-              </Button>
+              </IconButton>
             </div>
             <SelectInput
               label="Type"

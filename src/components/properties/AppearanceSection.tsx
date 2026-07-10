@@ -8,6 +8,7 @@ import { generatePolygonPoints, isStarRatio } from "@/utils/polygonUtils";
 import { hasPerCornerRadius } from "@/utils/renderUtils";
 import { Angle, Asterisk, CornersOut } from "@phosphor-icons/react";
 import clsx from "clsx";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 interface AppearanceSectionProps {
   node: SceneNode;
@@ -103,19 +104,28 @@ export function AppearanceSection({
           />
         )}
         {showCornerRadius && (
-          <button
-            type="button"
-            title={cornerMode === "unified" ? "Per corner radius" : "Unified radius"}
-            className={clsx(
-              "shrink-0 flex items-center justify-center w-6 h-6 rounded self-end border border-transparent",
-              cornerMode === "per-corner"
-                ? "border-border-default bg-surface-panel text-text-primary hover:bg-surface-panel"
-                : "text-text-muted hover:bg-secondary"
-            )}
-            onClick={() => handleModeChange(cornerMode === "unified" ? "per-corner" : "unified")}
-          >
-            <CornersOut size={18} />
-          </button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  title={cornerMode === "unified" ? "Per corner radius" : "Unified radius"}
+                  className={clsx(
+                    "shrink-0 flex items-center justify-center w-6 h-6 rounded self-end border border-transparent",
+                    cornerMode === "per-corner"
+                      ? "border-border-default bg-surface-panel text-text-primary hover:bg-surface-panel"
+                      : "text-text-muted hover:bg-secondary"
+                  )}
+                  onClick={() => handleModeChange(cornerMode === "unified" ? "per-corner" : "unified")}
+                >
+                  <CornersOut size={18} />
+                </button>
+              }
+            />
+            <TooltipContent>
+              <span>{cornerMode === "unified" ? "Per corner radius" : "Unified radius"}</span>
+            </TooltipContent>
+          </Tooltip>
         )}
         {polygonNode && !isStar && (
           <NumberInput

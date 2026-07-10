@@ -8,6 +8,11 @@ import type { SceneNode, FrameNode, GroupNode } from "../../types/scene";
 import { NodeIcon, EyeIcon, ChevronIcon } from "./LayerIcons";
 import { getDisplayName, selectionFromLayersRef } from "./layerTypes";
 import type { DragState, DropPosition } from "./layerTypes";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 
 function isSlotFrame(node: SceneNode): boolean {
   return node.type === "frame" && !!(node as FrameNode).isSlot;
@@ -239,12 +244,22 @@ export const LayerItem = memo(function LayerItem({
       >
         <div className="flex items-center gap-1 flex-1">
           {hasChildren ? (
-            <button
-              className="bg-transparent border-none cursor-pointer p-0.5 flex items-center justify-center rounded opacity-0 group-hover/layers:opacity-100 hover:bg-white/10"
-              onClick={handleChevronClick}
-            >
-              <ChevronIcon expanded={isExpanded} />
-            </button>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    className="bg-transparent border-none cursor-pointer p-0.5 flex items-center justify-center rounded opacity-0 group-hover/layers:opacity-100 hover:bg-white/10"
+                    onClick={handleChevronClick}
+                    aria-label={isExpanded ? "Collapse layer" : "Expand layer"}
+                  >
+                    <ChevronIcon expanded={isExpanded} />
+                  </button>
+                }
+              />
+              <TooltipContent side="right">
+                {isExpanded ? "Collapse" : "Expand"}
+              </TooltipContent>
+            </Tooltip>
           ) : (
             <div className="w-4" />
           )}
@@ -299,15 +314,24 @@ export const LayerItem = memo(function LayerItem({
           {isSelected && (
             <div className="absolute inset-0 pointer-events-none bg-accent-selection group-hover:bg-accent-selection/80" />
           )}
-          <button
-            className={clsx(
-              "relative bg-transparent border-none cursor-pointer p-1 flex items-center justify-center rounded group-hover:opacity-100 opacity-0",
-            )}
-            onClick={handleVisibilityClick}
-            title={isVisible ? "Hide layer" : "Show layer"}
-          >
-            <EyeIcon visible={isVisible} />
-          </button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  className={clsx(
+                    "relative bg-transparent border-none cursor-pointer p-1 flex items-center justify-center rounded group-hover:opacity-100 opacity-0",
+                  )}
+                  onClick={handleVisibilityClick}
+                  title={isVisible ? "Hide layer" : "Show layer"}
+                >
+                  <EyeIcon visible={isVisible} />
+                </button>
+              }
+            />
+            <TooltipContent side="right">
+              {isVisible ? "Hide layer" : "Show layer"}
+            </TooltipContent>
+          </Tooltip>
         </div>
     </div>
   );

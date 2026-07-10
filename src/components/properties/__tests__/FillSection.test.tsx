@@ -28,14 +28,11 @@ vi.mock("@/components/ui/popover", () => ({
 }));
 vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  DropdownMenuTrigger: ({ children, render }: { children?: ReactNode; render: ReactNode }) => (
-    <button
-      {...((render as { props?: Record<string, unknown> }).props ?? {})}
-      type="button"
-    >
-      {children}
-    </button>
-  ),
+  // `render` is the actual trigger element (e.g. an <IconButton>) — render it
+  // directly so its own logic (title/tooltip wiring) runs for real, instead of
+  // just lifting its props onto a bare <button> (which broke once the trigger
+  // became a component that computes `title` internally from `tooltip`).
+  DropdownMenuTrigger: ({ render }: { children?: ReactNode; render: ReactNode }) => render,
   DropdownMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   DropdownMenuRadioGroup: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   DropdownMenuRadioItem: ({ children }: { children: ReactNode }) => <div>{children}</div>,

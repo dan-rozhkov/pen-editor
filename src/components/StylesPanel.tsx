@@ -8,9 +8,10 @@ import {
 } from "@/types/style";
 import type { Paint } from "@/types/scene";
 import { createSolidPaint, createShadowEffect } from "@/utils/fillUtils";
-import { Dialog, DialogContent, DialogTitle } from "./ui/dialog";
+import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import { CustomColorPicker } from "./ui/ColorPicker";
-import { PlusIcon, TrashIcon } from "@phosphor-icons/react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip";
+import { PlusIcon, TrashIcon, ArrowLineLeftIcon } from "@phosphor-icons/react";
 import { buildCSSGradient } from "@/utils/gradientUtils";
 import {
   DropdownMenu,
@@ -18,6 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
+import { IconButton } from "./ui/IconButton";
 
 /** Inline editable name cell (mirrors TextStylesPanel/VariablesPanel EditableCell). */
 function EditableName({
@@ -126,16 +128,23 @@ function FillStyleRow({ style }: { style: FillStyle }) {
       <span className="text-[11px] text-text-muted font-mono truncate w-28 text-right">
         {paintTypeLabel(paint)}
       </span>
-      <button
-        className={
-          "p-1 rounded hover:bg-white/10 text-text-muted hover:text-red-400 transition-colors " +
-          (hovered ? "opacity-100" : "opacity-0")
-        }
-        onClick={() => deleteFillStyle(style.id)}
-        title="Delete fill style"
-      >
-        <TrashIcon className="size-3.5" />
-      </button>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              className={
+                "p-1 rounded hover:bg-white/10 text-text-muted hover:text-red-400 transition-colors " +
+                (hovered ? "opacity-100" : "opacity-0")
+              }
+              onClick={() => deleteFillStyle(style.id)}
+              title="Delete fill style"
+            >
+              <TrashIcon className="size-3.5" />
+            </button>
+          }
+        />
+        <TooltipContent>Delete fill style</TooltipContent>
+      </Tooltip>
     </div>
   );
 }
@@ -176,30 +185,39 @@ function EffectStyleRow({ style }: { style: EffectStyle }) {
         <EditableName value={style.name} onCommit={(name) => updateEffectStyle(style.id, { name })} />
       </div>
       <span className="text-[11px] text-text-muted truncate w-28 text-right">{summary || "Empty"}</span>
-      <button
-        className={
-          "p-1 rounded hover:bg-white/10 text-text-muted hover:text-red-400 transition-colors " +
-          (hovered ? "opacity-100" : "opacity-0")
-        }
-        onClick={() => deleteEffectStyle(style.id)}
-        title="Delete effect style"
-      >
-        <TrashIcon className="size-3.5" />
-      </button>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              className={
+                "p-1 rounded hover:bg-white/10 text-text-muted hover:text-red-400 transition-colors " +
+                (hovered ? "opacity-100" : "opacity-0")
+              }
+              onClick={() => deleteEffectStyle(style.id)}
+              title="Delete effect style"
+            >
+              <TrashIcon className="size-3.5" />
+            </button>
+          }
+        />
+        <TooltipContent>Delete effect style</TooltipContent>
+      </Tooltip>
     </div>
   );
 }
 
-interface StylesDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}
-
-export function StylesDialog({ open, onOpenChange }: StylesDialogProps) {
+/**
+ * Standalone panel body (no Dialog wrapper) rendered inside the left sidebar's
+ * "Styles" section — mirrors `ChatPanelContent`'s shape (self-contained
+ * header incl. expand/collapse, body below).
+ */
+export function StylesPanelContent() {
   const fillStyles = useStyleStore((s) => s.fillStyles);
   const effectStyles = useStyleStore((s) => s.effectStyles);
   const addFillStyle = useStyleStore((s) => s.addFillStyle);
   const addEffectStyle = useStyleStore((s) => s.addEffectStyle);
+  const isExpanded = useLeftSidebarStore((s) => s.isExpanded);
+  const toggleExpanded = useLeftSidebarStore((s) => s.toggleExpanded);
 
   const handleAddFill = () => {
     const paint: Paint = createSolidPaint("#4a90d9");
@@ -215,39 +233,47 @@ export function StylesDialog({ open, onOpenChange }: StylesDialogProps) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="sm:max-w-2xl max-h-[80vh] flex flex-col gap-0 p-0"
-        showCloseButton={false}
-        overlayClassName="backdrop-blur-none bg-black/40"
-      >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border-light">
-          <DialogTitle>Styles</DialogTitle>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              className="p-1 rounded hover:bg-secondary transition-colors text-text-muted hover:text-text-primary"
-              title="Add style"
-            >
-              <PlusIcon className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleAddFill}>Fill style</DropdownMenuItem>
-              <DropdownMenuItem onClick={handleAddEffect}>Effect style</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+    <div className="w-full h-full bg-surface-panel flex flex-col overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border-default shrink-0">
+        <span className="text-sm font-medium text-text-primary flex-1">
+          Styles
+        </span>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className="p-1 rounded hover:bg-secondary transition-colors text-text-muted hover:text-text-primary"
+            title="Add style"
+          >
+            <PlusIcon className="size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={handleAddFill}>Fill style</DropdownMenuItem>
+            <DropdownMenuItem onClick={handleAddEffect}>Effect style</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <IconButton
+          variant="ghost"
+          size="icon-sm"
+          onClick={toggleExpanded}
+          tooltip={isExpanded ? "Collapse panel" : "Expand panel"}
+        >
+          <ArrowLineLeftIcon
+            size={16}
+            className={isExpanded ? "" : "rotate-180"}
+          />
+        </IconButton>
+      </div>
 
-        <div className="flex-1 overflow-y-auto">
-          {fillStyles.length === 0 && effectStyles.length === 0 ? (
-            <div className="text-center text-text-disabled text-xs py-6">No styles yet</div>
-          ) : (
-            <div data-testid="styles-list">
-              {fillStyles.map((style) => <FillStyleRow key={style.id} style={style} />)}
-              {effectStyles.map((style) => <EffectStyleRow key={style.id} style={style} />)}
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+      <div className="flex-1 overflow-y-auto">
+        {fillStyles.length === 0 && effectStyles.length === 0 ? (
+          <div className="text-center text-text-disabled text-xs py-6">No styles yet</div>
+        ) : (
+          <div data-testid="styles-list">
+            {fillStyles.map((style) => <FillStyleRow key={style.id} style={style} />)}
+            {effectStyles.map((style) => <EffectStyleRow key={style.id} style={style} />)}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
+

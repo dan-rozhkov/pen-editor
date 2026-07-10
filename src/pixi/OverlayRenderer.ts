@@ -540,6 +540,8 @@ export function createOverlayRenderer(
   const DIRTY_MARQUEE = 32;
   const DIRTY_CONNECTOR = 64;
   const DIRTY_PERSISTENT_GUIDES = 128;
+  const DIRTY_PEN_PREVIEW = 256;
+  const DIRTY_PATH_EDIT = 512;
   const DIRTY_ALL_SCALE = DIRTY_GUIDES | DIRTY_DROP | DIRTY_MEASURE | DIRTY_DRAW | DIRTY_MARQUEE | DIRTY_CONNECTOR | DIRTY_PERSISTENT_GUIDES;
   let dirtyFlags = 0;
   let overlayRafId: number | null = null;
@@ -556,6 +558,8 @@ export function createOverlayRenderer(
     if (flags & DIRTY_MARQUEE) redrawMarquee();
     if (flags & DIRTY_CONNECTOR) redrawConnectorPreview();
     if (flags & DIRTY_PERSISTENT_GUIDES) redrawPersistentGuides();
+    if (flags & DIRTY_PEN_PREVIEW) redrawPenPreview();
+    if (flags & DIRTY_PATH_EDIT) redrawPathEdit();
   }
 
   function scheduleOverlayRedraw(flags: number): void {
@@ -572,12 +576,20 @@ export function createOverlayRenderer(
   const unsubMeasure = useMeasureStore.subscribe(redrawMeasureLines);
   const unsubConnector = useConnectorStore.subscribe(redrawConnectorPreview);
   const unsubDrawModeForPen = useDrawModeStore.subscribe(redrawPenPreview);
+  // Pen-store updates fire on every pointermove while drafting/dragging a
+  // handle (cursor tracking, handle drag) — potentially >100/sec. Batch the
+  // redraw through the same RAF mechanism as the other overlays instead of
+  // running it synchronously per event. redrawPathEdit is for the (mutually
+  // exclusive) point-edit-mode overlay on a *committed* path, so it's skipped
+  // entirely while a pen draft is in progress.
   const unsubPenTool = usePenToolStore.subscribe(() => {
-    redrawPenPreview();
-    redrawPathEdit();
+    const flags = usePenToolStore.getState().isDrafting
+      ? DIRTY_PEN_PREVIEW
+      : DIRTY_PEN_PREVIEW | DIRTY_PATH_EDIT;
+    scheduleOverlayRedraw(flags);
   });
-  const unsubSelectionForPathEdit = useSelectionStore.subscribe(redrawPathEdit);
-  const unsubSceneForPathEdit = useSceneStore.subscribe(redrawPathEdit);
+  const unsubSelectionForPathEdit = useSelectionStore.subscribe(() => scheduleOverlayRedraw(DIRTY_PATH_EDIT));
+  const unsubSceneForPathEdit = useSceneStore.subscribe(() => scheduleOverlayRedraw(DIRTY_PATH_EDIT));
   // Persistent guides are interactively dragged (like smart guides) — redraw
   // synchronously so the line tracks the pointer with zero added latency.
   const unsubPersistentGuides = useGuidesStore.subscribe(redrawPersistentGuides);

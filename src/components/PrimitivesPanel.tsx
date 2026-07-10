@@ -8,7 +8,7 @@ import {
   PEN_SUB_TOOLS,
   TRAILING_TOOLS,
 } from "../lib/toolDefinitions";
-import { Button } from "./ui/button";
+import { IconButton } from "./ui/IconButton";
 import { ButtonGroup } from "./ui/button-group";
 import {
   DropdownMenu,
@@ -39,12 +39,14 @@ export function PrimitivesPanel() {
           const isActive =
             tool === "cursor" ? activeTool === null : activeTool === tool;
           return (
-            <Button
+            <IconButton
               key={label}
               onClick={() =>
                 tool === "cursor" ? setActiveTool(null) : toggleTool(tool)
               }
-              title={`${label} (${shortcut})`}
+              tooltip={label}
+              shortcut={shortcut}
+              side="top"
               variant="ghost"
               size="lg"
               className={`${toolButtonBaseClass} ${
@@ -54,16 +56,18 @@ export function PrimitivesPanel() {
               }`}
             >
               <Icon size={40} className="size-6" weight="light" />
-            </Button>
+            </IconButton>
           );
         })}
 
         <DropdownMenu>
           <ButtonGroup orientation="horizontal" className="gap-0">
-            <Button
+            <IconButton
               variant="ghost"
               size="lg"
-              title="Rectangle (R)"
+              tooltip={RECT_TOOL.label}
+              shortcut={RECT_TOOL.shortcut}
+              side="top"
               onClick={() => toggleTool("rect")}
               className={`${toolButtonBaseClass} ${
                 isRectangleActive
@@ -72,22 +76,25 @@ export function PrimitivesPanel() {
               }`}
             >
               <RECT_TOOL.icon size={40} className="size-6" weight="light" />
-            </Button>
+            </IconButton>
 
-            <DropdownMenuTrigger>
-              <Button
-                variant="ghost"
-                size="lg"
-                title="Ellipse, Line, Polygon, Star"
-                className={`${toolButtonBaseClass} w-6 justify-center ${
-                  isRectSubToolActive
-                    ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
-                    : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
-                }`}
-              >
-                <CaretDownIcon size={12} className="size-3" weight="bold" />
-              </Button>
-            </DropdownMenuTrigger>
+            <DropdownMenuTrigger
+              render={
+                <IconButton
+                  variant="ghost"
+                  size="lg"
+                  tooltip="More shapes"
+                  side="top"
+                  className={`${toolButtonBaseClass} w-6 justify-center ${
+                    isRectSubToolActive
+                      ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
+                      : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
+                  }`}
+                >
+                  <CaretDownIcon size={12} className="size-3" weight="bold" />
+                </IconButton>
+              }
+            />
           </ButtonGroup>
 
           <DropdownMenuContent align="center" sideOffset={8}>
@@ -114,10 +121,12 @@ export function PrimitivesPanel() {
 
         <DropdownMenu>
           <ButtonGroup orientation="horizontal" className="gap-0">
-            <Button
+            <IconButton
               variant="ghost"
               size="lg"
-              title="Pen (P)"
+              tooltip={PEN_TOOL.label}
+              shortcut={PEN_TOOL.shortcut}
+              side="top"
               onClick={() => toggleTool("pen")}
               className={`${toolButtonBaseClass} ${
                 isPenActive
@@ -126,22 +135,25 @@ export function PrimitivesPanel() {
               }`}
             >
               <PEN_TOOL.icon size={40} className="size-6" weight="light" />
-            </Button>
+            </IconButton>
 
-            <DropdownMenuTrigger>
-              <Button
-                variant="ghost"
-                size="lg"
-                title="Pencil"
-                className={`${toolButtonBaseClass} w-6 justify-center ${
-                  isPenSubToolActive
-                    ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
-                    : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
-                }`}
-              >
-                <CaretDownIcon size={12} className="size-3" weight="bold" />
-              </Button>
-            </DropdownMenuTrigger>
+            <DropdownMenuTrigger
+              render={
+                <IconButton
+                  variant="ghost"
+                  size="lg"
+                  tooltip="More pen tools"
+                  side="top"
+                  className={`${toolButtonBaseClass} w-6 justify-center ${
+                    isPenSubToolActive
+                      ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
+                      : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
+                  }`}
+                >
+                  <CaretDownIcon size={12} className="size-3" weight="bold" />
+                </IconButton>
+              }
+            />
           </ButtonGroup>
 
           <DropdownMenuContent align="center" sideOffset={8}>
@@ -169,10 +181,12 @@ export function PrimitivesPanel() {
         {trailingTools.map(({ icon: Icon, label, tool, shortcut }) => {
           const isActive = activeTool === tool;
           return (
-            <Button
+            <IconButton
               key={label}
               onClick={() => toggleTool(tool)}
-              title={`${label} (${shortcut})`}
+              tooltip={label}
+              shortcut={shortcut}
+              side="top"
               variant="ghost"
               size="lg"
               className={`${toolButtonBaseClass} ${
@@ -182,7 +196,7 @@ export function PrimitivesPanel() {
               }`}
             >
               <Icon size={40} className="size-6" weight="light" />
-            </Button>
+            </IconButton>
           );
         })}
       </div>

@@ -1,12 +1,12 @@
-import { beforeEach, describe, expect, it, afterEach, vi } from "vitest";
+import { beforeEach, describe, expect, it, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
-import { StylesDialog } from "@/components/StylesPanel";
+import { StylesPanelContent } from "@/components/StylesPanel";
 import { useStyleStore } from "@/store/styleStore";
 import { resetStores } from "@/test/fixtures";
 
 afterEach(() => cleanup());
 
-describe("<StylesDialog />", () => {
+describe("<StylesPanelContent />", () => {
   beforeEach(() => {
     resetStores();
   });
@@ -22,7 +22,7 @@ describe("<StylesDialog />", () => {
         },
       ],
     });
-    render(<StylesDialog open onOpenChange={() => {}} />);
+    render(<StylesPanelContent />);
     expect(screen.getByText("Brand/Primary")).toBeTruthy();
     expect(screen.getByText("Card/Shadow")).toBeTruthy();
     expect(screen.getByTestId("styles-list").children).toHaveLength(2);
@@ -30,16 +30,16 @@ describe("<StylesDialog />", () => {
     expect(screen.queryByText("Effect styles")).toBeNull();
   });
 
-  it("adds a fill style from the Add menu", () => {
-    render(<StylesDialog open onOpenChange={() => {}} />);
+  it("the Add color style button creates a new fill style in the store", () => {
+    render(<StylesPanelContent />);
     expect(useStyleStore.getState().fillStyles).toHaveLength(0);
     fireEvent.click(screen.getByTitle("Add style"));
     fireEvent.click(screen.getByText("Fill style"));
     expect(useStyleStore.getState().fillStyles).toHaveLength(1);
   });
 
-  it("adds an effect style from the Add menu", () => {
-    render(<StylesDialog open onOpenChange={() => {}} />);
+  it("the Add effect style button creates a new effect style in the store", () => {
+    render(<StylesPanelContent />);
     expect(useStyleStore.getState().effectStyles).toHaveLength(0);
     fireEvent.click(screen.getByTitle("Add style"));
     fireEvent.click(screen.getByText("Effect style"));
@@ -52,7 +52,7 @@ describe("<StylesDialog />", () => {
       fillStyles: [{ id: "fs1", name: "Brand", paint: { id: "p", type: "solid", color: "#3366ff" } }],
       effectStyles: [],
     });
-    render(<StylesDialog open onOpenChange={() => {}} />);
+    render(<StylesPanelContent />);
     fireEvent.click(screen.getByTitle("Delete fill style"));
     expect(useStyleStore.getState().fillStyles).toHaveLength(0);
   });
@@ -62,7 +62,7 @@ describe("<StylesDialog />", () => {
       fillStyles: [{ id: "fs1", name: "Brand", paint: { id: "p", type: "solid", color: "#3366ff" } }],
       effectStyles: [],
     });
-    render(<StylesDialog open onOpenChange={() => {}} />);
+    render(<StylesPanelContent />);
     fireEvent.click(screen.getByText("Brand"));
     const input = screen.getByDisplayValue("Brand") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "Accent" } });
@@ -75,8 +75,7 @@ describe("<StylesDialog />", () => {
       fillStyles: [{ id: "fs1", name: "Brand", paint: { id: "p", type: "solid", color: "#3366ff" } }],
       effectStyles: [],
     });
-    const onOpenChange = vi.fn();
-    render(<StylesDialog open onOpenChange={onOpenChange} />);
+    render(<StylesPanelContent />);
 
     fireEvent.click(screen.getByLabelText("Pick color"));
     const rgbButton = screen.getByRole("button", { name: "RGB" });
@@ -84,6 +83,5 @@ describe("<StylesDialog />", () => {
     fireEvent.click(rgbButton);
 
     expect(screen.getByLabelText("Red")).toBeTruthy();
-    expect(onOpenChange).not.toHaveBeenCalledWith(false, expect.anything());
   });
 });

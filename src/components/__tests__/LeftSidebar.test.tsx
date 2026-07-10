@@ -28,6 +28,15 @@ vi.mock("../PagesPanel", () => ({
 vi.mock("../chat/ChatPanel", () => ({
   ChatPanelContent: () => <div data-testid="chat-shim" />,
 }));
+vi.mock("../VariablesPanel", () => ({
+  VariablesPanelContent: () => <div data-testid="variables-shim" />,
+}));
+vi.mock("../TextStylesPanel", () => ({
+  TextStylesPanelContent: () => <div data-testid="text-styles-shim" />,
+}));
+vi.mock("../StylesPanel", () => ({
+  StylesPanelContent: () => <div data-testid="styles-shim" />,
+}));
 
 import { LeftSidebar } from "../LeftSidebar";
 
@@ -60,7 +69,7 @@ describe("<LeftSidebar />", () => {
 
   afterEach(() => {
     cleanup();
-    useLeftSidebarStore.setState({ activeSection: "pages" });
+    useLeftSidebarStore.setState({ activeSection: "pages", isExpanded: false });
     usePageStore.setState({
       pages: baselinePages.pages,
       activePageId: baselinePages.activePageId,
@@ -108,6 +117,34 @@ describe("<LeftSidebar />", () => {
     expect(screen.getByTestId("components-shim")).toBeTruthy();
     // Pages section content is not mounted while components is active.
     expect(screen.queryByTestId("layers-shim")).toBeNull();
+  });
+
+  it("renders the Variables section when it is active", () => {
+    useLeftSidebarStore.setState({ activeSection: "variables" });
+    render(<LeftSidebar />);
+    expect(screen.getByTestId("variables-shim")).toBeTruthy();
+    expect(screen.queryByTestId("layers-shim")).toBeNull();
+  });
+
+  it("renders the Text styles section when it is active", () => {
+    useLeftSidebarStore.setState({ activeSection: "textStyles" });
+    render(<LeftSidebar />);
+    expect(screen.getByTestId("text-styles-shim")).toBeTruthy();
+  });
+
+  it("renders the Styles section when it is active", () => {
+    useLeftSidebarStore.setState({ activeSection: "styles" });
+    render(<LeftSidebar />);
+    expect(screen.getByTestId("styles-shim")).toBeTruthy();
+  });
+
+  it("renders the Styles section full-screen when the panel is expanded", () => {
+    useLeftSidebarStore.setState({ activeSection: "styles", isExpanded: true });
+    const { container } = render(<LeftSidebar />);
+    const wrapper = screen.getByTestId("styles-shim").parentElement;
+    expect(wrapper?.className).toContain("fixed");
+    expect(wrapper?.className).toContain("z-[60]");
+    expect(container).toBeTruthy();
   });
 
   it("renames the document via the editable file name field", () => {

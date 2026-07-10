@@ -1,6 +1,6 @@
 import type { Container as PixiContainer } from "pixi.js";
 import type { PixiExportRefs } from "@/store/canvasRefStore";
-import { findContainerByLabel } from "./exportUtils";
+import { findContainerByLabel, toExtractFrame } from "./exportUtils";
 import { assemblePdfFromPngPages, type PdfPageImage } from "@/lib/pdfExport/assemblePdf";
 import { useSceneStore } from "@/store/sceneStore";
 import { useLayoutStore } from "@/store/layoutStore";
@@ -45,16 +45,25 @@ export function getTopLevelFrames(): PdfFrameDescriptor[] {
 /**
  * Extract a Pixi container's live pixels as raw PNG bytes (not a data URL),
  * so they can be handed to pdf-lib's `embedPng`.
+ *
+ * Pins an explicit `frame` from the page's declared width/height (see
+ * `exportUtils.toExtractFrame`) so the rasterized page is exactly
+ * `width×height×scale` px, instead of Pixi's implicit content-bounds region
+ * (which can come out smaller than the frame for pages with no
+ * full-covering background). `resolution: scale` alone is already correct
+ * here — Pixi v8 uses it independent of the app renderer's resolution/DPR.
  */
 function extractPngBytes(
   pixiRefs: PixiExportRefs,
   container: PixiContainer,
   scale: number,
+  size: { width: number; height: number },
 ): Uint8Array {
   const canvas = pixiRefs.app.renderer.extract.canvas({
     target: container,
     resolution: scale,
     antialias: true,
+    frame: toExtractFrame(size.width, size.height),
   }) as HTMLCanvasElement;
   const dataUrl = canvas.toDataURL("image/png");
   return dataUrlToUint8Array(dataUrl);
@@ -172,7 +181,7 @@ export async function exportFramesToPdf(
 
       pages.push({
         pngBytes: withForcedRenderable(container, pixiRefs.sceneRoot, () =>
-          extractPngBytes(pixiRefs, container, scale),
+          extractPngBytes(pixiRefs, container, scale, { width: frame.width, height: frame.height }),
         ),
         widthPt: frame.width,
         heightPt: frame.height,

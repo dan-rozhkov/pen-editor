@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ImageAdjustments, ImageCropRect, ImageFillMode, SceneNode } from "@/types/scene";
 import { NumberInput, SelectInput } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
 import { Slider } from "@/components/ui/slider";
 import { CropIcon } from "@phosphor-icons/react";
 import { useFileUpload } from "@/components/properties/useFileUpload";
@@ -181,16 +182,15 @@ export function ImageFillEditor({
           onChange={handleModeChange}
           labelClassName="text-xs font-normal"
         />
-        <Button
+        <IconButton
           type="button"
           size="icon-sm"
           variant={cropEditorOpen ? "default" : "ghost"}
           onClick={() => setCropEditorOpen((v) => !v)}
-          title="Crop image"
-          aria-label="Crop image"
+          tooltip="Crop image"
         >
           <CropIcon />
-        </Button>
+        </IconButton>
       </div>
 
       {cropped && (

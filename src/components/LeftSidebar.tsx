@@ -1,9 +1,13 @@
 import { useRef, useState } from "react";
 import { ArrowsInLineVertical } from "@phosphor-icons/react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { LayersPanel } from "./layers";
 import { ComponentsPanel } from "./ComponentsPanel";
 import { PagesPanel } from "./PagesPanel";
 import { ChatPanelContent } from "./chat/ChatPanel";
+import { VariablesPanelContent } from "./VariablesPanel";
+import { TextStylesPanelContent } from "./TextStylesPanel";
+import { StylesPanelContent } from "./StylesPanel";
 import { Toolbar } from "./Toolbar";
 import { useSceneStore } from "@/store/sceneStore";
 import { useDocumentStore } from "@/store/documentStore";
@@ -23,6 +27,7 @@ export function LeftSidebar() {
   const isPanelOpen = useLeftSidebarStore((s) => s.isPanelOpen);
   const isMobile = useIsMobile();
   const isChatExpanded = useChatStore((s) => s.isExpanded);
+  const isPanelExpanded = useLeftSidebarStore((s) => s.isExpanded);
   const collapseAllFrames = useSceneStore((s) => s.collapseAllFrames);
   const fileName = useDocumentStore((s) => s.fileName);
   const setFileName = useDocumentStore((s) => s.setFileName);
@@ -108,13 +113,21 @@ export function LeftSidebar() {
               <span className="text-xs font-medium text-secondary-foreground">
                 Layers
               </span>
-              <button
-                onClick={collapseAllFrames}
-                className="p-0.5 rounded text-text-muted hover:text-text-default hover:bg-secondary transition-colors"
-                title="Collapse all"
-              >
-                <ArrowsInLineVertical size={14} />
-              </button>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      onClick={collapseAllFrames}
+                      aria-label="Collapse all"
+                      title="Collapse all"
+                      className="p-0.5 rounded text-text-muted hover:text-text-default hover:bg-secondary transition-colors"
+                    >
+                      <ArrowsInLineVertical size={14} />
+                    </button>
+                  }
+                />
+                <TooltipContent side="bottom">Collapse all</TooltipContent>
+              </Tooltip>
             </div>
             <div className="flex-1 overflow-hidden">
               <LayersPanel />
@@ -142,6 +155,46 @@ export function LeftSidebar() {
         >
           <ChatPanelContent />
         </div>
+
+        {/* Variables section — inline within the body, or fixed full-canvas
+            overlay when expanded (same pattern as Agents). */}
+        {activeSection === "variables" && (
+          <div
+            className={
+              isPanelExpanded
+                ? "fixed top-0 left-14 right-0 bottom-0 z-[60] flex flex-col bg-surface-panel"
+                : "absolute inset-0 flex flex-col"
+            }
+          >
+            <VariablesPanelContent />
+          </div>
+        )}
+
+        {/* Text styles section */}
+        {activeSection === "textStyles" && (
+          <div
+            className={
+              isPanelExpanded
+                ? "fixed top-0 left-14 right-0 bottom-0 z-[60] flex flex-col bg-surface-panel"
+                : "absolute inset-0 flex flex-col"
+            }
+          >
+            <TextStylesPanelContent />
+          </div>
+        )}
+
+        {/* Styles section */}
+        {activeSection === "styles" && (
+          <div
+            className={
+              isPanelExpanded
+                ? "fixed top-0 left-14 right-0 bottom-0 z-[60] flex flex-col bg-surface-panel"
+                : "absolute inset-0 flex flex-col"
+            }
+          >
+            <StylesPanelContent />
+          </div>
+        )}
       </div>
     </div>
   );

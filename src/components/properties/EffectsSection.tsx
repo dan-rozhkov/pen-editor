@@ -7,7 +7,7 @@ import {
   PropertyRow,
   PropertySection,
 } from "@/components/ui/PropertyInputs";
-import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   DropdownMenu,
@@ -82,7 +82,11 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
       action={
         <DropdownMenu>
           <DropdownMenuTrigger
-            render={<Button variant="ghost" size="icon-sm" title="Add effect" />}
+            render={
+              <IconButton variant="ghost" size="icon-sm" tooltip="Add effect">
+                <PlusIcon />
+              </IconButton>
+            }
           >
             <PlusIcon />
           </DropdownMenuTrigger>
@@ -158,24 +162,24 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
                         <span className="flex-1 text-[11px] font-semibold text-text-primary">
                           {effectLabel(effect)}
                         </span>
-                        <Button
+                        <IconButton
+                          tooltip="Move up"
                           variant="ghost"
                           size="icon-sm"
                           disabled={!canMoveUp}
                           onClick={() => commit(moveItem(effects, arrayIndex, 1))}
-                          title="Move up"
                         >
                           <ArrowUp />
-                        </Button>
-                        <Button
+                        </IconButton>
+                        <IconButton
+                          tooltip="Move down"
                           variant="ghost"
                           size="icon-sm"
                           disabled={!canMoveDown}
                           onClick={() => commit(moveItem(effects, arrayIndex, -1))}
-                          title="Move down"
                         >
                           <ArrowDown />
-                        </Button>
+                        </IconButton>
                       </div>
 
                       {effect.type === "shadow" && (
@@ -279,22 +283,22 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
                     </PopoverContent>
                   </Popover>
 
-                  <Button
+                  <IconButton
+                    tooltip={isVisible ? "Hide effect" : "Show effect"}
                     variant="ghost"
                     size="icon-sm"
                     onClick={() => commit(toggleEffectVisibleAt(effects, arrayIndex))}
-                    title={isVisible ? "Hide effect" : "Show effect"}
                   >
                     {isVisible ? <Eye /> : <EyeSlash />}
-                  </Button>
-                  <Button
+                  </IconButton>
+                  <IconButton
+                    tooltip="Remove effect"
                     variant="ghost"
                     size="icon-sm"
                     onClick={() => commit(removeEffectAt(effects, arrayIndex))}
-                    title="Remove effect"
                   >
                     <MinusIcon />
-                  </Button>
+                  </IconButton>
                 </div>
               );
             })}

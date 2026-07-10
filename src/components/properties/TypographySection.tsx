@@ -34,10 +34,16 @@ import {
   SelectInput,
 } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { FontCombobox } from "@/components/ui/FontCombobox";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useTextStyleStore } from "@/store/textStyleStore";
 import { TEXT_STYLE_PROPERTY_KEYS, type TextStyle } from "@/types/textStyle";
 import { MAX_INDENT_LEVEL, getParagraphAttrs, normalizeParagraphs, splitParagraphs } from "@/lib/textLists/paragraphs";
@@ -192,16 +198,13 @@ function TextStylesPopover({ node }: { node: TextNode }) {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          title="Text styles"
-          aria-label="Text styles"
-        >
-          <PlusIcon />
-        </Button>
-      </PopoverTrigger>
+      <PopoverTrigger
+        render={
+          <IconButton variant="ghost" size="icon-sm" tooltip="Text styles">
+            <PlusIcon />
+          </IconButton>
+        }
+      />
       <PopoverContent
         side="left"
         align="start"
@@ -211,24 +214,40 @@ function TextStylesPopover({ node }: { node: TextNode }) {
         <div className="flex h-10 items-center justify-between border-b border-input px-3">
           <div className="text-xs font-semibold text-text-primary">Text styles</div>
           <div className="flex items-center gap-1">
-            <button
-              type="button"
-              className="flex size-6 items-center justify-center rounded-md text-text-primary hover:bg-secondary"
-              title="Create text style"
-              aria-label="Create text style"
-              onClick={() => createStyleFromNode(node.id, node.name || "New text style")}
-            >
-              <PlusIcon size={14} />
-            </button>
-            <button
-              type="button"
-              className="flex size-6 items-center justify-center rounded-md text-text-primary hover:bg-secondary"
-              title="Close"
-              aria-label="Close text styles"
-              onClick={() => setOpen(false)}
-            >
-              <XIcon size={14} />
-            </button>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    className="flex size-6 items-center justify-center rounded-md text-text-primary hover:bg-secondary"
+                    aria-label="Create text style"
+                    onClick={() => createStyleFromNode(node.id, node.name || "New text style")}
+                  >
+                    <PlusIcon size={14} />
+                  </button>
+                }
+              />
+              <TooltipContent>
+                <span>Create text style</span>
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    className="flex size-6 items-center justify-center rounded-md text-text-primary hover:bg-secondary"
+                    aria-label="Close text styles"
+                    onClick={() => setOpen(false)}
+                  >
+                    <XIcon size={14} />
+                  </button>
+                }
+              />
+              <TooltipContent>
+                <span>Close</span>
+              </TooltipContent>
+            </Tooltip>
           </div>
         </div>
         <label className="flex h-9 items-center gap-2 px-3 text-text-muted">
@@ -327,21 +346,23 @@ function LinkPopover({ node, onUpdate }: { node: TextNode; onUpdate: (updates: P
         setOpen(next);
       }}
     >
-      <PopoverTrigger>
-        <Button
-          variant={node.link ? "default" : "secondary"}
-          size="icon-sm"
-          title="Link (⌘K)"
-          aria-label="Link"
-          className={
-            node.link
-              ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
-              : ""
-          }
-        >
-          <LinkSimpleIcon />
-        </Button>
-      </PopoverTrigger>
+      <PopoverTrigger
+        render={
+          <IconButton
+            variant={node.link ? "default" : "secondary"}
+            size="icon-sm"
+            tooltip="Link (⌘K)"
+            aria-label="Link"
+            className={
+              node.link
+                ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
+                : ""
+            }
+          >
+            <LinkSimpleIcon />
+          </IconButton>
+        }
+      />
       <PopoverContent side="left" align="start" sideOffset={TYPOGRAPHY_POPOVER_PANEL_OFFSET} className="w-[240px] gap-2">
         <div className="text-xs font-semibold text-text-primary">Link</div>
         <Input
@@ -527,15 +548,14 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
           }
         />
         {node.textStyleId && (
-          <Button
+          <IconButton
             variant="ghost"
             size="icon-sm"
-            title="Detach from style"
-            aria-label="Detach from style"
+            tooltip="Detach from style"
             onClick={() => detachStyleFromNode(node.id)}
           >
             <LinkIcon />
-          </Button>
+          </IconButton>
         )}
       </PropertyRow>
       <PropertyRow>
@@ -590,11 +610,12 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
       )}
       <PropertyRow>
         <div className="flex items-center gap-1 flex-1">
-          <Button
+          <IconButton
             variant={
               node.fontStyle === "italic" ? "default" : "secondary"
             }
             size="sm"
+            tooltip="Italic"
             className={`flex-1 ${
               node.fontStyle === "italic"
                 ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
@@ -608,13 +629,14 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             }
           >
             <TextItalic className="size-[18px]!" />
-          </Button>
+          </IconButton>
         </div>
         <div className="flex items-center gap-1 flex-1">
           <ButtonGroup orientation="horizontal" className={`flex-1 ${segmentedButtonGroupClass}`}>
-            <Button
+            <IconButton
               variant={node.underline ? "default" : "secondary"}
               size="sm"
+              tooltip="Underline"
               className={`flex-1 ${
                 node.underline
                   ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
@@ -627,10 +649,11 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
               }
             >
               <TextUnderline size={14} />
-            </Button>
-            <Button
+            </IconButton>
+            <IconButton
               variant={node.strikethrough ? "default" : "secondary"}
               size="sm"
+              tooltip="Strikethrough"
               className={`flex-1 ${
                 node.strikethrough
                   ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
@@ -643,7 +666,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
               }
             >
               <TextStrikethrough size={14} />
-            </Button>
+            </IconButton>
           </ButtonGroup>
           <LinkPopover node={node} onUpdate={onUpdate} />
         </div>
@@ -672,11 +695,12 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
         <PropertyRow>
           <div className="flex items-center gap-1 flex-1">
             <ButtonGroup orientation="horizontal" className={`flex-1 ${segmentedButtonGroupClass}`}>
-              <Button
+              <IconButton
                 variant={
                   node.textAlign === "left" ? "default" : "secondary"
                 }
                 size="sm"
+                tooltip="Align left"
                 className={`flex-1 ${
                   node.textAlign === "left"
                     ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
@@ -687,12 +711,13 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 }
               >
                 <TextAlignLeft size={14} />
-              </Button>
-              <Button
+              </IconButton>
+              <IconButton
                 variant={
                   node.textAlign === "center" ? "default" : "secondary"
                 }
                 size="sm"
+                tooltip="Align center"
                 className={`flex-1 ${
                   node.textAlign === "center"
                     ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
@@ -703,12 +728,13 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 }
               >
                 <TextAlignCenter size={14} />
-              </Button>
-              <Button
+              </IconButton>
+              <IconButton
                 variant={
                   node.textAlign === "right" ? "default" : "secondary"
                 }
                 size="sm"
+                tooltip="Align right"
                 className={`flex-1 ${
                   node.textAlign === "right"
                     ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
@@ -719,18 +745,19 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 }
               >
                 <TextAlignRight size={14} />
-              </Button>
+              </IconButton>
             </ButtonGroup>
           </div>
           <div className="flex items-center gap-1 flex-1">
             <ButtonGroup orientation="horizontal" className={`flex-1 ${segmentedButtonGroupClass}`}>
-              <Button
+              <IconButton
                 variant={
                   node.textAlignVertical === "top"
                     ? "default"
                     : "secondary"
                 }
                 size="sm"
+                tooltip="Align top"
                 className={`flex-1 ${
                   node.textAlignVertical === "top"
                     ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
@@ -743,14 +770,15 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 }
               >
                 <AlignTop size={14} />
-              </Button>
-              <Button
+              </IconButton>
+              <IconButton
                 variant={
                   node.textAlignVertical === "middle"
                     ? "default"
                     : "secondary"
                 }
                 size="sm"
+                tooltip="Align middle"
                 className={`flex-1 ${
                   node.textAlignVertical === "middle"
                     ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
@@ -763,14 +791,15 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 }
               >
                 <AlignCenterVertical size={14} />
-              </Button>
-              <Button
+              </IconButton>
+              <IconButton
                 variant={
                   node.textAlignVertical === "bottom"
                     ? "default"
                     : "secondary"
                 }
                 size="sm"
+                tooltip="Align bottom"
                 className={`flex-1 ${
                   node.textAlignVertical === "bottom"
                     ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
@@ -783,7 +812,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 }
               >
                 <AlignBottom size={14} />
-              </Button>
+              </IconButton>
             </ButtonGroup>
           </div>
         </PropertyRow>
@@ -795,10 +824,10 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
         <PropertyRow>
           <div className="flex items-center gap-1 flex-1">
             <ButtonGroup orientation="horizontal" className={`flex-1 ${segmentedButtonGroupClass}`}>
-              <Button
+              <IconButton
                 variant={firstParagraphAttrs.listType === "bullet" ? "default" : "secondary"}
                 size="sm"
-                title="Bulleted list (⌘⇧8)"
+                tooltip="Bulleted list (⌘⇧8)"
                 aria-label="Bulleted list"
                 aria-pressed={firstParagraphAttrs.listType === "bullet"}
                 className={`flex-1 ${
@@ -809,11 +838,11 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 onClick={() => applyListType("bullet")}
               >
                 <ListBullets size={14} />
-              </Button>
-              <Button
+              </IconButton>
+              <IconButton
                 variant={firstParagraphAttrs.listType === "number" ? "default" : "secondary"}
                 size="sm"
-                title="Numbered list (⌘⇧7)"
+                tooltip="Numbered list (⌘⇧7)"
                 aria-label="Numbered list"
                 aria-pressed={firstParagraphAttrs.listType === "number"}
                 className={`flex-1 ${
@@ -824,31 +853,31 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 onClick={() => applyListType("number")}
               >
                 <ListNumbers size={14} />
-              </Button>
+              </IconButton>
             </ButtonGroup>
           </div>
           <div className="flex items-center gap-1 flex-1">
             <ButtonGroup orientation="horizontal" className={`flex-1 ${segmentedButtonGroupClass}`}>
-              <Button
+              <IconButton
                 variant="secondary"
                 size="sm"
-                title="Outdent (Shift+Tab)"
+                tooltip="Outdent (Shift+Tab)"
                 aria-label="Outdent"
                 className="flex-1"
                 onClick={() => applyIndent(-1)}
               >
                 <TextOutdent size={14} />
-              </Button>
-              <Button
+              </IconButton>
+              <IconButton
                 variant="secondary"
                 size="sm"
-                title="Indent (Tab)"
+                tooltip="Indent (Tab)"
                 aria-label="Indent"
                 className="flex-1"
                 onClick={() => applyIndent(1)}
               >
                 <TextIndent size={14} />
-              </Button>
+              </IconButton>
             </ButtonGroup>
           </div>
         </PropertyRow>
@@ -858,12 +887,12 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
           Resizing
         </div>
         <ButtonGroup orientation="horizontal" className={`w-full ${segmentedButtonGroupClass}`}>
-          <Button
+          <IconButton
             variant={
               node.textWidthMode === "auto" ? "default" : "secondary"
             }
             size="sm"
-            title="Auto width"
+            tooltip="Auto width"
             aria-label="Auto width"
             className={`flex-1 ${
               node.textWidthMode === "auto"
@@ -873,13 +902,13 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             onClick={() => setTextWidthMode("auto")}
           >
             <ArrowsOut size={14} />
-          </Button>
-          <Button
+          </IconButton>
+          <IconButton
             variant={
               node.textWidthMode === "fixed" ? "default" : "secondary"
             }
             size="sm"
-            title="Fixed width"
+            tooltip="Fixed width"
             aria-label="Fixed width"
             className={`flex-1 ${
               node.textWidthMode === "fixed"
@@ -889,15 +918,15 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             onClick={() => setTextWidthMode("fixed")}
           >
             <ArrowRight size={14} />
-          </Button>
-          <Button
+          </IconButton>
+          <IconButton
             variant={
               node.textWidthMode === "fixed-height"
                 ? "default"
                 : "secondary"
             }
             size="sm"
-            title="Fixed size"
+            tooltip="Fixed size"
             aria-label="Fixed size"
             className={`flex-1 ${
               node.textWidthMode === "fixed-height"
@@ -907,7 +936,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             onClick={() => setTextWidthMode("fixed-height")}
           >
             <Article size={14} />
-          </Button>
+          </IconButton>
         </ButtonGroup>
       </div>
       {isWrapped && (
@@ -917,10 +946,10 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
               Truncate text
             </div>
             <ButtonGroup orientation="horizontal" className={`w-full ${segmentedButtonGroupClass}`}>
-              <Button
+              <IconButton
                 variant={!node.truncateText ? "default" : "secondary"}
                 size="sm"
-                title="No truncation"
+                tooltip="No truncation"
                 aria-label="No truncation"
                 aria-pressed={!node.truncateText}
                 className={`flex-1 ${
@@ -935,11 +964,11 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 }
               >
                 <MinusIcon size={14} />
-              </Button>
-              <Button
+              </IconButton>
+              <IconButton
                 variant={node.truncateText ? "default" : "secondary"}
                 size="sm"
-                title="Truncate with ellipsis"
+                tooltip="Truncate with ellipsis"
                 aria-label="Truncate with ellipsis"
                 aria-pressed={!!node.truncateText}
                 className={`flex-1 ${
@@ -954,7 +983,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 }
               >
                 <TruncateTextIcon />
-              </Button>
+              </IconButton>
             </ButtonGroup>
           </div>
           <NumberInput

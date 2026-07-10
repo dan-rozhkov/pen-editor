@@ -4,6 +4,7 @@ import { XIcon } from "@phosphor-icons/react";
 import { getUpdateSW } from "@/pwa/registerServiceWorker";
 import { usePwaStore } from "@/store/pwaStore";
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
 
 // Headless component: once a new service worker version has installed and is
 // waiting to activate (registerServiceWorker sets pwaStore's updateReady), it
@@ -48,14 +49,15 @@ export function PwaUpdateToast() {
             >
               Update
             </Button>
-            <Button
+            <IconButton
+              tooltip="Dismiss"
+              side="top"
               variant="ghost"
               size="icon-sm"
-              aria-label="Dismiss"
               onClick={() => setUpdateReady(false)}
             >
               <XIcon />
-            </Button>
+            </IconButton>
           </div>
         ),
         { id: TOAST_ID, duration: Infinity },

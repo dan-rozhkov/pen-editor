@@ -18,6 +18,19 @@ export function createPenController(_context: InteractionContext): PenController
   let anchorStartWorld = { x: 0, y: 0 };
   let dragExceededThreshold = false;
 
+  // Idle-cursor updates (the "next segment" preview following the mouse
+  // between clicks) arrive on every pointermove — potentially >100/sec — but
+  // the pen-preview overlay only needs the latest position once per rendered
+  // frame. Coalesce into a single store write per RAF, same pattern as
+  // panController's flushPanPosition.
+  let pendingCursorWorld: { x: number; y: number } | null = null;
+  let cursorRafId: number | null = null;
+
+  const flushCursorWorld = (): void => {
+    cursorRafId = null;
+    usePenToolStore.getState().setCursorWorld(pendingCursorWorld);
+  };
+
   return {
     handlePointerDown(e: PointerEvent, world: { x: number; y: number }): boolean {
       const { activeTool } = useDrawModeStore.getState();
@@ -59,7 +72,10 @@ export function createPenController(_context: InteractionContext): PenController
         return true;
       }
 
-      pen.setCursorWorld(world);
+      pendingCursorWorld = world;
+      if (cursorRafId === null) {
+        cursorRafId = requestAnimationFrame(flushCursorWorld);
+      }
       return true;
     },
 

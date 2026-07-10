@@ -13,8 +13,13 @@ import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
 import { SelectWithOptions } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
 import { InlineAlert } from "@/components/ui/inline-alert";
+import { IconButton } from "@/components/ui/IconButton";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -71,38 +76,51 @@ function TabBar() {
               className="group/tab relative w-full pr-5"
             >
               <span className="truncate max-w-[80px]">{tab.title}</span>
-              <button
-                data-testid={`close-tab-${tab.id}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  closeTab(tab.id);
-                }}
-                className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-secondary text-text-muted transition-opacity"
-                title="Close tab"
-              >
-                <XIcon size={10} />
-              </button>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      data-testid={`close-tab-${tab.id}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        closeTab(tab.id);
+                      }}
+                      className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-secondary text-text-muted transition-opacity"
+                      title="Close tab"
+                    >
+                      <XIcon size={10} />
+                    </button>
+                  }
+                />
+                <TooltipContent>Close tab</TooltipContent>
+              </Tooltip>
             </TabsTrigger>
           ))}
         </TabsList>
-        <Button
+        <IconButton
           data-testid="create-tab-button"
           variant="ghost"
           size="icon"
           onClick={() => createTab()}
-          title="New chat"
+          tooltip="New chat"
         >
           <PlusIcon className="size-4" weight="light" />
-        </Button>
+        </IconButton>
         {activeActions?.hasMessages && (
           <DropdownMenu>
             <DropdownMenuTrigger
-              data-testid="chat-menu-trigger"
-              title="Chat options"
-              render={<Button variant="ghost" size="icon" />}
-            >
-              <DotsThreeVerticalIcon size={16} weight="bold" />
-            </DropdownMenuTrigger>
+              render={
+                <IconButton
+                  data-testid="chat-menu-trigger"
+                  variant="ghost"
+                  size="icon"
+                  tooltip="Chat options"
+                >
+                  <DotsThreeVerticalIcon size={16} weight="bold" />
+                </IconButton>
+              }
+            />
+
             <DropdownMenuContent align="end" sideOffset={4} className="min-w-44">
               <DropdownMenuItem
                 data-testid="chat-menu-download"
@@ -305,24 +323,42 @@ export function ChatPanelContent() {
         <span className="text-sm font-medium text-text-primary flex-1">
           Design Agent
         </span>
-        <button
-          data-testid="presets-toggle"
-          onClick={() => setShowPresets((v) => !v)}
-          className={`-my-0.5 p-1 rounded-lg hover:bg-secondary ${showPresets ? "text-text-primary bg-secondary" : "text-text-muted"}`}
-          title={showPresets ? "Hide presets" : "Show presets"}
-        >
-          <LightningIcon size={16} />
-        </button>
-        <button
-          onClick={toggleExpanded}
-          className="-my-0.5 p-1 rounded-lg hover:bg-secondary text-text-muted transition-colors"
-          title={isExpanded ? "Collapse panel" : "Expand panel"}
-        >
-          <ArrowLineLeftIcon
-            size={16}
-            className={isExpanded ? "" : "rotate-180"}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                data-testid="presets-toggle"
+                onClick={() => setShowPresets((v) => !v)}
+                className={`-my-0.5 p-1 rounded-lg hover:bg-secondary ${showPresets ? "text-text-primary bg-secondary" : "text-text-muted"}`}
+                title={showPresets ? "Hide presets" : "Show presets"}
+              >
+                <LightningIcon size={16} />
+              </button>
+            }
           />
-        </button>
+          <TooltipContent>
+            {showPresets ? "Hide presets" : "Show presets"}
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                onClick={toggleExpanded}
+                className="-my-0.5 p-1 rounded-lg hover:bg-secondary text-text-muted transition-colors"
+                title={isExpanded ? "Collapse panel" : "Expand panel"}
+              >
+                <ArrowLineLeftIcon
+                  size={16}
+                  className={isExpanded ? "" : "rotate-180"}
+                />
+              </button>
+            }
+          />
+          <TooltipContent>
+            {isExpanded ? "Collapse panel" : "Expand panel"}
+          </TooltipContent>
+        </Tooltip>
       </div>
 
       {/* Tab bar */}

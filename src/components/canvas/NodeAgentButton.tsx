@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SparkleIcon, ArrowUpIcon } from "@phosphor-icons/react";
-import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
 import type { AgentMode } from "@/store/chatStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { embedScreenRect } from "@/components/canvas/embedLayerGeometry";
@@ -105,16 +105,16 @@ export function NodeAgentButton({
       onPointerDown={stopCanvasPointer}
     >
       {!open ? (
-        <Button
+        <IconButton
+          tooltip="Ask agent"
+          side="top"
           variant="default"
           size="icon-sm"
           className="size-6 rounded-lg bg-accent-primary text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)] hover:bg-accent-primary/90"
-          title="Ask agent"
-          aria-label="Ask agent"
           onClick={() => setOpen(true)}
         >
           <SparkleIcon className="size-3.5" weight="fill" />
-        </Button>
+        </IconButton>
       ) : (
         <div className="flex w-72 flex-col gap-1 rounded-xl border border-border-default bg-surface-panel p-1.5 shadow-[0_0px_3px_rgba(0,0,0,0.04)]">
           <div className="flex items-end gap-1.5">
@@ -127,17 +127,17 @@ export function NodeAgentButton({
               placeholder={placeholder}
               className="flex-1 resize-none bg-transparent px-1.5 py-1 text-[13px] text-text-primary outline-none placeholder:text-text-muted"
             />
-            <Button
+            <IconButton
+              tooltip="Send"
+              side="top"
               variant="default"
               size="icon-sm"
               className="size-5 shrink-0 rounded-lg bg-accent-primary text-white hover:bg-accent-primary/90"
-              title="Send"
-              aria-label="Send"
               disabled={!canSend}
               onClick={submit}
             >
               <ArrowUpIcon className="size-3" weight="regular" />
-            </Button>
+            </IconButton>
           </div>
           {/* Full-bleed divider: negative margins cancel the container padding. */}
           <div className="-mx-1.5 my-0.5 h-px bg-border-default" />

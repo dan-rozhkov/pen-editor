@@ -10,6 +10,7 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { BOOLEAN_SUPPORTED_TYPES, type BooleanOpKind } from "@/lib/booleanOps";
 import type { SceneNode } from "@/types/scene";
 import { PropertySection } from "@/components/ui/PropertyInputs";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 interface BooleanOperationsSectionProps {
   selectedIds: string[];
@@ -47,14 +48,21 @@ export function BooleanOperationsSection({ selectedIds, selectedNodes }: Boolean
     <PropertySection title="Boolean operations">
       <div className="flex gap-1">
         {OPS.map(({ op, label, Icon }) => (
-          <button
-            key={op}
-            className={buttonClass}
-            onClick={() => handleOp(op)}
-            title={label}
-          >
-            <Icon size={iconSize} />
-          </button>
+          <Tooltip key={op}>
+            <TooltipTrigger
+              render={
+                <button
+                  className={buttonClass}
+                  onClick={() => handleOp(op)}
+                >
+                  <Icon size={iconSize} />
+                </button>
+              }
+            />
+            <TooltipContent>
+              <span>{label}</span>
+            </TooltipContent>
+          </Tooltip>
         ))}
       </div>
     </PropertySection>

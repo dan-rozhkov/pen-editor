@@ -9,9 +9,6 @@ import {
 } from "@phosphor-icons/react";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import type { LeftSection } from "@/store/leftSidebarStore";
-import { useVariablesDialogStore } from "@/store/variablesDialogStore";
-import { useTextStylesDialogStore } from "@/store/textStylesDialogStore";
-import { useStylesDialogStore } from "@/store/stylesDialogStore";
 import { useIsMobile } from "@/hooks/useIsMobile";
 
 interface RailButtonProps {
@@ -59,14 +56,25 @@ const SECTIONS: {
   { section: "components", testid: "rail-components", title: "Assets", icon: <DiamondsFourIcon size={18} weight="light" /> },
 ];
 
+// Variables/Text styles/Styles are separate rail sections (not tabs, for now)
+// that render below a divider — same navigation model as SECTIONS above, just
+// visually grouped apart from the core Pages/Agents/Assets triad.
+const STYLE_SECTIONS: {
+  section: LeftSection;
+  testid: string;
+  title: string;
+  icon: ReactNode;
+}[] = [
+  { section: "variables", testid: "rail-variables", title: "Variables", icon: <PlusCircleIcon size={20} weight="light" /> },
+  { section: "textStyles", testid: "rail-text-styles", title: "Text", icon: <TextAaIcon size={20} weight="light" /> },
+  { section: "styles", testid: "rail-styles", title: "Styles", icon: <PaintBrushIcon size={20} weight="light" /> },
+];
+
 export function LeftRail() {
   const activeSection = useLeftSidebarStore((s) => s.activeSection);
   const setActiveSection = useLeftSidebarStore((s) => s.setActiveSection);
   const isPanelOpen = useLeftSidebarStore((s) => s.isPanelOpen);
   const setPanelOpen = useLeftSidebarStore((s) => s.setPanelOpen);
-  const openVariables = useVariablesDialogStore((s) => s.setOpen);
-  const openTextStyles = useTextStylesDialogStore((s) => s.setOpen);
-  const openStyles = useStylesDialogStore((s) => s.setOpen);
   const isMobile = useIsMobile();
 
   // On mobile the panel is a full-width overlay the rail toggles: tapping the
@@ -102,30 +110,21 @@ export function LeftRail() {
         </RailButton>
       ))}
       <div className="h-px w-5 bg-border-default" />
-      <RailButton
-        testid="rail-variables"
-        title="Variables"
-        active={false}
-        onClick={() => openVariables(true)}
-      >
-        <PlusCircleIcon size={20} weight="light" />
-      </RailButton>
-      <RailButton
-        testid="rail-text-styles"
-        title="Text"
-        active={false}
-        onClick={() => openTextStyles(true)}
-      >
-        <TextAaIcon size={20} weight="light" />
-      </RailButton>
-      <RailButton
-        testid="rail-styles"
-        title="Styles"
-        active={false}
-        onClick={() => openStyles(true)}
-      >
-        <PaintBrushIcon size={20} weight="light" />
-      </RailButton>
+      {STYLE_SECTIONS.map((item) => (
+        <RailButton
+          key={item.section}
+          testid={item.testid}
+          title={item.title}
+          active={
+            isMobile
+              ? isPanelOpen && activeSection === item.section
+              : activeSection === item.section
+          }
+          onClick={() => handleSectionClick(item.section)}
+        >
+          {item.icon}
+        </RailButton>
+      ))}
     </div>
   );
 }

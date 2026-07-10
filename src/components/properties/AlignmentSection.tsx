@@ -20,6 +20,7 @@ import { applyNodeUpdates } from "@/utils/applyNodeUpdates";
 import type { FrameNode, GroupNode, SceneNode } from "@/types/scene";
 import { PropertySection } from "@/components/ui/PropertyInputs";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 interface AlignmentSectionProps {
   count: number;
@@ -64,59 +65,122 @@ export function AlignmentSection({
     <div className="flex flex-col gap-4">
       <PropertySection title="Alignment">
         <div className="flex gap-1">
-          <button
-            className={buttonClass}
-            onClick={() => handleAlign("left")}
-            title="Align left"
-          >
-            <TextAlignLeft size={iconSize} />
-          </button>
-          <button
-            className={buttonClass}
-            onClick={() => handleAlign("centerH")}
-            title="Align center horizontally"
-          >
-            <TextAlignCenter size={iconSize} />
-          </button>
-          <button
-            className={buttonClass}
-            onClick={() => handleAlign("right")}
-            title="Align right"
-          >
-            <TextAlignRight size={iconSize} />
-          </button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  className={buttonClass}
+                  onClick={() => handleAlign("left")}
+                  title="Align left"
+                >
+                  <TextAlignLeft size={iconSize} />
+                </button>
+              }
+            />
+            <TooltipContent>
+              <span>Align left</span>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  className={buttonClass}
+                  onClick={() => handleAlign("centerH")}
+                  title="Align center horizontally"
+                >
+                  <TextAlignCenter size={iconSize} />
+                </button>
+              }
+            />
+            <TooltipContent>
+              <span>Align center horizontally</span>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  className={buttonClass}
+                  onClick={() => handleAlign("right")}
+                  title="Align right"
+                >
+                  <TextAlignRight size={iconSize} />
+                </button>
+              }
+            />
+            <TooltipContent>
+              <span>Align right</span>
+            </TooltipContent>
+          </Tooltip>
           <div className="w-2" />
-          <button
-            className={buttonClass}
-            onClick={() => handleAlign("top")}
-            title="Align top"
-          >
-            <AlignTop size={iconSize} />
-          </button>
-          <button
-            className={buttonClass}
-            onClick={() => handleAlign("centerV")}
-            title="Align center vertically"
-          >
-            <AlignCenterVertical size={iconSize} />
-          </button>
-          <button
-            className={buttonClass}
-            onClick={() => handleAlign("bottom")}
-            title="Align bottom"
-          >
-            <AlignBottom size={iconSize} />
-          </button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  className={buttonClass}
+                  onClick={() => handleAlign("top")}
+                  title="Align top"
+                >
+                  <AlignTop size={iconSize} />
+                </button>
+              }
+            />
+            <TooltipContent>
+              <span>Align top</span>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  className={buttonClass}
+                  onClick={() => handleAlign("centerV")}
+                  title="Align center vertically"
+                >
+                  <AlignCenterVertical size={iconSize} />
+                </button>
+              }
+            />
+            <TooltipContent>
+              <span>Align center vertically</span>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  className={buttonClass}
+                  onClick={() => handleAlign("bottom")}
+                  title="Align bottom"
+                >
+                  <AlignBottom size={iconSize} />
+                </button>
+              }
+            />
+            <TooltipContent>
+              <span>Align bottom</span>
+            </TooltipContent>
+          </Tooltip>
           {!isSingleNodeInFrame && (
             <>
               <div className="w-2" />
-              <button
-                className={buttonClass}
-                onClick={handleTidyUp}
-                title="Tidy up (Ctrl+Alt+T)"
-              >
-                <GridNine size={iconSize} />
-              </button>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      className={buttonClass}
+                      onClick={handleTidyUp}
+                      title="Tidy up (Ctrl+Alt+T)"
+                    >
+                      <GridNine size={iconSize} />
+                    </button>
+                  }
+                />
+                <TooltipContent>
+                  <span>Tidy up (Ctrl+Alt+T)</span>
+                </TooltipContent>
+              </Tooltip>
             </>
           )}
         </div>

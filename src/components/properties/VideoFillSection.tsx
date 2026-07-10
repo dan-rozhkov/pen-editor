@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ImageCropRect, ImageFillMode, VideoFill } from "@/types/scene";
 import { CheckboxInput, NumberInput, SelectInput, TextInput } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
 import { CropIcon } from "@phosphor-icons/react";
 import { useFileUpload } from "@/components/properties/useFileUpload";
 import { FileUploadControl } from "@/components/properties/FileUploadControl";
@@ -161,16 +162,15 @@ export function VideoFillEditor({
           onChange={handleModeChange}
           labelClassName="text-xs font-normal"
         />
-        <Button
+        <IconButton
           type="button"
           size="icon-sm"
           variant={cropEditorOpen ? "default" : "ghost"}
           onClick={() => setCropEditorOpen((v) => !v)}
-          title="Crop video"
-          aria-label="Crop video"
+          tooltip="Crop video"
         >
           <CropIcon />
-        </Button>
+        </IconButton>
       </div>
 
       {cropped && (

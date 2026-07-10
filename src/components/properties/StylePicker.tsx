@@ -1,5 +1,6 @@
 import { LinkSimpleIcon, LinkBreakIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,9 +40,9 @@ export function StylePicker({ styles, boundId, onPick, onDetach, kindLabel }: St
         <span className="min-w-0 flex-1 truncate text-xs text-text-primary" title={bound?.name}>
           {bound?.name ?? "Missing style"}
         </span>
-        <Button variant="ghost" size="icon-sm" onClick={onDetach} title="Detach style">
+        <IconButton variant="ghost" size="icon-sm" onClick={onDetach} tooltip="Detach style">
           <LinkBreakIcon />
-        </Button>
+        </IconButton>
       </div>
     );
   }

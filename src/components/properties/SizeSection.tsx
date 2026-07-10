@@ -29,6 +29,12 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { generatePolygonPoints } from "@/utils/polygonUtils";
 import { mountHtmlWithBodyStyles } from "@/utils/embedHtmlUtils";
@@ -584,35 +590,48 @@ export function SizeSection({
           }}
           min={1}
         />
-        {node.type !== "text" && <button
-          type="button"
-          className={cn(
-            "shrink-0 flex items-center justify-center w-6 h-6 rounded border border-transparent",
-            node.aspectRatioLocked
-              ? "border-border-default bg-surface-panel text-text-primary hover:bg-surface-panel"
-              : "text-text-muted hover:bg-secondary"
-          )}
-          title={node.aspectRatioLocked ? "Unlock aspect ratio" : "Lock aspect ratio"}
-          onClick={() =>
-            onUpdate({
-              aspectRatioLocked: !node.aspectRatioLocked,
-              ...(!node.aspectRatioLocked
-                ? { aspectRatio: effectiveWidth / effectiveHeight }
-                : {}),
-            })
-          }
-        >
-          {node.aspectRatioLocked ? (
-            <LinkSimple size={18} />
-          ) : (
-            <LinkSimpleBreak size={18} />
-          )}
-        </button>}
+        {node.type !== "text" && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  className={cn(
+                    "shrink-0 flex items-center justify-center w-6 h-6 rounded border border-transparent",
+                    node.aspectRatioLocked
+                      ? "border-border-default bg-surface-panel text-text-primary hover:bg-surface-panel"
+                      : "text-text-muted hover:bg-secondary"
+                  )}
+                  title={node.aspectRatioLocked ? "Unlock aspect ratio" : "Lock aspect ratio"}
+                  onClick={() =>
+                    onUpdate({
+                      aspectRatioLocked: !node.aspectRatioLocked,
+                      ...(!node.aspectRatioLocked
+                        ? { aspectRatio: effectiveWidth / effectiveHeight }
+                        : {}),
+                    })
+                  }
+                >
+                  {node.aspectRatioLocked ? (
+                    <LinkSimple size={18} />
+                  ) : (
+                    <LinkSimpleBreak size={18} />
+                  )}
+                </button>
+              }
+            />
+            <TooltipContent>
+              <span>
+                {node.aspectRatioLocked ? "Unlock aspect ratio" : "Lock aspect ratio"}
+              </span>
+            </TooltipContent>
+          </Tooltip>
+        )}
         {canFitToContent && (
-          <Button
+          <IconButton
             variant="secondary"
             size="icon-sm"
-            title={isFitting ? "Fitting..." : "Fit to content"}
+            tooltip={isFitting ? "Fitting..." : "Fit to content"}
             aria-label={isFitting ? "Fitting content" : "Fit to content"}
             disabled={isFitting}
             onClick={async () => {
@@ -664,7 +683,7 @@ export function SizeSection({
             }}
           >
             <ResizeIcon />
-          </Button>
+          </IconButton>
         )}
       </PropertyRow>
       {node.type === "frame" && (

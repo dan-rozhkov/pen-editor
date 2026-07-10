@@ -41,12 +41,6 @@ vi.mock("@/components/properties/AlignmentSection", () => ({
     <div data-testid="alignment-section" data-count={count} />
   ),
 }));
-// VariablesDialog pulls in the color picker / portals; stub it (the panel only
-// renders it closed by default anyway).
-vi.mock("@/components/VariablesPanel", () => ({
-  VariablesDialog: () => null,
-}));
-
 function select(ids: string[]) {
   useSelectionStore.setState({ selectedIds: ids });
 }

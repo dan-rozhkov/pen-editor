@@ -7,7 +7,7 @@ import {
   PropertySection,
   SelectInput,
 } from "@/components/ui/PropertyInputs";
-import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
 import { MinusIcon, PlusIcon } from "@phosphor-icons/react";
 import { OverrideIndicator } from "@/components/properties/OverrideIndicator";
 
@@ -154,13 +154,13 @@ export function StrokeSection({
       title="Stroke"
       action={
         !hasStroke ? (
-          <Button variant="ghost" size="icon-sm" onClick={handleAddStroke}>
+          <IconButton variant="ghost" size="icon-sm" tooltip="Add stroke" onClick={handleAddStroke}>
             <PlusIcon />
-          </Button>
+          </IconButton>
         ) : (
-          <Button variant="ghost" size="icon-sm" onClick={handleRemoveStroke}>
+          <IconButton variant="ghost" size="icon-sm" tooltip="Remove stroke" onClick={handleRemoveStroke}>
             <MinusIcon />
-          </Button>
+          </IconButton>
         )
       }
     >

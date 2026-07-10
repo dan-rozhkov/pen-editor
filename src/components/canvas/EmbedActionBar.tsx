@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { PenNibIcon, PencilSimpleLineIcon } from "@phosphor-icons/react";
-import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
 import type { EmbedNode } from "@/types/scene";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
@@ -75,28 +75,28 @@ export function EmbedActionBar({
       }}
       onPointerDown={stopCanvasPointer}
     >
-      <Button
+      <IconButton
+        tooltip="Inline edit"
+        side="top"
         variant="ghost"
         size="icon-sm"
         className="size-9 rounded-lg p-1"
-        title="Inline edit"
-        aria-label="Inline edit"
         onClick={handleInlineEdit}
       >
         <PencilSimpleLineIcon className="size-6" weight="light" />
-      </Button>
+      </IconButton>
       <div className="h-5 w-px bg-border" />
-      <Button
+      <IconButton
+        tooltip="Convert to design"
+        side="top"
         variant="ghost"
         size="icon-sm"
         className="size-9 rounded-lg p-1"
-        title="Convert to design"
-        aria-label="Convert to design"
         onClick={handleConvertToDesign}
         disabled={isConverting}
       >
         <PenNibIcon className="size-6" weight="light" />
-      </Button>
+      </IconButton>
     </div>
   );
 }

@@ -16,7 +16,7 @@ import {
   PropertySection,
   SelectInput,
 } from "@/components/ui/PropertyInputs";
-import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
 
 interface LayoutGridSectionProps {
   node: FrameNode;
@@ -290,9 +290,9 @@ export function LayoutGridSection({ node, onUpdate }: LayoutGridSectionProps) {
     <PropertySection
       title="Layout grid"
       action={
-        <Button variant="ghost" size="icon-sm" onClick={addGrid}>
+        <IconButton variant="ghost" size="icon-sm" onClick={addGrid} tooltip="Add grid">
           <PlusIcon />
-        </Button>
+        </IconButton>
       }
     >
       {grids.map((grid) => (
@@ -318,23 +318,23 @@ export function LayoutGridSection({ node, onUpdate }: LayoutGridSectionProps) {
             </span>
           </button>
 
-          <Button
+          <IconButton
             variant="ghost"
             size="icon-sm"
             onClick={(e) => { e.stopPropagation(); toggleVisibility(grid.id); }}
-            title={grid.visible ? "Hide grid" : "Show grid"}
+            tooltip={grid.visible ? "Hide grid" : "Show grid"}
           >
             {grid.visible ? <EyeIcon size={14} /> : <EyeSlashIcon size={14} />}
-          </Button>
+          </IconButton>
 
-          <Button
+          <IconButton
             variant="ghost"
             size="icon-sm"
             onClick={(e) => { e.stopPropagation(); removeGrid(grid.id); }}
-            title="Remove grid"
+            tooltip="Remove grid"
           >
             <MinusIcon size={14} />
-          </Button>
+          </IconButton>
 
           {popoverState?.id === grid.id && (
             <GridPopover

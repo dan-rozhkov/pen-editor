@@ -13,6 +13,7 @@ import {
 import { runExportSettingsForNode } from "@/lib/exportSettings/runExportAll";
 import { PropertySection, SelectInput, TextInput } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface Props {
@@ -98,9 +99,9 @@ export function ExportSettingsSection({ node, onUpdate }: Props) {
   };
 
   const action = (
-    <Button variant="ghost" size="icon-sm" onClick={handleAdd} title="Add export setting">
+    <IconButton variant="ghost" size="icon-sm" onClick={handleAdd} tooltip="Add export setting">
       <PlusIcon />
-    </Button>
+    </IconButton>
   );
 
   return (
@@ -152,14 +153,14 @@ export function ExportSettingsSection({ node, onUpdate }: Props) {
                   />
                 </PopoverContent>
               </Popover>
-              <Button
+              <IconButton
                 variant="ghost"
                 size="icon-sm"
                 onClick={() => handleRemove(setting.id)}
-                title="Remove export setting"
+                tooltip="Remove export setting"
               >
                 <MinusIcon />
-              </Button>
+              </IconButton>
             </div>
           ))}
         </div>

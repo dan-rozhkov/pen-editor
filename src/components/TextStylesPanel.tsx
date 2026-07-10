@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useTextStyleStore } from "../store/textStyleStore";
 import { generateTextStyleId } from "../types/textStyle";
 import type { TextStyle, TextStylePropertyKey } from "../types/textStyle";
-import { Dialog, DialogContent, DialogTitle } from "./ui/dialog";
+import { useLeftSidebarStore } from "../store/leftSidebarStore";
 import {
   Table,
   TableHeader,
@@ -11,7 +11,9 @@ import {
   TableHead,
   TableCell,
 } from "./ui/table";
-import { PlusIcon, TrashIcon } from "@phosphor-icons/react";
+import { PlusIcon, TrashIcon, ArrowLineLeftIcon } from "@phosphor-icons/react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip";
+import { IconButton } from "./ui/IconButton";
 
 // Inline editable text/number cell (mirrors VariablesPanel's EditableCell).
 function EditableCell({
@@ -148,27 +150,36 @@ function TextStyleRow({ style }: { style: TextStyle }) {
       </TableCell>
       <TableCell className="py-2 px-3 border-l border-border-light">
         {hovered && (
-          <button
-            className="p-1 rounded hover:bg-white/10 text-text-muted hover:text-red-400 transition-colors"
-            onClick={() => deleteTextStyle(style.id)}
-            title="Delete text style"
-          >
-            <TrashIcon className="size-3.5" />
-          </button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  className="p-1 rounded hover:bg-white/10 text-text-muted hover:text-red-400 transition-colors"
+                  onClick={() => deleteTextStyle(style.id)}
+                  title="Delete text style"
+                >
+                  <TrashIcon className="size-3.5" />
+                </button>
+              }
+            />
+            <TooltipContent>Delete text style</TooltipContent>
+          </Tooltip>
         )}
       </TableCell>
     </TableRow>
   );
 }
 
-interface TextStylesDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}
-
-export function TextStylesDialog({ open, onOpenChange }: TextStylesDialogProps) {
+/**
+ * Standalone panel body (no Dialog wrapper) rendered inside the left sidebar's
+ * "Text styles" section — mirrors `ChatPanelContent`'s shape (self-contained
+ * header incl. expand/collapse, body below).
+ */
+export function TextStylesPanelContent() {
   const textStyles = useTextStyleStore((s) => s.textStyles);
   const addTextStyle = useTextStyleStore((s) => s.addTextStyle);
+  const isExpanded = useLeftSidebarStore((s) => s.isExpanded);
+  const toggleExpanded = useLeftSidebarStore((s) => s.toggleExpanded);
 
   const handleAdd = () => {
     const newStyle: TextStyle = {
@@ -185,78 +196,90 @@ export function TextStylesDialog({ open, onOpenChange }: TextStylesDialogProps) 
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="sm:max-w-3xl max-h-[80vh] flex flex-col gap-0 p-0"
-        showCloseButton={false}
-        overlayClassName="backdrop-blur-none bg-black/40"
-      >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border-light">
-          <DialogTitle>
-            Text styles
-          </DialogTitle>
-          <button
-            className="p-1 rounded hover:bg-secondary transition-colors text-text-muted hover:text-text-primary"
-            title="Add text style"
-            onClick={handleAdd}
-          >
-            <PlusIcon className="size-4" />
-          </button>
-        </div>
+    <div className="w-full h-full bg-surface-panel flex flex-col overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border-default shrink-0">
+        <span className="text-sm font-medium text-text-primary flex-1">
+          Text styles
+        </span>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                className="p-1 rounded hover:bg-secondary transition-colors text-text-muted hover:text-text-primary"
+                title="Add text style"
+                onClick={handleAdd}
+              >
+                <PlusIcon className="size-4" />
+              </button>
+            }
+          />
+          <TooltipContent>Add text style</TooltipContent>
+        </Tooltip>
+        <IconButton
+          variant="ghost"
+          size="icon-sm"
+          onClick={toggleExpanded}
+          tooltip={isExpanded ? "Collapse panel" : "Expand panel"}
+        >
+          <ArrowLineLeftIcon
+            size={16}
+            className={isExpanded ? "" : "rotate-180"}
+          />
+        </IconButton>
+      </div>
 
-        <div className="flex-1 overflow-auto">
-          <Table className="border-collapse select-none table-fixed min-w-[720px]">
-            <TableHeader>
-              <TableRow className="border-border-light bg-surface-panel sticky top-0 hover:bg-surface-panel">
-                <TableHead className="w-[21%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto">
-                  Name
-                </TableHead>
-                <TableHead className="w-[17%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
-                  Font
-                </TableHead>
-                <TableHead className="w-[11%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
-                  Size
-                </TableHead>
-                <TableHead className="w-[13%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
-                  Weight
-                </TableHead>
-                <TableHead className="w-[13%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
-                  Line height
-                </TableHead>
-                <TableHead className="w-[17%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
-                  Letter spacing
-                </TableHead>
-                <TableHead className="w-[7%] h-auto border-l border-border-light" />
+      <div className="flex-1 overflow-auto">
+        <Table className="border-collapse select-none table-fixed min-w-[720px]">
+          <TableHeader>
+            <TableRow className="border-border-light bg-surface-panel sticky top-0 hover:bg-surface-panel">
+              <TableHead className="w-[21%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto">
+                Name
+              </TableHead>
+              <TableHead className="w-[17%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
+                Font
+              </TableHead>
+              <TableHead className="w-[11%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
+                Size
+              </TableHead>
+              <TableHead className="w-[13%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
+                Weight
+              </TableHead>
+              <TableHead className="w-[13%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
+                Line height
+              </TableHead>
+              <TableHead className="w-[17%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
+                Letter spacing
+              </TableHead>
+              <TableHead className="w-[7%] h-auto border-l border-border-light" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {textStyles.length === 0 ? (
+              <TableRow className="hover:bg-transparent">
+                <TableCell
+                  colSpan={7}
+                  className="text-center text-text-disabled text-xs py-12"
+                >
+                  No text styles yet — create one from a selected text layer's
+                  properties panel, or add one here.
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {textStyles.length === 0 ? (
-                <TableRow className="hover:bg-transparent">
-                  <TableCell
-                    colSpan={7}
-                    className="text-center text-text-disabled text-xs py-12"
-                  >
-                    No text styles yet — create one from a selected text layer's
-                    properties panel, or add one here.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                textStyles.map((s) => <TextStyleRow key={s.id} style={s} />)
-              )}
-            </TableBody>
-          </Table>
-        </div>
+            ) : (
+              textStyles.map((s) => <TextStyleRow key={s.id} style={s} />)
+            )}
+          </TableBody>
+        </Table>
+      </div>
 
-        <div className="border-t border-border-light px-4 py-3">
-          <button
-            className="flex items-center gap-2 text-xs text-text-muted hover:text-text-primary transition-colors"
-            onClick={handleAdd}
-          >
-            <PlusIcon className="size-4" weight="light" />
-            Create text style
-          </button>
-        </div>
-      </DialogContent>
-    </Dialog>
+      <div className="border-t border-border-light px-4 py-3">
+        <button
+          className="flex items-center gap-2 text-xs text-text-muted hover:text-text-primary transition-colors"
+          onClick={handleAdd}
+        >
+          <PlusIcon className="size-4" weight="light" />
+          Create text style
+        </button>
+      </div>
+    </div>
   );
 }

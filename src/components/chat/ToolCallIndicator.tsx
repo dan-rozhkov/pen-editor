@@ -11,6 +11,11 @@ import { getToolDisplayName } from "@/lib/toolDisplayNames";
 import { downloadFile, filenameFromUrl } from "@/lib/downloadFile";
 import { extractImageUrls } from "./extractImageUrls";
 import { ImagePreview } from "./MessageList";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 
 type ToolStatus = "running" | "completed" | "error";
 
@@ -119,16 +124,23 @@ export function ToolCallIndicator({ part }: ToolCallIndicatorProps) {
             {imageUrls.map((url, i) => (
               <div key={url} className="shrink-0 relative group">
                 <ImagePreview url={url} urls={imageUrls} index={i} />
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void downloadOne(url, i + 1);
-                  }}
-                  title="Download image"
-                  className="absolute top-1 right-1 p-1 rounded bg-black/60 text-white opacity-0 group-hover:opacity-100 hover:bg-black/80 transition-opacity"
-                >
-                  <DownloadSimpleIcon size={12} />
-                </button>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void downloadOne(url, i + 1);
+                        }}
+                        title="Download image"
+                        className="absolute top-1 right-1 p-1 rounded bg-black/60 text-white opacity-0 group-hover:opacity-100 hover:bg-black/80 transition-opacity"
+                      >
+                        <DownloadSimpleIcon size={12} />
+                      </button>
+                    }
+                  />
+                  <TooltipContent>Download image</TooltipContent>
+                </Tooltip>
               </div>
             ))}
           </div>

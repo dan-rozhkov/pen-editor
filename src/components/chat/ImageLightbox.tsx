@@ -1,5 +1,10 @@
 import { useEffect } from "react";
 import { CaretLeftIcon, CaretRightIcon } from "@phosphor-icons/react";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 
 interface ImageLightboxProps {
   urls: string[];
@@ -63,26 +68,40 @@ export function ImageLightbox({
 
       {hasMultiple && (
         <>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              prev();
-            }}
-            title="Previous image"
-            className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
-          >
-            <CaretLeftIcon size={24} />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              next();
-            }}
-            title="Next image"
-            className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
-          >
-            <CaretRightIcon size={24} />
-          </button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    prev();
+                  }}
+                  title="Previous image"
+                  className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
+                >
+                  <CaretLeftIcon size={24} />
+                </button>
+              }
+            />
+            <TooltipContent>Previous image</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    next();
+                  }}
+                  title="Next image"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
+                >
+                  <CaretRightIcon size={24} />
+                </button>
+              }
+            />
+            <TooltipContent>Next image</TooltipContent>
+          </Tooltip>
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/70 text-xs">
             {index + 1} / {urls.length}
           </div>

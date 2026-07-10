@@ -37,10 +37,8 @@ describe("<AutoLayoutSection />", () => {
         onUpdate={onUpdate}
       />,
     );
-    // the action (minus) button is the only button without a title; the 9
-    // alignment-grid buttons all have titles.
-    const action = screen.getAllByRole("button").find((b) => !b.getAttribute("title"));
-    fireEvent.click(action!);
+    const action = screen.getByRole("button", { name: "Disable auto layout" });
+    fireEvent.click(action);
     expect(onUpdate).toHaveBeenCalledWith({
       layout: { autoLayout: false, flexDirection: "row" },
     });

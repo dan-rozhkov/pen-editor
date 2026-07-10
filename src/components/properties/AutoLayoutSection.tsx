@@ -12,7 +12,8 @@ import {
   PropertySection,
   SelectInput,
 } from "@/components/ui/PropertyInputs";
-import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 const alignmentGridClass =
@@ -85,13 +86,23 @@ export function AutoLayoutSection({ node, onUpdate, mixedKeys }: AutoLayoutSecti
       title="Auto Layout"
       action={
         !hasAutoLayout ? (
-          <Button variant="ghost" size="icon-sm" onClick={enableAutoLayout}>
+          <IconButton
+            tooltip="Enable auto layout"
+            variant="ghost"
+            size="icon-sm"
+            onClick={enableAutoLayout}
+          >
             <PlusIcon />
-          </Button>
+          </IconButton>
         ) : (
-          <Button variant="ghost" size="icon-sm" onClick={disableAutoLayout}>
+          <IconButton
+            tooltip="Disable auto layout"
+            variant="ghost"
+            size="icon-sm"
+            onClick={disableAutoLayout}
+          >
             <MinusIcon />
-          </Button>
+          </IconButton>
         )
       }
     >
@@ -116,7 +127,8 @@ export function AutoLayoutSection({ node, onUpdate, mixedKeys }: AutoLayoutSecti
               }
               isMixed={isMixed("layout.flexDirection")}
             />
-            <Button
+            <IconButton
+              tooltip="Wrap"
               type="button"
               variant="ghost"
               size="icon-sm"
@@ -131,7 +143,7 @@ export function AutoLayoutSection({ node, onUpdate, mixedKeys }: AutoLayoutSecti
               )}
             >
               <ArrowUDownLeftIcon />
-            </Button>
+            </IconButton>
           </PropertyRow>
           <PropertyRow>
             <div className="flex flex-col gap-1 flex-1">
@@ -211,52 +223,60 @@ export function AutoLayoutSection({ node, onUpdate, mixedKeys }: AutoLayoutSecti
                     isSpaceBetween &&
                     currentAlign === targetAlign;
 
+                  const buttonTitle = canToggleSpaceBetween
+                    ? `${isRow ? "H" : "V"}: ${targetJustify}, ${
+                        isRow ? "V" : "H"
+                      }: ${targetAlign} (double-click for space-between)`
+                    : `${isRow ? "H" : "V"}: ${targetJustify}, ${
+                        isRow ? "V" : "H"
+                      }: ${targetAlign}`;
+
                   return (
-                    <button
-                      key={index}
-                      className={cn(
-                        alignmentButtonClass,
-                        isActive && activeAlignmentButtonClass,
-                        showSpaceBetweenIcon && "ring-1 ring-border-hover",
-                      )}
-                      onClick={handleClick}
-                      onDoubleClick={handleDoubleClick}
-                      title={
-                        canToggleSpaceBetween
-                          ? `${isRow ? "H" : "V"}: ${targetJustify}, ${
-                              isRow ? "V" : "H"
-                            }: ${targetAlign} (double-click for space-between)`
-                          : `${isRow ? "H" : "V"}: ${targetJustify}, ${
-                              isRow ? "V" : "H"
-                            }: ${targetAlign}`
-                      }
-                    >
-                      {showSpaceBetweenIcon ? (
-                        <div
-                          className={`flex ${
-                            isRow ? "flex-row gap-0.5" : "flex-col gap-0.5"
-                          }`}
-                        >
-                          <div
-                            className={`${
-                              isRow ? "w-0.5 h-3" : "w-3 h-0.5"
-                            } bg-current rounded`}
-                          />
-                          <div
-                            className={`${
-                              isRow ? "w-0.5 h-3" : "w-3 h-0.5"
-                            } bg-current rounded`}
-                          />
-                          <div
-                            className={`${
-                              isRow ? "w-0.5 h-3" : "w-3 h-0.5"
-                            } bg-current rounded`}
-                          />
-                        </div>
-                      ) : (
-                        <div className="w-1 h-1 rounded-full bg-primary" />
-                      )}
-                    </button>
+                    <Tooltip key={index}>
+                      <TooltipTrigger
+                        render={
+                          <button
+                            className={cn(
+                              alignmentButtonClass,
+                              isActive && activeAlignmentButtonClass,
+                              showSpaceBetweenIcon && "ring-1 ring-border-hover",
+                            )}
+                            onClick={handleClick}
+                            onDoubleClick={handleDoubleClick}
+                            title={buttonTitle}
+                          >
+                            {showSpaceBetweenIcon ? (
+                              <div
+                                className={`flex ${
+                                  isRow ? "flex-row gap-0.5" : "flex-col gap-0.5"
+                                }`}
+                              >
+                                <div
+                                  className={`${
+                                    isRow ? "w-0.5 h-3" : "w-3 h-0.5"
+                                  } bg-current rounded`}
+                                />
+                                <div
+                                  className={`${
+                                    isRow ? "w-0.5 h-3" : "w-3 h-0.5"
+                                  } bg-current rounded`}
+                                />
+                                <div
+                                  className={`${
+                                    isRow ? "w-0.5 h-3" : "w-3 h-0.5"
+                                  } bg-current rounded`}
+                                />
+                              </div>
+                            ) : (
+                              <div className="w-1 h-1 rounded-full bg-primary" />
+                            )}
+                          </button>
+                        }
+                      />
+                      <TooltipContent>
+                        <span>{buttonTitle}</span>
+                      </TooltipContent>
+                    </Tooltip>
                   );
                 })}
               </div>

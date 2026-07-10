@@ -6,7 +6,7 @@ import {
   cleanup,
   within,
 } from "@testing-library/react";
-import { VariablesDialog } from "../VariablesPanel";
+import { VariablesPanelContent } from "../VariablesPanel";
 import { useVariableStore } from "@/store/variableStore";
 import { resetStores, seedVariables } from "@/test/fixtures";
 
@@ -25,7 +25,7 @@ function findVariable(id: string) {
   return variables().find((v) => v.id === id);
 }
 
-describe("<VariablesDialog />", () => {
+describe("<VariablesPanelContent />", () => {
   beforeEach(() => {
     resetStores();
     seedVariables();
@@ -38,7 +38,7 @@ describe("<VariablesDialog />", () => {
   //   var-radius  "--radius-m" (number, value "8", no themeValues)
 
   it("renders a row for each seeded variable with names and values", () => {
-    render(<VariablesDialog open onOpenChange={() => {}} />);
+    render(<VariablesPanelContent />);
 
     expect(screen.getByText("--primary")).toBeTruthy();
     expect(screen.getByText("--radius-m")).toBeTruthy();
@@ -55,14 +55,14 @@ describe("<VariablesDialog />", () => {
 
   it("shows the empty state when there are no variables", () => {
     useVariableStore.setState({ variables: [] });
-    render(<VariablesDialog open onOpenChange={() => {}} />);
+    render(<VariablesPanelContent />);
 
     expect(screen.getByText("No variables yet")).toBeTruthy();
     expect(screen.queryByText("--primary")).toBeNull();
   });
 
   it("renames a variable and writes it back to the store", () => {
-    render(<VariablesDialog open onOpenChange={() => {}} />);
+    render(<VariablesPanelContent />);
 
     // EditableCell shows a span until clicked; click to enter edit mode.
     fireEvent.click(screen.getByText("--primary"));
@@ -75,7 +75,7 @@ describe("<VariablesDialog />", () => {
   });
 
   it("edits a number variable's theme value via the editable cell", () => {
-    render(<VariablesDialog open onOpenChange={() => {}} />);
+    render(<VariablesPanelContent />);
 
     // both light/dark cells render "8"; edit the first (light) one.
     const cells = screen.getAllByText("8");
@@ -91,7 +91,7 @@ describe("<VariablesDialog />", () => {
   });
 
   it("removes a variable when its delete button is clicked", () => {
-    render(<VariablesDialog open onOpenChange={() => {}} />);
+    render(<VariablesPanelContent />);
 
     expect(variables().length).toBe(2);
 
@@ -109,7 +109,7 @@ describe("<VariablesDialog />", () => {
   });
 
   it("escaping an edit leaves the store unchanged", () => {
-    render(<VariablesDialog open onOpenChange={() => {}} />);
+    render(<VariablesPanelContent />);
 
     fireEvent.click(screen.getByText("--primary"));
     const input = screen.getByDisplayValue("--primary") as HTMLInputElement;
@@ -120,7 +120,7 @@ describe("<VariablesDialog />", () => {
   });
 
   it("exposes an add-variable trigger that grows the store", () => {
-    render(<VariablesDialog open onOpenChange={() => {}} />);
+    render(<VariablesPanelContent />);
 
     expect(variables().length).toBe(2);
 

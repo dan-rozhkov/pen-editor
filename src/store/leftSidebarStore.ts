@@ -1,8 +1,24 @@
 import { create } from "zustand";
 
 const STORAGE_KEY = "left-sidebar-section";
+const EXPANDED_STORAGE_KEY = "left-sidebar-expanded";
 
-export type LeftSection = "pages" | "agents" | "components";
+export type LeftSection =
+  | "pages"
+  | "agents"
+  | "components"
+  | "variables"
+  | "textStyles"
+  | "styles";
+
+const LEFT_SECTIONS: LeftSection[] = [
+  "pages",
+  "agents",
+  "components",
+  "variables",
+  "textStyles",
+  "styles",
+];
 
 interface LeftSidebarState {
   activeSection: LeftSection;
@@ -11,17 +27,22 @@ interface LeftSidebarState {
   // panel is an overlay that the rail toggles; on desktop it is always shown.
   isPanelOpen: boolean;
   setPanelOpen: (open: boolean) => void;
+  // Full-screen expanded mode for the active section (mirrors chatStore's
+  // isExpanded for Agents). Only meaningful for sections that support it
+  // (currently variables/textStyles/styles).
+  isExpanded: boolean;
+  toggleExpanded: () => void;
 }
 
 function getInitial(): LeftSection {
   const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === "pages" || stored === "agents" || stored === "components") {
-    return stored;
+  if (stored && (LEFT_SECTIONS as string[]).includes(stored)) {
+    return stored as LeftSection;
   }
   return "pages";
 }
 
-export const useLeftSidebarStore = create<LeftSidebarState>((set) => ({
+export const useLeftSidebarStore = create<LeftSidebarState>((set, get) => ({
   activeSection: getInitial(),
   setActiveSection: (section) => {
     set({ activeSection: section });
@@ -30,4 +51,10 @@ export const useLeftSidebarStore = create<LeftSidebarState>((set) => ({
   // Closed by default so mobile starts with only the rail visible.
   isPanelOpen: false,
   setPanelOpen: (open) => set({ isPanelOpen: open }),
+  isExpanded: localStorage.getItem(EXPANDED_STORAGE_KEY) === "true",
+  toggleExpanded: () => {
+    const next = !get().isExpanded;
+    localStorage.setItem(EXPANDED_STORAGE_KEY, String(next));
+    set({ isExpanded: next });
+  },
 }));

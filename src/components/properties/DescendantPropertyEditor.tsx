@@ -21,6 +21,7 @@ import { EffectsSection } from "@/components/properties/EffectsSection";
 import { ThemeSection } from "@/components/properties/ThemeSection";
 import { TypographySection } from "@/components/properties/TypographySection";
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
 import { Eye, EyeSlash } from "@phosphor-icons/react";
 
 function getParentContextForDescendant(
@@ -152,16 +153,15 @@ export function DescendantPropertyEditor({
               step={1}
             />
           </div>
-          <Button
+          <IconButton
+            tooltip={displayNode.enabled === false ? "Show element" : "Hide element"}
             type="button"
             variant="secondary"
             size="icon-sm"
             onClick={() => handleUpdate({ enabled: displayNode.enabled === false ? undefined : false })}
-            title={displayNode.enabled === false ? "Show element" : "Hide element"}
-            aria-label={displayNode.enabled === false ? "Show element" : "Hide element"}
           >
             {displayNode.enabled === false ? <EyeSlash size={14} /> : <Eye size={14} />}
-          </Button>
+          </IconButton>
         </div>
       </PropertySection>
       <PositionSection node={displayNode} onUpdate={handleUpdate} parentContext={parentContext} />

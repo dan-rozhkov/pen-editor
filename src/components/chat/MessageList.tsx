@@ -12,6 +12,11 @@ import { SimpleMarkdown } from "./SimpleMarkdown";
 import { ToolCallIndicator } from "./ToolCallIndicator";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 import { ImageLightbox } from "./ImageLightbox";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 
 interface ImagePreviewProps {
   url: string;
@@ -73,13 +78,20 @@ function MessageCopyButton({ msg }: { msg: UIMessage }) {
   };
 
   return (
-    <button
-      onClick={handleCopy}
-      className="opacity-0 group-hover:opacity-100 shrink-0 p-1 rounded-lg hover:bg-secondary text-text-muted transition-colors"
-      title={copied ? "Copied" : "Copy message"}
-    >
-      {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
-    </button>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            onClick={handleCopy}
+            className="opacity-0 group-hover:opacity-100 shrink-0 p-1 rounded-lg hover:bg-secondary text-text-muted transition-colors"
+            title={copied ? "Copied" : "Copy message"}
+          >
+            {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
+          </button>
+        }
+      />
+      <TooltipContent>{copied ? "Copied" : "Copy message"}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -162,13 +174,20 @@ export function MessageList({ messages, isLoading, onRollback }: MessageListProp
             <div key={msg.id} className="group flex justify-end items-center gap-1">
               <MessageCopyButton msg={msg} />
               {onRollback && (
-                <button
-                  onClick={() => onRollback(msg.id)}
-                  className="opacity-0 group-hover:opacity-100 shrink-0 p-1 rounded-lg hover:bg-secondary text-text-muted transition-colors"
-                  title="Roll back to this message"
-                >
-                  <ArrowCounterClockwiseIcon size={14} />
-                </button>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        onClick={() => onRollback(msg.id)}
+                        className="opacity-0 group-hover:opacity-100 shrink-0 p-1 rounded-lg hover:bg-secondary text-text-muted transition-colors"
+                        title="Roll back to this message"
+                      >
+                        <ArrowCounterClockwiseIcon size={14} />
+                      </button>
+                    }
+                  />
+                  <TooltipContent>Roll back to this message</TooltipContent>
+                </Tooltip>
               )}
               <div className="max-w-[85%] rounded-xl px-3 py-2 rounded-md bg-secondary text-secondary-foreground transition-colors">
                 {imageParts.length > 0 && (

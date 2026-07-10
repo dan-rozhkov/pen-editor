@@ -13,6 +13,11 @@ import { modelSupportsVision } from "@/lib/chatModels";
 import { useSelectionScreenshots } from "@/hooks/useSelectionScreenshots";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { OFFLINE_SEND_TITLE } from "@/lib/apiBase";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 
 // Maximum images per message (mirrored by MAX_IMAGE_PARTS on the backend).
 const MAX_IMAGES = 4;
@@ -306,14 +311,21 @@ export function ChatInput({
                   alt={sel.name}
                   className="w-full h-full object-contain"
                 />
-                <button
-                  type="button"
-                  onClick={() => dismissSelection(sel.nodeId)}
-                  title="Remove from context"
-                  className="absolute top-0 right-0 p-0.5 bg-black/60 rounded-bl text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <XIcon size={10} />
-                </button>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        type="button"
+                        onClick={() => dismissSelection(sel.nodeId)}
+                        title="Remove from context"
+                        className="absolute top-0 right-0 p-0.5 bg-black/60 rounded-bl text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <XIcon size={10} />
+                      </button>
+                    }
+                  />
+                  <TooltipContent>Remove from context</TooltipContent>
+                </Tooltip>
               </div>
             ))}
           </div>
@@ -338,13 +350,21 @@ export function ChatInput({
                 alt={img.name}
                 className="w-full h-full object-cover"
               />
-              <button
-                type="button"
-                onClick={() => removeImage(i)}
-                className="absolute top-0 right-0 p-0.5 bg-black/60 rounded-bl text-white opacity-0 group-hover:opacity-100 transition-opacity"
-              >
-                <XIcon size={10} />
-              </button>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      onClick={() => removeImage(i)}
+                      title="Remove image"
+                      className="absolute top-0 right-0 p-0.5 bg-black/60 rounded-bl text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <XIcon size={10} />
+                    </button>
+                  }
+                />
+                <TooltipContent>Remove image</TooltipContent>
+              </Tooltip>
             </div>
           ))}
         </div>
@@ -352,24 +372,37 @@ export function ChatInput({
 
       <div className="flex items-end gap-2">
         {/* Attach image button */}
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={
-            !supportsVision ||
-            visibleSelection.length + attachedImages.length >= MAX_IMAGES
-          }
-          className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted disabled:text-text-disabled disabled:pointer-events-none transition-colors"
-          title={
-            !supportsVision
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={
+                  !supportsVision ||
+                  visibleSelection.length + attachedImages.length >= MAX_IMAGES
+                }
+                className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted disabled:text-text-disabled disabled:pointer-events-none transition-colors"
+                title={
+                  !supportsVision
+                    ? "Selected model can't read images"
+                    : visibleSelection.length + attachedImages.length >= MAX_IMAGES
+                      ? `Max ${MAX_IMAGES} images`
+                      : "Attach image"
+                }
+              >
+                <ImageIcon size={18} weight="light" />
+              </button>
+            }
+          />
+          <TooltipContent>
+            {!supportsVision
               ? "Selected model can't read images"
               : visibleSelection.length + attachedImages.length >= MAX_IMAGES
                 ? `Max ${MAX_IMAGES} images`
-                : "Attach image"
-          }
-        >
-          <ImageIcon size={18} weight="light" />
-        </button>
+                : "Attach image"}
+          </TooltipContent>
+        </Tooltip>
         <input
           ref={fileInputRef}
           type="file"
@@ -393,28 +426,44 @@ export function ChatInput({
           className="flex-1 resize-none bg-transparent text-sm text-text-primary placeholder:text-text-disabled outline-none min-h-[24px] max-h-[96px] py-1 leading-normal"
         />
         {isLoading ? (
-          <button
-            type="button"
-            onClick={stop}
-            className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted transition-colors"
-            title="Stop"
-          >
-            <StopIcon size={18} />
-          </button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  onClick={stop}
+                  className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted transition-colors"
+                  title="Stop"
+                >
+                  <StopIcon size={18} />
+                </button>
+              }
+            />
+            <TooltipContent>Stop</TooltipContent>
+          </Tooltip>
         ) : (
-          <button
-            type="submit"
-            disabled={
-              !isOnline ||
-              (!input.trim() &&
-                attachedImages.length === 0 &&
-                visibleSelection.length === 0)
-            }
-            className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted disabled:text-text-disabled transition-colors"
-            title={isOnline ? "Send" : OFFLINE_SEND_TITLE}
-          >
-            <PaperPlaneRightIcon size={18} />
-          </button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="submit"
+                  disabled={
+                    !isOnline ||
+                    (!input.trim() &&
+                      attachedImages.length === 0 &&
+                      visibleSelection.length === 0)
+                  }
+                  className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted disabled:text-text-disabled transition-colors"
+                  title={isOnline ? "Send" : OFFLINE_SEND_TITLE}
+                >
+                  <PaperPlaneRightIcon size={18} />
+                </button>
+              }
+            />
+            <TooltipContent>
+              {isOnline ? "Send" : OFFLINE_SEND_TITLE}
+            </TooltipContent>
+          </Tooltip>
         )}
       </div>
     </form>

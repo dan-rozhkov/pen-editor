@@ -5,6 +5,7 @@ import {
   PropertySection,
   SelectInput,
 } from "@/components/ui/PropertyInputs";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 interface ConstraintsSectionProps {
   node: SceneNode;
@@ -52,50 +53,86 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
           className="relative w-14 h-14 shrink-0 rounded border border-border-default bg-secondary/40"
           aria-label="Constraint cross"
         >
-          <button
-            type="button"
-            aria-label="Pin left"
-            aria-pressed={pinLeft}
-            className={cn(
-              pinBaseClass,
-              "left-0 top-1/2 -translate-y-1/2 -ml-px w-1.5 h-5 rounded-sm",
-              pinLeft ? pinActiveClass : pinInactiveClass,
-            )}
-            onClick={() => update({ horizontal: toggleConstraintEdge(horizontal, "start") })}
-          />
-          <button
-            type="button"
-            aria-label="Pin right"
-            aria-pressed={pinRight}
-            className={cn(
-              pinBaseClass,
-              "right-0 top-1/2 -translate-y-1/2 -mr-px w-1.5 h-5 rounded-sm",
-              pinRight ? pinActiveClass : pinInactiveClass,
-            )}
-            onClick={() => update({ horizontal: toggleConstraintEdge(horizontal, "end") })}
-          />
-          <button
-            type="button"
-            aria-label="Pin top"
-            aria-pressed={pinTop}
-            className={cn(
-              pinBaseClass,
-              "top-0 left-1/2 -translate-x-1/2 -mt-px h-1.5 w-5 rounded-sm",
-              pinTop ? pinActiveClass : pinInactiveClass,
-            )}
-            onClick={() => update({ vertical: toggleConstraintEdge(vertical, "start") })}
-          />
-          <button
-            type="button"
-            aria-label="Pin bottom"
-            aria-pressed={pinBottom}
-            className={cn(
-              pinBaseClass,
-              "bottom-0 left-1/2 -translate-x-1/2 -mb-px h-1.5 w-5 rounded-sm",
-              pinBottom ? pinActiveClass : pinInactiveClass,
-            )}
-            onClick={() => update({ vertical: toggleConstraintEdge(vertical, "end") })}
-          />
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label="Pin left"
+                  aria-pressed={pinLeft}
+                  className={cn(
+                    pinBaseClass,
+                    "left-0 top-1/2 -translate-y-1/2 -ml-px w-1.5 h-5 rounded-sm",
+                    pinLeft ? pinActiveClass : pinInactiveClass,
+                  )}
+                  onClick={() => update({ horizontal: toggleConstraintEdge(horizontal, "start") })}
+                />
+              }
+            />
+            <TooltipContent>
+              <span>Pin left</span>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label="Pin right"
+                  aria-pressed={pinRight}
+                  className={cn(
+                    pinBaseClass,
+                    "right-0 top-1/2 -translate-y-1/2 -mr-px w-1.5 h-5 rounded-sm",
+                    pinRight ? pinActiveClass : pinInactiveClass,
+                  )}
+                  onClick={() => update({ horizontal: toggleConstraintEdge(horizontal, "end") })}
+                />
+              }
+            />
+            <TooltipContent>
+              <span>Pin right</span>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label="Pin top"
+                  aria-pressed={pinTop}
+                  className={cn(
+                    pinBaseClass,
+                    "top-0 left-1/2 -translate-x-1/2 -mt-px h-1.5 w-5 rounded-sm",
+                    pinTop ? pinActiveClass : pinInactiveClass,
+                  )}
+                  onClick={() => update({ vertical: toggleConstraintEdge(vertical, "start") })}
+                />
+              }
+            />
+            <TooltipContent>
+              <span>Pin top</span>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label="Pin bottom"
+                  aria-pressed={pinBottom}
+                  className={cn(
+                    pinBaseClass,
+                    "bottom-0 left-1/2 -translate-x-1/2 -mb-px h-1.5 w-5 rounded-sm",
+                    pinBottom ? pinActiveClass : pinInactiveClass,
+                  )}
+                  onClick={() => update({ vertical: toggleConstraintEdge(vertical, "end") })}
+                />
+              }
+            />
+            <TooltipContent>
+              <span>Pin bottom</span>
+            </TooltipContent>
+          </Tooltip>
           <div className="absolute inset-3 rounded-sm border border-dashed border-text-muted" />
         </div>
         <div className="flex-1 flex flex-col gap-2">

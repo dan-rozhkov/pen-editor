@@ -344,13 +344,7 @@ describe("<TypographySection />", () => {
   });
 
   it("toggles italic on and off based on current state", () => {
-    // The icon-only buttons after italic are, in DOM order: underline,
-    // strikethrough, link (a Popover trigger — base-ui renders it as two
-    // nested `role="button"` elements, hence +2 not +1), align L/C/R,
-    // vAlign T/M/B, list bullet/number/outdent/indent, resize a/f/fh — 17
-    // buttons — so italic is the 18th from the end (stable regardless of
-    // leading combobox/select triggers).
-    const italicButton = () => screen.getAllByRole("button").slice(-18)[0];
+    const italicButton = () => screen.getByRole("button", { name: "Italic" });
 
     const onUpdate = vi.fn();
     const { unmount } = render(

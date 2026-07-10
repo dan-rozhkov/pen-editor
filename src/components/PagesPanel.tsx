@@ -9,6 +9,8 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { IconButton } from "@/components/ui/IconButton";
 
 export function PagesPanel() {
   const pages = usePageStore((s) => s.pages);
@@ -71,13 +73,20 @@ export function PagesPanel() {
         <span className="text-xs font-medium text-secondary-foreground">
           Pages
         </span>
-        <button
-          onClick={() => addPage()}
-          className="p-0.5 rounded text-text-muted hover:text-text-default hover:bg-secondary"
-          title="Add page"
-        >
-          <PlusIcon size={14} />
-        </button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                onClick={() => addPage()}
+                className="p-0.5 rounded text-text-muted hover:text-text-default hover:bg-secondary"
+                title="Add page"
+              >
+                <PlusIcon size={14} />
+              </button>
+            }
+          />
+          <TooltipContent>Add page</TooltipContent>
+        </Tooltip>
       </div>
       <div className="flex flex-col gap-0.5 px-4 pt-1 pb-3">
         {pages.map((page, index) => (
@@ -123,11 +132,18 @@ export function PagesPanel() {
                 <span className="truncate flex-1">{page.name}</span>
                 <DropdownMenu>
                   <DropdownMenuTrigger
-                    onClick={(e) => e.stopPropagation()}
-                    className="opacity-0 group-hover/page:opacity-100 data-popup-open:opacity-100 p-0.5 rounded text-text-muted hover:text-text-default hover:bg-secondary shrink-0"
-                  >
-                    <DotsThreeVertical size={14} weight="bold" />
-                  </DropdownMenuTrigger>
+                    render={
+                      <IconButton
+                        tooltip="Page options"
+                        onClick={(e) => e.stopPropagation()}
+                        variant="ghost"
+                        size="icon-xs"
+                        className="opacity-0 group-hover/page:opacity-100 data-popup-open:opacity-100 text-text-muted hover:text-text-default hover:bg-secondary shrink-0"
+                      >
+                        <DotsThreeVertical size={14} weight="bold" />
+                      </IconButton>
+                    }
+                  />
                   <DropdownMenuContent side="right" align="start">
                     <DropdownMenuItem onClick={() => duplicatePage(page.id)}>
                       Duplicate
