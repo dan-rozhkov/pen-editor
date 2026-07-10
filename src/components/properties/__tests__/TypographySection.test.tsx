@@ -74,14 +74,20 @@ describe("<TypographySection />", () => {
   });
 
   describe("variable font axes", () => {
+    function openOpenTypeSettings() {
+      fireEvent.click(screen.getByRole("button", { name: "OpenType settings" }));
+    }
+
     it("hides axis sliders and shows the static weight dropdown for a non-variable font", () => {
       render(<TypographySection node={textNode({ fontFamily: "Arial" })} onUpdate={vi.fn()} />);
       expect(screen.queryAllByRole("slider")).toHaveLength(0);
       expect(screen.getByText("Normal")).toBeDefined();
     });
 
-    it("shows a weight axis slider and hides the static weight dropdown for a variable font", () => {
+    it("shows a weight axis slider in OpenType settings and hides the static weight dropdown for a variable font", () => {
       render(<TypographySection node={textNode({ fontFamily: "Inter" })} onUpdate={vi.fn()} />);
+      expect(screen.queryAllByRole("slider")).toHaveLength(0);
+      openOpenTypeSettings();
       expect(screen.getAllByRole("slider")).toHaveLength(1);
       expect(screen.getByText("Weight")).toBeDefined();
       expect(screen.queryByText("Normal")).toBeNull();
@@ -89,6 +95,7 @@ describe("<TypographySection />", () => {
 
     it("shows one slider per registered axis for a multi-axis variable font", () => {
       render(<TypographySection node={textNode({ fontFamily: "Roboto Flex" })} onUpdate={vi.fn()} />);
+      openOpenTypeSettings();
       expect(screen.getAllByRole("slider")).toHaveLength(4); // wght, wdth, opsz, slnt
       expect(screen.getByText("Weight")).toBeDefined();
       expect(screen.getByText("Width")).toBeDefined();
@@ -104,6 +111,7 @@ describe("<TypographySection />", () => {
           onUpdate={onUpdate}
         />,
       );
+      openOpenTypeSettings();
       const slider = screen.getByRole("slider", { name: "Weight" });
       // Base UI's Slider Thumb reads `event.target` off a global `event`
       // during its native `change` handler — jsdom's `fireEvent.change`
@@ -124,16 +132,26 @@ describe("<TypographySection />", () => {
   });
 
   describe("OpenType features", () => {
-    function toggleCheckbox(name: string): HTMLInputElement {
-      return screen.getByRole("checkbox", { name }) as HTMLInputElement;
+    function openOpenTypeSettings() {
+      fireEvent.click(screen.getByRole("button", { name: "OpenType settings" }));
     }
 
-    it("renders the toggle features unchecked and the select groups at their default option", () => {
+    function toggleButton(name: string): HTMLElement {
+      return screen.getByRole("button", { name });
+    }
+
+    function isPressed(button: HTMLElement): boolean {
+      return button.getAttribute("aria-pressed") === "true";
+    }
+
+    it("keeps OpenType controls in a popover, with default feature values", () => {
       render(<TypographySection node={textNode()} onUpdate={vi.fn()} />);
-      expect(toggleCheckbox("Discretionary ligatures").checked).toBe(false);
-      expect(toggleCheckbox("Small caps").checked).toBe(false);
-      expect(toggleCheckbox("Fractions").checked).toBe(false);
-      expect(toggleCheckbox("Slashed zero").checked).toBe(false);
+      expect(screen.queryByRole("button", { name: "Discretionary ligatures" })).toBeNull();
+      openOpenTypeSettings();
+      expect(isPressed(toggleButton("Discretionary ligatures"))).toBe(false);
+      expect(isPressed(toggleButton("Small caps"))).toBe(false);
+      expect(isPressed(toggleButton("Fractions"))).toBe(false);
+      expect(isPressed(toggleButton("Slashed zero"))).toBe(false);
 
       const figureStyle = screen.getByText("Figure style").closest("div")!;
       expect(within(figureStyle).getByRole("combobox").textContent).toContain("Default");
@@ -147,14 +165,16 @@ describe("<TypographySection />", () => {
       render(
         <TypographySection node={textNode({ fontFeatures: { smcp: 1 } })} onUpdate={vi.fn()} />,
       );
-      expect(toggleCheckbox("Small caps").checked).toBe(true);
-      expect(toggleCheckbox("Discretionary ligatures").checked).toBe(false);
+      openOpenTypeSettings();
+      expect(isPressed(toggleButton("Small caps"))).toBe(true);
+      expect(isPressed(toggleButton("Discretionary ligatures"))).toBe(false);
     });
 
     it("emits onUpdate with the tag added when a toggle feature is checked", () => {
       const onUpdate = vi.fn();
       render(<TypographySection node={textNode()} onUpdate={onUpdate} />);
-      fireEvent.click(toggleCheckbox("Fractions"));
+      openOpenTypeSettings();
+      fireEvent.click(toggleButton("Fractions"));
       expect(onUpdate).toHaveBeenCalledWith({ fontFeatures: { frac: 1 } });
     });
 
@@ -166,7 +186,8 @@ describe("<TypographySection />", () => {
           onUpdate={onUpdate}
         />,
       );
-      fireEvent.click(toggleCheckbox("Slashed zero"));
+      openOpenTypeSettings();
+      fireEvent.click(toggleButton("Slashed zero"));
       expect(onUpdate).toHaveBeenCalledWith({ fontFeatures: { dlig: 1 } });
     });
 
@@ -177,6 +198,7 @@ describe("<TypographySection />", () => {
           onUpdate={vi.fn()}
         />,
       );
+      openOpenTypeSettings();
       const figureStyle = screen.getByText("Figure style").closest("div")!;
       expect(within(figureStyle).getByRole("combobox").textContent).toContain("Oldstyle");
       const figureSpacing = screen.getByText("Figure spacing").closest("div")!;

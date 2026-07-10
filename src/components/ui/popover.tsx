@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import { DotsSixIcon } from "@phosphor-icons/react";
@@ -33,6 +34,7 @@ function PopoverContent({
   sideOffset = 8,
   className,
   draggable = false,
+  dragHandleContent = "Popover",
   children,
   ...props
 }: PopoverPrimitive.Popup.Props &
@@ -51,6 +53,8 @@ function PopoverContent({
      * local drag state with it.
      */
     draggable?: boolean;
+    /** Title or other content displayed beside the drag icon in the handle. */
+    dragHandleContent?: ReactNode;
   }) {
   const positionerRef = useRef<HTMLDivElement>(null);
   const [tornOffPosition, setTornOffPosition] = useState<Point | null>(null);
@@ -172,10 +176,14 @@ function PopoverContent({
               data-slot="popover-drag-handle"
               role="presentation"
               title="Drag to move"
-              className="flex h-4 shrink-0 cursor-grab touch-none select-none items-center justify-center rounded-md text-text-muted transition-colors hover:bg-secondary hover:text-text-primary active:cursor-grabbing"
+              className={cn(
+                "flex h-4 shrink-0 cursor-grab touch-none select-none items-center rounded-md text-text-muted transition-colors hover:text-text-primary active:cursor-grabbing",
+                dragHandleContent ? "gap-1.5" : "justify-center",
+              )}
               onPointerDown={handleDragHandlePointerDown}
             >
               <DotsSixIcon size={14} weight="bold" className="rotate-90" />
+              {dragHandleContent}
             </div>
           )}
           {children}

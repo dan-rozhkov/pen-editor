@@ -156,12 +156,17 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
                         {effectLabel(effect)}
                       </span>
                     </PopoverTrigger>
-                    <PopoverContent draggable>
-                      {/* Title + reorder */}
-                      <div className="flex items-center gap-1">
-                        <span className="flex-1 text-[11px] font-semibold text-text-primary">
+                    <PopoverContent
+                      draggable
+                      dragHandleContent={
+                        <span className="text-[11px] font-semibold text-text-primary">
                           {effectLabel(effect)}
                         </span>
+                      }
+                    >
+                      {/* Title + reorder */}
+                      <div className="flex items-center gap-1">
+                        <span className="flex-1" />
                         <IconButton
                           tooltip="Move up"
                           variant="ghost"

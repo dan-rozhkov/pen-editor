@@ -15,20 +15,24 @@ import {
   MagnifyingGlassIcon,
   MinusIcon,
   PlusIcon,
+  SlidersHorizontalIcon,
+  NumberZeroIcon,
   TextAlignCenter,
   TextAlignLeft,
   TextAlignRight,
   TextIndent,
   TextItalic,
   TextOutdent,
+  TextAaIcon,
   TextStrikethrough,
+  TextSuperscriptIcon,
+  TextTIcon,
   TextUnderline,
   XIcon,
   IconContext,
 } from "@phosphor-icons/react";
 import type { SceneNode, TextNode } from "@/types/scene";
 import {
-  CheckboxInput,
   NumberInput,
   PropertyRow,
   PropertySection,
@@ -52,6 +56,7 @@ import { MAX_INDENT_LEVEL, getParagraphAttrs, normalizeParagraphs, splitParagrap
 import { toggleListType } from "@/lib/textLists/listEditing";
 import { isTypingTarget } from "@/components/canvas/keyboardShortcutUtils";
 import { Slider } from "@/components/ui/slider";
+import { useReadOnly } from "@/hooks/useReadOnly";
 import { getVariableFontAxes, type FontAxis } from "@/utils/variableFont";
 import {
   OPEN_TYPE_TOGGLE_FEATURES,
@@ -223,9 +228,9 @@ function TextStylesPopover({ node }: { node: TextNode }) {
         sideOffset={TYPOGRAPHY_POPOVER_PANEL_OFFSET}
         className="w-[240px] max-h-[360px] gap-0 overflow-hidden rounded-xl border-border-default p-0"
         draggable
+        dragHandleContent={<span className="text-[11px] font-semibold text-text-primary">Text styles</span>}
       >
         <div className="flex h-10 items-center justify-between border-b border-input px-3">
-          <div className="text-xs font-semibold text-text-primary">Text styles</div>
           <div className="flex items-center gap-1">
             <Tooltip>
               <TooltipTrigger
@@ -362,7 +367,7 @@ function LinkPopover({ node, onUpdate }: { node: TextNode; onUpdate: (updates: P
       <PopoverTrigger
         render={
           <IconButton
-            variant={node.link ? "default" : "secondary"}
+            variant={node.link ? "default" : "ghost"}
             size="icon-sm"
             tooltip="Link (⌘K)"
             aria-label="Link"
@@ -382,8 +387,8 @@ function LinkPopover({ node, onUpdate }: { node: TextNode; onUpdate: (updates: P
         sideOffset={TYPOGRAPHY_POPOVER_PANEL_OFFSET}
         className="w-[240px] gap-2"
         draggable
+        dragHandleContent={<span className="text-[11px] font-semibold text-text-primary">Link</span>}
       >
-        <div className="text-xs font-semibold text-text-primary">Link</div>
         <Input
           key={`${node.id}:${open}`}
           ref={inputRef}
@@ -503,6 +508,120 @@ function OpenTypeGroupSelect({
         onChange(withGroupSelection(fontFeatures, group, tag));
       }}
     />
+  );
+}
+
+function OpenTypeToggleIcon({ tag }: { tag: string }) {
+  switch (tag) {
+    case "smcp":
+      return <TextTIcon />;
+    case "frac":
+      return <TextSuperscriptIcon />;
+    case "zero":
+      return <NumberZeroIcon />;
+    default:
+      return <TextAaIcon />;
+  }
+}
+
+/** Advanced OpenType controls, kept out of the main inspector until needed. */
+function OpenTypePopover({
+  node,
+  onUpdate,
+}: {
+  node: TextNode;
+  onUpdate: (updates: Partial<TextNode>) => void;
+}) {
+  const readOnly = useReadOnly();
+  const variableFontAxes = getVariableFontAxes(node.fontFamily);
+
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <IconButton
+            variant="ghost"
+            size="icon-sm"
+            tooltip="OpenType settings"
+            aria-label="OpenType settings"
+          >
+            <SlidersHorizontalIcon />
+          </IconButton>
+        }
+      />
+      <PopoverContent
+        side="left"
+        align="start"
+        sideOffset={TYPOGRAPHY_POPOVER_PANEL_OFFSET}
+        className="w-[272px] gap-3"
+        draggable
+        dragHandleContent={<span className="text-[11px] font-semibold text-text-primary">OpenType</span>}
+      >
+        {variableFontAxes && (
+          <div className="flex flex-col gap-2">
+            {variableFontAxes.map((axis) => (
+              <VariableAxisSlider
+                key={axis.tag}
+                axis={axis}
+                value={node.fontVariations?.[axis.tag] ?? axis.default}
+                onChange={(value) =>
+                  onUpdate({
+                    fontVariations: { ...node.fontVariations, [axis.tag]: value },
+                  })
+                }
+              />
+            ))}
+          </div>
+        )}
+        <div className="flex w-full gap-1">
+          {OPEN_TYPE_TOGGLE_FEATURES.map((feature) => (
+            <IconButton
+              key={feature.tag}
+              variant={node.fontFeatures?.[feature.tag] === 1 ? "default" : "secondary"}
+              size="icon-sm"
+              tooltip={feature.label}
+              aria-label={feature.label}
+              aria-pressed={node.fontFeatures?.[feature.tag] === 1}
+              disabled={readOnly}
+              className={
+                node.fontFeatures?.[feature.tag] === 1
+                  ? "flex-1 border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
+                  : "flex-1"
+              }
+              onClick={() =>
+                onUpdate({
+                  fontFeatures: withToggleFeature(
+                    node.fontFeatures,
+                    feature.tag,
+                    node.fontFeatures?.[feature.tag] !== 1,
+                  ),
+                })
+              }
+            >
+              <OpenTypeToggleIcon tag={feature.tag} />
+            </IconButton>
+          ))}
+        </div>
+        <div className="flex flex-col gap-3">
+          {OPEN_TYPE_SELECT_GROUPS.filter((group) => group.key !== "stylisticSet").map((group) => (
+            <OpenTypeGroupSelect
+              key={group.key}
+              group={group}
+              fontFeatures={node.fontFeatures}
+              onChange={(fontFeatures) => onUpdate({ fontFeatures })}
+            />
+          ))}
+        </div>
+        {OPEN_TYPE_SELECT_GROUPS.filter((group) => group.key === "stylisticSet").map((group) => (
+          <OpenTypeGroupSelect
+            key={group.key}
+            group={group}
+            fontFeatures={node.fontFeatures}
+            onChange={(fontFeatures) => onUpdate({ fontFeatures })}
+          />
+        ))}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -644,61 +763,6 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
           />
         )}
       </PropertyRow>
-      {variableFontAxes && (
-        <PropertyRow>
-          <div className="flex w-full flex-col gap-2">
-            {variableFontAxes.map((axis) => (
-              <VariableAxisSlider
-                key={axis.tag}
-                axis={axis}
-                value={node.fontVariations?.[axis.tag] ?? axis.default}
-                onChange={(value) =>
-                  updateTypography({
-                    fontVariations: { ...node.fontVariations, [axis.tag]: value },
-                  })
-                }
-              />
-            ))}
-          </div>
-        </PropertyRow>
-      )}
-      <div className="flex flex-col gap-1.5">
-        <div className="text-[10px] font-normal text-text-muted">
-          OpenType
-        </div>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-          {OPEN_TYPE_TOGGLE_FEATURES.map((feature) => (
-            <CheckboxInput
-              key={feature.tag}
-              label={feature.label}
-              checked={node.fontFeatures?.[feature.tag] === 1}
-              onChange={(checked) =>
-                updateTypography({
-                  fontFeatures: withToggleFeature(node.fontFeatures, feature.tag, checked),
-                })
-              }
-            />
-          ))}
-        </div>
-        <PropertyRow>
-          {OPEN_TYPE_SELECT_GROUPS.filter((g) => g.key !== "stylisticSet").map((group) => (
-            <OpenTypeGroupSelect
-              key={group.key}
-              group={group}
-              fontFeatures={node.fontFeatures}
-              onChange={(fontFeatures) => updateTypography({ fontFeatures })}
-            />
-          ))}
-        </PropertyRow>
-        {OPEN_TYPE_SELECT_GROUPS.filter((g) => g.key === "stylisticSet").map((group) => (
-          <OpenTypeGroupSelect
-            key={group.key}
-            group={group}
-            fontFeatures={node.fontFeatures}
-            onChange={(fontFeatures) => updateTypography({ fontFeatures })}
-          />
-        ))}
-      </div>
       <PropertyRow>
         <div className="flex items-center gap-1 flex-1">
           <IconButton
@@ -760,6 +824,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             </IconButton>
           </ButtonGroup>
           <LinkPopover node={node} onUpdate={onUpdate} />
+          <OpenTypePopover node={node} onUpdate={updateTypography} />
         </div>
       </PropertyRow>
       <div className="flex flex-col gap-1">

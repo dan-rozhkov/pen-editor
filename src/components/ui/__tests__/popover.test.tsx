@@ -33,6 +33,18 @@ describe("PopoverContent draggable", () => {
     expect(screen.getByTitle("Drag to move")).toBeTruthy();
   });
 
+  it("renders optional content beside the drag icon", () => {
+    render(
+      <Popover open>
+        <PopoverTrigger>Open</PopoverTrigger>
+        <PopoverContent draggable dragHandleContent={<span>OpenType</span>}>
+          <div>Content</div>
+        </PopoverContent>
+      </Popover>,
+    );
+    expect(screen.getByTitle("Drag to move").textContent).toContain("OpenType");
+  });
+
   it("stays anchor-positioned (no inline position override) before any drag", () => {
     renderPopover(true);
     const handle = screen.getByTitle("Drag to move");

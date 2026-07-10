@@ -133,7 +133,12 @@ export function ExportSettingsSection({ node, onUpdate }: Props) {
                     <SlidersHorizontalIcon />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent side="left" align="start" draggable>
+                <PopoverContent
+                  side="left"
+                  align="start"
+                  draggable
+                  dragHandleContent={<span className="text-[11px] font-semibold text-text-primary">Export settings</span>}
+                >
                   {scaleSelectValue(setting.scale) === "custom" && (
                     <TextInput
                       label="Custom scale"

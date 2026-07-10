@@ -112,6 +112,7 @@ export function CustomColorPicker({
           className="w-[200px]"
           initialFocus={false}
           draggable
+          dragHandleContent={<span className="text-[11px] font-semibold text-text-primary">Color</span>}
         >
           <AriaColorPicker value={color} onChange={handleChange}>
             {/* Saturation / Brightness area */}
