@@ -140,6 +140,41 @@ describe("set_variables", () => {
     expect(variables.some((v) => v.name === "--radius-m")).toBe(true);
   });
 
+  it("merging a partial update (name only) preserves existing value and themeValues", async () => {
+    seedVariables();
+    const result = JSON.parse(
+      await setVariables({
+        variables: [
+          { id: "var-primary", name: "--primary-renamed" },
+        ] as unknown as Record<string, unknown>,
+      })
+    );
+    expect(result).toEqual({ success: true, variableCount: 2 });
+
+    const { variables } = useVariableStore.getState();
+    const primary = variables.find((v) => v.id === "var-primary");
+    expect(primary?.name).toBe("--primary-renamed");
+    // Untouched fields must survive the merge — no clobbering with defaults.
+    expect(primary?.value).toBe("#3366ff");
+    expect(primary?.themeValues).toEqual({ light: "#3366ff", dark: "#99bbff" });
+  });
+
+  it("still synthesizes a valid default value for a brand-new variable with no value sent (append)", async () => {
+    seedVariables();
+    const result = JSON.parse(
+      await setVariables({
+        variables: [
+          { name: "--new-radius", type: "number" },
+        ] as unknown as Record<string, unknown>,
+      })
+    );
+    expect(result).toEqual({ success: true, variableCount: 3 });
+
+    const { variables } = useVariableStore.getState();
+    const created = variables.find((v) => v.name === "--new-radius");
+    expect(created).toMatchObject({ type: "number", value: "0" });
+  });
+
   it("replaces the entire set when replace=true", async () => {
     seedVariables();
     const result = JSON.parse(

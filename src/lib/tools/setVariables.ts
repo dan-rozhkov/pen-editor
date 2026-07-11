@@ -32,11 +32,21 @@ function inferTypeFromValue(value: string): Variable["type"] {
   return "string";
 }
 
+// A normalized variable plus the set of top-level fields the caller actually
+// sent (as opposed to fields normalizeVariable synthesized a default for).
+// The merge branch needs this distinction so a partial update — e.g. just a
+// `name` change — doesn't clobber an existing variable's `value`/`themeValues`
+// with defaults.
+interface NormalizedVariable {
+  variable: Variable;
+  explicit: Set<keyof Variable>;
+}
+
 function extractVariablesFromObject(
   obj: Record<string, unknown>,
   parentKeys: string[] = []
-): Variable[] {
-  const extracted: Variable[] = [];
+): NormalizedVariable[] {
+  const extracted: NormalizedVariable[] = [];
 
   for (const [key, val] of Object.entries(obj)) {
     const path = [...parentKeys, key];
@@ -84,7 +94,7 @@ export const setVariables: ToolHandler = async (args) => {
   }
 
   // Parse incoming variables — accept either an array or an object with variable entries
-  const parsed: Variable[] = [];
+  const parsed: NormalizedVariable[] = [];
 
   const normalizedIncoming =
     typeof incoming === "object" &&
@@ -118,7 +128,7 @@ export const setVariables: ToolHandler = async (args) => {
   const store = useVariableStore.getState();
 
   if (replace) {
-    store.setVariables(parsed);
+    store.setVariables(parsed.map((p) => p.variable));
   } else {
     // Merge: match by id or name, update matched, append new
     const existing = [...store.variables];
@@ -129,16 +139,24 @@ export const setVariables: ToolHandler = async (args) => {
 
     const merged: Variable[] = [...existing];
 
-    for (const v of parsed) {
+    for (const { variable: v, explicit } of parsed) {
       const matchById = existingById.get(v.id);
       const matchByName = existingByName.get(normalizeVariableName(v.name));
       const match = matchById ?? matchByName;
 
       if (match) {
-        // Update existing
+        // Update existing — patch only the fields the model actually sent
+        // (tracked in `explicit`), so absent fields (e.g. themeValues, value)
+        // aren't clobbered with normalizeVariable's synthesized defaults.
         const idx = merged.indexOf(match);
-        merged[idx] = { ...match, ...v, id: match.id };
+        const patch: Partial<Variable> = {};
+        for (const key of explicit) {
+          if (key === "id") continue;
+          (patch as Record<string, unknown>)[key] = v[key];
+        }
+        merged[idx] = { ...match, ...patch, id: match.id };
       } else {
+        // New variable — use the fully normalized (defaulted) form.
         merged.push(v);
       }
     }
@@ -152,8 +170,16 @@ export const setVariables: ToolHandler = async (args) => {
   });
 };
 
-function normalizeVariable(obj: Record<string, unknown>): Variable {
-  const type = ((obj.type ?? obj.$type) as Variable["type"]) || "color";
+function normalizeVariable(obj: Record<string, unknown>): NormalizedVariable {
+  const explicit = new Set<keyof Variable>();
+
+  if (obj.id !== undefined) explicit.add("id");
+  if (obj.name !== undefined) explicit.add("name");
+
+  const rawType = obj.type ?? obj.$type;
+  const type = (rawType as Variable["type"]) || "color";
+  if (rawType !== undefined) explicit.add("type");
+
   const rawValue = obj.value ?? obj.$value ?? obj.color ?? obj.$color;
   const value =
     typeof rawValue === "string"
@@ -163,6 +189,7 @@ function normalizeVariable(obj: Record<string, unknown>): Variable {
       : type === "string"
       ? ""
       : "#000000";
+  if (rawValue !== undefined) explicit.add("value");
 
   const rawThemeValues = (obj.themeValues ?? obj.$themeValues) as
     | Variable["themeValues"]
@@ -172,12 +199,16 @@ function normalizeVariable(obj: Record<string, unknown>): Variable {
     rawThemeValues && typeof rawThemeValues === "object"
       ? rawThemeValues
       : undefined;
+  if (rawThemeValues !== undefined) explicit.add("themeValues");
 
   return {
-    id: (obj.id as string) || generateVariableId(),
-    name: normalizeVariableName(obj.name),
-    type,
-    value,
-    themeValues,
+    variable: {
+      id: (obj.id as string) || generateVariableId(),
+      name: normalizeVariableName(obj.name),
+      type,
+      value,
+      themeValues,
+    },
+    explicit,
   };
 }
