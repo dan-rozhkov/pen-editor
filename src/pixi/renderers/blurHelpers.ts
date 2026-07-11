@@ -27,6 +27,39 @@ export function pickBackgroundBlurRadius(effects: Effect[]): number | null {
 
 type TaggedFilter = Filter & { __layerBlur?: true };
 
+/** Containers that already have the layer-blur destroy-teardown hook registered (avoid double-attaching). */
+const destroyHooked = new WeakSet<Container>();
+
+/**
+ * The layer-blur filter currently owned by each container, tracked
+ * independently of `container.filters` so the destroy hook can still find
+ * (and free) it even if something else has since cleared/replaced
+ * `container.filters` out from under us.
+ */
+const layerBlurFilterByContainer = new WeakMap<Container, TaggedFilter>();
+
+/**
+ * Register a one-time teardown that destroys `container`'s layer-blur
+ * BlurFilter when the container itself is destroyed. `syncNodeTree`'s
+ * node-deletion path calls `container.destroy({ children: true })`, which
+ * does NOT destroy `container.filters` (Pixi 8 leaves them alive — see the
+ * matching comment in `backgroundBlurHelpers.ts`), so without this hook every
+ * deleted node that had a layer blur permanently leaks a BlurFilter (bug-08).
+ * Guarded by a WeakSet so it's only attached once per container, mirroring
+ * `ensureBackgroundBlurDestroyHook`.
+ */
+function ensureLayerBlurDestroyHook(container: Container): void {
+  if (destroyHooked.has(container)) return;
+  destroyHooked.add(container);
+  container.once("destroyed", () => {
+    const filter = layerBlurFilterByContainer.get(container);
+    layerBlurFilterByContainer.delete(container);
+    // Filter.destroy() is idempotent (no public `destroyed` flag to guard on,
+    // unlike Texture/Container), so it's safe to call unconditionally here.
+    filter?.destroy();
+  });
+}
+
 /**
  * Apply (or clear) the node's layer blur as a container-level BlurFilter.
  * Only filters tagged as layer blur are touched, so any other filters a
@@ -40,10 +73,13 @@ export function applyLayerBlur(container: Container, effects: Effect[]): void {
   for (const f of existing) {
     if (f.__layerBlur) f.destroy();
   }
+  layerBlurFilterByContainer.delete(container);
   if (radius != null) {
     const blur = new BlurFilter({ strength: radius / 2, quality: 3 }) as TaggedFilter;
     blur.__layerBlur = true;
     kept.push(blur);
+    layerBlurFilterByContainer.set(container, blur);
+    ensureLayerBlurDestroyHook(container);
   }
   container.filters = kept.length > 0 ? (kept as Filter[]) : [];
 }

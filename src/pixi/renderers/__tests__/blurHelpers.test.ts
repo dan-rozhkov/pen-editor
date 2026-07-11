@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { pickLayerBlurRadius, pickBackgroundBlurRadius } from "../blurHelpers";
+import { describe, it, expect, vi } from "vitest";
+import { Container, Filter } from "pixi.js";
+import { pickLayerBlurRadius, pickBackgroundBlurRadius, applyLayerBlur } from "../blurHelpers";
 import type { Effect, ShadowEffect } from "@/types/scene";
 
 const shadow: ShadowEffect = {
@@ -78,5 +79,43 @@ describe("pickBackgroundBlurRadius", () => {
         { type: "background-blur", radius: 5 },
       ]),
     ).toBe(5);
+  });
+});
+
+describe("applyLayerBlur destroy teardown (bug-08: BlurFilter leak on node delete)", () => {
+  it("destroys the layer-blur filter when the container is destroyed, even without a later applyLayerBlur call", () => {
+    const c = new Container();
+    applyLayerBlur(c, [{ type: "blur", radius: 6 }]);
+    const filter = (c.filters as Filter[])[0];
+    const destroySpy = vi.spyOn(filter, "destroy");
+
+    c.destroy({ children: true });
+
+    expect(destroySpy).toHaveBeenCalled();
+  });
+
+  it("still destroys the old filter when blur changes (existing replace behavior)", () => {
+    const c = new Container();
+    applyLayerBlur(c, [{ type: "blur", radius: 6 }]);
+    const first = (c.filters as Filter[])[0];
+    const firstDestroySpy = vi.spyOn(first, "destroy");
+
+    applyLayerBlur(c, [{ type: "blur", radius: 12 }]);
+    const second = (c.filters as Filter[])[0];
+
+    expect(firstDestroySpy).toHaveBeenCalled();
+    expect(second).not.toBe(first);
+  });
+
+  it("still destroys the filter when blur is cleared (existing clear behavior)", () => {
+    const c = new Container();
+    applyLayerBlur(c, [{ type: "blur", radius: 6 }]);
+    const filter = (c.filters as Filter[])[0];
+    const destroySpy = vi.spyOn(filter, "destroy");
+
+    applyLayerBlur(c, []);
+
+    expect(destroySpy).toHaveBeenCalled();
+    expect(c.filters).toEqual([]);
   });
 });
