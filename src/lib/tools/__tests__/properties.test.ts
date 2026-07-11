@@ -355,4 +355,48 @@ describe("replace_all_matching_properties", () => {
     expect(result).toEqual({ success: true, replacements: 0 });
     expect(useHistoryStore.getState().past).toHaveLength(0);
   });
+
+  it("matches numeric rules when `from` is sent as a numeric string", async () => {
+    const result = JSON.parse(
+      await replaceAllMatchingProperties({
+        parents: ["frame1"],
+        properties: {
+          strokeThickness: [{ from: "1", to: 3 }],
+          fontSize: [{ from: "16", to: 20 }],
+          padding: [{ from: "16", to: 24 }],
+          gap: [{ from: "8", to: 10 }],
+        },
+      })
+    );
+    expect(result).toEqual({ success: true, replacements: 4 });
+    const rect = useSceneStore.getState().nodesById["rect1"] as Record<string, unknown>;
+    expect(rect.strokeWidth).toBe(3);
+    const text = useSceneStore.getState().nodesById["text1"] as TextNode;
+    expect(text.fontSize).toBe(20);
+    const frame = useSceneStore.getState().nodesById["frame1"] as FlatFrameNode;
+    expect(frame.layout?.paddingTop).toBe(24);
+    expect(frame.layout?.gap).toBe(10);
+  });
+
+  it("coerces numeric `to` values sent as strings into numbers, not strings", async () => {
+    const result = JSON.parse(
+      await replaceAllMatchingProperties({
+        parents: ["frame1"],
+        properties: {
+          strokeThickness: [{ from: 1, to: "3" }],
+          fontSize: [{ from: 16, to: "20" }],
+          padding: [{ from: 16, to: "24" }],
+          gap: [{ from: 8, to: "10" }],
+        },
+      })
+    );
+    expect(result).toEqual({ success: true, replacements: 4 });
+    const rect = useSceneStore.getState().nodesById["rect1"] as Record<string, unknown>;
+    expect(rect.strokeWidth).toBe(3);
+    const text = useSceneStore.getState().nodesById["text1"] as TextNode;
+    expect(text.fontSize).toBe(20);
+    const frame = useSceneStore.getState().nodesById["frame1"] as FlatFrameNode;
+    expect(frame.layout?.paddingTop).toBe(24);
+    expect(frame.layout?.gap).toBe(10);
+  });
 });

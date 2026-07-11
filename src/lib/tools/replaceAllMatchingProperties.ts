@@ -45,6 +45,35 @@ function isColorEqual(a: unknown, b: unknown): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
+/**
+ * Compares numeric rule values leniently: `rule.from` arrives as `unknown`
+ * straight from the LLM and may be serialized as a numeric string (e.g.
+ * `"2"`) even though the node stores a number. Coerce both sides with
+ * `Number(...)` and compare numerically when both coerce cleanly; otherwise
+ * fall back to strict equality (e.g. non-numeric `fontWeight` values like
+ * `"normal"` must still match themselves, not silently fail because neither
+ * side is a valid number).
+ */
+function numEqual(a: unknown, b: unknown): boolean {
+  const na = Number(a);
+  const nb = Number(b);
+  if (!Number.isNaN(na) && !Number.isNaN(nb)) return na === nb;
+  return a === b;
+}
+
+/**
+ * Coerces a numeric rule's `to` value the same way `numEqual` coerces `from`:
+ * the LLM slip that sends `from: "2"` for a numeric field almost always sends
+ * `to: "4"` too, and writing that string straight into a numeric node field
+ * breaks downstream layout/render math. Return the number when it coerces
+ * cleanly; otherwise leave the value untouched. Only for genuinely numeric
+ * fields — not `fontWeight`, which is a string field.
+ */
+function numValue(x: unknown): unknown {
+  const n = Number(x);
+  return Number.isNaN(n) ? x : n;
+}
+
 export const replaceAllMatchingProperties: ToolHandler = async (args) => {
   const parents = args.parents as string[] | undefined;
   const properties = args.properties as PropertyRules | undefined;
@@ -147,9 +176,9 @@ export const replaceAllMatchingProperties: ToolHandler = async (args) => {
     // strokeThickness → strokeWidth
     if (rules.strokeThickness) {
       for (const rule of rules.strokeThickness) {
-        if (node.strokeWidth === rule.from) {
+        if (numEqual(node.strokeWidth, rule.from)) {
           updated = updated ?? { ...node };
-          (updated as unknown as Record<string, unknown>).strokeWidth = rule.to;
+          (updated as unknown as Record<string, unknown>).strokeWidth = numValue(rule.to);
           replacements++;
         }
       }
@@ -158,9 +187,9 @@ export const replaceAllMatchingProperties: ToolHandler = async (args) => {
     // fontSize (text only)
     if (rules.fontSize && node.type === "text") {
       for (const rule of rules.fontSize) {
-        if (node.fontSize === rule.from) {
+        if (numEqual(node.fontSize, rule.from)) {
           updated = updated ?? { ...node };
-          (updated as unknown as Record<string, unknown>).fontSize = rule.to;
+          (updated as unknown as Record<string, unknown>).fontSize = numValue(rule.to);
           replacements++;
         }
       }
@@ -180,7 +209,7 @@ export const replaceAllMatchingProperties: ToolHandler = async (args) => {
     // fontWeight (text only)
     if (rules.fontWeight && node.type === "text") {
       for (const rule of rules.fontWeight) {
-        if (node.fontWeight === rule.from) {
+        if (numEqual(node.fontWeight, rule.from)) {
           updated = updated ?? { ...node };
           (updated as unknown as Record<string, unknown>).fontWeight = rule.to;
           replacements++;
@@ -192,9 +221,9 @@ export const replaceAllMatchingProperties: ToolHandler = async (args) => {
     if (rules.cornerRadius && (node.type === "frame" || node.type === "rect")) {
       const nodeAny = node as unknown as Record<string, unknown>;
       for (const rule of rules.cornerRadius) {
-        if (nodeAny.cornerRadius === rule.from) {
+        if (numEqual(nodeAny.cornerRadius, rule.from)) {
           updated = updated ?? { ...node };
-          (updated as unknown as Record<string, unknown>).cornerRadius = rule.to;
+          (updated as unknown as Record<string, unknown>).cornerRadius = numValue(rule.to);
           replacements++;
         }
       }
@@ -222,9 +251,9 @@ export const replaceAllMatchingProperties: ToolHandler = async (args) => {
     if (rules.cornerSmoothing && (node.type === "frame" || node.type === "rect")) {
       const nodeAny = node as unknown as Record<string, unknown>;
       for (const rule of rules.cornerSmoothing) {
-        if (nodeAny.cornerSmoothing === rule.from) {
+        if (numEqual(nodeAny.cornerSmoothing, rule.from)) {
           updated = updated ?? { ...node };
-          (updated as unknown as Record<string, unknown>).cornerSmoothing = rule.to;
+          (updated as unknown as Record<string, unknown>).cornerSmoothing = numValue(rule.to);
           replacements++;
         }
       }
@@ -248,20 +277,20 @@ export const replaceAllMatchingProperties: ToolHandler = async (args) => {
       const layout = nodeAny.layout as LayoutProperties | undefined;
       if (layout) {
         for (const rule of rules.padding) {
-          const fromVal = rule.from as number;
+          const fromVal = rule.from;
           if (
-            layout.paddingTop === fromVal ||
-            layout.paddingRight === fromVal ||
-            layout.paddingBottom === fromVal ||
-            layout.paddingLeft === fromVal
+            numEqual(layout.paddingTop, fromVal) ||
+            numEqual(layout.paddingRight, fromVal) ||
+            numEqual(layout.paddingBottom, fromVal) ||
+            numEqual(layout.paddingLeft, fromVal)
           ) {
             updated = updated ?? { ...node };
-            const toVal = rule.to as number;
+            const toVal = numValue(rule.to) as number;
             const newLayout = { ...currentLayout(layout) };
-            if (layout.paddingTop === fromVal) newLayout.paddingTop = toVal;
-            if (layout.paddingRight === fromVal) newLayout.paddingRight = toVal;
-            if (layout.paddingBottom === fromVal) newLayout.paddingBottom = toVal;
-            if (layout.paddingLeft === fromVal) newLayout.paddingLeft = toVal;
+            if (numEqual(layout.paddingTop, fromVal)) newLayout.paddingTop = toVal;
+            if (numEqual(layout.paddingRight, fromVal)) newLayout.paddingRight = toVal;
+            if (numEqual(layout.paddingBottom, fromVal)) newLayout.paddingBottom = toVal;
+            if (numEqual(layout.paddingLeft, fromVal)) newLayout.paddingLeft = toVal;
             (updated as unknown as Record<string, unknown>).layout = newLayout;
             replacements++;
           }
@@ -275,9 +304,9 @@ export const replaceAllMatchingProperties: ToolHandler = async (args) => {
       const layout = nodeAny.layout as LayoutProperties | undefined;
       if (layout) {
         for (const rule of rules.gap) {
-          if (layout.gap === rule.from) {
+          if (numEqual(layout.gap, rule.from)) {
             updated = updated ?? { ...node };
-            const newLayout = { ...currentLayout(layout), gap: rule.to as number };
+            const newLayout = { ...currentLayout(layout), gap: numValue(rule.to) as number };
             (updated as unknown as Record<string, unknown>).layout = newLayout;
             replacements++;
           }
