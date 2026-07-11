@@ -183,6 +183,39 @@ describe("Layers3DOverlay", () => {
     });
   });
 
+  it("pans when focus remains on the button that opened 3D view", () => {
+    useLayers3DStore.setState({ active: true, planes: [plane("a", 0)] });
+    const externalButton = document.createElement("button");
+    document.body.appendChild(externalButton);
+    externalButton.focus();
+    render(<Layers3DOverlay />);
+    const overlay = document.querySelector("[data-3d-stack]")!.parentElement!;
+
+    fireEvent.keyDown(externalButton, { code: "Space", key: " " });
+    fireEvent.pointerDown(overlay, {
+      button: 0,
+      pointerId: 6,
+      clientX: 20,
+      clientY: 30,
+    });
+    fireEvent.pointerMove(overlay, {
+      buttons: 1,
+      pointerId: 6,
+      clientX: 50,
+      clientY: 45,
+    });
+    fireEvent.pointerUp(overlay, {
+      button: 0,
+      pointerId: 6,
+      clientX: 50,
+      clientY: 45,
+    });
+    fireEvent.keyUp(externalButton, { code: "Space", key: " " });
+    externalButton.remove();
+
+    expect(useLayers3DStore.getState()).toMatchObject({ panX: 30, panY: 15 });
+  });
+
   it("pans with middle-button drag", () => {
     useLayers3DStore.setState({ active: true, planes: [plane("a", 0)] });
     render(<Layers3DOverlay />);

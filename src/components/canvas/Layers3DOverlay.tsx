@@ -101,7 +101,7 @@ export function Layers3DOverlay() {
       if (
         target instanceof Element &&
         target.closest(
-          "[data-3d-controls], input, textarea, select, button, [contenteditable='true']",
+          "[data-3d-controls], input, textarea, select, [contenteditable='true']",
         )
       ) {
         return;
