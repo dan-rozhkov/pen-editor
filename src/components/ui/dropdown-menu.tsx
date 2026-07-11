@@ -237,7 +237,7 @@ function DropdownMenuShortcut({
     <kbd
       data-slot="dropdown-menu-shortcut"
       className={cn(
-        "text-muted-foreground group-focus/dropdown-menu-item:text-accent-foreground ml-auto inline-flex h-4 items-center rounded border border-border-default bg-surface-elevated px-1 font-mono text-[0.625rem] leading-4 tracking-widest",
+        "text-[#888] group-focus/dropdown-menu-item:text-accent-foreground ml-auto inline-flex h-4 items-center rounded border border-[#404040] bg-[#383838] px-1 font-mono text-[0.625rem] leading-4 tracking-widest",
         className,
       )}
       {...props}
