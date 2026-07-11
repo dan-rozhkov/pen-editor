@@ -1,4 +1,4 @@
-import { Cube } from "@phosphor-icons/react";
+import { PerspectiveIcon } from "@phosphor-icons/react";
 import { useLayers3DStore } from "@/store/layers3dStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
@@ -43,7 +43,7 @@ export function Layers3DToggle() {
           onClick={onClick}
           className="flex size-9 items-center justify-center rounded-lg text-text-primary transition-none outline-none hover:bg-secondary hover:text-text-primary dark:hover:bg-secondary"
         >
-          <Cube size={24} weight="light" />
+          <PerspectiveIcon size={24} weight="light" />
         </button>
       </TooltipTrigger>
       <TooltipContent side="top">Frame in 3D</TooltipContent>
