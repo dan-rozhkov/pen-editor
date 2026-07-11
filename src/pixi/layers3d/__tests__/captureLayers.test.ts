@@ -90,6 +90,31 @@ describe("captureLayers", () => {
     expect(childrenHost.visible).toBe(true);
   });
 
+  it("skips nodes whose extracted canvas is degenerate (1×1), keeping depthIndex consecutive", async () => {
+    // A content-less container (no own fill/stroke) extracts as a 1×1 canvas
+    // once its children-host is hidden. Such a plane is an invisible blurry
+    // stretch — drop it, and don't let it consume a depthIndex slot.
+    // Tag each container with its id so the extract mock can vary by node.
+    getNodeContainer.mockImplementation((id: string) => ({
+      __id: id,
+      getChildByLabel: () => null,
+    }));
+    // rect1's container extracts as a degenerate 1×1 canvas.
+    extractCanvas.mockImplementation((container: { __id: string }) => {
+      const size = container.__id === "rect1" ? 1 : 100;
+      return {
+        width: size,
+        height: size,
+        toBlob: (cb: (b: Blob) => void) => cb(new Blob(["x"])),
+      };
+    });
+
+    const planes = await captureLayers("frame1");
+    // rect1 dropped; frame1 and text1 remain with consecutive depthIndex.
+    expect(planes.map((p) => p.nodeId)).toEqual(["frame1", "text1"]);
+    expect(planes.map((p) => p.depthIndex)).toEqual([0, 1]);
+  });
+
   it("restores the children-host visibility even when extraction throws", async () => {
     const childrenHost = { visible: true };
     const frameContainer = {

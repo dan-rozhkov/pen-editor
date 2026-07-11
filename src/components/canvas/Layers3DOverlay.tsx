@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   useLayers3DStore,
   MIN_SPACING,
@@ -34,6 +34,53 @@ export function Layers3DOverlay() {
   const drag = useRef<{ x: number; y: number } | null>(null);
   const reducedMotion = useMemo(() => prefersReducedMotion(), []);
 
+  // Bounding box of all plane rects (children can sit at negative offsets
+  // relative to the frame origin). Positioning planes relative to this bbox and
+  // giving the wrapper the bbox's intrinsic size lets translate(-50%,-50%)
+  // center the true bounds rather than the frame's top-left corner.
+  const bbox = useMemo(() => {
+    if (planes.length === 0) return { minX: 0, minY: 0, width: 0, height: 0 };
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const p of planes) {
+      minX = Math.min(minX, p.rect.x);
+      minY = Math.min(minY, p.rect.y);
+      maxX = Math.max(maxX, p.rect.x + p.rect.width);
+      maxY = Math.max(maxY, p.rect.y + p.rect.height);
+    }
+    return { minX, minY, width: maxX - minX, height: maxY - minY };
+  }, [planes]);
+
+  // Measure the overlay container so the stack can be scaled to fit on entry.
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [container, setContainer] = useState({ w: 0, h: 0 });
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = containerRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setContainer({ w: r.width, h: r.height });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [active]);
+
+  // Fit-to-viewport scale (never upscales past 1). Guards degenerate bboxes and
+  // unmeasured containers (happy-dom / pre-layout) by falling back to 1.
+  const baseScale = useMemo(() => {
+    const candidates = [1];
+    if (container.w > 0 && bbox.width > 0) {
+      candidates.push((0.8 * container.w) / bbox.width);
+    }
+    if (container.h > 0 && bbox.height > 0) {
+      candidates.push((0.8 * container.h) / bbox.height);
+    }
+    return Math.min(...candidates);
+  }, [container.w, container.h, bbox.width, bbox.height]);
+
   if (!active) return null;
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -57,6 +104,7 @@ export function Layers3DOverlay() {
 
   return (
     <div
+      ref={containerRef}
       className="absolute inset-0 overflow-hidden"
       style={{
         perspective: "1600px",
@@ -73,10 +121,13 @@ export function Layers3DOverlay() {
       }}
     >
       <div
+        data-3d-stack
         className="absolute left-1/2 top-1/2"
         style={{
+          width: `${bbox.width}px`,
+          height: `${bbox.height}px`,
           transformStyle: "preserve-3d",
-          transform: `translate(-50%, -50%) scale(${zoom}) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`,
+          transform: `translate(-50%, -50%) scale(${zoom * baseScale}) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`,
           transition: reducedMotion ? "none" : "transform 0.4s ease-out",
         }}
       >
@@ -108,7 +159,9 @@ export function Layers3DOverlay() {
                 // descendants must sit CLOSER to the viewer (larger +Z), so the
                 // root frame is at the back. Offset by the stack midpoint to
                 // keep it centered in the perspective container.
-                transform: `translate3d(${p.rect.x}px, ${p.rect.y}px, ${
+                transform: `translate3d(${p.rect.x - bbox.minX}px, ${
+                  p.rect.y - bbox.minY
+                }px, ${
                   (p.depthIndex - (planes.length - 1) / 2) * spacing +
                   (isHovered ? 20 : 0)
                 }px)`,

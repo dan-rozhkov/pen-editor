@@ -70,6 +70,51 @@ describe("Layers3DOverlay", () => {
     expect(zOf("child")).toBeGreaterThan(zOf("parent"));
   });
 
+  it("offsets each plane by the bounding-box min so the stack is centered", () => {
+    // A child may sit at a negative offset relative to the frame origin. Plane
+    // positions must be shifted by the bbox min so the wrapper's
+    // translate(-50%,-50%) centers the true bounds, not the frame origin.
+    useLayers3DStore.setState({
+      active: true,
+      planes: [
+        { nodeId: "a", depthIndex: 0, rect: { x: -30, y: -10, width: 100, height: 50 }, imageUrl: "blob:a", cornerRadius: 0 },
+        { nodeId: "b", depthIndex: 1, rect: { x: 0, y: 0, width: 100, height: 50 }, imageUrl: "blob:b", cornerRadius: 0 },
+      ],
+    });
+    render(<Layers3DOverlay />);
+    const xOf = (id: string) => {
+      const t = (document.querySelector(`img[data-plane-id="${id}"]`) as HTMLElement).style.transform;
+      return Number(t.match(/translate3d\(\s*([-\d.]+)px/)![1]);
+    };
+    // bbox.minX = -30 → plane "a" lands at x 0, plane "b" at x 30.
+    expect(xOf("a")).toBe(0);
+    expect(xOf("b")).toBe(30);
+  });
+
+  it("gives the wrapper explicit width/height equal to the bbox size", () => {
+    useLayers3DStore.setState({
+      active: true,
+      planes: [
+        { nodeId: "a", depthIndex: 0, rect: { x: -30, y: -10, width: 100, height: 50 }, imageUrl: "blob:a", cornerRadius: 0 },
+        { nodeId: "b", depthIndex: 1, rect: { x: 0, y: 0, width: 100, height: 80 }, imageUrl: "blob:b", cornerRadius: 0 },
+      ],
+    });
+    render(<Layers3DOverlay />);
+    const wrapper = document.querySelector('[data-3d-stack]') as HTMLElement;
+    // bbox: minX -30, maxX 100 → w 130; minY -10, maxY 80 → h 90.
+    expect(wrapper.style.width).toBe("130px");
+    expect(wrapper.style.height).toBe("90px");
+  });
+
+  it("falls back to baseScale 1 when the container measures 0 (happy-dom)", () => {
+    // getBoundingClientRect returns 0-size in happy-dom, so the fit-scale must
+    // degrade to 1 and not blow up (no scale(0), no NaN).
+    useLayers3DStore.setState({ active: true, planes: [plane("a", 0)], zoom: 1 });
+    render(<Layers3DOverlay />);
+    const wrapper = document.querySelector('[data-3d-stack]') as HTMLElement;
+    expect(wrapper.style.transform).toContain("scale(1)");
+  });
+
   it("sets hoveredPlaneId on pointer enter", () => {
     useLayers3DStore.setState({ active: true, planes: [plane("a", 0)] });
     render(<Layers3DOverlay />);

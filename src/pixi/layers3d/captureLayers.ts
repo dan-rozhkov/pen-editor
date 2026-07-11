@@ -94,6 +94,13 @@ export async function captureLayers(frameId: string): Promise<Plane[]> {
         childrenHost.visible = prevHostVisible;
       }
     }
+    // A content-less container (frame/group with no own fill/stroke) extracts
+    // as a 1×1 canvas once its children-host is hidden. Stretched to the node's
+    // width/height it renders as a blurry nothing — skip it, and don't let it
+    // consume a depthIndex or MAX_PLANES slot. Descendants are captured
+    // independently and unaffected.
+    if (canvas.width <= 1 && canvas.height <= 1) continue;
+
     const imageUrl = await canvasToObjectUrl(canvas);
     if (!imageUrl) continue;
 
