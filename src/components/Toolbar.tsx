@@ -32,6 +32,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
   DropdownMenuCheckboxItem,
+  DropdownMenuShortcut,
 } from "./ui/dropdown-menu";
 import {
   CaretDownIcon,
@@ -223,7 +224,8 @@ export function Toolbar() {
                 Pixel grid
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem checked={showRulers} onCheckedChange={toggleShowRulers}>
-                Rulers (Shift+R)
+                Rulers
+                <DropdownMenuShortcut>Shift+R</DropdownMenuShortcut>
               </DropdownMenuCheckboxItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>

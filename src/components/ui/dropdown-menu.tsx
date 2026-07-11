@@ -232,12 +232,12 @@ function DropdownMenuSeparator({
 function DropdownMenuShortcut({
   className,
   ...props
-}: React.ComponentProps<"span">) {
+}: React.ComponentProps<"kbd">) {
   return (
-    <span
+    <kbd
       data-slot="dropdown-menu-shortcut"
       className={cn(
-        "text-muted-foreground group-focus/dropdown-menu-item:text-accent-foreground ml-auto text-[0.625rem] tracking-widest",
+        "text-muted-foreground group-focus/dropdown-menu-item:text-accent-foreground ml-auto inline-flex h-4 items-center rounded border border-border-default bg-surface-elevated px-1 font-mono text-[0.625rem] leading-4 tracking-widest",
         className,
       )}
       {...props}
