@@ -186,7 +186,7 @@ export function PrimitivesPanel() {
           return (
             <Fragment key={label}>
               {tool === "scale" && (
-                <Separator orientation="vertical" className="my-1" />
+                <Separator orientation="vertical" className="mx-2 h-1/2 self-center" />
               )}
               <IconButton
                 onClick={() => toggleTool(tool)}
