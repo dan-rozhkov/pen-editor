@@ -8,6 +8,9 @@ import { EmbedAgentButton } from "@/components/canvas/EmbedAgentButton";
 import { EmbedSelectionFrame } from "@/components/canvas/EmbedSelectionFrame";
 import { EmbedLayer } from "@/components/canvas/EmbedLayer";
 import { FrameAgentButton } from "@/components/canvas/FrameAgentButton";
+import { Layers3DToggle } from "@/components/canvas/Layers3DToggle";
+import { Layers3DOverlay } from "@/components/canvas/Layers3DOverlay";
+import { useLayers3DStore } from "@/store/layers3dStore";
 import type { EmbedNode, FrameNode, TextNode, InstanceOverrideUpdateProps } from "@/types/scene";
 import { useCanvasKeyboardShortcuts } from "@/components/canvas/useCanvasKeyboardShortcuts";
 import { useCanvasFileDrop } from "@/components/canvas/useCanvasFileDrop";
@@ -77,6 +80,8 @@ export function PixiCanvas() {
   const isCanvasLoading = useLoadingStore((s) => s.isCanvasLoading);
   const setPixiRefs = useCanvasRefStore((s) => s.setPixiRefs);
   const editorMode = useEditorModeStore((s) => s.mode);
+  const is3DActive = useLayers3DStore((s) => s.active);
+  const exit3D = useLayers3DStore((s) => s.exit);
 
   // Selection data for inline editors
   const instanceContext = useSelectionStore((s) => s.instanceContext);
@@ -339,7 +344,24 @@ export function PixiCanvas() {
   useCanvasResize(containerRef, setDimensions);
   useAltKeyMeasurement();
 
+  // Esc exits the 3D layer view. Only active while the 3D overlay is
+  // showing, so it never interferes with the normal canvas Esc behavior
+  // (useCanvasKeyboardShortcuts does not itself handle Escape).
+  useEffect(() => {
+    if (!is3DActive) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") exit3D();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [is3DActive, exit3D]);
+
   return (
+    <div style={{ width: "100%", height: "100%", position: "relative" }}>
+    {/* Pixi host (containerRef) + its DOM overlays are hidden via
+        `visibility` (not unmounted) while the 3D layer view is active, so
+        the Pixi Application, WebGL context and scene graph stay alive
+        underneath and can be restored instantly on exit. */}
     <div
       ref={containerRef}
       data-canvas
@@ -350,6 +372,7 @@ export function PixiCanvas() {
         cursor: isPanning ? "grab" : activeTool ? "crosshair" : "default",
         background: pageBackground,
         position: "relative",
+        visibility: is3DActive ? "hidden" : "visible",
       }}
     >
       {/* Code layers rendered as live DOM above the Pixi canvas */}
@@ -445,6 +468,11 @@ export function PixiCanvas() {
           />
         </div>
       )}
+    </div>
+    {/* 3D layer view toggle + overlay always sit above the (possibly
+        hidden) Pixi canvas, inside the same canvas container. */}
+    <Layers3DToggle />
+    <Layers3DOverlay />
     </div>
   );
 }

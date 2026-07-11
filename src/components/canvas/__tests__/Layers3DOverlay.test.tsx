@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { useLayers3DStore, DEFAULT_SPACING } from "@/store/layers3dStore";
 import { Layers3DOverlay } from "../Layers3DOverlay";
+import { Layers3DToggle } from "../Layers3DToggle";
+import { resetStores, seedScene } from "@/test/fixtures";
+import { useSelectionStore } from "@/store/selectionStore";
 
 const plane = (nodeId: string, depthIndex: number) => ({
   nodeId,
@@ -49,5 +52,33 @@ describe("Layers3DOverlay", () => {
     render(<Layers3DOverlay />);
     fireEvent.change(screen.getByLabelText(/spacing/i), { target: { value: "120" } });
     expect(useLayers3DStore.getState().spacing).toBe(120);
+  });
+});
+
+describe("Layers3DToggle", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  beforeEach(() => {
+    resetStores();
+    seedScene();
+    useLayers3DStore.setState({ active: false, planes: [] });
+  });
+
+  it("is disabled when no frame can be resolved", () => {
+    resetStores(); // empty scene → no frame
+    useSelectionStore.setState({ selectedIds: [] });
+    render(<Layers3DToggle />);
+    const button = screen.getByRole("button", { name: /3d/i }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+  });
+
+  it("enters 3D with the resolved frame on click", () => {
+    useSelectionStore.setState({ selectedIds: ["frame1"] });
+    render(<Layers3DToggle />);
+    fireEvent.click(screen.getByRole("button", { name: /3d/i }));
+    expect(useLayers3DStore.getState().active).toBe(true);
+    expect(useLayers3DStore.getState().targetFrameId).toBe("frame1");
   });
 });
