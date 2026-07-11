@@ -6,7 +6,7 @@ import {
   assignTextStyleProperty,
 } from "../types/textStyle";
 import { resolveTextStyleProperties } from "../utils/textStyleResolve";
-import { useHistoryStore } from "./historyStore";
+import { useHistoryStore, withHistoryBatch } from "./historyStore";
 import { useSceneStore, createSnapshot } from "./sceneStore";
 import type { TextNode } from "../types/scene";
 
@@ -80,28 +80,26 @@ export const useTextStyleStore = create<TextStyleState>((set, get) => ({
     // snapshot once up front, then suppress the per-node history saves inside
     // `updateNodesById` (mirrors `styleClipboardActions.ts`'s paste-style batching).
     saveTextStyleHistory();
-    const history = useHistoryStore.getState();
-    history.startBatch();
-    let updated: TextStyle | undefined;
-    set((state) => ({
-      textStyles: state.textStyles.map((s) => {
-        if (s.id !== id) return s;
-        updated = { ...s, ...updates };
-        return updated;
-      }),
-    }));
-    if (updated) propagateStyleUpdate(updated);
-    history.endBatch();
+    withHistoryBatch(() => {
+      let updated: TextStyle | undefined;
+      set((state) => ({
+        textStyles: state.textStyles.map((s) => {
+          if (s.id !== id) return s;
+          updated = { ...s, ...updates };
+          return updated;
+        }),
+      }));
+      if (updated) propagateStyleUpdate(updated);
+    });
   },
 
   deleteTextStyle: (id) => {
     // One undo step for "remove the style" + "unbind every node that used it".
     saveTextStyleHistory();
-    const history = useHistoryStore.getState();
-    history.startBatch();
-    set((state) => ({ textStyles: state.textStyles.filter((s) => s.id !== id) }));
-    unbindNodesFromStyle(id);
-    history.endBatch();
+    withHistoryBatch(() => {
+      set((state) => ({ textStyles: state.textStyles.filter((s) => s.id !== id) }));
+      unbindNodesFromStyle(id);
+    });
   },
 
   // Bulk replace (document load / serialization) — not an undoable user edit.
@@ -140,11 +138,10 @@ export const useTextStyleStore = create<TextStyleState>((set, get) => ({
 
     // One undo step for "add the style" + "bind this node to it".
     saveTextStyleHistory();
-    const history = useHistoryStore.getState();
-    history.startBatch();
-    set((state) => ({ textStyles: [...state.textStyles, style] }));
-    scene.updateNode(nodeId, { textStyleId: style.id, textStyleOverrides: [] });
-    history.endBatch();
+    withHistoryBatch(() => {
+      set((state) => ({ textStyles: [...state.textStyles, style] }));
+      scene.updateNode(nodeId, { textStyleId: style.id, textStyleOverrides: [] });
+    });
     return style;
   },
 }));

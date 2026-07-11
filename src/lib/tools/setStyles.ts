@@ -1,5 +1,5 @@
 import { useStyleStore } from "@/store/styleStore";
-import { useHistoryStore } from "@/store/historyStore";
+import { useHistoryStore, withHistoryBatch } from "@/store/historyStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { createSnapshot } from "@/store/sceneStore/helpers/history";
 import { generateFillStyleId, generateEffectStyleId } from "@/types/style";
@@ -98,13 +98,13 @@ export const setStyles: ToolHandler = async (args) => {
 
   const history = useHistoryStore.getState();
   history.saveHistory(createSnapshot(useSceneStore.getState()));
-  history.startBatch();
 
   const store = useStyleStore.getState();
   const fillResults: StyleResult[] = [];
   const effectResults: StyleResult[] = [];
   const errors: string[] = [];
 
+  withHistoryBatch(() => {
   if (replace) {
     if (Array.isArray(rawFillStyles)) {
       const built: FillStyle[] = [];
@@ -208,8 +208,7 @@ export const setStyles: ToolHandler = async (args) => {
       }
     }
   }
-
-  history.endBatch();
+  });
 
   const finalState = useStyleStore.getState();
   return JSON.stringify({

@@ -1,5 +1,5 @@
 import { useTextStyleStore } from "@/store/textStyleStore";
-import { useHistoryStore } from "@/store/historyStore";
+import { useHistoryStore, withHistoryBatch } from "@/store/historyStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { createSnapshot } from "@/store/sceneStore/helpers/history";
 import { generateTextStyleId, pickTextStyleProperties } from "@/types/textStyle";
@@ -70,35 +70,34 @@ export const setTextStyles: ToolHandler = async (args) => {
   // historyStore's reference-counted startBatch/endBatch).
   const history = useHistoryStore.getState();
   history.saveHistory(createSnapshot(useSceneStore.getState()));
-  history.startBatch();
 
-  // Kept live (updated as we go) rather than snapshotted once before the
-  // loop, so a later entry in the same call can match a style just
-  // added/renamed by an earlier entry instead of creating a duplicate.
-  const existingById = new Map(useTextStyleStore.getState().textStyles.map((s) => [s.id, s]));
-  const existingByName = new Map(useTextStyleStore.getState().textStyles.map((s) => [s.name, s]));
+  withHistoryBatch(() => {
+    // Kept live (updated as we go) rather than snapshotted once before the
+    // loop, so a later entry in the same call can match a style just
+    // added/renamed by an earlier entry instead of creating a duplicate.
+    const existingById = new Map(useTextStyleStore.getState().textStyles.map((s) => [s.id, s]));
+    const existingByName = new Map(useTextStyleStore.getState().textStyles.map((s) => [s.name, s]));
 
-  for (const obj of rawEntries) {
-    const id = typeof obj.id === "string" ? obj.id : undefined;
-    const name = typeof obj.name === "string" ? obj.name.trim() : undefined;
-    const match = (id ? existingById.get(id) : undefined) ?? (name ? existingByName.get(name) : undefined);
+    for (const obj of rawEntries) {
+      const id = typeof obj.id === "string" ? obj.id : undefined;
+      const name = typeof obj.name === "string" ? obj.name.trim() : undefined;
+      const match = (id ? existingById.get(id) : undefined) ?? (name ? existingByName.get(name) : undefined);
 
-    if (match) {
-      const updates = buildTextStyleUpdate(obj);
-      useTextStyleStore.getState().updateTextStyle(match.id, updates);
-      const updated: TextStyle = { ...match, ...updates };
-      existingById.set(updated.id, updated);
-      if (updated.name !== match.name) existingByName.delete(match.name);
-      existingByName.set(updated.name, updated);
-    } else {
-      const style = createTextStyle(obj);
-      useTextStyleStore.getState().addTextStyle(style);
-      existingById.set(style.id, style);
-      existingByName.set(style.name, style);
+      if (match) {
+        const updates = buildTextStyleUpdate(obj);
+        useTextStyleStore.getState().updateTextStyle(match.id, updates);
+        const updated: TextStyle = { ...match, ...updates };
+        existingById.set(updated.id, updated);
+        if (updated.name !== match.name) existingByName.delete(match.name);
+        existingByName.set(updated.name, updated);
+      } else {
+        const style = createTextStyle(obj);
+        useTextStyleStore.getState().addTextStyle(style);
+        existingById.set(style.id, style);
+        existingByName.set(style.name, style);
+      }
     }
-  }
-
-  history.endBatch();
+  });
 
   return JSON.stringify({
     success: true,

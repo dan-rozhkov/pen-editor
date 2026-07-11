@@ -33,16 +33,26 @@ export function useScrubLabel({
     maxRef.current = max;
   });
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    const deltaX = e.clientX - startXRef.current;
-    let newValue = startValueRef.current + Math.round(deltaX) * stepRef.current;
-    if (minRef.current !== undefined) newValue = Math.max(minRef.current, newValue);
-    if (maxRef.current !== undefined) newValue = Math.min(maxRef.current, newValue);
-    onChangeRef.current(newValue);
-  }, []);
-
   // Holds the teardown for the currently active drag (null when not dragging).
   const endDragRef = useRef<(() => void) | null>(null);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    try {
+      const deltaX = e.clientX - startXRef.current;
+      let newValue = startValueRef.current + Math.round(deltaX) * stepRef.current;
+      if (minRef.current !== undefined) newValue = Math.max(minRef.current, newValue);
+      if (maxRef.current !== undefined) newValue = Math.min(maxRef.current, newValue);
+      onChangeRef.current(newValue);
+    } catch (error) {
+      // The batch spans multiple async mousemove/mouseup events (it can't be
+      // wrapped in a single try/finally like a synchronous handler), so if
+      // onChange throws mid-drag, force the drag to end here — otherwise
+      // endDrag() (and its endBatch()) never runs and history stays batched
+      // for the rest of the session.
+      endDragRef.current?.();
+      throw error;
+    }
+  }, []);
 
   const onMouseDown = useCallback(
     (e: React.MouseEvent) => {

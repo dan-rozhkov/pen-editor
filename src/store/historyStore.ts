@@ -41,6 +41,28 @@ interface HistoryState {
   setStacks: (stacks: { past: HistorySnapshot[]; future: HistorySnapshot[] }) => void
 }
 
+/**
+ * Run `fn` inside a history batch, guaranteeing `endBatch()` runs even if
+ * `fn` throws — `startBatch`/`endBatch` are reference-counted, so an
+ * unclosed batch (e.g. from an unexpected-data exception mid-mutation)
+ * leaves `batchDepth` stuck above 0 and silently suppresses ALL history
+ * recording for the rest of the session (undo/redo quietly stops working).
+ * Every call site that brackets mutations with startBatch/endBatch should
+ * go through this helper instead of calling them directly.
+ *
+ * Returns `fn`'s return value; re-throws any error `fn` throws (the
+ * `finally` only guarantees the batch closes, it doesn't swallow errors).
+ */
+export function withHistoryBatch<T>(fn: () => T): T {
+  const { startBatch, endBatch } = useHistoryStore.getState();
+  startBatch();
+  try {
+    return fn();
+  } finally {
+    endBatch();
+  }
+}
+
 export const useHistoryStore = create<HistoryState>((set, get) => ({
   past: [],
   future: [],

@@ -495,8 +495,11 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
       if (ids.length > 0) {
         saveHistory(createSnapshot(useSceneStore.getState()));
         startBatch();
-        ids.forEach((id) => deleteNode(id));
-        endBatch();
+        try {
+          ids.forEach((id) => deleteNode(id));
+        } finally {
+          endBatch();
+        }
         clearSelection();
       }
     }

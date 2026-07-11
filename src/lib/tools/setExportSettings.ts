@@ -1,5 +1,5 @@
 import { useSceneStore } from "@/store/sceneStore";
-import { useHistoryStore } from "@/store/historyStore";
+import { useHistoryStore, withHistoryBatch } from "@/store/historyStore";
 import { createSnapshot } from "@/store/sceneStore/helpers/history";
 import { addExportSetting, createExportSetting } from "@/utils/exportSettingsUtils";
 import type { ExportSettingFormat } from "@/types/scene";
@@ -33,25 +33,24 @@ export const setExportSettings: ToolHandler = async (args) => {
 
   const history = useHistoryStore.getState();
   history.saveHistory(createSnapshot(useSceneStore.getState()));
-  history.startBatch();
 
   const { nodesById, updateNode } = useSceneStore.getState();
   let updatedCount = 0;
   const missingNodeIds: string[] = [];
-  for (const nodeId of nodeIds) {
-    const node = nodesById[nodeId];
-    if (!node) {
-      missingNodeIds.push(nodeId);
-      continue;
+  withHistoryBatch(() => {
+    for (const nodeId of nodeIds) {
+      const node = nodesById[nodeId];
+      if (!node) {
+        missingNodeIds.push(nodeId);
+        continue;
+      }
+      const setting = createExportSetting({ format: format as ExportSettingFormat, scale, suffix, quality });
+      const nextSettings =
+        mode === "replace" ? [setting] : addExportSetting(node.exportSettings, setting);
+      updateNode(nodeId, { exportSettings: nextSettings });
+      updatedCount += 1;
     }
-    const setting = createExportSetting({ format: format as ExportSettingFormat, scale, suffix, quality });
-    const nextSettings =
-      mode === "replace" ? [setting] : addExportSetting(node.exportSettings, setting);
-    updateNode(nodeId, { exportSettings: nextSettings });
-    updatedCount += 1;
-  }
-
-  history.endBatch();
+  });
 
   // Report the unresolved ids so the model can self-correct instead of assuming
   // every requested node was updated.

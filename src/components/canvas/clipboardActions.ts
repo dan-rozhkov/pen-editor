@@ -126,16 +126,19 @@ export function createClipboardActions(deps: ClipboardActionDeps) {
 
     saveHistory(createSnapshot(useSceneStore.getState()));
     startBatch();
-    for (const clonedNode of clonedNodes) {
-      if (targetContainerId) {
-        clonedNode.x = 20;
-        clonedNode.y = 20;
-        addChildToFrame(targetContainerId, clonedNode);
-      } else {
-        addNode(clonedNode);
+    try {
+      for (const clonedNode of clonedNodes) {
+        if (targetContainerId) {
+          clonedNode.x = 20;
+          clonedNode.y = 20;
+          addChildToFrame(targetContainerId, clonedNode);
+        } else {
+          addNode(clonedNode);
+        }
       }
+    } finally {
+      endBatch();
     }
-    endBatch();
 
     setImportedSelection(clonedNodes.map((node) => node.id));
   };

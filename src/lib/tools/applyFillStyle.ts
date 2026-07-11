@@ -1,6 +1,6 @@
 import { useStyleStore } from "@/store/styleStore";
 import { useSceneStore } from "@/store/sceneStore";
-import { useHistoryStore } from "@/store/historyStore";
+import { useHistoryStore, withHistoryBatch } from "@/store/historyStore";
 import { createSnapshot } from "@/store/sceneStore/helpers/history";
 import type { ToolHandler } from "../toolRegistry";
 
@@ -27,17 +27,16 @@ export const applyFillStyle: ToolHandler = async (args) => {
   // suppressed while batched — mirrors setStyles.ts).
   const history = useHistoryStore.getState();
   history.saveHistory(createSnapshot(useSceneStore.getState()));
-  history.startBatch();
 
   let appliedCount = 0;
-  const nodesById = useSceneStore.getState().nodesById;
-  for (const nodeId of nodeIds) {
-    if (!nodesById[nodeId]) continue;
-    store.applyFillStyleToNode(nodeId, styleId);
-    appliedCount += 1;
-  }
-
-  history.endBatch();
+  withHistoryBatch(() => {
+    const nodesById = useSceneStore.getState().nodesById;
+    for (const nodeId of nodeIds) {
+      if (!nodesById[nodeId]) continue;
+      store.applyFillStyleToNode(nodeId, styleId);
+      appliedCount += 1;
+    }
+  });
 
   return JSON.stringify({ success: true, appliedCount });
 };

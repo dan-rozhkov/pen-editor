@@ -1,6 +1,6 @@
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
-import { useHistoryStore } from "@/store/historyStore";
+import { useHistoryStore, withHistoryBatch } from "@/store/historyStore";
 import { selectAllInScope } from "@/components/canvas/keyboardShortcutUtils";
 import { copyAsCss, copyAsSvg } from "@/components/canvas/copyAsActions";
 import { formatShortcut } from "./shortcutFormat";
@@ -55,9 +55,9 @@ function deleteSelection(): void {
   if (ids.length === 0) return;
   const historyStore = useHistoryStore.getState();
   historyStore.saveHistory(createSnapshot(useSceneStore.getState()));
-  historyStore.startBatch();
-  ids.forEach((id) => useSceneStore.getState().deleteNode(id));
-  historyStore.endBatch();
+  withHistoryBatch(() => {
+    ids.forEach((id) => useSceneStore.getState().deleteNode(id));
+  });
   useSelectionStore.getState().clearSelection();
 }
 

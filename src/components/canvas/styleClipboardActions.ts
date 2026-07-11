@@ -60,10 +60,13 @@ export function createStyleClipboardActions(deps: StyleClipboardActionDeps) {
     // their own history entry.
     saveHistory(createSnapshot(useSceneStore.getState()));
     startBatch();
-    for (const [id, updates] of pendingUpdates) {
-      updateNode(id, updates);
+    try {
+      for (const [id, updates] of pendingUpdates) {
+        updateNode(id, updates);
+      }
+    } finally {
+      endBatch();
     }
-    endBatch();
   };
 
   return { copyStyleSelection, pasteStyleSelection };
