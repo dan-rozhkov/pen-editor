@@ -2,6 +2,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { getNodeContainer } from "@/pixi/pixiSync";
+import { getChildrenHost } from "@/pixi/syncHelpers";
 import { getNodeAbsolutePositionWithLayout } from "@/utils/nodeUtils";
 import type { Container } from "pixi.js";
 
@@ -70,6 +71,15 @@ export async function captureLayers(frameId: string): Promise<Plane[]> {
     const container = getNodeContainer(id) as Container | null;
     if (!container) continue;
 
+    // Frame/group containers nest their subtree inside a children-host
+    // sub-container. Hide it while extracting so a parent plane bakes ONLY its
+    // own visual content — otherwise every descendant is captured twice (once
+    // inside the parent, once as its own plane). Nodes without a host (rects,
+    // text, …) are unaffected. Restored in `finally`, even on extraction error.
+    const childrenHost = getChildrenHost(container);
+    const prevHostVisible = childrenHost ? childrenHost.visible : undefined;
+    if (childrenHost) childrenHost.visible = false;
+
     let canvas;
     try {
       canvas = pixiRefs.app.renderer.extract.canvas(container) as unknown as {
@@ -79,6 +89,10 @@ export async function captureLayers(frameId: string): Promise<Plane[]> {
       };
     } catch {
       continue; // extraction failed for this node — skip it, keep going
+    } finally {
+      if (childrenHost && prevHostVisible !== undefined) {
+        childrenHost.visible = prevHostVisible;
+      }
     }
     const imageUrl = await canvasToObjectUrl(canvas);
     if (!imageUrl) continue;

@@ -104,8 +104,13 @@ export function Layers3DOverlay() {
                 opacity: dimmed ? 0.5 : 1,
                 outline: isHovered ? "2px solid var(--color-accent-light)" : "none",
                 boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+                // depthIndex follows paint order (parent painted first). Deeper
+                // descendants must sit CLOSER to the viewer (larger +Z), so the
+                // root frame is at the back. Offset by the stack midpoint to
+                // keep it centered in the perspective container.
                 transform: `translate3d(${p.rect.x}px, ${p.rect.y}px, ${
-                  -p.depthIndex * spacing + (isHovered ? 20 : 0)
+                  (p.depthIndex - (planes.length - 1) / 2) * spacing +
+                  (isHovered ? 20 : 0)
                 }px)`,
               }}
             />

@@ -52,6 +52,24 @@ describe("Layers3DOverlay", () => {
     expect(img.style.maxHeight).toBe("none");
   });
 
+  it("places child planes closer to the viewer than their parents", () => {
+    // depthIndex follows paint order (parent first). A higher depthIndex is a
+    // deeper descendant, which must render CLOSER to the viewer (larger Z).
+    useLayers3DStore.setState({
+      active: true,
+      planes: [plane("parent", 0), plane("child", 1)],
+    });
+    render(<Layers3DOverlay />);
+    const zOf = (id: string) => {
+      const t = (
+        document.querySelector(`img[data-plane-id="${id}"]`) as HTMLElement
+      ).style.transform;
+      const m = t.match(/translate3d\([^,]+,[^,]+,\s*([-\d.]+)px\)/);
+      return Number(m![1]);
+    };
+    expect(zOf("child")).toBeGreaterThan(zOf("parent"));
+  });
+
   it("sets hoveredPlaneId on pointer enter", () => {
     useLayers3DStore.setState({ active: true, planes: [plane("a", 0)] });
     render(<Layers3DOverlay />);

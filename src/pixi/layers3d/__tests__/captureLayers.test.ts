@@ -31,7 +31,9 @@ describe("captureLayers", () => {
     resetStores();
     seedScene(); // frame1 → [rect1, text1]; rect2 is a separate root
     extractCanvas.mockReset().mockImplementation(() => fakeCanvas());
-    getNodeContainer.mockReset().mockImplementation(() => ({}));
+    getNodeContainer
+      .mockReset()
+      .mockImplementation(() => ({ getChildByLabel: () => null }));
     vi.stubGlobal("URL", {
       createObjectURL: vi.fn(() => "blob:mock"),
       revokeObjectURL: vi.fn(),
@@ -59,5 +61,55 @@ describe("captureLayers", () => {
     s.updateNode("rect1", { visible: false });
     const planes = await captureLayers("frame1");
     expect(planes.map((p) => p.nodeId)).toEqual(["frame1", "text1"]);
+  });
+
+  it("hides the frame's children-host while extracting, then restores it", async () => {
+    const childrenHost = { visible: true };
+    const frameContainer = {
+      getChildByLabel: (label: string) =>
+        label === "frame-children" ? childrenHost : null,
+    };
+    getNodeContainer.mockImplementation((id: string) =>
+      id === "frame1"
+        ? frameContainer
+        : { getChildByLabel: () => null },
+    );
+    let hostVisibleAtExtract: boolean | undefined;
+    extractCanvas.mockImplementation((container: unknown) => {
+      if (container === frameContainer) {
+        hostVisibleAtExtract = childrenHost.visible;
+      }
+      return fakeCanvas();
+    });
+
+    await captureLayers("frame1");
+
+    // (a) host is hidden at the exact moment the frame container is extracted
+    expect(hostVisibleAtExtract).toBe(false);
+    // (b) host visibility is restored afterward
+    expect(childrenHost.visible).toBe(true);
+  });
+
+  it("restores the children-host visibility even when extraction throws", async () => {
+    const childrenHost = { visible: true };
+    const frameContainer = {
+      getChildByLabel: (label: string) =>
+        label === "frame-children" ? childrenHost : null,
+    };
+    getNodeContainer.mockImplementation((id: string) =>
+      id === "frame1"
+        ? frameContainer
+        : { getChildByLabel: () => null },
+    );
+    extractCanvas.mockImplementation((container: unknown) => {
+      if (container === frameContainer) throw new Error("extract failed");
+      return fakeCanvas();
+    });
+
+    const planes = await captureLayers("frame1");
+
+    // frame plane skipped, but the host must be restored regardless
+    expect(childrenHost.visible).toBe(true);
+    expect(planes.map((p) => p.nodeId)).toEqual(["rect1", "text1"]);
   });
 });
