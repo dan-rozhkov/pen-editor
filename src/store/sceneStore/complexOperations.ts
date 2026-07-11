@@ -2,6 +2,7 @@ import type {
   FlatSceneNode,
   FrameNode,
   FlatFrameNode,
+  FlatGroupNode,
   EmbedNode,
   PathNode,
   SceneNode,
@@ -332,65 +333,37 @@ export function createComplexOperations(
       saveHistory(state);
 
       if (node.type === "group") {
-        // Group -> Frame
-        const frame: FlatSceneNode = {
-          id: node.id,
-          type: "frame" as const,
-          name: node.name,
-          x: node.x,
-          y: node.y,
-          width: node.width,
-          height: node.height,
-          fill: node.fill,
-          stroke: node.stroke,
-          strokeWidth: node.strokeWidth,
-          visible: node.visible,
-          enabled: node.enabled,
-          sizing: node.sizing,
-          fillBinding: node.fillBinding,
-          strokeBinding: node.strokeBinding,
-          rotation: node.rotation,
-          opacity: node.opacity,
-          fillOpacity: node.fillOpacity,
-          strokeOpacity: node.strokeOpacity,
-          flipX: node.flipX,
-          flipY: node.flipY,
-          imageFill: node.imageFill,
-        };
+        // Group -> Frame: spread the source node so modern fields (fills,
+        // gradientFill, effects, cornerRadius*, shader, etc.) survive, and
+        // drop only the group-only fields that don't exist on FrameNode.
+        const frame = { ...node, type: "frame" as const };
+        delete (frame as unknown as Partial<FlatGroupNode>).clipGeometry;
+        delete (frame as unknown as Partial<FlatGroupNode>).clipBounds;
         setState({
-          nodesById: { ...state.nodesById, [id]: frame },
+          nodesById: { ...state.nodesById, [id]: frame as FlatSceneNode },
           _cachedTree: null,
         });
         return true;
       }
 
       if (node.type === "frame") {
-        const group: FlatSceneNode = {
-          id: node.id,
-          type: "group" as const,
-          name: node.name,
-          x: node.x,
-          y: node.y,
-          width: node.width,
-          height: node.height,
-          fill: node.fill,
-          stroke: node.stroke,
-          strokeWidth: node.strokeWidth,
-          visible: node.visible,
-          enabled: node.enabled,
-          sizing: node.sizing,
-          fillBinding: node.fillBinding,
-          strokeBinding: node.strokeBinding,
-          rotation: node.rotation,
-          opacity: node.opacity,
-          fillOpacity: node.fillOpacity,
-          strokeOpacity: node.strokeOpacity,
-          flipX: node.flipX,
-          flipY: node.flipY,
-          imageFill: node.imageFill,
-        };
+        // Frame -> Group: spread the source node so modern fields (fills,
+        // gradientFill, effects, cornerRadius*, shader, etc.) survive, and
+        // drop only the frame-only fields that are meaningless/invalid on a
+        // GroupNode (layout, component/slot metadata, layout grids, theme
+        // override, clip). cornerRadius* is intentionally kept even though
+        // groups don't render it, so a later group -> frame conversion
+        // doesn't lose it.
+        const group = { ...node, type: "group" as const };
+        delete (group as unknown as Partial<FlatFrameNode>).layout;
+        delete (group as unknown as Partial<FlatFrameNode>).reusable;
+        delete (group as unknown as Partial<FlatFrameNode>).properties;
+        delete (group as unknown as Partial<FlatFrameNode>).isSlot;
+        delete (group as unknown as Partial<FlatFrameNode>).layoutGrids;
+        delete (group as unknown as Partial<FlatFrameNode>).themeOverride;
+        delete (group as unknown as Partial<FlatFrameNode>).clip;
         setState({
-          nodesById: { ...state.nodesById, [id]: group },
+          nodesById: { ...state.nodesById, [id]: group as FlatSceneNode },
           _cachedTree: null,
         });
         return true;

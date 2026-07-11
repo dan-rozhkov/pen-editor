@@ -168,6 +168,44 @@ describe("complexOperations", () => {
       expect(scene().nodesById["frame1"].type).toBe("frame");
     });
 
+    it("preserves fills/effects/cornerRadius across a frame -> group -> frame round-trip", () => {
+      const s = scene();
+      const fills = [{ id: "fill1", type: "solid" as const, color: "#ff0000" }];
+      const effects = [
+        {
+          type: "shadow" as const,
+          shadowType: "outer" as const,
+          color: "#00000040",
+          offset: { x: 2, y: 2 },
+          blur: 4,
+          spread: 0,
+        },
+      ];
+      s.nodesById["frame1"] = {
+        ...(s.nodesById["frame1"] as FlatFrameNode),
+        fills,
+        effects,
+        cornerRadius: 12,
+      } as FlatSceneNode;
+      useSceneStore.setState({ nodesById: { ...s.nodesById } });
+
+      expect(scene().convertNodeType("frame1")).toBe(true);
+      const group = scene().nodesById["frame1"] as FlatSceneNode;
+      expect(group.type).toBe("group");
+      expect(group.fills).toEqual(fills);
+      expect(group.effects).toEqual(effects);
+      expect((group as unknown as FlatFrameNode).cornerRadius).toBe(12);
+      expect((group as unknown as FlatFrameNode).layout).toBeUndefined();
+      expect((group as unknown as FlatFrameNode).reusable).toBeUndefined();
+
+      expect(scene().convertNodeType("frame1")).toBe(true);
+      const frame = scene().nodesById["frame1"] as FlatFrameNode;
+      expect(frame.type).toBe("frame");
+      expect(frame.fills).toEqual(fills);
+      expect(frame.effects).toEqual(effects);
+      expect(frame.cornerRadius).toBe(12);
+    });
+
     it("refuses to convert a reusable (component) frame without pushing history", () => {
       const s = scene();
       s.nodesById["frame1"] = {
