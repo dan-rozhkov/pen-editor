@@ -210,7 +210,6 @@ export function Layers3DOverlay() {
       >
         {planes.map((p) => {
           const isHovered = hoveredPlaneId === p.nodeId;
-          const dimmed = hoveredPlaneId !== null && !isHovered;
           return (
             <img
               key={p.nodeId}
@@ -229,7 +228,7 @@ export function Layers3DOverlay() {
                 maxWidth: "none",
                 maxHeight: "none",
                 borderRadius: `${p.cornerRadius}px`,
-                opacity: dimmed ? 0.5 : 1,
+                opacity: 1,
                 outline: isHovered
                   ? "2px solid rgba(125, 196, 255, 0.95)"
                   : "1px solid rgba(125, 196, 255, 0.5)",

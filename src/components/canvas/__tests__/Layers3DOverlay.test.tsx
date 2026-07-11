@@ -411,7 +411,7 @@ describe("Layers3DOverlay", () => {
     });
   });
 
-  it("does not double-apply opacity — base is 1, only hover-dim reduces it", () => {
+  it("keeps every plane fully opaque while hovering", () => {
     useLayers3DStore.setState({ active: true, planes: [plane("a", 0), plane("b", 1)] });
     render(<Layers3DOverlay />);
     const imgA = document.querySelector('img[data-plane-id="a"]') as HTMLElement;
@@ -420,7 +420,7 @@ describe("Layers3DOverlay", () => {
     expect(imgB.style.opacity).toBe("1");
     fireEvent.pointerEnter(imgA);
     expect(imgA.style.opacity).toBe("1");
-    expect(imgB.style.opacity).toBe("0.5");
+    expect(imgB.style.opacity).toBe("1");
   });
 });
 
