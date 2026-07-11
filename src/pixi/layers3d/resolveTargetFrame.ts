@@ -1,6 +1,6 @@
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
-import { findParentFrame } from "@/utils/nodeUtils";
+import { getAncestorIds } from "@/utils/nodeUtils";
 
 /**
  * Resolve which frame should be exploded into the 3D layer view.
@@ -12,15 +12,17 @@ import { findParentFrame } from "@/utils/nodeUtils";
  * 4. If no frame exists at all, return null (disables the 3D toggle).
  */
 export function resolveTargetFrame(): string | null {
-  const { nodesById, rootIds, getNodes } = useSceneStore.getState();
+  const { nodesById, parentById, rootIds } = useSceneStore.getState();
   const { selectedIds } = useSelectionStore.getState();
 
   const selId = selectedIds[0];
   if (selId && nodesById[selId]) {
     if (nodesById[selId].type === "frame") return selId;
 
-    const { parent } = findParentFrame(getNodes(), selId);
-    if (parent && parent.type === "frame") return parent.id;
+    const ancestorFrameId = getAncestorIds(parentById, selId).find(
+      (ancestorId) => nodesById[ancestorId]?.type === "frame",
+    );
+    if (ancestorFrameId) return ancestorFrameId;
   }
 
   const firstFrame = rootIds.find((id) => nodesById[id]?.type === "frame");
