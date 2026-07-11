@@ -155,7 +155,7 @@ export function Toolbar() {
           File
           <CaretDownIcon className="size-3 text-muted-foreground" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" sideOffset={4}>
+        <DropdownMenuContent align="start" sideOffset={4} className="min-w-56">
           <DropdownMenuItem onClick={handleOpen}>
             Open
           </DropdownMenuItem>
