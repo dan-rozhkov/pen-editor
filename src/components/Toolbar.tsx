@@ -32,8 +32,8 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
   DropdownMenuCheckboxItem,
-  DropdownMenuShortcut,
 } from "./ui/dropdown-menu";
+import { TooltipShortcut } from "./ui/tooltip";
 import {
   CaretDownIcon,
 } from "@phosphor-icons/react";
@@ -225,7 +225,7 @@ export function Toolbar() {
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem checked={showRulers} onCheckedChange={toggleShowRulers}>
                 Rulers
-                <DropdownMenuShortcut>Shift+R</DropdownMenuShortcut>
+                <TooltipShortcut className="ml-auto">Shift+R</TooltipShortcut>
               </DropdownMenuCheckboxItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
