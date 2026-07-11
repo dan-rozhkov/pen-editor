@@ -24,12 +24,15 @@ interface Layers3DState {
   rotateY: number;
   spacing: number;
   zoom: number;
+  panX: number;
+  panY: number;
   hoveredPlaneId: string | null;
   enter: (frameId: string) => Promise<void>;
   exit: () => void;
   setRotation: (x: number, y: number) => void;
   setSpacing: (px: number) => void;
   setZoom: (z: number) => void;
+  setPan: (x: number, y: number) => void;
   setHovered: (id: string | null) => void;
   resetView: () => void;
 }
@@ -39,6 +42,8 @@ const defaultView = {
   rotateY: DEFAULT_ROTATE_Y,
   spacing: DEFAULT_SPACING,
   zoom: 1,
+  panX: 0,
+  panY: 0,
 };
 
 export const useLayers3DStore = create<Layers3DState>((set, get) => ({
@@ -97,6 +102,7 @@ export const useLayers3DStore = create<Layers3DState>((set, get) => ({
     }),
   setSpacing: (px) => set({ spacing: clamp(px, MIN_SPACING, MAX_SPACING) }),
   setZoom: (z) => set({ zoom: clamp(z, MIN_ZOOM, MAX_ZOOM) }),
+  setPan: (x, y) => set({ panX: x, panY: y }),
   setHovered: (id) => set({ hoveredPlaneId: id }),
   resetView: () => set({ ...defaultView }),
 }));

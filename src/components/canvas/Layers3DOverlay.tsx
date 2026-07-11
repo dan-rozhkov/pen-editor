@@ -3,7 +3,7 @@ import {
   CircleNotch,
   XIcon,
 } from "@phosphor-icons/react";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   useLayers3DStore,
   MIN_SPACING,
@@ -33,15 +33,24 @@ export function Layers3DOverlay() {
   const rotateY = useLayers3DStore((s) => s.rotateY);
   const spacing = useLayers3DStore((s) => s.spacing);
   const zoom = useLayers3DStore((s) => s.zoom);
+  const panX = useLayers3DStore((s) => s.panX);
+  const panY = useLayers3DStore((s) => s.panY);
   const hoveredPlaneId = useLayers3DStore((s) => s.hoveredPlaneId);
   const setRotation = useLayers3DStore((s) => s.setRotation);
   const setSpacing = useLayers3DStore((s) => s.setSpacing);
   const setZoom = useLayers3DStore((s) => s.setZoom);
+  const setPan = useLayers3DStore((s) => s.setPan);
   const setHovered = useLayers3DStore((s) => s.setHovered);
   const resetView = useLayers3DStore((s) => s.resetView);
   const exit = useLayers3DStore((s) => s.exit);
 
-  const drag = useRef<{ x: number; y: number } | null>(null);
+  const drag = useRef<{
+    pointerId: number;
+    mode: "rotate" | "pan";
+    x: number;
+    y: number;
+  } | null>(null);
+  const spacePressed = useRef(false);
   const reducedMotion = useMemo(() => prefersReducedMotion(), []);
 
   // Bounding box of all plane rects (children can sit at negative offsets
@@ -83,6 +92,41 @@ export function Layers3DOverlay() {
     return () => window.removeEventListener("resize", measure);
   }, [active]);
 
+  useEffect(() => {
+    if (!active) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== "Space") return;
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest(
+          "[data-3d-controls], input, textarea, select, button, [contenteditable='true']",
+        )
+      ) {
+        return;
+      }
+      spacePressed.current = true;
+      event.preventDefault();
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.code === "Space") spacePressed.current = false;
+    };
+    const clearSpace = () => {
+      spacePressed.current = false;
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", clearSpace);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", clearSpace);
+      clearSpace();
+    };
+  }, [active]);
+
   // Fit-to-viewport scale (never upscales past 1). Guards degenerate bboxes and
   // unmeasured containers (happy-dom / pre-layout) by falling back to 1.
   const baseScale = useMemo(() => {
@@ -100,21 +144,36 @@ export function Layers3DOverlay() {
 
   const onPointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest("[data-3d-controls]")) return;
-    drag.current = { x: e.clientX, y: e.clientY };
+    if (e.button !== 0 && e.button !== 1) return;
+    drag.current = {
+      pointerId: e.pointerId,
+      mode: e.button === 1 || spacePressed.current ? "pan" : "rotate",
+      x: e.clientX,
+      y: e.clientY,
+    };
+    e.preventDefault();
     (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent) => {
-    if (!drag.current) return;
-    const dx = e.clientX - drag.current.x;
-    const dy = e.clientY - drag.current.y;
-    drag.current = { x: e.clientX, y: e.clientY };
-    const { rotateX: liveRotateX, rotateY: liveRotateY } =
-      useLayers3DStore.getState();
-    setRotation(liveRotateX - dy * 0.3, liveRotateY + dx * 0.3);
+    const currentDrag = drag.current;
+    if (!currentDrag || currentDrag.pointerId !== e.pointerId) return;
+    const dx = e.clientX - currentDrag.x;
+    const dy = e.clientY - currentDrag.y;
+    drag.current = { ...currentDrag, x: e.clientX, y: e.clientY };
+    const state = useLayers3DStore.getState();
+    if (currentDrag.mode === "pan") {
+      setPan(state.panX + dx, state.panY + dy);
+    } else {
+      setRotation(state.rotateX - dy * 0.3, state.rotateY + dx * 0.3);
+    }
   };
   const onPointerUp = (e: React.PointerEvent) => {
+    if (drag.current?.pointerId !== e.pointerId) return;
     drag.current = null;
-    (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+    const target = e.currentTarget as HTMLElement;
+    if (target.hasPointerCapture?.(e.pointerId)) {
+      target.releasePointerCapture(e.pointerId);
+    }
   };
 
   return (
@@ -130,6 +189,9 @@ export function Layers3DOverlay() {
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
+      onLostPointerCapture={(e) => {
+        if (drag.current?.pointerId === e.pointerId) drag.current = null;
+      }}
       onWheel={(e) => {
         const { zoom: liveZoom } = useLayers3DStore.getState();
         setZoom(liveZoom - e.deltaY * 0.003);
@@ -142,7 +204,7 @@ export function Layers3DOverlay() {
           width: `${bbox.width}px`,
           height: `${bbox.height}px`,
           transformStyle: "preserve-3d",
-          transform: `translate(-50%, -50%) scale(${zoom * baseScale}) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`,
+          transform: `translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) scale(${zoom * baseScale}) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`,
           transition: reducedMotion ? "none" : "transform 0.12s linear",
         }}
       >

@@ -32,6 +32,8 @@ describe("Layers3DOverlay", () => {
       rotateY: DEFAULT_ROTATE_Y,
       spacing: DEFAULT_SPACING,
       zoom: 1,
+      panX: 0,
+      panY: 0,
     });
   });
 
@@ -131,6 +133,182 @@ describe("Layers3DOverlay", () => {
     expect(wrapper.style.transform).toContain("scale(1)");
   });
 
+  it("includes the current pan translation in the stack transform", () => {
+    useLayers3DStore.setState({
+      active: true,
+      planes: [plane("a", 0)],
+      panX: 72,
+      panY: -34,
+    });
+    render(<Layers3DOverlay />);
+    const wrapper = document.querySelector("[data-3d-stack]") as HTMLElement;
+    expect(wrapper.style.transform).toContain("calc(-50% + 72px)");
+    expect(wrapper.style.transform).toContain("calc(-50% + -34px)");
+  });
+
+  it("pans with Space + left drag without rotating", () => {
+    useLayers3DStore.setState({ active: true, planes: [plane("a", 0)] });
+    render(<Layers3DOverlay />);
+    const overlay = document.querySelector("[data-3d-stack]")!.parentElement!;
+    const initialRotation = {
+      rotateX: useLayers3DStore.getState().rotateX,
+      rotateY: useLayers3DStore.getState().rotateY,
+    };
+
+    fireEvent.keyDown(window, { code: "Space", key: " " });
+    fireEvent.pointerDown(overlay, {
+      button: 0,
+      pointerId: 1,
+      clientX: 20,
+      clientY: 30,
+    });
+    fireEvent.pointerMove(overlay, {
+      button: 0,
+      pointerId: 1,
+      clientX: 75,
+      clientY: 10,
+    });
+    fireEvent.pointerUp(overlay, {
+      button: 0,
+      pointerId: 1,
+      clientX: 75,
+      clientY: 10,
+    });
+    fireEvent.keyUp(window, { code: "Space", key: " " });
+
+    expect(useLayers3DStore.getState()).toMatchObject({
+      panX: 55,
+      panY: -20,
+      ...initialRotation,
+    });
+  });
+
+  it("pans with middle-button drag", () => {
+    useLayers3DStore.setState({ active: true, planes: [plane("a", 0)] });
+    render(<Layers3DOverlay />);
+    const overlay = document.querySelector("[data-3d-stack]")!.parentElement!;
+
+    fireEvent.pointerDown(overlay, {
+      button: 1,
+      pointerId: 2,
+      clientX: 100,
+      clientY: 80,
+    });
+    fireEvent.pointerMove(overlay, {
+      buttons: 4,
+      pointerId: 2,
+      clientX: 70,
+      clientY: 120,
+    });
+    fireEvent.pointerUp(overlay, {
+      button: 1,
+      pointerId: 2,
+      clientX: 70,
+      clientY: 120,
+    });
+
+    expect(useLayers3DStore.getState()).toMatchObject({ panX: -30, panY: 40 });
+  });
+
+  it("keeps ordinary left drag mapped to rotation", () => {
+    useLayers3DStore.setState({ active: true, planes: [plane("a", 0)] });
+    render(<Layers3DOverlay />);
+    const overlay = document.querySelector("[data-3d-stack]")!.parentElement!;
+
+    fireEvent.pointerDown(overlay, {
+      button: 0,
+      pointerId: 3,
+      clientX: 10,
+      clientY: 10,
+    });
+    fireEvent.pointerMove(overlay, {
+      buttons: 1,
+      pointerId: 3,
+      clientX: 30,
+      clientY: 20,
+    });
+    fireEvent.pointerUp(overlay, {
+      button: 0,
+      pointerId: 3,
+      clientX: 30,
+      clientY: 20,
+    });
+
+    expect(useLayers3DStore.getState()).toMatchObject({
+      panX: 0,
+      panY: 0,
+      rotateX: DEFAULT_ROTATE_X - 3,
+      rotateY: DEFAULT_ROTATE_Y + 6,
+    });
+  });
+
+  it("does not start pan or rotation from the controls", () => {
+    useLayers3DStore.setState({ active: true, planes: [plane("a", 0)] });
+    render(<Layers3DOverlay />);
+    const controls = document.querySelector("[data-3d-controls]")!;
+    const before = useLayers3DStore.getState();
+
+    fireEvent.pointerDown(controls, {
+      button: 1,
+      pointerId: 4,
+      clientX: 0,
+      clientY: 0,
+    });
+    fireEvent.pointerMove(controls, {
+      buttons: 4,
+      pointerId: 4,
+      clientX: 100,
+      clientY: 100,
+    });
+    fireEvent.pointerUp(controls, {
+      button: 1,
+      pointerId: 4,
+      clientX: 100,
+      clientY: 100,
+    });
+
+    expect(useLayers3DStore.getState()).toMatchObject({
+      panX: before.panX,
+      panY: before.panY,
+      rotateX: before.rotateX,
+      rotateY: before.rotateY,
+    });
+  });
+
+  it("does not reserve Space while an interactive control is focused", () => {
+    useLayers3DStore.setState({ active: true, planes: [plane("a", 0)] });
+    render(<Layers3DOverlay />);
+    const overlay = document.querySelector("[data-3d-stack]")!.parentElement!;
+    const resetButton = screen.getByRole("button", { name: "Reset 3D view" });
+
+    fireEvent.keyDown(resetButton, { code: "Space", key: " " });
+    fireEvent.pointerDown(overlay, {
+      button: 0,
+      pointerId: 5,
+      clientX: 10,
+      clientY: 10,
+    });
+    fireEvent.pointerMove(overlay, {
+      buttons: 1,
+      pointerId: 5,
+      clientX: 30,
+      clientY: 20,
+    });
+    fireEvent.pointerUp(overlay, {
+      button: 0,
+      pointerId: 5,
+      clientX: 30,
+      clientY: 20,
+    });
+
+    expect(useLayers3DStore.getState()).toMatchObject({
+      panX: 0,
+      panY: 0,
+      rotateX: DEFAULT_ROTATE_X - 3,
+      rotateY: DEFAULT_ROTATE_Y + 6,
+    });
+  });
+
   it("gives sibling planes (same depth) the same Z", () => {
     useLayers3DStore.setState({
       active: true,
@@ -218,6 +396,8 @@ describe("Layers3DOverlay", () => {
       rotateY: -40,
       spacing: 120,
       zoom: 2,
+      panX: 90,
+      panY: -50,
     });
     render(<Layers3DOverlay />);
     fireEvent.click(screen.getByRole("button", { name: "Reset 3D view" }));
@@ -226,6 +406,8 @@ describe("Layers3DOverlay", () => {
       rotateY: DEFAULT_ROTATE_Y,
       spacing: DEFAULT_SPACING,
       zoom: 1,
+      panX: 0,
+      panY: 0,
     });
   });
 

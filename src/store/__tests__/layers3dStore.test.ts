@@ -31,6 +31,8 @@ describe("layers3dStore", () => {
       rotateY: DEFAULT_ROTATE_Y,
       spacing: DEFAULT_SPACING,
       zoom: 1,
+      panX: 0,
+      panY: 0,
       hoveredPlaneId: null,
     });
   });
@@ -100,5 +102,26 @@ describe("layers3dStore", () => {
     expect(useLayers3DStore.getState().spacing).toBe(MAX_SPACING);
     st.setZoom(999);
     expect(useLayers3DStore.getState().zoom).toBe(3);
+  });
+
+  it("updates pan and resetView restores it to the origin", () => {
+    const st = useLayers3DStore.getState();
+    st.setPan(125, -80);
+    expect(useLayers3DStore.getState()).toMatchObject({ panX: 125, panY: -80 });
+
+    useLayers3DStore.getState().resetView();
+    expect(useLayers3DStore.getState()).toMatchObject({ panX: 0, panY: 0 });
+  });
+
+  it("resets pan when entering and exiting 3D view", async () => {
+    captureLayers.mockResolvedValue([]);
+    useLayers3DStore.getState().setPan(30, 45);
+
+    await useLayers3DStore.getState().enter("frame1");
+    expect(useLayers3DStore.getState()).toMatchObject({ panX: 0, panY: 0 });
+
+    useLayers3DStore.getState().setPan(-70, 20);
+    useLayers3DStore.getState().exit();
+    expect(useLayers3DStore.getState()).toMatchObject({ panX: 0, panY: 0 });
   });
 });
