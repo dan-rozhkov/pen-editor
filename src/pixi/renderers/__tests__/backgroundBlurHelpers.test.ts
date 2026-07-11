@@ -1,12 +1,14 @@
-import { describe, it, expect } from "vitest";
-import { Container, Graphics, Sprite, Texture } from "pixi.js";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { Container, Graphics, Sprite, Texture, TextureSource } from "pixi.js";
 import {
   placeBackgroundBlurSprite,
   shouldRebakeBackgroundBlur,
   isSizeOnlyBackgroundBlurChange,
   destroyBackgroundBlurFill,
+  scheduleBackgroundBlurRebake,
+  ensureBackgroundBlurDestroyHook,
 } from "../backgroundBlurHelpers";
-import type { FlatSceneNode } from "@/types/scene";
+import type { Effect, FlatSceneNode } from "@/types/scene";
 
 function rectNode(over: Partial<FlatSceneNode> = {}): FlatSceneNode {
   return { id: "n1", type: "rect", x: 0, y: 0, width: 100, height: 80, ...over } as FlatSceneNode;
@@ -48,6 +50,51 @@ describe("backgroundBlurHelpers", () => {
     destroyBackgroundBlurFill(c);
     expect(c.getChildByLabel("background-blur-fill")).toBeNull();
     expect(c.getChildByLabel("background-blur-mask")).toBeNull();
+  });
+
+  describe("destroy teardown (bug-07: baked texture + rebake timer leak)", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("frees the baked texture when the container is destroyed", () => {
+      const c = new Container();
+      const source = new TextureSource({ width: 4, height: 4 });
+      const texture = new Texture({ source });
+      placeBackgroundBlurSprite(c, new Sprite(texture), rectNode());
+
+      ensureBackgroundBlurDestroyHook(c);
+      expect(texture.destroyed).toBe(false);
+
+      c.destroy({ children: true });
+
+      expect(texture.destroyed).toBe(true);
+    });
+
+    it("cancels a pending debounced rebake timer when the container is destroyed", () => {
+      vi.useFakeTimers();
+      const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
+      const c = new Container();
+      const effects = [{ type: "background-blur", radius: 8 }] as Effect[];
+
+      scheduleBackgroundBlurRebake(c, rectNode(), effects);
+      ensureBackgroundBlurDestroyHook(c);
+
+      c.destroy({ children: true });
+
+      expect(clearTimeoutSpy).toHaveBeenCalled();
+
+      // Advancing time past the debounce must not throw / touch a destroyed container.
+      expect(() => vi.advanceTimersByTime(1000)).not.toThrow();
+    });
+
+    it("does not attach the destroy hook twice for the same container", () => {
+      const c = new Container();
+      ensureBackgroundBlurDestroyHook(c);
+      ensureBackgroundBlurDestroyHook(c);
+
+      expect(() => c.destroy({ children: true })).not.toThrow();
+    });
   });
 
   describe("shouldRebakeBackgroundBlur", () => {

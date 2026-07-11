@@ -1,4 +1,4 @@
-import { BlurFilter, Container, Graphics, Rectangle, Sprite, type Texture } from "pixi.js";
+import { BlurFilter, Container, Graphics, Rectangle, Sprite, Texture } from "pixi.js";
 import type { Effect, FlatSceneNode, PerCornerRadius } from "@/types/scene";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { drawRoundedShape } from "./fillStrokeHelpers";
@@ -43,6 +43,45 @@ const BACKDROP_RESIZE_REBAKE_DEBOUNCE_MS = 180;
 
 /** Pending debounced size-only rebake per container. */
 const rebakeTimerByContainer = new WeakMap<Container, ReturnType<typeof setTimeout>>();
+
+/**
+ * The currently-baked backdrop texture owned by each container, tracked
+ * independently of the display list. Needed because by the time a
+ * `container.once("destroyed", ...)` handler runs, Pixi has already detached
+ * and destroyed the container's children (so `getChildByLabel` can no longer
+ * find the sprite to recover its texture) — see `ensureBackgroundBlurDestroyHook`.
+ */
+const bakedTextureByContainer = new WeakMap<Container, Texture>();
+
+/** Containers that already have the destroy-teardown hook registered (avoid double-attaching). */
+const destroyHooked = new WeakSet<Container>();
+
+/**
+ * Register a one-time teardown for `container`'s baked background-blur
+ * resources: cancels any pending debounced rebake timer and frees the baked
+ * sprite's texture. `syncNodeTree`'s node-deletion path destroys containers
+ * with `container.destroy({ children: true })` (no `texture: true`), so
+ * without this hook every deleted node that ever had a background-blur
+ * effect permanently leaks one full-size GPU texture (bug-07). Guarded by a
+ * WeakSet so it's only attached once per container, mirroring
+ * `destroyHooked` in `videoFillHelpers.ts`.
+ */
+export function ensureBackgroundBlurDestroyHook(container: Container): void {
+  if (destroyHooked.has(container)) return;
+  destroyHooked.add(container);
+  container.once("destroyed", () => {
+    const timer = rebakeTimerByContainer.get(container);
+    if (timer) clearTimeout(timer);
+    rebakeTimerByContainer.delete(container);
+
+    // The container's children (including the backdrop sprite) are already
+    // destroyed/detached by the time this fires, so recover the texture from
+    // the tracking map rather than searching the (now-empty) display list.
+    const texture = bakedTextureByContainer.get(container);
+    bakedTextureByContainer.delete(container);
+    if (texture && !texture.destroyed) texture.destroy(true);
+  });
+}
 
 type CornerNode = FlatSceneNode & {
   cornerRadius?: number;
@@ -118,7 +157,8 @@ export function destroyBackgroundBlurFill(container: Container): void {
     container.removeChild(sprite);
     const texture = sprite.texture;
     sprite.destroy();
-    texture.destroy(true);
+    if (!texture.destroyed) texture.destroy(true);
+    if (bakedTextureByContainer.get(container) === texture) bakedTextureByContainer.delete(container);
     if (mask instanceof Graphics) {
       container.removeChild(mask);
       mask.destroy();
@@ -156,6 +196,7 @@ export function placeBackgroundBlurSprite(
   container.addChildAt(sprite, 0);
   container.addChildAt(mask, 1);
   sprite.mask = mask;
+  bakedTextureByContainer.set(container, sprite.texture);
 }
 
 /**
@@ -177,6 +218,11 @@ export function applyBackgroundBlur(
     destroyBackgroundBlurFill(container);
     return;
   }
+
+  // Ensure the baked texture + any pending rebake timer are freed if this
+  // container is destroyed out from under us (e.g. node deletion), same as
+  // applyVideoFill's destroy hook in videoFillHelpers.ts.
+  ensureBackgroundBlurDestroyHook(container);
 
   const app = useCanvasRefStore.getState().pixiRefs?.app;
   if (!app) return;
@@ -248,6 +294,11 @@ export function scheduleBackgroundBlurRebake(
   width: number = node.width,
   height: number = node.height,
 ): void {
+  // Registered here too (not just in applyBackgroundBlur) so a container
+  // destroyed while this debounced rebake is still pending still has its
+  // timer cancelled and any already-baked texture freed.
+  ensureBackgroundBlurDestroyHook(container);
+
   const existing = rebakeTimerByContainer.get(container);
   if (existing) clearTimeout(existing);
   rebakeTimerByContainer.set(
