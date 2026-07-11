@@ -8,6 +8,22 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-07-11
+
+A read-only **3D layer view** for inspecting how a frame's layers stack.
+
+### Added
+- **3D layer view** — a floating "3D" toggle (top-center of the canvas)
+  explodes the selected frame's subtree into perspective-stacked planes, one
+  per node in paint order. Each plane is a real Pixi snapshot
+  (`renderer.extract`) of that node, so layers look exactly like the design.
+  Drag to orbit, scroll to zoom, hover to highlight a layer, and a spacing
+  slider controls the gap between planes; "Reset view" and Esc/"Exit" return
+  to the 2D canvas. The view is read-only and does not mutate the scene — the
+  Pixi canvas is hidden (never unmounted) underneath while it is active.
+  New `layers3dStore`, `captureLayers` snapshot pipeline, `resolveTargetFrame`
+  selection logic, and `Layers3DOverlay`/`Layers3DToggle` components.
+
 ## [0.11.0] - 2026-07-07
 
 Fourth gap-closing batch versus Figma: richer vector shapes, pattern fills,
