@@ -48,7 +48,8 @@ export function PresentOverlay() {
         <IconButton
           data-testid="present-exit"
           onClick={() => exit()}
-          tooltip="Exit (Esc)"
+          tooltip="Exit"
+          shortcut="Esc"
           side="top"
           variant="ghost"
           size="lg"

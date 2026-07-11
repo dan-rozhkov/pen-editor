@@ -1,9 +1,18 @@
+import {
+  ArrowCounterClockwiseIcon,
+  CircleNotch,
+  XIcon,
+} from "@phosphor-icons/react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   useLayers3DStore,
   MIN_SPACING,
   MAX_SPACING,
 } from "@/store/layers3dStore";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Slider } from "@/components/ui/slider";
+import { IconButton } from "@/components/ui/IconButton";
 
 function prefersReducedMotion(): boolean {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
@@ -18,6 +27,7 @@ function prefersReducedMotion(): boolean {
 
 export function Layers3DOverlay() {
   const active = useLayers3DStore((s) => s.active);
+  const isLoading = useLayers3DStore((s) => s.isLoading);
   const planes = useLayers3DStore((s) => s.planes);
   const rotateX = useLayers3DStore((s) => s.rotateX);
   const rotateY = useLayers3DStore((s) => s.rotateY);
@@ -122,7 +132,7 @@ export function Layers3DOverlay() {
       onPointerCancel={onPointerUp}
       onWheel={(e) => {
         const { zoom: liveZoom } = useLayers3DStore.getState();
-        setZoom(liveZoom - e.deltaY * 0.001);
+        setZoom(liveZoom - e.deltaY * 0.003);
       }}
     >
       <div
@@ -133,7 +143,7 @@ export function Layers3DOverlay() {
           height: `${bbox.height}px`,
           transformStyle: "preserve-3d",
           transform: `translate(-50%, -50%) scale(${zoom * baseScale}) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`,
-          transition: reducedMotion ? "none" : "transform 0.4s ease-out",
+          transition: reducedMotion ? "none" : "transform 0.12s linear",
         }}
       >
         {planes.map((p) => {
@@ -171,35 +181,70 @@ export function Layers3DOverlay() {
                 transform: `translate3d(${p.rect.x - bbox.minX}px, ${
                   p.rect.y - bbox.minY
                 }px, ${
-                  (p.depth - maxDepth / 2) * spacing + (isHovered ? 20 : 0)
+                  (p.depth - maxDepth / 2) * spacing
                 }px)`,
               }}
             />
           );
         })}
       </div>
+      {isLoading && (
+        <div
+          data-3d-loading
+          className="absolute inset-0 flex items-center justify-center pointer-events-none"
+        >
+          <CircleNotch
+            size={28}
+            weight="thin"
+            className="text-text-muted"
+            style={{ animation: "spin 1s linear infinite" }}
+          />
+        </div>
+      )}
 
       <div
         data-3d-controls
-        className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 rounded-lg bg-surface-panel px-4 py-2 shadow-lg"
+        className="absolute bottom-4 left-1/2 -translate-x-1/2"
       >
-        <label className="flex items-center gap-2 text-sm text-text-muted">
-          Spacing
-          <input
-            aria-label="Layer spacing"
-            type="range"
-            min={MIN_SPACING}
-            max={MAX_SPACING}
-            value={spacing}
-            onChange={(e) => setSpacing(Number(e.target.value))}
-          />
-        </label>
-        <button type="button" className="text-sm text-text-muted" onClick={resetView}>
-          Reset view
-        </button>
-        <button type="button" className="text-sm text-text-muted" onClick={exit}>
-          Exit
-        </button>
+        <div className="flex items-center gap-1 rounded-2xl border border-border-default bg-surface-panel p-1.5 shadow-[0_0px_3px_rgba(0,0,0,0.04)]">
+          <Label className="gap-2 px-2 text-text-primary">
+            <span>Spacing</span>
+            <Slider
+              className="w-28"
+              getAriaLabel={() => "Layer spacing"}
+              min={MIN_SPACING}
+              max={MAX_SPACING}
+              value={spacing}
+              onValueChange={(next) =>
+                setSpacing(Array.isArray(next) ? next[0] ?? MIN_SPACING : next)
+              }
+            />
+          </Label>
+          <Separator orientation="vertical" className="my-1" />
+          <IconButton
+            type="button"
+            variant="ghost"
+            size="icon-lg"
+            onClick={resetView}
+            tooltip="Reset view"
+            side="top"
+            aria-label="Reset 3D view"
+          >
+            <ArrowCounterClockwiseIcon size={24} weight="light" />
+          </IconButton>
+          <IconButton
+            type="button"
+            variant="ghost"
+            size="icon-lg"
+            onClick={exit}
+            tooltip="Exit"
+            shortcut="Esc"
+            side="top"
+            aria-label="Exit 3D view"
+          >
+            <XIcon size={24} weight="light" />
+          </IconButton>
+        </div>
       </div>
     </div>
   );

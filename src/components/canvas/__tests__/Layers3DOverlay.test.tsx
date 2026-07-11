@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { act } from "react";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
-import { useLayers3DStore, DEFAULT_SPACING } from "@/store/layers3dStore";
+import {
+  useLayers3DStore,
+  DEFAULT_ROTATE_X,
+  DEFAULT_ROTATE_Y,
+  DEFAULT_SPACING,
+} from "@/store/layers3dStore";
 import { Layers3DOverlay } from "../Layers3DOverlay";
 import { Layers3DToggle } from "../Layers3DToggle";
 import { resetStores, seedScene } from "@/test/fixtures";
@@ -23,13 +28,24 @@ describe("Layers3DOverlay", () => {
   beforeEach(() => {
     useLayers3DStore.setState({
       active: false, planes: [], hoveredPlaneId: null,
-      rotateX: 8, rotateY: -24, spacing: DEFAULT_SPACING, zoom: 1,
+      rotateX: DEFAULT_ROTATE_X,
+      rotateY: DEFAULT_ROTATE_Y,
+      spacing: DEFAULT_SPACING,
+      zoom: 1,
     });
   });
 
   it("renders nothing when inactive", () => {
     const { container } = render(<Layers3DOverlay />);
     expect(container.firstChild).toBeNull();
+  });
+
+  it("shows a loader while the frame is being captured", () => {
+    useLayers3DStore.setState({ active: true, isLoading: true, planes: [] });
+    render(<Layers3DOverlay />);
+
+    expect(document.querySelector("[data-3d-loading]")).toBeTruthy();
+    expect(document.querySelector("[data-3d-stack]")).toBeTruthy();
   });
 
   it("renders one img per plane with a translate3d transform", () => {
@@ -152,15 +168,65 @@ describe("Layers3DOverlay", () => {
   it("sets hoveredPlaneId on pointer enter", () => {
     useLayers3DStore.setState({ active: true, planes: [plane("a", 0)] });
     render(<Layers3DOverlay />);
-    fireEvent.pointerEnter(document.querySelector('img[data-plane-id="a"]')!);
+    const img = document.querySelector('img[data-plane-id="a"]')! as HTMLElement;
+    const transform = img.style.transform;
+    fireEvent.pointerEnter(img);
     expect(useLayers3DStore.getState().hoveredPlaneId).toBe("a");
+    expect(img.style.transform).toBe(transform);
   });
 
   it("spacing slider updates the store", () => {
     useLayers3DStore.setState({ active: true, planes: [plane("a", 0)] });
     render(<Layers3DOverlay />);
+    const previousEvent = (globalThis as { event?: Event }).event;
+    Object.defineProperty(globalThis, "event", {
+      configurable: true,
+      value: new Event("change"),
+    });
     fireEvent.change(screen.getByLabelText(/spacing/i), { target: { value: "120" } });
+    if (previousEvent) {
+      Object.defineProperty(globalThis, "event", {
+        configurable: true,
+        value: previousEvent,
+      });
+    } else {
+      delete (globalThis as { event?: Event }).event;
+    }
     expect(useLayers3DStore.getState().spacing).toBe(120);
+  });
+
+  it("zooms three times faster per wheel delta", () => {
+    useLayers3DStore.setState({ active: true, planes: [plane("a", 0)], zoom: 1 });
+    render(<Layers3DOverlay />);
+    const overlay = document.querySelector("[data-3d-stack]")!.parentElement!;
+    fireEvent.wheel(overlay, { deltaY: -100 });
+    expect(useLayers3DStore.getState().zoom).toBeCloseTo(1.3);
+  });
+
+  it("exits from the icon-only close button", () => {
+    useLayers3DStore.setState({ active: true, planes: [plane("a", 0)] });
+    render(<Layers3DOverlay />);
+    fireEvent.click(screen.getByRole("button", { name: "Exit 3D view" }));
+    expect(useLayers3DStore.getState().active).toBe(false);
+  });
+
+  it("resets the view from the icon-only reset button", () => {
+    useLayers3DStore.setState({
+      active: true,
+      planes: [plane("a", 0)],
+      rotateX: 30,
+      rotateY: -40,
+      spacing: 120,
+      zoom: 2,
+    });
+    render(<Layers3DOverlay />);
+    fireEvent.click(screen.getByRole("button", { name: "Reset 3D view" }));
+    expect(useLayers3DStore.getState()).toMatchObject({
+      rotateX: DEFAULT_ROTATE_X,
+      rotateY: DEFAULT_ROTATE_Y,
+      spacing: DEFAULT_SPACING,
+      zoom: 1,
+    });
   });
 
   it("does not double-apply opacity — base is 1, only hover-dim reduces it", () => {

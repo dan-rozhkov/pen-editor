@@ -1,8 +1,10 @@
 import { create } from "zustand";
 import { captureLayers, type Plane } from "@/pixi/layers3d/captureLayers";
 
-export const DEFAULT_ROTATE_X = 8;
-export const DEFAULT_ROTATE_Y = -24;
+// The opening perspective matches the composed 3D view: a slight upward tilt
+// with the right side brought forward, so the layer stack is readable at once.
+export const DEFAULT_ROTATE_X = -13.4;
+export const DEFAULT_ROTATE_Y = 31.8;
 export const DEFAULT_SPACING = 40;
 export const MIN_SPACING = 8;
 export const MAX_SPACING = 160;
@@ -15,6 +17,7 @@ const clamp = (v: number, lo: number, hi: number) =>
 
 interface Layers3DState {
   active: boolean;
+  isLoading: boolean;
   targetFrameId: string | null;
   planes: Plane[];
   rotateX: number;
@@ -40,6 +43,7 @@ const defaultView = {
 
 export const useLayers3DStore = create<Layers3DState>((set, get) => ({
   active: false,
+  isLoading: false,
   targetFrameId: null,
   planes: [],
   ...defaultView,
@@ -48,6 +52,7 @@ export const useLayers3DStore = create<Layers3DState>((set, get) => ({
   enter: async (frameId) => {
     set({
       active: true,
+      isLoading: true,
       targetFrameId: frameId,
       ...defaultView,
       hoveredPlaneId: null,
@@ -67,7 +72,7 @@ export const useLayers3DStore = create<Layers3DState>((set, get) => ({
     // Guard against a race where the user exited (or entered a different
     // frame) while the capture was in flight.
     if (get().active && get().targetFrameId === frameId) {
-      set({ planes });
+      set({ planes, isLoading: false });
     } else {
       planes.forEach((p) => URL.revokeObjectURL(p.imageUrl));
     }
@@ -77,6 +82,7 @@ export const useLayers3DStore = create<Layers3DState>((set, get) => ({
     get().planes.forEach((p) => URL.revokeObjectURL(p.imageUrl));
     set({
       active: false,
+      isLoading: false,
       targetFrameId: null,
       planes: [],
       hoveredPlaneId: null,

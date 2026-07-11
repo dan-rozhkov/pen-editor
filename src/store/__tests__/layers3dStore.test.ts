@@ -24,6 +24,7 @@ describe("layers3dStore", () => {
     vi.stubGlobal("URL", { createObjectURL: vi.fn(), revokeObjectURL: revoke });
     useLayers3DStore.setState({
       active: false,
+      isLoading: false,
       targetFrameId: null,
       planes: [],
       rotateX: DEFAULT_ROTATE_X,
@@ -43,8 +44,25 @@ describe("layers3dStore", () => {
     expect(s.active).toBe(true);
     expect(s.targetFrameId).toBe("frame1");
     expect(s.planes).toHaveLength(1);
+    expect(s.isLoading).toBe(false);
     expect(s.rotateX).toBe(DEFAULT_ROTATE_X);
     expect(s.rotateY).toBe(DEFAULT_ROTATE_Y);
+  });
+
+  it("keeps the loading state active until capture finishes", async () => {
+    let resolveCapture!: (planes: never[]) => void;
+    captureLayers.mockReturnValue(
+      new Promise<never[]>((resolve) => {
+        resolveCapture = resolve;
+      }),
+    );
+
+    const entering = useLayers3DStore.getState().enter("frame1");
+    expect(useLayers3DStore.getState().isLoading).toBe(true);
+
+    resolveCapture([]);
+    await entering;
+    expect(useLayers3DStore.getState().isLoading).toBe(false);
   });
 
   it("exit revokes every plane object-URL and deactivates", () => {
@@ -59,6 +77,7 @@ describe("layers3dStore", () => {
     expect(revoke).toHaveBeenCalledWith("blob:a");
     expect(revoke).toHaveBeenCalledWith("blob:b");
     expect(useLayers3DStore.getState().active).toBe(false);
+    expect(useLayers3DStore.getState().isLoading).toBe(false);
     expect(useLayers3DStore.getState().planes).toEqual([]);
   });
 
@@ -67,6 +86,7 @@ describe("layers3dStore", () => {
     await useLayers3DStore.getState().enter("frame1");
     const s = useLayers3DStore.getState();
     expect(s.active).toBe(false);
+    expect(s.isLoading).toBe(false);
     expect(s.targetFrameId).toBeNull();
     expect(s.planes).toEqual([]);
   });

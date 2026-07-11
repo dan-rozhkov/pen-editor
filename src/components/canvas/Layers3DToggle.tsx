@@ -3,6 +3,11 @@ import { useLayers3DStore } from "@/store/layers3dStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { resolveTargetFrame } from "@/pixi/layers3d/resolveTargetFrame";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export function Layers3DToggle() {
   const active = useLayers3DStore((s) => s.active);
@@ -29,20 +34,19 @@ export function Layers3DToggle() {
   };
 
   return (
-    <button
-      type="button"
-      aria-label="3D layer view"
-      title={disabled ? "Select a frame to view in 3D" : "3D layer view"}
-      disabled={disabled}
-      onClick={onClick}
-      className={`absolute left-1/2 top-4 -translate-x-1/2 z-10 flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium shadow-lg disabled:opacity-40 disabled:cursor-not-allowed ${
-        active
-          ? "bg-accent-primary text-white"
-          : "bg-surface-panel text-text-primary"
-      }`}
-    >
-      <Cube weight="bold" />
-      3D
-    </button>
+    <Tooltip>
+      <TooltipTrigger render={<span className="flex" />}>
+        <button
+          type="button"
+          aria-label="Frame in 3D"
+          disabled={disabled}
+          onClick={onClick}
+          className="flex size-9 items-center justify-center rounded-lg text-text-primary transition-none outline-none hover:bg-secondary hover:text-text-primary dark:hover:bg-secondary"
+        >
+          <Cube size={24} weight="light" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top">Frame in 3D</TooltipContent>
+    </Tooltip>
   );
 }

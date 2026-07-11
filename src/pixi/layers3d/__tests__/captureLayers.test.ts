@@ -33,7 +33,7 @@ describe("captureLayers", () => {
     extractCanvas.mockReset().mockImplementation(() => fakeCanvas());
     getNodeContainer
       .mockReset()
-      .mockImplementation(() => ({ getChildByLabel: () => null }));
+      .mockImplementation((id: string) => ({ __id: id, getChildByLabel: () => null }));
     vi.stubGlobal("URL", {
       createObjectURL: vi.fn(() => "blob:mock"),
       revokeObjectURL: vi.fn(),
@@ -83,6 +83,59 @@ describe("captureLayers", () => {
     expect(planes[0].rect).toMatchObject({ x: 0, y: 0, width: 400, height: 300 });
     // rect1 is at absolute (110,120) → local (10,20)
     expect(planes[1].rect).toMatchObject({ x: 10, y: 20, width: 100, height: 50 });
+  });
+
+  it("uses the layout-computed size for fill text planes", async () => {
+    const { useSceneStore } = await import("@/store/sceneStore");
+    const state = useSceneStore.getState();
+    useSceneStore.setState({
+      nodesById: {
+        ...state.nodesById,
+        frame1: {
+          ...state.nodesById.frame1,
+          layout: {
+            autoLayout: true,
+            flexDirection: "column",
+            gap: 8,
+            paddingTop: 16,
+            paddingRight: 16,
+            paddingBottom: 16,
+            paddingLeft: 16,
+          },
+        } as never,
+        text1: {
+          ...state.nodesById.text1,
+          sizing: { widthMode: "fill_container", heightMode: "fixed" },
+        } as never,
+      },
+      _cachedTree: null,
+    });
+
+    const { useLayoutStore } = await import("@/store/layoutStore");
+    const frame = useSceneStore.getState().getNodes()[0];
+    if (frame?.type !== "frame") throw new Error("Expected frame fixture");
+    const laidOutText = useLayoutStore
+      .getState()
+      .calculateLayoutForFrame(frame)
+      .find((node) => node.id === "text1");
+    const planes = await captureLayers("frame1");
+    const textPlane = planes.find((plane) => plane.nodeId === "text1");
+
+    expect(laidOutText?.width).not.toBe(state.nodesById.text1.width);
+    expect(textPlane?.rect.width).toBe(laidOutText?.width);
+    expect(textPlane?.rect.height).toBe(20);
+    const textContainer = getNodeContainer.mock.results.find(
+      (result) => result.value?.__id === "text1",
+    )?.value;
+    const textExtraction = extractCanvas.mock.calls.find(
+      ([options]) => options?.target === textContainer,
+    )?.[0];
+    expect(textExtraction?.frame).toMatchObject({
+      x: 0,
+      y: 0,
+      width: laidOutText?.width,
+      height: 20,
+    });
   });
 
   it("skips zero-size and invisible nodes", async () => {

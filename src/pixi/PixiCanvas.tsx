@@ -8,7 +8,6 @@ import { EmbedAgentButton } from "@/components/canvas/EmbedAgentButton";
 import { EmbedSelectionFrame } from "@/components/canvas/EmbedSelectionFrame";
 import { EmbedLayer } from "@/components/canvas/EmbedLayer";
 import { FrameAgentButton } from "@/components/canvas/FrameAgentButton";
-import { Layers3DToggle } from "@/components/canvas/Layers3DToggle";
 import { Layers3DOverlay } from "@/components/canvas/Layers3DOverlay";
 import { useLayers3DStore } from "@/store/layers3dStore";
 import type { EmbedNode, FrameNode, TextNode, InstanceOverrideUpdateProps } from "@/types/scene";
@@ -469,9 +468,8 @@ export function PixiCanvas() {
         </div>
       )}
     </div>
-    {/* 3D layer view toggle + overlay always sit above the (possibly
-        hidden) Pixi canvas, inside the same canvas container. */}
-    <Layers3DToggle />
+    {/* The 3D overlay sits above the (possibly hidden) Pixi canvas. Its
+        toggle lives at the end of the drawing toolbar. */}
     <Layers3DOverlay />
     </div>
   );

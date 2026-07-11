@@ -3,8 +3,11 @@ import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { getNodeContainer } from "@/pixi/pixiSync";
 import { getChildrenHost } from "@/pixi/syncHelpers";
-import { getNodeAbsolutePositionWithLayout } from "@/utils/nodeUtils";
-import type { Container } from "pixi.js";
+import {
+  getNodeAbsolutePositionWithLayout,
+  getNodeEffectiveSize,
+} from "@/utils/nodeUtils";
+import { Rectangle, type Container } from "pixi.js";
 
 export interface Plane {
   nodeId: string;
@@ -71,7 +74,11 @@ export async function captureLayers(frameId: string): Promise<Plane[]> {
     const { id, depth } = ids[index];
     const node = nodesById[id];
     if (!node) continue;
-    if ((node.width ?? 0) <= 0 || (node.height ?? 0) <= 0) continue;
+    const effectiveSize = getNodeEffectiveSize(nodes, id, calc) ?? {
+      width: node.width ?? 0,
+      height: node.height ?? 0,
+    };
+    if (effectiveSize.width <= 0 || effectiveSize.height <= 0) continue;
     if (node.visible === false) continue;
 
     const container = getNodeContainer(id) as Container | null;
@@ -88,7 +95,25 @@ export async function captureLayers(frameId: string): Promise<Plane[]> {
 
     let canvas;
     try {
-      canvas = pixiRefs.app.renderer.extract.canvas(container) as unknown as {
+      // Pixi's default extraction bounds shrink-wrap to visible pixels. For
+      // text that means a short glyph (for example "R") produces a narrow
+      // bitmap even when its auto-layout box is fill_container. The 3D DOM
+      // plane then stretches that bitmap back to the layout width. Preserve
+      // the text node's full local box so transparent padding, alignment and
+      // glyph proportions survive the round-trip.
+      const extractionTarget =
+        node.type === "text"
+          ? {
+              target: container,
+              frame: new Rectangle(
+                0,
+                0,
+                effectiveSize.width,
+                effectiveSize.height,
+              ),
+            }
+          : container;
+      canvas = pixiRefs.app.renderer.extract.canvas(extractionTarget) as unknown as {
         width: number;
         height: number;
         toBlob: (cb: (b: Blob | null) => void) => void;
@@ -121,8 +146,8 @@ export async function captureLayers(frameId: string): Promise<Plane[]> {
       rect: {
         x: abs.x - frameAbs.x,
         y: abs.y - frameAbs.y,
-        width: node.width ?? 0,
-        height: node.height ?? 0,
+        width: effectiveSize.width,
+        height: effectiveSize.height,
       },
       imageUrl,
       cornerRadius:

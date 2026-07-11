@@ -69,7 +69,7 @@ function TooltipShortcut({
     <span
       data-slot="tooltip-shortcut"
       className={cn(
-        "rounded border border-white/15 bg-white/10 px-1 py-0.5 font-mono text-popover-foreground/70",
+        "inline-flex h-4 items-center rounded border border-white/15 bg-white/10 px-1 py-0 font-mono leading-4 text-popover-foreground/70",
         className,
       )}
       {...props}

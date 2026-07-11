@@ -16,6 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
+import { Layers3DToggle } from "./canvas/Layers3DToggle";
 
 export function PrimitivesPanel() {
   const { activeTool, toggleTool, setActiveTool } = useDrawModeStore();
@@ -199,6 +200,8 @@ export function PrimitivesPanel() {
             </IconButton>
           );
         })}
+
+        <Layers3DToggle />
       </div>
     </div>
   );
