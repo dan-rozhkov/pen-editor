@@ -1,4 +1,5 @@
 import { CaretDownIcon } from "@phosphor-icons/react";
+import { Fragment } from "react";
 import { useDrawModeStore } from "../store/drawModeStore";
 import {
   LEADING_TOOLS,
@@ -9,6 +10,7 @@ import {
   TRAILING_TOOLS,
 } from "../lib/toolDefinitions";
 import { IconButton } from "./ui/IconButton";
+import { Separator } from "./ui/separator";
 import { ButtonGroup } from "./ui/button-group";
 import {
   DropdownMenu,
@@ -182,22 +184,26 @@ export function PrimitivesPanel() {
         {trailingTools.map(({ icon: Icon, label, tool, shortcut }) => {
           const isActive = activeTool === tool;
           return (
-            <IconButton
-              key={label}
-              onClick={() => toggleTool(tool)}
-              tooltip={label}
-              shortcut={shortcut}
-              side="top"
-              variant="ghost"
-              size="lg"
-              className={`${toolButtonBaseClass} ${
-                isActive
-                  ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
-                  : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
-              }`}
-            >
-              <Icon size={40} className="size-6" weight="light" />
-            </IconButton>
+            <Fragment key={label}>
+              {tool === "scale" && (
+                <Separator orientation="vertical" className="my-1" />
+              )}
+              <IconButton
+                onClick={() => toggleTool(tool)}
+                tooltip={label}
+                shortcut={shortcut}
+                side="top"
+                variant="ghost"
+                size="lg"
+                className={`${toolButtonBaseClass} ${
+                  isActive
+                    ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
+                    : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
+                }`}
+              >
+                <Icon size={40} className="size-6" weight="light" />
+              </IconButton>
+            </Fragment>
           );
         })}
 
