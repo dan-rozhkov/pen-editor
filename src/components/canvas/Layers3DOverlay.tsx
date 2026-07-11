@@ -53,6 +53,11 @@ export function Layers3DOverlay() {
     return { minX, minY, width: maxX - minX, height: maxY - minY };
   }, [planes]);
 
+  const maxDepth = useMemo(
+    () => Math.max(0, ...planes.map((p) => p.depth)),
+    [planes],
+  );
+
   // Measure the overlay container so the stack can be scaled to fit on entry.
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [container, setContainer] = useState({ w: 0, h: 0 });
@@ -153,17 +158,20 @@ export function Layers3DOverlay() {
                 maxHeight: "none",
                 borderRadius: `${p.cornerRadius}px`,
                 opacity: dimmed ? 0.5 : 1,
-                outline: isHovered ? "2px solid var(--color-accent-light)" : "none",
-                boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
-                // depthIndex follows paint order (parent painted first). Deeper
+                outline: isHovered
+                  ? "2px solid rgba(125, 196, 255, 0.95)"
+                  : "1px solid rgba(125, 196, 255, 0.5)",
+                // depth is the node's distance from the exploded frame root
+                // (root frame = 0, each level of nesting +1). Deeper
                 // descendants must sit CLOSER to the viewer (larger +Z), so the
-                // root frame is at the back. Offset by the stack midpoint to
-                // keep it centered in the perspective container.
+                // root frame is at the back. Offset by the max depth's
+                // midpoint to keep the stack centered in the perspective
+                // container. Sibling nodes share the same depth and render
+                // coplanar.
                 transform: `translate3d(${p.rect.x - bbox.minX}px, ${
                   p.rect.y - bbox.minY
                 }px, ${
-                  (p.depthIndex - (planes.length - 1) / 2) * spacing +
-                  (isHovered ? 20 : 0)
+                  (p.depth - maxDepth / 2) * spacing + (isHovered ? 20 : 0)
                 }px)`,
               }}
             />

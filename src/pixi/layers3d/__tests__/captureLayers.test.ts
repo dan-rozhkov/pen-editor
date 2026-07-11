@@ -40,10 +40,41 @@ describe("captureLayers", () => {
     });
   });
 
-  it("emits planes in paint order with monotonic depthIndex", async () => {
+  it("emits planes in paint order with tree-depth: root=0, siblings share depth, deeper for descendants", async () => {
     const planes = await captureLayers("frame1");
     expect(planes.map((p) => p.nodeId)).toEqual(["frame1", "rect1", "text1"]);
-    expect(planes.map((p) => p.depthIndex)).toEqual([0, 1, 2]);
+    // frame1 is the root (depth 0); rect1 and text1 are siblings, both direct
+    // children of frame1, so they share depth 1.
+    expect(planes.map((p) => p.depth)).toEqual([0, 1, 1]);
+  });
+
+  it("gives a nested grandchild a greater depth than its parent", async () => {
+    const { useSceneStore } = await import("@/store/sceneStore");
+    const s = useSceneStore.getState();
+    // Nest a grandchild under rect1: frame1(0) -> rect1(1) -> grandchild1(2).
+    useSceneStore.setState({
+      nodesById: {
+        ...s.nodesById,
+        grandchild1: {
+          id: "grandchild1",
+          type: "rect",
+          name: "Nested",
+          x: 5,
+          y: 5,
+          width: 10,
+          height: 10,
+        } as never,
+      },
+      parentById: { ...s.parentById, grandchild1: "rect1" },
+      childrenById: { ...s.childrenById, rect1: ["grandchild1"] },
+    });
+
+    const planes = await captureLayers("frame1");
+    const depthOf = (id: string) =>
+      planes.find((p) => p.nodeId === id)?.depth;
+    expect(depthOf("frame1")).toBe(0);
+    expect(depthOf("rect1")).toBe(1);
+    expect(depthOf("grandchild1")).toBe(2);
   });
 
   it("positions rects relative to the frame origin", async () => {
@@ -90,10 +121,12 @@ describe("captureLayers", () => {
     expect(childrenHost.visible).toBe(true);
   });
 
-  it("skips nodes whose extracted canvas is degenerate (1×1), keeping depthIndex consecutive", async () => {
+  it("skips nodes whose extracted canvas is degenerate (1×1), without shifting siblings' depth", async () => {
     // A content-less container (no own fill/stroke) extracts as a 1×1 canvas
     // once its children-host is hidden. Such a plane is an invisible blurry
-    // stretch — drop it, and don't let it consume a depthIndex slot.
+    // stretch — drop it. Depth is computed from the actual tree during the
+    // walk, so dropping rect1 must not shift text1's depth (still 1, since
+    // text1 is a direct child of the root frame regardless of rect1's fate).
     // Tag each container with its id so the extract mock can vary by node.
     getNodeContainer.mockImplementation((id: string) => ({
       __id: id,
@@ -110,9 +143,9 @@ describe("captureLayers", () => {
     });
 
     const planes = await captureLayers("frame1");
-    // rect1 dropped; frame1 and text1 remain with consecutive depthIndex.
+    // rect1 dropped; frame1 (depth 0) and text1 (depth 1) remain.
     expect(planes.map((p) => p.nodeId)).toEqual(["frame1", "text1"]);
-    expect(planes.map((p) => p.depthIndex)).toEqual([0, 1]);
+    expect(planes.map((p) => p.depth)).toEqual([0, 1]);
   });
 
   it("restores the children-host visibility even when extraction throws", async () => {

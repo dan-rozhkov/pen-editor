@@ -8,7 +8,7 @@ import type { Container } from "pixi.js";
 
 export interface Plane {
   nodeId: string;
-  depthIndex: number;
+  depth: number;
   rect: { x: number; y: number; width: number; height: number };
   imageUrl: string;
   cornerRadius: number;
@@ -28,15 +28,21 @@ function canvasToObjectUrl(canvas: {
   });
 }
 
-/** Pre-order (paint order): parent before children; children in child order. */
-function paintOrder(frameId: string): string[] {
+/**
+ * Pre-order (paint order): parent before children; children in child order.
+ * Each entry carries the node's tree depth (root frame = 0, each level of
+ * nesting increments by 1). Depth is derived purely from tree structure
+ * during the walk, so it is unaffected by which planes later get filtered
+ * out (content-less containers, invisible nodes, MAX_PLANES cap, etc.).
+ */
+function paintOrder(frameId: string): { id: string; depth: number }[] {
   const { childrenById } = useSceneStore.getState();
-  const out: string[] = [];
-  const walk = (id: string) => {
-    out.push(id);
-    for (const childId of childrenById[id] ?? []) walk(childId);
+  const out: { id: string; depth: number }[] = [];
+  const walk = (id: string, depth: number) => {
+    out.push({ id, depth });
+    for (const childId of childrenById[id] ?? []) walk(childId, depth + 1);
   };
-  walk(frameId);
+  walk(frameId, 0);
   return out;
 }
 
@@ -62,7 +68,7 @@ export async function captureLayers(frameId: string): Promise<Plane[]> {
       dropped = ids.length - index;
       break;
     }
-    const id = ids[index];
+    const { id, depth } = ids[index];
     const node = nodesById[id];
     if (!node) continue;
     if ((node.width ?? 0) <= 0 || (node.height ?? 0) <= 0) continue;
@@ -97,8 +103,9 @@ export async function captureLayers(frameId: string): Promise<Plane[]> {
     // A content-less container (frame/group with no own fill/stroke) extracts
     // as a 1×1 canvas once its children-host is hidden. Stretched to the node's
     // width/height it renders as a blurry nothing — skip it, and don't let it
-    // consume a depthIndex or MAX_PLANES slot. Descendants are captured
-    // independently and unaffected.
+    // consume a MAX_PLANES slot. Descendants are captured independently and
+    // unaffected — their depth was already computed from the tree, not from
+    // how many planes preceded them.
     if (canvas.width <= 1 && canvas.height <= 1) continue;
 
     const imageUrl = await canvasToObjectUrl(canvas);
@@ -110,7 +117,7 @@ export async function captureLayers(frameId: string): Promise<Plane[]> {
     };
     planes.push({
       nodeId: id,
-      depthIndex: planes.length,
+      depth,
       rect: {
         x: abs.x - frameAbs.x,
         y: abs.y - frameAbs.y,

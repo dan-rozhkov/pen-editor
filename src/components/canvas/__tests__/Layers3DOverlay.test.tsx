@@ -7,9 +7,9 @@ import { Layers3DToggle } from "../Layers3DToggle";
 import { resetStores, seedScene } from "@/test/fixtures";
 import { useSelectionStore } from "@/store/selectionStore";
 
-const plane = (nodeId: string, depthIndex: number) => ({
+const plane = (nodeId: string, depth: number) => ({
   nodeId,
-  depthIndex,
+  depth,
   rect: { x: 0, y: 0, width: 100, height: 50 },
   imageUrl: `blob:${nodeId}`,
   cornerRadius: 4,
@@ -53,7 +53,7 @@ describe("Layers3DOverlay", () => {
   });
 
   it("places child planes closer to the viewer than their parents", () => {
-    // depthIndex follows paint order (parent first). A higher depthIndex is a
+    // depth is tree depth from the exploded frame root. A higher depth is a
     // deeper descendant, which must render CLOSER to the viewer (larger Z).
     useLayers3DStore.setState({
       active: true,
@@ -77,8 +77,8 @@ describe("Layers3DOverlay", () => {
     useLayers3DStore.setState({
       active: true,
       planes: [
-        { nodeId: "a", depthIndex: 0, rect: { x: -30, y: -10, width: 100, height: 50 }, imageUrl: "blob:a", cornerRadius: 0 },
-        { nodeId: "b", depthIndex: 1, rect: { x: 0, y: 0, width: 100, height: 50 }, imageUrl: "blob:b", cornerRadius: 0 },
+        { nodeId: "a", depth: 0, rect: { x: -30, y: -10, width: 100, height: 50 }, imageUrl: "blob:a", cornerRadius: 0 },
+        { nodeId: "b", depth: 1, rect: { x: 0, y: 0, width: 100, height: 50 }, imageUrl: "blob:b", cornerRadius: 0 },
       ],
     });
     render(<Layers3DOverlay />);
@@ -95,8 +95,8 @@ describe("Layers3DOverlay", () => {
     useLayers3DStore.setState({
       active: true,
       planes: [
-        { nodeId: "a", depthIndex: 0, rect: { x: -30, y: -10, width: 100, height: 50 }, imageUrl: "blob:a", cornerRadius: 0 },
-        { nodeId: "b", depthIndex: 1, rect: { x: 0, y: 0, width: 100, height: 80 }, imageUrl: "blob:b", cornerRadius: 0 },
+        { nodeId: "a", depth: 0, rect: { x: -30, y: -10, width: 100, height: 50 }, imageUrl: "blob:a", cornerRadius: 0 },
+        { nodeId: "b", depth: 1, rect: { x: 0, y: 0, width: 100, height: 80 }, imageUrl: "blob:b", cornerRadius: 0 },
       ],
     });
     render(<Layers3DOverlay />);
@@ -113,6 +113,40 @@ describe("Layers3DOverlay", () => {
     render(<Layers3DOverlay />);
     const wrapper = document.querySelector('[data-3d-stack]') as HTMLElement;
     expect(wrapper.style.transform).toContain("scale(1)");
+  });
+
+  it("gives sibling planes (same depth) the same Z", () => {
+    useLayers3DStore.setState({
+      active: true,
+      planes: [plane("a", 1), plane("b", 1), plane("root", 0)],
+    });
+    render(<Layers3DOverlay />);
+    const zOf = (id: string) => {
+      const t = (
+        document.querySelector(`img[data-plane-id="${id}"]`) as HTMLElement
+      ).style.transform;
+      const m = t.match(/translate3d\([^,]+,[^,]+,\s*([-\d.]+)px\)/);
+      return Number(m![1]);
+    };
+    expect(zOf("a")).toBe(zOf("b"));
+    expect(zOf("a")).toBeGreaterThan(zOf("root"));
+  });
+
+  it("has no box-shadow and a light-blue outline on every plane, stronger on hover", () => {
+    useLayers3DStore.setState({ active: true, planes: [plane("a", 0), plane("b", 1)] });
+    render(<Layers3DOverlay />);
+    const imgA = document.querySelector('img[data-plane-id="a"]') as HTMLElement;
+    const imgB = document.querySelector('img[data-plane-id="b"]') as HTMLElement;
+    expect(imgA.style.boxShadow).toBe("");
+    expect(imgB.style.boxShadow).toBe("");
+    expect(imgA.style.outline).not.toBe("none");
+    expect(imgA.style.outline).toContain("rgba(125, 196, 255");
+    expect(imgB.style.outline).not.toBe("none");
+    expect(imgB.style.outline).toContain("rgba(125, 196, 255");
+
+    fireEvent.pointerEnter(imgA);
+    // Hover strengthens the outline (higher alpha) without dropping it.
+    expect(imgA.style.outline).toContain("0.95");
   });
 
   it("sets hoveredPlaneId on pointer enter", () => {

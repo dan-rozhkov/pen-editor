@@ -36,7 +36,7 @@ describe("layers3dStore", () => {
 
   it("enter captures planes and activates with default view", async () => {
     captureLayers.mockResolvedValue([
-      { nodeId: "a", depthIndex: 0, imageUrl: "blob:a", rect: {}, cornerRadius: 0 },
+      { nodeId: "a", depth: 0, imageUrl: "blob:a", rect: {}, cornerRadius: 0 },
     ]);
     await useLayers3DStore.getState().enter("frame1");
     const s = useLayers3DStore.getState();
@@ -51,8 +51,8 @@ describe("layers3dStore", () => {
     useLayers3DStore.setState({
       active: true,
       planes: [
-        { nodeId: "a", depthIndex: 0, imageUrl: "blob:a", rect: {}, cornerRadius: 0 },
-        { nodeId: "b", depthIndex: 1, imageUrl: "blob:b", rect: {}, cornerRadius: 0 },
+        { nodeId: "a", depth: 0, imageUrl: "blob:a", rect: {}, cornerRadius: 0 },
+        { nodeId: "b", depth: 1, imageUrl: "blob:b", rect: {}, cornerRadius: 0 },
       ] as never,
     });
     useLayers3DStore.getState().exit();
