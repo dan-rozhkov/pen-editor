@@ -5,6 +5,7 @@ import { drawRoundedShape } from "./fillStrokeHelpers";
 import { computeFillSpriteLayout } from "@/lib/imageCrop/spriteLayout";
 import { withTexture } from "./imageFillHelpers";
 import { parseYouTubeId, youTubeThumbnailUrl } from "@/lib/video/youtube";
+import { videoPlaybackStarted, videoPlaybackStopped } from "./videoPlaybackLoop";
 
 /**
  * Video-fill renderer. A node's topmost video paint is rendered as a masked
@@ -48,6 +49,16 @@ interface VideoFillState {
   sprite: Sprite;
   src: string;
   onLoadedMetadata: () => void;
+  /** Native play/pause listeners driving `videoPlaybackLoop`'s playing-video
+   *  counter (see that module for why: renderScheduler only repaints on a
+   *  signal, and a playing video must keep signalling every frame). */
+  onPlay: () => void;
+  onPause: () => void;
+  /** Whether `videoPlaybackStarted` has been called for this element without
+   *  a matching `videoPlaybackStopped` yet — lets teardown release the
+   *  counter synchronously instead of waiting on the native "pause" event,
+   *  which fires asynchronously (after listeners may already be removed). */
+  isPlaying: boolean;
 }
 
 const stateByContainer = new WeakMap<Container, VideoFillState>();
@@ -70,9 +81,15 @@ function teardownVideo(container: Container): void {
   if (!state) return;
   stateByContainer.delete(container);
 
-  const { el, source, baseTexture, derivedTexture, sprite, onLoadedMetadata } = state;
+  const { el, source, baseTexture, derivedTexture, sprite, onLoadedMetadata, onPlay, onPause, isPlaying } = state;
 
   el.removeEventListener("loadedmetadata", onLoadedMetadata);
+  el.removeEventListener("play", onPlay);
+  el.removeEventListener("pause", onPause);
+  // Release this element's slot in the playing-video counter now if it was
+  // still playing — el.pause() below fires "pause" asynchronously, after the
+  // listener above has already been removed, so it would never decrement.
+  if (isPlaying) videoPlaybackStopped();
 
   // Remove the sprite + mask from the (possibly still-live) container. When the
   // container was already destroyed (children:true), the sprite/mask Graphics
@@ -368,6 +385,9 @@ function createVideoState(video: VideoFill): VideoFillState {
     sprite,
     src: video.src,
     onLoadedMetadata: () => { /* replaced below */ },
+    onPlay: () => { /* replaced below */ },
+    onPause: () => { /* replaced below */ },
+    isPlaying: false,
   };
   return state;
 }
@@ -458,6 +478,26 @@ function applyVideoFill(
     relayout();
   };
   state.el.addEventListener("loadedmetadata", state.onLoadedMetadata);
+
+  // Drive the playing-video counter (`videoPlaybackLoop`) off the element's
+  // OWN play/pause state rather than the `autoplay` flag — this is correct
+  // even when autoplay is blocked by the browser (no "play" event ⇒ never
+  // counted) and when a non-looping video reaches its end ("pause" fires
+  // alongside "ended", so no separate "ended" listener is needed).
+  state.onPlay = () => {
+    if (!state.isPlaying) {
+      state.isPlaying = true;
+      videoPlaybackStarted();
+    }
+  };
+  state.onPause = () => {
+    if (state.isPlaying) {
+      state.isPlaying = false;
+      videoPlaybackStopped();
+    }
+  };
+  state.el.addEventListener("play", state.onPlay);
+  state.el.addEventListener("pause", state.onPause);
 
   // Initial placement (best-effort with whatever size is known so far).
   layoutVideoSprite(state, video, width, height);
