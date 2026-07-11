@@ -62,7 +62,7 @@ describe("<ChatInput />", () => {
     render(<Harness onSubmit={onSubmit} />);
     const textarea = screen.getByRole("textbox");
     fireEvent.change(textarea, { target: { value: "  make it blue  " } });
-    fireEvent.click(screen.getByTitle("Send"));
+    fireEvent.click(screen.getByLabelText("Send"));
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onSubmit).toHaveBeenCalledWith({
       text: "make it blue",
@@ -91,7 +91,7 @@ describe("<ChatInput />", () => {
   it("blocks submit when the input is empty (button disabled, no callback)", () => {
     const onSubmit = vi.fn();
     render(<Harness onSubmit={onSubmit} />);
-    const sendBtn = screen.getByTitle("Send") as HTMLButtonElement;
+    const sendBtn = screen.getByLabelText("Send") as HTMLButtonElement;
     expect(sendBtn.disabled).toBe(true);
     fireEvent.click(sendBtn);
     expect(onSubmit).not.toHaveBeenCalled();
@@ -117,11 +117,11 @@ describe("<ChatInput />", () => {
   it("shows a Stop button while loading and fires the stop callback", () => {
     const stop = vi.fn();
     render(<Harness onSubmit={vi.fn()} isLoading stop={stop} />);
-    const stopBtn = screen.getByTitle("Stop");
+    const stopBtn = screen.getByLabelText("Stop");
     fireEvent.click(stopBtn);
     expect(stop).toHaveBeenCalledTimes(1);
     // While loading, the Send button is replaced.
-    expect(screen.queryByTitle("Send")).toBeNull();
+    expect(screen.queryByLabelText("Send")).toBeNull();
   });
 
   it("surfaces the slash-command menu when the input is a slash query", () => {
@@ -156,7 +156,7 @@ describe("<ChatInput />", () => {
       vi.stubGlobal("navigator", { onLine: false });
       const onSubmit = vi.fn();
       render(<Harness onSubmit={onSubmit} initialInput="hello" />);
-      const sendBtn = screen.getByTitle(
+      const sendBtn = screen.getByLabelText(
         "Offline — sending is disabled"
       ) as HTMLButtonElement;
       expect(sendBtn.disabled).toBe(true);
@@ -187,7 +187,7 @@ describe("<ChatInput />", () => {
       render(<Harness onSubmit={onSubmit} initialInput="hello" />);
 
       // Dismiss the selection preview before attempting to send.
-      fireEvent.click(screen.getByTitle("Remove from context"));
+      fireEvent.click(screen.getByLabelText("Remove from context"));
       expect(screen.queryByAltText("Screen")).toBeNull();
 
       fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
@@ -222,7 +222,7 @@ describe("<ChatInput />", () => {
 
   it("offers an enabled Attach image button for a vision-capable model", () => {
     render(<Harness onSubmit={vi.fn()} />);
-    const attach = screen.getByTitle("Attach image") as HTMLButtonElement;
+    const attach = screen.getByLabelText("Attach image") as HTMLButtonElement;
     expect(attach.disabled).toBe(false);
   });
 
@@ -247,7 +247,7 @@ describe("<ChatInput />", () => {
       fireEvent.change(screen.getByRole("textbox"), {
         target: { value: "tweak these" },
       });
-      fireEvent.click(screen.getByTitle("Send"));
+      fireEvent.click(screen.getByLabelText("Send"));
       expect(onSubmit).toHaveBeenCalledWith({
         text: "tweak these",
         images: [
@@ -261,7 +261,7 @@ describe("<ChatInput />", () => {
       mockSelection = selection;
       const onSubmit = vi.fn();
       render(<Harness onSubmit={onSubmit} />);
-      const sendBtn = screen.getByTitle("Send") as HTMLButtonElement;
+      const sendBtn = screen.getByLabelText("Send") as HTMLButtonElement;
       expect(sendBtn.disabled).toBe(false);
       fireEvent.click(sendBtn);
       expect(onSubmit).toHaveBeenCalledWith({
@@ -278,11 +278,11 @@ describe("<ChatInput />", () => {
       const onSubmit = vi.fn();
       render(<Harness onSubmit={onSubmit} />);
       // Dismiss the first selected element ("Screen").
-      fireEvent.click(screen.getAllByTitle("Remove from context")[0]);
+      fireEvent.click(screen.getAllByLabelText("Remove from context")[0]);
       fireEvent.change(screen.getByRole("textbox"), {
         target: { value: "just the box" },
       });
-      fireEvent.click(screen.getByTitle("Send"));
+      fireEvent.click(screen.getByLabelText("Send"));
       expect(onSubmit).toHaveBeenCalledWith({
         text: "just the box",
         images: [{ dataUrl: "data:image/png;base64,b", name: "Box" }],
@@ -295,7 +295,7 @@ describe("<ChatInput />", () => {
       mockSelection = [];
       const onSubmit = vi.fn();
       render(<Harness onSubmit={onSubmit} initialInput="hi" />);
-      fireEvent.click(screen.getByTitle("Send"));
+      fireEvent.click(screen.getByLabelText("Send"));
       expect(onSubmit).toHaveBeenCalledWith({ text: "hi", images: undefined });
     });
 
@@ -310,7 +310,7 @@ describe("<ChatInput />", () => {
       expect(
         screen.getByText(/Only 4 images can be sent per message/)
       ).toBeTruthy();
-      fireEvent.click(screen.getByTitle("Send"));
+      fireEvent.click(screen.getByLabelText("Send"));
       const payload = onSubmit.mock.calls[0][0] as ChatLaunchPayload;
       expect(payload.images).toHaveLength(4);
       expect(payload.images?.map((img) => img.name)).toEqual([
@@ -326,7 +326,7 @@ describe("<ChatInput />", () => {
       const { rerender } = render(<Harness onSubmit={vi.fn()} />);
 
       // Dismiss "Screen", then deselect it (it leaves the selection).
-      fireEvent.click(screen.getAllByTitle("Remove from context")[0]);
+      fireEvent.click(screen.getAllByLabelText("Remove from context")[0]);
       expect(screen.queryByAltText("Screen")).toBeNull();
 
       mockSelection = [selection[1]];

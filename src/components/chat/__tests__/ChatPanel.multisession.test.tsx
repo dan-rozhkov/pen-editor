@@ -99,7 +99,7 @@ describe("ChatPanel streaming across two sessions", () => {
       fireEvent.change(textarea, { target: { value: text } });
     });
     await act(async () => {
-      fireEvent.click(within(container).getByTitle("Send"));
+      fireEvent.click(within(container).getByLabelText("Send"));
     });
   }
 

@@ -61,7 +61,7 @@ describe("<ComponentPropertiesSection />", () => {
     const comp = useSceneStore.getState().nodesById["comp"] as unknown as FrameNode;
     render(<ComponentPropertiesSection node={comp} />);
 
-    fireEvent.click(screen.getByTitle("Remove property"));
+    fireEvent.click(screen.getByLabelText("Remove property"));
 
     const updated = useSceneStore.getState().nodesById["comp"] as FlatFrameNode;
     expect(updated.properties).toEqual([]);

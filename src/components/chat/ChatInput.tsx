@@ -317,7 +317,7 @@ export function ChatInput({
                       <button
                         type="button"
                         onClick={() => dismissSelection(sel.nodeId)}
-                        title="Remove from context"
+                        aria-label="Remove from context"
                         className="absolute top-0 right-0 p-0.5 bg-black/60 rounded-bl text-white opacity-0 group-hover:opacity-100 transition-opacity"
                       >
                         <XIcon size={10} />
@@ -356,7 +356,7 @@ export function ChatInput({
                     <button
                       type="button"
                       onClick={() => removeImage(i)}
-                      title="Remove image"
+                      aria-label="Remove image"
                       className="absolute top-0 right-0 p-0.5 bg-black/60 rounded-bl text-white opacity-0 group-hover:opacity-100 transition-opacity"
                     >
                       <XIcon size={10} />
@@ -383,7 +383,7 @@ export function ChatInput({
                   visibleSelection.length + attachedImages.length >= MAX_IMAGES
                 }
                 className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted disabled:text-text-disabled disabled:pointer-events-none transition-colors"
-                title={
+                aria-label={
                   !supportsVision
                     ? "Selected model can't read images"
                     : visibleSelection.length + attachedImages.length >= MAX_IMAGES
@@ -433,7 +433,7 @@ export function ChatInput({
                   type="button"
                   onClick={stop}
                   className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted transition-colors"
-                  title="Stop"
+                  aria-label="Stop"
                 >
                   <StopIcon size={18} />
                 </button>
@@ -454,7 +454,7 @@ export function ChatInput({
                       visibleSelection.length === 0)
                   }
                   className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted disabled:text-text-disabled transition-colors"
-                  title={isOnline ? "Send" : OFFLINE_SEND_TITLE}
+                  aria-label={isOnline ? "Send" : OFFLINE_SEND_TITLE}
                 >
                   <PaperPlaneRightIcon size={18} />
                 </button>

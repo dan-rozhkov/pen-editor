@@ -96,7 +96,7 @@ describe("<ChatPanelContent />", () => {
   it("wires the input submit through to submitLaunchPayload", () => {
     mockState.input = "do the thing";
     render(<ChatPanelContent />);
-    fireEvent.click(screen.getByTitle("Send"));
+    fireEvent.click(screen.getByLabelText("Send"));
     expect(submitLaunchPayload).toHaveBeenCalledTimes(1);
     expect(submitLaunchPayload.mock.calls[0][0]).toMatchObject({
       text: "do the thing",
@@ -130,7 +130,7 @@ describe("<ChatPanelContent />", () => {
   it("shows the Stop control while loading", () => {
     mockState.isLoading = true;
     render(<ChatPanelContent />);
-    expect(screen.getByTitle("Stop")).toBeTruthy();
-    expect(screen.queryByTitle("Send")).toBeNull();
+    expect(screen.getByLabelText("Stop")).toBeTruthy();
+    expect(screen.queryByLabelText("Send")).toBeNull();
   });
 });

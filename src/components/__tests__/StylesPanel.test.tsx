@@ -53,7 +53,7 @@ describe("<StylesPanelContent />", () => {
       effectStyles: [],
     });
     render(<StylesPanelContent />);
-    fireEvent.click(screen.getByTitle("Delete fill style"));
+    fireEvent.click(screen.getByLabelText("Delete fill style"));
     expect(useStyleStore.getState().fillStyles).toHaveLength(0);
   });
 

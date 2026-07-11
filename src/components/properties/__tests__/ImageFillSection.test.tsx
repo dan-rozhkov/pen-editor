@@ -180,7 +180,7 @@ describe("<ImageFillEditor />", () => {
     );
 
     expect(screen.queryByText("Crop")).toBeNull();
-    fireEvent.click(screen.getByTitle("Crop image"));
+    fireEvent.click(screen.getByLabelText("Crop image"));
     const numberInputs = container.querySelectorAll('input[type="number"]');
     // Left, Top, Width, Height (crop). Adjustments are sliders.
     expect(numberInputs.length).toBe(4);

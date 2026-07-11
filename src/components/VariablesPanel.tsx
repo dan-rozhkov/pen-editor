@@ -215,7 +215,7 @@ function VariableRow({ variable }: { variable: Variable }) {
                 <button
                   className="p-1 rounded hover:bg-white/10 text-text-muted hover:text-red-400 transition-colors"
                   onClick={() => deleteVariable(variable.id)}
-                  title="Delete variable"
+                  aria-label="Delete variable"
                 >
                   <TrashIcon className="size-3.5" />
                 </button>
@@ -309,7 +309,7 @@ export function VariablesPanelContent() {
               render={
                 <button
                   className="p-1 rounded hover:bg-secondary transition-colors text-text-muted hover:text-text-primary"
-                  title="Add variable"
+                  aria-label="Add variable"
                 >
                   <PlusIcon className="size-4" />
                 </button>

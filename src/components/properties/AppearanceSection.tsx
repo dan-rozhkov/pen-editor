@@ -109,7 +109,7 @@ export function AppearanceSection({
               render={
                 <button
                   type="button"
-                  title={cornerMode === "unified" ? "Per corner radius" : "Unified radius"}
+                  aria-label={cornerMode === "unified" ? "Per corner radius" : "Unified radius"}
                   className={clsx(
                     "shrink-0 flex items-center justify-center w-6 h-6 rounded self-end border border-transparent",
                     cornerMode === "per-corner"

@@ -73,7 +73,7 @@ describe("<AppearanceSection />", () => {
 
   it("does not render corner radius controls for a non-corner node (line)", () => {
     render(<AppearanceSection node={makeNode({ type: "line" })} onUpdate={vi.fn()} />);
-    expect(screen.queryByTitle("Per corner radius")).toBeNull();
+    expect(screen.queryByLabelText("Per corner radius")).toBeNull();
     // Only the opacity spinbutton.
     expect(screen.getAllByRole("spinbutton")).toHaveLength(1);
   });
@@ -84,7 +84,7 @@ describe("<AppearanceSection />", () => {
       <AppearanceSection node={makeNode({ cornerRadius: 12 } as Partial<SceneNode>)} onUpdate={onUpdate} />,
     );
 
-    fireEvent.click(screen.getByTitle("Per corner radius"));
+    fireEvent.click(screen.getByLabelText("Per corner radius"));
 
     expect(onUpdate).toHaveBeenCalledTimes(1);
     expect(onUpdate.mock.calls[0][0]).toMatchObject({
@@ -109,7 +109,7 @@ describe("<AppearanceSection />", () => {
     expect(screen.getByText("BL")).toBeTruthy();
     expect(screen.getByText("BR")).toBeTruthy();
     // The toggle now offers a return to unified mode.
-    expect(screen.getByTitle("Unified radius")).toBeTruthy();
+    expect(screen.getByLabelText("Unified radius")).toBeTruthy();
   });
 
   it("edits a single per-corner value, merging the rest", () => {
@@ -135,7 +135,7 @@ describe("<AppearanceSection />", () => {
     } as Partial<SceneNode>);
     render(<AppearanceSection node={node} onUpdate={onUpdate} />);
 
-    fireEvent.click(screen.getByTitle("Unified radius"));
+    fireEvent.click(screen.getByLabelText("Unified radius"));
 
     expect(onUpdate).toHaveBeenCalledWith({
       cornerRadius: 7,
@@ -225,7 +225,7 @@ describe("<AppearanceSection />", () => {
         allTypesSupport={{ cornerRadius: false }}
       />,
     );
-    expect(screen.queryByTitle("Per corner radius")).toBeNull();
+    expect(screen.queryByLabelText("Per corner radius")).toBeNull();
     // Only opacity remains.
     expect(screen.getAllByRole("spinbutton")).toHaveLength(1);
   });

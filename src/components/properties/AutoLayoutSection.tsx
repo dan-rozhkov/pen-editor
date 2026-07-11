@@ -243,7 +243,7 @@ export function AutoLayoutSection({ node, onUpdate, mixedKeys }: AutoLayoutSecti
                             )}
                             onClick={handleClick}
                             onDoubleClick={handleDoubleClick}
-                            title={buttonTitle}
+                            aria-label={buttonTitle}
                           >
                             {showSpaceBetweenIcon ? (
                               <div

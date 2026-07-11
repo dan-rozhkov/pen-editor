@@ -111,7 +111,7 @@ describe("<MessageList />", () => {
         onRollback={onRollback}
       />
     );
-    const rollbackBtn = screen.getByTitle("Roll back to this message");
+    const rollbackBtn = screen.getByLabelText("Roll back to this message");
     fireEvent.click(rollbackBtn);
     expect(onRollback).toHaveBeenCalledWith("u1");
   });
@@ -123,6 +123,6 @@ describe("<MessageList />", () => {
         isLoading={false}
       />
     );
-    expect(screen.queryByTitle("Roll back to this message")).toBeNull();
+    expect(screen.queryByLabelText("Roll back to this message")).toBeNull();
   });
 });

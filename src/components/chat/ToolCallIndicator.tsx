@@ -132,7 +132,7 @@ export function ToolCallIndicator({ part }: ToolCallIndicatorProps) {
                           e.stopPropagation();
                           void downloadOne(url, i + 1);
                         }}
-                        title="Download image"
+                        aria-label="Download image"
                         className="absolute top-1 right-1 p-1 rounded bg-black/60 text-white opacity-0 group-hover:opacity-100 hover:bg-black/80 transition-opacity"
                       >
                         <DownloadSimpleIcon size={12} />

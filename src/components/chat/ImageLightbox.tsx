@@ -76,7 +76,7 @@ export function ImageLightbox({
                     e.stopPropagation();
                     prev();
                   }}
-                  title="Previous image"
+                  aria-label="Previous image"
                   className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
                 >
                   <CaretLeftIcon size={24} />
@@ -93,7 +93,7 @@ export function ImageLightbox({
                     e.stopPropagation();
                     next();
                   }}
-                  title="Next image"
+                  aria-label="Next image"
                   className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
                 >
                   <CaretRightIcon size={24} />

@@ -253,7 +253,7 @@ describe("<AutoLayoutSection />", () => {
         />,
       );
       // top-left cell: justify flex-start, align flex-start
-      fireEvent.click(screen.getByTitle("H: flex-start, V: flex-start"));
+      fireEvent.click(screen.getByLabelText("H: flex-start, V: flex-start"));
       expect(onUpdate).toHaveBeenCalledWith({
         layout: expect.objectContaining({
           alignItems: "flex-start",
@@ -270,7 +270,7 @@ describe("<AutoLayoutSection />", () => {
           onUpdate={onUpdate}
         />,
       );
-      fireEvent.click(screen.getByTitle(/H: center, V: center/));
+      fireEvent.click(screen.getByLabelText(/H: center, V: center/));
       expect(onUpdate).toHaveBeenCalledWith({
         layout: expect.objectContaining({
           alignItems: "center",
@@ -287,7 +287,7 @@ describe("<AutoLayoutSection />", () => {
           onUpdate={onUpdate}
         />,
       );
-      fireEvent.doubleClick(screen.getByTitle(/H: center, V: center/));
+      fireEvent.doubleClick(screen.getByLabelText(/H: center, V: center/));
       expect(onUpdate).toHaveBeenCalledWith({
         layout: expect.objectContaining({
           alignItems: "center",

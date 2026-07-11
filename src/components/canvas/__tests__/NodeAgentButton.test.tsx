@@ -24,28 +24,28 @@ beforeEach(() => launch.mockReset());
 describe("<NodeAgentButton />", () => {
   it("starts with the composer closed", () => {
     renderButton();
-    expect(screen.getByTitle("Ask agent")).toBeTruthy();
+    expect(screen.getByLabelText("Ask agent")).toBeTruthy();
     expect(screen.queryByRole("textbox")).toBeNull();
   });
 
   it("opens the composer with the given placeholder", () => {
     renderButton();
-    fireEvent.click(screen.getByTitle("Ask agent"));
+    fireEvent.click(screen.getByLabelText("Ask agent"));
     const box = screen.getByRole("textbox") as HTMLTextAreaElement;
     expect(box.placeholder).toBe("Ask about this node…");
   });
 
   it("calls launch with trimmed text on send", () => {
     renderButton();
-    fireEvent.click(screen.getByTitle("Ask agent"));
+    fireEvent.click(screen.getByLabelText("Ask agent"));
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "  hi there  " } });
-    fireEvent.click(screen.getByTitle("Send"));
+    fireEvent.click(screen.getByLabelText("Send"));
     expect(launch).toHaveBeenCalledWith("n-1", "hi there");
   });
 
   it("submits on Enter, not Shift+Enter", () => {
     renderButton();
-    fireEvent.click(screen.getByTitle("Ask agent"));
+    fireEvent.click(screen.getByLabelText("Ask agent"));
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "go" } });
     fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter", shiftKey: true });
     expect(launch).not.toHaveBeenCalled();
@@ -55,8 +55,8 @@ describe("<NodeAgentButton />", () => {
 
   it("blocks send for whitespace-only text", () => {
     renderButton();
-    fireEvent.click(screen.getByTitle("Ask agent"));
-    const send = screen.getByTitle("Send") as HTMLButtonElement;
+    fireEvent.click(screen.getByLabelText("Ask agent"));
+    const send = screen.getByLabelText("Send") as HTMLButtonElement;
     expect(send.disabled).toBe(true);
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "   " } });
     fireEvent.click(send);
@@ -65,7 +65,7 @@ describe("<NodeAgentButton />", () => {
 
   it("closes on Escape without launching", () => {
     renderButton();
-    fireEvent.click(screen.getByTitle("Ask agent"));
+    fireEvent.click(screen.getByLabelText("Ask agent"));
     fireEvent.keyDown(screen.getByRole("textbox"), { key: "Escape" });
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(launch).not.toHaveBeenCalled();
@@ -73,7 +73,7 @@ describe("<NodeAgentButton />", () => {
 
   it("runs a quick action with its prompt and mode", () => {
     renderButton();
-    fireEvent.click(screen.getByTitle("Ask agent"));
+    fireEvent.click(screen.getByLabelText("Ask agent"));
     const research = FRAME_QUICK_ACTIONS.find((a) => a.mode === "research")!;
     fireEvent.click(screen.getByRole("button", { name: research.label }));
     expect(launch).toHaveBeenCalledWith("n-1", research.prompt, research.mode);

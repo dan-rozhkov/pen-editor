@@ -45,7 +45,7 @@ describe("<LayoutGridSection />", () => {
     render(<LayoutGridSection node={makeFrame()} onUpdate={vi.fn()} />);
     expect(screen.getByText("Layout grid")).toBeTruthy();
     // No grid summary rows.
-    expect(screen.queryByTitle("Remove grid")).toBeNull();
+    expect(screen.queryByLabelText("Remove grid")).toBeNull();
   });
 
   it("adds a default columns grid via the add button", () => {
@@ -69,7 +69,7 @@ describe("<LayoutGridSection />", () => {
     );
     // Stretch + null width => "5 columns (Auto)".
     expect(screen.getByText("5 columns (Auto)")).toBeTruthy();
-    expect(screen.getByTitle("Remove grid")).toBeTruthy();
+    expect(screen.getByLabelText("Remove grid")).toBeTruthy();
   });
 
   it("summarizes a grid-type config by its cell size", () => {
@@ -88,7 +88,7 @@ describe("<LayoutGridSection />", () => {
       <LayoutGridSection node={makeFrame([grid()])} onUpdate={onUpdate} />,
     );
 
-    fireEvent.click(screen.getByTitle("Remove grid"));
+    fireEvent.click(screen.getByLabelText("Remove grid"));
 
     expect(onUpdate).toHaveBeenCalledTimes(1);
     // Removing the only grid -> layoutGrids becomes undefined.
@@ -101,7 +101,7 @@ describe("<LayoutGridSection />", () => {
       <LayoutGridSection node={makeFrame([grid({ visible: true })])} onUpdate={onUpdate} />,
     );
 
-    fireEvent.click(screen.getByTitle("Hide grid"));
+    fireEvent.click(screen.getByLabelText("Hide grid"));
 
     expect(onUpdate).toHaveBeenCalledTimes(1);
     const arg = onUpdate.mock.calls[0][0] as { layoutGrids: LayoutGridConfig[] };
@@ -114,7 +114,7 @@ describe("<LayoutGridSection />", () => {
       <LayoutGridSection node={makeFrame([grid({ visible: false })])} onUpdate={onUpdate} />,
     );
 
-    fireEvent.click(screen.getByTitle("Show grid"));
+    fireEvent.click(screen.getByLabelText("Show grid"));
 
     const arg = onUpdate.mock.calls[0][0] as { layoutGrids: LayoutGridConfig[] };
     expect(arg.layoutGrids[0].visible).toBe(true);

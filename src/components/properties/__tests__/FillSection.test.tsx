@@ -65,10 +65,10 @@ afterEach(() => cleanup());
 describe("<FillSection />", () => {
   it("renders nothing for an empty fill stack but keeps the Add button", () => {
     render(<FillSection {...baseProps(makeNode([]))} />);
-    expect(screen.getByTitle("Add fill")).toBeTruthy();
+    expect(screen.getByLabelText("Add fill")).toBeTruthy();
     expect(screen.queryByText("Mixed")).toBeNull();
     // No paint rows -> no remove buttons.
-    expect(screen.queryByTitle("Remove fill")).toBeNull();
+    expect(screen.queryByLabelText("Remove fill")).toBeNull();
   });
 
   it("renders a row per fill with its current color value", () => {
@@ -87,7 +87,7 @@ describe("<FillSection />", () => {
     const onUpdate = vi.fn();
     render(<FillSection {...baseProps(makeNode([]), onUpdate)} />);
 
-    fireEvent.click(screen.getByTitle("Add fill"));
+    fireEvent.click(screen.getByLabelText("Add fill"));
 
     expect(onUpdate).toHaveBeenCalledTimes(1);
     const arg = onUpdate.mock.calls[0][0];
@@ -122,7 +122,7 @@ describe("<FillSection />", () => {
     );
 
     // First rendered row is top-of-stack = array index 1 ("b").
-    fireEvent.click(screen.getAllByTitle("Remove fill")[0]);
+    fireEvent.click(screen.getAllByLabelText("Remove fill")[0]);
 
     expect(onUpdate).toHaveBeenCalledTimes(1);
     const remaining = onUpdate.mock.calls[0][0].fills as Paint[];
@@ -135,7 +135,7 @@ describe("<FillSection />", () => {
     render(<FillSection {...baseProps(makeNode([solid("a", "#ff0000")]), onUpdate)} />);
 
     // Visible by default -> button reads "Hide fill".
-    fireEvent.click(screen.getByTitle("Hide fill"));
+    fireEvent.click(screen.getByLabelText("Hide fill"));
     expect(onUpdate.mock.calls[0][0].fills[0]).toMatchObject({ visible: false });
   });
 
@@ -147,7 +147,7 @@ describe("<FillSection />", () => {
 
     // The bottom-of-stack row ("a", array index 0) can move up; it's the second
     // rendered row, so its "Move up" button is the last one.
-    const moveUps = screen.getAllByTitle("Move up");
+    const moveUps = screen.getAllByLabelText("Move up");
     fireEvent.click(moveUps[moveUps.length - 1]);
 
     const reordered = onUpdate.mock.calls[0][0].fills as Paint[];
@@ -160,7 +160,7 @@ describe("<FillSection />", () => {
       <FillSection {...baseProps(makeNode([solid("a", "#ff0000"), solid("b", "#00ff00")]))} />,
     );
     // First rendered row is the top of the stack -> cannot move up further.
-    const moveUps = screen.getAllByTitle("Move up") as HTMLButtonElement[];
+    const moveUps = screen.getAllByLabelText("Move up") as HTMLButtonElement[];
     expect(moveUps[0].disabled).toBe(true);
     // The bottom row can move up.
     expect(moveUps[moveUps.length - 1].disabled).toBe(false);
@@ -189,7 +189,7 @@ describe("<FillSection />", () => {
     render(<FillSection {...baseProps(makeNode([gradientFill]))} />);
     expect(screen.getByTestId("gradient-editor")).toBeTruthy();
     // Gradient rows have no caret toggle (only solids collapse).
-    expect(screen.queryByTitle(/Collapse|Expand/)).toBeNull();
+    expect(screen.queryByLabelText(/Collapse|Expand/)).toBeNull();
   });
 
   it("renders the image editor (stubbed) for an image fill on image-capable nodes", () => {
@@ -207,8 +207,8 @@ describe("<FillSection />", () => {
 
     // Details (incl. the blend dropdown) live in the popover; there is no longer
     // an inline caret toggle on the row.
-    expect(screen.queryByTitle(/Collapse|Expand/)).toBeNull();
-    expect(screen.getByTitle("Blend mode: Normal")).toBeTruthy();
+    expect(screen.queryByLabelText(/Collapse|Expand/)).toBeNull();
+    expect(screen.getByLabelText("Blend mode: Normal")).toBeTruthy();
   });
 
   it("shows a Mixed placeholder when fills are mixed across the selection", () => {

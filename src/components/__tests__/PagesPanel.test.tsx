@@ -78,7 +78,7 @@ describe("<PagesPanel />", () => {
     render(<PagesPanel />);
     expect(ps().pages.length).toBe(2);
 
-    fireEvent.click(screen.getByTitle("Add page"));
+    fireEvent.click(screen.getByLabelText("Add page"));
 
     const pages = ps().pages;
     expect(pages.length).toBe(3);

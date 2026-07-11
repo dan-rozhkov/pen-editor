@@ -156,7 +156,7 @@ function TextStyleRow({ style }: { style: TextStyle }) {
                 <button
                   className="p-1 rounded hover:bg-white/10 text-text-muted hover:text-red-400 transition-colors"
                   onClick={() => deleteTextStyle(style.id)}
-                  title="Delete text style"
+                  aria-label="Delete text style"
                 >
                   <TrashIcon className="size-3.5" />
                 </button>
@@ -206,7 +206,7 @@ export function TextStylesPanelContent() {
             render={
               <button
                 className="p-1 rounded hover:bg-secondary transition-colors text-text-muted hover:text-text-primary"
-                title="Add text style"
+                aria-label="Add text style"
                 onClick={handleAdd}
               >
                 <PlusIcon className="size-4" />

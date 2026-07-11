@@ -223,7 +223,7 @@ describe("<EffectsSection />", () => {
       <EffectsSection node={makeNode([shadow()])} onUpdate={onUpdate} />,
     );
 
-    fireEvent.click(screen.getByTitle("Remove effect"));
+    fireEvent.click(screen.getByLabelText("Remove effect"));
 
     expect(onUpdate).toHaveBeenCalledTimes(1);
     expect(onUpdate.mock.calls[0][0].effects).toEqual([]);
@@ -236,7 +236,7 @@ describe("<EffectsSection />", () => {
     );
 
     // visible → button title is "Hide effect"
-    fireEvent.click(screen.getByTitle("Hide effect"));
+    fireEvent.click(screen.getByLabelText("Hide effect"));
 
     expect(onUpdate).toHaveBeenCalledTimes(1);
     expect(onUpdate.mock.calls[0][0].effects[0].visible).toBe(false);
@@ -248,7 +248,7 @@ describe("<EffectsSection />", () => {
       <EffectsSection node={makeNode([shadow({ visible: false })])} onUpdate={onUpdate} />,
     );
 
-    fireEvent.click(screen.getByTitle("Show effect"));
+    fireEvent.click(screen.getByLabelText("Show effect"));
 
     expect(onUpdate).toHaveBeenCalledTimes(1);
     expect(onUpdate.mock.calls[0][0].effects[0].visible).toBe(true);

@@ -137,7 +137,7 @@ function FillStyleRow({ style }: { style: FillStyle }) {
                 (hovered ? "opacity-100" : "opacity-0")
               }
               onClick={() => deleteFillStyle(style.id)}
-              title="Delete fill style"
+              aria-label="Delete fill style"
             >
               <TrashIcon className="size-3.5" />
             </button>
@@ -194,7 +194,7 @@ function EffectStyleRow({ style }: { style: EffectStyle }) {
                 (hovered ? "opacity-100" : "opacity-0")
               }
               onClick={() => deleteEffectStyle(style.id)}
-              title="Delete effect style"
+              aria-label="Delete effect style"
             >
               <TrashIcon className="size-3.5" />
             </button>

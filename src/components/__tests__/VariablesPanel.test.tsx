@@ -101,7 +101,7 @@ describe("<VariablesPanelContent />", () => {
     const row = nameSpan.closest("tr") as HTMLTableRowElement;
     fireEvent.mouseEnter(row);
 
-    fireEvent.click(within(row).getByTitle("Delete variable"));
+    fireEvent.click(within(row).getByLabelText("Delete variable"));
 
     expect(variables().length).toBe(1);
     expect(findVariable("var-radius")).toBeUndefined();
@@ -128,7 +128,7 @@ describe("<VariablesPanelContent />", () => {
     // base-ui Menu renders items into a portal; getByText throws if the menu
     // didn't open, so a non-mounting menu fails loudly instead of silently
     // passing with the assertions skipped.
-    fireEvent.click(screen.getByTitle("Add variable"));
+    fireEvent.click(screen.getByLabelText("Add variable"));
     fireEvent.click(screen.getByText("Color"));
 
     expect(variables().length).toBe(3);

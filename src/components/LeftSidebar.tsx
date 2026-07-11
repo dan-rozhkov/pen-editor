@@ -119,7 +119,6 @@ export function LeftSidebar() {
                     <button
                       onClick={collapseAllFrames}
                       aria-label="Collapse all"
-                      title="Collapse all"
                       className="p-0.5 rounded text-text-muted hover:text-text-default hover:bg-secondary transition-colors"
                     >
                       <ArrowsInLineVertical size={14} />

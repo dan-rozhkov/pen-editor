@@ -40,7 +40,7 @@ describe("<ExportSettingsSection />", () => {
     const onUpdate = vi.fn();
     render(<ExportSettingsSection node={makeNode()} onUpdate={onUpdate} />);
 
-    fireEvent.click(screen.getByTitle("Add export setting"));
+    fireEvent.click(screen.getByLabelText("Add export setting"));
 
     expect(onUpdate).toHaveBeenCalledTimes(1);
     const call = onUpdate.mock.calls[0][0];
@@ -71,7 +71,7 @@ describe("<ExportSettingsSection />", () => {
     });
     render(<ExportSettingsSection node={node} onUpdate={onUpdate} />);
 
-    const removeButtons = screen.getAllByTitle("Remove export setting");
+    const removeButtons = screen.getAllByLabelText("Remove export setting");
     fireEvent.click(removeButtons[0]);
 
     expect(onUpdate).toHaveBeenCalledWith({

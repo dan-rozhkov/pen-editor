@@ -25,16 +25,16 @@ beforeEach(() => mockLaunch.mockReset());
 describe("<EmbedAgentButton />", () => {
   it("renders the trigger and opens an embed-specific composer", () => {
     render(<EmbedAgentButton node={embed} absoluteX={0} absoluteY={0} />);
-    fireEvent.click(screen.getByTitle("Ask agent"));
+    fireEvent.click(screen.getByLabelText("Ask agent"));
     const box = screen.getByRole("textbox") as HTMLTextAreaElement;
     expect(box.placeholder).toBe("Ask the agent about this embed…");
   });
 
   it("launches an embed agent chat on send", () => {
     render(<EmbedAgentButton node={embed} absoluteX={0} absoluteY={0} />);
-    fireEvent.click(screen.getByTitle("Ask agent"));
+    fireEvent.click(screen.getByLabelText("Ask agent"));
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "make it responsive" } });
-    fireEvent.click(screen.getByTitle("Send"));
+    fireEvent.click(screen.getByLabelText("Send"));
     expect(mockLaunch).toHaveBeenCalledWith("embed-1", "make it responsive");
   });
 });

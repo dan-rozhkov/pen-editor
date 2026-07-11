@@ -51,7 +51,7 @@ describe("<SizeSection />", () => {
     render(
       <SizeSection node={sceneNode("rect2")} onUpdate={onUpdate} parentContext={ROOT_CONTEXT} />,
     );
-    fireEvent.click(screen.getByTitle("Lock aspect ratio"));
+    fireEvent.click(screen.getByLabelText("Lock aspect ratio"));
     expect(onUpdate).toHaveBeenCalledWith({ aspectRatioLocked: true, aspectRatio: 2 });
   });
 

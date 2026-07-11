@@ -113,7 +113,7 @@ describe("<GradientEditor />", () => {
     const onChange = vi.fn();
     render(<GradientEditor gradient={linearGradient()} onChange={onChange} />);
 
-    fireEvent.click(screen.getByTitle("Add stop"));
+    fireEvent.click(screen.getByLabelText("Add stop"));
 
     const next = onChange.mock.calls[0][0] as GradientFill;
     expect(next.stops).toHaveLength(3);
@@ -130,7 +130,7 @@ describe("<GradientEditor />", () => {
     });
     render(<GradientEditor gradient={gradient} onChange={onChange} />);
 
-    fireEvent.click(screen.getByTitle("Remove stop"));
+    fireEvent.click(screen.getByLabelText("Remove stop"));
 
     const next = onChange.mock.calls[0][0] as GradientFill;
     // The first (selected) stop is removed.
@@ -140,7 +140,7 @@ describe("<GradientEditor />", () => {
 
   it("disables the Remove button when only two stops remain", () => {
     render(<GradientEditor gradient={linearGradient()} onChange={vi.fn()} />);
-    const remove = screen.getByTitle("Remove stop") as HTMLButtonElement;
+    const remove = screen.getByLabelText("Remove stop") as HTMLButtonElement;
     expect(remove.disabled).toBe(true);
   });
 

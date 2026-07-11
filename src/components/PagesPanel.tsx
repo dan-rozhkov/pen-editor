@@ -79,7 +79,7 @@ export function PagesPanel() {
               <button
                 onClick={() => addPage()}
                 className="p-0.5 rounded text-text-muted hover:text-text-default hover:bg-secondary"
-                title="Add page"
+                aria-label="Add page"
               >
                 <PlusIcon size={14} />
               </button>

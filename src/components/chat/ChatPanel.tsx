@@ -86,7 +86,7 @@ function TabBar() {
                         closeTab(tab.id);
                       }}
                       className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-secondary text-text-muted transition-opacity"
-                      title="Close tab"
+                      aria-label="Close tab"
                     >
                       <XIcon size={10} />
                     </button>
@@ -330,7 +330,7 @@ export function ChatPanelContent() {
                 data-testid="presets-toggle"
                 onClick={() => setShowPresets((v) => !v)}
                 className={`-my-0.5 p-1 rounded-lg hover:bg-secondary ${showPresets ? "text-text-primary bg-secondary" : "text-text-muted"}`}
-                title={showPresets ? "Hide presets" : "Show presets"}
+                aria-label={showPresets ? "Hide presets" : "Show presets"}
               >
                 <LightningIcon size={16} />
               </button>
@@ -346,7 +346,7 @@ export function ChatPanelContent() {
               <button
                 onClick={toggleExpanded}
                 className="-my-0.5 p-1 rounded-lg hover:bg-secondary text-text-muted transition-colors"
-                title={isExpanded ? "Collapse panel" : "Expand panel"}
+                aria-label={isExpanded ? "Collapse panel" : "Expand panel"}
               >
                 <ArrowLineLeftIcon
                   size={16}

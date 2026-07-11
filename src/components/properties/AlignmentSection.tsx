@@ -71,7 +71,7 @@ export function AlignmentSection({
                 <button
                   className={buttonClass}
                   onClick={() => handleAlign("left")}
-                  title="Align left"
+                  aria-label="Align left"
                 >
                   <TextAlignLeft size={iconSize} />
                 </button>
@@ -87,7 +87,7 @@ export function AlignmentSection({
                 <button
                   className={buttonClass}
                   onClick={() => handleAlign("centerH")}
-                  title="Align center horizontally"
+                  aria-label="Align center horizontally"
                 >
                   <TextAlignCenter size={iconSize} />
                 </button>
@@ -103,7 +103,7 @@ export function AlignmentSection({
                 <button
                   className={buttonClass}
                   onClick={() => handleAlign("right")}
-                  title="Align right"
+                  aria-label="Align right"
                 >
                   <TextAlignRight size={iconSize} />
                 </button>
@@ -120,7 +120,7 @@ export function AlignmentSection({
                 <button
                   className={buttonClass}
                   onClick={() => handleAlign("top")}
-                  title="Align top"
+                  aria-label="Align top"
                 >
                   <AlignTop size={iconSize} />
                 </button>
@@ -136,7 +136,7 @@ export function AlignmentSection({
                 <button
                   className={buttonClass}
                   onClick={() => handleAlign("centerV")}
-                  title="Align center vertically"
+                  aria-label="Align center vertically"
                 >
                   <AlignCenterVertical size={iconSize} />
                 </button>
@@ -152,7 +152,7 @@ export function AlignmentSection({
                 <button
                   className={buttonClass}
                   onClick={() => handleAlign("bottom")}
-                  title="Align bottom"
+                  aria-label="Align bottom"
                 >
                   <AlignBottom size={iconSize} />
                 </button>
@@ -171,7 +171,7 @@ export function AlignmentSection({
                     <button
                       className={buttonClass}
                       onClick={handleTidyUp}
-                      title="Tidy up (Ctrl+Alt+T)"
+                      aria-label="Tidy up (Ctrl+Alt+T)"
                     >
                       <GridNine size={iconSize} />
                     </button>

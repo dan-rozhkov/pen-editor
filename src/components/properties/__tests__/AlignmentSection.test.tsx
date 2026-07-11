@@ -30,7 +30,7 @@ describe("<AlignmentSection />", () => {
     );
     const before = pastLen();
 
-    fireEvent.click(screen.getByTitle("Align left"));
+    fireEvent.click(screen.getByLabelText("Align left"));
 
     // left edge = min(100, 600) = 100 -> rect2 moves to x=100
     expect(useSceneStore.getState().nodesById["rect2"].x).toBe(100);
@@ -42,7 +42,7 @@ describe("<AlignmentSection />", () => {
       <AlignmentSection count={2} selectedIds={["frame1", "rect2"]} nodes={getNodes()} />,
     );
 
-    fireEvent.click(screen.getByTitle("Align right"));
+    fireEvent.click(screen.getByLabelText("Align right"));
 
     // right edge = max(500, 800) = 800 -> frame1 (w400) moves to x=400
     expect(useSceneStore.getState().nodesById["frame1"].x).toBe(400);
@@ -67,12 +67,12 @@ describe("<AlignmentSection />", () => {
       />,
     );
     // alignment buttons still render
-    expect(screen.getByTitle("Align left")).toBeTruthy();
+    expect(screen.getByLabelText("Align left")).toBeTruthy();
     // but spacing + count are hidden
     expect(screen.queryByText("Spacing")).toBeNull();
     expect(screen.queryByText(/layers selected/)).toBeNull();
     // Tidy up is a multi-select-only action, hidden alongside spacing/count
-    expect(screen.queryByTitle("Tidy up (Ctrl+Alt+T)")).toBeNull();
+    expect(screen.queryByLabelText("Tidy up (Ctrl+Alt+T)")).toBeNull();
   });
 
   it("tidies up a chaotic multi-select as a single undo step", () => {
@@ -105,7 +105,7 @@ describe("<AlignmentSection />", () => {
     );
     const before = pastLen();
 
-    fireEvent.click(screen.getByTitle("Tidy up (Ctrl+Alt+T)"));
+    fireEvent.click(screen.getByLabelText("Tidy up (Ctrl+Alt+T)"));
 
     // Single undo step for the whole batch.
     expect(pastLen()).toBe(before + 1);

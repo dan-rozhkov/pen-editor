@@ -322,7 +322,7 @@ export const LayerItem = memo(function LayerItem({
                     "relative bg-transparent border-none cursor-pointer p-1 flex items-center justify-center rounded group-hover:opacity-100 opacity-0",
                   )}
                   onClick={handleVisibilityClick}
-                  title={isVisible ? "Hide layer" : "Show layer"}
+                  aria-label={isVisible ? "Hide layer" : "Show layer"}
                 >
                   <EyeIcon visible={isVisible} />
                 </button>

@@ -602,7 +602,7 @@ export function SizeSection({
                       ? "border-border-default bg-surface-panel text-text-primary hover:bg-surface-panel"
                       : "text-text-muted hover:bg-secondary"
                   )}
-                  title={node.aspectRatioLocked ? "Unlock aspect ratio" : "Lock aspect ratio"}
+                  aria-label={node.aspectRatioLocked ? "Unlock aspect ratio" : "Lock aspect ratio"}
                   onClick={() =>
                     onUpdate({
                       aspectRatioLocked: !node.aspectRatioLocked,

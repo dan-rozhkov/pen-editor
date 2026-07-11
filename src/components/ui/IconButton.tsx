@@ -35,10 +35,10 @@ export interface IconButtonProps
  * props you'd give `Button`, plus `tooltip` (required) and `shortcut`
  * (optional, already formatted — see `formatShortcut`).
  *
- * Renders both the Base UI tooltip popup (for hover/focus discoverability)
- * and a native `title` attribute (kept for tests/assistive tech that read
- * `title`, and as a fallback if the tooltip portal is unavailable).
- * `aria-label` defaults to `tooltip` but can be overridden explicitly.
+ * Renders only the Base UI tooltip popup for hover/focus discoverability.
+ * A native `title` is deliberately *not* set here — it would pop its own
+ * browser tooltip alongside this one. `aria-label` defaults to `tooltip`
+ * (overridable) and remains the accessible name for assistive tech.
  *
  * Relies on a single `TooltipProvider` mounted at the app root (`App.tsx`)
  * for shared open/close delay grouping — do not wrap this in another one.
@@ -51,7 +51,6 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
       side = "bottom",
       align = "center",
       "aria-label": ariaLabel,
-      title,
       ...buttonProps
     },
     ref,
@@ -60,12 +59,7 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
       <Tooltip>
         <TooltipTrigger
           render={
-            <Button
-              ref={ref}
-              aria-label={ariaLabel ?? tooltip}
-              title={title ?? tooltip}
-              {...buttonProps}
-            />
+            <Button ref={ref} aria-label={ariaLabel ?? tooltip} {...buttonProps} />
           }
         />
         <TooltipContent side={side} align={align}>
