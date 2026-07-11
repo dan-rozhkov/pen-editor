@@ -163,7 +163,7 @@ export function Toolbar() {
             <DropdownMenuSubTrigger>
               Edit
             </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
+            <DropdownMenuSubContent className="min-w-56">
               <DropdownMenuItem onClick={handleCopy}>
                 Copy
               </DropdownMenuItem>
@@ -183,7 +183,7 @@ export function Toolbar() {
             <DropdownMenuSubTrigger>
               Export
             </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
+            <DropdownMenuSubContent className="min-w-56">
               <DropdownMenuItem onClick={handleSave}>
                 Export as .json
               </DropdownMenuItem>
@@ -196,7 +196,7 @@ export function Toolbar() {
             <DropdownMenuSubTrigger>
               Import
             </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
+            <DropdownMenuSubContent className="min-w-56">
               <DropdownMenuItem
                 onClick={() => {
                   setImportOpen(true);
@@ -212,7 +212,7 @@ export function Toolbar() {
             <DropdownMenuSubTrigger>
               Settings
             </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
+            <DropdownMenuSubContent className="min-w-56">
               <DropdownMenuCheckboxItem checked={uiTheme === "light"} onCheckedChange={() => useUIThemeStore.getState().setUITheme("light")}>
                 Light theme
               </DropdownMenuCheckboxItem>
