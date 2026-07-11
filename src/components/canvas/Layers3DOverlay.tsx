@@ -95,6 +95,11 @@ export function Layers3DOverlay() {
                 position: "absolute",
                 width: `${p.rect.width}px`,
                 height: `${p.rect.height}px`,
+                // The stack is absolutely positioned with no intrinsic width,
+                // so Tailwind preflight's `img { max-width: 100% }` would clamp
+                // every plane to 0px. Opt out so the explicit px size wins.
+                maxWidth: "none",
+                maxHeight: "none",
                 borderRadius: `${p.cornerRadius}px`,
                 opacity: dimmed ? 0.5 : 1,
                 outline: isHovered ? "2px solid var(--color-accent-light)" : "none",

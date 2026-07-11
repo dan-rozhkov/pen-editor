@@ -40,6 +40,18 @@ describe("Layers3DOverlay", () => {
     expect((imgs[1] as HTMLElement).style.transform).toContain("translate3d");
   });
 
+  it("opts each plane out of max-width/height so its explicit px size wins", () => {
+    // Regression: Tailwind preflight's `img { max-width: 100% }` resolves
+    // against the absolutely-positioned (0-width) stack and collapses every
+    // plane to 0px — making the whole 3D view invisible. The planes must
+    // set max-width/max-height to "none".
+    useLayers3DStore.setState({ active: true, planes: [plane("a", 0)] });
+    render(<Layers3DOverlay />);
+    const img = document.querySelector('img[data-plane-id="a"]') as HTMLElement;
+    expect(img.style.maxWidth).toBe("none");
+    expect(img.style.maxHeight).toBe("none");
+  });
+
   it("sets hoveredPlaneId on pointer enter", () => {
     useLayers3DStore.setState({ active: true, planes: [plane("a", 0)] });
     render(<Layers3DOverlay />);

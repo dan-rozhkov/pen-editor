@@ -15,6 +15,7 @@ import { Rulers } from "./components/canvas/Rulers";
 import { CanvasContextMenu } from "./components/canvas/CanvasContextMenu";
 import { useUIVisibilityStore } from "./store/uiVisibilityStore";
 import { useEditorModeStore } from "./store/editorModeStore";
+import { useLayers3DStore } from "./store/layers3dStore";
 import { useIsMobile } from "./hooks/useIsMobile";
 import { useOnlineStatus } from "./hooks/useOnlineStatus";
 import { OfflineBanner } from "./components/pwa/OfflineBanner";
@@ -28,6 +29,7 @@ const PixiCanvas = lazy(() => import("./pixi/PixiCanvas").then((m) => ({ default
 function App() {
   const isUIHidden = useUIVisibilityStore((s) => s.isUIHidden);
   const mode = useEditorModeStore((s) => s.mode);
+  const is3DActive = useLayers3DStore((s) => s.active);
   const isMobile = useIsMobile();
   const isOnline = useOnlineStatus();
 
@@ -118,13 +120,15 @@ function App() {
           {!isMobile && (
             <>
               <div className="flex-1 h-full relative">
-                {/* Drawing tools are pointless in read-only view mode. */}
-                {!isView && (
+                {/* Drawing tools are pointless in read-only view mode, and
+                    the 3D layer view's own control bar occupies the same
+                    bottom-center slot — hide the draw palette in both. */}
+                {!isView && !is3DActive && (
                   <div className="pointer-events-auto">
                     <PrimitivesPanel />
                   </div>
                 )}
-                {!isView && <Rulers />}
+                {!isView && !is3DActive && <Rulers />}
                 <FpsDisplay />
               </div>
               {/* Right sidebar — read-only in view mode (inspect, no edits). */}

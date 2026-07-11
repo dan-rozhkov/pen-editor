@@ -8,6 +8,18 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.24.1] - 2026-07-11
+
+### Fixed
+- **3D layer view: planes were invisible.** Tailwind preflight's
+  `img { max-width: 100% }` resolved against the absolutely-positioned (zero-width)
+  stack and collapsed every snapshot plane to 0px wide. Planes now opt out with
+  `max-width/height: none`. (Only reproducible in the real browser with Tailwind
+  loaded — added a regression test.)
+- **3D layer view: control bar was unreachable.** The bottom draw-tool palette
+  (and rulers) stayed mounted over the 3D view and covered the spacing/reset/exit
+  control bar. Both are now hidden while the read-only 3D view is active.
+
 ## [0.24.0] - 2026-07-11
 
 A read-only **3D layer view** for inspecting how a frame's layers stack.
