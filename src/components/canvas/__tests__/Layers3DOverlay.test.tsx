@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { act } from "react";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { useLayers3DStore, DEFAULT_SPACING } from "@/store/layers3dStore";
 import { Layers3DOverlay } from "../Layers3DOverlay";
@@ -11,7 +12,6 @@ const plane = (nodeId: string, depthIndex: number) => ({
   depthIndex,
   rect: { x: 0, y: 0, width: 100, height: 50 },
   imageUrl: `blob:${nodeId}`,
-  opacity: 1,
   cornerRadius: 4,
 });
 
@@ -53,6 +53,18 @@ describe("Layers3DOverlay", () => {
     fireEvent.change(screen.getByLabelText(/spacing/i), { target: { value: "120" } });
     expect(useLayers3DStore.getState().spacing).toBe(120);
   });
+
+  it("does not double-apply opacity — base is 1, only hover-dim reduces it", () => {
+    useLayers3DStore.setState({ active: true, planes: [plane("a", 0), plane("b", 1)] });
+    render(<Layers3DOverlay />);
+    const imgA = document.querySelector('img[data-plane-id="a"]') as HTMLElement;
+    const imgB = document.querySelector('img[data-plane-id="b"]') as HTMLElement;
+    expect(imgA.style.opacity).toBe("1");
+    expect(imgB.style.opacity).toBe("1");
+    fireEvent.pointerEnter(imgA);
+    expect(imgA.style.opacity).toBe("1");
+    expect(imgB.style.opacity).toBe("0.5");
+  });
 });
 
 describe("Layers3DToggle", () => {
@@ -80,5 +92,20 @@ describe("Layers3DToggle", () => {
     fireEvent.click(screen.getByRole("button", { name: /3d/i }));
     expect(useLayers3DStore.getState().active).toBe(true);
     expect(useLayers3DStore.getState().targetFrameId).toBe("frame1");
+  });
+
+  it("re-enables when a frame is added to the scene, without remounting", () => {
+    resetStores(); // empty scene → no frame at all
+    useSelectionStore.setState({ selectedIds: [] });
+    render(<Layers3DToggle />);
+    const button = screen.getByRole("button", { name: /3d/i }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+
+    act(() => {
+      seedScene(); // adds frame1 to rootIds
+    });
+    // The toggle must pick this up via its own store subscription — nothing
+    // else in this test re-renders it.
+    expect(button.disabled).toBe(false);
   });
 });

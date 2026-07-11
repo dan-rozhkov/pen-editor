@@ -36,7 +36,7 @@ describe("layers3dStore", () => {
 
   it("enter captures planes and activates with default view", async () => {
     captureLayers.mockResolvedValue([
-      { nodeId: "a", depthIndex: 0, imageUrl: "blob:a", rect: {}, opacity: 1, cornerRadius: 0 },
+      { nodeId: "a", depthIndex: 0, imageUrl: "blob:a", rect: {}, cornerRadius: 0 },
     ]);
     await useLayers3DStore.getState().enter("frame1");
     const s = useLayers3DStore.getState();
@@ -51,8 +51,8 @@ describe("layers3dStore", () => {
     useLayers3DStore.setState({
       active: true,
       planes: [
-        { nodeId: "a", depthIndex: 0, imageUrl: "blob:a", rect: {}, opacity: 1, cornerRadius: 0 },
-        { nodeId: "b", depthIndex: 1, imageUrl: "blob:b", rect: {}, opacity: 1, cornerRadius: 0 },
+        { nodeId: "a", depthIndex: 0, imageUrl: "blob:a", rect: {}, cornerRadius: 0 },
+        { nodeId: "b", depthIndex: 1, imageUrl: "blob:b", rect: {}, cornerRadius: 0 },
       ] as never,
     });
     useLayers3DStore.getState().exit();
@@ -60,6 +60,15 @@ describe("layers3dStore", () => {
     expect(revoke).toHaveBeenCalledWith("blob:b");
     expect(useLayers3DStore.getState().active).toBe(false);
     expect(useLayers3DStore.getState().planes).toEqual([]);
+  });
+
+  it("exits cleanly if captureLayers rejects instead of stranding the view active", async () => {
+    captureLayers.mockRejectedValue(new Error("extract failed"));
+    await useLayers3DStore.getState().enter("frame1");
+    const s = useLayers3DStore.getState();
+    expect(s.active).toBe(false);
+    expect(s.targetFrameId).toBeNull();
+    expect(s.planes).toEqual([]);
   });
 
   it("clamps rotation, spacing and zoom", () => {

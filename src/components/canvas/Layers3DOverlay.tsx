@@ -46,7 +46,9 @@ export function Layers3DOverlay() {
     const dx = e.clientX - drag.current.x;
     const dy = e.clientY - drag.current.y;
     drag.current = { x: e.clientX, y: e.clientY };
-    setRotation(rotateX - dy * 0.3, rotateY + dx * 0.3);
+    const { rotateX: liveRotateX, rotateY: liveRotateY } =
+      useLayers3DStore.getState();
+    setRotation(liveRotateX - dy * 0.3, liveRotateY + dx * 0.3);
   };
   const onPointerUp = (e: React.PointerEvent) => {
     drag.current = null;
@@ -65,7 +67,10 @@ export function Layers3DOverlay() {
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
-      onWheel={(e) => setZoom(zoom - e.deltaY * 0.001)}
+      onWheel={(e) => {
+        const { zoom: liveZoom } = useLayers3DStore.getState();
+        setZoom(liveZoom - e.deltaY * 0.001);
+      }}
     >
       <div
         className="absolute left-1/2 top-1/2"
@@ -91,7 +96,7 @@ export function Layers3DOverlay() {
                 width: `${p.rect.width}px`,
                 height: `${p.rect.height}px`,
                 borderRadius: `${p.cornerRadius}px`,
-                opacity: dimmed ? p.opacity * 0.5 : p.opacity,
+                opacity: dimmed ? 0.5 : 1,
                 outline: isHovered ? "2px solid var(--color-accent-light)" : "none",
                 boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
                 transform: `translate3d(${p.rect.x}px, ${p.rect.y}px, ${

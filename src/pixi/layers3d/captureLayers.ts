@@ -10,12 +10,10 @@ export interface Plane {
   depthIndex: number;
   rect: { x: number; y: number; width: number; height: number };
   imageUrl: string;
-  opacity: number;
   cornerRadius: number;
 }
 
 export const MAX_PLANES = 300;
-const MAX_EDGE = 2048;
 
 function canvasToObjectUrl(canvas: {
   width: number;
@@ -58,11 +56,12 @@ export async function captureLayers(frameId: string): Promise<Plane[]> {
   const planes: Plane[] = [];
   let dropped = 0;
 
-  for (const id of ids) {
+  for (let index = 0; index < ids.length; index++) {
     if (planes.length >= MAX_PLANES) {
-      dropped = ids.length - planes.length;
+      dropped = ids.length - index;
       break;
     }
+    const id = ids[index];
     const node = nodesById[id];
     if (!node) continue;
     if ((node.width ?? 0) <= 0 || (node.height ?? 0) <= 0) continue;
@@ -81,9 +80,6 @@ export async function captureLayers(frameId: string): Promise<Plane[]> {
     } catch {
       continue; // extraction failed for this node — skip it, keep going
     }
-    if (canvas.width > MAX_EDGE || canvas.height > MAX_EDGE) {
-      // capped by resolution policy; still capture (browser downscales in <img>)
-    }
     const imageUrl = await canvasToObjectUrl(canvas);
     if (!imageUrl) continue;
 
@@ -101,7 +97,6 @@ export async function captureLayers(frameId: string): Promise<Plane[]> {
         height: node.height ?? 0,
       },
       imageUrl,
-      opacity: node.opacity ?? 1,
       cornerRadius:
         "cornerRadius" in node && typeof node.cornerRadius === "number"
           ? node.cornerRadius

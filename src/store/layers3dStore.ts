@@ -52,7 +52,18 @@ export const useLayers3DStore = create<Layers3DState>((set, get) => ({
       ...defaultView,
       hoveredPlaneId: null,
     });
-    const planes = await captureLayers(frameId);
+    let planes: Plane[];
+    try {
+      planes = await captureLayers(frameId);
+    } catch (err) {
+      console.error("captureLayers failed", err);
+      // Guard against a race where the user already exited (or entered a
+      // different frame) while the capture was in flight.
+      if (get().active && get().targetFrameId === frameId) {
+        get().exit();
+      }
+      return;
+    }
     // Guard against a race where the user exited (or entered a different
     // frame) while the capture was in flight.
     if (get().active && get().targetFrameId === frameId) {
