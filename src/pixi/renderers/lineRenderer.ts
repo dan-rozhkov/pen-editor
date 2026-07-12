@@ -2,6 +2,7 @@ import { Container, Graphics } from "pixi.js";
 import type { LineNode } from "@/types/scene";
 import { buildCapPrimitive, capTrimLength } from "@/utils/lineCapUtils";
 import { getResolvedStroke, parseColor, parseAlpha } from "./colorHelpers";
+import { isOutlineRenderMode, strokeOutlinePath } from "./outlineHelpers";
 
 export function createLineContainer(node: LineNode): Container {
   const container = new Container();
@@ -79,12 +80,22 @@ function drawCap(
 }
 
 export function drawLine(gfx: Graphics, node: LineNode): void {
+  const points = node.points;
+  if (points.length < 4) return;
+
+  // Outline mode: just the bare segment, no caps (caps are filled shapes),
+  // no node color/width — same wireframe stroke as every other shape.
+  if (isOutlineRenderMode()) {
+    gfx.moveTo(points[0], points[1]);
+    gfx.lineTo(points[2], points[3]);
+    strokeOutlinePath(gfx);
+    return;
+  }
+
   const strokeColor = getResolvedStroke(node) ?? "#000000";
   const color = parseColor(strokeColor);
   const alpha = parseAlpha(strokeColor);
   const strokeWidth = node.strokeWidth ?? 1;
-  const points = node.points;
-  if (points.length < 4) return;
 
   let [x1, y1, x2, y2] = points;
   const startCap = node.startCap ?? "none";

@@ -5,6 +5,7 @@ import { usePixelGridStore } from "@/store/pixelGridStore";
 import { useGuidesStore } from "@/store/guidesStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { useUIThemeStore } from "@/store/uiThemeStore";
+import { useRenderModeStore } from "@/store/renderModeStore";
 import { formatShortcut } from "./shortcutFormat";
 import type { PaletteCommand } from "./types";
 
@@ -39,6 +40,14 @@ export function getViewCommands(): PaletteCommand[] {
       group: "View",
       shortcut: formatShortcut(["shift", "R"]),
       run: () => useGuidesStore.getState().toggleShowRulers(),
+    },
+    {
+      id: "view-toggle-outline-mode",
+      label: "Toggle outline mode",
+      group: "View",
+      shortcut: formatShortcut(["mod", "shift", "O"]),
+      keywords: ["wireframe", "outline view"],
+      run: () => useRenderModeStore.getState().toggle(),
     },
     {
       id: "view-enter-present",

@@ -5,10 +5,12 @@ import { useVariableStore } from "@/store/variableStore";
 import { useStyleStore } from "@/store/styleStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useSelectionStore } from "@/store/selectionStore";
+import { useRenderModeStore } from "@/store/renderModeStore";
 import type { FlatSceneNode } from "@/types/scene";
 import { isFlatFrameNode, isRefNode, isConnectorNode } from "@/types/scene";
 import { updateNodeContainer } from "./renderers";
 import { applySiblingMasks } from "./renderers/maskHelpers";
+import { isOutlineRenderMode } from "./renderers/outlineHelpers";
 import { isActiveMasker } from "@/lib/masks/maskResolution";
 import { requestCanvasRender } from "./renderScheduler";
 import {
@@ -445,28 +447,32 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
     // Re-resolve sibling masking for any parent whose child's isMask flag
     // toggled in place (no children-order change to trigger reconcileChildren).
-    for (const parentId of maskDirtyParentIds) {
-      const parentEntry = registry.get(parentId);
-      if (!parentEntry) continue;
-      const childrenHost = getChildrenHost(parentEntry.container);
-      if (!childrenHost) continue;
-      applySiblingMasks(
-        state.childrenById[parentId] ?? [],
-        state.nodesById,
-        (id) => childrenHost.getChildByLabel(id),
-        childrenHost,
-      );
-    }
+    // Skipped in outline mode, which never applies masks (see groupRenderer.ts
+    // / frameRenderer.ts's matching guards at build time).
+    if (!isOutlineRenderMode()) {
+      for (const parentId of maskDirtyParentIds) {
+        const parentEntry = registry.get(parentId);
+        if (!parentEntry) continue;
+        const childrenHost = getChildrenHost(parentEntry.container);
+        if (!childrenHost) continue;
+        applySiblingMasks(
+          state.childrenById[parentId] ?? [],
+          state.nodesById,
+          (id) => childrenHost.getChildByLabel(id),
+          childrenHost,
+        );
+      }
 
-    // Same re-resolution for a root-level node whose isMask/visibility
-    // toggled in place without a rootIds structural change.
-    if (rootMaskDirty) {
-      applySiblingMasks(
-        state.rootIds,
-        state.nodesById,
-        (id) => sceneRoot.getChildByLabel(id),
-        sceneRoot,
-      );
+      // Same re-resolution for a root-level node whose isMask/visibility
+      // toggled in place without a rootIds structural change.
+      if (rootMaskDirty) {
+        applySiblingMasks(
+          state.rootIds,
+          state.nodesById,
+          (id) => sceneRoot.getChildByLabel(id),
+          sceneRoot,
+        );
+      }
     }
 
     // Reapply only affected auto-layout frame chains.
@@ -564,6 +570,18 @@ export function createPixiSync(sceneRoot: Container): () => void {
     fullRebuild(useSceneStore.getState());
     prevState = useSceneStore.getState();
   };
+
+  // Outline mode toggles the visual rules every renderer applies (see
+  // `renderers/*.ts`'s `isOutlineRenderMode()` checks) — an incremental
+  // update wouldn't revisit unchanged nodes, so every container would keep
+  // its previous mode's content until it happened to change for some other
+  // reason. A full rebuild re-evaluates every node under the new mode and,
+  // by destroying the old containers, also guarantees no fill/shader/blur
+  // texture or filter survives the switch (the known "leak on toggle back"
+  // failure mode this store's docs warn about).
+  const unsubRenderMode = useRenderModeStore.subscribe(() => {
+    rebuildFromCurrentState();
+  });
 
   const scheduleRebuildFromFonts = (): void => {
     if (disposed || fontsRebuildRafId != null) return;
@@ -666,6 +684,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
     unsubSelection();
     unsubDrag();
     unsubViewport();
+    unsubRenderMode();
     resolutionMgr.cleanup();
     clearPendingSceneUpdate();
     clearPendingThemeUpdate();

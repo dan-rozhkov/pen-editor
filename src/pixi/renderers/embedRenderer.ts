@@ -1,5 +1,8 @@
-import { Container } from "pixi.js";
+import { Container, Graphics } from "pixi.js";
 import type { EmbedNode } from "@/types/scene";
+import { drawOutlineBBox, isOutlineRenderMode } from "./outlineHelpers";
+
+const EMBED_OUTLINE_BG_LABEL = "embed-outline-bg";
 
 /**
  * Embeds ("code layers") now render as a Shadow-DOM overlay above the canvas
@@ -7,17 +10,34 @@ import type { EmbedNode } from "@/types/scene";
  * hit-testing, selection, drag and smart guides keep operating on the real
  * scene node. The HTML→texture pipeline (renderers/htmlTexture/*) is retained
  * for a future screenshot/export path but is intentionally not called here.
+ *
+ * Outline mode is the one exception: the DOM overlay has no wireframe
+ * concept of its own, so a bounding-box stroke is drawn directly in Pixi —
+ * the same fallback used for any other node type with no more specific
+ * outline geometry.
  */
-export function createEmbedContainer(_node: EmbedNode): Container {
-  return new Container();
+export function createEmbedContainer(node: EmbedNode): Container {
+  const container = new Container();
+  if (isOutlineRenderMode()) {
+    const gfx = new Graphics();
+    gfx.label = EMBED_OUTLINE_BG_LABEL;
+    drawOutlineBBox(gfx, node.width, node.height);
+    container.addChild(gfx);
+  }
+  return container;
 }
 
 export function updateEmbedContainer(
-  _container: Container,
-  _node: EmbedNode,
-  _prev: EmbedNode,
+  container: Container,
+  node: EmbedNode,
+  prev: EmbedNode,
 ): void {
-  // No-op: content lives in the DOM overlay.
+  if (!isOutlineRenderMode()) return;
+  const gfx = container.getChildByLabel(EMBED_OUTLINE_BG_LABEL) as Graphics;
+  if (gfx && (node.width !== prev.width || node.height !== prev.height)) {
+    gfx.clear();
+    drawOutlineBBox(gfx, node.width, node.height);
+  }
 }
 
 /** Retained for syncResolution callers; embeds no longer use textures. */

@@ -9,6 +9,7 @@ import {
 } from "./fillStrokeHelpers";
 import { applyImageFillsEllipse } from "./imageFillHelpers";
 import { applyVideoFillsEllipse } from "./videoFillHelpers";
+import { isOutlineRenderMode, strokeOutlinePath } from "./outlineHelpers";
 
 export function createEllipseContainer(node: EllipseNode): Container {
   const container = new Container();
@@ -17,11 +18,14 @@ export function createEllipseContainer(node: EllipseNode): Container {
   container.addChild(gfx);
   drawEllipse(gfx, node);
 
-  // Image fill stack with elliptical clipping. NOTE: the image mask is always
-  // a full ellipse — it does not respect arc/donut params (documented gap;
-  // combining an image fill with a non-default arc is rare in practice).
-  applyImageFillsEllipse(container, node, node.width, node.height);
-  applyVideoFillsEllipse(container, node, node.width, node.height);
+  if (!isOutlineRenderMode()) {
+    // Image fill stack with elliptical clipping. NOTE: the image mask is
+    // always a full ellipse — it does not respect arc/donut params
+    // (documented gap; combining an image fill with a non-default arc is
+    // rare in practice).
+    applyImageFillsEllipse(container, node, node.width, node.height);
+    applyVideoFillsEllipse(container, node, node.width, node.height);
+  }
 
   return container;
 }
@@ -46,9 +50,10 @@ export function updateEllipseContainer(
 
   // Image fill stack
   if (
-    hasFillSourceChanged(node, prev) ||
-    node.width !== prev.width ||
-    node.height !== prev.height
+    !isOutlineRenderMode() &&
+    (hasFillSourceChanged(node, prev) ||
+      node.width !== prev.width ||
+      node.height !== prev.height)
   ) {
     applyImageFillsEllipse(container, node, node.width, node.height);
     applyVideoFillsEllipse(container, node, node.width, node.height);
@@ -80,6 +85,11 @@ export function drawEllipse(gfx: Graphics, node: EllipseNode): void {
     useArc
       ? drawArcContours(target, node)
       : target.ellipse(node.width / 2, node.height / 2, node.width / 2, node.height / 2);
+  if (isOutlineRenderMode()) {
+    drawShape(gfx);
+    strokeOutlinePath(gfx);
+    return;
+  }
   const pathReady = applyFills(gfx, node, node.width, node.height, drawShape);
   // Skip rebuilding the geometry for the stroke when the last fill already left
   // a reusable path on `gfx`.

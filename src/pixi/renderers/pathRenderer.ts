@@ -11,6 +11,7 @@ import {
   escapeXmlAttr,
 } from "./colorHelpers";
 import { buildPixiGradient, fillSolidPaint } from "./fillStrokeHelpers";
+import { isOutlineRenderMode, strokeOutlinePath } from "./outlineHelpers";
 
 /**
  * Normalize compact SVG arc flag notation that PixiJS can't parse.
@@ -102,9 +103,6 @@ export function updatePathContainer(
 }
 
 export function drawPath(gfx: Graphics, node: PathNode): void {
-  const fillColor = getResolvedFill(node);
-  const strokeColor = getResolvedStroke(node);
-
   if (!node.geometry) return;
 
   // Normalize compact arc flag notation that PixiJS can't parse
@@ -122,6 +120,21 @@ export function drawPath(gfx: Graphics, node: PathNode): void {
     gfx.scale.set(scaleX, scaleY);
     gfx.position.set(-gb.x * scaleX, -gb.y * scaleY);
   }
+
+  // Outline mode: stroke the raw path geometry only — no fill stack, no
+  // gradient, no node-owned stroke color/width.
+  if (isOutlineRenderMode()) {
+    try {
+      gfx.path(new GraphicsPath(geometry));
+    } catch {
+      gfx.rect(0, 0, node.width, node.height);
+    }
+    strokeOutlinePath(gfx);
+    return;
+  }
+
+  const fillColor = getResolvedFill(node);
+  const strokeColor = getResolvedStroke(node);
 
   // Check if compound path (multiple subpaths) - needs evenodd for proper hole rendering
   const isCompoundPath = (geometry.match(/[Mm]/g)?.length ?? 0) > 1;

@@ -9,6 +9,7 @@ import {
 } from "./fillStrokeHelpers";
 import { applyImageFills } from "./imageFillHelpers";
 import { applyVideoFills } from "./videoFillHelpers";
+import { isOutlineRenderMode, strokeOutlinePath } from "./outlineHelpers";
 
 export function createRectContainer(node: RectNode): Container {
   const container = new Container();
@@ -17,27 +18,29 @@ export function createRectContainer(node: RectNode): Container {
   container.addChild(gfx);
   drawRect(gfx, node);
 
-  // Image fill paint stack
-  applyImageFills(
-    container,
-    node,
-    node.width,
-    node.height,
-    node.cornerRadius,
-    node.cornerRadiusPerCorner,
-    node.cornerSmoothing,
-  );
+  if (!isOutlineRenderMode()) {
+    // Image fill paint stack
+    applyImageFills(
+      container,
+      node,
+      node.width,
+      node.height,
+      node.cornerRadius,
+      node.cornerRadiusPerCorner,
+      node.cornerSmoothing,
+    );
 
-  // Video fill (topmost video paint)
-  applyVideoFills(
-    container,
-    node,
-    node.width,
-    node.height,
-    node.cornerRadius,
-    node.cornerRadiusPerCorner,
-    node.cornerSmoothing,
-  );
+    // Video fill (topmost video paint)
+    applyVideoFills(
+      container,
+      node,
+      node.width,
+      node.height,
+      node.cornerRadius,
+      node.cornerRadiusPerCorner,
+      node.cornerSmoothing,
+    );
+  }
 
   return container;
 }
@@ -58,12 +61,13 @@ export function updateRectContainer(
 
   // Image fill stack
   if (
-    hasFillSourceChanged(node, prev) ||
-    node.width !== prev.width ||
-    node.height !== prev.height ||
-    node.cornerRadius !== prev.cornerRadius ||
-    node.cornerRadiusPerCorner !== prev.cornerRadiusPerCorner ||
-    node.cornerSmoothing !== prev.cornerSmoothing
+    !isOutlineRenderMode() &&
+    (hasFillSourceChanged(node, prev) ||
+      node.width !== prev.width ||
+      node.height !== prev.height ||
+      node.cornerRadius !== prev.cornerRadius ||
+      node.cornerRadiusPerCorner !== prev.cornerRadiusPerCorner ||
+      node.cornerSmoothing !== prev.cornerSmoothing)
   ) {
     applyImageFills(
       container,
@@ -96,6 +100,11 @@ export function drawRect(gfx: Graphics, node: RectNode): void {
       node.cornerRadiusPerCorner,
       node.cornerSmoothing,
     );
+  if (isOutlineRenderMode()) {
+    drawShape(gfx);
+    strokeOutlinePath(gfx);
+    return;
+  }
   const pathReady = applyFills(gfx, node, node.width, node.height, drawShape);
   // Skip rebuilding the geometry for the stroke when the last fill already left
   // a reusable path on `gfx`.

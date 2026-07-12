@@ -7,6 +7,9 @@ import { hasActiveList, splitParagraphs } from "@/lib/textLists/paragraphs";
 import { layoutTextParagraphs, type LaidOutLine } from "@/utils/textWrap";
 import { resolveEffectiveFontWeight } from "@/utils/variableFont";
 import { hasEffectiveUnderline, TEXT_LINK_COLOR } from "@/lib/textLink";
+import { drawOutlineBBox, isOutlineRenderMode } from "./outlineHelpers";
+
+const TEXT_OUTLINE_BG_LABEL = "text-outline-bg";
 
 /**
  * Label on the wrapper container used by the per-line rendering path
@@ -89,6 +92,15 @@ function buildPlainContent(container: Container, node: TextNode): void {
 
 export function createTextContainer(node: TextNode): Container {
   const container = new Container();
+  if (isOutlineRenderMode()) {
+    // Outline mode: bounding-box rectangle only — glyph rendering is
+    // entirely skipped (bbox is the spec'd minimum for text).
+    const gfx = new Graphics();
+    gfx.label = TEXT_OUTLINE_BG_LABEL;
+    drawOutlineBBox(gfx, node.width, node.height);
+    container.addChild(gfx);
+    return container;
+  }
   if (needsLineLayout(node)) {
     buildListContent(container, node);
   } else {
@@ -102,6 +114,15 @@ export function updateTextContainer(
   node: TextNode,
   prev: TextNode,
 ): void {
+  if (isOutlineRenderMode()) {
+    const gfx = container.getChildByLabel(TEXT_OUTLINE_BG_LABEL) as Graphics;
+    if (gfx && (node.width !== prev.width || node.height !== prev.height)) {
+      gfx.clear();
+      drawOutlineBBox(gfx, node.width, node.height);
+    }
+    return;
+  }
+
   const nodeIsList = needsLineLayout(node);
   const wasList = container.getChildByLabel(LIST_ROOT_LABEL) != null;
 

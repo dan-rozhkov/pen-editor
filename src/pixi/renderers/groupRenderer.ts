@@ -2,6 +2,7 @@ import { Container } from "pixi.js";
 import type { FlatSceneNode, FlatGroupNode } from "@/types/scene";
 import { createNodeContainer } from "./index";
 import { applySiblingMasks } from "./maskHelpers";
+import { isOutlineRenderMode } from "./outlineHelpers";
 
 export function createGroupContainer(
   node: FlatGroupNode,
@@ -29,13 +30,16 @@ export function createGroupContainer(
     }
   }
 
-  // Figma-style sibling masking (a node with isMask clips siblings above it).
-  applySiblingMasks(
-    childIds,
-    nodesById,
-    (id) => childrenContainer.getChildByLabel(id),
-    childrenContainer,
-  );
+  // Figma-style sibling masking (a node with isMask clips siblings above
+  // it) — skipped in outline mode, which never applies masks.
+  if (!isOutlineRenderMode()) {
+    applySiblingMasks(
+      childIds,
+      nodesById,
+      (id) => childrenContainer.getChildByLabel(id),
+      childrenContainer,
+    );
+  }
 
   return container;
 }

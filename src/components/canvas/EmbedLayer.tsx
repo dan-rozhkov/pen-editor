@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
+import { useRenderModeStore } from "@/store/renderModeStore";
 import { mountHtmlWithBodyStyles } from "@/utils/embedHtmlUtils";
 import { buildVariableStyleBlock } from "@/utils/variableCssUtils";
 import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
@@ -76,15 +77,23 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
  */
 export function EmbedLayer() {
   const nodesById = useSceneStore((s) => s.nodesById);
+  // Outline mode renders every embed as a plain bbox stroke in Pixi
+  // (embedRenderer.ts) instead — the live HTML content has no wireframe
+  // form of its own, so it's hidden entirely rather than shown on top of a
+  // wireframe scene.
+  const isOutline = useRenderModeStore((s) => s.renderMode === "outline");
   const embedIds = useMemo(
     () =>
-      Object.keys(nodesById).filter((id) => {
-        const n = nodesById[id];
-        // Render only visible, enabled embeds — mirrors the Pixi visibility
-        // rule (renderers/index.ts) so hiding a layer hides its DOM too.
-        return n?.type === "embed" && n.visible !== false && n.enabled !== false;
-      }),
-    [nodesById],
+      isOutline
+        ? []
+        : Object.keys(nodesById).filter((id) => {
+            const n = nodesById[id];
+            // Render only visible, enabled embeds — mirrors the Pixi
+            // visibility rule (renderers/index.ts) so hiding a layer hides
+            // its DOM too.
+            return n?.type === "embed" && n.visible !== false && n.enabled !== false;
+          }),
+    [nodesById, isOutline],
   );
 
   return (

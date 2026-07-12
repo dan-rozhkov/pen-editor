@@ -4,6 +4,7 @@ import type { FlatSceneNode } from "@/types/scene";
 import type { SceneState } from "@/store/sceneStore";
 import { createNodeContainer } from "./renderers";
 import { applySiblingMasks } from "./renderers/maskHelpers";
+import { isOutlineRenderMode } from "./renderers/outlineHelpers";
 import { withAncestorThemes, getChildrenHost, type SyncContext } from "./syncHelpers";
 
 export function createNodeTreeManager(
@@ -82,8 +83,11 @@ export function createNodeTreeManager(
 
     // Root-level nodes are siblings of one another under `parent` too — a
     // root-level `isMask` node must clip its root-level siblings the same
-    // way frame/group renderers clip their own children internally.
-    applySiblingMasks(ids, nodesById, (id) => parent.getChildByLabel(id), parent);
+    // way frame/group renderers clip their own children internally. Skipped
+    // in outline mode, which never applies masks.
+    if (!isOutlineRenderMode()) {
+      applySiblingMasks(ids, nodesById, (id) => parent.getChildByLabel(id), parent);
+    }
   }
 
   function registerChildrenRecursive(
@@ -145,12 +149,15 @@ export function createNodeTreeManager(
           childrenHost.addChild(createdContainer);
           // A new sibling can shift masking (become a masker, or land inside/
           // outside an existing masked run) — re-resolve the whole host.
-          applySiblingMasks(
-            state.childrenById[parentId] ?? [],
-            state.nodesById,
-            (siblingId) => childrenHost.getChildByLabel(siblingId),
-            childrenHost,
-          );
+          // Skipped in outline mode, which never applies masks.
+          if (!isOutlineRenderMode()) {
+            applySiblingMasks(
+              state.childrenById[parentId] ?? [],
+              state.nodesById,
+              (siblingId) => childrenHost.getChildByLabel(siblingId),
+              childrenHost,
+            );
+          }
         }
       }
     } else {
@@ -277,7 +284,10 @@ export function createNodeTreeManager(
     }
 
     // Reorders/inserts/removals can all shift masking — re-resolve the host.
-    applySiblingMasks(expectedIds, nodesById, (id) => parent.getChildByLabel(id), parent);
+    // Skipped in outline mode, which never applies masks.
+    if (!isOutlineRenderMode()) {
+      applySiblingMasks(expectedIds, nodesById, (id) => parent.getChildByLabel(id), parent);
+    }
   }
 
   function subtreeHasRegisteredContainer(

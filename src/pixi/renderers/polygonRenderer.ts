@@ -1,6 +1,7 @@
 import { Container, Graphics } from "pixi.js";
 import type { PolygonNode } from "@/types/scene";
 import { applyFills, applyStroke } from "./fillStrokeHelpers";
+import { isOutlineRenderMode, strokeOutlinePath } from "./outlineHelpers";
 
 export function createPolygonContainer(node: PolygonNode): Container {
   const container = new Container();
@@ -44,6 +45,11 @@ export function drawPolygon(gfx: Graphics, node: PolygonNode): void {
   if (!points || points.length < 6) return;
 
   const drawShape = (target: Graphics) => target.poly(points, true);
+  if (isOutlineRenderMode()) {
+    drawShape(gfx);
+    strokeOutlinePath(gfx);
+    return;
+  }
   const pathReady = applyFills(gfx, node, node.width, node.height, drawShape);
   // Skip rebuilding the geometry for the stroke when the last fill already left
   // a reusable path on `gfx`.

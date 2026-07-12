@@ -7,6 +7,7 @@ import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
 import { useConnectorStore } from "@/store/connectorStore";
 import { useDragStore } from "@/store/dragStore";
 import { useGuidesStore } from "@/store/guidesStore";
+import { useRenderModeStore } from "@/store/renderModeStore";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { findNodeById, findParentFrame } from "@/utils/nodeUtils";
@@ -149,6 +150,7 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
       const allowed =
         (mod && e.code === "KeyC") || // copy
         (mod && e.shiftKey && (e.code === "KeyC" || e.code === "KeyS")) || // copy as CSS / SVG
+        (mod && e.shiftKey && e.code === "KeyO") || // toggle outline mode
         (mod && e.code === "KeyA") || // select all
         (mod && e.code === "Digit0") || // fit to content
         (mod && e.code === "Backslash") || // toggle UI
@@ -262,6 +264,18 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
       if (isTyping) return;
       e.preventDefault();
       copyAsSvg();
+      return;
+    }
+
+    // Cmd/Ctrl+Shift+O: toggle outline (wireframe) render mode ("O" = Outline).
+    // Figma uses Cmd+Shift+3, but on macOS that is the OS screen-capture
+    // shortcut and never reaches the browser — Cmd+Shift+O is free of both
+    // OS and app conflicts. Non-mutating (view-only), so it's allowed in
+    // read-only mode too via the allowlist above.
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.code === "KeyO") {
+      if (isTyping) return;
+      e.preventDefault();
+      useRenderModeStore.getState().toggle();
       return;
     }
 

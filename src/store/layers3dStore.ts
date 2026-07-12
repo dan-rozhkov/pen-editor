@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { captureLayers, type Plane } from "@/pixi/layers3d/captureLayers";
+import { useRenderModeStore } from "@/store/renderModeStore";
 
 // The opening perspective matches the composed 3D view: a slight upward tilt
 // with the right side brought forward, so the layer stack is readable at once.
@@ -55,6 +56,10 @@ export const useLayers3DStore = create<Layers3DState>((set, get) => ({
   hoveredPlaneId: null,
 
   enter: async (frameId) => {
+    // Outline mode and the 3D layer view are mutually-exclusive display
+    // modes (see renderModeStore's doc comment) — entering this one exits
+    // the other.
+    useRenderModeStore.getState().setRenderMode("normal");
     set({
       active: true,
       isLoading: true,

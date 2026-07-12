@@ -37,6 +37,7 @@ import { createEmbedContainer, updateEmbedContainer } from "./embedRenderer";
 import { createConnectorContainer, updateConnectorContainer } from "./connectorRenderer";
 import { applyShaderFill, shouldRebakeShader, resizeShaderFill, isSizeOnlyShaderChange } from "./shaderFillHelpers";
 import { applyVideoFills, applyVideoFillsEllipse } from "./videoFillHelpers";
+import { drawOutlineBBox, isOutlineRenderMode } from "./outlineHelpers";
 import type { ConnectorNode } from "@/types/scene";
 import type { ShadowShape } from "./shadowHelpers";
 import { resolveRefToTree } from "@/utils/instanceRuntime";
@@ -384,8 +385,21 @@ export function createNodeContainer(
     case "connector":
       container = createConnectorContainer(node as ConnectorNode);
       break;
-    default:
+    default: {
       container = new Container();
+      if (isOutlineRenderMode()) {
+        // The switch is exhaustive over `FlatSceneNode["type"]`, so `node`
+        // narrows to `never` here — fall back to the pre-switch reference,
+        // which every scene node carries `width`/`height` on regardless of
+        // type (this branch only exists as a safety net for a future node
+        // type added to the union without a case above).
+        const fallbackNode = node as FlatSceneNode;
+        const gfx = new Graphics();
+        gfx.label = "outline-bbox-fallback";
+        drawOutlineBBox(gfx, fallbackNode.width, fallbackNode.height);
+        container.addChild(gfx);
+      }
+    }
   }
 
   // Common properties
@@ -409,45 +423,52 @@ export function createNodeContainer(
     if (node.flipY) container.pivot.y = node.height;
   }
 
-  // Shadow stack
-  const initialShadowSize = getNodeShadowSize(node, container);
-  applyShadows(
-    container,
-    getResolvedRenderableEffects(node),
-    initialShadowSize.width,
-    initialShadowSize.height,
-    getNodeCornerRadius(node),
-    getNodeShadowShape(node),
-    getNodeCornerRadiusPerCorner(node),
-    getNodeCornerSmoothing(node),
-  );
+  // Shadow/blur/background-blur/shader: skipped entirely in outline mode —
+  // a wireframe view shows only geometry strokes, per the outline renderers
+  // above. Left as no-ops here (rather than each individual helper checking
+  // the mode) so this is the single place that decides what's "chrome" vs.
+  // "shape" for the effect stack.
+  if (!isOutlineRenderMode()) {
+    // Shadow stack
+    const initialShadowSize = getNodeShadowSize(node, container);
+    applyShadows(
+      container,
+      getResolvedRenderableEffects(node),
+      initialShadowSize.width,
+      initialShadowSize.height,
+      getNodeCornerRadius(node),
+      getNodeShadowShape(node),
+      getNodeCornerRadiusPerCorner(node),
+      getNodeCornerSmoothing(node),
+    );
 
-  // Layer blur (container-level filter; first visible blur in the stack wins)
-  applyLayerBlur(container, getResolvedRenderableEffects(node));
+    // Layer blur (container-level filter; first visible blur in the stack wins)
+    applyLayerBlur(container, getResolvedRenderableEffects(node));
 
-  // Background blur ("backdrop blur"/glassmorphism): needs the container
-  // already mounted at its final position to snapshot what's behind it, which
-  // isn't true yet at this point in tree construction — defer to the next
-  // animation frame (by then layout/mounting for this pass has settled). See
-  // backgroundBlurHelpers.ts for the snapshot/staleness limitation.
-  if (getResolvedRenderableEffects(node).some((e) => e.type === "background-blur")) {
-    requestAnimationFrame(() => {
-      if (container.destroyed) return;
-      // Re-read the CURRENT node from the store rather than the creation-time
-      // `node` closed over above: `updateNode` replaces the node object, so a
-      // synchronous follow-up update (the common `I()` then `U()` batch) will
-      // already have rebaked via `updateNodeContainer`. Baking the stale
-      // creation-time `node` here would clobber that with outdated
-      // effects/size/shape. If the node is gone or lost its background blur,
-      // clear any sprite instead.
-      const current = useSceneStore.getState().nodesById[node.id];
-      if (!current) return;
-      applyBackgroundBlur(container, current, getResolvedRenderableEffects(current));
-    });
+    // Background blur ("backdrop blur"/glassmorphism): needs the container
+    // already mounted at its final position to snapshot what's behind it, which
+    // isn't true yet at this point in tree construction — defer to the next
+    // animation frame (by then layout/mounting for this pass has settled). See
+    // backgroundBlurHelpers.ts for the snapshot/staleness limitation.
+    if (getResolvedRenderableEffects(node).some((e) => e.type === "background-blur")) {
+      requestAnimationFrame(() => {
+        if (container.destroyed) return;
+        // Re-read the CURRENT node from the store rather than the creation-time
+        // `node` closed over above: `updateNode` replaces the node object, so a
+        // synchronous follow-up update (the common `I()` then `U()` batch) will
+        // already have rebaked via `updateNodeContainer`. Baking the stale
+        // creation-time `node` here would clobber that with outdated
+        // effects/size/shape. If the node is gone or lost its background blur,
+        // clear any sprite instead.
+        const current = useSceneStore.getState().nodesById[node.id];
+        if (!current) return;
+        applyBackgroundBlur(container, current, getResolvedRenderableEffects(current));
+      });
+    }
+
+    // Shader fill (baked texture in-scene, so it obeys z-order)
+    if (node.shader) applyShaderFill(container, node);
   }
-
-  // Shader fill (baked texture in-scene, so it obeys z-order)
-  if (node.shader) applyShaderFill(container, node);
 
   return container;
 }
@@ -554,6 +575,10 @@ export function updateNodeContainer(
       break;
   }
 
+  // Shadow/blur/background-blur/shader: skipped entirely in outline mode —
+  // see the matching guard in createNodeContainer above.
+  if (isOutlineRenderMode()) return;
+
   // Shadow (after type-specific updates so frame effective size stays in sync)
   if (
     node.effect !== prev.effect ||
@@ -648,28 +673,30 @@ export function applyLayoutSize(
         gfx.clear();
         drawRect(gfx, { ...node, width: layoutWidth, height: layoutHeight } as RectNode);
       }
-      applyVideoFills(
-        container,
-        node,
-        layoutWidth,
-        layoutHeight,
-        (node as RectNode).cornerRadius,
-        (node as RectNode).cornerRadiusPerCorner,
-        (node as RectNode).cornerSmoothing,
-      );
-      const shadowRectNode = { ...node, width: layoutWidth, height: layoutHeight } as RectNode;
-      // Shadows are redrawn at the new size; layer blur is a size-independent container
-      // filter and needs no re-apply here.
-      applyShadows(
-        container,
-        getResolvedRenderableEffects(shadowRectNode),
-        layoutWidth,
-        layoutHeight,
-        shadowRectNode.cornerRadius,
-        "rect",
-        shadowRectNode.cornerRadiusPerCorner,
-        shadowRectNode.cornerSmoothing,
-      );
+      if (!isOutlineRenderMode()) {
+        applyVideoFills(
+          container,
+          node,
+          layoutWidth,
+          layoutHeight,
+          (node as RectNode).cornerRadius,
+          (node as RectNode).cornerRadiusPerCorner,
+          (node as RectNode).cornerSmoothing,
+        );
+        const shadowRectNode = { ...node, width: layoutWidth, height: layoutHeight } as RectNode;
+        // Shadows are redrawn at the new size; layer blur is a size-independent container
+        // filter and needs no re-apply here.
+        applyShadows(
+          container,
+          getResolvedRenderableEffects(shadowRectNode),
+          layoutWidth,
+          layoutHeight,
+          shadowRectNode.cornerRadius,
+          "rect",
+          shadowRectNode.cornerRadiusPerCorner,
+          shadowRectNode.cornerSmoothing,
+        );
+      }
       break;
     }
     case "ellipse": {
@@ -678,16 +705,18 @@ export function applyLayoutSize(
         gfx.clear();
         drawEllipse(gfx, { ...node, width: layoutWidth, height: layoutHeight } as EllipseNode);
       }
-      applyVideoFillsEllipse(container, node, layoutWidth, layoutHeight);
-      const shadowEllipseNode = { ...node, width: layoutWidth, height: layoutHeight } as EllipseNode;
-      applyShadows(
-        container,
-        getResolvedRenderableEffects(shadowEllipseNode),
-        layoutWidth,
-        layoutHeight,
-        undefined,
-        "ellipse",
-      );
+      if (!isOutlineRenderMode()) {
+        applyVideoFillsEllipse(container, node, layoutWidth, layoutHeight);
+        const shadowEllipseNode = { ...node, width: layoutWidth, height: layoutHeight } as EllipseNode;
+        applyShadows(
+          container,
+          getResolvedRenderableEffects(shadowEllipseNode),
+          layoutWidth,
+          layoutHeight,
+          undefined,
+          "ellipse",
+        );
+      }
       break;
     }
     case "frame": {
@@ -717,30 +746,40 @@ export function applyLayoutSize(
         gridGfx.clear();
         drawLayoutGrids(gridGfx, frameNode.layoutGrids, layoutWidth, layoutHeight);
       }
-      applyVideoFills(
-        container,
-        frameNode,
-        layoutWidth,
-        layoutHeight,
-        frameNode.cornerRadius,
-        frameNode.cornerRadiusPerCorner,
-        frameNode.cornerSmoothing,
-      );
-      applyShadows(
-        container,
-        getResolvedRenderableEffects(frameNode),
-        layoutWidth,
-        layoutHeight,
-        frameNode.cornerRadius,
-        "rect",
-        frameNode.cornerRadiusPerCorner,
-        frameNode.cornerSmoothing,
-      );
+      if (!isOutlineRenderMode()) {
+        applyVideoFills(
+          container,
+          frameNode,
+          layoutWidth,
+          layoutHeight,
+          frameNode.cornerRadius,
+          frameNode.cornerRadiusPerCorner,
+          frameNode.cornerSmoothing,
+        );
+        applyShadows(
+          container,
+          getResolvedRenderableEffects(frameNode),
+          layoutWidth,
+          layoutHeight,
+          frameNode.cornerRadius,
+          "rect",
+          frameNode.cornerRadiusPerCorner,
+          frameNode.cornerSmoothing,
+        );
+      }
       break;
     }
     case "embed": {
       // Embed HTML content is intentionally not scaled during interactive resize.
-      // It is re-rendered at the target size after resize settles.
+      // It is re-rendered at the target size after resize settles. In outline
+      // mode the bbox stroke (embedRenderer.ts) tracks the layout size too.
+      if (isOutlineRenderMode()) {
+        const gfx = container.getChildByLabel("embed-outline-bg") as Graphics;
+        if (gfx) {
+          gfx.clear();
+          drawOutlineBBox(gfx, layoutWidth, layoutHeight);
+        }
+      }
       break;
     }
     case "ref": {
@@ -762,5 +801,5 @@ export function applyLayoutSize(
 
   // Shader fill: the layout-driven size change bypasses node.width/height (and
   // thus shouldRebakeShader), so resize the baked sprite here and debounce-rebake.
-  if (node.shader) resizeShaderFill(container, node, layoutWidth, layoutHeight);
+  if (node.shader && !isOutlineRenderMode()) resizeShaderFill(container, node, layoutWidth, layoutHeight);
 }

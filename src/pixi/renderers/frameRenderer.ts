@@ -20,6 +20,7 @@ import { pushRenderTheme, popRenderTheme } from "./colorHelpers";
 import { createNodeContainer, isInsideRef } from "./index";
 import { drawLayoutGrids } from "./layoutGridRenderer";
 import { applySiblingMasks } from "./maskHelpers";
+import { isOutlineRenderMode, strokeOutlinePath } from "./outlineHelpers";
 
 /** Container with the frame's effective (fit_content-resolved) size attached */
 type FrameContainer = Container & {
@@ -106,35 +107,41 @@ export function createFrameContainer(
   drawFrameBackground(bg, node, effectiveWidth, effectiveHeight);
   container.addChild(bg);
 
-  // Slot indicator (pink overlay — only in component definition, not in instances)
-  if (node.isSlot && !isInsideRef()) {
+  const outlineMode = isOutlineRenderMode();
+
+  // Slot indicator (pink overlay — only in component definition, not in
+  // instances). Skipped in outline mode: a colored fill overlay has no place
+  // in a wireframe view.
+  if (node.isSlot && !isInsideRef() && !outlineMode) {
     const slotGfx = new Graphics();
     slotGfx.label = "frame-slot-indicator";
     drawSlotIndicator(slotGfx, effectiveWidth, effectiveHeight);
     container.addChild(slotGfx);
   }
 
-  // Image fill stack
-  applyImageFills(
-    container,
-    node,
-    effectiveWidth,
-    effectiveHeight,
-    node.cornerRadius,
-    node.cornerRadiusPerCorner,
-    node.cornerSmoothing,
-  );
+  if (!outlineMode) {
+    // Image fill stack
+    applyImageFills(
+      container,
+      node,
+      effectiveWidth,
+      effectiveHeight,
+      node.cornerRadius,
+      node.cornerRadiusPerCorner,
+      node.cornerSmoothing,
+    );
 
-  // Video fill (topmost video paint)
-  applyVideoFills(
-    container,
-    node,
-    effectiveWidth,
-    effectiveHeight,
-    node.cornerRadius,
-    node.cornerRadiusPerCorner,
-    node.cornerSmoothing,
-  );
+    // Video fill (topmost video paint)
+    applyVideoFills(
+      container,
+      node,
+      effectiveWidth,
+      effectiveHeight,
+      node.cornerRadius,
+      node.cornerRadiusPerCorner,
+      node.cornerSmoothing,
+    );
+  }
 
   // Clipping mask
   if (node.clip) {
@@ -182,20 +189,23 @@ export function createFrameContainer(
     }
   }
 
-  // Figma-style sibling masking (a node with isMask clips siblings above it).
-  applySiblingMasks(
-    childIds,
-    nodesById,
-    (id) => childrenContainer.getChildByLabel(id),
-    childrenContainer,
-  );
+  if (!outlineMode) {
+    // Figma-style sibling masking (a node with isMask clips siblings above it).
+    applySiblingMasks(
+      childIds,
+      nodesById,
+      (id) => childrenContainer.getChildByLabel(id),
+      childrenContainer,
+    );
 
-  // Layout grid overlay (rendered above children)
-  if (node.layoutGrids?.length) {
-    const gridGfx = new Graphics();
-    gridGfx.label = "frame-layout-grid";
-    drawLayoutGrids(gridGfx, node.layoutGrids, effectiveWidth, effectiveHeight);
-    container.addChild(gridGfx);
+    // Layout grid overlay (rendered above children) — a design-guide fill,
+    // out of place in a wireframe view.
+    if (node.layoutGrids?.length) {
+      const gridGfx = new Graphics();
+      gridGfx.label = "frame-layout-grid";
+      drawLayoutGrids(gridGfx, node.layoutGrids, effectiveWidth, effectiveHeight);
+      container.addChild(gridGfx);
+    }
   }
 
   // Disabled for now: cacheAsTexture can leave stale visual artifacts
@@ -234,14 +244,15 @@ export function updateFrameContainer(
 
   // Image fill stack
   if (
-    hasFillSourceChanged(node, prev) ||
-    node.width !== prev.width ||
-    node.height !== prev.height ||
-    node.sizing !== prev.sizing ||
-    node.layout !== prev.layout ||
-    node.cornerRadius !== prev.cornerRadius ||
-    node.cornerRadiusPerCorner !== prev.cornerRadiusPerCorner ||
-    node.cornerSmoothing !== prev.cornerSmoothing
+    !isOutlineRenderMode() &&
+    (hasFillSourceChanged(node, prev) ||
+      node.width !== prev.width ||
+      node.height !== prev.height ||
+      node.sizing !== prev.sizing ||
+      node.layout !== prev.layout ||
+      node.cornerRadius !== prev.cornerRadius ||
+      node.cornerRadiusPerCorner !== prev.cornerRadiusPerCorner ||
+      node.cornerSmoothing !== prev.cornerSmoothing)
   ) {
     applyImageFills(
       container,
@@ -272,7 +283,7 @@ export function updateFrameContainer(
     node.layout !== prev.layout
   ) {
     const existingGrid = container.getChildByLabel("frame-layout-grid") as Graphics;
-    if (node.layoutGrids?.length) {
+    if (node.layoutGrids?.length && !isOutlineRenderMode()) {
       const gridGfx = existingGrid ?? new Graphics();
       gridGfx.label = "frame-layout-grid";
       gridGfx.clear();
@@ -289,7 +300,7 @@ export function updateFrameContainer(
   // Update slot indicator
   if (node.isSlot !== prev.isSlot || node.width !== prev.width || node.height !== prev.height) {
     const existingSlot = container.getChildByLabel("frame-slot-indicator") as Graphics;
-    if (node.isSlot && !isInsideRef()) {
+    if (node.isSlot && !isInsideRef() && !isOutlineRenderMode()) {
       const slotGfx = existingSlot ?? new Graphics();
       slotGfx.label = "frame-slot-indicator";
       slotGfx.clear();
@@ -413,6 +424,11 @@ export function drawFrameBackground(
 
   const drawShape = (target: Graphics) =>
     drawRoundedShape(target, width, height, node.cornerRadius, node.cornerRadiusPerCorner, node.cornerSmoothing);
+  if (isOutlineRenderMode()) {
+    drawShape(gfx);
+    strokeOutlinePath(gfx);
+    return;
+  }
   const pathReady = applyFills(gfx, node, width, height, drawShape);
   // Skip rebuilding the geometry for the stroke when the last fill already left
   // a reusable path on `gfx`.

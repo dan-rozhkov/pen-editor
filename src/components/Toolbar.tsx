@@ -8,6 +8,7 @@ import { useThemeStore } from "../store/themeStore";
 import { useUIThemeStore } from "../store/uiThemeStore";
 import { usePixelGridStore } from "../store/pixelGridStore";
 import { useGuidesStore } from "../store/guidesStore";
+import { useRenderModeStore } from "../store/renderModeStore";
 import { useViewportStore } from "../store/viewportStore";
 import { usePageStore } from "../store/pageStore";
 import { buildTree } from "../types/scene";
@@ -34,6 +35,7 @@ import {
   DropdownMenuCheckboxItem,
 } from "./ui/dropdown-menu";
 import { TooltipShortcut } from "./ui/tooltip";
+import { formatShortcut } from "../lib/commands/shortcutFormat";
 import {
   CaretDownIcon,
 } from "@phosphor-icons/react";
@@ -49,6 +51,8 @@ export function Toolbar() {
   const togglePixelGrid = usePixelGridStore((s) => s.togglePixelGrid);
   const showRulers = useGuidesStore((s) => s.showRulers);
   const toggleShowRulers = useGuidesStore((s) => s.toggleShowRulers);
+  const outlineModeActive = useRenderModeStore((s) => s.renderMode === "outline");
+  const toggleRenderMode = useRenderModeStore((s) => s.toggle);
 
   const [importOpen, setImportOpen] = useState(false);
   const [jsonText, setJsonText] = useState("");
@@ -226,6 +230,11 @@ export function Toolbar() {
               <DropdownMenuCheckboxItem checked={showRulers} onCheckedChange={toggleShowRulers}>
                 Rulers
                 <TooltipShortcut className="ml-auto">Shift+R</TooltipShortcut>
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem checked={outlineModeActive} onCheckedChange={toggleRenderMode}>
+                Outline mode
+                <TooltipShortcut className="ml-auto">{formatShortcut(["mod", "shift", "O"])}</TooltipShortcut>
               </DropdownMenuCheckboxItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>

@@ -35,6 +35,7 @@ import { usePixelGridStore } from "@/store/pixelGridStore";
 import { useStyleStore } from "@/store/styleStore";
 import { useUIThemeStore } from "@/store/uiThemeStore";
 import { useThemeStore } from "@/store/themeStore";
+import { useRenderModeStore } from "@/store/renderModeStore";
 import { subscribeOverlayState } from "./pixiOverlayState";
 
 // Keep rendering this long after the last signal. Covers drop animations
@@ -102,6 +103,13 @@ export function setupRenderScheduler(app: Application): () => void {
     usePixelGridStore.subscribe(markActivity),
     useUIThemeStore.subscribe(markActivity),
     useThemeStore.subscribe(markActivity),
+    // Outline-mode toggle: pixiSync does a full container rebuild on this
+    // store's change (see pixiSync.ts), but that rebuild alone writes no
+    // Pixi containers the scheduler already watches at the right time —
+    // without this subscription the repaint would only land on the next
+    // safety tick (up to SAFETY_INTERVAL_MS later), same class of bug as the
+    // pen-tool-lag fix this allowlist exists to prevent.
+    useRenderModeStore.subscribe(markActivity),
     subscribeOverlayState(markActivity),
   ];
 
