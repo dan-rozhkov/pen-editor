@@ -326,6 +326,8 @@ function convertTextElement(node: H2dElementNode, textChildren: H2dTextNodeType[
     width: maxX - minX,
     height: maxY - minY,
   }
+  const text = normalizeCapturedText(textChildren.map((t) => t.text).join(''), node.styles.whiteSpace)
+  const isMultiline = text.includes('\n') || textChildren.some((child) => (child.lineCount ?? 1) > 1)
   const textNode: TextNode = {
     id: generateId(),
     type: 'text',
@@ -334,7 +336,11 @@ function convertTextElement(node: H2dElementNode, textChildren: H2dTextNodeType[
     y: rel.y,
     width: rel.width,
     height: rel.height,
-    text: normalizeCapturedText(textChildren.map((t) => t.text).join(''), node.styles.whiteSpace),
+    text,
+    // capture.js reports the rendered line count. Without an explicit fixed
+    // mode Pixi treats width as hug-content and renders the entire value on a
+    // single line, despite the captured width/height stored above.
+    ...(isMultiline ? { textWidthMode: 'fixed-height' as const } : {}),
   }
   // `node.styles` is a plain Record<string, string> of resolved styles (not a
   // live CSSStyleDeclaration) — applyTextProps only reads a narrow, string-only

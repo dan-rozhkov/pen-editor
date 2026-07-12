@@ -249,6 +249,23 @@ describe('convertH2dToSceneNodes (synthetic cases)', () => {
     expect(label.text).toBe('В корзину')
   })
 
+  it('uses a fixed text box for content captured on multiple rendered lines', () => {
+    const capturedText = text(
+      'Заключайте сделки без посредников и комиссий напрямую с производителями',
+      rect(10, 10, 180, 40),
+    )
+    capturedText.lineCount = 2
+    const body = el('BODY', rect(0, 0, 200, 60), {}, [
+      el('P', rect(10, 10, 180, 40), { fontSize: '16px', lineHeight: '20px' }, [capturedText]),
+    ])
+    const { nodes } = convertH2dToSceneNodes(buildDocument(body))
+    const paragraph = (nodes[0] as FrameNode).children[0] as TextNode
+
+    expect(paragraph.textWidthMode).toBe('fixed-height')
+    expect(paragraph.width).toBe(180)
+    expect(paragraph.height).toBe(40)
+  })
+
   it('parses a Tailwind-style two-layer box-shadow into sane (non-garbage) offsets', () => {
     const body = el('BODY', rect(0, 0, 100, 100), {}, [
       el('DIV', rect(0, 0, 30, 30), {
