@@ -8,6 +8,11 @@ import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 import { getViewportBounds } from "@/utils/viewportUtils";
 import { applyLayoutSize } from "./renderers";
 import {
+  applyOverviewEffectVisibility,
+  computeViewportRenderability,
+  isOverviewScale,
+} from "./viewportCulling";
+import {
   type SyncContext,
   type NodeLayoutOverride,
   type AutoLayoutFrameSet,
@@ -31,23 +36,25 @@ export function createAutoLayoutManager(ctx: SyncContext) {
     const { scale, x, y } = useViewportStore.getState();
     const bounds = getViewportBounds(scale, x, y, window.innerWidth, window.innerHeight);
     const margin = CULL_MARGIN / scale;
-    const minX = bounds.minX - margin;
-    const maxX = bounds.maxX + margin;
-    const minY = bounds.minY - margin;
-    const maxY = bounds.maxY + margin;
 
     const state = useSceneStore.getState();
-    for (const rootId of state.rootIds) {
-      const entry = registry.get(rootId);
-      if (!entry) continue;
-      const node = entry.node;
+    const renderability = computeViewportRenderability({
+      rootIds: state.rootIds,
+      nodesById: state.nodesById,
+      childrenById: state.childrenById,
+      bounds,
+      scale,
+      margin,
+    });
 
-      entry.container.renderable = !(
-        node.x + node.width < minX ||
-        node.x > maxX ||
-        node.y + node.height < minY ||
-        node.y > maxY
-      );
+    for (const [id, renderable] of renderability) {
+      const entry = registry.get(id);
+      if (!entry) continue;
+      applyOverviewEffectVisibility(entry.container, isOverviewScale(scale));
+      // Sibling-mask resolution exclusively owns mask-node renderability.
+      // Overwriting it here can resurrect an inert masker or suppress a mask
+      // Pixi needs for the stencil pass.
+      if (!entry.node.isMask) entry.container.renderable = renderable;
     }
   }
 

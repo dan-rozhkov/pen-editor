@@ -10,7 +10,9 @@
  *   - render whenever something invalidates (any visual store change, marquee
  *     overlay state, font load, canvas/window resize, or an explicit
  *     `requestCanvasRender()` call),
- *   - keep rendering for a trailing window after the last signal (covers drop
+ *   - viewport changes render once per dirty ticker frame, without keeping the
+ *     whole scene hot after pan/zoom,
+ *   - other signals keep rendering for a trailing window (covers drop
  *     animations and debounced re-renders + async rasterization),
  *   - a low-rate safety render as the backstop for purely-async arrivals
  *     (embed rasterization, image loads) that touch no store and emit no signal.
@@ -63,15 +65,26 @@ export function setupRenderScheduler(app: Application): () => void {
   // Render at least once immediately so the first paint is not delayed.
   let lastActivity = performance.now();
   let lastRender = 0;
+  let dirty = true;
+
+  const markDirty = () => {
+    dirty = true;
+  };
 
   const markActivity = () => {
     lastActivity = performance.now();
+    dirty = true;
   };
   invalidate = markActivity;
 
   const onTick = () => {
     const now = performance.now();
-    if (now - lastActivity <= TRAIL_MS || now - lastRender >= SAFETY_INTERVAL_MS) {
+    if (
+      dirty ||
+      now - lastActivity <= TRAIL_MS ||
+      now - lastRender >= SAFETY_INTERVAL_MS
+    ) {
+      dirty = false;
       lastRender = now;
       app.render();
     }
@@ -83,7 +96,9 @@ export function setupRenderScheduler(app: Application): () => void {
   // `subscribeOverlayState(fn)` accept a no-arg listener.
   const unsubs: Array<() => void> = [
     useSceneStore.subscribe(markActivity),
-    useViewportStore.subscribe(markActivity),
+    // Pan/zoom updates already arrive once per interaction frame. They need one
+    // repaint, not the generic trailing window used for async visual work.
+    useViewportStore.subscribe(markDirty),
     useSelectionStore.subscribe(markActivity),
     useHoverStore.subscribe(markActivity),
     useDragStore.subscribe(markActivity),

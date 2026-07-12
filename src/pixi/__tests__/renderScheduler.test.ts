@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import type { Application } from "pixi.js";
 import { usePenToolStore } from "@/store/penToolStore";
 import { useStyleStore } from "@/store/styleStore";
+import { useViewportStore } from "@/store/viewportStore";
 import { requestCanvasRender, setupRenderScheduler } from "../renderScheduler";
 
 describe("requestCanvasRender", () => {
@@ -80,9 +81,39 @@ describe("setupRenderScheduler invalidation sources", () => {
 
     now.mockReturnValue(5116);
     tick();
-    expect(render).toHaveBeenCalled();
+    expect(render).toHaveBeenCalledTimes(1);
+
+    // Non-viewport invalidations retain the trailing window for async work.
+    now.mockReturnValue(5132);
+    tick();
+    expect(render).toHaveBeenCalledTimes(2);
 
     useStyleStore.getState().deleteFillStyle("s-test");
+    cleanup();
+  });
+
+  it("renders a viewport change once without starting the trailing render window", () => {
+    const now = vi.spyOn(performance, "now");
+
+    now.mockReturnValue(0);
+    const { app, render, tick } = makeFakeApp();
+    const cleanup = setupRenderScheduler(app);
+
+    now.mockReturnValue(5000);
+    tick();
+    render.mockClear();
+
+    now.mockReturnValue(5100);
+    useViewportStore.getState().setPosition(20, 30);
+
+    now.mockReturnValue(5116);
+    tick();
+    expect(render).toHaveBeenCalledTimes(1);
+
+    now.mockReturnValue(5132);
+    tick();
+    expect(render).toHaveBeenCalledTimes(1);
+
     cleanup();
   });
 });

@@ -41,6 +41,9 @@ if (import.meta.env.DEV) {
   import('@/store/editorModeStore').then(({ useEditorModeStore }) => {
     (window as unknown as Record<string, unknown>).__editorModeStore = useEditorModeStore;
   });
+  import('@/store/canvasRefStore').then(({ useCanvasRefStore }) => {
+    (window as unknown as Record<string, unknown>).__canvasRefStore = useCanvasRefStore;
+  });
 }
 
 createRoot(document.getElementById('root')!).render(
