@@ -236,6 +236,19 @@ describe('convertH2dToSceneNodes (synthetic cases)', () => {
     expect(texts).toContain('world')
   })
 
+  it('removes source-formatting whitespace around captured text', () => {
+    const body = el('BODY', rect(0, 0, 200, 40), {}, [
+      el('BUTTON', rect(0, 0, 100, 40), { backgroundColor: 'rgb(0, 0, 0)' }, [
+        text('\n        В корзину\n      ', rect(10, 10, 80, 20)),
+      ]),
+    ])
+    const { nodes } = convertH2dToSceneNodes(buildDocument(body))
+    const button = (nodes[0] as FrameNode).children[0] as FrameNode
+    const label = button.children[0] as TextNode
+
+    expect(label.text).toBe('В корзину')
+  })
+
   it('parses a Tailwind-style two-layer box-shadow into sane (non-garbage) offsets', () => {
     const body = el('BODY', rect(0, 0, 100, 100), {}, [
       el('DIV', rect(0, 0, 30, 30), {

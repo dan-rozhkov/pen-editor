@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { mergeCustomFontsIntoList, notifyFontsChanged, registerFontLoadCallback, type SystemFont } from "@/utils/fontUtils";
+import { isGoogleFont, mergeCustomFontsIntoList, notifyFontsChanged, registerFontLoadCallback, type SystemFont } from "@/utils/fontUtils";
+
+describe("isGoogleFont", () => {
+  it("recognizes Onest used by h2d captures", () => {
+    expect(isGoogleFont("Onest")).toBe(true);
+  });
+});
 
 describe("mergeCustomFontsIntoList", () => {
   const baseFonts: SystemFont[] = [

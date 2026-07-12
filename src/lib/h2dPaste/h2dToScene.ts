@@ -334,13 +334,25 @@ function convertTextElement(node: H2dElementNode, textChildren: H2dTextNodeType[
     y: rel.y,
     width: rel.width,
     height: rel.height,
-    text: textChildren.map((t) => t.text).join(''),
+    text: normalizeCapturedText(textChildren.map((t) => t.text).join(''), node.styles.whiteSpace),
   }
   // `node.styles` is a plain Record<string, string> of resolved styles (not a
   // live CSSStyleDeclaration) — applyTextProps only reads a narrow, string-only
   // subset (TextStyleSource), so it works the same as it does against the DOM.
   applyTextProps(textNode, node.styles)
   return textNode
+}
+
+/**
+ * HTML source indentation is included verbatim by capture.js even though normal
+ * CSS whitespace collapsing never renders it. Keep genuinely inline trailing
+ * spaces (for example `Hello ` before a nested link), and preserve whitespace
+ * completely for preformatted elements.
+ */
+function normalizeCapturedText(text: string, whiteSpace: string | undefined): string {
+  if (whiteSpace === 'pre' || whiteSpace === 'pre-wrap' || whiteSpace === 'break-spaces') return text
+  if (!/[\r\n]/.test(text)) return text
+  return text.replace(/[ \t\r\n\f]+/g, ' ').trim()
 }
 
 /**

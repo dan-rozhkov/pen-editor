@@ -67,7 +67,7 @@ export const GOOGLE_FONTS = [
   'Noto Sans Display', 'Noto Sans HK', 'Noto Sans JP', 'Noto Sans KR',
   'Noto Sans SC', 'Noto Sans TC', 'Noto Serif', 'Noto Serif JP',
   'Nunito', 'Nunito Sans',
-  'Old Standard TT', 'Oleo Script', 'Open Sans', 'Orbitron', 'Oswald',
+  'Old Standard TT', 'Oleo Script', 'Onest', 'Open Sans', 'Orbitron', 'Oswald',
   'Outfit', 'Overpass', 'Oxygen',
   'PT Mono', 'PT Sans', 'PT Sans Caption', 'PT Sans Narrow', 'PT Serif',
   'Pacifico', 'Passion One', 'Pathway Gothic One', 'Patrick Hand',
