@@ -26,6 +26,17 @@ function slugify(name: string | undefined, fallback: string): string {
   return base || fallback;
 }
 
+/**
+ * Neutralize a string for safe embedding inside a `/* ... *\/` CSS comment.
+ * Untrusted node names (AI output, Figma/Pixso import, crafted .pen files)
+ * could otherwise contain a literal `*\/` that closes the comment early,
+ * letting the rest of the name be injected as live CSS. Also strips
+ * newlines/carriage returns so the comment can't be broken across lines.
+ */
+function escapeCssComment(name: string): string {
+  return name.replace(/\*\//g, "*\\/").replace(/[\r\n]+/g, " ");
+}
+
 /** Make `className` unique against `used`, suffixing with -2, -3, ... on collision. */
 function uniqueClassName(className: string, used: Set<string>): string {
   if (!used.has(className)) {
@@ -110,7 +121,7 @@ export function buildCssForNodes(nodeIds: string[], nodesById: Record<string, Fl
     };
 
     const className = uniqueClassName(slugify(node.name, node.type), usedClassNames);
-    const label = node.name ?? node.type;
+    const label = escapeCssComment(node.name ?? node.type);
     blocks.push(`/* ${label} */\n.${className} {\n${formatDeclarations(styles)}\n}`);
   }
 

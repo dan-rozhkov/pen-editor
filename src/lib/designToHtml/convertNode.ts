@@ -56,7 +56,7 @@ function wrapWithSlotIfNeeded(html: string, node: FlatSceneNode, ctx: Conversion
   if (node.type === "frame" && (node as FlatFrameNode).isSlot) {
     const slotName = node.name?.toLowerCase().trim();
     if (slotName && slotName !== "slot") {
-      return `<slot name="${slotName}">${html}</slot>`;
+      return `<slot name="${escapeAttr(slotName)}">${html}</slot>`;
     }
     return `<slot>${html}</slot>`;
   }
@@ -64,7 +64,7 @@ function wrapWithSlotIfNeeded(html: string, node: FlatSceneNode, ctx: Conversion
   const slotInfo = parseSlotName(node.name);
   if (!slotInfo) return html;
   if (slotInfo.name) {
-    return `<slot name="${slotInfo.name}">${html}</slot>`;
+    return `<slot name="${escapeAttr(slotInfo.name)}">${html}</slot>`;
   }
   return `<slot>${html}</slot>`;
 }

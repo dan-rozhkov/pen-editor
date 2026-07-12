@@ -169,6 +169,34 @@ describe("buildCssForNodes", () => {
     expect(css).toBe("");
   });
 
+  it("neutralizes */ in a node name so it cannot close the CSS comment", () => {
+    const node: FlatSceneNode = {
+      id: "rect1",
+      type: "rect",
+      name: "Evil */ *{background:url(https://evil/?x)} /*",
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 40,
+      fill: "#ff0000",
+    } as unknown as FlatSceneNode;
+
+    const { css } = buildCssForNodes(["rect1"], { rect1: node });
+
+    // The comment must stay closed by our own emitted "*/" only — the
+    // node-supplied "*/" must be neutralized so it can't terminate the
+    // comment early and leak a live "*{...}" rule into the stylesheet.
+    const commentMatches = css.match(/\/\*[\s\S]*?\*\//g);
+    expect(commentMatches).not.toBeNull();
+    // The malicious name must not split into two comments (i.e. its "*/"
+    // must not close the comment early) — there should be exactly one
+    // comment for this single node.
+    expect(commentMatches).toHaveLength(1);
+    // The injected rule must not appear as a live (uncommented) CSS rule.
+    const liveCss = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(liveCss).not.toContain("url(https://evil/?x)");
+  });
+
   it("ignores unrelated variables in the store beyond the referenced one", () => {
     useVariableStore.setState({
       variables: [
