@@ -13,6 +13,7 @@ import { extractCssUrl, parseColorWithOpacity } from '@/lib/htmlToDesign/colorPa
 import { parseCssLinearGradient } from '@/lib/htmlToDesign/gradientParsing'
 import { applyTextProps, parseShadows } from '@/lib/htmlToDesign/styleApplication'
 import { svgTextToDataUrl } from '@/lib/htmlToDesign/svgHandling'
+import { maybeApplyAutoLayout } from './autoLayoutInference'
 import { isH2dElementNode, isH2dTextNode } from './h2dTypes'
 import type { H2dDocument, H2dElementNode, H2dNode, H2dRect, H2dTextNode as H2dTextNodeType } from './h2dTypes'
 
@@ -126,7 +127,8 @@ function relRect(rect: H2dRect, parentRect: H2dRect): { x: number; y: number; wi
   return { x: rect.x - parentRect.x, y: rect.y - parentRect.y, width: rect.width, height: rect.height }
 }
 
-function px(value: string | undefined): number | null {
+/** Parse a resolved CSS length like '16px' into a number; `undefined`/unparseable (`normal`, a percentage, ...) -> `null`. */
+export function px(value: string | undefined): number | null {
   if (!value) return null
   const match = value.match(/^(-?\d+(?:\.\d+)?)px$/)
   if (!match) return null
@@ -358,6 +360,21 @@ function hasOwnVisualBox(styles: Record<string, string>): boolean {
   return false
 }
 
+/**
+ * Auto-layout is only attempted when every flow child of `frame` came
+ * straight from `elementChildren` (same order, one-to-one) — i.e. the
+ * element has no direct text content of its own. A direct text child
+ * (`convertTextElement`) is always synthesized as the FIRST child regardless
+ * of its real position in the original DOM order, so its presence would
+ * make the flow order unreliable for verification; skipping it here is
+ * conservative (never wrong, just occasionally misses a real flex box with
+ * mixed text+element children).
+ */
+function applyAutoLayoutIfPossible(frame: FrameNode, styles: Record<string, string>, elementChildren: H2dElementNode[], textChildren: H2dTextNodeType[]): void {
+  if (textChildren.length > 0 || elementChildren.length === 0) return
+  maybeApplyAutoLayout(frame, styles, elementChildren.map((c) => c.styles))
+}
+
 function convertFrame(node: H2dElementNode, elementChildren: H2dElementNode[], textChildren: H2dTextNodeType[], parentRect: H2dRect, ctx: ConvertCtx): FrameNode {
   const rel = relRect(node.rect, parentRect)
   const frame = makeFrame(node.tag, rel.x, rel.y, rel.width, rel.height)
@@ -378,6 +395,7 @@ function convertFrame(node: H2dElementNode, elementChildren: H2dElementNode[], t
     }
   }
   frame.children = children
+  applyAutoLayoutIfPossible(frame, node.styles, elementChildren, textChildren)
   return frame
 }
 
@@ -409,12 +427,17 @@ export function convertH2dToSceneNodes(document: H2dDocument): H2dConversionResu
   const root = makeFrame(document.documentTitle?.trim() || 'Pasted page', 0, 0, rootRect.width, rootRect.height)
   applyBackground(root, body, ctx)
   applyCommonProps(root, body, ctx)
+  const bodyElementChildren = visibleElementChildren(body, ctx)
   const children: SceneNode[] = []
-  for (const child of visibleElementChildren(body, ctx)) {
+  for (const child of bodyElementChildren) {
     const converted = convertElement(child, rootRect, ctx)
     if (converted) children.push(converted)
   }
   root.children = children
+  // BODY's own direct text (if any) is discarded (see comment above), so it
+  // never counts as a `textChildren` blocker here — the root always
+  // qualifies on that front the same way convertFrame's children do.
+  applyAutoLayoutIfPossible(root, body.styles, bodyElementChildren, [])
 
   return { nodes: [root], warnings: ctx.warnings }
 }

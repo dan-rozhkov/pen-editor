@@ -11,7 +11,7 @@ import { generateId } from "@/types/scene";
 import { hasPadding, hasVisualStyling, parsePadding } from "./elementChecks";
 import { measureNodeContents } from "./textMeasurement";
 
-const CSS_ALIGN_ITEMS_MAP: Record<string, AlignItems> = {
+export const CSS_ALIGN_ITEMS_MAP: Record<string, AlignItems> = {
   "flex-start": "flex-start",
   "start": "flex-start",
   "flex-end": "flex-end",
@@ -20,7 +20,7 @@ const CSS_ALIGN_ITEMS_MAP: Record<string, AlignItems> = {
   "stretch": "stretch",
 };
 
-const CSS_JUSTIFY_CONTENT_MAP: Record<string, JustifyContent> = {
+export const CSS_JUSTIFY_CONTENT_MAP: Record<string, JustifyContent> = {
   "flex-start": "flex-start",
   "start": "flex-start",
   "flex-end": "flex-end",

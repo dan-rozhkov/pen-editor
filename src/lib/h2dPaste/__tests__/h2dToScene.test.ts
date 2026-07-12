@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FrameNode, ShadowEffect, TextNode } from '@/types/scene'
+import { calculateFrameLayout } from '@/utils/yogaLayout'
 import { convertH2dToSceneNodes } from '../h2dToScene'
 import { parseH2dClipboardHtml } from '../parseH2dClipboard'
 import { H2D_FIXTURE_HTML } from './h2dFixtureHtml'
@@ -113,6 +114,59 @@ describe('convertH2dToSceneNodes (real fixture)', () => {
     const image = findImage(root)
     expect(image).toBeTruthy()
     expect(image!.imageFill!.url.startsWith('data:')).toBe(true)
+  })
+
+  it('infers auto-layout on the hero SECTION (flex column, gap 16, padding 48) and preserves child positions exactly', () => {
+    const { nodes } = convertFixture()
+    const root = nodes[0] as FrameNode
+    const hero = root.children.find((c) => c.type === 'frame') as FrameNode
+    expect(hero.layout).toBeTruthy()
+    expect(hero.layout?.autoLayout).toBe(true)
+    expect(hero.layout?.flexDirection).toBe('column')
+    expect(hero.layout?.gap).toBe(16)
+    expect(hero.layout?.paddingTop).toBe(48)
+    expect(hero.layout?.paddingRight).toBe(48)
+    expect(hero.layout?.paddingBottom).toBe(48)
+    expect(hero.layout?.paddingLeft).toBe(48)
+
+    // Paste fidelity: replaying the engine over the applied layout must
+    // reproduce the exact captured x/y of every flow child.
+    const results = calculateFrameLayout(hero)
+    expect(results.length).toBe(hero.children.length)
+    const byId = new Map(results.map((r) => [r.id, r]))
+    for (const child of hero.children) {
+      const r = byId.get(child.id)
+      expect(r).toBeTruthy()
+      expect(r!.x).toBeCloseTo(child.x, 0)
+      expect(r!.y).toBeCloseTo(child.y, 0)
+    }
+  })
+
+  it('infers auto-layout on the cards row DIV (flex row, gap 20, padding 32/48) and preserves child positions exactly', () => {
+    const { nodes } = convertFixture()
+    const root = nodes[0] as FrameNode
+    // The cards row is the root's second frame child (after the hero SECTION).
+    const frameChildren = root.children.filter((c): c is FrameNode => c.type === 'frame')
+    const cardsRow = frameChildren[1]
+    expect(cardsRow).toBeTruthy()
+    expect(cardsRow.layout).toBeTruthy()
+    expect(cardsRow.layout?.autoLayout).toBe(true)
+    expect(cardsRow.layout?.flexDirection).toBe('row')
+    expect(cardsRow.layout?.gap).toBe(20)
+    expect(cardsRow.layout?.paddingTop).toBe(32)
+    expect(cardsRow.layout?.paddingBottom).toBe(32)
+    expect(cardsRow.layout?.paddingLeft).toBe(48)
+    expect(cardsRow.layout?.paddingRight).toBe(48)
+
+    const results = calculateFrameLayout(cardsRow)
+    expect(results.length).toBe(cardsRow.children.length)
+    const byId = new Map(results.map((r) => [r.id, r]))
+    for (const child of cardsRow.children) {
+      const r = byId.get(child.id)
+      expect(r).toBeTruthy()
+      expect(r!.x).toBeCloseTo(child.x, 0)
+      expect(r!.y).toBeCloseTo(child.y, 0)
+    }
   })
 })
 
