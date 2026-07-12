@@ -179,11 +179,36 @@ export function applyBasePropsToText(node: TextNode, style: CSSStyleDeclaration)
   if (opacity < 1) node.opacity = opacity;
 }
 
+/**
+ * The subset of `CSSStyleDeclaration` that `applyTextProps` reads. Declared as
+ * a plain interface with optional string fields (rather than
+ * `Pick<CSSStyleDeclaration, ...>`) so callers that don't have a live DOM
+ * style object — e.g. h2d paste, which only has a `Record<string, string>` of
+ * resolved styles — can pass a plain object matching it, without `as any`.
+ * `CSSStyleDeclaration`'s (always-present, always-string) fields are a valid
+ * subtype, so the live-DOM caller is unaffected.
+ */
+export interface TextStyleSource {
+  fontSize?: string;
+  fontFamily?: string;
+  fontWeight?: string;
+  fontStyle?: string;
+  color?: string;
+  textAlign?: string;
+  lineHeight?: string;
+  letterSpacing?: string;
+  marginBottom?: string;
+  textDecorationLine?: string;
+  textDecoration?: string;
+  textTransform?: string;
+}
+
 /** Apply typography properties from CSS to a TextNode */
-export function applyTextProps(node: TextNode, style: CSSStyleDeclaration): void {
+export function applyTextProps(node: TextNode, style: TextStyleSource): void {
   // Font size
-  const fontSize = parseFloat(style.fontSize);
-  if (fontSize) node.fontSize = fontSize;
+  const fontSize = parseFloat(style.fontSize ?? "");
+  const hasFontSize = Number.isFinite(fontSize) && fontSize > 0;
+  if (hasFontSize) node.fontSize = fontSize;
 
   // Font family (first family)
   const fontFamily = style.fontFamily;
@@ -204,7 +229,7 @@ export function applyTextProps(node: TextNode, style: CSSStyleDeclaration): void
   }
 
   // Text color → fill
-  const color = parseColorWithOpacity(style.color);
+  const color = style.color ? parseColorWithOpacity(style.color) : null;
   if (color) {
     node.fill = color.color;
     if (color.opacity !== undefined) node.fillOpacity = color.opacity;
@@ -217,8 +242,8 @@ export function applyTextProps(node: TextNode, style: CSSStyleDeclaration): void
   }
 
   // Line height
-  const lineHeight = parseFloat(style.lineHeight);
-  if (lineHeight && fontSize && !isNaN(lineHeight)) {
+  const lineHeight = parseFloat(style.lineHeight ?? "");
+  if (Number.isFinite(lineHeight) && lineHeight > 0 && hasFontSize) {
     const ratio = lineHeight / fontSize;
     if (ratio > 0 && ratio !== 1.2 && isFinite(ratio)) {
       node.lineHeight = Math.round(ratio * 100) / 100;
@@ -226,7 +251,7 @@ export function applyTextProps(node: TextNode, style: CSSStyleDeclaration): void
   }
 
   // Letter spacing
-  const letterSpacing = parseFloat(style.letterSpacing);
+  const letterSpacing = parseFloat(style.letterSpacing ?? "");
   if (letterSpacing && !isNaN(letterSpacing) && letterSpacing !== 0) {
     node.letterSpacing = letterSpacing;
   }
@@ -236,7 +261,7 @@ export function applyTextProps(node: TextNode, style: CSSStyleDeclaration): void
   // designToHtml export instead puts `margin-bottom` on per-paragraph child
   // `<div>`s (see `buildSpacedParagraphsHtml`), which this element-level read
   // doesn't see — round-tripping that shape isn't attempted here.
-  const marginBottom = parseFloat(style.marginBottom);
+  const marginBottom = parseFloat(style.marginBottom ?? "");
   if (marginBottom && !isNaN(marginBottom) && marginBottom > 0) {
     node.paragraphSpacing = marginBottom;
   }

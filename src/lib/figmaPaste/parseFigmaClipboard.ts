@@ -14,29 +14,12 @@
 import { compileSchema, decodeBinarySchema } from 'kiwi-schema'
 import { inflateSync } from 'fflate'
 import { decompress as zstdDecompress } from 'fzstd'
+import { extractBase64Section, base64ToBytes } from '@/lib/clipboardPayload'
 import { DATA_END, DATA_START, META_END, META_START } from './detect'
 import type { FigClipboardMeta, FigMessage, FigPasteData } from './figTypes'
 
 const FIG_KIWI_PRELUDE = 'fig-kiwi'
 const FIG_JAM_PRELUDE = 'fig-jam.'
-
-function extractBase64Section(html: string, start: string, end: string): string | null {
-  const startIndex = html.indexOf(start)
-  if (startIndex === -1) return null
-  const endIndex = html.indexOf(end, startIndex + start.length)
-  if (endIndex === -1) return null
-  // The base64 payload may contain whitespace/newlines inserted by the clipboard
-  return html.slice(startIndex + start.length, endIndex).replace(/\s+/g, '')
-}
-
-function base64ToBytes(base64: string): Uint8Array {
-  const binary = atob(base64)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i)
-  }
-  return bytes
-}
 
 interface FigArchive {
   version: number

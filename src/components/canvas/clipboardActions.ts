@@ -14,7 +14,8 @@ import { createRefFromComponent } from "@/utils/componentUtils";
 import { findNodeByPath } from "@/utils/instanceRuntime";
 import { parseSvgToNodes } from "@/utils/svgUtils";
 import { convertFigmaClipboardHtml, isFigmaClipboardHtml } from "@/lib/figmaPaste";
-import { applyFigmaPasteNodes } from "./figmaPasteImport";
+import { convertH2dClipboardHtml, isH2dClipboardHtml } from "@/lib/h2dPaste";
+import { applyExternalPasteNodes } from "./externalPasteImport";
 import {
   applyImageImportPlans,
   createImageImportPlan,
@@ -205,6 +206,14 @@ export function createClipboardActions(deps: ClipboardActionDeps) {
       return;
     }
 
+    // Figma/h2d clipboard payloads are decoded to native nodes, 1:1. A decode
+    // failure or an empty result doesn't return early: `preventDefault` has
+    // already run (so the browser won't insert raw HTML), but execution falls
+    // through to the raw-image / SVG / internal-clipboard fallbacks below —
+    // otherwise a corrupt payload sitting alongside a valid image clipboard
+    // item would silently paste nothing.
+    let externalPasteHandled = false;
+
     // Figma clipboard (Ctrl+C in Figma) — decode to native nodes, 1:1
     if (isFigmaClipboardHtml(htmlText)) {
       e.preventDefault();
@@ -233,7 +242,7 @@ export function createClipboardActions(deps: ClipboardActionDeps) {
               // keep the gray placeholder if the raster can't be read
             }
           }
-          applyFigmaPasteNodes({
+          applyExternalPasteNodes({
             nodes: result.nodes,
             viewportCenter: getViewportCenter(dimensions),
             addNode,
@@ -241,6 +250,7 @@ export function createClipboardActions(deps: ClipboardActionDeps) {
             startBatch,
             endBatch,
           });
+          externalPasteHandled = true;
           // No raster to recover from — tell the user why image fills are missing
           // instead of leaving a silent gray box.
           if (result.unresolvedImageCount > 0 && !recoveredImage) {
@@ -251,12 +261,47 @@ export function createClipboardActions(deps: ClipboardActionDeps) {
           if (result.warnings.length > 0) {
             console.warn("[figma-paste] imported with warnings:", result.warnings);
           }
+        } else if (result) {
+          console.warn("[figma-paste] decoded clipboard produced no nodes");
         }
       } catch (error) {
         console.warn("[figma-paste] failed to decode Figma clipboard data:", error);
       }
-      return;
+    } else if (isH2dClipboardHtml(htmlText)) {
+      // h2d clipboard (html.to.design / Figma-capture) — decode to native nodes, 1:1
+      e.preventDefault();
+      try {
+        const result = await convertH2dClipboardHtml(htmlText);
+        if (result) {
+          // Log warnings regardless of whether any nodes came out — an
+          // empty result is exactly when the warnings are most useful.
+          if (result.warnings.length > 0) {
+            console.warn("[h2d-paste] imported with warnings:", result.warnings);
+          }
+          if (result.nodes.length > 0) {
+            applyExternalPasteNodes({
+              nodes: result.nodes,
+              viewportCenter: getViewportCenter(dimensions),
+              addNode,
+              saveHistory,
+              startBatch,
+              endBatch,
+            });
+            externalPasteHandled = true;
+            if (result.warnings.some((w) => /image/i.test(w))) {
+              toast("Pasted, but some images couldn't be transferred and were kept as external links.");
+            }
+          } else {
+            toast("Couldn't find any pasteable content in that page capture.");
+          }
+        }
+      } catch (error) {
+        console.warn("[h2d-paste] failed to decode h2d clipboard data:", error);
+        toast("Couldn't paste that content — the clipboard data looks corrupted.");
+      }
     }
+
+    if (externalPasteHandled) return;
 
     if (imageItems.length > 0) {
       e.preventDefault();
