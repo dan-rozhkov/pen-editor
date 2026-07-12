@@ -20,7 +20,7 @@ import { pushRenderTheme, popRenderTheme } from "./colorHelpers";
 import { createNodeContainer, isInsideRef } from "./index";
 import { drawLayoutGrids } from "./layoutGridRenderer";
 import { applySiblingMasks } from "./maskHelpers";
-import { isOutlineRenderMode, strokeOutlinePath } from "./outlineHelpers";
+import { getOutlineStrokeColor, isOutlineRenderMode, strokeOutlinePath } from "./outlineHelpers";
 
 /** Container with the frame's effective (fit_content-resolved) size attached */
 type FrameContainer = Container & {
@@ -426,7 +426,7 @@ export function drawFrameBackground(
     drawRoundedShape(target, width, height, node.cornerRadius, node.cornerRadiusPerCorner, node.cornerSmoothing);
   if (isOutlineRenderMode()) {
     drawShape(gfx);
-    strokeOutlinePath(gfx);
+    strokeOutlinePath(gfx, getOutlineStrokeColor(node));
     return;
   }
   const pathReady = applyFills(gfx, node, width, height, drawShape);
