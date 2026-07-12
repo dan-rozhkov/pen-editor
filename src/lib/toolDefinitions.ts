@@ -37,8 +37,18 @@ export interface ToolDefinition {
  * tool set and its shortcuts can't drift between the two surfaces.
  */
 export const LEADING_TOOLS: ToolDefinition[] = [
-  { icon: NavigationArrowIcon, label: "Select", tool: "cursor", shortcut: "V" },
   { icon: HashStraight, label: "Frame", tool: "frame", shortcut: "F" },
+];
+
+export const MOVE_TOOL: ToolDefinition = {
+  icon: NavigationArrowIcon,
+  label: "Move",
+  tool: "cursor",
+  shortcut: "V",
+};
+
+export const MOVE_SUB_TOOLS: ToolDefinition[] = [
+  { icon: ResizeIcon, label: "Scale", tool: "scale", shortcut: "K" },
 ];
 
 export const RECT_TOOL: ToolDefinition = {
@@ -70,11 +80,12 @@ export const PEN_SUB_TOOLS: ToolDefinition[] = [
 export const TRAILING_TOOLS: ToolDefinition[] = [
   { icon: TextTIcon, label: "Text", tool: "text", shortcut: "T" },
   { icon: CodeIcon, label: "Embed", tool: "embed", shortcut: "E" },
-  { icon: ResizeIcon, label: "Scale", tool: "scale", shortcut: "K" },
 ];
 
 /** Every tool, flattened into a single list (used by the command palette). */
 export const ALL_TOOLS: ToolDefinition[] = [
+  MOVE_TOOL,
+  ...MOVE_SUB_TOOLS,
   ...LEADING_TOOLS,
   RECT_TOOL,
   ...RECT_SUB_TOOLS,
