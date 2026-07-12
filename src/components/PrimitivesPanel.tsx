@@ -13,7 +13,6 @@ import {
 } from "../lib/toolDefinitions";
 import { IconButton } from "./ui/IconButton";
 import { Separator } from "./ui/separator";
-import { ButtonGroup } from "./ui/button-group";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,7 +42,7 @@ export function PrimitivesPanel() {
     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50">
       <div className="flex items-center gap-1 p-1.5 bg-surface-panel border border-border-default rounded-2xl shadow-[0_0px_3px_rgba(0,0,0,0.04)]">
         <DropdownMenu>
-          <ButtonGroup orientation="horizontal" className="gap-0">
+          <div className="flex items-center gap-1">
             <IconButton
               variant="ghost"
               size="lg"
@@ -77,7 +76,7 @@ export function PrimitivesPanel() {
                 </IconButton>
               }
             />
-          </ButtonGroup>
+          </div>
 
           <DropdownMenuContent align="center" sideOffset={8}>
             {MOVE_SUB_TOOLS.map(({ icon: Icon, label, tool, shortcut }) => {
@@ -127,7 +126,7 @@ export function PrimitivesPanel() {
         })}
 
         <DropdownMenu>
-          <ButtonGroup orientation="horizontal" className="gap-0">
+          <div className="flex items-center gap-1">
             <IconButton
               variant="ghost"
               size="lg"
@@ -161,7 +160,7 @@ export function PrimitivesPanel() {
                 </IconButton>
               }
             />
-          </ButtonGroup>
+          </div>
 
           <DropdownMenuContent align="center" sideOffset={8}>
             {rectSubTools.map(({ icon: Icon, label, tool, shortcut }) => {
@@ -186,7 +185,7 @@ export function PrimitivesPanel() {
         </DropdownMenu>
 
         <DropdownMenu>
-          <ButtonGroup orientation="horizontal" className="gap-0">
+          <div className="flex items-center gap-1">
             <IconButton
               variant="ghost"
               size="lg"
@@ -220,7 +219,7 @@ export function PrimitivesPanel() {
                 </IconButton>
               }
             />
-          </ButtonGroup>
+          </div>
 
           <DropdownMenuContent align="center" sideOffset={8}>
             {penSubTools.map(({ icon: Icon, label, tool, shortcut }) => {
