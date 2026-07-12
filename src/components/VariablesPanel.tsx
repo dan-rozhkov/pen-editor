@@ -241,7 +241,7 @@ function AddVariableDropdown({
 }) {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger>{children}</DropdownMenuTrigger>
+      <DropdownMenuTrigger className="h-6">{children}</DropdownMenuTrigger>
       <DropdownMenuContent
         side={side}
         align="end"

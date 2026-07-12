@@ -260,8 +260,7 @@ export function TextStylesPanelContent() {
                   colSpan={7}
                   className="text-center text-text-disabled text-xs py-12"
                 >
-                  No text styles yet — create one from a selected text layer's
-                  properties panel, or add one here.
+                  No text styles yet
                 </TableCell>
               </TableRow>
             ) : (
