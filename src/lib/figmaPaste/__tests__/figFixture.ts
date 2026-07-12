@@ -112,6 +112,7 @@ enum StackJustify {
   CENTER = 2;
   MAX = 3;
   SPACE_EVENLY = 4;
+  SPACE_BETWEEN = 5;
 }
 
 enum StackAlign {
@@ -301,6 +302,11 @@ message NodeChange {
   StackPositioning stackPositioning = 52;
   VectorData vectorData = 53;
   uint styleID = 54;
+  float borderTopWeight = 55;
+  float borderRightWeight = 56;
+  float borderBottomWeight = 57;
+  float borderLeftWeight = 58;
+  bool borderStrokeWeightsIndependent = 59;
 }
 
 message Blob {

@@ -163,6 +163,11 @@ export interface FigNodeChange {
   maskIsOutline?: boolean
   cornerRadius?: number
   strokeWeight?: number
+  borderTopWeight?: number
+  borderRightWeight?: number
+  borderBottomWeight?: number
+  borderLeftWeight?: number
+  borderStrokeWeightsIndependent?: boolean
   strokeAlign?: 'CENTER' | 'INSIDE' | 'OUTSIDE'
   strokeCap?: string
   strokeJoin?: 'MITER' | 'BEVEL' | 'ROUND'
@@ -206,7 +211,7 @@ export interface FigNodeChange {
   stackVerticalPadding?: number
   stackPaddingRight?: number
   stackPaddingBottom?: number
-  stackPrimaryAlignItems?: 'MIN' | 'CENTER' | 'MAX' | 'SPACE_EVENLY'
+  stackPrimaryAlignItems?: 'MIN' | 'CENTER' | 'MAX' | 'SPACE_EVENLY' | 'SPACE_BETWEEN'
   stackCounterAlignItems?: 'MIN' | 'CENTER' | 'MAX' | 'BASELINE'
   stackPrimarySizing?: FigStackSize
   stackCounterSizing?: FigStackSize

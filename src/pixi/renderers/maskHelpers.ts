@@ -31,9 +31,10 @@ import { resolveMasking, getMaskMode } from "@/lib/masks/maskResolution";
  * neither a masker nor masked is reset to `renderable = true`, so toggling
  * `isMask` off (or reordering children) always restores normal rendering.
  *
- * `.mask` ownership: a node's own container can already carry a `.mask` set
- * by its own renderer for an unrelated reason — currently only
- * `frameRenderer`'s `clip` handling, via a child labeled `"frame-mask"`.
+ * `.mask` ownership: a node's own container may already carry a `.mask` set
+ * by its renderer for an unrelated reason. Legacy frame containers used a
+ * direct child labeled `"frame-mask"`; current frames apply that mask to
+ * `"frame-children"` so their own background and outer shadow stay visible.
  * PixiJS only supports one `.mask` per container, so when a sibling masker
  * applies to a clipped frame, the sibling mask *wins* and the frame's own
  * clip is temporarily suppressed for as long as it's masked (matches how an
@@ -69,6 +70,16 @@ import { resolveMasking, getMaskMode } from "@/lib/masks/maskResolution";
  * still get a correct (if less optimal) cleanup pass.
  */
 const hostsWithActiveMasking = new WeakSet<Container>();
+
+function getOwnContainerMask(container: Container): Container | null {
+  const clip = container.getChildByLabel("frame-mask") as Container | null;
+  if (!clip) return null;
+  const frameChildren = container.getChildByLabel("frame-children") as Container | null;
+  // Frame clipping belongs to its child-content container so the frame's own
+  // background and outer shadow remain visible. It is not a mask to restore
+  // onto the frame container after sibling masking changes.
+  return frameChildren?.mask === clip ? null : clip;
+}
 
 /**
  * Resolve the actual Pixi object to assign as `.mask` for a given masker
@@ -115,7 +126,7 @@ export function applySiblingMasks(
       if (!container) continue;
       container.renderable = true;
       if (!container.mask) continue; // nothing to undo — cheap common case
-      const ownClip = container.getChildByLabel("frame-mask") as Container | null;
+      const ownClip = getOwnContainerMask(container);
       if (container.mask !== ownClip) container.mask = ownClip;
     }
     return;
@@ -136,9 +147,9 @@ export function applySiblingMasks(
     if (maskerId) {
       container.mask = resolveMaskTarget(maskerId, nodesById, getContainer);
     } else {
-      // Restore this node's own clip mask, if it has one, instead of
-      // clobbering it with `null`.
-      container.mask = (container.getChildByLabel("frame-mask") as Container | null) ?? null;
+      // Restore a renderer-owned container mask, if it has one. A frame's
+      // child-content clip is deliberately excluded by getOwnContainerMask.
+      container.mask = getOwnContainerMask(container);
     }
   }
 }

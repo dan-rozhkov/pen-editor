@@ -5,6 +5,7 @@ import type {
   GradientFill,
   ImageFill,
   Paint,
+  PerSideStroke,
   SceneNode,
   ShadowEffect,
 } from '@/types/scene'
@@ -69,6 +70,7 @@ export type MutableBase = {
   stroke?: string
   strokeOpacity?: number
   strokeWidth?: number
+  strokeWidthPerSide?: PerSideStroke
   strokeAlign?: 'center' | 'inside' | 'outside'
   effect?: ShadowEffect
   // Figma-style effect stack — set instead of the legacy single `effect`

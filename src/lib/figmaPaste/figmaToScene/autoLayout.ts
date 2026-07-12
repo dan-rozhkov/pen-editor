@@ -24,6 +24,7 @@ const STACK_JUSTIFY: Record<string, JustifyContent> = {
   CENTER: 'center',
   MAX: 'flex-end',
   SPACE_EVENLY: 'space-between',
+  SPACE_BETWEEN: 'space-between',
 }
 
 const STACK_ALIGN: Record<string, AlignItems> = {

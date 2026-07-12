@@ -100,6 +100,27 @@ describe('convertFigmaClipboardHtml', () => {
     expect(rect.strokeAlign).toBe('inside')
   })
 
+  it('preserves an individual stroke applied to only one side', async () => {
+    const html = clipboardWith([
+      onCanvas({
+        guid: guid(2),
+        type: 'FRAME',
+        name: 'Bottom divider',
+        size: { x: 200, y: 48 },
+        transform: identityTransform(),
+        strokePaints: [solidPaint(0, 0, 0)],
+        strokeWeight: 1,
+        borderBottomWeight: 1,
+        borderStrokeWeightsIndependent: true,
+        strokeAlign: 'INSIDE',
+      }),
+    ])
+
+    const frame = (await convertFigmaClipboardHtml(html))!.nodes[0] as FrameNode
+    expect(frame.stroke).toBe('#000000')
+    expect(frame.strokeWidthPerSide).toEqual({ top: 0, right: 0, bottom: 1, left: 0 })
+  })
+
   it('keeps z-order from fractional position strings (bottom first)', async () => {
     const html = clipboardWith([
       onCanvas({ guid: guid(2), type: 'FRAME', name: 'Root', size: { x: 10, y: 10 }, transform: identityTransform() }),
@@ -516,6 +537,44 @@ describe('convertFigmaClipboardHtml', () => {
     expect(gradient.stops[1].opacity).toBeCloseTo(0.5)
   })
 
+  it('converts radial gradients instead of dropping the fill', async () => {
+    const html = clipboardWith([
+      onCanvas({
+        guid: guid(2),
+        type: 'RECTANGLE',
+        size: { x: 160, y: 100 },
+        transform: identityTransform(),
+        fillPaints: [
+          {
+            type: 'GRADIENT_RADIAL',
+            visible: true,
+            opacity: 1,
+            transform: identityTransform(),
+            stops: [
+              { color: { r: 1, g: 1, b: 1, a: 1 }, position: 0 },
+              { color: { r: 0, g: 0, b: 0, a: 1 }, position: 1 },
+            ],
+          },
+        ],
+      }),
+    ])
+
+    const rect = (await convertFigmaClipboardHtml(html))!.nodes[0]
+    expect(rect.fill).toBeUndefined()
+    expect(rect.gradientFill).toMatchObject({
+      type: 'radial',
+      startX: 0.5,
+      startY: 0.5,
+      endX: 0.5,
+      endY: 0.5,
+      endRadius: 0.5,
+    })
+    expect(rect.gradientFill?.stops).toEqual([
+      { color: '#ffffff', position: 0 },
+      { color: '#000000', position: 1 },
+    ])
+  })
+
   it('decomposes rotation from the transform matrix', async () => {
     const angle = Math.PI / 2 // 90° clockwise on screen
     const html = clipboardWith([
@@ -699,6 +758,26 @@ describe('convertFigmaClipboardHtml', () => {
     expect(frame.layout!.gap).toBe(0)
   })
 
+  it('preserves space-between from current Figma clipboard payloads', async () => {
+    const html = clipboardWith([
+      onCanvas({
+        guid: guid(2),
+        type: 'FRAME',
+        size: { x: 200, y: 50 },
+        transform: identityTransform(),
+        stackMode: 'HORIZONTAL',
+        stackSpacing: 119,
+        stackPrimaryAlignItems: 'SPACE_BETWEEN',
+      }),
+    ])
+
+    const frame = (await convertFigmaClipboardHtml(html))!.nodes[0] as FrameNode
+    expect(frame.layout).toMatchObject({
+      justifyContent: 'space-between',
+      gap: 0,
+    })
+  })
+
   it('does not enable auto-layout for plain frames', async () => {
     const html = clipboardWith([
       onCanvas({
@@ -742,6 +821,35 @@ describe('convertFigmaClipboardHtml', () => {
       offset: { x: 0, y: 4 },
       blur: 8,
       spread: 2,
+    })
+  })
+
+  it('maps a clipped frame drop shadow without dropping the effect', async () => {
+    const html = clipboardWith([
+      onCanvas({
+        guid: guid(2),
+        type: 'FRAME',
+        size: { x: 100, y: 100 },
+        transform: identityTransform(),
+        effects: [
+          {
+            type: 'DROP_SHADOW',
+            visible: true,
+            color: { r: 0, g: 0, b: 0, a: 0.25 },
+            offset: { x: 0, y: 4 },
+            radius: 8,
+            spread: 2,
+          },
+        ],
+      }),
+    ])
+
+    const frame = (await convertFigmaClipboardHtml(html))!.nodes[0] as FrameNode
+    expect(frame.clip).toBe(true)
+    expect(frame.effect).toMatchObject({
+      type: 'shadow',
+      shadowType: 'outer',
+      color: '#00000040',
     })
   })
 

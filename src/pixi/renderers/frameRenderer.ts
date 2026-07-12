@@ -157,13 +157,15 @@ export function createFrameContainer(
     );
     mask.fill(0xffffff);
     container.addChild(mask);
-    container.mask = mask;
   }
 
   // Children container
   const childrenContainer = new Container();
   childrenContainer.label = "frame-children";
   container.addChild(childrenContainer);
+  if (node.clip) {
+    childrenContainer.mask = container.getChildByLabel("frame-mask");
+  }
 
   // If this frame overrides the theme, push it for children
   if (node.themeOverride) {
@@ -344,9 +346,11 @@ export function updateFrameContainer(
       if (!existingMask) {
         container.addChild(mask);
       }
-      container.mask = mask;
+      const childrenContainer = container.getChildByLabel("frame-children") as Container;
+      if (childrenContainer) childrenContainer.mask = mask;
     } else if (existingMask) {
-      container.mask = null;
+      const childrenContainer = container.getChildByLabel("frame-children") as Container;
+      if (childrenContainer) childrenContainer.mask = null;
       container.removeChild(existingMask);
       existingMask.destroy();
     }

@@ -103,6 +103,14 @@ function applyStrokePaints(base: MutableBase, change: FigNodeChange, ctx: Conver
   base.stroke = stroke.color
   if (stroke.opacity != null) base.strokeOpacity = stroke.opacity
   base.strokeWidth = stroke.width
+  if (change.borderStrokeWeightsIndependent) {
+    base.strokeWidthPerSide = {
+      top: change.borderTopWeight ?? 0,
+      right: change.borderRightWeight ?? 0,
+      bottom: change.borderBottomWeight ?? 0,
+      left: change.borderLeftWeight ?? 0,
+    }
+  }
   if (change.strokeAlign) base.strokeAlign = stroke.align
 }
 
