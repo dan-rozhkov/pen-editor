@@ -36,7 +36,7 @@ export function PrimitivesPanel() {
   const isPenSubToolActive = penSubTools.some((t) => t.tool === activeTool);
   const isPenActive = activeTool === "pen";
   const toolButtonBaseClass =
-    "group relative size-9 p-0 rounded-lg transition-none outline-none";
+    "group relative size-9 p-0 rounded-lg! transition-none outline-none";
 
   return (
     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50">
