@@ -12,6 +12,7 @@ import {
   TRAILING_TOOLS,
 } from "../lib/toolDefinitions";
 import { IconButton } from "./ui/IconButton";
+import { Separator } from "./ui/separator";
 import { ButtonGroup } from "./ui/button-group";
 import {
   DropdownMenu,
@@ -266,6 +267,11 @@ export function PrimitivesPanel() {
           );
         })}
 
+        <Separator
+          orientation="vertical"
+          className="mx-2 h-6"
+          style={{ alignSelf: "center" }}
+        />
         <Layers3DToggle />
       </div>
     </div>
