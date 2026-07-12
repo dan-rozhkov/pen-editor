@@ -9,12 +9,18 @@
  * clipboard `text/html` string. Returns null if either marker is absent.
  */
 export function extractBase64Section(html: string, start: string, end: string): string | null {
-  const startIndex = html.indexOf(start)
+  const rawStartIndex = html.indexOf(start)
+  const escapedStart = start.replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+  const escapedEnd = end.replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+  const usesEscapedMarkers = rawStartIndex === -1
+  const actualStart = usesEscapedMarkers ? escapedStart : start
+  const actualEnd = usesEscapedMarkers ? escapedEnd : end
+  const startIndex = html.indexOf(actualStart)
   if (startIndex === -1) return null
-  const endIndex = html.indexOf(end, startIndex + start.length)
+  const endIndex = html.indexOf(actualEnd, startIndex + actualStart.length)
   if (endIndex === -1) return null
   // The base64 payload may contain whitespace/newlines inserted by the clipboard
-  return html.slice(startIndex + start.length, endIndex).replace(/\s+/g, '')
+  return html.slice(startIndex + actualStart.length, endIndex).replace(/\s+/g, '')
 }
 
 /** Decode a base64 string into raw bytes. */

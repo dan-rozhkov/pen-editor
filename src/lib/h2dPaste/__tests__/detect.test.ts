@@ -7,6 +7,14 @@ describe('isH2dClipboardHtml', () => {
     expect(isH2dClipboardHtml(H2D_FIXTURE_HTML)).toBe(true)
   })
 
+  it('detects markers escaped inside clipboard HTML attributes', () => {
+    const escapedHtml = H2D_FIXTURE_HTML
+      .replaceAll('<!--', '&lt;!--')
+      .replaceAll('-->', '--&gt;')
+
+    expect(isH2dClipboardHtml(escapedHtml)).toBe(true)
+  })
+
   it('rejects a real Figma clipboard payload', () => {
     const figmaHtml =
       '<span data-metadata="<!--(figmeta)eyJhIjoxfQ==(/figmeta)-->"></span>' +

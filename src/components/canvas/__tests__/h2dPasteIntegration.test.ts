@@ -66,6 +66,19 @@ describe("handlePaste — h2d clipboard payload", () => {
     expect(selected).toEqual([root.id]);
   });
 
+  it("converts capture.js HTML with entity-escaped markers", async () => {
+    const { handlePaste } = makeActions();
+    const escapedHtml = H2D_FIXTURE_HTML
+      .replaceAll("<!--", "&lt;!--")
+      .replaceAll("-->", "--&gt;");
+
+    await handlePaste(fakeClipboardEvent(escapedHtml));
+
+    const state = useSceneStore.getState();
+    expect(state.rootIds).toHaveLength(1);
+    expect(state.nodesById[state.rootIds[0]]?.name).toBe("Capture test page");
+  });
+
   it("pastes the same h2d payload twice as two disjoint root frames", async () => {
     const { handlePaste } = makeActions();
 
