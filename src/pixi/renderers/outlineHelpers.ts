@@ -29,13 +29,13 @@ export function isOutlineRenderMode(): boolean {
 }
 
 /**
- * Stroke width that stays ~1px on screen regardless of the current viewport
+ * Stroke width that stays ~0.5px on screen regardless of the current viewport
  * zoom (matches the idiom used by the selection/hover overlays, e.g.
  * `selectionOverlay/helpers.ts`'s `gfx.stroke({ width: 1 / scale })`).
  */
 export function getOutlineStrokeWidth(): number {
   const scale = useViewportStore.getState().scale || 1;
-  return 1 / scale;
+  return 0.5 / scale;
 }
 
 /**

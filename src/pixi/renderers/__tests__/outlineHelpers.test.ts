@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   OUTLINE_STROKE_COLOR,
   getOutlineStrokeColor,
+  getOutlineStrokeWidth,
 } from "../outlineHelpers";
 import { COMPONENT_SELECTION_COLOR } from "@/pixi/selectionOverlay/constants";
 
@@ -13,5 +14,9 @@ describe("outline helpers", () => {
   it("keeps regular node outlines on the default palette color", () => {
     expect(getOutlineStrokeColor({ reusable: false })).toBe(OUTLINE_STROKE_COLOR);
     expect(getOutlineStrokeColor()).toBe(OUTLINE_STROKE_COLOR);
+  });
+
+  it("keeps outline strokes at half a screen pixel", () => {
+    expect(getOutlineStrokeWidth()).toBe(0.5);
   });
 });
