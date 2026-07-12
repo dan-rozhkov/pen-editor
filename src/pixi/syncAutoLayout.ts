@@ -43,7 +43,6 @@ export function createAutoLayoutManager(ctx: SyncContext) {
       nodesById: state.nodesById,
       childrenById: state.childrenById,
       bounds,
-      scale,
       margin,
     });
 

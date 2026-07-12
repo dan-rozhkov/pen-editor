@@ -7,12 +7,10 @@ interface ViewportRenderabilityInput {
   nodesById: Record<string, FlatSceneNode>;
   childrenById: Record<string, string[]>;
   bounds: ViewportBounds;
-  scale: number;
   margin: number;
 }
 
 const OVERVIEW_SCALE = 0.2;
-const MIN_TEXT_SCREEN_HEIGHT = 3;
 const EFFECT_LABELS = new Set([
   "shadow-layer",
   "inner-shadow-layer",
@@ -86,7 +84,6 @@ export function computeViewportRenderability({
   nodesById,
   childrenById,
   bounds,
-  scale,
   margin,
 }: ViewportRenderabilityInput): Map<string, boolean> {
   const result = new Map<string, boolean>();
@@ -101,14 +98,8 @@ export function computeViewportRenderability({
     if (!current) return;
 
     const hasRotation = hasRotatedAncestor || (current.rotation ?? 0) !== 0;
-    const isTinyOverviewText =
-      isOverviewScale(scale) &&
-      current.type === "text" &&
-      !current.isMask &&
-      current.height * scale < MIN_TEXT_SCREEN_HEIGHT;
     const renderable =
-      hasRotation ||
-      (!isTinyOverviewText && intersects(current, offsetX, offsetY, bounds, margin));
+      hasRotation || intersects(current, offsetX, offsetY, bounds, margin);
     result.set(id, renderable);
     if (!renderable) return;
 

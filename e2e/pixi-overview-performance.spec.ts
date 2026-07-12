@@ -107,7 +107,7 @@ test("overview culls nested detail and restores it after zooming in", async ({ p
     });
 
   await expect.poll(readRenderability).toEqual({
-    tinyText: false,
+    tinyText: true,
     distant: false,
     shadow: false,
     layerBlur: false,

@@ -30,7 +30,6 @@ describe("computeViewportRenderability", () => {
       nodesById,
       childrenById: { root: ["nearby", "distant"], distant: ["leaf"] },
       bounds: { minX: 0, minY: 0, maxX: 500, maxY: 500 },
-      scale: 1,
       margin: 0,
     });
 
@@ -40,7 +39,7 @@ describe("computeViewportRenderability", () => {
     expect(result.has("leaf")).toBe(false);
   });
 
-  it("omits tiny text details at overview scale without hiding mask nodes", () => {
+  it("keeps text renderable at overview scale", () => {
     const nodesById = {
       root: node("root", "frame", 0, 0, 500, 500),
       tiny: node("tiny", "text", 10, 10, 100, 20),
@@ -53,11 +52,10 @@ describe("computeViewportRenderability", () => {
       nodesById,
       childrenById: { root: ["tiny", "readable", "mask"] },
       bounds: { minX: 0, minY: 0, maxX: 500, maxY: 500 },
-      scale: 0.1,
       margin: 0,
     });
 
-    expect(result.get("tiny")).toBe(false);
+    expect(result.get("tiny")).toBe(true);
     expect(result.get("readable")).toBe(true);
     expect(result.get("mask")).toBe(true);
   });
@@ -73,7 +71,6 @@ describe("computeViewportRenderability", () => {
       nodesById,
       childrenById: { rotated: ["child"] },
       bounds: { minX: 0, minY: 0, maxX: 500, maxY: 500 },
-      scale: 1,
       margin: 0,
     });
 
