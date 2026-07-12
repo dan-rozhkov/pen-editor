@@ -184,6 +184,22 @@ describe('convertH2dToSceneNodes (synthetic cases)', () => {
     expect((nodes[0] as FrameNode).width).toBe(50)
   })
 
+  it('preserves BODY styles when h2d stores them as computed styles', () => {
+    const body = el('BODY', rect(0, 0, 100, 100), {}, [
+      el('DIV', rect(10, 10, 80, 80), { backgroundColor: 'rgb(255, 255, 255)' }),
+    ])
+    body.computedStyles = {
+      backgroundColor: 'rgb(12, 34, 56)',
+      overflow: 'hidden',
+    }
+
+    const { nodes } = convertH2dToSceneNodes(buildDocument(body))
+    const root = nodes[0] as FrameNode
+
+    expect(root.fill?.toLowerCase()).toBe('#0c2238')
+    expect(root.clip).toBe(true)
+  })
+
   it('skips whitespace-only text nodes and zero-size elements with no visible descendants', () => {
     const body = el('BODY', rect(0, 0, 100, 100), {}, [
       text('   \n  ', rect(0, 0, 0, 0)),

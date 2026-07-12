@@ -524,15 +524,22 @@ export function convertH2dToSceneNodes(document: H2dDocument): H2dConversionResu
     return { nodes: [], warnings: ['h2d document has no convertible root element'] }
   }
 
-  const rootRect = body.rect
+  // Some full-page h2d captures keep BODY's resolved page styles in
+  // `computedStyles` while `styles` is empty. Treat the explicit `styles`
+  // values as overrides, matching normal CSS precedence, so the page frame
+  // retains its background, clipping, effects, and layout properties.
+  const styledBody: H2dElementNode = body.computedStyles
+    ? { ...body, styles: { ...body.computedStyles, ...body.styles } }
+    : body
+  const rootRect = styledBody.rect
   // Deliberately NOT `makeFrame` + convertFrame's text-only fallback: the root
   // is always BODY (or the document root as a fallback), so its own direct
   // text content (if any) is discarded rather than nested as a text child —
   // only BODY's element children become the page's top-level nodes.
   const root = makeFrame(document.documentTitle?.trim() || 'Pasted page', 0, 0, rootRect.width, rootRect.height)
-  applyBackground(root, body, ctx)
-  applyCommonProps(root, body, ctx)
-  const bodyElementChildren = visibleElementChildren(body, ctx)
+  applyBackground(root, styledBody, ctx)
+  applyCommonProps(root, styledBody, ctx)
+  const bodyElementChildren = visibleElementChildren(styledBody, ctx)
   const children: SceneNode[] = []
   for (const child of bodyElementChildren) {
     const converted = convertElement(child, rootRect, ctx)
@@ -542,7 +549,7 @@ export function convertH2dToSceneNodes(document: H2dDocument): H2dConversionResu
   // BODY's own direct text (if any) is discarded (see comment above), so it
   // never counts as a `textChildren` blocker here — the root always
   // qualifies on that front the same way convertFrame's children do.
-  applyAutoLayoutIfPossible(root, body.styles, bodyElementChildren, [])
+  applyAutoLayoutIfPossible(root, styledBody.styles, bodyElementChildren, [])
 
   return { nodes: [root], warnings: ctx.warnings }
 }
