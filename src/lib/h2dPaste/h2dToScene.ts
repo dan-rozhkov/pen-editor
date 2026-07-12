@@ -13,6 +13,7 @@ import { extractCssUrl, parseColorWithOpacity } from '@/lib/htmlToDesign/colorPa
 import { parseCssLinearGradient } from '@/lib/htmlToDesign/gradientParsing'
 import { applyTextProps, parseShadows } from '@/lib/htmlToDesign/styleApplication'
 import { svgTextToDataUrl } from '@/lib/htmlToDesign/svgHandling'
+import { base64ToBytes } from '@/lib/clipboardPayload'
 import { maybeApplyAutoLayout } from './autoLayoutInference'
 import { isH2dElementNode, isH2dTextNode } from './h2dTypes'
 import type { H2dDocument, H2dElementNode, H2dNode, H2dRect, H2dTextNode as H2dTextNodeType } from './h2dTypes'
@@ -191,6 +192,14 @@ function strokeFromStyles(styles: Record<string, string>, ctx: ConvertCtx, name:
 
 /** Fill (solid/gradient/image) derived from backgroundColor/backgroundImage. */
 function applyBackground(base: Partial<FrameNode>, node: H2dElementNode, ctx: ConvertCtx): void {
+  const bgColor = node.styles.backgroundColor
+  if (bgColor) {
+    const parsed = parseColorWithOpacity(bgColor)
+    if (parsed) {
+      base.fill = parsed.color
+      if (parsed.opacity !== undefined) base.fillOpacity = parsed.opacity
+    }
+  }
   const bgImage = node.styles.backgroundImage
   if (bgImage && bgImage.startsWith('linear-gradient')) {
     const gradient: GradientFill | null = parseCssLinearGradient(bgImage)
@@ -207,14 +216,6 @@ function applyBackground(base: Partial<FrameNode>, node: H2dElementNode, ctx: Co
         base.imageFill = { url, mode: 'fill' }
         return
       }
-    }
-  }
-  const bgColor = node.styles.backgroundColor
-  if (bgColor) {
-    const parsed = parseColorWithOpacity(bgColor)
-    if (parsed) {
-      base.fill = parsed.color
-      if (parsed.opacity !== undefined) base.fillOpacity = parsed.opacity
     }
   }
 }
@@ -305,6 +306,82 @@ function convertSvg(node: H2dElementNode, parentRect: H2dRect, ctx: ConvertCtx):
     ctx.warnings.push('SVG element had no inline content — skipped fill')
   }
   applyCommonProps(frame, node, ctx)
+  return frame
+}
+
+function svgAssetSize(rawUrl: string, ctx: ConvertCtx): { width: number; height: number } | null {
+  const asset = ctx.document.assets?.[rawUrl]
+  if (asset?.blob?.type !== 'image/svg+xml') return null
+  try {
+    const payload = asset.blob.base64Blob.replace(/^data:[^,]*,/, '')
+    const svg = new TextDecoder().decode(base64ToBytes(payload))
+    const width = parseFloat(svg.match(/\bwidth=["']([^"']+)["']/i)?.[1] ?? '')
+    const height = parseFloat(svg.match(/\bheight=["']([^"']+)["']/i)?.[1] ?? '')
+    if (Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) return { width, height }
+    const viewBox = svg.match(/\bviewBox=["']\s*[-\d.]+\s+[-\d.]+\s+([\d.]+)\s+([\d.]+)\s*["']/i)
+    if (viewBox) return { width: Number(viewBox[1]), height: Number(viewBox[2]) }
+  } catch {
+    // Fall back to the standard icon size below when embedded SVG bytes are malformed.
+  }
+  return null
+}
+
+function convertInput(node: H2dElementNode, parentRect: H2dRect, ctx: ConvertCtx): FrameNode {
+  const rel = relRect(node.rect, parentRect)
+  const frame = makeFrame(node.tag, rel.x, rel.y, rel.width, rel.height)
+  // An input's CSS background image is usually a small no-repeat adornment,
+  // not a fill. Apply the solid background to the field and materialize the
+  // image separately below so it keeps its intrinsic dimensions.
+  const backgroundColor = node.styles.backgroundColor
+  if (backgroundColor) {
+    const parsed = parseColorWithOpacity(backgroundColor)
+    if (parsed) {
+      frame.fill = parsed.color
+      if (parsed.opacity !== undefined) frame.fillOpacity = parsed.opacity
+    }
+  }
+  applyCommonProps(frame, node, ctx)
+
+  const children: SceneNode[] = []
+  const rawBackgroundUrl = node.styles.backgroundImage ? extractCssUrl(node.styles.backgroundImage) : null
+  if (rawBackgroundUrl && node.styles.backgroundRepeat === 'no-repeat') {
+    const size = svgAssetSize(rawBackgroundUrl, ctx) ?? { width: 16, height: 16 }
+    const x = px(node.styles.backgroundPositionX) ?? 0
+    const y = node.styles.backgroundPositionY === '50%'
+      ? (node.rect.height - size.height) / 2
+      : (px(node.styles.backgroundPositionY) ?? 0)
+    const url = resolveAssetUrl(rawBackgroundUrl, ctx)
+    if (url) {
+      const icon = makeFrame('Background image', x, y, size.width, size.height)
+      icon.imageFill = { url, mode: 'fit' }
+      children.push(icon)
+    }
+  }
+
+  const value = node.attributes.value || node.attributes.placeholder
+  if (value) {
+    const isPlaceholder = !node.attributes.value && !!node.attributes.placeholder
+    const placeholderStyles = isPlaceholder ? node.pseudoElementStyles?.placeholder : undefined
+    const textStyles = { ...node.styles, ...placeholderStyles }
+    const paddingLeft = px(node.styles.paddingLeft) ?? 0
+    const paddingRight = px(node.styles.paddingRight) ?? 0
+    const height = px(placeholderStyles?.height) ?? px(node.styles.lineHeight) ?? node.rect.height
+    const width = px(placeholderStyles?.width) ?? Math.max(0, node.rect.width - paddingLeft - paddingRight)
+    const textNode: TextNode = {
+      id: generateId(),
+      type: 'text',
+      name: isPlaceholder ? 'Placeholder' : 'Value',
+      x: paddingLeft,
+      y: (node.rect.height - height) / 2,
+      width,
+      height,
+      text: value,
+      textWidthMode: 'fixed-height',
+    }
+    applyTextProps(textNode, textStyles)
+    children.push(textNode)
+  }
+  frame.children = children
   return frame
 }
 
@@ -418,6 +495,7 @@ function convertFrame(node: H2dElementNode, elementChildren: H2dElementNode[], t
 }
 
 function convertElement(node: H2dElementNode, parentRect: H2dRect, ctx: ConvertCtx): SceneNode | null {
+  if (node.tag.toUpperCase() === 'INPUT') return convertInput(node, parentRect, ctx)
   if (node.tag.toUpperCase() === 'IMG') return convertImage(node, parentRect, ctx)
   if (node.tag.toUpperCase() === 'SVG') return convertSvg(node, parentRect, ctx)
 
@@ -432,7 +510,16 @@ function convertElement(node: H2dElementNode, parentRect: H2dRect, ctx: ConvertC
 /** Convert a decoded h2d clipboard document into editor scene nodes (1:1 layout). */
 export function convertH2dToSceneNodes(document: H2dDocument): H2dConversionResult {
   const ctx = createConvertCtx(document)
-  const body = findBody(document.root) ?? (isH2dElementNode(document.root) ? document.root : null)
+  const body = findBody(document.root)
+  if (!body && isH2dElementNode(document.root)) {
+    const rootRect = document.root.rect
+    const converted = convertElement(document.root, rootRect, ctx)
+    if (!converted) return { nodes: [], warnings: ctx.warnings }
+    converted.x = 0
+    converted.y = 0
+    converted.name = document.documentTitle?.trim() || converted.name
+    return { nodes: [converted], warnings: ctx.warnings }
+  }
   if (!body) {
     return { nodes: [], warnings: ['h2d document has no convertible root element'] }
   }

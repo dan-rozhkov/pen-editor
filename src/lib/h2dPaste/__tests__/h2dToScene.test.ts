@@ -266,6 +266,65 @@ describe('convertH2dToSceneNodes (synthetic cases)', () => {
     expect(paragraph.height).toBe(40)
   })
 
+  it('converts a captured search input with placeholder, icon, and solid background', () => {
+    const input = el(
+      'INPUT',
+      rect(520, 82, 802, 48),
+      {
+        backgroundColor: 'rgb(255, 255, 255)',
+        backgroundImage: 'url("https://example.com/search.svg")',
+        backgroundPositionX: '16px',
+        backgroundPositionY: '50%',
+        backgroundRepeat: 'no-repeat',
+        fontFamily: 'Onest, sans-serif',
+        fontSize: '14px',
+        fontWeight: '500',
+        lineHeight: '20px',
+        paddingLeft: '48px',
+        paddingRight: '16px',
+      },
+      [],
+      { type: 'search', placeholder: 'Искать среди тысяч товаров...' },
+    )
+    input.pseudoElementStyles = {
+      placeholder: {
+        color: 'rgb(133, 143, 163)',
+        fontFamily: 'Onest, sans-serif',
+        fontSize: '14px',
+        fontWeight: '500',
+        height: '18px',
+        width: '734px',
+      },
+    }
+    const doc = {
+      ...buildDocument(input, {
+        assets: {
+          'https://example.com/search.svg': {
+            url: 'https://example.com/search.svg',
+            blob: {
+              type: 'image/svg+xml',
+              base64Blob: `data:application/octet-stream;base64,${btoa('<svg width="17" height="16"></svg>')}`,
+            },
+          },
+        },
+      }),
+      root: input,
+      documentTitle: 'Search field',
+    }
+
+    const { nodes } = convertH2dToSceneNodes(doc)
+    const field = nodes[0] as FrameNode
+    const placeholder = field.children.find((child): child is TextNode => child.type === 'text')
+    const icon = field.children.find((child): child is FrameNode => child.type === 'frame' && !!child.imageFill)
+
+    expect(field.fill?.toLowerCase()).toBe('#ffffff')
+    expect(field.imageFill).toBeUndefined()
+    expect(placeholder).toMatchObject({ text: 'Искать среди тысяч товаров...', x: 48, fontFamily: 'Onest' })
+    expect(placeholder?.fill?.toLowerCase()).toBe('#858fa3')
+    expect(icon).toMatchObject({ x: 16, y: 16, width: 17, height: 16 })
+    expect(icon?.imageFill?.mode).toBe('fit')
+  })
+
   it('parses a Tailwind-style two-layer box-shadow into sane (non-garbage) offsets', () => {
     const body = el('BODY', rect(0, 0, 100, 100), {}, [
       el('DIV', rect(0, 0, 30, 30), {

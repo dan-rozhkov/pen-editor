@@ -21,6 +21,9 @@ export interface H2dElementNode {
   attributes: Record<string, string>
   styles: Record<string, string>
   computedStyles?: Record<string, string>
+  pseudoElementStyles?: {
+    placeholder?: Record<string, string>
+  }
   rect: H2dRect
   childNodes: H2dNode[]
   /** Serialized outer `<svg>...</svg>` markup, present when `tag === 'SVG'`. */
