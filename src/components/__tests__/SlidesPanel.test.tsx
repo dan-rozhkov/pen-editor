@@ -4,6 +4,7 @@ import { SlidesPanel } from "../SlidesPanel";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
+import { useViewportStore } from "@/store/viewportStore";
 import { resetStores } from "@/test/fixtures";
 import type { FlatSceneNode } from "@/types/scene";
 
@@ -154,12 +155,21 @@ describe("<SlidesPanel />", () => {
   });
 
   it("selects the frame when a slide is clicked", () => {
-    seedNodes([frameNode("f1", "Intro"), frameNode("f2", "Outro")]);
+    seedNodes([
+      frameNode("f1", "Intro"),
+      frameNode("f2", "Outro", { x: 400, y: 200, width: 600, height: 300 }),
+    ]);
+    useViewportStore.setState({ scale: 2, x: 100, y: 100 });
     render(<SlidesPanel />);
 
     fireEvent.click(screen.getByText("Outro"));
 
     expect(useSelectionStore.getState().selectedIds).toEqual(["f2"]);
+    expect(useViewportStore.getState()).toMatchObject({
+      scale: 1,
+      x: window.innerWidth / 2 - 700,
+      y: window.innerHeight / 2 - 350,
+    });
   });
 
   it("highlights the currently selected slide", () => {

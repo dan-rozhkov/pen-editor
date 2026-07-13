@@ -131,13 +131,19 @@ export function SlidesPanel() {
   const selectSlide = (slideId: string) => {
     useSelectionStore.getState().select(slideId);
 
-    // Focus the frame on canvas — same "fit a single node" mechanism as
-    // Present mode (viewportStore.fitToContent with a one-node list).
     const target = getNodes().find((n) => n.id === slideId);
     if (target) {
-      useViewportStore
-        .getState()
-        .fitToContent([target], window.innerWidth, window.innerHeight);
+      const canvas = document.querySelector<HTMLElement>("[data-canvas]");
+      const viewportWidth = canvas?.clientWidth ?? window.innerWidth;
+      const viewportHeight = canvas?.clientHeight ?? window.innerHeight;
+      const viewport = useViewportStore.getState();
+
+      viewport.stopAnimation();
+      viewport.setViewportState({
+        scale: 1,
+        x: viewportWidth / 2 - (target.x + target.width / 2),
+        y: viewportHeight / 2 - (target.y + target.height / 2),
+      });
     }
   };
 
