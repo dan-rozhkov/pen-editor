@@ -64,6 +64,17 @@ export interface SceneState {
   reorderSlide: (fromIndex: number, toIndex: number) => void;
   setVisibility: (id: string, visible: boolean) => void;
   toggleVisibility: (id: string) => void;
+  /**
+   * Sets a slide (top-level frame)'s speaker notes, recording one history
+   * entry. Empty/whitespace-only text is normalized to `undefined`.
+   */
+  setSpeakerNotes: (id: string, text: string) => void;
+  /**
+   * Same as `setSpeakerNotes` but does not write history — used while typing
+   * so a run of keystrokes collapses into the single history entry saved
+   * when the textarea gains focus (mirrors InlineTextEditor's pattern).
+   */
+  setSpeakerNotesWithoutHistory: (id: string, text: string) => void;
   toggleFrameExpanded: (id: string) => void;
   setFrameExpanded: (id: string, expanded: boolean) => void;
   expandAncestors: (ids: string[]) => void;

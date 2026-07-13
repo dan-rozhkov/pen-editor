@@ -447,6 +447,29 @@ export function createBasicMutations(set: SetState, get: GetState) {
         };
       }),
 
+    setSpeakerNotes: (id: string, text: string) =>
+      set((state) => {
+        const existing = state.nodesById[id];
+        if (!existing) return state;
+        saveHistory(state);
+        const speakerNotes = text.trim() === "" ? undefined : text;
+        return {
+          nodesById: { ...state.nodesById, [id]: { ...existing, speakerNotes } },
+          _cachedTree: null,
+        };
+      }),
+
+    setSpeakerNotesWithoutHistory: (id: string, text: string) =>
+      set((state) => {
+        const existing = state.nodesById[id];
+        if (!existing) return state;
+        const speakerNotes = text.trim() === "" ? undefined : text;
+        return {
+          nodesById: { ...state.nodesById, [id]: { ...existing, speakerNotes } },
+          _cachedTree: null,
+        };
+      }),
+
     toggleFrameExpanded: (id: string) =>
       set((state) => {
         const newSet = new Set(state.expandedFrameIds);

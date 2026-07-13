@@ -3,6 +3,7 @@ import { useSceneStore } from "./sceneStore";
 import { useSelectionStore } from "./selectionStore";
 import { useHoverStore } from "./hoverStore";
 import { resolveSlideOrder } from "@/utils/slideOrder";
+import { topLevelAncestorId } from "@/utils/topLevelAncestor";
 import type { SceneNode } from "@/types/scene";
 
 export type EditorMode = "edit" | "view" | "present";
@@ -36,15 +37,6 @@ export function presentFitNode(
   if (!frameId) return [];
   const node = nodes.find((n) => n.id === frameId);
   return node ? [node] : [];
-}
-
-function topLevelAncestorId(
-  parentById: Record<string, string | null>,
-  id: string,
-): string {
-  let cur = id;
-  while (parentById[cur]) cur = parentById[cur] as string;
-  return cur;
 }
 
 export const useEditorModeStore = create<EditorModeState>((set) => ({

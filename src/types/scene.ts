@@ -514,6 +514,14 @@ export interface FrameNode extends BaseNode {
    * RefNode instance can select a value for via `RefNode.propertyValues`.
    */
   properties?: ComponentPropertyDef[]
+  /**
+   * Speaker/presenter notes for this slide, edited in the Slides section of
+   * the left sidebar (see `SpeakerNotesCard`). Not rendered on the canvas,
+   * not shown in Present mode, not exported — purely an authoring aid.
+   * Normalized to `undefined` when empty so it doesn't clutter saved `.pen`
+   * documents.
+   */
+  speakerNotes?: string
 }
 
 /** Property types a reusable component can declare (variant enum, boolean, text). */
