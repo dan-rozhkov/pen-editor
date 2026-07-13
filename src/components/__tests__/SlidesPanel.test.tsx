@@ -1,10 +1,17 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { render, screen, fireEvent, cleanup, act } from "@testing-library/react";
 import { SlidesPanel } from "../SlidesPanel";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
+import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { resetStores } from "@/test/fixtures";
 import type { FlatSceneNode } from "@/types/scene";
+
+const extractBase64 = vi.fn(async () => "thumbnail");
+
+vi.mock("@/utils/pixiUtils", () => ({
+  findPixiChild: vi.fn(() => ({})),
+}));
 
 /**
  * SlidesPanel lists top-level frames (rootIds order) as one-per-row preview
@@ -54,10 +61,17 @@ function seedNodes(nodes: FlatSceneNode[]): void {
 
 describe("<SlidesPanel />", () => {
   beforeEach(() => {
+    vi.useRealTimers();
+    extractBase64.mockClear();
     resetStores();
+    useCanvasRefStore.setState({ pixiRefs: null });
   });
 
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    useCanvasRefStore.setState({ pixiRefs: null });
+  });
 
   it("shows the empty state when there are no top-level frames", () => {
     render(<SlidesPanel />);
@@ -124,5 +138,30 @@ describe("<SlidesPanel />", () => {
     const introCard = screen.getByTestId("slide-card-f1");
     expect(outroCard.className).toContain("ring");
     expect(introCard.className).not.toContain("ring");
+  });
+
+  it("does not regenerate thumbnails after its own state update", async () => {
+    vi.useFakeTimers();
+    seedNodes([frameNode("f1", "Intro"), frameNode("f2", "Outro")]);
+    useCanvasRefStore.setState({
+      pixiRefs: {
+        app: { renderer: { extract: { base64: extractBase64 } } },
+        sceneRoot: {},
+      } as unknown as NonNullable<
+        ReturnType<typeof useCanvasRefStore.getState>["pixiRefs"]
+      >,
+    });
+
+    render(<SlidesPanel />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(extractBase64).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(extractBase64).toHaveBeenCalledTimes(2);
   });
 });

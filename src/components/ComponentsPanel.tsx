@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import clsx from "clsx";
 import { DiamondsFour } from "@phosphor-icons/react";
 import { useSceneStore } from "../store/sceneStore";
@@ -14,7 +15,12 @@ export function ComponentsPanel() {
   const addChildToFrame = useSceneStore((state) => state.addChildToFrame);
   const { getSelectedFrame, getViewportCenter } = useNodePlacement();
 
-  const components = getAllComponentsFlat(nodesById);
+  // Thumbnail generation updates local state. Keep this derived list stable
+  // across that render so it cannot recursively trigger another extraction.
+  const components = useMemo(
+    () => getAllComponentsFlat(nodesById),
+    [nodesById],
+  );
   const thumbnails = useComponentThumbnails(components);
 
   const createInstance = (component: FlatFrameNode) => {

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import clsx from "clsx";
 import { CardsIcon } from "@phosphor-icons/react";
 import { useSceneStore } from "../store/sceneStore";
@@ -12,7 +13,15 @@ export function SlidesPanel() {
   const getNodes = useSceneStore((state) => state.getNodes);
   const selectedIds = useSelectionStore((state) => state.selectedIds);
 
-  const slides = getTopLevelFramesFlat(nodesById, rootIds);
+  // Keep the list stable across thumbnail state/selection renders. A fresh
+  // array here retriggers useNodeThumbnails, whose state update then creates
+  // another fresh array and starts a continuous Pixi extraction loop.
+  // nodesById also changes for descendant edits, so real scene changes still
+  // invalidate every affected slide preview.
+  const slides = useMemo(
+    () => getTopLevelFramesFlat(nodesById, rootIds),
+    [nodesById, rootIds],
+  );
   const thumbnails = useNodeThumbnails(slides);
 
   const selectSlide = (slideId: string) => {
