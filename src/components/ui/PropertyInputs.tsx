@@ -352,6 +352,7 @@ interface SelectInputProps {
   value: string;
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
+  prefix?: React.ReactNode;
   labelOutside?: boolean;
   labelClassName?: string;
   isMixed?: boolean;
@@ -362,6 +363,7 @@ export function SelectInput({
   value,
   options,
   onChange,
+  prefix,
   labelOutside = false,
   labelClassName,
   isMixed = false,
@@ -387,6 +389,7 @@ export function SelectInput({
           value={selectValue}
           onValueChange={handleChange}
           options={selectOptions}
+          triggerPrefix={prefix}
           size="sm"
           className="w-full"
         />
@@ -402,6 +405,7 @@ export function SelectInput({
           value={selectValue}
           onValueChange={handleChange}
           options={selectOptions}
+          triggerPrefix={prefix}
           size="sm"
           className="w-full"
         />
@@ -415,6 +419,7 @@ export function SelectInput({
         value={selectValue}
         onValueChange={handleChange}
         options={selectOptions}
+        triggerPrefix={prefix}
         size="sm"
         className="w-full"
       />

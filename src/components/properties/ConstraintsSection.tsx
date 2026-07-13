@@ -20,9 +20,21 @@ const AXIS_OPTIONS: { value: ConstraintMode; label: string }[] = [
   { value: "scale", label: "Scale" },
 ];
 
-const pinBaseClass = "absolute z-10 transition-colors";
-const pinInactiveClass = "bg-border-default hover:bg-text-muted";
-const pinActiveClass = "bg-accent-bright";
+const pinBaseClass = "absolute z-10 flex h-5 w-5 items-center justify-center transition-colors before:rounded-full";
+const pinInactiveClass = "before:bg-border-default hover:before:bg-text-muted";
+const pinActiveClass = "before:bg-accent-bright";
+
+function AxisIcon({ axis }: { axis: "horizontal" | "vertical" }) {
+  return (
+    <svg aria-hidden="true" className="size-3 shrink-0 text-text-muted" viewBox="0 0 12 12" fill="none">
+      {axis === "horizontal" ? (
+        <path d="M1 6H11M1 4V8M11 4V8" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+      ) : (
+        <path d="M6 1V11M4 1H8M4 11H8" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+      )}
+    </svg>
+  );
+}
 
 /**
  * Constraints panel for a direct child of a non-auto-layout frame: controls
@@ -48,9 +60,9 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
 
   return (
     <PropertySection title="Constraints">
-      <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-3">
         <div
-          className="relative h-28 w-44 shrink-0 overflow-hidden rounded-[10px] bg-secondary"
+          className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md bg-secondary"
           aria-label="Constraint cross"
         >
           <Tooltip>
@@ -62,7 +74,7 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
                   aria-pressed={pinLeft}
                   className={cn(
                     pinBaseClass,
-                    "left-2 top-1/2 h-1.5 w-5 -translate-y-1/2 rounded-full",
+                    "left-0 top-1/2 -translate-y-1/2 before:h-px before:w-5",
                     pinLeft ? pinActiveClass : pinInactiveClass,
                   )}
                   onClick={() => update({ horizontal: toggleConstraintEdge(horizontal, "start") })}
@@ -82,7 +94,7 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
                   aria-pressed={pinRight}
                   className={cn(
                     pinBaseClass,
-                    "right-2 top-1/2 h-1.5 w-5 -translate-y-1/2 rounded-full",
+                    "right-0 top-1/2 -translate-y-1/2 before:h-px before:w-5",
                     pinRight ? pinActiveClass : pinInactiveClass,
                   )}
                   onClick={() => update({ horizontal: toggleConstraintEdge(horizontal, "end") })}
@@ -102,7 +114,7 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
                   aria-pressed={pinTop}
                   className={cn(
                     pinBaseClass,
-                    "left-1/2 top-1 h-5 w-1.5 -translate-x-1/2 rounded-full",
+                    "left-1/2 top-0 -translate-x-1/2 before:h-5 before:w-px",
                     pinTop ? pinActiveClass : pinInactiveClass,
                   )}
                   onClick={() => update({ vertical: toggleConstraintEdge(vertical, "start") })}
@@ -122,7 +134,7 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
                   aria-pressed={pinBottom}
                   className={cn(
                     pinBaseClass,
-                    "bottom-1 left-1/2 h-5 w-1.5 -translate-x-1/2 rounded-full",
+                    "bottom-0 left-1/2 -translate-x-1/2 before:h-5 before:w-px",
                     pinBottom ? pinActiveClass : pinInactiveClass,
                   )}
                   onClick={() => update({ vertical: toggleConstraintEdge(vertical, "end") })}
@@ -133,21 +145,21 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
               <span>Pin bottom</span>
             </TooltipContent>
           </Tooltip>
-          <div className="absolute left-8 top-8 h-12 w-28 rounded-[10px] border-2 border-border-default bg-surface-panel" />
-          <div className="absolute left-1/2 top-1/2 h-7 w-px -translate-x-1/2 -translate-y-1/2 bg-text-muted" />
-          <div className="absolute left-1/2 top-1/2 h-px w-7 -translate-x-1/2 -translate-y-1/2 bg-text-muted" />
+          <div className="absolute inset-3 rounded-md border border-border-default bg-surface-panel" />
+          <div className="absolute left-1/2 top-1/2 h-5 w-px -translate-x-1/2 -translate-y-1/2 bg-text-muted" />
+          <div className="absolute left-1/2 top-1/2 h-px w-5 -translate-x-1/2 -translate-y-1/2 bg-text-muted" />
         </div>
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-1 flex-col gap-2">
           <SelectInput
-            label="H"
             value={horizontal}
             options={AXIS_OPTIONS}
+            prefix={<AxisIcon axis="horizontal" />}
             onChange={(value) => update({ horizontal: value as ConstraintMode })}
           />
           <SelectInput
-            label="V"
             value={vertical}
             options={AXIS_OPTIONS}
+            prefix={<AxisIcon axis="vertical" />}
             onChange={(value) => update({ vertical: value as ConstraintMode })}
           />
         </div>
