@@ -382,22 +382,4 @@ describe("<SlidesPanel />", () => {
     });
   });
 
-  describe("Export PPTX button", () => {
-    it("renders an Export PPTX button next to Add slide", () => {
-      render(<SlidesPanel />);
-      expect(screen.getByLabelText("Export PPTX")).toBeTruthy();
-    });
-
-    it("disables Export PPTX when there are no slides", () => {
-      // stores reset by the suite's beforeEach → no frames
-      render(<SlidesPanel />);
-      expect((screen.getByLabelText("Export PPTX") as HTMLButtonElement).disabled).toBe(true);
-    });
-
-    it("enables Export PPTX once a slide exists", () => {
-      seedNodes([frameNode("f1", "One")]);
-      render(<SlidesPanel />);
-      expect((screen.getByLabelText("Export PPTX") as HTMLButtonElement).disabled).toBe(false);
-    });
-  });
 });

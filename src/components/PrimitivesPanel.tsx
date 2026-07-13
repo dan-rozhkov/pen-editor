@@ -41,9 +41,6 @@ export function PrimitivesPanel() {
 
   return (
     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2">
-      {/* Speaker notes card — only rendered in the Slides section; visually
-          merged with the tool pill below into one stacked floating block. */}
-      <SpeakerNotesCard />
       <div className="flex items-center gap-1 p-1.5 bg-surface-panel border border-border-default rounded-2xl shadow-[0_0px_3px_rgba(0,0,0,0.04)]">
         <DropdownMenu>
           <div className="flex items-center gap-1">
@@ -70,7 +67,7 @@ export function PrimitivesPanel() {
                   size="lg"
                   tooltip="More move tools"
                   side="top"
-                  className={`${toolButtonBaseClass} w-6 justify-center ${
+                  className={`${toolButtonBaseClass} -ml-1 w-6 justify-center ${
                     isMoveSubToolActive
                       ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
                       : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
@@ -154,7 +151,7 @@ export function PrimitivesPanel() {
                   size="lg"
                   tooltip="More shapes"
                   side="top"
-                  className={`${toolButtonBaseClass} w-6 justify-center ${
+                  className={`${toolButtonBaseClass} -ml-1 w-6 justify-center ${
                     isRectSubToolActive
                       ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
                       : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
@@ -213,7 +210,7 @@ export function PrimitivesPanel() {
                   size="lg"
                   tooltip="More pen tools"
                   side="top"
-                  className={`${toolButtonBaseClass} w-6 justify-center ${
+                  className={`${toolButtonBaseClass} -ml-1 w-6 justify-center ${
                     isPenSubToolActive
                       ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
                       : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
@@ -276,6 +273,7 @@ export function PrimitivesPanel() {
           style={{ alignSelf: "center" }}
         />
         <Layers3DToggle />
+        <SpeakerNotesCard />
       </div>
     </div>
   );

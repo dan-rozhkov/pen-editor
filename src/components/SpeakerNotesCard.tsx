@@ -5,12 +5,15 @@ import { useHistoryStore } from "@/store/historyStore";
 import { useActiveSlideId } from "@/hooks/useActiveSlideId";
 import { useReadOnly } from "@/hooks/useReadOnly";
 import type { FlatFrameNode } from "@/types/scene";
+import { NoteIcon } from "@phosphor-icons/react";
+import { Button } from "./ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 /**
- * Speaker notes for the currently selected slide, rendered as a card
- * visually merged with `PrimitivesPanel` (stacked directly above it — see
- * that component's render). Only shown when the Slides section is active;
- * scoped to the editor only (not shown in Present mode / exports).
+ * Speaker notes for the currently selected slide, rendered in a draggable
+ * popover opened from the tools bar. Only shown when the Slides section is
+ * active and a slide is selected; scoped to the editor only.
  *
  * The textarea is fully controlled by the scene store (no separate local
  * draft state) — `setSpeakerNotesWithoutHistory` writes on every keystroke.
@@ -40,6 +43,7 @@ export function SpeakerNotesCard() {
   >(null);
 
   if (activeSection !== "slides") return null;
+  if (!activeSlideId) return null;
 
   const handleChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     if (!activeSlideId) return;
@@ -60,8 +64,29 @@ export function SpeakerNotesCard() {
   };
 
   return (
-    <div className="w-[calc(100%-2rem)] max-w-[560px] pointer-events-auto bg-surface-panel border border-border-default rounded-2xl shadow-[0_0px_3px_rgba(0,0,0,0.04)]">
-      {activeSlideId ? (
+    <Popover>
+      <Tooltip>
+        <TooltipTrigger render={<span className="flex" />}>
+          <PopoverTrigger>
+            <Button
+              variant="ghost"
+              size="lg"
+              aria-label="Speaker notes"
+              className="group relative size-9 p-0 rounded-lg! transition-none outline-none text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
+            >
+              <NoteIcon size={40} className="size-6" weight="light" />
+            </Button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="top">Speaker notes</TooltipContent>
+      </Tooltip>
+      <PopoverContent
+        side="top"
+        align="center"
+        className="w-[320px]"
+        draggable
+        dragHandleContent={<span className="text-[11px] font-semibold text-text-primary">Speaker notes</span>}
+      >
         <textarea
           data-testid="speaker-notes-textarea"
           value={speakerNotes ?? ""}
@@ -70,11 +95,9 @@ export function SpeakerNotesCard() {
           disabled={readOnly}
           placeholder="Speaker notes…"
           rows={2}
-          className="w-full resize-none bg-transparent px-3 py-2 text-sm text-text-primary placeholder:text-text-muted outline-none disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-h-24 w-full resize-y rounded-md bg-secondary/50 px-2.5 py-2 text-sm text-text-primary placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent-primary disabled:cursor-not-allowed disabled:opacity-60"
         />
-      ) : (
-        <div className="px-3 py-2 text-sm text-text-muted">Select a slide to add notes.</div>
-      )}
-    </div>
+      </PopoverContent>
+    </Popover>
   );
 }

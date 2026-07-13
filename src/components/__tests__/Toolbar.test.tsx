@@ -59,6 +59,14 @@ describe("<Toolbar />", () => {
     );
   });
 
+  it("places PPTX export under File -> Export", () => {
+    render(<Toolbar />);
+    openFileMenu();
+    fireEvent.click(screen.getByText("Export"));
+
+    expect(screen.getByText("Export as .pptx")).toBeTruthy();
+  });
+
   it("exposes theme + pixel-grid checkboxes whose checked state mirrors the stores", () => {
     render(<Toolbar />);
     openSettings();

@@ -1,10 +1,9 @@
 import { useMemo, useRef, useState } from "react";
 import clsx from "clsx";
-import { CardsIcon, DownloadSimpleIcon, PlusIcon } from "@phosphor-icons/react";
+import { CardsIcon, PlusIcon } from "@phosphor-icons/react";
 import { useSceneStore } from "../store/sceneStore";
 import { useSelectionStore } from "../store/selectionStore";
 import { useViewportStore } from "../store/viewportStore";
-import { useCanvasRefStore } from "../store/canvasRefStore";
 import { generateId } from "../types/scene";
 import type { FlatFrameNode } from "../types/scene";
 import { resolveSlideOrder } from "../utils/slideOrder";
@@ -64,8 +63,6 @@ export function SlidesPanel() {
   const addNode = useSceneStore((state) => state.addNode);
   const reorderSlide = useSceneStore((state) => state.reorderSlide);
   const selectedIds = useSelectionStore((state) => state.selectedIds);
-  const pixiRefs = useCanvasRefStore((state) => state.pixiRefs);
-  const [isExportingPptx, setIsExportingPptx] = useState(false);
 
   // Keep the list stable across thumbnail state/selection renders. Scene
   // changes still update this list, while useNodeThumbnails resolves the
@@ -218,17 +215,6 @@ export function SlidesPanel() {
     finishDrag(false);
   };
 
-  const handleExportPptx = async () => {
-    if (!pixiRefs || isExportingPptx || slides.length === 0) return;
-    setIsExportingPptx(true);
-    try {
-      const { exportSlidesToPptx } = await import("../utils/exportPptxUtils");
-      await exportSlidesToPptx(pixiRefs);
-    } finally {
-      setIsExportingPptx(false);
-    }
-  };
-
   const handleClick = (slideId: string) => {
     // A drag gesture (past the threshold) already committed the reorder on
     // pointerup — the trailing click event it fires shouldn't also select.
@@ -246,21 +232,6 @@ export function SlidesPanel() {
           Slides
         </span>
         <div className="flex items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <button
-                  onClick={handleExportPptx}
-                  disabled={slides.length === 0 || isExportingPptx}
-                  className="p-0.5 rounded text-text-muted hover:text-text-default hover:bg-secondary disabled:opacity-40 disabled:pointer-events-none"
-                  aria-label="Export PPTX"
-                >
-                  <DownloadSimpleIcon size={14} />
-                </button>
-              }
-            />
-            <TooltipContent>Export PPTX</TooltipContent>
-          </Tooltip>
           <Tooltip>
             <TooltipTrigger
               render={
@@ -322,8 +293,9 @@ export function SlidesPanel() {
                       : undefined
                   }
                   className={clsx(
-                    "flex flex-col gap-1.5 rounded-lg p-2 text-left bg-secondary/50 hover:bg-secondary touch-none",
-                    isSelected && "ring-2 ring-accent-primary bg-secondary",
+                    "flex flex-col gap-1.5 rounded-lg p-2 text-left touch-none",
+                    !isSelected && "bg-secondary/50 hover:bg-secondary",
+                    isSelected && "bg-accent-primary/10 hover:bg-accent-primary/10",
                   )}
                 >
                   <div
@@ -341,7 +313,7 @@ export function SlidesPanel() {
                         <img
                           src={thumb}
                           alt={slide.name || "Slide"}
-                          className="max-w-full max-h-full object-contain"
+                          className="max-w-full max-h-full object-contain pointer-events-none"
                         />
                       ) : (
                         <CardsIcon

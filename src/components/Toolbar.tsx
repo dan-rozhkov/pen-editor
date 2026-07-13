@@ -11,6 +11,7 @@ import { useGuidesStore } from "../store/guidesStore";
 import { useRenderModeStore } from "../store/renderModeStore";
 import { useViewportStore } from "../store/viewportStore";
 import { usePageStore } from "../store/pageStore";
+import { useCanvasRefStore } from "../store/canvasRefStore";
 import { buildTree } from "../types/scene";
 
 import { downloadDocument, downloadPublicPen, openFilePicker } from "../utils/fileUtils";
@@ -53,10 +54,15 @@ export function Toolbar() {
   const toggleShowRulers = useGuidesStore((s) => s.toggleShowRulers);
   const outlineModeActive = useRenderModeStore((s) => s.renderMode === "outline");
   const toggleRenderMode = useRenderModeStore((s) => s.toggle);
+  const pixiRefs = useCanvasRefStore((s) => s.pixiRefs);
+  const hasSlides = useSceneStore((state) =>
+    state.rootIds.some((id) => state.nodesById[id]?.type === "frame"),
+  );
 
   const [importOpen, setImportOpen] = useState(false);
   const [jsonText, setJsonText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [isExportingPptx, setIsExportingPptx] = useState(false);
 
   const handleSave = () => {
     const pageStore = usePageStore.getState();
@@ -91,6 +97,17 @@ export function Toolbar() {
     const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
     const activeTheme = useThemeStore.getState().activeTheme;
     downloadPublicPen(currentPageNodes, variables, activeTheme, `${name}.pen`);
+  };
+
+  const handleExportPptx = async () => {
+    if (!pixiRefs || !hasSlides || isExportingPptx) return;
+    setIsExportingPptx(true);
+    try {
+      const { exportSlidesToPptx } = await import("../utils/exportPptxUtils");
+      await exportSlidesToPptx(pixiRefs);
+    } finally {
+      setIsExportingPptx(false);
+    }
   };
 
   const handleOpen = async () => {
@@ -194,6 +211,12 @@ export function Toolbar() {
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleExportPublicPen}>
                 Export as .pen
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleExportPptx}
+                disabled={!pixiRefs || !hasSlides || isExportingPptx}
+              >
+                {isExportingPptx ? "Exporting .pptx…" : "Export as .pptx"}
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>

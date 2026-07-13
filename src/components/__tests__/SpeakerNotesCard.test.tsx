@@ -31,16 +31,21 @@ describe("SpeakerNotesCard", () => {
     expect(container.innerHTML).toBe("");
   });
 
-  it("shows a 'select a slide' hint when nothing is selected", () => {
+  it("renders nothing when no slide is selected", () => {
     render(<SpeakerNotesCard />);
-    expect(screen.getByText(/select a slide/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Speaker notes" })).toBeNull();
     expect(screen.queryByTestId("speaker-notes-textarea")).toBeNull();
   });
+
+  function openNotesPopover() {
+    fireEvent.click(screen.getByRole("button", { name: "Speaker notes" }));
+  }
 
   it("shows the selected slide's speaker notes in a textarea", () => {
     useSceneStore.getState().setSpeakerNotes("frame1", "Opening remarks");
     useSelectionStore.getState().select("frame1");
     render(<SpeakerNotesCard />);
+    openNotesPopover();
     const textarea = screen.getByTestId("speaker-notes-textarea") as HTMLTextAreaElement;
     expect(textarea.value).toBe("Opening remarks");
   });
@@ -50,6 +55,7 @@ describe("SpeakerNotesCard", () => {
     useSceneStore.getState().setSpeakerNotes("frame1", "Notes for frame1");
     useSelectionStore.getState().select("rect1");
     render(<SpeakerNotesCard />);
+    openNotesPopover();
     const textarea = screen.getByTestId("speaker-notes-textarea") as HTMLTextAreaElement;
     expect(textarea.value).toBe("Notes for frame1");
   });
@@ -57,6 +63,7 @@ describe("SpeakerNotesCard", () => {
   it("typing writes to the scene and collapses into a single history entry", () => {
     useSelectionStore.getState().select("frame1");
     render(<SpeakerNotesCard />);
+    openNotesPopover();
     const textarea = screen.getByTestId("speaker-notes-textarea");
     const before = pastLen();
 
@@ -74,6 +81,7 @@ describe("SpeakerNotesCard", () => {
   it("focusing without typing does not touch history or clear the redo stack", () => {
     useSelectionStore.getState().select("frame1");
     render(<SpeakerNotesCard />);
+    openNotesPopover();
     // Simulate a pending redo entry (as if the user had just undone something).
     useHistoryStore.setState({ future: [{} as never] });
     const before = pastLen();
@@ -94,6 +102,7 @@ describe("SpeakerNotesCard", () => {
         <SpeakerNotesCard />
       </ReadOnlyProvider>,
     );
+    openNotesPopover();
     const textarea = screen.getByTestId("speaker-notes-textarea") as HTMLTextAreaElement;
     expect(textarea.disabled).toBe(true);
   });
