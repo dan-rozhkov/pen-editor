@@ -21,6 +21,20 @@ export function getAllComponentsFlat(
 }
 
 /**
+ * "Slides" = top-level frames, in canvas order (rootIds order — not sorted by
+ * position). Non-frame root nodes (rectangles, text, etc.) and nested frames
+ * are excluded.
+ */
+export function getTopLevelFramesFlat(
+  nodesById: Record<string, FlatSceneNode>,
+  rootIds: string[],
+): FlatFrameNode[] {
+  return rootIds
+    .map((id) => nodesById[id])
+    .filter((node): node is FlatFrameNode => !!node && node.type === "frame");
+}
+
+/**
  * Find the slot context for a descendant path inside an instance.
  * Walks path segments backwards to find a replace override.
  * Returns the slot path and the relative path from the slot to the target.

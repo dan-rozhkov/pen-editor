@@ -5,6 +5,7 @@ const EXPANDED_STORAGE_KEY = "left-sidebar-expanded";
 
 export type LeftSection =
   | "pages"
+  | "slides"
   | "agents"
   | "components"
   | "variables"
@@ -13,6 +14,7 @@ export type LeftSection =
 
 const LEFT_SECTIONS: LeftSection[] = [
   "pages",
+  "slides",
   "agents",
   "components",
   "variables",

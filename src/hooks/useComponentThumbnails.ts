@@ -5,19 +5,25 @@ import type { FlatFrameNode } from "@/types/scene";
 
 const EMPTY_THUMBNAILS: Map<string, string> = new Map();
 
-export function useComponentThumbnails(components: FlatFrameNode[]) {
+/**
+ * Generic Pixi-extract thumbnail generator for any list of nodes with an
+ * `id` that resolves to a Pixi container in the scene (frames, in practice).
+ * Shared by ComponentsPanel (reusable components) and SlidesPanel (top-level
+ * frames) — same "extract.base64 after a settle delay" mechanism.
+ */
+export function useNodeThumbnails(nodes: { id: string }[]) {
   const pixiRefs = useCanvasRefStore((s) => s.pixiRefs);
   const [thumbnails, setThumbnails] = useState<Map<string, string> | null>(null);
 
   useEffect(() => {
-    if (!pixiRefs || components.length === 0) return;
+    if (!pixiRefs || nodes.length === 0) return;
 
     const timeout = setTimeout(async () => {
       const { app, sceneRoot } = pixiRefs;
       const map = new Map<string, string>();
 
-      for (const comp of components) {
-        const container = findPixiChild(sceneRoot, comp.id);
+      for (const node of nodes) {
+        const container = findPixiChild(sceneRoot, node.id);
         if (!container) continue;
         try {
           const raw = await app.renderer.extract.base64(container);
@@ -25,7 +31,7 @@ export function useComponentThumbnails(components: FlatFrameNode[]) {
           const dataUrl = raw.startsWith("data:")
             ? raw
             : `data:image/png;base64,${raw}`;
-          map.set(comp.id, dataUrl);
+          map.set(node.id, dataUrl);
         } catch {
           // skip — placeholder will be shown
         }
@@ -35,11 +41,15 @@ export function useComponentThumbnails(components: FlatFrameNode[]) {
     }, 300);
 
     return () => clearTimeout(timeout);
-  }, [pixiRefs, components]);
+  }, [pixiRefs, nodes]);
 
-  // Derived: with no canvas refs or no components there are no thumbnails;
+  // Derived: with no canvas refs or no nodes there are no thumbnails;
   // otherwise keep showing the last generated map until the next one is ready
   // (same behavior as before, without setState inside the effect body).
-  if (!pixiRefs || components.length === 0) return EMPTY_THUMBNAILS;
+  if (!pixiRefs || nodes.length === 0) return EMPTY_THUMBNAILS;
   return thumbnails ?? EMPTY_THUMBNAILS;
+}
+
+export function useComponentThumbnails(components: FlatFrameNode[]) {
+  return useNodeThumbnails(components);
 }

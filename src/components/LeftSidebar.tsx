@@ -3,6 +3,7 @@ import { ArrowsInLineVertical } from "@phosphor-icons/react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { LayersPanel } from "./layers";
 import { ComponentsPanel } from "./ComponentsPanel";
+import { SlidesPanel } from "./SlidesPanel";
 import { PagesPanel } from "./PagesPanel";
 import { ChatPanelContent } from "./chat/ChatPanel";
 import { VariablesPanelContent } from "./VariablesPanel";
@@ -81,6 +82,13 @@ export function LeftSidebar() {
           </span>
         </div>
       )}
+      {activeSection === "slides" && (
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-border-default shrink-0">
+          <span className="text-sm font-medium text-text-primary flex-1">
+            Slides
+          </span>
+        </div>
+      )}
       {activeSection === "pages" && (
         <div className="px-2 pb-2">
           {isEditing ? (
@@ -138,6 +146,14 @@ export function LeftSidebar() {
         {activeSection === "components" && (
           <div className="absolute inset-0 flex flex-col overflow-hidden">
             <ComponentsPanel />
+          </div>
+        )}
+
+        {/* Slides section: one-per-row previews of top-level frames, no
+            layer tree — a separate section from Pages, not a toggle inside it. */}
+        {activeSection === "slides" && (
+          <div className="absolute inset-0 flex flex-col overflow-hidden">
+            <SlidesPanel />
           </div>
         )}
 

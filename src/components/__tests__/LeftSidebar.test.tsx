@@ -22,6 +22,9 @@ vi.mock("../layers", () => ({
 vi.mock("../ComponentsPanel", () => ({
   ComponentsPanel: () => <div data-testid="components-shim" />,
 }));
+vi.mock("../SlidesPanel", () => ({
+  SlidesPanel: () => <div data-testid="slides-shim" />,
+}));
 vi.mock("../PagesPanel", () => ({
   PagesPanel: () => <div data-testid="pages-shim" />,
 }));
@@ -109,6 +112,15 @@ describe("<LeftSidebar />", () => {
     useDocumentStore.setState({ fileName: "design.pen" });
     render(<LeftSidebar />);
     expect(screen.getByText("design")).toBeTruthy();
+  });
+
+  it("renders the Slides section when it is active", () => {
+    useLeftSidebarStore.setState({ activeSection: "slides" });
+    render(<LeftSidebar />);
+    expect(screen.getByTestId("slides-shim")).toBeTruthy();
+    // Pages/layers content is not mounted while slides is active.
+    expect(screen.queryByTestId("layers-shim")).toBeNull();
+    expect(screen.queryByTestId("pages-shim")).toBeNull();
   });
 
   it("renders the Components section when it is active", () => {

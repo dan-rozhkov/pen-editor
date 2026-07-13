@@ -17,6 +17,12 @@ describe("leftSidebarStore", () => {
     expect(localStorage.getItem("left-sidebar-section")).toBe("agents");
   });
 
+  it("updates to the slides section and persists it", () => {
+    useLeftSidebarStore.getState().setActiveSection("slides");
+    expect(useLeftSidebarStore.getState().activeSection).toBe("slides");
+    expect(localStorage.getItem("left-sidebar-section")).toBe("slides");
+  });
+
   it("switches to the variables/textStyles/styles sections", () => {
     useLeftSidebarStore.getState().setActiveSection("variables");
     expect(useLeftSidebarStore.getState().activeSection).toBe("variables");

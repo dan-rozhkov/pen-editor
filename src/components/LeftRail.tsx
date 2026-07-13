@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import {
   FileIcon,
+  CardsIcon,
   SparkleIcon,
   DiamondsFourIcon,
   PlusCircleIcon,
@@ -52,6 +53,7 @@ const SECTIONS: {
   icon: ReactNode;
 }[] = [
   { section: "pages", testid: "rail-pages", title: "Pages", icon: <FileIcon size={20} weight="light" /> },
+  { section: "slides", testid: "rail-slides", title: "Slides", icon: <CardsIcon size={20} weight="light" /> },
   { section: "agents", testid: "rail-agents", title: "Agents", icon: <SparkleIcon size={20} weight="light" /> },
   { section: "components", testid: "rail-components", title: "Assets", icon: <DiamondsFourIcon size={18} weight="light" /> },
 ];

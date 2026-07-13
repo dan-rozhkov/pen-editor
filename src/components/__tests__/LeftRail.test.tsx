@@ -13,11 +13,18 @@ describe("<LeftRail />", () => {
   it("renders the rail items", () => {
     render(<LeftRail />);
     expect(screen.getByTestId("rail-pages")).toBeTruthy();
+    expect(screen.getByTestId("rail-slides")).toBeTruthy();
     expect(screen.getByTestId("rail-agents")).toBeTruthy();
     expect(screen.getByTestId("rail-components")).toBeTruthy();
     expect(screen.getByTestId("rail-variables")).toBeTruthy();
     expect(screen.getByTestId("rail-text-styles")).toBeTruthy();
     expect(screen.getByTestId("rail-styles")).toBeTruthy();
+  });
+
+  it("switches to the slides section when its rail icon is clicked", () => {
+    render(<LeftRail />);
+    fireEvent.click(screen.getByTestId("rail-slides"));
+    expect(useLeftSidebarStore.getState().activeSection).toBe("slides");
   });
 
   it("switches the active section when a section icon is clicked", () => {
