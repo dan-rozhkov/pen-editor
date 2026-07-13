@@ -94,9 +94,12 @@ describe("<SlidesPanel />", () => {
     const card = screen.getByTestId("slide-card-f1");
     const number = screen.getByTestId("slide-number-f1");
     const title = screen.getByTestId("slide-name");
+    const preview = number.parentElement;
 
     expect(number.textContent).toBe("1");
-    expect(number.parentElement).toBe(card.querySelector("div"));
+    expect(number.className).toContain("text-sm");
+    expect(preview).toBe(card.querySelector("div"));
+    expect((preview as HTMLElement).style.aspectRatio).toBe("16 / 9");
     expect(title.parentElement).toBe(card);
   });
 

@@ -54,9 +54,6 @@ export function SlidesPanel() {
           {slides.map((slide, index) => {
             const thumb = thumbnails.get(slide.id);
             const isSelected = selectedIds.includes(slide.id);
-            const aspectRatio = slide.width > 0 && slide.height > 0
-              ? `${slide.width} / ${slide.height}`
-              : undefined;
             return (
               <button
                 key={slide.id}
@@ -69,11 +66,11 @@ export function SlidesPanel() {
               >
                 <div
                   className="w-full rounded-md flex overflow-hidden"
-                  style={{ aspectRatio: aspectRatio ?? "16 / 9" }}
+                  style={{ aspectRatio: "16 / 9" }}
                 >
                   <span
                     data-testid={`slide-number-${slide.id}`}
-                    className="shrink-0 w-6 px-2 pt-1.5 text-[11px] text-text-disabled"
+                    className="shrink-0 w-7 px-2 pt-1.5 text-sm font-medium text-text-disabled"
                   >
                     {index + 1}
                   </span>
