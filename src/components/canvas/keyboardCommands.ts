@@ -418,6 +418,34 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
       return;
     }
 
+    // Cmd/Ctrl+Shift+BracketLeft / BracketRight ("{" / "}" on a US layout —
+    // Shift is what turns the bracket keys into braces, so e.code stays
+    // Bracket* rather than switching on e.key): move the selected node one
+    // position up/down among its siblings (tree/z-order). LayersPanel renders
+    // rootIds/childrenById in *reverse* (last array index = topmost row), and
+    // Pixi stacks children in array order (last = on top), so "up" in the
+    // panel/canvas means moving to a *higher* array index.
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.code === "BracketLeft" || e.code === "BracketRight")) {
+      if (isTyping) return;
+      e.preventDefault();
+      const { selectedIds } = useSelectionStore.getState();
+      if (selectedIds.length === 1) {
+        const id = selectedIds[0];
+        const sceneState = useSceneStore.getState();
+        const parentId = sceneState.parentById[id] ?? null;
+        const siblings = parentId !== null ? (sceneState.childrenById[parentId] ?? []) : sceneState.rootIds;
+        const currentIndex = siblings.indexOf(id);
+        if (currentIndex !== -1) {
+          const delta = e.code === "BracketLeft" ? 1 : -1;
+          const newIndex = currentIndex + delta;
+          if (newIndex >= 0 && newIndex < siblings.length) {
+            sceneState.moveNode(id, parentId, newIndex);
+          }
+        }
+      }
+      return;
+    }
+
     // Shift+R: Toggle rulers
     if (e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && e.code === "KeyR") {
       if (isTyping) return;
