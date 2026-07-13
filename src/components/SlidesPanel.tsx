@@ -70,7 +70,7 @@ export function SlidesPanel() {
                 >
                   <span
                     data-testid={`slide-number-${slide.id}`}
-                    className="shrink-0 w-7 px-2 pt-1.5 text-sm font-medium text-text-disabled"
+                    className="shrink-0 w-7 pl-1 pr-2 pt-1.5 text-sm font-medium text-text-disabled"
                   >
                     {index + 1}
                   </span>
