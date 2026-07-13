@@ -1,12 +1,12 @@
 import { useState } from "react";
 import {
   AlignBottom,
+  AlignCenterHorizontal,
   AlignCenterVertical,
+  AlignLeft,
+  AlignRight,
   AlignTop,
   GridNine,
-  TextAlignCenter,
-  TextAlignLeft,
-  TextAlignRight,
 } from "@phosphor-icons/react";
 import {
   alignNodes,
@@ -73,7 +73,7 @@ export function AlignmentSection({
                   onClick={() => handleAlign("left")}
                   aria-label="Align left"
                 >
-                  <TextAlignLeft size={iconSize} />
+                  <AlignLeft size={iconSize} />
                 </button>
               }
             />
@@ -89,7 +89,7 @@ export function AlignmentSection({
                   onClick={() => handleAlign("centerH")}
                   aria-label="Align center horizontally"
                 >
-                  <TextAlignCenter size={iconSize} />
+                  <AlignCenterHorizontal size={iconSize} />
                 </button>
               }
             />
@@ -105,7 +105,7 @@ export function AlignmentSection({
                   onClick={() => handleAlign("right")}
                   aria-label="Align right"
                 >
-                  <TextAlignRight size={iconSize} />
+                  <AlignRight size={iconSize} />
                 </button>
               }
             />
