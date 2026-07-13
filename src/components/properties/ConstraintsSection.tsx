@@ -62,7 +62,7 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
     <PropertySection title="Constraints">
       <div className="flex items-center gap-3">
         <div
-          className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md bg-secondary"
+          className="relative h-14 w-20 shrink-0 overflow-hidden rounded-md bg-secondary"
           aria-label="Constraint cross"
         >
           <Tooltip>
@@ -74,7 +74,7 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
                   aria-pressed={pinLeft}
                   className={cn(
                     pinBaseClass,
-                    "left-0 top-1/2 -translate-y-1/2 before:h-px before:w-5",
+                    "left-1 top-1/2 -translate-y-1/2 before:h-px before:w-5",
                     pinLeft ? pinActiveClass : pinInactiveClass,
                   )}
                   onClick={() => update({ horizontal: toggleConstraintEdge(horizontal, "start") })}
@@ -94,7 +94,7 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
                   aria-pressed={pinRight}
                   className={cn(
                     pinBaseClass,
-                    "right-0 top-1/2 -translate-y-1/2 before:h-px before:w-5",
+                    "right-1 top-1/2 -translate-y-1/2 before:h-px before:w-5",
                     pinRight ? pinActiveClass : pinInactiveClass,
                   )}
                   onClick={() => update({ horizontal: toggleConstraintEdge(horizontal, "end") })}
@@ -145,7 +145,7 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
               <span>Pin bottom</span>
             </TooltipContent>
           </Tooltip>
-          <div className="absolute inset-3 rounded-md border border-border-default bg-surface-panel" />
+          <div className="absolute left-6 top-3 h-8 w-8 rounded-md border border-border-default bg-surface-panel" />
           <div className="absolute left-1/2 top-1/2 h-5 w-px -translate-x-1/2 -translate-y-1/2 bg-text-muted" />
           <div className="absolute left-1/2 top-1/2 h-px w-5 -translate-x-1/2 -translate-y-1/2 bg-text-muted" />
         </div>
