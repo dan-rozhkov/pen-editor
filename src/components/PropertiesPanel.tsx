@@ -12,13 +12,13 @@ import {
   getThemeFromAncestorFrames,
   type ParentContext,
 } from "@/utils/nodeUtils";
-import { AlignmentSection } from "@/components/properties/AlignmentSection";
 import { BooleanOperationsSection } from "@/components/properties/BooleanOperationsSection";
 import { DescendantPropertyEditor } from "@/components/properties/DescendantPropertyEditor";
 import { MultiSelectPropertyEditor } from "@/components/properties/MultiSelectPropertyEditor";
 import { PageProperties } from "@/components/properties/PageProperties";
 import { PencilToolProperties } from "@/components/properties/PencilToolProperties";
 import { PropertyEditor } from "@/components/properties/PropertyEditor";
+import { SpacingSection } from "@/components/properties/AlignmentSection";
 import { CaretRightIcon } from "@phosphor-icons/react";
 import clsx from "clsx";
 
@@ -210,16 +210,11 @@ export function PropertiesPanel() {
         {selectedIds.length === 0 && activeTool !== "frame" && activeTool !== "pencil" && (
           <PageProperties />
         )}
-        {(selectedIds.length > 1 || (selectedIds.length === 1 && parentContext.parent && !parentContext.isInsideAutoLayout)) && (
-          <AlignmentSection
-            count={selectedIds.length}
-            selectedIds={selectedIds}
-            nodes={nodes}
-            parentFrame={parentContext.parent}
-          />
-        )}
         {selectedNodes.length > 1 && activeTool !== "frame" && (
           <BooleanOperationsSection selectedIds={selectedIds} selectedNodes={selectedNodes} />
+        )}
+        {selectedNodes.length > 1 && activeTool !== "frame" && (
+          <SpacingSection selectedIds={selectedIds} nodes={nodes} />
         )}
         {/* Multi-select property editor */}
         {selectedNodes.length > 1 && activeTool !== "frame" && (

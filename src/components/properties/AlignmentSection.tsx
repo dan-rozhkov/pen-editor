@@ -29,12 +29,13 @@ interface AlignmentSectionProps {
   parentFrame?: FrameNode | GroupNode | null;
 }
 
-export function AlignmentSection({
+export function AlignmentControls({
   count,
   selectedIds,
   nodes,
   parentFrame,
-}: AlignmentSectionProps) {
+  showLabel = true,
+}: AlignmentSectionProps & { showLabel?: boolean }) {
   const isSingleNodeInFrame = count === 1 && parentFrame != null;
 
   const handleAlign = (alignment: AlignmentType) => {
@@ -62,9 +63,9 @@ export function AlignmentSection({
   const buttonClass = `${buttonBaseClass} bg-secondary hover:bg-secondary text-text-muted hover:text-text-primary`;
 
   return (
-    <div className="flex flex-col gap-4">
-      <PropertySection title="Alignment">
-        <div className="flex gap-1">
+    <div className="flex flex-col gap-2">
+      {showLabel && <div className="text-[10px] text-text-primary">Alignment</div>}
+      <div className="flex gap-1">
           <Tooltip>
             <TooltipTrigger
               render={
@@ -183,18 +184,28 @@ export function AlignmentSection({
               </Tooltip>
             </>
           )}
-        </div>
+      </div>
+    </div>
+  );
+}
+
+export function AlignmentSection(props: AlignmentSectionProps) {
+  const isSingleNodeInFrame = props.count === 1 && props.parentFrame != null;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <PropertySection title="Alignment">
+        <AlignmentControls {...props} showLabel={false} />
       </PropertySection>
       {!isSingleNodeInFrame && (
-        <>
-          <SpacingInput
-            selectedIds={selectedIds}
-            nodes={nodes}
-          />
-        </>
+        <SpacingInput selectedIds={props.selectedIds} nodes={props.nodes} />
       )}
     </div>
   );
+}
+
+export function SpacingSection({ selectedIds, nodes }: Pick<AlignmentSectionProps, "selectedIds" | "nodes">) {
+  return <SpacingInput selectedIds={selectedIds} nodes={nodes} />;
 }
 
 function SpacingInput({

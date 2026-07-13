@@ -5,6 +5,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { isInsideReusableComponent } from "@/utils/componentUtils";
 import { TypeSection } from "@/components/properties/TypeSection";
 import { PositionSection } from "@/components/properties/PositionSection";
+import { AlignmentControls } from "@/components/properties/AlignmentSection";
 import { SizeSection } from "@/components/properties/SizeSection";
 import { ConstraintsSection } from "@/components/properties/ConstraintsSection";
 import { AutoLayoutSection } from "@/components/properties/AutoLayoutSection";
@@ -75,7 +76,21 @@ export function PropertyEditor({
         }
         slotNode={slotFlatNode}
       />
-      <PositionSection node={node} onUpdate={onUpdate} parentContext={parentContext} />
+      <PositionSection
+        node={node}
+        onUpdate={onUpdate}
+        parentContext={parentContext}
+        alignment={
+          parentContext.parent && !parentContext.isInsideAutoLayout ? (
+            <AlignmentControls
+              count={1}
+              selectedIds={[node.id]}
+              nodes={allNodes}
+              parentFrame={parentContext.parent}
+            />
+          ) : undefined
+        }
+      />
       <SizeSection node={node} onUpdate={onUpdate} parentContext={parentContext} />
       {parentContext.parent &&
         parentContext.parent.type === "frame" &&

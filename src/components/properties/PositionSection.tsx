@@ -1,4 +1,5 @@
 import { ArrowClockwise } from "@phosphor-icons/react";
+import type { ReactNode } from "react";
 import type { SceneNode } from "@/types/scene";
 import type { ParentContext } from "@/utils/nodeUtils";
 import {
@@ -20,9 +21,10 @@ interface PositionSectionProps {
   onUpdate: (updates: Partial<SceneNode>) => void;
   mixedKeys?: Set<string>;
   parentContext?: ParentContext;
+  alignment?: ReactNode;
 }
 
-export function PositionSection({ node, onUpdate, mixedKeys, parentContext }: PositionSectionProps) {
+export function PositionSection({ node, onUpdate, mixedKeys, parentContext, alignment }: PositionSectionProps) {
   const isInsideAutoLayout = parentContext?.isInsideAutoLayout ?? false;
 
   return (
@@ -72,6 +74,7 @@ export function PositionSection({ node, onUpdate, mixedKeys, parentContext }: Po
           />
         </div>
       </div>
+      {alignment && <div className="mt-3">{alignment}</div>}
       {isInsideAutoLayout && (
         <Label className="cursor-pointer mt-1">
           <Checkbox

@@ -9,6 +9,7 @@ import {
   getSharedSections,
 } from "@/utils/multiSelectUtils";
 import { PositionSection } from "@/components/properties/PositionSection";
+import { AlignmentControls } from "@/components/properties/AlignmentSection";
 import { SizeSection } from "@/components/properties/SizeSection";
 import { AppearanceSection } from "@/components/properties/AppearanceSection";
 import { FillSection } from "@/components/properties/FillSection";
@@ -225,6 +226,13 @@ export function MultiSelectPropertyEditor({
           node={merged.node}
           onUpdate={handleUpdate}
           mixedKeys={merged.mixedKeys}
+          alignment={
+            <AlignmentControls
+              count={selectedNodes.length}
+              selectedIds={ids}
+              nodes={allNodes}
+            />
+          }
         />
       )}
       {sharedSections.has("size") && (

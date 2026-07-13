@@ -37,9 +37,7 @@ vi.mock("@/components/properties/PencilToolProperties", () => ({
   PencilToolProperties: () => <div data-testid="pencil-properties" />,
 }));
 vi.mock("@/components/properties/AlignmentSection", () => ({
-  AlignmentSection: ({ count }: { count: number }) => (
-    <div data-testid="alignment-section" data-count={count} />
-  ),
+  SpacingSection: () => <div data-testid="spacing-section" />,
 }));
 function select(ids: string[]) {
   useSelectionStore.setState({ selectedIds: ids });
@@ -62,7 +60,7 @@ describe("<PropertiesPanel /> (orchestration)", () => {
 
       expect(screen.queryByTestId("property-editor")).toBeNull();
       expect(screen.queryByTestId("multi-select-editor")).toBeNull();
-      expect(screen.queryByTestId("alignment-section")).toBeNull();
+      expect(screen.queryByTestId("spacing-section")).toBeNull();
     });
   });
 
@@ -89,37 +87,32 @@ describe("<PropertiesPanel /> (orchestration)", () => {
       expect(editor.getAttribute("data-node-type")).toBe("text");
     });
 
-    it("shows the AlignmentSection for a child node not inside auto-layout", () => {
-      // rect1 is a child of frame1 whose layout.autoLayout is false.
+    it("routes a child node not inside auto-layout to the PropertyEditor", () => {
+      // Alignment is rendered inside PositionSection by PropertyEditor.
       select(["rect1"]);
       render(<PropertiesPanel />);
 
-      const align = screen.getByTestId("alignment-section");
-      expect(align.getAttribute("data-count")).toBe("1");
-      // Still the single-node editor path.
       expect(screen.getByTestId("property-editor")).toBeTruthy();
     });
 
-    it("does not show the AlignmentSection for a single root-level node", () => {
-      // rect2 is a root node (no parent frame) -> alignment not applicable.
+    it("does not show spacing for a single root-level node", () => {
       select(["rect2"]);
       render(<PropertiesPanel />);
 
-      expect(screen.queryByTestId("alignment-section")).toBeNull();
+      expect(screen.queryByTestId("spacing-section")).toBeNull();
       expect(screen.getByTestId("property-editor")).toBeTruthy();
     });
   });
 
   describe("multi selection", () => {
-    it("routes 2+ nodes to the MultiSelectPropertyEditor plus AlignmentSection", () => {
+    it("routes 2+ nodes to the MultiSelectPropertyEditor plus spacing controls", () => {
       select(["rect1", "text1"]);
       render(<PropertiesPanel />);
 
       const multi = screen.getByTestId("multi-select-editor");
       expect(multi.getAttribute("data-count")).toBe("2");
 
-      const align = screen.getByTestId("alignment-section");
-      expect(align.getAttribute("data-count")).toBe("2");
+      expect(screen.getByTestId("spacing-section")).toBeTruthy();
 
       // Multi-select must NOT render the single-node editor or page props.
       expect(screen.queryByTestId("property-editor")).toBeNull();
