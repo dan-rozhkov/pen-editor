@@ -63,12 +63,12 @@ export function SlidesPanel() {
                 data-testid={`slide-card-${slide.id}`}
                 onClick={() => selectSlide(slide.id)}
                 className={clsx(
-                  "flex flex-col gap-1.5 rounded-lg p-2 text-left bg-transparent hover:bg-transparent",
+                  "flex flex-col gap-1.5 rounded-lg p-2 text-left bg-secondary/50 hover:bg-secondary",
                   isSelected && "ring-2 ring-accent-primary bg-secondary",
                 )}
               >
                 <div
-                  className="w-full bg-secondary rounded-md flex overflow-hidden"
+                  className="w-full rounded-md flex overflow-hidden"
                   style={{ aspectRatio: aspectRatio ?? "16 / 9" }}
                 >
                   <span
