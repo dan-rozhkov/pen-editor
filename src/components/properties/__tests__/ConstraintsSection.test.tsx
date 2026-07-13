@@ -58,6 +58,21 @@ describe("<ConstraintsSection />", () => {
     });
   });
 
+  it("clicking the center guides sets the corresponding axis to center", () => {
+    const onUpdate = vi.fn();
+    render(<ConstraintsSection node={makeNode()} onUpdate={onUpdate} />);
+
+    fireEvent.click(screen.getByLabelText("Center horizontally"));
+    expect(onUpdate).toHaveBeenCalledWith({
+      constraints: { horizontal: "center", vertical: "min" },
+    });
+
+    fireEvent.click(screen.getByLabelText("Center vertically"));
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      constraints: { horizontal: "min", vertical: "center" },
+    });
+  });
+
   it("reflects an existing stretch/center constraint on the pins", () => {
     render(
       <ConstraintsSection

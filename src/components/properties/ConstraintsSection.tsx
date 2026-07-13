@@ -146,8 +146,40 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
             </TooltipContent>
           </Tooltip>
           <div className="absolute left-6 top-4 h-6 w-8 rounded-md border border-border-default" />
-          <div className="absolute left-1/2 top-1/2 h-2.5 w-px -translate-x-1/2 -translate-y-1/2 bg-text-muted" />
-          <div className="absolute left-1/2 top-1/2 h-px w-2.5 -translate-x-1/2 -translate-y-1/2 bg-text-muted" />
+          <div className="pointer-events-none absolute left-1/2 top-1/2 h-2.5 w-px -translate-x-1/2 -translate-y-1/2 bg-text-muted" />
+          <div className="pointer-events-none absolute left-1/2 top-1/2 h-px w-2.5 -translate-x-1/2 -translate-y-1/2 bg-text-muted" />
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label="Center horizontally"
+                  aria-pressed={horizontal === "center"}
+                  className="absolute left-[calc(50%-5px)] top-1/2 z-20 h-px w-2.5 -translate-y-1/2"
+                  onClick={() => update({ horizontal: "center" })}
+                />
+              }
+            />
+            <TooltipContent>
+              <span>Center horizontally</span>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label="Center vertically"
+                  aria-pressed={vertical === "center"}
+                  className="absolute left-1/2 top-[calc(50%-5px)] z-20 h-2.5 w-px -translate-x-1/2"
+                  onClick={() => update({ vertical: "center" })}
+                />
+              }
+            />
+            <TooltipContent>
+              <span>Center vertically</span>
+            </TooltipContent>
+          </Tooltip>
         </div>
         <div className="flex flex-1 flex-col gap-2">
           <SelectInput
