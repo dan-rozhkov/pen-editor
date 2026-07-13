@@ -966,6 +966,8 @@ export interface FlatSnapshot {
   fillStyles?: FillStyle[]
   /** Named reusable effect styles, at the time of the snapshot. */
   effectStyles?: EffectStyle[]
+  /** Persistent slide (presentation) order, at the time of the snapshot. */
+  slideOrder?: string[]
 }
 
 export interface ComponentArtifact {

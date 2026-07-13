@@ -14,6 +14,7 @@ export function createSnapshot(state: {
   childrenById: Record<string, string[]>;
   rootIds: string[];
   componentArtifactsById?: Record<string, ComponentArtifact>;
+  slideOrder?: string[];
 }): HistorySnapshot {
   const selection = useSelectionStore.getState();
   return buildHistorySnapshot(
@@ -28,6 +29,7 @@ export function createSnapshot(state: {
     useTextStyleStore.getState().textStyles,
     useStyleStore.getState().fillStyles,
     useStyleStore.getState().effectStyles,
+    state.slideOrder ?? [],
   );
 }
 
@@ -38,6 +40,7 @@ export function saveHistory(state: {
   childrenById: Record<string, string[]>;
   rootIds: string[];
   componentArtifactsById?: Record<string, ComponentArtifact>;
+  slideOrder?: string[];
 }): void {
   useHistoryStore.getState().saveHistory(createSnapshot(state));
 }

@@ -26,6 +26,15 @@ export interface SceneState {
   expandedFrameIds: Set<string>;
   pageBackground: string;
 
+  /**
+   * Persistent presentation order of top-level frame ids ("slides"),
+   * independent of canvas x/y and of `rootIds` (tree/z-order). The single
+   * source of truth for both SlidesPanel and Present mode; resolve against
+   * the current scene via `resolveSlideOrder` (drops deleted ids, appends
+   * new top-level frames) rather than reading it raw.
+   */
+  slideOrder: string[];
+
   // Get full tree (lazy, cached)
   getNodes: () => SceneNode[];
 
@@ -46,6 +55,13 @@ export interface SceneState {
   setNodesWithoutHistory: (nodes: SceneNode[]) => void;
   restoreSnapshot: (snapshot: FlatSnapshot | HistorySnapshot) => void;
   reorderNode: (fromIndex: number, toIndex: number) => void;
+  /**
+   * Reorder the slide presentation order (`slideOrder`) only — indices are
+   * into the resolved slide order (see `resolveSlideOrder`), NOT into
+   * `rootIds`. Does not touch `nodesById`/`rootIds`/coordinates/z-order;
+   * writes history so it round-trips through undo/redo.
+   */
+  reorderSlide: (fromIndex: number, toIndex: number) => void;
   setVisibility: (id: string, visible: boolean) => void;
   toggleVisibility: (id: string) => void;
   toggleFrameExpanded: (id: string) => void;

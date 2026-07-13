@@ -2,7 +2,8 @@ import { create } from "zustand";
 import { useSceneStore } from "./sceneStore";
 import { useSelectionStore } from "./selectionStore";
 import { useHoverStore } from "./hoverStore";
-import type { FlatSceneNode, SceneNode } from "@/types/scene";
+import { resolveSlideOrder } from "@/utils/slideOrder";
+import type { SceneNode } from "@/types/scene";
 
 export type EditorMode = "edit" | "view" | "present";
 
@@ -25,19 +26,6 @@ export function canEditScene(mode: EditorMode): boolean {
 /** Present locks the canvas entirely; edit and view allow pan/zoom + select. */
 export function canInteractCanvas(mode: EditorMode): boolean {
   return mode !== "present";
-}
-
-/** Top-level frame ids ordered top-to-bottom, then left-to-right. */
-export function orderedFrameIds(
-  nodesById: Record<string, FlatSceneNode>,
-  rootIds: string[],
-): string[] {
-  return rootIds
-    .map((id) => nodesById[id])
-    .filter((n): n is FlatSceneNode => !!n && n.type === "frame")
-    .slice()
-    .sort((a, b) => a.y - b.y || a.x - b.x)
-    .map((n) => n.id);
 }
 
 /** Wrap the frame node (from the computed tree) for viewportStore.fitToContent. */
@@ -72,7 +60,10 @@ export const useEditorModeStore = create<EditorModeState>((set) => ({
 
   enterPresent: () => {
     const scene = useSceneStore.getState();
-    const ids = orderedFrameIds(scene.nodesById, scene.rootIds);
+    // Present order follows the user-defined slideOrder (same source of
+    // truth as SlidesPanel) rather than a spatial y/x sort, so the panel and
+    // Present mode always agree on the sequence.
+    const ids = resolveSlideOrder(scene.nodesById, scene.rootIds, scene.slideOrder);
     if (ids.length === 0) return; // nothing to present
     const selected = useSelectionStore.getState().selectedIds[0];
     let index = 0;

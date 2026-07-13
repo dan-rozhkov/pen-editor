@@ -27,6 +27,7 @@ function emptyPage(id: string, name: string): PageData {
     viewport: { scale: 1, x: 0, y: 0 },
     history: { past: [], future: [] },
     guides: [],
+    slideOrder: [],
   };
 }
 

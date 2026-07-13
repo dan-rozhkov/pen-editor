@@ -23,6 +23,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   _cachedTree: null,
   expandedFrameIds: new Set<string>(),
   pageBackground: "#f5f5f5",
+  slideOrder: [],
 
   // Lazy tree builder for backward compat
   getNodes: () => getCachedTree(get()),

@@ -29,7 +29,8 @@ export interface SnapshotSceneSlice {
  * so text-style add/update/delete round-trips through undo/redo too.
  * fillStyles/effectStyles (shared fill/effect styles) are carried the same
  * way so their create/update/delete/apply/detach round-trips through
- * undo/redo too.
+ * undo/redo too. slideOrder (persistent slide presentation order) is
+ * likewise always carried so `reorderSlide` round-trips through undo/redo.
  */
 export function buildHistorySnapshot(
   scene: SnapshotSceneSlice,
@@ -39,6 +40,7 @@ export function buildHistorySnapshot(
   textStyles: HistorySnapshot["textStyles"],
   fillStyles: HistorySnapshot["fillStyles"],
   effectStyles: HistorySnapshot["effectStyles"],
+  slideOrder: string[] = [],
 ): HistorySnapshot {
   return {
     nodesById: { ...scene.nodesById },
@@ -51,6 +53,7 @@ export function buildHistorySnapshot(
     textStyles: [...(textStyles ?? [])],
     fillStyles: [...(fillStyles ?? [])],
     effectStyles: [...(effectStyles ?? [])],
+    slideOrder: [...(slideOrder ?? [])],
     selection: {
       selectedIds: [...selection.selectedIds],
       enteredContainerId: selection.enteredContainerId,

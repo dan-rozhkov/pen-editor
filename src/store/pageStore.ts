@@ -30,6 +30,8 @@ export interface PageData {
   history: { past: HistorySnapshot[]; future: HistorySnapshot[] };
   // Per-page ruler guides
   guides: Guide[];
+  // Per-page slide (presentation) order — see src/utils/slideOrder.ts
+  slideOrder: string[];
 }
 
 interface PageStoreState {
@@ -65,6 +67,7 @@ function createEmptyPage(name: string): PageData {
     viewport: { scale: 1, x: 0, y: 0 },
     history: { past: [], future: [] },
     guides: [],
+    slideOrder: [],
   };
 }
 
@@ -163,6 +166,7 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
       viewport: { ...sourceAfterSave.viewport },
       history: { past: [], future: [] },
       guides: sourceAfterSave.guides.map((g) => ({ ...g })),
+      slideOrder: [...sourceAfterSave.slideOrder],
     };
 
     const sourceIndex = currentPages.findIndex((p) => p.id === pageId);
@@ -214,6 +218,7 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
       viewport: { scale: viewport.scale, x: viewport.x, y: viewport.y },
       history: history.getStacks(),
       guides: useGuidesStore.getState().guides,
+      slideOrder: [...scene.slideOrder],
     };
 
     // Sync componentArtifactsById from sceneStore
@@ -276,6 +281,7 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
       pageBackground: targetPage.pageBackground,
       expandedFrameIds: new Set(targetPage.expandedFrameIds),
       componentArtifactsById: { ...freshState.componentArtifactsById },
+      slideOrder: [...targetPage.slideOrder],
       _cachedTree: null,
     });
 

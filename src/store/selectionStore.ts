@@ -87,6 +87,7 @@ function saveSelectionHistoryIfChanged(
     useTextStyleStore.getState().textStyles,
     useStyleStore.getState().fillStyles,
     useStyleStore.getState().effectStyles,
+    scene.slideOrder,
   )
   useHistoryStore.getState().saveHistory(snapshot)
 }

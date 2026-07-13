@@ -250,4 +250,119 @@ describe("<SlidesPanel />", () => {
       .map(([container]) => (container as { id: string }).id);
     expect(refreshedIds).toEqual(["f1"]);
   });
+
+  describe("drag to reorder", () => {
+    /** Stub getBoundingClientRect so cards report a uniform row height + gap. */
+    function stubCardRect(id: string, top: number, height = 100): void {
+      const el = screen.getByTestId(`slide-card-${id}`);
+      el.getBoundingClientRect = () =>
+        ({
+          top,
+          bottom: top + height,
+          height,
+          left: 0,
+          right: 0,
+          width: 0,
+          x: 0,
+          y: top,
+          toJSON() {},
+        }) as DOMRect;
+    }
+
+    function stubRows(ids: string[], rowHeight = 100, gap = 12): void {
+      ids.forEach((id, i) => stubCardRect(id, i * (rowHeight + gap), rowHeight));
+    }
+
+    it("drags a card down past a neighbor and commits the new order on drop", () => {
+      seedNodes([frameNode("f1", "One"), frameNode("f2", "Two"), frameNode("f3", "Three")]);
+      render(<SlidesPanel />);
+      stubRows(["f1", "f2", "f3"]);
+
+      const card1 = screen.getByTestId("slide-card-f1");
+      fireEvent.pointerDown(card1, { button: 0, pointerId: 1, clientY: 50 });
+      // Past the drag threshold and past f2's slot center (slot = 112px).
+      fireEvent.pointerMove(card1, { pointerId: 1, clientY: 50 + 130 });
+      fireEvent.pointerUp(card1, { pointerId: 1, clientY: 50 + 130 });
+
+      const s = useSceneStore.getState();
+      expect(s.slideOrder).toEqual(["f2", "f1", "f3"]);
+      // Canvas layout / z-order untouched — only the presentation order moved.
+      expect(s.rootIds).toEqual(["f1", "f2", "f3"]);
+      expect(s.nodesById["f1"].x).toBe(0);
+      expect(s.nodesById["f1"].y).toBe(0);
+    });
+
+    it("shows the dragged card ahead of its neighbors, in the new order, after commit", () => {
+      seedNodes([frameNode("f1", "One"), frameNode("f2", "Two"), frameNode("f3", "Three")]);
+      render(<SlidesPanel />);
+      stubRows(["f1", "f2", "f3"]);
+
+      const card1 = screen.getByTestId("slide-card-f1");
+      fireEvent.pointerDown(card1, { button: 0, pointerId: 1, clientY: 50 });
+      fireEvent.pointerMove(card1, { pointerId: 1, clientY: 50 + 130 });
+      fireEvent.pointerUp(card1, { pointerId: 1, clientY: 50 + 130 });
+
+      const names = screen.getAllByTestId("slide-name").map((el) => el.textContent);
+      expect(names).toEqual(["Two", "One", "Three"]);
+    });
+
+    it("does not reorder when the pointer never crosses the drag threshold (plain click)", () => {
+      seedNodes([frameNode("f1", "One"), frameNode("f2", "Two")]);
+      render(<SlidesPanel />);
+      stubRows(["f1", "f2"]);
+
+      const card1 = screen.getByTestId("slide-card-f1");
+      fireEvent.pointerDown(card1, { button: 0, pointerId: 1, clientY: 50 });
+      fireEvent.pointerMove(card1, { pointerId: 1, clientY: 51 }); // 1px — below threshold
+      fireEvent.pointerUp(card1, { pointerId: 1, clientY: 51 });
+      fireEvent.click(card1);
+
+      expect(useSceneStore.getState().slideOrder).toEqual([]);
+      expect(useSelectionStore.getState().selectedIds).toEqual(["f1"]);
+    });
+
+    it("a real drag suppresses the trailing click's selection", () => {
+      seedNodes([frameNode("f1", "One"), frameNode("f2", "Two"), frameNode("f3", "Three")]);
+      render(<SlidesPanel />);
+      stubRows(["f1", "f2", "f3"]);
+
+      const card1 = screen.getByTestId("slide-card-f1");
+      fireEvent.pointerDown(card1, { button: 0, pointerId: 1, clientY: 50 });
+      fireEvent.pointerMove(card1, { pointerId: 1, clientY: 50 + 130 });
+      fireEvent.pointerUp(card1, { pointerId: 1, clientY: 50 + 130 });
+      // Browsers fire a trailing click after pointerup — it must not re-select.
+      fireEvent.click(card1);
+
+      expect(useSelectionStore.getState().selectedIds).toEqual([]);
+    });
+
+    it("clamps the drop at the top of the list", () => {
+      seedNodes([frameNode("f1", "One"), frameNode("f2", "Two"), frameNode("f3", "Three")]);
+      render(<SlidesPanel />);
+      stubRows(["f1", "f2", "f3"]);
+
+      const card3 = screen.getByTestId("slide-card-f3");
+      fireEvent.pointerDown(card3, { button: 0, pointerId: 1, clientY: 250 });
+      // Drag far above the top of the list.
+      fireEvent.pointerMove(card3, { pointerId: 1, clientY: 250 - 1000 });
+      fireEvent.pointerUp(card3, { pointerId: 1, clientY: 250 - 1000 });
+
+      expect(useSceneStore.getState().slideOrder).toEqual(["f3", "f1", "f2"]);
+    });
+
+    it("persists the new order across a re-render (survives via slideOrder, not node position)", () => {
+      seedNodes([frameNode("f1", "One"), frameNode("f2", "Two"), frameNode("f3", "Three")]);
+      const { rerender } = render(<SlidesPanel />);
+      stubRows(["f1", "f2", "f3"]);
+
+      const card1 = screen.getByTestId("slide-card-f1");
+      fireEvent.pointerDown(card1, { button: 0, pointerId: 1, clientY: 50 });
+      fireEvent.pointerMove(card1, { pointerId: 1, clientY: 50 + 130 });
+      fireEvent.pointerUp(card1, { pointerId: 1, clientY: 50 + 130 });
+
+      rerender(<SlidesPanel />);
+      const names = screen.getAllByTestId("slide-name").map((el) => el.textContent);
+      expect(names).toEqual(["Two", "One", "Three"]);
+    });
+  });
 });

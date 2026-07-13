@@ -73,4 +73,12 @@ describe("buildHistorySnapshot", () => {
     expect(snap.effectStyles).not.toBe(effectStyles);
     expect(snap.effectStyles).toEqual(effectStyles);
   });
+
+  it("clones the slideOrder array, defaulting to empty when omitted", () => {
+    expect(buildHistorySnapshot(scene, [], selection, [], [], [], []).slideOrder).toEqual([]);
+    const slideOrder = ["f2", "f1"];
+    const snap = buildHistorySnapshot(scene, [], selection, [], [], [], [], slideOrder);
+    expect(snap.slideOrder).not.toBe(slideOrder);
+    expect(snap.slideOrder).toEqual(slideOrder);
+  });
 });

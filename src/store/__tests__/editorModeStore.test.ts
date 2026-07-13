@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   useEditorModeStore,
-  orderedFrameIds,
   canEditScene,
   canInteractCanvas,
   presentFitNode,
@@ -10,7 +9,8 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 
 function seedFrames() {
-  // Two top-level frames + one non-frame root; B is above A on canvas.
+  // Two top-level frames + one non-frame root; B is above A on canvas, but
+  // slideOrder (the panel/Present source of truth) puts A before B.
   const frameA = { id: "A", type: "frame", x: 0, y: 100, width: 50, height: 50, children: [] };
   const frameB = { id: "B", type: "frame", x: 10, y: 0, width: 50, height: 50, children: [] };
   const rect = { id: "R", type: "rect", x: 0, y: 0, width: 10, height: 10 };
@@ -19,6 +19,7 @@ function seedFrames() {
     parentById: {},
     childrenById: { A: [], B: [], R: [] },
     rootIds: ["A", "B", "R"],
+    slideOrder: ["A", "B"],
   });
 }
 
@@ -27,11 +28,6 @@ describe("editorModeStore", () => {
     useEditorModeStore.setState({ mode: "edit", presentFrameIds: [], presentIndex: 0 });
     useSelectionStore.setState({ selectedIds: [] } as never);
     seedFrames();
-  });
-
-  it("orders top-level frames by (y, x) and ignores non-frames", () => {
-    const s = useSceneStore.getState();
-    expect(orderedFrameIds(s.nodesById, s.rootIds)).toEqual(["B", "A"]);
   });
 
   it("predicates express the gating policy", () => {
@@ -57,24 +53,30 @@ describe("editorModeStore", () => {
     expect(useSelectionStore.getState().selectedIds).toEqual([]);
   });
 
-  it("enterPresent captures ordered frames and starts at selected frame", () => {
+  it("enterPresent orders frames by slideOrder (not spatial y/x) and starts at selected frame", () => {
     useSelectionStore.setState({ selectedIds: ["A"] } as never);
     useEditorModeStore.getState().enterPresent();
     const st = useEditorModeStore.getState();
     expect(st.mode).toBe("present");
-    expect(st.presentFrameIds).toEqual(["B", "A"]);
-    expect(st.presentIndex).toBe(1); // A is second
+    expect(st.presentFrameIds).toEqual(["A", "B"]);
+    expect(st.presentIndex).toBe(0); // A is first in slideOrder
+  });
+
+  it("enterPresent falls back to rootIds order for frames not yet in slideOrder", () => {
+    useSceneStore.setState({ slideOrder: [] });
+    useEditorModeStore.getState().enterPresent();
+    expect(useEditorModeStore.getState().presentFrameIds).toEqual(["A", "B"]);
   });
 
   it("enterPresent clears the selection but still starts at the selected frame", () => {
-    useSelectionStore.getState().setSelectedIds(["A"]);
+    useSelectionStore.getState().setSelectedIds(["B"]);
     useEditorModeStore.getState().enterPresent();
-    expect(useEditorModeStore.getState().presentIndex).toBe(1); // A resolved first
+    expect(useEditorModeStore.getState().presentIndex).toBe(1); // B is second in slideOrder
     expect(useSelectionStore.getState().selectedIds).toEqual([]);
   });
 
   it("enterPresent is a no-op when there are no frames", () => {
-    useSceneStore.setState({ nodesById: {} as never, parentById: {}, childrenById: {}, rootIds: [] });
+    useSceneStore.setState({ nodesById: {} as never, parentById: {}, childrenById: {}, rootIds: [], slideOrder: [] });
     useEditorModeStore.getState().enterPresent();
     expect(useEditorModeStore.getState().mode).toBe("edit");
   });

@@ -20,6 +20,7 @@ export function resetStores(): void {
     _cachedTree: null,
     expandedFrameIds: new Set<string>(),
     pageBackground: "#f5f5f5",
+    slideOrder: [],
   });
   useSelectionStore.setState({
     selectedIds: [],

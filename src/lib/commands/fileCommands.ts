@@ -24,6 +24,7 @@ function exportAsJson(): void {
     nodes: buildTree(page.rootIds, page.nodesById, page.childrenById),
     pageBackground: page.pageBackground,
     guides: page.guides,
+    slideOrder: page.slideOrder,
   }));
   const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
   downloadDocument(

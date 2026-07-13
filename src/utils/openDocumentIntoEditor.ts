@@ -44,6 +44,7 @@ export function applyOpenedDocument(
       viewport: { scale: 1, x: 0, y: 0 },
       history: { past: [], future: [] },
       guides: page.guides ?? [],
+      slideOrder: page.slideOrder ?? [],
     };
   });
 

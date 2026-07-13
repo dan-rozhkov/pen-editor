@@ -13,6 +13,8 @@ export interface PenPage {
   nodes: SceneNode[]
   pageBackground?: string
   guides?: Guide[]
+  /** Persistent slide (presentation) order — see src/utils/slideOrder.ts */
+  slideOrder?: string[]
 }
 
 export interface PenDocument {
@@ -35,6 +37,7 @@ export interface DocumentPageData {
   nodes: SceneNode[]
   pageBackground: string
   guides: Guide[]
+  slideOrder: string[]
 }
 
 export interface DocumentData {
@@ -50,7 +53,7 @@ export interface DocumentData {
 const CURRENT_VERSION = '1.1'
 
 export function serializeDocument(
-  pages: { id: string; name: string; nodes: SceneNode[]; pageBackground: string; guides?: Guide[] }[],
+  pages: { id: string; name: string; nodes: SceneNode[]; pageBackground: string; guides?: Guide[]; slideOrder?: string[] }[],
   variables: Variable[],
   activeTheme: ThemeName,
   componentArtifacts: Record<string, ComponentArtifact> = {},
@@ -66,6 +69,7 @@ export function serializeDocument(
       nodes: p.nodes,
       ...(p.pageBackground !== '#f5f5f5' ? { pageBackground: p.pageBackground } : {}),
       ...(p.guides && p.guides.length > 0 ? { guides: p.guides } : {}),
+      ...(p.slideOrder && p.slideOrder.length > 0 ? { slideOrder: p.slideOrder } : {}),
     })),
     variables,
     textStyles,
@@ -90,6 +94,7 @@ export function deserializeDocument(json: string): DocumentData {
       nodes: p.nodes,
       pageBackground: p.pageBackground ?? '#f5f5f5',
       guides: p.guides ?? [],
+      slideOrder: p.slideOrder ?? [],
     }))
   } else {
     // Legacy single-page: wrap in a single page
@@ -99,6 +104,7 @@ export function deserializeDocument(json: string): DocumentData {
       nodes: doc.nodes ?? [],
       pageBackground: '#f5f5f5',
       guides: [],
+      slideOrder: [],
     }]
   }
 
@@ -114,7 +120,7 @@ export function deserializeDocument(json: string): DocumentData {
 }
 
 export function downloadDocument(
-  pages: { id: string; name: string; nodes: SceneNode[]; pageBackground: string }[],
+  pages: { id: string; name: string; nodes: SceneNode[]; pageBackground: string; guides?: Guide[]; slideOrder?: string[] }[],
   variables: Variable[],
   activeTheme: ThemeName,
   componentArtifacts: Record<string, ComponentArtifact> = {},

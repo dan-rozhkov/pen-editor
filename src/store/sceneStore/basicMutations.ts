@@ -12,6 +12,7 @@ import {
   collectDescendantIds,
 } from "../../types/scene";
 import { loadGoogleFontsFromNodes } from "../../utils/fontUtils";
+import { resolveSlideOrder } from "../../utils/slideOrder";
 import { saveHistory } from "./helpers/history";
 import { useGuidesStore } from "../guidesStore";
 import { useSelectionStore } from "../selectionStore";
@@ -334,6 +335,7 @@ export function createBasicMutations(set: SetState, get: GetState) {
         childrenById: snapshot.childrenById,
         rootIds: snapshot.rootIds,
         componentArtifactsById: { ...(snapshot.componentArtifactsById ?? {}) },
+        slideOrder: snapshot.slideOrder ?? [],
         _cachedTree: null,
       });
       // Restore variables when the snapshot carries them (all createSnapshot-based
@@ -391,6 +393,33 @@ export function createBasicMutations(set: SetState, get: GetState) {
         const [removed] = newRootIds.splice(fromIndex, 1);
         newRootIds.splice(toIndex, 0, removed);
         return { rootIds: newRootIds, _cachedTree: null };
+      }),
+
+    // Reorders the resolved slide order only — does NOT touch nodesById,
+    // rootIds, or any node coordinates/z-order. `fromIndex`/`toIndex` are
+    // indices into the caller's resolved order (see resolveSlideOrder),
+    // which is persisted verbatim as the new slideOrder.
+    reorderSlide: (fromIndex: number, toIndex: number) =>
+      set((state) => {
+        const currentOrder = resolveSlideOrder(
+          state.nodesById,
+          state.rootIds,
+          state.slideOrder,
+        );
+        if (
+          fromIndex < 0 ||
+          fromIndex >= currentOrder.length ||
+          toIndex < 0 ||
+          toIndex >= currentOrder.length ||
+          fromIndex === toIndex
+        ) {
+          return state;
+        }
+        saveHistory(state);
+        const newOrder = [...currentOrder];
+        const [removed] = newOrder.splice(fromIndex, 1);
+        newOrder.splice(toIndex, 0, removed);
+        return { slideOrder: newOrder };
       }),
 
     setVisibility: (id: string, visible: boolean) =>
