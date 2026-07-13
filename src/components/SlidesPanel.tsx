@@ -63,7 +63,7 @@ export function SlidesPanel() {
                 data-testid={`slide-card-${slide.id}`}
                 onClick={() => selectSlide(slide.id)}
                 className={clsx(
-                  "flex flex-col gap-1.5 rounded-lg p-2 text-left bg-secondary/50 hover:bg-secondary",
+                  "flex flex-col gap-1.5 rounded-lg p-2 text-left bg-transparent hover:bg-transparent",
                   isSelected && "ring-2 ring-accent-primary bg-secondary",
                 )}
               >
