@@ -63,7 +63,9 @@ describe("<MultiSelectPropertyEditor />", () => {
   it("renders the sections shared by two rects (position/size/appearance/fill/stroke)", () => {
     renderEditor(["rect1", "rect2"]);
 
-    expect(screen.getByText("Position")).toBeTruthy();
+    // "Position" now appears both as the section header and as an embedded
+    // alignment-control label, so match all occurrences.
+    expect(screen.getAllByText("Position").length).toBeGreaterThan(0);
     expect(screen.getByText("Size")).toBeTruthy();
     expect(screen.getByText("Appearance")).toBeTruthy();
     expect(screen.getByText("Fill")).toBeTruthy();
@@ -112,7 +114,7 @@ describe("<MultiSelectPropertyEditor />", () => {
     // rect + text both support position/size/appearance/fill/stroke/effects.
     renderEditor(["rect1", "text1"]);
 
-    expect(screen.getByText("Position")).toBeTruthy();
+    expect(screen.getAllByText("Position").length).toBeGreaterThan(0);
     expect(screen.getByText("Fill")).toBeTruthy();
     expect(screen.getByText("Stroke")).toBeTruthy();
   });
