@@ -13,11 +13,9 @@ export function SlidesPanel() {
   const getNodes = useSceneStore((state) => state.getNodes);
   const selectedIds = useSelectionStore((state) => state.selectedIds);
 
-  // Keep the list stable across thumbnail state/selection renders. A fresh
-  // array here retriggers useNodeThumbnails, whose state update then creates
-  // another fresh array and starts a continuous Pixi extraction loop.
-  // nodesById also changes for descendant edits, so real scene changes still
-  // invalidate every affected slide preview.
+  // Keep the list stable across thumbnail state/selection renders. Scene
+  // changes still update this list, while useNodeThumbnails resolves the
+  // changed descendant to its owning slide and refreshes only that preview.
   const slides = useMemo(
     () => getTopLevelFramesFlat(nodesById, rootIds),
     [nodesById, rootIds],

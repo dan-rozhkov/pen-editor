@@ -7,10 +7,10 @@ import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { resetStores } from "@/test/fixtures";
 import type { FlatSceneNode } from "@/types/scene";
 
-const extractBase64 = vi.fn(async () => "thumbnail");
+const extractBase64 = vi.fn(async (_container: unknown) => "thumbnail");
 
 vi.mock("@/utils/pixiUtils", () => ({
-  findPixiChild: vi.fn(() => ({})),
+  findPixiChild: vi.fn((_root: unknown, id: string) => ({ id })),
 }));
 
 /**
@@ -179,5 +179,58 @@ describe("<SlidesPanel />", () => {
       await vi.advanceTimersByTimeAsync(300);
     });
     expect(extractBase64).toHaveBeenCalledTimes(2);
+  });
+
+  it("regenerates only the slide whose descendant changed", async () => {
+    vi.useFakeTimers();
+    seedNodes([frameNode("f1", "Intro"), frameNode("f2", "Outro")]);
+    const child = {
+      id: "child-1",
+      type: "rectangle",
+      name: "Card",
+      x: 10,
+      y: 10,
+      width: 100,
+      height: 80,
+      fill: "#111111",
+    } as unknown as FlatSceneNode;
+    useSceneStore.setState((state) => ({
+      nodesById: { ...state.nodesById, [child.id]: child },
+      parentById: { ...state.parentById, [child.id]: "f1" },
+      childrenById: { ...state.childrenById, f1: [child.id], [child.id]: [] },
+      _cachedTree: null,
+    }));
+    useCanvasRefStore.setState({
+      pixiRefs: {
+        app: { renderer: { extract: { base64: extractBase64 } } },
+        sceneRoot: {},
+      } as unknown as NonNullable<
+        ReturnType<typeof useCanvasRefStore.getState>["pixiRefs"]
+      >,
+    });
+
+    render(<SlidesPanel />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(extractBase64).toHaveBeenCalledTimes(2);
+
+    act(() => {
+      useSceneStore.setState((state) => ({
+        nodesById: {
+          ...state.nodesById,
+          [child.id]: { ...state.nodesById[child.id], fill: "#ff0000" },
+        },
+        _cachedTree: null,
+      }));
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    const refreshedIds = extractBase64.mock.calls
+      .slice(2)
+      .map(([container]) => (container as { id: string }).id);
+    expect(refreshedIds).toEqual(["f1"]);
   });
 });
