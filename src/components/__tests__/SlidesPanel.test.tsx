@@ -87,6 +87,19 @@ describe("<SlidesPanel />", () => {
     expect(names).toEqual(["Intro", "Outro"]);
   });
 
+  it("places the slide number inside the preview above the title", () => {
+    seedNodes([frameNode("f1", "Intro")]);
+    render(<SlidesPanel />);
+
+    const card = screen.getByTestId("slide-card-f1");
+    const number = screen.getByTestId("slide-number-f1");
+    const title = screen.getByTestId("slide-name");
+
+    expect(number.textContent).toBe("1");
+    expect(number.parentElement).toBe(card.querySelector("div"));
+    expect(title.parentElement).toBe(card);
+  });
+
   it("excludes non-frame root nodes", () => {
     seedNodes([
       frameNode("f1", "Intro"),
