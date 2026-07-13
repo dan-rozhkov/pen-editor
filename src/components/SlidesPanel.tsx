@@ -69,16 +69,16 @@ export function SlidesPanel() {
                 )}
               >
                 <div
-                  className="w-full bg-secondary rounded-md flex flex-col overflow-hidden"
+                  className="w-full bg-secondary rounded-md flex overflow-hidden"
                   style={{ aspectRatio: aspectRatio ?? "16 / 9" }}
                 >
                   <span
                     data-testid={`slide-number-${slide.id}`}
-                    className="shrink-0 px-2 pt-1.5 h-6 text-[11px] text-text-disabled"
+                    className="shrink-0 w-6 px-2 pt-1.5 text-[11px] text-text-disabled"
                   >
                     {index + 1}
                   </span>
-                  <div className="min-h-0 flex-1 flex items-center justify-center overflow-hidden">
+                  <div className="min-w-0 flex-1 flex items-center justify-center overflow-hidden">
                     {thumb ? (
                       <img
                         src={thumb}
@@ -94,7 +94,7 @@ export function SlidesPanel() {
                     )}
                   </div>
                 </div>
-                <span data-testid="slide-name" className="text-[11px] text-text-secondary truncate">
+                <span data-testid="slide-name" className="pl-6 text-[11px] text-text-secondary truncate">
                   {slide.name || "Slide"}
                 </span>
               </button>
