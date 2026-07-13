@@ -125,7 +125,7 @@ export function SlidesPanel() {
       strokeWidth: 1,
       children: [],
     });
-    useSelectionStore.getState().select(id);
+    selectSlide(id);
   };
 
   const selectSlide = (slideId: string) => {

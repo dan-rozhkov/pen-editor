@@ -80,6 +80,7 @@ describe("<SlidesPanel />", () => {
   });
 
   it("adds and selects a new 16:9 slide", () => {
+    useViewportStore.setState({ scale: 2, x: 100, y: 100 });
     render(<SlidesPanel />);
 
     fireEvent.click(screen.getByRole("button", { name: "Add slide" }));
@@ -94,6 +95,11 @@ describe("<SlidesPanel />", () => {
       height: 540,
     });
     expect(useSelectionStore.getState().selectedIds).toEqual([slide?.id]);
+    expect(useViewportStore.getState()).toMatchObject({
+      scale: 1,
+      x: window.innerWidth / 2 - 480,
+      y: window.innerHeight / 2 - 270,
+    });
   });
 
   it("lists each top-level frame by name, in rootIds order", () => {
