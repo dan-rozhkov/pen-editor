@@ -78,7 +78,7 @@ Media parts are deduplicated by content hash before packaging.
 
 ## Slide geometry
 
-- PPTX has **one slide size per presentation**: taken from the first slide frame (default 960×540 px → 12192000×6858000 EMU — exactly the standard 16:9 size). Frames of other sizes are scaled proportionally to fit and centered.
+- PPTX has **one slide size per presentation**: taken from the first slide frame (default 960×540 px → 9144000×5143500 EMU at 96 dpi — exactly PowerPoint's standard "On-screen Show (16:9)" size). Frames of other sizes are scaled proportionally to fit and centered.
 - Absolute node rects come from `getNodeEffectiveSize` / `calculateFrameLayout` (Yoga-resolved auto-layout), relative to the slide frame; rotation → `a:xfrm rot` (clockwise, 60000ths of a degree).
 - Coordinate conversion: 1 px = 9525 EMU (96 dpi).
 
