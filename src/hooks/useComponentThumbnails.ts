@@ -60,6 +60,7 @@ export function useNodeThumbnails(nodes: { id: string }[]) {
   useEffect(() => {
     const nodeIds = nodeIdsKey ? nodeIdsKey.split("\u0000") : [];
     if (!pixiRefs || nodeIds.length === 0) return;
+    const { app, sceneRoot } = pixiRefs;
 
     const requestedIds = new Set(nodeIds);
     const pendingIds = new Set(nodeIds);
@@ -81,7 +82,6 @@ export function useNodeThumbnails(nodes: { id: string }[]) {
       const ids = [...pendingIds];
       pendingIds.clear();
       captureInFlight = true;
-      const { app, sceneRoot } = pixiRefs;
       const updates = new Map<string, string>();
 
       for (const id of ids) {
