@@ -20,14 +20,14 @@ const AXIS_OPTIONS: { value: ConstraintMode; label: string }[] = [
   { value: "scale", label: "Scale" },
 ];
 
-const pinBaseClass = "absolute transition-colors";
+const pinBaseClass = "absolute z-10 transition-colors";
 const pinInactiveClass = "bg-border-default hover:bg-text-muted";
 const pinActiveClass = "bg-accent-bright";
 
 /**
  * Constraints panel for a direct child of a non-auto-layout frame: controls
  * how the child repositions/resizes when the parent frame is resized
- * (Figma parity). The classic "cross" widget's four edge pins toggle
+ * (Figma parity). The classic Figma-style constraint widget's four edge pins toggle
  * min/max/stretch; the selects below cover the full mode set including
  * `center` and `scale` explicitly.
  */
@@ -48,9 +48,9 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
 
   return (
     <PropertySection title="Constraints">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-3">
         <div
-          className="relative w-14 h-14 shrink-0 rounded border border-border-default bg-secondary/40"
+          className="relative h-28 w-44 shrink-0 overflow-hidden rounded-[10px] bg-secondary"
           aria-label="Constraint cross"
         >
           <Tooltip>
@@ -62,7 +62,7 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
                   aria-pressed={pinLeft}
                   className={cn(
                     pinBaseClass,
-                    "left-0 top-1/2 -translate-y-1/2 -ml-px w-1.5 h-5 rounded-sm",
+                    "left-2 top-1/2 h-1.5 w-5 -translate-y-1/2 rounded-full",
                     pinLeft ? pinActiveClass : pinInactiveClass,
                   )}
                   onClick={() => update({ horizontal: toggleConstraintEdge(horizontal, "start") })}
@@ -82,7 +82,7 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
                   aria-pressed={pinRight}
                   className={cn(
                     pinBaseClass,
-                    "right-0 top-1/2 -translate-y-1/2 -mr-px w-1.5 h-5 rounded-sm",
+                    "right-2 top-1/2 h-1.5 w-5 -translate-y-1/2 rounded-full",
                     pinRight ? pinActiveClass : pinInactiveClass,
                   )}
                   onClick={() => update({ horizontal: toggleConstraintEdge(horizontal, "end") })}
@@ -102,7 +102,7 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
                   aria-pressed={pinTop}
                   className={cn(
                     pinBaseClass,
-                    "top-0 left-1/2 -translate-x-1/2 -mt-px h-1.5 w-5 rounded-sm",
+                    "left-1/2 top-1 h-5 w-1.5 -translate-x-1/2 rounded-full",
                     pinTop ? pinActiveClass : pinInactiveClass,
                   )}
                   onClick={() => update({ vertical: toggleConstraintEdge(vertical, "start") })}
@@ -122,7 +122,7 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
                   aria-pressed={pinBottom}
                   className={cn(
                     pinBaseClass,
-                    "bottom-0 left-1/2 -translate-x-1/2 -mb-px h-1.5 w-5 rounded-sm",
+                    "bottom-1 left-1/2 h-5 w-1.5 -translate-x-1/2 rounded-full",
                     pinBottom ? pinActiveClass : pinInactiveClass,
                   )}
                   onClick={() => update({ vertical: toggleConstraintEdge(vertical, "end") })}
@@ -133,9 +133,11 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
               <span>Pin bottom</span>
             </TooltipContent>
           </Tooltip>
-          <div className="absolute inset-3 rounded-sm border border-dashed border-text-muted" />
+          <div className="absolute left-8 top-8 h-12 w-28 rounded-[10px] border-2 border-border-default bg-surface-panel" />
+          <div className="absolute left-1/2 top-1/2 h-7 w-px -translate-x-1/2 -translate-y-1/2 bg-text-muted" />
+          <div className="absolute left-1/2 top-1/2 h-px w-7 -translate-x-1/2 -translate-y-1/2 bg-text-muted" />
         </div>
-        <div className="flex-1 flex flex-col gap-2">
+        <div className="flex flex-col gap-2">
           <SelectInput
             label="H"
             value={horizontal}
