@@ -77,7 +77,7 @@ function extractPngBytes(
  * `sceneRoot`) renderable for the duration of `fn`, then restore whatever they
  * were before.
  */
-function withForcedRenderable<T>(container: PixiContainer, sceneRoot: PixiContainer, fn: () => T): T {
+export function withForcedRenderable<T>(container: PixiContainer, sceneRoot: PixiContainer, fn: () => T): T {
   const restore: Array<() => void> = [];
   let current: PixiContainer | null = container;
   while (current) {
@@ -108,7 +108,7 @@ function dataUrlToUint8Array(dataUrl: string): Uint8Array {
   return bytes;
 }
 
-function downloadBlob(bytes: Uint8Array, filename: string, mimeType: string): void {
+export function downloadBlob(bytes: Uint8Array, filename: string, mimeType: string): void {
   const blob = new Blob([bytes as BlobPart], { type: mimeType });
   const url = URL.createObjectURL(blob);
   try {

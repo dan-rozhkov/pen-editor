@@ -1,9 +1,10 @@
 import { useMemo, useRef, useState } from "react";
 import clsx from "clsx";
-import { CardsIcon, PlusIcon } from "@phosphor-icons/react";
+import { CardsIcon, DownloadSimpleIcon, PlusIcon } from "@phosphor-icons/react";
 import { useSceneStore } from "../store/sceneStore";
 import { useSelectionStore } from "../store/selectionStore";
 import { useViewportStore } from "../store/viewportStore";
+import { useCanvasRefStore } from "../store/canvasRefStore";
 import { generateId } from "../types/scene";
 import type { FlatFrameNode } from "../types/scene";
 import { resolveSlideOrder } from "../utils/slideOrder";
@@ -63,6 +64,8 @@ export function SlidesPanel() {
   const addNode = useSceneStore((state) => state.addNode);
   const reorderSlide = useSceneStore((state) => state.reorderSlide);
   const selectedIds = useSelectionStore((state) => state.selectedIds);
+  const pixiRefs = useCanvasRefStore((state) => state.pixiRefs);
+  const [isExportingPptx, setIsExportingPptx] = useState(false);
 
   // Keep the list stable across thumbnail state/selection renders. Scene
   // changes still update this list, while useNodeThumbnails resolves the
@@ -215,6 +218,17 @@ export function SlidesPanel() {
     finishDrag(false);
   };
 
+  const handleExportPptx = async () => {
+    if (!pixiRefs || isExportingPptx || slides.length === 0) return;
+    setIsExportingPptx(true);
+    try {
+      const { exportSlidesToPptx } = await import("../utils/exportPptxUtils");
+      await exportSlidesToPptx(pixiRefs);
+    } finally {
+      setIsExportingPptx(false);
+    }
+  };
+
   const handleClick = (slideId: string) => {
     // A drag gesture (past the threshold) already committed the reorder on
     // pointerup — the trailing click event it fires shouldn't also select.
@@ -231,20 +245,37 @@ export function SlidesPanel() {
         <span className="text-xs font-medium text-secondary-foreground">
           Slides
         </span>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <button
-                onClick={addSlide}
-                className="p-0.5 rounded text-text-muted hover:text-text-default hover:bg-secondary"
-                aria-label="Add slide"
-              >
-                <PlusIcon size={14} />
-              </button>
-            }
-          />
-          <TooltipContent>Add slide</TooltipContent>
-        </Tooltip>
+        <div className="flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  onClick={handleExportPptx}
+                  disabled={slides.length === 0 || isExportingPptx}
+                  className="p-0.5 rounded text-text-muted hover:text-text-default hover:bg-secondary disabled:opacity-40 disabled:pointer-events-none"
+                  aria-label="Export PPTX"
+                >
+                  <DownloadSimpleIcon size={14} />
+                </button>
+              }
+            />
+            <TooltipContent>Export PPTX</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  onClick={addSlide}
+                  className="p-0.5 rounded text-text-muted hover:text-text-default hover:bg-secondary"
+                  aria-label="Add slide"
+                >
+                  <PlusIcon size={14} />
+                </button>
+              }
+            />
+            <TooltipContent>Add slide</TooltipContent>
+          </Tooltip>
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto px-4 pt-3 pb-5">
         {slides.length === 0 ? (
