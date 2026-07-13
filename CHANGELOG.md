@@ -8,6 +8,18 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-07-13
+
+### Added
+- **Slides creation** — the Slides section now has a persistent divider,
+  section header, and `+` action that creates and selects a new 16:9 frame.
+- **Slides document header** — Slides restores the File menu and editable
+  document name alongside the Pages experience.
+
+### Fixed
+- **Slide previews** — standardized preview proportions, spacing, numbering,
+  hover/selection styling, and thumbnail extraction updates.
+
 ## [0.24.1] - 2026-07-11
 
 ### Fixed
@@ -242,7 +254,8 @@ First tracked release. Summarizes the features shipped up to this point.
 - Align inline frame-name editor with the canvas label position.
 - Remove double-shaded blue on the selected layer row.
 
-[Unreleased]: https://github.com/dan-rozhkov/pen-editor/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/dan-rozhkov/pen-editor/compare/v0.30.0...HEAD
+[0.30.0]: https://github.com/dan-rozhkov/pen-editor/compare/v0.29.0...v0.30.0
 [0.11.0]: https://github.com/dan-rozhkov/pen-editor/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/dan-rozhkov/pen-editor/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/dan-rozhkov/pen-editor/compare/v0.8.0...v0.9.0
