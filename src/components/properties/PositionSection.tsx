@@ -29,52 +29,58 @@ export function PositionSection({ node, onUpdate, mixedKeys, parentContext, alig
 
   return (
     <PropertySection title="Position">
-      <PropertyRow>
-        <NumberInput
-          label="X"
-          value={node.x}
-          onChange={(v) => onUpdate({ x: v })}
-          isMixed={mixedKeys?.has("x")}
-        />
-        <NumberInput
-          label="Y"
-          value={node.y}
-          onChange={(v) => onUpdate({ y: v })}
-          isMixed={mixedKeys?.has("y")}
-        />
-      </PropertyRow>
-      <div className="flex gap-2 mt-2">
-        <div className="w-1/2">
-          <InputGroup>
-            <InputGroupAddon align="inline-start">
-              <ArrowClockwise size={14} />
-            </InputGroupAddon>
-            <InputGroupInput
-              type="number"
-              value={mixedKeys?.has("rotation") ? "" : Math.round((node.rotation ?? 0) * 100) / 100}
-              onChange={(e) => {
-                const val = parseFloat(e.target.value);
-                if (!isNaN(val)) {
-                  onUpdate({ rotation: val });
-                }
-              }}
-              min={0}
-              max={360}
-              step={1}
-              placeholder={mixedKeys?.has("rotation") ? "Mixed" : undefined}
-            />
-          </InputGroup>
-        </div>
-        <div className="w-1/2">
-          <FlipControls
-            flipX={node.flipX ?? false}
-            flipY={node.flipY ?? false}
-            onFlipXChange={(value) => onUpdate({ flipX: value })}
-            onFlipYChange={(value) => onUpdate({ flipY: value })}
+      {alignment}
+      <div className="flex flex-col gap-1">
+        <div className="text-[10px] text-text-primary">Position</div>
+        <PropertyRow>
+          <NumberInput
+            label="X"
+            value={node.x}
+            onChange={(v) => onUpdate({ x: v })}
+            isMixed={mixedKeys?.has("x")}
           />
+          <NumberInput
+            label="Y"
+            value={node.y}
+            onChange={(v) => onUpdate({ y: v })}
+            isMixed={mixedKeys?.has("y")}
+          />
+        </PropertyRow>
+      </div>
+      <div className="flex flex-col gap-1">
+        <div className="text-[10px] text-text-primary">Rotation</div>
+        <div className="flex gap-2">
+          <div className="w-1/2">
+            <InputGroup>
+              <InputGroupAddon align="inline-start">
+                <ArrowClockwise size={14} />
+              </InputGroupAddon>
+              <InputGroupInput
+                type="number"
+                value={mixedKeys?.has("rotation") ? "" : Math.round((node.rotation ?? 0) * 100) / 100}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  if (!isNaN(val)) {
+                    onUpdate({ rotation: val });
+                  }
+                }}
+                min={0}
+                max={360}
+                step={1}
+                placeholder={mixedKeys?.has("rotation") ? "Mixed" : undefined}
+              />
+            </InputGroup>
+          </div>
+          <div className="w-1/2">
+            <FlipControls
+              flipX={node.flipX ?? false}
+              flipY={node.flipY ?? false}
+              onFlipXChange={(value) => onUpdate({ flipX: value })}
+              onFlipYChange={(value) => onUpdate({ flipY: value })}
+            />
+          </div>
         </div>
       </div>
-      {alignment && <div className="mt-3">{alignment}</div>}
       {isInsideAutoLayout && (
         <Label className="cursor-pointer mt-1">
           <Checkbox

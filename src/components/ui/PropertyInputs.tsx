@@ -6,7 +6,7 @@ import { Label } from "./label";
 import { SelectWithOptions } from "./select";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "./input-group";
 import { ButtonGroup } from "./button-group";
-import { Button } from "./button";
+import { IconButton } from "./IconButton";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -544,26 +544,28 @@ export function FlipControls({
   return (
     <IconContext.Provider value={{ weight: "light" }}>
       <ButtonGroup orientation="horizontal" className="w-full">
-        <Button
+        <IconButton
           variant="secondary"
           size="sm"
           className="flex-1"
           onClick={() => onFlipXChange(!flipX)}
           disabled={readOnly}
+          tooltip="Flip horizontal"
           title="Flip horizontal"
         >
           <FlipHorizontalIcon className="size-[18px]!" />
-        </Button>
-        <Button
+        </IconButton>
+        <IconButton
           variant="secondary"
           size="sm"
           className="flex-1"
           onClick={() => onFlipYChange(!flipY)}
           disabled={readOnly}
+          tooltip="Flip vertical"
           title="Flip vertical"
         >
           <FlipVerticalIcon className="size-[18px]!" />
-        </Button>
+        </IconButton>
       </ButtonGroup>
     </IconContext.Provider>
   );

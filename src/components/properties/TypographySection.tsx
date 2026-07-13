@@ -5,7 +5,7 @@ import {
   AlignCenterVertical,
   AlignTop,
   ArrowsOut,
-  ArrowRight,
+  ArrowLineRight,
   Article,
   CheckIcon,
   LinkIcon,
@@ -1073,7 +1073,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             }`}
             onClick={() => setTextWidthMode("fixed")}
           >
-            <ArrowRight size={14} />
+            <ArrowLineRight size={14} />
           </IconButton>
           <IconButton
             variant={

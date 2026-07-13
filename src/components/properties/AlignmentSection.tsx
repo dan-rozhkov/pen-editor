@@ -7,6 +7,7 @@ import {
   AlignRight,
   AlignTop,
   GridNine,
+  IconContext,
 } from "@phosphor-icons/react";
 import {
   alignNodes,
@@ -20,7 +21,8 @@ import { applyNodeUpdates } from "@/utils/applyNodeUpdates";
 import type { FrameNode, GroupNode, SceneNode } from "@/types/scene";
 import { PropertySection } from "@/components/ui/PropertyInputs";
 import { Input } from "@/components/ui/input";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { ButtonGroup } from "@/components/ui/button-group";
+import { IconButton } from "@/components/ui/IconButton";
 
 interface AlignmentSectionProps {
   count: number;
@@ -58,134 +60,43 @@ export function AlignmentControls({
     applyNodeUpdates(nodes, updates);
   };
 
-  const iconSize = 16;
-  const buttonBaseClass = "p-2 rounded transition-colors";
-  const buttonClass = `${buttonBaseClass} bg-secondary hover:bg-secondary text-text-muted hover:text-text-primary`;
-
   return (
-    <div className="flex flex-col gap-2">
-      {showLabel && <div className="text-[10px] text-text-primary">Alignment</div>}
-      <div className="flex gap-1">
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <button
-                  className={buttonClass}
-                  onClick={() => handleAlign("left")}
-                  aria-label="Align left"
-                >
-                  <AlignLeft size={iconSize} />
-                </button>
-              }
-            />
-            <TooltipContent>
-              <span>Align left</span>
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <button
-                  className={buttonClass}
-                  onClick={() => handleAlign("centerH")}
-                  aria-label="Align center horizontally"
-                >
-                  <AlignCenterHorizontal size={iconSize} />
-                </button>
-              }
-            />
-            <TooltipContent>
-              <span>Align center horizontally</span>
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <button
-                  className={buttonClass}
-                  onClick={() => handleAlign("right")}
-                  aria-label="Align right"
-                >
-                  <AlignRight size={iconSize} />
-                </button>
-              }
-            />
-            <TooltipContent>
-              <span>Align right</span>
-            </TooltipContent>
-          </Tooltip>
-          <div className="w-2" />
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <button
-                  className={buttonClass}
-                  onClick={() => handleAlign("top")}
-                  aria-label="Align top"
-                >
-                  <AlignTop size={iconSize} />
-                </button>
-              }
-            />
-            <TooltipContent>
-              <span>Align top</span>
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <button
-                  className={buttonClass}
-                  onClick={() => handleAlign("centerV")}
-                  aria-label="Align center vertically"
-                >
-                  <AlignCenterVertical size={iconSize} />
-                </button>
-              }
-            />
-            <TooltipContent>
-              <span>Align center vertically</span>
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <button
-                  className={buttonClass}
-                  onClick={() => handleAlign("bottom")}
-                  aria-label="Align bottom"
-                >
-                  <AlignBottom size={iconSize} />
-                </button>
-              }
-            />
-            <TooltipContent>
-              <span>Align bottom</span>
-            </TooltipContent>
-          </Tooltip>
+    <IconContext.Provider value={{ weight: "light" }}>
+      <div className="flex flex-col gap-1">
+        {showLabel && <div className="text-[10px] text-text-primary">Alignment</div>}
+        <div className="flex w-full gap-2">
+          <ButtonGroup orientation="horizontal" className="min-w-0 flex-1">
+            <IconButton variant="secondary" size="sm" className="flex-1" onClick={() => handleAlign("left")} tooltip="Align left">
+              <AlignLeft className="size-[18px]!" />
+            </IconButton>
+            <IconButton variant="secondary" size="sm" className="flex-1" onClick={() => handleAlign("centerH")} tooltip="Align center horizontally">
+              <AlignCenterHorizontal className="size-[18px]!" />
+            </IconButton>
+            <IconButton variant="secondary" size="sm" className="flex-1" onClick={() => handleAlign("right")} tooltip="Align right">
+              <AlignRight className="size-[18px]!" />
+            </IconButton>
+          </ButtonGroup>
+          <ButtonGroup orientation="horizontal" className="min-w-0 flex-1">
+            <IconButton variant="secondary" size="sm" className="flex-1" onClick={() => handleAlign("top")} tooltip="Align top">
+              <AlignTop className="size-[18px]!" />
+            </IconButton>
+            <IconButton variant="secondary" size="sm" className="flex-1" onClick={() => handleAlign("centerV")} tooltip="Align center vertically">
+              <AlignCenterVertical className="size-[18px]!" />
+            </IconButton>
+            <IconButton variant="secondary" size="sm" className="flex-1" onClick={() => handleAlign("bottom")} tooltip="Align bottom">
+              <AlignBottom className="size-[18px]!" />
+            </IconButton>
+          </ButtonGroup>
           {!isSingleNodeInFrame && (
-            <>
-              <div className="w-2" />
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <button
-                      className={buttonClass}
-                      onClick={handleTidyUp}
-                      aria-label="Tidy up (Ctrl+Alt+T)"
-                    >
-                      <GridNine size={iconSize} />
-                    </button>
-                  }
-                />
-                <TooltipContent>
-                  <span>Tidy up (Ctrl+Alt+T)</span>
-                </TooltipContent>
-              </Tooltip>
-            </>
+            <ButtonGroup orientation="horizontal" className="shrink-0">
+              <IconButton variant="secondary" size="sm" onClick={handleTidyUp} tooltip="Tidy up (Ctrl+Alt+T)">
+                <GridNine className="size-[18px]!" />
+              </IconButton>
+            </ButtonGroup>
           )}
+        </div>
       </div>
-    </div>
+    </IconContext.Provider>
   );
 }
 
