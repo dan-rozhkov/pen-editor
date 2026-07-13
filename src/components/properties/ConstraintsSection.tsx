@@ -21,7 +21,8 @@ const AXIS_OPTIONS: { value: ConstraintMode; label: string }[] = [
 ];
 
 const pinBaseClass = "absolute z-10 flex h-5 w-5 items-center justify-center transition-colors before:rounded-full";
-const pinClass = "before:bg-text-muted hover:before:bg-text-primary";
+const pinInactiveClass = "before:bg-text-muted hover:before:bg-text-primary";
+const pinActiveClass = "before:bg-accent-bright";
 
 function AxisIcon({ axis }: { axis: "horizontal" | "vertical" }) {
   return (
@@ -73,8 +74,8 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
                   aria-pressed={pinLeft}
                   className={cn(
                     pinBaseClass,
-                    "left-1 top-1/2 -translate-y-1/2 before:h-px before:w-5",
-                    pinClass,
+                    "left-1 top-1/2 -translate-y-1/2 before:h-px before:w-2.5",
+                    pinLeft ? pinActiveClass : pinInactiveClass,
                   )}
                   onClick={() => update({ horizontal: toggleConstraintEdge(horizontal, "start") })}
                 />
@@ -93,8 +94,8 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
                   aria-pressed={pinRight}
                   className={cn(
                     pinBaseClass,
-                    "right-1 top-1/2 -translate-y-1/2 before:h-px before:w-5",
-                    pinClass,
+                    "right-1 top-1/2 -translate-y-1/2 before:h-px before:w-2.5",
+                    pinRight ? pinActiveClass : pinInactiveClass,
                   )}
                   onClick={() => update({ horizontal: toggleConstraintEdge(horizontal, "end") })}
                 />
@@ -113,8 +114,8 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
                   aria-pressed={pinTop}
                   className={cn(
                     pinBaseClass,
-                    "left-1/2 top-0 -translate-x-1/2 before:h-5 before:w-px",
-                    pinClass,
+                    "left-1/2 top-0 -translate-x-1/2 before:h-2.5 before:w-px",
+                    pinTop ? pinActiveClass : pinInactiveClass,
                   )}
                   onClick={() => update({ vertical: toggleConstraintEdge(vertical, "start") })}
                 />
@@ -133,8 +134,8 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
                   aria-pressed={pinBottom}
                   className={cn(
                     pinBaseClass,
-                    "bottom-0 left-1/2 -translate-x-1/2 before:h-5 before:w-px",
-                    pinClass,
+                    "bottom-0 left-1/2 -translate-x-1/2 before:h-2.5 before:w-px",
+                    pinBottom ? pinActiveClass : pinInactiveClass,
                   )}
                   onClick={() => update({ vertical: toggleConstraintEdge(vertical, "end") })}
                 />
