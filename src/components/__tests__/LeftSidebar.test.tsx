@@ -117,6 +117,8 @@ describe("<LeftSidebar />", () => {
   it("renders the Slides section when it is active", () => {
     useLeftSidebarStore.setState({ activeSection: "slides" });
     render(<LeftSidebar />);
+    expect(screen.getByTestId("toolbar-shim")).toBeTruthy();
+    expect(screen.getByText("Untitled")).toBeTruthy();
     expect(screen.getByTestId("slides-shim")).toBeTruthy();
     // Pages/layers content is not mounted while slides is active.
     expect(screen.queryByTestId("layers-shim")).toBeNull();

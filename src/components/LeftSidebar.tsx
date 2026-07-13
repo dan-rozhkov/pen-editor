@@ -66,9 +66,10 @@ export function LeftSidebar() {
           : "w-[300px] h-full flex flex-col bg-surface-panel border-r border-border-default"
       }
     >
-      {/* Pages keeps the File menu header; Agents has its own header (inside the
-          chat); Components gets a titled header styled like the chat's. */}
-      {activeSection === "pages" && (
+      {/* Pages and Slides share the document header; Agents has its own header
+          (inside the chat); Components gets a titled header styled like the
+          chat's. */}
+      {(activeSection === "pages" || activeSection === "slides") && (
         <div className="flex flex-row items-center gap-0 pr-1">
           <div className="flex-1 min-w-0">
             <Toolbar />
@@ -82,14 +83,7 @@ export function LeftSidebar() {
           </span>
         </div>
       )}
-      {activeSection === "slides" && (
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-border-default shrink-0">
-          <span className="text-sm font-medium text-text-primary flex-1">
-            Slides
-          </span>
-        </div>
-      )}
-      {activeSection === "pages" && (
+      {(activeSection === "pages" || activeSection === "slides") && (
         <div className="px-2 pb-2">
           {isEditing ? (
             <input

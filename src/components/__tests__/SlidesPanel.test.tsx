@@ -78,6 +78,23 @@ describe("<SlidesPanel />", () => {
     expect(screen.getByText("No slides yet")).toBeTruthy();
   });
 
+  it("adds and selects a new 16:9 slide", () => {
+    render(<SlidesPanel />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add slide" }));
+
+    const { nodesById, rootIds } = useSceneStore.getState();
+    const slide = nodesById[rootIds[0]];
+    expect(slide).toBeDefined();
+    expect(slide).toMatchObject({
+      type: "frame",
+      name: "Slide 1",
+      width: 960,
+      height: 540,
+    });
+    expect(useSelectionStore.getState().selectedIds).toEqual([slide?.id]);
+  });
+
   it("lists each top-level frame by name, in rootIds order", () => {
     seedNodes([frameNode("f1", "Intro"), frameNode("f2", "Outro")]);
     render(<SlidesPanel />);
