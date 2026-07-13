@@ -146,8 +146,18 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
             </TooltipContent>
           </Tooltip>
           <div className="absolute left-6 top-4 h-6 w-8 rounded-md border border-border-default" />
-          <div className="pointer-events-none absolute left-1/2 top-1/2 h-2.5 w-px -translate-x-1/2 -translate-y-1/2 bg-text-muted" />
-          <div className="pointer-events-none absolute left-1/2 top-1/2 h-px w-2.5 -translate-x-1/2 -translate-y-1/2 bg-text-muted" />
+          <div
+            className={cn(
+              "pointer-events-none absolute left-1/2 top-1/2 h-2.5 -translate-x-1/2 -translate-y-1/2",
+              vertical === "center" ? "w-[3px] bg-accent-bright" : "w-px bg-text-muted",
+            )}
+          />
+          <div
+            className={cn(
+              "pointer-events-none absolute left-1/2 top-1/2 w-2.5 -translate-x-1/2 -translate-y-1/2",
+              horizontal === "center" ? "h-[3px] bg-accent-bright" : "h-px bg-text-muted",
+            )}
+          />
           <Tooltip>
             <TooltipTrigger
               render={
