@@ -75,7 +75,7 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
                   className={cn(
                     pinBaseClass,
                     "left-1 top-1/2 -translate-y-1/2 before:h-px before:w-2.5",
-                    pinLeft ? pinActiveClass : pinInactiveClass,
+                    pinLeft ? `${pinActiveClass} before:h-[3px]` : pinInactiveClass,
                   )}
                   onClick={() => update({ horizontal: toggleConstraintEdge(horizontal, "start") })}
                 />
@@ -95,7 +95,7 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
                   className={cn(
                     pinBaseClass,
                     "right-1 top-1/2 -translate-y-1/2 before:h-px before:w-2.5",
-                    pinRight ? pinActiveClass : pinInactiveClass,
+                    pinRight ? `${pinActiveClass} before:h-[3px]` : pinInactiveClass,
                   )}
                   onClick={() => update({ horizontal: toggleConstraintEdge(horizontal, "end") })}
                 />
@@ -115,7 +115,7 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
                   className={cn(
                     pinBaseClass,
                     "left-1/2 top-0 -translate-x-1/2 before:h-2.5 before:w-px",
-                    pinTop ? pinActiveClass : pinInactiveClass,
+                    pinTop ? `${pinActiveClass} before:w-[3px]` : pinInactiveClass,
                   )}
                   onClick={() => update({ vertical: toggleConstraintEdge(vertical, "start") })}
                 />
@@ -135,7 +135,7 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
                   className={cn(
                     pinBaseClass,
                     "bottom-0 left-1/2 -translate-x-1/2 before:h-2.5 before:w-px",
-                    pinBottom ? pinActiveClass : pinInactiveClass,
+                    pinBottom ? `${pinActiveClass} before:w-[3px]` : pinInactiveClass,
                   )}
                   onClick={() => update({ vertical: toggleConstraintEdge(vertical, "end") })}
                 />
@@ -146,8 +146,8 @@ export function ConstraintsSection({ node, onUpdate }: ConstraintsSectionProps) 
             </TooltipContent>
           </Tooltip>
           <div className="absolute left-6 top-3 h-8 w-8 rounded-md border border-border-default" />
-          <div className="absolute left-1/2 top-1/2 h-5 w-px -translate-x-1/2 -translate-y-1/2 bg-text-muted" />
-          <div className="absolute left-1/2 top-1/2 h-px w-5 -translate-x-1/2 -translate-y-1/2 bg-text-muted" />
+          <div className="absolute left-1/2 top-1/2 h-2.5 w-px -translate-x-1/2 -translate-y-1/2 bg-text-muted" />
+          <div className="absolute left-1/2 top-1/2 h-px w-2.5 -translate-x-1/2 -translate-y-1/2 bg-text-muted" />
         </div>
         <div className="flex flex-1 flex-col gap-2">
           <SelectInput
