@@ -2,6 +2,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useMeasureStore } from "@/store/measureStore";
 import { useLayoutStore } from "@/store/layoutStore";
+import { useDevModeStore } from "@/store/devModeStore";
 import {
   findNodeById,
   getNodeAbsolutePositionWithLayout,
@@ -13,7 +14,9 @@ import {
   computeSiblingDistances,
 } from "@/utils/measureUtils";
 import { findResolvedDescendantByPath } from "@/utils/instanceRuntime";
+import { formatMeasureLine } from "@/lib/inspect/units";
 import type { RefNode } from "@/types/scene";
+import type { MeasureLine } from "@/store/measureStore";
 import type { InteractionContext } from "./types";
 
 export interface MeasurementController {
@@ -53,9 +56,17 @@ export function createMeasurementController(_context: InteractionContext): Measu
       hitId: string | null,
       hoveredDescendant?: { instanceId: string; descendantPath: string },
     ): void {
-      // Measurement distance computation (Option/Alt + hover)
-      const { modifierHeld, setLines, clearLines } = useMeasureStore.getState();
-      if (!hitId || !modifierHeld) {
+      // Measurement distance computation (Option/Alt + hover, or always-on in Dev Mode)
+      const { modifierHeld, setLines: setLinesRaw, clearLines } = useMeasureStore.getState();
+      const devMode = useDevModeStore.getState();
+      const setLines = (lines: MeasureLine[]) => {
+        setLinesRaw(
+          devMode.active
+            ? lines.map((line) => formatMeasureLine(line, devMode.units, devMode.remBase))
+            : lines,
+        );
+      };
+      if (!hitId || !(modifierHeld || devMode.active)) {
         clearLines();
       } else {
         const selState = useSelectionStore.getState();
