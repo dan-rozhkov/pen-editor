@@ -163,7 +163,7 @@ export function getFileCommands(): PaletteCommand[] {
     { id: "file-open", label: "Open…", group: "File", keywords: ["open file", "load"], run: () => void openDocument() },
     { id: "file-export-json", label: "Export as .json", group: "File", keywords: ["save", "download"], run: exportAsJson },
     { id: "file-export-pen", label: "Export as .pen", group: "File", keywords: ["save", "download"], run: exportAsPen },
-    { id: "file-export-tokens", label: "Export design tokens (.tokens.json)", group: "File", keywords: ["dtcg", "tokens", "download", "export"], run: exportDesignTokens },
-    { id: "file-import-tokens", label: "Import design tokens…", group: "File", keywords: ["dtcg", "tokens", "upload", "import"], run: () => void importDesignTokens() },
+    { id: "file-export-tokens", label: "Export tokens as .tokens.json", group: "File", keywords: ["dtcg", "tokens", "download", "export"], run: exportDesignTokens },
+    { id: "file-import-tokens", label: "Import design tokens", group: "File", keywords: ["dtcg", "tokens", "upload", "import"], run: () => void importDesignTokens() },
   ];
 }

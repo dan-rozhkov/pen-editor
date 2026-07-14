@@ -228,10 +228,7 @@ export function Toolbar() {
                 {isExportingPptx ? "Exporting .pptx…" : "Export as .pptx"}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleExportTokens}>
-                Export design tokens (.tokens.json)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleImportTokens}>
-                Import design tokens…
+                Export tokens as .tokens.json
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
@@ -247,6 +244,9 @@ export function Toolbar() {
                 }}
               >
                 Import from Pixso
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleImportTokens}>
+                Import design tokens
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
@@ -314,7 +314,11 @@ export function Toolbar() {
             >
               Cancel
             </Button>
-            <Button size="sm" onClick={handleImport}>
+            <Button
+              size="sm"
+              className="bg-accent-light text-white hover:bg-accent-light/80"
+              onClick={handleImport}
+            >
               Import
             </Button>
           </div>
