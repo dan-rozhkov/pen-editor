@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { ComponentPropertiesSection } from "../ComponentPropertiesSection";
+import { getComponentPropertyTargetOptions } from "@/utils/componentPropertyTargets";
 import { useSceneStore } from "@/store/sceneStore";
 import { resetStores } from "@/test/fixtures";
 import type { FlatFrameNode, FlatSceneNode, FrameNode } from "@/types/scene";
@@ -16,11 +17,30 @@ function seedComponent(): void {
     width: 100,
     height: 100,
   } as unknown as FlatSceneNode;
+  const label = {
+    id: "label",
+    type: "text",
+    name: "Label",
+    text: "Click me",
+    x: 0,
+    y: 0,
+    width: 80,
+    height: 20,
+  } as unknown as FlatSceneNode;
+  const nested = {
+    id: "nested",
+    type: "rect",
+    name: "Icon background",
+    x: 0,
+    y: 0,
+    width: 20,
+    height: 20,
+  } as unknown as FlatSceneNode;
 
   useSceneStore.setState({
-    nodesById: { comp },
-    parentById: { comp: null },
-    childrenById: {},
+    nodesById: { comp, label, nested },
+    parentById: { comp: null, label: "comp", nested: "label" },
+    childrenById: { comp: ["label"], label: ["nested"] },
     rootIds: ["comp"],
     componentArtifactsById: {},
     _cachedTree: null,
@@ -65,5 +85,13 @@ describe("<ComponentPropertiesSection />", () => {
 
     const updated = useSceneStore.getState().nodesById["comp"] as FlatFrameNode;
     expect(updated.properties).toEqual([]);
+  });
+
+  it("builds named target options while retaining ID paths as their values", () => {
+    const state = useSceneStore.getState();
+    expect(getComponentPropertyTargetOptions("comp", state.nodesById, state.childrenById)).toEqual([
+      { value: "label", label: "Label" },
+      { value: "label/nested", label: "Label / Icon background" },
+    ]);
   });
 });

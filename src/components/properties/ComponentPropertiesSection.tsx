@@ -1,6 +1,8 @@
+import { useMemo } from "react";
 import type { ComponentPropertyDef, ComponentPropertyType, FrameNode } from "@/types/scene";
 import { generateId } from "@/types/scene";
 import { useSceneStore } from "@/store/sceneStore";
+import { getComponentPropertyTargetOptions } from "@/utils/componentPropertyTargets";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
 import { CheckboxInput, PropertySection, SelectInput, TextInput } from "@/components/ui/PropertyInputs";
@@ -31,7 +33,13 @@ function defaultValueForType(type: ComponentPropertyType): string | boolean {
  */
 export function ComponentPropertiesSection({ node }: ComponentPropertiesSectionProps) {
   const setComponentProperties = useSceneStore((s) => s.setComponentProperties);
+  const nodesById = useSceneStore((s) => s.nodesById);
+  const childrenById = useSceneStore((s) => s.childrenById);
   const properties = node.properties ?? [];
+  const targetNodeOptions = useMemo(
+    () => getComponentPropertyTargetOptions(node.id, nodesById, childrenById),
+    [node.id, nodesById, childrenById],
+  );
 
   const updateProperty = (id: string, updates: Partial<ComponentPropertyDef>) => {
     setComponentProperties(
@@ -127,11 +135,15 @@ export function ComponentPropertiesSection({ node }: ComponentPropertiesSectionP
                 onChange={(defaultValue) => updateProperty(property.id, { defaultValue })}
               />
             )}
-            <TextInput
-              label="Target path"
+            <SelectInput
+              label="Target node"
               value={property.bindingPath}
+              options={
+                property.bindingPath && !targetNodeOptions.some((option) => option.value === property.bindingPath)
+                  ? [{ value: property.bindingPath, label: `Missing layer (${property.bindingPath})` }, ...targetNodeOptions]
+                  : targetNodeOptions
+              }
               onChange={(bindingPath) => updateProperty(property.id, { bindingPath })}
-              placeholder="e.g. label, or icon/inner"
             />
             <TextInput
               label="Target field"
