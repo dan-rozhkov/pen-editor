@@ -185,8 +185,8 @@ describe("<SlidesPanel />", () => {
 
     const outroCard = screen.getByTestId("slide-card-f2");
     const introCard = screen.getByTestId("slide-card-f1");
-    expect(outroCard.className).toContain("ring");
-    expect(introCard.className).not.toContain("ring");
+    expect(outroCard.className).toContain("bg-accent-primary");
+    expect(introCard.className).not.toContain("bg-accent-primary");
   });
 
   it("does not regenerate thumbnails after its own state update", async () => {
