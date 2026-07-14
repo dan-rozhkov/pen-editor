@@ -8,7 +8,25 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
-## [0.30.0] - 2026-07-13
+## [0.34.0] - 2026-07-14
+
+### Added
+- **DTCG design-tokens export/import.** New File-menu actions (and command-palette
+  entries) **Export design tokens (.tokens.json)** and **Import design tokens…**
+  bridge the editor's variables and fill/effect/text styles to the
+  [Design Tokens Community Group](https://tr.designtokens.org/format/) JSON format,
+  so tokens can flow through Style Dictionary and other DTCG tooling.
+  - Variables map to `color`/`number` tokens (light value in `$value`, dark theme
+    in `$extensions`); string variables emit without a `$type`.
+  - Fill styles map to `color` (solid, with variable bindings serialized as
+    `{alias}` references) or `gradient` tokens; effect-style shadows map to
+    `shadow`; text styles map to `typography`.
+  - Round-trip identity is preserved via `$extensions["com.peneditor"]` (original
+    store id + source), so re-importing an exported file updates entities in place
+    rather than duplicating them. Foreign DTCG files import via a `$type` heuristic.
+  - Import merges into the stores as a single undo step. Name collisions,
+    unsupported fills (image/pattern/video), blur effects, and non-numeric values
+    surface as toast warnings.
 
 ### Added
 - **Slides creation** — the Slides section now has a persistent divider,
