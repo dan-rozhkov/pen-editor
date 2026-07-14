@@ -4,6 +4,7 @@ import type {
   ShadowEffect,
   BlurEffect,
   BackgroundBlurEffect,
+  PathStroke,
 } from "@/types/scene";
 import type { Variable } from "@/types/variable";
 import type { FillStyle, EffectStyle } from "@/types/style";
@@ -11,6 +12,7 @@ import type { TextStyle } from "@/types/textStyle";
 import type { InspectUnits } from "@/store/devModeStore";
 import {
   getFills,
+  getRenderableFills,
   resolveFillStylePaint,
   resolveEffectStack,
 } from "@/utils/fillUtils";
@@ -181,7 +183,7 @@ function describeFillPaint(
 }
 
 function buildFillsSection(node: FlatSceneNode, variables: Variable[], fillStyles: FillStyle[]): InspectSection | undefined {
-  const fills = getFills(node);
+  const fills = getRenderableFills(node);
   if (!fills.length) return undefined;
   const rows = fills.map((paint, i) => {
     const row = describeFillPaint(paint, variables, fillStyles);
@@ -192,12 +194,18 @@ function buildFillsSection(node: FlatSceneNode, variables: Variable[], fillStyle
 }
 
 function buildStrokesSection(node: FlatSceneNode, variables: Variable[], units: InspectUnits, remBase: number): InspectSection | undefined {
-  const hasStroke = node.stroke !== undefined || node.strokeWidth !== undefined;
+  const pathStroke: PathStroke | undefined = node.type === "path" ? node.pathStroke : undefined;
+  const strokeColor = node.stroke ?? pathStroke?.fill;
+  const strokeWidth = node.strokeWidth ?? pathStroke?.thickness;
+  const strokeAlign = node.strokeAlign ?? pathStroke?.align;
+
+  const hasStroke =
+    strokeColor !== undefined || strokeWidth !== undefined || node.strokeWidthPerSide !== undefined;
   if (!hasStroke) return undefined;
   const rows: InspectValue[] = [];
 
-  if (node.stroke !== undefined) {
-    const displayValue = resolveVariableValue(node.stroke, node.strokeBinding, variables, "light") ?? node.stroke;
+  if (strokeColor !== undefined) {
+    const displayValue = resolveVariableValue(strokeColor, node.strokeBinding, variables, "light") ?? strokeColor;
     if (node.strokeBinding) {
       const variable = variables.find((v) => v.id === node.strokeBinding!.variableId);
       if (variable) {
@@ -218,11 +226,14 @@ function buildStrokesSection(node: FlatSceneNode, variables: Variable[], units: 
     }
   }
 
-  if (node.strokeWidth !== undefined) {
-    rows.push({ label: "Width", value: fmt(node.strokeWidth, units, remBase) });
+  if (node.strokeWidthPerSide !== undefined) {
+    const { top = 0, right = 0, bottom = 0, left = 0 } = node.strokeWidthPerSide;
+    rows.push({ label: "Width", value: shorthand(top, right, bottom, left, units, remBase) });
+  } else if (strokeWidth !== undefined) {
+    rows.push({ label: "Width", value: fmt(strokeWidth, units, remBase) });
   }
-  if (node.strokeAlign !== undefined) {
-    rows.push({ label: "Align", value: node.strokeAlign });
+  if (strokeAlign !== undefined) {
+    rows.push({ label: "Align", value: strokeAlign });
   }
 
   return { title: "Strokes", rows };
@@ -271,9 +282,10 @@ function buildRadiusSection(node: FlatSceneNode, units: InspectUnits, remBase: n
   return undefined;
 }
 
-export function buildInspectData(input: BuildInspectDataInput): InspectData {
+export function buildInspectData(input: BuildInspectDataInput): InspectData | null {
   const { nodeId, nodesById, rect, variables, fillStyles, effectStyles, textStyles, units, remBase } = input;
   const node = nodesById[nodeId];
+  if (!node) return null;
 
   const layout = node.type === "frame" ? node.layout : undefined;
   const paddingTop = layout?.autoLayout ? layout.paddingTop ?? 0 : 0;

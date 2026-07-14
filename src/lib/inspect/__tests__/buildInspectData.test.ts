@@ -252,4 +252,110 @@ describe("buildInspectData", () => {
     const radius = data.sections.find((s) => s.title === "Radius");
     expect(radius!.rows[0].value).toBe("1rem");
   });
+
+  it("builds a 4-value Width row for per-side stroke widths", () => {
+    const rect: FlatSceneNode = {
+      id: "r7",
+      type: "rect",
+      name: "PerSideStroke",
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      stroke: "#000000",
+      strokeWidthPerSide: { top: 1, right: 2, bottom: 3, left: 4 },
+    };
+    const nodesById = { r7: rect };
+    const data = buildInspectData(baseArgs(nodesById, "r7"));
+
+    const strokes = data.sections.find((s) => s.title === "Strokes");
+    expect(strokes).toBeDefined();
+    const width = strokes!.rows.find((r) => r.label === "Width");
+    expect(width?.value).toBe("1px 2px 3px 4px");
+  });
+
+  it("shows Width/Color for a path node using pathStroke fallback (no base stroke fields)", () => {
+    const path: FlatSceneNode = {
+      id: "p1",
+      type: "path",
+      name: "Vector",
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      geometry: "M0 0L10 10",
+      pathStroke: { fill: "#00ff00", thickness: 3, align: "center" },
+    };
+    const nodesById = { p1: path };
+    const data = buildInspectData(baseArgs(nodesById, "p1"));
+
+    const strokes = data.sections.find((s) => s.title === "Strokes");
+    expect(strokes).toBeDefined();
+    const width = strokes!.rows.find((r) => r.label === "Width");
+    expect(width?.value).toBe("3px");
+    const color = strokes!.rows.find((r) => r.label === "Color");
+    expect(color?.value).toBe("#00ff00");
+  });
+
+  it("hides invisible/zero-opacity fills from the Fills section", () => {
+    const rect: FlatSceneNode = {
+      id: "r8",
+      type: "rect",
+      name: "HiddenFill",
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      fills: [
+        { id: "p1", type: "solid", color: "#111111", visible: false },
+        { id: "p2", type: "solid", color: "#222222", opacity: 0 },
+        { id: "p3", type: "solid", color: "#333333" },
+      ],
+    };
+    const nodesById = { r8: rect };
+    const data = buildInspectData(baseArgs(nodesById, "r8"));
+
+    const fills = data.sections.find((s) => s.title === "Fills");
+    expect(fills).toBeDefined();
+    expect(fills!.rows).toHaveLength(1);
+    expect(fills!.rows[0].value).toBe("#333333");
+  });
+
+  it("returns null for a missing nodeId instead of crashing", () => {
+    const nodesById: Record<string, FlatSceneNode> = {};
+    const data = buildInspectData({
+      nodeId: "does-not-exist",
+      nodesById,
+      rect: { x: 0, y: 0, width: 0, height: 0 },
+      variables: [],
+      fillStyles: [],
+      effectStyles: [],
+      textStyles: [],
+      units: "px",
+      remBase: 16,
+    });
+    expect(data).toBeNull();
+  });
+
+  it("builds header.componentInfo for a ref (component instance) node without crashing", () => {
+    const ref: FlatSceneNode = {
+      id: "ref1",
+      type: "ref",
+      name: "Button Instance",
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 40,
+      componentId: "comp1",
+      propertyValues: { variant: "primary", disabled: false },
+    };
+    const nodesById = { ref1: ref };
+    const data = buildInspectData(baseArgs(nodesById, "ref1"));
+
+    expect(data).not.toBeNull();
+    expect(data!.header.componentInfo).toEqual({
+      componentId: "comp1",
+      propertyValues: { variant: "primary", disabled: false },
+    });
+  });
 });
