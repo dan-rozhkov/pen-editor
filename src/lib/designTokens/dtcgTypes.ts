@@ -24,6 +24,8 @@ export interface PenTokenExtension {
   textTransform?: string;
   fontVariations?: Record<string, number>;
   fontFeatures?: Record<string, number>;
+  /** PaintBase extras (opacity/visible/blendMode) with no DTCG home. Only defined fields are set. */
+  paint?: { opacity?: number; visible?: boolean; blendMode?: string };
 }
 
 export interface DtcgTokenExtensions {

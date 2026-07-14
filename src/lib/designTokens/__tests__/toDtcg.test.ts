@@ -59,6 +59,34 @@ describe("toDtcg", () => {
     expect(t.$extensions?.["com.peneditor"]?.source).toBe("fillStyle");
   });
 
+  it("carries paint extras (opacity, blendMode) into ext.paint for a solid fill", () => {
+    const fs: FillStyle = {
+      id: "fillstyle_extras", name: "translucent",
+      paint: { id: "p1", type: "solid", color: "#3b82f6", opacity: 0.5, blendMode: "multiply" },
+    };
+    const { document } = toDtcg({ ...empty, fillStyles: [fs] });
+    const t = tok(document, ["fill", "translucent"]);
+    expect(t.$extensions?.["com.peneditor"]?.paint).toEqual({ opacity: 0.5, blendMode: "multiply" });
+  });
+
+  it("does not overwrite the DTCG number type on a finite number variable and emits a string on NaN", () => {
+    const bad: Variable = { id: "var_nan", name: "broken", type: "number", value: "not-a-number" };
+    const { document, warnings } = toDtcg({ ...empty, variables: [bad] });
+    const t = tok(document, ["broken"]);
+    expect(t.$type).toBeUndefined();
+    expect(t.$value).toBe("not-a-number");
+    expect(warnings.some((w) => w.includes("broken") && w.includes("non-numeric"))).toBe(true);
+  });
+
+  it("warns and last-writer-wins when two token names collide", () => {
+    const a: FillStyle = { id: "fs_a", name: "primary", paint: { id: "pa", type: "solid", color: "#111" } };
+    const b: FillStyle = { id: "fs_b", name: "primary", paint: { id: "pb", type: "solid", color: "#222" } };
+    const { document, warnings } = toDtcg({ ...empty, fillStyles: [a, b] });
+    const t = tok(document, ["fill", "primary"]);
+    expect(t.$value).toBe("#222");
+    expect(warnings.some((w) => w.includes("primary") && w.includes("collides"))).toBe(true);
+  });
+
   it("maps a gradient fill and a multi-shadow effect", () => {
     const grad: FillStyle = {
       id: "fillstyle_2", name: "sky",

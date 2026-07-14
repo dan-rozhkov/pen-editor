@@ -23,12 +23,33 @@ describe("tokenPath", () => {
   it("nests a token under its path and walks it back", () => {
     const root: DtcgGroup = {};
     const token: DtcgToken = { $type: "color", $value: "#fff" };
-    setTokenAtPath(root, ["brand", "500"], token);
+    expect(setTokenAtPath(root, ["brand", "500"], token)).toBe(true);
     expect((root.brand as DtcgGroup)["500"]).toBe(token);
 
     const seen: Array<[string[], unknown]> = [];
     walkTokens(root, (t, segs) => seen.push([segs, t.$value]));
     expect(seen).toEqual([[["brand", "500"], "#fff"]]);
+  });
+
+  it("returns false and overwrites when two paths collide on the same slot", () => {
+    const root: DtcgGroup = {};
+    const first: DtcgToken = { $type: "color", $value: "#111" };
+    const second: DtcgToken = { $type: "color", $value: "#222" };
+    expect(setTokenAtPath(root, ["fill", "primary"], first)).toBe(true);
+    expect(setTokenAtPath(root, ["fill", "primary"], second)).toBe(false);
+    expect((root.fill as DtcgGroup).primary).toBe(second); // last-writer-wins
+  });
+
+  it("returns false when an intermediate segment was already a token", () => {
+    const root: DtcgGroup = {};
+    const varToken: DtcgToken = { $type: "color", $value: "#333" };
+    const styleToken: DtcgToken = { $type: "color", $value: "#444" };
+    // A variable named "fill" occupies the "fill" slot as a token...
+    expect(setTokenAtPath(root, ["fill"], varToken)).toBe(true);
+    // ...then a fill style tries to descend through "fill" as a group.
+    expect(setTokenAtPath(root, ["fill", "primary"], styleToken)).toBe(false);
+    // The write still happens (last-writer-wins): "fill" becomes a group again.
+    expect((root.fill as DtcgGroup).primary).toBe(styleToken);
   });
 
   it("does not treat group metadata as a token when walking", () => {

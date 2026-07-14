@@ -5,7 +5,14 @@ import type { FillStyle, EffectStyle } from "@/types/style";
 import { generateFillStyleId, generateEffectStyleId } from "@/types/style";
 import type { TextStyle } from "@/types/textStyle";
 import { generateTextStyleId } from "@/types/textStyle";
-import type { GradientFill, GradientColorStop, ShadowEffect, SolidPaint, GradientPaint } from "@/types/scene";
+import type {
+  GradientFill,
+  GradientColorStop,
+  ShadowEffect,
+  SolidPaint,
+  GradientPaint,
+  PaintBlendMode,
+} from "@/types/scene";
 import { generateId } from "@/types/scene";
 import type { DtcgDocument, DtcgToken, PenTokenSource } from "./dtcgTypes";
 import { readPenExt } from "./dtcgTypes";
@@ -27,6 +34,17 @@ interface Collected {
 
 const ALIAS_RE = /^\{(.+)\}$/;
 
+/** Copy back the defined PaintBase extras (opacity/visible/blendMode) from the DTCG extension onto a paint. */
+function applyPaintExt(
+  paint: SolidPaint | GradientPaint,
+  paintExt: { opacity?: number; visible?: boolean; blendMode?: string } | undefined,
+): void {
+  if (!paintExt) return;
+  if (paintExt.opacity !== undefined) paint.opacity = paintExt.opacity;
+  if (paintExt.visible !== undefined) paint.visible = paintExt.visible;
+  if (paintExt.blendMode !== undefined) paint.blendMode = paintExt.blendMode as PaintBlendMode;
+}
+
 /** Reconstruct the store name; drop a leading source-group prefix for styles. */
 function nameFromSegments(segments: string[], source: PenTokenSource): string {
   const prefix = source === "fillStyle" ? "fill" : source === "effectStyle" ? "effect" : source === "textStyle" ? "text" : null;
@@ -41,12 +59,6 @@ function classify(token: DtcgToken, segments: string[]): { source: PenTokenSourc
   const prefix = segments[0];
   if (prefix === "fill" && (token.$type === "color" || token.$type === "gradient")) {
     return { source: "fillStyle", id: undefined };
-  }
-  if (prefix === "effect" && token.$type === "shadow") {
-    return { source: "effectStyle", id: undefined };
-  }
-  if (prefix === "text" && token.$type === "typography") {
-    return { source: "textStyle", id: undefined };
   }
   switch (token.$type) {
     case "color": return { source: "variable", id: undefined };
@@ -100,7 +112,11 @@ export function fromDtcg(doc: DtcgDocument): { result: ImportResult; warnings: s
       const name = nameFromSegments(c.segments, "fillStyle");
       if (c.token.$type === "gradient") {
         const g = ext?.gradient;
-        const stops = (c.token.$value as GradientColorStop[]).map((s) => ({ color: s.color, position: s.position }));
+        const stops = (c.token.$value as GradientColorStop[]).map((s) =>
+          s.opacity !== undefined
+            ? { color: s.color, position: s.position, opacity: s.opacity }
+            : { color: s.color, position: s.position },
+        );
         const gradient: GradientFill = {
           type: g?.type ?? "linear",
           stops,
@@ -109,6 +125,7 @@ export function fromDtcg(doc: DtcgDocument): { result: ImportResult; warnings: s
           ...(g?.endRadius !== undefined ? { endRadius: g.endRadius } : {}),
         };
         const paint: GradientPaint = { id: generateId(), type: "gradient", gradient };
+        applyPaintExt(paint, ext?.paint);
         result.fillStyles.push({ id: c.id ?? generateFillStyleId(), name, paint });
       } else {
         // color token: literal or alias
@@ -126,6 +143,7 @@ export function fromDtcg(doc: DtcgDocument): { result: ImportResult; warnings: s
         } else {
           paint.color = raw;
         }
+        applyPaintExt(paint, ext?.paint);
         result.fillStyles.push({ id: c.id ?? generateFillStyleId(), name, paint });
       }
     } else if (c.source === "effectStyle") {

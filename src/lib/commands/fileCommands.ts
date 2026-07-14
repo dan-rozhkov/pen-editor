@@ -79,6 +79,10 @@ export function exportDesignTokens(): void {
   );
 }
 
+// Known limitation: foreign tokens (no com.peneditor extension) get a fresh generated id on
+// every import, since there's no stable id to key off — so re-importing the same foreign file
+// appends duplicates rather than updating in place. Our own exported files carry stable ids in
+// $extensions["com.peneditor"] and round-trip cleanly (re-import overwrites by id, no dupes).
 function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] {
   const byId = new Map(existing.map((e) => [e.id, e]));
   for (const item of incoming) byId.set(item.id, item);
@@ -133,8 +137,9 @@ function pickTokensFile(): Promise<string | null> {
       if (!file) { resolve(null); return; }
       resolve(await file.text());
     };
-    // If the picker is dismissed no change event fires; that path simply never resolves,
-    // which is acceptable for a one-shot user action.
+    // Modern browsers fire `cancel` on the <input> when the OS file dialog is dismissed
+    // without a selection; without this, cancelling would leave the promise unresolved forever.
+    input.oncancel = () => resolve(null);
     input.click();
   });
 }

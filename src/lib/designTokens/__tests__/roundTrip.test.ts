@@ -11,10 +11,13 @@ const input: ExportInput = {
   ],
   fillStyles: [
     { id: "fillstyle_1", name: "primary",
-      paint: { id: "p1", type: "solid", color: "#3b82f6", colorBinding: { variableId: "var_1" } } },
+      paint: {
+        id: "p1", type: "solid", color: "#3b82f6", colorBinding: { variableId: "var_1" },
+        opacity: 0.5, blendMode: "multiply",
+      } },
     { id: "fillstyle_2", name: "sky",
       paint: { id: "p2", type: "gradient", gradient: {
-        type: "linear", stops: [{ color: "#fff", position: 0 }, { color: "#000", position: 1 }],
+        type: "linear", stops: [{ color: "#fff", position: 0, opacity: 0.75 }, { color: "#000", position: 1 }],
         startX: 0, startY: 0, endX: 1, endY: 1 } } },
   ],
   effectStyles: [

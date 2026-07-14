@@ -2,7 +2,7 @@
 import type { Variable } from "@/types/variable";
 import type { FillStyle, EffectStyle } from "@/types/style";
 import type { TextStyle } from "@/types/textStyle";
-import type { ShadowEffect } from "@/types/scene";
+import type { ShadowEffect, SolidPaint, GradientPaint } from "@/types/scene";
 import type { DtcgDocument, DtcgToken, PenTokenExtension } from "./dtcgTypes";
 import { nameToSegments, segmentsToAlias, setTokenAtPath } from "./tokenPath";
 
@@ -11,6 +11,15 @@ export interface ExportInput {
   fillStyles: FillStyle[];
   effectStyles: EffectStyle[];
   textStyles: TextStyle[];
+}
+
+/** Collect the defined PaintBase extras (opacity/visible/blendMode); `undefined` if none are set. */
+function buildPaintExt(paint: SolidPaint | GradientPaint): PenTokenExtension["paint"] | undefined {
+  const out: NonNullable<PenTokenExtension["paint"]> = {};
+  if (paint.opacity !== undefined) out.opacity = paint.opacity;
+  if (paint.visible !== undefined) out.visible = paint.visible;
+  if (paint.blendMode !== undefined) out.blendMode = paint.blendMode;
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 export function toDtcg(input: ExportInput): { document: DtcgDocument; warnings: string[] } {
@@ -30,12 +39,20 @@ export function toDtcg(input: ExportInput): { document: DtcgDocument; warnings: 
       if (v.themeValues) ext.themes = { dark: v.themeValues.dark };
       token = { $type: "color", $value: light, $extensions: { "com.peneditor": ext } };
     } else if (v.type === "number") {
-      token = { $type: "number", $value: Number(v.value), $extensions: { "com.peneditor": ext } };
+      const n = Number(v.value);
+      if (Number.isFinite(n)) {
+        token = { $type: "number", $value: n, $extensions: { "com.peneditor": ext } };
+      } else {
+        warnings.push(`Variable "${v.name}" has a non-numeric value "${v.value}"; emitted as a string.`);
+        token = { $value: v.value, $extensions: { "com.peneditor": ext } };
+      }
     } else {
       warnings.push(`Variable "${v.name}" is a string — DTCG has no string type; emitted without $type.`);
       token = { $value: v.value, $extensions: { "com.peneditor": ext } };
     }
-    setTokenAtPath(document, nameToSegments(v.name), token);
+    if (!setTokenAtPath(document, nameToSegments(v.name), token)) {
+      warnings.push(`Token name "${v.name}" collides with another token; previous value was overwritten.`);
+    }
   }
 
   // --- Fill styles (under "fill") ---
@@ -50,6 +67,8 @@ export function toDtcg(input: ExportInput): { document: DtcgDocument; warnings: 
         if (segs) value = segmentsToAlias(segs);
         else warnings.push(`Fill style "${fs.name}" binds a deleted variable; wrote literal color.`);
       }
+      const paintExt = buildPaintExt(paint);
+      if (paintExt) ext.paint = paintExt;
       token = { $type: "color", $value: value, $extensions: { "com.peneditor": ext } };
     } else if (paint.type === "gradient") {
       const g = paint.gradient;
@@ -57,15 +76,23 @@ export function toDtcg(input: ExportInput): { document: DtcgDocument; warnings: 
         type: g.type, startX: g.startX, startY: g.startY, endX: g.endX, endY: g.endY,
         startRadius: g.startRadius, endRadius: g.endRadius,
       };
+      const paintExt = buildPaintExt(paint);
+      if (paintExt) ext.paint = paintExt;
       token = {
         $type: "gradient",
-        $value: g.stops.map((s) => ({ color: s.color, position: s.position })),
+        $value: g.stops.map((s) =>
+          s.opacity !== undefined
+            ? { color: s.color, position: s.position, opacity: s.opacity }
+            : { color: s.color, position: s.position },
+        ),
         $extensions: { "com.peneditor": ext },
       };
     } else {
       warnings.push(`Fill style "${fs.name}" is a ${paint.type} fill — no DTCG equivalent; skipped.`);
     }
-    if (token) setTokenAtPath(document, ["fill", ...nameToSegments(fs.name)], token);
+    if (token && !setTokenAtPath(document, ["fill", ...nameToSegments(fs.name)], token)) {
+      warnings.push(`Token name "${fs.name}" collides with another token; previous value was overwritten.`);
+    }
   }
 
   // --- Effect styles (under "effect") ---
@@ -88,7 +115,9 @@ export function toDtcg(input: ExportInput): { document: DtcgDocument; warnings: 
       $value: mapped.length === 1 ? mapped[0] : mapped,
       $extensions: { "com.peneditor": { id: es.id, source: "effectStyle" } },
     };
-    setTokenAtPath(document, ["effect", ...nameToSegments(es.name)], token);
+    if (!setTokenAtPath(document, ["effect", ...nameToSegments(es.name)], token)) {
+      warnings.push(`Token name "${es.name}" collides with another token; previous value was overwritten.`);
+    }
   }
 
   // --- Text styles (under "text") ---
@@ -104,7 +133,9 @@ export function toDtcg(input: ExportInput): { document: DtcgDocument; warnings: 
     if (ts.fontVariations !== undefined) ext.fontVariations = ts.fontVariations;
     if (ts.fontFeatures !== undefined) ext.fontFeatures = ts.fontFeatures;
     const token: DtcgToken = { $type: "typography", $value: value, $extensions: { "com.peneditor": ext } };
-    setTokenAtPath(document, ["text", ...nameToSegments(ts.name)], token);
+    if (!setTokenAtPath(document, ["text", ...nameToSegments(ts.name)], token)) {
+      warnings.push(`Token name "${ts.name}" collides with another token; previous value was overwritten.`);
+    }
   }
 
   return { document, warnings };
