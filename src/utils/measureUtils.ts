@@ -142,6 +142,35 @@ export function computeSiblingDistances(
 }
 
 /**
+ * World-space endpoints of a measure line's main segment (matching how the
+ * overlay renderer draws it) — used for point-to-segment hit-testing.
+ */
+export function measureLineEndpoints(
+  line: MeasureLine,
+): { x1: number; y1: number; x2: number; y2: number } {
+  if (line.orientation === "horizontal") {
+    return { x1: line.x, y1: line.y, x2: line.x + line.length, y2: line.y };
+  }
+  return { x1: line.x, y1: line.y, x2: line.x, y2: line.y + line.length };
+}
+
+/**
+ * Compute the distance lines between two node bounds, picking parent-vs-child
+ * (padding) or sibling (gap) geometry based on their ancestry relationship.
+ * Shared by the persistent-measure overlay and the measure tool controller's
+ * live preview/hit-testing so both stay in sync with the same geometry.
+ */
+export function computeMeasurementLines(
+  fromRect: NodeBounds,
+  toRect: NodeBounds,
+  relation: "from-is-ancestor" | "to-is-ancestor" | "sibling",
+): MeasureLine[] {
+  if (relation === "from-is-ancestor") return computeParentDistances(toRect, fromRect);
+  if (relation === "to-is-ancestor") return computeParentDistances(fromRect, toRect);
+  return computeSiblingDistances(fromRect, toRect);
+}
+
+/**
  * Compute the gap between two 1D intervals [aMin, aMax] and [bMin, bMax].
  * Returns { start, size } if there's a gap, null if they overlap.
  */

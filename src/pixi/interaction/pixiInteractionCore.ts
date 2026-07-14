@@ -42,6 +42,7 @@ import { createConnectorController } from "./connectorController";
 import { createDragController, DRAG_CLICK_THRESHOLD } from "./dragController";
 import { createMarqueeController } from "./marqueeController";
 import { createMeasurementController } from "./measurementController";
+import { createMeasureToolController } from "./measureToolController";
 import { resolveRefToTree, findNodeByPath } from "@/utils/instanceRuntime";
 import type { SceneNode, RefNode, TextNode } from "@/types/scene";
 import { resolveTextHandleReset } from "./textResize";
@@ -182,6 +183,7 @@ export function setupPixiInteraction(
   const drag = createDragController(context);
   const marquee = createMarqueeController(context);
   const measurement = createMeasurementController(context);
+  const measureTool = createMeasureToolController(context);
 
   // --- Pointer handlers ---
 
@@ -254,6 +256,13 @@ export function setupPixiInteraction(
 
     // Priority 1: Pan (Space+click or middle-mouse) — allowed in edit and view.
     if (pan.handlePointerDown(e)) return;
+
+    // Priority 1.5: Measure tool (Shift+M) — self-gates on activeTool ===
+    // "measure" (mirrors drawController's own activeTool gate), so this is a
+    // no-op whenever the tool isn't active. Placed ahead of the scene-editing
+    // and drag/marquee controllers below because pinning/selecting a
+    // measurement must never fall through into selection or a drag.
+    if (measureTool.handlePointerDown(e, world)) return;
 
     // Priorities 2-3: scene-editing controllers only run in edit mode.
     // Dev mode (inspect) is belt-and-braces excluded here too — the active
@@ -410,6 +419,7 @@ export function setupPixiInteraction(
 
     // Handle active interactions
     if (pan.handlePointerMove(e)) return;
+    if (measureTool.handlePointerMove(e, world)) return;
     if (pathEdit.handlePointerMove(e, world)) return;
     if (pencil.handlePointerMove(e, world)) return;
     if (pen.handlePointerMove(e, world)) return;
@@ -469,6 +479,7 @@ export function setupPixiInteraction(
 
     // Handle interaction cleanup in order
     if (pan.handlePointerUp(e)) return;
+    if (measureTool.handlePointerUp(e, world)) return;
     if (pathEdit.handlePointerUp(e, world)) return;
     if (scaleTool.handlePointerUp(e, world)) return;
     if (transform.handlePointerUp(e, world)) return;

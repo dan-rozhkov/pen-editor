@@ -52,6 +52,13 @@ export const useDevModeStore = create<DevModeState>((set, get) => ({
       useDrawModeStore.getState().setActiveTool(null);
     } else {
       useMeasureStore.getState().clearLines();
+      // The measure tool only makes sense while dev mode is active — exiting
+      // with it still selected must reset to the cursor tool, mirroring the
+      // force-exit on entry above (setActiveTool also clears any in-flight
+      // pen draft / path-edit mode as a side effect).
+      if (useDrawModeStore.getState().activeTool === "measure") {
+        useDrawModeStore.getState().setActiveTool(null);
+      }
     }
     set({ active });
   },

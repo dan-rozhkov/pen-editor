@@ -293,6 +293,7 @@ export function PixiCanvas() {
         const overlayCleanup = createOverlayRenderer(
           overlayContainer,
           selectionContainer,
+          sceneRoot,
           () => ({
             width: app.screen.width,
             height: app.screen.height,

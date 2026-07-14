@@ -5,6 +5,7 @@ import { usePenToolStore } from "@/store/penToolStore";
 import { useUIVisibilityStore } from "@/store/uiVisibilityStore";
 import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
 import { useDevModeStore } from "@/store/devModeStore";
+import { useMeasurementsStore } from "@/store/measurementsStore";
 import { useConnectorStore } from "@/store/connectorStore";
 import { useDragStore } from "@/store/dragStore";
 import { useGuidesStore } from "@/store/guidesStore";
@@ -47,7 +48,7 @@ export interface KeyDownHandlerDeps {
   undo: (snapshot: HistorySnapshot) => HistorySnapshot | null;
   redo: (snapshot: HistorySnapshot) => HistorySnapshot | null;
   fitToContent: (nodes: SceneNode[], width: number, height: number) => void;
-  toggleTool: (tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon" | "star" | "embed" | "pencil" | "connector" | "pen" | "scale") => void;
+  toggleTool: (tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon" | "star" | "embed" | "pencil" | "connector" | "pen" | "scale" | "measure") => void;
   cancelDrawing: () => void;
   clearSelection: () => void;
   copySelection: () => void;
@@ -147,6 +148,15 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
     const isDevMode = useDevModeStore.getState().active;
     if (!canEditScene(useEditorModeStore.getState().mode) || isDevMode) {
       if (e.code === "Escape") {
+        // Measure tool is dev-mode-only — Escape exits it back to the cursor
+        // tool first. This early return otherwise shadows the generic
+        // draw-tool Escape handling further down (dev mode keeps `mode` at
+        // "edit", so that handler is unreachable while dev mode is active).
+        if (isDevMode && useDrawModeStore.getState().activeTool === "measure") {
+          e.preventDefault();
+          useDrawModeStore.getState().setActiveTool(null);
+          return;
+        }
         // Mirrors view mode's Escape handling exactly. In dev mode `mode` is
         // already "edit", so this is a harmless no-op (presentFrameIds/Index
         // are already empty) rather than an actual mode transition — dev mode
@@ -155,6 +165,21 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
         useEditorModeStore.getState().exitToEdit();
         return;
       }
+
+      // Delete/Backspace in dev mode: remove the selected pinned measurement.
+      // This is the ONE mutating key the dev-mode read-only policy allows —
+      // it must return here rather than fall through to the generic
+      // scene-node deletion below, which must never run while inspecting.
+      if (isDevMode && (e.code === "Delete" || e.code === "Backspace")) {
+        if (isTyping) return;
+        const selectedMeasurementId = useMeasurementsStore.getState().selectedMeasurementId;
+        if (selectedMeasurementId) {
+          e.preventDefault();
+          useMeasurementsStore.getState().removeMeasurement(selectedMeasurementId);
+        }
+        return;
+      }
+
       const mod = e.metaKey || e.ctrlKey;
       const allowed =
         (mod && e.code === "KeyC") || // copy
@@ -166,7 +191,7 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
         e.code === "Space" || // pan
         (e.key === "Enter" && e.shiftKey) || // select parent frame
         (e.shiftKey && !mod && !e.altKey && e.code === "KeyD") || // toggle dev mode
-        (e.shiftKey && !mod && !e.altKey && e.code === "KeyM"); // reserved: dev-mode shortcut (no handler yet)
+        (e.shiftKey && !mod && !e.altKey && e.code === "KeyM"); // toggle measure tool
       if (!allowed) return;
       // Allowed read-only commands fall through to their handlers below.
     }
@@ -473,6 +498,17 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
       if (isTyping) return;
       e.preventDefault();
       useDevModeStore.getState().toggle();
+      return;
+    }
+
+    // Shift+M: Toggle the measure tool. Only meaningful in dev (inspect)
+    // mode — inert otherwise, so a stray Shift+M in normal editing does
+    // nothing (matches the brief: "harmless" outside dev mode).
+    if (e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && e.code === "KeyM") {
+      if (isTyping) return;
+      if (!useDevModeStore.getState().active) return;
+      e.preventDefault();
+      toggleTool("measure");
       return;
     }
 

@@ -103,6 +103,13 @@ export interface TransformState {
   }> | null;
 }
 
+export interface MeasureToolState {
+  /** Node id recorded on pointerDown; the measurement's "from" endpoint. */
+  fromId: string | null;
+  /** True between pointerDown-on-node and pointerUp while the measure tool is dragging. */
+  isActive: boolean;
+}
+
 export interface InteractionContext {
   canvas: HTMLCanvasElement;
   screenToWorld: (x: number, y: number) => { x: number; y: number };

@@ -2,7 +2,9 @@ import { Container, Graphics, Text } from "pixi.js";
 import { useSmartGuideStore } from "@/store/smartGuideStore";
 import { useGuidesStore } from "@/store/guidesStore";
 import { useDragStore } from "@/store/dragStore";
-import { useMeasureStore } from "@/store/measureStore";
+import { useMeasureStore, type MeasureLine } from "@/store/measureStore";
+import { useMeasurementsStore } from "@/store/measurementsStore";
+import { useDevModeStore } from "@/store/devModeStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { usePixelGridStore } from "@/store/pixelGridStore";
@@ -14,7 +16,11 @@ import { useLayoutStore } from "@/store/layoutStore";
 import { usePenToolStore } from "@/store/penToolStore";
 import type { AnchorPosition, PathAnchor } from "@/types/scene";
 import { getAnchorWorldPosition, drawArrowhead, shortenLineEnd } from "@/utils/connectorUtils";
+import { isDescendantOfFlat } from "@/utils/nodeUtils";
+import { computeMeasurementLines, measureLineEndpoints } from "@/utils/measureUtils";
+import { formatMeasureLine } from "@/lib/inspect/units";
 import { getMarqueeRect, subscribeOverlayState } from "./pixiOverlayState";
+import { createOverlayHelpers } from "./selectionOverlay/helpers";
 import {
   getAnchorScreenPoints,
   getEditedPathNode,
@@ -59,8 +65,10 @@ type MeasureLabelEntry = {
 export function createOverlayRenderer(
   overlayContainer: Container,
   measureLabelContainer: Container,
+  sceneRoot: Container,
   getViewportSize: () => { width: number; height: number },
 ): () => void {
+  const overlayHelpers = createOverlayHelpers(sceneRoot);
   const pixelGridGfx = new Graphics();
   pixelGridGfx.label = "pixel-grid";
   overlayContainer.addChild(pixelGridGfx);
@@ -85,6 +93,17 @@ export function createOverlayRenderer(
   measureLabels.label = "measure-labels";
   measureLabelContainer.addChild(measureLabels);
 
+  // Persistent (pinned) measurements — Task 8's Dev Mode measure tool
+  // (Shift+M). Distinct from `measureGfx`/`measureLabels` above, which
+  // render the ephemeral hover/drag preview from `useMeasureStore`.
+  const persistentMeasureGfx = new Graphics();
+  persistentMeasureGfx.label = "persistent-measurements";
+  overlayContainer.addChild(persistentMeasureGfx);
+
+  const persistentMeasureLabels = new Container();
+  persistentMeasureLabels.label = "persistent-measurement-labels";
+  measureLabelContainer.addChild(persistentMeasureLabels);
+
   const drawPreviewGfx = new Graphics();
   drawPreviewGfx.label = "draw-preview";
   overlayContainer.addChild(drawPreviewGfx);
@@ -105,29 +124,102 @@ export function createOverlayRenderer(
   pathEditGfx.label = "path-edit";
   overlayContainer.addChild(pathEditGfx);
 
-  const measureLabelPool: MeasureLabelEntry[] = [];
-  const activeMeasureLabels: MeasureLabelEntry[] = [];
-  let lastViewport = useViewportStore.getState();
+  /** Pooled floating labels for a measure-line layer — avoids per-frame Text/Graphics churn. */
+  function createMeasureLabelPool(container: Container) {
+    const pool: MeasureLabelEntry[] = [];
+    const active: MeasureLabelEntry[] = [];
 
-  function recycleMeasureLabels(): void {
-    while (activeMeasureLabels.length > 0) {
-      const entry = activeMeasureLabels.pop();
-      if (!entry) break;
-      measureLabels.removeChild(entry.group);
-      measureLabelPool.push(entry);
+    function acquire(): MeasureLabelEntry {
+      const entry =
+        pool.pop() ??
+        (() => {
+          const group = new Container();
+          const bg = new Graphics();
+          const text = new Text({ text: "", style: FLOATING_LABEL_STYLE });
+          group.addChild(bg);
+          group.addChild(text);
+          return { group, bg, text };
+        })();
+      container.addChild(entry.group);
+      active.push(entry);
+      return entry;
     }
+
+    function recycleAll(): void {
+      while (active.length > 0) {
+        const entry = active.pop();
+        if (!entry) break;
+        container.removeChild(entry.group);
+        pool.push(entry);
+      }
+    }
+
+    function destroy(): void {
+      recycleAll();
+      while (pool.length > 0) {
+        const entry = pool.pop();
+        if (!entry) break;
+        entry.group.destroy({ children: true });
+      }
+      container.destroy({ children: true });
+    }
+
+    return { acquire, recycleAll, destroy };
   }
 
-  function getMeasureLabelEntry(): MeasureLabelEntry {
-    const pooled = measureLabelPool.pop();
-    if (pooled) return pooled;
-    const group = new Container();
-    const bg = new Graphics();
-    const text = new Text({ text: "", style: FLOATING_LABEL_STYLE });
-    group.addChild(bg);
-    group.addChild(text);
-    return { group, bg, text };
+  /** Draw one measure line's main segment + end caps into `gfx`. Returns its screen-space endpoints. */
+  function drawMeasureLineSegment(
+    gfx: Graphics,
+    line: MeasureLine,
+    color: number,
+    strokeWidth: number,
+    capSize: number,
+  ): { x1: number; y1: number; x2: number; y2: number } {
+    const { x1, y1, x2, y2 } = measureLineEndpoints(line);
+
+    gfx.moveTo(x1, y1);
+    gfx.lineTo(x2, y2);
+    if (line.orientation === "horizontal") {
+      gfx.moveTo(x1, y1 - capSize);
+      gfx.lineTo(x1, y1 + capSize);
+      gfx.moveTo(x2, y2 - capSize);
+      gfx.lineTo(x2, y2 + capSize);
+    } else {
+      gfx.moveTo(x1 - capSize, y1);
+      gfx.lineTo(x1 + capSize, y1);
+      gfx.moveTo(x2 - capSize, y2);
+      gfx.lineTo(x2 + capSize, y2);
+    }
+    gfx.stroke({ color, width: strokeWidth });
+
+    return { x1, y1, x2, y2 };
   }
+
+  /** Paint a pooled label entry centered on a line's midpoint, screen-size fixed via inverse scaling. */
+  function paintMeasureLabel(
+    entry: MeasureLabelEntry,
+    label: string,
+    color: number,
+    invScale: number,
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+  ): void {
+    entry.group.position.set((x1 + x2) / 2, (y1 + y2) / 2);
+    entry.group.scale.set(invScale);
+    entry.text.text = label;
+    const bgWidth = entry.text.width + FLOATING_LABEL_PADDING_X * 2;
+    const bgHeight = FLOATING_LABEL_FONT_SIZE + FLOATING_LABEL_PADDING_Y * 2;
+    entry.bg.clear();
+    entry.bg.roundRect(-bgWidth / 2, -bgHeight / 2, bgWidth, bgHeight, FLOATING_LABEL_RADIUS);
+    entry.bg.fill(color);
+    entry.text.position.set(-entry.text.width / 2, -bgHeight / 2 + FLOATING_LABEL_PADDING_Y);
+  }
+
+  const measureLabelPool = createMeasureLabelPool(measureLabels);
+  const persistentMeasureLabelPool = createMeasureLabelPool(persistentMeasureLabels);
+  let lastViewport = useViewportStore.getState();
 
   function redrawPixelGrid(): void {
     pixelGridGfx.clear();
@@ -246,7 +338,7 @@ export function createOverlayRenderer(
 
   function redrawMeasureLines(): void {
     measureGfx.clear();
-    recycleMeasureLabels();
+    measureLabelPool.recycleAll();
 
     const { lines } = useMeasureStore.getState();
     if (lines.length === 0) return;
@@ -257,55 +349,62 @@ export function createOverlayRenderer(
     const capSize = 4 * invScale;
 
     for (const line of lines) {
-      let x1: number, y1: number, x2: number, y2: number;
-      if (line.orientation === "horizontal") {
-        x1 = line.x;
-        y1 = line.y;
-        x2 = line.x + line.length;
-        y2 = line.y;
-      } else {
-        x1 = line.x;
-        y1 = line.y;
-        x2 = line.x;
-        y2 = line.y + line.length;
+      const { x1, y1, x2, y2 } = drawMeasureLineSegment(measureGfx, line, MEASURE_COLOR, strokeWidth, capSize);
+      const entry = measureLabelPool.acquire();
+      paintMeasureLabel(entry, line.label, MEASURE_COLOR, invScale, x1, y1, x2, y2);
+    }
+  }
+
+  /**
+   * Persistent (pinned) measurements — Task 8's Dev Mode measure tool.
+   * Read-only overlay, active only while dev mode is on: for each stored
+   * `{fromId,toId}` pair, resolve both nodes' current draw rects and pick
+   * parent/child (padding) vs sibling (gap) geometry from their ancestry,
+   * then draw ALL resulting lines. Measurements whose nodes no longer
+   * resolve are skipped rather than crashing (e.g. a deleted node whose
+   * `removeMeasurementsForNodes` cleanup hasn't landed yet).
+   */
+  function redrawPersistentMeasurements(): void {
+    persistentMeasureGfx.clear();
+    persistentMeasureLabelPool.recycleAll();
+
+    const devMode = useDevModeStore.getState();
+    if (!devMode.active) return;
+
+    const { measurements, selectedMeasurementId } = useMeasurementsStore.getState();
+    if (measurements.length === 0) return;
+
+    const scale = useViewportStore.getState().scale;
+    const invScale = 1 / scale;
+    const capSize = 4 * invScale;
+    const parentById = useSceneStore.getState().parentById;
+
+    for (const m of measurements) {
+      const fromRect = overlayHelpers.getNodeDrawRect(m.fromId);
+      const toRect = overlayHelpers.getNodeDrawRect(m.toId);
+      if (!fromRect || !toRect) continue;
+
+      const relation = isDescendantOfFlat(parentById, m.fromId, m.toId)
+        ? "from-is-ancestor"
+        : isDescendantOfFlat(parentById, m.toId, m.fromId)
+          ? "to-is-ancestor"
+          : "sibling";
+      const lines = computeMeasurementLines(fromRect, toRect, relation);
+      const isSelected = m.id === selectedMeasurementId;
+      const strokeWidth = (isSelected ? 2 : 1) * invScale;
+
+      for (const line of lines) {
+        const formatted = formatMeasureLine(line, devMode.units, devMode.remBase);
+        const { x1, y1, x2, y2 } = drawMeasureLineSegment(
+          persistentMeasureGfx,
+          formatted,
+          MEASURE_COLOR,
+          strokeWidth,
+          capSize,
+        );
+        const entry = persistentMeasureLabelPool.acquire();
+        paintMeasureLabel(entry, formatted.label, MEASURE_COLOR, invScale, x1, y1, x2, y2);
       }
-
-      // Main line
-      measureGfx.moveTo(x1, y1);
-      measureGfx.lineTo(x2, y2);
-      // End caps
-      if (line.orientation === "horizontal") {
-        measureGfx.moveTo(x1, y1 - capSize);
-        measureGfx.lineTo(x1, y1 + capSize);
-        measureGfx.moveTo(x2, y2 - capSize);
-        measureGfx.lineTo(x2, y2 + capSize);
-      } else {
-        measureGfx.moveTo(x1 - capSize, y1);
-        measureGfx.lineTo(x1 + capSize, y1);
-        measureGfx.moveTo(x2 - capSize, y2);
-        measureGfx.lineTo(x2 + capSize, y2);
-      }
-
-      measureGfx.stroke({
-        color: MEASURE_COLOR,
-        width: strokeWidth,
-      });
-
-      // Centered label block (fixed screen size via inverse scaling).
-      const centerX = (x1 + x2) / 2;
-      const centerY = (y1 + y2) / 2;
-      const entry = getMeasureLabelEntry();
-      entry.group.position.set(centerX, centerY);
-      entry.group.scale.set(invScale);
-      entry.text.text = line.label;
-      const bgWidth = entry.text.width + FLOATING_LABEL_PADDING_X * 2;
-      const bgHeight = FLOATING_LABEL_FONT_SIZE + FLOATING_LABEL_PADDING_Y * 2;
-      entry.bg.clear();
-      entry.bg.roundRect(-bgWidth / 2, -bgHeight / 2, bgWidth, bgHeight, FLOATING_LABEL_RADIUS);
-      entry.bg.fill(MEASURE_COLOR);
-      entry.text.position.set(-entry.text.width / 2, -bgHeight / 2 + FLOATING_LABEL_PADDING_Y);
-      measureLabels.addChild(entry.group);
-      activeMeasureLabels.push(entry);
     }
   }
 
@@ -542,7 +641,10 @@ export function createOverlayRenderer(
   const DIRTY_PERSISTENT_GUIDES = 128;
   const DIRTY_PEN_PREVIEW = 256;
   const DIRTY_PATH_EDIT = 512;
-  const DIRTY_ALL_SCALE = DIRTY_GUIDES | DIRTY_DROP | DIRTY_MEASURE | DIRTY_DRAW | DIRTY_MARQUEE | DIRTY_CONNECTOR | DIRTY_PERSISTENT_GUIDES;
+  const DIRTY_PERSISTENT_MEASURE = 1024;
+  const DIRTY_ALL_SCALE =
+    DIRTY_GUIDES | DIRTY_DROP | DIRTY_MEASURE | DIRTY_DRAW | DIRTY_MARQUEE | DIRTY_CONNECTOR |
+    DIRTY_PERSISTENT_GUIDES | DIRTY_PERSISTENT_MEASURE;
   let dirtyFlags = 0;
   let overlayRafId: number | null = null;
 
@@ -560,6 +662,7 @@ export function createOverlayRenderer(
     if (flags & DIRTY_PERSISTENT_GUIDES) redrawPersistentGuides();
     if (flags & DIRTY_PEN_PREVIEW) redrawPenPreview();
     if (flags & DIRTY_PATH_EDIT) redrawPathEdit();
+    if (flags & DIRTY_PERSISTENT_MEASURE) redrawPersistentMeasurements();
   }
 
   function scheduleOverlayRedraw(flags: number): void {
@@ -589,7 +692,17 @@ export function createOverlayRenderer(
     scheduleOverlayRedraw(flags);
   });
   const unsubSelectionForPathEdit = useSelectionStore.subscribe(() => scheduleOverlayRedraw(DIRTY_PATH_EDIT));
-  const unsubSceneForPathEdit = useSceneStore.subscribe(() => scheduleOverlayRedraw(DIRTY_PATH_EDIT));
+  const unsubSceneForPathEdit = useSceneStore.subscribe(() =>
+    scheduleOverlayRedraw(DIRTY_PATH_EDIT | DIRTY_PERSISTENT_MEASURE),
+  );
+  // Persistent measurements: redraw when the pinned set/selection changes, or
+  // when dev mode toggles (the layer only renders while active). Node
+  // position/size changes already reschedule via the sceneStore subscription
+  // above (`DIRTY_PATH_EDIT | DIRTY_PERSISTENT_MEASURE`).
+  const unsubMeasurements = useMeasurementsStore.subscribe(() =>
+    scheduleOverlayRedraw(DIRTY_PERSISTENT_MEASURE),
+  );
+  const unsubDevMode = useDevModeStore.subscribe(() => scheduleOverlayRedraw(DIRTY_PERSISTENT_MEASURE));
   // Persistent guides are interactively dragged (like smart guides) — redraw
   // synchronously so the line tracks the pointer with zero added latency.
   const unsubPersistentGuides = useGuidesStore.subscribe(redrawPersistentGuides);
@@ -620,6 +733,7 @@ export function createOverlayRenderer(
   redrawConnectorPreview();
   redrawPenPreview();
   redrawPathEdit();
+  redrawPersistentMeasurements();
 
   return () => {
     if (overlayRafId !== null) {
@@ -632,6 +746,8 @@ export function createOverlayRenderer(
     unsubGuides();
     unsubDrop();
     unsubMeasure();
+    unsubMeasurements();
+    unsubDevMode();
     unsubDrawMode();
     unsubMarquee();
     unsubConnector();
@@ -645,13 +761,9 @@ export function createOverlayRenderer(
     persistentGuidesGfx.destroy();
     dropGfx.destroy();
     measureGfx.destroy();
-    recycleMeasureLabels();
-    while (measureLabelPool.length > 0) {
-      const entry = measureLabelPool.pop();
-      if (!entry) break;
-      entry.group.destroy({ children: true });
-    }
-    measureLabels.destroy({ children: true });
+    measureLabelPool.destroy();
+    persistentMeasureGfx.destroy();
+    persistentMeasureLabelPool.destroy();
     drawPreviewGfx.destroy();
     marqueeGfx.destroy();
     connectorPreviewGfx.destroy();
