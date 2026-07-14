@@ -8,6 +8,34 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-07-14
+
+### Changed
+- **Convert to design now uses the h2d capture pipeline.** `convertEmbedToDesign`
+  renders the embed's HTML in a sanitized same-origin iframe, captures the
+  browser-computed layout with a vendored DOM-capture bundle
+  (`src/vendor/h2dCapture/`, refresh via `scripts/update-h2d-capture.sh`), and
+  converts it through the same `h2dToScene` converter used for clipboard paste.
+  Converted slides are now geometrically faithful to the embed render (measured
+  rects instead of re-inferred layout). The legacy DOM-walk importer
+  (`convertHtmlToDesignNodes`) remains as the shared CSS-parsing library.
+  Conversion failures now surface as a toast; the capture iframe has a 10s load
+  timeout and a guard against the embed being deleted mid-conversion.
+
+### Fixed
+- **Cyrillic (and other missing-glyph) text no longer falls back to serif after
+  conversion.** Text nodes keep the CSS stack's generic fallback in a new
+  `fontFallback` field, applied in the Pixi renderer, text measurement, and the
+  inline text editor — latin-only families like Plus Jakarta Sans now degrade to
+  the correct generic instead of the browser default.
+- **JetBrains Mono loads after conversion/paste** — it was missing from the
+  Google-fonts registry, so nodes using it silently rendered in a fallback font.
+- **Gradient-only elements survive h2d conversion/paste in more cases:**
+  `repeating-linear-gradient` approximates as a linear gradient, radial gradients
+  convert properly, unsupported gradient functions (conic) degrade to the first
+  stop color, and multi-layer `url(...), gradient(...)` backgrounds keep the
+  first-layer image instead of dropping it.
+
 ## [0.34.0] - 2026-07-14
 
 ### Added
