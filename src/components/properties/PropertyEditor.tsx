@@ -76,6 +76,9 @@ export function PropertyEditor({
         }
         slotNode={slotFlatNode}
       />
+      {frameNode?.reusable && (
+        <ComponentPropertiesSection node={frameNode} />
+      )}
       <PositionSection
         node={node}
         onUpdate={onUpdate}
@@ -132,9 +135,6 @@ export function PropertyEditor({
       )}
       {node.type === "ref" && (
         <InstancePropertiesSection node={node} component={component} />
-      )}
-      {frameNode?.reusable && (
-        <ComponentPropertiesSection node={frameNode} />
       )}
       {(node.type === "frame" || node.type === "group") && (
         <FrameActionsSection node={node} />
