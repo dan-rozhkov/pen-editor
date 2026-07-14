@@ -5,6 +5,7 @@ import { useCustomFontStore } from "./store/customFontStore";
 import { LeftRail } from "./components/LeftRail";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { RightSidebar } from "./components/RightSidebar";
+import { InspectPanel } from "./components/inspect/InspectPanel";
 import { PrimitivesPanel } from "./components/PrimitivesPanel";
 import { PresentOverlay } from "./components/PresentOverlay";
 import { CommandPalette } from "./components/CommandPalette";
@@ -133,12 +134,11 @@ function App() {
                 {!isView && !is3DActive && <Rulers />}
                 <FpsDisplay />
               </div>
-              {/* Right sidebar — read-only in view mode (inspect, no edits) and
-                  in dev mode (Task 6 swaps this panel for the inspector; for
-                  now it just stays read-only). */}
+              {/* Right sidebar — read-only in view mode (inspect, no edits);
+                  swapped for the read-only InspectPanel in dev mode. */}
               <div className="pointer-events-auto">
                 <ReadOnlyProvider value={isView || isDev}>
-                  <RightSidebar />
+                  {isDev ? <InspectPanel /> : <RightSidebar />}
                 </ReadOnlyProvider>
               </div>
             </>
