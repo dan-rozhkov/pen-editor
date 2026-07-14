@@ -26,7 +26,9 @@ import {
   hitTestTransformHandle,
   getResizeCursor,
 } from "./hitTesting";
-import { createPanController } from "./panController";
+import { createPanController, wheelDeltaScale } from "./panController";
+import { computePresentScrollRange, clampPresentScrollY } from "./presentScroll";
+import { calculateNodesBounds } from "@/utils/viewportUtils";
 import { createTouchController } from "./touchController";
 import { createTransformController } from "./transformController";
 import { createScaleController } from "./scaleController";
@@ -128,6 +130,19 @@ export function setupPixiInteraction(
   let isSpaceHeld = false;
   let hoverRafId: number | null = null;
   let pendingHoverWorld: { x: number; y: number } | null = null;
+
+  // Memoizes the active present-mode slide's world bounds so
+  // handlePresentWheel doesn't re-walk the frame's entire subtree on every
+  // wheel event (~120Hz during trackpad inertia). Present mode is read-only
+  // (canEditScene is false), so a frame's own geometry can't change mid
+  // session — keyed on the `presentFrameIds` array identity (a fresh array
+  // per `enterPresent()` call) plus `frameId` so a later present session
+  // (even of the same frame, potentially edited in between) recomputes.
+  let presentWheelBoundsCache: {
+    framesRef: string[];
+    frameId: string;
+    bounds: ReturnType<typeof calculateNodesBounds>;
+  } | null = null;
 
   // Descendant drag state (for dragging nodes inside slot overrides)
   let descendantDrag: {
@@ -594,8 +609,52 @@ export function setupPixiInteraction(
     }
   }
 
+  // Play/Present narrowly re-opens wheel/trackpad input for vertical-only
+  // scrolling of a slide taller than the screen (see presentScroll.ts for the
+  // clamp math). Zoom, horizontal pan, and everything else stay locked.
+  function handlePresentWheel(e: WheelEvent): void {
+    const modeState = useEditorModeStore.getState();
+    const frameId = modeState.presentFrameIds[modeState.presentIndex];
+    if (!frameId) return;
+
+    let bounds: ReturnType<typeof calculateNodesBounds>;
+    if (
+      presentWheelBoundsCache &&
+      presentWheelBoundsCache.framesRef === modeState.presentFrameIds &&
+      presentWheelBoundsCache.frameId === frameId
+    ) {
+      bounds = presentWheelBoundsCache.bounds;
+    } else {
+      const nodes = useSceneStore.getState().getNodes();
+      const frame = nodes.find((n) => n.id === frameId);
+      if (!frame) return;
+      bounds = calculateNodesBounds([frame]);
+      presentWheelBoundsCache = { framesRef: modeState.presentFrameIds, frameId, bounds };
+    }
+    if (bounds.isEmpty) return;
+
+    const vs = useViewportStore.getState();
+    const range = computePresentScrollRange(
+      bounds.minY,
+      bounds.maxY - bounds.minY,
+      vs.scale,
+      window.innerHeight,
+    );
+    if (!range) return; // slide fits the screen — stays centered, no scroll
+
+    e.preventDefault();
+    const deltaY = e.deltaY * wheelDeltaScale(e);
+    const newY = clampPresentScrollY(vs.y - deltaY, range);
+    vs.setPosition(vs.x, newY);
+  }
+
   function handleWheel(e: WheelEvent): void {
-    if (!canInteractCanvas(useEditorModeStore.getState().mode)) return;
+    const mode = useEditorModeStore.getState().mode;
+    if (mode === "present") {
+      handlePresentWheel(e);
+      return;
+    }
+    if (!canInteractCanvas(mode)) return;
     pan.handleWheel(e);
   }
 

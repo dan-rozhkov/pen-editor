@@ -38,6 +38,7 @@ import { useStyleStore } from "@/store/styleStore";
 import { useUIThemeStore } from "@/store/uiThemeStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useRenderModeStore } from "@/store/renderModeStore";
+import { useEditorModeStore } from "@/store/editorModeStore";
 import { subscribeOverlayState } from "./pixiOverlayState";
 
 // Keep rendering this long after the last signal. Covers drop animations
@@ -125,6 +126,10 @@ export function setupRenderScheduler(app: Application): () => void {
     // safety tick (up to SAFETY_INTERVAL_MS later), same class of bug as the
     // pen-tool-lag fix this allowlist exists to prevent.
     useRenderModeStore.subscribe(markActivity),
+    // Play/Present mode entry/exit and slide navigation directly toggle Pixi
+    // container visibility (PresentController) without writing sceneStore —
+    // without this the repaint would only land on the next safety tick.
+    useEditorModeStore.subscribe(markActivity),
     subscribeOverlayState(markActivity),
   ];
 

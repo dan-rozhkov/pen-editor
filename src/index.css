@@ -144,6 +144,11 @@
   --color-accent-bright: #0d99ff;
   --color-accent-light: #0d99ff;
   --color-accent-selection: rgba(13, 153, 255, 0.12);
+
+  /* Play/Present mode's canvas backdrop — always dark, independent of the
+     editor's light/dark theme (Figma Present / Keynote convention). Defined
+     once here (not overridden in .dark) so it's theme-independent. */
+  --color-present-background: #0f0f0f;
 }
 
 .dark {

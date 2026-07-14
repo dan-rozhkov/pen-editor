@@ -371,7 +371,13 @@ export function PixiCanvas() {
         height: "100%",
         overflow: "hidden",
         cursor: isPanning ? "grab" : activeTool ? "crosshair" : "default",
-        background: pageBackground,
+        // Play/Present is always dark regardless of the editor's light/dark
+        // theme — a plain CSS swap (not a sceneStore.pageBackground mutation)
+        // so scene data stays untouched; the transition avoids a flash on
+        // entering/exiting Play.
+        background:
+          editorMode === "present" ? "var(--color-present-background)" : pageBackground,
+        transition: "background 250ms ease",
         position: "relative",
         visibility: is3DActive ? "hidden" : "visible",
       }}
@@ -455,11 +461,18 @@ export function PixiCanvas() {
           absoluteY={editingPosition.y}
         />
       )}
-      {/* Canvas loading overlay — opaque to hide content until rendered */}
+      {/* Canvas loading overlay — opaque to hide content until rendered.
+          Unreachable in present mode today (isCanvasLoading only spans
+          initial load, before Play can be entered), but mirrors the same
+          present-mode background swap as the canvas host above (line ~377)
+          for defense-in-depth. */}
       {isCanvasLoading && (
         <div
           className="absolute inset-0 flex items-center justify-center pointer-events-none"
-          style={{ background: pageBackground }}
+          style={{
+            background:
+              editorMode === "present" ? "var(--color-present-background)" : pageBackground,
+          }}
         >
           <CircleNotch
             size={28}

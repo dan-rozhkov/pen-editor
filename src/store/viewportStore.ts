@@ -27,6 +27,11 @@ interface ViewportState {
     viewportWidth: number,
     viewportHeight: number,
   ) => void;
+  fitToWidth: (
+    nodes: SceneNode[],
+    viewportWidth: number,
+    viewportHeight: number,
+  ) => void;
   getViewportState: () => { scale: number; x: number; y: number };
   setViewportState: (state: { scale: number; x: number; y: number }) => void;
 }
@@ -171,6 +176,41 @@ export const useViewportStore = create<ViewportState>((set, get) => ({
 
     const newX = viewportWidth / 2 - centerX * newScale;
     const newY = viewportHeight / 2 - centerY * newScale;
+
+    set({ scale: newScale, x: newX, y: newY });
+  },
+
+  // Fits content to the viewport WIDTH only (no padding), used by Play/Present
+  // mode so a slide fills the screen edge-to-edge horizontally — unlike
+  // fitToContent (min(scaleX, scaleY) + 50px padding), which is used
+  // elsewhere (viewCommands.fitToContent, PageControls) and must not change.
+  fitToWidth: (nodes, viewportWidth, viewportHeight) => {
+    const bounds = calculateNodesBounds(nodes);
+
+    if (bounds.isEmpty) {
+      set({ scale: 1, x: viewportWidth / 2, y: viewportHeight / 2 });
+      return;
+    }
+
+    const frameWidth = bounds.maxX - bounds.minX;
+    const frameHeight = bounds.maxY - bounds.minY;
+
+    const rawScale = frameWidth > 0 ? viewportWidth / frameWidth : 1;
+    const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, rawScale));
+
+    // Center horizontally around the frame's midpoint rather than pinning its
+    // left edge to x=0 — the two only coincide when rawScale is unclamped.
+    // When MIN_SCALE/MAX_SCALE binds (e.g. a very narrow or very wide frame),
+    // pinning the left edge leaves all the slack on one side instead of
+    // splitting it evenly (see viewportStore.test.ts's clamped-centering cases).
+    const centerX = bounds.minX + frameWidth / 2;
+    const newX = viewportWidth / 2 - centerX * newScale;
+
+    const scaledHeight = frameHeight * newScale;
+    const newY =
+      scaledHeight <= viewportHeight
+        ? (viewportHeight - scaledHeight) / 2 - bounds.minY * newScale
+        : -bounds.minY * newScale; // top-align: tall slides scroll from the top
 
     set({ scale: newScale, x: newX, y: newY });
   },

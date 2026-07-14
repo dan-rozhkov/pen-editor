@@ -1,5 +1,7 @@
 import { Container, Text } from "pixi.js";
 import { useSelectionStore } from "@/store/selectionStore";
+import { useSceneStore } from "@/store/sceneStore";
+import { useEditorModeStore } from "@/store/editorModeStore";
 import type { FlatSceneNode } from "@/types/scene";
 import type { SceneState } from "@/store/sceneStore";
 import { createNodeContainer } from "./renderers";
@@ -51,6 +53,18 @@ export function createNodeTreeManager(
       }
     }
 
+    // Play/Present isolates the active slide by hiding every other top-level
+    // container (see PresentController, which applies this directly on
+    // enter/index-change/exit). Re-derive the same hide set here too so any
+    // resync this function runs for (selection change, theme update, a full
+    // rebuild off a font-load event, ...) can't clobber it back to visible —
+    // this loop is otherwise the single place that decides final container
+    // visibility on every resync.
+    const modeState = useEditorModeStore.getState();
+    const isPresenting = modeState.mode === "present";
+    const activeFrameId = modeState.presentFrameIds[modeState.presentIndex];
+    const rootIds = isPresenting ? new Set(useSceneStore.getState().rootIds) : null;
+
     // Existing logic for registered (non-instance) nodes
     for (const [id, entry] of registry) {
       const baseVisible = entry.node.visible !== false && entry.node.enabled !== false;
@@ -58,7 +72,8 @@ export function createNodeTreeManager(
         (isTextEditing && entry.node.type === "text" && editingNodeId === id) ||
         (isEmbedEditing && entry.node.type === "embed" && editingNodeId === id)
       );
-      entry.container.visible = baseVisible && !hideWhileEditing;
+      const hideForPresentIsolation = rootIds !== null && rootIds.has(id) && id !== activeFrameId;
+      entry.container.visible = baseVisible && !hideWhileEditing && !hideForPresentIsolation;
     }
   }
 

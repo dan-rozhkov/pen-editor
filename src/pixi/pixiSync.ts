@@ -6,6 +6,7 @@ import { useStyleStore } from "@/store/styleStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useRenderModeStore } from "@/store/renderModeStore";
+import { useEditorModeStore } from "@/store/editorModeStore";
 import type { FlatSceneNode } from "@/types/scene";
 import { isFlatFrameNode, isRefNode, isConnectorNode } from "@/types/scene";
 import { updateNodeContainer } from "./renderers";
@@ -632,6 +633,17 @@ export function createPixiSync(sceneRoot: Container): () => void {
     nodeTreeMgr.applyTextEditingVisibility();
   });
 
+  // Play/Present mode/slide changes aren't scene mutations, so nothing else
+  // here re-applies visibility for them — this is what actually derives and
+  // applies the present-mode hide set (syncNodeTree.ts's present-mode branch
+  // of applyTextEditingVisibility) on enter/index-change/exit. No explicit
+  // repaint call here: renderScheduler.ts's own `useEditorModeStore.subscribe
+  // (markActivity)` already owns scheduling a repaint for this store's
+  // changes (`requestCanvasRender` === `invalidate` === `markActivity`).
+  const unsubEditorMode = useEditorModeStore.subscribe(() => {
+    nodeTreeMgr.applyTextEditingVisibility();
+  });
+
   // The auto-layout drag animator (autoLayoutDragAnimator.ts) mutates
   // containers directly, bypassing the store. A normal drop commits a scene
   // mutation whose flush re-applies layout, but some exits (drop with no
@@ -682,6 +694,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
     unsubVariables();
     unsubStyles();
     unsubSelection();
+    unsubEditorMode();
     unsubDrag();
     unsubViewport();
     unsubRenderMode();

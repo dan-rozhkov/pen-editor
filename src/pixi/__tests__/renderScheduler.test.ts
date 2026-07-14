@@ -3,6 +3,7 @@ import type { Application } from "pixi.js";
 import { usePenToolStore } from "@/store/penToolStore";
 import { useStyleStore } from "@/store/styleStore";
 import { useViewportStore } from "@/store/viewportStore";
+import { useEditorModeStore } from "@/store/editorModeStore";
 import { requestCanvasRender, setupRenderScheduler } from "../renderScheduler";
 
 describe("requestCanvasRender", () => {
@@ -89,6 +90,28 @@ describe("setupRenderScheduler invalidation sources", () => {
     expect(render).toHaveBeenCalledTimes(2);
 
     useStyleStore.getState().deleteFillStyle("s-test");
+    cleanup();
+  });
+
+  it("renders promptly after an editorModeStore change (Play mode/slide-index changes aren't scene mutations)", () => {
+    const now = vi.spyOn(performance, "now");
+
+    now.mockReturnValue(0);
+    const { app, render, tick } = makeFakeApp();
+    const cleanup = setupRenderScheduler(app);
+
+    now.mockReturnValue(5000);
+    tick();
+    render.mockClear();
+
+    now.mockReturnValue(5100);
+    useEditorModeStore.setState({ mode: "present", presentFrameIds: ["a"], presentIndex: 0 });
+
+    now.mockReturnValue(5116);
+    tick();
+    expect(render).toHaveBeenCalledTimes(1);
+
+    useEditorModeStore.setState({ mode: "edit", presentFrameIds: [], presentIndex: 0 });
     cleanup();
   });
 

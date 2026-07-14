@@ -11,7 +11,9 @@ const WHEEL_ZOOM_INTENSITY = 0.008;
 const WHEEL_LINE_HEIGHT_PX = 16;
 const WHEEL_PAGE_HEIGHT_PX = 800;
 
-function wheelDeltaScale(e: WheelEvent): number {
+// Exported for reuse by the present-mode vertical-scroll wheel handler
+// (pixiInteractionCore.ts), which needs the same deltaMode normalization.
+export function wheelDeltaScale(e: WheelEvent): number {
   if (e.deltaMode === 1) return WHEEL_LINE_HEIGHT_PX;
   if (e.deltaMode === 2) return WHEEL_PAGE_HEIGHT_PX;
   return 1;
