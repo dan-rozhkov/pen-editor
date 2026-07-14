@@ -75,7 +75,16 @@ export const useMeasurementsStore = create<MeasurementsState>((set, get) => ({
   },
 
   // Bulk replace (page switch / document load) — not an undoable user edit.
-  setMeasurements: (measurements) => set({ measurements }),
+  setMeasurements: (measurements) => {
+    set((state) => {
+      const measurementIds = new Set(measurements.map((m) => m.id));
+      const newSelectedId =
+        state.selectedMeasurementId && measurementIds.has(state.selectedMeasurementId)
+          ? state.selectedMeasurementId
+          : null;
+      return { measurements, selectedMeasurementId: newSelectedId };
+    });
+  },
 
   setSelectedMeasurement: (id) => set({ selectedMeasurementId: id }),
 
@@ -84,10 +93,16 @@ export const useMeasurementsStore = create<MeasurementsState>((set, get) => ({
   // state update with no history save of its own.
   removeMeasurementsForNodes: (nodeIds) => {
     const idSet = new Set(nodeIds);
-    set((state) => ({
-      measurements: state.measurements.filter(
+    set((state) => {
+      const newMeasurements = state.measurements.filter(
         (m) => !idSet.has(m.fromId) && !idSet.has(m.toId),
-      ),
-    }));
+      );
+      const newMeasurementIds = new Set(newMeasurements.map((m) => m.id));
+      const newSelectedId =
+        state.selectedMeasurementId && newMeasurementIds.has(state.selectedMeasurementId)
+          ? state.selectedMeasurementId
+          : null;
+      return { measurements: newMeasurements, selectedMeasurementId: newSelectedId };
+    });
   },
 }));

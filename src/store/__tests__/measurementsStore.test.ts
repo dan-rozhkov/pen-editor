@@ -117,4 +117,70 @@ describe("measurementsStore", () => {
 
     expect(useMeasurementsStore.getState().measurements).toEqual([]);
   });
+
+  it("setMeasurements clears stale selection when the selected measurement is not in the new array", () => {
+    // Setup: add and select a measurement
+    useMeasurementsStore.getState().addMeasurement("rect1", "rect2");
+    const id = useMeasurementsStore.getState().measurements[0].id;
+    useMeasurementsStore.getState().setSelectedMeasurement(id);
+    expect(useMeasurementsStore.getState().selectedMeasurementId).toBe(id);
+
+    // Bulk replace with empty array (e.g., page switch)
+    useMeasurementsStore.getState().setMeasurements([]);
+
+    // Selection should be cleared
+    expect(useMeasurementsStore.getState().selectedMeasurementId).toBeNull();
+  });
+
+  it("setMeasurements preserves selection when the selected measurement is in the new array", () => {
+    // Setup: add and select a measurement
+    useMeasurementsStore.getState().addMeasurement("rect1", "rect2");
+    const id = useMeasurementsStore.getState().measurements[0].id;
+    useMeasurementsStore.getState().setSelectedMeasurement(id);
+
+    // Bulk replace with array containing the selected measurement
+    useMeasurementsStore.getState().setMeasurements([
+      { id, fromId: "rect1", toId: "rect2" },
+    ]);
+
+    // Selection should be preserved
+    expect(useMeasurementsStore.getState().selectedMeasurementId).toBe(id);
+  });
+
+  it("removeMeasurementsForNodes clears stale selection when the selected measurement is removed", () => {
+    // Setup: set measurements and select one
+    useMeasurementsStore.getState().setMeasurements([
+      { id: "m1", fromId: "a", toId: "b" },
+      { id: "m2", fromId: "c", toId: "d" },
+    ]);
+    useMeasurementsStore.getState().setSelectedMeasurement("m1");
+    expect(useMeasurementsStore.getState().selectedMeasurementId).toBe("m1");
+
+    // Remove the node "a" that the selected measurement depends on
+    useMeasurementsStore.getState().removeMeasurementsForNodes(["a"]);
+
+    // Selection should be cleared because m1 was removed
+    expect(useMeasurementsStore.getState().selectedMeasurementId).toBeNull();
+    expect(useMeasurementsStore.getState().measurements).toEqual([
+      { id: "m2", fromId: "c", toId: "d" },
+    ]);
+  });
+
+  it("removeMeasurementsForNodes preserves selection when the selected measurement is not affected", () => {
+    // Setup: set measurements and select one
+    useMeasurementsStore.getState().setMeasurements([
+      { id: "m1", fromId: "a", toId: "b" },
+      { id: "m2", fromId: "c", toId: "d" },
+    ]);
+    useMeasurementsStore.getState().setSelectedMeasurement("m2");
+
+    // Remove the node "a" (doesn't touch m2)
+    useMeasurementsStore.getState().removeMeasurementsForNodes(["a"]);
+
+    // Selection should be preserved because m2 still exists
+    expect(useMeasurementsStore.getState().selectedMeasurementId).toBe("m2");
+    expect(useMeasurementsStore.getState().measurements).toEqual([
+      { id: "m2", fromId: "c", toId: "d" },
+    ]);
+  });
 });
