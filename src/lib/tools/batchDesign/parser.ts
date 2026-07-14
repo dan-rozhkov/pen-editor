@@ -9,12 +9,14 @@ const MAX_OPERATIONS = 25;
  * Each line is: [binding=]OP(arg1, arg2, ...)
  */
 export function parseOperations(input: string): ParsedOperation[] {
-  const lines = splitOperationLines(input);
+  const lines = splitOperationLines(stripWrapperNoiseLines(input));
   const operations: ParsedOperation[] = [];
 
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i].text.trim();
-    if (!raw || raw.startsWith("//") || raw.startsWith("#")) continue;
+    if (!raw || raw.startsWith("//") || raw.startsWith("#") || isWrapperNoiseLine(raw)) {
+      continue;
+    }
 
     const parsed = parseLine(raw, lines[i].line);
     operations.push(parsed);
@@ -30,6 +32,53 @@ export function parseOperations(input: string): ParsedOperation[] {
   }
 
   return operations;
+}
+
+/**
+ * Lines that are pure wrapper/fence noise a model occasionally emits around the
+ * operations script. These are skipped like comments so a stray tag doesn't fail
+ * the whole batch. A line is noise ONLY if the entire trimmed line is one of these
+ * — never a substring inside a real operation.
+ */
+function isWrapperNoiseLine(raw: string): boolean {
+  // Markdown code fences: ``` or ```lang  (also ~~~ )
+  if (/^(`{3,}|~{3,})[\w-]*$/.test(raw)) return true;
+  // XML-ish wrapper tags for the operations payload, opening or closing:
+  //   <operations>, </operations>, <batch_design>, </batch_design>
+  if (/^<\/?\s*(operations|batch_design)\s*\/?>$/i.test(raw)) return true;
+  return false;
+}
+
+/**
+ * Blank out physical lines that are pure wrapper/fence noise BEFORE the
+ * character-level line splitter runs. This is required for Markdown code fences
+ * specifically: splitOperationLines treats a backtick as a string delimiter, so a
+ * lone ``` fence would otherwise open a "string" and swallow the real operation on
+ * the next line. Noise lines are replaced with an empty line (not removed) so error
+ * line numbers stay aligned with the model's original input.
+ *
+ * Only contiguous noise lines at the TOP and BOTTOM of the input are peeled —
+ * wrappers (fences, `<operations>`/`</operations>` tag pairs) only ever appear as
+ * the outermost lines of the payload. Interior lines are left untouched so a lone
+ * `<script>` or ``` line that legitimately appears inside an htmlContent (or other
+ * string value) is never blanked, which would corrupt the generated HTML.
+ */
+function stripWrapperNoiseLines(input: string): string {
+  const lines = input.split("\n");
+  let start = 0;
+  let end = lines.length - 1;
+  // Peel contiguous wrapper/fence noise from the top…
+  while (start <= end && isWrapperNoiseLine(lines[start].trim())) {
+    lines[start] = "";
+    start++;
+  }
+  // …and from the bottom. Interior lines are left untouched so a `<script>`
+  // or ``` line inside an htmlContent string value is never blanked.
+  while (end >= start && isWrapperNoiseLine(lines[end].trim())) {
+    lines[end] = "";
+    end--;
+  }
+  return lines.join("\n");
 }
 
 function splitOperationLines(input: string): Array<{ text: string; line: number }> {
@@ -117,7 +166,9 @@ function parseLine(raw: string, lineNum: number): ParsedOperation {
   const opMatch = remaining.match(/^([A-Z])\(/);
   if (!opMatch || !OP_TYPES.has(opMatch[1])) {
     throw new Error(
-      `Line ${lineNum}: Invalid operation syntax: "${raw}"`
+      `Line ${lineNum}: Invalid operation syntax: "${raw}". ` +
+        `Each operation must be one of I/C/U/R/M/D/G, e.g. ` +
+        `binding=I(parent, {...}) or U(path, {...}). Do not wrap the script in tags or code fences.`
     );
   }
 

@@ -1479,4 +1479,83 @@ describe("batch_design", () => {
       expect(updated.link).toBeFalsy();
     });
   });
+
+  describe("parser tolerance", () => {
+    it("ignores a trailing </operations> wrapper line", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'embed=I(document, {type: "frame", name: "Slide", width: 100, height: 100})\n</operations>',
+        })
+      );
+      expect(result.success).toBe(true);
+      expect(result.operationsExecuted).toBe(1);
+    });
+
+    it("ignores a leading <operations> wrapper line", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            '<operations>\nembed=I(document, {type: "frame", name: "Slide", width: 100, height: 100})',
+        })
+      );
+      expect(result.success).toBe(true);
+      expect(result.operationsExecuted).toBe(1);
+    });
+
+    it("strips Markdown code fences around the script", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            '```\nembed=I(document, {type: "frame", name: "Slide", width: 100, height: 100})\n```',
+        })
+      );
+      expect(result.success).toBe(true);
+      expect(result.operationsExecuted).toBe(1);
+    });
+
+    it("errors with 'No operations' when the payload is only fences/tags", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations: "<operations>\n```\n```\n</operations>",
+        })
+      );
+      expect(result.success).toBeUndefined();
+      expect(result.error).toMatch(/No operations/);
+    });
+
+    it("still errors on a genuinely malformed operation", async () => {
+      const result = JSON.parse(
+        await batchDesign({ operations: "X(foo)" })
+      );
+      expect(result.success).toBeUndefined();
+      expect(result.error).toMatch(/Invalid operation syntax/);
+    });
+
+    it("does NOT strip a </operations> substring inside a string value", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'I(document, {type: "text", text: "see </operations> below"})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const created = sceneState().nodesById[result.createdNodes[0].id] as TextNode;
+      expect(created.text).toBe("see </operations> below");
+    });
+
+    it("preserves interior full-line noise inside a multi-line string value", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'I(document, {type: "text", name: "Snippet", text: "line one\\n<script>\\n```\\nline four"})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const created = sceneState().nodesById[result.createdNodes[0].id] as TextNode;
+      expect(created.text).toBe("line one\n<script>\n```\nline four");
+      expect(created.text).toContain("<script>");
+      expect(created.text).toContain("```");
+    });
+  });
 });
