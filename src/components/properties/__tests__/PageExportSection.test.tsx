@@ -13,25 +13,24 @@ afterEach(() => {
 });
 
 describe("<PageExportSection />", () => {
-  it("renders the page export action with a format selector and a scale selector", () => {
+  it("renders the page export action with compact format and scale selectors", () => {
     render(<PageExportSection />);
     expect(screen.getByText("Export page")).toBeTruthy();
-    expect(screen.getByText("Format")).toBeTruthy();
-    expect(screen.getByText("Scale")).toBeTruthy();
     // base-ui Select dropdowns are flaky in happy-dom (see FillSection.test.tsx),
     // so assert the selected value's label text renders rather than driving
     // the dropdown open.
     expect(screen.getByText("PNG")).toBeTruthy();
+    expect(screen.getByText("1x")).toBeTruthy();
   });
 
-  it("defaults to a raster format, labeling the button for a ZIP export", () => {
+  it("renders the export-all-frames button without a format suffix", () => {
     render(<PageExportSection />);
-    expect(screen.getByText("Export all frames (ZIP)")).toBeTruthy();
+    expect(screen.getByText("Export all frames")).toBeTruthy();
   });
 
   it("shows a status message when the canvas is not ready", async () => {
     render(<PageExportSection />);
-    fireEvent.click(screen.getByText("Export all frames (ZIP)"));
+    fireEvent.click(screen.getByText("Export all frames"));
     await Promise.resolve();
     expect(screen.getByText("Canvas is not ready")).toBeTruthy();
   });

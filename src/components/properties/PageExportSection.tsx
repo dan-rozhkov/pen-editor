@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { PropertySection, SelectInput } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
-import { resolvePageExportKind, pageExportResultLabel, type PageExportFormat } from "@/utils/pageExportFormat";
+import { resolvePageExportKind, type PageExportFormat } from "@/utils/pageExportFormat";
 
 /**
  * Page-level export shown when nothing is selected (inside `PageProperties`).
@@ -69,31 +69,27 @@ export function PageExportSection() {
     { value: "3", label: "3x" },
   ];
 
-  const resultLabel = pageExportResultLabel(format);
-
   return (
     <PropertySection title="Export page">
       <div className="flex flex-col gap-2">
-        <SelectInput
-          label="Format"
-          labelOutside
-          value={format}
-          options={formatOptions}
-          onChange={(v) => {
-            setFormat(v as PageExportFormat);
-            setStatus(null);
-          }}
-        />
-        <SelectInput
-          label="Scale"
-          labelOutside
-          value={String(scale)}
-          options={scaleOptions}
-          onChange={(v) => {
-            setScale(Number(v));
-            setStatus(null);
-          }}
-        />
+        <div className="flex gap-2">
+          <SelectInput
+            value={format}
+            options={formatOptions}
+            onChange={(v) => {
+              setFormat(v as PageExportFormat);
+              setStatus(null);
+            }}
+          />
+          <SelectInput
+            value={String(scale)}
+            options={scaleOptions}
+            onChange={(v) => {
+              setScale(Number(v));
+              setStatus(null);
+            }}
+          />
+        </div>
         <Button
           onClick={handleExportAllFrames}
           disabled={isExporting}
@@ -101,7 +97,7 @@ export function PageExportSection() {
           className="w-full min-w-0"
         >
           <span className="min-w-0 truncate">
-            {isExporting ? "Exporting…" : `Export all frames (${resultLabel})`}
+            {isExporting ? "Exporting…" : "Export all frames"}
           </span>
         </Button>
         {status && <div className="text-[10px] text-text-muted">{status}</div>}
