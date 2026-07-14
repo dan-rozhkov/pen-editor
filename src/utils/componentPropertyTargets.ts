@@ -1,8 +1,10 @@
 import type { FlatSceneNode } from "@/types/scene";
+import { getNodeDisplayName } from "@/utils/nodeDisplay";
 
 export interface ComponentPropertyTargetOption {
   value: string;
   label: string;
+  node: FlatSceneNode;
 }
 
 /**
@@ -17,19 +19,17 @@ export function getComponentPropertyTargetOptions(
 ): ComponentPropertyTargetOption[] {
   const options: ComponentPropertyTargetOption[] = [];
 
-  const visit = (parentId: string, idPath: string, namePath: string[]) => {
+  const visit = (parentId: string, idPath: string) => {
     for (const childId of childrenById[parentId] ?? []) {
       const child = nodesById[childId];
       if (!child) continue;
 
       const path = idPath ? `${idPath}/${child.id}` : child.id;
-      const name = child.name?.trim() || child.type;
-      const labels = [...namePath, name];
-      options.push({ value: path, label: labels.join(" / ") });
-      visit(child.id, path, labels);
+      options.push({ value: path, label: getNodeDisplayName(child), node: child });
+      visit(child.id, path);
     }
   };
 
-  visit(componentId, "", []);
+  visit(componentId, "");
   return options;
 }

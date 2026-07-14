@@ -192,7 +192,7 @@ function SelectScrollDownButton({
 interface SelectWithOptionsProps {
   value: string;
   onValueChange: (value: string | null) => void;
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; icon?: React.ReactNode }[];
   children?: React.ReactNode;
   triggerPrefix?: React.ReactNode;
   className?: string;
@@ -222,6 +222,7 @@ function SelectWithOptions({
       <SelectContent>
         {options.map((opt) => (
           <SelectItem key={opt.value} value={opt.value}>
+            {opt.icon}
             {opt.label}
           </SelectItem>
         ))}

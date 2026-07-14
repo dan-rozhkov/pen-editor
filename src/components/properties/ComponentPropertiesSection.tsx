@@ -3,6 +3,7 @@ import type { ComponentPropertyDef, ComponentPropertyType, FrameNode } from "@/t
 import { generateId } from "@/types/scene";
 import { useSceneStore } from "@/store/sceneStore";
 import { getComponentPropertyTargetOptions } from "@/utils/componentPropertyTargets";
+import { NodeIcon } from "@/components/layers/LayerIcons";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
 import { CheckboxInput, PropertySection, SelectInput, TextInput } from "@/components/ui/PropertyInputs";
@@ -39,6 +40,22 @@ export function ComponentPropertiesSection({ node }: ComponentPropertiesSectionP
   const targetNodeOptions = useMemo(
     () => getComponentPropertyTargetOptions(node.id, nodesById, childrenById),
     [node.id, nodesById, childrenById],
+  );
+  const targetNodeSelectOptions = useMemo(
+    () => targetNodeOptions.map((option) => ({
+      value: option.value,
+      label: option.label,
+      icon: (
+        <NodeIcon
+          type={option.node.type}
+          isComponent={option.node.type === "frame" && option.node.reusable === true}
+          isSlot={option.node.type === "frame" && option.node.isSlot === true}
+          isMask={option.node.isMask === true}
+          layout={option.node.type === "frame" ? option.node.layout : undefined}
+        />
+      ),
+    })),
+    [targetNodeOptions],
   );
 
   const updateProperty = (id: string, updates: Partial<ComponentPropertyDef>) => {
@@ -139,9 +156,9 @@ export function ComponentPropertiesSection({ node }: ComponentPropertiesSectionP
               label="Target node"
               value={property.bindingPath}
               options={
-                property.bindingPath && !targetNodeOptions.some((option) => option.value === property.bindingPath)
-                  ? [{ value: property.bindingPath, label: `Missing layer (${property.bindingPath})` }, ...targetNodeOptions]
-                  : targetNodeOptions
+                property.bindingPath && !targetNodeSelectOptions.some((option) => option.value === property.bindingPath)
+                  ? [{ value: property.bindingPath, label: `Missing layer (${property.bindingPath})` }, ...targetNodeSelectOptions]
+                  : targetNodeSelectOptions
               }
               onChange={(bindingPath) => updateProperty(property.id, { bindingPath })}
             />

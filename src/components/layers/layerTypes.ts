@@ -1,6 +1,7 @@
 import type { SceneNode, FlatSceneNode, RefNode } from "../../types/scene";
 import { isContainerNode } from "../../types/scene";
 import { resolveRefToTree } from "../../utils/instanceRuntime";
+import { getNodeDisplayName } from "@/utils/nodeDisplay";
 
 export type DropPosition = "before" | "after" | "inside" | null;
 
@@ -28,9 +29,7 @@ export interface FlattenedLayer {
 export const ROW_HEIGHT = 28;
 export const OVERSCAN = 8;
 
-export function getDisplayName(node: { name?: string; type: string }): string {
-  return node.name || node.type.charAt(0).toUpperCase() + node.type.slice(1);
-}
+export const getDisplayName = getNodeDisplayName;
 
 /** Shared ref so LayerItem can signal that selection originated from layers panel */
 export const selectionFromLayersRef = { current: false };

@@ -89,9 +89,10 @@ describe("<ComponentPropertiesSection />", () => {
 
   it("builds named target options while retaining ID paths as their values", () => {
     const state = useSceneStore.getState();
-    expect(getComponentPropertyTargetOptions("comp", state.nodesById, state.childrenById)).toEqual([
+    const options = getComponentPropertyTargetOptions("comp", state.nodesById, state.childrenById);
+    expect(options.map(({ value, label }) => ({ value, label }))).toEqual([
       { value: "label", label: "Label" },
-      { value: "label/nested", label: "Label / Icon background" },
+      { value: "label/nested", label: "Icon background" },
     ]);
   });
 });
