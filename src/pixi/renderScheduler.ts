@@ -39,6 +39,7 @@ import { useUIThemeStore } from "@/store/uiThemeStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useRenderModeStore } from "@/store/renderModeStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
+import { useDevModeStore } from "@/store/devModeStore";
 import { subscribeOverlayState } from "./pixiOverlayState";
 
 // Keep rendering this long after the last signal. Covers drop animations
@@ -130,6 +131,9 @@ export function setupRenderScheduler(app: Application): () => void {
     // container visibility (PresentController) without writing sceneStore —
     // without this the repaint would only land on the next safety tick.
     useEditorModeStore.subscribe(markActivity),
+    // Dev Mode (inspect overlay) toggle/unit-pref changes redraw the inspect
+    // overlay without writing sceneStore — same class of bug as outline mode.
+    useDevModeStore.subscribe(markActivity),
     subscribeOverlayState(markActivity),
   ];
 

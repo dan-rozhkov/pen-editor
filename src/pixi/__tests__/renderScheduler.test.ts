@@ -4,6 +4,7 @@ import { usePenToolStore } from "@/store/penToolStore";
 import { useStyleStore } from "@/store/styleStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
+import { useDevModeStore } from "@/store/devModeStore";
 import { requestCanvasRender, setupRenderScheduler } from "../renderScheduler";
 
 describe("requestCanvasRender", () => {
@@ -112,6 +113,28 @@ describe("setupRenderScheduler invalidation sources", () => {
     expect(render).toHaveBeenCalledTimes(1);
 
     useEditorModeStore.setState({ mode: "edit", presentFrameIds: [], presentIndex: 0 });
+    cleanup();
+  });
+
+  it("renders promptly after a devModeStore change (inspect overlay toggle isn't a scene mutation)", () => {
+    const now = vi.spyOn(performance, "now");
+
+    now.mockReturnValue(0);
+    const { app, render, tick } = makeFakeApp();
+    const cleanup = setupRenderScheduler(app);
+
+    now.mockReturnValue(5000);
+    tick();
+    render.mockClear();
+
+    now.mockReturnValue(5100);
+    useDevModeStore.getState().toggle();
+
+    now.mockReturnValue(5116);
+    tick();
+    expect(render).toHaveBeenCalledTimes(1);
+
+    useDevModeStore.getState().setActive(false);
     cleanup();
   });
 
