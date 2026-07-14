@@ -78,6 +78,10 @@ Nodes are stored as a flat map (`nodesById`) with parent-child references (`pare
 - `src/store/sceneStore/instanceOperations.ts` — component instance logic
 - `src/store/sceneStore/helpers/` — history, textSync, flatStoreHelpers, treeCache
 
+### HTML → Design Conversion
+
+Pasting/converting external HTML (e.g. `convertEmbedToDesign`) renders the markup in a hidden iframe and captures its computed layout via `src/lib/h2dCapture/captureEmbed.ts` (wrapping the vendored `src/vendor/h2dCapture/` bundle), then converts the capture into scene nodes with `src/lib/h2dPaste/h2dToScene.ts`. `src/lib/htmlToDesign/` remains in use as the shared CSS-parsing library (colors, gradients, shadows, text properties) consumed by the h2d pipeline, and it still contains the legacy DOM-walk importer (`convertHtmlToDesignNodes`), which is unused by the store but kept for reference/tests.
+
 ### File Format
 
 The editor reads/writes `.pen` files. These are accessed exclusively through the Pencil MCP tools — never read `.pen` files directly with file I/O.
@@ -134,7 +138,7 @@ src/
 ├── store/                     # Zustand stores
 │   └── sceneStore/            # Scene graph store (split into modules)
 ├── hooks/                     # Custom React hooks
-├── lib/                       # Tool registry, HTML→design conversion, etc.
+├── lib/                       # Tool registry, HTML→design conversion, h2d capture/paste, etc.
 ├── types/                     # TypeScript types/interfaces
 ├── utils/                     # Utility functions
 └── assets/                    # Static assets
