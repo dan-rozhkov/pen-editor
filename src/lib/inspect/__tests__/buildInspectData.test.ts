@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildInspectData } from "../buildInspectData";
+import { buildInspectData, type InspectData } from "../buildInspectData";
 import type { FlatSceneNode } from "@/types/scene";
 import type { Variable } from "@/types/variable";
 import type { FillStyle, EffectStyle } from "@/types/style";
@@ -19,6 +19,12 @@ function baseArgs(nodesById: Record<string, FlatSceneNode>, nodeId: string) {
     units: "px" as InspectUnits,
     remBase: 16,
   };
+}
+
+function buildOrThrow(input: Parameters<typeof buildInspectData>[0]): InspectData {
+  const data = buildInspectData(input);
+  if (!data) throw new Error("expected InspectData");
+  return data;
 }
 
 describe("buildInspectData", () => {
@@ -42,7 +48,7 @@ describe("buildInspectData", () => {
       },
     };
     const nodesById = { f1: frame };
-    const data = buildInspectData(baseArgs(nodesById, "f1"));
+    const data = buildOrThrow(baseArgs(nodesById, "f1"));
 
     expect(data.header.name).toBe("Card");
     expect(data.header.type).toBe("frame");
@@ -75,7 +81,7 @@ describe("buildInspectData", () => {
       height: 40,
     };
     const nodesById = { r1: rect };
-    const data = buildInspectData(baseArgs(nodesById, "r1"));
+    const data = buildOrThrow(baseArgs(nodesById, "r1"));
 
     expect(data.box.width).toBe(50);
     expect(data.box.height).toBe(40);
@@ -109,7 +115,7 @@ describe("buildInspectData", () => {
     const nodesById = { t1: text };
     const args = baseArgs(nodesById, "t1");
     args.textStyles = [{ id: "ts1", name: "Body/Medium", fontFamily: "Inter", fontSize: 14 }];
-    const data = buildInspectData(args);
+    const data = buildOrThrow(args);
 
     const typography = data.sections.find((s) => s.title === "Typography");
     expect(typography).toBeDefined();
@@ -152,7 +158,7 @@ describe("buildInspectData", () => {
         themeValues: { light: "#ff0000", dark: "#cc0000" },
       },
     ];
-    const data = buildInspectData(args);
+    const data = buildOrThrow(args);
 
     const fills = data.sections.find((s) => s.title === "Fills");
     expect(fills).toBeDefined();
@@ -177,7 +183,7 @@ describe("buildInspectData", () => {
     args.fillStyles = [
       { id: "fs1", name: "Surface/Primary", paint: { id: "p1", type: "solid", color: "#123456" } },
     ];
-    const data = buildInspectData(args);
+    const data = buildOrThrow(args);
 
     const fills = data.sections.find((s) => s.title === "Fills");
     const row = fills!.rows[0];
@@ -206,7 +212,7 @@ describe("buildInspectData", () => {
       ],
     };
     const nodesById = { r4: rect };
-    const data = buildInspectData(baseArgs(nodesById, "r4"));
+    const data = buildOrThrow(baseArgs(nodesById, "r4"));
 
     const effects = data.sections.find((s) => s.title === "Effects");
     expect(effects).toBeDefined();
@@ -225,7 +231,7 @@ describe("buildInspectData", () => {
       cornerRadiusPerCorner: { topLeft: 4, topRight: 8, bottomRight: 12, bottomLeft: 16 },
     };
     const nodesById = { r5: rect };
-    const data = buildInspectData(baseArgs(nodesById, "r5"));
+    const data = buildOrThrow(baseArgs(nodesById, "r5"));
 
     const radius = data.sections.find((s) => s.title === "Radius");
     expect(radius).toBeDefined();
@@ -246,7 +252,7 @@ describe("buildInspectData", () => {
     const nodesById = { r6: rect };
     const args = baseArgs(nodesById, "r6");
     args.units = "rem";
-    const data = buildInspectData(args);
+    const data = buildOrThrow(args);
 
     expect(data.box.width).toBe(32); // raw numbers stay numeric
     const radius = data.sections.find((s) => s.title === "Radius");
@@ -266,7 +272,7 @@ describe("buildInspectData", () => {
       strokeWidthPerSide: { top: 1, right: 2, bottom: 3, left: 4 },
     };
     const nodesById = { r7: rect };
-    const data = buildInspectData(baseArgs(nodesById, "r7"));
+    const data = buildOrThrow(baseArgs(nodesById, "r7"));
 
     const strokes = data.sections.find((s) => s.title === "Strokes");
     expect(strokes).toBeDefined();
@@ -287,7 +293,7 @@ describe("buildInspectData", () => {
       pathStroke: { fill: "#00ff00", thickness: 3, align: "center" },
     };
     const nodesById = { p1: path };
-    const data = buildInspectData(baseArgs(nodesById, "p1"));
+    const data = buildOrThrow(baseArgs(nodesById, "p1"));
 
     const strokes = data.sections.find((s) => s.title === "Strokes");
     expect(strokes).toBeDefined();
@@ -313,7 +319,7 @@ describe("buildInspectData", () => {
       ],
     };
     const nodesById = { r8: rect };
-    const data = buildInspectData(baseArgs(nodesById, "r8"));
+    const data = buildOrThrow(baseArgs(nodesById, "r8"));
 
     const fills = data.sections.find((s) => s.title === "Fills");
     expect(fills).toBeDefined();
