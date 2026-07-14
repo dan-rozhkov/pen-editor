@@ -2,6 +2,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
+import { useDevModeStore } from "@/store/devModeStore";
 import { useSmartGuideStore } from "@/store/smartGuideStore";
 import { useGuidesStore } from "@/store/guidesStore";
 import { useHoverStore } from "@/store/hoverStore";
@@ -354,9 +355,14 @@ export function createDragController(context: InteractionContext): DragControlle
           }
         }
 
-        // View/present modes select but never arm a drag — return true so the
-        // caller does not fall through to marquee/move handling.
-        if (!canEditScene(useEditorModeStore.getState().mode)) {
+        // View/present modes — and dev (inspect) mode, which stays "edit" at
+        // the editorModeStore level but must behave read-only — select but
+        // never arm a drag. Return true so the caller does not fall through
+        // to marquee/move handling.
+        if (
+          !canEditScene(useEditorModeStore.getState().mode) ||
+          useDevModeStore.getState().active
+        ) {
           return true;
         }
 

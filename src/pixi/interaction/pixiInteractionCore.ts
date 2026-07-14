@@ -351,19 +351,21 @@ export function setupPixiInteraction(
       const calculateLayoutForFrame =
         useLayoutStore.getState().calculateLayoutForFrame;
 
-      // Dev/inspect mode allows the selection above but never a drag.
-      if (!useDevModeStore.getState().active) {
-        const selectionBounds = getSelectionBoundingBox(
-          selectionState.selectedIds,
-          currentNodes,
-          calculateLayoutForFrame,
-        );
-        if (!hitId && isPointInsideBounds(world, selectionBounds)) {
-          if (drag.handlePointerDown(e, world, null, selectionState.selectedIds)) return;
-        }
-
-        if (drag.handlePointerDown(e, world, dragHitId)) return;
+      // Dev/inspect mode must still select on a plain node click — selection
+      // for this path happens inside drag.handlePointerDown itself, so it
+      // cannot be skipped here. dragController's own dev-mode check (see
+      // canEditScene/devMode guard in handlePointerDown) selects and returns
+      // true before ever arming a drag.
+      const selectionBounds = getSelectionBoundingBox(
+        selectionState.selectedIds,
+        currentNodes,
+        calculateLayoutForFrame,
+      );
+      if (!hitId && isPointInsideBounds(world, selectionBounds)) {
+        if (drag.handlePointerDown(e, world, null, selectionState.selectedIds)) return;
       }
+
+      if (drag.handlePointerDown(e, world, dragHitId)) return;
 
       // Priority 5: Marquee selection (background click)
       marquee.handlePointerDown(e, world, hitId);

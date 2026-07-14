@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { FlatSceneNode } from "@/types/scene";
 import type { InteractionContext } from "../types";
 
@@ -23,6 +23,8 @@ vi.mock("@/pixi/autoLayoutDragAnimator", () => ({
 import { createDragController } from "../dragController";
 import { useSceneStore } from "@/store/sceneStore";
 import { useDragStore } from "@/store/dragStore";
+import { useSelectionStore } from "@/store/selectionStore";
+import { useDevModeStore } from "@/store/devModeStore";
 import { resetStores } from "@/test/fixtures";
 
 // Auto-layout column frame at world (300, 200) with two 50x50 children.
@@ -215,5 +217,39 @@ describe("dragController auto-layout drag lifecycle", () => {
     // moveNode rebuilt the children list (identity change ⇒ relayout flush).
     expect(useSceneStore.getState().childrenById).not.toBe(childrenBefore);
     expect(useSceneStore.getState().childrenById["frame"]).toHaveLength(2);
+  });
+});
+
+describe("dragController dev (inspect) mode", () => {
+  afterEach(() => {
+    useDevModeStore.getState().setActive(false);
+  });
+
+  it("selects a plain node click but never arms a drag while dev mode is active", () => {
+    useDevModeStore.getState().setActive(true);
+    const controller = makeController();
+    const nodesBefore = useSceneStore.getState().nodesById;
+    const childrenBefore = useSceneStore.getState().childrenById;
+
+    // Regression test for the 8f9a1f2 bug: clicking a plain node in dev mode
+    // must still select it (selection happens inside handlePointerDown
+    // itself for the plain-node path), while never arming a drag.
+    expect(controller.handlePointerDown(pointerEvent, CHILD1_CENTER, "child1")).toBe(true);
+    expect(useSelectionStore.getState().selectedIds).toEqual(["child1"]);
+    expect(useDragStore.getState().isDragging).toBe(false);
+    expect(controller.isDragging()).toBe(false);
+    expect(h.animator.start).not.toHaveBeenCalled();
+
+    // Moving the pointer past the drag-click threshold must not start a drag
+    // or mutate the scene — dev mode is read-only.
+    expect(
+      controller.handlePointerMove(pointerEvent, {
+        x: CHILD1_CENTER.x + 40,
+        y: CHILD1_CENTER.y + 40,
+      }),
+    ).toBe(false);
+    expect(useDragStore.getState().isDragging).toBe(false);
+    expect(useSceneStore.getState().nodesById).toBe(nodesBefore);
+    expect(useSceneStore.getState().childrenById).toBe(childrenBefore);
   });
 });
