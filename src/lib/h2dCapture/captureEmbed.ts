@@ -1,4 +1,5 @@
 import type { H2dDocument } from "@/lib/h2dPaste/h2dTypes";
+import { sanitizeEmbedHtml } from "@/utils/sanitizeEmbedHtml";
 import captureBundleSource from "@/vendor/h2dCapture/capture.js?raw";
 
 interface H2dCaptureWindow extends Window {
@@ -32,15 +33,19 @@ export async function captureEmbedHtmlToH2d(
     "visibility:hidden",
     "pointer-events:none",
   ].join(";");
-  // Close any dangling </script> in the capture source defensively; the
-  // embed HTML rides in <body> untouched (it may not contain script tags —
-  // embeds are sanitized on mount elsewhere, and the iframe is same-origin
-  // but throwaway).
+  // Close any dangling </script> in the capture source defensively. The
+  // embed body HTML is untrusted (AI output, pasted markup, shared .pen
+  // files) and is DOMPurify-sanitized here with the same policy used to
+  // mount embeds for rendering (`sanitizeEmbedHtml`) before it rides into
+  // <body> — the iframe is same-origin, so unsanitized markup with a
+  // <script>/event handler would otherwise execute with direct access to
+  // the capture API set up in <head>.
+  const safeHtmlContent = sanitizeEmbedHtml(htmlContent);
   iframe.srcdoc =
     "<!doctype html><html><head><script>" +
     captureBundleSource.replace(/<\/script>/gi, "<\\/script>") +
     "</script></head><body style=\"margin:0\">" +
-    htmlContent +
+    safeHtmlContent +
     "</body></html>";
 
   document.body.appendChild(iframe);
