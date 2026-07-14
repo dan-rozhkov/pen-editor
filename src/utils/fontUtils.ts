@@ -53,7 +53,7 @@ export const GOOGLE_FONTS = [
   'IBM Plex Mono', 'IBM Plex Sans', 'IBM Plex Sans Condensed',
   'IBM Plex Serif', 'Inconsolata', 'Indie Flower', 'Inter', 'Inter Tight',
   'Istok Web',
-  'Jost', 'Josefin Sans', 'Josefin Slab',
+  'JetBrains Mono', 'Jost', 'Josefin Sans', 'Josefin Slab',
   'Kalam', 'Kanit', 'Karla', 'Kaushan Script', 'Khand',
   'Lato', 'League Spartan', 'Lexend', 'Lexend Deca', 'Libre Baskerville',
   'Libre Caslon Text', 'Libre Franklin', 'Lilita One', 'Limelight',
