@@ -634,6 +634,14 @@ export interface TextNode extends BaseNode {
   paragraphs?: ParagraphAttrs[]
   fontSize?: number
   fontFamily?: string
+  /**
+   * CSS generic fallback from the source font stack (e.g. the `sans-serif` in
+   * `"Plus Jakarta Sans", sans-serif`). Applied after `fontFamily` when
+   * rendering/measuring so glyphs missing from the primary family (e.g.
+   * Cyrillic in a latin-only font) degrade to the right generic instead of
+   * the browser default serif.
+   */
+  fontFallback?: "serif" | "sans-serif" | "monospace" | "cursive" | "fantasy" | "system-ui"
   // Font weight: "normal", "bold", or numeric "100"-"900"
   fontWeight?: string
   // Font style: "normal" or "italic"

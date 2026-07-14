@@ -203,6 +203,10 @@ export interface TextStyleSource {
   textTransform?: string;
 }
 
+const CSS_GENERIC_FAMILIES = new Set([
+  "serif", "sans-serif", "monospace", "cursive", "fantasy", "system-ui",
+]);
+
 /** Apply typography properties from CSS to a TextNode */
 export function applyTextProps(node: TextNode, style: TextStyleSource): void {
   // Font size
@@ -210,11 +214,15 @@ export function applyTextProps(node: TextNode, style: TextStyleSource): void {
   const hasFontSize = Number.isFinite(fontSize) && fontSize > 0;
   if (hasFontSize) node.fontSize = fontSize;
 
-  // Font family (first family)
+  // Font family (first family), plus the CSS generic fallback if present
   const fontFamily = style.fontFamily;
   if (fontFamily) {
-    const first = fontFamily.split(",")[0].trim().replace(/['"]/g, "");
-    node.fontFamily = first;
+    const families = fontFamily.split(",").map((f) => f.trim().replace(/['"]/g, ""));
+    node.fontFamily = families[0];
+    const last = families[families.length - 1]?.toLowerCase();
+    if (families.length > 1 && CSS_GENERIC_FAMILIES.has(last)) {
+      node.fontFallback = last as TextNode["fontFallback"];
+    }
   }
 
   // Font weight

@@ -20,7 +20,12 @@ function getContext(): CanvasRenderingContext2D {
  * Build a CSS font string from TextNode properties.
  * Format: "[style] [weight] <size>px <family>"
  */
-export function buildFontString(node: TextNode): string {
+export function buildFontString(
+  node: Pick<
+    TextNode,
+    'fontStyle' | 'fontVariations' | 'fontWeight' | 'fontSize' | 'fontFamily' | 'fontFallback'
+  >,
+): string {
   const style = node.fontStyle ?? 'normal'
   // Mirror the Pixi renderer: the `wght` variable-font axis overrides the
   // static weight, so measurement (wrapping/auto-size) matches what's drawn.
@@ -30,7 +35,8 @@ export function buildFontString(node: TextNode): string {
   const weight = resolveEffectiveFontWeight(node.fontVariations, node.fontWeight)
   const size = node.fontSize ?? 16
   const family = node.fontFamily ?? 'Arial'
-  return `${style} ${weight} ${size}px ${family}`
+  const fallback = node.fontFallback ? `, ${node.fontFallback}` : ''
+  return `${style} ${weight} ${size}px "${family}"${fallback}`
 }
 
 /**

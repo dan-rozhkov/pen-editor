@@ -379,7 +379,9 @@ export function buildTextStyle(node: TextNode): TextStyle {
   const lineHeightMultiplier = node.lineHeight ?? 1.2;
 
   return new TextStyle({
-    fontFamily: node.fontFamily || "Arial",
+    fontFamily: node.fontFallback
+      ? [node.fontFamily || "Arial", node.fontFallback]
+      : node.fontFamily || "Arial",
     fontSize: fontSize,
     fontWeight: resolveFontWeight(node) as TextStyle["fontWeight"],
     fontStyle: (node.fontStyle as TextStyle["fontStyle"]) ?? "normal",
