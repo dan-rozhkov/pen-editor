@@ -1,13 +1,22 @@
-import { useState } from "react";
+import { useState, type KeyboardEvent } from "react";
 import clsx from "clsx";
 import { toast } from "sonner";
 import { writeTextToClipboard } from "@/utils/clipboard";
 import { CaretRightIcon } from "@phosphor-icons/react";
 import type { InspectValue } from "@/lib/inspect/buildInspectData";
 
-function copy(label: string, value: string) {
-  void writeTextToClipboard(value);
-  toast(`Copied ${label}`);
+async function copy(label: string, value: string) {
+  const ok = await writeTextToClipboard(value);
+  if (ok) toast(`Copied ${label}`);
+}
+
+function handleActivationKeyDown(onActivate: () => void) {
+  return (e: KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      if (e.key === " ") e.preventDefault();
+      onActivate();
+    }
+  };
 }
 
 /**
@@ -27,6 +36,7 @@ export function InspectRow({ row }: { row: InspectValue }) {
         tabIndex={0}
         className="flex items-center justify-between gap-2 px-3 py-1.5 cursor-pointer hover:bg-surface-hover"
         onClick={() => void copy(row.label, copyValue)}
+        onKeyDown={handleActivationKeyDown(() => void copy(row.label, copyValue))}
       >
         <span className="text-text-muted text-xs">{row.label}</span>
         <span className="font-mono text-xs text-text-primary truncate">{row.value}</span>
@@ -44,6 +54,7 @@ export function InspectRow({ row }: { row: InspectValue }) {
         tabIndex={0}
         className="flex items-center justify-between gap-2 px-3 py-1.5 cursor-pointer hover:bg-surface-hover"
         onClick={() => setExpanded((v) => !v)}
+        onKeyDown={handleActivationKeyDown(() => setExpanded((v) => !v))}
       >
         <span className="text-text-muted text-xs">{row.label}</span>
         <span className="flex items-center gap-1 min-w-0">
@@ -66,6 +77,7 @@ export function InspectRow({ row }: { row: InspectValue }) {
               e.stopPropagation();
               void copy(`${row.label} (light)`, token.light);
             }}
+            onKeyDown={handleActivationKeyDown(() => void copy(`${row.label} (light)`, token.light))}
           >
             <span className="text-text-muted text-xs">Light</span>
             <span className="font-mono text-xs text-text-primary truncate">{token.light}</span>
@@ -79,6 +91,7 @@ export function InspectRow({ row }: { row: InspectValue }) {
               e.stopPropagation();
               void copy(`${row.label} (dark)`, token.dark);
             }}
+            onKeyDown={handleActivationKeyDown(() => void copy(`${row.label} (dark)`, token.dark))}
           >
             <span className="text-text-muted text-xs">Dark</span>
             <span className="font-mono text-xs text-text-primary truncate">{token.dark}</span>

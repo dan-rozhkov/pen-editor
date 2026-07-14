@@ -48,14 +48,14 @@ describe("<InspectPanel />", () => {
     expect(screen.getByText("50px")).toBeTruthy();
   });
 
-  it("copies a row's value on click and toasts", () => {
+  it("copies a row's value on click and toasts", async () => {
     select(["rect1"]);
     render(<InspectPanel />);
     const row = screen.getByText("Fill").closest('[data-testid="inspect-row"]');
     expect(row).toBeTruthy();
     fireEvent.click(row!);
     expect(writeTextToClipboard).toHaveBeenCalledWith("#ff0000");
-    expect(toast).toHaveBeenCalledWith("Copied Fill");
+    await vi.waitFor(() => expect(toast).toHaveBeenCalledWith("Copied Fill"));
   });
 
   it("toggles Code/List and shows a placeholder for Code", () => {
@@ -108,6 +108,33 @@ describe("<InspectPanel />", () => {
     expect(tokenRow).toBeTruthy();
     fireEvent.click(tokenRow!);
     expect(screen.getByText("#aa0000")).toBeTruthy();
+  });
+
+  it("renders componentId and propertyValues for a ref node", () => {
+    useSceneStore.setState((state) => ({
+      nodesById: {
+        ...state.nodesById,
+        ref1: {
+          id: "ref1",
+          type: "ref",
+          name: "Button Instance",
+          x: 0,
+          y: 0,
+          width: 40,
+          height: 20,
+          componentId: "frame1",
+          propertyValues: { size: "large", disabled: true },
+        } as never,
+      },
+      rootIds: [...state.rootIds, "ref1"],
+    }));
+    select(["ref1"]);
+    render(<InspectPanel />);
+    expect(screen.getByText("frame1")).toBeTruthy();
+    expect(screen.getByText("size")).toBeTruthy();
+    expect(screen.getByText("large")).toBeTruthy();
+    expect(screen.getByText("disabled")).toBeTruthy();
+    expect(screen.getByText("true")).toBeTruthy();
   });
 
   it("shows first node + selection count note for multi-select", () => {

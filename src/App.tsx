@@ -4,8 +4,7 @@ import { reconcileModels } from "./store/chatStore";
 import { useCustomFontStore } from "./store/customFontStore";
 import { LeftRail } from "./components/LeftRail";
 import { LeftSidebar } from "./components/LeftSidebar";
-import { RightSidebar } from "./components/RightSidebar";
-import { InspectPanel } from "./components/inspect/InspectPanel";
+import { RightPanel } from "./components/RightPanel";
 import { PrimitivesPanel } from "./components/PrimitivesPanel";
 import { PresentOverlay } from "./components/PresentOverlay";
 import { CommandPalette } from "./components/CommandPalette";
@@ -138,7 +137,7 @@ function App() {
                   swapped for the read-only InspectPanel in dev mode. */}
               <div className="pointer-events-auto">
                 <ReadOnlyProvider value={isView || isDev}>
-                  {isDev ? <InspectPanel /> : <RightSidebar />}
+                  <RightPanel />
                 </ReadOnlyProvider>
               </div>
             </>

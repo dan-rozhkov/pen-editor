@@ -150,6 +150,16 @@ export function InspectPanel() {
                 {data.header.componentInfo.componentId}
               </div>
             )}
+            {data.header.componentInfo?.propertyValues &&
+              Object.entries(data.header.componentInfo.propertyValues).map(([key, value]) => (
+                <div
+                  key={key}
+                  className="mt-1 text-xs font-mono text-text-muted truncate flex items-center justify-between gap-2"
+                >
+                  <span>{key}</span>
+                  <span>{String(value)}</span>
+                </div>
+              ))}
             {selectedIds.length > 1 && (
               <div className="mt-1 text-xs text-text-muted">{selectedIds.length} selected</div>
             )}
