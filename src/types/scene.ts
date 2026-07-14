@@ -1,5 +1,6 @@
 import type { ThemeName, Variable } from './variable'
 import type { Guide } from '../store/guidesStore'
+import type { PersistedMeasurement } from '../store/measurementsStore'
 import type { TextStyle } from './textStyle'
 import type { FillStyle, EffectStyle } from './style'
 
@@ -984,6 +985,8 @@ export interface FlatSnapshot {
   effectStyles?: EffectStyle[]
   /** Persistent slide (presentation) order, at the time of the snapshot. */
   slideOrder?: string[]
+  /** Persistent pinned distance measurements, at the time of the snapshot. */
+  measurements?: PersistedMeasurement[]
 }
 
 export interface ComponentArtifact {

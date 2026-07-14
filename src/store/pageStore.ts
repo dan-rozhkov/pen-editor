@@ -13,6 +13,7 @@ import { useLoadingStore } from "./loadingStore";
 import { useViewportStore } from "./viewportStore";
 import { useSelectionStore } from "./selectionStore";
 import { useGuidesStore, type Guide } from "./guidesStore";
+import { useMeasurementsStore, type PersistedMeasurement } from "./measurementsStore";
 
 export interface PageData {
   id: string;
@@ -32,6 +33,8 @@ export interface PageData {
   guides: Guide[];
   // Per-page slide (presentation) order — see src/utils/slideOrder.ts
   slideOrder: string[];
+  // Per-page pinned distance measurements
+  measurements: PersistedMeasurement[];
 }
 
 interface PageStoreState {
@@ -68,6 +71,7 @@ function createEmptyPage(name: string): PageData {
     history: { past: [], future: [] },
     guides: [],
     slideOrder: [],
+    measurements: [],
   };
 }
 
@@ -167,6 +171,7 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
       history: { past: [], future: [] },
       guides: sourceAfterSave.guides.map((g) => ({ ...g })),
       slideOrder: [...sourceAfterSave.slideOrder],
+      measurements: sourceAfterSave.measurements.map((m) => ({ ...m })),
     };
 
     const sourceIndex = currentPages.findIndex((p) => p.id === pageId);
@@ -219,6 +224,7 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
       history: history.getStacks(),
       guides: useGuidesStore.getState().guides,
       slideOrder: [...scene.slideOrder],
+      measurements: useMeasurementsStore.getState().measurements,
     };
 
     // Sync componentArtifactsById from sceneStore
@@ -301,6 +307,9 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
 
     // Load ruler guides
     useGuidesStore.getState().setGuides(targetPage.guides);
+
+    // Load pinned measurements
+    useMeasurementsStore.getState().setMeasurements(targetPage.measurements);
 
     // Clear selection
     useSelectionStore.setState({

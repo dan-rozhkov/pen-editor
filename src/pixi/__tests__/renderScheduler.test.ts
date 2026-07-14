@@ -5,6 +5,7 @@ import { useStyleStore } from "@/store/styleStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { useDevModeStore } from "@/store/devModeStore";
+import { useMeasurementsStore } from "@/store/measurementsStore";
 import { requestCanvasRender, setupRenderScheduler } from "../renderScheduler";
 
 describe("requestCanvasRender", () => {
@@ -135,6 +136,28 @@ describe("setupRenderScheduler invalidation sources", () => {
     expect(render).toHaveBeenCalledTimes(1);
 
     useDevModeStore.getState().setActive(false);
+    cleanup();
+  });
+
+  it("renders promptly after a measurementsStore change (persistent measurement overlay isn't a scene mutation)", () => {
+    const now = vi.spyOn(performance, "now");
+
+    now.mockReturnValue(0);
+    const { app, render, tick } = makeFakeApp();
+    const cleanup = setupRenderScheduler(app);
+
+    now.mockReturnValue(5000);
+    tick();
+    render.mockClear();
+
+    now.mockReturnValue(5100);
+    useMeasurementsStore.getState().setMeasurements([{ id: "m1", fromId: "a", toId: "b" }]);
+
+    now.mockReturnValue(5116);
+    tick();
+    expect(render).toHaveBeenCalledTimes(1);
+
+    useMeasurementsStore.getState().setMeasurements([]);
     cleanup();
   });
 

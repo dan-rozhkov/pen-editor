@@ -29,6 +29,7 @@ function exportAsJson(): void {
     pageBackground: page.pageBackground,
     guides: page.guides,
     slideOrder: page.slideOrder,
+    measurements: page.measurements,
   }));
   const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
   downloadDocument(

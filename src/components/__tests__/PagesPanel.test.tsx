@@ -28,6 +28,7 @@ function emptyPage(id: string, name: string): PageData {
     history: { past: [], future: [] },
     guides: [],
     slideOrder: [],
+    measurements: [],
   };
 }
 

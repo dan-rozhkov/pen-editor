@@ -19,6 +19,7 @@ import { useSelectionStore } from "../selectionStore";
 import { useVariableStore } from "../variableStore";
 import { useTextStyleStore } from "../textStyleStore";
 import { useStyleStore } from "../styleStore";
+import { useMeasurementsStore } from "../measurementsStore";
 import {
   syncTextDimensions,
   hasTextMeasureProps,
@@ -240,6 +241,13 @@ export function createBasicMutations(set: SetState, get: GetState) {
           newChildrenById,
         );
 
+        // Drop any pinned measurement touching the deleted node or its
+        // descendants. This is part of the same undo step as the delete
+        // itself: `saveHistory(state)` above already recorded the
+        // pre-deletion state (including the pre-cleanup measurements list),
+        // and `removeMeasurementsForNodes` saves no history of its own.
+        useMeasurementsStore.getState().removeMeasurementsForNodes([...removedNodeIds]);
+
         // Update rootIds — filter deleted node + orphaned connectors in one pass
         const removedIds = new Set([id, ...orphanedConnectorIds]);
         const newRootIds = (parentId === null || parentId === undefined)
@@ -364,6 +372,12 @@ export function createBasicMutations(set: SetState, get: GetState) {
       }
       if (snapshot.effectStyles) {
         useStyleStore.setState({ effectStyles: snapshot.effectStyles });
+      }
+      // Restore persistent pinned measurements the same way (all
+      // createSnapshot-based snapshots carry them), so measurement
+      // add/delete round-trips through undo/redo.
+      if (snapshot.measurements) {
+        useMeasurementsStore.getState().setMeasurements(snapshot.measurements);
       }
       if (!historySelection) return;
       useSelectionStore.setState({

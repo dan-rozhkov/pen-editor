@@ -57,6 +57,7 @@ function setPages(count: number) {
     history: { past: [], future: [] },
     guides: [],
     slideOrder: [],
+    measurements: [],
   }));
   usePageStore.setState({ pages, activePageId: pages[0]?.id ?? "" });
 }

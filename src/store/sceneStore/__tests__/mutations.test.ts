@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { useGuidesStore } from "@/store/guidesStore";
+import { useMeasurementsStore } from "@/store/measurementsStore";
 import { resetStores, seedScene } from "@/test/fixtures";
 import type { FlatSceneNode } from "@/types/scene";
 
@@ -106,6 +107,29 @@ describe("sceneStore mutations", () => {
         "rect1",
         "rect2",
         "text1",
+      ]);
+    });
+
+    it("removes measurements referencing the deleted node, and restores them on undo", () => {
+      useMeasurementsStore.getState().setMeasurements([
+        { id: "m1", fromId: "rect1", toId: "rect2" },
+        { id: "m2", fromId: "frame1", toId: "text1" },
+      ]);
+
+      scene().deleteNode("rect1");
+      expect(useMeasurementsStore.getState().measurements).toEqual([
+        { id: "m2", fromId: "frame1", toId: "text1" },
+      ]);
+
+      undo();
+      expect(useMeasurementsStore.getState().measurements).toEqual([
+        { id: "m1", fromId: "rect1", toId: "rect2" },
+        { id: "m2", fromId: "frame1", toId: "text1" },
+      ]);
+
+      redo();
+      expect(useMeasurementsStore.getState().measurements).toEqual([
+        { id: "m2", fromId: "frame1", toId: "text1" },
       ]);
     });
   });
@@ -255,6 +279,35 @@ describe("sceneStore mutations", () => {
       undo();
       expect(useGuidesStore.getState().guides).toHaveLength(1);
       expect(useGuidesStore.getState().guides[0].id).toBe(id);
+    });
+  });
+
+  describe("persistent measurements in undo/redo", () => {
+    it("round-trips a measurement add through undo/redo", () => {
+      useMeasurementsStore.getState().addMeasurement("rect1", "rect2");
+      expect(useMeasurementsStore.getState().measurements).toHaveLength(1);
+
+      undo();
+      expect(useMeasurementsStore.getState().measurements).toHaveLength(0);
+
+      redo();
+      expect(useMeasurementsStore.getState().measurements).toHaveLength(1);
+      expect(useMeasurementsStore.getState().measurements[0]).toMatchObject({
+        fromId: "rect1",
+        toId: "rect2",
+      });
+    });
+
+    it("round-trips a measurement delete through undo/redo", () => {
+      useMeasurementsStore.getState().addMeasurement("rect1", "rect2");
+      const id = useMeasurementsStore.getState().measurements[0].id;
+
+      useMeasurementsStore.getState().removeMeasurement(id);
+      expect(useMeasurementsStore.getState().measurements).toHaveLength(0);
+
+      undo();
+      expect(useMeasurementsStore.getState().measurements).toHaveLength(1);
+      expect(useMeasurementsStore.getState().measurements[0].id).toBe(id);
     });
   });
 });

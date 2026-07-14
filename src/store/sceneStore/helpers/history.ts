@@ -6,6 +6,7 @@ import { useSelectionStore } from "../../selectionStore";
 import { useVariableStore } from "../../variableStore";
 import { useStyleStore } from "../../styleStore";
 import { useTextStyleStore } from "../../textStyleStore";
+import { useMeasurementsStore } from "../../measurementsStore";
 
 /** Create a history snapshot (shallow clone - node refs are immutable) */
 export function createSnapshot(state: {
@@ -30,6 +31,7 @@ export function createSnapshot(state: {
     useStyleStore.getState().fillStyles,
     useStyleStore.getState().effectStyles,
     state.slideOrder ?? [],
+    useMeasurementsStore.getState().measurements,
   );
 }
 

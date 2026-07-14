@@ -81,4 +81,12 @@ describe("buildHistorySnapshot", () => {
     expect(snap.slideOrder).not.toBe(slideOrder);
     expect(snap.slideOrder).toEqual(slideOrder);
   });
+
+  it("clones the measurements array, defaulting to empty when omitted", () => {
+    expect(buildHistorySnapshot(scene, [], selection, [], [], [], []).measurements).toEqual([]);
+    const measurements = [{ id: "m1", fromId: "n1", toId: "n2" }];
+    const snap = buildHistorySnapshot(scene, [], selection, [], [], [], [], [], measurements);
+    expect(snap.measurements).not.toBe(measurements);
+    expect(snap.measurements).toEqual(measurements);
+  });
 });

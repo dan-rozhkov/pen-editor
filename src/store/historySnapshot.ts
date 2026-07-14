@@ -5,6 +5,7 @@ import type {
   SelectionSnapshot,
 } from "@/types/scene";
 import type { Guide } from "./guidesStore";
+import type { PersistedMeasurement } from "./measurementsStore";
 
 export interface SnapshotSceneSlice {
   nodesById: Record<string, FlatSceneNode>;
@@ -31,6 +32,8 @@ export interface SnapshotSceneSlice {
  * way so their create/update/delete/apply/detach round-trips through
  * undo/redo too. slideOrder (persistent slide presentation order) is
  * likewise always carried so `reorderSlide` round-trips through undo/redo.
+ * measurements (persistent pinned distance measurements) are carried the
+ * same way so measurement add/delete round-trips through undo/redo too.
  */
 export function buildHistorySnapshot(
   scene: SnapshotSceneSlice,
@@ -41,6 +44,7 @@ export function buildHistorySnapshot(
   fillStyles: HistorySnapshot["fillStyles"],
   effectStyles: HistorySnapshot["effectStyles"],
   slideOrder: string[] = [],
+  measurements: PersistedMeasurement[] = [],
 ): HistorySnapshot {
   return {
     nodesById: { ...scene.nodesById },
@@ -54,6 +58,7 @@ export function buildHistorySnapshot(
     fillStyles: [...(fillStyles ?? [])],
     effectStyles: [...(effectStyles ?? [])],
     slideOrder: [...(slideOrder ?? [])],
+    measurements: [...(measurements ?? [])],
     selection: {
       selectedIds: [...selection.selectedIds],
       enteredContainerId: selection.enteredContainerId,

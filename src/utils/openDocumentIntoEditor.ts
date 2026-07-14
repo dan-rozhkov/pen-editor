@@ -45,6 +45,7 @@ export function applyOpenedDocument(
       history: { past: [], future: [] },
       guides: page.guides ?? [],
       slideOrder: page.slideOrder ?? [],
+      measurements: page.measurements ?? [],
     };
   });
 

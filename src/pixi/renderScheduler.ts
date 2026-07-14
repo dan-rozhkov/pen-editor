@@ -30,6 +30,7 @@ import { useVariableStore } from "@/store/variableStore";
 import { useSmartGuideStore } from "@/store/smartGuideStore";
 import { useGuidesStore } from "@/store/guidesStore";
 import { useMeasureStore } from "@/store/measureStore";
+import { useMeasurementsStore } from "@/store/measurementsStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useConnectorStore } from "@/store/connectorStore";
 import { usePenToolStore } from "@/store/penToolStore";
@@ -134,6 +135,9 @@ export function setupRenderScheduler(app: Application): () => void {
     // Dev Mode (inspect overlay) toggle/unit-pref changes redraw the inspect
     // overlay without writing sceneStore — same class of bug as outline mode.
     useDevModeStore.subscribe(markActivity),
+    // Persistent pinned measurements drive their own overlay (like guides)
+    // without writing sceneStore — same class of bug as outline mode.
+    useMeasurementsStore.subscribe(markActivity),
     subscribeOverlayState(markActivity),
   ];
 
