@@ -483,7 +483,7 @@ function VariableAxisSlider({
   );
 }
 
-/** One compact select for a mutually-exclusive `OpenTypeSelectGroup` (numeral form/spacing, stylistic sets). */
+/** One compact select for a mutually-exclusive numeral OpenType group. */
 function OpenTypeGroupSelect({
   group,
   fontFeatures,
@@ -603,7 +603,7 @@ function OpenTypePopover({
           ))}
         </div>
         <div className="flex flex-col gap-3">
-          {OPEN_TYPE_SELECT_GROUPS.filter((group) => group.key !== "stylisticSet").map((group) => (
+          {OPEN_TYPE_SELECT_GROUPS.map((group) => (
             <OpenTypeGroupSelect
               key={group.key}
               group={group}
@@ -612,14 +612,6 @@ function OpenTypePopover({
             />
           ))}
         </div>
-        {OPEN_TYPE_SELECT_GROUPS.filter((group) => group.key === "stylisticSet").map((group) => (
-          <OpenTypeGroupSelect
-            key={group.key}
-            group={group}
-            fontFeatures={node.fontFeatures}
-            onChange={(fontFeatures) => onUpdate({ fontFeatures })}
-          />
-        ))}
       </PopoverContent>
     </Popover>
   );

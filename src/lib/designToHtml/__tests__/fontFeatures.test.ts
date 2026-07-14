@@ -30,7 +30,7 @@ describe("designToHtml generateTextStyles: font-feature-settings", () => {
     const styles = generateTextStyles(
       textNode({ fontFeatures: { dlig: 1, tnum: 1, ss03: 1 } }),
     );
-    expect(styles["font-feature-settings"]).toBe('"dlig" 1, "tnum" 1, "ss03" 1');
+    expect(styles["font-feature-settings"]).toBe('"dlig" 1, "tnum" 1');
   });
 
   it("omits font-feature-settings for an empty fontFeatures object", () => {

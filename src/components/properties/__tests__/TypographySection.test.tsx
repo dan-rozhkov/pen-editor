@@ -157,8 +157,7 @@ describe("<TypographySection />", () => {
       expect(within(figureStyle).getByRole("combobox").textContent).toContain("Default");
       const figureSpacing = screen.getByText("Figure spacing").closest("div")!;
       expect(within(figureSpacing).getByRole("combobox").textContent).toContain("Default");
-      const stylisticSet = screen.getByText("Stylistic set").closest("div")!;
-      expect(within(stylisticSet).getByRole("combobox").textContent).toContain("None");
+      expect(screen.queryByText("Stylistic set")).toBeNull();
     });
 
     it("reflects a checked toggle feature from fontFeatures", () => {

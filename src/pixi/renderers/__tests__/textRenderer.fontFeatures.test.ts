@@ -35,7 +35,7 @@ describe("buildTextStyle: fontFeatures is a documented no-op in Pixi", () => {
 
   it("ignores every curated feature tag for Pixi rendering (documented degradation)", () => {
     const style = buildTextStyle(
-      textNode({ fontFeatures: { dlig: 1, tnum: 1, ss01: 1, frac: 1, zero: 1, onum: 1 } }),
+      textNode({ fontFeatures: { dlig: 1, tnum: 1, frac: 1, zero: 1, onum: 1 } }),
     );
     expect(style.fontVariant).toBe("normal");
   });

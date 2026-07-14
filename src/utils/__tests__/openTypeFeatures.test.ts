@@ -3,6 +3,7 @@ import {
   OPEN_TYPE_TOGGLE_FEATURES,
   OPEN_TYPE_SELECT_GROUPS,
   toFontFeatureSettingsCss,
+  withoutStylisticSetFeatures,
   withToggleFeature,
   getGroupSelection,
   withGroupSelection,
@@ -22,12 +23,24 @@ describe("toFontFeatureSettingsCss", () => {
   });
 
   it("emits a multi-tag font-feature-settings value in insertion order", () => {
-    expect(toFontFeatureSettingsCss({ tnum: 1, ss01: 1 })).toBe('"tnum" 1, "ss01" 1');
+    expect(toFontFeatureSettingsCss({ tnum: 1, onum: 1 })).toBe('"tnum" 1, "onum" 1');
   });
 
   it("ignores non-numeric entries", () => {
     const dirty = { dlig: 1, bogus: "x" } as unknown as Record<string, number>;
     expect(toFontFeatureSettingsCss(dirty)).toBe('"dlig" 1');
+  });
+
+  it("omits retired stylistic-set tags", () => {
+    expect(toFontFeatureSettingsCss({ dlig: 1, ss03: 1 })).toBe('"dlig" 1');
+  });
+});
+
+describe("withoutStylisticSetFeatures", () => {
+  it("removes stylistic-set tags without mutating the original map", () => {
+    const features = { dlig: 1, ss01: 1, ss20: 1 };
+    expect(withoutStylisticSetFeatures(features)).toEqual({ dlig: 1 });
+    expect(features).toEqual({ dlig: 1, ss01: 1, ss20: 1 });
   });
 });
 
@@ -49,12 +62,15 @@ describe("withToggleFeature", () => {
     withToggleFeature(input, "dlig", true);
     expect(input).toEqual({ smcp: 1 });
   });
+
+  it("drops retired stylistic-set tags during an update", () => {
+    expect(withToggleFeature({ ss01: 1 }, "dlig", true)).toEqual({ dlig: 1 });
+  });
 });
 
 describe("mutually-exclusive select groups", () => {
   const numeralForm = OPEN_TYPE_SELECT_GROUPS.find((g) => g.key === "numeralForm")!;
   const numeralSpacing = OPEN_TYPE_SELECT_GROUPS.find((g) => g.key === "numeralSpacing")!;
-  const stylisticSet = OPEN_TYPE_SELECT_GROUPS.find((g) => g.key === "stylisticSet")!;
 
   it("numeralForm has lining/oldstyle options plus a default (null) option", () => {
     expect(numeralForm.options.map((o) => o.tag)).toEqual([null, "lnum", "onum"]);
@@ -62,14 +78,6 @@ describe("mutually-exclusive select groups", () => {
 
   it("numeralSpacing has proportional/tabular options plus a default (null) option", () => {
     expect(numeralSpacing.options.map((o) => o.tag)).toEqual([null, "pnum", "tnum"]);
-  });
-
-  it("stylisticSet offers ss01 through ss20 plus a default (null) option", () => {
-    const tags = stylisticSet.options.map((o) => o.tag);
-    expect(tags[0]).toBeNull();
-    expect(tags).toContain("ss01");
-    expect(tags).toContain("ss20");
-    expect(tags).toHaveLength(21);
   });
 
   it("getGroupSelection returns null when no option in the group is set", () => {
@@ -101,12 +109,6 @@ describe("mutually-exclusive select groups", () => {
     let features = withGroupSelection(undefined, numeralSpacing, "pnum");
     features = withGroupSelection(features, numeralSpacing, "tnum");
     expect(features).toEqual({ tnum: 1 });
-  });
-
-  it("selecting a stylistic set clears a previously selected one", () => {
-    let features = withGroupSelection(undefined, stylisticSet, "ss01");
-    features = withGroupSelection(features, stylisticSet, "ss07");
-    expect(features).toEqual({ ss07: 1 });
   });
 
   it("numeralForm and numeralSpacing selections don't interfere with each other", () => {

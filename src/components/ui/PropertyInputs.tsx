@@ -33,7 +33,7 @@ export function PropertySection({ title, children, action }: PropertySectionProp
   const hasChildren = React.Children.toArray(children).some(Boolean);
   return (
     <div className="relative border-b border-border-default">
-      <div className={`flex flex-col gap-2 px-4 pt-3 ${hasChildren ? 'pb-5' : 'pb-3'}`}>
+      <div className={cn("flex flex-col gap-2 px-4 pt-3", hasChildren ? "pb-5" : "pb-3")}>
         <div className="flex items-center justify-between">
           <div className="text-[11px] font-semibold text-text-primary">
             {title}

@@ -677,7 +677,7 @@ export interface TextNode extends BaseNode {
   // when `fontFamily` is a known variable font (`getVariableFontAxes`); absent
   // (or the font isn't variable) means "use static fontWeight/fontStyle only".
   fontVariations?: Record<string, number>
-  // OpenType feature values, e.g. { dlig: 1, tnum: 1, ss03: 1 }. Keys are
+  // OpenType feature values, e.g. { dlig: 1, tnum: 1, onum: 1 }. Keys are
   // 4-char OpenType feature tags (see `utils/openTypeFeatures.ts` for the
   // curated toggle/select tags with dedicated UI). Maps directly onto CSS
   // `font-feature-settings` for HTML export and the inline contentEditable

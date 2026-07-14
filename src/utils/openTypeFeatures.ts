@@ -1,6 +1,6 @@
 /**
  * OpenType feature control for text nodes (discretionary ligatures,
- * stylistic sets, small caps, numeral styles, fractions, slashed zero) —
+ * small caps, numeral styles, fractions, slashed zero) —
  * the sibling feature to `variableFont.ts`'s variable-font axes. A node's
  * `fontFeatures?: Record<string, number>` (see `types/scene.ts`) maps
  * straight onto CSS `font-feature-settings`, e.g. `{ dlig: 1, tnum: 1 }` ->
@@ -52,20 +52,10 @@ export const OPEN_TYPE_TOGGLE_FEATURES: OpenTypeToggleFeature[] = [
   { tag: "zero", label: "Slashed zero" },
 ];
 
-function stylisticSetOptions(): OpenTypeFeatureOption[] {
-  const options: OpenTypeFeatureOption[] = [{ tag: null, label: "None" }];
-  for (let i = 1; i <= 20; i++) {
-    const n = String(i).padStart(2, "0");
-    options.push({ tag: `ss${n}`, label: `Set ${n}` });
-  }
-  return options;
-}
-
 /**
  * Curated mutually-exclusive groups: numeral figure style (lining/oldstyle),
- * numeral figure spacing (proportional/tabular — independent of figure
- * style, per OpenType spec), and stylistic sets ss01-ss20 (exposed as one
- * compact select rather than 20 always-visible toggles).
+ * numeral figure spacing (proportional/tabular — independent of figure style,
+ * per OpenType spec).
  */
 export const OPEN_TYPE_SELECT_GROUPS: OpenTypeSelectGroup[] = [
   {
@@ -86,12 +76,21 @@ export const OPEN_TYPE_SELECT_GROUPS: OpenTypeSelectGroup[] = [
       { tag: "tnum", label: "Tabular" },
     ],
   },
-  {
-    key: "stylisticSet",
-    label: "Stylistic set",
-    options: stylisticSetOptions(),
-  },
 ];
+
+function isStylisticSetTag(tag: string): boolean {
+  return /^ss\d{2}$/.test(tag);
+}
+
+/** Remove retired stylistic-set (`ss##`) tags from a feature map. */
+export function withoutStylisticSetFeatures(
+  features: Record<string, number> | undefined,
+): Record<string, number> | undefined {
+  if (!features) return features;
+  return Object.fromEntries(
+    Object.entries(features).filter(([tag]) => !isStylisticSetTag(tag)),
+  );
+}
 
 /**
  * Build the CSS `font-feature-settings` value from a node's feature map,
@@ -104,7 +103,7 @@ export function toFontFeatureSettingsCss(
 ): string | undefined {
   if (!features) return undefined;
   const entries = Object.entries(features).filter(
-    ([, v]) => typeof v === "number" && !Number.isNaN(v),
+    ([tag, v]) => !isStylisticSetTag(tag) && typeof v === "number" && !Number.isNaN(v),
   );
   if (entries.length === 0) return undefined;
   return entries.map(([tag, value]) => `"${tag}" ${value}`).join(", ");
@@ -116,7 +115,7 @@ export function withToggleFeature(
   tag: string,
   on: boolean,
 ): Record<string, number> {
-  const next = { ...features };
+  const next = withoutStylisticSetFeatures(features) ?? {};
   if (on) {
     next[tag] = 1;
   } else {
@@ -141,19 +140,18 @@ export function getGroupSelection(
  * Select one option within a mutually-exclusive group: clears every other
  * tag belonging to the group, then sets `tag` (unless `tag` is `null`, the
  * "default/none" option). Pure — never mutates `features`. This is what
- * keeps lining/oldstyle, proportional/tabular, and the ss01-ss20 stylistic
- * sets from ever having two siblings active at once.
+ * keeps lining/oldstyle and proportional/tabular from ever having two
+ * siblings active at once.
  */
 export function withGroupSelection(
   features: Record<string, number> | undefined,
   group: OpenTypeSelectGroup,
   tag: string | null,
 ): Record<string, number> {
-  const next = { ...features };
+  const next = withoutStylisticSetFeatures(features) ?? {};
   for (const option of group.options) {
     if (option.tag !== null) delete next[option.tag];
   }
   if (tag !== null) next[tag] = 1;
   return next;
 }
-

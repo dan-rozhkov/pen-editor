@@ -59,7 +59,7 @@ describe("<ComponentPropertiesSection />", () => {
     const comp = useSceneStore.getState().nodesById["comp"] as unknown as FrameNode;
     render(<ComponentPropertiesSection node={comp} />);
 
-    fireEvent.click(screen.getByText("Add Property"));
+    fireEvent.click(screen.getByLabelText("Add property"));
 
     const updated = useSceneStore.getState().nodesById["comp"] as FlatFrameNode;
     expect(updated.properties).toHaveLength(1);
@@ -81,10 +81,35 @@ describe("<ComponentPropertiesSection />", () => {
     const comp = useSceneStore.getState().nodesById["comp"] as unknown as FrameNode;
     render(<ComponentPropertiesSection node={comp} />);
 
+    expect(screen.queryByText("Target node")).toBeNull();
     fireEvent.click(screen.getByLabelText("Remove property"));
 
     const updated = useSceneStore.getState().nodesById["comp"] as FlatFrameNode;
     expect(updated.properties).toEqual([]);
+  });
+
+  it("renames a property from the popover title on double-click", () => {
+    useSceneStore.getState().setComponentProperties("comp", [
+      {
+        id: "p1",
+        name: "State",
+        type: "variant",
+        variantOptions: ["default", "hover"],
+        defaultValue: "default",
+        bindingPath: "label",
+        bindingProp: "fill",
+      },
+    ]);
+    const comp = useSceneStore.getState().nodesById["comp"] as unknown as FrameNode;
+    render(<ComponentPropertiesSection node={comp} />);
+
+    fireEvent.click(screen.getByLabelText("Edit property State"));
+    fireEvent.doubleClick(screen.getByTestId("property-popover-title"));
+    fireEvent.change(screen.getByLabelText("Property name"), { target: { value: "Mode" } });
+    fireEvent.blur(screen.getByLabelText("Property name"));
+
+    const updated = useSceneStore.getState().nodesById["comp"] as FlatFrameNode;
+    expect(updated.properties?.[0]?.name).toBe("Mode");
   });
 
   it("builds named target options while retaining ID paths as their values", () => {
