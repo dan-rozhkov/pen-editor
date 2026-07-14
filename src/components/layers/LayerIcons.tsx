@@ -116,7 +116,10 @@ export const NodeIcon = ({
   isMask?: boolean;
   layout?: LayoutProperties;
 }) => {
-  const iconClass = clsx("w-4 h-4 shrink-0", "text-text-muted");
+  const iconClass = clsx(
+    "w-4 h-4 shrink-0",
+    isComponent || type === "ref" ? "text-accent-bright" : "text-text-muted",
+  );
 
   // Figma-style mask indicator: overrides the type icon so masking layers
   // (of any node type) are immediately recognizable in the layers panel.
