@@ -10,7 +10,7 @@
 
 import { generateId, type Effect, type FrameNode, type GradientFill, type PerCornerRadius, type SceneNode, type ShadowEffect, type TextNode } from '@/types/scene'
 import { extractCssUrl, parseColorWithOpacity } from '@/lib/htmlToDesign/colorParsing'
-import { parseCssLinearGradient, parseCssRadialGradient } from '@/lib/htmlToDesign/gradientParsing'
+import { parseCssGradient } from '@/lib/htmlToDesign/gradientParsing'
 import { applyTextProps, parseShadows } from '@/lib/htmlToDesign/styleApplication'
 import { svgTextToDataUrl } from '@/lib/htmlToDesign/svgHandling'
 import { base64ToBytes } from '@/lib/clipboardPayload'
@@ -190,6 +190,16 @@ function strokeFromStyles(styles: Record<string, string>, ctx: ConvertCtx, name:
   return { stroke: parsedColor.color, strokeWidth: present[0] }
 }
 
+/** Try the url(...) branch of a `background-image` value; returns true (and sets `base.imageFill`) on success. */
+function applyImageBackground(base: Partial<FrameNode>, bgImage: string, ctx: ConvertCtx): boolean {
+  const rawUrl = extractCssUrl(bgImage)
+  if (!rawUrl) return false
+  const url = resolveAssetUrl(rawUrl, ctx)
+  if (!url) return false
+  base.imageFill = { url, mode: 'fill' }
+  return true
+}
+
 /** Fill (solid/gradient/image) derived from backgroundColor/backgroundImage. */
 function applyBackground(base: Partial<FrameNode>, node: H2dElementNode, ctx: ConvertCtx): void {
   const bgColor = node.styles.backgroundColor
@@ -201,25 +211,28 @@ function applyBackground(base: Partial<FrameNode>, node: H2dElementNode, ctx: Co
     }
   }
   const bgImage = node.styles.backgroundImage
-  if (bgImage && bgImage.includes('linear-gradient(')) {
-    // Also matches repeating-linear-gradient: the parser reads the inner
-    // linear-gradient stop list, giving a non-repeating approximation.
-    const gradient: GradientFill | null = parseCssLinearGradient(bgImage)
+  if (!bgImage) return
+
+  // `background-image` can be a comma-separated layer list; CSS paints the
+  // FIRST listed layer on top. When that first layer is `url(...)` (e.g.
+  // `url(hero.jpg), linear-gradient(...)`), the image must win, so try it
+  // before the gradient branches and only fall through to them if no usable
+  // image URL was extracted. A gradient-first list (`linear-gradient(...),
+  // url(...)`) falls straight into the gradient branches below, same as
+  // before — the gradient was already the top layer there.
+  if (bgImage.trimStart().startsWith('url(') && applyImageBackground(base, bgImage, ctx)) return
+
+  if (bgImage.includes('linear-gradient(') || bgImage.includes('radial-gradient(')) {
+    // Reuses the same linear-before-radial dispatch as htmlToDesign's live-DOM
+    // import path. Also matches repeating-{linear,radial}-gradient: the
+    // parser reads the inner stop list, giving a non-repeating approximation.
+    const gradient: GradientFill | null = parseCssGradient(bgImage)
     if (gradient) {
       base.gradientFill = gradient
       return
     }
   }
-  if (bgImage && bgImage.includes('radial-gradient(')) {
-    // Also matches repeating-radial-gradient, same approximation strategy as
-    // the linear branch above.
-    const gradient: GradientFill | null = parseCssRadialGradient(bgImage)
-    if (gradient) {
-      base.gradientFill = gradient
-      return
-    }
-  }
-  if (bgImage && /conic-gradient\(/.test(bgImage) && !base.fill) {
+  if (/conic-gradient\(/.test(bgImage) && !base.fill) {
     // Unsupported gradient shape: degrade to the first stop color so the
     // element keeps a visible box instead of being dropped as invisible.
     const firstColor = bgImage.match(/(rgba?\([^)]*\)|#[0-9a-fA-F]{3,8})/)?.[1]
@@ -230,16 +243,7 @@ function applyBackground(base: Partial<FrameNode>, node: H2dElementNode, ctx: Co
       return
     }
   }
-  if (bgImage) {
-    const rawUrl = extractCssUrl(bgImage)
-    if (rawUrl) {
-      const url = resolveAssetUrl(rawUrl, ctx)
-      if (url) {
-        base.imageFill = { url, mode: 'fill' }
-        return
-      }
-    }
-  }
+  applyImageBackground(base, bgImage, ctx)
 }
 
 function resolveAssetUrl(rawUrl: string, ctx: ConvertCtx): string | null {

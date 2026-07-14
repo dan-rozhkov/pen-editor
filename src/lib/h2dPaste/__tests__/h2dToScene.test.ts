@@ -472,6 +472,36 @@ describe('convertH2dToSceneNodes (synthetic cases)', () => {
     expect(div.fill?.toLowerCase()).toBe('#ff0000')
   })
 
+  it('prefers a first-layer url(...) image over a trailing gradient layer (image-then-gradient background list)', () => {
+    const body = el('BODY', rect(0, 0, 100, 100), {}, [
+      el('DIV', rect(0, 0, 100, 50), {
+        backgroundImage:
+          'url(data:image/png;base64,AAAA), linear-gradient(90deg, rgb(255, 0, 0), rgb(0, 0, 255))',
+      }),
+    ])
+    const doc = buildDocument(body)
+    const { nodes } = convertH2dToSceneNodes(doc)
+    const root = nodes[0] as FrameNode
+    const div = root.children[0] as FrameNode
+    expect(div.imageFill?.url).toBe('data:image/png;base64,AAAA')
+    expect(div.gradientFill).toBeUndefined()
+  })
+
+  it('keeps gradient-then-url(...) resolving to a gradient fill (gradient is the top layer)', () => {
+    const body = el('BODY', rect(0, 0, 100, 100), {}, [
+      el('DIV', rect(0, 0, 100, 50), {
+        backgroundImage:
+          'linear-gradient(90deg, rgb(255, 0, 0), rgb(0, 0, 255)), url(data:image/png;base64,AAAA)',
+      }),
+    ])
+    const doc = buildDocument(body)
+    const { nodes } = convertH2dToSceneNodes(doc)
+    const root = nodes[0] as FrameNode
+    const div = root.children[0] as FrameNode
+    expect(div.gradientFill?.type).toBe('linear')
+    expect(div.imageFill).toBeUndefined()
+  })
+
   it('carries letterSpacing and underline through applyTextProps reuse', () => {
     const body = el('BODY', rect(0, 0, 100, 100), {}, [
       el(
