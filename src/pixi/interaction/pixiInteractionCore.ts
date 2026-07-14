@@ -10,6 +10,7 @@ import {
   canEditScene,
   canInteractCanvas,
 } from "@/store/editorModeStore";
+import { useDevModeStore } from "@/store/devModeStore";
 import {
   findNodeById,
   getNodeAbsolutePositionWithLayout,
@@ -255,7 +256,11 @@ export function setupPixiInteraction(
     if (pan.handlePointerDown(e)) return;
 
     // Priorities 2-3: scene-editing controllers only run in edit mode.
-    if (canEditScene(mode)) {
+    // Dev mode (inspect) is belt-and-braces excluded here too — the active
+    // draw/edit tool is already force-exited on entry (devModeStore.setActive),
+    // but a stray in-flight gesture (e.g. path-edit still active from the
+    // instant before) must not mutate the scene while inspecting.
+    if (canEditScene(mode) && !useDevModeStore.getState().active) {
       // Path point-edit mode: anchors/handles take priority over the resize
       // handles of the (still-selected) node underneath them. A click that
       // misses every anchor/handle exits edit mode and falls through to
@@ -291,7 +296,9 @@ export function setupPixiInteraction(
           }
 
           // Match Konva behavior: modifier clicks are selection gestures, not drag start.
-          if (!(e.shiftKey || e.metaKey || e.ctrlKey)) {
+          // Dev mode allows the selection above (inspection needs it) but never
+          // the drag that would follow it.
+          if (!(e.shiftKey || e.metaKey || e.ctrlKey) && !useDevModeStore.getState().active) {
             // Start drag from label by creating a custom drag start
             drag.handlePointerDown(e, world, labelHitId);
           }
@@ -307,8 +314,9 @@ export function setupPixiInteraction(
           .getState()
           .selectDescendant(hitTarget.instanceId, hitTarget.descendantPath);
 
-        // Check if this descendant is inside a replaced slot — allow drag (edit only)
-        if (!e.metaKey && !e.ctrlKey && canEditScene(mode)) {
+        // Check if this descendant is inside a replaced slot — allow drag (edit only,
+        // never in dev/inspect mode).
+        if (!e.metaKey && !e.ctrlKey && canEditScene(mode) && !useDevModeStore.getState().active) {
           const scState = useSceneStore.getState();
           const inst = scState.nodesById[hitTarget.instanceId] as RefNode | undefined;
           if (inst?.type === "ref") {
@@ -343,16 +351,19 @@ export function setupPixiInteraction(
       const calculateLayoutForFrame =
         useLayoutStore.getState().calculateLayoutForFrame;
 
-      const selectionBounds = getSelectionBoundingBox(
-        selectionState.selectedIds,
-        currentNodes,
-        calculateLayoutForFrame,
-      );
-      if (!hitId && isPointInsideBounds(world, selectionBounds)) {
-        if (drag.handlePointerDown(e, world, null, selectionState.selectedIds)) return;
-      }
+      // Dev/inspect mode allows the selection above but never a drag.
+      if (!useDevModeStore.getState().active) {
+        const selectionBounds = getSelectionBoundingBox(
+          selectionState.selectedIds,
+          currentNodes,
+          calculateLayoutForFrame,
+        );
+        if (!hitId && isPointInsideBounds(world, selectionBounds)) {
+          if (drag.handlePointerDown(e, world, null, selectionState.selectedIds)) return;
+        }
 
-      if (drag.handlePointerDown(e, world, dragHitId)) return;
+        if (drag.handlePointerDown(e, world, dragHitId)) return;
+      }
 
       // Priority 5: Marquee selection (background click)
       marquee.handlePointerDown(e, world, hitId);
@@ -367,8 +378,11 @@ export function setupPixiInteraction(
     const screenY = e.clientY - rect.top;
     const world = screenToWorld(screenX, screenY);
 
-    // Handle descendant drag (slot child)
-    if (descendantDrag) {
+    // Handle descendant drag (slot child). Belt-and-braces: descendantDrag is
+    // only ever set in handlePointerDown, which already excludes dev mode, but
+    // an in-flight drag started just before Shift+D toggled dev mode on must
+    // not keep mutating the scene either.
+    if (descendantDrag && !useDevModeStore.getState().active) {
       const dx = world.x - descendantDrag.startWorldX;
       const dy = world.y - descendantDrag.startWorldY;
       if (
@@ -412,7 +426,11 @@ export function setupPixiInteraction(
     // The next pointermove after zoom completes will restore the correct hover state.
     if (useViewportStore.getState().animationFrameId !== null) return;
 
-    // View/present modes are read-only — never show a hover highlight.
+    // View/present modes are read-only — never show a hover highlight. Dev
+    // (inspect) mode does NOT change `mode` (it's an orthogonal overlay on
+    // top of "edit"), so canEditScene stays true and this branch is skipped —
+    // the hover pass below keeps running, which dev mode needs to drive its
+    // measurement/inspection overlay.
     if (!canEditScene(useEditorModeStore.getState().mode)) {
       useHoverStore.getState().clearHovered();
       return;
@@ -461,6 +479,10 @@ export function setupPixiInteraction(
   }
 
   function handleDblClick(e: MouseEvent): void {
+    // Dev (inspect) mode blocks text-edit/drill-down entirely — checked first
+    // since `mode` itself stays "edit" while dev mode is active (canEditScene
+    // alone wouldn't catch it).
+    if (useDevModeStore.getState().active) return;
     // Double-click only starts inline editing (text/name/embed) — disabled
     // outside edit mode so view/present stay read-only.
     if (!canEditScene(useEditorModeStore.getState().mode)) return;

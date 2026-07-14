@@ -4,6 +4,7 @@ import { useDrawModeStore } from "@/store/drawModeStore";
 import { usePenToolStore } from "@/store/penToolStore";
 import { useUIVisibilityStore } from "@/store/uiVisibilityStore";
 import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
+import { useDevModeStore } from "@/store/devModeStore";
 import { useConnectorStore } from "@/store/connectorStore";
 import { useDragStore } from "@/store/dragStore";
 import { useGuidesStore } from "@/store/guidesStore";
@@ -136,12 +137,20 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
       }
     }
 
-    // Read-only (view) mode: allow only non-mutating commands and swallow every
-    // scene-editing shortcut (delete, nudge, group, grid, cut, undo/redo, edit).
-    // This is the single policy point for keyboard editing — keep it here rather
-    // than scattering canEditScene() guards across each command below.
-    if (!canEditScene(useEditorModeStore.getState().mode)) {
+    // Read-only (view) mode OR dev (inspect) mode: allow only non-mutating
+    // commands and swallow every scene-editing shortcut (delete, nudge, group,
+    // grid, cut, undo/redo, edit). This is the single policy point for
+    // keyboard editing — keep it here rather than scattering canEditScene()/
+    // devModeStore guards across each command below. Dev mode doesn't change
+    // `useEditorModeStore`'s `mode` (it's an orthogonal overlay on top of
+    // "edit" — see devModeStore.ts), so it's checked separately here.
+    const isDevMode = useDevModeStore.getState().active;
+    if (!canEditScene(useEditorModeStore.getState().mode) || isDevMode) {
       if (e.code === "Escape") {
+        // Mirrors view mode's Escape handling exactly. In dev mode `mode` is
+        // already "edit", so this is a harmless no-op (presentFrameIds/Index
+        // are already empty) rather than an actual mode transition — dev mode
+        // itself is only ever exited via Shift+D.
         e.preventDefault();
         useEditorModeStore.getState().exitToEdit();
         return;
@@ -155,7 +164,9 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
         (mod && e.code === "Digit0") || // fit to content
         (mod && e.code === "Backslash") || // toggle UI
         e.code === "Space" || // pan
-        (e.key === "Enter" && e.shiftKey); // select parent frame
+        (e.key === "Enter" && e.shiftKey) || // select parent frame
+        (e.shiftKey && !mod && !e.altKey && e.code === "KeyD") || // toggle dev mode
+        (e.shiftKey && !mod && !e.altKey && e.code === "KeyM"); // reserved: dev-mode shortcut (no handler yet)
       if (!allowed) return;
       // Allowed read-only commands fall through to their handlers below.
     }
@@ -451,6 +462,17 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
       if (isTyping) return;
       e.preventDefault();
       useGuidesStore.getState().toggleShowRulers();
+      return;
+    }
+
+    // Shift+D: Toggle Dev (inspect) mode. It's the toggle itself, so it must
+    // fire whether dev mode is currently on or off — placed above the
+    // read-only allowlist's reach (both branches of that `if` fall through to
+    // here) and still respects `isTyping` like every other letter shortcut.
+    if (e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && e.code === "KeyD") {
+      if (isTyping) return;
+      e.preventDefault();
+      useDevModeStore.getState().toggle();
       return;
     }
 

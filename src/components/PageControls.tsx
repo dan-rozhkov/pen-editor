@@ -1,11 +1,14 @@
 import { useMemo } from "react";
-import { PlayIcon } from "@phosphor-icons/react";
+import { PlayIcon, CodeIcon } from "@phosphor-icons/react";
 
 import { SelectWithOptions } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
 import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
+import { useDevModeStore } from "@/store/devModeStore";
+import { formatShortcut } from "@/lib/commands/shortcutFormat";
 
 const ZOOM_PRESETS = [25, 50, 75, 100, 125, 150, 200, 300];
 
@@ -26,6 +29,8 @@ export function PageControls() {
   const zoomAtPoint = useViewportStore((s) => s.zoomAtPoint);
   const fitToContent = useViewportStore((s) => s.fitToContent);
   const enterPresent = useEditorModeStore((s) => s.enterPresent);
+  const isDevMode = useDevModeStore((s) => s.active);
+  const toggleDevMode = useDevModeStore((s) => s.toggle);
 
   const currentZoom = Math.round(scale * 100);
   const zoomOptions = useMemo(() => {
@@ -77,11 +82,27 @@ export function PageControls() {
           className="w-auto min-w-0 border-transparent bg-transparent px-2 hover:bg-secondary hover:text-foreground focus-visible:border-transparent focus-visible:ring-0"
           size="sm"
         />
+        {/* Dev (inspect) mode toggle — Figma-style read-only CSS inspector. */}
+        <IconButton
+          variant="ghost"
+          size="icon-sm"
+          tooltip="Dev mode"
+          shortcut={formatShortcut(["shift", "D"])}
+          className={
+            isDevMode
+              ? "ml-auto bg-green-500/20 text-green-500 hover:bg-green-500/20 hover:text-green-500"
+              : "ml-auto"
+          }
+          onClick={() => toggleDevMode()}
+          data-testid="page-dev-mode"
+        >
+          <CodeIcon size={16} weight="light" />
+        </IconButton>
         {/* Primary "Play" button — opens fullscreen Present mode. */}
         <Button
           variant="default"
           size="sm"
-          className="ml-auto gap-1.5 h-auto px-3 py-1.5 -my-1.5 bg-accent-primary text-white hover:bg-accent-primary/90"
+          className="gap-1.5 h-auto px-3 py-1.5 -my-1.5 bg-accent-primary text-white hover:bg-accent-primary/90"
           onClick={() => enterPresent()}
           title="Present (fullscreen)"
           data-testid="page-present"

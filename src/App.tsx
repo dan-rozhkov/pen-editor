@@ -15,6 +15,7 @@ import { Rulers } from "./components/canvas/Rulers";
 import { CanvasContextMenu } from "./components/canvas/CanvasContextMenu";
 import { useUIVisibilityStore } from "./store/uiVisibilityStore";
 import { useEditorModeStore } from "./store/editorModeStore";
+import { useDevModeStore } from "./store/devModeStore";
 import { useLayers3DStore } from "./store/layers3dStore";
 import { useIsMobile } from "./hooks/useIsMobile";
 import { useOnlineStatus } from "./hooks/useOnlineStatus";
@@ -35,6 +36,7 @@ function App() {
 
   const isPresent = mode === "present";
   const isView = mode === "view";
+  const isDev = useDevModeStore((s) => s.active);
 
   // Pull the authoritative chat model list from the backend, then drop any saved
   // selection it no longer allows. Falls back to the hardcoded list on failure.
@@ -131,9 +133,11 @@ function App() {
                 {!isView && !is3DActive && <Rulers />}
                 <FpsDisplay />
               </div>
-              {/* Right sidebar — read-only in view mode (inspect, no edits). */}
+              {/* Right sidebar — read-only in view mode (inspect, no edits) and
+                  in dev mode (Task 6 swaps this panel for the inspector; for
+                  now it just stays read-only). */}
               <div className="pointer-events-auto">
-                <ReadOnlyProvider value={isView}>
+                <ReadOnlyProvider value={isView || isDev}>
                   <RightSidebar />
                 </ReadOnlyProvider>
               </div>
