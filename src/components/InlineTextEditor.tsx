@@ -58,8 +58,9 @@ function walkEditableNodes(root: Node, visit: (n: Node) => boolean | void): bool
   return walk(root)
 }
 
-function toCssFontFamily(fontFamily: string): string {
-  return fontFamily
+function toCssFontFamily(fontFamily: string, fontFallback?: string): string {
+  const combined = fontFallback ? `${fontFamily}, ${fontFallback}` : fontFamily
+  return combined
     .split(',')
     .map((part) => part.trim())
     .filter(Boolean)
@@ -355,7 +356,7 @@ export function InlineTextEditor({
   const screenLetterSpacing = (node.letterSpacing ?? 0) * scale
   const fontStyle = node.fontStyle ?? 'normal'
   const fontWeight = String(node.fontWeight ?? 'normal')
-  const fontFamily = toCssFontFamily(node.fontFamily ?? 'Arial')
+  const fontFamily = toCssFontFamily(node.fontFamily ?? 'Arial', node.fontFallback)
   const editorFontShorthand = `${fontStyle} normal ${fontWeight} ${screenFontSize}px ${fontFamily}`
   const fontVariationSettings = toFontVariationSettingsCss(node.fontVariations)
   const fontFeatureSettings = toFontFeatureSettingsCss(node.fontFeatures)

@@ -104,6 +104,19 @@ describe("<InlineTextEditor />", () => {
     expect(lines[2].style.marginBottom).toBe("");
   });
 
+  it("appends fontFallback to the CSS font-family used for the editor's font shorthand", () => {
+    const { container } = render(
+      <InlineTextEditor
+        node={textNode({ fontFamily: "Custom Font", fontFallback: "serif" })}
+        absoluteX={0}
+        absoluteY={0}
+      />,
+    );
+    const editor = container.querySelector('[contenteditable="true"]') as HTMLElement;
+    expect(editor.style.font).toContain('"Custom Font"');
+    expect(editor.style.font).toContain("serif");
+  });
+
   it("does not set margin-bottom when paragraphSpacing is 0/unset", () => {
     const { container } = render(
       <InlineTextEditor node={textNode({ text: "one\ntwo" })} absoluteX={0} absoluteY={0} />,

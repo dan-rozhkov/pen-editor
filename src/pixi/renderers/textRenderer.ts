@@ -148,6 +148,7 @@ export function updateTextContainer(
       node.height !== prev.height ||
       node.fontSize !== prev.fontSize ||
       node.fontFamily !== prev.fontFamily ||
+      node.fontFallback !== prev.fontFallback ||
       node.fontWeight !== prev.fontWeight ||
       node.fontStyle !== prev.fontStyle ||
       node.fontVariations !== prev.fontVariations ||
@@ -190,6 +191,7 @@ export function updateTextContainer(
     node.width !== prev.width ||
     node.fontSize !== prev.fontSize ||
     node.fontFamily !== prev.fontFamily ||
+    node.fontFallback !== prev.fontFallback ||
     node.fontWeight !== prev.fontWeight ||
     node.fontStyle !== prev.fontStyle ||
     node.letterSpacing !== prev.letterSpacing ||
@@ -206,6 +208,7 @@ export function updateTextContainer(
   if (
     node.fontSize !== prev.fontSize ||
     node.fontFamily !== prev.fontFamily ||
+    node.fontFallback !== prev.fontFallback ||
     node.fontWeight !== prev.fontWeight ||
     node.fontStyle !== prev.fontStyle ||
     node.fontVariations !== prev.fontVariations ||
