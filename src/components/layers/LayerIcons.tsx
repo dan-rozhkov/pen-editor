@@ -118,7 +118,7 @@ export const NodeIcon = ({
 }) => {
   const iconClass = clsx(
     "w-4 h-4 shrink-0",
-    isComponent || type === "ref" ? "text-[#8b5cf6]" : "text-text-muted",
+    isComponent || type === "ref" ? "text-accent-bright" : "text-text-muted",
   );
 
   // Figma-style mask indicator: overrides the type icon so masking layers

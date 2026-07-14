@@ -5,9 +5,9 @@ import { NodeIcon } from "../LayerIcons";
 describe("<NodeIcon />", () => {
   it("uses the component accent for component and instance icons", () => {
     const { container, rerender } = render(<NodeIcon type="frame" isComponent />);
-    expect(container.querySelector("svg")?.classList.contains("text-[#8b5cf6]")).toBe(true);
+    expect(container.querySelector("svg")?.classList.contains("text-accent-bright")).toBe(true);
 
     rerender(<NodeIcon type="ref" />);
-    expect(container.querySelector("svg")?.classList.contains("text-[#8b5cf6]")).toBe(true);
+    expect(container.querySelector("svg")?.classList.contains("text-accent-bright")).toBe(true);
   });
 });
