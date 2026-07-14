@@ -15,7 +15,7 @@ import { useCanvasRefStore } from "../store/canvasRefStore";
 import { buildTree } from "../types/scene";
 
 import { downloadDocument, downloadPublicPen, openFilePicker } from "../utils/fileUtils";
-import { exportDesignTokens } from "../lib/commands/fileCommands";
+import { exportDesignTokens, importDesignTokens } from "../lib/commands/fileCommands";
 import { useDocumentStore } from "../store/documentStore";
 import { applyOpenedDocument } from "../utils/openDocumentIntoEditor";
 import { parsePixsoNodes } from "../utils/pixsoImportUtils";
@@ -113,6 +113,10 @@ export function Toolbar() {
 
   const handleExportTokens = () => {
     exportDesignTokens();
+  };
+
+  const handleImportTokens = () => {
+    void importDesignTokens();
   };
 
   const handleOpen = async () => {
@@ -225,6 +229,9 @@ export function Toolbar() {
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleExportTokens}>
                 Export design tokens (.tokens.json)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleImportTokens}>
+                Import design tokens…
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>

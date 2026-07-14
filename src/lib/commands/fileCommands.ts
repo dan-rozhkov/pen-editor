@@ -1,6 +1,6 @@
 import { toast } from "sonner";
 import { buildTree } from "@/types/scene";
-import { useSceneStore } from "@/store/sceneStore";
+import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useTextStyleStore } from "@/store/textStyleStore";
 import { useStyleStore } from "@/store/styleStore";
@@ -9,7 +9,9 @@ import { useDocumentStore } from "@/store/documentStore";
 import { usePageStore } from "@/store/pageStore";
 import { downloadDocument, downloadPublicPen, openFilePicker } from "@/utils/fileUtils";
 import { applyOpenedDocument } from "@/utils/openDocumentIntoEditor";
-import { toDtcg } from "@/lib/designTokens";
+import { toDtcg, fromDtcg, type ImportResult } from "@/lib/designTokens";
+import type { DtcgDocument } from "@/lib/designTokens";
+import { useHistoryStore } from "@/store/historyStore";
 import type { PaletteCommand } from "./types";
 
 /**
@@ -77,6 +79,66 @@ export function exportDesignTokens(): void {
   );
 }
 
+function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] {
+  const byId = new Map(existing.map((e) => [e.id, e]));
+  for (const item of incoming) byId.set(item.id, item);
+  return Array.from(byId.values());
+}
+
+function applyImport(result: ImportResult): void {
+  // One undo step for the whole import (the setX setters don't snapshot).
+  useHistoryStore.getState().saveHistory(createSnapshot(useSceneStore.getState()));
+  const varStore = useVariableStore.getState();
+  const styleStore = useStyleStore.getState();
+  const textStore = useTextStyleStore.getState();
+  varStore.setVariables(mergeById(varStore.variables, result.variables));
+  styleStore.setFillStyles(mergeById(styleStore.fillStyles, result.fillStyles));
+  styleStore.setEffectStyles(mergeById(styleStore.effectStyles, result.effectStyles));
+  textStore.setTextStyles(mergeById(textStore.textStyles, result.textStyles));
+}
+
+export async function importDesignTokens(): Promise<void> {
+  const text = await pickTokensFile();
+  if (text == null) return; // user cancelled
+  let doc: DtcgDocument;
+  try {
+    doc = JSON.parse(text) as DtcgDocument;
+  } catch {
+    toast("That file isn't valid JSON.");
+    return;
+  }
+  if (doc == null || typeof doc !== "object" || Array.isArray(doc)) {
+    toast("That file doesn't look like a design-tokens document.");
+    return;
+  }
+  const { result, warnings } = fromDtcg(doc);
+  applyImport(result);
+  const count =
+    result.variables.length + result.fillStyles.length + result.effectStyles.length + result.textStyles.length;
+  toast(
+    warnings.length
+      ? `Imported ${count} token(s). ${warnings.length} skipped or downgraded.`
+      : `Imported ${count} token(s).`,
+  );
+}
+
+/** Prompt for a .tokens.json / .json file; resolve its text, or null if cancelled. */
+function pickTokensFile(): Promise<string | null> {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".tokens.json,.json,application/json";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) { resolve(null); return; }
+      resolve(await file.text());
+    };
+    // If the picker is dismissed no change event fires; that path simply never resolves,
+    // which is acceptable for a one-shot user action.
+    input.click();
+  });
+}
+
 async function openDocument(): Promise<void> {
   try {
     const result = await openFilePicker();
@@ -97,5 +159,6 @@ export function getFileCommands(): PaletteCommand[] {
     { id: "file-export-json", label: "Export as .json", group: "File", keywords: ["save", "download"], run: exportAsJson },
     { id: "file-export-pen", label: "Export as .pen", group: "File", keywords: ["save", "download"], run: exportAsPen },
     { id: "file-export-tokens", label: "Export design tokens (.tokens.json)", group: "File", keywords: ["dtcg", "tokens", "download", "export"], run: exportDesignTokens },
+    { id: "file-import-tokens", label: "Import design tokens…", group: "File", keywords: ["dtcg", "tokens", "upload", "import"], run: () => void importDesignTokens() },
   ];
 }
