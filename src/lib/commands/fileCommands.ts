@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { buildTree } from "@/types/scene";
 import { useSceneStore } from "@/store/sceneStore";
 import { useVariableStore } from "@/store/variableStore";
@@ -8,6 +9,7 @@ import { useDocumentStore } from "@/store/documentStore";
 import { usePageStore } from "@/store/pageStore";
 import { downloadDocument, downloadPublicPen, openFilePicker } from "@/utils/fileUtils";
 import { applyOpenedDocument } from "@/utils/openDocumentIntoEditor";
+import { toDtcg } from "@/lib/designTokens";
 import type { PaletteCommand } from "./types";
 
 /**
@@ -50,6 +52,31 @@ function exportAsPen(): void {
   );
 }
 
+export function exportDesignTokens(): void {
+  const { document: tokensDoc, warnings } = toDtcg({
+    variables: useVariableStore.getState().variables,
+    fillStyles: useStyleStore.getState().fillStyles,
+    effectStyles: useStyleStore.getState().effectStyles,
+    textStyles: useTextStyleStore.getState().textStyles,
+  });
+  const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
+  const blob = new Blob([JSON.stringify(tokensDoc, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${name}.tokens.json`;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast(
+    warnings.length
+      ? `Exported design tokens. ${warnings.length} item(s) skipped or downgraded.`
+      : "Exported design tokens.",
+  );
+}
+
 async function openDocument(): Promise<void> {
   try {
     const result = await openFilePicker();
@@ -69,5 +96,6 @@ export function getFileCommands(): PaletteCommand[] {
     { id: "file-open", label: "Open…", group: "File", keywords: ["open file", "load"], run: () => void openDocument() },
     { id: "file-export-json", label: "Export as .json", group: "File", keywords: ["save", "download"], run: exportAsJson },
     { id: "file-export-pen", label: "Export as .pen", group: "File", keywords: ["save", "download"], run: exportAsPen },
+    { id: "file-export-tokens", label: "Export design tokens (.tokens.json)", group: "File", keywords: ["dtcg", "tokens", "download", "export"], run: exportDesignTokens },
   ];
 }

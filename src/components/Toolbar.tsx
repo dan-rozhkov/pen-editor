@@ -15,6 +15,7 @@ import { useCanvasRefStore } from "../store/canvasRefStore";
 import { buildTree } from "../types/scene";
 
 import { downloadDocument, downloadPublicPen, openFilePicker } from "../utils/fileUtils";
+import { exportDesignTokens } from "../lib/commands/fileCommands";
 import { useDocumentStore } from "../store/documentStore";
 import { applyOpenedDocument } from "../utils/openDocumentIntoEditor";
 import { parsePixsoNodes } from "../utils/pixsoImportUtils";
@@ -108,6 +109,10 @@ export function Toolbar() {
     } finally {
       setIsExportingPptx(false);
     }
+  };
+
+  const handleExportTokens = () => {
+    exportDesignTokens();
   };
 
   const handleOpen = async () => {
@@ -217,6 +222,9 @@ export function Toolbar() {
                 disabled={!pixiRefs || !hasSlides || isExportingPptx}
               >
                 {isExportingPptx ? "Exporting .pptx…" : "Export as .pptx"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportTokens}>
+                Export design tokens (.tokens.json)
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
