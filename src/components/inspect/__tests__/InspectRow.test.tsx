@@ -55,4 +55,31 @@ describe("<InspectRow />", () => {
     fireEvent.click(row);
     await vi.waitFor(() => expect(toast).toHaveBeenCalledWith("Copied Fill"));
   });
+
+  it("token sub-row keydown (Light) stops propagation and copies without collapsing", async () => {
+    vi.mocked(writeTextToClipboard).mockResolvedValue(true);
+    render(
+      <InspectRow
+        row={{
+          label: "Fill",
+          value: "#ff0000",
+          token: { name: "colorVar", light: "#ffffff", dark: "#000000" },
+        }}
+      />
+    );
+    // Expand the token row
+    const tokenRow = screen.getAllByText("Fill")[0].closest('[data-testid="inspect-row"]')!;
+    fireEvent.click(tokenRow);
+    // Verify Light and Dark sub-rows are visible after expanding
+    expect(screen.queryByText("Light")).not.toBeNull();
+    expect(screen.queryByText("Dark")).not.toBeNull();
+    // Press Enter on Light sub-row
+    const lightRow = screen.getByText("Light").closest('[data-testid="inspect-row"]')!;
+    fireEvent.keyDown(lightRow, { key: "Enter" });
+    // Verify clipboard was called for light value
+    await vi.waitFor(() => expect(writeTextToClipboard).toHaveBeenCalledWith("#ffffff"));
+    // Verify Light and Dark rows are STILL visible (not collapsed)
+    expect(screen.queryByText("Light")).not.toBeNull();
+    expect(screen.queryByText("Dark")).not.toBeNull();
+  });
 });

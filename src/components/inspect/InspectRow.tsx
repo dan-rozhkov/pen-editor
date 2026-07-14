@@ -77,7 +77,10 @@ export function InspectRow({ row }: { row: InspectValue }) {
               e.stopPropagation();
               void copy(`${row.label} (light)`, token.light);
             }}
-            onKeyDown={handleActivationKeyDown(() => void copy(`${row.label} (light)`, token.light))}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              handleActivationKeyDown(() => void copy(`${row.label} (light)`, token.light))(e);
+            }}
           >
             <span className="text-text-muted text-xs">Light</span>
             <span className="font-mono text-xs text-text-primary truncate">{token.light}</span>
@@ -91,7 +94,10 @@ export function InspectRow({ row }: { row: InspectValue }) {
               e.stopPropagation();
               void copy(`${row.label} (dark)`, token.dark);
             }}
-            onKeyDown={handleActivationKeyDown(() => void copy(`${row.label} (dark)`, token.dark))}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              handleActivationKeyDown(() => void copy(`${row.label} (dark)`, token.dark))(e);
+            }}
           >
             <span className="text-text-muted text-xs">Dark</span>
             <span className="font-mono text-xs text-text-primary truncate">{token.dark}</span>
