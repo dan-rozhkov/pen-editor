@@ -8,7 +8,6 @@ import type {
   SceneNode,
 } from "../../types/scene";
 import { generateId, buildTree } from "../../types/scene";
-import { convertHtmlToDesignNodes } from "../../lib/htmlToDesign";
 import { convertDesignNodesToHtml } from "../../lib/designToHtml";
 import { loadGoogleFontsFromNodes } from "../../utils/fontUtils";
 import { useLayoutStore } from "../layoutStore";
@@ -533,17 +532,34 @@ export function createComplexOperations(
 
       const embed = node as EmbedNode;
 
-      // Convert HTML to design nodes (async — re-read state after)
-      const convertedRoot = await convertHtmlToDesignNodes(
+      // Capture the embed's HTML in an iframe and convert via the h2d
+      // pipeline (same converter as clipboard paste). Both modules are
+      // dynamically imported so the vendored capture bundle stays out of
+      // the main chunk. (async — re-read state after)
+      const [{ captureEmbedHtmlToH2d }, { convertH2dToSceneNodes }] =
+        await Promise.all([
+          import("../../lib/h2dCapture/captureEmbed"),
+          import("../../lib/h2dPaste/h2dToScene"),
+        ]);
+      const h2dDoc = await captureEmbedHtmlToH2d(
         embed.htmlContent,
         embed.width,
         embed.height,
       );
-      const rootFrame = convertedRoot as FrameNode;
+      const { nodes: convertedNodes, warnings } = convertH2dToSceneNodes(h2dDoc);
+      if (warnings.length > 0) {
+        console.warn("convertEmbedToDesign:", warnings.join("; "));
+      }
+      const first = convertedNodes[0];
+      if (!first || first.type !== "frame") return null;
+      const rootFrame = first as FrameNode;
 
       // Position at original embed location
       rootFrame.x = embed.x;
       rootFrame.y = embed.y;
+      rootFrame.width = embed.width;
+      rootFrame.height = embed.height;
+      rootFrame.clip = true;
       if (embed.name) rootFrame.name = embed.name;
 
       // Re-read state after async gap to avoid stale snapshot

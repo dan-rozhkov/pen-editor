@@ -1,8 +1,43 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { useSceneStore } from "@/store/sceneStore";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { resetStores, seedScene } from "@/test/fixtures";
-import type { FlatFrameNode, EmbedNode, FlatSceneNode } from "@/types/scene";
+import type { FlatFrameNode, EmbedNode, FlatSceneNode, TextNode } from "@/types/scene";
+import type { H2dDocument } from "@/lib/h2dPaste/h2dTypes";
+import { buildDocument, el, rect, text } from "@/lib/h2dPaste/__tests__/h2dFixture";
+
+const CAPTURE_FIXTURE: H2dDocument = buildDocument(
+  el(
+    "BODY",
+    rect(0, 0, 400, 300),
+    { backgroundColor: "rgb(245, 240, 230)" },
+    [
+      el(
+        "DIV",
+        rect(20, 200, 80, 60),
+        {
+          backgroundImage:
+            "linear-gradient(180deg, rgb(253, 230, 138) 0%, rgb(251, 191, 36) 100%)",
+        },
+      ),
+      el(
+        "DIV",
+        rect(20, 160, 80, 20),
+        {
+          fontFamily: '"Plus Jakarta Sans", sans-serif',
+          fontSize: "16px",
+          color: "rgb(26, 26, 46)",
+        },
+        [text("10,1", rect(20, 160, 40, 20))],
+      ),
+    ],
+  ),
+  { documentTitle: "fixture" },
+);
+
+vi.mock("@/lib/h2dCapture/captureEmbed", () => ({
+  captureEmbedHtmlToH2d: vi.fn().mockResolvedValue(CAPTURE_FIXTURE),
+}));
 
 function scene() {
   return useSceneStore.getState();
@@ -10,6 +45,15 @@ function scene() {
 
 function pastLen() {
   return useHistoryStore.getState().past.length;
+}
+
+// Replicate the real undo cycle from useCanvasKeyboardShortcuts: snapshot
+// current -> ask history for the target -> restore it if present.
+function undo() {
+  const snapshot = createSnapshot(useSceneStore.getState());
+  const prev = useHistoryStore.getState().undo(snapshot);
+  if (prev) useSceneStore.getState().restoreSnapshot(prev);
+  return prev;
 }
 
 /**
@@ -302,26 +346,6 @@ describe("complexOperations", () => {
   });
 
   describe("convertEmbedToDesign", () => {
-    let stubbedFonts = false;
-    beforeEach(() => {
-      // happy-dom has no FontFaceSet; convertHtmlToDesignNodes awaits document.fonts.ready
-      if (!(document as unknown as { fonts?: unknown }).fonts) {
-        Object.defineProperty(document, "fonts", {
-          configurable: true,
-          value: { ready: Promise.resolve() },
-        });
-        stubbedFonts = true;
-      }
-    });
-    afterEach(() => {
-      // Remove our stub so the fake FontFaceSet doesn't leak to other test files
-      // in the same worker.
-      if (stubbedFonts) {
-        delete (document as unknown as { fonts?: unknown }).fonts;
-        stubbedFonts = false;
-      }
-    });
-
     function seedEmbed() {
       const embed = {
         id: "embed1",
@@ -354,14 +378,48 @@ describe("complexOperations", () => {
       expect(s.nodesById["embed1"]).toBeUndefined();
       const root = s.nodesById[rootId!];
       expect(root).toBeDefined();
-      // converted root keeps the embed's name and origin
+      // converted root keeps the embed's name and origin/size
       expect(root.name).toBe("Widget");
       expect(root.x).toBe(50);
       expect(root.y).toBe(60);
+      expect((root as FlatFrameNode).width).toBe(120);
+      expect((root as FlatFrameNode).height).toBe(80);
+      expect((root as FlatFrameNode).clip).toBe(true);
       // embed replaced in place within rootIds
       expect(s.rootIds).toContain(rootId);
       expect(s.rootIds).not.toContain("embed1");
       expect(pastLen()).toBe(before + 1);
+
+      // h2d fixture content made it through the pipeline
+      const rootChildIds = s.childrenById[rootId!] ?? [];
+      const rootChildren = rootChildIds.map((cid) => s.nodesById[cid]);
+
+      const bar = rootChildren.find(
+        (c) => c.type === "frame" && (c as FlatFrameNode).gradientFill,
+      ) as FlatFrameNode | undefined;
+      expect(bar).toBeDefined();
+      expect(bar!.gradientFill!.type).toBe("linear");
+
+      const textNode = rootChildren.find(
+        (c) => c.type === "text",
+      ) as TextNode | undefined;
+      expect(textNode?.text).toBe("10,1");
+      expect(textNode?.fontFamily).toBe("Plus Jakarta Sans");
+      expect(textNode?.fontFallback).toBe("sans-serif");
+    });
+
+    it("undo restores the removed embed", async () => {
+      seedEmbed();
+      const rootId = await scene().convertEmbedToDesign("embed1");
+      expect(rootId).toBeTruthy();
+      expect(scene().nodesById["embed1"]).toBeUndefined();
+
+      undo();
+
+      const s = scene();
+      expect(s.nodesById["embed1"]).toBeDefined();
+      expect(s.nodesById[rootId!]).toBeUndefined();
+      expect(s.rootIds).toContain("embed1");
     });
 
     it("returns null for non-embed and missing nodes", async () => {
