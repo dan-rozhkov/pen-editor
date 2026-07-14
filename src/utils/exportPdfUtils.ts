@@ -1,57 +1,21 @@
 import type { Container as PixiContainer } from "pixi.js";
 import type { PixiExportRefs } from "@/store/canvasRefStore";
-import { findContainerByLabel, toExtractFrame } from "./exportUtils";
+import {
+  findContainerByLabel,
+  extractImageBytes,
+  withForcedRenderable,
+  downloadBlob,
+  resolvePageExportBaseName,
+  type PdfFrameDescriptor,
+} from "./exportUtils";
 import { assemblePdfFromPngPages, type PdfPageImage } from "@/lib/pdfExport/assemblePdf";
-import { useSceneStore } from "@/store/sceneStore";
-import { useLayoutStore } from "@/store/layoutStore";
-import { getNodeEffectiveSize } from "@/utils/nodeUtils";
-import { sanitizeExportBaseName } from "@/utils/exportSettingsUtils";
 
-/** A frame (or any node) to render onto one PDF page. */
-export interface PdfFrameDescriptor {
-  id: string;
-  name?: string;
-  /** Logical (unscaled) width/height in design px, used as the PDF page size in pt (1px = 1pt). */
-  width: number;
-  height: number;
-}
-
-/** Resolve a single frame's effective PDF page size, falling back to stored width/height. */
-export function getFrameDescriptor(nodeId: string, name: string | undefined): PdfFrameDescriptor {
-  const { getNodes, nodesById } = useSceneStore.getState();
-  const { calculateLayoutForFrame } = useLayoutStore.getState();
-  const nodes = getNodes();
-  const node = nodesById[nodeId];
-  const size = getNodeEffectiveSize(nodes, nodeId, calculateLayoutForFrame) ?? {
-    width: node?.width ?? 0,
-    height: node?.height ?? 0,
-  };
-  return { id: nodeId, name, width: size.width, height: size.height };
-}
-
-/** Top-level `frame` nodes on the current page, in Layers-panel top-to-bottom (page) order. */
-export function getTopLevelFrames(): PdfFrameDescriptor[] {
-  const { rootIds, nodesById } = useSceneStore.getState();
-
-  const frames: PdfFrameDescriptor[] = [];
-  for (const id of [...rootIds].reverse()) {
-    const node = nodesById[id];
-    if (!node || node.type !== "frame") continue;
-    frames.push(getFrameDescriptor(id, node.name));
-  }
-  return frames;
-}
+export type { PdfFrameDescriptor } from "./exportUtils";
 
 /**
  * Extract a Pixi container's live pixels as raw PNG bytes (not a data URL),
- * so they can be handed to pdf-lib's `embedPng`.
- *
- * Pins an explicit `frame` from the page's declared width/height (see
- * `exportUtils.toExtractFrame`) so the rasterized page is exactly
- * `width×height×scale` px, instead of Pixi's implicit content-bounds region
- * (which can come out smaller than the frame for pages with no
- * full-covering background). `resolution: scale` alone is already correct
- * here — Pixi v8 uses it independent of the app renderer's resolution/DPR.
+ * so they can be handed to pdf-lib's `embedPng`. Thin PNG-specific wrapper
+ * around the shared `extractImageBytes` (see `exportUtils.ts`).
  */
 function extractPngBytes(
   pixiRefs: PixiExportRefs,
@@ -59,72 +23,7 @@ function extractPngBytes(
   scale: number,
   size: { width: number; height: number },
 ): Uint8Array {
-  const canvas = pixiRefs.app.renderer.extract.canvas({
-    target: container,
-    resolution: scale,
-    antialias: true,
-    frame: toExtractFrame(size.width, size.height),
-  }) as HTMLCanvasElement;
-  const dataUrl = canvas.toDataURL("image/png");
-  return dataUrlToUint8Array(dataUrl);
-}
-
-/**
- * Viewport culling (`syncAutoLayout.ts` `updateCulling`) sets `container.renderable
- * = false` on root frame containers outside the viewport, which would make
- * `renderer.extract.canvas` rasterize a blank page for any frame not currently
- * on-screen. Force `container` and its ancestors (up to and including
- * `sceneRoot`) renderable for the duration of `fn`, then restore whatever they
- * were before.
- */
-export function withForcedRenderable<T>(container: PixiContainer, sceneRoot: PixiContainer, fn: () => T): T {
-  const restore: Array<() => void> = [];
-  let current: PixiContainer | null = container;
-  while (current) {
-    if (!current.renderable) {
-      const target = current;
-      restore.push(() => {
-        target.renderable = false;
-      });
-      current.renderable = true;
-    }
-    if (current === sceneRoot) break;
-    current = current.parent as PixiContainer | null;
-  }
-  try {
-    return fn();
-  } finally {
-    for (const undo of restore) undo();
-  }
-}
-
-function dataUrlToUint8Array(dataUrl: string): Uint8Array {
-  const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
-export function downloadBlob(bytes: Uint8Array, filename: string, mimeType: string): void {
-  const blob = new Blob([bytes as BlobPart], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  try {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  } finally {
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-}
-
-function safePdfFilename(baseName: string): string {
-  return `${sanitizeExportBaseName(baseName)}.pdf`;
+  return extractImageBytes(pixiRefs, container, scale, size, "image/png");
 }
 
 /**
@@ -142,8 +41,7 @@ export function resolvePdfDownloadFilename(
   frames: PdfFrameDescriptor[],
 ): string {
   if (finalFilename) return finalFilename;
-  const base = frames.length === 1 ? frames[0].name || frames[0].id : "canvas";
-  return safePdfFilename(base);
+  return `${resolvePageExportBaseName(frames)}.pdf`;
 }
 
 /**

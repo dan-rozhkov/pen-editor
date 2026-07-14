@@ -9,8 +9,7 @@ import { getFills, resolveFillStylePaint, resolveEffectStack } from "@/utils/fil
 import { resolveRefToTree } from "@/utils/instanceRuntime";
 import { getTopLevelFramesFlat } from "@/utils/componentUtils";
 import { resolveSlideOrder } from "@/utils/slideOrder";
-import { findContainerByLabel, toExtractFrame } from "@/utils/exportUtils";
-import { withForcedRenderable, downloadBlob } from "@/utils/exportPdfUtils";
+import { findContainerByLabel, extractImageBytes, withForcedRenderable, downloadBlob } from "@/utils/exportUtils";
 import { sanitizeExportBaseName } from "@/utils/exportSettingsUtils";
 import { buildSlidesInput, type BuildDeps } from "@/lib/pptxExport/buildSlidesInput";
 import { assemblePptx } from "@/lib/pptxExport/assemblePptx";
@@ -65,20 +64,9 @@ export async function exportSlidesToPptx(pixiRefs: PixiExportRefs): Promise<bool
       const container = findContainerByLabel(pixiRefs.sceneRoot, nodeId);
       if (!container) return null;
       try {
-        return withForcedRenderable(container, pixiRefs.sceneRoot, () => {
-          const canvas = pixiRefs.app.renderer.extract.canvas({
-            target: container,
-            resolution: scale,
-            antialias: true,
-            frame: toExtractFrame(widthPx, heightPx),
-          }) as HTMLCanvasElement;
-          const dataUrl = canvas.toDataURL("image/png");
-          const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
-          const binary = atob(base64);
-          const bytes = new Uint8Array(binary.length);
-          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-          return bytes;
-        });
+        return withForcedRenderable(container, pixiRefs.sceneRoot, () =>
+          extractImageBytes(pixiRefs, container, scale, { width: widthPx, height: heightPx }, "image/png"),
+        );
       } catch (error) {
         console.warn(`PPTX export: raster fallback failed for node ${nodeId}`, error);
         return null;

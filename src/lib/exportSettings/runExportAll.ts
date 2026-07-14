@@ -57,7 +57,10 @@ export const defaultExportRunners: ExportRunners = {
   },
   exportPdf: async (pixiRefs, nodeId, nodeName, scale, filename) => {
     if (!pixiRefs) return false;
-    const { exportFramesToPdf, getFrameDescriptor } = await import("@/utils/exportPdfUtils");
+    const [{ exportFramesToPdf }, { getFrameDescriptor }] = await Promise.all([
+      import("@/utils/exportPdfUtils"),
+      import("@/utils/exportUtils"),
+    ]);
     const frame = getFrameDescriptor(nodeId, nodeName);
     // Pass the already-built filename (e.g. "Icon@2x.pdf") verbatim so the
     // downloaded file matches the reported result filename (keeps the @Nx label).

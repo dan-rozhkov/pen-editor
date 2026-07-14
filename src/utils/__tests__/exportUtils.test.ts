@@ -1,7 +1,15 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { Rectangle } from 'pixi.js'
-import { toExtractFrame, getNodeExportSize } from '@/utils/exportUtils'
+import {
+  toExtractFrame,
+  getNodeExportSize,
+  getFrameDescriptor,
+  getTopLevelFrames,
+  resolvePageExportBaseName,
+  type PdfFrameDescriptor,
+} from '@/utils/exportUtils'
 import { useSceneStore } from '@/store/sceneStore'
+import type { FlatSceneNode } from '@/types/scene'
 import { resetStores, seedScene } from '@/test/fixtures'
 
 describe('toExtractFrame', () => {
@@ -83,5 +91,98 @@ describe('getNodeExportSize', () => {
 
   it('falls back to {0,0} for an unknown node id', () => {
     expect(getNodeExportSize('does-not-exist')).toEqual({ width: 0, height: 0 })
+  })
+})
+
+describe('getFrameDescriptor / getTopLevelFrames (page-export frame sizing & order)', () => {
+  /** Column auto-layout frame, height=fit_content, stored height stale/wrong. */
+  function seedHugContentFrame(id: string, stored: { width: number; height: number }): void {
+    const frame = {
+      id,
+      type: 'frame',
+      name: id,
+      x: 0,
+      y: 0,
+      width: stored.width,
+      height: stored.height,
+      layout: {
+        autoLayout: true,
+        flexDirection: 'column',
+        gap: 0,
+        paddingTop: 0,
+        paddingRight: 0,
+        paddingBottom: 0,
+        paddingLeft: 0,
+      },
+      sizing: { widthMode: 'fixed', heightMode: 'fit_content' },
+    } as unknown as FlatSceneNode
+
+    const child = {
+      id: `${id}-child`,
+      type: 'rect',
+      x: 0,
+      y: 0,
+      width: stored.width,
+      height: 40,
+      sizing: { widthMode: 'fixed', heightMode: 'fixed' },
+    } as unknown as FlatSceneNode
+
+    useSceneStore.setState((s) => ({
+      nodesById: { ...s.nodesById, [id]: frame, [`${id}-child`]: child },
+      parentById: { ...s.parentById, [id]: null, [`${id}-child`]: id },
+      childrenById: { ...s.childrenById, [id]: [`${id}-child`] },
+      rootIds: [...s.rootIds, id],
+      _cachedTree: null,
+    }))
+  }
+
+  beforeEach(() => {
+    resetStores()
+  })
+
+  it('resolves the effective (hug-content) size instead of the raw stored width/height', () => {
+    // Stored height (200) is stale; the frame actually hugs its one 40px-tall child.
+    seedHugContentFrame('f1', { width: 100, height: 200 })
+
+    const descriptor = getFrameDescriptor('f1', 'f1')
+
+    expect(descriptor.width).toBe(100)
+    expect(descriptor.height).toBe(40)
+  })
+
+  it('orders top-level frames to match the Layers panel (reverse of rootIds)', () => {
+    seedHugContentFrame('first', { width: 50, height: 50 })
+    seedHugContentFrame('second', { width: 50, height: 50 })
+
+    expect(useSceneStore.getState().rootIds).toEqual(['first', 'second'])
+
+    const frames = getTopLevelFrames()
+
+    expect(frames.map((f) => f.id)).toEqual(['second', 'first'])
+  })
+})
+
+describe('resolvePageExportBaseName', () => {
+  it('uses the sanitized single frame name when there is exactly one frame', () => {
+    const frames: PdfFrameDescriptor[] = [{ id: 'f1', name: 'Cover', width: 10, height: 10 }]
+    expect(resolvePageExportBaseName(frames)).toBe('Cover')
+  })
+
+  it('falls back to the frame id when the single frame has no name', () => {
+    const frames: PdfFrameDescriptor[] = [{ id: 'f1', width: 10, height: 10 }]
+    expect(resolvePageExportBaseName(frames)).toBe('f1')
+  })
+
+  it('sanitizes the single-frame name', () => {
+    const frames: PdfFrameDescriptor[] = [{ id: 'f1', name: 'My Frame / v2', width: 10, height: 10 }]
+    expect(resolvePageExportBaseName(frames)).toBe('My_Frame___v2')
+  })
+
+  it('falls back to "canvas" for a multi-frame export', () => {
+    const frames: PdfFrameDescriptor[] = [
+      { id: 'f1', name: 'A', width: 10, height: 10 },
+      { id: 'f2', name: 'B', width: 10, height: 10 },
+    ]
+    expect(resolvePageExportBaseName(frames)).toBe('canvas')
   })
 })
