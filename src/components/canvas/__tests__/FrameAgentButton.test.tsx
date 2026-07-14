@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { FrameAgentButton } from "../FrameAgentButton";
 import { FRAME_QUICK_ACTIONS } from "../frameQuickActions";
-import type { FrameNode } from "@/types/scene";
+import type { FrameNode, RefNode } from "@/types/scene";
 
 const mockLaunch = vi.fn();
 vi.mock("@/lib/launchFrameAgentChat", () => ({
@@ -34,6 +34,25 @@ describe("<FrameAgentButton />", () => {
     renderButton();
     expect(screen.getByLabelText("Ask agent")).toBeTruthy();
     expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("uses the component accent for components and instances", () => {
+    const { rerender } = render(
+      <FrameAgentButton node={{ ...frame, reusable: true }} absoluteX={0} absoluteY={0} />,
+    );
+    expect(screen.getByLabelText("Ask agent").classList.contains("bg-[#8b5cf6]")).toBe(true);
+
+    const instance = {
+      id: "instance-1",
+      type: "ref",
+      componentId: "frame-1",
+      x: 0,
+      y: 0,
+      width: 320,
+      height: 600,
+    } as RefNode;
+    rerender(<FrameAgentButton node={instance} absoluteX={0} absoluteY={0} />);
+    expect(screen.getByLabelText("Ask agent").classList.contains("bg-[#8b5cf6]")).toBe(true);
   });
 
   it("opens the composer when the trigger is clicked", () => {

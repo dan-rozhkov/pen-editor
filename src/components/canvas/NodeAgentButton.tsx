@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SparkleIcon, ArrowUpIcon } from "@phosphor-icons/react";
 import { IconButton } from "@/components/ui/IconButton";
+import { cn } from "@/lib/utils";
 import type { AgentMode } from "@/store/chatStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { embedScreenRect } from "@/components/canvas/embedLayerGeometry";
@@ -14,6 +15,7 @@ interface NodeAgentButtonProps {
   absoluteX: number;
   absoluteY: number;
   placeholder: string;
+  isComponentContext?: boolean;
   launch: (nodeId: string, text: string, mode?: AgentMode) => void | Promise<unknown>;
 }
 
@@ -30,6 +32,7 @@ export function NodeAgentButton({
   absoluteX,
   absoluteY,
   placeholder,
+  isComponentContext = false,
   launch,
 }: NodeAgentButtonProps) {
   const scale = useViewportStore((s) => s.scale);
@@ -110,7 +113,12 @@ export function NodeAgentButton({
           side="top"
           variant="default"
           size="icon-sm"
-          className="size-6 rounded-lg bg-accent-primary text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)] hover:bg-accent-primary/90"
+          className={cn(
+            "size-6 rounded-lg text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)]",
+            isComponentContext
+              ? "bg-[#8b5cf6] hover:bg-[#8b5cf6]/90"
+              : "bg-accent-primary hover:bg-accent-primary/90",
+          )}
           onClick={() => setOpen(true)}
         >
           <SparkleIcon className="size-3.5" weight="fill" />
@@ -132,11 +140,16 @@ export function NodeAgentButton({
               side="top"
               variant="default"
               size="icon-sm"
-              className="size-5 shrink-0 rounded-lg bg-accent-primary text-white hover:bg-accent-primary/90"
+              className={cn(
+                "size-6 shrink-0 rounded-lg",
+                canSend
+                  ? "bg-accent-primary text-white hover:bg-accent-primary/90"
+                  : "bg-transparent text-text-secondary hover:bg-transparent disabled:opacity-100",
+              )}
               disabled={!canSend}
               onClick={submit}
             >
-              <ArrowUpIcon className="size-3" weight="regular" />
+              <ArrowUpIcon className="size-3.5" weight="regular" />
             </IconButton>
           </div>
           {/* Full-bleed divider: negative margins cancel the container padding. */}

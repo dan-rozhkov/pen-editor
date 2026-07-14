@@ -28,6 +28,20 @@ describe("<NodeAgentButton />", () => {
     expect(screen.queryByRole("textbox")).toBeNull();
   });
 
+  it("uses the component accent when requested", () => {
+    render(
+      <NodeAgentButton
+        node={node}
+        absoluteX={0}
+        absoluteY={0}
+        placeholder="Ask about this node…"
+        isComponentContext
+        launch={launch}
+      />,
+    );
+    expect(screen.getByLabelText("Ask agent").classList.contains("bg-[#8b5cf6]")).toBe(true);
+  });
+
   it("opens the composer with the given placeholder", () => {
     renderButton();
     fireEvent.click(screen.getByLabelText("Ask agent"));
@@ -58,9 +72,21 @@ describe("<NodeAgentButton />", () => {
     fireEvent.click(screen.getByLabelText("Ask agent"));
     const send = screen.getByLabelText("Send") as HTMLButtonElement;
     expect(send.disabled).toBe(true);
+    expect(send.classList.contains("bg-transparent")).toBe(true);
+    expect(send.classList.contains("text-text-secondary")).toBe(true);
+    expect(send.classList.contains("disabled:opacity-100")).toBe(true);
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "   " } });
     fireEvent.click(send);
     expect(launch).not.toHaveBeenCalled();
+  });
+
+  it("uses the blue send button only when there is text to send", () => {
+    renderButton();
+    fireEvent.click(screen.getByLabelText("Ask agent"));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Hello" } });
+    const send = screen.getByLabelText("Send") as HTMLButtonElement;
+    expect(send.disabled).toBe(false);
+    expect(send.classList.contains("bg-accent-primary")).toBe(true);
   });
 
   it("closes on Escape without launching", () => {

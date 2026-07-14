@@ -176,7 +176,9 @@ export function PixiCanvas() {
   const selectedFrameNode = useMemo(() => {
     if (selectedIds.length !== 1) return null;
     const selectedNode = nodesById[selectedIds[0]];
-    return selectedNode?.type === "frame" ? (selectedNode as FrameNode) : null;
+    return selectedNode?.type === "frame" || selectedNode?.type === "ref"
+      ? (selectedNode as FrameNode | RefNode)
+      : null;
   }, [selectedIds, nodesById]);
 
   const selectedFramePosition = useMemo(() => {
