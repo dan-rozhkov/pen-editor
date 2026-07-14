@@ -8,6 +8,30 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-07-14
+
+### Added
+- **Export page can produce images, not just a PDF.** The Export page section
+  gains a format selector — PNG, JPG, WebP or PDF (SVG stays per-node in export
+  settings). PDF is unchanged: every top-level frame becomes a page of one
+  multi-page PDF, in Layers order. Pick a raster format and each frame is
+  rasterized separately and downloaded as a single ZIP, one image per frame.
+  The 1x/2x/3x scale applies to both. Frames that share a name are deduplicated
+  (`Slide_1.png`, `Slide_1-2.png`) so nothing is silently dropped, and the
+  status line reports how many files actually landed in the archive.
+
+### Fixed
+- **JPG export no longer turns transparent areas black.** The canvas is
+  flattened onto white before JPEG encoding (JPEG has no alpha channel); PNG
+  and WebP keep transparency.
+
+### Changed
+- Raster page export no longer loads the PDF library. The frame helpers shared
+  by every exporter moved out of `exportPdfUtils` into `exportUtils`, so
+  `pdf-lib` (a 422KB chunk) is fetched only when you actually export a PDF.
+  The three near-identical Pixi extract-to-bytes copies in the PDF, PPTX and
+  ZIP exporters collapsed into one shared `extractImageBytes`.
+
 ## [0.36.0] - 2026-07-14
 
 ### Changed
