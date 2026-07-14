@@ -10,7 +10,7 @@
 
 import { generateId, type Effect, type FrameNode, type GradientFill, type PerCornerRadius, type SceneNode, type ShadowEffect, type TextNode } from '@/types/scene'
 import { extractCssUrl, parseColorWithOpacity } from '@/lib/htmlToDesign/colorParsing'
-import { parseCssLinearGradient } from '@/lib/htmlToDesign/gradientParsing'
+import { parseCssLinearGradient, parseCssRadialGradient } from '@/lib/htmlToDesign/gradientParsing'
 import { applyTextProps, parseShadows } from '@/lib/htmlToDesign/styleApplication'
 import { svgTextToDataUrl } from '@/lib/htmlToDesign/svgHandling'
 import { base64ToBytes } from '@/lib/clipboardPayload'
@@ -201,10 +201,32 @@ function applyBackground(base: Partial<FrameNode>, node: H2dElementNode, ctx: Co
     }
   }
   const bgImage = node.styles.backgroundImage
-  if (bgImage && bgImage.startsWith('linear-gradient')) {
+  if (bgImage && bgImage.includes('linear-gradient(')) {
+    // Also matches repeating-linear-gradient: the parser reads the inner
+    // linear-gradient stop list, giving a non-repeating approximation.
     const gradient: GradientFill | null = parseCssLinearGradient(bgImage)
     if (gradient) {
       base.gradientFill = gradient
+      return
+    }
+  }
+  if (bgImage && bgImage.includes('radial-gradient(')) {
+    // Also matches repeating-radial-gradient, same approximation strategy as
+    // the linear branch above.
+    const gradient: GradientFill | null = parseCssRadialGradient(bgImage)
+    if (gradient) {
+      base.gradientFill = gradient
+      return
+    }
+  }
+  if (bgImage && /conic-gradient\(/.test(bgImage) && !base.fill) {
+    // Unsupported gradient shape: degrade to the first stop color so the
+    // element keeps a visible box instead of being dropped as invisible.
+    const firstColor = bgImage.match(/(rgba?\([^)]*\)|#[0-9a-fA-F]{3,8})/)?.[1]
+    const parsed = firstColor ? parseColorWithOpacity(firstColor) : null
+    if (parsed) {
+      base.fill = parsed.color
+      if (parsed.opacity !== undefined) base.fillOpacity = parsed.opacity
       return
     }
   }

@@ -429,6 +429,49 @@ describe('convertH2dToSceneNodes (synthetic cases)', () => {
     expect(span.lineHeight).toBeUndefined()
   })
 
+  it('approximates repeating-linear-gradient as a linear gradientFill', () => {
+    const body = el('BODY', rect(0, 0, 100, 100), {}, [
+      el('DIV', rect(0, 0, 100, 50), {
+        backgroundImage: 'repeating-linear-gradient(45deg, rgb(254, 243, 199) 0px, rgb(253, 230, 138) 16px)',
+      }),
+    ])
+    const doc = buildDocument(body)
+    const { nodes } = convertH2dToSceneNodes(doc)
+    const root = nodes[0] as FrameNode
+    expect(root.children).toHaveLength(1)
+    const div = root.children[0] as FrameNode
+    expect(div.gradientFill?.type).toBe('linear')
+  })
+
+  it('approximates repeating-radial-gradient as a radial gradientFill', () => {
+    const body = el('BODY', rect(0, 0, 100, 100), {}, [
+      el('DIV', rect(0, 0, 100, 50), {
+        backgroundImage: 'repeating-radial-gradient(circle, rgb(254, 243, 199) 0px, rgb(253, 230, 138) 16px)',
+      }),
+    ])
+    const doc = buildDocument(body)
+    const { nodes } = convertH2dToSceneNodes(doc)
+    const root = nodes[0] as FrameNode
+    expect(root.children).toHaveLength(1)
+    const div = root.children[0] as FrameNode
+    expect(div.gradientFill?.type).toBe('radial')
+  })
+
+  it('falls back to the first stop color for an unsupported gradient function', () => {
+    const body = el('BODY', rect(0, 0, 100, 100), {}, [
+      el('DIV', rect(0, 0, 100, 50), {
+        backgroundImage: 'conic-gradient(rgb(255, 0, 0), rgb(0, 0, 255))',
+      }),
+    ])
+    const doc = buildDocument(body)
+    const { nodes } = convertH2dToSceneNodes(doc)
+    const root = nodes[0] as FrameNode
+    expect(root.children).toHaveLength(1)
+    const div = root.children[0] as FrameNode
+    expect(div.gradientFill).toBeUndefined()
+    expect(div.fill?.toLowerCase()).toBe('#ff0000')
+  })
+
   it('carries letterSpacing and underline through applyTextProps reuse', () => {
     const body = el('BODY', rect(0, 0, 100, 100), {}, [
       el(
