@@ -8,6 +8,27 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-07-14
+
+### Changed
+- **Play mode is a real presentation view, not a zoom on the canvas.** Entering
+  Play now shows only the active slide — every other top-level frame and root
+  node is hidden (derived on every resync, so a background resync can't reveal
+  them), and nodes you hid in the Layers panel stay hidden when you exit. The
+  canvas backdrop swaps to a dark, theme-independent
+  `--color-present-background` (scene data is untouched — `pageBackground` is
+  never mutated). The controls pill fades out after ~3s without mouse movement
+  and returns on the next move, staying visible while you hover it.
+- **Slides fit to the width of the screen.** New `viewportStore.fitToWidth`
+  scales the active frame to the viewport width with no padding: short slides
+  centre vertically, tall slides align to the top so they start at the
+  beginning. A slide taller than the screen scrolls down with the
+  wheel/trackpad, clamped to its own top and bottom edges — only `viewport.y`
+  moves, so zoom, horizontal pan and node editing stay locked in Play. Arrow
+  keys and Space still navigate between slides; touch drag remains blocked.
+  `fitToContent` is unchanged, so `viewCommands` and `PageControls` behave
+  exactly as before.
+
 ## [0.35.0] - 2026-07-14
 
 ### Changed
