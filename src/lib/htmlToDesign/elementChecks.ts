@@ -48,6 +48,8 @@ export function hasVisualStyling(style: CSSStyleDeclaration): boolean {
   if (borderTop > 0 || borderRight > 0 || borderBottom > 0 || borderLeft > 0) return true;
   const shadow = style.boxShadow;
   if (shadow && shadow !== "none") return true;
+  const bgImage = style.backgroundImage;
+  if (bgImage && bgImage !== "none") return true;
   return false;
 }
 

@@ -362,21 +362,15 @@ export function groupGridChildrenIntoRows(
 
   if (flowEntries.length === 0) return;
 
-  // Group flow children by their visual row (top coordinate)
+  // Group flow children into rows by chunking DOM order into groups of
+  // colCount items. With the default grid-auto-flow: row, the DOM order
+  // fills row-by-row, so this doesn't depend on rect tops — unlike top-based
+  // grouping, it's not thrown off by rows whose cells have different heights
+  // (e.g. align-items: end bar charts).
   const rows: { node: SceneNode; rect: DOMRect }[][] = [];
-  let currentRow: { node: SceneNode; rect: DOMRect }[] = [];
-  let currentRowTop: number | null = null;
-
-  for (const entry of flowEntries) {
-    if (currentRowTop === null || Math.abs(entry.rect.top - currentRowTop) > ALIGNMENT_TOLERANCE) {
-      if (currentRow.length > 0) rows.push(currentRow);
-      currentRow = [entry];
-      currentRowTop = entry.rect.top;
-    } else {
-      currentRow.push(entry);
-    }
+  for (let i = 0; i < flowEntries.length; i += grid.colCount) {
+    rows.push(flowEntries.slice(i, i + grid.colCount));
   }
-  if (currentRow.length > 0) rows.push(currentRow);
 
   const flowChildren = flowEntries.map((e) => e.node);
 
