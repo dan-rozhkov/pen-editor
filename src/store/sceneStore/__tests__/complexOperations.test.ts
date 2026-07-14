@@ -5,6 +5,7 @@ import { resetStores, seedScene } from "@/test/fixtures";
 import type { FlatFrameNode, EmbedNode, FlatSceneNode, TextNode } from "@/types/scene";
 import type { H2dDocument } from "@/lib/h2dPaste/h2dTypes";
 import { buildDocument, el, rect, text } from "@/lib/h2dPaste/__tests__/h2dFixture";
+import { captureEmbedHtmlToH2d } from "@/lib/h2dCapture/captureEmbed";
 
 const CAPTURE_FIXTURE: H2dDocument = buildDocument(
   el(
@@ -36,8 +37,13 @@ const CAPTURE_FIXTURE: H2dDocument = buildDocument(
 );
 
 vi.mock("@/lib/h2dCapture/captureEmbed", () => ({
-  captureEmbedHtmlToH2d: vi.fn().mockResolvedValue(CAPTURE_FIXTURE),
+  captureEmbedHtmlToH2d: vi.fn(),
 }));
+
+// The factory above can't reference CAPTURE_FIXTURE directly (vi.mock is
+// hoisted above the fixture's own initialization once something imports the
+// mocked module statically), so wire the default resolved value here instead.
+vi.mocked(captureEmbedHtmlToH2d).mockResolvedValue(CAPTURE_FIXTURE);
 
 function scene() {
   return useSceneStore.getState();
@@ -425,6 +431,40 @@ describe("complexOperations", () => {
     it("returns null for non-embed and missing nodes", async () => {
       expect(await scene().convertEmbedToDesign("rect1")).toBeNull();
       expect(await scene().convertEmbedToDesign("ghost")).toBeNull();
+    });
+
+    it("returns null and leaves no orphaned nodes/history when the embed is deleted while capture is pending", async () => {
+      seedEmbed();
+      const before = pastLen();
+      const nodesBefore = scene().nodesById;
+
+      let resolveCapture!: (doc: H2dDocument) => void;
+      const deferred = new Promise<H2dDocument>((resolve) => {
+        resolveCapture = resolve;
+      });
+      vi.mocked(captureEmbedHtmlToH2d).mockReturnValueOnce(deferred);
+
+      const pending = scene().convertEmbedToDesign("embed1");
+
+      // Concurrent delete of the embed while the capture is still in flight.
+      const s = scene();
+      const { embed1: _removed, ...remainingNodes } = s.nodesById;
+      useSceneStore.setState({
+        nodesById: remainingNodes,
+        rootIds: s.rootIds.filter((rid) => rid !== "embed1"),
+        _cachedTree: null,
+      });
+
+      resolveCapture(CAPTURE_FIXTURE);
+      const result = await pending;
+
+      expect(result).toBeNull();
+      // no new nodes were inserted beyond the pre-capture set minus the embed
+      expect(Object.keys(scene().nodesById).sort()).toEqual(
+        Object.keys(nodesBefore).filter((k) => k !== "embed1").sort(),
+      );
+      // no spurious history entry for the abandoned conversion
+      expect(pastLen()).toBe(before);
     });
   });
 });

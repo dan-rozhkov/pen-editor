@@ -562,8 +562,11 @@ export function createComplexOperations(
       rootFrame.clip = true;
       if (embed.name) rootFrame.name = embed.name;
 
-      // Re-read state after async gap to avoid stale snapshot
+      // Re-read state after async gap to avoid stale snapshot. A concurrent
+      // delete/undo during capture may have removed the embed already — bail
+      // out rather than inserting an unreachable converted tree.
       const state = get();
+      if (!state.nodesById[id]) return null;
       saveHistory(state);
 
       // Determine embed's parent and position

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * `captureEmbedHtmlToH2d` renders `htmlContent` into a same-origin iframe's
@@ -56,5 +56,43 @@ describe("captureEmbedHtmlToH2d", () => {
     expect(srcdoc).toMatch(/^<!doctype html><html><head><script>/);
     expect(srcdoc).toContain("__h2d_clone");
     expect(srcdoc).toContain(`<body style="margin:0">${SANITIZED_MARKER}</body>`);
+  });
+
+  describe("iframe load timeout", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.mocked(HTMLIFrameElement.prototype.addEventListener).mockRestore?.();
+    });
+
+    it("rejects and removes the iframe if `load` never fires", async () => {
+      // happy-dom does dispatch `load` for srcdoc iframes on its own event
+      // loop (unaffected by fake timers), which would race the timeout we're
+      // testing here. Suppress that listener registration so the only path
+      // that can settle the promise is our own setTimeout — this isolates
+      // the hang case deterministically.
+      vi.spyOn(HTMLIFrameElement.prototype, "addEventListener").mockImplementation(
+        () => {},
+      );
+
+      const promise = captureEmbedHtmlToH2d("<p>hi</p>", 50, 50);
+      const settled = vi.fn();
+      const failed = vi.fn();
+      promise.then(settled, failed);
+
+      expect(document.querySelector("iframe")).not.toBeNull();
+
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(settled).not.toHaveBeenCalled();
+      expect(failed).toHaveBeenCalledTimes(1);
+      expect(failed.mock.calls[0][0]).toBeInstanceOf(Error);
+      expect((failed.mock.calls[0][0] as Error).message).toMatch(/timed out/i);
+      // finally block removes the iframe even on the timeout path
+      expect(document.querySelector("iframe")).toBeNull();
+    });
   });
 });

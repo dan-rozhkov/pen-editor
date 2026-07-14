@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { toast } from "sonner";
 import type { EmbedNode } from "@/types/scene";
 import { PropertySection } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,9 @@ export function EmbedContentSection({ node }: EmbedContentSectionProps) {
       if (newFrameId) {
         useSelectionStore.getState().setSelectedIds([newFrameId]);
       }
+    } catch (error) {
+      console.error("Failed to convert embed to design:", error);
+      toast.error("Couldn't convert this embed to a design — please try again.");
     } finally {
       setConverting(false);
     }

@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { PenNibIcon, PencilSimpleLineIcon } from "@phosphor-icons/react";
+import { toast } from "sonner";
 import { IconButton } from "@/components/ui/IconButton";
 import type { EmbedNode } from "@/types/scene";
 import { useSceneStore } from "@/store/sceneStore";
@@ -54,6 +55,9 @@ export function EmbedActionBar({
         if (newFrameId) {
           useSelectionStore.getState().setSelectedIds([newFrameId]);
         }
+      } catch (error) {
+        console.error("Failed to convert embed to design:", error);
+        toast.error("Couldn't convert this embed to a design — please try again.");
       } finally {
         setIsConverting(false);
       }
