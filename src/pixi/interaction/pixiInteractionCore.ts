@@ -36,6 +36,7 @@ import { createScaleController } from "./scaleController";
 import { createDrawController } from "./drawController";
 import { createPencilController } from "./pencilController";
 import { createPenController } from "./penController";
+import { createTextPathController } from "./textPathController";
 import { createPathEditController } from "./pathEditController";
 import { enterPathEditMode } from "./pathEditMode";
 import { createConnectorController } from "./connectorController";
@@ -178,6 +179,7 @@ export function setupPixiInteraction(
   const draw = createDrawController(context);
   const pencil = createPencilController(context);
   const pen = createPenController(context);
+  const textPathTool = createTextPathController(context);
   const pathEdit = createPathEditController(context);
   const connector = createConnectorController(context);
   const drag = createDragController(context);
@@ -286,6 +288,7 @@ export function setupPixiInteraction(
       // Drawing mode (pencil/pen first, then connector, then standard draw)
       if (pencil.handlePointerDown(e, world)) return;
       if (pen.handlePointerDown(e, world)) return;
+      if (textPathTool.handlePointerDown(e, world)) return;
       if (connector.handlePointerDown(e, world)) return;
       if (draw.handlePointerDown(e, world)) return;
     }
@@ -423,6 +426,7 @@ export function setupPixiInteraction(
     if (pathEdit.handlePointerMove(e, world)) return;
     if (pencil.handlePointerMove(e, world)) return;
     if (pen.handlePointerMove(e, world)) return;
+    if (textPathTool.handlePointerMove(e, world)) return;
     if (connector.handlePointerMove(e, world)) return;
     if (draw.handlePointerMove(e, world)) return;
     if (scaleTool.handlePointerMove(e, world)) return;
