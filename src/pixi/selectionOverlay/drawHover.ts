@@ -3,6 +3,7 @@ import { useHoverStore, worldMouse } from "@/store/hoverStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
+import { useDevModeStore } from "@/store/devModeStore";
 import type { FlatFrameNode, TextNode } from "@/types/scene";
 import type { OverlayHelpers, Rect } from "./helpers";
 import { drawTextBaselines, drawDashedRect, drawHatchedRect } from "./helpers";
@@ -119,18 +120,25 @@ export function redrawHover(
     return;
   }
 
-  if (!hoveredNodeId) return;
+  const state = useSceneStore.getState();
+  const selectedId = selectedIds.length === 1 ? selectedIds[0] : null;
+  const selectedFrameId =
+    useDevModeStore.getState().active && selectedId && state.nodesById[selectedId]?.type === "frame"
+      ? selectedId
+      : null;
+  const selectedTargetId =
+    hoveredNodeId && selectedIds.includes(hoveredNodeId) ? hoveredNodeId : selectedFrameId;
 
-  // When hovering a selected node, show dotted outlines on its direct children
-  if (selectedIds.includes(hoveredNodeId)) {
-    const state = useSceneStore.getState();
-    const children = state.childrenById[hoveredNodeId];
+  // A selected frame's auto-layout spacing is persistent in Dev Mode. Outside
+  // Dev Mode, keep the existing hover-only behaviour.
+  if (selectedTargetId) {
+    const children = state.childrenById[selectedTargetId];
     const scale = useViewportStore.getState().scale;
 
     // Precompute child rects (used by both dashed outlines and spacing overlays)
     const childRectMap = new Map<string, Rect>();
     if (children && children.length > 0) {
-      const color = helpers.getSelectionColor(hoveredNodeId);
+      const color = helpers.getSelectionColor(selectedTargetId);
       for (const childId of children) {
         const childNode = state.nodesById[childId];
         if (!childNode || childNode.visible === false) continue;
@@ -142,11 +150,11 @@ export function redrawHover(
     }
 
     // Draw padding & gap overlays for auto-layout frames
-    const node = state.nodesById[hoveredNodeId];
+    const node = state.nodesById[selectedTargetId];
     if (node?.type === "frame") {
       const frameNode = node as FlatFrameNode;
       if (frameNode.layout?.autoLayout) {
-        const parentRect = helpers.getNodeDrawRect(hoveredNodeId);
+        const parentRect = helpers.getNodeDrawRect(selectedTargetId);
         if (parentRect) {
           drawSpacingOverlays(spacingOverlay, spacingLabel, frameNode, parentRect, children ?? [], state, childRectMap, scale);
         }
@@ -154,6 +162,8 @@ export function redrawHover(
     }
     return;
   }
+
+  if (!hoveredNodeId) return;
 
   // Regular hover outline
   const node = useSceneStore.getState().nodesById[hoveredNodeId];

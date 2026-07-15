@@ -4,6 +4,7 @@ import { useHoverStore } from "@/store/hoverStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
+import { useDevModeStore } from "@/store/devModeStore";
 import { createOverlayHelpers } from "./helpers";
 import { redrawSelection } from "./drawSelection";
 import { redrawHover, cleanupSpacingPool } from "./drawHover";
@@ -120,6 +121,13 @@ export function createSelectionOverlay(
     scheduleSelectionRedraw(DIRTY_SELECTION | DIRTY_FRAME_NAMES);
   });
 
+  // Dev Mode makes a selected auto-layout frame's spacing overlays persistent,
+  // so entering or exiting it must redraw the hover layer even if the cursor
+  // and selection have not changed.
+  const unsubDevMode = useDevModeStore.subscribe(() => {
+    scheduleSelectionRedraw(DIRTY_HOVER);
+  });
+
   // Editor mode toggles whether transform handles are drawn — redraw on change.
   let lastMode = useEditorModeStore.getState().mode;
   const unsubMode = useEditorModeStore.subscribe(() => {
@@ -199,6 +207,7 @@ export function createSelectionOverlay(
     unsubSelection();
     unsubHover();
     unsubScene();
+    unsubDevMode();
     unsubViewport();
     unsubMode();
     frameNameRenderer.cleanup();
