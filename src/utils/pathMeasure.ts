@@ -20,6 +20,17 @@ import { cubicDerivative, cubicValue } from "./pathAnchors";
  * nearest sample) via `cubicValue`/`cubicDerivative`. This keeps the
  * returned point/tangent exact while only needing the LUT for the
  * length->t mapping (which has no closed form for a cubic).
+ *
+ * `preparePath(points, closed)` builds the segment LUT exactly once and
+ * returns a small object callers hold onto and query repeatedly
+ * (`getTotalLength`/`getPointAtLength`/`getClosestPoint`) — the
+ * `getTotalLength`/`getPointAtLength`/`getClosestPointOnPath` module
+ * functions below are thin convenience wrappers around a fresh
+ * `preparePath()` call for one-shot callers, but a hot loop (per-glyph
+ * layout, or a drag handler firing `getClosestPointOnPath` ~250 times per
+ * pointermove) MUST call `preparePath` once and reuse the returned object,
+ * or it silently re-samples the whole contour (64 cubic evals x2 axes per
+ * segment) on every single point/probe query.
  */
 
 /** Samples per segment for the length LUT. Enough for sub-pixel accuracy on typical canvas-scale paths. */
@@ -92,14 +103,6 @@ function buildSegments(points: PathAnchor[], closed: boolean): Segment[] {
   return segments;
 }
 
-/** Total arc length of the contour described by `points` (see `pathAnchors.ts` for the anchor model). */
-export function getTotalLength(points: PathAnchor[], closed: boolean): number {
-  const segments = buildSegments(points, closed);
-  if (segments.length === 0) return 0;
-  const last = segments[segments.length - 1];
-  return last.startLength + last.length;
-}
-
 /** Binary search a segment's length LUT for the sample bracketing `localLen`, returning an interpolated `t`. */
 function tAtLocalLength(seg: Segment, localLen: number): number {
   const samples = seg.samples;
@@ -136,13 +139,6 @@ function pointOnSegment(seg: Segment, t: number): PointOnPath {
   return { x, y, angle };
 }
 
-/**
- * Point (and tangent angle) at arc-length `len` along the contour. Clamps
- * `len` to `[0, getTotalLength(...)]` — matches SVG `getPointAtLength`
- * semantics, which likewise clamps rather than throwing. A path with fewer
- * than 2 anchors has no defined tangent; returns the single point (or the
- * origin for an empty path) with `angle: 0`.
- */
 export interface ClosestPointResult extends PointOnPath {
   /** Arc-length at which the closest point occurs. */
   length: number;
@@ -151,15 +147,119 @@ export interface ClosestPointResult extends PointOnPath {
 }
 
 /**
- * Nearest point on the contour to an arbitrary (x, y), by arc length. Used by
- * the text-on-path tool (click-to-convert hover/hit-test) and the start-
- * offset handle drag — both need "where along this curve is the pointer"
- * rather than a fixed length. Coarse sample over the whole contour (reusing
- * the same segment LUTs `getTotalLength`/`getPointAtLength` build) followed
- * by a local golden-section refinement between the two bracketing samples,
- * so accuracy doesn't depend on bumping the coarse sample count arbitrarily
- * high.
+ * A contour's segment LUT, built once, plus the query methods that reuse it.
+ * Callers that need more than one point/probe against the same `points`
+ * (per-glyph text-on-path layout, the start-offset drag handle's per-
+ * pointermove hit-test) must call `preparePath` once and hold the result —
+ * see this module's doc comment.
  */
+export interface PreparedPath {
+  /** Total arc length of the contour. */
+  readonly totalLength: number;
+  /**
+   * Point (and tangent angle) at arc-length `len` along the contour. Clamps
+   * `len` to `[0, totalLength]` — matches SVG `getPointAtLength` semantics,
+   * which likewise clamps rather than throwing. A path with fewer than 2
+   * anchors has no defined tangent; returns the single point (or the origin
+   * for an empty path) with `angle: 0`.
+   */
+  getPointAtLength(len: number): PointOnPath;
+  /**
+   * Nearest point on the contour to an arbitrary (x, y), by arc length.
+   * Coarse sample over the whole contour followed by a local golden-section
+   * refinement between the two bracketing samples, so accuracy doesn't
+   * depend on bumping the coarse sample count arbitrarily high.
+   */
+  getClosestPoint(x: number, y: number, coarseSamples?: number): ClosestPointResult | null;
+}
+
+/**
+ * Build the segment LUT for `points`/`closed` exactly once and return a
+ * handle for repeated point/tangent/closest-point queries against it. See
+ * this module's doc comment for why callers in a loop or a per-pointermove
+ * handler must use this instead of the one-shot `getPointAtLength`/
+ * `getClosestPointOnPath` convenience functions below.
+ */
+export function preparePath(points: PathAnchor[], closed: boolean): PreparedPath {
+  const segments = buildSegments(points, closed);
+  const totalLength =
+    segments.length > 0 ? segments[segments.length - 1].startLength + segments[segments.length - 1].length : 0;
+
+  function getPointAtLength(len: number): PointOnPath {
+    if (points.length === 0) return { x: 0, y: 0, angle: 0 };
+    if (points.length === 1) return { x: points[0].x, y: points[0].y, angle: 0 };
+
+    const clamped = Math.max(0, Math.min(totalLength, len));
+
+    // Binary search segments by startLength for the one containing `clamped`.
+    let lo = 0;
+    let hi = segments.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (segments[mid].startLength <= clamped) lo = mid;
+      else hi = mid - 1;
+    }
+    const seg = segments[lo];
+    const localLen = clamped - seg.startLength;
+    const t = tAtLocalLength(seg, localLen);
+    return pointOnSegment(seg, t);
+  }
+
+  function getClosestPoint(x: number, y: number, coarseSamples = 200): ClosestPointResult | null {
+    if (points.length === 0) return null;
+    if (points.length === 1 || totalLength === 0) {
+      const only = getPointAtLength(0);
+      return { ...only, length: 0, distance: Math.hypot(x - only.x, y - only.y) };
+    }
+
+    const distAt = (len: number): number => {
+      const p = getPointAtLength(len);
+      return Math.hypot(x - p.x, y - p.y);
+    };
+
+    let bestLen = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i <= coarseSamples; i++) {
+      const len = (i / coarseSamples) * totalLength;
+      const d = distAt(len);
+      if (d < bestDist) {
+        bestDist = d;
+        bestLen = len;
+      }
+    }
+
+    // Golden-section search within one coarse-sample span around the best
+    // hit for sub-sample precision.
+    const span = totalLength / coarseSamples;
+    let lo = Math.max(0, bestLen - span);
+    let hi = Math.min(totalLength, bestLen + span);
+    const gr = (Math.sqrt(5) - 1) / 2;
+    for (let i = 0; i < 24 && hi - lo > 1e-4; i++) {
+      const c = hi - gr * (hi - lo);
+      const d = hi - (hi - lo) * (1 - gr);
+      if (distAt(c) < distAt(d)) hi = d;
+      else lo = c;
+    }
+    bestLen = (lo + hi) / 2;
+
+    const point = getPointAtLength(bestLen);
+    return { ...point, length: bestLen, distance: Math.hypot(x - point.x, y - point.y) };
+  }
+
+  return { totalLength, getPointAtLength, getClosestPoint };
+}
+
+/** Total arc length of the contour described by `points` (see `pathAnchors.ts` for the anchor model). One-shot convenience wrapper — see this module's doc comment for hot-loop callers. */
+export function getTotalLength(points: PathAnchor[], closed: boolean): number {
+  return preparePath(points, closed).totalLength;
+}
+
+/** One-shot convenience wrapper around `preparePath(...).getPointAtLength(...)` — see this module's doc comment for hot-loop callers. */
+export function getPointAtLength(points: PathAnchor[], closed: boolean, len: number): PointOnPath {
+  return preparePath(points, closed).getPointAtLength(len);
+}
+
+/** One-shot convenience wrapper around `preparePath(...).getClosestPoint(...)` — see this module's doc comment for hot-loop callers (e.g. a pointermove handler probing the same contour repeatedly). */
 export function getClosestPointOnPath(
   points: PathAnchor[],
   closed: boolean,
@@ -167,65 +267,5 @@ export function getClosestPointOnPath(
   y: number,
   coarseSamples = 200,
 ): ClosestPointResult | null {
-  const total = getTotalLength(points, closed);
-  if (points.length === 0) return null;
-  if (points.length === 1 || total === 0) {
-    const only = getPointAtLength(points, closed, 0);
-    return { ...only, length: 0, distance: Math.hypot(x - only.x, y - only.y) };
-  }
-
-  const distAt = (len: number): number => {
-    const p = getPointAtLength(points, closed, len);
-    return Math.hypot(x - p.x, y - p.y);
-  };
-
-  let bestLen = 0;
-  let bestDist = Infinity;
-  for (let i = 0; i <= coarseSamples; i++) {
-    const len = (i / coarseSamples) * total;
-    const d = distAt(len);
-    if (d < bestDist) {
-      bestDist = d;
-      bestLen = len;
-    }
-  }
-
-  // Golden-section search within one coarse-sample span around the best hit
-  // for sub-sample precision.
-  const span = total / coarseSamples;
-  let lo = Math.max(0, bestLen - span);
-  let hi = Math.min(total, bestLen + span);
-  const gr = (Math.sqrt(5) - 1) / 2;
-  for (let i = 0; i < 24 && hi - lo > 1e-4; i++) {
-    const c = hi - gr * (hi - lo);
-    const d = hi - (hi - lo) * (1 - gr);
-    if (distAt(c) < distAt(d)) hi = d;
-    else lo = c;
-  }
-  bestLen = (lo + hi) / 2;
-
-  const point = getPointAtLength(points, closed, bestLen);
-  return { ...point, length: bestLen, distance: Math.hypot(x - point.x, y - point.y) };
-}
-
-export function getPointAtLength(points: PathAnchor[], closed: boolean, len: number): PointOnPath {
-  if (points.length === 0) return { x: 0, y: 0, angle: 0 };
-  if (points.length === 1) return { x: points[0].x, y: points[0].y, angle: 0 };
-
-  const segments = buildSegments(points, closed);
-  const total = segments.length > 0 ? segments[segments.length - 1].startLength + segments[segments.length - 1].length : 0;
-  const clamped = Math.max(0, Math.min(total, len));
-
-  // Binary search segments by startLength for the one containing `clamped`.
-  let lo = 0;
-  let hi = segments.length - 1;
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1;
-    if (segments[mid].startLength <= clamped) lo = mid;
-    else hi = mid - 1;
-  }
-  const seg = segments[lo];
-  const localLen = clamped - seg.startLength;
-  const t = tAtLocalLength(seg, localLen);
-  return pointOnSegment(seg, t);
+  return preparePath(points, closed).getClosestPoint(x, y, coarseSamples);
 }

@@ -1,5 +1,5 @@
 import type { TextNode } from "@/types/scene";
-import { getClosestPointOnPath, getPointAtLength, getTotalLength } from "@/utils/pathMeasure";
+import { preparePath } from "@/utils/pathMeasure";
 
 /**
  * Pure geometry for the on-canvas `startOffset` drag handle (the "blue
@@ -22,10 +22,10 @@ export function getStartOffsetHandleWorldPos(
   tp: TextPath,
   absPos: { x: number; y: number },
 ): { x: number; y: number } | null {
-  const total = getTotalLength(tp.points, tp.closed ?? false);
   if (tp.points.length === 0) return null;
+  const prepared = preparePath(tp.points, tp.closed ?? false);
   const clampedOffset = Math.max(0, Math.min(1, tp.startOffset ?? 0));
-  const point = getPointAtLength(tp.points, tp.closed ?? false, clampedOffset * total);
+  const point = prepared.getPointAtLength(clampedOffset * prepared.totalLength);
   return { x: absPos.x + point.x, y: absPos.y + point.y };
 }
 
@@ -57,11 +57,16 @@ export function offsetFromWorldPoint(
   worldX: number,
   worldY: number,
 ): number {
-  const total = getTotalLength(tp.points, tp.closed ?? false);
-  if (total <= 0) return Math.max(0, Math.min(1, tp.startOffset ?? 0));
+  // Built once per call (this fires on every pointermove while dragging the
+  // handle) and reused for the closest-point search's ~250 internal probes —
+  // see `@/utils/pathMeasure`'s doc comment on why a hot caller must hold a
+  // single `PreparedPath` rather than go through the one-shot
+  // `getTotalLength`/`getClosestPointOnPath` wrappers per probe.
+  const prepared = preparePath(tp.points, tp.closed ?? false);
+  if (prepared.totalLength <= 0) return Math.max(0, Math.min(1, tp.startOffset ?? 0));
   const localX = worldX - absPos.x;
   const localY = worldY - absPos.y;
-  const closest = getClosestPointOnPath(tp.points, tp.closed ?? false, localX, localY);
+  const closest = prepared.getClosestPoint(localX, localY);
   if (!closest) return Math.max(0, Math.min(1, tp.startOffset ?? 0));
-  return Math.max(0, Math.min(1, closest.length / total));
+  return Math.max(0, Math.min(1, closest.length / prepared.totalLength));
 }

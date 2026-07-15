@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { getTotalLength, getPointAtLength, getClosestPointOnPath } from "../pathMeasure";
+import { describe, it, expect, vi } from "vitest";
+import { getTotalLength, getPointAtLength, getClosestPointOnPath, preparePath } from "../pathMeasure";
+import * as pathAnchorsModule from "../pathAnchors";
 import type { PathAnchor } from "../pathAnchors";
 
 describe("getTotalLength", () => {
@@ -203,5 +204,65 @@ describe("getClosestPointOnPath", () => {
   it("returns the single point for a one-anchor path", () => {
     const res = getClosestPointOnPath([{ x: 5, y: 5 }], false, 100, 100);
     expect(res).toEqual({ x: 5, y: 5, angle: 0, length: 0, distance: Math.hypot(95, 95) });
+  });
+});
+
+describe("preparePath — LUT reuse (finding 3 regression)", () => {
+  // `buildSegments` samples every segment via `cubicValue` (2 calls per
+  // sample: one per axis) — the number of `cubicValue` calls is a direct
+  // proxy for "did the segment LUT get rebuilt". A query that re-evaluates
+  // the *exact* cubic at an interpolated `t` (not a re-sample) costs exactly
+  // 2 `cubicValue` calls (x and y) regardless of the LUT's sample count.
+  it("builds the LUT once and every subsequent getPointAtLength call costs exactly 2 cubicValue calls (no re-sampling)", () => {
+    const points: PathAnchor[] = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 100 },
+    ];
+    const spy = vi.spyOn(pathAnchorsModule, "cubicValue");
+    spy.mockClear();
+
+    const prepared = preparePath(points, false);
+    const buildCallCount = spy.mock.calls.length;
+    // Two straight segments, each sampled — real sampling work happened.
+    expect(buildCallCount).toBeGreaterThan(0);
+
+    spy.mockClear();
+    const probeCount = 250;
+    for (let i = 0; i < probeCount; i++) {
+      prepared.getPointAtLength((i / probeCount) * prepared.totalLength);
+    }
+
+    // If each query rebuilt the LUT, this would be `probeCount * buildCallCount`
+    // (tens of thousands of calls for 250 probes); reusing the prepared LUT
+    // costs exactly 2 calls per query.
+    expect(spy.mock.calls.length).toBe(probeCount * 2);
+  });
+
+  it("getClosestPointOnPath (the start-offset drag handle's hot path) does not rebuild the LUT per internal probe", () => {
+    const points: PathAnchor[] = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+    ];
+
+    // Cost of building this path's LUT exactly once, for comparison.
+    let spy = vi.spyOn(pathAnchorsModule, "cubicValue");
+    spy.mockClear();
+    preparePath(points, false);
+    const singleBuildCost = spy.mock.calls.length;
+    expect(singleBuildCost).toBeGreaterThan(0);
+
+    spy = vi.spyOn(pathAnchorsModule, "cubicValue");
+    spy.mockClear();
+    // `getClosestPointOnPath` probes ~200 coarse samples + a golden-section
+    // refinement (~10s more) internally — dragging the start-offset handle
+    // calls this once per pointermove.
+    getClosestPointOnPath(points, false, 40, 10, 200);
+
+    // Before the fix, each internal probe rebuilt the whole LUT from
+    // scratch, so total cost would be on the order of
+    // `~250 * singleBuildCost`. Reusing one `PreparedPath` for the whole
+    // call keeps it to a small constant multiple of a single build.
+    expect(spy.mock.calls.length).toBeLessThan(singleBuildCost * 5);
   });
 });
