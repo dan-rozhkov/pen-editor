@@ -40,6 +40,10 @@ export interface InspectData {
   box: {
     width: number;
     height: number;
+    borderTop: number;
+    borderRight: number;
+    borderBottom: number;
+    borderLeft: number;
     paddingTop: number;
     paddingRight: number;
     paddingBottom: number;
@@ -93,6 +97,25 @@ interface BoxMetrics {
   paddingBottom: number;
   paddingLeft: number;
   gap?: number;
+}
+
+interface BoxBorderMetrics {
+  borderTop: number;
+  borderRight: number;
+  borderBottom: number;
+  borderLeft: number;
+}
+
+/** Derive box-model border widths from the node's shared or per-side stroke. */
+function computeBoxBorderMetrics(node: FlatSceneNode): BoxBorderMetrics {
+  if (node.strokeWidthPerSide) {
+    const { top = 0, right = 0, bottom = 0, left = 0 } = node.strokeWidthPerSide;
+    return { borderTop: top, borderRight: right, borderBottom: bottom, borderLeft: left };
+  }
+
+  const pathStroke: PathStroke | undefined = node.type === "path" ? node.pathStroke : undefined;
+  const width = node.strokeWidth ?? pathStroke?.thickness ?? 0;
+  return { borderTop: width, borderRight: width, borderBottom: width, borderLeft: width };
 }
 
 /**
@@ -331,6 +354,7 @@ export function buildInspectData(input: BuildInspectDataInput): InspectData | nu
   if (!node) return null;
 
   const { paddingTop, paddingRight, paddingBottom, paddingLeft, gap } = computeBoxMetrics(node);
+  const { borderTop, borderRight, borderBottom, borderLeft } = computeBoxBorderMetrics(node);
 
   const header: InspectData["header"] = {
     name: node.name ?? node.type,
@@ -364,6 +388,10 @@ export function buildInspectData(input: BuildInspectDataInput): InspectData | nu
     box: {
       width: rect.width,
       height: rect.height,
+      borderTop,
+      borderRight,
+      borderBottom,
+      borderLeft,
       paddingTop,
       paddingRight,
       paddingBottom,

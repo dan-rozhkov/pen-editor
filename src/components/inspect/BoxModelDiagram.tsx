@@ -21,6 +21,7 @@ export function BoxModelDiagram({
     const value = fmt(px);
     return value.endsWith(units) ? value.slice(0, -units.length) : value;
   };
+  const fmtBorder = (px: number) => (px > 0 ? fmt(px) : "−");
   const hasPadding =
     box.paddingTop > 0 || box.paddingRight > 0 || box.paddingBottom > 0 || box.paddingLeft > 0;
 
@@ -33,10 +34,18 @@ export function BoxModelDiagram({
         <div className="relative h-full rounded border border-border-default bg-surface-panel">
           <span className="absolute left-1/2 top-2 -translate-x-1/2 text-sm text-text-muted">Border</span>
 
-          <span className="absolute left-6 top-2 text-xs text-text-muted">−</span>
-          <span className="absolute right-6 top-2 text-xs text-text-muted">−</span>
-          <span className="absolute bottom-3 left-6 text-xs text-text-muted">−</span>
-          <span className="absolute bottom-3 right-6 text-xs text-text-muted">−</span>
+          <span className="absolute left-6 top-2 text-xs text-text-muted">
+            {fmtBorder(box.borderTop)}
+          </span>
+          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-text-muted">
+            {fmtBorder(box.borderRight)}
+          </span>
+          <span className="absolute bottom-2 left-1/2 -translate-x-1/2 text-xs text-text-muted">
+            {fmtBorder(box.borderBottom)}
+          </span>
+          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-text-muted">
+            {fmtBorder(box.borderLeft)}
+          </span>
 
           <div className="absolute inset-x-5 inset-y-10 rounded border-2 border-text-primary bg-accent-selection">
             <span className="absolute left-3 top-1 text-xs text-text-muted">Padding</span>

@@ -39,6 +39,7 @@ describe("buildInspectData", () => {
       y: 0,
       width: 200,
       height: 100,
+      strokeWidthPerSide: { top: 1, right: 2, bottom: 3, left: 4 },
       layout: {
         autoLayout: true,
         flexDirection: "row",
@@ -56,6 +57,10 @@ describe("buildInspectData", () => {
     expect(data.header.type).toBe("frame");
     expect(data.box.width).toBe(200);
     expect(data.box.height).toBe(100);
+    expect(data.box.borderTop).toBe(1);
+    expect(data.box.borderRight).toBe(2);
+    expect(data.box.borderBottom).toBe(3);
+    expect(data.box.borderLeft).toBe(4);
     expect(data.box.paddingTop).toBe(12);
     expect(data.box.paddingRight).toBe(12);
     expect(data.box.paddingBottom).toBe(12);
@@ -87,6 +92,10 @@ describe("buildInspectData", () => {
 
     expect(data.box.width).toBe(50);
     expect(data.box.height).toBe(40);
+    expect(data.box.borderTop).toBe(0);
+    expect(data.box.borderRight).toBe(0);
+    expect(data.box.borderBottom).toBe(0);
+    expect(data.box.borderLeft).toBe(0);
     expect(data.box.paddingTop).toBe(0);
     expect(data.box.paddingRight).toBe(0);
     expect(data.box.paddingBottom).toBe(0);
