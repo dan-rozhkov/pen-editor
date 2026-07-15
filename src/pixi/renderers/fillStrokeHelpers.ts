@@ -434,10 +434,26 @@ export function fillSolidPaint(gfx: Graphics, paint: SolidPaint): void {
  */
 export type ShapeDrawer = (target: Graphics) => void;
 
-const BLEND_FILL_LAYER_LABEL = "fill-blend-layer";
+/**
+ * A paint stack (fill or stroke) whose per-layer blend mode is non-'normal'
+ * needs its own sibling `Graphics` so Pixi's compositor can apply that blend
+ * mode in isolation — a single `Graphics` object only has one `blendMode`.
+ * Both `applyFills` and `applyStroke` create these layers; they're
+ * distinguished by label/flag so clearing one never touches the other's
+ * layers (both run back-to-back on the same `gfx`/container per node render).
+ */
+type BlendLayerKind = "fill" | "stroke";
 
-/** Container carrying a marker for previously created blend fill layers. */
-type ContainerWithBlendFlag = Container & { _hasBlendFillLayers?: boolean };
+const BLEND_LAYER_LABEL: Record<BlendLayerKind, string> = {
+  fill: "fill-blend-layer",
+  stroke: "stroke-blend-layer",
+};
+
+/** Container carrying markers for previously created fill/stroke blend layers. */
+type ContainerWithBlendFlags = Container & {
+  _hasBlendFillLayers?: boolean;
+  _hasBlendStrokeLayers?: boolean;
+};
 
 /**
  * Render the node's paint stack (bottom-to-top) onto `container`.
@@ -463,7 +479,7 @@ export function applyFills(
   height: number,
   drawShape: ShapeDrawer,
 ): boolean {
-  const container = baseGfx.parent as ContainerWithBlendFlag | null;
+  const container = baseGfx.parent as ContainerWithBlendFlags | null;
 
   const fills = getResolvedRenderableFills(node);
   const needsBlend = fills.some(
@@ -474,7 +490,7 @@ export function applyFills(
   // frames) when blend layers exist or are about to. The typical no-blend case
   // skips both the scan and the `getChildIndex` lookup entirely.
   if (container && (container._hasBlendFillLayers || needsBlend)) {
-    clearBlendFillLayers(container);
+    clearBlendLayers(container, "fill");
     container._hasBlendFillLayers = needsBlend;
   }
 
@@ -489,10 +505,11 @@ export function applyFills(
 
     let target = baseGfx;
     if (paintNeedsOwnLayer(paint.blendMode) && container) {
-      target = createBlendFillLayer(
+      target = createBlendLayer(
         container,
         resolvePaintBlendMode(paint.blendMode),
         blendInsertIndex,
+        "fill",
       );
       blendInsertIndex++;
     }
@@ -512,33 +529,60 @@ export function applyFills(
   return pathOnBase;
 }
 
-function createBlendFillLayer(
+function createBlendLayer(
   container: Container,
   blendMode: BLEND_MODES,
   index: number,
+  kind: BlendLayerKind,
 ): Graphics {
   const layer = new Graphics();
-  layer.label = BLEND_FILL_LAYER_LABEL;
+  layer.label = BLEND_LAYER_LABEL[kind];
   layer.blendMode = blendMode;
   container.addChildAt(layer, Math.min(index, container.children.length));
   return layer;
 }
 
-/** Remove all blend fill layers previously created for this container. */
-function clearBlendFillLayers(container: Container): void {
+/** Remove all previously created blend layers of the given kind for this container. */
+function clearBlendLayers(container: Container, kind: BlendLayerKind): void {
+  const label = BLEND_LAYER_LABEL[kind];
   for (let i = container.children.length - 1; i >= 0; i--) {
     const child = container.children[i];
-    if (child.label === BLEND_FILL_LAYER_LABEL) {
+    if (child.label === label) {
       container.removeChildAt(i);
       child.destroy();
     }
   }
 }
 
+/**
+ * Insertion index for a new stroke blend layer: directly above `baseGfx` and
+ * any existing fill-blend-layers (`applyFills` always runs immediately before
+ * `applyStroke` on the same `gfx`/container, see the four renderer call
+ * sites), so strokes composite above the fully-resolved fill — matching where
+ * a plain `.stroke()` call already visually lands today (drawn onto `baseGfx`
+ * after its fill) — and below any later-added content (image/video fill
+ * sprites, child nodes), which is only appended to the container after
+ * `drawShape`'s caller returns.
+ */
+function findStrokeBlendInsertIndex(container: Container, baseGfx: Graphics): number {
+  let idx = container.getChildIndex(baseGfx) + 1;
+  while (idx < container.children.length && container.children[idx].label === BLEND_LAYER_LABEL.fill) {
+    idx++;
+  }
+  return idx;
+}
+
 /** Resolve a single stroke paint's solid color to a Pixi `stroke()` color+alpha pair. */
 function strokePaintColor(paint: SolidPaint): string | undefined {
   return getResolvedSolidPaint(paint);
 }
+
+/** A stroke paint resolved to something drawable, built BEFORE any `drawShape`
+ *  call so an unresolvable solid color never leaves a redrawn path unconsumed
+ *  (see `applyStroke`'s doc comment). */
+type DrawableStroke =
+  | { kind: 'gradient'; paint: Extract<Paint, { type: 'gradient' }> }
+  | { kind: 'solid'; paint: SolidPaint; color: string };
 
 /**
  * Apply the stroke paint stack (per-side or unified) after the shape is drawn.
@@ -547,22 +591,39 @@ function strokePaintColor(paint: SolidPaint): string | undefined {
  * see `BaseNode.strokes` doc comment); `strokes`/legacy stroke fields only
  * vary color/gradient/opacity/blendMode, composited bottom-to-top in that
  * SAME geometry (later paints drawn on top of earlier ones, not offset
- * outward — mirrors `applyFills`).
+ * outward — mirrors `applyFills`). A paint whose blend mode is non-'normal'
+ * draws into its own sibling Graphics (mirroring `applyFills`'s blend-layer
+ * mechanism), so the per-paint blend-mode control in `StrokeSection` actually
+ * takes effect on the canvas.
  *
  * Pixi v8 consumes the current path on every `.stroke()` (like `.fill()`), so
- * each additional paint layer needs the shape path redrawn via `drawShape`.
- * The first layer may reuse an already-fresh path left by the last fill
- * (`pathReady`), skipping one redundant redraw — same optimization
- * `applyFills`'s caller-facing `pathReady` return enables today.
+ * each additional paint layer drawn onto `gfx` needs the shape path redrawn
+ * via `drawShape` (a blend layer is a distinct Graphics and always needs its
+ * own fresh `drawShape` call, since it never inherits `gfx`'s path). The
+ * first layer targeting `gfx` may reuse an already-fresh path left by the
+ * last fill (`pathReady`), skipping one redundant redraw — same optimization
+ * `applyFills`'s caller-facing `pathReady` return enables today. Paints are
+ * resolved to a `DrawableStroke` (color looked up, unresolvable solids
+ * dropped) BEFORE this loop runs, so a paint that fails to resolve never
+ * triggers a `drawShape` redraw that no `.stroke()` call consumes — that
+ * would leave two superimposed shape paths on `gfx` for the next iteration to
+ * stroke together.
  *
- * Per-side stroke + gradient is an explicitly out-of-scope combination (the
- * task spec flags per-side gradient geometry as ambiguous — four independent
- * segments have no single bbox to map a gradient onto consistently with
- * Figma). The UI (`StrokeSection`) blocks switching to per-side mode when the
- * stroke stack contains a gradient paint and vice versa; this function's
- * per-side branch defensively falls back to the topmost visible SOLID paint's
- * color only (ignoring any gradient paints) so a `.pen` file that ends up
- * with both anyway still renders something reasonable instead of crashing.
+ * Per-side stroke + gradient has no single bbox to map four independent
+ * segments onto consistently with Figma, so the UI (`StrokeSection`) blocks
+ * switching to per-side mode when the stroke stack contains a gradient paint
+ * and vice versa. That guard only covers hand-editing, though — Figma paste
+ * (`applyStrokePaints` in `figmaToScene/base.ts`) can still produce the
+ * combination when a node has both `borderStrokeWeightsIndependent` and a
+ * gradient stroke. This function's per-side branch first tries the topmost
+ * visible SOLID paint's color (unchanged, still ignores any gradient paints
+ * mixed into an otherwise-solid stack); only when the stack has NO solid
+ * paint at all (i.e. gradient-only) does it fall through to the uniform
+ * branch below, which renders the full stack (including the gradient) mapped
+ * to the node's own bbox at the node's uniform `strokeWidth` — ignoring the
+ * per-side widths but preserving the gradient's actual appearance. Judged to
+ * lose less than either flattening the gradient to a per-side solid color or
+ * rendering nothing.
  */
 export function applyStroke(
   gfx: Graphics,
@@ -572,8 +633,22 @@ export function applyStroke(
   drawShape: ShapeDrawer,
   pathReady = false,
 ): void {
+  const container = gfx.parent as ContainerWithBlendFlags | null;
+  // Ensures stale blend layers from a previous render never linger past an
+  // early return below (e.g. the stroke was removed, or downgraded to a
+  // combination this render doesn't need a blend layer for).
+  const syncBlendLayers = (needsBlend: boolean): void => {
+    if (container && (container._hasBlendStrokeLayers || needsBlend)) {
+      clearBlendLayers(container, "stroke");
+      container._hasBlendStrokeLayers = needsBlend;
+    }
+  };
+
   const strokes = getResolvedRenderableStrokes(node);
-  if (strokes.length === 0) return;
+  if (strokes.length === 0) {
+    syncBlendLayers(false);
+    return;
+  }
 
   const align = node.strokeAlign ?? 'center';
   const perSide = node.strokeWidthPerSide;
@@ -581,39 +656,70 @@ export function applyStroke(
   if (hasPerSideStroke(perSide) && perSide) {
     const solid = [...strokes].reverse().find((p): p is SolidPaint => p.type === 'solid');
     const strokeColor = solid ? strokePaintColor(solid) : undefined;
-    if (strokeColor) drawPerSideStroke(gfx, width, height, strokeColor, perSide, align);
-    return;
+    if (strokeColor) {
+      drawPerSideStroke(gfx, width, height, strokeColor, perSide, align);
+      syncBlendLayers(false);
+      return;
+    }
+    // No solid paint to key the per-side render off of (gradient-only stack)
+    // — fall through to the uniform branch below (see doc comment).
   }
 
   const strokeWidth = node.strokeWidth;
-  if (!strokeWidth) return;
+  if (!strokeWidth) {
+    syncBlendLayers(false);
+    return;
+  }
 
   const alignment = align === 'inside' ? 1 : align === 'outside' ? 0 : 0.5;
 
   // Solid + gradient only — image/pattern/video stroke paints are out of
   // scope (task spec: "Video/shader-пейнты на обводке" explicitly excluded;
-  // image/pattern strokes were never part of the DoD either). Skipped
-  // without consuming a `drawShape` redraw.
-  const renderable = strokes.filter(
-    (p): p is SolidPaint | Extract<Paint, { type: 'gradient' }> => p.type === 'solid' || p.type === 'gradient',
-  );
-
-  renderable.forEach((paint, index) => {
-    if (index > 0 || !pathReady) drawShape(gfx);
-
+  // image/pattern strokes were never part of the DoD either). Both those and
+  // an unresolvable solid color are dropped here, before any `drawShape`
+  // call, so neither consumes a redraw without a matching `.stroke()`.
+  const renderable: DrawableStroke[] = [];
+  for (const paint of strokes) {
     if (paint.type === 'gradient') {
-      const gradient = buildPixiGradient(paint.gradient, width, height, { forStroke: true });
-      gfx.stroke({ fill: gradient, alpha: paint.opacity ?? 1, width: strokeWidth, alignment });
-      return;
+      renderable.push({ kind: 'gradient', paint });
+    } else if (paint.type === 'solid') {
+      const color = strokePaintColor(paint);
+      if (color) renderable.push({ kind: 'solid', paint, color });
+    }
+  }
+
+  if (renderable.length === 0) {
+    syncBlendLayers(false);
+    return;
+  }
+
+  const needsBlend = renderable.some((entry) => paintNeedsOwnLayer(entry.paint.blendMode));
+  syncBlendLayers(needsBlend);
+
+  let blendInsertIndex = needsBlend && container ? findStrokeBlendInsertIndex(container, gfx) : 0;
+  let basePathReady = pathReady;
+
+  for (const entry of renderable) {
+    let target = gfx;
+    if (paintNeedsOwnLayer(entry.paint.blendMode) && container) {
+      target = createBlendLayer(container, resolvePaintBlendMode(entry.paint.blendMode), blendInsertIndex, "stroke");
+      blendInsertIndex++;
+      drawShape(target);
+    } else {
+      if (!basePathReady) drawShape(gfx);
+      basePathReady = false;
     }
 
-    const color = strokePaintColor(paint);
-    if (!color) return;
-    gfx.stroke({
-      color: parseColor(color),
-      alpha: parseAlpha(color),
-      width: strokeWidth,
-      alignment,
-    });
-  });
+    if (entry.kind === 'gradient') {
+      const gradient = buildPixiGradient(entry.paint.gradient, width, height, { forStroke: true });
+      target.stroke({ fill: gradient, alpha: entry.paint.opacity ?? 1, width: strokeWidth, alignment });
+    } else {
+      target.stroke({
+        color: parseColor(entry.color),
+        alpha: parseAlpha(entry.color),
+        width: strokeWidth,
+        alignment,
+      });
+    }
+  }
 }

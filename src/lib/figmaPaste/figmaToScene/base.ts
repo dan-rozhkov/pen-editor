@@ -125,6 +125,16 @@ function applyStrokePaints(base: MutableBase, change: FigNodeChange, ctx: Conver
 
   base.strokeWidth = change.strokeWeight ?? 1
   if (change.borderStrokeWeightsIndependent) {
+    // Intentionally unconditional: `strokeWidthPerSide` is set purely from
+    // Figma's own per-side-border flag, independent of what `base.strokes`
+    // ended up as above — including a gradient-only stack, a combination the
+    // editor's own UI (`StrokeSection`) otherwise blocks from being created
+    // by hand. Not guarded here because it doesn't need to be: the renderer
+    // (`applyStroke` in `pixi/renderers/fillStrokeHelpers.ts`) has an explicit
+    // fallback for exactly this combination — a gradient-only stroke stack
+    // with per-side widths renders as a uniform gradient stroke mapped to the
+    // node's bbox (ignoring the per-side widths) rather than nothing, so
+    // round-tripping this data stays renderable end-to-end.
     base.strokeWidthPerSide = {
       top: change.borderTopWeight ?? 0,
       right: change.borderRightWeight ?? 0,
