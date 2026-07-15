@@ -3,6 +3,7 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
+import { useDevModeStore } from "@/store/devModeStore";
 import type { FrameNode, TextNode } from "@/types/scene";
 import type { OverlayHelpers } from "./helpers";
 import { drawTextBaselines } from "./helpers";
@@ -33,6 +34,7 @@ export function redrawSelection(
   outlinesContainer: Container,
   handlesContainer: Container,
   sizeLabelsContainer: Container,
+  devModeFrameBadgeContainer: Container,
   selectionTextBaselines: Graphics,
   helpers: OverlayHelpers,
 ): void {
@@ -48,11 +50,13 @@ export function redrawSelection(
   destroyChildren(outlinesContainer);
   destroyChildren(handlesContainer);
   destroyChildren(sizeLabelsContainer);
+  destroyChildren(devModeFrameBadgeContainer);
   selectionTextBaselines.clear();
 
   if (selectedIds.length === 0) return;
 
   const state = useSceneStore.getState();
+  const isDevMode = useDevModeStore.getState().active;
   const isInstanceDescendantSelection =
     !!instanceContext &&
     selectedIds.length === 1 &&
@@ -95,7 +99,7 @@ export function redrawSelection(
 
       // Draw transform handles for slot frames
       const isSlot = target.node.type === "frame" && !!(target.node as FrameNode).isSlot;
-      if (isSlot) {
+      if (isSlot && !isDevMode) {
         const handleSizeWorld = HANDLE_SIZE / scale;
         const halfHandle = handleSizeWorld / 2;
         const { x: rx, y: ry, width: rw, height: rh } = target.drawRect;
@@ -206,7 +210,7 @@ export function redrawSelection(
 
   // Transform handles at corners (skipped for a single embed — DOM-rendered).
   // Hidden outside edit mode: view keeps the outline for inspection, no handles.
-  if (!singleEmbedId && !isPathEditing && canEditScene(useEditorModeStore.getState().mode)) {
+  if (!isDevMode && !singleEmbedId && !isPathEditing && canEditScene(useEditorModeStore.getState().mode)) {
     const handleSizeWorld = HANDLE_SIZE / scale;
     const halfHandle = handleSizeWorld / 2;
 
@@ -275,6 +279,49 @@ export function redrawSelection(
       badgeHeightMode,
     );
   }
+
+  // Dev mode keeps the selection outline but replaces editing affordances with
+  // a fixed-size frame-name badge. Resolve through Pixi so nested frames use
+  // their actual rendered position rather than a root-relative node position.
+  if (isDevMode && selectedIds.length === 1) {
+    const selectedNode = state.nodesById[selectedIds[0]];
+    const drawRect = helpers.getNodeDrawRect(selectedIds[0]);
+    if (selectedNode?.type === "frame" && drawRect) {
+      drawDevModeFrameBadge(
+        devModeFrameBadgeContainer,
+        drawRect.x,
+        drawRect.y,
+        selectedNode.name || "Frame",
+        scale,
+      );
+    }
+  }
+}
+
+function drawDevModeFrameBadge(
+  container: Container,
+  x: number,
+  y: number,
+  name: string,
+  scale: number,
+): void {
+  const text = new Text({ text: name, style: SIZE_LABEL_STYLE });
+  const width = text.width + SIZE_LABEL_PADDING_X * 2;
+  const height = SIZE_LABEL_FONT_SIZE + SIZE_LABEL_PADDING_Y * 2;
+  const group = new Container();
+  const offset = 4 / scale;
+
+  group.position.set(x, y - offset);
+  group.scale.set(1 / scale);
+
+  const background = new Graphics();
+  background.roundRect(0, -height, width, height, SIZE_LABEL_CORNER_RADIUS);
+  background.fill(SIZE_LABEL_BG_DEFAULT);
+  group.addChild(background);
+
+  text.position.set(SIZE_LABEL_PADDING_X, -height + SIZE_LABEL_PADDING_Y);
+  group.addChild(text);
+  container.addChild(group);
 }
 
 function drawSizeLabel(

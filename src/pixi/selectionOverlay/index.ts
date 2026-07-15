@@ -65,6 +65,10 @@ export function createSelectionOverlay(
   sizeLabelsContainer.label = "size-labels";
   selectionContainer.addChild(sizeLabelsContainer);
 
+  const devModeFrameBadgeContainer = new Container();
+  devModeFrameBadgeContainer.label = "dev-mode-frame-badge";
+  selectionContainer.addChild(devModeFrameBadgeContainer);
+
   const spacingLabel = new Container();
   spacingLabel.label = "spacing-label";
   selectionContainer.addChild(spacingLabel);
@@ -80,6 +84,7 @@ export function createSelectionOverlay(
       outlinesContainer,
       handlesContainer,
       sizeLabelsContainer,
+      devModeFrameBadgeContainer,
       selectionTextBaselines,
       helpers,
     );
@@ -125,7 +130,7 @@ export function createSelectionOverlay(
   // so entering or exiting it must redraw the hover layer even if the cursor
   // and selection have not changed.
   const unsubDevMode = useDevModeStore.subscribe(() => {
-    scheduleSelectionRedraw(DIRTY_HOVER);
+    scheduleSelectionRedraw(DIRTY_SELECTION | DIRTY_FRAME_NAMES | DIRTY_HOVER);
   });
 
   // Editor mode toggles whether transform handles are drawn — redraw on change.
@@ -157,6 +162,7 @@ export function createSelectionOverlay(
         outlinesContainer.visible = false;
         handlesContainer.visible = false;
         sizeLabelsContainer.visible = false;
+        devModeFrameBadgeContainer.visible = false;
         hovOutline.visible = false;
         childOutlines.visible = false;
         spacingOverlay.visible = false;
@@ -175,6 +181,7 @@ export function createSelectionOverlay(
       outlinesContainer.visible = true;
       handlesContainer.visible = true;
       sizeLabelsContainer.visible = true;
+      devModeFrameBadgeContainer.visible = true;
       hovOutline.visible = true;
       childOutlines.visible = true;
       spacingOverlay.visible = true;
@@ -222,5 +229,6 @@ export function createSelectionOverlay(
     handlesContainer.destroy({ children: true });
     frameNamesContainer.destroy({ children: true });
     sizeLabelsContainer.destroy({ children: true });
+    devModeFrameBadgeContainer.destroy({ children: true });
   };
 }

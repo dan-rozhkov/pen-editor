@@ -128,6 +128,34 @@ describe("<InspectPanel />", () => {
     expect(within(boxModel).queryByText("10px")).toBeNull();
   });
 
+  it("shows the per-corner radius values in the box model diagram", () => {
+    render(
+      <BoxModelDiagram
+        box={{
+          width: 238,
+          height: 157,
+          borderTop: 1,
+          borderRight: 1,
+          borderBottom: 1,
+          borderLeft: 1,
+          paddingTop: 4,
+          paddingRight: 4,
+          paddingBottom: 4,
+          paddingLeft: 4,
+          cornerRadius: { topLeft: 16, topRight: 8, bottomRight: 12, bottomLeft: 4 },
+        }}
+        units="px"
+        remBase={16}
+      />,
+    );
+    const boxModel = screen.getByLabelText("Box model");
+    expect(within(boxModel).getByText("16")).toBeTruthy();
+    expect(within(boxModel).getByText("8")).toBeTruthy();
+    expect(within(boxModel).getByText("12")).toBeTruthy();
+    expect(within(boxModel).getAllByText("4").length).toBeGreaterThanOrEqual(4);
+    expect(within(boxModel).getByText("Border").getAttribute("style")).toContain("left: 48px");
+  });
+
   it("expands a token row on click, showing light/dark values", () => {
     useVariableStore.setState({
       variables: [

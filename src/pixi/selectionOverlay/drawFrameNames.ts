@@ -3,6 +3,7 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useHoverStore } from "@/store/hoverStore";
 import { useViewportStore } from "@/store/viewportStore";
+import { useDevModeStore } from "@/store/devModeStore";
 import { getViewportBounds } from "@/utils/viewportUtils";
 import type { FlatFrameNode, FlatSceneNode } from "@/types/scene";
 import { truncateLabelToWidth } from "@/pixi/frameLabelUtils";
@@ -71,6 +72,7 @@ export function createFrameNameRenderer(): FrameNameRenderer {
 
     const state = useSceneStore.getState();
     const { selectedIds, editingNodeId, editingMode } = useSelectionStore.getState();
+    const isDevMode = useDevModeStore.getState().active;
     const { hoveredNodeId } = useHoverStore.getState();
     const { scale, x, y } = useViewportStore.getState();
 
@@ -107,6 +109,9 @@ export function createFrameNameRenderer(): FrameNameRenderer {
       const flatNode = node as FlatSceneNode;
 
       const isSelected = selectedSet.has(rootId);
+      // A selected frame in Dev mode has a dedicated blue badge rendered by
+      // drawSelection, so omit the regular name to prevent a duplicate label.
+      if (isDevMode && isSelected) continue;
       const isHovered = hoveredNodeId === rootId;
       const isComponentNode =
         node.type === "frame" && (node as FlatFrameNode).reusable;

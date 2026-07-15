@@ -17,6 +17,7 @@ import {
   resolveEffectStack,
 } from "@/utils/fillUtils";
 import { resolveVariableValue } from "@/utils/colorUtils";
+import { buildCSSGradient } from "@/utils/gradientUtils";
 import { formatLength } from "./units";
 
 export interface InspectValue {
@@ -24,6 +25,8 @@ export interface InspectValue {
   value: string;
   copyValue?: string;
   token?: { name: string; light: string; dark: string };
+  /** CSS background used for a compact color or gradient preview. */
+  swatchBackground?: string;
 }
 
 export interface InspectSection {
@@ -48,6 +51,7 @@ export interface InspectData {
     paddingRight: number;
     paddingBottom: number;
     paddingLeft: number;
+    cornerRadius?: { topLeft: number; topRight: number; bottomRight: number; bottomLeft: number };
     gap?: number;
   };
   sections: InspectSection[];
@@ -116,6 +120,20 @@ function computeBoxBorderMetrics(node: FlatSceneNode): BoxBorderMetrics {
   const pathStroke: PathStroke | undefined = node.type === "path" ? node.pathStroke : undefined;
   const width = node.strokeWidth ?? pathStroke?.thickness ?? 0;
   return { borderTop: width, borderRight: width, borderBottom: width, borderLeft: width };
+}
+
+function computeBoxCornerRadius(
+  node: FlatSceneNode,
+): { topLeft: number; topRight: number; bottomRight: number; bottomLeft: number } | undefined {
+  if (node.type !== "frame" && node.type !== "rect") return undefined;
+
+  if (node.cornerRadiusPerCorner) {
+    const { topLeft = 0, topRight = 0, bottomRight = 0, bottomLeft = 0 } = node.cornerRadiusPerCorner;
+    return { topLeft, topRight, bottomRight, bottomLeft };
+  }
+
+  const radius = node.cornerRadius ?? 0;
+  return { topLeft: radius, topRight: radius, bottomRight: radius, bottomLeft: radius };
 }
 
 /**
@@ -213,6 +231,21 @@ function buildToken(variable: Variable): { name: string; light: string; dark: st
   };
 }
 
+function getPaintSwatchBackground(paint: ReturnType<typeof getFills>[number]): string | undefined {
+  if (paint.type === "solid") return paint.color;
+  if (paint.type === "gradient") {
+    if (paint.gradient.type === "radial") {
+      const stops = [...paint.gradient.stops]
+        .sort((a, b) => a.position - b.position)
+        .map((stop) => `${stop.color} ${Math.round(stop.position * 100)}%`)
+        .join(", ");
+      return `radial-gradient(circle, ${stops})`;
+    }
+    return buildCSSGradient(paint.gradient.stops);
+  }
+  return undefined;
+}
+
 function describeFillPaint(
   paint: ReturnType<typeof getFills>[number],
   variables: Variable[],
@@ -224,7 +257,12 @@ function describeFillPaint(
     if (style) {
       const resolved = resolveFillStylePaint(paint, fillStyles);
       const copyValue = resolved.type === "solid" ? resolved.color : style.name;
-      return { label: "Fill", value: style.name, copyValue };
+      return {
+        label: "Fill",
+        value: style.name,
+        copyValue,
+        swatchBackground: getPaintSwatchBackground(resolved),
+      };
     }
   }
 
@@ -233,13 +271,24 @@ function describeFillPaint(
     if (paint.colorBinding) {
       const variable = variables.find((v) => v.id === paint.colorBinding!.variableId);
       if (variable) {
-        return { label: "Fill", value: displayValue, token: buildToken(variable) };
+        return {
+          label: "Fill",
+          value: displayValue,
+          token: buildToken(variable),
+          swatchBackground: displayValue,
+        };
       }
     }
-    return { label: "Fill", value: displayValue };
+    return { label: "Fill", value: displayValue, swatchBackground: displayValue };
   }
 
-  if (paint.type === "gradient") return { label: "Fill", value: `Gradient (${paint.gradient.type})` };
+  if (paint.type === "gradient") {
+    return {
+      label: "Fill",
+      value: `Gradient (${paint.gradient.type})`,
+      swatchBackground: getPaintSwatchBackground(paint),
+    };
+  }
   if (paint.type === "image") return { label: "Fill", value: "Image" };
   if (paint.type === "pattern") return { label: "Fill", value: "Pattern" };
   return { label: "Fill", value: "Video" };
@@ -283,12 +332,17 @@ function buildStrokesSection(
     if (node.strokeBinding) {
       const variable = variables.find((v) => v.id === node.strokeBinding!.variableId);
       if (variable) {
-        rows.push({ label: "Color", value: displayValue, token: buildToken(variable) });
+        rows.push({
+          label: "Color",
+          value: displayValue,
+          token: buildToken(variable),
+          swatchBackground: displayValue,
+        });
       } else {
-        rows.push({ label: "Color", value: displayValue });
+        rows.push({ label: "Color", value: displayValue, swatchBackground: displayValue });
       }
     } else {
-      rows.push({ label: "Color", value: displayValue });
+      rows.push({ label: "Color", value: displayValue, swatchBackground: displayValue });
     }
   }
 
@@ -309,7 +363,7 @@ function describeEffect(effect: ShadowEffect | BlurEffect | BackgroundBlurEffect
   if (effect.type === "shadow") {
     const label = effect.shadowType === "inner" ? "Inner shadow" : "Shadow";
     const value = `${fmt(effect.offset.x, units, remBase)} ${fmt(effect.offset.y, units, remBase)} ${fmt(effect.blur, units, remBase)} ${fmt(effect.spread, units, remBase)} ${effect.color}`;
-    return { label, value };
+    return { label, value, swatchBackground: effect.color };
   }
   if (effect.type === "blur") {
     return { label: "Blur", value: fmt(effect.radius, units, remBase) };
@@ -355,6 +409,7 @@ export function buildInspectData(input: BuildInspectDataInput): InspectData | nu
 
   const { paddingTop, paddingRight, paddingBottom, paddingLeft, gap } = computeBoxMetrics(node);
   const { borderTop, borderRight, borderBottom, borderLeft } = computeBoxBorderMetrics(node);
+  const cornerRadius = computeBoxCornerRadius(node);
 
   const header: InspectData["header"] = {
     name: node.name ?? node.type,
@@ -396,6 +451,7 @@ export function buildInspectData(input: BuildInspectDataInput): InspectData | nu
       paddingRight,
       paddingBottom,
       paddingLeft,
+      cornerRadius,
       gap,
     },
     sections,

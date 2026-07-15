@@ -29,6 +29,24 @@ describe("<InspectRow />", () => {
     expect(writeTextToClipboard).toHaveBeenCalledWith("#ff0000");
   });
 
+  it("shows a compact preview next to a color or gradient value", () => {
+    const { rerender } = render(
+      <InspectRow row={{ label: "Fill", value: "#ff0000", swatchBackground: "#ff0000" }} />,
+    );
+    expect(screen.getByLabelText("Fill preview").getAttribute("style")).toContain("#ff0000");
+
+    rerender(
+      <InspectRow
+        row={{
+          label: "Fill",
+          value: "Gradient (linear)",
+          swatchBackground: "linear-gradient(to right, #ff0000, #0000ff)",
+        }}
+      />,
+    );
+    expect(screen.getByLabelText("Fill preview").getAttribute("style")).toContain("linear-gradient");
+  });
+
   it("copies and toasts on Space keydown, preventing scroll", () => {
     vi.mocked(writeTextToClipboard).mockResolvedValue(true);
     render(<InspectRow row={{ label: "Fill", value: "#ff0000" }} />);
@@ -73,6 +91,8 @@ describe("<InspectRow />", () => {
     // Verify Light and Dark sub-rows are visible after expanding
     expect(screen.queryByText("Light")).not.toBeNull();
     expect(screen.queryByText("Dark")).not.toBeNull();
+    expect(screen.getByLabelText("Light preview")).toBeTruthy();
+    expect(screen.getByLabelText("Dark preview")).toBeTruthy();
     // Press Enter on Light sub-row
     const lightRow = screen.getByText("Light").closest('[data-testid="inspect-row"]')!;
     fireEvent.keyDown(lightRow, { key: "Enter" });

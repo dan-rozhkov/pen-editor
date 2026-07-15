@@ -176,6 +176,7 @@ describe("buildInspectData", () => {
     const row = fills!.rows[0];
     expect(row.value).toBe("#ff0000");
     expect(row.token).toEqual({ name: "Brand/Red", light: "#ff0000", dark: "#cc0000" });
+    expect(row.swatchBackground).toBe("#ff0000");
   });
 
   it("shows a FillStyle name for a solid paint with styleId", () => {
@@ -228,6 +229,7 @@ describe("buildInspectData", () => {
     const effects = data.sections.find((s) => s.title === "Effects");
     expect(effects).toBeDefined();
     expect(effects!.rows[0].value).toBe("0px 4px 8px 0px #00000040");
+    expect(effects!.rows[0].swatchBackground).toBe("#00000040");
   });
 
   it("builds a 4-value Radius row for per-corner radius", () => {
@@ -247,6 +249,7 @@ describe("buildInspectData", () => {
     const radius = data.sections.find((s) => s.title === "Radius");
     expect(radius).toBeDefined();
     expect(radius!.rows[0].value).toBe("4px 8px 12px 16px");
+    expect(data.box.cornerRadius).toEqual({ topLeft: 4, topRight: 8, bottomRight: 12, bottomLeft: 16 });
   });
 
   it("formats dimensions in rem when units is rem", () => {
@@ -268,6 +271,7 @@ describe("buildInspectData", () => {
     expect(data.box.width).toBe(32); // raw numbers stay numeric
     const radius = data.sections.find((s) => s.title === "Radius");
     expect(radius!.rows[0].value).toBe("1rem");
+    expect(data.box.cornerRadius).toEqual({ topLeft: 16, topRight: 16, bottomRight: 16, bottomLeft: 16 });
   });
 
   it("builds a 4-value Width row for per-side stroke widths", () => {
@@ -311,6 +315,7 @@ describe("buildInspectData", () => {
     const width = strokes!.rows.find((r) => r.label === "Width");
     expect(width?.value).toBe("3px");
     const color = strokes!.rows.find((r) => r.label === "Color");
+    expect(color?.swatchBackground).toBe("#00ff00");
     expect(color?.value).toBe("#00ff00");
   });
 

@@ -19,6 +19,21 @@ function handleActivationKeyDown(onActivate: () => void) {
   };
 }
 
+function isHexColor(value: string): boolean {
+  return /^#[\da-f]{3,8}$/i.test(value);
+}
+
+function ValueSwatch({ label, background }: { label: string; background: string }) {
+  return (
+    <span
+      data-testid="inspect-value-swatch"
+      aria-label={`${label} preview`}
+      className="h-4 w-4 shrink-0 rounded border border-border-default"
+      style={{ background }}
+    />
+  );
+}
+
 /**
  * A single label/value row in the inspect panel. Whole row is clickable to
  * copy `copyValue ?? value`. Token rows (variable-backed values) expand
@@ -39,7 +54,12 @@ export function InspectRow({ row }: { row: InspectValue }) {
         onKeyDown={handleActivationKeyDown(() => void copy(row.label, copyValue))}
       >
         <span className="text-text-muted text-xs">{row.label}</span>
-        <span className="text-xs text-text-primary truncate">{row.value}</span>
+        <span className="flex min-w-0 items-center gap-1.5">
+          {row.swatchBackground && (
+            <ValueSwatch label={row.label} background={row.swatchBackground} />
+          )}
+          <span className="text-xs text-text-primary truncate">{row.value}</span>
+        </span>
       </div>
     );
   }
@@ -83,7 +103,10 @@ export function InspectRow({ row }: { row: InspectValue }) {
             }}
           >
             <span className="text-text-muted text-xs">Light</span>
-            <span className="text-xs text-text-primary truncate">{token.light}</span>
+            <span className="flex min-w-0 items-center gap-1.5">
+              {isHexColor(token.light) && <ValueSwatch label="Light" background={token.light} />}
+              <span className="text-xs text-text-primary truncate">{token.light}</span>
+            </span>
           </div>
           <div
             data-testid="inspect-row"
@@ -100,7 +123,10 @@ export function InspectRow({ row }: { row: InspectValue }) {
             }}
           >
             <span className="text-text-muted text-xs">Dark</span>
-            <span className="text-xs text-text-primary truncate">{token.dark}</span>
+            <span className="flex min-w-0 items-center gap-1.5">
+              {isHexColor(token.dark) && <ValueSwatch label="Dark" background={token.dark} />}
+              <span className="text-xs text-text-primary truncate">{token.dark}</span>
+            </span>
           </div>
         </div>
       )}
