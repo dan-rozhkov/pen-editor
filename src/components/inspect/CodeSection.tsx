@@ -64,22 +64,39 @@ function CodeBlock({ code, lang }: { code: string; lang: "css" | "html" | "tsx" 
 
   const lines = useMemo(() => code.split("\n"), [code]);
   const isLong = lines.length > MAX_COLLAPSED_LINES;
-  const visibleCode = isLong && !expanded ? lines.slice(0, MAX_COLLAPSED_LINES).join("\n") : code;
-
-  const tokens = useMemo(() => highlightCode(visibleCode, lang), [visibleCode, lang]);
+  const visibleLines = isLong && !expanded ? lines.slice(0, MAX_COLLAPSED_LINES) : lines;
+  const highlightedLines = useMemo(
+    () => visibleLines.map((line) => highlightCode(line, lang)),
+    [visibleLines, lang],
+  );
 
   return (
-    <div className="relative rounded-md bg-surface-elevated border border-border-default">
+    <div data-testid="code-block" className="relative rounded-md bg-surface-hover">
       <div className="absolute top-1 right-1">
         <CopyButton code={code} />
       </div>
-      <pre className="font-mono text-xs leading-relaxed whitespace-pre-wrap break-words p-3 pr-8 overflow-x-auto">
-        {tokens.map((token, i) => (
-          <span key={i} className={TOKEN_CLASS[token.kind]}>
-            {token.text}
-          </span>
-        ))}
-      </pre>
+      <div className="flex overflow-x-auto py-3 pr-8">
+        <ol
+          aria-label="Line numbers"
+          data-testid="code-line-numbers"
+          className="shrink-0 select-none px-3 text-right font-mono text-xs leading-relaxed text-text-muted"
+        >
+          {visibleLines.map((_, index) => (
+            <li key={index}>{index + 1}</li>
+          ))}
+        </ol>
+        <pre className="min-w-0 flex-1 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words">
+          {highlightedLines.map((tokens, lineIndex) => (
+            <code key={lineIndex} className="block min-h-[1.25rem]">
+              {tokens.map((token, tokenIndex) => (
+                <span key={tokenIndex} className={TOKEN_CLASS[token.kind]}>
+                  {token.text}
+                </span>
+              ))}
+            </code>
+          ))}
+        </pre>
+      </div>
       {isLong && (
         <div className="px-3 pb-2">
           <button
