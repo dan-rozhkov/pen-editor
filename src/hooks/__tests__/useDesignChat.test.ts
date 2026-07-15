@@ -371,6 +371,12 @@ describe("useDesignChat (hook + UI message stream)", () => {
       "var-radius",
     ]);
 
+    // Trace-stitching contract (pen-editor-backend raw_traces.session_id):
+    // every request of one conversation must carry the same non-empty id.
+    expect(requests[0].body.id).toBeTypeOf("string");
+    expect((requests[0].body.id as string).length).toBeGreaterThan(0);
+    expect(requests[1].body.id).toBe(requests[0].body.id);
+
     // Final assistant message carries the streamed text
     const lastMessage = result.current.messages.at(-1);
     expect(lastMessage?.role).toBe("assistant");
