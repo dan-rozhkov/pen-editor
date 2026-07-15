@@ -39,7 +39,7 @@ export function InspectRow({ row }: { row: InspectValue }) {
         onKeyDown={handleActivationKeyDown(() => void copy(row.label, copyValue))}
       >
         <span className="text-text-muted text-xs">{row.label}</span>
-        <span className="font-mono text-xs text-text-primary truncate">{row.value}</span>
+        <span className="text-xs text-text-primary truncate">{row.value}</span>
       </div>
     );
   }
@@ -63,7 +63,7 @@ export function InspectRow({ row }: { row: InspectValue }) {
             weight="bold"
             className={clsx("text-text-muted transition-transform duration-150 shrink-0", expanded && "rotate-90")}
           />
-          <span className="font-mono text-xs text-text-primary truncate">{token.name}</span>
+          <span className="text-xs text-text-primary truncate">{token.name}</span>
         </span>
       </div>
       {expanded && (
@@ -83,7 +83,7 @@ export function InspectRow({ row }: { row: InspectValue }) {
             }}
           >
             <span className="text-text-muted text-xs">Light</span>
-            <span className="font-mono text-xs text-text-primary truncate">{token.light}</span>
+            <span className="text-xs text-text-primary truncate">{token.light}</span>
           </div>
           <div
             data-testid="inspect-row"
@@ -100,7 +100,7 @@ export function InspectRow({ row }: { row: InspectValue }) {
             }}
           >
             <span className="text-text-muted text-xs">Dark</span>
-            <span className="font-mono text-xs text-text-primary truncate">{token.dark}</span>
+            <span className="text-xs text-text-primary truncate">{token.dark}</span>
           </div>
         </div>
       )}
