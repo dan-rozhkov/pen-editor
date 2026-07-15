@@ -319,6 +319,68 @@ describe("buildInspectData", () => {
     expect(color?.value).toBe("#00ff00");
   });
 
+  it("reports a gradient stroke paint instead of the stale legacy stroke field", () => {
+    const rect: FlatSceneNode = {
+      id: "r9",
+      type: "rect",
+      name: "GradientStroke",
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      stroke: "#000000", // stale legacy value — strokes stack must win
+      strokeWidth: 2,
+      strokes: [
+        {
+          id: "s1",
+          type: "gradient",
+          gradient: {
+            type: "linear",
+            startX: 0,
+            startY: 0,
+            endX: 1,
+            endY: 0,
+            stops: [
+              { color: "#ff0000", position: 0 },
+              { color: "#0000ff", position: 1 },
+            ],
+          },
+        },
+      ],
+    };
+    const nodesById = { r9: rect };
+    const data = buildOrThrow(baseArgs(nodesById, "r9"));
+
+    const strokes = data.sections.find((s) => s.title === "Strokes");
+    expect(strokes).toBeDefined();
+    const color = strokes!.rows.find((r) => r.label === "Color");
+    expect(color?.value).toBe("Gradient (linear)");
+  });
+
+  it("labels a multi-paint stroke stack Color 1/Color 2 in stack order", () => {
+    const rect: FlatSceneNode = {
+      id: "r10",
+      type: "rect",
+      name: "MultiStroke",
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      strokeWidth: 2,
+      strokes: [
+        { id: "bottom", type: "solid", color: "#000000" },
+        { id: "top", type: "solid", color: "#00ff00" },
+      ],
+    };
+    const nodesById = { r10: rect };
+    const data = buildOrThrow(baseArgs(nodesById, "r10"));
+
+    const strokes = data.sections.find((s) => s.title === "Strokes");
+    expect(strokes).toBeDefined();
+    expect(strokes!.rows.find((r) => r.label === "Color 1")?.value).toBe("#000000");
+    expect(strokes!.rows.find((r) => r.label === "Color 2")?.value).toBe("#00ff00");
+  });
+
   it("hides invisible/zero-opacity fills from the Fills section", () => {
     const rect: FlatSceneNode = {
       id: "r8",

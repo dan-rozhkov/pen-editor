@@ -4,12 +4,13 @@ import type {
   GroupNode,
   JustifyContent,
   Paint,
+  PathStroke,
   SceneNode,
   ShaderConfig,
   TextNode,
 } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
-import { getEffects, getFills } from "@/utils/fillUtils";
+import { getEffects, getFills, getRenderableStrokes } from "@/utils/fillUtils";
 import { anchorsToSVGPath } from "@/utils/pathAnchors";
 
 type PenTheme = Record<string, string>;
@@ -63,6 +64,10 @@ interface PenStroke {
   align?: "inside" | "center" | "outside";
   thickness?: number | { top?: number; right?: number; bottom?: number; left?: number };
   fill?: PenFill;
+  // Paint stack, bottom-to-top; present instead of "fill" when a node has 2+
+  // visible stroke paints (gradient/multi-paint stroke). Mirrors
+  // PenBaseNode.fill/fills.
+  fills?: PenFill[];
 }
 
 interface PenShadowEffect {
@@ -207,8 +212,14 @@ type FillSource = Pick<
 
 type StrokeSource = Pick<
   SceneNode,
-  "stroke" | "strokeBinding" | "strokeOpacity" | "strokeWidth" | "strokeWidthPerSide" | "strokeAlign"
->;
+  | "stroke"
+  | "strokeBinding"
+  | "strokeOpacity"
+  | "strokeWidth"
+  | "strokeWidthPerSide"
+  | "strokeAlign"
+  | "strokes"
+> & { pathStroke?: PathStroke };
 
 function sanitizeVariableName(name: string, fallbackId: string): string {
   const normalized = name
@@ -394,20 +405,22 @@ function exportFills(
 }
 
 function exportStroke(node: StrokeSource, context: ExportContext): PenStroke | undefined {
-  const fill = exportSolidFill(
-    node.stroke,
-    node.strokeBinding?.variableId,
-    node.strokeOpacity,
-    context,
-  );
+  const paints = getRenderableStrokes(node);
+  // Legacy-derived stroke stacks (no `strokes` on the node) fold `strokeOpacity`
+  // into the single solid paint already (see legacyStrokesToPaints), so no
+  // separate fallback-opacity plumbing is needed here (unlike exportFills).
+  const exported = paints
+    .map((p) => exportPaint(p, context))
+    .filter((f): f is PenFill => f !== undefined);
   const thickness = node.strokeWidthPerSide ?? node.strokeWidth;
 
-  if (!fill && thickness == null && !node.strokeAlign) return undefined;
+  if (exported.length === 0 && thickness == null && !node.strokeAlign) return undefined;
 
   return {
     ...(node.strokeAlign ? { align: node.strokeAlign } : {}),
     ...(thickness != null ? { thickness } : {}),
-    ...(fill ? { fill } : {}),
+    ...(exported.length === 1 ? { fill: exported[0] } : {}),
+    ...(exported.length > 1 ? { fills: exported } : {}),
   };
 }
 

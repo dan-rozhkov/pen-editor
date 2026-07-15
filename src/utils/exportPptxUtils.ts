@@ -5,7 +5,7 @@ import { useStyleStore } from "@/store/styleStore";
 import { useVariableStore } from "@/store/variableStore";
 import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
 import { resolveColor } from "@/utils/colorUtils";
-import { getFills, resolveFillStylePaint, resolveEffectStack } from "@/utils/fillUtils";
+import { getFills, getRenderableStrokes, resolveFillStylePaint, resolveEffectStack } from "@/utils/fillUtils";
 import { resolveRefToTree } from "@/utils/instanceRuntime";
 import { getTopLevelFramesFlat } from "@/utils/componentUtils";
 import { resolveSlideOrder } from "@/utils/slideOrder";
@@ -50,6 +50,10 @@ export async function exportSlidesToPptx(pixiRefs: PixiExportRefs): Promise<bool
     getNodeFills: (node) => {
       const { fillStyles } = useStyleStore.getState();
       return getFills(node).map((paint) => resolveFillStylePaint(paint, fillStyles));
+    },
+    getNodeStrokes: (node) => {
+      const { fillStyles } = useStyleStore.getState();
+      return getRenderableStrokes(node).map((paint) => resolveFillStylePaint(paint, fillStyles));
     },
     getNodeEffects: (node) => {
       const { effectStyles } = useStyleStore.getState();

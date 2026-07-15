@@ -333,25 +333,15 @@ function pixsoGradientToFill(gradient: PixsoGradientPaint): GradientFill | undef
 }
 
 /**
- * Build a Figma-style Paint[] stack from Pixso fills. Returns:
- * - `{ fill, fillOpacity }` legacy fields when there is exactly one visible
- *   solid paint (keeps simple nodes clean and back-compatible), OR
- * - `{ fills }` when the stack has a gradient/image or more than one paint.
- * Image paints are resolved via `ctx.imageMap` (by hash) — an unresolved image
+ * Convert visible Pixso paints into a Figma-style `Paint[]` stack. Shared by
+ * `buildFills` (fill) and `buildStrokes` (stroke) — image paints are only
+ * meaningful as a fill; `buildStrokes` filters them back out (mirrors
+ * `applyStrokePaints`'s IMAGE exclusion in the Figma-paste importer). Image
+ * paints are resolved via `ctx.imageMap` (by hash) — an unresolved image
  * paint is dropped with a warning.
  */
-function buildFills(
-  paints: PixsoPaint[] | undefined,
-  ctx: PixsoImportContext,
-): {
-  fill?: string;
-  fillOpacity?: number;
-  gradientFill?: GradientFill;
-  fills?: Paint[];
-} {
+function buildPaintStack(paints: PixsoPaint[] | undefined, ctx: PixsoImportContext): Paint[] {
   const visible = visiblePaints(paints);
-  if (visible.length === 0) return {};
-
   const stack: Paint[] = [];
   for (const paint of visible) {
     if (paint.type === "SOLID") {
@@ -397,7 +387,28 @@ function buildFills(
       stack.push(ip);
     }
   }
+  return stack;
+}
 
+/**
+ * Build a Figma-style Paint[] stack from Pixso fills. Returns:
+ * - `{ fill, fillOpacity }` legacy fields when there is exactly one visible
+ *   solid paint (keeps simple nodes clean and back-compatible), OR
+ * - `{ fills }` when the stack has a gradient/image or more than one paint.
+ */
+function buildFills(
+  paints: PixsoPaint[] | undefined,
+  ctx: PixsoImportContext,
+): {
+  fill?: string;
+  fillOpacity?: number;
+  gradientFill?: GradientFill;
+  fills?: Paint[];
+} {
+  const visible = visiblePaints(paints);
+  if (visible.length === 0) return {};
+
+  const stack = buildPaintStack(paints, ctx);
   if (stack.length === 0) return {};
 
   // Single plain solid → legacy fields (clean, back-compatible). Only collapse
@@ -438,24 +449,42 @@ function firstSolidHex(paints?: PixsoPaint[]): { hex?: string; opacity?: number 
   return result;
 }
 
+/**
+ * Build the editor's stroke representation from Pixso strokes, mirroring
+ * `buildFills`/`applyStrokePaints` (Figma paste importer): a gradient or
+ * multi-paint stroke becomes a `strokes` paint stack instead of being
+ * silently dropped (the old behavior — `firstSolidHex` found no SOLID paint
+ * for a gradient stroke and returned nothing at all). Image paints are
+ * excluded (unsupported on a stroke), matching the Figma-paste convention.
+ */
 function extractStroke(
   strokes: PixsoPaint[] | undefined,
   strokeWeight: number | undefined,
   hasPerSide: boolean,
-): { stroke?: string; strokeWidth?: number; strokeOpacity?: number } {
+  ctx: PixsoImportContext,
+): { stroke?: string; strokeWidth?: number; strokeOpacity?: number; strokes?: Paint[] } {
   if (!strokes || !strokes.length) return {};
   // A node can define its stroke width uniformly (`strokeWeight`) or per-side
   // (`individualStrokeWeights`); with only per-side widths `strokeWeight` is
   // absent, but the stroke color must still be imported.
   const hasWidth = (strokeWeight !== undefined && strokeWeight > 0) || hasPerSide;
   if (!hasWidth) return {};
-  const { hex, opacity } = firstSolidHex(strokes);
-  if (!hex) return {};
+
+  const stack = buildPaintStack(strokes, ctx).filter((p) => p.type !== "image");
+  if (stack.length === 0) return {};
+
+  const widthProps: { strokeWidth?: number } = {};
+  if (strokeWeight !== undefined && strokeWeight > 0) widthProps.strokeWidth = strokeWeight;
+
+  if (stack.length >= 2 || stack[0].type === "gradient") {
+    return { strokes: stack, ...widthProps };
+  }
+  const solid = stack[0] as SolidPaint;
   const result: { stroke: string; strokeWidth?: number; strokeOpacity?: number } = {
-    stroke: hex,
+    stroke: solid.color,
+    ...widthProps,
   };
-  if (strokeWeight !== undefined && strokeWeight > 0) result.strokeWidth = strokeWeight;
-  if (opacity !== undefined) result.strokeOpacity = opacity;
+  if (solid.opacity !== undefined && solid.opacity < 1) result.strokeOpacity = solid.opacity;
   return result;
 }
 
@@ -910,10 +939,11 @@ export function convertPixsoNode(
   // Appearance — fills / gradient / image stack.
   const { fill, fillOpacity, gradientFill, fills } = buildFills(node.fills, ctx);
   const strokeWidthPerSide = extractPerSideStroke(node);
-  const { stroke, strokeWidth, strokeOpacity } = extractStroke(
+  const { stroke, strokeWidth, strokeOpacity, strokes } = extractStroke(
     node.strokes,
     node.strokeWeight,
     strokeWidthPerSide !== undefined,
+    ctx,
   );
   const strokeAlign = mapStrokeAlign(node.strokeAlign);
   const effects = extractEffects(node.effects);
@@ -924,10 +954,13 @@ export function convertPixsoNode(
     if (fillOpacity !== undefined) base.fillOpacity = fillOpacity;
     if (gradientFill) base.gradientFill = gradientFill;
   }
-  if (stroke) base.stroke = stroke;
+  if (strokes) base.strokes = strokes;
+  else {
+    if (stroke) base.stroke = stroke;
+    if (strokeOpacity !== undefined) base.strokeOpacity = strokeOpacity;
+  }
   if (strokeWidth) base.strokeWidth = strokeWidth;
   if (strokeWidthPerSide) base.strokeWidthPerSide = strokeWidthPerSide;
-  if (strokeOpacity !== undefined) base.strokeOpacity = strokeOpacity;
   if (strokeAlign) base.strokeAlign = strokeAlign;
   if (effects) base.effects = effects;
 

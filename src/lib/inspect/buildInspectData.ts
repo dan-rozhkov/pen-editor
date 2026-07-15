@@ -13,6 +13,7 @@ import type { InspectUnits } from "@/store/devModeStore";
 import {
   getFills,
   getRenderableFills,
+  getRenderableStrokes,
   resolveFillStylePaint,
   resolveEffectStack,
 } from "@/utils/fillUtils";
@@ -246,11 +247,12 @@ function getPaintSwatchBackground(paint: ReturnType<typeof getFills>[number]): s
   return undefined;
 }
 
-function describeFillPaint(
+function describePaint(
   paint: ReturnType<typeof getFills>[number],
   variables: Variable[],
   fillStyles: FillStyle[],
   effectiveTheme: ThemeName,
+  label: string,
 ): InspectValue {
   if (paint.styleId) {
     const style = fillStyles.find((s) => s.id === paint.styleId);
@@ -258,7 +260,7 @@ function describeFillPaint(
       const resolved = resolveFillStylePaint(paint, fillStyles);
       const copyValue = resolved.type === "solid" ? resolved.color : style.name;
       return {
-        label: "Fill",
+        label,
         value: style.name,
         copyValue,
         swatchBackground: getPaintSwatchBackground(resolved),
@@ -272,26 +274,26 @@ function describeFillPaint(
       const variable = variables.find((v) => v.id === paint.colorBinding!.variableId);
       if (variable) {
         return {
-          label: "Fill",
+          label,
           value: displayValue,
           token: buildToken(variable),
           swatchBackground: displayValue,
         };
       }
     }
-    return { label: "Fill", value: displayValue, swatchBackground: displayValue };
+    return { label, value: displayValue, swatchBackground: displayValue };
   }
 
   if (paint.type === "gradient") {
     return {
-      label: "Fill",
+      label,
       value: `Gradient (${paint.gradient.type})`,
       swatchBackground: getPaintSwatchBackground(paint),
     };
   }
-  if (paint.type === "image") return { label: "Fill", value: "Image" };
-  if (paint.type === "pattern") return { label: "Fill", value: "Pattern" };
-  return { label: "Fill", value: "Video" };
+  if (paint.type === "image") return { label, value: "Image" };
+  if (paint.type === "pattern") return { label, value: "Pattern" };
+  return { label, value: "Video" };
 }
 
 function buildFillsSection(
@@ -303,7 +305,7 @@ function buildFillsSection(
   const fills = getRenderableFills(node);
   if (!fills.length) return undefined;
   const rows = fills.map((paint, i) => {
-    const row = describeFillPaint(paint, variables, fillStyles, effectiveTheme);
+    const row = describePaint(paint, variables, fillStyles, effectiveTheme, "Fill");
     if (fills.length > 1) row.label = `Fill ${i + 1}`;
     return row;
   });
@@ -313,38 +315,27 @@ function buildFillsSection(
 function buildStrokesSection(
   node: FlatSceneNode,
   variables: Variable[],
+  fillStyles: FillStyle[],
   units: InspectUnits,
   remBase: number,
   effectiveTheme: ThemeName,
 ): InspectSection | undefined {
   const pathStroke: PathStroke | undefined = node.type === "path" ? node.pathStroke : undefined;
-  const strokeColor = node.stroke ?? pathStroke?.fill;
+  const strokes = getRenderableStrokes(node);
   const strokeWidth = node.strokeWidth ?? pathStroke?.thickness;
   const strokeAlign = node.strokeAlign ?? pathStroke?.align;
 
   const hasStroke =
-    strokeColor !== undefined || strokeWidth !== undefined || node.strokeWidthPerSide !== undefined;
+    strokes.length > 0 || strokeWidth !== undefined || node.strokeWidthPerSide !== undefined;
   if (!hasStroke) return undefined;
   const rows: InspectValue[] = [];
 
-  if (strokeColor !== undefined) {
-    const displayValue = resolveVariableValue(strokeColor, node.strokeBinding, variables, effectiveTheme) ?? strokeColor;
-    if (node.strokeBinding) {
-      const variable = variables.find((v) => v.id === node.strokeBinding!.variableId);
-      if (variable) {
-        rows.push({
-          label: "Color",
-          value: displayValue,
-          token: buildToken(variable),
-          swatchBackground: displayValue,
-        });
-      } else {
-        rows.push({ label: "Color", value: displayValue, swatchBackground: displayValue });
-      }
-    } else {
-      rows.push({ label: "Color", value: displayValue, swatchBackground: displayValue });
-    }
-  }
+  const colorRows = strokes.map((paint, i) => {
+    const row = describePaint(paint, variables, fillStyles, effectiveTheme, "Color");
+    if (strokes.length > 1) row.label = `Color ${i + 1}`;
+    return row;
+  });
+  rows.push(...colorRows);
 
   if (node.strokeWidthPerSide !== undefined) {
     const { top = 0, right = 0, bottom = 0, left = 0 } = node.strokeWidthPerSide;
@@ -429,7 +420,7 @@ export function buildInspectData(input: BuildInspectDataInput): InspectData | nu
   const fillsSection = buildFillsSection(node, variables, fillStyles, effectiveTheme);
   if (fillsSection) sections.push(fillsSection);
 
-  const strokesSection = buildStrokesSection(node, variables, units, remBase, effectiveTheme);
+  const strokesSection = buildStrokesSection(node, variables, fillStyles, units, remBase, effectiveTheme);
   if (strokesSection) sections.push(strokesSection);
 
   const effectsSection = buildEffectsSection(node, effectStyles, units, remBase);

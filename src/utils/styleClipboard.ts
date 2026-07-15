@@ -43,6 +43,7 @@ export interface NodeStyleSnapshot {
   strokeWidthPerSide?: PerSideStroke;
   strokeOpacity?: number;
   strokeBinding?: ColorBinding;
+  strokes?: Paint[];
   // Effects
   effect?: ShadowEffect;
   effects?: Effect[];
@@ -99,6 +100,7 @@ const COMMON_STYLE_KEYS = [
   "strokeWidthPerSide",
   "strokeOpacity",
   "strokeBinding",
+  "strokes",
   "effect",
   "effects",
   "opacity",
@@ -165,7 +167,8 @@ const INNER_RADIUS_RATIO_NODE_TYPES = new Set<FlatSceneNode["type"]>(["ellipse",
  * Dual-representation property groups (legacy single-value fields vs the
  * modern stacks — see the contract at the top of `@/utils/fillUtils`):
  * `fills` supersedes `fill`/`gradientFill`/`imageFill`/`fillOpacity`/
- * `fillBinding` when set, and `effects` supersedes `effect`. A paste that
+ * `fillBinding` when set, `strokes` supersedes `stroke`/`strokeOpacity`/
+ * `strokeBinding` when set, and `effects` supersedes `effect`. A paste that
  * writes one representation must explicitly clear the counterpart on the
  * target (write `undefined` — the same pattern as `clearLegacyFillProps` /
  * `clearLegacyEffectProps` used by the fill/effects panels), otherwise a
@@ -174,6 +177,7 @@ const INNER_RADIUS_RATIO_NODE_TYPES = new Set<FlatSceneNode["type"]>(["ellipse",
  */
 const DUAL_REPRESENTATION_GROUPS: readonly (readonly string[])[] = [
   ["fills", "fill", "fillOpacity", "fillBinding", "gradientFill", "imageFill"],
+  ["strokes", "stroke", "strokeOpacity", "strokeBinding"],
   ["effects", "effect"],
 ];
 

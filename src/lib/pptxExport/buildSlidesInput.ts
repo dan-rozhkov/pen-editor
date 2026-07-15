@@ -54,6 +54,15 @@ export interface BuildDeps {
   resolveRef: (ref: RefNode) => SceneNode | null;
   /** Visible paint stack with legacy fallback + style/variable resolution. Wire to fillUtils.getFills + resolveFillStylePaint. */
   getNodeFills: (node: SceneNode) => Paint[];
+  /**
+   * Visible stroke paint stack (bottom-to-top) with legacy fallback + style/
+   * variable resolution. Wire to fillUtils.getRenderableStrokes +
+   * resolveFillStylePaint. PPTX has no multi-layer or gradient stroke
+   * primitive, so `strokeOf` approximates: topmost visible paint wins, and a
+   * gradient paint is approximated by its first stop's color rather than
+   * silently dropped.
+   */
+  getNodeStrokes: (node: SceneNode) => Paint[];
   /** Visible effect stack. Wire to fillUtils.getEffects + resolveEffectStack. */
   getNodeEffects: (node: SceneNode) => Effect[];
   /** Resolve a possibly-variable-bound color to a literal hex string, e.g. via a variableId binding. */
@@ -161,17 +170,57 @@ function topVectorFill(fills: Paint[], node: SceneNode, ctx: WalkCtx): FillInput
   return undefined;
 }
 
+/**
+ * Approximate a single stroke paint as a flat RGBA. Solid paints map
+ * directly; a gradient paint (no PPTX gradient-line primitive is emitted
+ * here) is approximated by its first stop's color rather than dropped.
+ * Image/pattern/video paints have no representable color and return
+ * undefined so the caller can fall through to the next paint down the stack.
+ */
+function approxStrokePaintColor(
+  paint: Paint,
+  node: SceneNode,
+  ctx: WalkCtx,
+): { rgb: string; hexAlpha: number; paintOpacity: number } | undefined {
+  if (paint.type === "solid") {
+    const solid = paint as SolidPaint;
+    const rawColor = resolvedColorOf({ color: solid.color, binding: solid.colorBinding }, node, ctx);
+    const { rgb, alpha: hexAlpha } = parseHexColor(rawColor ?? "#000000");
+    return { rgb, hexAlpha, paintOpacity: solid.opacity ?? 1 };
+  }
+  if (paint.type === "gradient") {
+    const stops = [...(paint as GradientPaint).gradient.stops].sort((a, b) => a.position - b.position);
+    const firstStop = stops[0];
+    if (!firstStop) return undefined;
+    const { rgb, alpha: hexAlpha } = parseHexColor(firstStop.color);
+    return { rgb, hexAlpha: hexAlpha * (firstStop.opacity ?? 1), paintOpacity: paint.opacity ?? 1 };
+  }
+  // image/pattern/video: no flat-color representation.
+  return undefined;
+}
+
 function strokeOf(node: SceneNode, ctx: WalkCtx): StrokeInput | undefined {
   const perSide = node.strokeWidthPerSide;
   const widthPx = perSide
     ? Math.max(perSide.top ?? 0, perSide.right ?? 0, perSide.bottom ?? 0, perSide.left ?? 0)
     : (node.strokeWidth ?? 0);
-  if (widthPx <= 0 || !node.stroke) return undefined;
+  if (widthPx <= 0) return undefined;
 
-  const rawColor = resolvedColorOf({ color: node.stroke, binding: node.strokeBinding }, node, ctx);
-  const { rgb, alpha: hexAlpha } = parseHexColor(rawColor ?? "#000000");
-  const alpha = clamp01(hexAlpha * (node.strokeOpacity ?? 1) * (node.opacity ?? 1));
-  return { rgb, alpha, widthPx };
+  const strokes = ctx.deps.getNodeStrokes(node);
+  // Topmost visible paint wins (PPTX has one flat line color, not a stack);
+  // fall through to the next paint down when the topmost has no flat-color
+  // representation (image/pattern/video).
+  let approx: ReturnType<typeof approxStrokePaintColor> | undefined;
+  for (let i = strokes.length - 1; i >= 0; i--) {
+    const paint = strokes[i];
+    if (paint.visible === false || (paint.opacity ?? 1) <= 0) continue;
+    approx = approxStrokePaintColor(paint, node, ctx);
+    if (approx) break;
+  }
+  if (!approx) return undefined;
+
+  const alpha = clamp01(approx.hexAlpha * approx.paintOpacity * (node.opacity ?? 1));
+  return { rgb: approx.rgb, alpha, widthPx };
 }
 
 function shadowsOf(node: SceneNode, effects: Effect[], ctx: WalkCtx): ShadowInput[] | undefined {

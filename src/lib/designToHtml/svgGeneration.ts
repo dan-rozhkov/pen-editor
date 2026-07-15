@@ -9,7 +9,7 @@ import type {
   PolygonNode,
 } from "@/types/scene";
 import { applyOpacity } from "@/utils/colorUtils";
-import { getRenderableFills } from "@/utils/fillUtils";
+import { getRenderableFills, getRenderableStrokes } from "@/utils/fillUtils";
 import { buildCapMarkerDef } from "@/utils/lineCapUtils";
 
 let gradientIdCounter = 0;
@@ -62,6 +62,33 @@ function buildSvgFillLayers(node: {
   return { layers, defs };
 }
 
+/**
+ * Resolve a node's `strokes` paint stack (bottom-to-top) into an SVG stroke
+ * value, mirroring `resolveStrokePaint` in `@/lib/designToSvg/shapeStyles`:
+ * a gradient paint gets a `<linearGradient>`/`<radialGradient>` def instead
+ * of being approximated as a solid; a multi-paint stack is approximated with
+ * its topmost visible paint only (SVG has one `stroke=` slot per element —
+ * full compositing would require duplicating the shape element per layer,
+ * out of scope here). Returns `null` when there is no solid/gradient paint
+ * to render (e.g. only `strokes` is set but every paint is hidden, or an
+ * unsupported image/pattern/video paint).
+ */
+function resolveStrokePaintFromStack(node: { strokes?: Paint[] }): {
+  stroke: string;
+  opacity?: number;
+  def: string;
+} | null {
+  if (!node.strokes) return null;
+  const strokes = getRenderableStrokes(node).filter((p) => p.type === "solid" || p.type === "gradient");
+  const topmost = strokes.at(-1);
+  if (!topmost) return null;
+  if (topmost.type === "solid") {
+    return { stroke: topmost.color, opacity: topmost.opacity, def: "" };
+  }
+  const id = `pen-svg-stroke-grad-${++gradientIdCounter}`;
+  return { stroke: `url(#${id})`, opacity: topmost.opacity, def: gradientToSvgDef(topmost.gradient, id) };
+}
+
 function gradientToSvgDef(g: GradientFill, id: string): string {
   const stops = [...g.stops]
     .sort((a, b) => a.position - b.position)
@@ -109,13 +136,29 @@ function safeRatio(num: number, den: number): number {
  * Convert a PathNode to inline SVG markup
  */
 export function pathNodeToSvg(node: PathNode): string {
-  const { layers, defs } = buildSvgFillLayers(node);
+  const { layers, defs: fillDefs } = buildSvgFillLayers(node);
+  let defs = fillDefs;
   const fillRule = node.fillRule ?? "nonzero";
 
   let strokeWidth = 0;
   let strokeAlign: string | undefined;
   let strokeAttr = "";
-  if (node.pathStroke?.fill) {
+  // `strokes` (gradient/multi-paint stack) takes priority over the
+  // solid-only `pathStroke`/legacy `stroke` fallbacks — mirrors
+  // `getStrokes()`'s fallback order in `@/utils/fillUtils`. Geometry
+  // (width/join/cap) is not part of the paint stack, so it still comes from
+  // `pathStroke`/node-level fields regardless of which paint model is used.
+  const stackStroke = resolveStrokePaintFromStack(node);
+  if (stackStroke && (node.strokeWidth || node.pathStroke?.thickness)) {
+    strokeWidth = node.strokeWidth ?? node.pathStroke?.thickness ?? 1;
+    strokeAlign = node.pathStroke?.align ?? node.strokeAlign;
+    const strokeJoin = node.pathStroke?.join ?? "miter";
+    const strokeCap = node.pathStroke?.cap ?? "butt";
+    const opacityAttr =
+      stackStroke.opacity != null && stackStroke.opacity !== 1 ? ` stroke-opacity="${stackStroke.opacity}"` : "";
+    strokeAttr = ` stroke="${stackStroke.stroke}"${opacityAttr} stroke-width="${strokeWidth}" stroke-linejoin="${strokeJoin}" stroke-linecap="${strokeCap}"`;
+    defs += stackStroke.def;
+  } else if (node.pathStroke?.fill) {
     const strokeColor = applyOpacity(node.pathStroke.fill, node.strokeOpacity);
     strokeWidth = node.pathStroke.thickness ?? 1;
     strokeAlign = node.pathStroke.align ?? node.strokeAlign;
@@ -197,10 +240,18 @@ export function polygonNodeToSvg(node: PolygonNode): string {
   }
   const pointsStr = points.join(" ");
 
-  const { layers, defs } = buildSvgFillLayers(node);
+  const { layers, defs: fillDefs } = buildSvgFillLayers(node);
+  let defs = fillDefs;
   let strokeWidth = 0;
   let strokeAttr = "";
-  if (node.stroke && node.strokeWidth) {
+  const stackStroke = resolveStrokePaintFromStack(node);
+  if (stackStroke && node.strokeWidth) {
+    strokeWidth = node.strokeWidth;
+    const opacityAttr =
+      stackStroke.opacity != null && stackStroke.opacity !== 1 ? ` stroke-opacity="${stackStroke.opacity}"` : "";
+    strokeAttr = ` stroke="${stackStroke.stroke}"${opacityAttr} stroke-width="${strokeWidth}"`;
+    defs += stackStroke.def;
+  } else if (node.stroke && node.strokeWidth) {
     const strokeColor = applyOpacity(node.stroke, node.strokeOpacity);
     strokeWidth = node.strokeWidth;
     strokeAttr = ` stroke="${strokeColor}" stroke-width="${node.strokeWidth}"`;

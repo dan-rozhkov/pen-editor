@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FlatSceneNode, RefNode } from "@/types/scene";
-import { getEffects, getFills } from "@/utils/fillUtils";
+import { getEffects, getFills, getRenderableStrokes } from "@/utils/fillUtils";
 import { extractNodeStyle, pickStyleUpdatesForNode } from "@/utils/styleClipboard";
 
 const rectSource: FlatSceneNode = {
@@ -236,6 +236,66 @@ describe("pickStyleUpdatesForNode", () => {
       expect(effects[0]).toMatchObject({ type: "blur", radius: 8 });
     });
 
+    it("copies a gradient `strokes` stack instead of dropping it", () => {
+      const gradientStrokeSource = {
+        ...legacyFillSource,
+        stroke: undefined,
+        strokes: [
+          {
+            id: "s1",
+            type: "gradient",
+            gradient: { type: "linear", startX: 0, startY: 0, endX: 1, endY: 0, stops: [{ color: "#ff0000", position: 0 }, { color: "#0000ff", position: 1 }] },
+          },
+        ],
+      } as unknown as FlatSceneNode;
+
+      const style = extractNodeStyle(gradientStrokeSource);
+      const updates = pickStyleUpdatesForNode(paintStackTarget, style);
+      const merged = { ...paintStackTarget, ...updates } as FlatSceneNode;
+      const strokes = getRenderableStrokes(merged);
+      expect(strokes).toHaveLength(1);
+      expect(strokes[0]).toMatchObject({ type: "gradient" });
+    });
+
+    it("clears the target's stale legacy stroke fields when pasting a `strokes` stack", () => {
+      const strokeStackSource = {
+        ...legacyFillSource,
+        stroke: undefined,
+        strokes: [{ id: "p2", type: "solid", color: "#00ff00" }],
+      } as unknown as FlatSceneNode;
+      const legacyStrokeTarget = {
+        ...paintStackTarget,
+        stroke: "#123456",
+        strokeOpacity: 0.5,
+      } as FlatSceneNode;
+
+      const style = extractNodeStyle(strokeStackSource);
+      const updates = pickStyleUpdatesForNode(legacyStrokeTarget, style);
+      const merged = { ...legacyStrokeTarget, ...updates } as FlatSceneNode;
+      expect(merged.stroke).toBeUndefined();
+      const strokes = getRenderableStrokes(merged);
+      expect(strokes).toHaveLength(1);
+      expect(strokes[0]).toMatchObject({ type: "solid", color: "#00ff00" });
+    });
+
+    it("clears the target's stale `strokes` stack when pasting a legacy-only stroke", () => {
+      const legacyStrokeSource = {
+        ...legacyFillSource,
+        stroke: "#abcdef",
+      } as FlatSceneNode;
+      const strokeStackTarget = {
+        ...paintStackTarget,
+        strokes: [{ id: "p1", type: "solid", color: "#0000ff" }],
+      } as unknown as FlatSceneNode;
+
+      const style = extractNodeStyle(legacyStrokeSource);
+      const updates = pickStyleUpdatesForNode(strokeStackTarget, style);
+      const merged = { ...strokeStackTarget, ...updates } as FlatSceneNode;
+      const strokes = getRenderableStrokes(merged);
+      expect(strokes).toHaveLength(1);
+      expect(strokes[0]).toMatchObject({ type: "solid", color: "#abcdef" });
+    });
+
     it("leaves the target's fills and effects untouched when the source has neither", () => {
       const bareSource = {
         id: "s2",
@@ -250,6 +310,7 @@ describe("pickStyleUpdatesForNode", () => {
       const updates = pickStyleUpdatesForNode(paintStackTarget, style) as Record<string, unknown>;
       expect("fills" in updates).toBe(false);
       expect("fill" in updates).toBe(false);
+      expect("strokes" in updates).toBe(false);
       expect("effects" in updates).toBe(false);
       expect("effect" in updates).toBe(false);
       expect(updates.opacity).toBe(0.5);
@@ -288,6 +349,7 @@ describe("pickStyleUpdatesForNode", () => {
 
       // Not honored by resolveRefToTree — must never be written as dead data.
       expect("fills" in updates).toBe(false);
+      expect("strokes" in updates).toBe(false);
       expect("effects" in updates).toBe(false);
       expect("effect" in updates).toBe(false);
       expect("opacity" in updates).toBe(false);

@@ -268,6 +268,58 @@ describe("convertPixsoNode — common properties", () => {
     expect(n.strokeAlign).toBe("inside");
   });
 
+  it("gradient stroke → strokes stack, not silently dropped", () => {
+    const n = convertPixsoNode({
+      ...base,
+      strokes: [
+        {
+          type: "GRADIENT_LINEAR",
+          gradientStops: [
+            { position: 0, color: { r: 1, g: 0, b: 0 } },
+            { position: 1, color: { r: 0, g: 0, b: 1 } },
+          ],
+        },
+      ],
+      strokeWeight: 4,
+    }) as RectNode;
+    expect(n.stroke).toBeUndefined();
+    expect(n.strokes).toHaveLength(1);
+    expect(n.strokes![0].type).toBe("gradient");
+    expect(n.strokeWidth).toBe(4);
+  });
+
+  it("multiple stroke paints → strokes stack", () => {
+    const n = convertPixsoNode({
+      ...base,
+      strokes: [
+        { type: "SOLID", color: { r: 0, g: 0, b: 0 } },
+        { type: "SOLID", color: { r: 0, g: 1, b: 0 }, opacity: 0.5 },
+      ],
+      strokeWeight: 2,
+    }) as RectNode;
+    expect(n.stroke).toBeUndefined();
+    expect(n.strokes).toHaveLength(2);
+    const top = n.strokes![1] as SolidPaint;
+    expect(top.color).toBe("#00ff00");
+    expect(top.opacity).toBe(0.5);
+  });
+
+  it("image stroke paint is excluded (unsupported on a stroke)", () => {
+    const n = convertPixsoNode(
+      {
+        ...base,
+        strokes: [
+          { type: "SOLID", color: { r: 0, g: 0, b: 0 } },
+          { type: "IMAGE", imageHash: "abc", scaleMode: "FILL" },
+        ],
+        strokeWeight: 2,
+      },
+      { imageMap: { abc: "data:image/png;base64,AAAA" } },
+    ) as RectNode;
+    expect(n.stroke).toBe("#000000");
+    expect(n.strokes).toBeUndefined();
+  });
+
   it("effects: drop shadow / inner shadow / blur / bg blur", () => {
     const n = convertPixsoNode({
       ...base,

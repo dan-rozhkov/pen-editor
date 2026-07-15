@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import { buildSlidesInput, needsRaster } from "../buildSlidesInput";
 import type { BuildDeps } from "../buildSlidesInput";
+import { getRenderableStrokes } from "@/utils/fillUtils";
 import type {
   FrameNode,
   RectNode,
@@ -17,6 +18,7 @@ const deps: BuildDeps = {
   layoutChildren: (f) => f.children,
   resolveRef: () => null,
   getNodeFills: (n) => n.fills ?? [],
+  getNodeStrokes: (n) => getRenderableStrokes(n),
   getNodeEffects: (n) => n.effects ?? [],
   resolveColor: (lookup) => lookup.color,
   rasterizeNode: () => new Uint8Array([1, 2, 3]),
@@ -337,6 +339,75 @@ describe("buildSlidesInput", () => {
     const shape = input.slides[0].shapes[0];
     expect(shape.kind).toBe("rect");
     if (shape.kind === "rect") expect(shape.stroke?.widthPx).toBe(3);
+  });
+
+  it("gradient stroke is approximated with its first stop's color", () => {
+    const input = buildSlidesInput(
+      [
+        frame({
+          children: [
+            rect({
+              strokeWidth: 4,
+              strokes: [
+                {
+                  id: "s",
+                  type: "gradient",
+                  gradient: {
+                    type: "linear",
+                    startX: 0,
+                    startY: 0,
+                    endX: 1,
+                    endY: 0,
+                    stops: [
+                      { color: "#ff0000", position: 0 },
+                      { color: "#0000ff", position: 1 },
+                    ],
+                  },
+                },
+              ],
+            }),
+          ],
+        }),
+      ],
+      deps,
+    );
+    const shape = input.slides[0].shapes[0];
+    expect(shape.kind).toBe("rect");
+    if (shape.kind === "rect") {
+      expect(shape.stroke).toMatchObject({ rgb: "FF0000", widthPx: 4 });
+    }
+  });
+
+  it("multi-paint stroke stack approximates with the topmost visible paint", () => {
+    const input = buildSlidesInput(
+      [
+        frame({
+          children: [
+            rect({
+              strokeWidth: 2,
+              strokes: [
+                { id: "bottom", type: "solid", color: "#000000" },
+                { id: "top", type: "solid", color: "#00ff00" },
+              ],
+            }),
+          ],
+        }),
+      ],
+      deps,
+    );
+    const shape = input.slides[0].shapes[0];
+    expect(shape.kind).toBe("rect");
+    if (shape.kind === "rect") expect(shape.stroke).toMatchObject({ rgb: "00FF00", widthPx: 2 });
+  });
+
+  it("stroke stack with only a hidden paint yields no stroke, not a crash", () => {
+    const input = buildSlidesInput(
+      [frame({ children: [rect({ strokeWidth: 2, strokes: [{ id: "s", type: "solid", color: "#000", visible: false }] })] })],
+      deps,
+    );
+    const shape = input.slides[0].shapes[0];
+    expect(shape.kind).toBe("rect");
+    if (shape.kind === "rect") expect(shape.stroke).toBeUndefined();
   });
 
   it("shadow effect mapping", () => {

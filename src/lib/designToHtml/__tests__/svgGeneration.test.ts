@@ -119,6 +119,41 @@ describe("pathNodeToSvg", () => {
     const strokeIdx = svg.indexOf('stroke="');
     expect(strokeIdx).toBeGreaterThan(lastPathStart);
   });
+
+  it("a gradient `strokes` paint renders stroke=url(#...) with a def, not dropped", () => {
+    const strokes: Paint[] = [{ id: "s1", type: "gradient", gradient: linearGradient }];
+    const svg = pathNodeToSvg(pathNode({ strokes, strokeWidth: 3 }));
+    expect(svg).toMatch(/stroke="url\(#[^"]+\)"/);
+    expect(svg).toContain("<linearGradient");
+    expect(svg).toContain('stroke-width="3"');
+  });
+
+  it("a multi-paint `strokes` stack renders only the topmost visible paint", () => {
+    const strokes: Paint[] = [
+      { id: "s1", type: "solid", color: "#000000" },
+      { id: "s2", type: "solid", color: "#00ff00" },
+    ];
+    const svg = pathNodeToSvg(pathNode({ strokes, strokeWidth: 2 }));
+    const strokeMatches = svg.match(/stroke="/g) ?? [];
+    expect(strokeMatches).toHaveLength(1);
+    expect(svg).toContain('stroke="#00ff00"');
+    expect(svg).not.toContain("#000000");
+  });
+
+  it("`strokes` stack wins over a stale legacy `stroke`/`pathStroke`", () => {
+    const strokes: Paint[] = [{ id: "s1", type: "solid", color: "#00ff00" }];
+    const svg = pathNodeToSvg(
+      pathNode({
+        strokes,
+        strokeWidth: 2,
+        stroke: "#000000",
+        pathStroke: { fill: "#ff0000", thickness: 5, align: "center" },
+      }),
+    );
+    expect(svg).toContain('stroke="#00ff00"');
+    expect(svg).not.toContain("#000000");
+    expect(svg).not.toContain("#ff0000");
+  });
 });
 
 describe("lineNodeToSvg", () => {
@@ -187,5 +222,13 @@ describe("polygonNodeToSvg", () => {
   it("no fills → fill=none", () => {
     const svg = polygonNodeToSvg(polygonNode({}));
     expect(svg).toContain('fill="none"');
+  });
+
+  it("a gradient `strokes` paint renders stroke=url(#...) instead of being dropped", () => {
+    const strokes: Paint[] = [{ id: "s1", type: "gradient", gradient: linearGradient }];
+    const svg = polygonNodeToSvg(polygonNode({ strokes, strokeWidth: 4 }));
+    expect(svg).toMatch(/stroke="url\(#[^"]+\)"/);
+    expect(svg).toContain("<linearGradient");
+    expect(svg).toContain('stroke-width="4"');
   });
 });
