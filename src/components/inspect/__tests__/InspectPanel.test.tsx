@@ -47,6 +47,15 @@ describe("<InspectPanel />", () => {
     expect(screen.getByText("100 × 50")).toBeTruthy();
   });
 
+  it("places the box model in the Layer properties accordion", () => {
+    select(["rect1"]);
+    render(<InspectPanel />);
+    const layerProperties = screen.getByRole("button", { name: "Layer properties" });
+    expect(screen.getByLabelText("Box model")).toBeTruthy();
+    fireEvent.click(layerProperties);
+    expect(screen.queryByLabelText("Box model")).toBeNull();
+  });
+
   it("copies a row's value on click and toasts", async () => {
     select(["rect1"]);
     render(<InspectPanel />);

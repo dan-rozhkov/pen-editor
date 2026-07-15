@@ -193,7 +193,9 @@ export function InspectPanel() {
             )}
           </div>
 
-          <BoxModelDiagram box={data.box} units={units} remBase={remBase} />
+          <Section title="Layer properties">
+            <BoxModelDiagram box={data.box} units={units} remBase={remBase} />
+          </Section>
 
           {data.sections.map((section) => (
             <Section key={section.title} title={section.title}>
