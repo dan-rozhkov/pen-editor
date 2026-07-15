@@ -258,6 +258,54 @@ describe("<StrokeSection />", () => {
     });
   });
 
+  describe("stroke paint stack", () => {
+    it("shows a Type selector (Solid/Linear/Radial) for a legacy single-color stroke", () => {
+      renderSection(makeNode({ stroke: "#ff0000", strokeWidth: 4 }));
+      expect(screen.getByText("Solid")).toBeTruthy();
+    });
+
+    it("renders paint-stack rows once node.strokes is set, without the legacy color row", () => {
+      renderSection(
+        makeNode({
+          strokeWidth: 4,
+          strokes: [
+            { id: "s1", type: "solid", color: "#111111" },
+            { id: "s2", type: "gradient", gradient: { type: "linear", stops: [{ color: "#fff", position: 0 }, { color: "#000", position: 1 }], startX: 0, startY: 0, endX: 1, endY: 0 } },
+          ],
+        } as Partial<SceneNode>),
+      );
+      // No legacy "Type" selector for a single color.
+      expect(screen.queryByText("Solid")).toBeNull();
+      // Both stack rows render a summary label.
+      expect(screen.getByText("#111111".toUpperCase())).toBeTruthy();
+      expect(screen.getByText("Linear")).toBeTruthy();
+    });
+
+    it("removing a stroke clears both legacy fields and the strokes stack", () => {
+      const onUpdate = renderSection(
+        makeNode({
+          strokeWidth: 4,
+          strokes: [{ id: "s1", type: "solid", color: "#111111" }],
+        } as Partial<SceneNode>),
+      );
+      fireEvent.click(screen.getAllByRole("button")[0]);
+      expect(onUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ strokes: undefined, stroke: undefined }),
+      );
+    });
+
+    it("omits the Per Side mode option once the stack has a gradient paint", () => {
+      renderSection(
+        makeNode({
+          strokeWidth: 4,
+          strokes: [{ id: "s1", type: "gradient", gradient: { type: "linear", stops: [{ color: "#fff", position: 0 }, { color: "#000", position: 1 }], startX: 0, startY: 0, endX: 1, endY: 0 } }],
+        } as Partial<SceneNode>),
+      );
+      expect(screen.queryByText("Per Side")).toBeNull();
+      expect(screen.getByText("Unified")).toBeTruthy();
+    });
+  });
+
   describe("path stroke migration", () => {
     it("migrates legacy pathStroke to base props on first edit", () => {
       const onUpdate = renderSection(

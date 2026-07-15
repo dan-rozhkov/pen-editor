@@ -48,6 +48,7 @@ import {
   convertFillKind,
   getFillKind,
   moveItem,
+  paintSummary,
   removeFillAt,
   toggleFillVisibleAt,
   updateFillAt,
@@ -66,7 +67,8 @@ interface FillSectionProps {
 }
 
 // Derived from the canonical blend-mode list ("color-dodge" → "Color Dodge").
-const BLEND_MODE_OPTIONS: { value: PaintBlendMode; label: string }[] =
+// Exported — shared with StrokeSection's paint-stack rows.
+export const BLEND_MODE_OPTIONS: { value: PaintBlendMode; label: string }[] =
   PAINT_BLEND_MODES.map((mode) => ({
     value: mode,
     label: mode
@@ -79,7 +81,7 @@ function blendModeLabel(mode: PaintBlendMode | undefined): string {
   return BLEND_MODE_OPTIONS.find((option) => option.value === (mode ?? "normal"))?.label ?? "Normal";
 }
 
-function BlendModeDropdown({
+export function BlendModeDropdown({
   value,
   onChange,
 }: {
@@ -120,8 +122,8 @@ function BlendModeDropdown({
   );
 }
 
-/** Small color/gradient/image preview swatch for a paint row. */
-function PaintSwatch({ paint }: { paint: Paint }) {
+/** Small color/gradient/image preview swatch for a paint row. Exported — shared with StrokeSection. */
+export function PaintSwatch({ paint }: { paint: Paint }) {
   let style: React.CSSProperties;
   if (paint.type === "solid") {
     style = { backgroundColor: paint.color };
@@ -176,17 +178,10 @@ const FILL_TYPE_OPTIONS = [
   { value: "radial", label: "Radial" },
 ];
 
-const FILL_ROW_TRIGGER_CLASS =
+// Exported — shared with StrokeSection's paint-stack rows.
+export const FILL_ROW_TRIGGER_CLASS =
   "flex min-w-0 flex-1 items-center gap-2 rounded bg-secondary px-1.5 py-1 text-left text-secondary-foreground hover:bg-secondary data-popup-open:bg-secondary";
 
-/** One-line summary shown on the collapsed row (popover trigger). */
-function paintSummary(paint: Paint): string {
-  if (paint.type === "solid") return paint.color.toUpperCase();
-  if (paint.type === "image") return "Image";
-  if (paint.type === "pattern") return "Pattern";
-  if (paint.type === "video") return "Video";
-  return paint.gradient.type === "radial" ? "Radial" : "Linear";
-}
 
 export function FillSection({
   node,

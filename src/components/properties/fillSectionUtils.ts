@@ -16,6 +16,18 @@ import { getDefaultGradient } from "@/utils/gradientUtils";
 /** Discrete fill kinds shown in the per-paint type selector. */
 export type FillKind = "solid" | "linear" | "radial" | "image" | "pattern" | "video";
 
+/**
+ * One-line summary shown on a paint row's collapsed popover trigger. Shared
+ * between `FillSection` and `StrokeSection`'s paint-stack rows.
+ */
+export function paintSummary(paint: Paint): string {
+  if (paint.type === "solid") return paint.color.toUpperCase();
+  if (paint.type === "image") return "Image";
+  if (paint.type === "pattern") return "Pattern";
+  if (paint.type === "video") return "Video";
+  return paint.gradient.type === "radial" ? "Radial" : "Linear";
+}
+
 /** Map a Paint to its UI fill kind. */
 export function getFillKind(paint: Paint): FillKind {
   switch (paint.type) {
