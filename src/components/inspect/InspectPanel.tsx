@@ -64,7 +64,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     <div className="border-b border-border-default">
       <button
         type="button"
-        className="w-full flex items-center gap-1.5 px-3 py-2 text-left hover:bg-surface-hover"
+        className="w-full flex items-center gap-1.5 px-3 py-2 text-left hover:bg-secondary"
         onClick={() => setExpanded((v) => !v)}
       >
         <ChevronIcon expanded={expanded} />
