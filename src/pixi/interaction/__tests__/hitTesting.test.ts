@@ -151,6 +151,66 @@ describe("findNodeAtPoint", () => {
   });
 });
 
+describe("auto-layout child z-order", () => {
+  beforeEach(() => {
+    resetStores();
+
+    const autoFrame = {
+      id: "autoFrame",
+      type: "frame",
+      name: "Auto Frame",
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      fill: "#ffffff",
+      layout: { autoLayout: true, direction: "row" },
+    } as unknown as FlatSceneNode;
+
+    const absoluteFrame = {
+      id: "absoluteFrame",
+      type: "frame",
+      name: "Absolute Frame",
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      fill: "#ff0000",
+      absolutePosition: true,
+      layout: { autoLayout: false },
+    } as unknown as FlatSceneNode;
+
+    const topRect = {
+      id: "topRect",
+      type: "rect",
+      name: "Top Rect",
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      fill: "#00ff00",
+    } as unknown as FlatSceneNode;
+
+    useSceneStore.setState({
+      nodesById: { autoFrame, absoluteFrame, topRect },
+      parentById: {
+        autoFrame: null,
+        absoluteFrame: "autoFrame",
+        topRect: "autoFrame",
+      },
+      // Bottom-to-top: the absolute frame is behind the regular child.
+      childrenById: { autoFrame: ["absoluteFrame", "topRect"] },
+      rootIds: ["autoFrame"],
+      componentArtifactsById: {},
+      _cachedTree: null,
+    });
+  });
+
+  it("hits a regular child above an overlapping absolute-positioned frame", () => {
+    expect(findNodeAtPoint(50, 50, { deepSelect: true })).toBe("topRect");
+  });
+});
+
 /**
  * Fixture scene for scope-chain drill tests:
  *

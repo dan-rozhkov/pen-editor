@@ -14,17 +14,13 @@ export function prepareFrameNode(
   frameNode: FrameNode,
   calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
 ): PreparedFrameNode {
-  let layoutChildren: SceneNode[];
-  if (frameNode.layout?.autoLayout) {
-    const flowChildren = calculateLayoutForFrame(frameNode);
-    // Include absolute-positioned children as-is (they keep their own x/y)
-    const absoluteChildren = frameNode.children.filter(
-      (c) => c.absolutePosition && c.visible !== false && c.enabled !== false,
-    );
-    layoutChildren = [...flowChildren, ...absoluteChildren];
-  } else {
-    layoutChildren = frameNode.children;
-  }
+  // The layout store applies computed geometry in-place over frame.children,
+  // preserving every child's original z-order. Absolute-positioned children
+  // are already present with their stored x/y, so appending them again would
+  // both duplicate them and incorrectly make them topmost for hit-testing.
+  const layoutChildren = frameNode.layout?.autoLayout
+    ? calculateLayoutForFrame(frameNode)
+    : frameNode.children;
   const fitWidth =
     frameNode.layout?.autoLayout && frameNode.sizing?.widthMode === "fit_content";
   const fitHeight =
