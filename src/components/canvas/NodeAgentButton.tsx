@@ -3,6 +3,7 @@ import { SparkleIcon, ArrowUpIcon } from "@phosphor-icons/react";
 import { IconButton } from "@/components/ui/IconButton";
 import { cn } from "@/lib/utils";
 import type { AgentMode } from "@/store/chatStore";
+import { useDevModeStore } from "@/store/devModeStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { embedScreenRect } from "@/components/canvas/embedLayerGeometry";
 import {
@@ -35,6 +36,7 @@ export function NodeAgentButton({
   isComponentContext = false,
   launch,
 }: NodeAgentButtonProps) {
+  const isDevMode = useDevModeStore((state) => state.active);
   const scale = useViewportStore((s) => s.scale);
   const panX = useViewportStore((s) => s.x);
   const panY = useViewportStore((s) => s.y);
@@ -96,6 +98,8 @@ export function NodeAgentButton({
     },
     [submit],
   );
+
+  if (isDevMode) return null;
 
   return (
     <div

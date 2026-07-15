@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NodeAgentButton } from "../NodeAgentButton";
 import { FRAME_QUICK_ACTIONS } from "../frameQuickActions";
+import { useDevModeStore } from "@/store/devModeStore";
 
 const launch = vi.fn();
 const node = { id: "n-1", width: 320, height: 600 };
@@ -18,14 +19,26 @@ function renderButton() {
   );
 }
 
-afterEach(() => cleanup());
-beforeEach(() => launch.mockReset());
+afterEach(() => {
+  cleanup();
+  useDevModeStore.setState({ active: false });
+});
+beforeEach(() => {
+  launch.mockReset();
+  useDevModeStore.setState({ active: false });
+});
 
 describe("<NodeAgentButton />", () => {
   it("starts with the composer closed", () => {
     renderButton();
     expect(screen.getByLabelText("Ask agent")).toBeTruthy();
     expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("hides the trigger in dev mode", () => {
+    useDevModeStore.setState({ active: true });
+    renderButton();
+    expect(screen.queryByLabelText("Ask agent")).toBeNull();
   });
 
   it("uses the component accent when requested", () => {
