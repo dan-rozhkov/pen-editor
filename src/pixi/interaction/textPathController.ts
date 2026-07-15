@@ -3,10 +3,12 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useViewportStore } from "@/store/viewportStore";
+import { saveHistory } from "@/store/sceneStore/helpers/history";
+import { withHistoryBatch } from "@/store/historyStore";
 import { generateId } from "@/types/scene";
 import type { PathNode } from "@/types/scene";
 import { getNodeAbsolutePositionWithLayout } from "@/utils/nodeUtils";
-import { buildTextPathNodeFromPath, findClosestPathNode } from "./textPathHitTest";
+import { buildTextPathNodeFromPath, findClosestPathNode, reinsertAtIndex } from "./textPathHitTest";
 import type { InteractionContext } from "./types";
 
 /** Screen-space hover/click threshold, converted to world units by the current zoom (mirrors `pathEditGeometry.ts`'s HIT_RADIUS_PX). */
@@ -55,15 +57,51 @@ export function createTextPathController(_context: InteractionContext): TextPath
       const newId = generateId();
       const textNode = buildTextPathNodeFromPath(pathNode as unknown as PathNode, newId);
       const parentId = state.parentById[hoverId] ?? null;
+      const siblings = parentId ? (state.childrenById[parentId] ?? []) : state.rootIds;
+      const originalIndex = siblings.indexOf(hoverId);
 
-      state.deleteNode(hoverId);
-      if (parentId) {
-        useSceneStore.getState().addChildToFrame(parentId, textNode);
-      } else {
-        useSceneStore.getState().addNode(textNode);
-      }
+      // The conversion is delete-old + add-new + select-new under the hood —
+      // three operations that would otherwise land as three separate history
+      // entries (a single Cmd+Z would then leave neither the path nor the
+      // text — the predecessor's self-reported defect). `saveHistory` once
+      // up front + `withHistoryBatch` around all of it (each of these calls
+      // normally saves its own history entry, a no-op while batched —
+      // `select`'s history save isn't gated through the scene store's
+      // `saveHistory` helper but the same underlying historyStore action,
+      // which independently respects `batchMode`) collapses them into one
+      // undo step.
+      saveHistory(useSceneStore.getState());
+      withHistoryBatch(() => {
+        state.deleteNode(hoverId);
+        if (parentId) {
+          useSceneStore.getState().addChildToFrame(parentId, textNode);
+        } else {
+          useSceneStore.getState().addNode(textNode);
+        }
 
-      useSelectionStore.getState().select(newId);
+        // addNode/addChildToFrame always append — restore the original
+        // path's stacking position among its siblings (otherwise the
+        // converted node jumps to the front for a path with siblings above/
+        // below it).
+        if (originalIndex >= 0) {
+          if (parentId) {
+            useSceneStore.setState((s) => ({
+              childrenById: {
+                ...s.childrenById,
+                [parentId]: reinsertAtIndex(s.childrenById[parentId] ?? [], newId, originalIndex),
+              },
+              _cachedTree: null,
+            }));
+          } else {
+            useSceneStore.setState((s) => ({
+              rootIds: reinsertAtIndex(s.rootIds, newId, originalIndex),
+              _cachedTree: null,
+            }));
+          }
+        }
+
+        useSelectionStore.getState().select(newId);
+      });
       useDrawModeStore.getState().setActiveTool(null);
       return true;
     },
