@@ -11,7 +11,7 @@ import {
   PenNibIcon,
   FlowArrow,
   type IconWeight,
-  CodeIcon,
+  CodeBlockIcon,
   ResizeIcon,
 } from "@phosphor-icons/react";
 import type { DrawToolType } from "@/store/drawModeStore";
@@ -79,7 +79,7 @@ export const PEN_SUB_TOOLS: ToolDefinition[] = [
 
 export const TRAILING_TOOLS: ToolDefinition[] = [
   { icon: TextTIcon, label: "Text", tool: "text", shortcut: "T" },
-  { icon: CodeIcon, label: "Embed", tool: "embed", shortcut: "E" },
+  { icon: CodeBlockIcon, label: "Embed", tool: "embed", shortcut: "E" },
 ];
 
 /** Every tool, flattened into a single list (used by the command palette). */
