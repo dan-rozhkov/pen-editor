@@ -115,7 +115,7 @@ export function InspectPanel() {
 
   return (
     <div className="w-[300px] h-full flex flex-col bg-surface-panel border-l border-border-default overflow-y-auto">
-      <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border-default">
+      <div className="flex h-[58.5px] items-center justify-between gap-2 px-3 py-3 border-b border-border-default">
         <ButtonGroup orientation="horizontal" className={modeToggleGroupClass}>
           <Button
             type="button"
