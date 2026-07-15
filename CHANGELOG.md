@@ -8,6 +8,46 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.40.0] - 2026-07-15
+
+### Added
+- **Gradient and multiple strokes (p1-22).** Strokes are now a paint stack
+  (`strokes: Paint[]`) just like fills: solid and gradient (linear/radial)
+  paints, several strokes composited bottom-to-top in one geometry, each with
+  its own `visible`/`opacity`/`blendMode`. Stroke geometry (weight, align,
+  per-side widths) stays a single node-level property, matching Figma's model —
+  two stroke paints cannot have different weights. The Stroke panel gained the
+  same add/remove/reorder/blend controls as Fill, opening the existing gradient
+  editor. Legacy single-color strokes keep working and migrate into the stack
+  on first edit; old `.pen` files open unchanged.
+- **Text on a path (p2-11).** New text-on-path tool: click a vector path and it
+  becomes a text node whose glyphs run along the curve, rotated to the tangent
+  (the path's fill and effects move onto the text; no leftover path node). A
+  draggable on-canvas handle sets the start point, and `side`/`flip` put the
+  text above or below the line and reverse its reading direction. The curve
+  stays editable through the existing path point-edit mode, with the text
+  re-flowing live. Text past the end of the path is clipped, matching the SVG
+  `<textPath>` spec, with an overflow indicator in the panel. Built on a new
+  arc-length module (`pathMeasure`) — the first such arithmetic in the editor.
+
+### Changed
+- Pasting from Figma now preserves gradient and multiple strokes 1:1 (stops,
+  angles, per-paint opacity, weight, align, per-side widths). Previously every
+  stroke but the topmost was dropped and a gradient stroke silently degraded to
+  its first stop's color.
+- The AI agent can set the stroke stack via `batch_design`'s `strokes`.
+- Dev Mode, `.pen` export, style copy/paste, PPTX and SVG/HTML export all read
+  the stroke stack instead of the legacy single-color field, so a gradient
+  stroke no longer disappears from them.
+- SVG export renders gradient strokes as `stroke="url(#...)"` and composites a
+  multi-paint stroke stack in full. CSS export uses `border-image-source` with
+  `border-image-slice: 1` — Figma's own Copy as CSS omits the slice, which
+  renders nothing at all; the `border-radius` incompatibility is inherent to
+  CSS border-image and is documented in code.
+- Text on a path is exported natively to SVG via `<defs><path>` + `<textPath>`.
+  HTML/PPTX degrade to straight text (no CSS equivalent exists); PDF keeps full
+  fidelity since it rasterizes the canvas.
+
 ## [0.39.0] - 2026-07-15
 
 ### Added
