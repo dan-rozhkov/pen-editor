@@ -8,6 +8,30 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-07-15
+
+### Added
+- **Dev Mode (Figma-style developer handoff — free).** Toggle with the `</>`
+  button next to Play or `Shift+D`. The canvas becomes read-only (selection,
+  pan and zoom keep working; drag/resize/draw/text-edit and mutating shortcuts
+  are blocked, including command-palette edit commands), and the right panel
+  is replaced by an **Inspect** panel: box-model diagram, layout, typography,
+  fills/strokes/effects/radius with bound variable and shared-style names
+  (tokens expand to their light/dark values), everything copy-on-click, plus a
+  Code ↔ List toggle (code generation lands in dev-02) and a px/rem unit
+  switch (rem base 16, remembered in localStorage). Variable colors resolve
+  through the node's effective theme (ancestor `themeOverride` respected), so
+  copied values match the canvas.
+- **Hover measurements.** In Dev Mode, hovering another node draws the red
+  distance overlays without holding Alt (Alt+hover in normal mode unchanged);
+  labels honor the px/rem unit choice.
+- **Measurement tool (`Shift+M`).** Drag from node to node to pin a persistent
+  measurement, rendered only in Dev Mode. Measurements are saved per page into
+  the document, participate in undo/redo, survive save/load, are cleaned up
+  when the anchored nodes are deleted (including boolean ops, embed/frame
+  conversions, instance detach and AI batch edits), and can be selected and
+  removed with Delete. Undo/redo (Cmd+Z) works inside Dev Mode.
+
 ## [0.37.0] - 2026-07-14
 
 ### Added
