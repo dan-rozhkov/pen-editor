@@ -34,7 +34,7 @@ export function InspectRow({ row }: { row: InspectValue }) {
         data-testid="inspect-row"
         role="button"
         tabIndex={0}
-        className="flex items-center justify-between gap-2 px-3 py-1.5 cursor-pointer hover:bg-surface-hover"
+        className="flex items-center justify-between gap-2 px-3 py-1.5 cursor-pointer hover:bg-secondary"
         onClick={() => void copy(row.label, copyValue)}
         onKeyDown={handleActivationKeyDown(() => void copy(row.label, copyValue))}
       >
@@ -52,7 +52,7 @@ export function InspectRow({ row }: { row: InspectValue }) {
         data-testid="inspect-row"
         role="button"
         tabIndex={0}
-        className="flex items-center justify-between gap-2 px-3 py-1.5 cursor-pointer hover:bg-surface-hover"
+        className="flex items-center justify-between gap-2 px-3 py-1.5 cursor-pointer hover:bg-secondary"
         onClick={() => setExpanded((v) => !v)}
         onKeyDown={handleActivationKeyDown(() => setExpanded((v) => !v))}
       >
@@ -72,7 +72,7 @@ export function InspectRow({ row }: { row: InspectValue }) {
             data-testid="inspect-row"
             role="button"
             tabIndex={0}
-            className="flex items-center justify-between gap-2 py-1 cursor-pointer hover:bg-surface-hover"
+            className="flex items-center justify-between gap-2 py-1 cursor-pointer hover:bg-secondary"
             onClick={(e) => {
               e.stopPropagation();
               void copy(`${row.label} (light)`, token.light);
@@ -89,7 +89,7 @@ export function InspectRow({ row }: { row: InspectValue }) {
             data-testid="inspect-row"
             role="button"
             tabIndex={0}
-            className="flex items-center justify-between gap-2 py-1 cursor-pointer hover:bg-surface-hover"
+            className="flex items-center justify-between gap-2 py-1 cursor-pointer hover:bg-secondary"
             onClick={(e) => {
               e.stopPropagation();
               void copy(`${row.label} (dark)`, token.dark);
