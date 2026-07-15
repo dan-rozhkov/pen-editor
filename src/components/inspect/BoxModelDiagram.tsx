@@ -38,7 +38,7 @@ export function BoxModelDiagram({
           <span className="absolute bottom-3 left-6 text-xs text-text-muted">−</span>
           <span className="absolute bottom-3 right-6 text-xs text-text-muted">−</span>
 
-          <div className="absolute inset-x-5 inset-y-10 rounded border-2 border-text-primary bg-blue-500/15">
+          <div className="absolute inset-x-5 inset-y-10 rounded border-2 border-text-primary bg-accent-selection">
             <span className="absolute left-3 top-1 text-xs text-text-muted">Padding</span>
             {hasPadding && (
               <>
