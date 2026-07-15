@@ -1,6 +1,6 @@
 import { Graphics, GraphicsPath } from "pixi.js";
 import { Container } from "pixi.js";
-import type { LineCap, LineJoin } from "pixi.js";
+import type { LineCap, LineJoin, Polygon } from "pixi.js";
 import type { PathNode } from "@/types/scene";
 import {
   getResolvedFill,
@@ -64,6 +64,111 @@ function colorToHex(color: string): string {
   return `#${Math.max(0, Math.min(0xffffff, n)).toString(16).padStart(6, "0")}`;
 }
 
+interface NonzeroFillGeometry {
+  outers: string[];
+  holes: string[];
+}
+
+interface NonzeroRing {
+  path: string;
+  polygon: Polygon;
+  boundsArea: number;
+  parent: number | null;
+  winding: number;
+}
+
+/**
+ * PixiJS 8 only discovers compound-path holes for evenodd fills. For a real
+ * SVG nonzero fill, derive the boundaries where the accumulated winding
+ * changes between zero and non-zero, preserving same-winding nested contours.
+ */
+function resolveNonzeroFillGeometry(geometry: string): NonzeroFillGeometry | null {
+  // Figma's decoded geometry is absolute. A later relative `m` depends on the
+  // previous subpath's endpoint, so keep Pixi's native fallback for that form.
+  if (geometry.includes("m")) return null;
+  const subpaths = geometry.split(/(?=M)/).filter((part) => part.trim().length > 0);
+  if (subpaths.length < 2) return null;
+
+  try {
+    const rings: NonzeroRing[] = subpaths.map((path) => {
+      const primitives = new GraphicsPath(path, false).shapePath.shapePrimitives;
+      if (primitives.length !== 1 || primitives[0].shape.type !== "polygon") {
+        throw new Error("Unsupported compound path primitive");
+      }
+      const polygon = primitives[0].shape as Polygon;
+      if (!polygon.closePath) throw new Error("Open compound path");
+      const bounds = polygon.getBounds();
+      return {
+        path,
+        polygon,
+        boundsArea: bounds.width * bounds.height,
+        parent: null,
+        winding: polygon.isClockwise() ? 1 : -1,
+      };
+    });
+
+    for (let childIndex = 0; childIndex < rings.length; childIndex++) {
+      const child = rings[childIndex];
+      let parentIndex: number | null = null;
+      for (let candidateIndex = 0; candidateIndex < rings.length; candidateIndex++) {
+        if (candidateIndex === childIndex) continue;
+        const candidate = rings[candidateIndex];
+        if (
+          candidate.boundsArea <= child.boundsArea ||
+          !candidate.polygon.containsPolygon(child.polygon)
+        ) {
+          continue;
+        }
+        if (parentIndex == null || candidate.boundsArea < rings[parentIndex].boundsArea) {
+          parentIndex = candidateIndex;
+        }
+      }
+      child.parent = parentIndex;
+    }
+
+    const windingInside = new Array<number | undefined>(rings.length);
+    const resolveWindingInside = (index: number): number => {
+      const cached = windingInside[index];
+      if (cached != null) return cached;
+      const parent = rings[index].parent;
+      const outside = parent == null ? 0 : resolveWindingInside(parent);
+      const inside = outside + rings[index].winding;
+      windingInside[index] = inside;
+      return inside;
+    };
+
+    const outers: string[] = [];
+    const holes: string[] = [];
+    for (let index = 0; index < rings.length; index++) {
+      const parent = rings[index].parent;
+      const outside = parent == null ? 0 : resolveWindingInside(parent);
+      const inside = resolveWindingInside(index);
+      if (outside === 0 && inside !== 0) outers.push(rings[index].path);
+      if (outside !== 0 && inside === 0) holes.push(rings[index].path);
+    }
+
+    return holes.length > 0 && outers.length > 0 ? { outers, holes } : null;
+  } catch {
+    // Unsupported/malformed path: retain the declared nonzero behaviour.
+    return null;
+  }
+}
+
+function drawNonzeroFill(
+  gfx: Graphics,
+  geometry: NonzeroFillGeometry,
+  applyFill: () => void,
+): void {
+  for (const outer of geometry.outers) {
+    gfx.path(new GraphicsPath(outer, false));
+  }
+  applyFill();
+  for (const hole of geometry.holes) {
+    gfx.path(new GraphicsPath(hole, false));
+    gfx.cut();
+  }
+}
+
 export function createPathContainer(node: PathNode): Container {
   const container = new Container();
   const gfx = new Graphics();
@@ -92,6 +197,7 @@ export function updatePathContainer(
     node.strokeAlign !== prev.strokeAlign ||
     node.pathStroke !== prev.pathStroke ||
     node.gradientFill !== prev.gradientFill ||
+    node.fillRule !== prev.fillRule ||
     node.fills !== prev.fills
   ) {
     const gfx = container.getChildByLabel("path-gfx") as Graphics;
@@ -140,13 +246,32 @@ export function drawPath(gfx: Graphics, node: PathNode): void {
   const isCompoundPath = (geometry.match(/[Mm]/g)?.length ?? 0) > 1;
   // Use evenodd for compound paths (PixiJS requires explicit fill-rule for holes)
   const effectiveFillRule = node.fillRule ?? (isCompoundPath ? "evenodd" : "nonzero");
+  const nonzeroFillGeometry = effectiveFillRule === "nonzero"
+    ? resolveNonzeroFillGeometry(geometry)
+    : null;
+  let restoreStrokePath = false;
 
   // Parse SVG path-data directly (geometry is "d" string, not full <svg> markup).
   try {
-    // Explicit paint stack: render each visible layer via GraphicsPath, stacking
-    // bottom-to-top. The SVG-parser fast path (which respects fill-rule for the
-    // legacy single solid fill) is only used when `fills` is NOT set.
-    if (node.fills) {
+    if (nonzeroFillGeometry) {
+      // Pixi's SVG parser does not implement nonzero winding holes. Render the
+      // zero/non-zero boundaries explicitly, while retaining the source rule on
+      // the SceneNode for SVG export and editing semantics.
+      if (node.fills) {
+        drawNonzeroPathFillStack(gfx, node, nonzeroFillGeometry);
+      } else if (node.gradientFill) {
+        const gradient = buildPixiGradient(node.gradientFill, node.width, node.height);
+        drawNonzeroFill(gfx, nonzeroFillGeometry, () => gfx.fill(gradient));
+      } else if (fillColor) {
+        drawNonzeroFill(gfx, nonzeroFillGeometry, () => {
+          gfx.fill({ color: parseColor(fillColor), alpha: parseAlpha(fillColor) });
+        });
+      }
+      restoreStrokePath = true;
+      // Explicit paint stack: render each visible layer via GraphicsPath, stacking
+      // bottom-to-top. The SVG-parser fast path (which respects fill-rule for the
+      // legacy single solid fill) is only used when `fills` is NOT set.
+    } else if (node.fills) {
       drawPathFillStack(gfx, node, geometry, effectiveFillRule === "evenodd");
     } else {
       const pathStroke = node.pathStroke;
@@ -178,6 +303,9 @@ export function drawPath(gfx: Graphics, node: PathNode): void {
 
   const pathStroke = node.pathStroke;
   if (pathStroke?.fill || strokeColor) {
+    if (restoreStrokePath) {
+      gfx.path(new GraphicsPath(geometry, false));
+    }
     const sColor = pathStroke?.fill ?? strokeColor ?? "#000000";
     const align = node.strokeAlign ?? 'center';
     const alignment = align === 'inside' ? 1 : align === 'outside' ? 0 : 0.5;
@@ -190,6 +318,24 @@ export function drawPath(gfx: Graphics, node: PathNode): void {
       cap: (pathStroke?.cap as LineCap | undefined) ?? "butt",
       join: (pathStroke?.join as LineJoin | undefined) ?? "miter",
       alignment,
+    });
+  }
+}
+
+function drawNonzeroPathFillStack(
+  gfx: Graphics,
+  node: PathNode,
+  geometry: NonzeroFillGeometry,
+): void {
+  for (const paint of getResolvedRenderableFills(node)) {
+    if (paint.type !== "gradient" && paint.type !== "solid") continue;
+    drawNonzeroFill(gfx, geometry, () => {
+      if (paint.type === "gradient") {
+        const gradient = buildPixiGradient(paint.gradient, node.width, node.height);
+        gfx.fill({ fill: gradient, alpha: paint.opacity ?? 1 });
+      } else {
+        fillSolidPaint(gfx, paint);
+      }
     });
   }
 }

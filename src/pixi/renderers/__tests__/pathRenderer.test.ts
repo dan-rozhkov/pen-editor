@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { Graphics } from "pixi.js";
-import { drawPath } from "../pathRenderer";
+import { createPathContainer, drawPath, updatePathContainer } from "../pathRenderer";
 import * as fillStrokeHelpers from "../fillStrokeHelpers";
 import type { PathNode } from "@/types/scene";
 
@@ -55,5 +55,63 @@ describe("drawPathFillStack (pattern-on-path safety net)", () => {
 
     expect(solidSpy).toHaveBeenCalledTimes(1);
     solidSpy.mockRestore();
+  });
+});
+
+describe("drawPath compound paths", () => {
+  it("preserves the hole in a Figma-style nonzero path with opposite-winding loops", () => {
+    const node = pathNode({
+      fill: "#ffffff",
+      fillRule: "nonzero",
+      geometry: "M0 0 L100 0 L100 100 L0 100 Z M30 30 L30 70 L70 70 L70 30 Z",
+    });
+
+    const gfx = new Graphics();
+    drawPath(gfx, node);
+
+    expect(gfx.containsPoint({ x: 10, y: 10 })).toBe(true);
+    expect(gfx.containsPoint({ x: 50, y: 50 })).toBe(false);
+  });
+
+  it("keeps a same-winding nested contour filled under the nonzero rule", () => {
+    const gfx = new Graphics();
+    drawPath(gfx, pathNode({
+      fill: "#ffffff",
+      fillRule: "nonzero",
+      geometry: "M0 0 L100 0 L100 100 L0 100 Z M30 30 L70 30 L70 70 L30 70 Z",
+    }));
+
+    expect(gfx.containsPoint({ x: 50, y: 50 })).toBe(true);
+  });
+
+  it("preserves holes in multiple disjoint nonzero shapes", () => {
+    const gfx = new Graphics();
+    drawPath(gfx, pathNode({
+      fill: "#ffffff",
+      fillRule: "nonzero",
+      geometry: [
+        "M0 0 L40 0 L40 40 L0 40 Z",
+        "M10 10 L10 30 L30 30 L30 10 Z",
+        "M60 60 L100 60 L100 100 L60 100 Z",
+        "M70 70 L70 90 L90 90 L90 70 Z",
+      ].join(" "),
+    }));
+
+    expect(gfx.containsPoint({ x: 5, y: 5 })).toBe(true);
+    expect(gfx.containsPoint({ x: 20, y: 20 })).toBe(false);
+    expect(gfx.containsPoint({ x: 65, y: 65 })).toBe(true);
+    expect(gfx.containsPoint({ x: 80, y: 80 })).toBe(false);
+  });
+
+  it("redraws when only the fill rule changes", () => {
+    const geometry = "M0 0 L100 0 L100 100 L0 100 Z M30 30 L70 30 L70 70 L30 70 Z";
+    const previous = pathNode({ fill: "#ffffff", fillRule: "nonzero", geometry });
+    const next = { ...previous, fillRule: "evenodd" as const };
+    const container = createPathContainer(previous);
+    const gfx = container.getChildByLabel("path-gfx") as Graphics;
+
+    expect(gfx.containsPoint({ x: 50, y: 50 })).toBe(true);
+    updatePathContainer(container, next, previous);
+    expect(gfx.containsPoint({ x: 50, y: 50 })).toBe(false);
   });
 });
