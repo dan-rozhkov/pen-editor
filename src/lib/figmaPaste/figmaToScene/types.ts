@@ -69,6 +69,10 @@ export type MutableBase = {
   fills?: Paint[]
   stroke?: string
   strokeOpacity?: number
+  // Figma-style stroke paint stack — set instead of the legacy single fields
+  // above when the node carries more than one visible stroke paint, or a
+  // gradient stroke paint (which the legacy fields can't represent at all).
+  strokes?: Paint[]
   strokeWidth?: number
   strokeWidthPerSide?: PerSideStroke
   strokeAlign?: 'center' | 'inside' | 'outside'

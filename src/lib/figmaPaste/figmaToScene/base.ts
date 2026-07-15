@@ -97,12 +97,33 @@ export function resolveStroke(change: FigNodeChange, ctx: ConvertContext): Strok
   return style
 }
 
+/**
+ * Convert Figma's `strokePaints` into the editor's stroke stack (or, for the
+ * single-solid-paint case, the legacy fields — mirrors `applyFillPaints`).
+ * Previously this dropped every stroke but the topmost (`topPaint`) and
+ * approximated a gradient stroke with its first stop's solid color (see
+ * `resolveStroke`, still used for `path` nodes' `pathStroke` — which has no
+ * gradient/multi-paint representation, an intentional scope limit, not this
+ * bug). `convertPaints` already builds the full editor `Paint[]` for fills;
+ * strokes reuse it verbatim, only excluding IMAGE paints (unsupported on a
+ * stroke, matching the old `topPaint(..., p => p.type !== 'IMAGE')` filter).
+ */
 function applyStrokePaints(base: MutableBase, change: FigNodeChange, ctx: ConvertContext): void {
-  const stroke = resolveStroke(change, ctx)
-  if (!stroke) return
-  base.stroke = stroke.color
-  if (stroke.opacity != null) base.strokeOpacity = stroke.opacity
-  base.strokeWidth = stroke.width
+  const { paints } = convertPaints(change.strokePaints, ctx)
+  const strokePaints = paints.filter((p) => p.type !== 'image')
+  if (strokePaints.length === 0) return
+
+  if (strokePaints.length >= 2 || strokePaints[0].type === 'gradient') {
+    base.strokes = strokePaints
+  } else {
+    const solid = strokePaints[0]
+    if (solid.type === 'solid') {
+      base.stroke = solid.color
+      if (solid.opacity != null) base.strokeOpacity = solid.opacity
+    }
+  }
+
+  base.strokeWidth = change.strokeWeight ?? 1
   if (change.borderStrokeWeightsIndependent) {
     base.strokeWidthPerSide = {
       top: change.borderTopWeight ?? 0,
@@ -111,7 +132,10 @@ function applyStrokePaints(base: MutableBase, change: FigNodeChange, ctx: Conver
       left: change.borderLeftWeight ?? 0,
     }
   }
-  if (change.strokeAlign) base.strokeAlign = stroke.align
+  if (change.strokeAlign) {
+    base.strokeAlign =
+      change.strokeAlign === 'INSIDE' ? 'inside' : change.strokeAlign === 'OUTSIDE' ? 'outside' : 'center'
+  }
 }
 
 /** Map a Figma shadow effect into the editor's shadow effect (null = unusable). */

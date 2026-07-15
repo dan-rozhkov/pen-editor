@@ -929,6 +929,85 @@ describe('convertFigmaClipboardHtml', () => {
     expect(rect.fills!.map((p) => (p.type === 'solid' ? p.color : p.type))).toEqual(['#ff0000', '#0000ff'])
   })
 
+  it('converts a gradient stroke to a real gradient paint instead of approximating it with a solid color', async () => {
+    const html = clipboardWith([
+      onCanvas({
+        guid: guid(2),
+        type: 'RECTANGLE',
+        size: { x: 400, y: 200 },
+        transform: identityTransform(),
+        strokePaints: [
+          {
+            type: 'GRADIENT_LINEAR',
+            visible: true,
+            opacity: 1,
+            transform: identityTransform(),
+            stops: [
+              { color: { r: 1, g: 0, b: 0, a: 1 }, position: 0 },
+              { color: { r: 0, g: 0, b: 1, a: 1 }, position: 1 },
+            ],
+          },
+        ],
+        strokeWeight: 60,
+        strokeAlign: 'OUTSIDE',
+      }),
+    ])
+
+    const result = (await convertFigmaClipboardHtml(html))!
+    const rect = result.nodes[0]
+    expect(rect.strokes).toHaveLength(1)
+    expect(rect.strokes![0]).toMatchObject({ type: 'gradient' })
+    expect((rect.strokes![0] as { gradient: { type: string } }).gradient.type).toBe('linear')
+    // No more lossy solid-color approximation or its warning.
+    expect(rect.stroke).toBeUndefined()
+    expect(result.warnings.join(' ')).not.toContain('approximated with a solid color')
+    // Geometry (weight/align) stays on the node regardless of the paint model.
+    expect(rect.strokeWidth).toBe(60)
+    expect(rect.strokeAlign).toBe('outside')
+  })
+
+  it('preserves multiple stroke paints (solid + gradient) as a stroke stack, not just the topmost', async () => {
+    const html = clipboardWith([
+      onCanvas({
+        guid: guid(2),
+        type: 'RECTANGLE',
+        size: { x: 100, y: 100 },
+        transform: identityTransform(),
+        strokePaints: [
+          solidPaint(0, 0, 0), // bottom: black
+          { ...solidPaint(1, 1, 0), opacity: 0.6 }, // top: yellow @ 60% opacity
+        ],
+        strokeWeight: 4,
+      }),
+    ])
+
+    const rect = (await convertFigmaClipboardHtml(html))!.nodes[0]
+    expect(rect.strokes).toHaveLength(2)
+    expect(rect.strokes![0]).toMatchObject({ type: 'solid', color: '#000000' })
+    expect(rect.strokes![1]).toMatchObject({ type: 'solid', color: '#ffff00' })
+    expect(rect.strokes![1].opacity).toBeCloseTo(0.6)
+    // Stack is the source of truth — legacy single fields stay unset.
+    expect(rect.stroke).toBeUndefined()
+  })
+
+  it('still resolves a single solid stroke through the legacy fields (no unnecessary stack)', async () => {
+    const html = clipboardWith([
+      onCanvas({
+        guid: guid(2),
+        type: 'RECTANGLE',
+        size: { x: 10, y: 10 },
+        transform: identityTransform(),
+        strokePaints: [solidPaint(0, 1, 0)],
+        strokeWeight: 2,
+      }),
+    ])
+
+    const rect = (await convertFigmaClipboardHtml(html))!.nodes[0]
+    expect(rect.strokes).toBeUndefined()
+    expect(rect.stroke).toBe('#00ff00')
+    expect(rect.strokeWidth).toBe(2)
+  })
+
   // Shapes below mirror a captured real payload (fig-kiwi v106): Figma's
   // `EffectType` enum names layer blur FOREGROUND_BLUR, and ships leftover
   // `color`/`offset`/`spread` on blur effects — so a blur must be recognised by
