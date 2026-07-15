@@ -143,4 +143,44 @@ describe("<InspectPanel />", () => {
     expect(screen.getByText("Box")).toBeTruthy();
     expect(screen.getByText("2 selected")).toBeTruthy();
   });
+
+  it("exits dev mode when the exit button is clicked", () => {
+    select(["rect1"]);
+    render(<InspectPanel />);
+    fireEvent.click(screen.getByTestId("inspect-exit-dev-mode"));
+    expect(useDevModeStore.getState().active).toBe(false);
+  });
+
+  it("resolves a variable-bound fill to the dark value for a node under a dark themeOverride ancestor", () => {
+    useVariableStore.setState({
+      variables: [
+        {
+          id: "v1",
+          name: "Brand/Red",
+          type: "color",
+          value: "#ff0000",
+          themeValues: { light: "#ff0000", dark: "#aa0000" },
+        } as never,
+      ],
+    });
+    // rect1 is already a child of frame1 in the seeded scene (see fixtures.ts).
+    // Uses the "$name" direct-reference fallback (no colorBinding) so the
+    // resolved value renders directly as row text instead of behind an
+    // expandable token — a colorBinding's token row shows the variable name,
+    // not the resolved value, until expanded (see the token-row test above),
+    // so it can't assert the theme resolution by itself.
+    useSceneStore.setState((state) => ({
+      nodesById: {
+        ...state.nodesById,
+        frame1: { ...state.nodesById.frame1, themeOverride: "dark" } as never,
+        rect1: {
+          ...state.nodesById.rect1,
+          fill: "$Brand/Red",
+        } as never,
+      },
+    }));
+    select(["rect1"]);
+    render(<InspectPanel />);
+    expect(screen.getByText("#aa0000")).toBeTruthy();
+  });
 });

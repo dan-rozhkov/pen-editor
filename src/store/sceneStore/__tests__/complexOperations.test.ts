@@ -6,6 +6,7 @@ import type { FlatFrameNode, EmbedNode, FlatSceneNode, TextNode } from "@/types/
 import type { H2dDocument } from "@/lib/h2dPaste/h2dTypes";
 import { buildDocument, el, rect, text } from "@/lib/h2dPaste/__tests__/h2dFixture";
 import { captureEmbedHtmlToH2d } from "@/lib/h2dCapture/captureEmbed";
+import { useMeasurementsStore } from "@/store/measurementsStore";
 
 const CAPTURE_FIXTURE: H2dDocument = buildDocument(
   el(
@@ -349,6 +350,15 @@ describe("complexOperations", () => {
       expect(scene().convertDesignToEmbed("rect1")).toBeNull();
       expect(scene().convertDesignToEmbed("ghost")).toBeNull();
     });
+
+    it("drops a pinned measurement anchored to the converted frame or a descendant", () => {
+      useMeasurementsStore.getState().addMeasurement("rect1", "rect2");
+      expect(useMeasurementsStore.getState().measurements).toHaveLength(1);
+
+      const embedId = scene().convertDesignToEmbed("frame1");
+      expect(embedId).toBeTruthy();
+      expect(useMeasurementsStore.getState().measurements).toHaveLength(0);
+    });
   });
 
   describe("convertEmbedToDesign", () => {
@@ -431,6 +441,16 @@ describe("complexOperations", () => {
     it("returns null for non-embed and missing nodes", async () => {
       expect(await scene().convertEmbedToDesign("rect1")).toBeNull();
       expect(await scene().convertEmbedToDesign("ghost")).toBeNull();
+    });
+
+    it("drops a pinned measurement anchored to the converted embed", async () => {
+      seedEmbed();
+      useMeasurementsStore.getState().addMeasurement("embed1", "rect1");
+      expect(useMeasurementsStore.getState().measurements).toHaveLength(1);
+
+      const rootId = await scene().convertEmbedToDesign("embed1");
+      expect(rootId).toBeTruthy();
+      expect(useMeasurementsStore.getState().measurements).toHaveLength(0);
     });
 
     it("returns null and leaves no orphaned nodes/history when the embed is deleted while capture is pending", async () => {

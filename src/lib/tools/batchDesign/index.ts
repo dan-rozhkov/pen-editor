@@ -1,4 +1,5 @@
 import { useSceneStore } from "@/store/sceneStore";
+import { useMeasurementsStore } from "@/store/measurementsStore";
 import { createSnapshot, saveHistory } from "@/store/sceneStore/helpers/history";
 import type { EmbedNode } from "@/types/scene";
 import {
@@ -45,6 +46,7 @@ export const batchDesign: ToolHandler = async (args) => {
     createdNodeIds: [],
     issues: [],
     componentTagMap,
+    removedIdsForMeasurementCleanup: new Set(),
   };
 
   // 3. Execute operations sequentially
@@ -88,6 +90,16 @@ export const batchDesign: ToolHandler = async (args) => {
     rootIds: ctx.rootIds,
     _cachedTree: null,
   });
+
+  // Drop pinned measurements touching anything R()/D() removed during the
+  // batch — same undo step as the commit above (saveHistory already
+  // recorded the pre-batch measurements list; removeMeasurementsForNodes
+  // saves no history of its own).
+  if (ctx.removedIdsForMeasurementCleanup.size > 0) {
+    useMeasurementsStore
+      .getState()
+      .removeMeasurementsForNodes([...ctx.removedIdsForMeasurementCleanup]);
+  }
 
   // 6. Build response
   const createdNodes = serializeCreatedNodes(ctx);

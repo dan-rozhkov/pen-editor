@@ -1,6 +1,6 @@
+import { useDevModeStore } from "@/store/devModeStore";
 import { RightSidebar } from "./RightSidebar";
 import { InspectPanel } from "./inspect/InspectPanel";
-import { useDevModeStore } from "@/store/devModeStore";
 
 /**
  * Swaps the right-hand panel between the normal properties `RightSidebar`

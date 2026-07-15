@@ -125,7 +125,7 @@ function App() {
                 {/* Drawing tools are pointless in read-only view mode, and
                     the 3D layer view's own control bar occupies the same
                     bottom-center slot — hide the draw palette in both. */}
-                {!isView && !is3DActive && (
+                {!isView && !isDev && !is3DActive && (
                   <div className="pointer-events-auto">
                     <PrimitivesPanel />
                   </div>

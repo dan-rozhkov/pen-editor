@@ -12,6 +12,14 @@ export interface PaletteCommand {
   /** Extra search terms not shown in the UI (e.g. aliases). */
   keywords?: string[];
   icon?: ToolIconComponent;
+  /**
+   * Marks a command as a scene mutation (delete, group, paste, etc.).
+   * The palette filters these out while dev (inspect) mode is active, so
+   * the same read-only guarantee `canEditScene`/keyboard shortcuts enforce
+   * elsewhere can't be bypassed via ⌘K. Undo/redo are intentionally NOT
+   * flagged — they stay available in dev mode (see keyboardCommands.ts).
+   */
+  mutatesScene?: boolean;
   /** Executes the command. Called on Enter/click; the palette closes after. */
   run: () => void;
 }

@@ -32,6 +32,19 @@ describe("getCommands", () => {
     expect(toolCommands.length).toBe(ALL_TOOLS.length);
   });
 
+  it("flags every scene-mutating Edit command with mutatesScene", () => {
+    const commands = getCommands();
+    for (const id of ["edit-cut", "edit-paste", "edit-paste-properties", "edit-group", "edit-ungroup", "edit-delete"]) {
+      const command = commands.find((c) => c.id === id);
+      expect(command?.mutatesScene).toBe(true);
+    }
+    // Undo/redo must stay reachable in dev mode — never flagged.
+    for (const id of ["edit-undo", "edit-redo"]) {
+      const command = commands.find((c) => c.id === id);
+      expect(command?.mutatesScene).toBeFalsy();
+    }
+  });
+
   it("includes the core Edit/View/File actions", () => {
     const ids = getCommands().map((c) => c.id);
     for (const id of [

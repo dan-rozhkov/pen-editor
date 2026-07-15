@@ -616,6 +616,15 @@ function executeReplace(op: ParsedOperation, ctx: ExecutionContext): void {
     collectDescendantIds(path, ctx.childrenById)
   );
 
+  // The replaced node's own id doesn't survive either (the new node gets a
+  // brand-new id), so a pinned measurement anchored to it or any descendant
+  // can't follow the swap — queue them for cleanup (applied once the whole
+  // batch commits successfully, see ExecutionContext.removedIdsForMeasurementCleanup).
+  ctx.removedIdsForMeasurementCleanup.add(path);
+  for (const descendantId of removedDescendantIds) {
+    ctx.removedIdsForMeasurementCleanup.add(descendantId);
+  }
+
   // Remove old node and descendants
   removeNodeAndDescendants(
     path,
@@ -744,6 +753,13 @@ function executeDelete(op: ParsedOperation, ctx: ExecutionContext): void {
     nodeId,
     ...collectDescendantIds(nodeId, ctx.childrenById),
   ]);
+
+  // Queue the same set for pinned-measurement cleanup, applied once the
+  // whole batch commits successfully (see
+  // ExecutionContext.removedIdsForMeasurementCleanup).
+  for (const id of removedIds) {
+    ctx.removedIdsForMeasurementCleanup.add(id);
+  }
 
   // Remove node and all descendants
   removeNodeAndDescendants(

@@ -10,6 +10,7 @@ import {
   CommandShortcut,
 } from "@/components/ui/command";
 import { useCommandPaletteStore } from "@/store/commandPaletteStore";
+import { useDevModeStore } from "@/store/devModeStore";
 import { getCommands, commandFilter, type CommandGroupName } from "@/lib/commands/registry";
 import { isTypingTarget } from "@/components/canvas/keyboardShortcutUtils";
 
@@ -24,6 +25,7 @@ const GROUP_ORDER: CommandGroupName[] = ["Tools", "Edit", "View", "File"];
 export function CommandPalette() {
   const open = useCommandPaletteStore((s) => s.open);
   const setOpen = useCommandPaletteStore((s) => s.setOpen);
+  const isDevMode = useDevModeStore((s) => s.active);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -41,7 +43,11 @@ export function CommandPalette() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  const commands = getCommands();
+  // Dev (inspect) mode is read-only — scene-mutating commands (delete, group,
+  // paste, etc.) must not be reachable via ⌘K, mirroring the keyboard-shortcut
+  // guard in keyboardCommands.ts. Undo/redo aren't flagged `mutatesScene` and
+  // stay available (see PaletteCommand.mutatesScene doc).
+  const commands = getCommands().filter((c) => !isDevMode || !c.mutatesScene);
   const groups = GROUP_ORDER.map((group) => ({
     group,
     commands: commands.filter((c) => c.group === group),

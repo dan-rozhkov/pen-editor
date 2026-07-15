@@ -10,6 +10,7 @@ import {
 } from "@/utils/instanceUtils";
 import { getNodeEffectiveSize } from "@/utils/nodeUtils";
 import { buildCapPrimitive, capPrimitiveBounds } from "@/utils/lineCapUtils";
+import { distanceToSegment } from "@/utils/geometryUtils";
 import type { TransformHandle } from "./types";
 import { measureLabelTextWidth, truncateLabelToWidth } from "@/pixi/frameLabelUtils";
 import { resolveRefToTree, findResolvedDescendantByPath } from "@/utils/instanceRuntime";
@@ -48,21 +49,6 @@ function lineCapReach(shape: LineNode["startCap"], strokeWidth: number): { along
     along: -bounds.minX,
     perp: Math.max(Math.abs(bounds.minY), Math.abs(bounds.minY + bounds.height)),
   };
-}
-
-function pointToSegmentDistance(
-  px: number, py: number,
-  x1: number, y1: number,
-  x2: number, y2: number,
-): number {
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const lenSq = dx * dx + dy * dy;
-  if (lenSq === 0) return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
-  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lenSq));
-  const projX = x1 + t * dx;
-  const projY = y1 + t * dy;
-  return Math.sqrt((px - projX) ** 2 + (py - projY) ** 2);
 }
 
 function getHitNodeEffectiveSize(
@@ -251,7 +237,7 @@ export function findCanvasHitTargetAtPoint(
         const scale = useViewportStore.getState().scale;
         const perpTolerance = Math.max(startReach.perp, endReach.perp, strokeWidth / 2);
         const threshold = Math.max(5, perpTolerance) / scale;
-        const dist = pointToSegmentDistance(worldX, worldY, sx1, sy1, sx2, sy2);
+        const dist = distanceToSegment(worldX, worldY, sx1, sy1, sx2, sy2);
         if (dist <= threshold) {
           return { kind: "node", nodeId: node.id };
         }
@@ -282,7 +268,7 @@ export function findCanvasHitTargetAtPoint(
       if (conn.points.length >= 4) {
         const scale = useViewportStore.getState().scale;
         const threshold = 5 / scale;
-        const dist = pointToSegmentDistance(
+        const dist = distanceToSegment(
           worldX, worldY,
           absX + conn.points[0], absY + conn.points[1],
           absX + conn.points[2], absY + conn.points[3],

@@ -17,6 +17,31 @@ import { COMPONENT_SELECTION_COLOR, HATCH_SPACING, SELECTION_COLOR } from "./con
 
 export type Rect = { x: number; y: number; width: number; height: number };
 
+/**
+ * Snap a node's draw rect to the rounding/clamping embeds render with
+ * (integer x/y, width/height floored to at least 1px) — embeds are DOM
+ * content rasterized at integer pixel boundaries, so a fractional rect would
+ * disagree with what's actually drawn. Non-embed nodes pass through
+ * unchanged. Pure function (no store/Pixi dependency) so it can be reused
+ * anywhere a node's rect needs to match the selection overlay exactly —
+ * e.g. `measureToolController`'s `defaultGetRect`.
+ */
+export function getEmbedAwareDrawRect(
+  node: FlatSceneNode,
+  absPos: { x: number; y: number },
+  size: { width: number; height: number },
+): Rect {
+  if (node.type !== "embed") {
+    return { x: absPos.x, y: absPos.y, width: size.width, height: size.height };
+  }
+  return {
+    x: Math.round(absPos.x),
+    y: Math.round(absPos.y),
+    width: Math.max(1, Math.round(size.width)),
+    height: Math.max(1, Math.round(size.height)),
+  };
+}
+
 export function createOverlayHelpers(sceneRoot: Container) {
   function findNodeContainerById(
     root: Container,
@@ -119,21 +144,7 @@ export function createOverlayHelpers(sceneRoot: Container) {
     return SELECTION_COLOR;
   }
 
-  function getDrawRect(
-    node: FlatSceneNode,
-    absPos: { x: number; y: number },
-    size: { width: number; height: number },
-  ): Rect {
-    if (node.type !== "embed") {
-      return { x: absPos.x, y: absPos.y, width: size.width, height: size.height };
-    }
-    return {
-      x: Math.round(absPos.x),
-      y: Math.round(absPos.y),
-      width: Math.max(1, Math.round(size.width)),
-      height: Math.max(1, Math.round(size.height)),
-    };
-  }
+  const getDrawRect = getEmbedAwareDrawRect;
 
   /** Combines getAbsolutePosition + getEffectiveSize + getDrawRect for a single node. */
   function getNodeDrawRect(nodeId: string): Rect | null {

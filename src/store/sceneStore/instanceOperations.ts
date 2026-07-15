@@ -19,6 +19,8 @@ import { resolveRefToFrame } from "@/utils/instanceRuntime";
 import { isInsideReusableComponent } from "@/utils/componentUtils";
 import { validatePropertyValue } from "@/utils/componentProperties";
 import type { StoreApi } from "zustand";
+import { collectDescendantIds } from "../../types/scene";
+import { useMeasurementsStore } from "../measurementsStore";
 
 type SetState = StoreApi<SceneState>["setState"];
 type GetState = StoreApi<SceneState>["getState"];
@@ -308,6 +310,14 @@ export function createInstanceOperations(set: SetState, get: GetState) {
       const newNodesById = { ...state.nodesById };
       const newParentById = { ...state.parentById };
       const newChildrenById = { ...state.childrenById };
+
+      // The instance (a ref — no scene-graph descendants of its own) is
+      // being replaced wholesale by its resolved (detached) tree under a
+      // brand-new id, so a pinned measurement anchored to it can't follow
+      // the swap — drop it, same undo step as the detach (saveHistory above
+      // already recorded the pre-detach measurements list).
+      const removedIds = new Set<string>([instanceId, ...collectDescendantIds(instanceId, state.childrenById)]);
+      useMeasurementsStore.getState().removeMeasurementsForNodes([...removedIds]);
 
       removeNodeAndDescendants(instanceId, newNodesById, newParentById, newChildrenById);
       insertTreeIntoFlat(resolved, parentId ?? null, newNodesById, newParentById, newChildrenById);

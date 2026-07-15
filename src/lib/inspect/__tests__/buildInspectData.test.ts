@@ -5,6 +5,7 @@ import type { Variable } from "@/types/variable";
 import type { FillStyle, EffectStyle } from "@/types/style";
 import type { TextStyle } from "@/types/textStyle";
 import type { InspectUnits } from "@/store/devModeStore";
+import type { ThemeName } from "@/types/variable";
 
 function baseArgs(nodesById: Record<string, FlatSceneNode>, nodeId: string) {
   const node = nodesById[nodeId];
@@ -18,6 +19,7 @@ function baseArgs(nodesById: Record<string, FlatSceneNode>, nodeId: string) {
     textStyles: [] as TextStyle[],
     units: "px" as InspectUnits,
     remBase: 16,
+    effectiveTheme: "light" as ThemeName,
   };
 }
 
@@ -339,8 +341,74 @@ describe("buildInspectData", () => {
       textStyles: [],
       units: "px",
       remBase: 16,
+      effectiveTheme: "light",
     });
     expect(data).toBeNull();
+  });
+
+  it("resolves a variable-bound fill to the dark value when effectiveTheme is dark", () => {
+    const rect: FlatSceneNode = {
+      id: "r9",
+      type: "rect",
+      name: "ThemedSwatch",
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      fills: [
+        {
+          id: "p1",
+          type: "solid",
+          color: "#ff0000",
+          colorBinding: { variableId: "v1" },
+        },
+      ],
+    };
+    const nodesById = { r9: rect };
+    const args = baseArgs(nodesById, "r9");
+    args.effectiveTheme = "dark";
+    args.variables = [
+      {
+        id: "v1",
+        name: "Brand/Red",
+        type: "color",
+        value: "#ff0000",
+        themeValues: { light: "#ff0000", dark: "#cc0000" },
+      },
+    ];
+    const data = buildOrThrow(args);
+
+    const fills = data.sections.find((s) => s.title === "Fills");
+    const row = fills!.rows[0];
+    expect(row.value).toBe("#cc0000");
+    expect(row.token).toEqual({ name: "Brand/Red", light: "#ff0000", dark: "#cc0000" });
+  });
+
+  it("uses a 2-value padding shorthand when top===bottom and right===left but not all equal", () => {
+    const frame: FlatSceneNode = {
+      id: "f2",
+      type: "frame",
+      name: "TwoValuePad",
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 100,
+      layout: {
+        autoLayout: true,
+        flexDirection: "row",
+        gap: 0,
+        paddingTop: 8,
+        paddingRight: 16,
+        paddingBottom: 8,
+        paddingLeft: 16,
+      },
+    };
+    const nodesById = { f2: frame };
+    const data = buildOrThrow(baseArgs(nodesById, "f2"));
+
+    const layoutSection = data.sections.find((s) => s.title === "Layout");
+    const padding = layoutSection!.rows.find((r) => r.label === "Padding");
+    expect(padding?.value).toBe("8px 16px");
   });
 
   it("builds header.componentInfo for a ref (component instance) node without crashing", () => {

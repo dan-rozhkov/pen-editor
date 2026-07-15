@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useMeasureStore } from "@/store/measureStore";
+import { useMeasurementsStore } from "@/store/measurementsStore";
 // NOTE: this is the one place a store reaches into `pixi/interaction` (every
 // other store is a leaf; interaction controllers depend on stores, not vice
 // versa). Safe here only because `cancelActiveMeasure` is a plain function
@@ -71,6 +72,9 @@ export const useDevModeStore = create<DevModeState>((set, get) => ({
       if (useDrawModeStore.getState().activeTool === "measure") {
         useDrawModeStore.getState().setActiveTool(null);
       }
+      // A pinned measurement's selection highlight is dev-mode-only UI —
+      // don't leave it dangling (stale) once dev mode is exited.
+      useMeasurementsStore.getState().setSelectedMeasurement(null);
     }
     set({ active });
   },

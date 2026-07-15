@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useSceneStore } from "@/store/sceneStore";
 import { useHistoryStore } from "@/store/historyStore";
+import { useMeasurementsStore } from "@/store/measurementsStore";
 import { resetStores, seedScene } from "@/test/fixtures";
 import type { EllipseNode, PathNode, RectNode } from "@/types/scene";
 
@@ -68,6 +69,15 @@ describe("booleanOperation", () => {
     expect(s.childrenById["frame1"]).not.toContain("circle");
 
     expect(pastLen()).toBe(before + 1);
+  });
+
+  it("drops a pinned measurement anchored to one of the merged shapes", () => {
+    useMeasurementsStore.getState().addMeasurement("square", "rect1");
+    expect(useMeasurementsStore.getState().measurements).toHaveLength(1);
+
+    const resultId = scene().booleanOperation(["square", "circle"], "union");
+    expect(resultId).toBeTruthy();
+    expect(useMeasurementsStore.getState().measurements).toHaveLength(0);
   });
 
   it("undo restores the original square and circle nodes", () => {

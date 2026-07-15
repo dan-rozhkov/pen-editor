@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createMeasureToolController, cancelActiveMeasure } from "../measureToolController";
 import type { MeasureRect } from "../measureToolController";
 import { useDrawModeStore } from "@/store/drawModeStore";
@@ -33,6 +33,14 @@ function fakeGetRect(nodeId: string): MeasureRect | null {
 }
 
 describe("measureToolController", () => {
+  let rafCallbacks: FrameRequestCallback[];
+
+  function flushRaf(): void {
+    const callbacks = rafCallbacks;
+    rafCallbacks = [];
+    for (const cb of callbacks) cb(0);
+  }
+
   beforeEach(() => {
     resetStores();
     seedScene();
@@ -43,6 +51,19 @@ describe("measureToolController", () => {
     // a gesture mid-flight (e.g. pointerDown+Move without pointerUp) can't
     // leak into the next test.
     cancelActiveMeasure();
+
+    // The preview computation inside handlePointerMove is rAF-coalesced
+    // (mirrors pixiInteractionCore's scheduleHoverPass) — stub rAF so tests
+    // can deterministically flush it instead of waiting a real frame.
+    rafCallbacks = [];
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn((cb: FrameRequestCallback) => {
+        rafCallbacks.push(cb);
+        return rafCallbacks.length;
+      }),
+    );
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
   });
 
   it("pins a measurement on pointerDown node A + pointerUp node B", () => {
@@ -129,7 +150,35 @@ describe("measureToolController", () => {
 
     controller.handlePointerDown(new PointerEvent("pointerdown", { button: 0 }), { x: 0, y: 0 });
     controller.handlePointerMove(new PointerEvent("pointermove"), { x: 1000, y: 0 });
+    flushRaf();
 
+    expect(useMeasureStore.getState().lines.length).toBeGreaterThan(0);
+  });
+
+  it("does not write the preview line synchronously — only after the rAF flushes", () => {
+    const hitTest = fakeHitTest({ "0,0": "rect1", "1000,0": "rect2" });
+    const controller = createMeasureToolController(context, { hitTest, getRect: fakeGetRect });
+
+    controller.handlePointerDown(new PointerEvent("pointerdown", { button: 0 }), { x: 0, y: 0 });
+    controller.handlePointerMove(new PointerEvent("pointermove"), { x: 1000, y: 0 });
+    expect(useMeasureStore.getState().lines).toHaveLength(0);
+
+    flushRaf();
+    expect(useMeasureStore.getState().lines.length).toBeGreaterThan(0);
+  });
+
+  it("coalesces multiple pointermoves within the same frame into a single preview compute", () => {
+    const hitTest = fakeHitTest({ "0,0": "rect1", "999,0": "rect1", "1000,0": "rect2" });
+    const controller = createMeasureToolController(context, { hitTest, getRect: fakeGetRect });
+
+    controller.handlePointerDown(new PointerEvent("pointerdown", { button: 0 }), { x: 0, y: 0 });
+    controller.handlePointerMove(new PointerEvent("pointermove"), { x: 999, y: 0 });
+    controller.handlePointerMove(new PointerEvent("pointermove"), { x: 1000, y: 0 });
+    // Only the latest queued point should be used once flushed — the RAF is
+    // requested once (not once per pointermove).
+    expect(vi.mocked(requestAnimationFrame).mock.calls.length).toBe(1);
+
+    flushRaf();
     expect(useMeasureStore.getState().lines.length).toBeGreaterThan(0);
   });
 
@@ -155,6 +204,7 @@ describe("measureToolController", () => {
 
       controller.handlePointerDown(new PointerEvent("pointerdown", { button: 0 }), { x: 0, y: 0 });
       controller.handlePointerMove(new PointerEvent("pointermove"), { x: 1000, y: 0 });
+      flushRaf();
       expect(useMeasureStore.getState().lines.length).toBeGreaterThan(0);
 
       expect(cancelActiveMeasure()).toBe(true);
@@ -163,6 +213,7 @@ describe("measureToolController", () => {
 
       // Further move/up after cancellation must not resurrect the gesture.
       controller.handlePointerMove(new PointerEvent("pointermove"), { x: 1000, y: 0 });
+      flushRaf();
       expect(useMeasureStore.getState().lines).toHaveLength(0);
 
       controller.handlePointerUp(new PointerEvent("pointerup"), { x: 1000, y: 0 });
@@ -175,6 +226,7 @@ describe("measureToolController", () => {
 
       controller.handlePointerDown(new PointerEvent("pointerdown", { button: 0 }), { x: 0, y: 0 });
       controller.handlePointerMove(new PointerEvent("pointermove"), { x: 1000, y: 0 });
+      flushRaf();
       expect(useMeasureStore.getState().lines.length).toBeGreaterThan(0);
 
       // Tool toggled off (e.g. Shift+M) mid-drag, without going through cancelActiveMeasure.

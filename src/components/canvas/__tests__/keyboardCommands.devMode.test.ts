@@ -4,6 +4,7 @@ import { useEditorModeStore } from "@/store/editorModeStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useDevModeStore } from "@/store/devModeStore";
+import { useMeasurementsStore } from "@/store/measurementsStore";
 
 function makeDeps(): KeyDownHandlerDeps {
   return {
@@ -132,6 +133,17 @@ describe("keyboardCommands — dev mode gating", () => {
     } finally {
       document.body.removeChild(input);
     }
+  });
+
+  it("Escape in dev mode clears selection instead of a no-op exitToEdit", () => {
+    handler(key("Escape"));
+    expect(deps.clearSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it("Escape in dev mode also clears any stale selected measurement", () => {
+    useMeasurementsStore.setState({ selectedMeasurementId: "m1" });
+    handler(key("Escape"));
+    expect(useMeasurementsStore.getState().selectedMeasurementId).toBeNull();
   });
 
   it("in normal edit mode (dev mode off), Delete still deletes", () => {

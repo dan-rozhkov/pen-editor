@@ -164,12 +164,22 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
           e.preventDefault();
           cancelActiveMeasure();
           useDrawModeStore.getState().setActiveTool(null);
+          useMeasurementsStore.getState().setSelectedMeasurement(null);
           return;
         }
-        // Mirrors view mode's Escape handling exactly. In dev mode `mode` is
-        // already "edit", so this is a harmless no-op (presentFrameIds/Index
-        // are already empty) rather than an actual mode transition — dev mode
-        // itself is only ever exited via Shift+D.
+        // Dev mode: Escape clears the current selection (there's no draw
+        // tool/present session to back out of — dev mode itself is only
+        // ever exited via Shift+D). View mode keeps the original
+        // present-mode-mirroring no-op via exitToEdit().
+        if (isDevMode) {
+          e.preventDefault();
+          useMeasurementsStore.getState().setSelectedMeasurement(null);
+          clearSelection();
+          return;
+        }
+        // Mirrors view mode's Escape handling exactly. `mode` is "view", so
+        // this is a harmless no-op (presentFrameIds/Index are already empty)
+        // rather than an actual mode transition.
         e.preventDefault();
         useEditorModeStore.getState().exitToEdit();
         return;

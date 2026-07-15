@@ -46,6 +46,21 @@ function saveMeasurementHistory(): void {
   useHistoryStore.getState().saveHistory(createSnapshot(useSceneStore.getState()));
 }
 
+/**
+ * Keep a selection id valid against a (possibly just-changed) measurements
+ * list: pass it through unchanged if it still refers to a measurement in the
+ * list, otherwise drop it to null. Shared by `setMeasurements` (bulk
+ * replace) and `removeMeasurementsForNodes` (cleanup) so a stale
+ * `selectedMeasurementId` can't survive either path.
+ */
+function reconcileSelection(
+  selectedId: string | null,
+  measurements: PersistedMeasurement[],
+): string | null {
+  if (!selectedId) return null;
+  return measurements.some((m) => m.id === selectedId) ? selectedId : null;
+}
+
 export const useMeasurementsStore = create<MeasurementsState>((set, get) => ({
   measurements: [],
   selectedMeasurementId: null,
@@ -76,14 +91,10 @@ export const useMeasurementsStore = create<MeasurementsState>((set, get) => ({
 
   // Bulk replace (page switch / document load) — not an undoable user edit.
   setMeasurements: (measurements) => {
-    set((state) => {
-      const measurementIds = new Set(measurements.map((m) => m.id));
-      const newSelectedId =
-        state.selectedMeasurementId && measurementIds.has(state.selectedMeasurementId)
-          ? state.selectedMeasurementId
-          : null;
-      return { measurements, selectedMeasurementId: newSelectedId };
-    });
+    set((state) => ({
+      measurements,
+      selectedMeasurementId: reconcileSelection(state.selectedMeasurementId, measurements),
+    }));
   },
 
   setSelectedMeasurement: (id) => set({ selectedMeasurementId: id }),
@@ -97,12 +108,10 @@ export const useMeasurementsStore = create<MeasurementsState>((set, get) => ({
       const newMeasurements = state.measurements.filter(
         (m) => !idSet.has(m.fromId) && !idSet.has(m.toId),
       );
-      const newMeasurementIds = new Set(newMeasurements.map((m) => m.id));
-      const newSelectedId =
-        state.selectedMeasurementId && newMeasurementIds.has(state.selectedMeasurementId)
-          ? state.selectedMeasurementId
-          : null;
-      return { measurements: newMeasurements, selectedMeasurementId: newSelectedId };
+      return {
+        measurements: newMeasurements,
+        selectedMeasurementId: reconcileSelection(state.selectedMeasurementId, newMeasurements),
+      };
     });
   },
 }));

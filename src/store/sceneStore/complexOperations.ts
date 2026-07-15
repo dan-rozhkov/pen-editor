@@ -7,12 +7,13 @@ import type {
   PathNode,
   SceneNode,
 } from "../../types/scene";
-import { generateId, buildTree } from "../../types/scene";
+import { generateId, buildTree, collectDescendantIds } from "../../types/scene";
 import { convertDesignNodesToHtml } from "../../lib/designToHtml";
 import { loadGoogleFontsFromNodes } from "../../utils/fontUtils";
 import { useLayoutStore } from "../layoutStore";
 import { calculateFrameIntrinsicSize, calculateFrameLayout } from "../../utils/yogaLayout";
 import { saveHistory } from "./helpers/history";
+import { useMeasurementsStore } from "../measurementsStore";
 import {
   insertTreeIntoFlat,
   removeNodeAndDescendants,
@@ -499,6 +500,16 @@ export function createComplexOperations(
       const newParentById = { ...state.parentById, [pathId]: parentId ?? null };
       const newChildrenById = { ...state.childrenById };
 
+      // Capture the full set of ids being replaced (each selected shape +
+      // its descendants) against the pre-removal tree, so pinned
+      // measurements touching any of them can be cleaned up below.
+      const removedIds = new Set<string>(ids);
+      for (const id of ids) {
+        for (const descendantId of collectDescendantIds(id, state.childrenById)) {
+          removedIds.add(descendantId);
+        }
+      }
+
       for (const id of ids) {
         removeNodeAndDescendants(id, newNodesById, newParentById, newChildrenById);
       }
@@ -513,6 +524,12 @@ export function createComplexOperations(
         filtered.splice(Math.min(insertIndex, filtered.length), 0, pathId);
         newRootIds = filtered;
       }
+
+      // Same undo step as the boolean op itself: `saveHistory(state)` above
+      // already recorded the pre-op measurements list, and
+      // `removeMeasurementsForNodes` saves no history of its own (mirrors
+      // basicMutations.ts's delete-node cleanup).
+      useMeasurementsStore.getState().removeMeasurementsForNodes([...removedIds]);
 
       setState({
         nodesById: newNodesById,
@@ -580,6 +597,13 @@ export function createComplexOperations(
       const newNodesById = { ...state.nodesById };
       const newParentById = { ...state.parentById };
       const newChildrenById = { ...state.childrenById };
+
+      // The embed node itself (a leaf — no scene-graph descendants) is being
+      // replaced wholesale by the converted tree under a brand-new id, so a
+      // pinned measurement anchored to it can't follow the swap — drop it,
+      // same undo step as the conversion (saveHistory above already
+      // recorded the pre-conversion measurements list).
+      useMeasurementsStore.getState().removeMeasurementsForNodes([id]);
 
       removeNodeAndDescendants(id, newNodesById, newParentById, newChildrenById);
       insertTreeIntoFlat(rootFrame, parentId ?? null, newNodesById, newParentById, newChildrenById);
@@ -656,6 +680,14 @@ export function createComplexOperations(
       const newNodesById = { ...state.nodesById };
       const newParentById = { ...state.parentById };
       const newChildrenById = { ...state.childrenById };
+
+      // The frame/group subtree (root + descendants) is being collapsed
+      // into a single new embed node, so any pinned measurement touching
+      // it or a descendant can't follow the swap — drop them, same undo
+      // step as the conversion (saveHistory above already recorded the
+      // pre-conversion measurements list).
+      const removedIds = new Set<string>([id, ...collectDescendantIds(id, state.childrenById)]);
+      useMeasurementsStore.getState().removeMeasurementsForNodes([...removedIds]);
 
       removeNodeAndDescendants(id, newNodesById, newParentById, newChildrenById);
 

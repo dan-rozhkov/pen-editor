@@ -6,7 +6,7 @@ import type {
   BackgroundBlurEffect,
   PathStroke,
 } from "@/types/scene";
-import type { Variable } from "@/types/variable";
+import type { Variable, ThemeName } from "@/types/variable";
 import type { FillStyle, EffectStyle } from "@/types/style";
 import type { TextStyle } from "@/types/textStyle";
 import type { InspectUnits } from "@/store/devModeStore";
@@ -59,18 +59,63 @@ export interface BuildInspectDataInput {
   textStyles: TextStyle[];
   units: InspectUnits;
   remBase: number;
+  /**
+   * The node's effective theme (innermost ancestor `themeOverride`, or the
+   * global active theme) — used to resolve variable-bound color values to
+   * the theme actually rendered for this node, instead of hardcoding
+   * "light". See `getEffectiveThemeForNode` (src/utils/nodeThemeUtils.ts).
+   */
+  effectiveTheme: ThemeName;
 }
 
 function fmt(px: number, units: InspectUnits, remBase: number): string {
   return formatLength(px, units, remBase);
 }
 
-/** Shorthand a 4-value box (CSS top/right/bottom/left order): one value when uniform. */
+/**
+ * Shorthand a 4-value box (CSS top/right/bottom/left order): one value when
+ * uniform, two when top===bottom && right===left, otherwise all four.
+ * Mirrors `generatePaddingCss` (src/lib/designToHtml/layoutStyleGeneration.ts).
+ */
 function shorthand(top: number, right: number, bottom: number, left: number, units: InspectUnits, remBase: number): string {
   if (top === right && right === bottom && bottom === left) {
     return fmt(top, units, remBase);
   }
+  if (top === bottom && right === left) {
+    return `${fmt(top, units, remBase)} ${fmt(right, units, remBase)}`;
+  }
   return [top, right, bottom, left].map((v) => fmt(v, units, remBase)).join(" ");
+}
+
+interface BoxMetrics {
+  paddingTop: number;
+  paddingRight: number;
+  paddingBottom: number;
+  paddingLeft: number;
+  gap?: number;
+}
+
+/**
+ * Derive padding + gap from a node's auto-layout config (0/undefined for
+ * non-auto-layout frames). Shared by `buildLayoutSection` (rows) and
+ * `buildInspectData` (the box-model diagram) so the two never drift.
+ */
+function computeBoxMetrics(node: FlatSceneNode): BoxMetrics {
+  const layout = node.type === "frame" ? node.layout : undefined;
+  if (!layout?.autoLayout) {
+    return { paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0 };
+  }
+  const gap =
+    layout.flexDirection === "column"
+      ? layout.rowGap ?? layout.gap ?? 0
+      : layout.columnGap ?? layout.gap ?? 0;
+  return {
+    paddingTop: layout.paddingTop ?? 0,
+    paddingRight: layout.paddingRight ?? 0,
+    paddingBottom: layout.paddingBottom ?? 0,
+    paddingLeft: layout.paddingLeft ?? 0,
+    gap,
+  };
 }
 
 function buildLayoutSection(node: FlatSceneNode, units: InspectUnits, remBase: number): InspectSection | undefined {
@@ -80,16 +125,9 @@ function buildLayoutSection(node: FlatSceneNode, units: InspectUnits, remBase: n
 
   rows.push({ label: "Direction", value: layout.flexDirection ?? "row" });
 
-  const gap =
-    layout.flexDirection === "column"
-      ? layout.rowGap ?? layout.gap ?? 0
-      : layout.columnGap ?? layout.gap ?? 0;
-  rows.push({ label: "Gap", value: fmt(gap, units, remBase) });
+  const { paddingTop, paddingRight, paddingBottom, paddingLeft, gap } = computeBoxMetrics(node);
+  rows.push({ label: "Gap", value: fmt(gap ?? 0, units, remBase) });
 
-  const paddingTop = layout.paddingTop ?? 0;
-  const paddingRight = layout.paddingRight ?? 0;
-  const paddingBottom = layout.paddingBottom ?? 0;
-  const paddingLeft = layout.paddingLeft ?? 0;
   rows.push({
     label: "Padding",
     value: shorthand(paddingTop, paddingRight, paddingBottom, paddingLeft, units, remBase),
@@ -143,10 +181,20 @@ function buildTypographySection(
   return { title: "Typography", rows };
 }
 
+/** Build the light/dark token summary shown on an expandable variable-bound row. */
+function buildToken(variable: Variable): { name: string; light: string; dark: string } {
+  return {
+    name: variable.name,
+    light: variable.themeValues?.light ?? variable.value,
+    dark: variable.themeValues?.dark ?? variable.value,
+  };
+}
+
 function describeFillPaint(
   paint: ReturnType<typeof getFills>[number],
   variables: Variable[],
   fillStyles: FillStyle[],
+  effectiveTheme: ThemeName,
 ): InspectValue {
   if (paint.styleId) {
     const style = fillStyles.find((s) => s.id === paint.styleId);
@@ -158,19 +206,11 @@ function describeFillPaint(
   }
 
   if (paint.type === "solid") {
-    const displayValue = resolveVariableValue(paint.color, paint.colorBinding, variables, "light") ?? paint.color;
+    const displayValue = resolveVariableValue(paint.color, paint.colorBinding, variables, effectiveTheme) ?? paint.color;
     if (paint.colorBinding) {
       const variable = variables.find((v) => v.id === paint.colorBinding!.variableId);
       if (variable) {
-        return {
-          label: "Fill",
-          value: displayValue,
-          token: {
-            name: variable.name,
-            light: variable.themeValues?.light ?? variable.value,
-            dark: variable.themeValues?.dark ?? variable.value,
-          },
-        };
+        return { label: "Fill", value: displayValue, token: buildToken(variable) };
       }
     }
     return { label: "Fill", value: displayValue };
@@ -182,18 +222,29 @@ function describeFillPaint(
   return { label: "Fill", value: "Video" };
 }
 
-function buildFillsSection(node: FlatSceneNode, variables: Variable[], fillStyles: FillStyle[]): InspectSection | undefined {
+function buildFillsSection(
+  node: FlatSceneNode,
+  variables: Variable[],
+  fillStyles: FillStyle[],
+  effectiveTheme: ThemeName,
+): InspectSection | undefined {
   const fills = getRenderableFills(node);
   if (!fills.length) return undefined;
   const rows = fills.map((paint, i) => {
-    const row = describeFillPaint(paint, variables, fillStyles);
+    const row = describeFillPaint(paint, variables, fillStyles, effectiveTheme);
     if (fills.length > 1) row.label = `Fill ${i + 1}`;
     return row;
   });
   return { title: "Fills", rows };
 }
 
-function buildStrokesSection(node: FlatSceneNode, variables: Variable[], units: InspectUnits, remBase: number): InspectSection | undefined {
+function buildStrokesSection(
+  node: FlatSceneNode,
+  variables: Variable[],
+  units: InspectUnits,
+  remBase: number,
+  effectiveTheme: ThemeName,
+): InspectSection | undefined {
   const pathStroke: PathStroke | undefined = node.type === "path" ? node.pathStroke : undefined;
   const strokeColor = node.stroke ?? pathStroke?.fill;
   const strokeWidth = node.strokeWidth ?? pathStroke?.thickness;
@@ -205,19 +256,11 @@ function buildStrokesSection(node: FlatSceneNode, variables: Variable[], units: 
   const rows: InspectValue[] = [];
 
   if (strokeColor !== undefined) {
-    const displayValue = resolveVariableValue(strokeColor, node.strokeBinding, variables, "light") ?? strokeColor;
+    const displayValue = resolveVariableValue(strokeColor, node.strokeBinding, variables, effectiveTheme) ?? strokeColor;
     if (node.strokeBinding) {
       const variable = variables.find((v) => v.id === node.strokeBinding!.variableId);
       if (variable) {
-        rows.push({
-          label: "Color",
-          value: displayValue,
-          token: {
-            name: variable.name,
-            light: variable.themeValues?.light ?? variable.value,
-            dark: variable.themeValues?.dark ?? variable.value,
-          },
-        });
+        rows.push({ label: "Color", value: displayValue, token: buildToken(variable) });
       } else {
         rows.push({ label: "Color", value: displayValue });
       }
@@ -283,20 +326,11 @@ function buildRadiusSection(node: FlatSceneNode, units: InspectUnits, remBase: n
 }
 
 export function buildInspectData(input: BuildInspectDataInput): InspectData | null {
-  const { nodeId, nodesById, rect, variables, fillStyles, effectStyles, textStyles, units, remBase } = input;
+  const { nodeId, nodesById, rect, variables, fillStyles, effectStyles, textStyles, units, remBase, effectiveTheme } = input;
   const node = nodesById[nodeId];
   if (!node) return null;
 
-  const layout = node.type === "frame" ? node.layout : undefined;
-  const paddingTop = layout?.autoLayout ? layout.paddingTop ?? 0 : 0;
-  const paddingRight = layout?.autoLayout ? layout.paddingRight ?? 0 : 0;
-  const paddingBottom = layout?.autoLayout ? layout.paddingBottom ?? 0 : 0;
-  const paddingLeft = layout?.autoLayout ? layout.paddingLeft ?? 0 : 0;
-  const gap = layout?.autoLayout
-    ? layout.flexDirection === "column"
-      ? layout.rowGap ?? layout.gap ?? 0
-      : layout.columnGap ?? layout.gap ?? 0
-    : undefined;
+  const { paddingTop, paddingRight, paddingBottom, paddingLeft, gap } = computeBoxMetrics(node);
 
   const header: InspectData["header"] = {
     name: node.name ?? node.type,
@@ -313,10 +347,10 @@ export function buildInspectData(input: BuildInspectDataInput): InspectData | nu
   const typographySection = buildTypographySection(node, textStyles, units, remBase);
   if (typographySection) sections.push(typographySection);
 
-  const fillsSection = buildFillsSection(node, variables, fillStyles);
+  const fillsSection = buildFillsSection(node, variables, fillStyles, effectiveTheme);
   if (fillsSection) sections.push(fillsSection);
 
-  const strokesSection = buildStrokesSection(node, variables, units, remBase);
+  const strokesSection = buildStrokesSection(node, variables, units, remBase, effectiveTheme);
   if (strokesSection) sections.push(strokesSection);
 
   const effectsSection = buildEffectsSection(node, effectStyles, units, remBase);

@@ -8,6 +8,7 @@ import { useMeasurementsStore } from "@/store/measurementsStore";
 import { getNodeAbsolutePositionWithLayout, getNodeEffectiveSize, isDescendantOfFlat } from "@/utils/nodeUtils";
 import { computeMeasurementLines, measureLineEndpoints } from "@/utils/measureUtils";
 import { distanceToSegment } from "@/utils/geometryUtils";
+import { getEmbedAwareDrawRect } from "@/pixi/selectionOverlay/helpers";
 import { formatMeasureLine } from "@/lib/inspect/units";
 import { findCanvasHitTargetAtPoint } from "./hitTesting";
 import type { InteractionContext, MeasureToolState } from "./types";
@@ -64,10 +65,11 @@ function defaultHitTest(worldX: number, worldY: number): string | null {
   return target?.kind === "node" ? target.nodeId : null;
 }
 
-// NOTE: this is a separate implementation from the overlay's
-// `getNodeDrawRect` (src/pixi/selectionOverlay/helpers.ts) and does not
-// round/clamp embed rects the way that one does — that overlay function is
-// the source of truth for what's actually drawn on screen.
+// Uses the same `getEmbedAwareDrawRect` rounding/clamping the selection
+// overlay's `getNodeDrawRect` applies (src/pixi/selectionOverlay/helpers.ts),
+// so an embed's measured rect always matches what's actually drawn on screen
+// — this used to be a separate, non-rounding implementation (a real
+// divergence for embed nodes), now backed by the shared helper.
 function defaultGetRect(nodeId: string): MeasureRect | null {
   const state = useSceneStore.getState();
   const node = state.nodesById[nodeId];
@@ -77,12 +79,10 @@ function defaultGetRect(nodeId: string): MeasureRect | null {
   const pos = getNodeAbsolutePositionWithLayout(nodes, nodeId, calculateLayoutForFrame);
   if (!pos) return null;
   const size = getNodeEffectiveSize(nodes, nodeId, calculateLayoutForFrame);
-  return {
-    x: pos.x,
-    y: pos.y,
+  return getEmbedAwareDrawRect(node, pos, {
     width: size?.width ?? node.width,
     height: size?.height ?? node.height,
-  };
+  });
 }
 
 /** Determine parent/child vs sibling geometry from the flat parent map. */
@@ -116,8 +116,27 @@ export function createMeasureToolController(
     isActive: false,
   };
 
+  // rAF-coalesced preview computation: a raw pointermove stream can fire far
+  // faster than the screen refreshes, and each preview recompute does a
+  // hit-test + measurement-line calc + store write. Mirrors
+  // `scheduleHoverPass` in pixiInteractionCore.ts — pointerdown/up stay
+  // fully synchronous (they gate other controllers via their boolean
+  // return), only the preview math inside pointermove is deferred to once
+  // per frame.
+  let previewRafId: number | null = null;
+  let pendingPreviewWorld: { x: number; y: number } | null = null;
+
+  function cancelPendingPreview(): void {
+    if (previewRafId !== null) {
+      cancelAnimationFrame(previewRafId);
+      previewRafId = null;
+    }
+    pendingPreviewWorld = null;
+  }
+
   /** Reset gesture state and drop the module-level cancel handle (no history involved). */
   function reset(): void {
+    cancelPendingPreview();
     state.isActive = false;
     state.fromId = null;
     activeMeasureCancel = null;
@@ -128,6 +147,44 @@ export function createMeasureToolController(
     if (!state.isActive) return;
     useMeasureStore.getState().clearLines();
     reset();
+  }
+
+  /** Compute + write the preview line for the latest queued pointer position. */
+  function flushPreview(): void {
+    previewRafId = null;
+    const world = pendingPreviewWorld;
+    pendingPreviewWorld = null;
+    if (!world || !state.isActive || !state.fromId) return;
+
+    // Defensive re-check: the tool may have been deactivated (Esc, Shift+M
+    // toggle-off, dev-mode exit) without going through `cancelActiveMeasure`
+    // — e.g. a caller that forgot to wire the escape hatch. Bail out rather
+    // than drawing a ghost preview for a tool that's no longer active.
+    if (useDrawModeStore.getState().activeTool !== "measure") {
+      cancel();
+      return;
+    }
+
+    const hoveredId = hitTest(world.x, world.y);
+    if (!hoveredId || hoveredId === state.fromId) {
+      useMeasureStore.getState().clearLines();
+      return;
+    }
+
+    const fromRect = getRect(state.fromId);
+    const toRect = getRect(hoveredId);
+    if (!fromRect || !toRect) {
+      useMeasureStore.getState().clearLines();
+      return;
+    }
+
+    const parentById = useSceneStore.getState().parentById;
+    const relation = resolveRelation(parentById, state.fromId, hoveredId);
+    const lines = computeMeasurementLines(fromRect, toRect, relation);
+    const devMode = useDevModeStore.getState();
+    useMeasureStore
+      .getState()
+      .setLines(lines.map((line) => formatMeasureLine(line, devMode.units, devMode.remBase)));
   }
 
   function selectNearestMeasurement(worldX: number, worldY: number): void {
@@ -181,35 +238,18 @@ export function createMeasureToolController(
     handlePointerMove(_e: PointerEvent, world: { x: number; y: number }): boolean {
       if (!state.isActive || !state.fromId) return false;
 
-      // Defensive re-check: the tool may have been deactivated (Esc, Shift+M
-      // toggle-off, dev-mode exit) without going through `cancelActiveMeasure`
-      // — e.g. a caller that forgot to wire the escape hatch. Bail out rather
-      // than drawing a ghost preview for a tool that's no longer active.
+      // Same defensive re-check as flushPreview, but synchronous so a
+      // deactivated tool doesn't keep gating other controllers via a stale
+      // `true` return.
       if (useDrawModeStore.getState().activeTool !== "measure") {
         cancel();
         return false;
       }
 
-      const hoveredId = hitTest(world.x, world.y);
-      if (!hoveredId || hoveredId === state.fromId) {
-        useMeasureStore.getState().clearLines();
-        return true;
+      pendingPreviewWorld = world;
+      if (previewRafId === null) {
+        previewRafId = requestAnimationFrame(flushPreview);
       }
-
-      const fromRect = getRect(state.fromId);
-      const toRect = getRect(hoveredId);
-      if (!fromRect || !toRect) {
-        useMeasureStore.getState().clearLines();
-        return true;
-      }
-
-      const parentById = useSceneStore.getState().parentById;
-      const relation = resolveRelation(parentById, state.fromId, hoveredId);
-      const lines = computeMeasurementLines(fromRect, toRect, relation);
-      const devMode = useDevModeStore.getState();
-      useMeasureStore
-        .getState()
-        .setLines(lines.map((line) => formatMeasureLine(line, devMode.units, devMode.remBase)));
       return true;
     },
 

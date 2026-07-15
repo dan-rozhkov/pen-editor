@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDevModeStore } from "@/store/devModeStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useMeasureStore } from "@/store/measureStore";
+import { useMeasurementsStore } from "@/store/measurementsStore";
 
 const UNITS_KEY = "dev-mode-units";
 const REM_BASE_KEY = "dev-mode-rem-base";
@@ -86,5 +87,13 @@ describe("devModeStore", () => {
 
     useDevModeStore.getState().setActive(false);
     expect(useMeasureStore.getState().lines).toEqual([]);
+  });
+
+  it("exiting dev mode clears the selected pinned measurement", () => {
+    useDevModeStore.getState().setActive(true);
+    useMeasurementsStore.setState({ selectedMeasurementId: "m1" });
+
+    useDevModeStore.getState().setActive(false);
+    expect(useMeasurementsStore.getState().selectedMeasurementId).toBeNull();
   });
 });

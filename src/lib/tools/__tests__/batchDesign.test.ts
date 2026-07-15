@@ -3,6 +3,7 @@ import { batchDesign } from "@/lib/tools/batchDesign";
 import { useSceneStore } from "@/store/sceneStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { resetStores, seedScene, seedVariables } from "@/test/fixtures";
+import { useMeasurementsStore } from "@/store/measurementsStore";
 import type { Effect, FlatFrameNode, FlatSceneNode, Paint, ShadowEffect, TextNode, ConnectorNode } from "@/types/scene";
 
 function sceneState() {
@@ -1107,6 +1108,15 @@ describe("batch_design", () => {
       expect(childrenById["frame1"]).toBeUndefined();
     });
 
+    it("D() drops a pinned measurement anchored to the deleted node", async () => {
+      useMeasurementsStore.getState().addMeasurement("rect1", "rect2");
+      expect(useMeasurementsStore.getState().measurements).toHaveLength(1);
+
+      const result = JSON.parse(await batchDesign({ operations: "D(rect1)" }));
+      expect(result.success).toBe(true);
+      expect(useMeasurementsStore.getState().measurements).toHaveLength(0);
+    });
+
     it("moves a root node into a frame at a given index", async () => {
       const result = JSON.parse(
         await batchDesign({ operations: "M(rect2, frame1, 0)" })
@@ -1285,6 +1295,51 @@ describe("batch_design", () => {
       const conn = sceneState().nodesById["conn1"] as ConnectorNode | undefined;
       expect(conn).toBeDefined();
       expect(conn?.endConnection.nodeId).toBe(newId);
+    });
+
+    it("R() drops a pinned measurement anchored to the replaced node itself", async () => {
+      useMeasurementsStore.getState().addMeasurement("frame1", "rect2");
+      expect(useMeasurementsStore.getState().measurements).toHaveLength(1);
+
+      const result = JSON.parse(
+        await batchDesign({
+          operations: 'R(frame1, {type: "frame", name: "New", width: 100, height: 100})',
+        })
+      );
+
+      expect(result.success).toBe(true);
+      expect(useMeasurementsStore.getState().measurements).toHaveLength(0);
+    });
+
+    it("R() drops a pinned measurement anchored to a removed descendant of the replaced node", async () => {
+      // rect1 is a child of frame1; replacing frame1 removes rect1.
+      useMeasurementsStore.getState().addMeasurement("rect1", "rect2");
+      expect(useMeasurementsStore.getState().measurements).toHaveLength(1);
+
+      const result = JSON.parse(
+        await batchDesign({
+          operations: 'R(frame1, {type: "frame", name: "New", width: 100, height: 100})',
+        })
+      );
+
+      expect(result.success).toBe(true);
+      expect(useMeasurementsStore.getState().measurements).toHaveLength(0);
+    });
+
+    it("a failed batch does not remove pinned measurements (rolled back with the rest)", async () => {
+      useMeasurementsStore.getState().addMeasurement("rect1", "rect2");
+
+      const result = JSON.parse(
+        await batchDesign({
+          operations: [
+            "D(rect1)",
+            'U(nonexistent_node, {fill: "#000000"})',
+          ].join("\n"),
+        })
+      );
+
+      expect(result.error).toMatch(/^Execution error:/);
+      expect(useMeasurementsStore.getState().measurements).toHaveLength(1);
     });
   });
 

@@ -1,8 +1,8 @@
 import { useState, type KeyboardEvent } from "react";
 import clsx from "clsx";
 import { toast } from "sonner";
-import { writeTextToClipboard } from "@/utils/clipboard";
 import { CaretRightIcon } from "@phosphor-icons/react";
+import { writeTextToClipboard } from "@/utils/clipboard";
 import type { InspectValue } from "@/lib/inspect/buildInspectData";
 
 async function copy(label: string, value: string) {

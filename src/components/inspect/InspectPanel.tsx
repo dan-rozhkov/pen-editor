@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import clsx from "clsx";
-import { CaretRightIcon } from "@phosphor-icons/react";
+import { CaretRightIcon, XIcon } from "@phosphor-icons/react";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useVariableStore } from "@/store/variableStore";
@@ -10,9 +10,12 @@ import { useDevModeStore } from "@/store/devModeStore";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { createOverlayHelpers } from "@/pixi/selectionOverlay/helpers";
 import { buildInspectData } from "@/lib/inspect/buildInspectData";
+import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
+import { formatShortcut } from "@/lib/commands/shortcutFormat";
 import type { FlatSceneNode } from "@/types/scene";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
 import { SelectWithOptions } from "@/components/ui/select";
 import { BoxModelDiagram } from "./BoxModelDiagram";
 import { InspectRow } from "./InspectRow";
@@ -69,7 +72,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export function InspectPanel() {
   const selectedIds = useSelectionStore((s) => s.selectedIds);
-  const nodesById = useSceneStore((s) => s.nodesById);
+  const nodeId = selectedIds[0];
+  // Narrow subscription — only re-renders when the inspected node itself
+  // changes, not on every unrelated scene edit. `buildInspectData` still
+  // needs the *full* nodesById map (children/name lookups for e.g. layout
+  // sections), which is read non-reactively via `.getState()` inside the
+  // memo below rather than subscribed to here.
+  const node = useSceneStore((s) => (nodeId ? s.nodesById[nodeId] : undefined));
   const variables = useVariableStore((s) => s.variables);
   const fillStyles = useStyleStore((s) => s.fillStyles);
   const effectStyles = useStyleStore((s) => s.effectStyles);
@@ -79,12 +88,11 @@ export function InspectPanel() {
   const setUnits = useDevModeStore((s) => s.setUnits);
   const [mode, setMode] = useState<"list" | "code">("list");
 
-  const nodeId = selectedIds[0];
-  const node = nodeId ? nodesById[nodeId] : undefined;
-
   const data = useMemo(() => {
     if (!nodeId || !node) return null;
     const rect = resolveRect(nodeId, node);
+    const effectiveTheme = getEffectiveThemeForNode(nodeId);
+    const nodesById = useSceneStore.getState().nodesById;
     return buildInspectData({
       nodeId,
       nodesById,
@@ -95,8 +103,9 @@ export function InspectPanel() {
       textStyles,
       units,
       remBase,
+      effectiveTheme,
     });
-  }, [nodeId, node, nodesById, variables, fillStyles, effectStyles, textStyles, units, remBase]);
+  }, [nodeId, node, variables, fillStyles, effectStyles, textStyles, units, remBase]);
 
   return (
     <div className="w-[300px] h-full flex flex-col bg-surface-panel border-l border-border-default overflow-y-auto">
@@ -119,13 +128,26 @@ export function InspectPanel() {
             List
           </Button>
         </ButtonGroup>
-        <SelectWithOptions
-          size="sm"
-          value={units}
-          onValueChange={(v) => v && setUnits(v as "px" | "rem")}
-          options={UNIT_OPTIONS}
-          className="w-16"
-        />
+        <div className="flex items-center gap-1.5">
+          <SelectWithOptions
+            size="sm"
+            value={units}
+            onValueChange={(v) => v && setUnits(v as "px" | "rem")}
+            options={UNIT_OPTIONS}
+            className="w-16"
+          />
+          <IconButton
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            tooltip="Exit dev mode"
+            shortcut={formatShortcut(["shift", "D"])}
+            data-testid="inspect-exit-dev-mode"
+            onClick={() => useDevModeStore.getState().setActive(false)}
+          >
+            <XIcon size={14} weight="bold" />
+          </IconButton>
+        </div>
       </div>
 
       {!data ? (
