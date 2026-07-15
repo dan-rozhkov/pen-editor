@@ -8,6 +8,32 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.39.0] - 2026-07-15
+
+### Added
+- **Dev Mode code generation (dev-02).** The Inspect panel's Code tab now
+  generates real code for the selected node with a format dropdown — **CSS**,
+  **Tailwind**, or **React (JSX)** (with an inline-styles ↔ Tailwind-classes
+  sub-toggle) — remembered in localStorage. Output reuses the same
+  node→CSS-declarations layer as HTML export and Copy as CSS, honors the
+  px/rem unit switch, and resolves bound variables to `var(--token)` with the
+  `:root` token definitions shipped alongside (CSS block, HTML/JSX comment, or
+  a warning for bare class strings). Tailwind maps exact standard-scale values
+  to utilities and falls back to arbitrary values; React output is a
+  compilable function component (verified by a TypeScript transpile check in
+  tests). Includes a dependency-free syntax highlighter with dedicated
+  theme-aware `--color-code-*` tokens, copy button, and collapsing for long
+  code (40+ lines).
+
+### Fixed
+- Codegen review fixes: px→rem conversion is scoped to declaration values (no
+  longer rewrites selectors, comments, or variable names containing
+  px-shaped substrings); React `className` output is quote-safe (pattern-fill
+  URLs can no longer break the JSX); unsupported nodes (component instances,
+  embeds, vector shapes, video fills) now emit explicit warnings instead of
+  silently rendering as empty `<div>`s; multi-selection shows a "first of N"
+  hint in Tailwind/React formats.
+
 ## [0.38.0] - 2026-07-15
 
 ### Added
