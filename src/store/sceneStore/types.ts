@@ -145,4 +145,8 @@ export const TEXT_MEASURE_PROPS = new Set([
   "sizing",
   // list markers + indent change wrapping/auto-width (see textWrap.layoutTextParagraphs)
   "paragraphs",
+  // In path mode, "auto width" resizes to the path's own bbox (see
+  // `measureTextAutoSize`'s textPath special case) — a geometry edit
+  // (dragging an anchor via pathEditMode) must re-run that resync.
+  "textPath",
 ]);

@@ -1,5 +1,6 @@
 import type { TextNode } from '../types/scene'
 import { buildFontString, getLineLimit, layoutTextParagraphs } from './textWrap'
+import { computeAnchorsBBox } from './pathAnchors'
 
 // Re-export the shared helpers so existing call sites keep their import path.
 export { applyTextTransform } from './textTransform'
@@ -32,6 +33,15 @@ function getContext(): CanvasRenderingContext2D {
  * paragraph, no wrap — reports each line's `x` offset for exactly this).
  */
 export function measureTextAutoSize(node: TextNode): { width: number; height: number } {
+  // Text-on-a-path changes what "auto width" means: the node's box is the
+  // path's own bounding box (so selection/resize handles track the curve),
+  // not the bbox of the rendered glyphs — mirrors how a plain `PathNode`'s
+  // width/height derive from `computeAnchorsBBox`, not from its stroke.
+  if (node.textPath) {
+    const { width, height } = computeAnchorsBBox(node.textPath.points, node.textPath.closed ?? false)
+    return { width: Math.ceil(width), height: Math.ceil(height) }
+  }
+
   const fontSize = node.fontSize ?? 16
   const lineHeight = node.lineHeight ?? 1.2
   const letterSpacing = node.letterSpacing ?? 0

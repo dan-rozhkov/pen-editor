@@ -8,8 +8,12 @@ import { layoutTextParagraphs, type LaidOutLine } from "@/utils/textWrap";
 import { resolveEffectiveFontWeight } from "@/utils/variableFont";
 import { hasEffectiveUnderline, TEXT_LINK_COLOR } from "@/lib/textLink";
 import { drawOutlineBBox, isOutlineRenderMode } from "./outlineHelpers";
+import { layoutTextOnPath, type TextPathGlyph } from "@/utils/textPathLayout";
 
 const TEXT_OUTLINE_BG_LABEL = "text-outline-bg";
+
+/** Root container label for the text-on-path rendering path (see `buildPathContent`). */
+const PATH_ROOT_LABEL = "text-path-root";
 
 /**
  * Label on the wrapper container used by the per-line rendering path
@@ -101,7 +105,9 @@ export function createTextContainer(node: TextNode): Container {
     container.addChild(gfx);
     return container;
   }
-  if (needsLineLayout(node)) {
+  if (node.textPath) {
+    buildPathContent(container, node);
+  } else if (needsLineLayout(node)) {
     buildListContent(container, node);
   } else {
     buildPlainContent(container, node);
@@ -119,6 +125,54 @@ export function updateTextContainer(
     if (gfx && (node.width !== prev.width || node.height !== prev.height)) {
       gfx.clear();
       drawOutlineBBox(gfx, node.width, node.height);
+    }
+    return;
+  }
+
+  const nodeIsPath = !!node.textPath;
+  const wasPath = container.getChildByLabel(PATH_ROOT_LABEL) != null;
+
+  // Path mode is a fully separate rendering path from plain/list text (glyphs
+  // are individually positioned/rotated along a curve rather than laid out in
+  // a rectangular box) — handled first, before the plain<->list branch below.
+  // `textPath` (and everything that affects per-glyph layout) must be listed
+  // here or an edit silently won't re-render — see the task spec's warning
+  // about `updateTextContainer`'s hand-maintained diff lists.
+  if (nodeIsPath || wasPath) {
+    const modeChanged = nodeIsPath !== wasPath;
+    const pathContentChanged =
+      modeChanged ||
+      node.textPath !== prev.textPath ||
+      node.text !== prev.text ||
+      node.textTransform !== prev.textTransform ||
+      node.fontSize !== prev.fontSize ||
+      node.fontFamily !== prev.fontFamily ||
+      node.fontFallback !== prev.fontFallback ||
+      node.fontWeight !== prev.fontWeight ||
+      node.fontStyle !== prev.fontStyle ||
+      node.fontVariations !== prev.fontVariations ||
+      node.letterSpacing !== prev.letterSpacing ||
+      node.underline !== prev.underline ||
+      node.strikethrough !== prev.strikethrough ||
+      node.fill !== prev.fill ||
+      node.fillBinding !== prev.fillBinding ||
+      node.fillOpacity !== prev.fillOpacity ||
+      node.fills !== prev.fills ||
+      node.width !== prev.width ||
+      node.height !== prev.height;
+
+    if (!pathContentChanged) return;
+
+    for (const child of [...container.children]) {
+      container.removeChild(child);
+      child.destroy();
+    }
+    if (nodeIsPath) {
+      buildPathContent(container, node);
+    } else if (needsLineLayout(node)) {
+      buildListContent(container, node);
+    } else {
+      buildPlainContent(container, node);
     }
     return;
   }
@@ -231,6 +285,124 @@ export function updateTextContainer(
 
   positionTextBlock(textObj, node);
   drawTextDecorations(container, textObj, node);
+}
+
+/**
+ * Text-on-a-path rendering: one Pixi `Text` per glyph, positioned/rotated
+ * along `node.textPath`'s curve via `layoutTextOnPath` (`@/utils/textPathLayout`,
+ * built on `@/utils/pathMeasure`'s arc-length LUT). Modeled after
+ * `buildListContent`'s "own Text objects, hand-placed in a container"
+ * pattern, since neither Pixi's `Text` nor `buildListContent`'s per-line
+ * layout can rotate individual glyphs.
+ *
+ * `node.width`/`node.height` are NOT used to size/wrap the text here — in
+ * path mode the node's box is the path's own bounding box (see
+ * `measureTextAutoSize`'s `textPath` special case in `@/utils/textMeasure`),
+ * and `textPath.points` are stored directly in that same local box (no
+ * separate `geometryBounds` scale field on `textPath`, unlike `PathNode`) —
+ * any non-uniform scale on the source path is baked into the copied points
+ * once, at conversion time, by the text-path tool.
+ */
+function buildPathContent(container: Container, node: TextNode): void {
+  const layout = layoutTextOnPath(node);
+  if (!layout) return;
+
+  const root = new Container();
+  root.label = PATH_ROOT_LABEL;
+  container.addChild(root);
+
+  if (layout.glyphs.length === 0) return;
+
+  const style = buildTextStyle(node);
+  const fillColor = getEffectiveTextColor(node);
+  const dpr = window.devicePixelRatio || 1;
+  const anchorY = layout.effectiveSide === "left" ? 1 : 0;
+
+  layout.glyphs.forEach((glyph, i) => {
+    const t = new Text({ text: glyph.char, style });
+    t.resolution = dpr;
+    // Rotated glyphs must not be pixel-snapped (roundPixels would jitter the
+    // sub-pixel rotation/position computed from the curve).
+    t.roundPixels = false;
+    t.label = `text-path-glyph-${i}`;
+    t.anchor.set(0, anchorY);
+    t.x = glyph.x;
+    t.y = glyph.y;
+    t.rotation = glyph.angle;
+    root.addChild(t);
+  });
+
+  drawPathTextDecorations(root, node, layout.glyphs, layout.effectiveSide, fillColor);
+}
+
+/**
+ * Underline/strikethrough for text-on-path: `drawTextDecorations`/
+ * `drawListTextDecorations` draw axis-aligned `Graphics.rect()`s, which only
+ * make sense for a straight baseline. On a curve each glyph gets its own
+ * short rotated segment (same transform already computed for the glyph
+ * itself), so the decoration follows the curve glyph-by-glyph rather than
+ * cutting a straight line across it.
+ */
+function drawPathTextDecorations(
+  root: Container,
+  node: TextNode,
+  glyphs: TextPathGlyph[],
+  effectiveSide: "left" | "right",
+  fillColor: string,
+): void {
+  const underline = hasEffectiveUnderline(node);
+  if (!underline && !node.strikethrough) return;
+
+  const g = new Graphics();
+  g.label = "text-decorations";
+  const fontSize = node.fontSize ?? 16;
+  const thickness = Math.max(1, Math.round(fontSize / 14));
+  const underlineOffset = fontSize * 1.05;
+  const strikeOffset = fontSize * 0.55;
+  // Decoration segments sit "below" the glyph baseline in the glyph's own
+  // local frame; when the effective side flips the glyph anchor to the top
+  // (side === 'right'), the decoration offset flips too so it stays on the
+  // ink side of the glyph rather than floating away from it.
+  const sign = effectiveSide === "right" ? -1 : 1;
+
+  // `Graphics.rect()` always draws axis-aligned in the graphics object's own
+  // local space, which can't express a per-glyph rotation — so each segment
+  // is built as an explicit quad (4 corners derived from the glyph's own
+  // cos/sin) via `poly()` instead. Uses the pure-measured `glyph.width` (from
+  // `layoutTextOnPath`/`measureTextWidth`) rather than the Pixi `Text`
+  // object's own `.width` getter — the latter triggers Pixi's internal canvas
+  // text-metrics path, which isn't stubbed by the test environment's
+  // `HTMLCanvasElement.getContext('2d')` shim (see `src/test/setup.ts`) and
+  // throws under happy-dom.
+  glyphs.forEach((glyph) => {
+    const w = glyph.width;
+    if (w <= 0) return;
+    const cos = Math.cos(glyph.angle);
+    const sin = Math.sin(glyph.angle);
+    const drawQuad = (offset: number) => {
+      // Perpendicular (normal) direction to the tangent, offset by `offset`
+      // along it, then a `w`-long segment along the tangent itself.
+      const nx = -sin;
+      const ny = cos;
+      const baseX = glyph.x + nx * offset * sign;
+      const baseY = glyph.y + ny * offset * sign;
+      const halfT = thickness / 2;
+      const p1x = baseX - nx * halfT;
+      const p1y = baseY - ny * halfT;
+      const p2x = baseX + nx * halfT;
+      const p2y = baseY + ny * halfT;
+      const p3x = p2x + cos * w;
+      const p3y = p2y + sin * w;
+      const p4x = p1x + cos * w;
+      const p4y = p1y + sin * w;
+      g.poly([p1x, p1y, p2x, p2y, p3x, p3y, p4x, p4y], true);
+      g.fill(fillColor);
+    };
+    if (underline) drawQuad(underlineOffset);
+    if (node.strikethrough) drawQuad(strikeOffset);
+  });
+
+  root.addChild(g);
 }
 
 /**
