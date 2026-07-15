@@ -37,6 +37,7 @@ import { createDrawController } from "./drawController";
 import { createPencilController } from "./pencilController";
 import { createPenController } from "./penController";
 import { createTextPathController } from "./textPathController";
+import { createTextPathOffsetController } from "./textPathOffsetController";
 import { createPathEditController } from "./pathEditController";
 import { enterPathEditMode } from "./pathEditMode";
 import { createConnectorController } from "./connectorController";
@@ -180,6 +181,7 @@ export function setupPixiInteraction(
   const pencil = createPencilController(context);
   const pen = createPenController(context);
   const textPathTool = createTextPathController(context);
+  const textPathOffset = createTextPathOffsetController(context);
   const pathEdit = createPathEditController(context);
   const connector = createConnectorController(context);
   const drag = createDragController(context);
@@ -272,6 +274,12 @@ export function setupPixiInteraction(
     // but a stray in-flight gesture (e.g. path-edit still active from the
     // instant before) must not mutate the scene while inspecting.
     if (canEditScene(mode) && !useDevModeStore.getState().active) {
+      // Text-on-path start-offset handle: self-gated on hit-test (only
+      // swallows the click when the pointer actually lands on the handle),
+      // so it's safe to check first — a miss simply returns false and falls
+      // through to path-edit/transform/drag below, same as every other
+      // handle-shaped control in this chain.
+      if (textPathOffset.handlePointerDown(e, world)) return;
       // Path point-edit mode: anchors/handles take priority over the resize
       // handles of the (still-selected) node underneath them. A click that
       // misses every anchor/handle exits edit mode and falls through to
@@ -423,6 +431,7 @@ export function setupPixiInteraction(
     // Handle active interactions
     if (pan.handlePointerMove(e)) return;
     if (measureTool.handlePointerMove(e, world)) return;
+    if (textPathOffset.handlePointerMove(e, world)) return;
     if (pathEdit.handlePointerMove(e, world)) return;
     if (pencil.handlePointerMove(e, world)) return;
     if (pen.handlePointerMove(e, world)) return;
@@ -484,6 +493,7 @@ export function setupPixiInteraction(
     // Handle interaction cleanup in order
     if (pan.handlePointerUp(e)) return;
     if (measureTool.handlePointerUp(e, world)) return;
+    if (textPathOffset.handlePointerUp(e, world)) return;
     if (pathEdit.handlePointerUp(e, world)) return;
     if (scaleTool.handlePointerUp(e, world)) return;
     if (transform.handlePointerUp(e, world)) return;

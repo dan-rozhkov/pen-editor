@@ -67,6 +67,8 @@ import {
   type OpenTypeSelectGroup,
 } from "@/utils/openTypeFeatures";
 import { layoutTextOnPath } from "@/utils/textPathLayout";
+import { useSelectionStore } from "@/store/selectionStore";
+import { enterTextPathEditMode } from "@/pixi/interaction/pathEditMode";
 
 /** True when one or more trailing characters don't fit before the path's end (see `layoutTextOnPath`'s overflow policy doc comment). */
 function textPathOverflows(node: TextNode): boolean {
@@ -625,6 +627,10 @@ function OpenTypePopover({
 
 export function TypographySection({ node, onUpdate }: TypographySectionProps) {
   const detachStyleFromNode = useTextStyleStore((s) => s.detachStyleFromNode);
+  const isEditingPath = useSelectionStore(
+    (s) => s.editingNodeId === node.id && s.editingMode === "text-path",
+  );
+  const stopEditing = useSelectionStore((s) => s.stopEditing);
 
   // Route typography edits: while the node is bound to a text style, changing
   // a style-managed property (fontFamily/fontSize/...) becomes a local
@@ -1192,8 +1198,20 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
       </PropertyRow>
       {node.textPath && (
         <div className="flex flex-col gap-1">
-          <div className="text-[10px] font-normal text-text-muted">
-            Path
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] font-normal text-text-muted">
+              Path
+            </div>
+            <Button
+              variant={isEditingPath ? "default" : "secondary"}
+              size="sm"
+              aria-pressed={isEditingPath}
+              onClick={() =>
+                isEditingPath ? stopEditing() : enterTextPathEditMode(node.id)
+              }
+            >
+              {isEditingPath ? "Done" : "Edit Path"}
+            </Button>
           </div>
           <PropertyRow>
             <NumberInput

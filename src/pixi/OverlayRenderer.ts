@@ -23,9 +23,10 @@ import { getMarqueeRect, subscribeOverlayState } from "./pixiOverlayState";
 import { createOverlayHelpers } from "./selectionOverlay/helpers";
 import {
   getAnchorScreenPoints,
-  getEditedPathNode,
+  getEditedAnchorTarget,
   getNodeAbsolutePosition,
 } from "./interaction/pathEditGeometry";
+import { getActiveStartOffsetHandlePos } from "./interaction/textPathOffsetController";
 import {
   FLOATING_LABEL_FONT_SIZE,
   FLOATING_LABEL_PADDING_X,
@@ -123,6 +124,10 @@ export function createOverlayRenderer(
   const pathEditGfx = new Graphics();
   pathEditGfx.label = "path-edit";
   overlayContainer.addChild(pathEditGfx);
+
+  const textPathOffsetGfx = new Graphics();
+  textPathOffsetGfx.label = "text-path-offset-handle";
+  overlayContainer.addChild(textPathOffsetGfx);
 
   /** Pooled floating labels for a measure-line layer — avoids per-frame Text/Graphics churn. */
   function createMeasureLabelPool(container: Container) {
@@ -601,7 +606,7 @@ export function createOverlayRenderer(
   /** Path point-edit mode overlay: anchors + bezier handles as a screen-space (world-drawn) Graphics layer. */
   function redrawPathEdit(): void {
     pathEditGfx.clear();
-    const edited = getEditedPathNode();
+    const edited = getEditedAnchorTarget();
     if (!edited) return;
     const absPos = getNodeAbsolutePosition(edited.id);
     if (!absPos) return;
@@ -611,7 +616,7 @@ export function createOverlayRenderer(
     const handleRadius = 3 / scale;
     const pen = usePenToolStore.getState();
 
-    const screenPoints = getAnchorScreenPoints(edited.node, absPos);
+    const screenPoints = getAnchorScreenPoints(edited.points, edited.scaleBasis, absPos);
     for (const sp of screenPoints) {
       if (sp.handleOut) {
         const isHovered = pen.hoveredHandle?.anchorIndex === sp.index && pen.hoveredHandle.which === "out";
@@ -628,6 +633,25 @@ export function createOverlayRenderer(
     }
   }
 
+  /**
+   * Text-on-path `startOffset` handle: a single blue dot on the curve at the
+   * node's current start position (spec section 4's "синий хандл"),
+   * draggable via `textPathOffsetController.ts`. Shown whenever the sole
+   * selection is a text-on-path node — independent of path-edit mode (see
+   * that controller's doc comment).
+   */
+  function redrawTextPathOffsetHandle(): void {
+    textPathOffsetGfx.clear();
+    const pos = getActiveStartOffsetHandlePos();
+    if (!pos) return;
+
+    const scale = useViewportStore.getState().scale || 1;
+    const radius = 5 / scale;
+    textPathOffsetGfx.circle(pos.x, pos.y, radius);
+    textPathOffsetGfx.fill(PEN_ACCENT_COLOR);
+    textPathOffsetGfx.stroke({ color: 0xffffff, width: 1.5 / scale });
+  }
+
   // Phase 5: Batch viewport-triggered overlay redraws via dirty flags + RAF.
   // Interactive store subscriptions stay synchronous to avoid perceptible lag
   // on guides/draw preview/drop indicators during drag/draw.
@@ -642,9 +666,10 @@ export function createOverlayRenderer(
   const DIRTY_PEN_PREVIEW = 256;
   const DIRTY_PATH_EDIT = 512;
   const DIRTY_PERSISTENT_MEASURE = 1024;
+  const DIRTY_TEXT_PATH_OFFSET = 2048;
   const DIRTY_ALL_SCALE =
     DIRTY_GUIDES | DIRTY_DROP | DIRTY_MEASURE | DIRTY_DRAW | DIRTY_MARQUEE | DIRTY_CONNECTOR |
-    DIRTY_PERSISTENT_GUIDES | DIRTY_PERSISTENT_MEASURE;
+    DIRTY_PERSISTENT_GUIDES | DIRTY_PERSISTENT_MEASURE | DIRTY_TEXT_PATH_OFFSET;
   let dirtyFlags = 0;
   let overlayRafId: number | null = null;
 
@@ -663,6 +688,7 @@ export function createOverlayRenderer(
     if (flags & DIRTY_PEN_PREVIEW) redrawPenPreview();
     if (flags & DIRTY_PATH_EDIT) redrawPathEdit();
     if (flags & DIRTY_PERSISTENT_MEASURE) redrawPersistentMeasurements();
+    if (flags & DIRTY_TEXT_PATH_OFFSET) redrawTextPathOffsetHandle();
   }
 
   function scheduleOverlayRedraw(flags: number): void {
@@ -691,9 +717,11 @@ export function createOverlayRenderer(
       : DIRTY_PEN_PREVIEW | DIRTY_PATH_EDIT;
     scheduleOverlayRedraw(flags);
   });
-  const unsubSelectionForPathEdit = useSelectionStore.subscribe(() => scheduleOverlayRedraw(DIRTY_PATH_EDIT));
+  const unsubSelectionForPathEdit = useSelectionStore.subscribe(() =>
+    scheduleOverlayRedraw(DIRTY_PATH_EDIT | DIRTY_TEXT_PATH_OFFSET),
+  );
   const unsubSceneForPathEdit = useSceneStore.subscribe(() =>
-    scheduleOverlayRedraw(DIRTY_PATH_EDIT | DIRTY_PERSISTENT_MEASURE),
+    scheduleOverlayRedraw(DIRTY_PATH_EDIT | DIRTY_PERSISTENT_MEASURE | DIRTY_TEXT_PATH_OFFSET),
   );
   // Persistent measurements: redraw when the pinned set/selection changes, or
   // when dev mode toggles (the layer only renders while active). Node
@@ -734,6 +762,7 @@ export function createOverlayRenderer(
   redrawPenPreview();
   redrawPathEdit();
   redrawPersistentMeasurements();
+  redrawTextPathOffsetHandle();
 
   return () => {
     if (overlayRafId !== null) {
@@ -769,5 +798,6 @@ export function createOverlayRenderer(
     connectorPreviewGfx.destroy();
     penPreviewGfx.destroy();
     pathEditGfx.destroy();
+    textPathOffsetGfx.destroy();
   };
 }

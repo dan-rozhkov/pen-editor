@@ -9,7 +9,7 @@ import { useTextStyleStore } from './textStyleStore'
 import { useStyleStore } from './styleStore'
 import { useMeasurementsStore } from './measurementsStore'
 
-type EditingMode = 'text' | 'name' | 'embed' | 'path' | null
+type EditingMode = 'text' | 'name' | 'embed' | 'path' | 'text-path' | null
 
 export interface InstanceContext {
   instanceId: string

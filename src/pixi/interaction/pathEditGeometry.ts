@@ -3,7 +3,8 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { getNodeAbsolutePositionWithLayout } from "@/utils/nodeUtils";
-import type { PathAnchor, PathNode } from "@/types/scene";
+import { applyAnchorEditToNode } from "@/utils/pathAnchors";
+import type { PathAnchor, PathNode, SceneNode, TextNode } from "@/types/scene";
 
 /**
  * Shared geometry helpers for path point-edit mode, used by both the
@@ -27,13 +28,72 @@ export type PathEditHit =
   | { kind: "anchor"; index: number }
   | { kind: "handle"; index: number; which: "in" | "out" };
 
-/** The path node currently in point-edit mode, or null if not editing a path. */
-export function getEditedPathNode(): { id: string; node: PathNode } | null {
+/**
+ * A geometry currently under anchor-edit (dragging anchors/handles) — either
+ * a `PathNode`'s own `points`, or a text-on-path `TextNode`'s `textPath.points`.
+ * Both share the same `PathAnchor[]` model (see `pathAnchors.ts`), so the
+ * pointer-interaction controller and the overlay renderer can drive either
+ * one through this single shape instead of branching on node type
+ * everywhere. `scaleBasis` feeds `anchorToWorld`/`worldDeltaToAnchorDelta`
+ * (identity scale for text-path — see its construction below); `applyEdit`
+ * produces the store update for a new points/closed pair, keeping each
+ * node type's own persistence shape (PathNode's `geometry`/`geometryBounds`
+ * recompute vs. TextNode's `textPath` object) private to this module.
+ */
+export interface AnchorEditTarget {
+  id: string;
+  kind: "path" | "text-path";
+  points: PathAnchor[];
+  closed: boolean;
+  scaleBasis: Pick<PathNode, "width" | "height" | "geometryBounds" | "x" | "y">;
+  applyEdit: (points: PathAnchor[], closed: boolean) => Partial<SceneNode>;
+}
+
+/**
+ * The node currently in anchor-edit mode (`editingMode` is `"path"` or
+ * `"text-path"` — see `pathEditMode.ts`'s `enterPathEditMode`/
+ * `enterTextPathEditMode`), or null if nothing is being anchor-edited.
+ */
+export function getEditedAnchorTarget(): AnchorEditTarget | null {
   const { editingNodeId, editingMode } = useSelectionStore.getState();
-  if (editingMode !== "path" || !editingNodeId) return null;
+  if (!editingNodeId) return null;
   const node = useSceneStore.getState().nodesById[editingNodeId];
-  if (!node || node.type !== "path" || !node.points) return null;
-  return { id: editingNodeId, node: node as unknown as PathNode };
+  if (!node) return null;
+
+  if (editingMode === "path") {
+    if (node.type !== "path" || !node.points) return null;
+    const pathNode = node as unknown as PathNode;
+    return {
+      id: editingNodeId,
+      kind: "path",
+      points: pathNode.points ?? [],
+      closed: pathNode.closed ?? false,
+      scaleBasis: pathNode,
+      applyEdit: (points, closed) => applyAnchorEditToNode(pathNode, points, closed),
+    };
+  }
+
+  if (editingMode === "text-path") {
+    if (node.type !== "text" || !node.textPath) return null;
+    const textNode = node as unknown as TextNode;
+    const tp = textNode.textPath!;
+    return {
+      id: editingNodeId,
+      kind: "text-path",
+      points: tp.points,
+      closed: tp.closed ?? false,
+      // `textPath.points` are stored directly in the node's local 0..width/
+      // 0..height box, with no separate `geometryBounds` scale field (see
+      // `textPathHitTest.ts`'s doc comment) — omitting `geometryBounds` here
+      // makes `anchorToWorld`'s fallback kick in, which is exactly scale 1
+      // against the node's own width/height, i.e. no rescaling at all.
+      scaleBasis: { width: textNode.width, height: textNode.height, x: textNode.x, y: textNode.y },
+      applyEdit: (points, closed) =>
+        ({ textPath: { ...tp, points, closed } }) as Partial<SceneNode>,
+    };
+  }
+
+  return null;
 }
 
 export function getNodeAbsolutePosition(nodeId: string): { x: number; y: number } | null {
@@ -91,15 +151,15 @@ export function worldDeltaToAnchorDelta(
 }
 
 export function getAnchorScreenPoints(
-  node: PathNode,
+  points: PathAnchor[],
+  scaleBasis: Pick<PathNode, "width" | "height" | "geometryBounds">,
   absPos: { x: number; y: number },
 ): AnchorScreenPoint[] {
-  const points: PathAnchor[] = node.points ?? [];
   return points.map((anchor, index) => ({
     index,
-    pos: anchorToWorld(node, absPos, anchor),
-    handleIn: anchor.handleIn ? anchorToWorld(node, absPos, anchor.handleIn) : undefined,
-    handleOut: anchor.handleOut ? anchorToWorld(node, absPos, anchor.handleOut) : undefined,
+    pos: anchorToWorld(scaleBasis, absPos, anchor),
+    handleIn: anchor.handleIn ? anchorToWorld(scaleBasis, absPos, anchor.handleIn) : undefined,
+    handleOut: anchor.handleOut ? anchorToWorld(scaleBasis, absPos, anchor.handleOut) : undefined,
   }));
 }
 
@@ -107,14 +167,14 @@ const HIT_RADIUS_PX = 7;
 
 /** Hit-test anchors/handles at a world point against the currently edited node. */
 export function hitTestPathEdit(worldX: number, worldY: number): PathEditHit | null {
-  const edited = getEditedPathNode();
+  const edited = getEditedAnchorTarget();
   if (!edited) return null;
   const absPos = getNodeAbsolutePosition(edited.id);
   if (!absPos) return null;
 
   const scale = useViewportStore.getState().scale || 1;
   const radius = HIT_RADIUS_PX / scale;
-  const screenPoints = getAnchorScreenPoints(edited.node, absPos);
+  const screenPoints = getAnchorScreenPoints(edited.points, edited.scaleBasis, absPos);
 
   // Handles are checked first — they sit closer to the anchor when the
   // handle is short, and should win the hit-test since anchors are more
