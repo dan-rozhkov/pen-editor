@@ -59,13 +59,34 @@ export function anchorsToSVGPath(points: PathAnchor[], closed: boolean): string 
   return d;
 }
 
-function cubicValue(p0: number, p1: number, p2: number, p3: number, t: number): number {
+/**
+ * De Casteljau evaluation of a single-axis cubic bezier at `t` (0..1).
+ * Exported for `pathMeasure.ts` (arc-length LUT + point-at-length), which
+ * evaluates the same cubic on both axes to get an exact (x, y) at a given t.
+ */
+export function cubicValue(p0: number, p1: number, p2: number, p3: number, t: number): number {
   const mt = 1 - t;
   return (
     mt * mt * mt * p0 +
     3 * mt * mt * t * p1 +
     3 * mt * t * t * p2 +
     t * t * t * p3
+  );
+}
+
+/**
+ * Derivative (tangent component) of a single-axis cubic bezier at `t`.
+ * B'(t) = 3(1-t)^2 (p1-p0) + 6(1-t)t (p2-p1) + 3t^2 (p3-p2). Exported for
+ * `pathMeasure.ts`, which combines the x/y derivatives into a tangent angle
+ * via `Math.atan2`. Shares the same B'(t) coefficients `cubicExtremaTs` below
+ * solves for zeros of.
+ */
+export function cubicDerivative(p0: number, p1: number, p2: number, p3: number, t: number): number {
+  const mt = 1 - t;
+  return (
+    3 * mt * mt * (p1 - p0) +
+    6 * mt * t * (p2 - p1) +
+    3 * t * t * (p3 - p2)
   );
 }
 

@@ -710,6 +710,44 @@ export interface TextNode extends BaseNode {
   // been locally edited since the style was applied. Centralized style edits skip
   // these keys for this node ("local override", mirrors ref-instance overrides).
   textStyleOverrides?: string[]
+  /**
+   * Text-on-a-path: when set, glyphs are laid out along a curve instead of a
+   * straight baseline (Figma "Text on a path", minus the live poglyph editor —
+   * see below). Deliberately a field ON `TextNode`, not a new `SceneNode`
+   * union member and not a reference to a sibling `PathNode`: a reference
+   * would leave a dangling `pathNodeId` on delete/copy and introduce a
+   * cross-node layout dependency this codebase doesn't otherwise have. The
+   * `points`/`closed` model is copied 1:1 from `PathNode` (see `PathAnchor`
+   * doc comment) at the moment the path tool converts a path node into a
+   * text-on-path node — after that, the path geometry lives only here; no
+   * separate path node remains.
+   *
+   * Arc-length math (`getTotalLength`/`getPointAtLength`) lives in
+   * `@/utils/pathMeasure`. `TypographySection`'s "Path" subsection exposes
+   * `startOffset`/`side`/`flip`; the start handle on canvas drags
+   * `startOffset` directly. Overflow (glyphs whose advance would start past
+   * the path's end) is simply not drawn — matches the SVG `<textPath>` spec,
+   * so the Pixi canvas and SVG export agree without extra logic. No
+   * auto-shrink/fit-to-path and no live per-glyph on-canvas editor (out of
+   * scope — see the task doc); editing shows the text as a flat straight
+   * line near the path and re-curves on Esc/blur.
+   *
+   * Persists for free via the untyped `JSON.stringify`/`parse` round-trip in
+   * `serializeDocument`/`deserializeDocument` (`@/utils/fileUtils`) — absence
+   * means "not on a path" (legacy default), same as `paragraphs`/`points`.
+   * NOT part of `TEXT_STYLE_PROPERTY_KEYS` (`@/types/textStyle`): this is
+   * node geometry, not typography, so a named text style must never carry it.
+   */
+  textPath?: {
+    points: PathAnchor[]
+    closed?: boolean
+    /** 0..1 fraction along the path length where the first glyph starts. */
+    startOffset: number
+    /** Which side of the path direction the text sits on (baseline offset direction). */
+    side: 'left' | 'right'
+    /** Reverses the direction glyphs advance along the path. */
+    flip?: boolean
+  }
 }
 
 export interface GroupNode extends BaseNode {
