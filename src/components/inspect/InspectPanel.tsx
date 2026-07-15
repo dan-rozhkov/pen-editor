@@ -170,7 +170,7 @@ export function InspectPanel() {
           <div className="px-3 py-2 border-b border-border-default">
             <div className="flex flex-col gap-0.5">
               <span className="text-sm font-medium text-text-primary truncate">{data.header.name}</span>
-              <span className="text-[10px] uppercase tracking-wide text-text-muted">
+              <span className="text-xs capitalize text-text-muted">
                 {data.header.type}
               </span>
             </div>
