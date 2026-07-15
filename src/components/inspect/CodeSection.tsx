@@ -158,7 +158,7 @@ export function CodeSection({ selectedIds }: { selectedIds: string[] }) {
           value={format}
           onValueChange={(v) => v && setFormat(v as CodegenFormat)}
           options={FORMAT_OPTIONS}
-          className="w-28"
+          className="w-fit"
         />
         {format === "react" && (
           <ButtonGroup>
