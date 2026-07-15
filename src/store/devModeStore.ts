@@ -21,9 +21,13 @@ import { cancelActiveMeasure } from "@/pixi/interaction/measureToolController";
  * measure-line overlay so stale measurements don't linger back in edit mode.
  */
 export type InspectUnits = "px" | "rem";
+export type CodegenFormat = "css" | "tailwind" | "react";
+export type CodegenReactStyle = "inline" | "tailwind";
 
 const UNITS_KEY = "dev-mode-units";
 const REM_BASE_KEY = "dev-mode-rem-base";
+const CODEGEN_FORMAT_KEY = "dev-mode-codegen-format";
+const CODEGEN_REACT_STYLE_KEY = "dev-mode-codegen-react-style";
 
 function getInitialUnits(): InspectUnits {
   const stored = localStorage.getItem(UNITS_KEY);
@@ -36,20 +40,36 @@ function getInitialRemBase(): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 16;
 }
 
+function getInitialCodegenFormat(): CodegenFormat {
+  const stored = localStorage.getItem(CODEGEN_FORMAT_KEY);
+  return stored === "tailwind" || stored === "react" ? stored : "css";
+}
+
+function getInitialCodegenReactStyle(): CodegenReactStyle {
+  const stored = localStorage.getItem(CODEGEN_REACT_STYLE_KEY);
+  return stored === "tailwind" ? "tailwind" : "inline";
+}
+
 interface DevModeState {
   active: boolean;
   units: InspectUnits;
   remBase: number;
+  codegenFormat: CodegenFormat;
+  codegenReactStyle: CodegenReactStyle;
   toggle: () => void;
   setActive: (active: boolean) => void;
   setUnits: (units: InspectUnits) => void;
   setRemBase: (base: number) => void;
+  setCodegenFormat: (format: CodegenFormat) => void;
+  setCodegenReactStyle: (style: CodegenReactStyle) => void;
 }
 
 export const useDevModeStore = create<DevModeState>((set, get) => ({
   active: false,
   units: getInitialUnits(),
   remBase: getInitialRemBase(),
+  codegenFormat: getInitialCodegenFormat(),
+  codegenReactStyle: getInitialCodegenReactStyle(),
 
   toggle: () => {
     get().setActive(!get().active);
@@ -92,6 +112,24 @@ export const useDevModeStore = create<DevModeState>((set, get) => ({
     set({ remBase: base });
     try {
       localStorage.setItem(REM_BASE_KEY, String(base));
+    } catch {
+      // localStorage unavailable (private mode/quota) — in-memory state still applies.
+    }
+  },
+
+  setCodegenFormat: (format) => {
+    set({ codegenFormat: format });
+    try {
+      localStorage.setItem(CODEGEN_FORMAT_KEY, format);
+    } catch {
+      // localStorage unavailable (private mode/quota) — in-memory state still applies.
+    }
+  },
+
+  setCodegenReactStyle: (style) => {
+    set({ codegenReactStyle: style });
+    try {
+      localStorage.setItem(CODEGEN_REACT_STYLE_KEY, style);
     } catch {
       // localStorage unavailable (private mode/quota) — in-memory state still applies.
     }

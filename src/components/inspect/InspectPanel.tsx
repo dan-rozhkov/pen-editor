@@ -19,6 +19,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { SelectWithOptions } from "@/components/ui/select";
 import { BoxModelDiagram } from "./BoxModelDiagram";
 import { InspectRow } from "./InspectRow";
+import { CodeSection } from "./CodeSection";
 
 const ChevronIcon = ({ expanded }: { expanded: boolean }) => (
   <CaretRightIcon
@@ -162,9 +163,7 @@ export function InspectPanel() {
           <span className="text-text-muted text-xs">Select a layer to inspect</span>
         </div>
       ) : mode === "code" ? (
-        <div className="flex-1 flex items-center justify-center px-4 text-center">
-          <span className="text-text-muted text-xs">Code generation coming soon</span>
-        </div>
+        <CodeSection selectedIds={selectedIds} />
       ) : (
         <div className="flex-1 overflow-y-auto">
           <div className="px-3 py-2 border-b border-border-default">

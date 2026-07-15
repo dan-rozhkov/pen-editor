@@ -56,17 +56,17 @@ describe("<InspectPanel />", () => {
     await vi.waitFor(() => expect(toast).toHaveBeenCalledWith("Copied Fill"));
   });
 
-  it("toggles Code/List and shows a placeholder for Code", () => {
+  it("toggles Code/List and shows the CSS code section for Code", () => {
     select(["rect1"]);
     render(<InspectPanel />);
     fireEvent.click(screen.getByRole("button", { name: "Code" }));
-    expect(screen.getByText("Code generation coming soon")).toBeTruthy();
+    expect(screen.getByText("CSS")).toBeTruthy();
   });
 
-  it("defaults to List mode without the Code placeholder", () => {
+  it("defaults to List mode without the Code section", () => {
     select(["rect1"]);
     render(<InspectPanel />);
-    expect(screen.queryByText("Code generation coming soon")).toBeNull();
+    expect(screen.queryByText("CSS")).toBeNull();
   });
 
   it("switches units from px to rem and updates rows", () => {

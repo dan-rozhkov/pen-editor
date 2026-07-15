@@ -6,11 +6,19 @@ import { useMeasurementsStore } from "@/store/measurementsStore";
 
 const UNITS_KEY = "dev-mode-units";
 const REM_BASE_KEY = "dev-mode-rem-base";
+const CODEGEN_FORMAT_KEY = "dev-mode-codegen-format";
+const CODEGEN_REACT_STYLE_KEY = "dev-mode-codegen-react-style";
 
 describe("devModeStore", () => {
   beforeEach(() => {
     localStorage.clear();
-    useDevModeStore.setState({ active: false, units: "px", remBase: 16 });
+    useDevModeStore.setState({
+      active: false,
+      units: "px",
+      remBase: 16,
+      codegenFormat: "css",
+      codegenReactStyle: "inline",
+    });
     useDrawModeStore.setState({ activeTool: null });
     useMeasureStore.setState({ lines: [] });
   });
@@ -95,5 +103,44 @@ describe("devModeStore", () => {
 
     useDevModeStore.getState().setActive(false);
     expect(useMeasurementsStore.getState().selectedMeasurementId).toBeNull();
+  });
+
+  it("starts with codegenFormat 'css' and codegenReactStyle 'inline' when localStorage has nothing", () => {
+    expect(useDevModeStore.getState().codegenFormat).toBe("css");
+    expect(useDevModeStore.getState().codegenReactStyle).toBe("inline");
+  });
+
+  it("setCodegenFormat('react') persists to localStorage", () => {
+    useDevModeStore.getState().setCodegenFormat("react");
+    expect(useDevModeStore.getState().codegenFormat).toBe("react");
+    expect(localStorage.getItem(CODEGEN_FORMAT_KEY)).toBe("react");
+  });
+
+  it("setCodegenReactStyle('tailwind') persists to localStorage", () => {
+    useDevModeStore.getState().setCodegenReactStyle("tailwind");
+    expect(useDevModeStore.getState().codegenReactStyle).toBe("tailwind");
+    expect(localStorage.getItem(CODEGEN_REACT_STYLE_KEY)).toBe("tailwind");
+  });
+
+  it("codegenFormat/codegenReactStyle persist across a fresh module load (seeded localStorage)", async () => {
+    localStorage.setItem(CODEGEN_FORMAT_KEY, "tailwind");
+    localStorage.setItem(CODEGEN_REACT_STYLE_KEY, "tailwind");
+
+    vi.resetModules();
+    const { useDevModeStore: freshStore } = await import("@/store/devModeStore");
+
+    expect(freshStore.getState().codegenFormat).toBe("tailwind");
+    expect(freshStore.getState().codegenReactStyle).toBe("tailwind");
+  });
+
+  it("falls back to defaults when localStorage has an invalid codegen value", async () => {
+    localStorage.setItem(CODEGEN_FORMAT_KEY, "bogus");
+    localStorage.setItem(CODEGEN_REACT_STYLE_KEY, "bogus");
+
+    vi.resetModules();
+    const { useDevModeStore: freshStore } = await import("@/store/devModeStore");
+
+    expect(freshStore.getState().codegenFormat).toBe("css");
+    expect(freshStore.getState().codegenReactStyle).toBe("inline");
   });
 });
