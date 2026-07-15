@@ -71,4 +71,29 @@ describe("convertDesignNodesToSvg — text-on-path", () => {
     const { svg } = convertDesignNodesToSvg("text1", nodesById, {});
     expect(svg).not.toContain("<tspan");
   });
+
+  // Finding 1 regression: the closed-path (circle) case is the spec's
+  // headline use case for text-on-a-path (badges, stamps) — flip must
+  // reverse a closed contour's authored `Z`-closed path correctly, not just
+  // an open 2-point line.
+  it("reverses a closed (circular) path's direction and remaps startOffset when flip is set", () => {
+    const r = 100;
+    const k = 0.5522847498;
+    const circlePoints = [
+      { x: r, y: 0, handleOut: { x: r, y: r * k }, handleIn: { x: r, y: -r * k } },
+      { x: 0, y: r, handleIn: { x: r * k, y: r }, handleOut: { x: -r * k, y: r } },
+    ];
+    const nodesById: Record<string, FlatSceneNode> = {
+      text1: pathTextNode({
+        textPath: { points: circlePoints, closed: true, startOffset: 0.2, side: "left", flip: true },
+      }),
+    };
+    const { svg } = convertDesignNodesToSvg("text1", nodesById, {});
+
+    // Reversed anchor order (point 1 first, point 0 second) with
+    // handleIn/handleOut swapped, still closed with "Z".
+    expect(svg).toMatch(/<path id="pen-svg-textpath-\d+" d="M0,100 C[^"]+ Z" fill="none"\/>/);
+    // 1 - 0.2 = 0.8 -> 80%
+    expect(svg).toContain('startOffset="80.000%"');
+  });
 });

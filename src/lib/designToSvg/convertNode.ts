@@ -15,7 +15,8 @@ import { getPrimarySolidPaint } from "@/utils/fillUtils";
 import { pointsAttr } from "@/utils/lineCapUtils";
 import { resolveMasking } from "@/lib/masks/maskResolution";
 import { hasEffectiveUnderline, isSafeLinkHref, TEXT_LINK_COLOR } from "@/lib/textLink";
-import { anchorsToSVGPath, reverseAnchors } from "@/utils/pathAnchors";
+import { anchorsToSVGPath } from "@/utils/pathAnchors";
+import { resolveTextPathDirection } from "@/utils/textPathLayout";
 import { applyTextTransform } from "@/utils/textTransform";
 import { buildEllipseArcGeometry, ellipseArcGeometryToSvgPath, hasCustomEllipseArc } from "@/lib/shapePath/ellipseArc";
 import {
@@ -272,11 +273,16 @@ function convertEllipseToSvg(node: EllipseNode, ctx: SvgConversionContext, isRoo
  *   Pixi renderer's anchor-flip for the same case.
  * - `flip`: reverses which direction glyphs read along the curve. There's no
  *   "reverse textPath direction" attribute, so the `<path>` itself is
- *   authored backward (`reverseAnchors`) instead — reversing the path also
- *   flips its tangent direction everywhere, which is exactly how the Pixi
- *   renderer's `flip` (angle + PI) behaves. `startOffset` is remapped
- *   (`1 - startOffset`) so the glyphs still start from the same point on the
- *   curve the user picked before the path was reversed.
+ *   authored backward instead — reversing the path also flips its tangent
+ *   direction everywhere. `startOffset` is remapped (`1 - startOffset`) so
+ *   the glyphs still start from the same point on the curve the user picked
+ *   before the path was reversed. The reverse+remap is computed by
+ *   `resolveTextPathDirection` (`@/utils/textPathLayout`), the same helper
+ *   the Pixi renderer's per-glyph layout uses — a single definition of
+ *   `flip` shared by both, so they can't drift the way they did before (the
+ *   Pixi side used to just add PI to each glyph's angle without reversing
+ *   the advance order, which mirrors the text in place rather than flipping
+ *   its reading direction).
  */
 function convertTextOnPathToSvg(
   node: TextNode,
@@ -293,11 +299,10 @@ function convertTextOnPathToSvg(
   const attrs = commonGroupAttrs(node, null, isRoot);
   const flip = !!tp.flip;
   const effectiveSide: "left" | "right" = flip ? (tp.side === "left" ? "right" : "left") : tp.side;
-  const points = flip ? reverseAnchors(tp.points) : tp.points;
-  const startOffsetFrac = flip ? 1 - (tp.startOffset ?? 0) : (tp.startOffset ?? 0);
+  const { points, closed, startOffset: startOffsetFrac } = resolveTextPathDirection(tp);
   const clampedOffset = Math.max(0, Math.min(1, startOffsetFrac));
 
-  const d = anchorsToSVGPath(points, tp.closed ?? false);
+  const d = anchorsToSVGPath(points, closed);
   const pathId = nextSvgId("textpath");
   ctx.defs.push(`<path id="${pathId}" d="${escapeXml(d)}" fill="none"/>`);
 

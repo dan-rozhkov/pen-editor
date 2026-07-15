@@ -1,5 +1,6 @@
-import type { TextNode } from '../types/scene'
-import { getPointAtLength, getTotalLength } from './pathMeasure'
+import type { PathAnchor, TextNode } from '../types/scene'
+import { preparePath } from './pathMeasure'
+import { reverseAnchors } from './pathAnchors'
 import { measureTextWidth } from './textWrap'
 import { applyTextTransform } from './textTransform'
 
@@ -9,7 +10,7 @@ export interface TextPathGlyph {
   /** Anchor point on the curve (glyph's advance origin), in the node's local space. */
   x: number
   y: number
-  /** Rotation to apply to the glyph, in radians (tangent angle, plus PI when `flip`). */
+  /** Rotation to apply to the glyph, in radians (the tangent angle of the effective — post-`flip` — direction of travel, from `resolveTextPathDirection`). */
   angle: number
   /** Measured advance width of this glyph (letter-spacing not included). */
   width: number
@@ -22,6 +23,33 @@ export interface TextPathLayoutResult {
   overflow: boolean
   /** `side` after accounting for `flip` (flip swaps which side of the path the text sits on). */
   effectiveSide: 'left' | 'right'
+}
+
+/**
+ * Single source of truth for what `flip` means, shared by the Pixi renderer
+ * (via `layoutTextOnPath` below) and the SVG exporter
+ * (`@/lib/designToSvg/convertNode.ts`'s `convertTextOnPathToSvg`) — the two
+ * previously derived `flip` independently and drifted: the renderer only
+ * rotated each glyph by PI while still advancing in the original direction,
+ * which reverses each glyph in place without reversing reading order (wrong
+ * — mirrors instead of flipping); the SVG exporter reversed the authored path
+ * itself (`reverseAnchors`) and remapped `startOffset -> 1 - startOffset`,
+ * which flips both the advance order and the tangent together (matches
+ * Figma's "Flip text orientation").
+ *
+ * Reversing the anchor list is sufficient to flip the tangent too: walking a
+ * cubic backward negates its derivative at every shared point, so
+ * `getPointAtLength` on the reversed points naturally returns `angle + PI`
+ * relative to the forward path — no separate `+ Math.PI` adjustment needed
+ * once the direction itself is reversed.
+ */
+export function resolveTextPathDirection(
+  tp: NonNullable<TextNode['textPath']>,
+): { points: PathAnchor[]; closed: boolean; startOffset: number } {
+  const closed = tp.closed ?? false
+  const startOffset = tp.startOffset ?? 0
+  if (!tp.flip) return { points: tp.points, closed, startOffset }
+  return { points: reverseAnchors(tp.points), closed, startOffset: 1 - startOffset }
 }
 
 /**
@@ -48,13 +76,20 @@ export function layoutTextOnPath(node: TextNode): TextPathLayoutResult | null {
   const tp = node.textPath
   if (!tp) return null
 
-  const totalLength = getTotalLength(tp.points, tp.closed ?? false)
   const flip = !!tp.flip
   const effectiveSide: 'left' | 'right' = flip ? (tp.side === 'left' ? 'right' : 'left') : tp.side
+  const { points, closed, startOffset: startOffsetFrac } = resolveTextPathDirection(tp)
+
+  // Built once and reused for every glyph — rebuilding the arc-length LUT
+  // per glyph (and per drag/hover probe elsewhere) is the exact class of
+  // per-event/per-glyph recomputation this codebase already paid for once
+  // (see `bug-01`, the pen-tool-lag fix) and doesn't want to reintroduce.
+  const prepared = preparePath(points, closed)
+  const totalLength = prepared.totalLength
 
   const text = applyTextTransform(node.text ?? '', node.textTransform)
   const letterSpacing = node.letterSpacing ?? 0
-  const startOffset = Math.max(0, Math.min(1, tp.startOffset ?? 0))
+  const startOffset = Math.max(0, Math.min(1, startOffsetFrac))
 
   let advance = startOffset * totalLength
   let overflow = false
@@ -65,15 +100,18 @@ export function layoutTextOnPath(node: TextNode): TextPathLayoutResult | null {
       overflow = true
       break
     }
-    const width = measureTextWidth(node, char)
-    const { x, y, angle } = getPointAtLength(tp.points, tp.closed ?? false, advance)
-    glyphs.push({
-      char,
-      x,
-      y,
-      angle: flip ? angle + Math.PI : angle,
-      width,
-    })
+    // `measureTextWidth` bakes in `(text.length - 1) * letterSpacing` using
+    // UTF-16 code-unit length, meant for measuring whole strings. `char` here
+    // is one `Array.from` grapheme/code-point, which is 1 code unit for BMP
+    // characters (the `- 1` term is 0, a no-op) but 2 for astral characters
+    // like emoji — so for those, `measureTextWidth` already adds one
+    // glyph's worth of letterSpacing on top of the raw glyph width.
+    // Subtracting that same term back out yields the pure glyph width, so
+    // `advance += width + letterSpacing` below is the only place spacing is
+    // applied, exactly once per glyph regardless of code-unit width.
+    const width = measureTextWidth(node, char) - Math.max(0, char.length - 1) * letterSpacing
+    const { x, y, angle } = prepared.getPointAtLength(advance)
+    glyphs.push({ char, x, y, angle, width })
     advance += width + letterSpacing
   }
 
