@@ -1,6 +1,7 @@
 import {
   generateId,
   type BackgroundBlurEffect,
+  type BaseNode,
   type BlurEffect,
   type Effect,
   type FlatSceneNode,
@@ -9,6 +10,7 @@ import {
   type ImageFill,
   type ImagePaint,
   type Paint,
+  type PathStroke,
   type PatternFill,
   type PatternPaint,
   type SceneNode,
@@ -240,6 +242,73 @@ export function resolveFillStylePaint(paint: Paint, fillStyles: FillStyle[]): Pa
 /** Node's renderable fill stack with any fill-style references substituted in. */
 export function getResolvedRenderableFills(node: FillSource, fillStyles: FillStyle[]): Paint[] {
   return getRenderableFills(node).map((p) => resolveFillStylePaint(p, fillStyles))
+}
+
+// --- Stroke paint stack ---
+//
+// Mirrors the fill stack above, but geometry (strokeWidth/strokeAlign/
+// strokeWidthPerSide) stays on the node — see `BaseNode.strokes` doc comment.
+// Also folds in `PathStroke` (path-node-only legacy stroke model) as a
+// second, lower-priority fallback beneath `stroke`/`strokeOpacity`/
+// `strokeBinding`, completing the migration flagged in the task spec
+// (previously only done ad hoc in `StrokeSection.tsx`'s edit path).
+
+type StrokeSource = Pick<BaseNode, 'stroke' | 'strokeOpacity' | 'strokeBinding'> & {
+  strokes?: Paint[]
+  pathStroke?: PathStroke
+}
+
+export const LEGACY_STROKE_PAINT_ID = 'legacy-stroke'
+
+/**
+ * Derive the stroke paint stack from the legacy single-stroke fields (and,
+ * for path nodes without those, `PathStroke.fill`). A single solid layer —
+ * gradients never had a legacy stroke representation.
+ */
+export function legacyStrokesToPaints(node: StrokeSource): Paint[] {
+  const color = node.stroke ?? node.pathStroke?.fill
+  if (color === undefined) return []
+  const solid: SolidPaint = { id: LEGACY_STROKE_PAINT_ID, type: 'solid', color }
+  if (node.strokeOpacity !== undefined) solid.opacity = node.strokeOpacity
+  if (node.strokeBinding !== undefined) solid.colorBinding = node.strokeBinding
+  return [solid]
+}
+
+const legacyStrokesCache = new WeakMap<object, Paint[]>()
+
+/**
+ * Read a node's stroke paint stack (bottom-to-top). Falls back to the legacy
+ * single-stroke fields (and `PathStroke.fill`) when `strokes` is not set.
+ */
+export function getStrokes(node: StrokeSource): Paint[] {
+  if (node.strokes) return node.strokes
+  let cached = legacyStrokesCache.get(node)
+  if (!cached) {
+    cached = legacyStrokesToPaints(node)
+    legacyStrokesCache.set(node, cached)
+  }
+  return cached
+}
+
+/** Stroke paints that should actually render (visible, non-zero opacity). */
+export function getRenderableStrokes(node: StrokeSource): Paint[] {
+  return getStrokes(node).filter((p) => p.visible !== false && (p.opacity ?? 1) > 0)
+}
+
+/**
+ * Node updates that clear the legacy single-stroke fields (color only —
+ * geometry fields `strokeWidth`/`strokeAlign`/`strokeWidthPerSide` are never
+ * cleared here, they remain node-level regardless of paint model). Spread
+ * into the same update that sets `strokes`:
+ * `updateNode(id, { strokes, ...clearLegacyStrokeProps() })`
+ */
+export function clearLegacyStrokeProps(): Pick<FlatSceneNode, 'stroke' | 'strokeOpacity' | 'strokeBinding'> {
+  return { stroke: undefined, strokeOpacity: undefined, strokeBinding: undefined }
+}
+
+/** Node's renderable stroke stack with any fill-style references substituted in. */
+export function getResolvedRenderableStrokes(node: StrokeSource, fillStyles: FillStyle[]): Paint[] {
+  return getRenderableStrokes(node).map((p) => resolveFillStylePaint(p, fillStyles))
 }
 
 /**

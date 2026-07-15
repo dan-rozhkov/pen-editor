@@ -353,6 +353,19 @@ export interface BaseNode {
    * `getFills()` from `@/utils/fillUtils` to read fills with legacy fallback.
    */
   fills?: Paint[]
+  /**
+   * Figma-style stroke paint stack (bottom-to-top), analogous to `fills`.
+   * When defined, this is the single source of truth for the node's stroke
+   * COLOR/PAINT(s); the legacy `stroke`/`strokeOpacity`/`strokeBinding`
+   * fields are ignored. Stroke GEOMETRY (`strokeWidth`, `strokeAlign`,
+   * `strokeWidthPerSide`) stays on the node regardless — Figma's model has
+   * one shared weight/align/style per node, multiple paints only vary color/
+   * gradient/opacity/blendMode, composited in this array's order in the same
+   * geometry. Use `getStrokes()`/`getRenderableStrokes()` from
+   * `@/utils/fillUtils` to read with legacy (and `PathStroke`, for `path`
+   * nodes) fallback.
+   */
+  strokes?: Paint[]
   // Shadow effect (legacy single-effect field — superseded by `effects`)
   effect?: ShadowEffect
   /**

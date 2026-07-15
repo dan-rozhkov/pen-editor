@@ -106,7 +106,8 @@ export function drawRect(gfx: Graphics, node: RectNode): void {
     return;
   }
   const pathReady = applyFills(gfx, node, node.width, node.height, drawShape);
-  // Skip rebuilding the geometry for the stroke when the last fill already left
-  // a reusable path on `gfx`.
-  applyStroke(gfx, node, node.width, node.height, pathReady ? undefined : drawShape);
+  // Skip rebuilding the geometry for the stroke's first layer when the last
+  // fill already left a reusable path on `gfx` (subsequent stroke paint
+  // layers, if any, still redraw via `drawShape`).
+  applyStroke(gfx, node, node.width, node.height, drawShape, pathReady);
 }

@@ -5,6 +5,7 @@ import { useStyleStore } from "@/store/styleStore";
 import { resolveColor, applyOpacity } from "@/utils/colorUtils";
 import {
   getResolvedRenderableFills as getResolvedRenderableFillsPure,
+  getResolvedRenderableStrokes as getResolvedRenderableStrokesPure,
   resolveEffectStack,
 } from "@/utils/fillUtils";
 
@@ -93,6 +94,16 @@ export function getResolvedStroke(node: FlatSceneNode): string | undefined {
   const theme = getEffectiveTheme();
   const raw = resolveColor(node.stroke, node.strokeBinding, variables, theme);
   return raw ? applyOpacity(raw, node.strokeOpacity) : raw;
+}
+
+/**
+ * Node's renderable stroke paint stack (see `BaseNode.strokes`), with any
+ * stroke-style (`styleId`) references substituted in from `styleStore`,
+ * mirroring `getResolvedRenderableFills`.
+ */
+export function getResolvedRenderableStrokes(node: FlatSceneNode): Paint[] {
+  const { fillStyles } = useStyleStore.getState();
+  return getResolvedRenderableStrokesPure(node, fillStyles);
 }
 
 export function parseColor(color: string): number {

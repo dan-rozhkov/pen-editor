@@ -436,5 +436,5 @@ export function drawFrameBackground(
   const pathReady = applyFills(gfx, node, width, height, drawShape);
   // Skip rebuilding the geometry for the stroke when the last fill already left
   // a reusable path on `gfx`.
-  applyStroke(gfx, node, width, height, pathReady ? undefined : drawShape);
+  applyStroke(gfx, node, width, height, drawShape, pathReady);
 }

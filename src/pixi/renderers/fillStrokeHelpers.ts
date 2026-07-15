@@ -3,6 +3,7 @@ import type { BLEND_MODES } from "pixi.js";
 import type {
   FlatSceneNode,
   GradientFill,
+  Paint,
   PaintBlendMode,
   PerSideStroke,
   PerCornerRadius,
@@ -13,7 +14,7 @@ import { buildSquircleRectPath } from "@/lib/shapePath/squircleCorner";
 import {
   getResolvedSolidPaint,
   getResolvedRenderableFills,
-  getResolvedStroke,
+  getResolvedRenderableStrokes,
   parseColor,
   parseAlpha,
 } from "./colorHelpers";
@@ -107,38 +108,82 @@ function applyStopOpacity(color: string, opacity?: number): string {
   return `rgba(${r},${g},${b},${opacity})`;
 }
 
+/**
+ * Build a Pixi `FillGradient` from our normalized `GradientFill`.
+ *
+ * `forStroke` fixes a Pixi v8 divergence from Figma: `generateTextureFillMatrix`
+ * pads a *stroked* shape's bounds by the stroke width before mapping the
+ * gradient's normalized 0..1 space onto them (`scene/graphics/shared/utils/
+ * generateTextureFillMatrix.mjs` — `if (style.width) bounds.pad(style.width)`),
+ * so a `FillGradient` built with `textureSpace: "local"` reads ~`strokeWidth`
+ * px "inward" of where Figma places it (measured: 130/260/390 vs Figma's
+ * 160/260/360 on a 400x200 node with a 60px stroke — see task spec p1-22).
+ * Figma instead maps the gradient onto the node's own bbox regardless of
+ * stroke width, with no expansion and hard clamping past 0..1.
+ *
+ * The fix (verified by pixel measurement on the linear case, see spec):
+ * `textureSpace: "global"` skips that bounds-based normalization entirely —
+ * `FillGradient`'s own `buildLinearGradient`/`buildRadialGradient` then treat
+ * `start`/`end`/`center`/radii as literal local-space (px) coordinates rather
+ * than a 0..1 fraction of the (padded) shape bounds. So for `forStroke` we
+ * pre-multiply our normalized bbox-relative coordinates by the node's own
+ * width/height to get the same px position Figma would read off the bbox.
+ *
+ * Verified from source (no headless-GPU pixel test available in this repo)
+ * that this is safe under a node transform (position/rotation/scale) and
+ * viewport zoom: Graphics geometry — and therefore this gradient — is always
+ * built in the Graphics object's own LOCAL, untransformed coordinate space
+ * (`gfx.rect(0, 0, width, height)` etc.); the container's world transform is
+ * applied by Pixi's scene graph as an entirely separate step downstream, the
+ * same way it already is for the existing "local" fill-gradient path. Radial
+ * stroke gradients use the same px conversion by analogy (not independently
+ * pixel-measured in the spec, which only worked the linear case through) —
+ * see the report for the disclosed caveat on non-square-bbox eccentricity.
+ */
 export function buildPixiGradient(
   gradient: GradientFill,
-  _width: number,
-  _height: number,
+  width: number,
+  height: number,
+  options?: { forStroke?: boolean },
 ): FillGradient {
   const sorted = [...gradient.stops].sort((a, b) => a.position - b.position);
+  const colorStops = sorted.map((s) => ({
+    offset: s.position,
+    color: applyStopOpacity(s.color, s.opacity),
+  }));
+  const forStroke = options?.forStroke ?? false;
+  const textureSpace = forStroke ? "global" : "local";
 
   if (gradient.type === "linear") {
     return new FillGradient({
       type: "linear",
-      start: { x: gradient.startX, y: gradient.startY },
-      end: { x: gradient.endX, y: gradient.endY },
-      textureSpace: "local",
-      colorStops: sorted.map((s) => ({
-        offset: s.position,
-        color: applyStopOpacity(s.color, s.opacity),
-      })),
+      start: forStroke
+        ? { x: gradient.startX * width, y: gradient.startY * height }
+        : { x: gradient.startX, y: gradient.startY },
+      end: forStroke
+        ? { x: gradient.endX * width, y: gradient.endY * height }
+        : { x: gradient.endX, y: gradient.endY },
+      textureSpace,
+      colorStops,
     });
   }
 
-  // Radial gradient
+  // Radial gradient. Radii are normalized against `width` (matching the x-axis
+  // basis used elsewhere for this node), which reproduces a true circle rather
+  // than Figma's bbox-aspect-stretched ellipse on non-square nodes — a
+  // disclosed, non-pixel-verified extrapolation for the stroke case.
   return new FillGradient({
     type: "radial",
-    center: { x: gradient.startX, y: gradient.startY },
-    innerRadius: gradient.startRadius ?? 0,
-    outerCenter: { x: gradient.endX, y: gradient.endY },
-    outerRadius: gradient.endRadius ?? 0.5,
-    textureSpace: "local",
-    colorStops: sorted.map((s) => ({
-      offset: s.position,
-      color: applyStopOpacity(s.color, s.opacity),
-    })),
+    center: forStroke
+      ? { x: gradient.startX * width, y: gradient.startY * height }
+      : { x: gradient.startX, y: gradient.startY },
+    innerRadius: forStroke ? (gradient.startRadius ?? 0) * width : (gradient.startRadius ?? 0),
+    outerCenter: forStroke
+      ? { x: gradient.endX * width, y: gradient.endY * height }
+      : { x: gradient.endX, y: gradient.endY },
+    outerRadius: forStroke ? (gradient.endRadius ?? 0.5) * width : (gradient.endRadius ?? 0.5),
+    textureSpace,
+    colorStops,
   });
 }
 
@@ -291,7 +336,8 @@ export function hasVisualPropsChanged(
     (node as { cornerSmoothing?: number }).cornerSmoothing !==
       (prev as { cornerSmoothing?: number }).cornerSmoothing ||
     node.gradientFill !== prev.gradientFill ||
-    node.fills !== prev.fills
+    node.fills !== prev.fills ||
+    node.strokes !== prev.strokes
   );
 }
 
@@ -456,38 +502,85 @@ function clearBlendFillLayers(container: Container): void {
   }
 }
 
+/** Resolve a single stroke paint's solid color to a Pixi `stroke()` color+alpha pair. */
+function strokePaintColor(paint: SolidPaint): string | undefined {
+  return getResolvedSolidPaint(paint);
+}
+
 /**
- * Apply stroke (per-side or unified) after shape is drawn.
+ * Apply the stroke paint stack (per-side or unified) after the shape is drawn.
  *
- * The unified branch strokes the current path. In Pixi v8 a `.stroke()` issued
- * immediately after a `.fill()` reuses the fill's path, so this works when a
- * fill was the last thing drawn on `gfx`. When `drawShape` is provided it is
- * re-run first so the stroke has a fresh path even if the last fill landed on a
- * separate blend layer (or there were no fills at all).
+ * Geometry (weight/align/per-side) is one setting per node (Figma parity —
+ * see `BaseNode.strokes` doc comment); `strokes`/legacy stroke fields only
+ * vary color/gradient/opacity/blendMode, composited bottom-to-top in that
+ * SAME geometry (later paints drawn on top of earlier ones, not offset
+ * outward — mirrors `applyFills`).
+ *
+ * Pixi v8 consumes the current path on every `.stroke()` (like `.fill()`), so
+ * each additional paint layer needs the shape path redrawn via `drawShape`.
+ * The first layer may reuse an already-fresh path left by the last fill
+ * (`pathReady`), skipping one redundant redraw — same optimization
+ * `applyFills`'s caller-facing `pathReady` return enables today.
+ *
+ * Per-side stroke + gradient is an explicitly out-of-scope combination (the
+ * task spec flags per-side gradient geometry as ambiguous — four independent
+ * segments have no single bbox to map a gradient onto consistently with
+ * Figma). The UI (`StrokeSection`) blocks switching to per-side mode when the
+ * stroke stack contains a gradient paint and vice versa; this function's
+ * per-side branch defensively falls back to the topmost visible SOLID paint's
+ * color only (ignoring any gradient paints) so a `.pen` file that ends up
+ * with both anyway still renders something reasonable instead of crashing.
  */
 export function applyStroke(
   gfx: Graphics,
   node: FlatSceneNode,
   width: number,
   height: number,
-  drawShape?: ShapeDrawer,
+  drawShape: ShapeDrawer,
+  pathReady = false,
 ): void {
-  const strokeColor = getResolvedStroke(node);
-  if (!strokeColor) return;
+  const strokes = getResolvedRenderableStrokes(node);
+  if (strokes.length === 0) return;
 
   const align = node.strokeAlign ?? 'center';
-
   const perSide = node.strokeWidthPerSide;
+
   if (hasPerSideStroke(perSide) && perSide) {
-    drawPerSideStroke(gfx, width, height, strokeColor, perSide, align);
-  } else if (node.strokeWidth) {
-    if (drawShape) drawShape(gfx);
-    const alignment = align === 'inside' ? 1 : align === 'outside' ? 0 : 0.5;
+    const solid = [...strokes].reverse().find((p): p is SolidPaint => p.type === 'solid');
+    const strokeColor = solid ? strokePaintColor(solid) : undefined;
+    if (strokeColor) drawPerSideStroke(gfx, width, height, strokeColor, perSide, align);
+    return;
+  }
+
+  const strokeWidth = node.strokeWidth;
+  if (!strokeWidth) return;
+
+  const alignment = align === 'inside' ? 1 : align === 'outside' ? 0 : 0.5;
+
+  // Solid + gradient only — image/pattern/video stroke paints are out of
+  // scope (task spec: "Video/shader-пейнты на обводке" explicitly excluded;
+  // image/pattern strokes were never part of the DoD either). Skipped
+  // without consuming a `drawShape` redraw.
+  const renderable = strokes.filter(
+    (p): p is SolidPaint | Extract<Paint, { type: 'gradient' }> => p.type === 'solid' || p.type === 'gradient',
+  );
+
+  renderable.forEach((paint, index) => {
+    if (index > 0 || !pathReady) drawShape(gfx);
+
+    if (paint.type === 'gradient') {
+      const gradient = buildPixiGradient(paint.gradient, width, height, { forStroke: true });
+      gfx.stroke({ fill: gradient, alpha: paint.opacity ?? 1, width: strokeWidth, alignment });
+      return;
+    }
+
+    const color = strokePaintColor(paint);
+    if (!color) return;
     gfx.stroke({
-      color: parseColor(strokeColor),
-      alpha: parseAlpha(strokeColor),
-      width: node.strokeWidth,
+      color: parseColor(color),
+      alpha: parseAlpha(color),
+      width: strokeWidth,
       alignment,
     });
-  }
+  });
 }

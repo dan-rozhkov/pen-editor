@@ -93,5 +93,5 @@ export function drawEllipse(gfx: Graphics, node: EllipseNode): void {
   const pathReady = applyFills(gfx, node, node.width, node.height, drawShape);
   // Skip rebuilding the geometry for the stroke when the last fill already left
   // a reusable path on `gfx`.
-  applyStroke(gfx, node, node.width, node.height, pathReady ? undefined : drawShape);
+  applyStroke(gfx, node, node.width, node.height, drawShape, pathReady);
 }
