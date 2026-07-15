@@ -125,6 +125,11 @@ const REACT_STYLE_OPTIONS: { value: CodegenReactStyle; label: string }[] = [
 ];
 
 export function CodeSection({ selectedIds }: { selectedIds: string[] }) {
+const reactStyleToggleGroupClass =
+  "h-6 rounded-md bg-secondary gap-px [&>[data-slot]]:rounded-[5px]! [&>[data-slot]]:border [&>[data-slot]~[data-slot]]:border-l";
+const activeReactStyleToggleClass =
+  "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel";
+
   const nodesById = useSceneStore((s) => s.nodesById);
   const childrenById = useSceneStore((s) => s.childrenById);
   const units = useDevModeStore((s) => s.units);
@@ -168,14 +173,15 @@ export function CodeSection({ selectedIds }: { selectedIds: string[] }) {
           className="w-fit"
         />
         {format === "react" && (
-          <ButtonGroup>
+          <ButtonGroup orientation="horizontal" className={reactStyleToggleGroupClass}>
             {REACT_STYLE_OPTIONS.map((opt) => (
               <Button
                 key={opt.value}
                 type="button"
-                variant={reactStyle === opt.value ? "default" : "outline"}
+                variant={reactStyle === opt.value ? "default" : "secondary"}
                 size="sm"
                 onClick={() => setReactStyle(opt.value)}
+                className={reactStyle === opt.value ? activeReactStyleToggleClass : undefined}
               >
                 {opt.label}
               </Button>

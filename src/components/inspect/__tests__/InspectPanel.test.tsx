@@ -77,6 +77,15 @@ describe("<InspectPanel />", () => {
     expect(screen.getByLabelText("Line numbers").children.length).toBeGreaterThan(0);
   });
 
+  it("uses the properties-style toggle group for React code output", () => {
+    select(["rect1"]);
+    useDevModeStore.getState().setCodegenFormat("react");
+    render(<InspectPanel />);
+    fireEvent.click(screen.getByRole("button", { name: "Code" }));
+    expect(screen.getByRole("button", { name: "Inline" }).className).toContain("bg-surface-panel");
+    expect(screen.getByRole("button", { name: "Tailwind" }).className).toContain("bg-secondary");
+  });
+
   it("defaults to List mode without the Code section", () => {
     select(["rect1"]);
     render(<InspectPanel />);
