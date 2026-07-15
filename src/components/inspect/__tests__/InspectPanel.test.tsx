@@ -43,9 +43,7 @@ describe("<InspectPanel />", () => {
     select(["rect1"]);
     render(<InspectPanel />);
     expect(screen.getByText("Box")).toBeTruthy();
-    // Width/height should be shown as formatted px values somewhere in the box model.
-    expect(screen.getByText("100px")).toBeTruthy();
-    expect(screen.getByText("50px")).toBeTruthy();
+    expect(screen.getByText("100px × 50px")).toBeTruthy();
   });
 
   it("copies a row's value on click and toasts", async () => {
@@ -74,11 +72,11 @@ describe("<InspectPanel />", () => {
   it("switches units from px to rem and updates rows", () => {
     select(["rect1"]);
     render(<InspectPanel />);
-    expect(screen.getByText("100px")).toBeTruthy();
+    expect(screen.getByText("100px × 50px")).toBeTruthy();
     act(() => {
       useDevModeStore.getState().setUnits("rem");
     });
-    expect(screen.getByText("6.25rem")).toBeTruthy();
+    expect(screen.getByText("6.25rem × 3.125rem")).toBeTruthy();
   });
 
   it("expands a token row on click, showing light/dark values", () => {

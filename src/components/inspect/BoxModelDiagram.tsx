@@ -3,9 +3,8 @@ import type { InspectUnits } from "@/store/devModeStore";
 import { formatLength } from "@/lib/inspect/units";
 
 /**
- * CSS-box-model-style diagram: an outer ring showing padding on each side
- * (when non-zero) around an inner box labeled with width x height. Purely
- * presentational — all values are pre-computed pixel numbers from
+ * CSS-box-model-style diagram with nested Border → Padding → content layers.
+ * Purely presentational — all values are pre-computed pixel numbers from
  * `InspectData.box`, formatted here per the current unit preference.
  */
 export function BoxModelDiagram({
@@ -23,27 +22,42 @@ export function BoxModelDiagram({
 
   return (
     <div className="p-3">
-      <div className="relative h-[120px] flex items-center justify-center rounded-md border border-dashed border-border-default bg-surface-hover/40">
-        {hasPadding && (
-          <>
-            <span className="absolute top-1 left-1/2 -translate-x-1/2 text-[10px] font-mono text-text-muted">
-              {fmt(box.paddingTop)}
-            </span>
-            <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[10px] font-mono text-text-muted">
-              {fmt(box.paddingBottom)}
-            </span>
-            <span className="absolute left-1 top-1/2 -translate-y-1/2 text-[10px] font-mono text-text-muted">
-              {fmt(box.paddingLeft)}
-            </span>
-            <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[10px] font-mono text-text-muted">
-              {fmt(box.paddingRight)}
-            </span>
-          </>
-        )}
-        <div className="flex flex-col items-center justify-center gap-0.5 min-w-[60px] min-h-[40px] rounded border border-green-500/50 bg-green-500/10 px-3 py-2">
-          <span className="font-mono text-xs text-text-primary">{fmt(box.width)}</span>
-          <span className="text-text-muted text-[10px]">×</span>
-          <span className="font-mono text-xs text-text-primary">{fmt(box.height)}</span>
+      <div
+        aria-label="Box model"
+        className="relative h-[200px] overflow-hidden rounded-lg bg-surface-hover/70 p-5"
+      >
+        <div className="relative h-full rounded border border-border-default bg-surface-panel">
+          <span className="absolute left-1/2 top-2 -translate-x-1/2 text-sm text-text-muted">Border</span>
+
+          <span className="absolute left-6 top-2 text-xs text-text-muted">−</span>
+          <span className="absolute right-6 top-2 text-xs text-text-muted">−</span>
+          <span className="absolute bottom-3 left-6 text-xs text-text-muted">−</span>
+          <span className="absolute bottom-3 right-6 text-xs text-text-muted">−</span>
+
+          <div className="absolute inset-x-5 inset-y-10 rounded border-2 border-text-primary bg-blue-500/15">
+            <span className="absolute left-3 top-1 text-xs text-text-muted">Padding</span>
+            {hasPadding && (
+              <>
+                <span className="absolute left-1/2 top-2 -translate-x-1/2 text-[10px] font-mono text-text-muted">
+                  {fmt(box.paddingTop)}
+                </span>
+                <span className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[10px] font-mono text-text-muted">
+                  {fmt(box.paddingBottom)}
+                </span>
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-mono text-text-muted">
+                  {fmt(box.paddingLeft)}
+                </span>
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-mono text-text-muted">
+                  {fmt(box.paddingRight)}
+                </span>
+              </>
+            )}
+            <div className="absolute left-1/2 top-1/2 flex min-w-[112px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded border-2 border-dashed border-text-primary bg-surface-panel px-3 py-1.5">
+              <span className="whitespace-nowrap font-mono text-sm text-text-primary">
+                {fmt(box.width)} × {fmt(box.height)}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
       {box.gap !== undefined && (
