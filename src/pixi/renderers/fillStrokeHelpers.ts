@@ -135,10 +135,39 @@ function applyStopOpacity(color: string, opacity?: number): string {
  * built in the Graphics object's own LOCAL, untransformed coordinate space
  * (`gfx.rect(0, 0, width, height)` etc.); the container's world transform is
  * applied by Pixi's scene graph as an entirely separate step downstream, the
- * same way it already is for the existing "local" fill-gradient path. Radial
- * stroke gradients use the same px conversion by analogy (not independently
- * pixel-measured in the spec, which only worked the linear case through) —
- * see the report for the disclosed caveat on non-square-bbox eccentricity.
+ * same way it already is for the existing "local" fill-gradient path.
+ *
+ * Radial gradients need one more correction on top of the px-space fix: a
+ * scalar `radius * width` (matching the x-axis basis used for `center`/
+ * `outerCenter`) draws a true circle, not Figma's bbox-aspect-stretched
+ * ellipse, on a non-square node — the fill path gets this for free because
+ * `generateTextureFillMatrix`'s `"local"` branch (`scene/graphics/shared/
+ * utils/generateTextureFillMatrix.mjs`) scales x by `1/bounds.width` and y by
+ * `1/bounds.height` *independently*, which is exactly what stretches a
+ * circular gradient into a bbox-aspect ellipse for fills — but `"global"`
+ * mode (required for the px-space fix above) scales by the gradient's own
+ * (square, `textureSize`) texture dimensions instead, so no such stretch
+ * happens automatically. `FillGradient.buildRadialGradient` (`scene/graphics/
+ * shared/fill/FillGradient.mjs`) exposes exactly this as its own `scale`
+ * option: before rasterizing the gradient to its backing canvas texture it
+ * does `context.translate(cx, cy); context.rotate(this.rotation);
+ * context.scale(1, this.scale); context.translate(-cx, -cy)` — i.e. `scale`
+ * stretches the *baked-in* circle along the texture's local y-axis before the
+ * (uniform) `transform` matrix maps the texture back onto world space, so the
+ * resulting world-space y-radius is `outerRadius * this.scale` while the
+ * x-radius is unaffected. Since `outerRadius` here is already `radius *
+ * width` (the x-axis basis), setting `scale: height / width` makes the
+ * world-space y-radius come out to `radius * width * (height / width) =
+ * radius * height` — the y-axis basis, matching `center`/`outerCenter`'s own
+ * `startY * height`/`endY * height` and reproducing the fill path's bbox-
+ * aspect ellipse. (`center`/`outerCenter` positions are unaffected by `scale`
+ * — `buildRadialGradient`'s internal `ox`/`oy` canvas-anchor terms use the
+ * same radius basis on both subtraction and re-addition, so the world-space
+ * center always comes out to exactly the `center`/`outerCenter` values
+ * passed in, regardless of aspect.) This is a from-source derivation, not an
+ * independent pixel measurement (no headless-GPU harness available here) —
+ * flag for a follow-up visual check against a real Figma radial stroke
+ * gradient on a non-square node.
  */
 export function buildPixiGradient(
   gradient: GradientFill,
@@ -168,10 +197,13 @@ export function buildPixiGradient(
     });
   }
 
-  // Radial gradient. Radii are normalized against `width` (matching the x-axis
-  // basis used elsewhere for this node), which reproduces a true circle rather
-  // than Figma's bbox-aspect-stretched ellipse on non-square nodes — a
-  // disclosed, non-pixel-verified extrapolation for the stroke case.
+  // Radial gradient. Radii are normalized against `width` (matching the
+  // x-axis basis used for `center`/`outerCenter`); for `forStroke` the
+  // `scale: height / width` below stretches that x-basis radius into the
+  // node's bbox-aspect ellipse (see the doc comment above for the from-source
+  // derivation of why this exactly reproduces `radius * height` on the
+  // y-axis, matching the fill path's own bbox-aspect stretch).
+  const aspectScale = forStroke && width !== 0 ? height / width : 1;
   return new FillGradient({
     type: "radial",
     center: forStroke
@@ -182,6 +214,7 @@ export function buildPixiGradient(
       ? { x: gradient.endX * width, y: gradient.endY * height }
       : { x: gradient.endX, y: gradient.endY },
     outerRadius: forStroke ? (gradient.endRadius ?? 0.5) * width : (gradient.endRadius ?? 0.5),
+    scale: aspectScale,
     textureSpace,
     colorStops,
   });

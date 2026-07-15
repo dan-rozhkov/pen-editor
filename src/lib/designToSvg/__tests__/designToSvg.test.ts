@@ -10,6 +10,7 @@ import type {
   GradientFill,
   LineNode,
   Paint,
+  PathNode,
   PolygonNode,
   RectNode,
   TextNode,
@@ -91,6 +92,19 @@ function polygon(id: string, extra: Partial<PolygonNode> = {}): PolygonNode {
     fill: "#0000ff",
     ...extra,
   } as PolygonNode;
+}
+
+function path(id: string, extra: Partial<PathNode> = {}): PathNode {
+  return {
+    id,
+    type: "path",
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 100,
+    geometry: "M0 0 L100 0 L100 100 L0 100 Z",
+    ...extra,
+  } as PathNode;
 }
 
 describe("convertDesignNodesToSvg", () => {
@@ -201,7 +215,7 @@ describe("convertDesignNodesToSvg", () => {
     expect(svg).toContain('stroke-width="4"');
   });
 
-  it("approximates a multi-paint stroke stack with the topmost paint and warns", () => {
+  it("composites a multi-paint stroke stack in full, not just the topmost paint", () => {
     const strokes: Paint[] = [
       { id: "s1", type: "solid", color: "#000000" },
       { id: "s2", type: "solid", color: "#ffff00", opacity: 0.6 },
@@ -211,9 +225,55 @@ describe("convertDesignNodesToSvg", () => {
     };
     const { svg, warnings } = convertDesignNodesToSvg("rect1", nodesById, {});
 
+    // Both stroke layers render (duplicated shape elements), bottom-to-top,
+    // each with its own stroke-width — no data loss, no approximation warning.
+    expect(svg).toContain('stroke="#000000"');
     expect(svg).toContain('stroke="#ffff00"');
     expect(svg).toContain('stroke-opacity="0.6"');
-    expect(warnings.some((w) => w.includes("approximated with the topmost"))).toBe(true);
+    const strokeMatches = svg.match(/stroke="#/g) ?? [];
+    expect(strokeMatches).toHaveLength(2);
+    expect(svg.indexOf('stroke="#000000"')).toBeLessThan(svg.indexOf('stroke="#ffff00"'));
+    expect(warnings).toEqual([]);
+  });
+
+  it("path node: pathStroke (legacy, path-only) still renders join/cap when no strokes/stroke is set", () => {
+    const nodesById: Record<string, FlatSceneNode> = {
+      p1: path("p1", { pathStroke: { fill: "#ff0000", thickness: 3, align: "center", join: "round", cap: "round" } }),
+    };
+    const { svg, warnings } = convertDesignNodesToSvg("p1", nodesById, {});
+
+    expect(warnings).toEqual([]);
+    expect(svg).toContain('stroke="#ff0000"');
+    expect(svg).toContain('stroke-width="3"');
+    expect(svg).toContain('stroke-linejoin="round"');
+    expect(svg).toContain('stroke-linecap="round"');
+  });
+
+  it("path node: a gradient `strokes` stack wins over a stale `pathStroke`", () => {
+    const gradient: GradientFill = {
+      type: "linear",
+      stops: [
+        { color: "#ff0000", position: 0 },
+        { color: "#0000ff", position: 1 },
+      ],
+      startX: 0,
+      startY: 0,
+      endX: 1,
+      endY: 0,
+    };
+    const strokes: Paint[] = [{ id: "s1", type: "gradient", gradient }];
+    const nodesById: Record<string, FlatSceneNode> = {
+      p1: path("p1", {
+        strokes,
+        strokeWidth: 2,
+        pathStroke: { fill: "#00ff00", thickness: 9, align: "center" },
+      }),
+    };
+    const { svg } = convertDesignNodesToSvg("p1", nodesById, {});
+
+    expect(svg).toMatch(/stroke="url\(#/);
+    expect(svg).toContain('stroke-width="2"');
+    expect(svg).not.toContain("#00ff00");
   });
 
   it("emits a feDropShadow filter for a shadow effect", () => {

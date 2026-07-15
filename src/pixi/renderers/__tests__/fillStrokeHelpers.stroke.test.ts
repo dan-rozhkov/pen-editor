@@ -56,6 +56,27 @@ describe("buildPixiGradient", () => {
     expect(g.innerRadius).toBe(0);
     expect(g.outerRadius).toBe(200); // 0.5 * width(400)
   });
+
+  it("forStroke: radial gradient on a non-square bbox gets a bbox-aspect scale, not a true circle", () => {
+    // 400x200 node: outerRadius is x-basis (0.5 * 400 = 200px). Figma stretches
+    // the gradient to the bbox aspect ratio (a 400x200 ellipse), so the
+    // effective y-radius must come out to 0.5 * height (100px) via `scale`,
+    // not stay a 200px circle. See buildPixiGradient's doc comment for the
+    // from-source derivation of why `scale: height / width` achieves this.
+    const g = buildPixiGradient(radialGradient, 400, 200, { forStroke: true });
+    expect(g.scale).toBe(200 / 400);
+    expect(g.outerRadius * g.scale).toBe(100); // effective y-radius = 0.5 * height
+  });
+
+  it("forStroke: radial gradient on a square bbox keeps scale 1 (true circle, unchanged)", () => {
+    const g = buildPixiGradient(radialGradient, 300, 300, { forStroke: true });
+    expect(g.scale).toBe(1);
+  });
+
+  it("non-forStroke (fill) radial gradient leaves scale at Pixi's default (bbox-aspect handled by generateTextureFillMatrix's local bounds scale, not FillGradient.scale)", () => {
+    const g = buildPixiGradient(radialGradient, 400, 200);
+    expect(g.scale).toBe(1);
+  });
 });
 
 describe("applyStroke", () => {

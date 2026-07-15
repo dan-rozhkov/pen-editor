@@ -23,7 +23,8 @@ import {
   buildCapMarker,
   buildEffectsFilter,
   buildFillLayers,
-  buildStrokeAttr,
+  buildStrokeLayers,
+  buildStrokeWidthAttr,
   escapeXml,
   fillLayersMarkup,
   hasNonUniformCornerRadius,
@@ -78,7 +79,8 @@ function commonGroupAttrs(node: FlatSceneNode, filterId: string | null, isRoot: 
 /** Fill + stroke + corner-radius markup shared by frame backgrounds and rect nodes. */
 function renderRectLikeShape(node: FlatFrameNode | RectNode, ctx: SvgConversionContext): string {
   const layers = buildFillLayers(node, ctx);
-  const strokeAttr = buildStrokeAttr(node, ctx);
+  const strokeLayers = buildStrokeLayers(node, ctx);
+  const strokeWidthAttr = buildStrokeWidthAttr(node, ctx, strokeLayers.length > 0);
   const pcr = node.cornerRadiusPerCorner;
   const smoothing = node.cornerSmoothing;
 
@@ -96,7 +98,7 @@ function renderRectLikeShape(node: FlatFrameNode | RectNode, ctx: SvgConversionC
       },
       smoothing,
     );
-    return fillLayersMarkup("path", `d="${d}"`, layers, strokeAttr);
+    return fillLayersMarkup("path", `d="${d}"`, layers, strokeLayers, strokeWidthAttr);
   }
 
   const inset = strokeAlignInset(node);
@@ -107,7 +109,7 @@ function renderRectLikeShape(node: FlatFrameNode | RectNode, ctx: SvgConversionC
   const r = Math.max(0, (node.cornerRadius ?? 0) - inset);
   const radiusAttr = r > 0 ? ` rx="${r}" ry="${r}"` : "";
   const baseAttrs = `x="${x}" y="${y}" width="${w}" height="${h}"${radiusAttr}`;
-  return fillLayersMarkup("rect", baseAttrs, layers, strokeAttr);
+  return fillLayersMarkup("rect", baseAttrs, layers, strokeLayers, strokeWidthAttr);
 }
 
 function buildClipPathForFrame(node: FlatFrameNode, ctx: SvgConversionContext): string {
@@ -226,7 +228,8 @@ function convertEllipseToSvg(node: EllipseNode, ctx: SvgConversionContext, isRoo
   const filterId = buildEffectsFilter(node, ctx);
   const attrs = commonGroupAttrs(node, filterId, isRoot);
   const layers = buildFillLayers(node, ctx);
-  const strokeAttr = buildStrokeAttr(node, ctx);
+  const strokeLayers = buildStrokeLayers(node, ctx);
+  const strokeWidthAttr = buildStrokeWidthAttr(node, ctx, strokeLayers.length > 0);
 
   const arcParams = {
     startAngle: node.startAngle,
@@ -241,7 +244,7 @@ function convertEllipseToSvg(node: EllipseNode, ctx: SvgConversionContext, isRoo
     }
     const geometry = buildEllipseArcGeometry(node.width, node.height, arcParams);
     const d = ellipseArcGeometryToSvgPath(geometry);
-    const shape = fillLayersMarkup("path", `d="${d}"`, layers, strokeAttr);
+    const shape = fillLayersMarkup("path", `d="${d}"`, layers, strokeLayers, strokeWidthAttr);
     return `<g ${attrs}>${shape}</g>`;
   }
 
@@ -250,7 +253,13 @@ function convertEllipseToSvg(node: EllipseNode, ctx: SvgConversionContext, isRoo
   const cy = node.height / 2;
   const rx = Math.max(0, node.width / 2 - inset);
   const ry = Math.max(0, node.height / 2 - inset);
-  const shape = fillLayersMarkup("ellipse", `cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}"`, layers, strokeAttr);
+  const shape = fillLayersMarkup(
+    "ellipse",
+    `cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}"`,
+    layers,
+    strokeLayers,
+    strokeWidthAttr,
+  );
   return `<g ${attrs}>${shape}</g>`;
 }
 
@@ -379,28 +388,36 @@ function convertPathToSvg(node: PathNode, ctx: SvgConversionContext, isRoot: boo
   const attrs = commonGroupAttrs(node, filterId, isRoot);
   const fillRule = node.fillRule ?? "nonzero";
 
+  // `strokes`/legacy `stroke` (the paint-stack model, potentially a
+  // gradient or multiple paints) takes priority over `pathStroke` (path-only
+  // legacy model, solid color only) when set — mirrors `getStrokes()`'s
+  // fallback order. `pathStroke` still wins when neither is set, carrying
+  // its own join/cap fields that have no `strokes`-model equivalent.
+  const strokeLayers = node.strokes || node.stroke ? buildStrokeLayers(node, ctx) : [];
   let strokeAttr = "";
-  if (node.pathStroke?.fill) {
+  let shapeEls: string;
+  if (strokeLayers.length === 0 && node.pathStroke?.fill) {
     const strokeColor = applyOpacity(node.pathStroke.fill, node.strokeOpacity);
     const strokeWidth = node.pathStroke.thickness ?? 1;
     const join = node.pathStroke.join ?? "miter";
     const cap = node.pathStroke.cap ?? "butt";
     strokeAttr = ` stroke="${strokeColor}" stroke-width="${strokeWidth}" stroke-linejoin="${join}" stroke-linecap="${cap}"`;
+    const layers = buildFillLayers(node, ctx);
+    shapeEls =
+      layers.length === 0
+        ? `<path d="${node.geometry}" fill="none" fill-rule="${fillRule}"${strokeAttr}/>`
+        : layers
+            .map((l, i) => {
+              const opacityAttr = l.opacity != null && l.opacity !== 1 ? ` fill-opacity="${l.opacity}"` : "";
+              const stroke = i === layers.length - 1 ? strokeAttr : "";
+              return `<path d="${node.geometry}" fill="${l.fill}"${opacityAttr} fill-rule="${fillRule}"${stroke}/>`;
+            })
+            .join("");
   } else {
-    strokeAttr = buildStrokeAttr(node, ctx);
+    const strokeWidthAttr = buildStrokeWidthAttr(node, ctx, strokeLayers.length > 0);
+    const layers = buildFillLayers(node, ctx);
+    shapeEls = fillLayersMarkup("path", `d="${node.geometry}" fill-rule="${fillRule}"`, layers, strokeLayers, strokeWidthAttr);
   }
-
-  const layers = buildFillLayers(node, ctx);
-  const shapeEls =
-    layers.length === 0
-      ? `<path d="${node.geometry}" fill="none" fill-rule="${fillRule}"${strokeAttr}/>`
-      : layers
-          .map((l, i) => {
-            const opacityAttr = l.opacity != null && l.opacity !== 1 ? ` fill-opacity="${l.opacity}"` : "";
-            const stroke = i === layers.length - 1 ? strokeAttr : "";
-            return `<path d="${node.geometry}" fill="${l.fill}"${opacityAttr} fill-rule="${fillRule}"${stroke}/>`;
-          })
-          .join("");
   return `<g ${attrs}>${shapeEls}</g>`;
 }
 
@@ -431,9 +448,10 @@ function convertPolygonToSvg(node: PolygonNode, ctx: SvgConversionContext, isRoo
   const filterId = buildEffectsFilter(node, ctx);
   const attrs = commonGroupAttrs(node, filterId, isRoot);
   const pointsStr = pointsAttr(node.points);
-  const strokeAttr = buildStrokeAttr(node, ctx);
+  const strokeLayers = buildStrokeLayers(node, ctx);
+  const strokeWidthAttr = buildStrokeWidthAttr(node, ctx, strokeLayers.length > 0);
   const layers = buildFillLayers(node, ctx);
-  const shape = fillLayersMarkup("polygon", `points="${pointsStr}"`, layers, strokeAttr);
+  const shape = fillLayersMarkup("polygon", `points="${pointsStr}"`, layers, strokeLayers, strokeWidthAttr);
   return `<g ${attrs}>${shape}</g>`;
 }
 

@@ -81,35 +81,48 @@ function gradientToSvgDef(g: GradientFill, id: string): string {
   return `<linearGradient id="${id}" x1="${g.startX}" y1="${g.startY}" x2="${g.endX}" y2="${g.endY}">${stops}</linearGradient>`;
 }
 
-/** Render a stack of fill layers onto repeated copies of the same shape element. */
+/**
+ * Render a node's full fill + stroke paint stack onto repeated copies of the
+ * same shape element — fills first (bottom-to-top, `fill="none"` stroke
+ * elements after), so multi-paint stroke stacks composite fully instead of
+ * being approximated to a single paint (mirrors `buildFillLayers`' own
+ * per-layer duplication trick, now applied to strokes too).
+ */
 export function fillLayersMarkup(
   tag: string,
   baseAttrs: string,
-  layers: FillLayer[],
-  strokeAttr: string,
+  fillLayers: FillLayer[],
+  strokeLayers: StrokeLayer[],
+  strokeWidthAttr: string,
 ): string {
-  if (layers.length === 0) {
-    return `<${tag} ${baseAttrs} fill="none"${strokeAttr}/>`;
+  const fillEls = fillLayers.map((l) => {
+    const opacityAttr = l.opacity != null && l.opacity !== 1 ? ` fill-opacity="${l.opacity}"` : "";
+    return `<${tag} ${baseAttrs} fill="${l.fill}"${opacityAttr}/>`;
+  });
+  const strokeEls = strokeLayers.map((l) => {
+    const opacityAttr = l.opacity != null && l.opacity !== 1 ? ` stroke-opacity="${l.opacity}"` : "";
+    return `<${tag} ${baseAttrs} fill="none" stroke="${l.stroke}"${opacityAttr}${strokeWidthAttr}/>`;
+  });
+  if (fillEls.length === 0 && strokeEls.length === 0) {
+    return `<${tag} ${baseAttrs} fill="none"/>`;
   }
-  return layers
-    .map((l, i) => {
-      const opacityAttr = l.opacity != null && l.opacity !== 1 ? ` fill-opacity="${l.opacity}"` : "";
-      const stroke = i === layers.length - 1 ? strokeAttr : "";
-      return `<${tag} ${baseAttrs} fill="${l.fill}"${opacityAttr}${stroke}/>`;
-    })
-    .join("");
+  return fillEls.join("") + strokeEls.join("");
+}
+
+/** One resolved stroke layer, bottom-to-top, ready to stamp onto a duplicated shape element. */
+export interface StrokeLayer {
+  stroke: string;
+  opacity?: number;
 }
 
 /**
- * Resolve a node's stroke paint stack into an SVG `stroke` value (color or
- * `url(#...)` gradient reference), registering a gradient `<defs>` entry when
- * needed. SVG has exactly one `stroke=` slot per element, so — unlike
- * `buildFillLayers`, which duplicates the shape per fill layer — a multi-paint
- * stroke stack is represented by its TOPMOST visible paint only (documented
- * simplification: SVG export already collapsed multiple strokes to "the"
- * stroke before this feature; the paint itself can now be a real gradient
- * instead of an approximated solid color, which is the DoD requirement this
- * fixes — full multi-layer stroke compositing in SVG is out of scope).
+ * Resolve a node's stroke paint stack into SVG stroke values, registering any
+ * gradient `<defs>` on the shared context — mirrors `buildFillLayers`. A
+ * multi-paint stroke stack is rendered as one duplicated shape element per
+ * paint (via `fillLayersMarkup`, same trick already used for `fills`), so
+ * full N-layer stroke compositing works, not just the topmost paint.
+ * Image/pattern/video paints have no flat SVG stroke representation and are
+ * dropped with a warning (matches `buildFillLayers`' image/pattern handling).
  *
  * A gradient stroke's `<linearGradient>`/`<radialGradient>` def deliberately
  * reuses `gradientToSvgDef` unchanged (no px-space conversion, unlike the
@@ -119,50 +132,48 @@ export function fillLayersMarkup(
  * exactly Figma's model (gradient reads off the node's bbox, not inflated by
  * stroke width) — so no Pixi-style workaround is needed here.
  */
-function resolveStrokePaint(
-  node: FlatSceneNode,
-  ctx: SvgConversionContext,
-): { stroke: string; opacity?: number } | null {
+export function buildStrokeLayers(node: FlatSceneNode, ctx: SvgConversionContext): StrokeLayer[] {
   const strokes = getRenderableStrokes(node);
-  const topmost = strokes.filter((p) => p.type === "solid" || p.type === "gradient").at(-1);
-  if (!topmost) return null;
-  if (strokes.length > 1) {
-    ctx.warnings.push(
-      `Multiple stroke paints on node "${nodeLabel(node)}" are approximated with the topmost one in SVG export.`,
-    );
+  const layers: StrokeLayer[] = [];
+  for (const paint of strokes) {
+    if (paint.type === "solid") {
+      layers.push({ stroke: paint.color, opacity: paint.opacity });
+    } else if (paint.type === "gradient") {
+      const id = nextSvgId("stroke-grad");
+      ctx.defs.push(gradientToSvgDef(paint.gradient, id));
+      layers.push({ stroke: `url(#${id})`, opacity: paint.opacity });
+    } else {
+      const paintLabel = paint.type === "pattern" ? "Pattern stroke" : paint.type === "image" ? "Image stroke" : "Video stroke";
+      ctx.warnings.push(
+        `${paintLabel} on node "${nodeLabel(node)}" is not supported in SVG export and was skipped.`,
+      );
+    }
   }
-  if (topmost.type === "solid") {
-    return { stroke: topmost.color, opacity: topmost.opacity };
-  }
-  const id = nextSvgId("stroke-grad");
-  ctx.defs.push(gradientToSvgDef(topmost.gradient, id));
-  return { stroke: `url(#${id})`, opacity: topmost.opacity };
+  return layers;
 }
 
 /**
- * Build a `stroke`/`stroke-width` attribute string for a node.
- * SVG only has a single uniform stroke width per shape; a per-side stroke is
- * approximated with the widest side (documented simplification), and no
- * attribute is emitted for zero-width/absent strokes.
+ * Build the shared `stroke-width` attribute string for a node (no color —
+ * that comes per-layer from `buildStrokeLayers`). SVG only has a single
+ * uniform stroke width per shape; a per-side stroke is approximated with the
+ * widest side (documented simplification), and an empty string is returned
+ * for zero-width/absent strokes (geometry stays node-level, shared by every
+ * paint in the stack, matching the Figma/editor model).
  */
-export function buildStrokeAttr(node: FlatSceneNode, ctx: SvgConversionContext): string {
-  const paint = resolveStrokePaint(node, ctx);
-
+export function buildStrokeWidthAttr(node: FlatSceneNode, ctx: SvgConversionContext, hasStroke: boolean): string {
   if (node.strokeWidthPerSide) {
     const sides = node.strokeWidthPerSide;
     const maxSide = Math.max(sides.top ?? 0, sides.right ?? 0, sides.bottom ?? 0, sides.left ?? 0);
-    if (maxSide > 0 && paint) {
+    if (maxSide > 0 && hasStroke) {
       ctx.warnings.push(
         `Per-side stroke on node "${nodeLabel(node)}" is approximated with a uniform stroke in SVG export.`,
       );
-      const opacityAttr = paint.opacity != null && paint.opacity !== 1 ? ` stroke-opacity="${paint.opacity}"` : "";
-      return ` stroke="${paint.stroke}"${opacityAttr} stroke-width="${maxSide}"`;
+      return ` stroke-width="${maxSide}"`;
     }
     return "";
   }
-  if (!paint || !node.strokeWidth) return "";
-  const opacityAttr = paint.opacity != null && paint.opacity !== 1 ? ` stroke-opacity="${paint.opacity}"` : "";
-  return ` stroke="${paint.stroke}"${opacityAttr} stroke-width="${node.strokeWidth}"`;
+  if (!hasStroke || !node.strokeWidth) return "";
+  return ` stroke-width="${node.strokeWidth}"`;
 }
 
 /**
