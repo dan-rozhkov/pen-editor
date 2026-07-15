@@ -167,10 +167,10 @@ export function InspectPanel() {
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto">
-          <div className="px-3 py-2 border-b border-border-default border-l-2 border-l-green-500">
-            <div className="flex items-center justify-between gap-2">
+          <div className="px-3 py-2 border-b border-border-default">
+            <div className="flex flex-col gap-0.5">
               <span className="text-sm font-medium text-text-primary truncate">{data.header.name}</span>
-              <span className="text-[10px] uppercase tracking-wide text-green-500 bg-green-500/20 rounded px-1.5 py-0.5 shrink-0">
+              <span className="text-[10px] uppercase tracking-wide text-text-muted">
                 {data.header.type}
               </span>
             </div>
