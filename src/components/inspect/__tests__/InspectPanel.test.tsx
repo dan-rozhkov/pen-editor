@@ -71,6 +71,7 @@ describe("<InspectPanel />", () => {
     render(<InspectPanel />);
     fireEvent.click(screen.getByRole("button", { name: "Code" }));
     expect(screen.getByText("CSS")).toBeTruthy();
+    expect(screen.getByTestId("code-block").className).toContain("bg-surface-base");
     expect(screen.getByTestId("code-block").className).not.toContain("border");
     expect(screen.getByLabelText("Line numbers").children.length).toBeGreaterThan(0);
   });

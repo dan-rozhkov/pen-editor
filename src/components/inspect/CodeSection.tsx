@@ -71,7 +71,7 @@ function CodeBlock({ code, lang }: { code: string; lang: "css" | "html" | "tsx" 
   );
 
   return (
-    <div data-testid="code-block" className="relative rounded-md bg-surface-hover">
+    <div data-testid="code-block" className="relative rounded-md bg-surface-base">
       <div className="absolute top-1 right-1">
         <CopyButton code={code} />
       </div>
@@ -79,15 +79,15 @@ function CodeBlock({ code, lang }: { code: string; lang: "css" | "html" | "tsx" 
         <ol
           aria-label="Line numbers"
           data-testid="code-line-numbers"
-          className="shrink-0 select-none px-3 text-right font-mono text-xs leading-relaxed text-text-muted"
+          className="shrink-0 select-none px-3 text-right font-mono text-xs leading-5 text-text-muted"
         >
           {visibleLines.map((_, index) => (
-            <li key={index}>{index + 1}</li>
+            <li key={index} className="h-5">{index + 1}</li>
           ))}
         </ol>
-        <pre className="min-w-0 flex-1 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words">
+        <pre className="min-w-0 flex-1 font-mono text-xs leading-5 whitespace-pre-wrap break-words">
           {highlightedLines.map((tokens, lineIndex) => (
-            <code key={lineIndex} className="block min-h-[1.25rem]">
+            <code key={lineIndex} className="block min-h-5">
               {tokens.map((token, tokenIndex) => (
                 <span key={tokenIndex} className={TOKEN_CLASS[token.kind]}>
                   {token.text}
