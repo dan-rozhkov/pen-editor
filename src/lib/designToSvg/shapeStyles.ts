@@ -7,7 +7,7 @@ import type {
   ShadowEffect,
 } from "@/types/scene";
 import { applyOpacity } from "@/utils/colorUtils";
-import { getRenderableEffects, getRenderableFills } from "@/utils/fillUtils";
+import { getRenderableEffects, getRenderableFills, getRenderableStrokes } from "@/utils/fillUtils";
 import { hasPerCornerRadius } from "@/utils/renderUtils";
 import { buildSquircleRectPath, type PathSegment } from "@/lib/shapePath/squircleCorner";
 import { buildCapMarkerDef } from "@/utils/lineCapUtils";
@@ -101,25 +101,68 @@ export function fillLayersMarkup(
 }
 
 /**
+ * Resolve a node's stroke paint stack into an SVG `stroke` value (color or
+ * `url(#...)` gradient reference), registering a gradient `<defs>` entry when
+ * needed. SVG has exactly one `stroke=` slot per element, so — unlike
+ * `buildFillLayers`, which duplicates the shape per fill layer — a multi-paint
+ * stroke stack is represented by its TOPMOST visible paint only (documented
+ * simplification: SVG export already collapsed multiple strokes to "the"
+ * stroke before this feature; the paint itself can now be a real gradient
+ * instead of an approximated solid color, which is the DoD requirement this
+ * fixes — full multi-layer stroke compositing in SVG is out of scope).
+ *
+ * A gradient stroke's `<linearGradient>`/`<radialGradient>` def deliberately
+ * reuses `gradientToSvgDef` unchanged (no px-space conversion, unlike the
+ * Pixi renderer's `buildPixiGradient(..., { forStroke: true })`): SVG's
+ * default `gradientUnits="objectBoundingBox"` already maps our normalized
+ * 0..1 coordinates onto the geometry element's own bounding box, which is
+ * exactly Figma's model (gradient reads off the node's bbox, not inflated by
+ * stroke width) — so no Pixi-style workaround is needed here.
+ */
+function resolveStrokePaint(
+  node: FlatSceneNode,
+  ctx: SvgConversionContext,
+): { stroke: string; opacity?: number } | null {
+  const strokes = getRenderableStrokes(node);
+  const topmost = strokes.filter((p) => p.type === "solid" || p.type === "gradient").at(-1);
+  if (!topmost) return null;
+  if (strokes.length > 1) {
+    ctx.warnings.push(
+      `Multiple stroke paints on node "${nodeLabel(node)}" are approximated with the topmost one in SVG export.`,
+    );
+  }
+  if (topmost.type === "solid") {
+    return { stroke: topmost.color, opacity: topmost.opacity };
+  }
+  const id = nextSvgId("stroke-grad");
+  ctx.defs.push(gradientToSvgDef(topmost.gradient, id));
+  return { stroke: `url(#${id})`, opacity: topmost.opacity };
+}
+
+/**
  * Build a `stroke`/`stroke-width` attribute string for a node.
  * SVG only has a single uniform stroke width per shape; a per-side stroke is
  * approximated with the widest side (documented simplification), and no
  * attribute is emitted for zero-width/absent strokes.
  */
 export function buildStrokeAttr(node: FlatSceneNode, ctx: SvgConversionContext): string {
+  const paint = resolveStrokePaint(node, ctx);
+
   if (node.strokeWidthPerSide) {
     const sides = node.strokeWidthPerSide;
     const maxSide = Math.max(sides.top ?? 0, sides.right ?? 0, sides.bottom ?? 0, sides.left ?? 0);
-    if (maxSide > 0 && node.stroke) {
+    if (maxSide > 0 && paint) {
       ctx.warnings.push(
         `Per-side stroke on node "${nodeLabel(node)}" is approximated with a uniform stroke in SVG export.`,
       );
-      return ` stroke="${applyOpacity(node.stroke, node.strokeOpacity)}" stroke-width="${maxSide}"`;
+      const opacityAttr = paint.opacity != null && paint.opacity !== 1 ? ` stroke-opacity="${paint.opacity}"` : "";
+      return ` stroke="${paint.stroke}"${opacityAttr} stroke-width="${maxSide}"`;
     }
     return "";
   }
-  if (!node.stroke || !node.strokeWidth) return "";
-  return ` stroke="${applyOpacity(node.stroke, node.strokeOpacity)}" stroke-width="${node.strokeWidth}"`;
+  if (!paint || !node.strokeWidth) return "";
+  const opacityAttr = paint.opacity != null && paint.opacity !== 1 ? ` stroke-opacity="${paint.opacity}"` : "";
+  return ` stroke="${paint.stroke}"${opacityAttr} stroke-width="${node.strokeWidth}"`;
 }
 
 /**
@@ -130,7 +173,8 @@ export function buildStrokeAttr(node: FlatSceneNode, ctx: SvgConversionContext):
  * Returns 0 for `"center"`/unset (no adjustment needed).
  */
 export function strokeAlignInset(node: FlatSceneNode): number {
-  if (!node.stroke || !node.strokeWidth || node.strokeWidthPerSide) return 0;
+  const hasStroke = node.strokes ? node.strokes.length > 0 : Boolean(node.stroke);
+  if (!hasStroke || !node.strokeWidth || node.strokeWidthPerSide) return 0;
   const align = node.strokeAlign ?? "center";
   if (align === "inside") return node.strokeWidth / 2;
   if (align === "outside") return -node.strokeWidth / 2;

@@ -176,6 +176,46 @@ describe("convertDesignNodesToSvg", () => {
     expect(svg).toContain('fill="url(#');
   });
 
+  it("renders a gradient stroke as stroke=\"url(#...)\" referencing a <linearGradient> def", () => {
+    const gradient: GradientFill = {
+      type: "linear",
+      stops: [
+        { color: "#ff0000", position: 0 },
+        { color: "#0000ff", position: 1 },
+      ],
+      startX: 0,
+      startY: 0,
+      endX: 1,
+      endY: 0,
+    };
+    const strokes: Paint[] = [{ id: "s1", type: "gradient", gradient }];
+    const nodesById: Record<string, FlatSceneNode> = {
+      rect1: rect("rect1", { fill: undefined, stroke: undefined, strokes, strokeWidth: 4 }),
+    };
+    const { svg, warnings } = convertDesignNodesToSvg("rect1", nodesById, {});
+
+    expect(warnings).toEqual([]);
+    expect(svg).toContain("<defs>");
+    expect(svg).toContain("<linearGradient");
+    expect(svg).toMatch(/stroke="url\(#/);
+    expect(svg).toContain('stroke-width="4"');
+  });
+
+  it("approximates a multi-paint stroke stack with the topmost paint and warns", () => {
+    const strokes: Paint[] = [
+      { id: "s1", type: "solid", color: "#000000" },
+      { id: "s2", type: "solid", color: "#ffff00", opacity: 0.6 },
+    ];
+    const nodesById: Record<string, FlatSceneNode> = {
+      rect1: rect("rect1", { fill: undefined, stroke: undefined, strokes, strokeWidth: 2 }),
+    };
+    const { svg, warnings } = convertDesignNodesToSvg("rect1", nodesById, {});
+
+    expect(svg).toContain('stroke="#ffff00"');
+    expect(svg).toContain('stroke-opacity="0.6"');
+    expect(warnings.some((w) => w.includes("approximated with the topmost"))).toBe(true);
+  });
+
   it("emits a feDropShadow filter for a shadow effect", () => {
     const nodesById: Record<string, FlatSceneNode> = {
       rect1: rect("rect1", {
