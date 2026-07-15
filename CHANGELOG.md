@@ -8,6 +8,26 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.41.0] - 2026-07-15
+
+### Fixed
+- **Holes in Figma compound vectors.** Pasting a compound vector from Figma
+  filled in its holes. PixiJS 8 only discovers compound-path holes for `evenodd`
+  fills, but Figma's decoded geometry uses SVG's `nonzero` rule, so each subpath
+  rendered as a solid shape. The path renderer now derives the fill boundaries
+  itself — from where the accumulated winding crosses between zero and non-zero
+  — which also preserves same-winding nested contours. Holes survive across
+  disjoint subpaths as well, such as the two-person icon where each figure
+  carries its own hole. Geometry containing a relative `m` subpath keeps Pixi's
+  native fallback, since such a subpath depends on the previous one's endpoint.
+- **Auto-layout hit-test z-order.** In an auto-layout frame, an
+  absolute-positioned child was hit-tested as if it were topmost, so it could
+  swallow clicks meant for a regular child drawn above it. `prepareFrameNode`
+  had been appending absolute-positioned children to the computed flow children,
+  which both duplicated them and put them last; the layout store already applies
+  computed geometry in place over `frame.children`, preserving each child's
+  original z-order.
+
 ## [0.40.0] - 2026-07-15
 
 ### Added
