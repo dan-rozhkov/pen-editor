@@ -13,8 +13,8 @@ import {
   type IconWeight,
   CodeBlockIcon,
   ResizeIcon,
-  TextAaIcon,
 } from "@phosphor-icons/react";
+import { TextOnPathIcon } from "@/components/ui/custom-icons/TextOnPathIcon";
 import type { DrawToolType } from "@/store/drawModeStore";
 
 export type ToolIconComponent = React.ComponentType<{
@@ -79,7 +79,7 @@ export const PEN_SUB_TOOLS: ToolDefinition[] = [
   // Click a vector path on canvas to convert it into text-on-a-path (fill
   // and effects migrate onto the new text layer; no source path node
   // remains). See src/pixi/interaction/textPathController.ts.
-  { icon: TextAaIcon, label: "Text on Path", tool: "text-path", shortcut: "⇧T" },
+  { icon: TextOnPathIcon, label: "Text on Path", tool: "text-path", shortcut: "⇧T" },
 ];
 
 export const TRAILING_TOOLS: ToolDefinition[] = [
