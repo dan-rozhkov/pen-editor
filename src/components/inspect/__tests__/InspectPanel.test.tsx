@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, act, within } from "@testing-library/react";
 import { resetStores, seedScene } from "@/test/fixtures";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useDevModeStore } from "@/store/devModeStore";
@@ -17,6 +17,7 @@ vi.mock("sonner", () => ({
 
 import { toast } from "sonner";
 import { InspectPanel } from "../InspectPanel";
+import { BoxModelDiagram } from "../BoxModelDiagram";
 
 function select(ids: string[]) {
   useSelectionStore.setState({ selectedIds: ids });
@@ -77,6 +78,32 @@ describe("<InspectPanel />", () => {
       useDevModeStore.getState().setUnits("rem");
     });
     expect(screen.getByText("6.25 × 3.125")).toBeTruthy();
+  });
+
+  it("shows unitless values in the box model diagram", () => {
+    render(
+      <BoxModelDiagram
+        box={{
+          width: 240,
+          height: 338,
+          borderTop: 1,
+          borderRight: 1,
+          borderBottom: 1,
+          borderLeft: 1,
+          paddingTop: 10,
+          paddingRight: 10,
+          paddingBottom: 10,
+          paddingLeft: 10,
+        }}
+        units="px"
+        remBase={16}
+      />,
+    );
+    const boxModel = screen.getByLabelText("Box model");
+    expect(within(boxModel).getAllByText("1")).toHaveLength(4);
+    expect(within(boxModel).getAllByText("10")).toHaveLength(4);
+    expect(within(boxModel).queryByText("1px")).toBeNull();
+    expect(within(boxModel).queryByText("10px")).toBeNull();
   });
 
   it("expands a token row on click, showing light/dark values", () => {

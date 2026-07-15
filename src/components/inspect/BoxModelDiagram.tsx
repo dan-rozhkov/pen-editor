@@ -21,7 +21,7 @@ export function BoxModelDiagram({
     const value = fmt(px);
     return value.endsWith(units) ? value.slice(0, -units.length) : value;
   };
-  const fmtBorder = (px: number) => (px > 0 ? fmt(px) : "−");
+  const fmtBorder = (px: number) => (px > 0 ? fmtNumber(px) : "−");
   const hasPadding =
     box.paddingTop > 0 || box.paddingRight > 0 || box.paddingBottom > 0 || box.paddingLeft > 0;
 
@@ -52,16 +52,16 @@ export function BoxModelDiagram({
             {hasPadding && (
               <>
                 <span className="absolute left-1/2 top-1 -translate-x-1/2 text-xs text-text-muted">
-                  {fmt(box.paddingTop)}
+                  {fmtNumber(box.paddingTop)}
                 </span>
                 <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-xs text-text-muted">
-                  {fmt(box.paddingBottom)}
+                  {fmtNumber(box.paddingBottom)}
                 </span>
                 <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-text-muted">
-                  {fmt(box.paddingLeft)}
+                  {fmtNumber(box.paddingLeft)}
                 </span>
                 <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-text-muted">
-                  {fmt(box.paddingRight)}
+                  {fmtNumber(box.paddingRight)}
                 </span>
               </>
             )}
