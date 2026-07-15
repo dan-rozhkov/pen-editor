@@ -150,4 +150,21 @@ describe("buildTextPathNodeFromPath", () => {
     expect(text.textPath!.points.length).toBe(3);
     expect(text.textPath!.closed).toBe(true);
   });
+
+  // Finding 4 regression: `fills: []` (fills explicitly cleared, e.g. by
+  // removing the last fill layer in the UI) is a truthy array. A plain
+  // `pathNode.fills ?` truthiness check treats it as "has a fill", copies
+  // the empty array onto the new text node, and never falls back to the
+  // stroke color — producing text with no fill and no stroke that renders
+  // invisible.
+  it("falls back to the stroke color when fills is an empty array (stroke-only path with cleared fills)", () => {
+    const node = pathNode({
+      fill: undefined,
+      fills: [],
+      pathStroke: { fill: "#0000ff", thickness: 2 },
+    });
+    const text = buildTextPathNodeFromPath(node, "new-id");
+    expect(text.fills).toBeUndefined();
+    expect(text.fill).toBe("#0000ff");
+  });
 });

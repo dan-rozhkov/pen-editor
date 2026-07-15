@@ -144,7 +144,13 @@ export function buildTextPathNodeFromPath(pathNode: PathNode, newId: string): Te
   // stroke-only path (no fill) falls back to its stroke color so the
   // converted text isn't invisible.
   const strokeColor = pathNode.pathStroke?.fill ?? pathNode.stroke;
-  const hasFill = pathNode.fills || pathNode.fill || pathNode.gradientFill;
+  // `fills: []` (fills explicitly cleared, e.g. a stroke-only path) is a
+  // truthy array — a plain `pathNode.fills ?`/`pathNode.fills ||` check
+  // would treat it as "has a fill", copy the empty array onto the new text
+  // node, and skip both the single-fill and stroke-color fallbacks below,
+  // producing invisible text. Check for a non-empty array instead.
+  const hasFills = !!pathNode.fills && pathNode.fills.length > 0;
+  const hasSingleFill = !!pathNode.fill || !!pathNode.gradientFill;
 
   const node: TextNode = {
     id: newId,
@@ -163,9 +169,9 @@ export function buildTextPathNodeFromPath(pathNode: PathNode, newId: string): Te
       startOffset: 0,
       side: "left",
     },
-    ...(pathNode.fills
+    ...(hasFills
       ? { fills: pathNode.fills }
-      : hasFill
+      : hasSingleFill
         ? {
             fill: pathNode.fill,
             fillBinding: pathNode.fillBinding,
