@@ -93,4 +93,14 @@ describe("keyboardCommands — view mode gating", () => {
     handler(key("Delete"));
     expect(deps.deleteNode).toHaveBeenCalledWith("F");
   });
+
+  it("Cmd+Z (undo) does not trigger deps.undo in view mode", () => {
+    handler(key("KeyZ", { metaKey: true }));
+    expect(deps.undo).not.toHaveBeenCalled();
+  });
+
+  it("Cmd+Shift+Z (redo) does not trigger deps.redo in view mode", () => {
+    handler(key("KeyZ", { metaKey: true, shiftKey: true }));
+    expect(deps.redo).not.toHaveBeenCalled();
+  });
 });

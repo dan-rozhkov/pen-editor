@@ -147,11 +147,12 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
     // `mode` (it's an orthogonal overlay on top of "edit" — see
     // devModeStore.ts), so it's checked separately here.
     //
-    // Undo/redo (Cmd+Z / Cmd+Shift+Z) IS allowed here, unlike other mutating
-    // shortcuts: pinning/removing a measurement in dev mode pushes to the
+    // Undo/redo (Cmd+Z / Cmd+Shift+Z) IS allowed in dev mode only, unlike other
+    // mutating shortcuts: pinning/removing a measurement in dev mode pushes to the
     // same shared undo history as normal editing (see measurementsStore /
     // keyboardCommands' Delete-in-dev-mode branch below), so blocking undo
-    // while inspecting would leave no way to walk that history back.
+    // while inspecting would leave no way to walk that history back. In view mode,
+    // undo/redo are never allowed.
     const isDevMode = useDevModeStore.getState().active;
     if (!canEditScene(useEditorModeStore.getState().mode) || isDevMode) {
       if (e.code === "Escape") {
@@ -196,7 +197,7 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
         (mod && e.code === "KeyA") || // select all
         (mod && e.code === "Digit0") || // fit to content
         (mod && e.code === "Backslash") || // toggle UI
-        (mod && e.code === "KeyZ") || // undo (plain) / redo (shift) — see policy note below
+        (isDevMode && mod && e.code === "KeyZ") || // undo/redo (dev mode only: measurement history)
         e.code === "Space" || // pan
         (e.key === "Enter" && e.shiftKey) || // select parent frame
         (e.shiftKey && !mod && !e.altKey && e.code === "KeyD") || // toggle dev mode
