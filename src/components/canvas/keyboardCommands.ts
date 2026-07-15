@@ -17,6 +17,7 @@ import { tidyUpNodes } from "@/utils/alignmentUtils";
 import { applyNodeUpdates } from "@/utils/applyNodeUpdates";
 import { finishPenDraft, cancelPenDraft } from "@/pixi/interaction/penDraftCommit";
 import { cancelActiveScale } from "@/pixi/interaction/scaleController";
+import { cancelActiveMeasure } from "@/pixi/interaction/measureToolController";
 import { enterPathEditMode } from "@/pixi/interaction/pathEditMode";
 import { isTypingTarget, selectAllInScope } from "./keyboardShortcutUtils";
 import {
@@ -140,11 +141,17 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
 
     // Read-only (view) mode OR dev (inspect) mode: allow only non-mutating
     // commands and swallow every scene-editing shortcut (delete, nudge, group,
-    // grid, cut, undo/redo, edit). This is the single policy point for
-    // keyboard editing — keep it here rather than scattering canEditScene()/
-    // devModeStore guards across each command below. Dev mode doesn't change
-    // `useEditorModeStore`'s `mode` (it's an orthogonal overlay on top of
-    // "edit" — see devModeStore.ts), so it's checked separately here.
+    // grid, cut, edit). This is the single policy point for keyboard editing —
+    // keep it here rather than scattering canEditScene()/devModeStore guards
+    // across each command below. Dev mode doesn't change `useEditorModeStore`'s
+    // `mode` (it's an orthogonal overlay on top of "edit" — see
+    // devModeStore.ts), so it's checked separately here.
+    //
+    // Undo/redo (Cmd+Z / Cmd+Shift+Z) IS allowed here, unlike other mutating
+    // shortcuts: pinning/removing a measurement in dev mode pushes to the
+    // same shared undo history as normal editing (see measurementsStore /
+    // keyboardCommands' Delete-in-dev-mode branch below), so blocking undo
+    // while inspecting would leave no way to walk that history back.
     const isDevMode = useDevModeStore.getState().active;
     if (!canEditScene(useEditorModeStore.getState().mode) || isDevMode) {
       if (e.code === "Escape") {
@@ -154,6 +161,7 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
         // "edit", so that handler is unreachable while dev mode is active).
         if (isDevMode && useDrawModeStore.getState().activeTool === "measure") {
           e.preventDefault();
+          cancelActiveMeasure();
           useDrawModeStore.getState().setActiveTool(null);
           return;
         }
@@ -188,6 +196,7 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
         (mod && e.code === "KeyA") || // select all
         (mod && e.code === "Digit0") || // fit to content
         (mod && e.code === "Backslash") || // toggle UI
+        (mod && e.code === "KeyZ") || // undo (plain) / redo (shift) — see policy note below
         e.code === "Space" || // pan
         (e.key === "Enter" && e.shiftKey) || // select parent frame
         (e.shiftKey && !mod && !e.altKey && e.code === "KeyD") || // toggle dev mode
@@ -508,6 +517,10 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
       if (isTyping) return;
       if (!useDevModeStore.getState().active) return;
       e.preventDefault();
+      // Toggling the tool off mid-drag must also kill any in-progress
+      // gesture immediately (not just wait for the next pointer event's
+      // defensive activeTool re-check in measureToolController).
+      cancelActiveMeasure();
       toggleTool("measure");
       return;
     }

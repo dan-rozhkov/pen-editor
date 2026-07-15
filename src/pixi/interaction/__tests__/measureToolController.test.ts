@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createMeasureToolController } from "../measureToolController";
+import { createMeasureToolController, cancelActiveMeasure } from "../measureToolController";
 import type { MeasureRect } from "../measureToolController";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useMeasurementsStore } from "@/store/measurementsStore";
@@ -38,6 +38,11 @@ describe("measureToolController", () => {
     seedScene();
     useDrawModeStore.setState({ activeTool: "measure" });
     useMeasureStore.setState({ lines: [], modifierHeld: false });
+    // The controller's gesture-cancel handle is module-level state (mirrors
+    // scaleController's `activeScaleCancel`) — reset it so a test that leaves
+    // a gesture mid-flight (e.g. pointerDown+Move without pointerUp) can't
+    // leak into the next test.
+    cancelActiveMeasure();
   });
 
   it("pins a measurement on pointerDown node A + pointerUp node B", () => {
@@ -137,5 +142,60 @@ describe("measureToolController", () => {
 
     expect(useMeasurementsStore.getState().measurements).toHaveLength(0);
     expect(useMeasurementsStore.getState().selectedMeasurementId).toBeNull();
+  });
+
+  describe("gesture cancellation on deactivation", () => {
+    it("cancelActiveMeasure clears the preview and returns false when nothing is active", () => {
+      expect(cancelActiveMeasure()).toBe(false);
+    });
+
+    it("cancelActiveMeasure mid-drag clears the preview; a later move/up is a no-op", () => {
+      const hitTest = fakeHitTest({ "0,0": "rect1", "1000,0": "rect2" });
+      const controller = createMeasureToolController(context, { hitTest, getRect: fakeGetRect });
+
+      controller.handlePointerDown(new PointerEvent("pointerdown", { button: 0 }), { x: 0, y: 0 });
+      controller.handlePointerMove(new PointerEvent("pointermove"), { x: 1000, y: 0 });
+      expect(useMeasureStore.getState().lines.length).toBeGreaterThan(0);
+
+      expect(cancelActiveMeasure()).toBe(true);
+      expect(useMeasureStore.getState().lines).toHaveLength(0);
+      expect(controller.isActive()).toBe(false);
+
+      // Further move/up after cancellation must not resurrect the gesture.
+      controller.handlePointerMove(new PointerEvent("pointermove"), { x: 1000, y: 0 });
+      expect(useMeasureStore.getState().lines).toHaveLength(0);
+
+      controller.handlePointerUp(new PointerEvent("pointerup"), { x: 1000, y: 0 });
+      expect(useMeasurementsStore.getState().measurements).toHaveLength(0);
+    });
+
+    it("handlePointerMove re-checks activeTool and cancels the gesture when the tool switched away mid-drag", () => {
+      const hitTest = fakeHitTest({ "0,0": "rect1", "1000,0": "rect2" });
+      const controller = createMeasureToolController(context, { hitTest, getRect: fakeGetRect });
+
+      controller.handlePointerDown(new PointerEvent("pointerdown", { button: 0 }), { x: 0, y: 0 });
+      controller.handlePointerMove(new PointerEvent("pointermove"), { x: 1000, y: 0 });
+      expect(useMeasureStore.getState().lines.length).toBeGreaterThan(0);
+
+      // Tool toggled off (e.g. Shift+M) mid-drag, without going through cancelActiveMeasure.
+      useDrawModeStore.setState({ activeTool: "cursor" });
+
+      controller.handlePointerMove(new PointerEvent("pointermove"), { x: 1000, y: 0 });
+      expect(useMeasureStore.getState().lines).toHaveLength(0);
+      expect(controller.isActive()).toBe(false);
+    });
+
+    it("handlePointerUp re-checks activeTool and does not add a measurement when the tool switched away mid-drag", () => {
+      const hitTest = fakeHitTest({ "0,0": "rect1", "1000,0": "rect2" });
+      const controller = createMeasureToolController(context, { hitTest, getRect: fakeGetRect });
+
+      controller.handlePointerDown(new PointerEvent("pointerdown", { button: 0 }), { x: 0, y: 0 });
+      useDrawModeStore.setState({ activeTool: "cursor" });
+
+      controller.handlePointerUp(new PointerEvent("pointerup"), { x: 1000, y: 0 });
+
+      expect(useMeasurementsStore.getState().measurements).toHaveLength(0);
+      expect(controller.isActive()).toBe(false);
+    });
   });
 });

@@ -1,6 +1,13 @@
 import { create } from "zustand";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useMeasureStore } from "@/store/measureStore";
+// NOTE: this is the one place a store reaches into `pixi/interaction` (every
+// other store is a leaf; interaction controllers depend on stores, not vice
+// versa). Safe here only because `cancelActiveMeasure` is a plain function
+// reference resolved lazily inside `setActive`, never touched at either
+// module's top level — so the ES-module circular import (measureToolController
+// also imports this store) never observes a not-yet-initialized binding.
+import { cancelActiveMeasure } from "@/pixi/interaction/measureToolController";
 
 /**
  * Figma-style Dev Mode (inspect mode): read-only overlay exposing CSS-ish
@@ -51,6 +58,11 @@ export const useDevModeStore = create<DevModeState>((set, get) => ({
     if (active) {
       useDrawModeStore.getState().setActiveTool(null);
     } else {
+      // Abort any in-progress measure drag first — otherwise a stray
+      // pointermove/pointerup right after exiting dev mode could still draw
+      // the ghost preview or pin a measurement (the gesture lives in the
+      // controller's closure, unreachable except via this escape hatch).
+      cancelActiveMeasure();
       useMeasureStore.getState().clearLines();
       // The measure tool only makes sense while dev mode is active — exiting
       // with it still selected must reset to the cursor tool, mirroring the

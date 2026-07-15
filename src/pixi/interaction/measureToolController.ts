@@ -40,11 +40,34 @@ export interface MeasureToolController {
 // units — divided by scale by the caller so it stays a constant screen size.
 const SEGMENT_HIT_TOLERANCE_SCREEN_PX = 6;
 
+/**
+ * Module-level handle to the active measure gesture's cancel function, so
+ * out-of-band callers (Esc key handler, Shift+M toggle-off, dev-mode exit)
+ * can abort an in-progress drag — the gesture state lives inside the
+ * controller closure and isn't otherwise reachable. Mirrors
+ * `cancelActiveScale` in scaleController.ts.
+ */
+let activeMeasureCancel: (() => void) | null = null;
+
+/**
+ * Abort an in-progress measure gesture: reset the closure state and clear
+ * the live preview line. Returns true if a gesture was cancelled.
+ */
+export function cancelActiveMeasure(): boolean {
+  if (!activeMeasureCancel) return false;
+  activeMeasureCancel();
+  return true;
+}
+
 function defaultHitTest(worldX: number, worldY: number): string | null {
   const target = findCanvasHitTargetAtPoint(worldX, worldY);
   return target?.kind === "node" ? target.nodeId : null;
 }
 
+// NOTE: this is a separate implementation from the overlay's
+// `getNodeDrawRect` (src/pixi/selectionOverlay/helpers.ts) and does not
+// round/clamp embed rects the way that one does — that overlay function is
+// the source of truth for what's actually drawn on screen.
 function defaultGetRect(nodeId: string): MeasureRect | null {
   const state = useSceneStore.getState();
   const node = state.nodesById[nodeId];
@@ -93,6 +116,20 @@ export function createMeasureToolController(
     isActive: false,
   };
 
+  /** Reset gesture state and drop the module-level cancel handle (no history involved). */
+  function reset(): void {
+    state.isActive = false;
+    state.fromId = null;
+    activeMeasureCancel = null;
+  }
+
+  /** Abort the in-progress gesture: clear the live preview and reset state. */
+  function cancel(): void {
+    if (!state.isActive) return;
+    useMeasureStore.getState().clearLines();
+    reset();
+  }
+
   function selectNearestMeasurement(worldX: number, worldY: number): void {
     const scale = useViewportStore.getState().scale || 1;
     const tolerance = SEGMENT_HIT_TOLERANCE_SCREEN_PX / scale;
@@ -132,6 +169,7 @@ export function createMeasureToolController(
       if (hitId) {
         state.fromId = hitId;
         state.isActive = true;
+        activeMeasureCancel = cancel;
         return true;
       }
 
@@ -142,6 +180,15 @@ export function createMeasureToolController(
 
     handlePointerMove(_e: PointerEvent, world: { x: number; y: number }): boolean {
       if (!state.isActive || !state.fromId) return false;
+
+      // Defensive re-check: the tool may have been deactivated (Esc, Shift+M
+      // toggle-off, dev-mode exit) without going through `cancelActiveMeasure`
+      // — e.g. a caller that forgot to wire the escape hatch. Bail out rather
+      // than drawing a ghost preview for a tool that's no longer active.
+      if (useDrawModeStore.getState().activeTool !== "measure") {
+        cancel();
+        return false;
+      }
 
       const hoveredId = hitTest(world.x, world.y);
       if (!hoveredId || hoveredId === state.fromId) {
@@ -169,6 +216,13 @@ export function createMeasureToolController(
     handlePointerUp(_e: PointerEvent, world: { x: number; y: number }): boolean {
       if (!state.isActive) return false;
 
+      // Defensive re-check (see handlePointerMove): don't pin a measurement
+      // for a gesture whose tool was deactivated mid-drag.
+      if (useDrawModeStore.getState().activeTool !== "measure") {
+        cancel();
+        return true;
+      }
+
       useMeasureStore.getState().clearLines();
 
       const hoveredId = hitTest(world.x, world.y);
@@ -176,8 +230,7 @@ export function createMeasureToolController(
         useMeasurementsStore.getState().addMeasurement(state.fromId, hoveredId);
       }
 
-      state.isActive = false;
-      state.fromId = null;
+      reset();
       return true;
     },
 

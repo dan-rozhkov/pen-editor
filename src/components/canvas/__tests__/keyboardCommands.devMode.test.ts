@@ -95,6 +95,14 @@ describe("keyboardCommands — dev mode gating", () => {
     expect(deps.fitToContent).toHaveBeenCalledTimes(1);
   });
 
+  it("still allows undo (Cmd+Z) and redo (Cmd+Shift+Z) in dev mode", () => {
+    handler(key("KeyZ", { metaKey: true }));
+    expect(deps.undo).toHaveBeenCalledTimes(1);
+
+    handler(key("KeyZ", { metaKey: true, shiftKey: true }));
+    expect(deps.redo).toHaveBeenCalledTimes(1);
+  });
+
   it("Shift+D toggles dev mode off", () => {
     expect(useDevModeStore.getState().active).toBe(true);
     handler(key("KeyD", { shiftKey: true }));
