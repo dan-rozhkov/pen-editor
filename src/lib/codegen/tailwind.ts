@@ -1,7 +1,78 @@
 import type { FlatFrameNode, FlatSceneNode, LayoutProperties, TextNode } from "@/types/scene";
-import { generateLayoutStyles } from "@/lib/designToHtml/layoutStyleGeneration";
-import { generateVisualStyles, generateTextStyles } from "@/lib/designToHtml/styleGeneration";
+import { FLEX_FILL } from "@/lib/designToHtml/layoutStyleGeneration";
+import { getRenderableFills } from "@/utils/fillUtils";
 import { type CodegenOptions, convertPxToRem } from "./css";
+import { nodeDeclarations } from "./declarations";
+import { collectBoundVariableIds, buildTokensBlock } from "@/lib/designToCss/buildCss";
+import { useVariableStore } from "@/store/variableStore";
+import { useThemeStore } from "@/store/themeStore";
+
+export function hasVideoFill(node: FlatSceneNode): boolean {
+  return getRenderableFills(node).some((paint) => paint.type === "video");
+}
+
+/**
+ * Union of `collectBoundVariableIds` over `nodeId` and its whole emitted
+ * subtree (mirrors `buildElement`'s traversal). Used so Tailwind/React output
+ * — which emits `var(--token)` references with no `:root` definitions of its
+ * own (unlike `buildCssForNodes`) — can surface the tokens the pasted markup
+ * needs.
+ */
+export function collectSubtreeVariableIds(
+  nodeId: string,
+  nodesById: Record<string, FlatSceneNode>,
+  childrenById: Record<string, string[]>,
+): Set<string> {
+  const ids = new Set<string>();
+  const node = nodesById[nodeId];
+  if (!node) return ids;
+  for (const id of collectBoundVariableIds(node)) ids.add(id);
+  for (const childId of childrenById[nodeId] ?? []) {
+    for (const id of collectSubtreeVariableIds(childId, nodesById, childrenById)) ids.add(id);
+  }
+  return ids;
+}
+
+/** `:root {...}` CSS text for `variableIds` using the current variable store + active theme (empty string if none resolve). */
+export function tokensBlockForIds(variableIds: Set<string>): string {
+  if (variableIds.size === 0) return "";
+  const { variables } = useVariableStore.getState();
+  const { activeTheme } = useThemeStore.getState();
+  return buildTokensBlock(variableIds, variables, activeTheme);
+}
+
+/** Variable *names* (e.g. `--primary`) for `variableIds`, in the current variable store — used for the leaf-output warning listing needed tokens. */
+function tokenNamesForIds(variableIds: Set<string>): string[] {
+  if (variableIds.size === 0) return [];
+  const { variables } = useVariableStore.getState();
+  return variables.filter((v) => variableIds.has(v.id)).map((v) => v.name);
+}
+
+/** Node types with no dedicated Tailwind/React renderer today (instances, vectors, embeds — `childrenById` only tracks `frame`/`group` subtrees). Rendered as an empty placeholder div, flagged via `warnings`. */
+export const UNSUPPORTED_NODE_TYPES = new Set(["ref", "embed", "path", "line", "polygon", "connector"]);
+
+/** Human label per unsupported node type, used in the placeholder warning message. */
+const TYPE_LABELS: Record<string, string> = {
+  ref: "Component instance",
+  embed: "Embed",
+  path: "Vector",
+  line: "Line",
+  polygon: "Polygon",
+  connector: "Connector",
+};
+
+/** Warning pushed once per unsupported/video-fill node rendered as an empty placeholder div. */
+export function unsupportedNodeWarning(node: FlatSceneNode): string {
+  const label = TYPE_LABELS[node.type] ?? node.type;
+  const name = node.name ? ` '${node.name}'` : "";
+  return `${label}${name} rendered as empty placeholder — instances/vectors/embeds are not yet supported in Tailwind/React output.`;
+}
+
+/** Warning pushed once per video-fill node, which also renders as an empty placeholder div (no dedicated `<video>` output yet). */
+export function videoFillWarning(node: FlatSceneNode): string {
+  const name = node.name ? ` '${node.name}'` : "";
+  return `Node${name} has a video fill rendered as an empty placeholder — video fills are not yet supported in Tailwind/React output.`;
+}
 
 export interface BuildTailwindCodeResult {
   code: string;
@@ -233,7 +304,7 @@ export function declarationsToTailwind(decls: Record<string, string>, options: C
         classes.push(flexShrinkClass(value, options));
         continue;
       case "flex":
-        classes.push(value === "1 1 0%" ? "flex-1" : arbitraryProperty(prop, value, options));
+        classes.push(value === FLEX_FILL ? "flex-1" : arbitraryProperty(prop, value, options));
         continue;
       default:
         break;
@@ -263,18 +334,6 @@ function escapeHtml(text: string): string {
 
 function escapeHtmlAttr(text: string): string {
   return escapeHtml(text).replace(/"/g, "&quot;");
-}
-
-function nodeDeclarations(
-  node: FlatSceneNode,
-  parentLayout: LayoutProperties | undefined,
-  isRoot: boolean,
-): Record<string, string> {
-  return {
-    ...generateLayoutStyles(node, parentLayout, isRoot),
-    ...generateVisualStyles(node),
-    ...(node.type === "text" ? generateTextStyles(node as TextNode) : {}),
-  };
 }
 
 /**
@@ -307,6 +366,12 @@ function buildElement(
   if (node.type === "text") {
     const content = escapeHtml((node as TextNode).text ?? "");
     return `${indent}<div${classAttr}>${content}</div>`;
+  }
+
+  if (UNSUPPORTED_NODE_TYPES.has(node.type)) {
+    warnings.push(unsupportedNodeWarning(node));
+  } else if (hasVideoFill(node)) {
+    warnings.push(videoFillWarning(node));
   }
 
   const childIds = childrenById[nodeId] ?? [];
@@ -347,9 +412,15 @@ export function buildTailwindCode(
   const childIds = childrenById[nodeId] ?? [];
   if (childIds.length === 0) {
     const classes = declarationsToTailwind(nodeDeclarations(node, undefined, true), options);
+    const tokenNames = tokenNamesForIds(collectBoundVariableIds(node));
+    if (tokenNames.length > 0) {
+      warnings.push(`Requires CSS variable definitions: ${tokenNames.join(", ")}.`);
+    }
     return { code: classes.join(" "), warnings };
   }
 
   const code = buildElement(nodeId, nodesById, childrenById, undefined, true, 0, options, warnings) ?? "";
-  return { code, warnings };
+  const tokensBlock = tokensBlockForIds(collectSubtreeVariableIds(nodeId, nodesById, childrenById));
+  const finalCode = tokensBlock ? `<!--\n${tokensBlock}\n-->\n${code}` : code;
+  return { code: finalCode, warnings };
 }

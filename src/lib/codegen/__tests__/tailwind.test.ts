@@ -206,4 +206,75 @@ describe("buildTailwindCode", () => {
     expect(code).toContain("w-25");
     expect(code).toContain("h-25");
   });
+
+  it("prepends a ready-to-paste :root{} definitions block when the subtree binds a variable", () => {
+    seedVariables();
+    const frame = frameNode({
+      width: 100,
+      height: 100,
+      layout: undefined,
+      fills: [
+        {
+          id: "p1",
+          type: "solid",
+          color: "#3366ff",
+          colorBinding: { variableId: "var-primary" },
+        },
+      ],
+    } as unknown as Partial<FlatFrameNode>);
+    const rect = boxRect();
+    const nodesById = { frame1: frame, rect1: rect };
+    const childrenById = { frame1: ["rect1"] };
+
+    const { code } = buildTailwindCode("frame1", nodesById, childrenById, { units: "px", remBase: 16 });
+
+    expect(code).toContain(":root {");
+    expect(code).toContain("--primary: #3366ff;");
+    // The definitions block comes before the markup.
+    expect(code.indexOf(":root {")).toBeLessThan(code.indexOf("<div"));
+  });
+
+  it("warns and adds a needed-tokens list for a bound-variable leaf (no markup wrapper)", () => {
+    seedVariables();
+    const rect = {
+      ...boxRect(),
+      fill: undefined,
+      fills: [
+        {
+          id: "p1",
+          type: "solid",
+          color: "#3366ff",
+          colorBinding: { variableId: "var-primary" },
+        },
+      ],
+    } as unknown as RectNode;
+
+    const { code, warnings } = buildTailwindCode("rect1", { rect1: rect }, {}, { units: "px", remBase: 16 });
+
+    expect(code).toContain("bg-[var(--primary)]");
+    expect(warnings.some((w) => w.includes("--primary"))).toBe(true);
+  });
+
+  it("warns once for an unsupported node type (ref) rendered as an empty placeholder", () => {
+    const frame = frameNode({ layout: undefined });
+    const ref = {
+      id: "ref1",
+      type: "ref",
+      name: "Button",
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 20,
+      componentId: "comp1",
+      overrides: {},
+      propertyValues: {},
+    } as unknown as RectNode;
+    const nodesById = { frame1: frame, ref1: ref };
+    const childrenById = { frame1: ["ref1"] };
+
+    const { code, warnings } = buildTailwindCode("frame1", nodesById, childrenById, { units: "px", remBase: 16 });
+
+    expect(code).toContain("<div");
+    expect(warnings.some((w) => w.includes("instance") || w.includes("Instance"))).toBe(true);
+  });
 });

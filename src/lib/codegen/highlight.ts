@@ -15,8 +15,7 @@ export type TokenKind =
   | "punctuation"
   | "plain"
   | "property"
-  | "tag"
-  | "className";
+  | "tag";
 
 export interface Token {
   text: string;
@@ -29,6 +28,17 @@ interface Rule {
   kind: TokenKind;
   re: RegExp;
 }
+
+/** Regex source for one `<quote>...<quote>` span with `\`-escapes allowed inside. */
+function quotedSpanSource(quote: string): string {
+  return `${quote}(?:[^${quote}\\\\]|\\\\.)*${quote}`;
+}
+
+/** Shared `"..."`/`'...'` string-literal regex source, reused by CSS/HTML (as-is) and TSX (extended with a backtick variant below). */
+const QUOTED_STRING_SOURCE = `^${quotedSpanSource('"')}|^${quotedSpanSource("'")}`;
+
+/** `QUOTED_STRING_SOURCE` plus a `` `...` `` template-literal variant, for TSX. */
+const TSX_STRING_SOURCE = `${QUOTED_STRING_SOURCE}|^${quotedSpanSource("`")}`;
 
 const CSS_KEYWORDS = new Set(["important", "inherit", "initial", "unset", "auto", "none"]);
 
@@ -65,7 +75,7 @@ const TSX_KEYWORDS = new Set([
 /** Ordered rule list for a language: first match wins at each scan position. */
 const CSS_RULES: Rule[] = [
   { kind: "comment", re: /^\/\*[\s\S]*?\*\// },
-  { kind: "string", re: /^"(?:[^"\\]|\\.)*"|^'(?:[^'\\]|\\.)*'/ },
+  { kind: "string", re: new RegExp(QUOTED_STRING_SOURCE) },
   // Property name: identifier (incl. --custom-props) immediately followed by ':'.
   // Note: this can misclassify pseudo-selector-ish input as `property` (e.g. the
   // "a" in "a:hover" in selector position). Cosmetic-only — the generators feed
@@ -79,14 +89,14 @@ const CSS_RULES: Rule[] = [
 const HTML_RULES: Rule[] = [
   { kind: "comment", re: /^<!--[\s\S]*?-->/ },
   { kind: "tag", re: /^<\/?[a-zA-Z][a-zA-Z0-9-]*/ },
-  { kind: "string", re: /^"(?:[^"\\]|\\.)*"|^'(?:[^'\\]|\\.)*'/ },
+  { kind: "string", re: new RegExp(QUOTED_STRING_SOURCE) },
   { kind: "property", re: /^[a-zA-Z-]+(?=\s*=)/ },
   { kind: "punctuation", re: /^[<>/=]/ },
 ];
 
 const TSX_RULES: Rule[] = [
   { kind: "comment", re: /^\{\/\*[\s\S]*?\*\/\}|^\/\/[^\n]*|^\/\*[\s\S]*?\*\// },
-  { kind: "string", re: /^"(?:[^"\\]|\\.)*"|^'(?:[^'\\]|\\.)*'|^`(?:[^`\\]|\\.)*`/ },
+  { kind: "string", re: new RegExp(TSX_STRING_SOURCE) },
   { kind: "tag", re: /^<\/?[A-Za-z][A-Za-z0-9.]*/ },
   {
     kind: "keyword",

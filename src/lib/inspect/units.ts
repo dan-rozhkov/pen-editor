@@ -5,7 +5,7 @@ import type { MeasureLine } from "@/store/measureStore";
  * Strip trailing zeros and decimal point if necessary.
  * E.g. "1.2000" → "1.2", "1.0000" → "1", "2.50" → "2.5"
  */
-function stripTrailingZeros(num: string): string {
+export function stripTrailingZeros(num: string): string {
   return num.replace(/\.?0+$/, "");
 }
 

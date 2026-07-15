@@ -142,6 +142,24 @@ describe("<InspectPanel />", () => {
     expect(screen.getByText("2 selected")).toBeTruthy();
   });
 
+  it("hints that Tailwind/React code shows only the first of a multi-selection", () => {
+    select(["rect1", "text1"]);
+    render(<InspectPanel />);
+    fireEvent.click(screen.getByRole("button", { name: "Code" }));
+    act(() => {
+      useDevModeStore.getState().setCodegenFormat("tailwind");
+    });
+    expect(screen.getByText("Showing first of 2 selected layers.")).toBeTruthy();
+  });
+
+  it("does not show the multi-selection hint for CSS (which handles multi-select natively)", () => {
+    useDevModeStore.getState().setCodegenFormat("css");
+    select(["rect1", "text1"]);
+    render(<InspectPanel />);
+    fireEvent.click(screen.getByRole("button", { name: "Code" }));
+    expect(screen.queryByText(/Showing first of/)).toBeNull();
+  });
+
   it("exits dev mode when the exit button is clicked", () => {
     select(["rect1"]);
     render(<InspectPanel />);

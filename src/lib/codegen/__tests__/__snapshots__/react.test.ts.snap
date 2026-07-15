@@ -17,11 +17,11 @@ exports[`buildReactCode > (a) generates an inline-style component for a frame wi
 exports[`buildReactCode > (b) generates a Tailwind-className component for the same tree 1`] = `
 "export function Card() {
   return (
-    <div className="box-border flex flex-col gap-2 p-4 w-75 h-50">
+    <div className={"box-border flex flex-col gap-2 p-4 w-75 h-50"}>
       {/* Title */}
-      <div className="box-border shrink-0 w-30 h-6 text-base font-bold">{"Hello & <world>"}</div>
+      <div className={"box-border shrink-0 w-30 h-6 text-base font-bold"}>{"Hello & <world>"}</div>
       {/* Avatar */}
-      <img src="" className="box-border shrink-0 w-10 h-10 rounded-[20px]" alt={"Avatar"} />
+      <img src="" className={"box-border shrink-0 w-10 h-10 rounded-[20px]"} alt={"Avatar"} />
     </div>
   );
 }

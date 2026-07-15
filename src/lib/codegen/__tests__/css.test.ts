@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resetStores, seedVariables } from "@/test/fixtures";
+import { useVariableStore } from "@/store/variableStore";
 import { buildCssCode } from "../css";
 import type { FlatFrameNode, GradientPaint, RectNode, ShadowEffect } from "@/types/scene";
 
@@ -229,6 +230,69 @@ describe("buildCssCode", () => {
     // 33/16 = 2.0625
     expect(code).toContain("height: 2.0625rem");
     // 100/16 = 6.25 (no trailing zeros beyond needed)
+    expect(code).toContain("width: 6.25rem");
+  });
+
+  it("(f) rem mode never rewrites px-shaped text in the selector or the /* name */ comment", () => {
+    const node: RectNode = {
+      id: "rect1",
+      type: "rect",
+      name: "Button 8px",
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 40,
+      fill: "#ff0000",
+    } as unknown as RectNode;
+
+    const { code } = buildCssCode(["rect1"], { rect1: node }, { units: "rem", remBase: 16 });
+
+    // Selector class name is untouched — "8px" here is part of the slug, not a CSS length.
+    expect(code).toContain(".button-8px {");
+    expect(code).not.toContain(".button-0.5rem");
+    // Comment text is untouched too.
+    expect(code).toContain("/* Button 8px */");
+    // The actual declaration values still convert (sanity check the fix didn't disable conversion).
+    expect(code).toContain("width: 6.25rem");
+  });
+
+  it("(g) rem mode converts a --token's value but never its name", () => {
+    seedVariables();
+    useVariableStore.setState({
+      variables: [
+        {
+          id: "var-spacing",
+          name: "--spacing-16px",
+          type: "color",
+          value: "#3366ff",
+          themeValues: { light: "#3366ff", dark: "#3366ff" },
+        },
+      ],
+    });
+    const node: RectNode = {
+      id: "rect1",
+      type: "rect",
+      name: "Button",
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 40,
+      fills: [
+        {
+          id: "p1",
+          type: "solid",
+          color: "#3366ff",
+          colorBinding: { variableId: "var-spacing" },
+        },
+      ],
+    } as unknown as RectNode;
+
+    const { code } = buildCssCode(["rect1"], { rect1: node }, { units: "rem", remBase: 16 });
+
+    // The custom-property *name* is never rewritten...
+    expect(code).toContain("--spacing-16px: #3366ff;");
+    expect(code).not.toContain("--spacing-1rem");
+    // ...but a var() reference's px length elsewhere would still convert (width sanity check).
     expect(code).toContain("width: 6.25rem");
   });
 });

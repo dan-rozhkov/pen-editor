@@ -58,7 +58,7 @@ function uniqueClassName(className: string, used: Set<string>): string {
  * doesn't resolve them yet), so collecting anything else here would emit a
  * `:root` token that never appears in the CSS body.
  */
-function collectBoundVariableIds(node: FlatSceneNode): Set<string> {
+export function collectBoundVariableIds(node: FlatSceneNode): Set<string> {
   const ids = new Set<string>();
   for (const paint of getRenderableFills(node)) {
     if (paint.type === "solid" && paint.colorBinding) {
@@ -77,7 +77,8 @@ function formatDeclarations(styles: Record<string, string>): string {
     .join("\n");
 }
 
-function buildTokensBlock(variableIds: Set<string>, variables: Variable[], theme: "light" | "dark"): string {
+/** Build a raw `:root { --token: value; ... }` CSS text for the given variable ids (empty string if none resolve). Exported for reuse by codegen generators (`tailwind.ts`, `react.ts`) that emit `var(--token)` references without a definitions block of their own. */
+export function buildTokensBlock(variableIds: Set<string>, variables: Variable[], theme: "light" | "dark"): string {
   if (variableIds.size === 0) return "";
   const lines = variables
     .filter((v) => variableIds.has(v.id))

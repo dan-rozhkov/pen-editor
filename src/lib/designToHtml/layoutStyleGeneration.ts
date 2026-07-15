@@ -1,5 +1,8 @@
 import type { FlatFrameNode, FlatSceneNode, LayoutProperties, SizingProperties } from "@/types/scene";
 
+/** The `flex` shorthand emitted for a `fill_container` flex child (grow/shrink, zero basis). Shared with `codegen/tailwind.ts`'s `flex-1` mapping so the two stay in sync. */
+export const FLEX_FILL = "1 1 0%";
+
 /**
  * Generate CSS for layout properties (flexbox, sizing, positioning)
  */
@@ -102,7 +105,7 @@ function generateFlexChildStyles(
   // Main axis sizing
   if (isRow) {
     if (widthMode === "fill_container") {
-      styles.flex = "1 1 0%";
+      styles.flex = FLEX_FILL;
       styles["min-width"] = "0";
     } else if (widthMode === "fit_content") {
       styles.flex = "0 0 auto";
@@ -112,7 +115,7 @@ function generateFlexChildStyles(
     }
   } else {
     if (heightMode === "fill_container") {
-      styles.flex = "1 1 0%";
+      styles.flex = FLEX_FILL;
       styles["min-height"] = "0";
     } else if (heightMode === "fit_content") {
       styles.flex = "0 0 auto";

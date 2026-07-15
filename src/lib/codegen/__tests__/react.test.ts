@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { resetStores } from "@/test/fixtures";
+import { resetStores, seedVariables } from "@/test/fixtures";
 import { buildReactCode } from "../react";
 import type { FlatFrameNode, RectNode, TextNode } from "@/types/scene";
 
@@ -118,7 +118,7 @@ describe("buildReactCode", () => {
 
     expect(warnings).toEqual([]);
     expect(code).toMatchSnapshot();
-    expect(code).toContain('className="box-border flex flex-col gap-2 p-4 w-75 h-50"');
+    expect(code).toContain('className={"box-border flex flex-col gap-2 p-4 w-75 h-50"}');
     expect(code).toContain('<img src=""');
     await assertCompiles(code);
   });
@@ -183,6 +183,85 @@ describe("buildReactCode", () => {
 
     expect(code).toContain("/>");
     expect(code).not.toContain("></div>");
+    await assertCompiles(code);
+  });
+
+  it("(h) a pattern fill's URL containing a quote can't break out of the className attribute (tailwind styleMode)", async () => {
+    const rect: RectNode = {
+      id: "rect1",
+      type: "rect",
+      name: "Box",
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 40,
+      fills: [
+        {
+          id: "p1",
+          type: "pattern",
+          pattern: { url: 'https://evil.example/a.png") } <script>alert(1)</script' },
+        },
+      ],
+    } as unknown as RectNode;
+
+    const { code } = buildReactCode("rect1", { rect1: rect }, {}, { units: "px", remBase: 16, styleMode: "tailwind" });
+
+    // The value is a JS string expression, never interpolated into a `"..."` attribute.
+    expect(code).toContain("className={");
+    expect(code).not.toContain('className="');
+    expect(code).not.toContain("<script>alert(1)</script>");
+    await assertCompiles(code);
+  });
+
+  it("(i) warns once for an unsupported node type (ref) rendered as an empty placeholder", () => {
+    const frame = frameNode({ layout: undefined });
+    const ref = {
+      id: "ref1",
+      type: "ref",
+      name: "Button",
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 20,
+      componentId: "comp1",
+      overrides: {},
+      propertyValues: {},
+    } as unknown as RectNode;
+    const nodesById = { frame1: frame, ref1: ref };
+    const childrenById = { frame1: ["ref1"] };
+
+    const { code, warnings } = buildReactCode("frame1", nodesById, childrenById, {
+      units: "px",
+      remBase: 16,
+      styleMode: "inline",
+    });
+
+    expect(code).toContain("<div");
+    expect(warnings.some((w) => w.toLowerCase().includes("instance"))).toBe(true);
+  });
+
+  it("(j) prepends a CSS-variable-definitions block comment when the subtree binds a variable", async () => {
+    seedVariables();
+    const frame = frameNode({
+      layout: undefined,
+      width: 100,
+      height: 100,
+      fills: [
+        {
+          id: "p1",
+          type: "solid",
+          color: "#3366ff",
+          colorBinding: { variableId: "var-primary" },
+        },
+      ],
+    } as unknown as Partial<FlatFrameNode>);
+
+    const { code } = buildReactCode("frame1", { frame1: frame }, {}, { units: "px", remBase: 16, styleMode: "inline" });
+
+    expect(code).toContain("/* Requires CSS variables:");
+    expect(code).toContain(":root {");
+    expect(code).toContain("--primary: #3366ff;");
+    expect(code.indexOf(":root {")).toBeLessThan(code.indexOf("export function"));
     await assertCompiles(code);
   });
 });

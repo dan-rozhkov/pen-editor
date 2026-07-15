@@ -1,9 +1,17 @@
 import type { FlatFrameNode, FlatSceneNode, LayoutProperties, TextNode } from "@/types/scene";
-import { generateLayoutStyles } from "@/lib/designToHtml/layoutStyleGeneration";
-import { generateVisualStyles, generateTextStyles, BACKGROUND_STYLE_KEYS } from "@/lib/designToHtml/styleGeneration";
+import { BACKGROUND_STYLE_KEYS } from "@/lib/designToHtml/styleGeneration";
 import { getRenderableFills } from "@/utils/fillUtils";
 import { type CodegenOptions, convertPxToRem } from "./css";
-import { declarationsToTailwind } from "./tailwind";
+import { nodeDeclarations } from "./declarations";
+import {
+  declarationsToTailwind,
+  collectSubtreeVariableIds,
+  tokensBlockForIds,
+  UNSUPPORTED_NODE_TYPES,
+  unsupportedNodeWarning,
+  videoFillWarning,
+  hasVideoFill,
+} from "./tailwind";
 
 export interface BuildReactCodeResult {
   code: string;
@@ -41,12 +49,34 @@ function capitalize(word: string): string {
   return word.length === 0 ? word : word[0].toUpperCase() + word.slice(1);
 }
 
+/**
+ * Per-node-type "is this the Figma-style default name" regex, built once per
+ * type rather than on every visited node (a deep tree can call
+ * `isMeaningfulName` thousands of times). `DEFAULT_NAME_LABELS`' types are
+ * precomputed eagerly; any other type falls back to a lazily-cached regex
+ * keyed by the type string itself.
+ */
+const DEFAULT_NAME_REGEXES: Record<string, RegExp> = Object.fromEntries(
+  Object.entries(DEFAULT_NAME_LABELS).map(([type, label]) => [type, new RegExp(`^${label}(\\s+\\d+)?$`, "i")]),
+);
+const nameRegexCache = new Map<string, RegExp>();
+
+function defaultNameRegexFor(nodeType: string): RegExp {
+  const known = DEFAULT_NAME_REGEXES[nodeType];
+  if (known) return known;
+  let re = nameRegexCache.get(nodeType);
+  if (!re) {
+    re = new RegExp(`^${nodeType}(\\s+\\d+)?$`, "i");
+    nameRegexCache.set(nodeType, re);
+  }
+  return re;
+}
+
 /** Whether `name` is worth a `{/* Name *\/}` comment: non-empty and not a Figma-style default like "Rectangle 12". */
 function isMeaningfulName(name: string | undefined, nodeType: string): boolean {
   const trimmed = name?.trim();
   if (!trimmed) return false;
-  const label = DEFAULT_NAME_LABELS[nodeType] ?? nodeType;
-  return !new RegExp(`^${label}(\\s+\\d+)?$`, "i").test(trimmed);
+  return !defaultNameRegexFor(nodeType).test(trimmed);
 }
 
 /**
@@ -97,18 +127,6 @@ function omitBackgroundKeys(decls: Record<string, string>): Record<string, strin
   return Object.fromEntries(Object.entries(decls).filter(([prop]) => !BACKGROUND_KEY_SET.has(prop)));
 }
 
-function nodeDeclarations(
-  node: FlatSceneNode,
-  parentLayout: LayoutProperties | undefined,
-  isRoot: boolean,
-): Record<string, string> {
-  return {
-    ...generateLayoutStyles(node, parentLayout, isRoot),
-    ...generateVisualStyles(node),
-    ...(node.type === "text" ? generateTextStyles(node as TextNode) : {}),
-  };
-}
-
 /** `{ prop: "value", ... }` source for a `style={{...}}` object; values are always JS string literals ("numeric-less"), px lengths converted to rem first when requested. */
 function styleObjectSource(decls: Record<string, string>, options: CodegenOptions): string {
   const entries = Object.entries(decls).map(([prop, rawValue]) => {
@@ -119,11 +137,22 @@ function styleObjectSource(decls: Record<string, string>, options: CodegenOption
   return `{ ${entries.join(", ")} }`;
 }
 
-/** ` className="..."` (Task 2's Tailwind mapper) or ` style={{...}}`, leading-space-prefixed and empty when there are no declarations. */
+/**
+ * ` className={...}` (Task 2's Tailwind mapper) or ` style={{...}}`,
+ * leading-space-prefixed and empty when there are no declarations.
+ *
+ * The className value is emitted as a JS string expression
+ * (`className={JSON.stringify(...)}`), the same guaranteed-safe strategy
+ * used for text content elsewhere in this file — never interpolated
+ * directly into a `"..."` JSX attribute. An arbitrary-value class can
+ * legitimately contain a `"` (e.g. a `pattern`/image fill's URL inside
+ * `bg-[url("...")]`), which would otherwise break out of the attribute and
+ * inject live JSX.
+ */
 function styleOrClassAttr(decls: Record<string, string>, options: ReactCodegenOptions): string {
   if (options.styleMode === "tailwind") {
     const classes = declarationsToTailwind(decls, options);
-    return classes.length > 0 ? ` className="${classes.join(" ")}"` : "";
+    return classes.length > 0 ? ` className={${jsxStringLiteral(classes.join(" "))}}` : "";
   }
   return Object.keys(decls).length > 0 ? ` style={${styleObjectSource(decls, options)}}` : "";
 }
@@ -168,6 +197,12 @@ function buildJsxElement(
     const attrs = styleOrClassAttr(omitBackgroundKeys(decls), options);
     const alt = jsxStringLiteral(node.name ?? "");
     return `${indent}<img src=""${attrs} alt={${alt}} />`;
+  }
+
+  if (UNSUPPORTED_NODE_TYPES.has(node.type)) {
+    warnings.push(unsupportedNodeWarning(node));
+  } else if (hasVideoFill(node)) {
+    warnings.push(videoFillWarning(node));
   }
 
   const attrs = styleOrClassAttr(decls, options);
@@ -220,6 +255,9 @@ export function buildReactCode(
 
   const componentName = componentNameFor(node.name, node.type);
   const element = buildJsxElement(nodeId, nodesById, childrenById, undefined, true, 2, options, warnings) ?? "";
-  const code = `export function ${componentName}() {\n  return (\n${element}\n  );\n}\n`;
+  const componentCode = `export function ${componentName}() {\n  return (\n${element}\n  );\n}\n`;
+
+  const tokensBlock = tokensBlockForIds(collectSubtreeVariableIds(nodeId, nodesById, childrenById));
+  const code = tokensBlock ? `/* Requires CSS variables:\n${tokensBlock}\n*/\n${componentCode}` : componentCode;
   return { code, warnings };
 }

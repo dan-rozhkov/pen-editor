@@ -25,9 +25,7 @@ const MAX_COLLAPSED_LINES = 40;
  * Highlight colors route through the `--color-code-*` theme tokens in
  * `src/index.css` (light values in `@theme`, dark overrides in `.dark`) so
  * contrast holds on both panel themes; `plain`/`punctuation` reuse the
- * standard text tokens. `className` is declared by the `Token` shape but no
- * tokenizer rule emits it today (class values arrive as `string`) — mapped
- * to the string color so it renders sensibly if a rule ever produces it.
+ * standard text tokens.
  */
 const TOKEN_CLASS: Record<Token["kind"], string> = {
   keyword: "text-code-keyword",
@@ -38,7 +36,6 @@ const TOKEN_CLASS: Record<Token["kind"], string> = {
   plain: "text-text-primary",
   property: "text-code-property",
   tag: "text-code-tag",
-  className: "text-code-string",
 };
 
 function CopyButton({ code }: { code: string }) {
@@ -162,6 +159,12 @@ export function CodeSection({ selectedIds }: { selectedIds: string[] }) {
           </ButtonGroup>
         )}
       </div>
+
+      {format !== "css" && selectedIds.length > 1 && (
+        <div className="text-[11px] text-text-muted">
+          Showing first of {selectedIds.length} selected layers.
+        </div>
+      )}
 
       <CodeBlock code={result.code} lang={lang} />
 
