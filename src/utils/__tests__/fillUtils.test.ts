@@ -4,6 +4,7 @@ import type { FlatSceneNode, GradientFill, Paint } from '@/types/scene'
 import {
   clearLegacyEffectProps,
   clearLegacyFillProps,
+  clearLegacyStrokeProps,
   createBlurEffect,
   createBackgroundBlurEffect,
   createImagePaint,
@@ -14,7 +15,10 @@ import {
   getPrimarySolidColor,
   getPrimarySolidPaint,
   getRenderableFills,
+  getRenderableStrokes,
+  getStrokes,
   legacyFillsToPaints,
+  legacyStrokesToPaints,
 } from '@/utils/fillUtils'
 
 function makeNode(props: Partial<FlatSceneNode>): FlatSceneNode {
@@ -141,6 +145,83 @@ describe('clear helpers', () => {
       imageFill: undefined,
     })
     expect(clearLegacyEffectProps()).toEqual({ effect: undefined })
+  })
+
+  it('clears every legacy stroke field (color only, geometry untouched)', () => {
+    expect(clearLegacyStrokeProps()).toEqual({
+      stroke: undefined,
+      strokeOpacity: undefined,
+      strokeBinding: undefined,
+    })
+  })
+})
+
+describe('getStrokes', () => {
+  it('returns strokes verbatim when set, ignoring legacy fields', () => {
+    const strokes: Paint[] = [createSolidPaint('#ff0000')]
+    const node = makeNode({ strokes, stroke: '#00ff00' })
+    expect(getStrokes(node)).toBe(strokes)
+  })
+
+  it('derives a solid paint from legacy stroke with opacity and binding', () => {
+    const node = makeNode({ stroke: '#336699', strokeOpacity: 0.5, strokeBinding: { variableId: 'v1' } })
+    const strokes = getStrokes(node)
+    expect(strokes).toHaveLength(1)
+    expect(strokes[0]).toMatchObject({
+      type: 'solid',
+      color: '#336699',
+      opacity: 0.5,
+      colorBinding: { variableId: 'v1' },
+    })
+  })
+
+  it('falls back to PathStroke.fill when stroke/strokeWidth are unset (path nodes)', () => {
+    const node = makeNode({ type: 'path', pathStroke: { fill: '#123456', thickness: 3, align: 'inside' } } as Partial<FlatSceneNode>)
+    const strokes = getStrokes(node)
+    expect(strokes).toHaveLength(1)
+    expect(strokes[0]).toMatchObject({ type: 'solid', color: '#123456' })
+  })
+
+  it('prefers node.stroke over PathStroke.fill when both are present', () => {
+    const node = makeNode({
+      type: 'path',
+      stroke: '#ff0000',
+      pathStroke: { fill: '#123456' },
+    } as Partial<FlatSceneNode>)
+    expect(getStrokes(node)[0]).toMatchObject({ color: '#ff0000' })
+  })
+
+  it('returns empty stack when node has no stroke at all', () => {
+    expect(getStrokes(makeNode({}))).toEqual([])
+  })
+
+  it('getStrokes caches the derived legacy stack per node object', () => {
+    const node = makeNode({ stroke: '#123456' })
+    expect(getStrokes(node)).toBe(getStrokes(node))
+  })
+})
+
+describe('getRenderableStrokes', () => {
+  it('filters hidden and zero-opacity paints', () => {
+    const node = makeNode({
+      strokes: [
+        createSolidPaint('#111111', { visible: false }),
+        createSolidPaint('#222222', { opacity: 0 }),
+        createSolidPaint('#333333'),
+      ],
+    })
+    const renderable = getRenderableStrokes(node)
+    expect(renderable).toHaveLength(1)
+    expect((renderable[0] as { color: string }).color).toBe('#333333')
+  })
+})
+
+describe('legacyStrokesToPaints', () => {
+  it('produces deterministic paint ids (stable React keys)', () => {
+    const node = makeNode({ stroke: '#123456' })
+    const a = legacyStrokesToPaints(node)
+    const b = legacyStrokesToPaints(node)
+    expect(a[0].id).toBe(b[0].id)
   })
 })
 
