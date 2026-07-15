@@ -17,6 +17,10 @@ export function BoxModelDiagram({
   remBase: number;
 }) {
   const fmt = (px: number) => formatLength(px, units, remBase);
+  const fmtNumber = (px: number) => {
+    const value = fmt(px);
+    return value.endsWith(units) ? value.slice(0, -units.length) : value;
+  };
   const hasPadding =
     box.paddingTop > 0 || box.paddingRight > 0 || box.paddingBottom > 0 || box.paddingLeft > 0;
 
@@ -54,7 +58,7 @@ export function BoxModelDiagram({
             )}
             <div className="absolute left-1/2 top-1/2 flex min-w-[112px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded border-2 border-dashed border-text-primary bg-surface-panel px-3 py-1.5">
               <span className="whitespace-nowrap font-mono text-sm text-text-primary">
-                {fmt(box.width)} × {fmt(box.height)}
+                {fmtNumber(box.width)} × {fmtNumber(box.height)}
               </span>
             </div>
           </div>

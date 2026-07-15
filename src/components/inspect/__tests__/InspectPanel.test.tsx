@@ -43,7 +43,7 @@ describe("<InspectPanel />", () => {
     select(["rect1"]);
     render(<InspectPanel />);
     expect(screen.getByText("Box")).toBeTruthy();
-    expect(screen.getByText("100px × 50px")).toBeTruthy();
+    expect(screen.getByText("100 × 50")).toBeTruthy();
   });
 
   it("copies a row's value on click and toasts", async () => {
@@ -72,11 +72,11 @@ describe("<InspectPanel />", () => {
   it("switches units from px to rem and updates rows", () => {
     select(["rect1"]);
     render(<InspectPanel />);
-    expect(screen.getByText("100px × 50px")).toBeTruthy();
+    expect(screen.getByText("100 × 50")).toBeTruthy();
     act(() => {
       useDevModeStore.getState().setUnits("rem");
     });
-    expect(screen.getByText("6.25rem × 3.125rem")).toBeTruthy();
+    expect(screen.getByText("6.25 × 3.125")).toBeTruthy();
   });
 
   it("expands a token row on click, showing light/dark values", () => {
