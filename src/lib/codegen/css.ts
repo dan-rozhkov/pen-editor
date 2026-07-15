@@ -39,8 +39,11 @@ function pxTokenToRem(px: number, remBase: number): string {
  * to the whole output (rule bodies and the `:root` tokens block alike,
  * including inside `var(--token, <fallback>)`) since all of them are CSS
  * lengths in practice — there is no non-length `px` token emitted today.
+ *
+ * Exported for reuse by sibling codegen generators (e.g. `tailwind.ts`) that
+ * need the same px->rem conversion for arbitrary-value bracket contents.
  */
-function convertPxToRem(css: string, remBase: number): string {
+export function convertPxToRem(css: string, remBase: number): string {
   return css.replace(PX_LENGTH_RE, (_match, value: string) => pxTokenToRem(Number(value), remBase));
 }
 

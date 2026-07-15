@@ -1,0 +1,8 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildTailwindCode > (f) emits indented HTML markup for a frame with a text child, escaping untrusted text 1`] = `
+"<div class="box-border flex flex-col gap-2 p-4 w-75 h-50">
+  <div class="box-border shrink-0 w-30 h-6 text-base font-bold">Card */ &lt;script&gt;alert(1)&lt;/script&gt;</div>
+  <div class="box-border shrink-0 w-25 h-10 bg-[#ff0000] rounded-lg"></div>
+</div>"
+`;
