@@ -9,6 +9,7 @@ import {
   appendAnchorPoint,
   closeContourPoints,
   applyAnchorEditToNode,
+  reverseAnchors,
   type PathAnchor,
 } from "../pathAnchors";
 import type { PathNode } from "@/types/scene";
@@ -238,5 +239,39 @@ describe("applyAnchorEditToNode", () => {
     expect(updates.y).toBe(300);
     expect(updates.width).toBe(21);
     expect(updates.height).toBe(21);
+  });
+});
+
+describe("reverseAnchors", () => {
+  it("reverses point order", () => {
+    const points: PathAnchor[] = [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 10 },
+    ];
+    const reversed = reverseAnchors(points);
+    expect(reversed.map((p) => [p.x, p.y])).toEqual([
+      [10, 10],
+      [10, 0],
+      [0, 0],
+    ]);
+  });
+
+  it("swaps handleIn/handleOut so the traced curve is unchanged, only its direction", () => {
+    const points: PathAnchor[] = [
+      { x: 0, y: 0, handleOut: { x: 5, y: 5 } },
+      { x: 10, y: 0, handleIn: { x: 8, y: 5 }, handleOut: { x: 12, y: -5 } },
+      { x: 20, y: 0, handleIn: { x: 18, y: 5 } },
+    ];
+    const reversed = reverseAnchors(points);
+    // Forward path and the reversed-then-reversed-back path must draw the
+    // same curve (same `d` string family, ignoring the direction it was
+    // authored in) — verified indirectly via the SVG `d` string endpoints.
+    expect(anchorsToSVGPath(reversed, false)).toBe(
+      "M20,0 C18,5 12,-5 10,0 C8,5 5,5 0,0",
+    );
+    expect(anchorsToSVGPath(points, false)).toBe(
+      "M0,0 C5,5 8,5 10,0 C12,-5 18,5 20,0",
+    );
   });
 });

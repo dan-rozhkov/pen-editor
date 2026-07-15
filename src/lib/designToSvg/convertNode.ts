@@ -15,6 +15,8 @@ import { getPrimarySolidPaint } from "@/utils/fillUtils";
 import { pointsAttr } from "@/utils/lineCapUtils";
 import { resolveMasking } from "@/lib/masks/maskResolution";
 import { hasEffectiveUnderline, isSafeLinkHref, TEXT_LINK_COLOR } from "@/lib/textLink";
+import { anchorsToSVGPath, reverseAnchors } from "@/utils/pathAnchors";
+import { applyTextTransform } from "@/utils/textTransform";
 import { buildEllipseArcGeometry, ellipseArcGeometryToSvgPath, hasCustomEllipseArc } from "@/lib/shapePath/ellipseArc";
 import {
   buildCapMarker,
@@ -251,7 +253,65 @@ function convertEllipseToSvg(node: EllipseNode, ctx: SvgConversionContext, isRoo
   return `<g ${attrs}>${shape}</g>`;
 }
 
-function convertTextToSvg(node: TextNode, _ctx: SvgConversionContext, isRoot: boolean): string {
+/**
+ * Text-on-a-path: native SVG `<textPath>` gets this essentially for free — a
+ * browser lays glyphs along the referenced `<path>` itself (tangent rotation
+ * included), and per the `<textPath>` spec any glyph starting past the
+ * path's end is simply not rendered, exactly matching the Pixi renderer's
+ * overflow policy (`@/utils/textPathLayout`) with zero extra clipping logic.
+ * This is the one export format that reaches pixel-for-pixel fidelity with
+ * the canvas (see the task spec).
+ *
+ * `side`/`flip` have no direct `<textPath>` equivalent with reliable browser
+ * support, so both are approximated structurally instead of via the
+ * (poorly-supported) SVG2 `side` attribute:
+ * - `side`: 'left' (text above the path, ascenders extending up from the
+ *   baseline-on-path — the native `<textPath>` default) needs no extra
+ *   attribute; 'right' (text below the path) uses `dominant-baseline="hanging"`
+ *   to hang the glyph's top, not its baseline, from the path — matching the
+ *   Pixi renderer's anchor-flip for the same case.
+ * - `flip`: reverses which direction glyphs read along the curve. There's no
+ *   "reverse textPath direction" attribute, so the `<path>` itself is
+ *   authored backward (`reverseAnchors`) instead — reversing the path also
+ *   flips its tangent direction everywhere, which is exactly how the Pixi
+ *   renderer's `flip` (angle + PI) behaves. `startOffset` is remapped
+ *   (`1 - startOffset`) so the glyphs still start from the same point on the
+ *   curve the user picked before the path was reversed.
+ */
+function convertTextOnPathToSvg(
+  node: TextNode,
+  ctx: SvgConversionContext,
+  isRoot: boolean,
+  color: string,
+  fontSize: number,
+  fontFamily: string,
+  fontWeightAttr: string,
+  fontStyleAttr: string,
+  decorationAttr: string,
+): string {
+  const tp = node.textPath!;
+  const attrs = commonGroupAttrs(node, null, isRoot);
+  const flip = !!tp.flip;
+  const effectiveSide: "left" | "right" = flip ? (tp.side === "left" ? "right" : "left") : tp.side;
+  const points = flip ? reverseAnchors(tp.points) : tp.points;
+  const startOffsetFrac = flip ? 1 - (tp.startOffset ?? 0) : (tp.startOffset ?? 0);
+  const clampedOffset = Math.max(0, Math.min(1, startOffsetFrac));
+
+  const d = anchorsToSVGPath(points, tp.closed ?? false);
+  const pathId = nextSvgId("textpath");
+  ctx.defs.push(`<path id="${pathId}" d="${escapeXml(d)}" fill="none"/>`);
+
+  const baselineAttr = effectiveSide === "right" ? ` dominant-baseline="hanging"` : "";
+  const text = escapeXml(applyTextTransform(node.text, node.textTransform));
+
+  const g = `<g ${attrs}><text font-family="${escapeXml(fontFamily)}" font-size="${fontSize}" fill="${color}"${fontWeightAttr}${fontStyleAttr}${decorationAttr}${baselineAttr}><textPath href="#${pathId}" startOffset="${(clampedOffset * 100).toFixed(3)}%">${text}</textPath></text></g>`;
+  if (node.link && isSafeLinkHref(node.link.url)) {
+    return `<a href="${escapeXml(node.link.url)}" target="_blank" rel="noopener">${g}</a>`;
+  }
+  return g;
+}
+
+function convertTextToSvg(node: TextNode, ctx: SvgConversionContext, isRoot: boolean): string {
   const attrs = commonGroupAttrs(node, null, isRoot);
   const primary = getPrimarySolidPaint(node);
   const color = primary
@@ -273,6 +333,20 @@ function convertTextToSvg(node: TextNode, _ctx: SvgConversionContext, isRoot: bo
   if (hasEffectiveUnderline(node)) decorations.push("underline");
   if (node.strikethrough) decorations.push("line-through");
   const decorationAttr = decorations.length > 0 ? ` text-decoration="${decorations.join(" ")}"` : "";
+
+  if (node.textPath) {
+    return convertTextOnPathToSvg(
+      node,
+      ctx,
+      isRoot,
+      color,
+      fontSize,
+      fontFamily,
+      fontWeightAttr,
+      fontStyleAttr,
+      decorationAttr,
+    );
+  }
 
   const textAnchor = node.textAlign === "center" ? "middle" : node.textAlign === "right" ? "end" : "start";
   const anchorX = node.textAlign === "center" ? node.width / 2 : node.textAlign === "right" ? node.width : 0;

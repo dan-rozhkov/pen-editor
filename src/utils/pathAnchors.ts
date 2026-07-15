@@ -345,6 +345,24 @@ export function svgPathToAnchors(d: string): { points: PathAnchor[]; closed: boo
   return { points, closed };
 }
 
+/**
+ * Reverse a contour's point order (swapping each anchor's in/out handles so
+ * the curve shape is unchanged, only its direction of travel). Used by the
+ * text-on-path SVG exporter to flip which way glyphs read along the curve —
+ * browsers have no "reverse direction" attribute on `<textPath>`, so the
+ * `<path>` itself must be authored backward instead. Mirrors the Pixi
+ * renderer's `flip` handling (`@/utils/textPathLayout`), which achieves the
+ * same visual result by adding PI to each glyph's tangent angle instead.
+ */
+export function reverseAnchors(points: PathAnchor[]): PathAnchor[] {
+  return [...points].reverse().map((p) => ({
+    x: p.x,
+    y: p.y,
+    handleIn: p.handleOut ?? null,
+    handleOut: p.handleIn ?? null,
+  }));
+}
+
 // --- Pure point-manipulation reducers (pen tool + path edit mode) ---
 
 /** Move an anchor (and its handles, so they travel with it) by a delta. */
