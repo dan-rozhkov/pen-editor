@@ -22,24 +22,32 @@ import {
   TEXT_BASELINE_COLOR,
 } from "./constants";
 
-const INDICATOR_LINE_LENGTH = 7;
-
 // Pooled PixiJS objects for spacing overlays (avoid create/destroy per frame)
+const INDICATOR_LINE_LENGTH = 7;
 let spacingGfx: Graphics | null = null;
-let labelGroup: Container | null = null;
-let labelBg: Graphics | null = null;
-let labelText: Text | null = null;
+interface SpacingLabel {
+  group: Container;
+  bg: Graphics;
+  text: Text;
+}
+const spacingLabels: SpacingLabel[] = [];
 
-function ensureSpacingPool(): { gfx: Graphics; group: Container; bg: Graphics; text: Text } {
+function ensureSpacingPool(): Graphics {
   if (!spacingGfx) spacingGfx = new Graphics();
-  if (!labelGroup) labelGroup = new Container();
-  if (!labelBg) labelBg = new Graphics();
-  if (!labelText) labelText = new Text({ text: "", style: FLOATING_LABEL_STYLE });
-  if (!labelGroup.children.length) {
-    labelGroup.addChild(labelBg);
-    labelGroup.addChild(labelText);
-  }
-  return { gfx: spacingGfx, group: labelGroup, bg: labelBg, text: labelText };
+  return spacingGfx;
+}
+
+function ensureSpacingLabel(index: number): SpacingLabel {
+  const existing = spacingLabels[index];
+  if (existing) return existing;
+
+  const group = new Container();
+  const bg = new Graphics();
+  const text = new Text({ text: "", style: FLOATING_LABEL_STYLE });
+  group.addChild(bg, text);
+  const label = { group, bg, text };
+  spacingLabels.push(label);
+  return label;
 }
 
 /** Destroy pooled spacing-overlay objects. Called from selectionOverlay cleanup.
@@ -48,13 +56,13 @@ function ensureSpacingPool(): { gfx: Graphics; group: Container; bg: Graphics; t
  *  would then reuse destroyed objects. */
 export function cleanupSpacingPool(): void {
   spacingGfx?.removeFromParent();
-  labelGroup?.removeFromParent();
   if (spacingGfx && !spacingGfx.destroyed) spacingGfx.destroy();
-  if (labelGroup && !labelGroup.destroyed) labelGroup.destroy({ children: true });
+  for (const { group } of spacingLabels) {
+    group.removeFromParent();
+    if (!group.destroyed) group.destroy({ children: true });
+  }
   spacingGfx = null;
-  labelGroup = null;
-  labelBg = null;
-  labelText = null;
+  spacingLabels.length = 0;
 }
 
 export function redrawHover(
@@ -71,10 +79,12 @@ export function redrawHover(
 
   // Detach pooled objects (don't destroy — they're reused)
   if (spacingGfx?.parent) spacingGfx.removeFromParent();
-  if (labelGroup?.parent) labelGroup.removeFromParent();
   spacingGfx?.clear();
-  labelBg?.clear();
-  if (labelGroup) labelGroup.visible = false;
+  for (const { group, bg } of spacingLabels) {
+    if (group.parent) group.removeFromParent();
+    bg.clear();
+    group.visible = false;
+  }
 
   const { hoveredNodeId, hoveredInstanceId, hoveredDescendantPath } =
     useHoverStore.getState();
@@ -200,7 +210,6 @@ interface SpacingArea {
   value: number;
   color: number;
   alpha: number;
-  /** Orientation of the indicator line: "horizontal" or "vertical" */
   orientation: "horizontal" | "vertical";
 }
 
@@ -278,21 +287,44 @@ function drawSpacingOverlays(
 
   if (areas.length === 0) return;
 
-  const pool = ensureSpacingPool();
-  const gfx = pool.gfx;
+  const gfx = ensureSpacingPool();
   container.addChild(gfx);
 
   const invScale = 1 / scale;
-  const lineLen = INDICATOR_LINE_LENGTH / scale;
-  const lineWidth = 1 / scale;
+  const showPersistentLabels = useDevModeStore.getState().active;
 
   for (const area of areas) {
     drawHatchedRect(gfx, area.rect, area.color, scale, area.alpha);
+  }
 
-    // Center indicator line
+  if (showPersistentLabels) {
+    for (const [index, area] of areas.entries()) {
+      // Keep every spacing value visible in Dev Mode, instead of showing an
+      // indicator line that only reveals its value after hover.
+      const cx = area.rect.x + area.rect.width / 2;
+      const cy = area.rect.y + area.rect.height / 2;
+      const label = ensureSpacingLabel(index);
+      label.group.visible = true;
+      label.group.position.set(cx, cy);
+      label.group.scale.set(invScale);
+
+      label.text.text = String(Math.round(area.value));
+      const bgWidth = label.text.width + FLOATING_LABEL_PADDING_X * 2;
+      const bgHeight = FLOATING_LABEL_FONT_SIZE + FLOATING_LABEL_PADDING_Y * 2;
+
+      label.bg.roundRect(-bgWidth / 2, -bgHeight / 2, bgWidth, bgHeight, FLOATING_LABEL_RADIUS);
+      label.bg.fill(area.color);
+      label.text.position.set(-label.text.width / 2, -FLOATING_LABEL_FONT_SIZE / 2);
+      labelContainer.addChild(label.group);
+    }
+    return;
+  }
+
+  const lineLen = INDICATOR_LINE_LENGTH / scale;
+  const lineWidth = 1 / scale;
+  for (const area of areas) {
     const cx = area.rect.x + area.rect.width / 2;
     const cy = area.rect.y + area.rect.height / 2;
-
     if (area.orientation === "horizontal") {
       gfx.moveTo(cx - lineLen / 2, cy);
       gfx.lineTo(cx + lineLen / 2, cy);
@@ -303,37 +335,29 @@ function drawSpacingOverlays(
     gfx.stroke({ color: area.color, width: lineWidth });
   }
 
-  // Show label only when hovering near the center indicator line
   const mx = worldMouse.x;
   const my = worldMouse.y;
   const hitRadius = 4 / scale;
-  const hoveredArea = areas.find(a => {
-    const cx = a.rect.x + a.rect.width / 2;
-    const cy = a.rect.y + a.rect.height / 2;
+  const hoveredArea = areas.find((area) => {
+    const cx = area.rect.x + area.rect.width / 2;
+    const cy = area.rect.y + area.rect.height / 2;
     const halfLen = lineLen / 2;
-    if (a.orientation === "horizontal") {
-      return Math.abs(my - cy) <= hitRadius && mx >= cx - halfLen - hitRadius && mx <= cx + halfLen + hitRadius;
-    } else {
-      return Math.abs(mx - cx) <= hitRadius && my >= cy - halfLen - hitRadius && my <= cy + halfLen + hitRadius;
-    }
+    return area.orientation === "horizontal"
+      ? Math.abs(my - cy) <= hitRadius && mx >= cx - halfLen - hitRadius && mx <= cx + halfLen + hitRadius
+      : Math.abs(mx - cx) <= hitRadius && my >= cy - halfLen - hitRadius && my <= cy + halfLen + hitRadius;
   });
   if (!hoveredArea) return;
 
-  const cursorOffsetX = 4;
-  const cursorOffsetY = -4;
-
-  pool.group.visible = true;
-  pool.group.position.set(mx, my);
-  pool.group.scale.set(invScale);
-
-  pool.text.text = String(Math.round(hoveredArea.value));
-  const bgWidth = pool.text.width + FLOATING_LABEL_PADDING_X * 2;
+  const label = ensureSpacingLabel(0);
+  label.group.visible = true;
+  label.group.position.set(mx, my);
+  label.group.scale.set(invScale);
+  label.text.text = String(Math.round(hoveredArea.value));
+  const bgWidth = label.text.width + FLOATING_LABEL_PADDING_X * 2;
   const bgHeight = FLOATING_LABEL_FONT_SIZE + FLOATING_LABEL_PADDING_Y * 2;
 
-  pool.bg.roundRect(cursorOffsetX, cursorOffsetY - bgHeight, bgWidth, bgHeight, FLOATING_LABEL_RADIUS);
-  pool.bg.fill(hoveredArea.color);
-
-  pool.text.position.set(cursorOffsetX + FLOATING_LABEL_PADDING_X, cursorOffsetY - bgHeight + FLOATING_LABEL_PADDING_Y);
-
-  labelContainer.addChild(pool.group);
+  label.bg.roundRect(4, -4 - bgHeight, bgWidth, bgHeight, FLOATING_LABEL_RADIUS);
+  label.bg.fill(hoveredArea.color);
+  label.text.position.set(4 + FLOATING_LABEL_PADDING_X, -4 - bgHeight + FLOATING_LABEL_PADDING_Y);
+  labelContainer.addChild(label.group);
 }
