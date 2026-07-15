@@ -4,6 +4,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useHistoryStore } from "@/store/historyStore";
 import type { PathAnchor, SceneNode, TextNode } from "@/types/scene";
+import { computeAnchorsBBox } from "@/utils/pathAnchors";
 import { enterTextPathEditMode } from "../pathEditMode";
 import { getEditedAnchorTarget } from "../pathEditGeometry";
 import { createPathEditController } from "../pathEditController";
@@ -101,10 +102,28 @@ describe("getEditedAnchorTarget — text-path branch", () => {
     expect(target!.scaleBasis.width).toBe(stored.width);
     expect(target!.scaleBasis.height).toBe(stored.height);
 
+    // Finding 2 regression: the new bbox for these points is x:[5,100],
+    // y:[0,5] (a closed 2-point contour also has a wraparound segment back
+    // to point 0, but that doesn't change the extrema here). `applyEdit`
+    // must rebase the points onto a 0-origin box (subtracting the bbox's
+    // x/y) and shift the node's own x/y by that same delta, so the curve's
+    // world position is unchanged — mirroring what `applyAnchorEditToNode`
+    // does for `PathNode` via `geometryBounds`, since `textPath.points` has
+    // no separate bounds field to carry the offset instead.
     const nextPoints = [{ x: 5, y: 5 }, { x: 100, y: 0 }];
     const partial = target!.applyEdit(nextPoints, true);
     expect(partial).toEqual({
-      textPath: { points: nextPoints, closed: true, startOffset: 0, side: "left" },
+      textPath: {
+        points: [
+          { x: 0, y: 5 },
+          { x: 95, y: 0 },
+        ],
+        closed: true,
+        startOffset: 0,
+        side: "left",
+      },
+      x: 5,
+      y: 0,
     });
   });
 
@@ -190,5 +209,78 @@ describe("pathEditController — dragging an anchor on a text-on-path node", () 
     };
     expect(after.points[0]).toEqual({ x: 3, y: 4 });
     expect(after.geometry).toContain("3,4");
+  });
+});
+
+describe("pathEditController — text-path anchor drag renormalizes the node origin (finding 2 regression)", () => {
+  beforeEach(() => {
+    resetStores();
+    seedScene();
+  });
+
+  function dragAnchor0To(id: string, to: { x: number; y: number }) {
+    const controller = makeController();
+    // Anchor 0 sits at world (0,0): the node is at (0,0) with no parent, and
+    // STRAIGHT_POINTS[0] is (0,0).
+    controller.handlePointerDown(pointerEvent, { x: 0, y: 0 });
+    controller.handlePointerMove(pointerEvent, to);
+    controller.handlePointerUp(pointerEvent, to);
+    return useSceneStore.getState().nodesById[id] as unknown as TextNode;
+  }
+
+  // Before the fix, `applyEdit` returned only `{ textPath: {...tp, points, closed} }`
+  // — `node.x`/`node.y` never moved, so dragging a point outside the
+  // original [0,100]x[0,0] box left the curve's points spanning negative/
+  // overflowing local coordinates while the node's own box (whose width/
+  // height come from `computeAnchorsBBox`, discarding its x/y) silently
+  // desynced from where the curve actually renders.
+  it.each([
+    ["left", { x: -30, y: 0 }],
+    ["up", { x: 0, y: -25 }],
+    ["left and up (diagonal)", { x: -20, y: -15 }],
+  ] as const)("keeps the curve's world position anchored when dragging anchor 0 outward (%s)", (_label, to) => {
+    const node = makeTextOnPathNode("curvedOut", STRAIGHT_POINTS);
+    useSceneStore.getState().addNode(node);
+    enterTextPathEditMode("curvedOut");
+
+    const after = dragAnchor0To("curvedOut", to);
+    const tp = after.textPath!;
+
+    // The dragged anchor renders at exactly the world point it was dropped
+    // on...
+    expect(after.x + tp.points[0].x).toBeCloseTo(to.x, 5);
+    expect(after.y + tp.points[0].y).toBeCloseTo(to.y, 5);
+    // ...the untouched anchor (originally world (100, 0)) hasn't moved...
+    expect(after.x + tp.points[1].x).toBeCloseTo(100, 5);
+    expect(after.y + tp.points[1].y).toBeCloseTo(0, 5);
+    // ...and the points are renormalized back onto a 0-origin local box, so
+    // `node.width`/`node.height` (which derive from the bbox's width/height
+    // only, not its origin) still describe the same box the curve renders
+    // in.
+    const bbox = computeAnchorsBBox(tp.points, tp.closed ?? false);
+    expect(bbox.x).toBeCloseTo(0, 5);
+    expect(bbox.y).toBeCloseTo(0, 5);
+    // `measureTextAutoSize` ceils the bbox's width/height (see `textMeasure.ts`).
+    expect(after.width).toBeCloseTo(Math.ceil(bbox.width), 5);
+    expect(after.height).toBeCloseTo(Math.ceil(bbox.height), 5);
+  });
+
+  it("does not shift node.x when only the far (max) side of the bbox moves", () => {
+    const node = makeTextOnPathNode("curvedRight", STRAIGHT_POINTS);
+    useSceneStore.getState().addNode(node);
+    enterTextPathEditMode("curvedRight");
+
+    // Drag anchor 1 (world (100, 0)) further right and down — the bbox's
+    // min x/y (from anchor 0, untouched at (0,0)) doesn't change, so no
+    // renormalization shift is needed.
+    const controller = makeController();
+    controller.handlePointerDown(pointerEvent, { x: 100, y: 0 });
+    controller.handlePointerMove(pointerEvent, { x: 150, y: 40 });
+    controller.handlePointerUp(pointerEvent, { x: 150, y: 40 });
+
+    const after = useSceneStore.getState().nodesById["curvedRight"] as unknown as TextNode;
+    expect(after.x).toBe(0);
+    expect(after.y).toBe(0);
+    expect(after.textPath!.points[1]).toEqual({ x: 150, y: 40 });
   });
 });

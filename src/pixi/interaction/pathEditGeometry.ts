@@ -3,7 +3,7 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { getNodeAbsolutePositionWithLayout } from "@/utils/nodeUtils";
-import { applyAnchorEditToNode } from "@/utils/pathAnchors";
+import { applyAnchorEditToNode, computeAnchorsBBox } from "@/utils/pathAnchors";
 import type { PathAnchor, PathNode, SceneNode, TextNode } from "@/types/scene";
 
 /**
@@ -88,8 +88,31 @@ export function getEditedAnchorTarget(): AnchorEditTarget | null {
       // makes `anchorToWorld`'s fallback kick in, which is exactly scale 1
       // against the node's own width/height, i.e. no rescaling at all.
       scaleBasis: { width: textNode.width, height: textNode.height, x: textNode.x, y: textNode.y },
-      applyEdit: (points, closed) =>
-        ({ textPath: { ...tp, points, closed } }) as Partial<SceneNode>,
+      // Unlike `PathNode` (which keeps a `geometryBounds` field so its box
+      // can float anywhere relative to the raw points), a text-path node's
+      // points are REQUIRED to already be in the node's local 0-origin box —
+      // there is nowhere else to record an origin offset. So an edit that
+      // moves the bbox's origin (e.g. dragging the leftmost anchor further
+      // left) must rebase every point back onto a 0-origin box and shift
+      // `x`/`y` by the same delta to keep the curve's world position
+      // unchanged — the same invariant `applyAnchorEditToNode` maintains for
+      // `PathNode` via `geometryBounds`, just inlined here since there's no
+      // separate bounds field to update.
+      applyEdit: (points, closed) => {
+        const newGB = computeAnchorsBBox(points, closed);
+        const rebase = (p: { x: number; y: number }) => ({ x: p.x - newGB.x, y: p.y - newGB.y });
+        const rebasedPoints: PathAnchor[] = points.map((p) => ({
+          x: p.x - newGB.x,
+          y: p.y - newGB.y,
+          handleIn: p.handleIn ? rebase(p.handleIn) : p.handleIn,
+          handleOut: p.handleOut ? rebase(p.handleOut) : p.handleOut,
+        }));
+        return {
+          textPath: { ...tp, points: rebasedPoints, closed },
+          x: textNode.x + newGB.x,
+          y: textNode.y + newGB.y,
+        } as Partial<SceneNode>;
+      },
     };
   }
 
