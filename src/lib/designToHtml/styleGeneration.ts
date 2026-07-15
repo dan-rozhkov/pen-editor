@@ -3,7 +3,7 @@ import type { Variable } from "@/types/variable";
 import { applyOpacity } from "@/utils/colorUtils";
 import { hasPerCornerRadius } from "@/utils/renderUtils";
 import { useVariableStore } from "@/store/variableStore";
-import { getRenderableFills, getRenderableEffects, getPrimarySolidPaint } from "@/utils/fillUtils";
+import { getRenderableFills, getRenderableStrokes, getRenderableEffects, getPrimarySolidPaint } from "@/utils/fillUtils";
 import { imageModeToCssSize, fillModeToObjectFit } from "@/lib/cssBackground";
 import { cropRectToBackgroundCss, isFullCropRect, coverPixelRect, containPixelRect, clampCropRect, FULL_CROP_RECT } from "@/lib/imageCrop/cropRect";
 import { toFontVariationSettingsCss } from "@/utils/variableFont";
@@ -50,19 +50,52 @@ export function generateVisualStyles(node: BaseNode): Record<string, string> {
   // Fill / background — from the paint stack (bottom-to-top).
   Object.assign(styles, generateFillCss(node, variables));
 
-  // Stroke / border
-  if (node.stroke && (node.strokeWidth || node.strokeWidthPerSide)) {
-    const rawStrokeColor = applyOpacity(node.stroke, node.strokeOpacity);
-    const strokeColor = resolveBindingToCssVar(node.strokeBinding, rawStrokeColor, variables) ?? rawStrokeColor;
-    if (node.strokeWidthPerSide) {
-      Object.assign(styles, generatePerSideBorderCss(node.strokeWidthPerSide, strokeColor));
-    } else if (node.strokeWidth) {
-      if (node.strokeAlign === "outside") {
-        styles.outline = `${node.strokeWidth}px solid ${strokeColor}`;
-      } else {
-        styles.border = `${node.strokeWidth}px solid ${strokeColor}`;
-        if (node.strokeAlign === "inside") {
-          styles["box-sizing"] = "border-box";
+  // Stroke / border — resolved from the paint stack (getRenderableStrokes),
+  // falling back to the legacy stroke/strokeOpacity/strokeBinding fields
+  // (getRenderableStrokes already does this fallback internally). Like SVG
+  // export, a multi-paint stroke stack is approximated with its topmost
+  // visible paint only — CSS's border/outline shorthand has one paint slot,
+  // same ceiling as SVG's single `stroke=`.
+  const strokePaints = getRenderableStrokes(node).filter(
+    (p): p is SolidPaint | GradientPaint => p.type === "solid" || p.type === "gradient",
+  );
+  const topmostStroke = strokePaints.at(-1);
+  if (topmostStroke && (node.strokeWidth || node.strokeWidthPerSide)) {
+    if (topmostStroke.type === "gradient") {
+      // Gradient stroke: Figma's own "Copy as CSS" ships border-image-source
+      // WITHOUT border-image-slice, which renders nothing at all, and loses
+      // border-radius entirely. Chosen approach here: border-image-source +
+      // the required border-image-slice: 1 (fixes the "doesn't render" bug —
+      // strictly better than Figma's broken output). Documented compromise,
+      // not fixed further in this pass: border-image still can't follow a
+      // rounded border-radius (a CSS limitation — the gradient border-image
+      // and the border-radius rounding are mutually exclusive on a plain
+      // element; a real fix needs a wrapper/pseudo-element with
+      // background+mask, out of scope here), and per-side stroke widths
+      // aren't representable with a single border-image (falls back to a
+      // uniform border using strokeWidth). `outside` alignment also has no
+      // border-image equivalent (no "outline-image" in CSS) and renders in
+      // the normal border box instead (same visual position as center/inside).
+      styles.border = `${node.strokeWidthPerSide ? maxPerSide(node.strokeWidthPerSide) : node.strokeWidth}px solid transparent`;
+      styles["border-image-source"] = generateGradientCss(topmostStroke.gradient, topmostStroke.opacity);
+      styles["border-image-slice"] = "1";
+      if (node.strokeAlign === "inside") {
+        styles["box-sizing"] = "border-box";
+      }
+    } else {
+      const rawStrokeColor = applyOpacity(topmostStroke.color, topmostStroke.opacity);
+      const strokeColor =
+        resolveBindingToCssVar(topmostStroke.colorBinding, rawStrokeColor, variables) ?? rawStrokeColor;
+      if (node.strokeWidthPerSide) {
+        Object.assign(styles, generatePerSideBorderCss(node.strokeWidthPerSide, strokeColor));
+      } else if (node.strokeWidth) {
+        if (node.strokeAlign === "outside") {
+          styles.outline = `${node.strokeWidth}px solid ${strokeColor}`;
+        } else {
+          styles.border = `${node.strokeWidth}px solid ${strokeColor}`;
+          if (node.strokeAlign === "inside") {
+            styles["box-sizing"] = "border-box";
+          }
         }
       }
     }
@@ -495,6 +528,11 @@ function generateGradientCss(gradient: GradientFill, layerOpacity?: number): str
   const dy = gradient.endY - gradient.startY;
   const angle = Math.round((Math.atan2(dx, -dy) * 180) / Math.PI);
   return `linear-gradient(${angle}deg, ${stops})`;
+}
+
+/** Widest side of a per-side stroke — used as the uniform width fallback for a gradient border-image (see the gradient-stroke branch above). */
+function maxPerSide(perSide: PerSideStroke): number {
+  return Math.max(perSide.top ?? 0, perSide.right ?? 0, perSide.bottom ?? 0, perSide.left ?? 0);
 }
 
 function generatePerSideBorderCss(
