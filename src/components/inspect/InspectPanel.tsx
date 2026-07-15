@@ -53,6 +53,11 @@ const UNIT_OPTIONS = [
   { value: "rem", label: "rem" },
 ];
 
+const modeToggleGroupClass =
+  "h-6 rounded-md bg-secondary gap-px [&>[data-slot]]:rounded-[5px]! [&>[data-slot]]:border [&>[data-slot]~[data-slot]]:border-l";
+const activeModeToggleClass =
+  "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel";
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   const [expanded, setExpanded] = useState(true);
   return (
@@ -110,19 +115,21 @@ export function InspectPanel() {
   return (
     <div className="w-[300px] h-full flex flex-col bg-surface-panel border-l border-border-default overflow-y-auto">
       <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border-default">
-        <ButtonGroup>
+        <ButtonGroup orientation="horizontal" className={modeToggleGroupClass}>
           <Button
             type="button"
-            variant={mode === "code" ? "default" : "outline"}
+            variant={mode === "code" ? "default" : "secondary"}
             size="sm"
+            className={mode === "code" ? activeModeToggleClass : undefined}
             onClick={() => setMode("code")}
           >
             Code
           </Button>
           <Button
             type="button"
-            variant={mode === "list" ? "default" : "outline"}
+            variant={mode === "list" ? "default" : "secondary"}
             size="sm"
+            className={mode === "list" ? activeModeToggleClass : undefined}
             onClick={() => setMode("list")}
           >
             List
@@ -145,7 +152,7 @@ export function InspectPanel() {
             data-testid="inspect-exit-dev-mode"
             onClick={() => useDevModeStore.getState().setActive(false)}
           >
-            <XIcon size={14} weight="bold" />
+            <XIcon size={14} weight="light" />
           </IconButton>
         </div>
       </div>
