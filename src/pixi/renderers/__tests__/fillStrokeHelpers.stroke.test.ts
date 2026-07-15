@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { Graphics } from "pixi.js";
+import { Container, Graphics } from "pixi.js";
 import type { FlatSceneNode, GradientFill } from "@/types/scene";
 import { createSolidPaint, createGradientPaint } from "@/utils/fillUtils";
 import { applyStroke, buildPixiGradient } from "../fillStrokeHelpers";
@@ -168,5 +168,110 @@ describe("applyStroke", () => {
     for (const call of strokeSpy.mock.calls) {
       expect(call[0]).not.toHaveProperty("fill");
     }
+  });
+
+  // --- Finding 1: per-paint blendMode was a no-op on strokes -------------
+
+  it("routes a non-normal blend-mode stroke paint onto its own blended sibling layer", () => {
+    const container = new Container();
+    const gfx = new Graphics();
+    gfx.label = "rect-bg";
+    container.addChild(gfx);
+    const gfxStrokeSpy = vi.spyOn(gfx, "stroke");
+    const drawShape = vi.fn();
+    const node = makeNode({
+      strokeWidth: 4,
+      strokes: [
+        createSolidPaint("#ff0000"),
+        createSolidPaint("#00ff00", { blendMode: "multiply" }),
+      ],
+    });
+
+    applyStroke(gfx, node, 400, 200, drawShape, true);
+
+    // The normal-blend paint stroked `gfx` itself...
+    expect(gfxStrokeSpy).toHaveBeenCalledTimes(1);
+    // ...while the multiply-blend paint got its own sibling Graphics layer
+    // with the resolved Pixi blend mode, instead of silently no-opping.
+    const blendLayers = container.children.filter((c) => c.label === "stroke-blend-layer");
+    expect(blendLayers).toHaveLength(1);
+    const layer = blendLayers[0] as Graphics;
+    expect(layer).not.toBe(gfx);
+    expect(layer.blendMode).toBe("multiply");
+  });
+
+  it("removes a stale stroke blend layer once the blend-mode paint is gone", () => {
+    const container = new Container();
+    const gfx = new Graphics();
+    gfx.label = "rect-bg";
+    container.addChild(gfx);
+
+    const blended = makeNode({
+      strokeWidth: 4,
+      strokes: [createSolidPaint("#00ff00", { blendMode: "multiply" })],
+    });
+    applyStroke(gfx, blended, 400, 200, vi.fn(), true);
+    expect(container.children.some((c) => c.label === "stroke-blend-layer")).toBe(true);
+
+    const normal = makeNode({
+      strokeWidth: 4,
+      strokes: [createSolidPaint("#00ff00")],
+    });
+    applyStroke(gfx, normal, 400, 200, vi.fn(), true);
+    expect(container.children.some((c) => c.label === "stroke-blend-layer")).toBe(false);
+  });
+
+  // --- Finding 2: per-side + gradient-only stack rendered nothing --------
+
+  it("falls back to a uniform gradient stroke when per-side widths combine with a gradient-only stack", () => {
+    const gfx = new Graphics();
+    const strokeSpy = vi.spyOn(gfx, "stroke").mockImplementation(() => gfx);
+    const drawShape = vi.fn();
+    // Mirrors what Figma paste can produce (`applyStrokePaints` in
+    // figmaToScene/base.ts): `strokeWidthPerSide` set from
+    // `borderStrokeWeightsIndependent`, independent of a gradient-only stroke
+    // stack with no guard between the two.
+    const node = makeNode({
+      strokeWidth: 60,
+      strokeWidthPerSide: { top: 0, right: 0, bottom: 1, left: 0 },
+      strokes: [createGradientPaint(linearGradient)],
+    });
+
+    applyStroke(gfx, node, 400, 200, drawShape, true);
+
+    // Previously: no solid paint found -> strokeColor undefined -> silent
+    // no-op, zero stroke() calls. Now: falls through to the uniform branch
+    // and actually renders the gradient across the node's own bbox.
+    expect(strokeSpy).toHaveBeenCalledTimes(1);
+    const call = strokeSpy.mock.calls[0][0] as { fill?: { textureSpace?: string }; width?: number };
+    expect(call.fill?.textureSpace).toBe("global");
+    // Falls back to the node's uniform strokeWidth, not any per-side value.
+    expect(call.width).toBe(60);
+  });
+
+  // --- Finding 3: unresolvable solid paint left an unconsumed path -------
+
+  it("does not leave an unconsumed drawShape redraw when a solid paint fails to resolve", () => {
+    const gfx = new Graphics();
+    vi.spyOn(gfx, "stroke").mockImplementation(() => gfx);
+    const drawShape = vi.fn();
+    const node = makeNode({
+      strokeWidth: 4,
+      strokes: [
+        createSolidPaint("#ff0000"),
+        // Empty color, no colorBinding -> resolves to a falsy color and must
+        // be dropped before any drawShape() redraw is issued for it.
+        createSolidPaint(""),
+        createSolidPaint("#0000ff"),
+      ],
+    });
+
+    applyStroke(gfx, node, 400, 200, drawShape, true);
+
+    // Two resolvable paints: the first reuses the fresh (pathReady) path, the
+    // second needs exactly one redraw. The unresolvable middle paint must not
+    // consume a redraw of its own (it would leave two superimposed paths for
+    // the next `.stroke()` call to stroke together).
+    expect(drawShape).toHaveBeenCalledTimes(1);
   });
 });

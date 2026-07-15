@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { Graphics } from 'pixi.js'
 import { convertFigmaClipboardHtml, isFigmaClipboardHtml } from '..'
 import { calculateFrameLayout } from '@/utils/yogaLayout'
 import { decodePathCommandsBlob } from '../pathBlobs'
+import { applyStroke } from '@/pixi/renderers/fillStrokeHelpers'
 import type { FigNodeChange, FigTextData } from '../figTypes'
-import type { FrameNode, GroupNode, PathNode, TextNode } from '@/types/scene'
+import type { FlatSceneNode, FrameNode, GroupNode, PathNode, TextNode } from '@/types/scene'
 import {
   buildFigmaClipboardHtml,
   encodePathCommandsBlob,
@@ -1006,6 +1008,55 @@ describe('convertFigmaClipboardHtml', () => {
     expect(rect.strokes).toBeUndefined()
     expect(rect.stroke).toBe('#00ff00')
     expect(rect.strokeWidth).toBe(2)
+  })
+
+  it('pastes independent border weights + a gradient stroke into a renderable (not dropped) stroke, end to end', async () => {
+    // `applyStrokePaints` (figmaToScene/base.ts) sets `strokeWidthPerSide`
+    // from `borderStrokeWeightsIndependent` independent of the paint stack it
+    // builds, so this combination — blocked from hand-editing by
+    // `StrokeSection`'s UI guard — is reachable via paste alone.
+    const html = clipboardWith([
+      onCanvas({
+        guid: guid(2),
+        type: 'RECTANGLE',
+        size: { x: 400, y: 200 },
+        transform: identityTransform(),
+        strokePaints: [
+          {
+            type: 'GRADIENT_LINEAR',
+            visible: true,
+            opacity: 1,
+            transform: identityTransform(),
+            stops: [
+              { color: { r: 1, g: 0, b: 0, a: 1 }, position: 0 },
+              { color: { r: 0, g: 0, b: 1, a: 1 }, position: 1 },
+            ],
+          },
+        ],
+        strokeWeight: 60,
+        borderBottomWeight: 1,
+        borderStrokeWeightsIndependent: true,
+      }),
+    ])
+
+    const rect = (await convertFigmaClipboardHtml(html))!.nodes[0]
+    // Pasted node ends up with BOTH a gradient-only stroke stack and per-side
+    // widths — the combination `applyStroke`'s renderer must not drop.
+    expect(rect.strokes).toHaveLength(1)
+    expect(rect.strokes![0]).toMatchObject({ type: 'gradient' })
+    expect(rect.strokeWidthPerSide).toEqual({ top: 0, right: 0, bottom: 1, left: 0 })
+    expect(rect.strokeWidth).toBe(60)
+
+    // End-to-end: feed the pasted node straight into the renderer and assert
+    // it actually draws a stroke instead of silently rendering nothing (the
+    // bug — see fillStrokeHelpers.ts `applyStroke` doc comment for the
+    // uniform-gradient-fallback policy this exercises).
+    const gfx = new Graphics()
+    const strokeSpy = vi.spyOn(gfx, 'stroke').mockImplementation(() => gfx)
+    applyStroke(gfx, rect as unknown as FlatSceneNode, rect.width, rect.height, vi.fn(), true)
+    expect(strokeSpy).toHaveBeenCalledTimes(1)
+    const call = strokeSpy.mock.calls[0][0] as { fill?: { textureSpace?: string } }
+    expect(call.fill?.textureSpace).toBe('global')
   })
 
   // Shapes below mirror a captured real payload (fig-kiwi v106): Figma's
