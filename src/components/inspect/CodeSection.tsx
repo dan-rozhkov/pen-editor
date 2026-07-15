@@ -198,9 +198,6 @@ const activeReactStyleToggleClass =
 
       <CodeBlock code={result.code} lang={lang} />
 
-      {result.warnings.length > 0 && (
-        <div className="text-[11px] text-text-muted">{result.warnings.join(" ")}</div>
-      )}
     </div>
   );
 }
