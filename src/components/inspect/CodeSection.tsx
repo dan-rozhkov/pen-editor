@@ -53,7 +53,14 @@ function CopyButton({ code }: { code: string }) {
   };
 
   return (
-    <IconButton type="button" variant="ghost" size="icon-sm" tooltip="Copy code" onClick={handleCopy}>
+    <IconButton
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      tooltip="Copy code"
+      className="bg-surface-panel hover:bg-surface-panel"
+      onClick={handleCopy}
+    >
       {copied ? <CheckIcon size={14} weight="bold" /> : <CopyIcon size={14} />}
     </IconButton>
   );

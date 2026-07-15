@@ -73,6 +73,7 @@ describe("<InspectPanel />", () => {
     expect(screen.getByText("CSS")).toBeTruthy();
     expect(screen.getByTestId("code-block").className).toContain("bg-surface-base");
     expect(screen.getByTestId("code-block").className).not.toContain("border");
+    expect(screen.getByRole("button", { name: "Copy code" }).className).toContain("bg-surface-panel");
     expect(screen.getByLabelText("Line numbers").children.length).toBeGreaterThan(0);
   });
 
