@@ -85,13 +85,13 @@ export function PageControls() {
         {/* Dev (inspect) mode toggle — Figma-style read-only CSS inspector. */}
         <IconButton
           variant="ghost"
-          size="icon-sm"
+          size="icon"
           tooltip="Dev mode"
           shortcut={formatShortcut(["shift", "D"])}
           className={
             isDevMode
-              ? "ml-auto bg-green-500/20 text-green-500 hover:bg-green-500/20 hover:text-green-500"
-              : "ml-auto"
+              ? "ml-auto size-[33.5px] bg-green-500/20 text-green-500 hover:bg-green-500/20 hover:text-green-500"
+              : "ml-auto size-[33.5px]"
           }
           onClick={() => toggleDevMode()}
           data-testid="page-dev-mode"
