@@ -103,6 +103,26 @@ describe("drawPath compound paths", () => {
     expect(gfx.containsPoint({ x: 80, y: 80 })).toBe(false);
   });
 
+  it("associates a hole with its own outer when a later disjoint shape exists", () => {
+    const gfx = new Graphics();
+    drawPath(gfx, pathNode({
+      fill: "#ffffff",
+      fillRule: "nonzero",
+      geometry: [
+        "M0 0 L40 0 L40 40 L0 40 Z",
+        "M10 10 L10 30 L30 30 L30 10 Z",
+        "M60 0 L100 0 L100 40 L60 40 Z",
+      ].join(" "),
+    }));
+
+    const fillInstructions = gfx.context.instructions.filter(
+      (instruction) => instruction.action === "fill",
+    );
+    expect(fillInstructions).toHaveLength(2);
+    expect(gfx.containsPoint({ x: 20, y: 20 })).toBe(false);
+    expect(gfx.containsPoint({ x: 80, y: 20 })).toBe(true);
+  });
+
   it("redraws when only the fill rule changes", () => {
     const geometry = "M0 0 L100 0 L100 100 L0 100 Z M30 30 L70 30 L70 70 L30 70 Z";
     const previous = pathNode({ fill: "#ffffff", fillRule: "nonzero", geometry });

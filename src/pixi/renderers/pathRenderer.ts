@@ -65,8 +65,10 @@ function colorToHex(color: string): string {
 }
 
 interface NonzeroFillGeometry {
-  outers: string[];
-  holes: string[];
+  regions: Array<{
+    outer: string;
+    holes: string[];
+  }>;
 }
 
 interface NonzeroRing {
@@ -137,17 +139,32 @@ function resolveNonzeroFillGeometry(geometry: string): NonzeroFillGeometry | nul
       return inside;
     };
 
-    const outers: string[] = [];
-    const holes: string[] = [];
+    const outerIndexes: number[] = [];
+    const holeIndexes: number[] = [];
     for (let index = 0; index < rings.length; index++) {
       const parent = rings[index].parent;
       const outside = parent == null ? 0 : resolveWindingInside(parent);
       const inside = resolveWindingInside(index);
-      if (outside === 0 && inside !== 0) outers.push(rings[index].path);
-      if (outside !== 0 && inside === 0) holes.push(rings[index].path);
+      if (outside === 0 && inside !== 0) outerIndexes.push(index);
+      if (outside !== 0 && inside === 0) holeIndexes.push(index);
     }
 
-    return holes.length > 0 && outers.length > 0 ? { outers, holes } : null;
+    if (holeIndexes.length === 0 || outerIndexes.length === 0) return null;
+
+    const outerIndexSet = new Set(outerIndexes);
+    const regionByOuter = new Map(
+      outerIndexes.map((index) => [index, { outer: rings[index].path, holes: [] as string[] }]),
+    );
+    for (const holeIndex of holeIndexes) {
+      let ancestor = rings[holeIndex].parent;
+      while (ancestor != null && !outerIndexSet.has(ancestor)) {
+        ancestor = rings[ancestor].parent;
+      }
+      if (ancestor == null) throw new Error("Nonzero hole has no containing outer boundary");
+      regionByOuter.get(ancestor)?.holes.push(rings[holeIndex].path);
+    }
+
+    return { regions: outerIndexes.map((index) => regionByOuter.get(index)!) };
   } catch {
     // Unsupported/malformed path: retain the declared nonzero behaviour.
     return null;
@@ -159,13 +176,17 @@ function drawNonzeroFill(
   geometry: NonzeroFillGeometry,
   applyFill: () => void,
 ): void {
-  for (const outer of geometry.outers) {
-    gfx.path(new GraphicsPath(outer, false));
-  }
-  applyFill();
-  for (const hole of geometry.holes) {
-    gfx.path(new GraphicsPath(hole, false));
-    gfx.cut();
+  // Pixi associates `cut()` with the most recently filled geometry. Keep each
+  // disconnected outer and its holes in a separate fill instruction; otherwise
+  // a hole belonging to an earlier outer can be attached to the last outer and
+  // remain visibly filled (for example, the first head in a two-person icon).
+  for (const region of geometry.regions) {
+    gfx.path(new GraphicsPath(region.outer, false));
+    applyFill();
+    for (const hole of region.holes) {
+      gfx.path(new GraphicsPath(hole, false));
+      gfx.cut();
+    }
   }
 }
 
