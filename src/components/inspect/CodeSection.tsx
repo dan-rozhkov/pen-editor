@@ -106,13 +106,14 @@ function CodeBlock({ code, lang }: { code: string; lang: "css" | "html" | "tsx" 
       </div>
       {isLong && (
         <div className="px-3 pb-2">
-          <button
+          <Button
             type="button"
-            className="text-[11px] text-text-muted hover:text-text-primary underline"
+            variant="outline"
+            size="sm"
             onClick={() => setExpanded((v) => !v)}
           >
             {expanded ? "Show less" : `Show all (${lines.length} lines)`}
-          </button>
+          </Button>
         </div>
       )}
     </div>
