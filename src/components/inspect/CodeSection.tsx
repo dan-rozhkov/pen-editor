@@ -85,7 +85,7 @@ function CodeBlock({ code, lang }: { code: string; lang: "css" | "html" | "tsx" 
             <li key={index} className="h-5">{index + 1}</li>
           ))}
         </ol>
-        <pre className="min-w-0 flex-1 font-mono text-xs leading-5 whitespace-pre-wrap break-words">
+        <pre className="min-w-0 flex-1 font-mono text-xs leading-5 whitespace-pre">
           {highlightedLines.map((tokens, lineIndex) => (
             <code key={lineIndex} className="block min-h-5">
               {tokens.map((token, tokenIndex) => (
