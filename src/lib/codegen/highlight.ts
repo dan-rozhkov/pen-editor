@@ -66,7 +66,10 @@ const TSX_KEYWORDS = new Set([
 const CSS_RULES: Rule[] = [
   { kind: "comment", re: /^\/\*[\s\S]*?\*\// },
   { kind: "string", re: /^"(?:[^"\\]|\\.)*"|^'(?:[^'\\]|\\.)*'/ },
-  // Property name: identifier (incl. --custom-props) immediately followed by ':' (not part of a pseudo-selector like ::before).
+  // Property name: identifier (incl. --custom-props) immediately followed by ':'.
+  // Note: this can misclassify pseudo-selector-ish input as `property` (e.g. the
+  // "a" in "a:hover" in selector position). Cosmetic-only — the generators feed
+  // this tokenizer declaration blocks, so selectors barely occur in practice.
   { kind: "property", re: /^(--[a-zA-Z0-9_-]+|[a-zA-Z-]+)(?=\s*:)/ },
   { kind: "number", re: /^-?\d*\.?\d+(?:px|rem|em|%|deg|s|ms|fr|vh|vw)?\b/ },
   { kind: "punctuation", re: /^[{}:;,()]/ },

@@ -21,16 +21,24 @@ const FORMAT_OPTIONS: { value: CodegenFormat; label: string }[] = [
 
 const MAX_COLLAPSED_LINES = 40;
 
+/**
+ * Highlight colors route through the `--color-code-*` theme tokens in
+ * `src/index.css` (light values in `@theme`, dark overrides in `.dark`) so
+ * contrast holds on both panel themes; `plain`/`punctuation` reuse the
+ * standard text tokens. `className` is declared by the `Token` shape but no
+ * tokenizer rule emits it today (class values arrive as `string`) — mapped
+ * to the string color so it renders sensibly if a rule ever produces it.
+ */
 const TOKEN_CLASS: Record<Token["kind"], string> = {
-  keyword: "text-purple-400",
-  string: "text-green-400",
-  comment: "text-text-muted italic",
-  number: "text-orange-400",
+  keyword: "text-code-keyword",
+  string: "text-code-string",
+  comment: "text-code-comment italic",
+  number: "text-code-number",
   punctuation: "text-text-muted",
   plain: "text-text-primary",
-  property: "text-blue-400",
-  tag: "text-red-400",
-  className: "text-yellow-400",
+  property: "text-code-property",
+  tag: "text-code-tag",
+  className: "text-code-string",
 };
 
 function CopyButton({ code }: { code: string }) {

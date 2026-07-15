@@ -149,6 +149,15 @@
      editor's light/dark theme (Figma Present / Keynote convention). Defined
      once here (not overridden in .dark) so it's theme-independent. */
   --color-present-background: #0f0f0f;
+
+  /* Syntax-highlight colors (Dev-mode Code section) — light theme.
+     Tuned for readable contrast on the light panel surfaces. */
+  --color-code-keyword: #7c3aed;
+  --color-code-string: #15803d;
+  --color-code-comment: #6e7781;
+  --color-code-number: #c2410c;
+  --color-code-property: #1d4ed8;
+  --color-code-tag: #b91c1c;
 }
 
 .dark {
@@ -176,6 +185,14 @@
   --color-accent-bright: #0d99ff;
   --color-accent-light: #0d99ff;
   --color-accent-selection: rgba(13, 153, 255, 0.22);
+
+  /* Syntax-highlight colors (Dev-mode Code section) — dark theme. */
+  --color-code-keyword: #c084fc;
+  --color-code-string: #4ade80;
+  --color-code-comment: #8b949e;
+  --color-code-number: #fb923c;
+  --color-code-property: #60a5fa;
+  --color-code-tag: #f87171;
 }
 
 html.disable-theme-transitions *,
