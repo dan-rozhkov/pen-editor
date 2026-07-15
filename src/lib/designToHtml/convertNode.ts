@@ -398,6 +398,23 @@ function buildTextBodyHtml(node: TextNode): string {
   return parts.join("");
 }
 
+/**
+ * Deliberate degradation for text-on-a-path (`node.textPath`): CSS has no
+ * `<textPath>` equivalent (a per-glyph absolute-positioned span stack, or an
+ * embedded inline `<svg>` reusing `designToSvg`'s native `<textPath>`, would
+ * both be a separate follow-up task — out of scope here per the task spec).
+ * This function ignores `textPath` entirely and renders the node's plain
+ * `text` on a straight line via the normal layout/text styles below — it
+ * never reads `node.textPath`, so nothing here can crash on it. Unlike
+ * `designToSvg` (see `SvgConversionContext.warnings`), this HTML exporter's
+ * `ConversionContext` has no warning-collection plumbing (see the doc
+ * comment on `convertChildrenWithMasking` for the same limitation with
+ * masking) — surfacing a user-facing "flattened to plain text" warning here
+ * would require adding that plumbing and threading a return-type change
+ * through `convertDesignNodesToHtml` and its callers, which is out of scope
+ * for this pass. PPTX export (`@/lib/pptxExport/buildSlidesInput.ts`) has
+ * the same ignore-and-degrade behavior for the same reason.
+ */
 function convertTextNode(
   node: TextNode,
   parentLayout: LayoutProperties | undefined,

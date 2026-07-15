@@ -219,6 +219,13 @@ function applyTextTransform(text: string, transform: TextNode["textTransform"]):
   }
 }
 
+/**
+ * Text-on-a-path (`node.textPath`) has no OOXML/PPTX equivalent and is
+ * intentionally ignored here — the node degrades to its plain `text` on a
+ * straight line, the same simplification `designToHtml/convertNode.ts`'s
+ * `convertTextNode` makes (see that function's doc comment for why no
+ * warning is surfaced yet).
+ */
 function textShape(node: TextNode, fills: Paint[], absX: number, absY: number, ctx: WalkCtx): TextShapeInput {
   const transformed = applyTextTransform(node.text ?? "", node.textTransform);
   const align: ParagraphInput["align"] =

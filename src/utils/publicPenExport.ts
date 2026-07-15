@@ -10,6 +10,7 @@ import type {
 } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
 import { getEffects, getFills } from "@/utils/fillUtils";
+import { anchorsToSVGPath } from "@/utils/pathAnchors";
 
 type PenTheme = Record<string, string>;
 type PenSize = number | "fill_container" | "fit_content";
@@ -168,6 +169,19 @@ interface PenTextNode extends PenBaseNode {
   textAlignVertical?: "top" | "middle" | "bottom";
   lineHeight?: number;
   letterSpacing?: number;
+  /**
+   * Text-on-a-path (mirrors `TextNode.textPath` in `@/types/scene`). This
+   * hand-written exporter has its own schema (`PenTextNode`) separate from
+   * the internal `SceneNode` shape, so — unlike `serializeDocument`'s bare
+   * `JSON.stringify` round-trip, which carries `textPath` for free — it must
+   * be mapped explicitly or a public-export consumer would silently see
+   * straight text. `path` is the same SVG `d` string convention as
+   * `PenPathNode.geometry` (built via `anchorsToSVGPath`).
+   */
+  path?: string;
+  pathStartOffset?: number;
+  pathSide?: "left" | "right";
+  pathFlip?: boolean;
 }
 
 type PenNode = PenFrameNode | PenRectangleNode | PenEllipseNode | PenPathNode | PenTextNode;
@@ -520,6 +534,7 @@ function mapTextGrowth(mode: TextNode["textWidthMode"]): PenTextNode["textGrowth
 function exportTextNode(node: TextNode, context: ExportContext, parentUsesLayout: boolean): PenTextNode {
   const base = exportNodeBase(node, context, parentUsesLayout);
   const textGrowth = mapTextGrowth(node.textWidthMode);
+  const tp = node.textPath;
 
   return {
     ...base,
@@ -536,6 +551,14 @@ function exportTextNode(node: TextNode, context: ExportContext, parentUsesLayout
     ...(node.textAlignVertical ? { textAlignVertical: node.textAlignVertical } : {}),
     ...(node.lineHeight != null ? { lineHeight: node.lineHeight } : {}),
     ...(node.letterSpacing != null ? { letterSpacing: node.letterSpacing } : {}),
+    ...(tp
+      ? {
+          path: anchorsToSVGPath(tp.points, tp.closed ?? false),
+          pathStartOffset: tp.startOffset,
+          pathSide: tp.side,
+          ...(tp.flip ? { pathFlip: true } : {}),
+        }
+      : {}),
   };
 }
 
