@@ -1,0 +1,29 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildReactCode > (a) generates an inline-style component for a frame with rect/text/image-fill children 1`] = `
+"export function Card() {
+  return (
+    <div style={{ boxSizing: "border-box", display: "flex", flexDirection: "column", gap: "8px", padding: "16px", width: "300px", height: "200px" }}>
+      {/* Title */}
+      <div style={{ boxSizing: "border-box", flexShrink: "0", width: "120px", height: "24px", fontSize: "16px", fontWeight: "700" }}>{"Hello & <world>"}</div>
+      {/* Avatar */}
+      <img src="" style={{ boxSizing: "border-box", flexShrink: "0", width: "40px", height: "40px", borderRadius: "20px" }} alt={"Avatar"} />
+    </div>
+  );
+}
+"
+`;
+
+exports[`buildReactCode > (b) generates a Tailwind-className component for the same tree 1`] = `
+"export function Card() {
+  return (
+    <div className="box-border flex flex-col gap-2 p-4 w-75 h-50">
+      {/* Title */}
+      <div className="box-border shrink-0 w-30 h-6 text-base font-bold">{"Hello & <world>"}</div>
+      {/* Avatar */}
+      <img src="" className="box-border shrink-0 w-10 h-10 rounded-[20px]" alt={"Avatar"} />
+    </div>
+  );
+}
+"
+`;
