@@ -76,7 +76,21 @@ export interface FigTextData {
 }
 
 export interface FigEffect {
-  type?: 'INNER_SHADOW' | 'DROP_SHADOW' | 'FOREGROUND_BLUR' | 'BACKGROUND_BLUR'
+  // Full EffectType enum of a captured payload (fig-kiwi v106). Figma names
+  // layer blur FOREGROUND_BLUR (LAYER_BLUR is the public plugin-API name only).
+  // Only the shadows and blurs have an editor equivalent; the rest are listed
+  // so a `switch` over this union stays honest about what can arrive.
+  type?:
+    | 'INNER_SHADOW'
+    | 'DROP_SHADOW'
+    | 'FOREGROUND_BLUR'
+    | 'BACKGROUND_BLUR'
+    | 'REPEAT'
+    | 'SYMMETRY'
+    | 'GRAIN'
+    | 'NOISE'
+    | 'GLASS'
+    | 'CUSTOM'
   color?: FigColor
   offset?: FigVector
   radius?: number

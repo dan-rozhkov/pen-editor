@@ -1,7 +1,7 @@
 // Shared node properties: position/size decomposition, fills, strokes,
 // effects and corner radii applied to every converted node.
 
-import { generateId, type Paint, type PerCornerRadius, type ShadowEffect } from '@/types/scene'
+import { generateId, type Effect, type Paint, type PerCornerRadius, type ShadowEffect } from '@/types/scene'
 import type { FigEffect, FigNodeChange } from '../figTypes'
 import { colorToHex, colorToHex8, convertPaints, topPaint } from './paints'
 import type { ConvertContext, MutableBase, StrokeStyle } from './types'
@@ -127,20 +127,45 @@ function toShadowEffect(effect: FigEffect): ShadowEffect | null {
   }
 }
 
+/**
+ * Map one Figma effect into the editor's effect (null = no equivalent).
+ *
+ * Figma's `EffectType` names layer blur FOREGROUND_BLUR, and carries leftover
+ * `color`/`offset`/`spread` on blur effects, so the kind must be decided by
+ * `type` alone. Effect kinds newer Figma versions added (REPEAT, GRAIN, NOISE,
+ * GLASS, CUSTOM, …) have no editor equivalent and are skipped rather than
+ * mis-imported. Progressive blur (`blurOpType: PROGRESSIVE`) degrades to a
+ * uniform blur of the same radius — the editor has no gradient-blur ramp.
+ */
+function toEffect(effect: FigEffect): Effect | null {
+  switch (effect.type) {
+    case 'DROP_SHADOW':
+    case 'INNER_SHADOW':
+      return toShadowEffect(effect)
+    case 'FOREGROUND_BLUR':
+      return { type: 'blur', radius: effect.radius ?? 0 }
+    case 'BACKGROUND_BLUR':
+      return { type: 'background-blur', radius: effect.radius ?? 0 }
+    default:
+      return null
+  }
+}
+
 function applyEffects(base: MutableBase, change: FigNodeChange): void {
-  const shadows = (change.effects ?? [])
-    .filter((e) => e.visible !== false && (e.type === 'DROP_SHADOW' || e.type === 'INNER_SHADOW'))
-    .map(toShadowEffect)
-    .filter((s): s is ShadowEffect => s !== null)
-  if (shadows.length === 0) return
-  if (shadows.length === 1) {
-    // Single shadow keeps the legacy `effect` field (no id) for back-compat.
-    base.effect = shadows[0]
+  const effects = (change.effects ?? [])
+    .filter((e) => e.visible !== false)
+    .map(toEffect)
+    .filter((e): e is Effect => e !== null)
+  if (effects.length === 0) return
+  if (effects.length === 1 && effects[0].type === 'shadow') {
+    // A lone shadow keeps the legacy `effect` field (no id) for back-compat.
+    // Blurs have no legacy field, so they always take the stack path below.
+    base.effect = effects[0]
     return
   }
-  // Multiple shadows: the legacy single field can't represent the stack, so
-  // `effects` becomes the source of truth. Ids back UI list keys/reordering.
-  base.effects = shadows.map((shadow) => ({ ...shadow, id: generateId() }))
+  // The legacy single field can't represent a stack (or a blur), so `effects`
+  // becomes the source of truth. Ids back UI list keys/reordering.
+  base.effects = effects.map((effect) => ({ ...effect, id: generateId() }))
 }
 
 export function perCornerRadius(change: FigNodeChange): PerCornerRadius | undefined {

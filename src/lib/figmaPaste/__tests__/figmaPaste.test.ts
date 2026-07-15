@@ -929,6 +929,109 @@ describe('convertFigmaClipboardHtml', () => {
     expect(rect.fills!.map((p) => (p.type === 'solid' ? p.color : p.type))).toEqual(['#ff0000', '#0000ff'])
   })
 
+  // Shapes below mirror a captured real payload (fig-kiwi v106): Figma's
+  // `EffectType` enum names layer blur FOREGROUND_BLUR, and ships leftover
+  // `color`/`offset`/`spread` on blur effects — so a blur must be recognised by
+  // `type` alone and must never be read as a shadow.
+  it('maps a layer blur to a blur effect', async () => {
+    const html = clipboardWith([
+      onCanvas({
+        guid: guid(2),
+        type: 'RECTANGLE',
+        size: { x: 10, y: 10 },
+        transform: identityTransform(),
+        effects: [
+          {
+            type: 'FOREGROUND_BLUR',
+            visible: true,
+            radius: 40,
+            offset: { x: 0, y: 4 },
+            spread: 0,
+            color: { r: 0, g: 0, b: 0, a: 0.25 },
+          },
+        ],
+      }),
+    ])
+
+    const rect = (await convertFigmaClipboardHtml(html))!.nodes[0]
+    expect(rect.effects).toHaveLength(1)
+    expect(rect.effects![0]).toMatchObject({ type: 'blur', radius: 40 })
+    expect(rect.effects![0].id).toBeTruthy()
+    // A blur can't live in the legacy single-shadow field
+    expect(rect.effect).toBeUndefined()
+  })
+
+  it('maps a background blur to a background-blur effect', async () => {
+    const html = clipboardWith([
+      onCanvas({
+        guid: guid(2),
+        type: 'RECTANGLE',
+        size: { x: 10, y: 10 },
+        transform: identityTransform(),
+        effects: [{ type: 'BACKGROUND_BLUR', visible: true, radius: 12 }],
+      }),
+    ])
+
+    const rect = (await convertFigmaClipboardHtml(html))!.nodes[0]
+    expect(rect.effects).toHaveLength(1)
+    expect(rect.effects![0]).toMatchObject({ type: 'background-blur', radius: 12 })
+  })
+
+  it('keeps a shadow and a layer blur together as an effect stack', async () => {
+    const html = clipboardWith([
+      onCanvas({
+        guid: guid(2),
+        type: 'RECTANGLE',
+        size: { x: 10, y: 10 },
+        transform: identityTransform(),
+        effects: [
+          { type: 'DROP_SHADOW', visible: true, color: { r: 0, g: 0, b: 0, a: 0.25 }, offset: { x: 0, y: 4 }, radius: 8, spread: 2 },
+          { type: 'FOREGROUND_BLUR', visible: true, radius: 6 },
+        ],
+      }),
+    ])
+
+    const rect = (await convertFigmaClipboardHtml(html))!.nodes[0]
+    expect(rect.effects).toHaveLength(2)
+    expect(rect.effects![0]).toMatchObject({ type: 'shadow', shadowType: 'outer' })
+    expect(rect.effects![1]).toMatchObject({ type: 'blur', radius: 6 })
+    // The stack is the source of truth — the legacy field must not double it up
+    expect(rect.effect).toBeUndefined()
+  })
+
+  it('drops hidden blur effects', async () => {
+    const html = clipboardWith([
+      onCanvas({
+        guid: guid(2),
+        type: 'RECTANGLE',
+        size: { x: 10, y: 10 },
+        transform: identityTransform(),
+        effects: [{ type: 'FOREGROUND_BLUR', visible: false, radius: 40 }],
+      }),
+    ])
+
+    const rect = (await convertFigmaClipboardHtml(html))!.nodes[0]
+    expect(rect.effects).toBeUndefined()
+    expect(rect.effect).toBeUndefined()
+  })
+
+  it('skips effect kinds the editor has no equivalent for', async () => {
+    const html = clipboardWith([
+      onCanvas({
+        guid: guid(2),
+        type: 'RECTANGLE',
+        size: { x: 10, y: 10 },
+        transform: identityTransform(),
+        // NOISE/GLASS/GRAIN etc. exist in newer fig-kiwi schemas
+        effects: [{ type: 'NOISE', visible: true, radius: 4 }],
+      }),
+    ])
+
+    const rect = (await convertFigmaClipboardHtml(html))!.nodes[0]
+    expect(rect.effects).toBeUndefined()
+    expect(rect.effect).toBeUndefined()
+  })
+
   it('preserves multiple shadow effects as an effect stack', async () => {
     const html = clipboardWith([
       onCanvas({

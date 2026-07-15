@@ -47,9 +47,23 @@ enum ImageScaleMode {
   TILE = 4;
 }
 
+// Member NAMES mirror the EffectType enum of a captured real payload (fig-kiwi
+// v106) — Figma names layer blur FOREGROUND_BLUR. The numbering is this
+// fixture's own (kept 1-based like the other enums here, unlike Figma's 0-based
+// schema); it never has to match, because a payload always carries the schema it
+// was encoded with. The trailing kinds have no editor equivalent and exist here
+// so tests can prove they're skipped, not crashed on.
 enum EffectType {
   INNER_SHADOW = 1;
   DROP_SHADOW = 2;
+  FOREGROUND_BLUR = 3;
+  BACKGROUND_BLUR = 4;
+  REPEAT = 5;
+  SYMMETRY = 6;
+  GRAIN = 7;
+  NOISE = 8;
+  GLASS = 9;
+  CUSTOM = 10;
 }
 
 enum WindingRule {
