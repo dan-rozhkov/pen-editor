@@ -20,6 +20,7 @@ import { syncTextDimensions } from "@/store/sceneStore/helpers/textSync";
 import { resolveVariableReference } from "@/lib/tools/variableResolutionUtils";
 import {
   clearLegacyFillProps,
+  clearLegacyStrokeProps,
   createDefaultVideoPlayback,
   createGradientPaint,
   createImagePaint,
@@ -425,6 +426,26 @@ export function mapNodeData(
         const paints = normalizeFills(value, options?.theme, nodeTypeForFills, warnings);
         result.fills = paints;
         Object.assign(result, clearLegacyFillProps());
+        break;
+      }
+
+      // Figma-style stroke paint stack (bottom-to-top), analogous to `fills`
+      // above but restricted to solid/gradient — image/pattern/video paints
+      // have no meaning on a stroke (Figma doesn't support them either).
+      // Geometry (strokeWidth/strokeAlign/strokeWidthPerSide) is set
+      // separately (see `stroke`/`strokeThickness` cases) and stays on the
+      // node regardless of which paint model is used.
+      case "strokes": {
+        const rawPaints = normalizeFills(value, options?.theme, nodeTypeForFills, warnings);
+        const strokePaints = rawPaints.filter((p) => {
+          if (p.type === "solid" || p.type === "gradient") return true;
+          warnings.push(
+            `Stroke paints only support "solid"/"gradient" (not "${p.type}") — the paint was dropped.`,
+          );
+          return false;
+        });
+        result.strokes = strokePaints;
+        Object.assign(result, clearLegacyStrokeProps());
         break;
       }
 

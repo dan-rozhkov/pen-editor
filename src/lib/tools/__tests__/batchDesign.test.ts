@@ -638,6 +638,71 @@ describe("batch_design", () => {
     });
   });
 
+  describe("strokes (paint stack)", () => {
+    it("creates a node with a gradient stroke, clearing legacy stroke fields", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'r=I(document, {type: "rectangle", name: "GradientBorder", width: 100, height: 40, strokes: [{type: "gradient", gradient: {type: "linear", stops: [{color: "#7c3aed", position: 0}, {color: "#06b6d4", position: 1}], startX: 0, startY: 0, endX: 1, endY: 0}}], strokeThickness: 2, strokeAlign: "inside"})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const node = sceneState().nodesById[result.createdNodes[0].id];
+      const strokes = node.strokes as Paint[];
+      expect(strokes).toHaveLength(1);
+      expect(strokes[0]).toMatchObject({ type: "gradient" });
+      expect(typeof strokes[0].id).toBe("string");
+      // Geometry stays on the node regardless of the paint model.
+      expect(node.strokeWidth).toBe(2);
+      expect(node.strokeAlign).toBe("inside");
+      // legacy single-stroke fields are cleared when strokes is the source of truth
+      expect(node.stroke).toBeUndefined();
+    });
+
+    it("creates a node with a multi-paint stroke stack (solid + gradient)", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'r=I(document, {type: "rectangle", name: "Layered", width: 10, height: 10, strokes: [{type: "solid", color: "#000000"}, {type: "solid", color: "#ffff00", opacity: 0.6}], strokeThickness: 4})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const strokes = sceneState().nodesById[result.createdNodes[0].id].strokes as Paint[];
+      expect(strokes).toHaveLength(2);
+      expect(strokes[0]).toMatchObject({ type: "solid", color: "#000000" });
+      expect(strokes[1]).toMatchObject({ type: "solid", color: "#ffff00", opacity: 0.6 });
+      expect(strokes[0].id).not.toBe(strokes[1].id);
+    });
+
+    it("drops an image stroke paint (only solid/gradient are supported on a stroke)", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'r=I(document, {type: "rectangle", name: "Bad", width: 10, height: 10, strokes: [{type: "solid", color: "#ff0000"}, {type: "image", url: "https://x/a.png", mode: "fill"}]})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const strokes = sceneState().nodesById[result.createdNodes[0].id].strokes as Paint[];
+      expect(strokes).toHaveLength(1);
+      expect(strokes[0]).toMatchObject({ type: "solid", color: "#ff0000" });
+    });
+
+    it("U() replaces the stroke stack and clears the legacy stroke field", async () => {
+      await batchDesign({ operations: 'U(rect1, {stroke: "#ff0000", strokeThickness: 2})' });
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'U(rect1, {strokes: [{type: "gradient", gradient: {type: "radial", stops: [{color: "#fff", position: 0}, {color: "#000", position: 1}], startX: 0.5, startY: 0.5, endX: 0.5, endY: 0.5, endRadius: 0.5}}]})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const node = sceneState().nodesById["rect1"] as Record<string, unknown>;
+      const strokes = node.strokes as Paint[];
+      expect(strokes[0]).toMatchObject({ type: "gradient" });
+      expect(node.stroke).toBeUndefined();
+    });
+  });
+
   describe("update (U)", () => {
     it("updates properties of an existing node", async () => {
       const result = JSON.parse(
