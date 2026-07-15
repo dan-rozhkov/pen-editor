@@ -48,7 +48,18 @@ function parseFigArchive(bytes: Uint8Array): FigArchive {
   return { version, chunks }
 }
 
-function decompressChunk(chunk: Uint8Array): Uint8Array {
+const ZSTD_FRAME_MAGIC = [0x28, 0xb5, 0x2f, 0xfd] as const
+
+function isZstdFrame(chunk: Uint8Array): boolean {
+  return ZSTD_FRAME_MAGIC.every((byte, index) => chunk[index] === byte)
+}
+
+export function decompressFigmaChunk(chunk: Uint8Array): Uint8Array {
+  // fflate's inflateSync may accept a zstd frame without throwing and return
+  // garbage, so exception-based format detection is not reliable. Modern
+  // Figma archives commonly mix a deflated schema with a zstd data chunk.
+  if (isZstdFrame(chunk)) return zstdDecompress(chunk)
+
   try {
     return inflateSync(chunk)
   } catch (deflateError) {
@@ -85,8 +96,8 @@ export function parseFigmaClipboardHtml(html: string): FigPasteData {
   if (archive.chunks.length < 2) {
     throw new Error('Figma archive has fewer chunks than expected')
   }
-  const encodedSchema = decompressChunk(archive.chunks[0])
-  const encodedData = decompressChunk(archive.chunks[1])
+  const encodedSchema = decompressFigmaChunk(archive.chunks[0])
+  const encodedData = decompressFigmaChunk(archive.chunks[1])
   const schema = compileSchema(decodeBinarySchema(encodedSchema))
   const message = schema.decodeMessage(encodedData) as FigMessage
   return {

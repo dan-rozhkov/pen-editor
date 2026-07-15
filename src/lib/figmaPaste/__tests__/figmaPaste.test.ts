@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Graphics } from 'pixi.js'
-import { convertFigmaClipboardHtml, isFigmaClipboardHtml } from '..'
-import { calculateFrameLayout } from '@/utils/yogaLayout'
-import { decodePathCommandsBlob } from '../pathBlobs'
 import { applyStroke } from '@/pixi/renderers/fillStrokeHelpers'
-import type { FigNodeChange, FigTextData } from '../figTypes'
 import type { FlatSceneNode, FrameNode, GroupNode, PathNode, TextNode } from '@/types/scene'
+import { calculateFrameLayout } from '@/utils/yogaLayout'
+import { convertFigmaClipboardHtml, isFigmaClipboardHtml } from '..'
+import { decodePathCommandsBlob } from '../pathBlobs'
+import { decompressFigmaChunk } from '../parseFigmaClipboard'
+import type { FigNodeChange, FigTextData } from '../figTypes'
 import {
   buildFigmaClipboardHtml,
   encodePathCommandsBlob,
@@ -16,6 +17,11 @@ import {
 } from './figFixture'
 
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])
+
+const ZSTD_REGRESSION_BYTES = Uint8Array.from(
+  atob('KLUv/QRYqQAAZmlnbWEgenN0ZCByZWdyZXNzaW9uNckqww=='),
+  (char) => char.charCodeAt(0),
+)
 
 /** Wrap node changes in DOCUMENT → CANVAS the way Figma structures the payload. */
 function clipboardWith(
@@ -52,6 +58,13 @@ describe('isFigmaClipboardHtml', () => {
   it('rejects regular html', async () => {
     expect(isFigmaClipboardHtml('<div>hello</div>')).toBe(false)
     expect(await convertFigmaClipboardHtml('<div>hello</div>')).toBeNull()
+  })
+})
+
+describe('Figma archive decompression', () => {
+  it('decodes zstd chunks by their frame magic instead of treating them as deflate', () => {
+    const decoded = decompressFigmaChunk(ZSTD_REGRESSION_BYTES)
+    expect(new TextDecoder().decode(decoded)).toBe('figma zstd regression')
   })
 })
 
