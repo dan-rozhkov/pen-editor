@@ -61,7 +61,7 @@ function CopyButton({ code }: { code: string }) {
       className="bg-surface-panel hover:bg-surface-panel"
       onClick={handleCopy}
     >
-      {copied ? <CheckIcon size={14} weight="bold" /> : <CopyIcon size={14} />}
+      {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
     </IconButton>
   );
 }
@@ -125,12 +125,12 @@ const REACT_STYLE_OPTIONS: { value: CodegenReactStyle; label: string }[] = [
   { value: "tailwind", label: "Tailwind" },
 ];
 
-export function CodeSection({ selectedIds }: { selectedIds: string[] }) {
 const reactStyleToggleGroupClass =
   "h-6 rounded-md bg-secondary gap-px [&>[data-slot]]:rounded-[5px]! [&>[data-slot]]:border [&>[data-slot]~[data-slot]]:border-l";
 const activeReactStyleToggleClass =
   "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel";
 
+export function CodeSection({ selectedIds }: { selectedIds: string[] }) {
   const nodesById = useSceneStore((s) => s.nodesById);
   const childrenById = useSceneStore((s) => s.childrenById);
   const units = useDevModeStore((s) => s.units);
@@ -181,8 +181,8 @@ const activeReactStyleToggleClass =
                 type="button"
                 variant={reactStyle === opt.value ? "default" : "secondary"}
                 size="sm"
-                onClick={() => setReactStyle(opt.value)}
                 className={reactStyle === opt.value ? activeReactStyleToggleClass : undefined}
+                onClick={() => setReactStyle(opt.value)}
               >
                 {opt.label}
               </Button>
@@ -198,7 +198,6 @@ const activeReactStyleToggleClass =
       )}
 
       <CodeBlock code={result.code} lang={lang} />
-
     </div>
   );
 }

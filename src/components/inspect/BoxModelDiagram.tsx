@@ -32,9 +32,9 @@ export function BoxModelDiagram({
         className="relative h-[200px] overflow-hidden rounded-lg bg-surface-hover/30 p-6"
       >
         <div className="relative h-full rounded border border-border-default bg-surface-panel">
-          <span className="absolute left-1/2 top-2 -translate-x-1/2 text-xs text-text-muted">Border</span>
+          <span className="absolute left-8 top-2 -translate-x-1/2 text-xs text-text-muted">Border</span>
 
-          <span className="absolute left-6 top-2 text-xs text-text-muted">
+          <span className="absolute left-1/2 top-2 text-xs text-text-muted">
             {fmtBorder(box.borderTop)}
           </span>
           <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-text-muted">
