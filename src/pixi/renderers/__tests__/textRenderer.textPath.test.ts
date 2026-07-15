@@ -97,6 +97,14 @@ describe("createTextContainer — text-on-path", () => {
     const first = root.children.find((c) => c.label === "text-path-glyph-0")!;
     expect(Math.abs(first.rotation)).toBeCloseTo(Math.PI, 5);
   });
+
+  it("renders every glyph with flip:true and the default startOffset:0 (regression: flip used to remap startOffset -> 1, pushing the whole string past the path's end so only one glyph — or none — drew)", () => {
+    const flipped = pathTextNode({ textPath: { ...pathTextNode().textPath!, flip: true, startOffset: 0 } });
+    const container = createTextContainer(flipped);
+    const root = pathRoot(container)!;
+    const glyphs = root.children.filter((c) => c.label?.startsWith("text-path-glyph"));
+    expect(glyphs).toHaveLength("Hello".length);
+  });
 });
 
 describe("updateTextContainer — text-on-path diffing", () => {

@@ -76,3 +76,33 @@ describe("offsetFromWorldPoint", () => {
     expect(offsetFromWorldPoint(tp, { x: 0, y: 0 }, 999, 999)).toBe(0.5);
   });
 });
+
+describe("flip", () => {
+  // `flip` reverses the points the handle walks (via `resolveTextPathDirection`)
+  // but leaves `startOffset` itself unchanged, so `0` is always "the start of
+  // wherever the text currently reads from" — see `textPathLayout.ts`.
+  const FLIPPED: TextPath = { ...STRAIGHT, flip: true };
+
+  it("places startOffset=0's handle at the path's END (100,0) — the visual start of the reversed/flipped text", () => {
+    const pos = getStartOffsetHandleWorldPos(FLIPPED, { x: 0, y: 0 });
+    expect(pos).toEqual({ x: 100, y: 0 });
+  });
+
+  it("moves the handle monotonically opposite to the unflipped direction as startOffset increases", () => {
+    const at0 = getStartOffsetHandleWorldPos(FLIPPED, { x: 0, y: 0 })!;
+    const at50 = getStartOffsetHandleWorldPos({ ...FLIPPED, startOffset: 0.5 }, { x: 0, y: 0 })!;
+    const at100 = getStartOffsetHandleWorldPos({ ...FLIPPED, startOffset: 1 }, { x: 0, y: 0 })!;
+    expect(at0.x).toBeCloseTo(100, 5);
+    expect(at50.x).toBeCloseTo(50, 5);
+    expect(at100.x).toBeCloseTo(0, 5);
+  });
+
+  it("offsetFromWorldPoint round-trips with getStartOffsetHandleWorldPos under flip (drag lands the handle under the cursor)", () => {
+    for (const offset of [0, 0.25, 0.5, 0.75, 1]) {
+      const tp = { ...FLIPPED, startOffset: offset };
+      const handlePos = getStartOffsetHandleWorldPos(tp, { x: 0, y: 0 })!;
+      const roundTripped = offsetFromWorldPoint(tp, { x: 0, y: 0 }, handlePos.x, handlePos.y);
+      expect(roundTripped).toBeCloseTo(offset, 5);
+    }
+  });
+});

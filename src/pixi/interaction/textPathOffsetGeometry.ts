@@ -1,5 +1,6 @@
 import type { TextNode } from "@/types/scene";
 import { preparePath } from "@/utils/pathMeasure";
+import { resolveTextPathDirection } from "@/utils/textPathLayout";
 
 /**
  * Pure geometry for the on-canvas `startOffset` drag handle (the "blue
@@ -13,6 +14,13 @@ import { preparePath } from "@/utils/pathMeasure";
  * `anchorToWorld`, which has to account for a `PathNode`'s possible
  * non-uniform scale — the handle's world position is simply the node's
  * absolute position plus the local point, no scaling involved.
+ *
+ * Both functions below route the raw `textPath` through
+ * `resolveTextPathDirection` (`@/utils/textPathLayout`) — the single source
+ * of truth for what `flip` means — rather than reading `tp.points`/`closed`
+ * directly, so the handle sits at the visual start of the text and drags
+ * monotonically along it in both flip states, matching the glyph layout the
+ * Pixi renderer and SVG exporter produce from the same helper.
  */
 
 export type TextPath = NonNullable<TextNode["textPath"]>;
@@ -23,8 +31,9 @@ export function getStartOffsetHandleWorldPos(
   absPos: { x: number; y: number },
 ): { x: number; y: number } | null {
   if (tp.points.length === 0) return null;
-  const prepared = preparePath(tp.points, tp.closed ?? false);
-  const clampedOffset = Math.max(0, Math.min(1, tp.startOffset ?? 0));
+  const { points, closed, startOffset } = resolveTextPathDirection(tp);
+  const prepared = preparePath(points, closed);
+  const clampedOffset = Math.max(0, Math.min(1, startOffset));
   const point = prepared.getPointAtLength(clampedOffset * prepared.totalLength);
   return { x: absPos.x + point.x, y: absPos.y + point.y };
 }
@@ -62,11 +71,12 @@ export function offsetFromWorldPoint(
   // see `@/utils/pathMeasure`'s doc comment on why a hot caller must hold a
   // single `PreparedPath` rather than go through the one-shot
   // `getTotalLength`/`getClosestPointOnPath` wrappers per probe.
-  const prepared = preparePath(tp.points, tp.closed ?? false);
-  if (prepared.totalLength <= 0) return Math.max(0, Math.min(1, tp.startOffset ?? 0));
+  const { points, closed, startOffset } = resolveTextPathDirection(tp);
+  const prepared = preparePath(points, closed);
+  if (prepared.totalLength <= 0) return Math.max(0, Math.min(1, startOffset));
   const localX = worldX - absPos.x;
   const localY = worldY - absPos.y;
   const closest = prepared.getClosestPoint(localX, localY);
-  if (!closest) return Math.max(0, Math.min(1, tp.startOffset ?? 0));
+  if (!closest) return Math.max(0, Math.min(1, startOffset));
   return Math.max(0, Math.min(1, closest.length / prepared.totalLength));
 }

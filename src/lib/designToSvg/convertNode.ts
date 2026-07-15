@@ -283,15 +283,19 @@ function convertEllipseToSvg(node: EllipseNode, ctx: SvgConversionContext, isRoo
  * - `flip`: reverses which direction glyphs read along the curve. There's no
  *   "reverse textPath direction" attribute, so the `<path>` itself is
  *   authored backward instead — reversing the path also flips its tangent
- *   direction everywhere. `startOffset` is remapped (`1 - startOffset`) so
- *   the glyphs still start from the same point on the curve the user picked
- *   before the path was reversed. The reverse+remap is computed by
- *   `resolveTextPathDirection` (`@/utils/textPathLayout`), the same helper
- *   the Pixi renderer's per-glyph layout uses — a single definition of
- *   `flip` shared by both, so they can't drift the way they did before (the
- *   Pixi side used to just add PI to each glyph's angle without reversing
- *   the advance order, which mirrors the text in place rather than flipping
- *   its reading direction).
+ *   direction everywhere. `startOffset` is passed through unchanged (it's a
+ *   fraction along the *effective*, post-flip direction of travel, so `0`
+ *   always means "the start of wherever the text currently reads from").
+ *   The reverse is computed by `resolveTextPathDirection`
+ *   (`@/utils/textPathLayout`), the same helper the Pixi renderer's
+ *   per-glyph layout uses — a single definition of `flip` shared by both, so
+ *   they can't drift the way they did before (the Pixi side used to just add
+ *   PI to each glyph's angle without reversing the advance order, which
+ *   mirrors the text in place rather than flipping its reading direction;
+ *   an earlier version of this exporter separately remapped
+ *   `startOffset -> 1 - startOffset`, which combined with a default
+ *   `startOffset: 0` placed the entire string's start at the very end of the
+ *   path, rendering at most one glyph before overflow cut the rest).
  */
 function convertTextOnPathToSvg(
   node: TextNode,

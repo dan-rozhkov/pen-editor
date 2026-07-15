@@ -51,7 +51,12 @@ describe("convertDesignNodesToSvg — text-on-path", () => {
     expect(svg).toContain('dominant-baseline="hanging"');
   });
 
-  it("reverses the authored path direction and remaps startOffset when flip is set", () => {
+  it("reverses the authored path direction but leaves startOffset unchanged when flip is set", () => {
+    // `startOffset` is a fraction along the effective (post-flip) direction
+    // of travel, so it passes through as-is. An earlier version remapped it
+    // to `1 - startOffset`, which combined with the default `startOffset: 0`
+    // placed the whole string's start at the path's very end, rendering at
+    // most one glyph before overflow cut the rest.
     const nodesById: Record<string, FlatSceneNode> = {
       text1: pathTextNode({
         textPath: { ...pathTextNode().textPath!, startOffset: 0.25, flip: true },
@@ -60,10 +65,20 @@ describe("convertDesignNodesToSvg — text-on-path", () => {
     const { svg } = convertDesignNodesToSvg("text1", nodesById, {});
     // Reversed straight line: M200,0 L0,0
     expect(svg).toMatch(/<path id="pen-svg-textpath-\d+" d="M200,0 L0,0" fill="none"\/>/);
-    // 1 - 0.25 = 0.75 -> 75%
-    expect(svg).toContain('startOffset="75.000%"');
+    expect(svg).toContain('startOffset="25.000%"');
     // flip also swaps the effective side (left -> right here).
     expect(svg).toContain('dominant-baseline="hanging"');
+  });
+
+  it("renders the full string with flip:true and the default startOffset:0 (regression: the old 1 - startOffset remap pushed the whole string past the path's end)", () => {
+    const nodesById: Record<string, FlatSceneNode> = {
+      text1: pathTextNode({
+        textPath: { ...pathTextNode().textPath!, startOffset: 0, flip: true },
+      }),
+    };
+    const { svg } = convertDesignNodesToSvg("text1", nodesById, {});
+    expect(svg).toContain('startOffset="0.000%"');
+    expect(svg).toContain(">Hello<");
   });
 
   it("does not wrap glyphs in <tspan> for path text", () => {
@@ -76,7 +91,7 @@ describe("convertDesignNodesToSvg — text-on-path", () => {
   // headline use case for text-on-a-path (badges, stamps) — flip must
   // reverse a closed contour's authored `Z`-closed path correctly, not just
   // an open 2-point line.
-  it("reverses a closed (circular) path's direction and remaps startOffset when flip is set", () => {
+  it("reverses a closed (circular) path's direction but leaves startOffset unchanged when flip is set", () => {
     const r = 100;
     const k = 0.5522847498;
     const circlePoints = [
@@ -93,7 +108,6 @@ describe("convertDesignNodesToSvg — text-on-path", () => {
     // Reversed anchor order (point 1 first, point 0 second) with
     // handleIn/handleOut swapped, still closed with "Z".
     expect(svg).toMatch(/<path id="pen-svg-textpath-\d+" d="M0,100 C[^"]+ Z" fill="none"\/>/);
-    // 1 - 0.2 = 0.8 -> 80%
-    expect(svg).toContain('startOffset="80.000%"');
+    expect(svg).toContain('startOffset="20.000%"');
   });
 });

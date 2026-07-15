@@ -27,21 +27,32 @@ export interface TextPathLayoutResult {
 
 /**
  * Single source of truth for what `flip` means, shared by the Pixi renderer
- * (via `layoutTextOnPath` below) and the SVG exporter
- * (`@/lib/designToSvg/convertNode.ts`'s `convertTextOnPathToSvg`) — the two
- * previously derived `flip` independently and drifted: the renderer only
- * rotated each glyph by PI while still advancing in the original direction,
- * which reverses each glyph in place without reversing reading order (wrong
- * — mirrors instead of flipping); the SVG exporter reversed the authored path
- * itself (`reverseAnchors`) and remapped `startOffset -> 1 - startOffset`,
- * which flips both the advance order and the tangent together (matches
- * Figma's "Flip text orientation").
+ * (via `layoutTextOnPath` below), the SVG exporter
+ * (`@/lib/designToSvg/convertNode.ts`'s `convertTextOnPathToSvg`), and the
+ * on-canvas start-offset handle (`@/pixi/interaction/textPathOffsetGeometry.ts`)
+ * — all three must agree on which points the text travels over and what
+ * `startOffset` means relative to that travel, or they drift the way they
+ * did before (see history below).
  *
  * Reversing the anchor list is sufficient to flip the tangent too: walking a
  * cubic backward negates its derivative at every shared point, so
  * `getPointAtLength` on the reversed points naturally returns `angle + PI`
  * relative to the forward path — no separate `+ Math.PI` adjustment needed
  * once the direction itself is reversed.
+ *
+ * `startOffset` is passed through unchanged — it is a fraction along the
+ * *effective* (post-flip) direction of travel, so `0` always means "the
+ * start of wherever the text currently reads from" in both flip states.
+ * An earlier version remapped it to `1 - startOffset` on the theory that the
+ * glyphs should still start from the same point on the curve the user picked
+ * before the path was reversed; that's self-defeating, because anchoring at
+ * the *original* start point while travelling in the *reversed* direction
+ * means travelling immediately off the path — with the default
+ * `startOffset: 0`, `1 - 0 = 1` places the entire string's start at the very
+ * end of the path, so only one glyph (if that) ever fits before overflow
+ * cuts the rest. Passing `startOffset` through keeps `flip` doing only what
+ * its name says (reverse the direction of travel / which side the text
+ * sits on) without also silently relocating the start point.
  */
 export function resolveTextPathDirection(
   tp: NonNullable<TextNode['textPath']>,
@@ -49,7 +60,7 @@ export function resolveTextPathDirection(
   const closed = tp.closed ?? false
   const startOffset = tp.startOffset ?? 0
   if (!tp.flip) return { points: tp.points, closed, startOffset }
-  return { points: reverseAnchors(tp.points), closed, startOffset: 1 - startOffset }
+  return { points: reverseAnchors(tp.points), closed, startOffset }
 }
 
 /**

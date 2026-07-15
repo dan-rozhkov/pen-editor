@@ -46,7 +46,13 @@ describe("resolveTextPathDirection", () => {
     expect(result.startOffset).toBe(0.4);
   });
 
-  it("reverses the points and remaps startOffset -> 1 - startOffset when flip is set", () => {
+  it("reverses the points but leaves startOffset unchanged when flip is set", () => {
+    // `startOffset` is a fraction along the *effective* (post-flip) direction
+    // of travel, so it passes through untouched — remapping it to
+    // `1 - startOffset` (an earlier, wrong version of this helper) combined
+    // with the default `startOffset: 0` would place the entire string's
+    // start at the very end of the path, rendering at most one glyph before
+    // overflow cut the rest (see `layoutTextOnPath`'s regression test below).
     const tp = {
       points: [{ x: 0, y: 0 }, { x: 100, y: 0 }],
       closed: false,
@@ -59,7 +65,7 @@ describe("resolveTextPathDirection", () => {
       { x: 100, y: 0, handleIn: null, handleOut: null },
       { x: 0, y: 0, handleIn: null, handleOut: null },
     ]);
-    expect(result.startOffset).toBeCloseTo(0.75, 10);
+    expect(result.startOffset).toBeCloseTo(0.25, 10);
   });
 });
 
@@ -108,15 +114,15 @@ describe("layoutTextOnPath — flip (finding 1 regression)", () => {
     expect(layout.glyphs).toHaveLength(2);
 
     // Ground truth: replay exactly what a browser's `<textPath>` does with
-    // the SVG exporter's authored-backward path (`reverseAnchors`) and
-    // remapped `startOffset` — walk the reversed contour forward from
-    // `(1 - startOffset) * totalLength`. Before the fix, `layoutTextOnPath`
+    // the SVG exporter's authored-backward path (`reverseAnchors`), with
+    // `startOffset` unchanged — walk the reversed contour forward from
+    // `startOffset * totalLength`. Before the fix, `layoutTextOnPath`
     // instead walked the ORIGINAL (unreversed) contour and only rotated
     // each glyph by PI in place, which does not match this at all for a
     // closed curve (the two would land on different points and diverge in
     // opposite rotational directions).
     const reversed = preparePath(reverseAnchors(CIRCLE_POINTS), true);
-    const startAdvance = (1 - tp.startOffset) * reversed.totalLength;
+    const startAdvance = tp.startOffset * reversed.totalLength;
     const expectedGlyph0 = reversed.getPointAtLength(startAdvance);
     const expectedGlyph1 = reversed.getPointAtLength(startAdvance + 8 /* "A"'s measured width */);
 
