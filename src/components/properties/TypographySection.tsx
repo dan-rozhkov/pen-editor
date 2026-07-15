@@ -66,6 +66,12 @@ import {
   withGroupSelection,
   type OpenTypeSelectGroup,
 } from "@/utils/openTypeFeatures";
+import { layoutTextOnPath } from "@/utils/textPathLayout";
+
+/** True when one or more trailing characters don't fit before the path's end (see `layoutTextOnPath`'s overflow policy doc comment). */
+function textPathOverflows(node: TextNode): boolean {
+  return layoutTextOnPath(node)?.overflow ?? false;
+}
 
 interface TypographySectionProps {
   node: TextNode;
@@ -1184,6 +1190,127 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
           step={1}
         />
       </PropertyRow>
+      {node.textPath && (
+        <div className="flex flex-col gap-1">
+          <div className="text-[10px] font-normal text-text-muted">
+            Path
+          </div>
+          <PropertyRow>
+            <NumberInput
+              label="Offset"
+              labelOutside={true}
+              value={Math.round((node.textPath.startOffset ?? 0) * 100)}
+              onChange={(v) =>
+                onUpdate({
+                  textPath: {
+                    ...node.textPath!,
+                    startOffset: Math.max(0, Math.min(100, v)) / 100,
+                  },
+                } as Partial<SceneNode>)
+              }
+              min={0}
+              max={100}
+              step={1}
+            />
+            <div className="flex items-center gap-1 flex-1">
+              <ButtonGroup orientation="horizontal" className={`flex-1 ${segmentedButtonGroupClass}`}>
+                <IconButton
+                  variant={!node.textPath.flip ? "default" : "secondary"}
+                  size="sm"
+                  tooltip="Flip text orientation"
+                  aria-label="Flip text orientation off"
+                  aria-pressed={!node.textPath.flip}
+                  className={`flex-1 ${
+                    !node.textPath.flip
+                      ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
+                      : ""
+                  }`}
+                  onClick={() =>
+                    onUpdate({
+                      textPath: { ...node.textPath!, flip: false },
+                    } as Partial<SceneNode>)
+                  }
+                >
+                  <ArrowLineRight size={14} />
+                </IconButton>
+                <IconButton
+                  variant={node.textPath.flip ? "default" : "secondary"}
+                  size="sm"
+                  tooltip="Flip text to the other side of the path"
+                  aria-label="Flip text orientation on"
+                  aria-pressed={!!node.textPath.flip}
+                  className={`flex-1 ${
+                    node.textPath.flip
+                      ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
+                      : ""
+                  }`}
+                  onClick={() =>
+                    onUpdate({
+                      textPath: { ...node.textPath!, flip: true },
+                    } as Partial<SceneNode>)
+                  }
+                >
+                  <ArrowLineRight size={14} className="-scale-x-100" />
+                </IconButton>
+              </ButtonGroup>
+            </div>
+          </PropertyRow>
+          <PropertyRow>
+            <div className="flex flex-1 flex-col gap-1">
+              <div className="text-[10px] font-normal text-text-muted">
+                Side
+              </div>
+              <ButtonGroup orientation="horizontal" className={`w-full ${segmentedButtonGroupClass}`}>
+                <IconButton
+                  variant={node.textPath.side === "left" ? "default" : "secondary"}
+                  size="sm"
+                  tooltip="Text above the path"
+                  aria-label="Text above the path"
+                  aria-pressed={node.textPath.side === "left"}
+                  className={`flex-1 ${
+                    node.textPath.side === "left"
+                      ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
+                      : ""
+                  }`}
+                  onClick={() =>
+                    onUpdate({
+                      textPath: { ...node.textPath!, side: "left" },
+                    } as Partial<SceneNode>)
+                  }
+                >
+                  <AlignTop size={14} />
+                </IconButton>
+                <IconButton
+                  variant={node.textPath.side === "right" ? "default" : "secondary"}
+                  size="sm"
+                  tooltip="Text below the path"
+                  aria-label="Text below the path"
+                  aria-pressed={node.textPath.side === "right"}
+                  className={`flex-1 ${
+                    node.textPath.side === "right"
+                      ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
+                      : ""
+                  }`}
+                  onClick={() =>
+                    onUpdate({
+                      textPath: { ...node.textPath!, side: "right" },
+                    } as Partial<SceneNode>)
+                  }
+                >
+                  <AlignBottom size={14} />
+                </IconButton>
+              </ButtonGroup>
+            </div>
+          </PropertyRow>
+          {textPathOverflows(node) && (
+            <PropertyRow>
+              <div className="flex items-center gap-1 text-[10px] font-normal text-text-muted">
+                Text overflows the end of the path and is clipped.
+              </div>
+            </PropertyRow>
+          )}
+        </div>
+      )}
       </PropertySection>
     </IconContext.Provider>
   );
