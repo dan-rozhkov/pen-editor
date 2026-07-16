@@ -8,6 +8,21 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-07-16
+
+### Added
+- **Agent-authored comments (cmt-02).** The design agent can now leave its own
+  comment pins via the `leave_comment` tool (schema in backend 0.16.0) — the
+  reverse of cmt-01's loop, turning the agent into a reviewer. Each pin is
+  anchored to the flagged node, so a finding points at the exact element instead
+  of getting lost in a wall of chat text. Agent pins are visually distinct
+  (violet with a sparkle glyph vs. blue user pins) and tagged "Agent" in the
+  Comments panel. The tool takes a batch of findings in one call and reports the
+  created thread numbers. Pair it with the `/design-review` skill: "review this
+  screen" → the agent checks contrast/typography/spacing/consistency against the
+  guidelines and drops a pin on each issue. Agent comments stay outside
+  undo/redo like all others.
+
 ## [0.43.0] - 2026-07-16
 
 ### Added
