@@ -8,6 +8,19 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-07-16
+
+### Added
+- **Export from Dev Mode.** The Inspect panel now has an Export section, so a
+  developer can grab an asset (icon as SVG, image at 2x, …) without leaving Dev
+  Mode for Design mode — the same list of format/scale rows, suffixes, presets,
+  and "Export all" available in Design mode. Because Dev Mode is read-only, the
+  settings are ephemeral session-only overrides keyed by node: they never touch
+  `node.exportSettings` or the `.pen` document (someone who "just looked" never
+  produces a diff) and reset when Dev Mode is exited. A node the designer
+  already configured shows those settings as its starting point; an unconfigured
+  node offers one default PNG 1x row so a single click exports.
+
 ## [0.41.0] - 2026-07-15
 
 ### Fixed
