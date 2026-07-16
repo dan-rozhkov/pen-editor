@@ -78,9 +78,10 @@ describe("<FillSection />", () => {
     const colorInputs = screen.getAllByPlaceholderText("#000000") as HTMLInputElement[];
     // Two solid rows -> two color text inputs. Rows render top-of-stack first,
     // so the last array element ("#00ff00") renders before "#ff0000".
+    // ColorInput displays hex uppercased.
     expect(colorInputs).toHaveLength(2);
-    expect(colorInputs[0].value).toBe("#00ff00");
-    expect(colorInputs[1].value).toBe("#ff0000");
+    expect(colorInputs[0].value).toBe("#00FF00");
+    expect(colorInputs[1].value).toBe("#FF0000");
   });
 
   it("adds a solid fill via the Add button", () => {
