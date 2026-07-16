@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useMeasureStore } from "@/store/measureStore";
 import { useMeasurementsStore } from "@/store/measurementsStore";
+import { useDevExportStore } from "@/store/devExportStore";
 // NOTE: this is the one place a store reaches into `pixi/interaction` (every
 // other store is a leaf; interaction controllers depend on stores, not vice
 // versa). Safe here only because `cancelActiveMeasure` is a plain function
@@ -95,6 +96,10 @@ export const useDevModeStore = create<DevModeState>((set, get) => ({
       // A pinned measurement's selection highlight is dev-mode-only UI —
       // don't leave it dangling (stale) once dev mode is exited.
       useMeasurementsStore.getState().setSelectedMeasurement(null);
+      // Dev Mode's Export section (dev-03) writes to an ephemeral,
+      // session-only override store instead of the node/.pen document —
+      // those overrides only make sense while Dev Mode is active.
+      useDevExportStore.getState().clearAll();
     }
     set({ active });
   },

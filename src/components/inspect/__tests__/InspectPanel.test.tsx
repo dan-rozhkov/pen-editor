@@ -18,9 +18,23 @@ vi.mock("sonner", () => ({
 import { toast } from "sonner";
 import { InspectPanel } from "../InspectPanel";
 import { BoxModelDiagram } from "../BoxModelDiagram";
+import { useDevExportStore } from "@/store/devExportStore";
+import { ReadOnlyProvider } from "@/components/ReadOnlyProvider";
 
 function select(ids: string[]) {
   useSelectionStore.setState({ selectedIds: ids });
+}
+
+/**
+ * See the identical helper/comment in DevExportSection.test.tsx: base-ui's
+ * `SelectItem` only commits a plain click on an unhighlighted option for
+ * touch pointers, so a hover (`mouseMove`) has to precede the click to make
+ * it behave like a real mouse selection.
+ */
+function selectOption(name: string) {
+  const option = screen.getByRole("option", { name });
+  fireEvent.mouseMove(option);
+  fireEvent.click(option);
 }
 
 describe("<InspectPanel />", () => {
@@ -242,6 +256,70 @@ describe("<InspectPanel />", () => {
     render(<InspectPanel />);
     fireEvent.click(screen.getByTestId("inspect-exit-dev-mode"));
     expect(useDevModeStore.getState().active).toBe(false);
+  });
+
+  it("shows an Export section with a default PNG 1x row for a node with no exportSettings (dev-03)", () => {
+    select(["rect1"]);
+    render(<InspectPanel />);
+    expect(screen.getByRole("button", { name: "Export" })).toBeTruthy();
+    expect(screen.getByTestId("export-settings-list").children).toHaveLength(1);
+  });
+
+  it("editing export settings in Dev Mode does not mutate the node in sceneStore (dev-03)", () => {
+    select(["rect1"]);
+    render(<InspectPanel />);
+    const before = JSON.stringify(useSceneStore.getState().nodesById);
+
+    fireEvent.click(screen.getByLabelText("Add export setting"));
+
+    expect(JSON.stringify(useSceneStore.getState().nodesById)).toBe(before);
+    expect(useSceneStore.getState().nodesById.rect1.exportSettings).toBeUndefined();
+  });
+
+  it("hides the Export section entirely for a multi-selection, matching Design mode (finding 1)", () => {
+    select(["rect1", "text1"]);
+    render(<InspectPanel />);
+    expect(screen.queryByRole("button", { name: "Export" })).toBeNull();
+    expect(screen.queryByTestId("export-settings-list")).toBeNull();
+  });
+
+  // Ship-blocking bug: production wraps `<RightPanel />` (and thus
+  // `InspectPanel`) in `<ReadOnlyProvider value={isView || isDev}>`
+  // (App.tsx:139) — every other test in this file renders `InspectPanel`
+  // bare, so `useReadOnly()` silently defaults to `false` and never exercises
+  // the real Dev Mode condition. That blind spot is *why* the Export
+  // section's format/scale selects (and the suffix/custom-scale fields) were
+  // completely inert in the live app despite this file's existing coverage.
+  it("(ship bug, reproduces the real production condition) the Export section's scale select is interactive under a real ReadOnlyProvider(true), and never touches the document", () => {
+    select(["rect1"]);
+    render(
+      <ReadOnlyProvider value={true}>
+        <InspectPanel />
+      </ReadOnlyProvider>,
+    );
+    const before = JSON.stringify(useSceneStore.getState().nodesById);
+
+    const list = screen.getByTestId("export-settings-list");
+    const [, scaleCombobox] = within(list).getAllByRole("combobox");
+    fireEvent.click(scaleCombobox);
+    selectOption("2x");
+
+    expect(useDevExportStore.getState().overrides.rect1?.[0]).toMatchObject({ scale: 2 });
+    // Read-only for the *document* must be preserved: only the ephemeral
+    // devExportStore is written, never sceneStore/the node's exportSettings.
+    expect(JSON.stringify(useSceneStore.getState().nodesById)).toBe(before);
+    expect(useSceneStore.getState().nodesById.rect1.exportSettings).toBeUndefined();
+  });
+
+  it("renders a single Export heading with the add-row action still reachable (finding 2)", () => {
+    select(["rect1"]);
+    render(<InspectPanel />);
+    // Only one "Export" heading should exist — the collapsible Section's own
+    // title, not a second one nested inside ExportSettingsList's PropertySection.
+    expect(screen.getAllByText("Export")).toHaveLength(1);
+
+    fireEvent.click(screen.getByLabelText("Add export setting"));
+    expect(screen.getByTestId("export-settings-list").children).toHaveLength(2);
   });
 
   it("resolves a variable-bound fill to the dark value for a node under a dark themeOverride ancestor", () => {

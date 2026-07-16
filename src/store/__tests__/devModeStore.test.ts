@@ -3,6 +3,7 @@ import { useDevModeStore } from "@/store/devModeStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useMeasureStore } from "@/store/measureStore";
 import { useMeasurementsStore } from "@/store/measurementsStore";
+import { useDevExportStore } from "@/store/devExportStore";
 
 const UNITS_KEY = "dev-mode-units";
 const REM_BASE_KEY = "dev-mode-rem-base";
@@ -21,6 +22,7 @@ describe("devModeStore", () => {
     });
     useDrawModeStore.setState({ activeTool: null });
     useMeasureStore.setState({ lines: [] });
+    useDevExportStore.setState({ overrides: {} });
   });
 
   it("starts inactive with px units and remBase 16 when localStorage has nothing", () => {
@@ -95,6 +97,14 @@ describe("devModeStore", () => {
 
     useDevModeStore.getState().setActive(false);
     expect(useMeasureStore.getState().lines).toEqual([]);
+  });
+
+  it("exiting dev mode clears ephemeral export-setting overrides (dev-03)", () => {
+    useDevModeStore.getState().setActive(true);
+    useDevExportStore.setState({ overrides: { n1: [{ id: "a", format: "png", scale: 2 }] } });
+
+    useDevModeStore.getState().setActive(false);
+    expect(useDevExportStore.getState().overrides).toEqual({});
   });
 
   it("exiting dev mode clears the selected pinned measurement", () => {

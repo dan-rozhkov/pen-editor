@@ -20,6 +20,7 @@ import { SelectWithOptions } from "@/components/ui/select";
 import { BoxModelDiagram } from "./BoxModelDiagram";
 import { InspectRow } from "./InspectRow";
 import { CodeSection } from "./CodeSection";
+import { DevExportSection } from "./DevExportSection";
 
 const ChevronIcon = ({ expanded }: { expanded: boolean }) => (
   <CaretRightIcon
@@ -162,49 +163,66 @@ export function InspectPanel() {
         <div className="flex-1 flex items-center justify-center px-4 text-center">
           <span className="text-text-muted text-xs">Select a layer to inspect</span>
         </div>
-      ) : mode === "code" ? (
-        <CodeSection selectedIds={selectedIds} />
       ) : (
-        <div className="flex-1 overflow-y-auto">
-          <div className="px-3 py-2 border-b border-border-default">
-            <div className="flex flex-col gap-0.5">
-              <span className="text-sm font-medium text-text-primary truncate">{data.header.name}</span>
-              <span className="text-xs capitalize text-text-muted">
-                {data.header.type}
-              </span>
-            </div>
-            {data.header.componentInfo && (
-              <div className="mt-1 text-xs font-mono text-text-muted truncate">
-                {data.header.componentInfo.componentId}
-              </div>
-            )}
-            {data.header.componentInfo?.propertyValues &&
-              Object.entries(data.header.componentInfo.propertyValues).map(([key, value]) => (
-                <div
-                  key={key}
-                  className="mt-1 text-xs font-mono text-text-muted truncate flex items-center justify-between gap-2"
-                >
-                  <span>{key}</span>
-                  <span>{String(value)}</span>
+        <>
+          {mode === "code" ? (
+            <CodeSection selectedIds={selectedIds} />
+          ) : (
+            <div className="flex-1 overflow-y-auto">
+              <div className="px-3 py-2 border-b border-border-default">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-medium text-text-primary truncate">{data.header.name}</span>
+                  <span className="text-xs capitalize text-text-muted">
+                    {data.header.type}
+                  </span>
                 </div>
-              ))}
-            {selectedIds.length > 1 && (
-              <div className="mt-1 text-xs text-text-muted">{selectedIds.length} selected</div>
-            )}
-          </div>
+                {data.header.componentInfo && (
+                  <div className="mt-1 text-xs font-mono text-text-muted truncate">
+                    {data.header.componentInfo.componentId}
+                  </div>
+                )}
+                {data.header.componentInfo?.propertyValues &&
+                  Object.entries(data.header.componentInfo.propertyValues).map(([key, value]) => (
+                    <div
+                      key={key}
+                      className="mt-1 text-xs font-mono text-text-muted truncate flex items-center justify-between gap-2"
+                    >
+                      <span>{key}</span>
+                      <span>{String(value)}</span>
+                    </div>
+                  ))}
+                {selectedIds.length > 1 && (
+                  <div className="mt-1 text-xs text-text-muted">{selectedIds.length} selected</div>
+                )}
+              </div>
 
-          <Section title="Layer properties">
-            <BoxModelDiagram box={data.box} units={units} remBase={remBase} />
-          </Section>
+              <Section title="Layer properties">
+                <BoxModelDiagram box={data.box} units={units} remBase={remBase} />
+              </Section>
 
-          {data.sections.map((section) => (
-            <Section key={section.title} title={section.title}>
-              {section.rows.map((row, i) => (
-                <InspectRow key={`${row.label}-${i}`} row={row} />
+              {data.sections.map((section) => (
+                <Section key={section.title} title={section.title}>
+                  {section.rows.map((row, i) => (
+                    <InspectRow key={`${row.label}-${i}`} row={row} />
+                  ))}
+                </Section>
               ))}
+            </div>
+          )}
+
+          {/* Last section in the panel (dev-03): always available regardless of
+              List/Code mode, since exporting an asset shouldn't require
+              switching away from Code mode. Read-only Dev Mode never writes
+              here — see DevExportSection. Only rendered for a single
+              selection, matching Design mode's ExportSettingsSection
+              (PropertiesPanel.tsx) — exporting silently only acted on
+              selectedIds[0] otherwise, with no indication in the UI. */}
+          {selectedIds.length === 1 && (
+            <Section title="Export">
+              <DevExportSection nodeId={nodeId!} nodeName={node?.name} exportSettings={node?.exportSettings} />
             </Section>
-          ))}
-        </div>
+          )}
+        </>
       )}
     </div>
   );
