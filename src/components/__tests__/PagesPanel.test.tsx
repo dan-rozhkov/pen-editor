@@ -29,6 +29,7 @@ function emptyPage(id: string, name: string): PageData {
     guides: [],
     slideOrder: [],
     measurements: [],
+    comments: [],
   };
 }
 

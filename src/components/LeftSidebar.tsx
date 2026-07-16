@@ -9,6 +9,7 @@ import { ChatPanelContent } from "./chat/ChatPanel";
 import { VariablesPanelContent } from "./VariablesPanel";
 import { TextStylesPanelContent } from "./TextStylesPanel";
 import { StylesPanelContent } from "./StylesPanel";
+import { CommentsPanelContent } from "./CommentsPanel";
 import { Toolbar } from "./Toolbar";
 import { useSceneStore } from "@/store/sceneStore";
 import { useDocumentStore } from "@/store/documentStore";
@@ -202,6 +203,13 @@ export function LeftSidebar() {
             }
           >
             <StylesPanelContent />
+          </div>
+        )}
+
+        {/* Comments section (cmt-01) */}
+        {activeSection === "comments" && (
+          <div className="absolute inset-0 flex flex-col overflow-hidden">
+            <CommentsPanelContent />
           </div>
         )}
       </div>

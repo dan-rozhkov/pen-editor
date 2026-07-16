@@ -7,6 +7,7 @@ import { generateId } from '../types/scene'
 import { serializePublicPenDocument } from "@/utils/publicPenExport";
 import type { Guide } from "@/store/guidesStore";
 import type { PersistedMeasurement } from "@/store/measurementsStore";
+import type { CommentThread } from "@/store/commentsStore";
 
 export interface PenPage {
   id: string
@@ -17,6 +18,8 @@ export interface PenPage {
   /** Persistent slide (presentation) order — see src/utils/slideOrder.ts */
   slideOrder?: string[]
   measurements?: PersistedMeasurement[]
+  /** Canvas comment threads (cmt-01). Omitted when empty. */
+  comments?: CommentThread[]
 }
 
 export interface PenDocument {
@@ -41,6 +44,7 @@ export interface DocumentPageData {
   guides: Guide[]
   slideOrder: string[]
   measurements: PersistedMeasurement[]
+  comments: CommentThread[]
 }
 
 export interface DocumentData {
@@ -56,7 +60,7 @@ export interface DocumentData {
 const CURRENT_VERSION = '1.1'
 
 export function serializeDocument(
-  pages: { id: string; name: string; nodes: SceneNode[]; pageBackground: string; guides?: Guide[]; slideOrder?: string[]; measurements?: PersistedMeasurement[] }[],
+  pages: { id: string; name: string; nodes: SceneNode[]; pageBackground: string; guides?: Guide[]; slideOrder?: string[]; measurements?: PersistedMeasurement[]; comments?: CommentThread[] }[],
   variables: Variable[],
   activeTheme: ThemeName,
   componentArtifacts: Record<string, ComponentArtifact> = {},
@@ -74,6 +78,7 @@ export function serializeDocument(
       ...(p.guides && p.guides.length > 0 ? { guides: p.guides } : {}),
       ...(p.slideOrder && p.slideOrder.length > 0 ? { slideOrder: p.slideOrder } : {}),
       ...(p.measurements && p.measurements.length > 0 ? { measurements: p.measurements } : {}),
+      ...(p.comments && p.comments.length > 0 ? { comments: p.comments } : {}),
     })),
     variables,
     textStyles,
@@ -100,6 +105,7 @@ export function deserializeDocument(json: string): DocumentData {
       guides: p.guides ?? [],
       slideOrder: p.slideOrder ?? [],
       measurements: p.measurements ?? [],
+      comments: p.comments ?? [],
     }))
   } else {
     // Legacy single-page: wrap in a single page
@@ -111,6 +117,7 @@ export function deserializeDocument(json: string): DocumentData {
       guides: [],
       slideOrder: [],
       measurements: [],
+      comments: [],
     }]
   }
 
@@ -126,7 +133,7 @@ export function deserializeDocument(json: string): DocumentData {
 }
 
 export function downloadDocument(
-  pages: { id: string; name: string; nodes: SceneNode[]; pageBackground: string; guides?: Guide[]; slideOrder?: string[]; measurements?: PersistedMeasurement[] }[],
+  pages: { id: string; name: string; nodes: SceneNode[]; pageBackground: string; guides?: Guide[]; slideOrder?: string[]; measurements?: PersistedMeasurement[]; comments?: CommentThread[] }[],
   variables: Variable[],
   activeTheme: ThemeName,
   componentArtifacts: Record<string, ComponentArtifact> = {},

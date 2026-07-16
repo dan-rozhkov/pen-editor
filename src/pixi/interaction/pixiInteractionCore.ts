@@ -45,6 +45,7 @@ import { createDragController, DRAG_CLICK_THRESHOLD } from "./dragController";
 import { createMarqueeController } from "./marqueeController";
 import { createMeasurementController } from "./measurementController";
 import { createMeasureToolController } from "./measureToolController";
+import { createCommentToolController } from "./commentToolController";
 import { resolveRefToTree, findNodeByPath } from "@/utils/instanceRuntime";
 import type { SceneNode, RefNode, TextNode } from "@/types/scene";
 import { resolveTextHandleReset } from "./textResize";
@@ -188,6 +189,7 @@ export function setupPixiInteraction(
   const marquee = createMarqueeController(context);
   const measurement = createMeasurementController(context);
   const measureTool = createMeasureToolController(context);
+  const commentTool = createCommentToolController(context);
 
   // --- Pointer handlers ---
 
@@ -267,6 +269,12 @@ export function setupPixiInteraction(
     // and drag/marquee controllers below because pinning/selecting a
     // measurement must never fall through into selection or a drag.
     if (measureTool.handlePointerDown(e, world)) return;
+
+    // Priority 1.6: Comment tool (C) — self-gates on activeTool === "comment".
+    // Placed ahead of the scene-editing and drag/marquee controllers so that
+    // in comment mode a click PLACES A PIN and never selects or moves a node
+    // (cmt-01: "in comment mode the canvas does not select/move objects").
+    if (commentTool.handlePointerDown(e, world)) return;
 
     // Priorities 2-3: scene-editing controllers only run in edit mode.
     // Dev mode (inspect) is belt-and-braces excluded here too — the active

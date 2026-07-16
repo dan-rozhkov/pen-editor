@@ -14,6 +14,7 @@ import { useViewportStore } from "./viewportStore";
 import { useSelectionStore } from "./selectionStore";
 import { useGuidesStore, type Guide } from "./guidesStore";
 import { useMeasurementsStore, type PersistedMeasurement } from "./measurementsStore";
+import { useCommentsStore, type CommentThread } from "./commentsStore";
 
 export interface PageData {
   id: string;
@@ -35,6 +36,8 @@ export interface PageData {
   slideOrder: string[];
   // Per-page pinned distance measurements
   measurements: PersistedMeasurement[];
+  // Per-page canvas comment threads (cmt-01). Outside undo/redo.
+  comments: CommentThread[];
 }
 
 interface PageStoreState {
@@ -72,6 +75,7 @@ function createEmptyPage(name: string): PageData {
     guides: [],
     slideOrder: [],
     measurements: [],
+    comments: [],
   };
 }
 
@@ -172,6 +176,7 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
       guides: sourceAfterSave.guides.map((g) => ({ ...g })),
       slideOrder: [...sourceAfterSave.slideOrder],
       measurements: sourceAfterSave.measurements.map((m) => ({ ...m })),
+      comments: sourceAfterSave.comments.map((c) => ({ ...c })),
     };
 
     const sourceIndex = currentPages.findIndex((p) => p.id === pageId);
@@ -225,6 +230,7 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
       guides: useGuidesStore.getState().guides,
       slideOrder: [...scene.slideOrder],
       measurements: useMeasurementsStore.getState().measurements,
+      comments: useCommentsStore.getState().threads,
     };
 
     // Sync componentArtifactsById from sceneStore
@@ -310,6 +316,11 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
 
     // Load pinned measurements
     useMeasurementsStore.getState().setMeasurements(targetPage.measurements);
+
+    // Load canvas comment threads (also drop any in-progress pin draft — it
+    // belongs to the page we're leaving).
+    useCommentsStore.getState().setThreads(targetPage.comments);
+    useCommentsStore.getState().cancelDraft();
 
     // Clear selection
     useSelectionStore.setState({

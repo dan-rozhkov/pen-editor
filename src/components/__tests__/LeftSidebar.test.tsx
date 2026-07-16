@@ -58,6 +58,7 @@ function setPages(count: number) {
     guides: [],
     slideOrder: [],
     measurements: [],
+    comments: [],
   }));
   usePageStore.setState({ pages, activePageId: pages[0]?.id ?? "" });
 }

@@ -172,8 +172,10 @@ export function createDrawController(_context: InteractionContext): DrawControll
       const { activeTool } = useDrawModeStore.getState();
       // "scale" reuses the resize handles (scaleController) and must never
       // fall through to drawing a shape — a miss should do nothing, not spawn
-      // a phantom rectangle (and reset the tool on release).
-      if (activeTool && activeTool !== "cursor" && activeTool !== "connector" && activeTool !== "scale" && e.button === 0) {
+      // a phantom rectangle (and reset the tool on release). "comment" places a
+      // pin via commentToolController (which runs first and short-circuits);
+      // exclude it here too so a future reorder can't spawn a bogus node.
+      if (activeTool && activeTool !== "cursor" && activeTool !== "connector" && activeTool !== "scale" && activeTool !== "comment" && e.button === 0) {
         state.isDrawing = true;
         state.startWorldX = world.x;
         state.startWorldY = world.y;

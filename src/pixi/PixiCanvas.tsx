@@ -7,6 +7,7 @@ import { EmbedActionBar } from "@/components/canvas/EmbedActionBar";
 import { EmbedAgentButton } from "@/components/canvas/EmbedAgentButton";
 import { EmbedSelectionFrame } from "@/components/canvas/EmbedSelectionFrame";
 import { EmbedLayer } from "@/components/canvas/EmbedLayer";
+import { CommentLayer } from "@/components/comments/CommentLayer";
 import { FrameAgentButton } from "@/components/canvas/FrameAgentButton";
 import { Layers3DOverlay } from "@/components/canvas/Layers3DOverlay";
 import { useLayers3DStore } from "@/store/layers3dStore";
@@ -385,6 +386,9 @@ export function PixiCanvas() {
     >
       {/* Code layers rendered as live DOM above the Pixi canvas */}
       <EmbedLayer />
+      {/* Canvas comment pins + threads (cmt-01), above embeds (z-10) and the
+          embed selection frame (z-11) at z-12. */}
+      <CommentLayer />
       {/* Selection frame + resize handles mirrored as DOM above the embed
           layer — the Pixi overlay is hidden behind the embed's HTML content. */}
       {selectedEmbedNode && selectedEmbedPosition && editingMode !== "embed" && (

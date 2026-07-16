@@ -34,6 +34,9 @@ const EXPECTED_CLIENT_TOOLS = [
   "generate_image",
   "generate_frame_image",
   "set_export_settings",
+  "read_comments",
+  "reply_comment",
+  "resolve_comment",
 ];
 
 // Tools whose schema also has a backend `execute` — they run server-side, the

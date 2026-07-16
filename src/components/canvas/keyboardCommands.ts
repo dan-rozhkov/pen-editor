@@ -6,6 +6,7 @@ import { useUIVisibilityStore } from "@/store/uiVisibilityStore";
 import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
 import { useDevModeStore } from "@/store/devModeStore";
 import { useMeasurementsStore } from "@/store/measurementsStore";
+import { useCommentsStore } from "@/store/commentsStore";
 import { useConnectorStore } from "@/store/connectorStore";
 import { useDragStore } from "@/store/dragStore";
 import { useGuidesStore } from "@/store/guidesStore";
@@ -510,6 +511,16 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
       return;
     }
 
+    // Shift+C: Toggle comment-pin visibility (cmt-01). Plain Shift+C is free —
+    // Copy-as-CSS is Cmd/Ctrl+Shift+C (handled above, requires a modifier), and
+    // the plain-letter block below requires !shiftKey, so this never collides.
+    if (e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && e.code === "KeyC") {
+      if (isTyping) return;
+      e.preventDefault();
+      useCommentsStore.getState().togglePinsHidden();
+      return;
+    }
+
     // Shift+D: Toggle Dev (inspect) mode. It's the toggle itself, so it must
     // fire whether dev mode is currently on or off — placed above the
     // read-only allowlist's reach (both branches of that `if` fall through to
@@ -592,9 +603,16 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
         toggleTool("pencil");
         return;
       }
-      if (e.code === "KeyC") {
+      if (e.code === "KeyN") {
         e.preventDefault();
         toggleTool("connector");
+        return;
+      }
+      if (e.code === "KeyC") {
+        // C enters/exits comment mode (cmt-01). This replaced the connector
+        // tool's old C hotkey — connector moved to N (KeyN, above).
+        e.preventDefault();
+        useDrawModeStore.getState().toggleTool("comment");
         return;
       }
       if (e.code === "KeyK") {

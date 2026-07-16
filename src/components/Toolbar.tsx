@@ -78,6 +78,7 @@ export function Toolbar() {
       guides: page.guides,
       slideOrder: page.slideOrder,
       measurements: page.measurements,
+      comments: page.comments,
     }));
 
     const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";

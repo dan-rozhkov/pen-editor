@@ -9,6 +9,7 @@ import { useThemeStore } from "@/store/themeStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useGuidesStore } from "@/store/guidesStore";
 import { useMeasurementsStore } from "@/store/measurementsStore";
+import { useCommentsStore } from "@/store/commentsStore";
 import { useDevExportStore } from "@/store/devExportStore";
 
 /** Reset every store the tool handlers touch to a clean baseline. */
@@ -42,6 +43,7 @@ export function resetStores(): void {
   useViewportStore.setState({ scale: 1, x: 0, y: 0 });
   useGuidesStore.setState({ guides: [] });
   useMeasurementsStore.setState({ measurements: [], selectedMeasurementId: null });
+  useCommentsStore.setState({ threads: [], draftAnchor: null });
   // Dev Mode's Export overrides (dev-03) are session-only and normally
   // cleared by `devModeStore.setActive(false)`, but tests often flip Dev
   // Mode on/off via `setState({ active: ... })` directly, bypassing that

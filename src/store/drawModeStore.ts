@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import { usePenToolStore } from './penToolStore'
 import { useSelectionStore } from './selectionStore'
+import { useCommentsStore } from './commentsStore'
 
-export type DrawToolType = 'cursor' | 'frame' | 'rect' | 'ellipse' | 'text' | 'line' | 'polygon' | 'star' | 'embed' | 'pencil' | 'connector' | 'pen' | 'scale' | 'measure' | 'text-path'
+export type DrawToolType = 'cursor' | 'frame' | 'rect' | 'ellipse' | 'text' | 'line' | 'polygon' | 'star' | 'embed' | 'pencil' | 'connector' | 'pen' | 'scale' | 'measure' | 'text-path' | 'comment'
 
 export interface PencilSettings {
   color: string
@@ -22,6 +23,15 @@ function exitPathEditMode(): void {
   if (useSelectionStore.getState().editingMode === 'path') {
     useSelectionStore.getState().stopEditing()
   }
+}
+
+// Leaving comment mode must drop any in-progress pin placement (the draft
+// anchor). Cleanup of this mode-transient UI state lives in the store rather
+// than a React effect (gotcha ux-10): every tool transition below routes
+// through here, so a pending draft can't survive a switch to another tool,
+// Esc, or a completed draw. Harmless (no-op) when there's no draft.
+function exitCommentDraft(): void {
+  useCommentsStore.getState().cancelDraft()
 }
 
 const DEFAULT_PENCIL_SETTINGS: PencilSettings = {
@@ -61,6 +71,7 @@ export const useDrawModeStore = create<DrawModeState>((set) => ({
   setActiveTool: (tool) => {
     usePenToolStore.getState().resetDraft()
     exitPathEditMode()
+    if (tool !== 'comment') exitCommentDraft()
     set({ activeTool: tool, isDrawing: false, drawStart: null, drawCurrent: null, pencilPoints: [] })
   },
 
@@ -68,8 +79,10 @@ export const useDrawModeStore = create<DrawModeState>((set) => ({
     usePenToolStore.getState().resetDraft()
     exitPathEditMode()
     if (state.activeTool === tool) {
+      exitCommentDraft()
       return { activeTool: null, isDrawing: false, drawStart: null, drawCurrent: null, pencilPoints: [] }
     }
+    if (tool !== 'comment') exitCommentDraft()
     return { activeTool: tool, isDrawing: false, drawStart: null, drawCurrent: null, pencilPoints: [] }
   }),
 
@@ -79,10 +92,14 @@ export const useDrawModeStore = create<DrawModeState>((set) => ({
 
   addPencilPoint: (pt) => set((state) => ({ pencilPoints: [...state.pencilPoints, pt] })),
 
-  endDrawing: () => set({ activeTool: null, isDrawing: false, drawStart: null, drawCurrent: null, pencilPoints: [] }),
+  endDrawing: () => {
+    exitCommentDraft()
+    set({ activeTool: null, isDrawing: false, drawStart: null, drawCurrent: null, pencilPoints: [] })
+  },
 
   cancelDrawing: () => {
     usePenToolStore.getState().resetDraft()
+    exitCommentDraft()
     set({ activeTool: null, isDrawing: false, drawStart: null, drawCurrent: null, pencilPoints: [] })
   },
 
