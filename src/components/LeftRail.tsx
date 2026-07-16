@@ -57,7 +57,7 @@ const SECTIONS: {
   { section: "slides", testid: "rail-slides", title: "Slides", icon: <CardsIcon size={20} weight="light" /> },
   { section: "agents", testid: "rail-agents", title: "Agents", icon: <SparkleIcon size={20} weight="light" /> },
   { section: "components", testid: "rail-components", title: "Assets", icon: <DiamondsFourIcon size={18} weight="light" /> },
-  { section: "comments", testid: "rail-comments", title: "Comments", icon: <ChatCircleIcon size={20} weight="light" /> },
+  { section: "comments", testid: "rail-comments", title: "Threads", icon: <ChatCircleIcon size={20} weight="light" /> },
 ];
 
 // Variables/Text styles/Styles are separate rail sections (not tabs, for now)

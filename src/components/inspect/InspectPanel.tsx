@@ -20,7 +20,7 @@ import { SelectWithOptions } from "@/components/ui/select";
 import { BoxModelDiagram } from "./BoxModelDiagram";
 import { InspectRow } from "./InspectRow";
 import { CodeSection } from "./CodeSection";
-import { DevExportSection } from "./DevExportSection";
+import { DevExportAddButton, DevExportSection } from "./DevExportSection";
 
 const ChevronIcon = ({ expanded }: { expanded: boolean }) => (
   <CaretRightIcon
@@ -60,18 +60,21 @@ const modeToggleGroupClass =
 const activeModeToggleClass =
   "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel";
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {
   const [expanded, setExpanded] = useState(true);
   return (
     <div className="border-b border-border-default">
-      <button
-        type="button"
-        className="w-full flex items-center gap-1.5 px-3 py-2 text-left hover:bg-secondary"
-        onClick={() => setExpanded((v) => !v)}
-      >
-        <ChevronIcon expanded={expanded} />
-        <span className="text-xs font-medium text-text-primary">{title}</span>
-      </button>
+      <div className="flex min-h-10 items-center px-3 py-2">
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          <ChevronIcon expanded={expanded} />
+          <span className="text-xs font-medium text-text-primary">{title}</span>
+        </button>
+        {action}
+      </div>
       {expanded && <div className="pb-1">{children}</div>}
     </div>
   );
@@ -115,7 +118,7 @@ export function InspectPanel() {
   }, [nodeId, node, variables, fillStyles, effectStyles, textStyles, units, remBase]);
 
   return (
-    <div className="w-[300px] h-full flex flex-col bg-surface-panel border-l border-border-default overflow-y-auto">
+    <div className="w-[300px] h-full flex flex-col bg-surface-panel border-l border-border-default overflow-hidden">
       <div className="flex h-[58.5px] items-center justify-between gap-2 px-3 py-3 border-b border-border-default">
         <ButtonGroup orientation="horizontal" className={modeToggleGroupClass}>
           <Button
@@ -165,10 +168,11 @@ export function InspectPanel() {
         </div>
       ) : (
         <>
-          {mode === "code" ? (
-            <CodeSection selectedIds={selectedIds} />
-          ) : (
-            <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto">
+            {mode === "code" ? (
+              <CodeSection selectedIds={selectedIds} />
+            ) : (
+              <>
               <div className="px-3 py-2 border-b border-border-default">
                 <div className="flex flex-col gap-0.5">
                   <span className="text-sm font-medium text-text-primary truncate">{data.header.name}</span>
@@ -197,7 +201,12 @@ export function InspectPanel() {
               </div>
 
               <Section title="Layer properties">
-                <BoxModelDiagram box={data.box} units={units} remBase={remBase} />
+                <BoxModelDiagram
+                  box={data.box}
+                  textMetrics={data.textMetrics}
+                  units={units}
+                  remBase={remBase}
+                />
               </Section>
 
               {data.sections.map((section) => (
@@ -207,21 +216,27 @@ export function InspectPanel() {
                   ))}
                 </Section>
               ))}
-            </div>
-          )}
+              </>
+            )}
 
-          {/* Last section in the panel (dev-03): always available regardless of
-              List/Code mode, since exporting an asset shouldn't require
-              switching away from Code mode. Read-only Dev Mode never writes
-              here — see DevExportSection. Only rendered for a single
-              selection, matching Design mode's ExportSettingsSection
-              (PropertiesPanel.tsx) — exporting silently only acted on
-              selectedIds[0] otherwise, with no indication in the UI. */}
-          {selectedIds.length === 1 && (
-            <Section title="Export">
-              <DevExportSection nodeId={nodeId!} nodeName={node?.name} exportSettings={node?.exportSettings} />
-            </Section>
-          )}
+            {/* Last section in the scrollable content (dev-03): available in
+                both List and Code modes, but never pinned to the panel edge.
+                Only rendered for a single selection, matching Design mode's
+                ExportSettingsSection. */}
+            {selectedIds.length === 1 && (
+              <Section
+                title="Export"
+                action={<DevExportAddButton nodeId={nodeId!} exportSettings={node?.exportSettings} />}
+              >
+                <DevExportSection
+                  nodeId={nodeId!}
+                  nodeName={node?.name}
+                  exportSettings={node?.exportSettings}
+                  hideBodyAddAction
+                />
+              </Section>
+            )}
+          </div>
         </>
       )}
     </div>

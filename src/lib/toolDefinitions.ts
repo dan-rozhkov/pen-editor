@@ -13,6 +13,7 @@ import {
   type IconWeight,
   CodeBlockIcon,
   ResizeIcon,
+  ChatCircleIcon,
 } from "@phosphor-icons/react";
 import { TextOnPathIcon } from "@/components/ui/custom-icons/TextOnPathIcon";
 import type { DrawToolType } from "@/store/drawModeStore";
@@ -82,6 +83,13 @@ export const PEN_SUB_TOOLS: ToolDefinition[] = [
   { icon: TextOnPathIcon, label: "Text on Path", tool: "text-path", shortcut: "⇧T" },
 ];
 
+export const COMMENT_TOOL: ToolDefinition = {
+  icon: ChatCircleIcon,
+  label: "Comment",
+  tool: "comment",
+  shortcut: "C",
+};
+
 export const TRAILING_TOOLS: ToolDefinition[] = [
   { icon: TextTIcon, label: "Text", tool: "text", shortcut: "T" },
   { icon: CodeBlockIcon, label: "Embed", tool: "embed", shortcut: "E" },
@@ -96,5 +104,6 @@ export const ALL_TOOLS: ToolDefinition[] = [
   ...RECT_SUB_TOOLS,
   PEN_TOOL,
   ...PEN_SUB_TOOLS,
+  COMMENT_TOOL,
   ...TRAILING_TOOLS,
 ];

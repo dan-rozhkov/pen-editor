@@ -23,6 +23,11 @@ function isHexColor(value: string): boolean {
   return /^#[\da-f]{3,8}$/i.test(value);
 }
 
+/** Dev Mode presents color values consistently without changing copied data. */
+function formatColorDisplay(value: string): string {
+  return value.replace(/#[\da-f]{3,8}\b/gi, (hex) => hex.toUpperCase());
+}
+
 function ValueSwatch({ label, background }: { label: string; background: string }) {
   return (
     <span
@@ -58,7 +63,7 @@ export function InspectRow({ row }: { row: InspectValue }) {
           {row.swatchBackground && (
             <ValueSwatch label={row.label} background={row.swatchBackground} />
           )}
-          <span className="text-xs text-text-primary truncate">{row.value}</span>
+          <span className="text-xs text-text-primary truncate">{formatColorDisplay(row.value)}</span>
         </span>
       </div>
     );
@@ -105,7 +110,7 @@ export function InspectRow({ row }: { row: InspectValue }) {
             <span className="text-text-muted text-xs">Light</span>
             <span className="flex min-w-0 items-center gap-1.5">
               {isHexColor(token.light) && <ValueSwatch label="Light" background={token.light} />}
-              <span className="text-xs text-text-primary truncate">{token.light}</span>
+              <span className="text-xs text-text-primary truncate">{formatColorDisplay(token.light)}</span>
             </span>
           </div>
           <div
@@ -125,7 +130,7 @@ export function InspectRow({ row }: { row: InspectValue }) {
             <span className="text-text-muted text-xs">Dark</span>
             <span className="flex min-w-0 items-center gap-1.5">
               {isHexColor(token.dark) && <ValueSwatch label="Dark" background={token.dark} />}
-              <span className="text-xs text-text-primary truncate">{token.dark}</span>
+              <span className="text-xs text-text-primary truncate">{formatColorDisplay(token.dark)}</span>
             </span>
           </div>
         </div>

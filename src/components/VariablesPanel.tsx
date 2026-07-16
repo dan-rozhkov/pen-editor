@@ -13,7 +13,7 @@ import {
   TableHead,
   TableCell,
 } from "./ui/table";
-import { PlusIcon, TrashIcon, ArrowLineLeftIcon } from "@phosphor-icons/react";
+import { PlusCircleIcon, PlusIcon, TrashIcon, ArrowLineLeftIcon } from "@phosphor-icons/react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -22,6 +22,7 @@ import {
 } from "./ui/dropdown-menu";
 import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip";
 import { IconButton } from "./ui/IconButton";
+import { PanelEmptyState } from "./PanelEmptyState";
 
 // Type badge labels and colors
 const typeBadge: Record<VariableType, { label: string; className: string }> = {
@@ -333,6 +334,11 @@ export function VariablesPanelContent() {
 
       {/* Table */}
       <div className="flex-1 overflow-y-auto">
+        {variables.length === 0 ? (
+          <PanelEmptyState icon={<PlusCircleIcon size={28} weight="light" />}>
+            No variables yet
+          </PanelEmptyState>
+        ) : (
         <Table className="border-collapse select-none table-fixed">
           <TableHeader>
             <TableRow className="border-border-light bg-surface-panel sticky top-0 hover:bg-surface-panel">
@@ -349,20 +355,10 @@ export function VariablesPanelContent() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {variables.length === 0 ? (
-              <TableRow className="hover:bg-transparent">
-                <TableCell
-                  colSpan={4}
-                  className="text-center text-text-disabled text-xs py-12"
-                >
-                  No variables yet
-                </TableCell>
-              </TableRow>
-            ) : (
-              variables.map((v) => <VariableRow key={v.id} variable={v} />)
-            )}
+            {variables.map((v) => <VariableRow key={v.id} variable={v} />)}
           </TableBody>
         </Table>
+        )}
       </div>
 
       {/* Footer */}

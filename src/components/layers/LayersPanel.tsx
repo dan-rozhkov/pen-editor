@@ -5,6 +5,7 @@ import {
   useEffect,
   useMemo,
 } from "react";
+import { StackIcon } from "@phosphor-icons/react";
 import { useSceneStore } from "../../store/sceneStore";
 import { useSelectionStore } from "../../store/selectionStore";
 import { getAncestorIds } from "../../utils/nodeUtils";
@@ -14,6 +15,7 @@ import type { FlatFrameNode, FrameNode, RefNode, SceneNode } from "../../types/s
 import { buildTree } from "../../types/scene";
 import { createRefFromComponent } from "../../utils/componentUtils";
 import { deepCloneNode } from "../../utils/cloneNode";
+import { PanelEmptyState } from "../PanelEmptyState";
 import { LayerItem } from "./LayerItem";
 import {
   ROW_HEIGHT,
@@ -296,9 +298,9 @@ export function LayersPanel() {
         ref={scrollRef}
       >
         {reversedNodes.length === 0 ? (
-          <div className="text-text-disabled text-xs text-center p-5">
+          <PanelEmptyState icon={<StackIcon size={28} weight="light" />}>
             No layers yet
-          </div>
+          </PanelEmptyState>
         ) : (
           <div style={{ height: totalHeight + 8, position: "relative", display: "inline-block", minWidth: "100%", paddingTop: 8 }}>
             <div style={{ transform: `translateY(${translateY}px)` }}>

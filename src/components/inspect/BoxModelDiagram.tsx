@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { InspectData } from "@/lib/inspect/buildInspectData";
 import type { InspectUnits } from "@/store/devModeStore";
 import { formatLength } from "@/lib/inspect/units";
@@ -29,6 +30,68 @@ function RadiusCorner({ corner }: { corner: Corner }) {
   );
 }
 
+function TextMetricsDiagram({
+  text,
+  box,
+  formatValue,
+}: {
+  text: NonNullable<InspectData["textMetrics"]>;
+  box: InspectData["box"];
+  formatValue: (value: number) => string;
+}) {
+  const metrics = useMemo(() => {
+    const preview = text.text.trim().slice(0, 2) || "Ag";
+    const fallbackWidth = text.fontSize * 1.15;
+    if (typeof document === "undefined") {
+      return { preview, width: fallbackWidth };
+    }
+    const context = document.createElement("canvas").getContext("2d");
+    if (!context) return { preview, width: fallbackWidth };
+    context.font = `${text.fontStyle} ${text.fontWeight} ${text.fontSize}px ${text.fontFamily}`;
+    const measured = context.measureText(preview);
+    return { preview, width: measured.width || fallbackWidth };
+  }, [text]);
+
+  const previewWidth = Math.min(metrics.width, box.width);
+  const leftGap =
+    text.textAlign === "right"
+      ? box.width - previewWidth
+      : text.textAlign === "center"
+        ? (box.width - previewWidth) / 2
+        : 0;
+  const rightGap = Math.max(0, box.width - previewWidth - leftGap);
+  const previewScale = Math.min(1, 106 / Math.max(text.fontSize, 1));
+
+  return (
+    <div className="p-3">
+      <div aria-label="Text metrics" className="relative h-[200px] overflow-hidden bg-surface-hover/30 p-6">
+        <div className="relative flex h-full items-center justify-center overflow-hidden rounded-[12px] bg-surface-panel">
+          <div className="relative flex h-[108px] w-[168px] items-center justify-center border border-blue-500">
+            <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-blue-500" />
+            <div
+              className="relative border border-dashed border-red-500 px-2 leading-none text-text-primary"
+              style={{
+                fontFamily: text.fontFamily,
+                fontSize: `${Math.max(18, text.fontSize * previewScale)}px`,
+                fontStyle: text.fontStyle,
+                fontWeight: text.fontWeight,
+              }}
+            >
+              {metrics.preview}
+            </div>
+            <span className="absolute -left-2 top-1/2 -translate-x-full -translate-y-1/2 rounded bg-orange-500 px-1.5 py-0.5 text-xs font-medium text-white">
+              {formatValue(leftGap)}
+            </span>
+            <span className="absolute -right-2 top-1/2 translate-x-full -translate-y-1/2 rounded bg-orange-500 px-1.5 py-0.5 text-xs font-medium text-white">
+              {formatValue(rightGap)}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * CSS-box-model-style diagram with nested Border → Padding → content layers.
  * Purely presentational — all values are pre-computed pixel numbers from
@@ -36,10 +99,12 @@ function RadiusCorner({ corner }: { corner: Corner }) {
  */
 export function BoxModelDiagram({
   box,
+  textMetrics,
   units,
   remBase,
 }: {
   box: InspectData["box"];
+  textMetrics?: InspectData["textMetrics"];
   units: InspectUnits;
   remBase: number;
 }) {
@@ -54,6 +119,10 @@ export function BoxModelDiagram({
   const radius = box.cornerRadius;
   const hasRadius = radius && Object.values(radius).some((value) => value > 0);
   const borderLabelLeft = hasRadius ? 48 : undefined;
+
+  if (textMetrics) {
+    return <TextMetricsDiagram text={textMetrics} box={box} formatValue={fmt} />;
+  }
 
   return (
     <div className="p-3">

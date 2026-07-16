@@ -55,6 +55,14 @@ export interface InspectData {
     cornerRadius?: { topLeft: number; topRight: number; bottomRight: number; bottomLeft: number };
     gap?: number;
   };
+  textMetrics?: {
+    text: string;
+    fontFamily: string;
+    fontSize: number;
+    fontWeight: string;
+    fontStyle: string;
+    textAlign: "left" | "center" | "right";
+  };
   sections: InspectSection[];
 }
 
@@ -445,6 +453,17 @@ export function buildInspectData(input: BuildInspectDataInput): InspectData | nu
       cornerRadius,
       gap,
     },
+    textMetrics:
+      node.type === "text"
+        ? {
+            text: node.text,
+            fontFamily: node.fontFamily ?? "Arial",
+            fontSize: node.fontSize ?? 16,
+            fontWeight: node.fontWeight ?? "normal",
+            fontStyle: node.fontStyle ?? "normal",
+            textAlign: node.textAlign ?? "left",
+          }
+        : undefined,
     sections,
   };
 }

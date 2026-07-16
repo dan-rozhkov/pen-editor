@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PlusIcon, MinusIcon, DownloadSimpleIcon, SlidersHorizontalIcon } from "@phosphor-icons/react";
+import { PlusIcon, MinusIcon, SlidersHorizontalIcon } from "@phosphor-icons/react";
 import type { ExportSetting } from "@/types/scene";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { useExportPresetStore } from "@/store/exportPresetStore";
@@ -30,6 +30,8 @@ interface Props {
    * button above the rows instead of being dropped.
    */
   hideHeader?: boolean;
+  /** The enclosing section renders the add action in its own header. */
+  hideBodyAddAction?: boolean;
 }
 
 const FORMAT_OPTIONS = [
@@ -68,7 +70,7 @@ function scaleSelectValue(scale: number): string {
  * (localStorage) — shared by both, since presets are already outside the
  * document.
  */
-export function ExportSettingsList({ nodeId, nodeName, settings, onChange, hideHeader }: Props) {
+export function ExportSettingsList({ nodeId, nodeName, settings, onChange, hideHeader, hideBodyAddAction = false }: Props) {
   const pixiRefs = useCanvasRefStore((s) => s.pixiRefs);
   const presets = useExportPresetStore((s) => s.presets);
   const [isExporting, setIsExporting] = useState(false);
@@ -196,8 +198,7 @@ export function ExportSettingsList({ nodeId, nodeName, settings, onChange, hideH
       )}
 
       {settings.length > 0 && (
-        <Button onClick={handleExportAll} disabled={isExporting} variant="secondary" className="w-full min-w-0">
-          <DownloadSimpleIcon />
+        <Button onClick={handleExportAll} disabled={isExporting} variant="outline" className="w-full min-w-0">
           <span className="min-w-0 truncate">{isExporting ? "Exporting…" : "Export all"}</span>
         </Button>
       )}
@@ -209,7 +210,7 @@ export function ExportSettingsList({ nodeId, nodeName, settings, onChange, hideH
   if (hideHeader) {
     return (
       <div className="flex flex-col gap-2 px-3 pb-2">
-        <div className="flex justify-end">{action}</div>
+        {!hideBodyAddAction && <div className="flex justify-end">{action}</div>}
         {body}
       </div>
     );

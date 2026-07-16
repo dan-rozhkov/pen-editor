@@ -196,7 +196,7 @@ describe("<InspectPanel />", () => {
     const tokenRow = screen.getByText("Brand/Red").closest('[data-testid="inspect-row"]');
     expect(tokenRow).toBeTruthy();
     fireEvent.click(tokenRow!);
-    expect(screen.getByText("#aa0000")).toBeTruthy();
+    expect(screen.getByText("#AA0000")).toBeTruthy();
   });
 
   it("renders componentId and propertyValues for a ref node", () => {
@@ -318,6 +318,10 @@ describe("<InspectPanel />", () => {
     // title, not a second one nested inside ExportSettingsList's PropertySection.
     expect(screen.getAllByText("Export")).toHaveLength(1);
 
+    const exportHeader = screen.getByRole("button", { name: "Export" }).parentElement;
+    expect(exportHeader).not.toBeNull();
+    expect(within(exportHeader!).getByLabelText("Add export setting")).toBeTruthy();
+
     fireEvent.click(screen.getByLabelText("Add export setting"));
     expect(screen.getByTestId("export-settings-list").children).toHaveLength(2);
   });
@@ -352,6 +356,6 @@ describe("<InspectPanel />", () => {
     }));
     select(["rect1"]);
     render(<InspectPanel />);
-    expect(screen.getByText("#aa0000")).toBeTruthy();
+    expect(screen.getByText("#AA0000")).toBeTruthy();
   });
 });

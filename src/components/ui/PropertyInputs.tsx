@@ -23,6 +23,10 @@ function formatVariableNameForDisplay(name: string): string {
   return name.trim().replace(/^\$/, "");
 }
 
+function formatHexForDisplay(value: string): string {
+  return /^#[\da-f]{0,8}$/i.test(value) ? value.toUpperCase() : value;
+}
+
 interface PropertySectionProps {
   title: string;
   children: React.ReactNode;
@@ -275,7 +279,7 @@ export function ColorInput({
         </InputGroupAddon>
         <InputGroupInput
           type="text"
-          value={value}
+          value={formatHexForDisplay(value)}
           onChange={(e) => !readOnly && onChange(e.target.value)}
           readOnly={readOnly}
           placeholder="#000000"

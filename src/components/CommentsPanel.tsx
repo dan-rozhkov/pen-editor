@@ -1,11 +1,18 @@
 import { useMemo, useState } from "react";
-import { ChatCircleIcon } from "@phosphor-icons/react";
+import { ChatCircleIcon, SlidersHorizontalIcon } from "@phosphor-icons/react";
 import { useCommentsStore, type CommentThread } from "@/store/commentsStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { usePageStore } from "@/store/pageStore";
 import { isThreadUnattached, isAgentThread } from "@/lib/comments/commentsLogic";
 import { navigateToThread } from "@/lib/comments/commentNavigation";
-import { Checkbox } from "@/components/ui/checkbox";
+import { IconButton } from "@/components/ui/IconButton";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { PanelEmptyState } from "@/components/PanelEmptyState";
 
 interface PanelRow {
   thread: CommentThread;
@@ -64,44 +71,55 @@ export function CommentsPanelContent() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-border-default shrink-0">
-        <span className="flex-1 text-sm font-medium text-text-primary">Comments</span>
-      </div>
-
-      <div className="flex flex-col gap-2 px-4 py-2 border-b border-border-default text-xs text-text-muted">
-        <label className="flex items-center gap-2">
-          <Checkbox
-            checked={showResolved}
-            onCheckedChange={(v) => setShowResolved(v === true)}
+        <span className="flex-1 text-sm font-medium text-text-primary">Threads</span>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <IconButton
+                data-testid="threads-settings-trigger"
+                variant="ghost"
+                size="icon-sm"
+                tooltip="Thread settings"
+                aria-label="Thread settings"
+              >
+                <SlidersHorizontalIcon size={16} />
+              </IconButton>
+            }
           />
-          Show resolved
-        </label>
-        <label className="flex items-center gap-2">
-          <Checkbox
-            checked={currentPageOnly}
-            onCheckedChange={(v) => setCurrentPageOnly(v === true)}
-          />
-          Current page only
-        </label>
+          <DropdownMenuContent align="end" sideOffset={4}>
+            <DropdownMenuCheckboxItem
+              checked={showResolved}
+              onCheckedChange={setShowResolved}
+            >
+              Show resolved
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={currentPageOnly}
+              onCheckedChange={setCurrentPageOnly}
+            >
+              Current page only
+            </DropdownMenuCheckboxItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div className="flex-1 overflow-y-auto">
         {rows.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 px-4 py-10 text-center text-text-muted">
-            <ChatCircleIcon size={28} weight="light" />
-            <p className="text-xs">No comments yet. Press C and click the canvas to add one.</p>
-          </div>
+          <PanelEmptyState icon={<ChatCircleIcon size={28} weight="light" />}>
+            No comments yet. Press C and click the canvas to add one.
+          </PanelEmptyState>
         ) : (
-          <ul>
+          <ul className="flex flex-col gap-1 p-2">
             {rows.map((row) => (
               <li key={row.thread.id}>
                 <button
                   data-comment-row
                   data-thread-id={row.thread.id}
                   onClick={() => navigateToThread(row.thread.id)}
-                  className="flex w-full flex-col gap-1 border-b border-border-default px-4 py-2 text-left hover:bg-secondary"
+                  className="flex w-full flex-col gap-1 rounded-md px-3 py-2 text-left hover:bg-secondary"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-accent-primary">
+                    <span className="text-xs text-text-muted">
                       #{row.thread.order}
                     </span>
                     {isAgentThread(row.thread) && (

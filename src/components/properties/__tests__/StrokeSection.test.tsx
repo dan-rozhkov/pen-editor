@@ -44,6 +44,20 @@ function renderSection(node: SceneNode, props: Partial<React.ComponentProps<type
   return onUpdate;
 }
 
+function openLegacyStrokePopover() {
+  fireEvent.click(screen.getByTitle("Edit stroke"));
+}
+
+function numberInputFor(label: string) {
+  let container: HTMLElement | null = screen.getByText(label).parentElement;
+  while (container) {
+    const input = container.querySelector("input");
+    if (input) return input;
+    container = container.parentElement;
+  }
+  throw new Error(`No numeric input found for ${label}`);
+}
+
 afterEach(() => cleanup());
 
 describe("<StrokeSection />", () => {
@@ -78,15 +92,15 @@ describe("<StrokeSection />", () => {
 
     it("renders current color, opacity, align and weight", () => {
       renderSection(unifiedNode());
+      openLegacyStrokePopover();
 
       // Hex text input.
-      const hex = screen.getByDisplayValue("#ff0000") as HTMLInputElement;
-      expect(hex.value).toBe("#ff0000");
+      const hex = screen.getByDisplayValue("#FF0000") as HTMLInputElement;
+      expect(hex.value).toBe("#FF0000");
 
-      // Two spinbuttons in unified mode: [opacity %, weight].
-      const inputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
-      expect(inputs[0].value).toBe("50"); // opacity 0.5 -> 50%
-      expect(inputs[1].value).toBe("4"); // weight
+      // The stroke popover has opacity; the section retains weight.
+      expect((numberInputFor("Opacity") as HTMLInputElement).value).toBe("50");
+      expect((numberInputFor("Weight") as HTMLInputElement).value).toBe("4");
 
       // Selected select labels render as text.
       expect(screen.getByText("Outside")).toBeTruthy();
@@ -95,22 +109,22 @@ describe("<StrokeSection />", () => {
 
     it("emits a hex color change", () => {
       const onUpdate = renderSection(unifiedNode());
-      const hex = screen.getByDisplayValue("#ff0000");
+      openLegacyStrokePopover();
+      const hex = screen.getByDisplayValue("#FF0000");
       fireEvent.change(hex, { target: { value: "#00ff00" } });
       expect(onUpdate).toHaveBeenCalledWith({ stroke: "#00ff00" });
     });
 
     it("converts an opacity edit from percent to a 0..1 fraction", () => {
       const onUpdate = renderSection(unifiedNode());
-      const inputs = screen.getAllByRole("spinbutton");
-      fireEvent.change(inputs[0], { target: { value: "20" } });
+      openLegacyStrokePopover();
+      fireEvent.change(numberInputFor("Opacity"), { target: { value: "20" } });
       expect(onUpdate).toHaveBeenCalledWith({ strokeOpacity: 0.2 });
     });
 
     it("emits a weight change", () => {
       const onUpdate = renderSection(unifiedNode());
-      const inputs = screen.getAllByRole("spinbutton");
-      fireEvent.change(inputs[1], { target: { value: "8" } });
+      fireEvent.change(numberInputFor("Weight"), { target: { value: "8" } });
       expect(onUpdate).toHaveBeenCalledWith({ strokeWidth: 8 });
     });
 
@@ -132,8 +146,8 @@ describe("<StrokeSection />", () => {
 
     it("defaults opacity display to 100% when unset", () => {
       renderSection(makeNode({ stroke: "#000000", strokeWidth: 2 }));
-      const inputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
-      expect(inputs[0].value).toBe("100");
+      openLegacyStrokePopover();
+      expect((numberInputFor("Opacity") as HTMLInputElement).value).toBe("100");
     });
   });
 
@@ -147,20 +161,20 @@ describe("<StrokeSection />", () => {
 
     it("renders T/R/B/L inputs and hides the unified weight", () => {
       renderSection(perSideNode());
+      openLegacyStrokePopover();
       // Opacity + 4 per-side inputs = 5 spinbuttons; no unified weight input.
-      const inputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
-      expect(inputs.length).toBe(5);
-      expect(inputs[1].value).toBe("1"); // top
-      expect(inputs[2].value).toBe("2"); // right
-      expect(inputs[3].value).toBe("3"); // bottom
-      expect(inputs[4].value).toBe("4"); // left
+      expect((numberInputFor("Opacity") as HTMLInputElement).value).toBe("100");
+      expect((numberInputFor("T") as HTMLInputElement).value).toBe("1");
+      expect((numberInputFor("R") as HTMLInputElement).value).toBe("2");
+      expect((numberInputFor("B") as HTMLInputElement).value).toBe("3");
+      expect((numberInputFor("L") as HTMLInputElement).value).toBe("4");
       expect(screen.getByText("Per Side")).toBeTruthy();
     });
 
     it("emits a merged per-side object when one side changes", () => {
       const onUpdate = renderSection(perSideNode());
-      const inputs = screen.getAllByRole("spinbutton");
-      fireEvent.change(inputs[2], { target: { value: "10" } }); // right
+      openLegacyStrokePopover();
+      fireEvent.change(numberInputFor("R"), { target: { value: "10" } });
       expect(onUpdate).toHaveBeenCalledWith({
         strokeWidthPerSide: { top: 1, right: 10, bottom: 3, left: 4 },
       });
@@ -175,8 +189,8 @@ describe("<StrokeSection />", () => {
       renderSection(makeNode({ stroke: "#000", strokeWidth: 6 }));
       expect(screen.getByText("Weight")).toBeTruthy();
       expect(screen.getByText("Unified")).toBeTruthy();
-      // Unified mode => exactly opacity + weight spinbuttons.
-      expect(screen.getAllByRole("spinbutton")).toHaveLength(2);
+      // The compact row keeps opacity inside its popover, leaving weight here.
+      expect(screen.getAllByRole("spinbutton")).toHaveLength(1);
     });
 
     it("omits the Mode select for ellipses (per-side unsupported)", () => {
@@ -225,8 +239,9 @@ describe("<StrokeSection />", () => {
         makeNode({ stroke: "#ff0000", strokeWidth: 4, strokeOpacity: 0.5 }),
         { mixedKeys: new Set(["stroke", "strokeOpacity", "strokeWidth"]) },
       );
+      openLegacyStrokePopover();
       // ColorInput renders the "Mixed" label instead of a hex input.
-      expect(screen.getByText("Mixed")).toBeTruthy();
+      expect(screen.getAllByText("Mixed")).toHaveLength(2);
       expect(screen.queryByDisplayValue("#ff0000")).toBeNull();
 
       const inputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
@@ -261,6 +276,8 @@ describe("<StrokeSection />", () => {
   describe("stroke paint stack", () => {
     it("shows a Type selector (Solid/Linear/Radial) for a legacy single-color stroke", () => {
       renderSection(makeNode({ stroke: "#ff0000", strokeWidth: 4 }));
+      expect(screen.queryByText("Solid")).toBeNull();
+      openLegacyStrokePopover();
       expect(screen.getByText("Solid")).toBeTruthy();
     });
 
@@ -288,6 +305,7 @@ describe("<StrokeSection />", () => {
           strokes: [{ id: "s1", type: "solid", color: "#111111" }],
         } as Partial<SceneNode>),
       );
+      openLegacyStrokePopover();
       fireEvent.click(screen.getAllByRole("button")[0]);
       expect(onUpdate).toHaveBeenCalledWith(
         expect.objectContaining({ strokes: undefined, stroke: undefined }),
@@ -314,6 +332,7 @@ describe("<StrokeSection />", () => {
           pathStroke: { fill: "#123456", thickness: 3, align: "inside" },
         } as Partial<SceneNode>),
       );
+      openLegacyStrokePopover();
       // The hex input reflects the pathStroke fill.
       const hex = screen.getByDisplayValue("#123456");
       fireEvent.change(hex, { target: { value: "#abcdef" } });

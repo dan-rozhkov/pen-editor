@@ -9,6 +9,7 @@ import type { FlatFrameNode } from "../types/scene";
 import { resolveSlideOrder } from "../utils/slideOrder";
 import { useNodeThumbnails } from "../hooks/useComponentThumbnails";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
+import { PanelEmptyState } from "./PanelEmptyState";
 
 /** Pointer movement (px) before a press is treated as a drag rather than a click. */
 const DRAG_THRESHOLD_PX = 4;
@@ -250,9 +251,9 @@ export function SlidesPanel() {
       </div>
       <div className="flex-1 overflow-y-auto px-4 pt-3 pb-5">
         {slides.length === 0 ? (
-          <div className="text-text-disabled text-xs text-center p-5">
+          <PanelEmptyState icon={<CardsIcon size={28} weight="light" />}>
             No slides yet
-          </div>
+          </PanelEmptyState>
         ) : (
           <div className="flex flex-col gap-3">
             {slides.map((slide, index) => {

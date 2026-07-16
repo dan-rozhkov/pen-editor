@@ -116,6 +116,12 @@ export function StrokeSection({
   };
 
   const strokeMode = getStrokeMode(node);
+  const legacyStrokePaint: Paint = {
+    id: "legacy-stroke",
+    type: "solid",
+    color: node.stroke ?? pathStroke?.fill ?? component?.stroke ?? "#000000",
+    opacity: node.strokeOpacity,
+  };
 
   // Per-side stroke doesn't make sense for ellipses
   const canUsePerSide = node.type !== "ellipse";
@@ -241,47 +247,56 @@ export function StrokeSection({
               canUseGradient={strokeMode !== "per-side"}
             />
           ) : (
-          /* Color and opacity row (legacy single-stroke mode) */
+          /* Keep the legacy single-stroke controls compact, matching Fill's
+             swatch-and-summary row. Its type picker lives in the popover. */
           <div className="flex items-center gap-1">
-            <div className="w-20 shrink-0">
-              <SelectInput
-                labelOutside
-                label="Type"
-                value="solid"
-                options={
-                  strokeMode === "per-side"
-                    ? [{ value: "solid", label: "Solid" }]
-                    : STROKE_TYPE_OPTIONS
-                }
-                onChange={(v) => {
-                  if (v === "linear" || v === "radial") handleConvertToGradient(v);
-                }}
-              />
-            </div>
-            <div className="min-w-0 flex-1">
-              <ColorInput
-                value={node.stroke ?? pathStroke?.fill ?? component?.stroke ?? "#000000"}
-                onChange={(v) => effectiveOnUpdate({ stroke: v || undefined })}
-                variableId={node.strokeBinding?.variableId}
-                onVariableChange={handleStrokeVariableChange}
-                availableVariables={colorVariables}
-                activeTheme={activeTheme}
-                isMixed={mixedKeys?.has("stroke")}
-              />
-            </div>
-            <div className="w-20">
-              <NumberInput
-                label="%"
-                value={Math.round((node.strokeOpacity ?? 1) * 100)}
-                onChange={(v) =>
-                  effectiveOnUpdate({ strokeOpacity: Math.max(0, Math.min(100, v)) / 100 })
-                }
-                min={0}
-                max={100}
-                step={1}
-                isMixed={mixedKeys?.has("strokeOpacity")}
-              />
-            </div>
+            <Popover>
+              <PopoverTrigger className={FILL_ROW_TRIGGER_CLASS} title="Edit stroke">
+                <PaintSwatch paint={legacyStrokePaint} />
+                <span className="min-w-0 flex-1 truncate text-xs text-text-primary">
+                  {mixedKeys?.has("stroke") ? "Mixed" : paintSummary(legacyStrokePaint)}
+                </span>
+              </PopoverTrigger>
+              <PopoverContent
+                draggable
+                dragHandleContent={<span className="text-[11px] font-semibold text-text-primary">Stroke</span>}
+              >
+                <SelectInput
+                  label="Type"
+                  labelOutside
+                  value="solid"
+                  options={
+                    strokeMode === "per-side"
+                      ? [{ value: "solid", label: "Solid" }]
+                      : STROKE_TYPE_OPTIONS
+                  }
+                  onChange={(v) => {
+                    if (v === "linear" || v === "radial") handleConvertToGradient(v);
+                  }}
+                />
+                <ColorInput
+                  value={node.stroke ?? pathStroke?.fill ?? component?.stroke ?? "#000000"}
+                  onChange={(v) => effectiveOnUpdate({ stroke: v || undefined })}
+                  variableId={node.strokeBinding?.variableId}
+                  onVariableChange={handleStrokeVariableChange}
+                  availableVariables={colorVariables}
+                  activeTheme={activeTheme}
+                  isMixed={mixedKeys?.has("stroke")}
+                />
+                <NumberInput
+                  label="Opacity"
+                  labelOutside
+                  value={Math.round((node.strokeOpacity ?? 1) * 100)}
+                  onChange={(v) =>
+                    effectiveOnUpdate({ strokeOpacity: Math.max(0, Math.min(100, v)) / 100 })
+                  }
+                  min={0}
+                  max={100}
+                  step={1}
+                  isMixed={mixedKeys?.has("strokeOpacity")}
+                />
+              </PopoverContent>
+            </Popover>
             <OverrideIndicator
               isOverridden={isOverridden(node.stroke, component?.stroke)}
               onReset={() => resetOverride("stroke")}

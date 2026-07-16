@@ -1,14 +1,48 @@
 import { useMemo } from "react";
+import { PlusIcon } from "@phosphor-icons/react";
 import type { ExportSetting } from "@/types/scene";
 import { useDevExportStore } from "@/store/devExportStore";
-import { createExportSetting } from "@/utils/exportSettingsUtils";
+import { addExportSetting, createExportSetting } from "@/utils/exportSettingsUtils";
 import { ExportSettingsList } from "@/components/properties/ExportSettingsList";
 import { ReadOnlyProvider } from "@/components/ReadOnlyProvider";
+import { IconButton } from "@/components/ui/IconButton";
 
 interface Props {
   nodeId: string;
   nodeName: string | undefined;
   exportSettings: ExportSetting[] | undefined;
+  hideBodyAddAction?: boolean;
+}
+
+function useDevExportSettings(nodeId: string, exportSettings: ExportSetting[] | undefined) {
+  const override = useDevExportStore((s) => s.overrides[nodeId]);
+  const hasOverride = useDevExportStore((s) => Object.prototype.hasOwnProperty.call(s.overrides, nodeId));
+  const setOverride = useDevExportStore((s) => s.setOverride);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const defaultRow = useMemo(() => createExportSetting(), [nodeId]);
+  const settings = useMemo(() => {
+    if (hasOverride) return override ?? [];
+    const base = exportSettings ?? [];
+    return base.length > 0 ? base : [defaultRow];
+  }, [hasOverride, override, exportSettings, defaultRow]);
+
+  return { settings, setSettings: (next: ExportSetting[]) => setOverride(nodeId, next) };
+}
+
+/** Add control used in the InspectPanel accordion header. */
+export function DevExportAddButton({ nodeId, exportSettings }: Pick<Props, "nodeId" | "exportSettings">) {
+  const { settings, setSettings } = useDevExportSettings(nodeId, exportSettings);
+  return (
+    <IconButton
+      variant="ghost"
+      size="icon-sm"
+      onClick={() => setSettings(addExportSetting(settings, createExportSetting()))}
+      tooltip="Add export setting"
+    >
+      <PlusIcon />
+    </IconButton>
+  );
 }
 
 /**
@@ -29,29 +63,8 @@ interface Props {
  *   export" works in a single click, without ever writing that default back
  *   to the node.
  */
-export function DevExportSection({ nodeId, nodeName, exportSettings }: Props) {
-  const override = useDevExportStore((s) => s.overrides[nodeId]);
-  // Distinguish "never touched in Dev Mode" (key absent) from "explicitly
-  // emptied" (key present, value `[]`) — `override` alone can't tell them
-  // apart since both read as an empty/undefined value.
-  const hasOverride = useDevExportStore((s) => Object.prototype.hasOwnProperty.call(s.overrides, nodeId));
-  const setOverride = useDevExportStore((s) => s.setOverride);
-
-  // The default row's id must stay stable across re-renders for the *same*
-  // untouched node — otherwise its React list key (and thus DOM identity)
-  // churns on every unrelated recompute. Memoized on `nodeId` alone (not on
-  // `exportSettings`/`override`) so it survives even if a re-render passes a
-  // new-but-still-empty `exportSettings` array reference for the same node.
-  // createExportSetting() itself takes no arguments — the dep array is used
-  // purely as a change-detection key, hence the eslint-disable below.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const defaultRow = useMemo(() => createExportSetting(), [nodeId]);
-
-  const settings = useMemo(() => {
-    if (hasOverride) return override ?? [];
-    const base = exportSettings ?? [];
-    return base.length > 0 ? base : [defaultRow];
-  }, [hasOverride, override, exportSettings, defaultRow]);
+export function DevExportSection({ nodeId, nodeName, exportSettings, hideBodyAddAction = false }: Props) {
+  const { settings, setSettings } = useDevExportSettings(nodeId, exportSettings);
 
   return (
     // Dev Mode is read-only for the *document*: App.tsx wraps `<RightPanel />`
@@ -75,8 +88,9 @@ export function DevExportSection({ nodeId, nodeName, exportSettings }: Props) {
         nodeId={nodeId}
         nodeName={nodeName}
         settings={settings}
-        onChange={(next) => setOverride(nodeId, next)}
+        onChange={setSettings}
         hideHeader
+        hideBodyAddAction={hideBodyAddAction}
       />
     </ReadOnlyProvider>
   );

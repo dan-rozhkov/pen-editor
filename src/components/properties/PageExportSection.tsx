@@ -93,7 +93,7 @@ export function PageExportSection() {
         <Button
           onClick={handleExportAllFrames}
           disabled={isExporting}
-          variant="secondary"
+          variant="outline"
           className="w-full min-w-0"
         >
           <span className="min-w-0 truncate">

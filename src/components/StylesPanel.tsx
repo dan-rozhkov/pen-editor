@@ -11,7 +11,7 @@ import { createSolidPaint, createShadowEffect } from "@/utils/fillUtils";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import { CustomColorPicker } from "./ui/ColorPicker";
 import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip";
-import { PlusIcon, TrashIcon, ArrowLineLeftIcon } from "@phosphor-icons/react";
+import { PaintBrushIcon, PlusIcon, TrashIcon, ArrowLineLeftIcon } from "@phosphor-icons/react";
 import { buildCSSGradient } from "@/utils/gradientUtils";
 import {
   DropdownMenu,
@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { IconButton } from "./ui/IconButton";
+import { PanelEmptyState } from "./PanelEmptyState";
 
 /** Inline editable name cell (mirrors TextStylesPanel/VariablesPanel EditableCell). */
 function EditableName({
@@ -265,7 +266,9 @@ export function StylesPanelContent() {
 
       <div className="flex-1 overflow-y-auto">
         {fillStyles.length === 0 && effectStyles.length === 0 ? (
-          <div className="text-center text-text-disabled text-xs py-6">No styles yet</div>
+          <PanelEmptyState icon={<PaintBrushIcon size={28} weight="light" />}>
+            No styles yet
+          </PanelEmptyState>
         ) : (
           <div data-testid="styles-list">
             {fillStyles.map((style) => <FillStyleRow key={style.id} style={style} />)}
@@ -276,4 +279,3 @@ export function StylesPanelContent() {
     </div>
   );
 }
-

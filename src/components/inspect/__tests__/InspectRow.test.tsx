@@ -14,6 +14,14 @@ import { toast } from "sonner";
 import { InspectRow } from "../InspectRow";
 
 describe("<InspectRow />", () => {
+  it("displays hex colors in uppercase while preserving the copied value", async () => {
+    render(<InspectRow row={{ label: "Fill", value: "#aa0000" }} />);
+    expect(screen.getByText("#AA0000")).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId("inspect-row"));
+    await vi.waitFor(() => expect(writeTextToClipboard).toHaveBeenCalledWith("#aa0000"));
+  });
+
   beforeEach(() => {
     vi.mocked(writeTextToClipboard).mockClear();
     vi.mocked(toast).mockClear();

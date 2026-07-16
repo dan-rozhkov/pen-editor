@@ -8,6 +8,7 @@ import { generateId } from "../types/scene";
 import type { SceneNode, FlatFrameNode, RefNode } from "../types/scene";
 import { useNodePlacement } from "../hooks/useNodePlacement";
 import { useComponentThumbnails } from "../hooks/useComponentThumbnails";
+import { PanelEmptyState } from "./PanelEmptyState";
 
 export function ComponentsPanel() {
   const nodesById = useSceneStore((state) => state.nodesById);
@@ -52,9 +53,9 @@ export function ComponentsPanel() {
   if (components.length === 0) {
     return (
       <div className="h-full bg-surface-panel flex flex-col select-none">
-        <div className="text-text-disabled text-xs text-center p-5">
+        <PanelEmptyState icon={<DiamondsFour size={28} weight="light" />}>
           No components yet
-        </div>
+        </PanelEmptyState>
       </div>
     );
   }

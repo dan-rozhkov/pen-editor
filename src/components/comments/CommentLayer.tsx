@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { CheckIcon, TrashIcon, SparkleIcon, ArrowCounterClockwiseIcon } from "@phosphor-icons/react";
+import { CheckIcon, TrashIcon, SparkleIcon, ArrowCounterClockwiseIcon, ArrowUpIcon, XIcon } from "@phosphor-icons/react";
 import { useViewportStore } from "@/store/viewportStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useLayoutStore } from "@/store/layoutStore";
@@ -11,7 +11,7 @@ import {
 import { resolveAnchorPoint, buildClickAnchor, isAgentThread, type NodeRect } from "@/lib/comments/commentsLogic";
 import { findCanvasHitTargetAtPoint } from "@/pixi/interaction/hitTesting";
 import { sendCommentToAgent } from "@/lib/sendCommentToAgent";
-import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -262,21 +262,23 @@ function ThreadPopover({ thread, onClose }: { thread: CommentThread; onClose: ()
         position: "absolute",
         left: PIN_SIZE + 6,
         top: -PIN_SIZE,
-        width: 260,
-        maxHeight: 360,
+        width: 320,
+        maxHeight: 420,
         overflowY: "auto",
         pointerEvents: "auto",
         zIndex: 1,
       }}
-      className="rounded-lg border border-border-default bg-surface-panel p-2 shadow-lg"
+      className="rounded-xl border border-border-light bg-surface-panel p-3 shadow-lg"
     >
-      <div className="mb-1 flex items-center justify-between">
-        <span className="text-xs font-medium text-text-primary">Comment #{thread.order}</span>
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-[11px] font-semibold text-text-primary">Comment</span>
         <div className="flex items-center gap-0.5">
-          <Button
-            size="icon-xs"
+          <IconButton
+            size="icon-sm"
             variant="ghost"
-            title={resolved ? "Reopen" : "Resolve"}
+            className="size-6 rounded-lg"
+            tooltip={resolved ? "Reopen" : "Resolve"}
+            side="top"
             onClick={() =>
               resolved
                 ? store.getState().unresolveThread(thread.id)
@@ -284,45 +286,59 @@ function ThreadPopover({ thread, onClose }: { thread: CommentThread; onClose: ()
             }
           >
             {resolved ? <ArrowCounterClockwiseIcon /> : <CheckIcon />}
-          </Button>
-          <Button
-            size="icon-xs"
+          </IconButton>
+          <IconButton
+            size="icon-sm"
             variant="ghost"
-            title="Send to agent"
+            className="size-6 rounded-lg"
+            tooltip="Send to agent"
+            side="top"
             onClick={() => sendCommentToAgent(thread.id)}
           >
             <SparkleIcon />
-          </Button>
-          <Button
-            size="icon-xs"
+          </IconButton>
+          <IconButton
+            size="icon-sm"
             variant="ghost"
-            title="Delete thread"
+            className="size-6 rounded-lg"
+            tooltip="Delete thread"
+            side="top"
             onClick={() => setConfirmDelete(true)}
           >
             <TrashIcon />
-          </Button>
+          </IconButton>
+          <IconButton
+            size="icon-sm"
+            variant="ghost"
+            className="size-6 rounded-lg"
+            tooltip="Close comment"
+            side="top"
+            onClick={onClose}
+          >
+            <XIcon />
+          </IconButton>
         </div>
       </div>
 
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-2">
         {thread.messages.map((m) => (
-          <div key={m.id} className="rounded-md bg-secondary/60 px-2 py-1.5">
+          <div key={m.id} className="rounded-md bg-secondary/60 px-3 py-2.5">
             <div className="mb-0.5 flex items-center justify-between">
-              <span className="text-[10px] font-medium text-text-muted">
+              <span className="text-xs font-medium text-text-muted">
                 {m.author === "agent" ? "Agent" : "You"}
                 {m.editedAt ? " (edited)" : ""}
               </span>
               {m.author === "me" && editingId !== m.id && (
                 <div className="flex items-center gap-1">
                   <button
-                    className="text-[10px] text-text-muted hover:text-text-primary"
+                    className="text-xs text-text-muted hover:text-text-primary"
                     onClick={() => startEdit(m.id, m.text)}
                   >
                     Edit
                   </button>
                   {m.id !== rootId && (
                     <button
-                      className="text-[10px] text-text-muted hover:text-text-primary"
+                      className="text-xs text-text-muted hover:text-text-primary"
                       onClick={() => store.getState().deleteMessage(thread.id, m.id)}
                     >
                       Delete
@@ -337,26 +353,39 @@ function ThreadPopover({ thread, onClose }: { thread: CommentThread; onClose: ()
                   autoFocus
                   value={editText}
                   onChange={(e) => setEditText(e.target.value)}
-                  className="w-full resize-none rounded border border-border-default bg-background px-1.5 py-1 text-xs text-text-primary outline-none"
+                  className="w-full resize-none rounded-md border border-border-default bg-background px-2.5 py-2 text-sm text-text-primary outline-none focus:ring-1 focus:ring-accent-primary"
                   rows={2}
                 />
                 <div className="flex justify-end gap-1">
-                  <Button size="xs" variant="ghost" onClick={() => setEditingId(null)}>
-                    Cancel
-                  </Button>
-                  <Button size="xs" onClick={commitEdit}>
-                    Save
-                  </Button>
+                  <IconButton
+                    tooltip="Cancel edit"
+                    side="top"
+                    size="icon-sm"
+                    variant="ghost"
+                    className="size-6 rounded-lg"
+                    onClick={() => setEditingId(null)}
+                  >
+                    <XIcon className="size-3.5" />
+                  </IconButton>
+                  <IconButton
+                    tooltip="Save edit"
+                    side="top"
+                    size="icon-sm"
+                    className="size-6 rounded-lg bg-accent-primary text-white hover:bg-accent-primary/90"
+                    onClick={commitEdit}
+                  >
+                    <CheckIcon className="size-3.5" />
+                  </IconButton>
                 </div>
               </div>
             ) : (
-              <p className="whitespace-pre-wrap break-words text-xs text-text-primary">{m.text}</p>
+              <p className="whitespace-pre-wrap break-words text-sm text-text-primary">{m.text}</p>
             )}
           </div>
         ))}
       </div>
 
-      <div className="mt-1.5 flex items-end gap-1">
+      <div className="mt-3 flex items-end gap-2">
         <textarea
           value={replyText}
           onChange={(e) => setReplyText(e.target.value)}
@@ -367,19 +396,26 @@ function ThreadPopover({ thread, onClose }: { thread: CommentThread; onClose: ()
             }
           }}
           placeholder="Reply…"
-          rows={1}
-          className="min-h-7 flex-1 resize-none rounded border border-border-default bg-background px-1.5 py-1 text-xs text-text-primary outline-none"
+          rows={2}
+          className="min-h-16 flex-1 resize-none rounded-md border border-border-default bg-background px-2.5 py-2 text-sm text-text-primary outline-none focus:ring-1 focus:ring-accent-primary"
         />
-        <Button size="sm" onClick={submitReply} disabled={!replyText.trim()}>
-          Post
-        </Button>
+        <IconButton
+          tooltip="Post reply"
+          side="top"
+          variant="default"
+          size="icon-sm"
+          className={
+            replyText.trim()
+              ? "size-6 shrink-0 rounded-lg bg-accent-primary text-white hover:bg-accent-primary/90"
+              : "size-6 shrink-0 rounded-lg bg-transparent text-text-secondary hover:bg-transparent disabled:opacity-100"
+          }
+          disabled={!replyText.trim()}
+          onClick={submitReply}
+        >
+          <ArrowUpIcon className="size-3.5" weight="regular" />
+        </IconButton>
       </div>
 
-      <div className="mt-1 flex justify-end">
-        <Button size="xs" variant="ghost" onClick={onClose}>
-          Close
-        </Button>
-      </div>
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent size="sm">
@@ -435,33 +471,42 @@ function DraftComposer({ screen }: { screen: Screen }) {
       <div
         data-comment-draft
         onPointerDown={(e) => e.stopPropagation()}
-        style={{ position: "absolute", left: PIN_SIZE + 6, top: -PIN_SIZE, width: 240, pointerEvents: "auto" }}
-        className="rounded-lg border border-border-default bg-surface-panel p-2 shadow-lg"
+        style={{ position: "absolute", left: PIN_SIZE + 6, top: -PIN_SIZE, width: 320, pointerEvents: "auto" }}
+        className="rounded-xl border border-border-light bg-surface-panel p-1.5 shadow-lg"
       >
-        <textarea
-          autoFocus
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              submit();
-            } else if (e.key === "Escape") {
-              e.preventDefault();
-              cancel();
+        <div className="flex items-end gap-1.5">
+          <textarea
+            autoFocus
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                submit();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                cancel();
+              }
+            }}
+            placeholder="Add a comment…"
+            rows={2}
+            className="min-h-16 flex-1 resize-none bg-transparent px-1.5 py-1 text-[13px] text-text-primary outline-none placeholder:text-text-muted"
+          />
+          <IconButton
+            tooltip="Add comment"
+            side="top"
+            variant="default"
+            size="icon-sm"
+            className={
+              text.trim()
+                ? "size-6 shrink-0 rounded-lg bg-accent-primary text-white hover:bg-accent-primary/90"
+                : "size-6 shrink-0 rounded-lg bg-transparent text-text-secondary hover:bg-transparent disabled:opacity-100"
             }
-          }}
-          placeholder="Add a comment…"
-          rows={2}
-          className="w-full resize-none rounded border border-border-default bg-background px-1.5 py-1 text-xs text-text-primary outline-none"
-        />
-        <div className="mt-1 flex justify-end gap-1">
-          <Button size="xs" variant="ghost" onClick={cancel}>
-            Cancel
-          </Button>
-          <Button size="xs" onClick={submit} disabled={!text.trim()}>
-            Comment
-          </Button>
+            disabled={!text.trim()}
+            onClick={submit}
+          >
+            <ArrowUpIcon className="size-3.5" weight="regular" />
+          </IconButton>
         </div>
       </div>
     </div>

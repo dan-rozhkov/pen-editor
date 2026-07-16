@@ -6,7 +6,9 @@ import {
   ArrowCounterClockwiseIcon,
   CopyIcon,
   CheckIcon,
+  SparkleIcon,
 } from "@phosphor-icons/react";
+import { PanelEmptyState } from "@/components/PanelEmptyState";
 import { messageToMarkdown } from "@/lib/chatExport";
 import { SimpleMarkdown } from "./SimpleMarkdown";
 import { ToolCallIndicator } from "./ToolCallIndicator";
@@ -145,10 +147,9 @@ export function MessageList({ messages, isLoading, onRollback }: MessageListProp
       className="flex-1 overflow-y-auto layers-scrollbar px-3 py-3 space-y-3"
     >
       {messages.length === 0 && (
-        <div className="flex flex-col items-center justify-center h-full text-text-muted text-sm gap-2">
-          <span className="text-2xl">&#x2728;</span>
-          <p>Ask the design agent anything</p>
-        </div>
+        <PanelEmptyState icon={<SparkleIcon size={28} weight="light" />}>
+          Ask the design agent anything
+        </PanelEmptyState>
       )}
 
       {messages.map((msg) => {

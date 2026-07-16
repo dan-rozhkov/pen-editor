@@ -11,9 +11,10 @@ import {
   TableHead,
   TableCell,
 } from "./ui/table";
-import { PlusIcon, TrashIcon, ArrowLineLeftIcon } from "@phosphor-icons/react";
+import { PlusIcon, TextAaIcon, TrashIcon, ArrowLineLeftIcon } from "@phosphor-icons/react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip";
 import { IconButton } from "./ui/IconButton";
+import { PanelEmptyState } from "./PanelEmptyState";
 
 // Inline editable text/number cell (mirrors VariablesPanel's EditableCell).
 function EditableCell({
@@ -229,6 +230,11 @@ export function TextStylesPanelContent() {
       </div>
 
       <div className="flex-1 overflow-auto">
+        {textStyles.length === 0 ? (
+          <PanelEmptyState icon={<TextAaIcon size={28} weight="light" />}>
+            No text styles yet
+          </PanelEmptyState>
+        ) : (
         <Table className="border-collapse select-none table-fixed min-w-[720px]">
           <TableHeader>
             <TableRow className="border-border-light bg-surface-panel sticky top-0 hover:bg-surface-panel">
@@ -254,20 +260,10 @@ export function TextStylesPanelContent() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {textStyles.length === 0 ? (
-              <TableRow className="hover:bg-transparent">
-                <TableCell
-                  colSpan={7}
-                  className="text-center text-text-disabled text-xs py-12"
-                >
-                  No text styles yet
-                </TableCell>
-              </TableRow>
-            ) : (
-              textStyles.map((s) => <TextStyleRow key={s.id} style={s} />)
-            )}
+            {textStyles.map((s) => <TextStyleRow key={s.id} style={s} />)}
           </TableBody>
         </Table>
+        )}
       </div>
 
       <div className="border-t border-border-light px-4 py-3">

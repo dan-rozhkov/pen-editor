@@ -9,6 +9,7 @@ import {
   RECT_SUB_TOOLS,
   PEN_TOOL,
   PEN_SUB_TOOLS,
+  COMMENT_TOOL,
   TRAILING_TOOLS,
 } from "../lib/toolDefinitions";
 import { IconButton } from "./ui/IconButton";
@@ -243,6 +244,22 @@ export function PrimitivesPanel() {
             })}
           </DropdownMenuContent>
         </DropdownMenu>
+
+        <IconButton
+          onClick={() => toggleTool(COMMENT_TOOL.tool)}
+          tooltip={COMMENT_TOOL.label}
+          shortcut={COMMENT_TOOL.shortcut}
+          side="top"
+          variant="ghost"
+          size="lg"
+          className={`${toolButtonBaseClass} ${
+            activeTool === COMMENT_TOOL.tool
+              ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
+              : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
+          }`}
+        >
+          <COMMENT_TOOL.icon size={40} className="size-6" weight="light" />
+        </IconButton>
 
         {trailingTools.map(({ icon: Icon, label, tool, shortcut }) => {
           const isActive = activeTool === tool;
