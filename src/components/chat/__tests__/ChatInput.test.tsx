@@ -18,8 +18,13 @@ afterEach(() => {
 });
 
 beforeEach(() => {
-  // A known vision-capable model so the attach button is enabled.
-  useChatStore.setState({ model: "google/gemini-2.5-flash" });
+  // A known vision-capable model so the attach button is enabled, and a clean
+  // per-session attachment map so tests don't leak attachments into each other.
+  useChatStore.setState({
+    model: "google/gemini-2.5-flash",
+    attachedImages: {},
+    dismissedSelection: {},
+  });
   mockSelection = [];
 });
 
@@ -28,6 +33,7 @@ interface HarnessProps {
   isLoading?: boolean;
   stop?: () => void;
   initialInput?: string;
+  sessionId?: string;
 }
 
 /** Wrap ChatInput with local input state, mirroring the real parent wiring. */
@@ -36,10 +42,12 @@ function Harness({
   isLoading = false,
   stop = () => {},
   initialInput = "",
+  sessionId = "test-session",
 }: HarnessProps) {
   const [input, setInput] = useState(initialInput);
   return (
     <ChatInput
+      sessionId={sessionId}
       input={input}
       setInput={setInput}
       onSubmit={onSubmit}
@@ -220,6 +228,47 @@ describe("<ChatInput />", () => {
     });
   });
 
+  it("keeps attachments in the store when the input unmounts and remounts for the same session", async () => {
+    const { unmount } = render(
+      <Harness onSubmit={vi.fn()} sessionId="tab-A" />
+    );
+
+    const fileInput = document.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+    const file = new File(["fake-bytes"], "photo.png", { type: "image/png" });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => expect(screen.getByAltText("photo.png")).toBeTruthy());
+    expect(useChatStore.getState().attachedImages["tab-A"]).toHaveLength(1);
+
+    // Simulate the tab going inactive (ChatSession returns null) and back.
+    unmount();
+    expect(useChatStore.getState().attachedImages["tab-A"]).toHaveLength(1);
+
+    render(<Harness onSubmit={vi.fn()} sessionId="tab-A" />);
+    expect(screen.getByAltText("photo.png")).toBeTruthy();
+  });
+
+  it("keeps each session's attachments separate", async () => {
+    const { unmount } = render(
+      <Harness onSubmit={vi.fn()} sessionId="tab-A" />
+    );
+    const fileInput = document.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+    fireEvent.change(fileInput, {
+      target: { files: [new File(["a"], "a.png", { type: "image/png" })] },
+    });
+    await waitFor(() => expect(screen.getByAltText("a.png")).toBeTruthy());
+    unmount();
+
+    // A different session starts empty and doesn't see tab-A's attachment.
+    render(<Harness onSubmit={vi.fn()} sessionId="tab-B" />);
+    expect(screen.queryByAltText("a.png")).toBeNull();
+    expect(useChatStore.getState().attachedImages["tab-B"]).toBeUndefined();
+  });
+
   it("offers an enabled Attach image button for a vision-capable model", () => {
     render(<Harness onSubmit={vi.fn()} />);
     const attach = screen.getByLabelText("Attach image") as HTMLButtonElement;
@@ -279,6 +328,30 @@ describe("<ChatInput />", () => {
       render(<Harness onSubmit={onSubmit} />);
       // Dismiss the first selected element ("Screen").
       fireEvent.click(screen.getAllByLabelText("Remove from context")[0]);
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: { value: "just the box" },
+      });
+      fireEvent.click(screen.getByLabelText("Send"));
+      expect(onSubmit).toHaveBeenCalledWith({
+        text: "just the box",
+        images: [{ dataUrl: "data:image/png;base64,b", name: "Box" }],
+      });
+    });
+
+    it("keeps a dismissed selection in the store across an unmount/remount for the same session", () => {
+      mockSelection = selection;
+      const { unmount } = render(
+        <Harness onSubmit={vi.fn()} sessionId="tab-A" />
+      );
+      // Dismiss "Screen" — only "Box" should remain as context.
+      fireEvent.click(screen.getAllByLabelText("Remove from context")[0]);
+      expect(useChatStore.getState().dismissedSelection["tab-A"]).toBeTruthy();
+
+      unmount();
+      expect(useChatStore.getState().dismissedSelection["tab-A"]).toBeTruthy();
+
+      const onSubmit = vi.fn();
+      render(<Harness onSubmit={onSubmit} sessionId="tab-A" />);
       fireEvent.change(screen.getByRole("textbox"), {
         target: { value: "just the box" },
       });

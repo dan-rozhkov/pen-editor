@@ -17,6 +17,8 @@ import type { AgentMode } from "@/store/chatStore";
 import { toolHandlers } from "@/lib/toolRegistry";
 import type { ChatLaunchPayload } from "@/types/chat";
 
+const STREAM_RENDER_THROTTLE_MS = 50;
+
 // Exported for tests.
 export function resolveChatApiUrl(): string {
   // VITE_AI_API_URL is the explicit full chat URL; honor it verbatim. Otherwise
@@ -188,6 +190,10 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   const chat = useChat({
     id: sessionId,
     transport,
+    // AI SDK otherwise publishes a React update for every stream chunk. A
+    // short throttle keeps active Markdown rendering responsive while still
+    // feeling continuous, especially when multiple sessions run in parallel.
+    experimental_throttle: STREAM_RENDER_THROTTLE_MS,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onToolCall: async ({ toolCall }) => {
       const result = await executeToolCall(toolCall.toolName, toolCall.input);

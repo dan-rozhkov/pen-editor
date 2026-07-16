@@ -140,11 +140,19 @@ describe("ChatPanel streaming across two sessions", () => {
     const tab1 = screen.getByTestId("chat-session-tab-1");
     const tab2 = screen.getByTestId("chat-session-tab-2");
 
-    // Each session must show ONLY its own stream.
-    expect(within(tab1).queryByText(/AAA-from-chat-1/)).toBeTruthy();
-    expect(within(tab1).queryByText(/BBB-from-chat-2/)).toBeNull();
+    // Background sessions keep streaming but do not maintain a hidden,
+    // expensive message DOM.
+    expect(within(tab1).queryByText(/AAA-from-chat-1/)).toBeNull();
     expect(within(tab2).queryByText(/BBB-from-chat-2/)).toBeTruthy();
     expect(within(tab2).queryByText(/AAA-from-chat-1/)).toBeNull();
+
+    // Switching back renders the response accumulated by the mounted hook.
+    act(() => {
+      useChatStore.getState().setActiveTab("tab-1");
+    });
+    expect(within(tab1).queryByText(/AAA-from-chat-1/)).toBeTruthy();
+    expect(within(tab1).queryByText(/BBB-from-chat-2/)).toBeNull();
+    expect(within(tab2).queryByText(/BBB-from-chat-2/)).toBeNull();
   });
 
   it("keeps tab-1's stream when a NEW tab is created mid-stream", async () => {
@@ -200,6 +208,11 @@ describe("ChatPanel streaming across two sessions", () => {
 
     expect(within(tab1).queryByText(/AAA-from-chat-1/)).toBeTruthy();
     expect(within(tab1).queryByText(/BBB-from-chat-2/)).toBeNull();
+    expect(within(tab2).queryByText(/BBB-from-chat-2/)).toBeNull();
+
+    act(() => {
+      useChatStore.getState().setActiveTab(newTabId);
+    });
     expect(within(tab2).queryByText(/BBB-from-chat-2/)).toBeTruthy();
     expect(within(tab2).queryByText(/AAA-from-chat-1/)).toBeNull();
   });

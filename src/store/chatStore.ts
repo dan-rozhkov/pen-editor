@@ -1,6 +1,15 @@
 import { create } from "zustand";
-import type { ChatLaunchPayload } from "@/types/chat";
+import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
 import { getDefaultModel, getModelOptions } from "@/lib/chatModels";
+
+/** Stable empty reference so the per-session selector never returns a fresh
+ * array for tabs without attachments (which would re-render on every store
+ * change). Never mutated — the store always writes fresh arrays. */
+export const NO_ATTACHED_IMAGES: AttachedImage[] = [];
+
+/** Stable empty reference for sessions with no dismissed selection previews,
+ * for the same reason as NO_ATTACHED_IMAGES. Never mutated. */
+export const NO_DISMISSED_SELECTION: ReadonlySet<string> = new Set<string>();
 
 export interface ChatTab {
   id: string;
@@ -33,6 +42,18 @@ interface ChatState {
   launchQueue: Record<string, ChatLaunchPayload | undefined>;
   /** Export/clear handlers published by each mounted session, keyed by tab id */
   sessionActions: Record<string, ChatSessionActions>;
+  /**
+   * Composer image attachments keyed by tab id. Lifted out of ChatInput so a
+   * partially-composed message survives the input unmounting when its tab goes
+   * inactive (inactive ChatSessions render null for performance).
+   */
+  attachedImages: Record<string, AttachedImage[]>;
+  /**
+   * Per-message-dismissed canvas-selection previews, keyed by tab id. Lifted
+   * out of ChatInput for the same reason as attachedImages, so the user's
+   * "remove from context" choices survive the input unmounting.
+   */
+  dismissedSelection: Record<string, Set<string>>;
 
   toggleOpen: () => void;
   open: () => void;
@@ -60,6 +81,15 @@ interface ChatState {
 
   registerSessionActions: (tabId: string, actions: ChatSessionActions) => void;
   unregisterSessionActions: (tabId: string) => void;
+
+  setAttachedImages: (
+    tabId: string,
+    update: AttachedImage[] | ((prev: AttachedImage[]) => AttachedImage[]),
+  ) => void;
+  setDismissedSelection: (
+    tabId: string,
+    update: Set<string> | ((prev: Set<string>) => Set<string>),
+  ) => void;
 }
 
 const DEFAULT_AGENT_MODE: AgentMode = "prototype";
@@ -127,6 +157,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   abortControllers: {},
   launchQueue: {},
   sessionActions: {},
+  attachedImages: {},
+  dismissedSelection: {},
 
   toggleOpen: () => set((s) => ({ isOpen: !s.isOpen })),
   open: () => set({ isOpen: true }),
@@ -179,7 +211,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   closeTab: (tabId: string) => {
-    const { tabs, activeTabId, abortControllers, launchQueue } = get();
+    const {
+      tabs,
+      activeTabId,
+      abortControllers,
+      launchQueue,
+      attachedImages,
+      dismissedSelection,
+    } = get();
 
     // Abort any ongoing request for this tab
     const controller = abortControllers[tabId];
@@ -197,6 +236,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const parallelCount = normalizeParallelCount(localStorage.getItem("chat-parallel-count"));
       const newLaunchQueue = { ...launchQueue };
       delete newLaunchQueue[tabId];
+      const newAttachedImages = { ...attachedImages };
+      delete newAttachedImages[tabId];
+      const newDismissedSelection = { ...dismissedSelection };
+      delete newDismissedSelection[tabId];
       set({
         tabs: [{ id: newId, title: "Chat 1", model, agentMode, parallelCount }],
         activeTabId: newId,
@@ -205,6 +248,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         parallelCount,
         abortControllers: newControllers,
         launchQueue: newLaunchQueue,
+        attachedImages: newAttachedImages,
+        dismissedSelection: newDismissedSelection,
       });
       return;
     }
@@ -212,8 +257,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const newTabs = tabs.filter((t) => t.id !== tabId);
     const newControllers = { ...abortControllers };
     const newLaunchQueue = { ...launchQueue };
+    const newAttachedImages = { ...attachedImages };
+    const newDismissedSelection = { ...dismissedSelection };
     delete newControllers[tabId];
     delete newLaunchQueue[tabId];
+    delete newAttachedImages[tabId];
+    delete newDismissedSelection[tabId];
 
     let newActiveTabId = activeTabId;
     if (activeTabId === tabId) {
@@ -232,6 +281,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       parallelCount: switchToTab?.parallelCount ?? get().parallelCount,
       abortControllers: newControllers,
       launchQueue: newLaunchQueue,
+      attachedImages: newAttachedImages,
+      dismissedSelection: newDismissedSelection,
     });
   },
 
@@ -310,6 +361,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const newActions = { ...s.sessionActions };
       delete newActions[tabId];
       return { sessionActions: newActions };
+    });
+  },
+
+  setAttachedImages: (tabId, update) => {
+    set((s) => {
+      const prev = s.attachedImages[tabId] ?? [];
+      const next = typeof update === "function" ? update(prev) : update;
+      if (next === prev) return s;
+      const nextMap = { ...s.attachedImages };
+      if (next.length === 0) {
+        delete nextMap[tabId];
+      } else {
+        nextMap[tabId] = next;
+      }
+      return { attachedImages: nextMap };
+    });
+  },
+
+  setDismissedSelection: (tabId, update) => {
+    set((s) => {
+      const prev = s.dismissedSelection[tabId] ?? new Set<string>();
+      const next = typeof update === "function" ? update(prev) : update;
+      if (next === prev) return s;
+      const nextMap = { ...s.dismissedSelection };
+      if (next.size === 0) {
+        delete nextMap[tabId];
+      } else {
+        nextMap[tabId] = next;
+      }
+      return { dismissedSelection: nextMap };
     });
   },
 }));

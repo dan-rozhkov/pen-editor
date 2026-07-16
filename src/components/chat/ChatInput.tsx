@@ -8,7 +8,11 @@ import {
 import { SlashCommandMenu } from "./SlashCommandMenu";
 import type { SlashCommand } from "./slashCommands";
 import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
-import { useChatStore } from "@/store/chatStore";
+import {
+  useChatStore,
+  NO_ATTACHED_IMAGES,
+  NO_DISMISSED_SELECTION,
+} from "@/store/chatStore";
 import { modelSupportsVision } from "@/lib/chatModels";
 import { useSelectionScreenshots } from "@/hooks/useSelectionScreenshots";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
@@ -23,6 +27,8 @@ import {
 const MAX_IMAGES = 4;
 
 interface ChatInputProps {
+  /** Owning chat session; keys the composer's persisted image attachments. */
+  sessionId: string;
   input: string;
   setInput: (value: string) => void;
   // Returns whether the message was actually sent. ChatInput only clears
@@ -52,6 +58,7 @@ async function processFiles(files: FileList | File[]): Promise<AttachedImage[]> 
 }
 
 export function ChatInput({
+  sessionId,
   input,
   setInput,
   onSubmit,
@@ -60,7 +67,17 @@ export function ChatInput({
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([]);
+  // Persisted in chatStore keyed by sessionId so a half-composed message keeps
+  // its attachments when the input unmounts (inactive tabs render null).
+  const attachedImages = useChatStore(
+    (s) => s.attachedImages[sessionId] ?? NO_ATTACHED_IMAGES,
+  );
+  const setSessionAttachedImages = useChatStore((s) => s.setAttachedImages);
+  const setAttachedImages = useCallback(
+    (update: AttachedImage[] | ((prev: AttachedImage[]) => AttachedImage[])) =>
+      setSessionAttachedImages(sessionId, update),
+    [setSessionAttachedImages, sessionId],
+  );
   const [isDragOver, setIsDragOver] = useState(false);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const model = useChatStore((s) => s.model);
@@ -73,17 +90,31 @@ export function ChatInput({
   // as visual context. The user can drop individual ones for the message they
   // are composing without changing the canvas selection.
   const selectionScreenshots = useSelectionScreenshots();
-  const [dismissedSelection, setDismissedSelection] = useState<Set<string>>(
-    () => new Set()
+  // Persisted in chatStore keyed by sessionId (like attachedImages) so the
+  // user's per-message "remove from context" choices survive the input
+  // unmounting when its tab goes inactive.
+  const dismissedSelection = useChatStore(
+    (s) => s.dismissedSelection[sessionId] ?? NO_DISMISSED_SELECTION,
+  );
+  const setSessionDismissedSelection = useChatStore(
+    (s) => s.setDismissedSelection,
+  );
+  const setDismissedSelection = useCallback(
+    (update: Set<string> | ((prev: Set<string>) => Set<string>)) =>
+      setSessionDismissedSelection(sessionId, update),
+    [setSessionDismissedSelection, sessionId],
   );
   const visibleSelection = useMemo(
     () => selectionScreenshots.filter((s) => !dismissedSelection.has(s.nodeId)),
     [selectionScreenshots, dismissedSelection]
   );
 
-  const dismissSelection = useCallback((nodeId: string) => {
-    setDismissedSelection((prev) => new Set(prev).add(nodeId));
-  }, []);
+  const dismissSelection = useCallback(
+    (nodeId: string) => {
+      setDismissedSelection((prev) => new Set(prev).add(nodeId));
+    },
+    [setDismissedSelection]
+  );
 
   // Forget dismissals for nodes that have left the selection, so re-selecting a
   // previously-dismissed node brings it back as context.
@@ -101,7 +132,7 @@ export function ChatInput({
       }
       return next.size === prev.size ? prev : next;
     });
-  }, [selectionIds]);
+  }, [selectionIds, setDismissedSelection]);
 
   // Selection screenshots plus manual attachments can exceed the per-message
   // image limit; explicit attachments are always kept and the overflow (extra
@@ -158,12 +189,15 @@ export function ChatInput({
         );
       }
     },
-    [supportsVision]
+    [supportsVision, setAttachedImages]
   );
 
-  const removeImage = useCallback((index: number) => {
-    setAttachedImages((prev) => prev.filter((_, i) => i !== index));
-  }, []);
+  const removeImage = useCallback(
+    (index: number) => {
+      setAttachedImages((prev) => prev.filter((_, i) => i !== index));
+    },
+    [setAttachedImages]
+  );
 
   const doSubmit = useCallback(
     () => {
@@ -201,7 +235,16 @@ export function ChatInput({
         }
       }
     },
-    [input, attachedImages, visibleSelection, supportsVision, isLoading, onSubmit]
+    [
+      input,
+      attachedImages,
+      visibleSelection,
+      supportsVision,
+      isLoading,
+      onSubmit,
+      setAttachedImages,
+      setDismissedSelection,
+    ]
   );
 
   const handleKeyDown = useCallback(

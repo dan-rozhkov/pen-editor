@@ -14,12 +14,12 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@ai-sdk/react": "^3.0.214",
+    "@ai-sdk/react": "^3.0.230",
     "@base-ui/react": "^1.1.0",
     "@paper-design/shaders-react": "0.0.76",
     "@phosphor-icons/react": "^2.1.10",
     "@tailwindcss/vite": "^4.3.1",
-    "ai": "^6.0.212",
+    "ai": "^6.0.228",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",

@@ -170,10 +170,12 @@ function PresetList({ onSelect }: { onSelect: (preset: ChatPreset) => void }) {
 
 function ChatSession({
   sessionId,
+  isActive,
   showPresets,
   onClosePresets,
 }: {
   sessionId: string;
+  isActive: boolean;
   showPresets: boolean;
   onClosePresets: () => void;
 }) {
@@ -225,6 +227,13 @@ function ChatSession({
     });
     return () => unregisterSessionActions(sessionId);
   }, [sessionId, hasMessages, registerSessionActions, unregisterSessionActions]);
+
+  // Keep the chat hook mounted for background streaming, but do not update a
+  // hidden message tree on every token. Markdown parsing and auto-scroll both
+  // run on the main thread and become expensive when several agents stream.
+  if (!isActive) {
+    return null;
+  }
 
   const handleSelectPreset = (preset: ChatPreset) => {
     setAgentMode(preset.mode);
@@ -292,6 +301,7 @@ function ChatSession({
 
       {/* Input */}
       <ChatInput
+        sessionId={sessionId}
         input={input}
         setInput={setInput}
         onSubmit={handleSubmit}
@@ -375,6 +385,7 @@ export function ChatPanelContent() {
         >
           <ChatSession
             sessionId={tab.id}
+            isActive={tab.id === activeTabId}
             showPresets={showPresets}
             onClosePresets={() => setShowPresets(false)}
           />
