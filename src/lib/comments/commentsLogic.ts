@@ -76,6 +76,16 @@ export function isThreadUnattached(
   return !(thread.anchor.nodeId in nodesById);
 }
 
+/**
+ * A thread is "agent" (vs. user-authored) based on its ROOT message only —
+ * a user thread that the agent later replied to is still a user thread. Used
+ * to give agent-initiated pins (from `leave_comment`) a distinct look in
+ * `CommentLayer`/`CommentsPanel`.
+ */
+export function isAgentThread(thread: CommentThread): boolean {
+  return thread.messages[0]?.author === "agent";
+}
+
 export interface ReadCommentsOptions {
   includeResolved?: boolean;
   threadId?: string;

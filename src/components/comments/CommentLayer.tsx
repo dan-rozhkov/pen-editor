@@ -8,7 +8,7 @@ import {
   getNodeAbsolutePositionWithLayout,
   getNodeEffectiveSize,
 } from "@/utils/nodeUtils";
-import { resolveAnchorPoint, buildClickAnchor, type NodeRect } from "@/lib/comments/commentsLogic";
+import { resolveAnchorPoint, buildClickAnchor, isAgentThread, type NodeRect } from "@/lib/comments/commentsLogic";
 import { findCanvasHitTargetAtPoint } from "@/pixi/interaction/hitTesting";
 import { sendCommentToAgent } from "@/lib/sendCommentToAgent";
 import { Button } from "@/components/ui/button";
@@ -143,6 +143,11 @@ function CommentPin({ thread, screen, open, onOpen, onClose }: CommentPinProps) 
   const dragState = useRef<{ startX: number; startY: number; moved: boolean } | null>(null);
 
   const resolved = thread.resolvedAt != null;
+  const agent = isAgentThread(thread);
+  // Agent-initiated pins (from `leave_comment`) get a distinct violet color +
+  // a small sparkle glyph instead of the order number, so a design-review
+  // batch reads as clearly agent-authored at a glance vs. user pins (blue).
+  const pinColor = agent ? "#8b5cf6" : "var(--color-accent-primary, #0d99ff)";
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
@@ -187,7 +192,8 @@ function CommentPin({ thread, screen, open, onOpen, onClose }: CommentPinProps) 
       <button
         data-comment-pin
         data-thread-id={thread.id}
-        title={`Comment #${thread.order}`}
+        data-agent-pin={agent ? "true" : undefined}
+        title={`${agent ? "Agent comment" : "Comment"} #${thread.order}`}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -199,7 +205,7 @@ function CommentPin({ thread, screen, open, onOpen, onClose }: CommentPinProps) 
           height: PIN_SIZE,
           borderRadius: "50% 50% 50% 0",
           transform: "translateY(0)",
-          background: resolved ? "var(--color-accent-primary, #0d99ff)" : "#0d99ff",
+          background: pinColor,
           opacity: resolved ? 0.5 : 1,
           color: "#fff",
           fontSize: 11,
@@ -207,12 +213,14 @@ function CommentPin({ thread, screen, open, onOpen, onClose }: CommentPinProps) 
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
+          gap: 1,
           border: "1.5px solid #fff",
           boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
           cursor: "pointer",
           pointerEvents: "auto",
         }}
       >
+        {agent && <SparkleIcon size={10} weight="fill" />}
         {thread.order}
       </button>
       {open && <ThreadPopover thread={thread} onClose={onClose} />}

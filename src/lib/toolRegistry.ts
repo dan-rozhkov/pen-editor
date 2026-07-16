@@ -23,6 +23,7 @@ import { setExportSettings } from "./tools/setExportSettings";
 import { readComments } from "./tools/readComments";
 import { replyComment } from "./tools/replyComment";
 import { resolveComment } from "./tools/resolveComment";
+import { leaveComment } from "./tools/leaveComment";
 export type ToolHandler = (
   args: Record<string, unknown>
 ) => Promise<string>;
@@ -56,4 +57,5 @@ export const toolHandlers: Record<string, ToolHandler> = {
   read_comments: readComments,
   reply_comment: replyComment,
   resolve_comment: resolveComment,
+  leave_comment: leaveComment,
 };

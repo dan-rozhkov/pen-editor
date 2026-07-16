@@ -200,4 +200,41 @@ describe("commentsStore", () => {
     useCommentsStore.getState().deleteThread(id);
     expect(pastLen()).toBe(before);
   });
+
+  describe("addAgentThread", () => {
+    it("creates a thread with an 'agent'-authored root message at the given anchor", () => {
+      const id = useCommentsStore
+        .getState()
+        .addAgentThread({ kind: "node", nodeId: "rect1", ox: 0.5, oy: 0.5 }, "contrast looks low");
+
+      expect(id).toBeTruthy();
+      const thread = useCommentsStore.getState().threads[0];
+      expect(thread.anchor).toEqual({ kind: "node", nodeId: "rect1", ox: 0.5, oy: 0.5 });
+      expect(thread.messages[0]).toMatchObject({ author: "agent", text: "contrast looks low" });
+      expect(thread.order).toBe(1);
+    });
+
+    it("is a no-op with empty text", () => {
+      const id = useCommentsStore
+        .getState()
+        .addAgentThread({ kind: "canvas", x: 0, y: 0 }, "   ");
+      expect(id).toBeNull();
+      expect(useCommentsStore.getState().threads).toHaveLength(0);
+    });
+
+    it("shares the same document-wide order counter as submitDraft", () => {
+      useCommentsStore.getState().startDraft({ kind: "canvas", x: 0, y: 0 });
+      useCommentsStore.getState().submitDraft("user comment"); // order 1
+      useCommentsStore.getState().addAgentThread({ kind: "canvas", x: 1, y: 1 }, "agent comment");
+
+      const orders = useCommentsStore.getState().threads.map((t) => t.order);
+      expect(orders).toEqual([1, 2]);
+    });
+
+    it("does not record undo history", () => {
+      const before = pastLen();
+      useCommentsStore.getState().addAgentThread({ kind: "canvas", x: 0, y: 0 }, "note");
+      expect(pastLen()).toBe(before);
+    });
+  });
 });

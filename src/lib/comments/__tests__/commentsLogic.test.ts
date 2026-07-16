@@ -5,6 +5,7 @@ import {
   buildClickAnchor,
   isThreadUnattached,
   buildReadCommentsResult,
+  isAgentThread,
 } from "@/lib/comments/commentsLogic";
 import type { CommentThread } from "@/store/commentsStore";
 
@@ -164,5 +165,25 @@ describe("buildReadCommentsResult", () => {
     const result = buildReadCommentsResult(threads, {}, {});
     expect(result.threads[0].nodeId).toBe("rect1");
     expect(result.threads[0].unattached).toBe(true);
+  });
+});
+
+describe("isAgentThread", () => {
+  const withRoot = (author: "me" | "agent"): CommentThread => ({
+    id: "t1",
+    order: 1,
+    anchor: { kind: "canvas", x: 0, y: 0 },
+    messages: [
+      { id: "m1", author, text: "root", createdAt: 0 },
+      { id: "m2", author: author === "me" ? "agent" : "me", text: "reply", createdAt: 1 },
+    ],
+  });
+
+  it("is true when the root message is authored by the agent", () => {
+    expect(isAgentThread(withRoot("agent"))).toBe(true);
+  });
+
+  it("is false when the root message is authored by the user, even if a reply is from the agent", () => {
+    expect(isAgentThread(withRoot("me"))).toBe(false);
   });
 });

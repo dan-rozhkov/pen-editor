@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { readComments } from "@/lib/tools/readComments";
 import { replyComment } from "@/lib/tools/replyComment";
 import { resolveComment } from "@/lib/tools/resolveComment";
+import { leaveComment } from "@/lib/tools/leaveComment";
 import { useCommentsStore } from "@/store/commentsStore";
 import { resetStores, seedScene } from "@/test/fixtures";
 import type { CommentThread } from "@/store/commentsStore";
@@ -161,5 +162,77 @@ describe("resolve_comment", () => {
   it("returns an error for an unknown threadId", async () => {
     const res = JSON.parse(await resolveComment({ threadId: "nope" }));
     expect(res.error).toBeTruthy();
+  });
+});
+
+describe("leave_comment", () => {
+  it("creates an agent-authored thread anchored to a node (center by default)", async () => {
+    const result = await leaveComment({ comments: [{ nodeId: "rect1", text: "low contrast" }] });
+
+    const threads = useCommentsStore.getState().threads;
+    expect(threads).toHaveLength(1);
+    expect(threads[0].anchor).toEqual({ kind: "node", nodeId: "rect1", ox: 0.5, oy: 0.5 });
+    expect(threads[0].messages[0]).toMatchObject({ author: "agent", text: "low contrast" });
+    expect(result).toContain(`#${threads[0].order}`);
+  });
+
+  it("creates a canvas-anchored thread from x/y when nodeId is omitted", async () => {
+    await leaveComment({ comments: [{ x: 42, y: 84, text: "spacing is off here" }] });
+
+    const threads = useCommentsStore.getState().threads;
+    expect(threads).toHaveLength(1);
+    expect(threads[0].anchor).toEqual({ kind: "canvas", x: 42, y: 84 });
+  });
+
+  it("creates a thread even when nodeId references a node no longer in the scene (unattached, not dropped)", async () => {
+    await leaveComment({ comments: [{ nodeId: "ghost", text: "was here" }] });
+
+    const threads = useCommentsStore.getState().threads;
+    expect(threads).toHaveLength(1);
+    expect(threads[0].anchor).toEqual({ kind: "node", nodeId: "ghost", ox: 0.5, oy: 0.5 });
+  });
+
+  it("processes a batch, creating multiple threads with consecutive orders and citing all of them", async () => {
+    const result = await leaveComment({
+      comments: [
+        { nodeId: "rect1", text: "first" },
+        { nodeId: "text1", text: "second" },
+        { x: 1, y: 2, text: "third" },
+      ],
+    });
+
+    const threads = useCommentsStore.getState().threads;
+    expect(threads).toHaveLength(3);
+    const orders = threads.map((t) => t.order).sort((a, b) => a - b);
+    expect(orders).toEqual([orders[0], orders[0] + 1, orders[0] + 2]);
+    for (const t of orders) {
+      expect(result).toContain(`#${t}`);
+    }
+  });
+
+  it("skips an item with neither nodeId nor x/y, without crashing, and reports the skip", async () => {
+    const result = await leaveComment({
+      comments: [
+        { text: "no anchor given" },
+        { nodeId: "rect1", text: "valid one" },
+      ],
+    });
+
+    const threads = useCommentsStore.getState().threads;
+    expect(threads).toHaveLength(1);
+    expect(threads[0].messages[0].text).toBe("valid one");
+    expect(result.toLowerCase()).toMatch(/skip|invalid|reject/);
+  });
+
+  it("skips an item with empty text", async () => {
+    const result = await leaveComment({ comments: [{ nodeId: "rect1", text: "   " }] });
+    expect(useCommentsStore.getState().threads).toHaveLength(0);
+    expect(result.toLowerCase()).toMatch(/skip|invalid|reject/);
+  });
+
+  it("rejects an empty or missing comments array", async () => {
+    const result = await leaveComment({ comments: [] });
+    expect(useCommentsStore.getState().threads).toHaveLength(0);
+    expect(result.toLowerCase()).toMatch(/no comments|empty|invalid/);
   });
 });

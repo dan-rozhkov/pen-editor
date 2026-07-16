@@ -37,6 +37,7 @@ const EXPECTED_CLIENT_TOOLS = [
   "read_comments",
   "reply_comment",
   "resolve_comment",
+  "leave_comment",
 ];
 
 // Tools whose schema also has a backend `execute` — they run server-side, the

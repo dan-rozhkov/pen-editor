@@ -3,7 +3,7 @@ import { ChatCircleIcon } from "@phosphor-icons/react";
 import { useCommentsStore, type CommentThread } from "@/store/commentsStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { usePageStore } from "@/store/pageStore";
-import { isThreadUnattached } from "@/lib/comments/commentsLogic";
+import { isThreadUnattached, isAgentThread } from "@/lib/comments/commentsLogic";
 import { navigateToThread } from "@/lib/comments/commentNavigation";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -104,6 +104,11 @@ export function CommentsPanelContent() {
                     <span className="text-xs font-medium text-accent-primary">
                       #{row.thread.order}
                     </span>
+                    {isAgentThread(row.thread) && (
+                      <span className="rounded bg-violet-500/15 px-1 py-0.5 text-[10px] text-violet-500">
+                        Agent
+                      </span>
+                    )}
                     {row.thread.resolvedAt != null && (
                       <span className="rounded bg-secondary px-1 py-0.5 text-[10px] text-text-muted">
                         Resolved

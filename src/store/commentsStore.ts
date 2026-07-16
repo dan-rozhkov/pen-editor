@@ -40,6 +40,43 @@ function generateMessageId(): string {
   return `comment-message-${Date.now()}-${nextMessageId}`;
 }
 
+type GetState = () => CommentsState;
+type SetState = (
+  partial: Partial<CommentsState> | ((state: CommentsState) => Partial<CommentsState>),
+) => void;
+
+/**
+ * Shared thread-creation logic behind both `submitDraft` (author "me", draft
+ * anchor) and `addAgentThread` (author "agent", explicit anchor): compute the
+ * document-wide next `order` (reaching into `pageStore` for inactive pages'
+ * threads, same as before), build the root message, append the thread. Does
+ * NOT touch `draftAnchor` — callers manage that themselves.
+ */
+function createThread(
+  anchor: CommentAnchor,
+  author: "me" | "agent",
+  text: string,
+  get: GetState,
+  set: SetState,
+): string {
+  const otherPagesOrders = usePageStore
+    .getState()
+    .pages.flatMap((p) => p.comments ?? [])
+    .map((t) => t.order);
+  const order = nextOrder([...otherPagesOrders, ...get().threads.map((t) => t.order)]);
+
+  const id = generateThreadId();
+  const message: CommentMessage = {
+    id: generateMessageId(),
+    author,
+    text,
+    createdAt: Date.now(),
+  };
+  const thread: CommentThread = { id, order, anchor, messages: [message] };
+  set((state) => ({ threads: [...state.threads, thread] }));
+  return id;
+}
+
 interface CommentsState {
   /** Persistent comment threads for the current page. */
   threads: CommentThread[];
@@ -60,6 +97,14 @@ interface CommentsState {
   cancelDraft: () => void;
   /** Commit the current draft as a new thread with `text` as its root message. Returns the new thread id, or null if there's no draft. */
   submitDraft: (text: string) => string | null;
+  /**
+   * Create a new thread directly at `anchor` with an agent-authored root
+   * message — used by the `leave_comment` tool handler. Mirrors `submitDraft`
+   * (same document-wide `order` counter, same "no-op on empty text" rule) but
+   * takes an explicit anchor instead of consuming `draftAnchor`. Returns the
+   * new thread id, or null if `text` is empty.
+   */
+  addAgentThread: (anchor: CommentAnchor, text: string) => string | null;
 
   addReply: (threadId: string, author: "me" | "agent", text: string) => void;
   /** Edit a message's text — only ever affects messages authored "me" (agent replies are not user-editable). */
@@ -107,22 +152,15 @@ export const useCommentsStore = create<CommentsState>((set, get) => ({
     const trimmed = text.trim();
     if (!anchor || !trimmed) return null;
 
-    const otherPagesOrders = usePageStore
-      .getState()
-      .pages.flatMap((p) => p.comments ?? [])
-      .map((t) => t.order);
-    const order = nextOrder([...otherPagesOrders, ...get().threads.map((t) => t.order)]);
-
-    const id = generateThreadId();
-    const message: CommentMessage = {
-      id: generateMessageId(),
-      author: "me",
-      text: trimmed,
-      createdAt: Date.now(),
-    };
-    const thread: CommentThread = { id, order, anchor, messages: [message] };
-    set((state) => ({ threads: [...state.threads, thread], draftAnchor: null }));
+    const id = createThread(anchor, "me", trimmed, get, set);
+    set({ draftAnchor: null });
     return id;
+  },
+
+  addAgentThread: (anchor, text) => {
+    const trimmed = text.trim();
+    if (!trimmed) return null;
+    return createThread(anchor, "agent", trimmed, get, set);
   },
 
   addReply: (threadId, author, text) => {
