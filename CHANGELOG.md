@@ -8,6 +8,30 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-07-16
+
+### Added
+- **Canvas comments + AI-agent loop (cmt-01).** Figma-like commenting: press
+  **C** for comment mode, click to drop a pin — anchored to a node (it tracks
+  the node through move/resize/auto-layout) or to a bare canvas point. Threads
+  support replies, edit/delete your own message, resolve/unresolve, and
+  delete-with-confirmation. A **Comments** tab in the left rail lists every
+  thread with navigate-to-pin (across pages), "Show resolved" and "Current page
+  only" filters, and an "unattached" badge for threads whose anchor node was
+  deleted. **Shift+C** hides pins.
+  - Comments live **outside undo/redo** — a design Cmd+Z never resurrects a
+    deleted thread or erases a new one. Deleting an anchor node doesn't touch
+    the comment; the pin just hides until undo brings the node back.
+  - Comments round-trip in `.pen` per page (omitted when empty; legacy files
+    load cleanly).
+  - The pin gives the AI agent an exact node anchor that plain chat lacks.
+    "Send to agent" seeds a chat about comment #N and opens the agents panel;
+    three client-executed tools — `read_comments`, `reply_comment`,
+    `resolve_comment` (schemas in backend 0.15.0) — let the agent read and act
+    on threads.
+- The connector tool's keyboard shortcut moved from **C** to **N** (it has no
+  toolbar button; C is now comment mode).
+
 ## [0.42.0] - 2026-07-16
 
 ### Added
