@@ -8,6 +8,36 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.45.1] - 2026-07-17
+
+### Fixed
+- **Panel edits reach the canvas live again.** 0.45.0's `NumberInput` draft layer
+  only pushed a value to the store on blur/Enter, so the canvas stopped tracking
+  typing — wrong for a visual editor, where every change belongs on screen
+  immediately. Every parseable keystroke commits again; the draft survives purely
+  as the field's text buffer, so intermediate strings (`""`, `"-"`) still never
+  reach the scene.
+
+  The undo spam that motivated the draft layer is handled the way `useScrubLabel`
+  already handles a drag: snapshot + `startBatch()` at the first commit,
+  `endBatch()` at the end. A focus→blur session is therefore **one** undo step —
+  better than 0.45.0's predecessor, which recorded one per keystroke.
+- **History no longer dies silently after Escape in a panel field.** The editing
+  batch now closes when the input unmounts. Escape is handled by a window keydown
+  listener registered with `{ capture: true }` (`useCanvasKeyboardShortcuts`),
+  which clears the selection and unmounts the field before its own keydown/blur
+  handlers can run; the open batch outlived the component and left `batchDepth`
+  above 0, which suppresses **all** history recording for the rest of the session
+  (undo/redo quietly stops working, with nothing in the console).
+
+### Removed
+- `NumberInput`'s Escape-revert (added in 0.45.0). The capture-phase listener
+  above unmounts the field before the component's own Escape handler can run, so
+  the revert was unreachable in the properties panel. Escape now keeps the typed
+  value, as it did before 0.45.0. Making revert work would mean gating the
+  `Escape` branch in `keyboardCommands.ts` on `isTyping`, the way the neighbouring
+  arrow-key branch already is.
+
 ## [0.45.0] - 2026-07-17
 
 ### Changed
