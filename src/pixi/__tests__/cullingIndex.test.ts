@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { generatePerfScene } from "@/dev/perfScene";
 import { createCullingIndex } from "../cullingIndex";
-import { computeViewportRenderability } from "../viewportCulling";
+import { computeViewportRenderability } from "./legacyCullingOracle";
 
 describe("cullingIndex", () => {
   it("queryVisible matches computeViewportRenderability's renderable set for unrotated scenes", () => {
@@ -129,6 +129,41 @@ describe("cullingIndex", () => {
     // report for the derivation.
     const protrudingCorner = { minX: -83, minY: 156, maxX: -80, maxY: 157 };
     expect(index.queryVisible(protrudingCorner).has("rotParent")).toBe(true);
+  });
+
+  // Regression: moveNode-to-root leaves the moved node's nodesById reference
+  // unchanged; the fix lives in syncDiff.ts's root-membership diff, but this
+  // asserts the actual consumer (cullingIndex.updateForChanged) picks up the
+  // new position once that diff correctly includes the moved id.
+  it("a node moved to root is reindexed at its new position", () => {
+    const scene = generatePerfScene(2, 3);
+    const movedId = "perf-0-1";
+    const oldParentId = "perf-frame-0";
+    const index = createCullingIndex();
+    index.rebuild(scene as never);
+
+    // Before the move: querying far outside the frame's origin misses it.
+    expect(index.queryVisible({ minX: 90000, minY: 90000, maxX: 91000, maxY: 91000 }).has(movedId)).toBe(false);
+
+    const parentById = { ...scene.parentById, [movedId]: null };
+    const childrenById = {
+      ...scene.childrenById,
+      [oldParentId]: scene.childrenById[oldParentId].filter((id) => id !== movedId),
+    };
+    const rootIds = [...scene.rootIds, movedId];
+    // Simulate moveNode: the moved node keeps its stored x/y (unrelated to
+    // this test) but is now a root — relocate it far away so a query at its
+    // new absolute position only hits if it was actually reindexed there.
+    const movedNode = { ...scene.nodesById[movedId], x: 90000, y: 90000 };
+    const nodesById = { ...scene.nodesById, [movedId]: movedNode };
+    const next = { ...scene, nodesById, parentById, childrenById, rootIds };
+
+    // Mirrors the fixed syncDiff output: the moved id (and its old parent,
+    // whose childrenById entry changed) are in changedIds.
+    index.updateForChanged(next as never, new Set([movedId, oldParentId]));
+
+    const visible = index.queryVisible({ minX: 90000, minY: 90000, maxX: 91000, maxY: 91000 });
+    expect(visible.has(movedId)).toBe(true);
   });
 
   it("removed ids are dropped from the index", () => {

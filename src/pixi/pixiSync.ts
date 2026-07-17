@@ -1,5 +1,6 @@
 import { Container } from "pixi.js";
 import { useSceneStore, type SceneState } from "@/store/sceneStore";
+import { consumeDirty } from "@/store/sceneStore/dirtyTracking";
 import { useDragStore } from "@/store/dragStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useStyleStore } from "@/store/styleStore";
@@ -9,10 +10,10 @@ import { useRenderModeStore } from "@/store/renderModeStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import type { FlatSceneNode } from "@/types/scene";
 import { isFlatFrameNode, isRefNode, isConnectorNode } from "@/types/scene";
+import { isActiveMasker } from "@/lib/masks/maskResolution";
 import { updateNodeContainer } from "./renderers";
 import { applySiblingMasks } from "./renderers/maskHelpers";
 import { isOutlineRenderMode } from "./renderers/outlineHelpers";
-import { isActiveMasker } from "@/lib/masks/maskResolution";
 import { requestCanvasRender } from "./renderScheduler";
 import {
   type RegistryEntry,
@@ -28,7 +29,6 @@ import { createAutoLayoutManager } from "./syncAutoLayout";
 import { createCullingIndex } from "./cullingIndex";
 import { perfStats } from "./perfStats";
 import { computeSceneDiffFull, computeSceneDiffDirty, type SceneDiff } from "./syncDiff";
-import { consumeDirty } from "@/store/sceneStore/dirtyTracking";
 import { createRasterCacheManager } from "./rasterCacheManager";
 
 // Module-level registry accessor for the drag animator
@@ -307,6 +307,16 @@ export function createPixiSync(sceneRoot: Container): () => void {
   function incrementalUpdate(state: SceneState, prev: SceneState, diff: SceneDiff): SceneDiff {
     const changedIds = diff.changedIds;
     const themeChangedFrameIds: string[] = [];
+    // Set below (Task: theme-refresh visibility fix) when a frame's
+    // themeOverride changed this flush — the re-themed subtree's ids are
+    // excluded from `changedIds` by construction (their node objects didn't
+    // change, only their re-rendered colors did), so the final
+    // `applyTextEditingVisibility` call below must be widened to include
+    // them, or a node re-themed while text-editing would have its
+    // THEME_SENTINEL recolor pass reset `container.visible` (see
+    // renderers/index.ts's `visible !== prev.visible` check against the
+    // sentinel) without visibility ever being re-applied afterward.
+    let themeSubtreeIds: Set<string> | null = null;
 
     // Handle added nodes
     for (const id of diff.addedIds) {
@@ -460,6 +470,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
         }
       };
       for (const frameId of themeChangedFrameIds) collect(frameId);
+      themeSubtreeIds = subtreeIds;
 
       // Defense in depth, not a live gap: each `frameId` here is itself in
       // `diff.updatedIds` (its `themeOverride` changed) and therefore in
@@ -490,7 +501,10 @@ export function createPixiSync(sceneRoot: Container): () => void {
           );
         });
       }
-      nodeTreeMgr.applyTextEditingVisibility(changedIds);
+      // No `applyTextEditingVisibility` call here — the final call at the
+      // end of this function (widened to the `changedIds` ∪ `themeSubtreeIds`
+      // union via `themeSubtreeIds` above) covers this subtree's containers,
+      // which are already fully updated by this point.
     }
 
     // Update connectors when connected nodes move/resize. Collect the changed
@@ -567,7 +581,13 @@ export function createPixiSync(sceneRoot: Container): () => void {
     // New text nodes can appear during incremental subtree rebuilds (e.g. instance edits).
     // Re-apply current resolution so they don't stay at the default and look blurry.
     resolutionMgr.refreshTextResolution();
-    nodeTreeMgr.applyTextEditingVisibility(changedIds);
+    // Widened to include `themeSubtreeIds` (a re-themed frame's descendants,
+    // excluded from `changedIds` by construction) — see the doc comment on
+    // `themeSubtreeIds` above for why an un-widened call here would leave a
+    // text-editing node hidden after its ancestor's themeOverride changes.
+    nodeTreeMgr.applyTextEditingVisibility(
+      themeSubtreeIds ? new Set([...changedIds, ...themeSubtreeIds]) : changedIds,
+    );
 
     // Task 10: feed this flush's dirty ids to the spatial culling index
     // *before* the visual pass below — `updateCulling()` queries the index,
@@ -616,7 +636,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
       resolutionMgr.scheduleImageFillResolutionUpdate(state.scale);
       // Task 13: a zoom-bucket change uncaches immediately in the next
       // decision round and re-caches once quiet again.
-      rasterCacheManager?.onViewportChange(state.scale);
+      rasterCacheManager?.onViewportChange();
       // Phase 1: Update culling on zoom
       updateCulling();
     } else if (state.x !== lastX || state.y !== lastY) {

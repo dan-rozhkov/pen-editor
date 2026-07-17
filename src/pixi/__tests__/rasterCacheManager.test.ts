@@ -108,6 +108,7 @@ describe("createRasterCacheManager", () => {
     // scene mutation and therefore no SceneDiff — onFlushStart never sees it.
     const c1 = makeContainer();
     const state = makeState(["f1"]);
+    state.nodesById["n1"] = { type: "rect", width: 10, height: 10 } as unknown as SceneState["nodesById"][string];
     state.parentById["n1"] = "f1";
     const getState = vi.fn<() => SceneState>(() => state);
     const getScale = vi.fn<() => number>(() => 1);
@@ -130,6 +131,7 @@ describe("createRasterCacheManager", () => {
     // the dragged node's top frame must drop its cache before that starts.
     const c1 = makeContainer();
     const state = makeState(["f1"]);
+    state.nodesById["dragged-node"] = { type: "rect", width: 10, height: 10 } as unknown as SceneState["nodesById"][string];
     state.parentById["dragged-node"] = "f1";
     const getState = vi.fn<() => SceneState>(() => state);
     const getScale = vi.fn<() => number>(() => 1);
@@ -277,7 +279,7 @@ describe("createRasterCacheManager", () => {
 
     // Zoom in past the resolution bucket boundary (bucket 1 -> 4 at scale 3).
     scale = 3;
-    manager.onViewportChange(scale);
+    manager.onViewportChange();
     vi.advanceTimersByTime(600); // uncaches immediately on the bucket mismatch
     expect(c1.cacheAsTexture).toHaveBeenCalledWith(false);
     c1.cacheAsTexture.mockClear();
@@ -286,5 +288,53 @@ describe("createRasterCacheManager", () => {
     // the very next round re-caches it at the new resolution.
     vi.advanceTimersByTime(600);
     expect(c1.cacheAsTexture).toHaveBeenCalledWith({ resolution: 4, antialias: true });
+  });
+
+  // Regression (Task: fit_content sizing gate): a fit_content top-level
+  // frame's rendered size is the *live* Yoga-computed intrinsic size, never
+  // written back to nodesById's width/height — the fits-gate would read
+  // stale stored dimensions while cacheAsTexture rasterizes the live bounds.
+  // Excluded from caching eligibility entirely.
+  it("never caches a fit_content top-level frame", () => {
+    const c1 = makeContainer();
+    const fitContentFrame = {
+      type: "frame",
+      width: 1440,
+      height: 900,
+      layout: { autoLayout: true },
+      sizing: { widthMode: "fit_content" },
+    } as unknown as SceneState["nodesById"][string];
+    const state = makeState(["f1"], { nodesById: { f1: fitContentFrame } });
+    const getState = vi.fn<() => SceneState>(() => state);
+    const getScale = vi.fn<() => number>(() => 1);
+    const getContainer = vi.fn((id: string) => (id === "f1" ? c1 : null));
+    const manager = createRasterCacheManager({ getContainer, getState, getScale });
+
+    manager.onFlushStart(diffFor(["f1"]), state);
+    vi.advanceTimersByTime(600 + QUIET_MS + 600);
+    expect(c1.cacheAsTexture).not.toHaveBeenCalled();
+  });
+
+  // Regression (Task: topFrameOf dead-id gap): an id absent from nodesById
+  // (already removed from the scene) must not throw, and must not touch an
+  // unrelated frame's cache — the removed id's own top ancestor is gone
+  // along with it, so there's nothing to mark dirty for it.
+  it("a removed id in the mutation set does not throw and does not uncache an unrelated frame", () => {
+    const c1 = makeContainer();
+    const state = makeState(["f1"]);
+    const getState = vi.fn<() => SceneState>(() => state);
+    const getScale = vi.fn<() => number>(() => 1);
+    const getContainer = vi.fn((id: string) => (id === "f1" ? c1 : null));
+    const manager = createRasterCacheManager({ getContainer, getState, getScale });
+
+    manager.onFlushStart(diffFor(["f1"]), state);
+    vi.advanceTimersByTime(600 + QUIET_MS); // caches f1
+    expect(c1.cacheAsTexture).toHaveBeenLastCalledWith({ resolution: 1, antialias: true });
+    c1.cacheAsTexture.mockClear();
+
+    expect(() => manager.onDirectContainerMutation(["removed-node"], state)).not.toThrow();
+    // f1 is untouched: "removed-node" has no nodesById entry, so it resolves
+    // to no top frame at all, not (incorrectly) to f1.
+    expect(c1.cacheAsTexture).not.toHaveBeenCalled();
   });
 });

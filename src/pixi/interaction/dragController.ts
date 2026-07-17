@@ -815,6 +815,12 @@ export function createDragController(context: InteractionContext): DragControlle
               };
             }
 
+            // Marked right before returning the changed state, matching
+            // commitDragPositions' convention above — this history-commit
+            // pass replaces node object identities without going through a
+            // mutator that already calls markNodesDirty, so the dirty-set
+            // diff would otherwise miss these ids entirely.
+            markNodesDirty(movedItems.map((item) => item.id));
             return {
               nodesById: newNodesById,
               _cachedTree: null,

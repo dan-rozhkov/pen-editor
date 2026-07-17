@@ -5,6 +5,7 @@ import type { InteractionContext, TransformHandle } from "./types";
 import { hitTestTransformHandle, getResizeCursor } from "./hitTesting";
 import { computeScaleUpdates } from "@/store/sceneStore/scaleOperations";
 import { saveHistory } from "@/store/sceneStore/helpers/history";
+import { markNodesDirty } from "@/store/sceneStore/dirtyTracking";
 
 const MIN_SIZE = 5;
 
@@ -265,8 +266,16 @@ export function createScaleController(context: InteractionContext): ScaleControl
         componentArtifactsById: state.originalComponentArtifactsById ?? undefined,
       });
       const newNodesById = { ...state.originalNodesById };
-      for (const id in updates) {
+      const updatedIds = Object.keys(updates);
+      for (const id of updatedIds) {
         newNodesById[id] = { ...newNodesById[id], ...updates[id] } as FlatSceneNode;
+      }
+      // Only mark when the commit actually changes something — mirrors the
+      // no-op guards elsewhere (commitDragPositions, updateNode) that avoid
+      // arming the dirty-tracking flag for a mutation that returns unchanged
+      // state.
+      if (updatedIds.length > 0) {
+        markNodesDirty(updatedIds);
       }
       useSceneStore.setState({ nodesById: newNodesById, _cachedTree: null });
 

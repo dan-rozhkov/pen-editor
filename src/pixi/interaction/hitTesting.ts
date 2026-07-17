@@ -5,6 +5,7 @@ import { useViewportStore } from "@/store/viewportStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { getCullingIndex } from "@/pixi/pixiSync";
 import type { SceneNode, FrameNode, FlatSceneNode, RefNode, ConnectorNode, LineNode } from "@/types/scene";
+import { isFitContentFrame } from "@/types/scene";
 import {
   getPreparedNodeEffectiveSize,
   prepareFrameNode,
@@ -42,22 +43,12 @@ const LABEL_HIT_PADDING = 2;
  */
 const ROOT_PRUNE_PADDING_PX = 8;
 
-/**
- * True for an auto-layout frame with `fit_content` sizing on either axis —
- * its rendered (hit-tested) size is the *live* Yoga-computed intrinsic size
- * (`prepareFrameNode`/`getPreparedNodeEffectiveSize`), which the culling
- * index cannot see: `syncAutoLayout` applies intrinsic size only to the
- * Pixi container, never back to the store's `width`/`height`. See the
- * root-pruning comment in `findCanvasHitTargetAtPoint` for why this must be
- * excluded from pruning rather than merely padded around.
- */
-function isFitContentFrame(node: SceneNode): boolean {
-  if (node.type !== "frame") return false;
-  return (
-    node.layout?.autoLayout === true &&
-    (node.sizing?.widthMode === "fit_content" || node.sizing?.heightMode === "fit_content")
-  );
-}
+// `isFitContentFrame` (why this hit-test path excludes fit_content frame
+// roots from culling-index pruning) is defined in `@/types/scene`, shared
+// with `rasterCacheManager.ts`'s caching-eligibility filter — see its doc
+// comment there. See the root-pruning comment in `findCanvasHitTargetAtPoint`
+// for why this case must be excluded from pruning rather than merely padded
+// around.
 const LABEL_FONT_FAMILY = "system-ui, -apple-system, sans-serif";
 const LABEL_TEXT_STYLE = new TextStyle({
   fontFamily: LABEL_FONT_FAMILY,

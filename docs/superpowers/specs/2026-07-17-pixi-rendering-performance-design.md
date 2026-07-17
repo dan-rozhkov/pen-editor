@@ -260,6 +260,10 @@ Phase 4 (batching hygiene: shared `GraphicsContext`, text consolidation, mask hy
 
 The 20000-node run is not hard-gated in CI (`PERF_NODES` env var, default 5000) — it's a manual/occasional check, not a per-push assertion, since CI runner variance at that size hasn't been characterized across multiple machines.
 
+### Structural mutators and the full-scan fallback (disclosure)
+
+Structural mutators — `deleteNode`, group/ungroup, boolean ops, and undo/redo — are not dirty-instrumented (they don't call `markNodesDirty`), so `consumeDirty()` reports an incomplete dirty set for that flush and `computeDiff` falls back to the O(N) `computeSceneDiffFull` scan instead of the dirty-set fast path. Scaling the pre-dirty-set baseline in the table above (Task 3, 5000 nodes, full-scan `flush` avg 1.99ms) to 20000 nodes puts this fallback's per-flush cost at roughly ~2ms — i.e. one `computeSceneDiffFull`-driven flush costs about what four Task-14-era dirty-set flushes cost combined at that document size. This is acceptable because it's a one-off per user action (one delete, one undo) rather than a per-frame cost: unlike `flush`/`updateCulling`, which run on every pan/drag frame and therefore compound into visible jank if slow, a structural edit's fallback scan runs once and is bounded by human interaction latency, not the 16.6ms frame budget. No dirty-instrumentation work is planned for these mutators unless a future workload shows the fallback itself causing dropped frames (e.g. a very large multi-select delete).
+
 ## Sources
 
 - https://madebyevan.com/figma/building-a-professional-design-tool-on-the-web/

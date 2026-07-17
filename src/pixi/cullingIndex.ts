@@ -239,8 +239,15 @@ export function createCullingIndex() {
     },
 
     queryVisible(bounds: Rect): Set<string> {
-      const hits = grid.query(bounds);
-      const visible = new Set<string>(hits);
+      // One Set, filled in place by grid.query's `out` param, instead of
+      // allocating a `hits` set and then copying it into a second `visible`
+      // set. `hits` is snapshotted as an array before the loops below start
+      // mutating `visible` in place, so iteration stays over the original
+      // grid hits only (adding ancestors/descendants must not itself expand
+      // what these loops walk).
+      const visible = new Set<string>();
+      grid.query(bounds, visible);
+      const hits = [...visible];
 
       for (const id of hits) {
         let cur = parentById[id] ?? null;

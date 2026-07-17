@@ -1,10 +1,11 @@
-import { computeRasterCacheDecisions } from "./rasterCache";
-import type { SceneDiff } from "./syncDiff";
 import type { SceneState } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useDragStore } from "@/store/dragStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
+import { isFitContentFrame } from "@/types/scene";
+import { computeRasterCacheDecisions } from "./rasterCache";
 import { requestCanvasRender } from "./renderScheduler";
+import type { SceneDiff } from "./syncDiff";
 
 // The decision timer (Task 12's QUIET_MS is the *quiet* threshold; this is
 // the round-trip cadence at which we re-evaluate it).
@@ -50,7 +51,7 @@ export interface RasterCacheManager {
   onDirectContainerMutation(ids: Iterable<string>, state: SceneState): void;
   /** Zoom (or other viewport) change — schedules a decision round so a
    *  resolution-bucket change gets picked up. */
-  onViewportChange(scale?: number): void;
+  onViewportChange(): void;
   /** Containers were destroyed and recreated (fullRebuild / render-mode
    *  rebuild) — the old `cached`/`dirtyAt` bookkeeping refers to containers
    *  that no longer exist and must be dropped, not replayed against the new
@@ -65,6 +66,13 @@ export function createRasterCacheManager(deps: RasterCacheManagerDeps): RasterCa
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   const topFrameOf = (id: string, state: SceneState): string | null => {
+    // A removed id has no entry in nodesById — its own top ancestor is gone
+    // along with it, and the parent that lost it is separately covered by
+    // its own childrenById change (already in the same diff/mutation's ids).
+    // Walking parentById for a dead id would otherwise resolve to whatever
+    // (possibly unrelated) node currently occupies that id's stale parent
+    // chain, or loop against no-longer-consistent state.
+    if (!state.nodesById[id]) return null;
     let cur: string | null = id;
     while (cur != null && state.parentById[cur] != null) cur = state.parentById[cur];
     return cur;
@@ -124,15 +132,26 @@ export function createRasterCacheManager(deps: RasterCacheManagerDeps): RasterCa
       if (top) hot.add(top);
     }
 
+    // Task 3 (fit_content sizing gate): a fit_content top-level frame's
+    // rendered size is the *live* Yoga-computed intrinsic size, never
+    // written back to `width`/`height` here — the fits-gate below would
+    // read stale stored dimensions while `cacheAsTexture` rasterizes the
+    // live (possibly different) bounds. Excluded from caching eligibility
+    // entirely rather than risking a wrongly-sized cached texture.
+    const topLevelFrameIds = state.rootIds.filter((id) => {
+      const n = state.nodesById[id];
+      return n?.type === "frame" && !isFitContentFrame(n);
+    });
+
     const framePixelSize = new Map(
-      state.rootIds.map((id) => {
+      topLevelFrameIds.map((id) => {
         const n = state.nodesById[id];
         return [id, { width: (n?.width ?? 0) * scale, height: (n?.height ?? 0) * scale }] as const;
       }),
     );
 
     const decisions = computeRasterCacheDecisions({
-      topLevelFrameIds: state.rootIds.filter((id) => state.nodesById[id]?.type === "frame"),
+      topLevelFrameIds,
       frameSubtreeDirtyAt: dirtyAt,
       cachedFrames: cached,
       hotFrameIds: hot,
@@ -159,15 +178,19 @@ export function createRasterCacheManager(deps: RasterCacheManagerDeps): RasterCa
     }
   }
 
+  const onDirectContainerMutation = (ids: Iterable<string>, state: SceneState): void => {
+    markDirtyAndUncache(ids, state);
+    schedule();
+  };
+
   return {
+    // A SceneDiff's `changedIds` is just another set of ids that were
+    // touched outside this manager's view — same handling as any other
+    // direct container mutation.
     onFlushStart(diff: SceneDiff, state: SceneState): void {
-      markDirtyAndUncache(diff.changedIds, state);
-      schedule();
+      onDirectContainerMutation(diff.changedIds, state);
     },
-    onDirectContainerMutation(ids: Iterable<string>, state: SceneState): void {
-      markDirtyAndUncache(ids, state);
-      schedule();
-    },
+    onDirectContainerMutation,
     onViewportChange(): void {
       schedule();
     },

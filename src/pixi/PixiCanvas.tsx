@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { Application, Container } from "pixi.js";
+import { useShallow } from "zustand/react/shallow";
 import { InlineNameEditor} from "@/components/InlineNameEditor";
 import { InlineTextEditor } from "@/components/InlineTextEditor";
 import { InlineEmbedEditor } from "@/components/InlineEmbedEditor";
@@ -117,33 +118,23 @@ export function usePixiCanvasState({
   // absolute position WITHOUT touching the edited node's own record (its
   // x/y are computed by Yoga, not stored). A non-reactive read here would
   // leave the inline editor overlay pinned at a stale position once the
-  // component stops re-rendering on every unrelated mutation. Select x and
-  // y as two primitive selectors (not one object-returning selector) so
-  // zustand's default Object.is equality still bails out per-axis without
-  // needing useShallow.
-  const editingX = useSceneStore((s) => {
-    if (!editingNodeId) return null;
-    if (resolvedDescendant) return resolvedDescendant.absX;
-    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-    return (
-      getNodeAbsolutePositionWithLayout(s.getNodes(), editingNodeId, calculateLayoutForFrame)
-        ?.x ?? null
-    );
-  });
-  const editingY = useSceneStore((s) => {
-    if (!editingNodeId) return null;
-    if (resolvedDescendant) return resolvedDescendant.absY;
-    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-    return (
-      getNodeAbsolutePositionWithLayout(s.getNodes(), editingNodeId, calculateLayoutForFrame)
-        ?.y ?? null
-    );
-  });
-
-  const editingPosition =
-    editingNodeId && editingX != null && editingY != null
-      ? { x: editingX, y: editingY }
-      : null;
+  // component stops re-rendering on every unrelated mutation. A single
+  // selector (rather than separate x/y selectors) so the layout walk
+  // (`getNodeAbsolutePositionWithLayout`) runs once per store notification
+  // instead of twice; `useShallow` prevents the fresh `{x, y}` object this
+  // selector returns every call from defeating zustand's default Object.is
+  // equality and re-rendering on every unrelated mutation.
+  const editingPosition = useSceneStore(
+    useShallow((s) => {
+      if (!editingNodeId) return null;
+      if (resolvedDescendant) {
+        return { x: resolvedDescendant.absX, y: resolvedDescendant.absY };
+      }
+      const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+      const pos = getNodeAbsolutePositionWithLayout(s.getNodes(), editingNodeId, calculateLayoutForFrame);
+      return pos ? { x: pos.x, y: pos.y } : null;
+    }),
+  );
 
   // Theme lookup returns a primitive ('light' | 'dark'), so subscribing with
   // a selector that reads the ancestor chain is safe without useShallow —

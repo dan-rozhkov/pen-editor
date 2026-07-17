@@ -1,10 +1,15 @@
-type Label = "incrementalUpdate" | "updateCulling" | "flush";
+type Label = "updateCulling" | "flush";
 type Bucket = { count: number; totalMs: number; maxMs: number };
 
 const buckets = new Map<Label, Bucket>();
 
 export const perfStats = {
   time<T>(label: Label, fn: () => T): T {
+    // Dev-only instrumentation — skip the performance.now() bracketing (and
+    // the bucket bookkeeping) entirely outside dev so this never costs a
+    // production frame. Vitest sets import.meta.env.DEV true, so tests still
+    // exercise the measured path below.
+    if (!import.meta.env.DEV) return fn();
     const start = performance.now();
     try {
       return fn();
