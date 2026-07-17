@@ -260,10 +260,10 @@ describe("createRasterCacheManager", () => {
 
   it("onViewportChange schedules a round that uncaches on bucket change and re-caches after quiet", () => {
     const c1 = makeContainer();
-    // `framePixelSize` is at-current-zoom (width * scale — see rasterCache.ts's
-    // `// at current zoom` doc), and the fit check then multiplies by the
-    // resolution bucket on top of that — so a frame must be small enough
-    // to still fit once *both* factors apply at scale 3 / bucket 4.
+    // `frameSize` carries RAW stored width/height; the fit check is
+    // `width * resolutionBucket <= MAX_TEXTURE_PX` (cacheAsTexture's
+    // `resolution` applies to local units — zoom does NOT multiply into the
+    // texture size). Zoom only picks the bucket, via scale * pixelRatio.
     const state = makeState(["f1"], { nodesById: { f1: frameNode(100, 80) } });
     const getState = vi.fn<() => SceneState>(() => state);
     let scale = 1;
