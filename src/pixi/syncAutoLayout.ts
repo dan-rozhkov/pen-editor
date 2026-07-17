@@ -1,4 +1,4 @@
-import { useSceneStore, type SceneState } from "@/store/sceneStore";
+import type { SceneState } from "@/store/sceneStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useDragStore } from "@/store/dragStore";
 import { useViewportStore } from "@/store/viewportStore";
@@ -7,11 +7,7 @@ import { materializeLayoutRefs } from "@/utils/layoutRefUtils";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 import { getViewportBounds } from "@/utils/viewportUtils";
 import { applyLayoutSize } from "./renderers";
-import {
-  applyOverviewEffectVisibility,
-  computeViewportRenderability,
-  isOverviewScale,
-} from "./viewportCulling";
+import { applyOverviewEffectVisibility, isOverviewScale } from "./viewportCulling";
 import {
   type SyncContext,
   type NodeLayoutOverride,
@@ -29,35 +25,89 @@ const CULL_MARGIN = 400;
  * culling on root containers. Both operate over the live PixiJS registry.
  */
 export function createAutoLayoutManager(ctx: SyncContext) {
-  const { registry } = ctx;
+  const { registry, cullingIndex } = ctx;
 
   // ─── Phase 1: Viewport Culling ───────────────────────────────────────
 
-  function updateCulling(): void {
+  // Last-applied visible set + overview flag, kept across frames so an
+  // unchanged viewport/scene touches zero containers: only ids whose
+  // visible/culled state actually flips (or the overview flag flips) get
+  // `.renderable` re-applied, instead of walking every entry every frame.
+  let lastVisible = new Set<string>();
+  let lastOverview: boolean | null = null;
+
+  /**
+   * @param settleIds Ids whose container was just created (added this flush,
+   * or every node on a full rebuild) and therefore carries no prior
+   * `.renderable` state from a previous `updateCulling` pass. The
+   * visible/lastVisible diff below only ever *changes* state for ids whose
+   * membership flipped — a brand-new container that's culled from birth
+   * never appears in `visible` (so the "show" loop skips it) and never
+   * appeared in `lastVisible` either (so the "hide" loop skips it too),
+   * leaving Pixi's default `renderable = true` in place. `settleIds` closes
+   * that gap: anything in it not already handled by the "show" loop gets an
+   * explicit `renderable = false`.
+   */
+  function updateCulling(settleIds?: Iterable<string>): void {
     perfStats.time("updateCulling", () => {
       const { scale, x, y } = useViewportStore.getState();
-      const bounds = getViewportBounds(scale, x, y, window.innerWidth, window.innerHeight);
+      const b = getViewportBounds(scale, x, y, window.innerWidth, window.innerHeight);
       const margin = CULL_MARGIN / scale;
+      const bounds = {
+        minX: b.minX - margin,
+        minY: b.minY - margin,
+        maxX: b.maxX + margin,
+        maxY: b.maxY + margin,
+      };
 
-      const state = useSceneStore.getState();
-      const renderability = computeViewportRenderability({
-        rootIds: state.rootIds,
-        nodesById: state.nodesById,
-        childrenById: state.childrenById,
-        bounds,
-        margin,
-      });
+      const visible = cullingIndex.queryVisible(bounds);
+      const overview = isOverviewScale(scale);
+      const overviewFlipped = overview !== lastOverview;
+      lastOverview = overview;
 
-      for (const [id, renderable] of renderability) {
+      for (const id of visible) {
+        if (lastVisible.has(id) && !overviewFlipped) continue; // state unchanged
         const entry = registry.get(id);
         if (!entry) continue;
-        applyOverviewEffectVisibility(entry.container, isOverviewScale(scale));
+        applyOverviewEffectVisibility(entry.container, overview);
         // Sibling-mask resolution exclusively owns mask-node renderability.
         // Overwriting it here can resurrect an inert masker or suppress a mask
         // Pixi needs for the stencil pass.
-        if (!entry.node.isMask) entry.container.renderable = renderable;
+        if (!entry.node.isMask) entry.container.renderable = true;
       }
+      for (const id of lastVisible) {
+        if (visible.has(id)) continue;
+        const entry = registry.get(id);
+        if (!entry) continue;
+        if (!entry.node.isMask) entry.container.renderable = false;
+      }
+      if (settleIds) {
+        for (const id of settleIds) {
+          if (visible.has(id)) continue; // already forced true by the loop above
+          const entry = registry.get(id);
+          if (!entry) continue;
+          if (!entry.node.isMask) entry.container.renderable = false;
+        }
+      }
+      lastVisible = visible;
     });
+  }
+
+  /**
+   * Forces the next `updateCulling()` call to (re-)apply overview-effect
+   * state to every currently-visible id, instead of diffing against the
+   * previous frame's set. Required after `fullRebuild` (font load,
+   * render-mode toggle): every container is destroyed and recreated, so
+   * per-container WeakMap-tracked overview effect state (shadow/blur
+   * layers) starts fresh even for ids whose true/false visibility hasn't
+   * changed — without this, an id that was already in `lastVisible` before
+   * the rebuild would be skipped by the "show" loop and its brand-new
+   * shadow/blur children would never get `applyOverviewEffectVisibility`
+   * applied at all.
+   */
+  function resetCullingState(): void {
+    lastVisible = new Set();
+    lastOverview = null;
   }
 
   // ─── Auto-Layout ─────────────────────────────────────────────────────
@@ -245,6 +295,7 @@ export function createAutoLayoutManager(ctx: SyncContext) {
 
   return {
     updateCulling,
+    resetCullingState,
     collectDirtyAutoLayoutFrames,
     applyAutoLayoutPositions,
   };

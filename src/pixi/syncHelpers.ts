@@ -3,6 +3,7 @@ import type { FlatSceneNode, FlatFrameNode, FrameNode, SceneNode } from "@/types
 import { isFlatFrameNode, isRefNode } from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
 import type { SceneState } from "@/store/sceneStore";
+import type { createCullingIndex } from "./cullingIndex";
 import {
   pushRenderTheme,
   popRenderTheme,
@@ -13,6 +14,7 @@ import {
 export interface SyncContext {
   sceneRoot: Container;
   registry: Map<string, RegistryEntry>;
+  cullingIndex: ReturnType<typeof createCullingIndex>;
 }
 
 /**

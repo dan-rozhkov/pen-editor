@@ -25,8 +25,9 @@ import { createResolutionManager } from "./syncResolution";
 import { createNodeTreeManager } from "./syncNodeTree";
 import { createConnectorManager } from "./syncConnectors";
 import { createAutoLayoutManager } from "./syncAutoLayout";
+import { createCullingIndex } from "./cullingIndex";
 import { perfStats } from "./perfStats";
-import { computeSceneDiffFull, computeSceneDiffDirty } from "./syncDiff";
+import { computeSceneDiffFull, computeSceneDiffDirty, type SceneDiff } from "./syncDiff";
 import { consumeDirty } from "@/store/sceneStore/dirtyTracking";
 
 // Module-level registry accessor for the drag animator
@@ -106,7 +107,9 @@ export function createPixiSync(sceneRoot: Container): () => void {
   registryAccessor = (id) => registry.get(id)?.container ?? null;
   sceneRootAccessor = () => sceneRoot;
 
-  const ctx = { sceneRoot, registry };
+  // Task 10: grid-backed replacement for the per-frame full-tree culling walk.
+  const cullingIndex = createCullingIndex();
+  const ctx = { sceneRoot, registry, cullingIndex };
   const resolutionMgr = createResolutionManager(ctx);
   const nodeTreeMgr = createNodeTreeManager(
     ctx,
@@ -128,7 +131,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
   // Viewport culling + auto-layout position application.
   const autoLayoutMgr = createAutoLayoutManager(ctx);
-  const { updateCulling, collectDirtyAutoLayoutFrames, applyAutoLayoutPositions } = autoLayoutMgr;
+  const { updateCulling, resetCullingState, collectDirtyAutoLayoutFrames, applyAutoLayoutPositions } = autoLayoutMgr;
 
   // ─── Full Rebuild ────────────────────────────────────────────────────
 
@@ -172,8 +175,18 @@ export function createPixiSync(sceneRoot: Container): () => void {
     resolutionMgr.applyImageFillTextureResolution(resolutionMgr.getTargetImageFillResolution(useViewportStore.getState().scale));
     nodeTreeMgr.applyTextEditingVisibility();
 
+    // Task 10: (re)build the spatial culling index before the visual pass.
+    // Every container was just destroyed and recreated above — reset the
+    // diff-against-last-frame state so updateCulling() re-applies overview
+    // visibility to every visible id, and pass every node id as `settleIds`
+    // so ids that end up NOT visible (never previously in `lastVisible`,
+    // since it was just reset) get an explicit `renderable = false` instead
+    // of keeping Pixi's default `true` on their brand-new container.
+    cullingIndex.rebuild(state);
+    resetCullingState();
+
     // Phase 1: Apply culling after build
-    updateCulling();
+    updateCulling(Object.keys(state.nodesById));
   }
 
   // ─── Phase 7: Incremental Theme/Variable Update ──────────────────────
@@ -212,9 +225,9 @@ export function createPixiSync(sceneRoot: Container): () => void {
     state: SceneState,
     prev: SceneState,
     dirty?: { ids: Set<string>; complete: boolean },
-  ): void {
+  ): SceneDiff | undefined {
     if (state.nodesById === prev.nodesById && state.rootIds === prev.rootIds && state.childrenById === prev.childrenById) {
-      return; // No scene changes
+      return undefined; // No scene changes
     }
 
     // Phase 5: dirty-set diff when honest, full O(N) scan otherwise —
@@ -496,6 +509,15 @@ export function createPixiSync(sceneRoot: Container): () => void {
     resolutionMgr.refreshTextResolution();
     nodeTreeMgr.applyTextEditingVisibility(changedIds);
 
+    // Task 10: feed this flush's dirty ids to the spatial culling index
+    // *before* the visual pass below — `updateCulling()` queries the index,
+    // so if this ran after the visual pass instead, a node that moved
+    // on/off-screen this same flush would render with last frame's
+    // visibility for one extra frame (a stale-visible/stale-culled bug).
+    // Removed ids are dropped from the index; the rest are re-walked from
+    // their nearest rotated ancestor (or themselves) — see cullingIndex.ts.
+    cullingIndex.updateForChanged(state, changedIds);
+
     // Phase 1: Re-apply culling after tree changes.
     // NOTE: this call must stay last (and unconditional) in this function.
     // `applySiblingMasks` above writes `.renderable` on root/child containers
@@ -505,7 +527,12 @@ export function createPixiSync(sceneRoot: Container): () => void {
     // outside the viewport), but the ordering is fragile: reordering these
     // two, or short-circuiting before this line, can silently resurrect a
     // culled node or re-show an inert masker.
-    updateCulling();
+    // `diff.addedIds` are passed as settleIds: their containers are brand
+    // new this flush and carry no prior `lastVisible` membership, so a
+    // newly-added node that's culled from birth needs an explicit
+    // `renderable = false` (see updateCulling's settleIds doc).
+    updateCulling(diff.addedIds);
+    return diff;
   }
 
   // ─── Subscriptions ───────────────────────────────────────────────────
