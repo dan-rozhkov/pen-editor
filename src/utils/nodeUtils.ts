@@ -1,4 +1,12 @@
-import type { SceneNode, FrameNode, GroupNode, RefNode } from "../types/scene";
+import type {
+  SceneNode,
+  FrameNode,
+  GroupNode,
+  RefNode,
+  FlatFrameNode,
+  FlatGroupNode,
+  FlatSceneNode,
+} from "../types/scene";
 import type { ThemeName } from "../types/variable";
 import { flattenTree, isContainerNode } from "../types/scene";
 import { getPreparedNodeEffectiveSize, prepareFrameNode } from "@/utils/instanceUtils";
@@ -56,6 +64,32 @@ export function findParentFrame(
   }
 
   return { parent: null, isInsideAutoLayout: false };
+}
+
+export interface FlatParentContext {
+  parent: FlatFrameNode | FlatGroupNode | null;
+  isInsideAutoLayout: boolean;
+}
+
+/**
+ * O(1) flat-map equivalent of findParentFrame, for panel code that subscribes
+ * to nodesById/parentById instead of the scene tree. Mirrors the
+ * isInsideAutoLayout semantics of findParentFrame.
+ */
+export function getParentContextFlat(
+  nodesById: Record<string, FlatSceneNode>,
+  parentById: Record<string, string | null>,
+  id: string,
+): FlatParentContext {
+  const parentId = parentById[id] ?? null;
+  const raw = parentId ? nodesById[parentId] : null;
+  const parent =
+    raw && (raw.type === "frame" || raw.type === "group") ? raw : null;
+  return {
+    parent,
+    isInsideAutoLayout:
+      parent?.type === "frame" && !!parent.layout?.autoLayout,
+  };
 }
 
 /**
