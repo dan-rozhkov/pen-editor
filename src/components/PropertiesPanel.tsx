@@ -214,15 +214,6 @@ export function PropertiesPanel() {
       ? getThemeFromAncestorFrames(s.parentById, s.nodesById, singleSelectedId, "light")
       : ("light" as const),
   );
-  // DescendantPropertyEditor (instance-descendant editing) still needs the
-  // full tree; this is a rare, non-performance-critical path (Task 6 will
-  // migrate it off `allNodes`). Kept narrow: when there's no instanceContext
-  // this returns a stable empty array, so it never triggers a re-render on
-  // ordinary scene mutations.
-  const descendantAllNodes = useSceneStore((s) =>
-    instanceContext ? s.getNodes() : EMPTY_NODES,
-  );
-
   const parentContext: FlatParentContext = useMemo(
     () => ({
       parent: parentNode,
@@ -267,7 +258,6 @@ export function PropertiesPanel() {
         {instanceContext && activeTool !== "frame" && (
           <DescendantPropertyEditor
             instanceContext={instanceContext}
-            allNodes={descendantAllNodes as unknown as SceneNode[]}
             variables={variables}
             activeTheme={effectiveTheme}
           />

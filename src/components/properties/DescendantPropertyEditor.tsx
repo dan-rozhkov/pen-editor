@@ -48,14 +48,12 @@ function getParentContextForDescendant(
 
 interface DescendantPropertyEditorProps {
   instanceContext: InstanceContext;
-  allNodes: SceneNode[];
   variables: Variable[];
   activeTheme: ThemeName;
 }
 
 export function DescendantPropertyEditor({
   instanceContext,
-  allNodes,
   variables,
   activeTheme,
 }: DescendantPropertyEditorProps) {
@@ -65,6 +63,7 @@ export function DescendantPropertyEditor({
   const updateSlotChildWithoutHistory = useSceneStore((s) => s.updateSlotChildWithoutHistory);
   const nodesById = useSceneStore((s) => s.nodesById);
   const childrenById = useSceneStore((s) => s.childrenById);
+  const allNodes = useSceneStore((s) => s.getNodes());
 
   const instance = findNodeById(allNodes, instanceContext.instanceId) as RefNode | null;
   if (!instance || instance.type !== "ref") return null;
