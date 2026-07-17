@@ -23,7 +23,7 @@ describe("dirty diff equivalence", () => {
     const removedId = "perf-1-2";
     const nodesById = { ...prev.nodesById };
     delete nodesById[removedId];
-    const childrenById = { ...prev.childrenById, "perf-frame-1": prev.childrenById["perf-frame-1"].filter((i) => i !== removedId) };
+    const childrenById: Record<string, string[]> = { ...prev.childrenById, "perf-frame-1": prev.childrenById["perf-frame-1"].filter((i) => i !== removedId) };
     delete childrenById[removedId];
     const next = { ...prev, nodesById, childrenById };
     const full = computeSceneDiffFull(asState(next), asState(prev));
