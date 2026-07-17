@@ -4,6 +4,9 @@ import { expect, test } from "@playwright/test";
 // perfStats. Budgets are soft (console.warn) until Phase 1–2 land; then tighten.
 test("large document: sync flush and culling stay within budget", async ({ page }) => {
   await page.route("**/api/models", (route) => route.fulfill({ json: { models: [], default: null } }));
+  // Disable the DEV-only diff safety net so this probe measures the shipped
+  // diff path, not the full-scan comparison run alongside it in dev.
+  await page.addInitScript(() => localStorage.setItem("pen.diffCheck", "off"));
   await page.goto("/?perf=5000");
   await expect(page.locator("[data-canvas]")).toBeVisible();
   await page.waitForTimeout(1500); // initial build settles

@@ -49,6 +49,14 @@ export function getSceneRoot(): Container | null {
 const THEME_SENTINEL = Object.freeze({ type: "none" }) as unknown as FlatSceneNode;
 
 /**
+ * DEV-only diff safety net (runs the full O(N) scan alongside the dirty-set
+ * diff and warns on mismatch). Kept on by default in dev, but can be opted
+ * out of via `localStorage.setItem("pen.diffCheck", "off")` so perf probes
+ * (which run in dev mode) can measure the shipped diff path uncontaminated.
+ */
+const diffCheckEnabled = import.meta.env.DEV && localStorage.getItem("pen.diffCheck") !== "off";
+
+/**
  * A node is "variable-dependent" if its rendering can change when a design
  * variable / theme changes:
  * - `ref`: the resolved component subtree may contain bindings anywhere;
@@ -215,7 +223,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
       ? computeSceneDiffDirty(state, prev, dirty.ids)
       : computeSceneDiffFull(state, prev);
 
-    if (import.meta.env.DEV && dirty?.complete) {
+    if (diffCheckEnabled && dirty?.complete) {
       const fullCheck = computeSceneDiffFull(state, prev);
       let mismatch = false;
       for (const id of diff.changedIds) {

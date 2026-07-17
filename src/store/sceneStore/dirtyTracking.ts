@@ -8,6 +8,13 @@ const pending = new Set<string>();
 let complete = true;
 let armed = false;
 
+/**
+ * When marking a batch that includes newly-added nodes forming a subtree,
+ * `ids` must be listed parent-before-child: pixiSync's `createAndAttachNode`
+ * drops a child whose parent container isn't registered yet. Currently no
+ * mutator does subtree adds via this channel — structural adds rely on the
+ * full-scan fallback.
+ */
 export function markNodesDirty(ids: Iterable<string>): void {
   for (const id of ids) pending.add(id);
   armed = true;
