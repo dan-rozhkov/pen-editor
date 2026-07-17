@@ -13,7 +13,7 @@ import type {
   TextNode,
 } from "@/types/scene";
 import { flattenTree } from "@/types/scene";
-import type { ParentContext } from "@/utils/nodeUtils";
+import type { FlatParentContext, ParentContext } from "@/utils/nodeUtils";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { materializeLayoutRefs } from "@/utils/layoutRefUtils";
@@ -180,7 +180,7 @@ async function measureEmbedContentSize(
  */
 function computeSizeForMode(
   node: SceneNode,
-  parentContext: ParentContext,
+  parentContext: ParentContext | FlatParentContext,
   mode: SizingMode,
   dimension: "width" | "height",
   calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
@@ -238,7 +238,7 @@ function computeSizeForMode(
 interface SizeSectionProps {
   node: SceneNode;
   onUpdate: (updates: Partial<SceneNode>) => void;
-  parentContext: ParentContext;
+  parentContext: ParentContext | FlatParentContext;
   mixedKeys?: Set<string>;
   isMultiSelect?: boolean;
   selectedNodes?: SceneNode[];

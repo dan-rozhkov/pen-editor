@@ -1,16 +1,22 @@
-import { useState, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useViewportStore } from "@/store/viewportStore";
-import type { SceneNode, FrameNode } from "@/types/scene";
+import type {
+  FlatFrameNode,
+  FlatGroupNode,
+  FlatSceneNode,
+  FrameNode,
+  SceneNode,
+} from "@/types/scene";
 import { generateId } from "@/types/scene";
 import {
-  findNodeById,
-  findParentFrame,
+  getParentContextFlat,
   getThemeFromAncestorFrames,
-  type ParentContext,
+  type FlatParentContext,
 } from "@/utils/nodeUtils";
 import { BooleanOperationsSection } from "@/components/properties/BooleanOperationsSection";
 import { DescendantPropertyEditor } from "@/components/properties/DescendantPropertyEditor";
@@ -167,40 +173,71 @@ function FramePresetsPanel() {
   );
 }
 
+const EMPTY_NODES: FlatSceneNode[] = [];
+
 export function PropertiesPanel() {
-  const nodes = useSceneStore((s) => s.getNodes());
+  const selectedIds = useSelectionStore((s) => s.selectedIds);
+  const instanceContext = useSelectionStore((s) => s.instanceContext);
   const updateNode = useSceneStore((s) => s.updateNode);
-  const { selectedIds, instanceContext } = useSelectionStore();
   const variables = useVariableStore((s) => s.variables);
   const activeTool = useDrawModeStore((s) => s.activeTool);
 
-  const selectedNode =
-    selectedIds.length === 1 ? findNodeById(nodes, selectedIds[0]) : null;
+  const singleSelectedId = selectedIds.length === 1 ? selectedIds[0] : null;
 
-  const nodesById = useSceneStore((s) => s.nodesById);
-  const parentById = useSceneStore((s) => s.parentById);
+  // Narrow subscriptions: the panel re-renders only when the selection or the
+  // *selected node itself* changes — not on every scene mutation. Dragging
+  // the selected node still updates the X/Y/size fields live.
+  const selectedNode = useSceneStore((s): FlatSceneNode | null =>
+    singleSelectedId ? (s.nodesById[singleSelectedId] ?? null) : null,
+  );
+  // Returns the parent node object itself (a stable reference from nodesById),
+  // not a fresh context object — a selector that built `{ parent, ... }` inline
+  // would return a new object on every store change and defeat the subscription.
+  const parentNode = useSceneStore((s): FlatFrameNode | FlatGroupNode | null =>
+    singleSelectedId
+      ? getParentContextFlat(s.nodesById, s.parentById, singleSelectedId).parent
+      : null,
+  );
+  const selectedNodes = useSceneStore(
+    useShallow((s): FlatSceneNode[] =>
+      selectedIds.length > 1
+        ? (selectedIds
+            .map((id) => s.nodesById[id])
+            .filter(Boolean) as FlatSceneNode[])
+        : EMPTY_NODES,
+    ),
+  );
+  // The ancestor walk runs on each store change, but re-renders the panel only
+  // when the resulting theme name (a string) actually changes.
+  const effectiveTheme = useSceneStore((s) =>
+    singleSelectedId
+      ? getThemeFromAncestorFrames(s.parentById, s.nodesById, singleSelectedId, "light")
+      : ("light" as const),
+  );
+  // DescendantPropertyEditor (instance-descendant editing) still needs the
+  // full tree; this is a rare, non-performance-critical path (Task 6 will
+  // migrate it off `allNodes`). Kept narrow: when there's no instanceContext
+  // this returns a stable empty array, so it never triggers a re-render on
+  // ordinary scene mutations.
+  const descendantAllNodes = useSceneStore((s) =>
+    instanceContext ? s.getNodes() : EMPTY_NODES,
+  );
 
-  // Compute effective theme for the selected node by walking ancestor themeOverrides.
-  const effectiveTheme = useMemo(() => {
-    if (!selectedNode) return 'light' as const;
-    return getThemeFromAncestorFrames(parentById, nodesById, selectedNode.id, 'light');
-  }, [selectedNode, parentById, nodesById]);
-  const selectedNodes = useMemo(() => {
-    if (selectedIds.length <= 1) return [];
-    return selectedIds
-      .map((id) => nodesById[id])
-      .filter(Boolean) as SceneNode[];
-  }, [selectedIds, nodesById]);
+  const parentContext: FlatParentContext = useMemo(
+    () => ({
+      parent: parentNode,
+      isInsideAutoLayout:
+        parentNode?.type === "frame" && !!parentNode.layout?.autoLayout,
+    }),
+    [parentNode],
+  );
 
-  const parentContext: ParentContext = selectedNode
-    ? findParentFrame(nodes, selectedNode.id)
-    : { parent: null, isInsideAutoLayout: false };
-
-  const handleUpdate = (updates: Partial<SceneNode>) => {
-    if (selectedNode) {
-      updateNode(selectedNode.id, updates);
-    }
-  };
+  const handleUpdate = useCallback(
+    (updates: Partial<SceneNode>) => {
+      if (singleSelectedId) updateNode(singleSelectedId, updates);
+    },
+    [singleSelectedId, updateNode],
+  );
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden [&_[data-slot=button-group]_[data-slot=button]:focus-visible]:border-transparent [&_[data-slot=button-group]_[data-slot=button]:focus-visible]:ring-0 [&_[data-slot=button-group]_[data-slot=button]:focus-visible]:outline-none">
@@ -211,15 +248,18 @@ export function PropertiesPanel() {
           <PageProperties />
         )}
         {selectedNodes.length > 1 && activeTool !== "frame" && (
-          <BooleanOperationsSection selectedIds={selectedIds} selectedNodes={selectedNodes} />
+          <BooleanOperationsSection
+            selectedIds={selectedIds}
+            selectedNodes={selectedNodes as SceneNode[]}
+          />
         )}
         {selectedNodes.length > 1 && activeTool !== "frame" && (
-          <SpacingSection selectedIds={selectedIds} nodes={nodes} />
+          <SpacingSection selectedIds={selectedIds} />
         )}
         {/* Multi-select property editor */}
         {selectedNodes.length > 1 && activeTool !== "frame" && (
           <MultiSelectPropertyEditor
-            selectedNodes={selectedNodes}
+            selectedNodes={selectedNodes as SceneNode[]}
             variables={variables}
             activeTheme={effectiveTheme}
           />
@@ -227,7 +267,7 @@ export function PropertiesPanel() {
         {instanceContext && activeTool !== "frame" && (
           <DescendantPropertyEditor
             instanceContext={instanceContext}
-            allNodes={nodes}
+            allNodes={descendantAllNodes as unknown as SceneNode[]}
             variables={variables}
             activeTheme={effectiveTheme}
           />
@@ -235,12 +275,13 @@ export function PropertiesPanel() {
         {/* Show normal property editor */}
         {selectedNode && !instanceContext && activeTool !== "frame" && (
           <PropertyEditor
-            node={selectedNode}
+            // Flat node: sections must not rely on `node.children` (subtree
+            // access goes through nodesById/childrenById + materializeLayoutRefs).
+            node={selectedNode as SceneNode}
             onUpdate={handleUpdate}
             parentContext={parentContext}
             variables={variables}
             activeTheme={effectiveTheme}
-            allNodes={nodes}
           />
         )}
       </div>

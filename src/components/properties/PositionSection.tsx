@@ -1,7 +1,7 @@
 import { ArrowClockwise } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import type { SceneNode } from "@/types/scene";
-import type { ParentContext } from "@/utils/nodeUtils";
+import type { FlatParentContext, ParentContext } from "@/utils/nodeUtils";
 import {
   FlipControls,
   NumberInput,
@@ -20,7 +20,7 @@ interface PositionSectionProps {
   node: SceneNode;
   onUpdate: (updates: Partial<SceneNode>) => void;
   mixedKeys?: Set<string>;
-  parentContext?: ParentContext;
+  parentContext?: ParentContext | FlatParentContext;
   alignment?: ReactNode;
 }
 

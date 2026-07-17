@@ -1,6 +1,7 @@
-import type { SceneNode, FlatFrameNode } from "@/types/scene";
+import { memo, useCallback, useMemo } from "react";
+import type { SceneNode, FlatFrameNode, FrameNode } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
-import { findComponentById, type ParentContext } from "@/utils/nodeUtils";
+import type { FlatParentContext, ParentContext } from "@/utils/nodeUtils";
 import { useSceneStore } from "@/store/sceneStore";
 import { isInsideReusableComponent } from "@/utils/componentUtils";
 import { TypeSection } from "@/components/properties/TypeSection";
@@ -27,32 +28,43 @@ import { ExportSettingsSection } from "@/components/properties/ExportSettingsSec
 interface PropertyEditorProps {
   node: SceneNode;
   onUpdate: (updates: Partial<SceneNode>) => void;
-  parentContext: ParentContext;
+  parentContext: ParentContext | FlatParentContext;
   variables: Variable[];
   activeTheme: ThemeName;
-  allNodes: SceneNode[];
 }
 
-export function PropertyEditor({
+export const PropertyEditor = memo(function PropertyEditor({
   node,
   onUpdate,
   parentContext,
   variables,
   activeTheme,
-  allNodes,
 }: PropertyEditorProps) {
-  const component =
-    node.type === "ref" ? findComponentById(allNodes, node.componentId) : null;
-  const frameNode = node.type === "frame" ? node : null;
+  // O(1) flat lookup of the reusable component frame. Sections never read
+  // `children` off `component`, so the flat node is safe (cast at the boundary).
+  const component = useSceneStore((s): FrameNode | null => {
+    if (node.type !== "ref") return null;
+    const c = s.nodesById[node.componentId];
+    return c && c.type === "frame" && c.reusable
+      ? (c as unknown as FrameNode)
+      : null;
+  });
+  const frameNode = node.type === "frame" ? (node as FrameNode) : null;
 
-  const isOverridden = <T,>(instanceVal: T | undefined, componentVal: T | undefined): boolean => {
-    if (!component) return false;
-    return instanceVal !== undefined && instanceVal !== componentVal;
-  };
+  const isOverridden = useCallback(
+    <T,>(instanceVal: T | undefined, componentVal: T | undefined): boolean => {
+      if (!component) return false;
+      return instanceVal !== undefined && instanceVal !== componentVal;
+    },
+    [component],
+  );
 
-  const resetOverride = (property: keyof SceneNode) => {
-    onUpdate({ [property]: undefined } as Partial<SceneNode>);
-  };
+  const resetOverride = useCallback(
+    (property: keyof SceneNode) => {
+      onUpdate({ [property]: undefined } as Partial<SceneNode>);
+    },
+    [onUpdate],
+  );
 
   const slotFlatNode = useSceneStore((s) => {
     if (node.type !== "frame") return null;
@@ -62,7 +74,12 @@ export function PropertyEditor({
     return s.nodesById[node.id] as FlatFrameNode;
   });
 
-  const colorVariables = variables.filter((v) => v.type === "color");
+  const colorVariables = useMemo(
+    () => variables.filter((v) => v.type === "color"),
+    [variables],
+  );
+
+  const selectionNodes = useMemo(() => [node], [node]);
 
   return (
     <div className="flex flex-col">
@@ -88,7 +105,6 @@ export function PropertyEditor({
             <AlignmentControls
               count={1}
               selectedIds={[node.id]}
-              nodes={allNodes}
               parentFrame={parentContext.parent}
             />
           ) : undefined
@@ -142,8 +158,8 @@ export function PropertyEditor({
       {node.type === "embed" && (
         <EmbedContentSection node={node} />
       )}
-      <SelectionColorsSection nodes={[node]} />
+      <SelectionColorsSection nodes={selectionNodes} />
       <ExportSettingsSection node={node} onUpdate={onUpdate} />
     </div>
   );
-}
+});
