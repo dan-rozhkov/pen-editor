@@ -417,7 +417,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
           );
         });
       }
-      nodeTreeMgr.applyTextEditingVisibility();
+      nodeTreeMgr.applyTextEditingVisibility(changedIds);
     }
 
     // Update connectors when connected nodes move/resize. Collect the changed
@@ -494,7 +494,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
     // New text nodes can appear during incremental subtree rebuilds (e.g. instance edits).
     // Re-apply current resolution so they don't stay at the default and look blurry.
     resolutionMgr.refreshTextResolution();
-    nodeTreeMgr.applyTextEditingVisibility();
+    nodeTreeMgr.applyTextEditingVisibility(changedIds);
 
     // Phase 1: Re-apply culling after tree changes.
     // NOTE: this call must stay last (and unconditional) in this function.
@@ -641,7 +641,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
   });
 
   const unsubSelection = useSelectionStore.subscribe(() => {
-    nodeTreeMgr.applyTextEditingVisibility();
+    nodeTreeMgr.applyTextEditingVisibility([]);
   });
 
   // Play/Present mode/slide changes aren't scene mutations, so nothing else
@@ -652,7 +652,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
   // (markActivity)` already owns scheduling a repaint for this store's
   // changes (`requestCanvasRender` === `invalidate` === `markActivity`).
   const unsubEditorMode = useEditorModeStore.subscribe(() => {
-    nodeTreeMgr.applyTextEditingVisibility();
+    nodeTreeMgr.applyTextEditingVisibility([]);
   });
 
   // The auto-layout drag animator (autoLayoutDragAnimator.ts) mutates
