@@ -3,8 +3,9 @@ import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { SizeSection } from "../SizeSection";
 import { useSceneStore } from "@/store/sceneStore";
 import { resetStores, seedScene } from "@/test/fixtures";
-import type { PolygonNode, SceneNode } from "@/types/scene";
+import type { FlatSceneNode, PolygonNode, SceneNode } from "@/types/scene";
 import type { ParentContext } from "@/utils/nodeUtils";
+import { getParentContextFlat } from "@/utils/nodeUtils";
 import { generatePolygonPoints } from "@/utils/polygonUtils";
 
 const ROOT_CONTEXT = { isInsideAutoLayout: false, parent: null } as unknown as ParentContext;
@@ -207,6 +208,76 @@ describe("<SizeSection />", () => {
       expect(call?.[0].points).toEqual(expectedPoints);
       expect(call?.[0].points).not.toEqual(generatePolygonPoints(5, 100, 150));
     });
+  });
+
+  // Regression test for the flat-node crash Task 4 introduced: SizeSection now
+  // receives a FLAT parent (from nodesById via getParentContextFlat) with no
+  // `children` array, and a flat child node. Before Task 5's materializeLayoutRefs
+  // fix, the effectiveWidth useMemo passed the flat parent straight into
+  // calculateLayoutForFrame, which internally does
+  // `applyLayoutToChildren(frame.children, layoutResults)` on the ORIGINAL
+  // (un-materialized) frame argument — `frame.children` is undefined on a flat
+  // node, so `.map` throws `TypeError: undefined.map` during render.
+  it("renders a flat child with fill_container sizing inside a flat auto-layout parent without crashing", () => {
+    const autoFrame = {
+      id: "autoFrame",
+      type: "frame",
+      name: "Auto",
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 300,
+      fill: "#ffffff",
+      layout: {
+        autoLayout: true,
+        flexDirection: "column",
+        gap: 8,
+        paddingTop: 16,
+        paddingRight: 16,
+        paddingBottom: 16,
+        paddingLeft: 16,
+      },
+    } as unknown as FlatSceneNode;
+
+    const childA = {
+      id: "childA",
+      type: "rect",
+      name: "ChildA",
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 50,
+      fill: "#ff0000",
+      sizing: { widthMode: "fill_container" },
+    } as unknown as FlatSceneNode;
+
+    useSceneStore.setState({
+      nodesById: { autoFrame, childA },
+      parentById: { autoFrame: null, childA: "autoFrame" },
+      childrenById: { autoFrame: ["childA"] },
+      rootIds: ["autoFrame"],
+      componentArtifactsById: {},
+      _cachedTree: null,
+    });
+
+    const { nodesById, parentById } = useSceneStore.getState();
+    const parentContext = getParentContextFlat(nodesById, parentById, "childA");
+    expect(parentContext.isInsideAutoLayout).toBe(true);
+
+    expect(() =>
+      render(
+        <SizeSection
+          node={nodesById.childA as unknown as SceneNode}
+          onUpdate={vi.fn()}
+          parentContext={parentContext}
+        />,
+      ),
+    ).not.toThrow();
+
+    const inputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    // Width should reflect the computed fill_container layout (400 - 32 padding),
+    // not the raw stored width (100).
+    expect(inputs[0].value).toBe("368");
   });
 
   it("toggles clip content for frames only", () => {

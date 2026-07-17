@@ -6,6 +6,7 @@ import {
 } from "@phosphor-icons/react";
 import type {
   EmbedNode,
+  FlatSceneNode,
   FrameNode,
   PolygonNode,
   SceneNode,
@@ -184,21 +185,24 @@ function computeSizeForMode(
   mode: SizingMode,
   dimension: "width" | "height",
   calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
-  allNodes: SceneNode[],
+  nodesById: Record<string, FlatSceneNode>,
+  childrenById: Record<string, string[]>,
+  isMultiSelect: boolean,
 ): number | undefined {
   if (mode === "fixed") return undefined;
 
-  if (mode === "fit_content" && node.type === "frame") {
-    if (!("children" in node) || !Array.isArray(node.children)) {
-      return undefined;
-    }
-    const frame = node as FrameNode;
-    const flat = flattenTree(allNodes);
-    const layoutFrame = materializeLayoutRefs(
-      frame,
-      flat.nodesById,
-      flat.childrenById,
-    );
+  if (mode === "fit_content" && node.type === "frame" && !isMultiSelect) {
+    // Skip the synthetic merged node of a multi-selection. It carries the FIRST
+    // selected node's id (computeMergedProperties uses nodes[0] as its base,
+    // multiSelectUtils.ts:46), so childrenById[node.id] resolves to that node's
+    // real children — materializing it would compute an intrinsic size from one
+    // arbitrary member of the selection and show it as the group's. Today's
+    // `Array.isArray(node.children)` check skips this case only by accident (flat
+    // nodes have no children array); once the panel passes flat nodes that
+    // accident stops holding for single-select too, so discriminate explicitly.
+    // materializeLayoutRefs handles both tree nodes (children array) and flat
+    // nodes (children resolved via childrenById).
+    const layoutFrame = materializeLayoutRefs(node as FrameNode, nodesById, childrenById);
     const intrinsic = calculateFrameIntrinsicSize(layoutFrame, {
       fitWidth: dimension === "width",
       fitHeight: dimension === "height",
@@ -212,7 +216,11 @@ function computeSizeForMode(
     parentContext.parent &&
     parentContext.parent.type === "frame"
   ) {
-    const parent = parentContext.parent as FrameNode;
+    const parent = materializeLayoutRefs(
+      parentContext.parent as FrameNode,
+      nodesById,
+      childrenById,
+    );
     const sizingKey = dimension === "width" ? "widthMode" : "heightMode";
     const modifiedChildren = parent.children.map((child) => {
       if (child.id !== node.id) return child;
@@ -257,7 +265,8 @@ export function SizeSection({
   useDirectUpdateOnly = false,
 }: SizeSectionProps) {
   const calculateLayoutForFrame = useLayoutStore((s) => s.calculateLayoutForFrame);
-  const allNodes = useSceneStore((s) => s.getNodes());
+  const nodesById = useSceneStore((s) => s.nodesById);
+  const childrenById = useSceneStore((s) => s.childrenById);
   const updateNode = useSceneStore((s) => s.updateNode);
   const updateNodeWithoutHistory = useSceneStore((s) => s.updateNodeWithoutHistory);
   const [isFitting, setIsFitting] = useState(false);
@@ -276,7 +285,11 @@ export function SizeSection({
       return;
     }
 
-    const parent = parentContext.parent as FrameNode;
+    const parent = materializeLayoutRefs(
+      parentContext.parent as FrameNode,
+      nodesById,
+      childrenById,
+    );
     const sizingKey = dimension === "width" ? "widthMode" : "heightMode";
     const modifiedChildren = parent.children.map((child) => {
       if (child.id !== node.id) return child;
@@ -315,23 +328,18 @@ export function SizeSection({
     let ew = node.width;
     let eh = node.height;
 
-    // For fit_content frames: compute intrinsic size
+    // For fit_content frames: compute intrinsic size. Skip the synthetic merged
+    // multi-select node (see the comment in computeSizeForMode).
     if (
       node.type === "frame" &&
-      ("children" in node) &&
-      Array.isArray(node.children) &&
-      (node as FrameNode).layout?.autoLayout
+      (node as FrameNode).layout?.autoLayout &&
+      !isMultiSelect
     ) {
       const frame = node as FrameNode;
       const fitWidth = frame.sizing?.widthMode === "fit_content";
       const fitHeight = frame.sizing?.heightMode === "fit_content";
       if (fitWidth || fitHeight) {
-        const flat = flattenTree(allNodes);
-        const layoutFrame = materializeLayoutRefs(
-          frame,
-          flat.nodesById,
-          flat.childrenById,
-        );
+        const layoutFrame = materializeLayoutRefs(frame, nodesById, childrenById);
         const intrinsicSize = calculateFrameIntrinsicSize(layoutFrame, {
           fitWidth,
           fitHeight,
@@ -350,7 +358,12 @@ export function SizeSection({
       const widthMode = node.sizing?.widthMode ?? "fixed";
       const heightMode = node.sizing?.heightMode ?? "fixed";
       if (widthMode !== "fixed" || heightMode !== "fixed") {
-        const layoutChildren = calculateLayoutForFrame(parentContext.parent as FrameNode);
+        const parent = materializeLayoutRefs(
+          parentContext.parent as FrameNode,
+          nodesById,
+          childrenById,
+        );
+        const layoutChildren = calculateLayoutForFrame(parent);
         const layoutNode = layoutChildren.find((n) => n.id === node.id);
         if (layoutNode) {
           if (widthMode !== "fixed") ew = layoutNode.width;
@@ -360,7 +373,7 @@ export function SizeSection({
     }
 
     return { effectiveWidth: ew, effectiveHeight: eh };
-  }, [node, parentContext, calculateLayoutForFrame, allNodes]);
+  }, [node, parentContext, calculateLayoutForFrame, nodesById, childrenById, isMultiSelect]);
 
   const canFitToContent = !isMultiSelect && (node.type === "frame" || node.type === "embed")
     ? true
@@ -429,7 +442,9 @@ export function SizeSection({
                       newMode,
                       "width",
                       calculateLayoutForFrame,
-                      allNodes,
+                      nodesById,
+                      childrenById,
+                      !!isMultiSelect,
                     );
                     onUpdate({
                       sizing: {
@@ -484,7 +499,9 @@ export function SizeSection({
                       newMode,
                       "height",
                       calculateLayoutForFrame,
-                      allNodes,
+                      nodesById,
+                      childrenById,
+                      !!isMultiSelect,
                     );
                     onUpdate({
                       sizing: {
@@ -637,16 +654,17 @@ export function SizeSection({
             onClick={async () => {
               setIsFitting(true);
               try {
+                const tree = useSceneStore.getState().getNodes();
                 if (isMultiSelect && selectedNodes) {
                   const state = useSceneStore.getState();
                   saveHistory(state);
                   for (const n of selectedNodes) {
                     if (n.type === "frame") {
-                      const treeNode = allNodes.find(a => a.id === n.id);
+                      const treeNode = tree.find((a) => a.id === n.id);
                       if (treeNode && treeNode.type === "frame" && "children" in treeNode) {
                         const size = computeFrameFitToContentSize(
                           treeNode as FrameNode,
-                          allNodes,
+                          tree,
                           calculateLayoutForFrame,
                         );
                         updateNodeWithoutHistory(n.id, size);
@@ -660,7 +678,7 @@ export function SizeSection({
                   if (node.type === "frame") {
                     const size = computeFrameFitToContentSize(
                       node,
-                      allNodes,
+                      tree,
                       calculateLayoutForFrame,
                     );
                     if (useDirectUpdateOnly) {
