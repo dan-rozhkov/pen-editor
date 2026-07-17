@@ -33,6 +33,7 @@ import { consumeDirty } from "@/store/sceneStore/dirtyTracking";
 // Module-level registry accessor for the drag animator
 let registryAccessor: ((id: string) => Container | null) | null = null;
 let sceneRootAccessor: (() => Container) | null = null;
+let cullingIndexAccessor: (() => ReturnType<typeof createCullingIndex>) | null = null;
 
 export function getNodeContainer(id: string): Container | null {
   return registryAccessor?.(id) ?? null;
@@ -40,6 +41,15 @@ export function getNodeContainer(id: string): Container | null {
 
 export function getSceneRoot(): Container | null {
   return sceneRootAccessor?.() ?? null;
+}
+
+/**
+ * The live culling index (Task 10), or `null` before `createPixiSync` has
+ * run its first flush / after its cleanup. Consumers (e.g. hit-testing) must
+ * treat `null` as "no index available" and fall back to unpruned behavior.
+ */
+export function getCullingIndex(): ReturnType<typeof createCullingIndex> | null {
+  return cullingIndexAccessor?.() ?? null;
 }
 
 /**
@@ -109,6 +119,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
   // Task 10: grid-backed replacement for the per-frame full-tree culling walk.
   const cullingIndex = createCullingIndex();
+  cullingIndexAccessor = () => cullingIndex;
   const ctx = { sceneRoot, registry, cullingIndex };
   const resolutionMgr = createResolutionManager(ctx);
   const nodeTreeMgr = createNodeTreeManager(
@@ -751,5 +762,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
     sceneRoot.removeChildren();
     registryAccessor = null;
     sceneRootAccessor = null;
+    cullingIndexAccessor = null;
   };
 }

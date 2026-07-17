@@ -1,9 +1,12 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { Container } from "pixi.js";
 import type { FlatSceneNode } from "@/types/scene";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { resetStores } from "@/test/fixtures";
 import { findNodeAtPoint } from "@/pixi/interaction/hitTesting";
+import { createPixiSync } from "@/pixi/pixiSync";
+import * as instanceUtils from "@/utils/instanceUtils";
 
 // `pointToSegmentDistance` is module-private; we re-derive its expected
 // behavior here through the public characterization cases. The pure-math
@@ -475,4 +478,165 @@ describe("hit testing respects sibling masks (isMask)", () => {
     expect(findNodeAtPoint(10, 10, { deepSelect: true })).toBe("frameA");
   });
 
+});
+
+/**
+ * Task 11: root-level pruning via the culling index (`getCullingIndex()`,
+ * exposed by `createPixiSync`). These tests build a real pixiSync instance
+ * so `getCullingIndex()` returns a live, populated index instead of `null`
+ * (the "no index" case is already exercised by every test above — pixiSync
+ * is never constructed there).
+ */
+describe("Task 11: hit-testing pruned by the culling index", () => {
+  let dispose: (() => void) | null = null;
+
+  afterEach(() => {
+    dispose?.();
+    dispose = null;
+    vi.restoreAllMocks();
+  });
+
+  it("returns identical results to the unpruned (no-index) behavior", () => {
+    resetStores();
+    seedHitScene();
+    dispose = createPixiSync(new Container());
+
+    expect(findNodeAtPoint(20, 20)).toBe("frameA");
+    expect(findNodeAtPoint(20, 20, { deepSelect: true })).toBe("rect1");
+    expect(findNodeAtPoint(350, 50)).toBe("frameB");
+    expect(findNodeAtPoint(600, 600)).toBeNull();
+    expect(findNodeAtPoint(160, 160)).toBe("rectTop");
+  });
+
+  it("still hits a line's rendered cap tip beyond its raw (degenerate-height) bbox", () => {
+    // Regression guard for the tolerance-inflation requirement: the culling
+    // index stores the line's raw bbox (height 0), but the cap tip at
+    // (108,50) is only hit-testable via the line's own stroke-aware distance
+    // check — line roots must never be pruned away.
+    resetStores();
+    seedCappedLineScene();
+    dispose = createPixiSync(new Container());
+
+    expect(findNodeAtPoint(50, 50)).toBe("line1"); // segment body
+    expect(findNodeAtPoint(108, 50)).toBe("line1"); // cap tip, beyond raw bbox
+    expect(findNodeAtPoint(50, 200)).toBeNull(); // well outside tolerance
+  });
+
+  it("never prunes connector roots, even while the index is stale mid-flush", () => {
+    // pixiSync updates the culling index only on its (rAF-deferred) flush —
+    // see `scheduleSceneUpdate`/`flushSceneUpdate`. A connector's endpoints
+    // can move (e.g. its attached node dragged) and get written to the
+    // store — and read by hit-testing via `useSceneStore.getState()` —
+    // before that flush runs, so the index can be stale relative to the
+    // connector's *current* position for a frame. Connector roots must
+    // therefore always be traversed regardless of the (possibly stale)
+    // candidates set.
+    resetStores();
+    const connector = {
+      id: "conn1",
+      type: "connector",
+      name: "Connector 1",
+      x: -5000,
+      y: -5000,
+      width: 10,
+      height: 10,
+      points: [0, 0, 10, 10],
+      startConnection: { nodeId: "a", anchor: "right" },
+      endConnection: { nodeId: "b", anchor: "left" },
+      stroke: "#000000",
+      strokeWidth: 2,
+    } as unknown as FlatSceneNode;
+
+    useSceneStore.setState({
+      nodesById: { conn1: connector },
+      parentById: { conn1: null },
+      childrenById: { conn1: [] },
+      rootIds: ["conn1"],
+      componentArtifactsById: {},
+      _cachedTree: null,
+    });
+    // Index is built (fullRebuild) synchronously here, from the far-away position.
+    dispose = createPixiSync(new Container());
+
+    // Move the connector to a new position — store update only, no flush yet
+    // (pixiSync's scene subscription defers to requestAnimationFrame).
+    useSceneStore.setState((s) => ({
+      nodesById: {
+        ...s.nodesById,
+        conn1: { ...s.nodesById.conn1, x: 500, y: 500, points: [0, 0, 10, 10] } as FlatSceneNode,
+      },
+      _cachedTree: null,
+    }));
+
+    // The culling index still thinks conn1 lives at (-5000,-5000) — a point
+    // query at its new position would NOT return conn1 as a candidate. It
+    // must still be hit because connector roots are never pruned.
+    expect(findNodeAtPoint(505, 505)).toBe("conn1");
+  });
+
+  it("prunes root subtrees whose indexed AABB misses the point", () => {
+    resetStores();
+
+    const nodesById: Record<string, FlatSceneNode> = {};
+    const childrenById: Record<string, string[]> = {};
+    const parentById: Record<string, string | null> = {};
+    const rootIds: string[] = [];
+
+    // Target frame first (lowest z-order -> visited LAST in the reverse
+    // walk), so an unpruned traversal must visit every decoy before it.
+    nodesById.target = {
+      id: "target",
+      type: "frame",
+      name: "Target",
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      fill: "#ffffff",
+      layout: { autoLayout: false },
+    } as unknown as FlatSceneNode;
+    childrenById.target = [];
+    parentById.target = null;
+    rootIds.push("target");
+
+    // 50 decoy roots, far away from the target and from each other.
+    for (let i = 0; i < 50; i++) {
+      const id = `decoy${i}`;
+      nodesById[id] = {
+        id,
+        type: "rect",
+        name: id,
+        x: 100_000 + i * 1_000,
+        y: 100_000,
+        width: 100,
+        height: 100,
+        fill: "#ff0000",
+      } as unknown as FlatSceneNode;
+      childrenById[id] = [];
+      parentById[id] = null;
+      rootIds.push(id);
+    }
+
+    useSceneStore.setState({
+      nodesById,
+      parentById,
+      childrenById,
+      rootIds,
+      componentArtifactsById: {},
+      _cachedTree: null,
+    });
+    dispose = createPixiSync(new Container());
+
+    // Every visited root (frame/rect) reaches this call exactly once via
+    // `getHitNodeEffectiveSize` — count invocations as a proxy for "roots
+    // actually traversed".
+    const spy = vi.spyOn(instanceUtils, "getPreparedNodeEffectiveSize");
+
+    expect(findNodeAtPoint(50, 50)).toBe("target");
+
+    // Unpruned, this would be 51 (50 decoys walked first in reverse z-order,
+    // then the target). Pruned via the culling index, only "target" itself
+    // should be visited.
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
 });
