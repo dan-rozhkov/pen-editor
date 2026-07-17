@@ -220,6 +220,46 @@ and tested** — not a global toggle.
   matrix (Phase 3).
 - E2E smoke unchanged; add one perf smoke as non-blocking CI initially.
 
+## Results (2026-07-17)
+
+Task 14 (decision gate) re-ran the Phase 0 harness (`e2e/pixi-large-document-performance.spec.ts`, `?perf=N`, 60 simulated pan frames + 60 simulated single-node-move frames) at the default 5000-node size and, via the newly parameterized `PERF_NODES` env var, at 20000 nodes. Numbers below are `perfStats` averages/maxes over those 119 `updateCulling` calls / 60 `flush` calls; "avg" and "max" are per-call, not per-frame totals.
+
+### Before/after table (5000 nodes)
+
+| Stage | Task(s) | flush avg | flush max | updateCulling avg | updateCulling max |
+|---|---|---|---|---|---|
+| Baseline (pre-work) | Task 3 | 1.99ms | 4.9ms | 0.10ms | 1.1ms |
+| Post-Phase-1 (dirty-set diffing) | Task 5 | 1.55ms | 4.2ms | *(not re-measured; Phase 1 targeted flush)* | — |
+| Post-Phase-2 (spatial-index culling) | Task 10 | 0.337ms | 2.5ms | 0.037ms | *(not reported)* |
+| Final (raster-cache flag on) | Task 13 | ~0.35ms | — | ~0.045ms | — |
+| **Task 14 re-measure, 5000 nodes** | — | **0.32–0.35ms** (3 runs) | **2.4ms** | **0.03–0.045ms** (3 runs) | **0.2ms** |
+| **Task 14 measure, 20000 nodes** | — | **0.82ms** | **6.4ms** | **0.044ms** | **0.3ms** |
+
+### Per-task measured wins (from the reference numbers above)
+
+- **Task 5 (dirty-set diffing, Phase 1.1):** flush avg 1.99ms → 1.55ms, a ~22% reduction — the first O(N)-scan removal, before the drag fast-path/narrow-subscription tasks landed on top of it.
+- **Task 10 (spatial-index culling, Phase 2):** updateCulling avg 0.10ms → 0.037ms, ~2.6–2.7x faster (the task's own report notes the synthetic e2e scene is mostly off-screen relative to a denser real document, so the full-tree-walk baseline was already cheap here — the win should be larger on denser/larger real documents than this harness can show). flush avg also dropped further to 0.337ms, reflecting the cumulative effect of the drag fast-path (Task 6) and narrow `PixiCanvas` subscriptions (Task 8) landing between Task 5 and Task 10, not Task 10 alone.
+- **Task 13 (raster caching, flag on, Phase 3):** flush/updateCulling stayed flat (~0.35ms / ~0.045ms) — expected, since raster caching's payoff is GPU paint/draw cost, which neither of these two instrumented hot paths measures. No regression from enabling the flag is the relevant signal here.
+- **Overall, 5000 nodes:** flush avg 1.99ms → ~0.33ms (~83% reduction); updateCulling avg 0.10ms → ~0.04ms (~60% reduction).
+- **Scaling to 20000 nodes (4x the node count):** flush avg only rose to 0.82ms (~2.5x, sub-linear vs. the 4x node count) and updateCulling avg barely moved (0.044ms) — both consistent with the dirty-set/spatial-index design doing O(changed) work instead of O(N) work per frame.
+
+### Phase 4/5 decision
+
+Per this spec's rule ("later phases only start if the harness says they're still needed"): **closing here — no Phase 4/5 work is justified by the numbers.**
+
+At 20000 nodes (4x the default harness size), `flush` avg is 0.82ms and `updateCulling` avg is 0.044ms per call — even the *max* observed (`flush` 6.4ms) is well inside a 60fps (16.6ms) frame budget, and both hot paths scale sub-linearly with document size, which is exactly the outcome the dirty-set/spatial-index architecture (Phases 1–2) was designed to produce. Raster caching (Phase 3) is confirmed not to regress either timer. Subjectively, pan and single-node drag on the 20000-node harness remained visually smooth during manual observation while running the probe (no dropped-frame stutter noticeable at the point the script issued each `setViewportState`/`updateNode` call).
+
+Phase 4 (batching hygiene: shared `GraphicsContext`, text consolidation, mask hygiene) and Phase 5 (time-sliced `batch_design`, lazy frame instantiation) both target costs this harness does not show a problem with — GPU batch-count overhead and cold-start/bulk-mutation latency respectively, neither of which the drag/pan probe exercises. If a future workload surfaces one of those symptoms specifically (e.g. a very large `batch_design` call blocking the main thread, or slow initial load of a huge document), that would be the trigger to reopen this spec and add a harness scenario for it — not a reason to preemptively build Phase 4/5 now against numbers that already meet budget.
+
+### Hard budgets (this task)
+
+`e2e/pixi-large-document-performance.spec.ts` now asserts hard budgets, calibrated at the default 5000-node size (1.5x measured avg rounded up; 2x measured max rounded up, since max is noisier frame-to-frame — GC pauses, first-frame JIT — than avg, so 1.5x on max alone risked CI flakiness):
+
+- `flush` avg ≤ 0.6ms, max ≤ 5ms
+- `updateCulling` avg ≤ 0.1ms, max ≤ 0.5ms
+
+The 20000-node run is not hard-gated in CI (`PERF_NODES` env var, default 5000) — it's a manual/occasional check, not a per-push assertion, since CI runner variance at that size hasn't been characterized across multiple machines.
+
 ## Sources
 
 - https://madebyevan.com/figma/building-a-professional-design-tool-on-the-web/
