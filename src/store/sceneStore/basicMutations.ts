@@ -32,6 +32,7 @@ import {
   removeOrphanedConnectors,
 } from "./helpers/flatStoreHelpers";
 import { markComponentArtifactsStaleFromNative } from "./componentArtifacts";
+import { markNodesDirty } from "./dirtyTracking";
 import type { SceneState } from "./types";
 import type { StoreApi } from "zustand";
 
@@ -94,7 +95,8 @@ export function createBasicMutations(set: SetState, get: GetState) {
       loadGoogleFontsFromNodes([child]);
     },
 
-    updateNode: (id: string, updates: Partial<SceneNode>) =>
+    updateNode: (id: string, updates: Partial<SceneNode>) => {
+      markNodesDirty([id]);
       set((state) => {
         const existing = state.nodesById[id];
         if (!existing) return state;
@@ -112,9 +114,11 @@ export function createBasicMutations(set: SetState, get: GetState) {
         );
 
         return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
-      }),
+      });
+    },
 
-    updateMultipleNodes: (ids: string[], updates: Partial<SceneNode>) =>
+    updateMultipleNodes: (ids: string[], updates: Partial<SceneNode>) => {
+      markNodesDirty(ids);
       set((state) => {
         saveHistory(state);
         const newNodesById = { ...state.nodesById };
@@ -134,9 +138,11 @@ export function createBasicMutations(set: SetState, get: GetState) {
         );
 
         return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
-      }),
+      });
+    },
 
-    updateNodeWithoutHistory: (id: string, updates: Partial<SceneNode>) =>
+    updateNodeWithoutHistory: (id: string, updates: Partial<SceneNode>) => {
+      markNodesDirty([id]);
       set((state) => {
         const existing = state.nodesById[id];
         if (!existing) return state;
@@ -153,9 +159,11 @@ export function createBasicMutations(set: SetState, get: GetState) {
         );
 
         return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
-      }),
+      });
+    },
 
-    updateNodesWithoutHistory: (updatesById: Record<string, Partial<SceneNode>>) =>
+    updateNodesWithoutHistory: (updatesById: Record<string, Partial<SceneNode>>) => {
+      markNodesDirty(Object.keys(updatesById));
       set((state) => {
         const ids = Object.keys(updatesById).filter((id) => state.nodesById[id]);
         if (ids.length === 0) return state;
@@ -178,9 +186,11 @@ export function createBasicMutations(set: SetState, get: GetState) {
         );
 
         return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
-      }),
+      });
+    },
 
-    updateNodesById: (updatesById: Record<string, Partial<SceneNode>>) =>
+    updateNodesById: (updatesById: Record<string, Partial<SceneNode>>) => {
+      markNodesDirty(Object.keys(updatesById));
       set((state) => {
         const ids = Object.keys(updatesById).filter((id) => state.nodesById[id]);
         if (ids.length === 0) return state;
@@ -204,7 +214,8 @@ export function createBasicMutations(set: SetState, get: GetState) {
         );
 
         return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
-      }),
+      });
+    },
 
     deleteNode: (id: string) =>
       set((state) => {
@@ -558,6 +569,17 @@ export function createBasicMutations(set: SetState, get: GetState) {
         } else {
           newRootIds.splice(newIndex, 0, nodeId);
         }
+
+        // Mark the moved node plus both parents whose childrenById entry just
+        // changed identity (old parent lost a child, new parent gained one).
+        // Marked here — right before this `set` callback returns — rather
+        // than before the outer `set(...)` call, since oldParentId is only
+        // known once we're inside the callback with `state`.
+        markNodesDirty(
+          [nodeId, oldParentId, newParentId].filter(
+            (id): id is string => id !== null && id !== undefined,
+          ),
+        );
 
         return {
           parentById: newParentById,

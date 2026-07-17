@@ -6,6 +6,7 @@ import { createBasicMutations } from "./basicMutations";
 import { createInstanceOperations } from "./instanceOperations";
 import { createComponentArtifactOperations } from "./componentArtifacts";
 import { createComplexOperations } from "./complexOperations";
+import { noteSceneSetState } from "./dirtyTracking";
 import type { SceneState } from "./types";
 
 // Re-export types and utilities
@@ -46,6 +47,16 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       return { pageBackground: color };
     }),
 }));
+
+// Fires synchronously on EVERY scene store mutation (internal action `set`
+// or external `setState`) — zustand actions created inside `create((set) =>
+// ...)` call the internal `set`, which bypasses the external `setState`
+// property, so wrapping `setState` would silently miss every store action.
+// `subscribe` sees both, which is why detection lives here instead.
+// Registered after pixiSync's own subscription elsewhere doesn't matter:
+// consumption of the dirty set happens later in a rAF flush (Task 5), not
+// synchronously inside this listener, so subscriber order is irrelevant.
+useSceneStore.subscribe(() => noteSceneSetState());
 
 // ----- Font Loading Side Effects -----
 
