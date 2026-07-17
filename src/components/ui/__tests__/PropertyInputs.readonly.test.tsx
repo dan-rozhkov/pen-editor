@@ -19,18 +19,21 @@ describe("PropertyInputs in read-only mode", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it("NumberInput draft layer commits nothing on Enter or blur when read-only", () => {
+  it("NumberInput does not commit a clamp of an out-of-range value on Enter when read-only", () => {
+    // `value` is deliberately outside [min, max]: on Enter, commitValue would
+    // format/clamp it to something that differs from `value`, which is the
+    // only scenario where the readOnly guard actually prevents a commit
+    // (readOnly + value within range is a no-op even with the guard removed,
+    // since next === value). Don't "simplify" this back to an in-range value.
     const onChange = vi.fn();
     render(
       <ReadOnlyProvider value={true}>
-        <NumberInput label="W" value={10} onChange={onChange} />
+        <NumberInput label="W" value={150} min={0} max={100} onChange={onChange} />
       </ReadOnlyProvider>,
     );
-    const input = screen.getByDisplayValue("10") as HTMLInputElement;
+    const input = screen.getByDisplayValue("150");
     fireEvent.focus(input);
-    fireEvent.change(input, { target: { value: "20" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    fireEvent.blur(input);
     expect(onChange).not.toHaveBeenCalled();
   });
 
