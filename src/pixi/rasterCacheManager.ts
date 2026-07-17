@@ -5,6 +5,7 @@ import { useEditorModeStore } from "@/store/editorModeStore";
 import { isFitContentFrame } from "@/types/scene";
 import { computeRasterCacheDecisions } from "./rasterCache";
 import { requestCanvasRender } from "./renderScheduler";
+import { isOverviewScale } from "./viewportCulling";
 import type { SceneDiff } from "./syncDiff";
 
 // The decision timer (Task 12's QUIET_MS is the *quiet* threshold; this is
@@ -24,6 +25,15 @@ export interface RasterCacheManagerDeps {
   getContainer(id: string): CacheableContainer | null;
   getState(): SceneState;
   getScale(): number;
+  /**
+   * Bug 1a (field report): a frame with at least one culled (renderable
+   * false, non-mask) descendant at any depth must never be cached — caching
+   * it would bake the currently-hidden content into the texture, which then
+   * renders as permanently-missing layers once panning/zooming reveals that
+   * content again (culling never evicts caches on its own). Optional —
+   * callers/tests that don't exercise culling default to "never culled".
+   */
+  hasCulledContent?(frameId: string, state: SceneState): boolean;
 }
 
 export interface RasterCacheManager {
@@ -57,6 +67,13 @@ export interface RasterCacheManager {
    *  that no longer exist and must be dropped, not replayed against the new
    *  ones. */
   onRebuild(): void;
+  /**
+   * Ids of top-level frames currently holding a live cached texture. Used by
+   * the culling side (Bug 1c) to evict everything on an overview scale flip,
+   * since at that point every cached frame's overview-effect-visibility
+   * state just changed underneath it.
+   */
+  cachedFrameIds(): string[];
   dispose(): void;
 }
 
@@ -143,6 +160,16 @@ export function createRasterCacheManager(deps: RasterCacheManagerDeps): RasterCa
       return n?.type === "frame" && !isFitContentFrame(n);
     });
 
+    // Bug 1a: never cache (and evict if already cached — reusing the
+    // existing hot-frame handling below covers both) a frame in overview or
+    // with any culled descendant. Folded into `hot` rather than filtered out
+    // of `topLevelFrameIds` so the normal dirty/bucket-mismatch bookkeeping
+    // below still runs for these ids once the condition clears.
+    const overview = isOverviewScale(scale);
+    for (const id of topLevelFrameIds) {
+      if (overview || deps.hasCulledContent?.(id, state)) hot.add(id);
+    }
+
     const framePixelSize = new Map(
       topLevelFrameIds.map((id) => {
         const n = state.nodesById[id];
@@ -205,6 +232,9 @@ export function createRasterCacheManager(deps: RasterCacheManagerDeps): RasterCa
       // decision round starts clean.
       cached.clear();
       dirtyAt.clear();
+    },
+    cachedFrameIds(): string[] {
+      return [...cached.keys()];
     },
     dispose(): void {
       if (timer) {

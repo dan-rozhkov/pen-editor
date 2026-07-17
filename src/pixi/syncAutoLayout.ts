@@ -20,12 +20,32 @@ import { perfStats } from "./perfStats";
 // Phase 1: Viewport culling — screen-space margin to avoid pop-in during fast panning
 const CULL_MARGIN = 400;
 
+export interface CullingEvictionDeps {
+  /**
+   * Bug 1b/1c (field report — cached frames baking culled/hidden state):
+   * called with ids whose culling divergence just resolved and therefore
+   * need their (possibly stale) raster cache invalidated. The caller is
+   * expected to wire this to `rasterCacheManager.onDirectContainerMutation`
+   * (a no-op for ids not under a cached top frame, so this can be called
+   * liberally).
+   */
+  onCullingEviction?: (ids: string[]) => void;
+  /**
+   * Bug 1c: ids of every top-level frame currently holding a live cached
+   * texture — read on an overview-scale flip so every one of them can be
+   * evicted via `onCullingEviction` (their overview-effect-visibility state
+   * just changed underneath them).
+   */
+  getCachedFrameIds?: () => string[];
+}
+
 /**
  * Computes auto-layout positions/sizes for frame children and applies viewport
  * culling on root containers. Both operate over the live PixiJS registry.
  */
-export function createAutoLayoutManager(ctx: SyncContext) {
+export function createAutoLayoutManager(ctx: SyncContext, cullingEviction?: CullingEvictionDeps) {
   const { registry, cullingIndex } = ctx;
+  const { onCullingEviction, getCachedFrameIds } = cullingEviction ?? {};
 
   // ─── Phase 1: Viewport Culling ───────────────────────────────────────
 
@@ -65,8 +85,15 @@ export function createAutoLayoutManager(ctx: SyncContext) {
       const overviewFlipped = overview !== lastOverview;
       lastOverview = overview;
 
+      // Bug 1b (field report): ids whose renderable state flips false->true
+      // this pass ("shown") — a raster cache covering one of these may have
+      // baked its prior (culled/hidden) state into the texture, and culling
+      // itself never evicts caches. Collected so the caller can invalidate.
+      const shownIds: string[] = [];
+
       for (const id of visible) {
-        if (lastVisible.has(id) && !overviewFlipped) continue; // state unchanged
+        const wasVisible = lastVisible.has(id);
+        if (wasVisible && !overviewFlipped) continue; // state unchanged
         const entry = registry.get(id);
         if (!entry) continue;
         applyOverviewEffectVisibility(entry.container, overview);
@@ -74,6 +101,7 @@ export function createAutoLayoutManager(ctx: SyncContext) {
         // Overwriting it here can resurrect an inert masker or suppress a mask
         // Pixi needs for the stencil pass.
         if (!entry.node.isMask) entry.container.renderable = true;
+        if (!wasVisible) shownIds.push(id);
       }
       for (const id of lastVisible) {
         if (visible.has(id)) continue;
@@ -90,7 +118,53 @@ export function createAutoLayoutManager(ctx: SyncContext) {
         }
       }
       lastVisible = visible;
+
+      // Bug 1c: an overview flip changes overview-effect visibility on every
+      // currently-visible id at once — any cached top frame needs its
+      // texture invalidated, not just the ids that individually flipped
+      // renderable this pass (a frame can be fully visible, unaffected by
+      // the show/hide loops above, yet still have effect layers whose
+      // rendered state just changed).
+      if (overviewFlipped) {
+        const cachedIds = getCachedFrameIds?.() ?? [];
+        if (cachedIds.length > 0) onCullingEviction?.(cachedIds);
+      } else if (shownIds.length > 0) {
+        onCullingEviction?.(shownIds);
+      }
     });
+  }
+
+  /**
+   * Bug 1a dep: does `frameId`'s subtree (at any depth) contain a descendant
+   * whose container is currently non-renderable due to culling? Used to gate
+   * raster-cache eligibility — caching a frame with culled content would
+   * bake the hidden state into the texture (culling never evicts caches on
+   * its own, so that hole would persist until an unrelated eviction).
+   *
+   * Deliberately reads live container state (`container.renderable`) rather
+   * than replicating `cullingIndex`'s visible-set membership semantics: a
+   * descendant covered by a rotated ancestor's AABB is, by design, absent
+   * from the visible set's per-id membership even though it's genuinely
+   * on-screen (see cullingIndex.ts) — treating that absence as "culled"
+   * would be wrong. Reading `renderable` directly sidesteps that distinction
+   * entirely, since `updateCulling` only ever sets it false for ids actually
+   * meant to be hidden.
+   *
+   * Only meaningful when the frame itself is visible — if the frame isn't
+   * currently visible, there's no baked-hole divergence to speak of yet.
+   */
+  function hasCulledDescendant(frameId: string, state: SceneState): boolean {
+    if (!lastVisible.has(frameId)) return false;
+    const stack: string[] = [...(state.childrenById[frameId] ?? [])];
+    while (stack.length > 0) {
+      const id = stack.pop()!;
+      const entry = registry.get(id);
+      if (entry && !entry.node.isMask && entry.container.renderable === false) {
+        return true;
+      }
+      for (const childId of state.childrenById[id] ?? []) stack.push(childId);
+    }
+    return false;
   }
 
   /**
@@ -298,5 +372,6 @@ export function createAutoLayoutManager(ctx: SyncContext) {
     resetCullingState,
     collectDirtyAutoLayoutFrames,
     applyAutoLayoutPositions,
+    hasCulledDescendant,
   };
 }

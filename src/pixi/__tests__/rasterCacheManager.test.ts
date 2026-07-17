@@ -337,4 +337,62 @@ describe("createRasterCacheManager", () => {
     // to no top frame at all, not (incorrectly) to f1.
     expect(c1.cacheAsTexture).not.toHaveBeenCalled();
   });
+
+  // Bug 1a (field report): a frame with culled/hidden descendants must never
+  // be cached — doing so bakes the currently-hidden content into the
+  // texture, which then shows up as permanently-missing layers once panning
+  // reveals that content again (culling itself never evicts caches).
+  it("never caches a frame whose hasCulledContent dep reports true", () => {
+    const c1 = makeContainer();
+    const state = makeState(["f1"]);
+    const getState = vi.fn<() => SceneState>(() => state);
+    const getScale = vi.fn<() => number>(() => 1);
+    const getContainer = vi.fn((id: string) => (id === "f1" ? c1 : null));
+    const hasCulledContent = vi.fn(() => true);
+    const manager = createRasterCacheManager({ getContainer, getState, getScale, hasCulledContent });
+
+    manager.onFlushStart(diffFor(["f1"]), state);
+    vi.advanceTimersByTime(600 + QUIET_MS + 600);
+    expect(c1.cacheAsTexture).not.toHaveBeenCalled();
+    expect(hasCulledContent).toHaveBeenCalledWith("f1", state);
+  });
+
+  it("evicts a frame that was cached before hasCulledContent started reporting true", () => {
+    const c1 = makeContainer();
+    const state = makeState(["f1"]);
+    const getState = vi.fn<() => SceneState>(() => state);
+    const getScale = vi.fn<() => number>(() => 1);
+    const getContainer = vi.fn((id: string) => (id === "f1" ? c1 : null));
+    let culled = false;
+    const manager = createRasterCacheManager({
+      getContainer,
+      getState,
+      getScale,
+      hasCulledContent: () => culled,
+    });
+
+    manager.onFlushStart(diffFor(["f1"]), state);
+    vi.advanceTimersByTime(600 + QUIET_MS + 600);
+    expect(c1.cacheAsTexture).toHaveBeenLastCalledWith({ resolution: 1, antialias: true });
+    c1.cacheAsTexture.mockClear();
+
+    culled = true;
+    manager.onViewportChange(); // schedules a decision round without a new mutation
+    vi.advanceTimersByTime(600);
+    expect(c1.cacheAsTexture).toHaveBeenCalledWith(false);
+  });
+
+  it("cachedFrameIds() reflects the live cached set", () => {
+    const c1 = makeContainer();
+    const c2 = makeContainer();
+    const { manager } = setup({ f1: c1, f2: c2 });
+
+    expect(manager.cachedFrameIds()).toEqual([]);
+    manager.onFlushStart(diffFor(["f1", "f2"]), makeState(["f1", "f2"]));
+    vi.advanceTimersByTime(600 + QUIET_MS);
+    expect(manager.cachedFrameIds().sort()).toEqual(["f1", "f2"]);
+
+    manager.onDirectContainerMutation(["f1"], makeState(["f1", "f2"]));
+    expect(manager.cachedFrameIds()).toEqual(["f2"]);
+  });
 });

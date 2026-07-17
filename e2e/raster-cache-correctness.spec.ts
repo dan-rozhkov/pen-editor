@@ -257,4 +257,80 @@ test.describe("raster cache correctness (Task 13)", () => {
     center = await samplePixel(page, 100, 100);
     expect(isCloseTo(center, [255, 0, 0, 255])).toBe(true); // red — no stale blue ghost
   });
+
+  // Bug 1 (field report): cached frames bake culled/hidden state, so panning
+  // within the same resolution bucket reveals baked "holes" — a child that
+  // was off-screen (and therefore renderable=false) at cache time never
+  // reappears, because culling itself never evicts the cache. Regression for
+  // `hasCulledDescendant` (gates caching) + the show-transition eviction
+  // callback in `updateCulling` (syncAutoLayout.ts).
+  test("panning into a cached wide frame reveals a child baked out of the cache, not a hole", async ({ page }) => {
+    await page.route("**/api/models", (route) => route.fulfill({ json: { models: [], default: null } }));
+    await page.addInitScript(() => localStorage.setItem("pen.rasterCache", "on"));
+    await page.goto("/");
+    await expect(page.locator("[data-canvas]")).toBeVisible();
+
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __sceneStore: { setState: (state: unknown) => void };
+        __viewportStore: { getState: () => { setViewportState: (s: { scale: number; x: number; y: number }) => void } };
+      };
+      // A single top-level frame wide enough that its right edge starts
+      // culled at the initial viewport position, but narrow enough (< 4096
+      // local px) to still be cache-eligible (rasterCache.ts MAX_TEXTURE_PX).
+      const frameWide = {
+        id: "frame-wide", type: "frame", name: "Frame Wide",
+        x: 0, y: 0, width: 3000, height: 200, fill: "#ffffff",
+      };
+      const childLeft = {
+        id: "child-left", type: "rect", name: "Child Left",
+        x: 10, y: 10, width: 100, height: 100, fill: "#0000ff",
+      };
+      const childRight = {
+        id: "child-right", type: "rect", name: "Child Right",
+        x: 2850, y: 10, width: 100, height: 100, fill: "#ff0000",
+      };
+      w.__sceneStore.setState({
+        nodesById: {
+          [frameWide.id]: frameWide,
+          [childLeft.id]: childLeft,
+          [childRight.id]: childRight,
+        },
+        parentById: {
+          [frameWide.id]: null,
+          [childLeft.id]: frameWide.id,
+          [childRight.id]: frameWide.id,
+        },
+        childrenById: {
+          [frameWide.id]: [childLeft.id, childRight.id],
+          [childLeft.id]: [],
+          [childRight.id]: [],
+        },
+        rootIds: [frameWide.id],
+        _cachedTree: null,
+      });
+      w.__viewportStore.getState().setViewportState({ scale: 1, x: 0, y: 0 });
+    });
+
+    // child-right (world 2850-2950) sits well outside the initial viewport +
+    // CULL_MARGIN, so it's culled (renderable=false) at cache time — the
+    // frame's baked texture reflects that hole.
+    await page.waitForTimeout(SETTLE_MS);
+
+    // Pan right so child-right comes into (culling-index) view. `samplePixel`
+    // extracts from `sceneRoot` directly — its own child coordinates are
+    // world/node-local coordinates, unaffected by the ancestor `viewport`
+    // container's pan/zoom transform (confirmed by the existing zoom test
+    // above, which samples the same local point across a scale change) — so
+    // the sample coordinates below are child-right's own x/y, not a
+    // pan-adjusted screen position.
+    await page.evaluate(() => {
+      (window as unknown as { __viewportStore: { getState: () => { setViewportState: (s: { scale: number; x: number; y: number }) => void } } })
+        .__viewportStore.getState().setViewportState({ scale: 1, x: -2600, y: 0 });
+    });
+    await page.waitForTimeout(FRESH_PAINT_MS);
+
+    const revealed = await samplePixel(page, 2900, 60); // child-right's own local center
+    expect(isCloseTo(revealed, [255, 0, 0, 255])).toBe(true); // red — not a stale hole (white bg or transparent)
+  });
 });

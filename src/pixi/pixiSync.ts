@@ -29,7 +29,7 @@ import { createAutoLayoutManager } from "./syncAutoLayout";
 import { createCullingIndex } from "./cullingIndex";
 import { perfStats } from "./perfStats";
 import { computeSceneDiffFull, computeSceneDiffDirty, type SceneDiff } from "./syncDiff";
-import { createRasterCacheManager } from "./rasterCacheManager";
+import { createRasterCacheManager, type RasterCacheManager } from "./rasterCacheManager";
 
 // Module-level registry accessor for the drag animator
 let registryAccessor: ((id: string) => Container | null) | null = null;
@@ -129,15 +129,10 @@ export function createPixiSync(sceneRoot: Container): () => void {
   registryAccessor = (id) => registry.get(id)?.container ?? null;
   sceneRootAccessor = () => sceneRoot;
 
-  // Task 13: flagged raster cache manager — `null` (never called) when the
-  // flag is off, per the flag's contract.
-  const rasterCacheManager = rasterCacheEnabled
-    ? createRasterCacheManager({
-        getContainer: (id) => registry.get(id)?.container ?? null,
-        getState: () => useSceneStore.getState(),
-        getScale: () => useViewportStore.getState().scale,
-      })
-    : null;
+  // Declared here (assigned below, after autoLayoutMgr) so autoLayoutMgr's
+  // culling-eviction callbacks can close over it — they're only ever invoked
+  // on later viewport/scene events, by which point this is assigned.
+  let rasterCacheManager: RasterCacheManager | null = null;
 
   // Task 10: grid-backed replacement for the per-frame full-tree culling walk.
   const cullingIndex = createCullingIndex();
@@ -162,9 +157,27 @@ export function createPixiSync(sceneRoot: Container): () => void {
     updateConnectorsForNodes,
   } = connectorMgr;
 
-  // Viewport culling + auto-layout position application.
-  const autoLayoutMgr = createAutoLayoutManager(ctx);
-  const { updateCulling, resetCullingState, collectDirtyAutoLayoutFrames, applyAutoLayoutPositions } = autoLayoutMgr;
+  // Viewport culling + auto-layout position application. Created before the
+  // raster cache manager below so (a) its `hasCulledDescendant` can be wired
+  // in as a caching-eligibility dep (Bug 1a), and (b) it can request cache
+  // eviction on culling-state divergence (Bug 1b/1c) via the `rasterCacheManager`
+  // reference above, which is assigned immediately after.
+  const autoLayoutMgr = createAutoLayoutManager(ctx, {
+    onCullingEviction: (ids) => rasterCacheManager?.onDirectContainerMutation(ids, useSceneStore.getState()),
+    getCachedFrameIds: () => rasterCacheManager?.cachedFrameIds() ?? [],
+  });
+  const { updateCulling, resetCullingState, collectDirtyAutoLayoutFrames, applyAutoLayoutPositions, hasCulledDescendant } = autoLayoutMgr;
+
+  // Task 13: flagged raster cache manager — `null` (never called) when the
+  // flag is off, per the flag's contract.
+  rasterCacheManager = rasterCacheEnabled
+    ? createRasterCacheManager({
+        getContainer: (id) => registry.get(id)?.container ?? null,
+        getState: () => useSceneStore.getState(),
+        getScale: () => useViewportStore.getState().scale,
+        hasCulledContent: hasCulledDescendant,
+      })
+    : null;
 
   // ─── Full Rebuild ────────────────────────────────────────────────────
 
