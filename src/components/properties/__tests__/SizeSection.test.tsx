@@ -188,10 +188,13 @@ describe("<SizeSection />", () => {
       fireEvent.blur(inputs[0]);
 
       const expectedPoints = generatePolygonPoints(5, 150, 100, 0.5);
+      const plainPentagonPoints = generatePolygonPoints(5, 150, 100);
+      // Sanity check the fixture itself: a plain pentagon (no inner-radius
+      // ratio) must actually differ from the starred points, otherwise the
+      // toEqual(expectedPoints) assertion above couldn't distinguish the two.
+      expect(expectedPoints).not.toEqual(plainPentagonPoints);
       const call = onUpdate.mock.calls.find((c) => "points" in c[0]);
       expect(call?.[0].points).toEqual(expectedPoints);
-      // A plain pentagon (no ratio) would produce different points.
-      expect(call?.[0].points).not.toEqual(generatePolygonPoints(5, 150, 100));
     });
 
     it("preserves innerRadiusRatio when H is edited", () => {
@@ -204,9 +207,10 @@ describe("<SizeSection />", () => {
       fireEvent.blur(inputs[1]);
 
       const expectedPoints = generatePolygonPoints(5, 100, 150, 0.5);
+      const plainPentagonPoints = generatePolygonPoints(5, 100, 150);
+      expect(expectedPoints).not.toEqual(plainPentagonPoints);
       const call = onUpdate.mock.calls.find((c) => "points" in c[0]);
       expect(call?.[0].points).toEqual(expectedPoints);
-      expect(call?.[0].points).not.toEqual(generatePolygonPoints(5, 100, 150));
     });
   });
 
@@ -378,6 +382,39 @@ describe("<SizeSection />", () => {
       // regresses to a childrenById check, this assertion catches it.
       expect(inputs[0].value).not.toBe("140");
       expect(inputs[1].value).not.toBe("180");
+    });
+
+    // Pins the OTHER `!isMultiSelect` guard, in computeSizeForMode (~:195),
+    // reached via the W sizing-mode "Fit" button's onClick. This path runs
+    // UNCONDITIONALLY even when isMultiSelect, so if this guard regressed to a
+    // childrenById-based check it would compute the borrowed frame's intrinsic
+    // width (140, from autoFitChildB) and WRITE it into the store via onUpdate
+    // for the entire multi-selection — persisted data corruption, not just a
+    // display glitch. The previous test only covers the display-side useMemo
+    // guard; this one covers the write-side guard.
+    it("does not compute or write an intrinsic width when clicking Fit on a multi-selection", () => {
+      seedAutoFitFrame();
+      const onUpdate = vi.fn();
+      const { nodesById } = useSceneStore.getState();
+      const mergedNode = { ...(nodesById.autoFitFrame as unknown as SceneNode) };
+
+      render(
+        <SizeSection
+          node={mergedNode}
+          onUpdate={onUpdate}
+          parentContext={ROOT_CONTEXT}
+          isMultiSelect
+          selectedNodes={[mergedNode]}
+        />,
+      );
+
+      const fitButtons = screen.getAllByRole("button", { name: "Fit" });
+      fireEvent.click(fitButtons[0]); // width sizing-mode row
+
+      expect(onUpdate).toHaveBeenCalled();
+      expect(onUpdate).not.toHaveBeenCalledWith(
+        expect.objectContaining({ width: 140 }),
+      );
     });
   });
 

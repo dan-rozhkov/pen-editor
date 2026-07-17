@@ -188,7 +188,7 @@ function computeSizeForMode(
   nodesById: Record<string, FlatSceneNode>,
   childrenById: Record<string, string[]>,
   isMultiSelect: boolean,
-  materializedParent: FrameNode | null,
+  getMaterializedParent: () => FrameNode | null,
 ): number | undefined {
   if (mode === "fixed") return undefined;
 
@@ -215,10 +215,10 @@ function computeSizeForMode(
     mode === "fill_container" &&
     parentContext.isInsideAutoLayout &&
     parentContext.parent &&
-    parentContext.parent.type === "frame" &&
-    materializedParent
+    parentContext.parent.type === "frame"
   ) {
-    const parent = materializedParent;
+    const parent = getMaterializedParent();
+    if (!parent) return undefined;
     const sizingKey = dimension === "width" ? "widthMode" : "heightMode";
     const modifiedChildren = parent.children.map((child) => {
       if (child.id !== node.id) return child;
@@ -270,20 +270,32 @@ export function SizeSection({
   const [isFitting, setIsFitting] = useState(false);
   const [minMaxVisibleOverride, setMinMaxVisibleOverride] = useState<boolean | null>(null);
 
-  // Hoisted so the parent's subtree is materialized once per render (a full
-  // recursive deep copy via materializeLayoutRefs) instead of separately at
-  // each of the three sites that need it (fill_container sizing here, the
-  // reflow below, and the effectiveWidth/effectiveHeight useMemo). Only
-  // materialized when there's actually an auto-layout frame parent to reuse.
-  const materializedParent = useMemo(() => {
-    if (
-      parentContext.isInsideAutoLayout &&
-      parentContext.parent &&
-      parentContext.parent.type === "frame"
-    ) {
-      return materializeLayoutRefs(parentContext.parent as FrameNode, nodesById, childrenById);
-    }
-    return null;
+  // Memoizes a THUNK, not a value: materializing the parent's subtree is a
+  // full recursive deep copy (materializeLayoutRefs), and up to three sites
+  // may need it (fill_container sizing in computeSizeForMode, the reflow
+  // below, and the effectiveWidth/effectiveHeight useMemo's gated branch).
+  // Most renders enter none of those branches (e.g. a fixed/fixed child), so
+  // the thunk lets the render path pay nothing unless something actually
+  // calls it — while still sharing exactly ONE materialized instance across
+  // all callers within a render (preserving the layoutCache WeakMap identity
+  // hit at layoutStore.ts:63). `computed` (not `??=` on the cache alone)
+  // distinguishes "not yet computed" from "gate legitimately produced null",
+  // so a null result is cached and not recomputed on every call.
+  const getMaterializedParent = useMemo(() => {
+    let computed = false;
+    let cached: FrameNode | null = null;
+    return () => {
+      if (!computed) {
+        cached =
+          parentContext.isInsideAutoLayout &&
+          parentContext.parent &&
+          parentContext.parent.type === "frame"
+            ? materializeLayoutRefs(parentContext.parent as FrameNode, nodesById, childrenById)
+            : null;
+        computed = true;
+      }
+      return cached;
+    };
   }, [parentContext.isInsideAutoLayout, parentContext.parent, nodesById, childrenById]);
 
   const reflowAutoLayoutSiblings = (
@@ -294,13 +306,13 @@ export function SizeSection({
     if (
       !parentContext.isInsideAutoLayout ||
       !parentContext.parent ||
-      parentContext.parent.type !== "frame" ||
-      !materializedParent
+      parentContext.parent.type !== "frame"
     ) {
       return;
     }
 
-    const parent = materializedParent;
+    const parent = getMaterializedParent();
+    if (!parent) return;
     const sizingKey = dimension === "width" ? "widthMode" : "heightMode";
     const modifiedChildren = parent.children.map((child) => {
       if (child.id !== node.id) return child;
@@ -368,12 +380,15 @@ export function SizeSection({
     ) {
       const widthMode = node.sizing?.widthMode ?? "fixed";
       const heightMode = node.sizing?.heightMode ?? "fixed";
-      if ((widthMode !== "fixed" || heightMode !== "fixed") && materializedParent) {
-        const layoutChildren = calculateLayoutForFrame(materializedParent);
-        const layoutNode = layoutChildren.find((n) => n.id === node.id);
-        if (layoutNode) {
-          if (widthMode !== "fixed") ew = layoutNode.width;
-          if (heightMode !== "fixed") eh = layoutNode.height;
+      if (widthMode !== "fixed" || heightMode !== "fixed") {
+        const materializedParent = getMaterializedParent();
+        if (materializedParent) {
+          const layoutChildren = calculateLayoutForFrame(materializedParent);
+          const layoutNode = layoutChildren.find((n) => n.id === node.id);
+          if (layoutNode) {
+            if (widthMode !== "fixed") ew = layoutNode.width;
+            if (heightMode !== "fixed") eh = layoutNode.height;
+          }
         }
       }
     }
@@ -386,7 +401,7 @@ export function SizeSection({
     nodesById,
     childrenById,
     isMultiSelect,
-    materializedParent,
+    getMaterializedParent,
   ]);
 
   const canFitToContent = !isMultiSelect && (node.type === "frame" || node.type === "embed")
@@ -459,7 +474,7 @@ export function SizeSection({
                       nodesById,
                       childrenById,
                       !!isMultiSelect,
-                      materializedParent,
+                      getMaterializedParent,
                     );
                     onUpdate({
                       sizing: {
@@ -517,7 +532,7 @@ export function SizeSection({
                       nodesById,
                       childrenById,
                       !!isMultiSelect,
-                      materializedParent,
+                      getMaterializedParent,
                     );
                     onUpdate({
                       sizing: {
