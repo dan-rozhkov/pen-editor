@@ -1,4 +1,4 @@
-import type { FrameNode, GroupNode, SceneNode } from '../types/scene'
+import type { FrameNode, SceneNode } from '../types/scene'
 import { findNodeById, findParentFrame, getNodeAbsolutePosition } from './nodeUtils'
 import { calculateFrameIntrinsicSize } from './yogaLayout'
 import { tidyUp, type TidyRect } from '../lib/tidyUp'
@@ -285,7 +285,7 @@ export function tidyUpNodes(
 export function alignNodeInFrame(
   allNodes: SceneNode[],
   nodeId: string,
-  parentFrame: FrameNode | GroupNode,
+  parentFrame: { width: number; height: number },
   alignment: AlignmentType
 ): { id: string; x?: number; y?: number } | null {
   const node = findNodeById(allNodes, nodeId)

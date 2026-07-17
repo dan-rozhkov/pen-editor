@@ -18,29 +18,36 @@ import {
   type AlignmentType,
 } from "@/utils/alignmentUtils";
 import { applyNodeUpdates } from "@/utils/applyNodeUpdates";
-import type { FrameNode, GroupNode, SceneNode } from "@/types/scene";
+import type { FlatFrameNode, FlatGroupNode, FrameNode, GroupNode, SceneNode } from "@/types/scene";
+import { useSceneStore } from "@/store/sceneStore";
 import { PropertySection } from "@/components/ui/PropertyInputs";
 import { Input } from "@/components/ui/input";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { IconButton } from "@/components/ui/IconButton";
 
-interface AlignmentSectionProps {
+interface AlignmentControlsProps {
   count: number;
   selectedIds: string[];
+  parentFrame?: FrameNode | GroupNode | FlatFrameNode | FlatGroupNode | null;
+  showLabel?: boolean;
+}
+
+interface AlignmentSectionProps extends Omit<AlignmentControlsProps, "showLabel"> {
   nodes: SceneNode[];
-  parentFrame?: FrameNode | GroupNode | null;
 }
 
 export function AlignmentControls({
   count,
   selectedIds,
-  nodes,
   parentFrame,
   showLabel = true,
-}: AlignmentSectionProps & { showLabel?: boolean }) {
+}: AlignmentControlsProps) {
   const isSingleNodeInFrame = count === 1 && parentFrame != null;
 
   const handleAlign = (alignment: AlignmentType) => {
+    // Tree is read imperatively at event time — a subscription here would
+    // re-render the properties panel on every scene mutation.
+    const nodes = useSceneStore.getState().getNodes();
     let updates: { id: string; x?: number; y?: number }[];
 
     if (isSingleNodeInFrame) {
@@ -55,6 +62,7 @@ export function AlignmentControls({
   };
 
   const handleTidyUp = () => {
+    const nodes = useSceneStore.getState().getNodes();
     const updates = tidyUpNodes(selectedIds, nodes);
     if (updates.length === 0) return;
     applyNodeUpdates(nodes, updates);
@@ -106,7 +114,12 @@ export function AlignmentSection(props: AlignmentSectionProps) {
   return (
     <div className="flex flex-col gap-4">
       <PropertySection title="Alignment">
-        <AlignmentControls {...props} showLabel={false} />
+        <AlignmentControls
+          count={props.count}
+          selectedIds={props.selectedIds}
+          parentFrame={props.parentFrame}
+          showLabel={false}
+        />
       </PropertySection>
       {!isSingleNodeInFrame && (
         <SpacingInput selectedIds={props.selectedIds} nodes={props.nodes} />
@@ -115,7 +128,11 @@ export function AlignmentSection(props: AlignmentSectionProps) {
   );
 }
 
-export function SpacingSection({ selectedIds, nodes }: Pick<AlignmentSectionProps, "selectedIds" | "nodes">) {
+export function SpacingSection({ selectedIds }: { selectedIds: string[] }) {
+  // Own tree subscription: this branch renders only in multi-select mode, so
+  // the broad getNodes() subscription stays isolated from the single-select
+  // panel path (calculateSpacing needs absolute positions from the tree).
+  const nodes = useSceneStore((s) => s.getNodes());
   return <SpacingInput selectedIds={selectedIds} nodes={nodes} />;
 }
 
