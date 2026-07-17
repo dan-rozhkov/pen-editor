@@ -205,4 +205,56 @@ test.describe("raster cache correctness (Task 13)", () => {
 
     expect(isCloseTo(onPixel, offPixel, 8)).toBe(true);
   });
+
+  // The classic historical bug: a variable/theme edit recolors containers
+  // directly (incrementalThemeUpdate's THEME_SENTINEL pass) with no scene
+  // mutation at all, so a cached top frame never saw a SceneDiff telling it
+  // to drop its texture. Regression-tests rasterCacheManager.onDirectContainerMutation.
+  test("variable edit inside a cached frame shows fresh pixels, not a stale texture", async ({ page }) => {
+    await page.route("**/api/models", (route) => route.fulfill({ json: { models: [], default: null } }));
+    await page.addInitScript(() => localStorage.setItem("pen.rasterCache", "on"));
+    await page.goto("/");
+    await expect(page.locator("[data-canvas]")).toBeVisible();
+
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __sceneStore: { setState: (state: unknown) => void };
+        __variableStore: { getState: () => { addVariable: (v: object) => void } };
+        __viewportStore: { getState: () => { setViewportState: (s: { scale: number; x: number; y: number }) => void } };
+      };
+      w.__variableStore.getState().addVariable({
+        id: "var-fill-1", name: "Test Color", type: "color", value: "#0000ff",
+      });
+      const frameV = {
+        id: "frame-v", type: "frame", name: "Frame V",
+        x: 0, y: 0, width: 200, height: 200, fill: "#ffffff",
+      };
+      const rectV = {
+        id: "rect-v", type: "rect", name: "Rect V",
+        x: 50, y: 50, width: 100, height: 100,
+        fill: "#0000ff", fillBinding: { variableId: "var-fill-1" },
+      };
+      w.__sceneStore.setState({
+        nodesById: { [frameV.id]: frameV, [rectV.id]: rectV },
+        parentById: { [frameV.id]: null, [rectV.id]: frameV.id },
+        childrenById: { [frameV.id]: [rectV.id], [rectV.id]: [] },
+        rootIds: [frameV.id],
+        _cachedTree: null,
+      });
+      w.__viewportStore.getState().setViewportState({ scale: 1, x: 0, y: 0 });
+    });
+
+    await page.waitForTimeout(SETTLE_MS); // frame-v goes quiet and caches
+    let center = await samplePixel(page, 100, 100);
+    expect(isCloseTo(center, [0, 0, 255, 255])).toBe(true); // blue, pre-edit
+
+    // Edit the bound variable — no scene mutation, so no SceneDiff.
+    await page.evaluate(() => {
+      (window as unknown as { __variableStore: { getState: () => { updateVariable: (id: string, u: object) => void } } })
+        .__variableStore.getState().updateVariable("var-fill-1", { value: "#ff0000" });
+    });
+    await page.waitForTimeout(FRESH_PAINT_MS);
+    center = await samplePixel(page, 100, 100);
+    expect(isCloseTo(center, [255, 0, 0, 255])).toBe(true); // red — no stale blue ghost
+  });
 });

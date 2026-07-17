@@ -231,6 +231,12 @@ export function createPixiSync(sceneRoot: Container): () => void {
    */
   function incrementalThemeUpdate(): void {
     const state = useSceneStore.getState();
+    // Task 13 (Critical fix): this recolors containers directly — no scene
+    // mutation, so no SceneDiff ever observes it, and a cached top frame
+    // covering a variable-dependent node would otherwise keep its pre-edit
+    // GPU snapshot forever. Must run before the recolor loop below mutates
+    // anything.
+    rasterCacheManager?.onDirectContainerMutation(variableDependentIds, state);
     for (const id of variableDependentIds) {
       const entry = registry.get(id);
       if (!entry) continue;
@@ -454,6 +460,16 @@ export function createPixiSync(sceneRoot: Container): () => void {
         }
       };
       for (const frameId of themeChangedFrameIds) collect(frameId);
+
+      // Defense in depth, not a live gap: each `frameId` here is itself in
+      // `diff.updatedIds` (its `themeOverride` changed) and therefore in
+      // `changedIds`, which `onFlushStart` already walked (via manager.
+      // onFlushStart above, before this function ran) to uncache every
+      // frameId's top ancestor — and every id in `subtreeIds` shares that
+      // same top ancestor by construction (they're its descendants). Kept
+      // anyway so this pass stays correct on its own if it's ever called
+      // outside the current onFlushStart-then-incrementalUpdate ordering.
+      rasterCacheManager?.onDirectContainerMutation(subtreeIds, state);
 
       for (const id of subtreeIds) {
         if (changedIds.has(id)) continue; // already updated with its fresh node
@@ -746,6 +762,25 @@ export function createPixiSync(sceneRoot: Container): () => void {
   // affected frame chain whenever a drag ends, so container positions always
   // reconcile with the computed layout regardless of how the drag finished.
   const unsubDrag = useDragStore.subscribe((dragState, prevDragState) => {
+    // Task 13 (Critical fix): drag START. autoLayoutDragAnimator.ts is about
+    // to start lerping the ghost + sibling containers on every RAF frame,
+    // entirely outside the scene store — no SceneDiff will ever see these
+    // mutations, so a top frame that's already cached at this instant would
+    // otherwise render a frozen pre-drag snapshot for the whole gesture.
+    // `applyDecisions` already refuses to (re)cache anything while
+    // `isDragging` is true, so a single uncache right here, before the first
+    // animator frame, is enough — nothing will re-cache mid-gesture. One
+    // frame covers the whole drag: dragController.ts sets
+    // `state.autoLayoutParentId` once at pointer-down and never reassigns it
+    // (the auto-layout reorder gesture always stays within the node's
+    // original parent — it never retargets to a different frame mid-drag,
+    // unlike a free/cross-frame drop, which commits via `moveNode` and so is
+    // already covered by the normal onFlushStart path), so the dragged
+    // node's top ancestor is the one and only frame this animator can touch.
+    if (!prevDragState.isDragging && dragState.isDragging && dragState.draggedNodeId) {
+      rasterCacheManager?.onDirectContainerMutation([dragState.draggedNodeId], useSceneStore.getState());
+      return;
+    }
     if (!prevDragState.isDragging || dragState.isDragging) return;
     const draggedId = prevDragState.draggedNodeId;
     if (!draggedId) return;
@@ -759,6 +794,12 @@ export function createPixiSync(sceneRoot: Container): () => void {
     );
     if (dirtyFrames.size > 0) {
       applyAutoLayoutPositions(sceneState, dirtyFrames);
+      // Task 13: this is itself a direct container mutation outside a store
+      // flush (drop-with-no-insert-target / cancel path) — refresh the
+      // manager's dirty timestamp for the affected chain the same way, so
+      // its QUIET_MS window restarts from when the mutation actually
+      // finished rather than from drag start.
+      rasterCacheManager?.onDirectContainerMutation(dirtyFrames, sceneState);
       // Direct container mutation outside a store flush — signal the renderer.
       requestCanvasRender();
     }

@@ -39,8 +39,10 @@ function makeState(ids: string[] = ["f1"], overrides: Partial<SceneState> = {}):
   } as SceneState;
 }
 
-function makeContainer(): CacheableContainer & { cacheAsTexture: ReturnType<typeof vi.fn> } {
-  return { cacheAsTexture: vi.fn() };
+type CacheAsTextureFn = CacheableContainer["cacheAsTexture"];
+
+function makeContainer(): CacheableContainer & { cacheAsTexture: ReturnType<typeof vi.fn<CacheAsTextureFn>> } {
+  return { cacheAsTexture: vi.fn<CacheAsTextureFn>() };
 }
 
 function diffFor(ids: string[]): SceneDiff {
@@ -98,6 +100,56 @@ describe("createRasterCacheManager", () => {
     // onFlushStart, not on the next timer tick.
     manager.onFlushStart(diffFor(["f1"]), makeState());
     expect(c1.cacheAsTexture).toHaveBeenCalledWith(false);
+  });
+
+  it("onDirectContainerMutation evicts a cached frame synchronously (theme/style recolor path)", () => {
+    // f1 is the top frame; n1 is a variable-dependent descendant that
+    // incrementalThemeUpdate recolors directly (THEME_SENTINEL), with no
+    // scene mutation and therefore no SceneDiff — onFlushStart never sees it.
+    const c1 = makeContainer();
+    const state = makeState(["f1"]);
+    state.parentById["n1"] = "f1";
+    const getState = vi.fn<() => SceneState>(() => state);
+    const getScale = vi.fn<() => number>(() => 1);
+    const getContainer = vi.fn((id: string) => (id === "f1" ? c1 : null));
+    const manager = createRasterCacheManager({ getContainer, getState, getScale });
+
+    manager.onFlushStart(diffFor(["f1"]), state);
+    vi.advanceTimersByTime(600); // caches f1
+    expect(c1.cacheAsTexture).toHaveBeenLastCalledWith({ resolution: 1, antialias: true });
+    c1.cacheAsTexture.mockClear();
+
+    // Variable/style store change: recolor n1 directly, no scene diff.
+    manager.onDirectContainerMutation(["n1"], state);
+    expect(c1.cacheAsTexture).toHaveBeenCalledWith(false); // synchronous, not on the next timer tick
+  });
+
+  it("onDirectContainerMutation evicts the dragged node's cached top frame at drag start", () => {
+    // Simulates pixiSync's isDragging false->true hook: autoLayoutDragAnimator
+    // is about to lerp containers on every RAF frame outside the store, so
+    // the dragged node's top frame must drop its cache before that starts.
+    const c1 = makeContainer();
+    const state = makeState(["f1"]);
+    state.parentById["dragged-node"] = "f1";
+    const getState = vi.fn<() => SceneState>(() => state);
+    const getScale = vi.fn<() => number>(() => 1);
+    const getContainer = vi.fn((id: string) => (id === "f1" ? c1 : null));
+    const manager = createRasterCacheManager({ getContainer, getState, getScale });
+
+    manager.onFlushStart(diffFor(["f1"]), state);
+    vi.advanceTimersByTime(600); // caches f1
+    expect(c1.cacheAsTexture).toHaveBeenLastCalledWith({ resolution: 1, antialias: true });
+    c1.cacheAsTexture.mockClear();
+
+    manager.onDirectContainerMutation(["dragged-node"], state);
+    expect(c1.cacheAsTexture).toHaveBeenCalledWith(false);
+
+    // And it must stay uncached for the whole gesture: applyDecisions bails
+    // completely while isDragging, so no amount of waiting re-caches it.
+    useDragStore.setState({ isDragging: true });
+    c1.cacheAsTexture.mockClear();
+    vi.advanceTimersByTime(600 + QUIET_MS + 600);
+    expect(c1.cacheAsTexture).not.toHaveBeenCalled();
   });
 
   it("never (un)caches mid-drag", () => {

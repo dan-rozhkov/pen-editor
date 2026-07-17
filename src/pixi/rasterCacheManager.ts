@@ -36,6 +36,18 @@ export interface RasterCacheManager {
    * texture was never invalidated before the mutation landed).
    */
   onFlushStart(diff: SceneDiff, state: SceneState): void;
+  /**
+   * For container mutations that happen *outside* a scene-store flush and so
+   * never appear in any `SceneDiff` — `incrementalThemeUpdate`'s variable/style
+   * recoloring (THEME_SENTINEL) and `autoLayoutDragAnimator`'s direct
+   * position lerps are the two known cases. Must be called synchronously
+   * BEFORE the mutation lands, same as `onFlushStart` — a cached top frame
+   * covering one of `ids` has to drop its texture first, or it keeps
+   * rendering its pre-mutation GPU snapshot indefinitely (nothing else ever
+   * marks it dirty, since by construction no scene diff observed this
+   * mutation).
+   */
+  onDirectContainerMutation(ids: Iterable<string>, state: SceneState): void;
   /** Zoom (or other viewport) change — schedules a decision round so a
    *  resolution-bucket change gets picked up. */
   onViewportChange(scale?: number): void;
@@ -67,6 +79,22 @@ export function createRasterCacheManager(deps: RasterCacheManagerDeps): RasterCa
   const schedule = (): void => {
     if (timer) clearTimeout(timer);
     timer = setTimeout(applyDecisions, DECISION_INTERVAL_MS);
+  };
+
+  /**
+   * Shared by `onFlushStart` (ids = a `SceneDiff`'s `changedIds`) and
+   * `onDirectContainerMutation` (ids = whatever a non-diff mutation touched):
+   * mark each id's top frame freshly dirty (restarts its QUIET_MS window)
+   * and, if it's currently cached, drop the texture synchronously.
+   */
+  const markDirtyAndUncache = (ids: Iterable<string>, state: SceneState): void => {
+    const now = performance.now();
+    for (const id of ids) {
+      const top = topFrameOf(id, state);
+      if (!top) continue;
+      dirtyAt.set(top, now);
+      if (cached.has(top)) uncache(top);
+    }
   };
 
   function applyDecisions(): void {
@@ -133,13 +161,11 @@ export function createRasterCacheManager(deps: RasterCacheManagerDeps): RasterCa
 
   return {
     onFlushStart(diff: SceneDiff, state: SceneState): void {
-      const now = performance.now();
-      for (const id of diff.changedIds) {
-        const top = topFrameOf(id, state);
-        if (!top) continue;
-        dirtyAt.set(top, now);
-        if (cached.has(top)) uncache(top);
-      }
+      markDirtyAndUncache(diff.changedIds, state);
+      schedule();
+    },
+    onDirectContainerMutation(ids: Iterable<string>, state: SceneState): void {
+      markDirtyAndUncache(ids, state);
       schedule();
     },
     onViewportChange(): void {
