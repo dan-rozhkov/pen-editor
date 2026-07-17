@@ -188,6 +188,7 @@ function computeSizeForMode(
   nodesById: Record<string, FlatSceneNode>,
   childrenById: Record<string, string[]>,
   isMultiSelect: boolean,
+  materializedParent: FrameNode | null,
 ): number | undefined {
   if (mode === "fixed") return undefined;
 
@@ -214,13 +215,10 @@ function computeSizeForMode(
     mode === "fill_container" &&
     parentContext.isInsideAutoLayout &&
     parentContext.parent &&
-    parentContext.parent.type === "frame"
+    parentContext.parent.type === "frame" &&
+    materializedParent
   ) {
-    const parent = materializeLayoutRefs(
-      parentContext.parent as FrameNode,
-      nodesById,
-      childrenById,
-    );
+    const parent = materializedParent;
     const sizingKey = dimension === "width" ? "widthMode" : "heightMode";
     const modifiedChildren = parent.children.map((child) => {
       if (child.id !== node.id) return child;
@@ -272,6 +270,22 @@ export function SizeSection({
   const [isFitting, setIsFitting] = useState(false);
   const [minMaxVisibleOverride, setMinMaxVisibleOverride] = useState<boolean | null>(null);
 
+  // Hoisted so the parent's subtree is materialized once per render (a full
+  // recursive deep copy via materializeLayoutRefs) instead of separately at
+  // each of the three sites that need it (fill_container sizing here, the
+  // reflow below, and the effectiveWidth/effectiveHeight useMemo). Only
+  // materialized when there's actually an auto-layout frame parent to reuse.
+  const materializedParent = useMemo(() => {
+    if (
+      parentContext.isInsideAutoLayout &&
+      parentContext.parent &&
+      parentContext.parent.type === "frame"
+    ) {
+      return materializeLayoutRefs(parentContext.parent as FrameNode, nodesById, childrenById);
+    }
+    return null;
+  }, [parentContext.isInsideAutoLayout, parentContext.parent, nodesById, childrenById]);
+
   const reflowAutoLayoutSiblings = (
     dimension: "width" | "height",
     newMode: SizingMode,
@@ -280,16 +294,13 @@ export function SizeSection({
     if (
       !parentContext.isInsideAutoLayout ||
       !parentContext.parent ||
-      parentContext.parent.type !== "frame"
+      parentContext.parent.type !== "frame" ||
+      !materializedParent
     ) {
       return;
     }
 
-    const parent = materializeLayoutRefs(
-      parentContext.parent as FrameNode,
-      nodesById,
-      childrenById,
-    );
+    const parent = materializedParent;
     const sizingKey = dimension === "width" ? "widthMode" : "heightMode";
     const modifiedChildren = parent.children.map((child) => {
       if (child.id !== node.id) return child;
@@ -357,13 +368,8 @@ export function SizeSection({
     ) {
       const widthMode = node.sizing?.widthMode ?? "fixed";
       const heightMode = node.sizing?.heightMode ?? "fixed";
-      if (widthMode !== "fixed" || heightMode !== "fixed") {
-        const parent = materializeLayoutRefs(
-          parentContext.parent as FrameNode,
-          nodesById,
-          childrenById,
-        );
-        const layoutChildren = calculateLayoutForFrame(parent);
+      if ((widthMode !== "fixed" || heightMode !== "fixed") && materializedParent) {
+        const layoutChildren = calculateLayoutForFrame(materializedParent);
         const layoutNode = layoutChildren.find((n) => n.id === node.id);
         if (layoutNode) {
           if (widthMode !== "fixed") ew = layoutNode.width;
@@ -373,7 +379,15 @@ export function SizeSection({
     }
 
     return { effectiveWidth: ew, effectiveHeight: eh };
-  }, [node, parentContext, calculateLayoutForFrame, nodesById, childrenById, isMultiSelect]);
+  }, [
+    node,
+    parentContext,
+    calculateLayoutForFrame,
+    nodesById,
+    childrenById,
+    isMultiSelect,
+    materializedParent,
+  ]);
 
   const canFitToContent = !isMultiSelect && (node.type === "frame" || node.type === "embed")
     ? true
@@ -445,6 +459,7 @@ export function SizeSection({
                       nodesById,
                       childrenById,
                       !!isMultiSelect,
+                      materializedParent,
                     );
                     onUpdate({
                       sizing: {
@@ -502,6 +517,7 @@ export function SizeSection({
                       nodesById,
                       childrenById,
                       !!isMultiSelect,
+                      materializedParent,
                     );
                     onUpdate({
                       sizing: {

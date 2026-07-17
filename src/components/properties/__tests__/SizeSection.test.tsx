@@ -280,6 +280,107 @@ describe("<SizeSection />", () => {
     expect(inputs[0].value).toBe("368");
   });
 
+  // Pins the `!isMultiSelect` guard (SizeSection.tsx ~336 / ~194): a
+  // `childrenById`-based guard would NOT skip the synthetic multi-select node.
+  // `computeMergedProperties` (multiSelectUtils.ts) builds that node as
+  // `{ ...nodes[0] }` — it borrows the FIRST selected node's `id` — and
+  // `childrenById` always has an (even empty) entry for every real container.
+  // So checking "does childrenById have children for this id" resolves to
+  // nodes[0]'s REAL children and materializes THAT frame's intrinsic size,
+  // presenting one arbitrary member of the selection as the whole selection's
+  // size. The fixture below makes the frame's own stored size (50x50, what a
+  // multi-select merge should show) and its children's combined intrinsic
+  // size (140x180) unambiguously different, so a regression is impossible to
+  // miss.
+  describe("multi-select guard: synthetic merged node vs. borrowed frame id", () => {
+    function seedAutoFitFrame(): void {
+      const autoFitFrame = {
+        id: "autoFitFrame",
+        type: "frame",
+        name: "AutoFit",
+        x: 0,
+        y: 0,
+        width: 50,
+        height: 50,
+        fill: "#ffffff",
+        layout: {
+          autoLayout: true,
+          flexDirection: "column",
+          gap: 0,
+          paddingTop: 0,
+          paddingRight: 0,
+          paddingBottom: 0,
+          paddingLeft: 0,
+        },
+        sizing: { widthMode: "fit_content", heightMode: "fit_content" },
+      } as unknown as FlatSceneNode;
+
+      const childA = {
+        id: "autoFitChildA",
+        type: "rect",
+        name: "ChildA",
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 60,
+        fill: "#ff0000",
+      } as unknown as FlatSceneNode;
+
+      const childB = {
+        id: "autoFitChildB",
+        type: "rect",
+        name: "ChildB",
+        x: 0,
+        y: 0,
+        width: 140,
+        height: 80,
+        fill: "#00ff00",
+      } as unknown as FlatSceneNode;
+
+      useSceneStore.setState({
+        nodesById: { autoFitFrame, autoFitChildA: childA, autoFitChildB: childB },
+        parentById: {
+          autoFitFrame: null,
+          autoFitChildA: "autoFitFrame",
+          autoFitChildB: "autoFitFrame",
+        },
+        childrenById: { autoFitFrame: ["autoFitChildA", "autoFitChildB"] },
+        rootIds: ["autoFitFrame"],
+        componentArtifactsById: {},
+        _cachedTree: null,
+      });
+    }
+
+    it("shows the merged node's own size, not the borrowed frame's intrinsic content size", () => {
+      seedAutoFitFrame();
+      const { nodesById } = useSceneStore.getState();
+      // Simulates computeMergedProperties: `{ ...nodes[0] }` — the synthetic
+      // multi-select node carries nodes[0]'s id verbatim.
+      const mergedNode = { ...(nodesById.autoFitFrame as unknown as SceneNode) };
+
+      render(
+        <SizeSection
+          node={mergedNode}
+          onUpdate={vi.fn()}
+          parentContext={ROOT_CONTEXT}
+          isMultiSelect
+          selectedNodes={[mergedNode]}
+        />,
+      );
+
+      const inputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+      // Merged node's own stored size (correct: multi-select shouldn't
+      // recompute an intrinsic size from one member's children).
+      expect(inputs[0].value).toBe("50");
+      expect(inputs[1].value).toBe("50");
+      // Sanity check the fixture: the frame's real intrinsic content size is
+      // unambiguously different from its own stored size, so if the guard
+      // regresses to a childrenById check, this assertion catches it.
+      expect(inputs[0].value).not.toBe("140");
+      expect(inputs[1].value).not.toBe("180");
+    });
+  });
+
   it("toggles clip content for frames only", () => {
     const onUpdate = vi.fn();
     const { unmount } = render(
