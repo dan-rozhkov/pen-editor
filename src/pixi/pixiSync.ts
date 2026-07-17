@@ -25,6 +25,7 @@ import { createResolutionManager } from "./syncResolution";
 import { createNodeTreeManager } from "./syncNodeTree";
 import { createConnectorManager } from "./syncConnectors";
 import { createAutoLayoutManager } from "./syncAutoLayout";
+import { perfStats } from "./perfStats";
 
 // Module-level registry accessor for the drag animator
 let registryAccessor: ((id: string) => Container | null) | null = null;
@@ -544,7 +545,9 @@ export function createPixiSync(sceneRoot: Container): () => void {
     if (!pendingSceneState) return;
     const nextState = pendingSceneState;
     pendingSceneState = null;
-    incrementalUpdate(nextState, prevState);
+    perfStats.time("flush", () => {
+      incrementalUpdate(nextState, prevState);
+    });
     prevState = nextState;
   };
 

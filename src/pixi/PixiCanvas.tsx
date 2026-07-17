@@ -44,6 +44,7 @@ import { setupPixiInteraction } from "./interaction";
 import { createSelectionOverlay } from "./selectionOverlay";
 import { createOverlayRenderer } from "./OverlayRenderer";
 import { setupRenderScheduler } from "./renderScheduler";
+import { perfStats } from "./perfStats";
 
 export function PixiCanvas() {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -311,6 +312,10 @@ export function PixiCanvas() {
         // Render on demand: detach Pixi's per-frame render and drive it from
         // store/overlay/font signals + a trailing window + a safety tick.
         const renderSchedulerCleanup = setupRenderScheduler(app);
+
+        if (import.meta.env.DEV) {
+          (window as unknown as { __perfStats: typeof perfStats }).__perfStats = perfStats;
+        }
 
         setPixiRefs({
           app,

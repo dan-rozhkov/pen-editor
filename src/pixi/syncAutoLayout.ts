@@ -19,6 +19,7 @@ import {
   withAncestorThemes,
   flatToTreeFrame,
 } from "./syncHelpers";
+import { perfStats } from "./perfStats";
 
 // Phase 1: Viewport culling — screen-space margin to avoid pop-in during fast panning
 const CULL_MARGIN = 400;
@@ -33,28 +34,30 @@ export function createAutoLayoutManager(ctx: SyncContext) {
   // ─── Phase 1: Viewport Culling ───────────────────────────────────────
 
   function updateCulling(): void {
-    const { scale, x, y } = useViewportStore.getState();
-    const bounds = getViewportBounds(scale, x, y, window.innerWidth, window.innerHeight);
-    const margin = CULL_MARGIN / scale;
+    perfStats.time("updateCulling", () => {
+      const { scale, x, y } = useViewportStore.getState();
+      const bounds = getViewportBounds(scale, x, y, window.innerWidth, window.innerHeight);
+      const margin = CULL_MARGIN / scale;
 
-    const state = useSceneStore.getState();
-    const renderability = computeViewportRenderability({
-      rootIds: state.rootIds,
-      nodesById: state.nodesById,
-      childrenById: state.childrenById,
-      bounds,
-      margin,
+      const state = useSceneStore.getState();
+      const renderability = computeViewportRenderability({
+        rootIds: state.rootIds,
+        nodesById: state.nodesById,
+        childrenById: state.childrenById,
+        bounds,
+        margin,
+      });
+
+      for (const [id, renderable] of renderability) {
+        const entry = registry.get(id);
+        if (!entry) continue;
+        applyOverviewEffectVisibility(entry.container, isOverviewScale(scale));
+        // Sibling-mask resolution exclusively owns mask-node renderability.
+        // Overwriting it here can resurrect an inert masker or suppress a mask
+        // Pixi needs for the stencil pass.
+        if (!entry.node.isMask) entry.container.renderable = renderable;
+      }
     });
-
-    for (const [id, renderable] of renderability) {
-      const entry = registry.get(id);
-      if (!entry) continue;
-      applyOverviewEffectVisibility(entry.container, isOverviewScale(scale));
-      // Sibling-mask resolution exclusively owns mask-node renderability.
-      // Overwriting it here can resurrect an inert masker or suppress a mask
-      // Pixi needs for the stencil pass.
-      if (!entry.node.isMask) entry.container.renderable = renderable;
-    }
   }
 
   // ─── Auto-Layout ─────────────────────────────────────────────────────
