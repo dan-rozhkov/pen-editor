@@ -95,8 +95,7 @@ export function createBasicMutations(set: SetState, get: GetState) {
       loadGoogleFontsFromNodes([child]);
     },
 
-    updateNode: (id: string, updates: Partial<SceneNode>) => {
-      markNodesDirty([id]);
+    updateNode: (id: string, updates: Partial<SceneNode>) =>
       set((state) => {
         const existing = state.nodesById[id];
         if (!existing) return state;
@@ -113,9 +112,14 @@ export function createBasicMutations(set: SetState, get: GetState) {
           [existing],
         );
 
+        // Marked right before returning the changed state — NOT before this
+        // `set(...)` call — because zustand skips the subscriber notification
+        // entirely when a guard above returns `state` unchanged (Object.is
+        // check), which would leave `armed` stuck true and wrongly bless the
+        // next, unrelated mutation as tracked.
+        markNodesDirty([id]);
         return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
-      });
-    },
+      }),
 
     updateMultipleNodes: (ids: string[], updates: Partial<SceneNode>) => {
       markNodesDirty(ids);
@@ -141,8 +145,7 @@ export function createBasicMutations(set: SetState, get: GetState) {
       });
     },
 
-    updateNodeWithoutHistory: (id: string, updates: Partial<SceneNode>) => {
-      markNodesDirty([id]);
+    updateNodeWithoutHistory: (id: string, updates: Partial<SceneNode>) =>
       set((state) => {
         const existing = state.nodesById[id];
         if (!existing) return state;
@@ -158,12 +161,11 @@ export function createBasicMutations(set: SetState, get: GetState) {
           [existing],
         );
 
+        markNodesDirty([id]);
         return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
-      });
-    },
+      }),
 
-    updateNodesWithoutHistory: (updatesById: Record<string, Partial<SceneNode>>) => {
-      markNodesDirty(Object.keys(updatesById));
+    updateNodesWithoutHistory: (updatesById: Record<string, Partial<SceneNode>>) =>
       set((state) => {
         const ids = Object.keys(updatesById).filter((id) => state.nodesById[id]);
         if (ids.length === 0) return state;
@@ -185,12 +187,11 @@ export function createBasicMutations(set: SetState, get: GetState) {
           staleSources,
         );
 
+        markNodesDirty(ids);
         return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
-      });
-    },
+      }),
 
-    updateNodesById: (updatesById: Record<string, Partial<SceneNode>>) => {
-      markNodesDirty(Object.keys(updatesById));
+    updateNodesById: (updatesById: Record<string, Partial<SceneNode>>) =>
       set((state) => {
         const ids = Object.keys(updatesById).filter((id) => state.nodesById[id]);
         if (ids.length === 0) return state;
@@ -213,9 +214,9 @@ export function createBasicMutations(set: SetState, get: GetState) {
           staleSources,
         );
 
+        markNodesDirty(ids);
         return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
-      });
-    },
+      }),
 
     deleteNode: (id: string) =>
       set((state) => {
