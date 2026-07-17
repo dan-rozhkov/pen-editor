@@ -1,4 +1,5 @@
 import { useSceneStore } from "@/store/sceneStore";
+import { markNodesDirty } from "@/store/sceneStore/dirtyTracking";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
@@ -97,6 +98,11 @@ export function createDragController(context: InteractionContext): DragControlle
   let autoLayoutDragActivated = false;
 
   const resetDragState = (): void => {
+    // Belt-and-suspenders: every drag-end/cancel path routes through here.
+    // If a caller forgot to flush first, at minimum drop the stale pending
+    // delta and its scheduled rAF so it can never resurrect a dragged
+    // position after other code has restored state (req: cancel safety).
+    cancelPendingDragCommit();
     state.isDragging = false;
     state.nodeId = null;
     state.dragItems = [];
@@ -179,20 +185,31 @@ export function createDragController(context: InteractionContext): DragControlle
     state.startBoundsHeight = maxY - minY;
   };
 
-  const updateDraggedNodesWithoutHistory = (
-    adjustedDeltaX: number,
-    adjustedDeltaY: number,
-  ): void => {
+  // Pointermove can fire faster than frames; coalesce to at most one
+  // useSceneStore.setState per animation frame instead of writing (and
+  // spreading the full nodesById map) on every move event. `pendingDelta`
+  // holds only the latest delta values — never stale node references — so a
+  // commit that fires after the drag state has moved on still applies the
+  // most recent numbers.
+  let pendingDelta: { dx: number; dy: number } | null = null;
+  let commitRafId: number | null = null;
+
+  const commitDragPositions = (): void => {
+    commitRafId = null;
+    if (!pendingDelta) return;
+    const { dx, dy } = pendingDelta;
+    pendingDelta = null;
+
     useSceneStore.setState((sceneState) => {
       const newNodesById = { ...sceneState.nodesById };
-      let hasChanges = false;
+      const changedIds: string[] = [];
 
       for (const item of state.dragItems) {
         const existing = newNodesById[item.id];
         if (!existing) continue;
 
-        const nextX = Math.round(item.startNodeX + adjustedDeltaX);
-        const nextY = Math.round(item.startNodeY + adjustedDeltaY);
+        const nextX = Math.round(item.startNodeX + dx);
+        const nextY = Math.round(item.startNodeY + dy);
         if (existing.x === nextX && existing.y === nextY) continue;
 
         newNodesById[item.id] = {
@@ -200,16 +217,52 @@ export function createDragController(context: InteractionContext): DragControlle
           x: nextX,
           y: nextY,
         };
-        hasChanges = true;
+        changedIds.push(item.id);
       }
 
-      return hasChanges
-        ? {
-            nodesById: newNodesById,
-            _cachedTree: null,
-          }
-        : sceneState;
+      if (changedIds.length === 0) return sceneState;
+
+      // Marked right before returning the changed state, matching
+      // updateNode's convention (see basicMutations.ts) — zustand skips the
+      // subscriber notification when this updater returns `state` unchanged
+      // (the `changedIds.length === 0` guard above), which would leave the
+      // dirty-tracking `armed` flag stuck true and wrongly bless the next,
+      // unrelated mutation if we marked before that check instead.
+      markNodesDirty(changedIds);
+      return {
+        nodesById: newNodesById,
+        _cachedTree: null,
+      };
     });
+  };
+
+  const cancelPendingDragCommit = (): void => {
+    if (commitRafId != null) {
+      cancelAnimationFrame(commitRafId);
+      commitRafId = null;
+    }
+    pendingDelta = null;
+  };
+
+  // Flush any coalesced delta synchronously — must run before any drop,
+  // commit, or history logic reads node positions, or the final pointermove
+  // of the drag is lost (the node lands one frame behind).
+  const flushPendingDragCommit = (): void => {
+    if (commitRafId != null) {
+      cancelAnimationFrame(commitRafId);
+      commitRafId = null;
+    }
+    commitDragPositions();
+  };
+
+  const updateDraggedNodesWithoutHistory = (
+    adjustedDeltaX: number,
+    adjustedDeltaY: number,
+  ): void => {
+    pendingDelta = { dx: adjustedDeltaX, dy: adjustedDeltaY };
+    if (commitRafId == null) {
+      commitRafId = requestAnimationFrame(commitDragPositions);
+    }
   };
 
   const computeDropFinalPosition = (
@@ -702,6 +755,12 @@ export function createDragController(context: InteractionContext): DragControlle
 
       // End dragging (free drag)
       if (state.isDragging && state.nodeId) {
+        // Flush any coalesced pointermove delta synchronously before reading
+        // node positions below — otherwise the final pointermove of the
+        // drag (already rAF-scheduled but not yet committed) is lost and the
+        // node lands one frame behind where the pointer actually released.
+        flushPendingDragCommit();
+
         useSmartGuideStore.getState().clearGuides();
 
         const sceneState = useSceneStore.getState();
