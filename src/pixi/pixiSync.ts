@@ -29,6 +29,7 @@ import { createCullingIndex } from "./cullingIndex";
 import { perfStats } from "./perfStats";
 import { computeSceneDiffFull, computeSceneDiffDirty, type SceneDiff } from "./syncDiff";
 import { consumeDirty } from "@/store/sceneStore/dirtyTracking";
+import { createRasterCacheManager } from "./rasterCacheManager";
 
 // Module-level registry accessor for the drag animator
 let registryAccessor: ((id: string) => Container | null) | null = null;
@@ -66,6 +67,17 @@ const THEME_SENTINEL = Object.freeze({ type: "none" }) as unknown as FlatSceneNo
  * (which run in dev mode) can measure the shipped diff path uncontaminated.
  */
 const diffCheckEnabled = import.meta.env.DEV && localStorage.getItem("pen.diffCheck") !== "off";
+
+/**
+ * Task 13: raster caching of quiet top-level frames, behind a flag.
+ * Dev-on by default (kill switch: `localStorage.setItem("pen.rasterCache", "off")`),
+ * prod-off by default (opt-in: `localStorage.setItem("pen.rasterCache", "on")`).
+ * When off, `createRasterCacheManager` is never called — see `rasterCacheManager`
+ * below, instantiated only if this is true.
+ */
+const rasterCacheEnabled = import.meta.env.DEV
+  ? localStorage.getItem("pen.rasterCache") !== "off"
+  : localStorage.getItem("pen.rasterCache") === "on";
 
 /**
  * A node is "variable-dependent" if its rendering can change when a design
@@ -116,6 +128,16 @@ export function createPixiSync(sceneRoot: Container): () => void {
   // Expose registry and sceneRoot to the drag animator
   registryAccessor = (id) => registry.get(id)?.container ?? null;
   sceneRootAccessor = () => sceneRoot;
+
+  // Task 13: flagged raster cache manager — `null` (never called) when the
+  // flag is off, per the flag's contract.
+  const rasterCacheManager = rasterCacheEnabled
+    ? createRasterCacheManager({
+        getContainer: (id) => registry.get(id)?.container ?? null,
+        getState: () => useSceneStore.getState(),
+        getScale: () => useViewportStore.getState().scale,
+      })
+    : null;
 
   // Task 10: grid-backed replacement for the per-frame full-tree culling walk.
   const cullingIndex = createCullingIndex();
@@ -230,9 +252,13 @@ export function createPixiSync(sceneRoot: Container): () => void {
   // ─── Incremental Update (Phases 3 + 4) ──────────────────────────────
 
   /**
-   * Incremental update - only process changed nodes.
+   * Compute this flush's diff (dirty-set fast path with a full-scan fallback,
+   * plus the DEV-only equivalence check), or `undefined` if nothing changed.
+   * Split out of `incrementalUpdate` (Task 13) so the diff is available
+   * *before* any container is mutated — `rasterCacheManager.onFlushStart`
+   * must run on this diff ahead of `incrementalUpdate` itself.
    */
-  function incrementalUpdate(
+  function computeDiff(
     state: SceneState,
     prev: SceneState,
     dirty?: { ids: Set<string>; complete: boolean },
@@ -266,6 +292,13 @@ export function createPixiSync(sceneRoot: Container): () => void {
       }
     }
 
+    return diff;
+  }
+
+  /**
+   * Incremental update - only process changed nodes.
+   */
+  function incrementalUpdate(state: SceneState, prev: SceneState, diff: SceneDiff): SceneDiff {
     const changedIds = diff.changedIds;
     const themeChangedFrameIds: string[] = [];
 
@@ -565,6 +598,9 @@ export function createPixiSync(sceneRoot: Container): () => void {
       resolutionMgr.scheduleTextResolutionUpdate(state.scale);
       resolutionMgr.scheduleEmbedResolutionUpdate(state.scale);
       resolutionMgr.scheduleImageFillResolutionUpdate(state.scale);
+      // Task 13: a zoom-bucket change uncaches immediately in the next
+      // decision round and re-caches once quiet again.
+      rasterCacheManager?.onViewportChange(state.scale);
       // Phase 1: Update culling on zoom
       updateCulling();
     } else if (state.x !== lastX || state.y !== lastY) {
@@ -591,7 +627,13 @@ export function createPixiSync(sceneRoot: Container): () => void {
     pendingSceneState = null;
     const dirty = consumeDirty();
     perfStats.time("flush", () => {
-      incrementalUpdate(nextState, prevState, dirty);
+      const diff = computeDiff(nextState, prevState, dirty);
+      if (!diff) return;
+      // Task 13: uncache-before-update ordering. A cached subtree must drop
+      // its texture synchronously here, before incrementalUpdate mutates any
+      // container inside it — see rasterCacheManager.ts's onFlushStart doc.
+      rasterCacheManager?.onFlushStart(diff, nextState);
+      incrementalUpdate(nextState, prevState, diff);
     });
     prevState = nextState;
   };
@@ -617,6 +659,10 @@ export function createPixiSync(sceneRoot: Container): () => void {
   const rebuildFromCurrentState = (): void => {
     clearPendingSceneUpdate();
     consumeDirty(); // discard — a full rebuild resolves everything, no stale ids should leak into the next incremental flush
+    // Task 13: every container is about to be destroyed and recreated — the
+    // manager's `cached`/`dirtyAt` bookkeeping refers to containers that are
+    // going away, so it must reset rather than be replayed against new ones.
+    rasterCacheManager?.onRebuild();
     fullRebuild(useSceneStore.getState());
     prevState = useSceneStore.getState();
   };
@@ -747,6 +793,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
     unsubDrag();
     unsubViewport();
     unsubRenderMode();
+    rasterCacheManager?.dispose();
     resolutionMgr.cleanup();
     clearPendingSceneUpdate();
     clearPendingThemeUpdate();
