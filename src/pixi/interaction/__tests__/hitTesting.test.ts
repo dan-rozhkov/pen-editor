@@ -639,4 +639,53 @@ describe("Task 11: hit-testing pruned by the culling index", () => {
     // should be visited.
     expect(spy).toHaveBeenCalledTimes(1);
   });
+
+  it("never prunes a fit_content auto-layout frame root, whose live intrinsic size exceeds its stale stored bbox", () => {
+    // Regression for a reviewer-found gap: `syncAutoLayout` applies a
+    // fit_content frame's Yoga-computed intrinsic size only to the Pixi
+    // container, never back to the store's width/height. The culling index
+    // bboxes the frame from the stale stored size, but hit-testing
+    // (`getPreparedNodeEffectiveSize` -> `prepareFrameNode` ->
+    // `calculateFrameIntrinsicSize`) checks against the live intrinsic size.
+    // A click inside the real rendered frame but outside the stale stored
+    // bbox must still hit — the frame must never be pruned by the index.
+    resetStores();
+
+    // No children: the intrinsic width comes purely from `paddingRight`
+    // (`calculateFrameIntrinsicSize`'s empty-children branch sums
+    // padding-left + padding-right), so nothing OTHER than the frame's own
+    // (stale, small) stored bbox is indexed — a child with its own
+    // accurately-stored wide bbox would otherwise leak into the culling
+    // index's ancestor-inclusion and mask the bug this test targets.
+    const bigFrame = {
+      id: "bigFrame",
+      type: "frame",
+      name: "Big Frame",
+      x: 0,
+      y: 0,
+      // Stored width is deliberately much smaller than the live intrinsic
+      // width (300, from paddingRight) computed below.
+      width: 10,
+      height: 50,
+      fill: "#ffffff",
+      layout: { autoLayout: true, flexDirection: "row", paddingRight: 300 },
+      sizing: { widthMode: "fit_content" },
+    } as unknown as FlatSceneNode;
+
+    useSceneStore.setState({
+      nodesById: { bigFrame },
+      parentById: { bigFrame: null },
+      childrenById: { bigFrame: [] },
+      rootIds: ["bigFrame"],
+      componentArtifactsById: {},
+      _cachedTree: null,
+    });
+    dispose = createPixiSync(new Container());
+
+    // (200, 20) is well outside the stale stored bbox (0,0..10,50) — the
+    // culling index, built from the stored width, would not return
+    // "bigFrame" as a candidate for this point — but it's inside the real
+    // rendered (intrinsic-width) frame.
+    expect(findNodeAtPoint(200, 20)).toBe("bigFrame");
+  });
 });

@@ -41,6 +41,23 @@ const LABEL_HIT_PADDING = 2;
  * padding alone.
  */
 const ROOT_PRUNE_PADDING_PX = 8;
+
+/**
+ * True for an auto-layout frame with `fit_content` sizing on either axis —
+ * its rendered (hit-tested) size is the *live* Yoga-computed intrinsic size
+ * (`prepareFrameNode`/`getPreparedNodeEffectiveSize`), which the culling
+ * index cannot see: `syncAutoLayout` applies intrinsic size only to the
+ * Pixi container, never back to the store's `width`/`height`. See the
+ * root-pruning comment in `findCanvasHitTargetAtPoint` for why this must be
+ * excluded from pruning rather than merely padded around.
+ */
+function isFitContentFrame(node: SceneNode): boolean {
+  if (node.type !== "frame") return false;
+  return (
+    node.layout?.autoLayout === true &&
+    (node.sizing?.widthMode === "fit_content" || node.sizing?.heightMode === "fit_content")
+  );
+}
 const LABEL_FONT_FAMILY = "system-ui, -apple-system, sans-serif";
 const LABEL_TEXT_STYLE = new TextStyle({
   fontFamily: LABEL_FONT_FAMILY,
@@ -453,10 +470,25 @@ export function findCanvasHitTargetAtPoint(
   // Task 11: prune root subtrees whose indexed AABB misses the point. `null`
   // means no index is available (pixiSync not initialized) — behave exactly
   // as before, unpruned. Padded by a screen-space margin to absorb the fixed
-  // stroke/handle hit tolerances (see ROOT_PRUNE_PADDING_PX); `line` and
-  // `connector` roots are excluded from pruning below regardless, since
-  // their hit tolerance (rendered cap reach; stale endpoints between index
-  // updates) isn't reliably bounded by that padding.
+  // stroke/handle hit tolerances (see ROOT_PRUNE_PADDING_PX).
+  //
+  // IMPORTANT for future call sites: `candidates` is a snapshot of the
+  // culling index's *last flush*, not the live store — it can lag a store
+  // write by up to one rAF (pixiSync's `scheduleSceneUpdate` is
+  // rAF-deferred). Anything hit-tested from *live* geometry that can diverge
+  // from what's indexed must be excluded from pruning below, not merely
+  // padded around, since the divergence isn't bounded by a fixed pixel
+  // amount. Two known cases, both excluded:
+  //  - `line`/`connector` roots: their hit tolerance (rendered cap reach;
+  //    connector endpoints that moved since the last flush) isn't reliably
+  //    bounded by ROOT_PRUNE_PADDING_PX.
+  //  - fit_content auto-layout frame roots: `getPreparedNodeEffectiveSize`
+  //    hit-tests against the *live* intrinsic (Yoga-computed) size, but the
+  //    index bboxes the frame from its *stored* `width`/`height` — for a
+  //    hug-contents frame those never converge, because `syncAutoLayout`
+  //    applies the intrinsic size only to the Pixi container, never writes
+  //    it back to the store. A click inside the real rendered frame but
+  //    outside the stale stored bbox would otherwise be wrongly pruned.
   const scaleForPrune = useViewportStore.getState().scale || 1;
   const prunePadding = ROOT_PRUNE_PADDING_PX / scaleForPrune;
   const candidates = getCullingIndex()?.queryVisible({
@@ -473,6 +505,7 @@ export function findCanvasHitTargetAtPoint(
       candidates &&
       rootNode.type !== "connector" &&
       rootNode.type !== "line" &&
+      !isFitContentFrame(rootNode) &&
       !candidates.has(rootNode.id)
     ) {
       continue;
