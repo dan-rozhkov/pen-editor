@@ -26,6 +26,8 @@ import { createNodeTreeManager } from "./syncNodeTree";
 import { createConnectorManager } from "./syncConnectors";
 import { createAutoLayoutManager } from "./syncAutoLayout";
 import { perfStats } from "./perfStats";
+import { computeSceneDiffFull, computeSceneDiffDirty } from "./syncDiff";
+import { consumeDirty } from "@/store/sceneStore/dirtyTracking";
 
 // Module-level registry accessor for the drag animator
 let registryAccessor: ((id: string) => Container | null) | null = null;
@@ -198,69 +200,59 @@ export function createPixiSync(sceneRoot: Container): () => void {
   /**
    * Incremental update - only process changed nodes.
    */
-  function incrementalUpdate(state: SceneState, prev: SceneState): void {
+  function incrementalUpdate(
+    state: SceneState,
+    prev: SceneState,
+    dirty?: { ids: Set<string>; complete: boolean },
+  ): void {
     if (state.nodesById === prev.nodesById && state.rootIds === prev.rootIds && state.childrenById === prev.childrenById) {
       return; // No scene changes
     }
 
-    // Phase 4: Combined change detection + theme override check in a single pass
-    const changedIds = new Set<string>();
+    // Phase 5: dirty-set diff when honest, full O(N) scan otherwise —
+    // byte-identical output either way (see syncDiff.ts equivalence tests).
+    const diff = dirty?.complete
+      ? computeSceneDiffDirty(state, prev, dirty.ids)
+      : computeSceneDiffFull(state, prev);
+
+    if (import.meta.env.DEV && dirty?.complete) {
+      const fullCheck = computeSceneDiffFull(state, prev);
+      let mismatch = false;
+      for (const id of diff.changedIds) {
+        if (!fullCheck.changedIds.has(id)) { mismatch = true; break; }
+      }
+      if (!mismatch) {
+        for (const id of fullCheck.changedIds) {
+          if (!diff.changedIds.has(id)) { mismatch = true; break; }
+        }
+      }
+      if (mismatch) {
+        console.warn(
+          "[pixiSync] dirty-set diff mismatch vs full scan — a mutator likely skipped markNodesDirty",
+          { dirty: [...diff.changedIds], full: [...fullCheck.changedIds] },
+        );
+      }
+    }
+
+    const changedIds = diff.changedIds;
     const themeChangedFrameIds: string[] = [];
 
-    for (const id of Object.keys(state.nodesById)) {
-      const node = state.nodesById[id];
-      const prevNode = prev.nodesById[id];
-      if (node !== prevNode) {
-        changedIds.add(id);
-        // A frame's themeOverride recolors its whole subtree — collect it for
-        // a targeted THEME_SENTINEL pass below instead of a full scene rebuild.
-        if (
-          node && prevNode &&
-          isFlatFrameNode(node) &&
-          node.themeOverride !== (isFlatFrameNode(prevNode) ? prevNode.themeOverride : undefined)
-        ) {
-          themeChangedFrameIds.push(id);
-        }
-      }
-    }
-
-    // Removed nodes
-    for (const id of Object.keys(prev.nodesById)) {
-      if (!state.nodesById[id]) {
-        changedIds.add(id);
-      }
-    }
-
-    // Children changes
-    for (const id of Object.keys(state.childrenById)) {
-      if (state.childrenById[id] !== prev.childrenById[id]) {
-        changedIds.add(id);
-      }
-    }
-    for (const id of Object.keys(prev.childrenById)) {
-      if (!state.childrenById[id]) {
-        changedIds.add(id);
-      }
-    }
-
     // Handle added nodes
-    for (const id of Object.keys(state.nodesById)) {
-      if (!prev.nodesById[id]) {
-        nodeTreeMgr.createAndAttachNode(id, state);
-        // Phase 3 + 6: Update indexes for new nodes
-        const node = state.nodesById[id];
-        if (node) {
-          if (isRefNode(node)) {
-            componentIndex.add(id, node.componentId);
-          }
-          if (isConnectorNode(node)) {
-            addToConnectorIndex(id, node);
-          }
-          if (isVariableDependent(node)) {
-            variableDependentIds.add(id);
-          }
-          resolutionMgr.trackNodeAdded(id, node);
+    for (const id of diff.addedIds) {
+      nodeTreeMgr.createAndAttachNode(id, state);
+      // Phase 3 + 6: Update indexes for new nodes
+      const node = state.nodesById[id];
+      if (node) {
+        if (isRefNode(node)) {
+          componentIndex.add(id, node.componentId);
         }
+        if (isConnectorNode(node)) {
+          addToConnectorIndex(id, node);
+        }
+        if (isVariableDependent(node)) {
+          variableDependentIds.add(id);
+        }
+        resolutionMgr.trackNodeAdded(id, node);
       }
     }
 
@@ -268,22 +260,20 @@ export function createPixiSync(sceneRoot: Container): () => void {
     const affectedInstanceIds = collectAffectedInstanceIds(state, prev, changedIds, componentIndex);
 
     // Handle removed nodes
-    for (const id of Object.keys(prev.nodesById)) {
-      if (!state.nodesById[id]) {
-        // Phase 3 + 6: Update indexes for removed nodes
-        const prevNode = prev.nodesById[id];
-        if (prevNode) {
-          if (isRefNode(prevNode)) {
-            componentIndex.remove(id, prevNode.componentId);
-          }
-          if (isConnectorNode(prevNode)) {
-            removeFromConnectorIndex(id, prevNode);
-          }
-          variableDependentIds.delete(id);
-          resolutionMgr.trackNodeRemoved(id);
+    for (const id of diff.removedIds) {
+      // Phase 3 + 6: Update indexes for removed nodes
+      const prevNode = prev.nodesById[id];
+      if (prevNode) {
+        if (isRefNode(prevNode)) {
+          componentIndex.remove(id, prevNode.componentId);
         }
-        nodeTreeMgr.removeNode(id, prev.childrenById, state.nodesById);
+        if (isConnectorNode(prevNode)) {
+          removeFromConnectorIndex(id, prevNode);
+        }
+        variableDependentIds.delete(id);
+        resolutionMgr.trackNodeRemoved(id);
       }
+      nodeTreeMgr.removeNode(id, prev.childrenById, state.nodesById);
     }
 
     // Nodes whose isMask flag (or masking-relevant visibility) flipped
@@ -297,10 +287,18 @@ export function createPixiSync(sceneRoot: Container): () => void {
     let rootMaskDirty = false;
 
     // Handle updated nodes (reference equality check)
-    for (const id of Object.keys(state.nodesById)) {
+    for (const id of diff.updatedIds) {
       const node = state.nodesById[id];
       const prevNode = prev.nodesById[id];
       if (node && prevNode && node !== prevNode) {
+        // A frame's themeOverride recolors its whole subtree — collect it for
+        // a targeted THEME_SENTINEL pass below instead of a full scene rebuild.
+        if (
+          isFlatFrameNode(node) &&
+          node.themeOverride !== (isFlatFrameNode(prevNode) ? prevNode.themeOverride : undefined)
+        ) {
+          themeChangedFrameIds.push(id);
+        }
         const entry = registry.get(id);
         if (entry) {
           if (isActiveMasker(node) !== isActiveMasker(prevNode)) {
@@ -545,8 +543,9 @@ export function createPixiSync(sceneRoot: Container): () => void {
     if (!pendingSceneState) return;
     const nextState = pendingSceneState;
     pendingSceneState = null;
+    const dirty = consumeDirty();
     perfStats.time("flush", () => {
-      incrementalUpdate(nextState, prevState);
+      incrementalUpdate(nextState, prevState, dirty);
     });
     prevState = nextState;
   };
@@ -571,6 +570,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
   const rebuildFromCurrentState = (): void => {
     clearPendingSceneUpdate();
+    consumeDirty(); // discard — a full rebuild resolves everything, no stale ids should leak into the next incremental flush
     fullRebuild(useSceneStore.getState());
     prevState = useSceneStore.getState();
   };
