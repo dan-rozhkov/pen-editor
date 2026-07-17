@@ -30,12 +30,31 @@ export function createCullingIndex() {
   let parentById: SceneState["parentById"] = {};
   let rootIds: string[] = [];
 
-  /** Union bounding box of `id` and all its descendants, in `id`'s own local (untranslated, unrotated) frame. */
+  /**
+   * Union bounding box of `id` and all its descendants, in `id`'s own local
+   * (untranslated, unrotated) frame.
+   *
+   * A descendant with its own non-zero rotation contributes its *rotated*
+   * AABB (its own subtree box, recursively computed, then rotated around
+   * its local origin) instead of its raw unrotated rect, and recursion
+   * stops there — mirrors the top-level rotated-node handling below. Using
+   * the raw rect would under-count: a nested-rotated node near the
+   * subtree's edge can poke outside the naively-computed box, so the outer
+   * covering AABB would wrongly say "off-screen" while the nested node is
+   * actually on-screen.
+   */
   function collectLocalSubtreeBox(id: string): Rect {
     const rootNode = nodesById[id];
     const box: Rect = rootNode
       ? { minX: 0, minY: 0, maxX: rootNode.width, maxY: rootNode.height }
       : { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+
+    const expand = (r: Rect): void => {
+      if (r.minX < box.minX) box.minX = r.minX;
+      if (r.minY < box.minY) box.minY = r.minY;
+      if (r.maxX > box.maxX) box.maxX = r.maxX;
+      if (r.maxY > box.maxY) box.maxY = r.maxY;
+    };
 
     const visit = (curId: string, offsetX: number, offsetY: number): void => {
       for (const childId of childrenById[curId] ?? []) {
@@ -43,10 +62,13 @@ export function createCullingIndex() {
         if (!child) continue;
         const x = offsetX + child.x;
         const y = offsetY + child.y;
-        if (x < box.minX) box.minX = x;
-        if (y < box.minY) box.minY = y;
-        if (x + child.width > box.maxX) box.maxX = x + child.width;
-        if (y + child.height > box.maxY) box.maxY = y + child.height;
+        const childRotation = child.rotation ?? 0;
+        if (childRotation !== 0) {
+          const childLocalBox = collectLocalSubtreeBox(childId);
+          expand(rotatedAabb(childLocalBox, childRotation, x, y));
+          continue; // covered conservatively — don't also visit its children
+        }
+        expand({ minX: x, minY: y, maxX: x + child.width, maxY: y + child.height });
         visit(childId, x, y);
       }
     };

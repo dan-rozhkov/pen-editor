@@ -83,6 +83,54 @@ describe("cullingIndex", () => {
     expect(visible.has("perf-0-0")).toBe(true);
   });
 
+  it("a nested-rotated descendant inflates the covering AABB beyond the naive (unrotated) box", () => {
+    // rotParent (rotated 45°, at world origin) covers its subtree with a
+    // single AABB. rotChild sits near rotParent's raw (unrotated) edge and
+    // is itself rotated 45° — its true rotated footprint pokes further out
+    // than its raw x/y/width/height rect would suggest. If the covering box
+    // were built from rotChild's raw rect (the bug), the AABB would stop
+    // short of this corner; accounting for rotChild's own rotation extends
+    // it far enough to include this viewport.
+    const nodesById = {
+      rotParent: {
+        id: "rotParent",
+        type: "frame",
+        name: "Rotated parent",
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100,
+        rotation: 45,
+      },
+      rotChild: {
+        id: "rotChild",
+        type: "rect",
+        name: "Rotated child",
+        x: 90,
+        y: 90,
+        width: 20,
+        height: 20,
+        rotation: 45,
+      },
+    };
+    const state = {
+      nodesById,
+      parentById: { rotParent: null, rotChild: "rotParent" },
+      childrenById: { rotParent: ["rotChild"], rotChild: [] },
+      rootIds: ["rotParent"],
+    } as never;
+
+    const index = createCullingIndex();
+    index.rebuild(state);
+
+    // Intersects only the region the rotation-aware covering AABB pokes
+    // into (~x:[-83.6,73.6], y:[0,157.3]) and NOT the naive unrotated-child
+    // AABB (~x:[-77.8,77.8], y:[0,155.6]) — see the arithmetic in the task
+    // report for the derivation.
+    const protrudingCorner = { minX: -83, minY: 156, maxX: -80, maxY: 157 };
+    expect(index.queryVisible(protrudingCorner).has("rotParent")).toBe(true);
+  });
+
   it("removed ids are dropped from the index", () => {
     const scene = generatePerfScene(1, 1);
     const index = createCullingIndex();
