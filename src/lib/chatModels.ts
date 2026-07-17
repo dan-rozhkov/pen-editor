@@ -34,13 +34,28 @@ const FALLBACK_MODELS: ChatModelOption[] = [
     supportsVision: true,
   },
   {
-    value: "moonshotai/kimi-k2.6",
-    label: "Kimi K2.6",
+    value: "z-ai/glm-5.2",
+    label: "GLM 5.2",
+    supportsVision: false,
+  },
+  {
+    value: "moonshotai/kimi-k2.5",
+    label: "Kimi K2.5",
     supportsVision: true,
   },
   {
     value: "minimax/minimax-m3",
     label: "Minimax M3",
+    supportsVision: true,
+  },
+  {
+    value: "xiaomi/mimo-v2.5-pro",
+    label: "MiMo V2.5 Pro",
+    supportsVision: false,
+  },
+  {
+    value: "xiaomi/mimo-v2.5",
+    label: "MiMo V2.5",
     supportsVision: true,
   },
   {
@@ -52,11 +67,6 @@ const FALLBACK_MODELS: ChatModelOption[] = [
     value: "deepseek/deepseek-v4-pro",
     label: "DeepSeek V4 Pro",
     supportsVision: false,
-  },
-  {
-    value: "qwen/qwen3.7-plus",
-    label: "Qwen3.7 Plus",
-    supportsVision: true,
   },
 ];
 
