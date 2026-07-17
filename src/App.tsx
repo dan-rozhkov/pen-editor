@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from "react";
 import { loadModels } from "./lib/chatModels";
 import { reconcileModels } from "./store/chatStore";
 import { useCustomFontStore } from "./store/customFontStore";
+import { useSceneStore } from "./store/sceneStore";
 import { LeftRail } from "./components/LeftRail";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { RightPanel } from "./components/RightPanel";
@@ -57,6 +58,21 @@ function App() {
     if (view !== null && view !== "0" && view !== "false") {
       useEditorModeStore.getState().enterView();
     }
+  }, []);
+
+  // Dev-only synthetic document seeding for perf work, via `?perf=N` (approx
+  // total node count). Dynamically imported so the generator is tree-shaken
+  // from production builds.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const perf = new URLSearchParams(window.location.search).get("perf");
+    if (!perf) return;
+    void import("./dev/perfScene").then(({ generatePerfScene }) => {
+      const total = Math.max(100, parseInt(perf, 10) || 5000);
+      const frames = Math.max(1, Math.round(total / 60));
+      const scene = generatePerfScene(frames, 60);
+      useSceneStore.setState({ ...scene, _cachedTree: null });
+    });
   }, []);
 
   return (
