@@ -176,6 +176,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
         getState: () => useSceneStore.getState(),
         getScale: () => useViewportStore.getState().scale,
         hasCulledContent: hasCulledDescendant,
+        getPixelRatio: () => window.devicePixelRatio || 1,
       })
     : null;
 

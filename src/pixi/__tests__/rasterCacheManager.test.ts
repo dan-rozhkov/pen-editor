@@ -382,6 +382,23 @@ describe("createRasterCacheManager", () => {
     expect(c1.cacheAsTexture).toHaveBeenCalledWith(false);
   });
 
+  // Bug 2 (field report): the resolution bucket must derive from effective
+  // scale (CSS scale * devicePixelRatio) — a HiDPI display must not cache at
+  // the CSS-scale-only bucket.
+  it("caches at the dpr-adjusted resolution bucket when getPixelRatio is provided", () => {
+    const c1 = makeContainer();
+    const state = makeState(["f1"]);
+    const getState = vi.fn<() => SceneState>(() => state);
+    const getScale = vi.fn<() => number>(() => 1);
+    const getContainer = vi.fn((id: string) => (id === "f1" ? c1 : null));
+    const getPixelRatio = vi.fn(() => 2);
+    const manager = createRasterCacheManager({ getContainer, getState, getScale, getPixelRatio });
+
+    manager.onFlushStart(diffFor(["f1"]), state);
+    vi.advanceTimersByTime(600 + QUIET_MS + 600);
+    expect(c1.cacheAsTexture).toHaveBeenCalledWith({ resolution: 2, antialias: true });
+  });
+
   it("cachedFrameIds() reflects the live cached set", () => {
     const c1 = makeContainer();
     const c2 = makeContainer();

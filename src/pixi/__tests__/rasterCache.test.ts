@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { computeRasterCacheDecisions, resolutionBucketFor, QUIET_MS } from "../rasterCache";
+import { computeRasterCacheDecisions, resolutionBucketFor, QUIET_MS, type RasterCacheInput } from "../rasterCache";
 
-const base = () => ({
+const base = (): RasterCacheInput => ({
   topLevelFrameIds: ["f1", "f2"],
   frameSubtreeDirtyAt: new Map([["f1", 0], ["f2", 0]]),
   cachedFrames: new Map(),
@@ -46,5 +46,28 @@ describe("computeRasterCacheDecisions", () => {
     const d = computeRasterCacheDecisions(input);
     expect(d.toUncache).toContain("f1");
     expect(d.toCache.find((c) => c.id === "f1")).toBeUndefined();
+  });
+
+  // Bug 2 (field report): resolution bucket must derive from EFFECTIVE scale
+  // (CSS scale * devicePixelRatio), not CSS scale alone — otherwise a HiDPI
+  // display renders a bucket-1 cache at half the pixels it actually needs,
+  // and zooming within the same CSS-scale bucket never fixes it.
+  it("buckets from effective scale (scale * devicePixelRatio), not CSS scale alone", () => {
+    const input = base();
+    input.scale = 1;
+    input.pixelRatio = 2;
+    const d = computeRasterCacheDecisions(input);
+    expect(d.toCache).toEqual([
+      { id: "f1", resolutionBucket: 2 },
+      { id: "f2", resolutionBucket: 2 },
+    ]);
+  });
+
+  it("defaults pixelRatio to 1 when omitted (back-compat with CSS-scale-only callers)", () => {
+    const d = computeRasterCacheDecisions(base());
+    expect(d.toCache).toEqual([
+      { id: "f1", resolutionBucket: 1 },
+      { id: "f2", resolutionBucket: 1 },
+    ]);
   });
 });

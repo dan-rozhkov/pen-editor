@@ -34,6 +34,13 @@ export interface RasterCacheManagerDeps {
    * callers/tests that don't exercise culling default to "never culled".
    */
   hasCulledContent?(frameId: string, state: SceneState): boolean;
+  /**
+   * Bug 2 (field report): devicePixelRatio at render time. The resolution
+   * bucket must derive from effective scale (CSS scale * pixelRatio) — see
+   * `rasterCache.ts`'s `RasterCacheInput.pixelRatio` doc. Optional, defaults
+   * to 1 (no dpr scaling) for callers/tests that don't care.
+   */
+  getPixelRatio?(): number;
 }
 
 export interface RasterCacheManager {
@@ -138,6 +145,7 @@ export function createRasterCacheManager(deps: RasterCacheManagerDeps): RasterCa
 
     const state = deps.getState();
     const scale = deps.getScale();
+    const pixelRatio = deps.getPixelRatio?.() ?? 1;
     const selection = useSelectionStore.getState();
     const hot = new Set<string>();
     for (const id of selection.selectedIds) {
@@ -170,10 +178,12 @@ export function createRasterCacheManager(deps: RasterCacheManagerDeps): RasterCa
       if (overview || deps.hasCulledContent?.(id, state)) hot.add(id);
     }
 
+    // RAW local-unit size — NOT premultiplied by scale (see
+    // RasterCacheInput.framePixelSize doc in rasterCache.ts).
     const framePixelSize = new Map(
       topLevelFrameIds.map((id) => {
         const n = state.nodesById[id];
-        return [id, { width: (n?.width ?? 0) * scale, height: (n?.height ?? 0) * scale }] as const;
+        return [id, { width: n?.width ?? 0, height: n?.height ?? 0 }] as const;
       }),
     );
 
@@ -184,6 +194,7 @@ export function createRasterCacheManager(deps: RasterCacheManagerDeps): RasterCa
       hotFrameIds: hot,
       framePixelSize,
       scale,
+      pixelRatio,
       now: performance.now(),
     });
 
