@@ -81,4 +81,33 @@ describe("usePixiCanvasState (PixiCanvas node-scoped subscriptions)", () => {
       "Hello world",
     );
   });
+
+  it("re-renders and refreshes editingPosition when an ancestor frame moves, even though the edited node's own record is untouched", () => {
+    // text1 is a child of frame1 in the fixture scene (frame1 at 100,100;
+    // text1 at local 10,90 -> absolute 110,190). Editing text1 without
+    // touching frame1 first establishes the baseline position.
+    useSelectionStore.setState({
+      editingNodeId: "text1",
+      editingMode: "text",
+      selectedIds: ["text1"],
+    });
+
+    let renders = 0;
+    const { result } = renderHook(() => {
+      renders++;
+      return useHarness();
+    });
+
+    expect(result.current.editingPosition).toEqual({ x: 110, y: 190 });
+    const rendersAfterMount = renders;
+
+    // Move the ANCESTOR frame — a sibling-resize-style reflow — without
+    // touching text1's own record at all.
+    act(() => {
+      useSceneStore.getState().updateNode("frame1", { x: 300 });
+    });
+
+    expect(renders).toBe(rendersAfterMount + 1);
+    expect(result.current.editingPosition).toEqual({ x: 310, y: 190 });
+  });
 });

@@ -112,11 +112,38 @@ export function usePixiCanvasState({
     );
   }, []);
 
-  const editingPosition = editingNodeId
-    ? (resolvedDescendant
-        ? { x: resolvedDescendant.absX, y: resolvedDescendant.absY }
-        : getEditingPosition(editingNodeId))
-    : null;
+  // Reactive to the ancestor chain: while editing a node inside an
+  // auto-layout frame, a sibling resize can reflow the edited node to a new
+  // absolute position WITHOUT touching the edited node's own record (its
+  // x/y are computed by Yoga, not stored). A non-reactive read here would
+  // leave the inline editor overlay pinned at a stale position once the
+  // component stops re-rendering on every unrelated mutation. Select x and
+  // y as two primitive selectors (not one object-returning selector) so
+  // zustand's default Object.is equality still bails out per-axis without
+  // needing useShallow.
+  const editingX = useSceneStore((s) => {
+    if (!editingNodeId) return null;
+    if (resolvedDescendant) return resolvedDescendant.absX;
+    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+    return (
+      getNodeAbsolutePositionWithLayout(s.getNodes(), editingNodeId, calculateLayoutForFrame)
+        ?.x ?? null
+    );
+  });
+  const editingY = useSceneStore((s) => {
+    if (!editingNodeId) return null;
+    if (resolvedDescendant) return resolvedDescendant.absY;
+    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+    return (
+      getNodeAbsolutePositionWithLayout(s.getNodes(), editingNodeId, calculateLayoutForFrame)
+        ?.y ?? null
+    );
+  });
+
+  const editingPosition =
+    editingNodeId && editingX != null && editingY != null
+      ? { x: editingX, y: editingY }
+      : null;
 
   // Theme lookup returns a primitive ('light' | 'dark'), so subscribing with
   // a selector that reads the ancestor chain is safe without useShallow —
