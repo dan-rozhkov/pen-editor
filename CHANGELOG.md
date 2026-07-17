@@ -8,6 +8,40 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.45.0] - 2026-07-17
+
+### Changed
+- **Properties panel render isolation (perf-01).** `PropertiesPanel` no longer
+  subscribes to the whole scene tree (`getNodes()`) or to the entire selection
+  store. It now subscribes narrowly — to the selection and to the *selected node*
+  via the flat `nodesById` map — so a mutation of an unrelated node no longer
+  invalidates the tree cache, rebuilds the tree O(N), and re-renders every mounted
+  section. Sections receive flat nodes and materialize subtrees via
+  `materializeLayoutRefs` where they need children; the broad tree subscriptions
+  survive only in the rare multi-select and instance-descendant branches, or are
+  read imperatively at event time. `PropertyEditor` is `React.memo`-wrapped with
+  stable props, and the component lookup for instances is now O(1).
+
+  Scope note: the isolation is **partial by design**. `SizeSection` and
+  `SelectionColorsSection` still subscribe to the flat maps, which get a fresh
+  reference on every mutation, so they still re-render (and still run Yoga in
+  render) during drag. Removing Yoga from the render path was an explicit non-goal
+  here and is tracked as follow-up perf-02.
+
+### Fixed
+- **Number inputs no longer write to the store on every keystroke.** The shared
+  `NumberInput` gained a local draft layer: typing edits only local state, and the
+  store is committed exactly once on blur/Enter, with Escape reverting. Typing
+  "250" previously produced three store writes and **three undo entries**, and
+  pushed the intermediate values (2, 25) onto the canvas, retriggering auto-layout
+  each time. It is now one undo entry for the whole edit, and nothing reaches the
+  canvas until commit. Values are clamped to min/max on commit; label scrubbing is
+  unchanged. Read-only fields (Dev Mode's inspect panel) correctly commit nothing.
+- **Multi-select fit-content no longer risks showing/writing one node's size for
+  the whole selection.** The merged multi-select node borrows the first selected
+  node's id, so the fit_content branches are now explicitly gated on
+  `isMultiSelect` rather than relying on the absence of a `children` array.
+
 ## [0.44.0] - 2026-07-16
 
 ### Added
