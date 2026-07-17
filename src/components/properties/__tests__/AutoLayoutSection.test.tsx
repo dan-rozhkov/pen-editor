@@ -74,12 +74,16 @@ describe("<AutoLayoutSection />", () => {
     );
     const inputs = screen.getAllByRole("spinbutton");
 
+    fireEvent.focus(inputs[0]);
     fireEvent.change(inputs[0], { target: { value: "16" } });
+    fireEvent.blur(inputs[0]);
     expect(onUpdate).toHaveBeenCalledWith({
       layout: expect.objectContaining({ gap: 16 }),
     });
 
+    fireEvent.focus(inputs[1]);
     fireEvent.change(inputs[1], { target: { value: "12" } });
+    fireEvent.blur(inputs[1]);
     expect(onUpdate).toHaveBeenCalledWith({
       layout: expect.objectContaining({ paddingTop: 12 }),
     });
@@ -101,7 +105,9 @@ describe("<AutoLayoutSection />", () => {
     // the scrub-drag/steppers, both of which read the `min` prop).
     expect(gapInput.hasAttribute("min")).toBe(false);
 
+    fireEvent.focus(gapInput);
     fireEvent.change(gapInput, { target: { value: "-10" } });
+    fireEvent.blur(gapInput);
     expect(onUpdate).toHaveBeenCalledWith({
       layout: expect.objectContaining({ gap: -10 }),
     });
@@ -232,11 +238,15 @@ describe("<AutoLayoutSection />", () => {
         />,
       );
       const inputs = screen.getAllByRole("spinbutton");
+      fireEvent.focus(inputs[0]);
       fireEvent.change(inputs[0], { target: { value: "20" } });
+      fireEvent.blur(inputs[0]);
       expect(onUpdate).toHaveBeenCalledWith({
         layout: expect.objectContaining({ rowGap: 20 }),
       });
+      fireEvent.focus(inputs[1]);
       fireEvent.change(inputs[1], { target: { value: "7" } });
+      fireEvent.blur(inputs[1]);
       expect(onUpdate).toHaveBeenCalledWith({
         layout: expect.objectContaining({ columnGap: 7 }),
       });

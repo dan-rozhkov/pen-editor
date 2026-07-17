@@ -62,20 +62,30 @@ describe("<PatternFillEditor />", () => {
     const { container } = render(
       <PatternFillEditor pattern={pattern()} onChange={onChange} />,
     );
-    fireEvent.change(numberInputs(container)[0], { target: { value: "200" } });
+    const scaleInput = numberInputs(container)[0];
+    fireEvent.focus(scaleInput);
+    fireEvent.change(scaleInput, { target: { value: "200" } });
+    fireEvent.blur(scaleInput);
     expect(onChange).toHaveBeenCalledWith(pattern({ scale: 2 }));
   });
 
   it("emits spacing and offsets in px, clamping negative spacing to 0", () => {
     const onChange = vi.fn();
+    // Seed a non-zero spacingX: the default is already 0 (the clamp floor),
+    // so clamping -3 back to 0 from an unset/0 start would be a no-op commit
+    // under the new "skip unchanged" rule.
     const { container } = render(
-      <PatternFillEditor pattern={pattern()} onChange={onChange} />,
+      <PatternFillEditor pattern={pattern({ spacingX: 4 })} onChange={onChange} />,
     );
     const [, gapX, , offsetX] = numberInputs(container);
+    fireEvent.focus(gapX);
     fireEvent.change(gapX, { target: { value: "-3" } });
+    fireEvent.blur(gapX);
     expect(onChange).toHaveBeenLastCalledWith(pattern({ spacingX: 0 }));
+    fireEvent.focus(offsetX);
     fireEvent.change(offsetX, { target: { value: "-7" } });
-    expect(onChange).toHaveBeenLastCalledWith(pattern({ offsetX: -7 }));
+    fireEvent.blur(offsetX);
+    expect(onChange).toHaveBeenLastCalledWith(pattern({ spacingX: 4, offsetX: -7 }));
   });
 
   it("emits rowOffset as a 0-1 fraction, clamped to [0, 1]", () => {
@@ -84,9 +94,13 @@ describe("<PatternFillEditor />", () => {
       <PatternFillEditor pattern={pattern()} onChange={onChange} />,
     );
     const rowOffset = numberInputs(container)[5];
+    fireEvent.focus(rowOffset);
     fireEvent.change(rowOffset, { target: { value: "50" } });
+    fireEvent.blur(rowOffset);
     expect(onChange).toHaveBeenLastCalledWith(pattern({ rowOffset: 0.5 }));
+    fireEvent.focus(rowOffset);
     fireEvent.change(rowOffset, { target: { value: "150" } });
+    fireEvent.blur(rowOffset);
     expect(onChange).toHaveBeenLastCalledWith(pattern({ rowOffset: 1 }));
   });
 

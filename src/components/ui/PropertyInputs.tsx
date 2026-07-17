@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef, useState } from "react";
 import type { Variable, ThemeName } from "../../types/variable";
 import { getVariableValue } from "../../types/variable";
 import { Input } from "./input";
@@ -80,17 +80,82 @@ export function NumberInput({
   const readOnly = useReadOnly();
   const scrub = useScrubLabel({ value, onChange, step, min, max });
 
+  // Draft layer: while the field is focused the user edits a local string and
+  // the store is committed exactly once (blur / Enter), so typing doesn't spam
+  // updateNode + undo history per keystroke and intermediate values ("12" on
+  // the way to "120", "-", "1.") never reach the canvas. Escape reverts.
+  const [draft, setDraft] = useState<string | null>(null);
+  // blur fires synchronously after Enter/Escape while the stale closure still
+  // sees a non-null draft — this flag tells the blur handler to skip its commit.
+  const skipBlurCommitRef = useRef(false);
+
+  const formattedValue = isMixed ? "" : String(Math.round(value * 100) / 100);
+  const displayValue = draft ?? formattedValue;
+  const mixedProps = isMixed ? { placeholder: "Mixed" } : {};
+
+  const commitValue = (raw: string) => {
+    const parsed = parseFloat(raw);
+    if (Number.isNaN(parsed)) return;
+    let next = parsed;
+    if (min !== undefined) next = Math.max(min, next);
+    if (max !== undefined) next = Math.min(max, next);
+    // In a mixed selection the displayed `value` is only the first node's, so
+    // "unchanged vs value" says nothing about the other nodes — always commit.
+    if (isMixed || next !== value) onChange(next);
+  };
+
+  const handleFocus = () => {
+    if (readOnly) return;
+    // A prior Escape/Enter may have armed the flag without a blur ever landing
+    // (e.g. the element was never actually focused) — never let it leak into
+    // the next editing session and swallow a real commit.
+    skipBlurCommitRef.current = false;
+    setDraft(isMixed ? "" : formattedValue);
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (readOnly) return;
-    const val = parseFloat(e.target.value);
-    if (!isNaN(val)) {
-      onChange(val);
+    setDraft(e.target.value);
+  };
+
+  const handleBlur = () => {
+    if (skipBlurCommitRef.current) {
+      skipBlurCommitRef.current = false;
+      return;
+    }
+    if (!readOnly && draft !== null && draft !== formattedValue) commitValue(draft);
+    setDraft(null);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (readOnly) return;
+    if (e.key === "Enter") {
+      commitValue(e.currentTarget.value);
+      skipBlurCommitRef.current = true;
+      setDraft(null);
+      e.currentTarget.blur();
+    } else if (e.key === "Escape") {
+      skipBlurCommitRef.current = true;
+      setDraft(null);
+      e.currentTarget.blur();
     }
   };
 
+  const inputProps = {
+    type: "number" as const,
+    value: displayValue,
+    onFocus: handleFocus,
+    onChange: handleChange,
+    onBlur: handleBlur,
+    onKeyDown: handleKeyDown,
+    readOnly,
+    min,
+    max,
+    step,
+    ...mixedProps,
+  };
+
   const scrubMouseDown = readOnly ? undefined : scrub.onMouseDown;
-  const displayValue = isMixed ? "" : Math.round(value * 100) / 100;
-  const mixedProps = isMixed ? { placeholder: "Mixed" } : {};
 
   if (labelOutside && label) {
     return (
@@ -101,28 +166,10 @@ export function NumberInput({
             <InputGroupAddon align="inline-start">
               {icon}
             </InputGroupAddon>
-            <InputGroupInput
-              type="number"
-              value={displayValue}
-              onChange={handleChange}
-              readOnly={readOnly}
-              min={min}
-              max={max}
-              step={step}
-              {...mixedProps}
-            />
+            <InputGroupInput {...inputProps} />
           </InputGroup>
         ) : (
-          <Input
-            type="number"
-            value={displayValue}
-            onChange={handleChange}
-            readOnly={readOnly}
-            min={min}
-            max={max}
-            step={step}
-            {...mixedProps}
-          />
+          <Input {...inputProps} />
         )}
       </div>
     );
@@ -135,16 +182,7 @@ export function NumberInput({
           <InputGroupAddon align="inline-start">
             <Label className="text-[11px] w-4 shrink-0" onMouseDown={scrubMouseDown} style={scrub.style}>{label}</Label>
           </InputGroupAddon>
-          <InputGroupInput
-            type="number"
-            value={displayValue}
-            onChange={handleChange}
-            readOnly={readOnly}
-            min={min}
-            max={max}
-            step={step}
-            {...mixedProps}
-          />
+          <InputGroupInput {...inputProps} />
         </InputGroup>
       </div>
     );
@@ -152,16 +190,7 @@ export function NumberInput({
 
   return (
     <div className="flex-1">
-      <Input
-        type="number"
-        value={displayValue}
-        onChange={handleChange}
-        readOnly={readOnly}
-        min={min}
-        max={max}
-        step={step}
-        {...mixedProps}
-      />
+      <Input {...inputProps} />
     </div>
   );
 }

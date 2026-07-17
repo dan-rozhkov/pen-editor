@@ -36,9 +36,12 @@ describe("<AppearanceSection />", () => {
     const onUpdate = vi.fn();
     render(<AppearanceSection node={makeNode()} onUpdate={onUpdate} />);
 
-    fireEvent.change(screen.getAllByRole("spinbutton")[0], {
+    const opacityInput = screen.getAllByRole("spinbutton")[0];
+    fireEvent.focus(opacityInput);
+    fireEvent.change(opacityInput, {
       target: { value: "30" },
     });
+    fireEvent.blur(opacityInput);
     expect(onUpdate).toHaveBeenCalledWith({ opacity: 0.3 });
   });
 
@@ -67,7 +70,9 @@ describe("<AppearanceSection />", () => {
       <AppearanceSection node={makeNode({ cornerRadius: 8 } as Partial<SceneNode>)} onUpdate={onUpdate} />,
     );
     const spinbuttons = screen.getAllByRole("spinbutton");
+    fireEvent.focus(spinbuttons[1]);
     fireEvent.change(spinbuttons[1], { target: { value: "16" } });
+    fireEvent.blur(spinbuttons[1]);
     expect(onUpdate).toHaveBeenCalledWith({ cornerRadius: 16 });
   });
 
@@ -121,7 +126,9 @@ describe("<AppearanceSection />", () => {
 
     // In per-corner mode the spinbuttons are [opacity, TL, TR, BL, BR].
     const spinbuttons = screen.getAllByRole("spinbutton");
+    fireEvent.focus(spinbuttons[1]);
     fireEvent.change(spinbuttons[1], { target: { value: "9" } }); // TL
+    fireEvent.blur(spinbuttons[1]);
 
     expect(onUpdate).toHaveBeenCalledWith({
       cornerRadiusPerCorner: { topLeft: 9, topRight: 2, bottomRight: 3, bottomLeft: 4 },
@@ -153,7 +160,9 @@ describe("<AppearanceSection />", () => {
     const spinbuttons = screen.getAllByRole("spinbutton") as HTMLInputElement[];
     expect(spinbuttons[1].value).toBe("6");
 
+    fireEvent.focus(spinbuttons[1]);
     fireEvent.change(spinbuttons[1], { target: { value: "5" } });
+    fireEvent.blur(spinbuttons[1]);
     expect(onUpdate).toHaveBeenCalledTimes(1);
     const arg = onUpdate.mock.calls[0][0] as { sides: number; points: unknown };
     expect(arg.sides).toBe(5);
@@ -178,7 +187,9 @@ describe("<AppearanceSection />", () => {
 
     // [opacity, points, ratio]
     const spinbuttons = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    fireEvent.focus(spinbuttons[2]);
     fireEvent.change(spinbuttons[2], { target: { value: "30" } });
+    fireEvent.blur(spinbuttons[2]);
 
     expect(onUpdate).toHaveBeenCalledTimes(1);
     const arg = onUpdate.mock.calls[0][0] as { innerRadiusRatio: number };
@@ -211,9 +222,19 @@ describe("<AppearanceSection />", () => {
 
   it("updates ellipse sweepAngle, clamped to [-360, 360]", () => {
     const onUpdate = vi.fn();
-    render(<AppearanceSection node={makeNode({ type: "ellipse" } as Partial<SceneNode>)} onUpdate={onUpdate} />);
+    // Seed a non-default sweepAngle: the default is already 360 (the clamp
+    // ceiling), so clamping 500 down to 360 from an unset/360 start would be
+    // a no-op commit under the new "skip unchanged" rule.
+    render(
+      <AppearanceSection
+        node={makeNode({ type: "ellipse", sweepAngle: 90 } as Partial<SceneNode>)}
+        onUpdate={onUpdate}
+      />,
+    );
     const spinbuttons = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    fireEvent.focus(spinbuttons[2]);
     fireEvent.change(spinbuttons[2], { target: { value: "500" } });
+    fireEvent.blur(spinbuttons[2]);
     expect(onUpdate).toHaveBeenCalledWith({ sweepAngle: 360 });
   });
 
@@ -250,7 +271,9 @@ describe("<AppearanceSection />", () => {
     const onUpdate = vi.fn();
     render(<AppearanceSection node={makeNode()} onUpdate={onUpdate} />);
     const spinbuttons = screen.getAllByRole("spinbutton");
+    fireEvent.focus(spinbuttons[2]);
     fireEvent.change(spinbuttons[2], { target: { value: "60" } });
+    fireEvent.blur(spinbuttons[2]);
     expect(onUpdate).toHaveBeenCalledWith({ cornerSmoothing: 0.6 });
   });
 

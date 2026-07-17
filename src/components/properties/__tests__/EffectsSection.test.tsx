@@ -166,10 +166,14 @@ describe("<EffectsSection />", () => {
     render(<EffectsSection node={makeNode([blurFx()])} onUpdate={onUpdate} />);
     const input = screen.getByRole("spinbutton");
 
+    fireEvent.focus(input);
     fireEvent.change(input, { target: { value: "24" } });
+    fireEvent.blur(input);
     expect(onUpdate.mock.calls[0][0].effects[0].radius).toBe(24);
 
+    fireEvent.focus(input);
     fireEvent.change(input, { target: { value: "250" } });
+    fireEvent.blur(input);
     expect(onUpdate.mock.calls[1][0].effects[0].radius).toBe(100);
   });
 
@@ -200,10 +204,14 @@ describe("<EffectsSection />", () => {
     render(<EffectsSection node={makeNode([backgroundBlurFx()])} onUpdate={onUpdate} />);
     const input = screen.getByRole("spinbutton");
 
+    fireEvent.focus(input);
     fireEvent.change(input, { target: { value: "24" } });
+    fireEvent.blur(input);
     expect(onUpdate.mock.calls[0][0].effects[0].radius).toBe(24);
 
+    fireEvent.focus(input);
     fireEvent.change(input, { target: { value: "250" } });
+    fireEvent.blur(input);
     expect(onUpdate.mock.calls[1][0].effects[0].radius).toBe(100);
   });
 
@@ -261,10 +269,14 @@ describe("<EffectsSection />", () => {
     );
     const inputs = screen.getAllByRole("spinbutton");
 
+    fireEvent.focus(inputs[1]);
     fireEvent.change(inputs[1], { target: { value: "10" } }); // X
+    fireEvent.blur(inputs[1]);
     expect(onUpdate.mock.calls[0][0].effects[0].offset).toEqual({ x: 10, y: 4 });
 
+    fireEvent.focus(inputs[2]);
     fireEvent.change(inputs[2], { target: { value: "-3" } }); // Y
+    fireEvent.blur(inputs[2]);
     expect(onUpdate.mock.calls[1][0].effects[0].offset).toEqual({ x: 2, y: -3 });
   });
 
@@ -275,10 +287,14 @@ describe("<EffectsSection />", () => {
     );
     const inputs = screen.getAllByRole("spinbutton");
 
+    fireEvent.focus(inputs[3]);
     fireEvent.change(inputs[3], { target: { value: "20" } }); // Blur
+    fireEvent.blur(inputs[3]);
     expect(onUpdate.mock.calls[0][0].effects[0].blur).toBe(20);
 
+    fireEvent.focus(inputs[4]);
     fireEvent.change(inputs[4], { target: { value: "5" } }); // Spread
+    fireEvent.blur(inputs[4]);
     expect(onUpdate.mock.calls[1][0].effects[0].spread).toBe(5);
   });
 
@@ -293,7 +309,9 @@ describe("<EffectsSection />", () => {
     const inputs = screen.getAllByRole("spinbutton");
 
     // 50% → alpha = round(0.5 * 255) = 128 = 0x80, base color preserved
+    fireEvent.focus(inputs[0]);
     fireEvent.change(inputs[0], { target: { value: "50" } });
+    fireEvent.blur(inputs[0]);
     expect(onUpdate.mock.calls[0][0].effects[0].color).toBe("#11223380");
   });
 

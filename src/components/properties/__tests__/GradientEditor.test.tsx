@@ -91,7 +91,9 @@ describe("<GradientEditor />", () => {
     render(<GradientEditor gradient={linearGradient()} onChange={onChange} />);
 
     const spinbuttons = screen.getAllByRole("spinbutton");
+    fireEvent.focus(spinbuttons[0]);
     fireEvent.change(spinbuttons[0], { target: { value: "25" } });
+    fireEvent.blur(spinbuttons[0]);
 
     const next = onChange.mock.calls[0][0] as GradientFill;
     expect(next.stops[0].position).toBeCloseTo(0.25);
@@ -101,9 +103,12 @@ describe("<GradientEditor />", () => {
     const onChange = vi.fn();
     render(<GradientEditor gradient={linearGradient()} onChange={onChange} />);
 
-    fireEvent.change(screen.getAllByRole("spinbutton")[0], {
+    const stopInput = screen.getAllByRole("spinbutton")[0];
+    fireEvent.focus(stopInput);
+    fireEvent.change(stopInput, {
       target: { value: "150" },
     });
+    fireEvent.blur(stopInput);
 
     const next = onChange.mock.calls[0][0] as GradientFill;
     expect(next.stops[0].position).toBe(1);
@@ -150,7 +155,9 @@ describe("<GradientEditor />", () => {
 
     const spinbuttons = screen.getAllByRole("spinbutton");
     // angle is the second spinbutton
+    fireEvent.focus(spinbuttons[1]);
     fireEvent.change(spinbuttons[1], { target: { value: "90" } });
+    fireEvent.blur(spinbuttons[1]);
 
     expect(onChange).toHaveBeenCalledTimes(1);
     const next = onChange.mock.calls[0][0] as GradientFill;

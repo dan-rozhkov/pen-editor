@@ -50,13 +50,19 @@ describe("<TypographySection />", () => {
     render(<TypographySection node={textNode()} onUpdate={onUpdate} />);
     const inputs = screen.getAllByRole("spinbutton");
 
+    fireEvent.focus(inputs[0]);
     fireEvent.change(inputs[0], { target: { value: "24" } });
+    fireEvent.blur(inputs[0]);
     expect(onUpdate).toHaveBeenCalledWith({ fontSize: 24 });
 
+    fireEvent.focus(inputs[1]);
     fireEvent.change(inputs[1], { target: { value: "1.4" } });
+    fireEvent.blur(inputs[1]);
     expect(onUpdate).toHaveBeenCalledWith({ lineHeight: 1.4 });
 
+    fireEvent.focus(inputs[2]);
     fireEvent.change(inputs[2], { target: { value: "3" } });
+    fireEvent.blur(inputs[2]);
     expect(onUpdate).toHaveBeenCalledWith({ letterSpacing: 3 });
   });
 
@@ -69,7 +75,9 @@ describe("<TypographySection />", () => {
     // font size, line height, letter spacing, paragraph spacing.
     expect(inputs[3].value).toBe("8");
 
+    fireEvent.focus(inputs[3]);
     fireEvent.change(inputs[3], { target: { value: "16" } });
+    fireEvent.blur(inputs[3]);
     expect(onUpdate).toHaveBeenCalledWith({ paragraphSpacing: 16 });
   });
 
@@ -296,7 +304,10 @@ describe("<TypographySection />", () => {
       render(
         <TypographySection node={textNode({ textWidthMode: "fixed" })} onUpdate={onUpdate} />,
       );
-      fireEvent.change(maxLinesInput(), { target: { value: "3" } });
+      const input = maxLinesInput();
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: "3" } });
+      fireEvent.blur(input);
       expect(onUpdate).toHaveBeenCalledWith({ maxLines: 3 });
     });
 
@@ -308,7 +319,10 @@ describe("<TypographySection />", () => {
           onUpdate={onUpdate}
         />,
       );
-      fireEvent.change(maxLinesInput(), { target: { value: "0" } });
+      const input = maxLinesInput();
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: "0" } });
+      fireEvent.blur(input);
       expect(onUpdate).toHaveBeenCalledWith({ maxLines: undefined });
     });
   });
@@ -323,7 +337,9 @@ describe("<TypographySection />", () => {
       expect(screen.getByRole("button", { name: "Create text style" })).toBeTruthy();
 
       const inputs = screen.getAllByRole("spinbutton");
+      fireEvent.focus(inputs[0]);
       fireEvent.change(inputs[0], { target: { value: "24" } });
+      fireEvent.blur(inputs[0]);
       expect(onUpdate).toHaveBeenCalledWith({ fontSize: 24 });
     });
 
@@ -336,7 +352,9 @@ describe("<TypographySection />", () => {
         />,
       );
       const inputs = screen.getAllByRole("spinbutton");
+      fireEvent.focus(inputs[0]);
       fireEvent.change(inputs[0], { target: { value: "24" } }); // font size
+      fireEvent.blur(inputs[0]);
 
       expect(onUpdate).toHaveBeenCalledWith({
         fontSize: 24,
@@ -356,13 +374,17 @@ describe("<TypographySection />", () => {
         />,
       );
       const inputs = screen.getAllByRole("spinbutton");
+      fireEvent.focus(inputs[0]);
       fireEvent.change(inputs[0], { target: { value: "24" } }); // font size again
+      fireEvent.blur(inputs[0]);
       expect(onUpdate).toHaveBeenCalledWith({
         fontSize: 24,
         textStyleOverrides: ["fontSize"],
       });
 
+      fireEvent.focus(inputs[2]);
       fireEvent.change(inputs[2], { target: { value: "3" } }); // letter spacing
+      fireEvent.blur(inputs[2]);
       expect(onUpdate).toHaveBeenCalledWith({
         letterSpacing: 3,
         textStyleOverrides: ["fontSize", "letterSpacing"],

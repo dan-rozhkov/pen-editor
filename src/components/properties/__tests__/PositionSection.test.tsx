@@ -31,10 +31,14 @@ describe("<PositionSection />", () => {
     render(<PositionSection node={makeNode()} onUpdate={onUpdate} />);
     const inputs = screen.getAllByRole("spinbutton");
 
+    fireEvent.focus(inputs[0]);
     fireEvent.change(inputs[0], { target: { value: "42" } });
+    fireEvent.blur(inputs[0]);
     expect(onUpdate).toHaveBeenCalledWith({ x: 42 });
 
+    fireEvent.focus(inputs[1]);
     fireEvent.change(inputs[1], { target: { value: "-5" } });
+    fireEvent.blur(inputs[1]);
     expect(onUpdate).toHaveBeenCalledWith({ y: -5 });
   });
 

@@ -268,7 +268,9 @@ describe("<FillSection />", () => {
     );
 
     const opacityInput = screen.getByRole("spinbutton");
+    fireEvent.focus(opacityInput);
     fireEvent.change(opacityInput, { target: { value: "25" } });
+    fireEvent.blur(opacityInput);
 
     expect(onUpdate).toHaveBeenCalledTimes(1);
     const arg = onUpdate.mock.calls[0][0];

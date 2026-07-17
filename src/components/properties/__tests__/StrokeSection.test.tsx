@@ -118,13 +118,19 @@ describe("<StrokeSection />", () => {
     it("converts an opacity edit from percent to a 0..1 fraction", () => {
       const onUpdate = renderSection(unifiedNode());
       openLegacyStrokePopover();
-      fireEvent.change(numberInputFor("Opacity"), { target: { value: "20" } });
+      const opacityInput = numberInputFor("Opacity");
+      fireEvent.focus(opacityInput);
+      fireEvent.change(opacityInput, { target: { value: "20" } });
+      fireEvent.blur(opacityInput);
       expect(onUpdate).toHaveBeenCalledWith({ strokeOpacity: 0.2 });
     });
 
     it("emits a weight change", () => {
       const onUpdate = renderSection(unifiedNode());
-      fireEvent.change(numberInputFor("Weight"), { target: { value: "8" } });
+      const weightInput = numberInputFor("Weight");
+      fireEvent.focus(weightInput);
+      fireEvent.change(weightInput, { target: { value: "8" } });
+      fireEvent.blur(weightInput);
       expect(onUpdate).toHaveBeenCalledWith({ strokeWidth: 8 });
     });
 
@@ -174,7 +180,10 @@ describe("<StrokeSection />", () => {
     it("emits a merged per-side object when one side changes", () => {
       const onUpdate = renderSection(perSideNode());
       openLegacyStrokePopover();
-      fireEvent.change(numberInputFor("R"), { target: { value: "10" } });
+      const rInput = numberInputFor("R");
+      fireEvent.focus(rInput);
+      fireEvent.change(rInput, { target: { value: "10" } });
+      fireEvent.blur(rInput);
       expect(onUpdate).toHaveBeenCalledWith({
         strokeWidthPerSide: { top: 1, right: 10, bottom: 3, left: 4 },
       });

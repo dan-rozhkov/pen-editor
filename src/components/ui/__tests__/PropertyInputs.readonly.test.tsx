@@ -19,6 +19,21 @@ describe("PropertyInputs in read-only mode", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it("NumberInput draft layer commits nothing on Enter or blur when read-only", () => {
+    const onChange = vi.fn();
+    render(
+      <ReadOnlyProvider value={true}>
+        <NumberInput label="W" value={10} onChange={onChange} />
+      </ReadOnlyProvider>,
+    );
+    const input = screen.getByDisplayValue("10") as HTMLInputElement;
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "20" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.blur(input);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it("CheckboxInput is disabled when read-only", () => {
     const onChange = vi.fn();
     render(

@@ -39,10 +39,14 @@ describe("<SizeSection />", () => {
     );
     const inputs = screen.getAllByRole("spinbutton");
 
+    fireEvent.focus(inputs[0]);
     fireEvent.change(inputs[0], { target: { value: "300" } });
+    fireEvent.blur(inputs[0]);
     expect(onUpdate).toHaveBeenCalledWith({ width: 300 });
 
+    fireEvent.focus(inputs[1]);
     fireEvent.change(inputs[1], { target: { value: "250" } });
+    fireEvent.blur(inputs[1]);
     expect(onUpdate).toHaveBeenCalledWith({ height: 250 });
   });
 
@@ -65,7 +69,9 @@ describe("<SizeSection />", () => {
     render(<SizeSection node={locked} onUpdate={onUpdate} parentContext={ROOT_CONTEXT} />);
     const inputs = screen.getAllByRole("spinbutton");
 
+    fireEvent.focus(inputs[0]);
     fireEvent.change(inputs[0], { target: { value: "300" } });
+    fireEvent.blur(inputs[0]);
     // height = round(300 / 2) = 150
     expect(onUpdate).toHaveBeenCalledWith({ width: 300, height: 150 });
   });
@@ -145,7 +151,9 @@ describe("<SizeSection />", () => {
       );
       fireEvent.click(screen.getByLabelText("Set min/max sizes"));
       const inputs = screen.getAllByRole("spinbutton");
+      fireEvent.focus(inputs[3]);
       fireEvent.change(inputs[3], { target: { value: "320" } }); // Max W
+      fireEvent.blur(inputs[3]);
       expect(onUpdate).toHaveBeenCalledWith({
         sizing: expect.objectContaining({ maxWidth: 320 }),
       });
@@ -174,7 +182,9 @@ describe("<SizeSection />", () => {
       const node = starNode();
       render(<SizeSection node={node} onUpdate={onUpdate} parentContext={ROOT_CONTEXT} />);
       const inputs = screen.getAllByRole("spinbutton");
+      fireEvent.focus(inputs[0]);
       fireEvent.change(inputs[0], { target: { value: "150" } });
+      fireEvent.blur(inputs[0]);
 
       const expectedPoints = generatePolygonPoints(5, 150, 100, 0.5);
       const call = onUpdate.mock.calls.find((c) => "points" in c[0]);
@@ -188,7 +198,9 @@ describe("<SizeSection />", () => {
       const node = starNode();
       render(<SizeSection node={node} onUpdate={onUpdate} parentContext={ROOT_CONTEXT} />);
       const inputs = screen.getAllByRole("spinbutton");
+      fireEvent.focus(inputs[1]);
       fireEvent.change(inputs[1], { target: { value: "150" } });
+      fireEvent.blur(inputs[1]);
 
       const expectedPoints = generatePolygonPoints(5, 100, 150, 0.5);
       const call = onUpdate.mock.calls.find((c) => "points" in c[0]);

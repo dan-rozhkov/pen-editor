@@ -186,7 +186,9 @@ describe("<ImageFillEditor />", () => {
     expect(numberInputs.length).toBe(4);
     expect(screen.getAllByRole("slider")).toHaveLength(5);
     const leftInput = numberInputs[0] as HTMLInputElement;
+    fireEvent.focus(leftInput);
     fireEvent.change(leftInput, { target: { value: "150" } }); // out-of-range, should clamp
+    fireEvent.blur(leftInput);
 
     expect(onUpdate).toHaveBeenCalledTimes(1);
     const arg = onUpdate.mock.calls[0][0] as {

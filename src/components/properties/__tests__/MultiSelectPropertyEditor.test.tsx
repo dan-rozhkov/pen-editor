@@ -78,7 +78,9 @@ describe("<MultiSelectPropertyEditor />", () => {
 
     // Position renders first: spinbuttons are X, Y, rotation.
     const inputs = screen.getAllByRole("spinbutton");
+    fireEvent.focus(inputs[0]);
     fireEvent.change(inputs[0], { target: { value: "250" } });
+    fireEvent.blur(inputs[0]);
 
     expect(nodeById("rect1").x).toBe(250);
     expect(nodeById("rect2").x).toBe(250);
@@ -93,7 +95,9 @@ describe("<MultiSelectPropertyEditor />", () => {
     // "Opacity %" at index 5.
     const opacity = screen.getAllByRole("spinbutton")[5] as HTMLInputElement;
     expect(opacity.value).toBe("100");
+    fireEvent.focus(opacity);
     fireEvent.change(opacity, { target: { value: "40" } });
+    fireEvent.blur(opacity);
 
     expect(nodeById("rect1").opacity).toBe(0.4);
     expect(nodeById("rect2").opacity).toBe(0.4);

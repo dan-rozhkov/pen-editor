@@ -143,7 +143,9 @@ describe("<LayoutGridSection />", () => {
 
     // First spinbutton in the popover is the Count input.
     const spinbuttons = screen.getAllByRole("spinbutton");
+    fireEvent.focus(spinbuttons[0]);
     fireEvent.change(spinbuttons[0], { target: { value: "8" } });
+    fireEvent.blur(spinbuttons[0]);
 
     expect(onUpdate).toHaveBeenCalledTimes(1);
     const arg = onUpdate.mock.calls[0][0] as { layoutGrids: LayoutGridConfig[] };
