@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { Variable, ThemeName } from "../../types/variable";
 import { getVariableValue } from "../../types/variable";
 import { Input } from "./input";
@@ -17,6 +17,8 @@ import { FlipHorizontalIcon, FlipVerticalIcon, IconContext } from "@phosphor-ico
 import { CustomColorPicker } from "./ColorPicker";
 import { useScrubLabel } from "@/hooks/useScrubLabel";
 import { useReadOnly } from "@/hooks/useReadOnly";
+import { useHistoryStore } from "@/store/historyStore";
+import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { cn } from "@/lib/utils";
 
 function formatVariableNameForDisplay(name: string): string {
@@ -80,18 +82,47 @@ export function NumberInput({
   const readOnly = useReadOnly();
   const scrub = useScrubLabel({ value, onChange, step, min, max });
 
-  // Draft layer: while the field is focused the user edits a local string and
-  // the store is committed exactly once (blur / Enter), so typing doesn't spam
-  // updateNode + undo history per keystroke and intermediate values ("12" on
-  // the way to "120", "-", "1.") never reach the canvas. Escape reverts.
+  // This is a visual editor: every keystroke commits to the store so the canvas
+  // tracks typing live. The draft is only a text buffer for the field itself —
+  // it keeps intermediate strings that parseFloat can't use ("", "-", "1.")
+  // on screen instead of snapping the input back to the last good number.
   const [draft, setDraft] = useState<string | null>(null);
-  // blur fires synchronously after Enter/Escape while the stale closure still
-  // sees a non-null draft — this flag tells the blur handler to skip its commit.
-  const skipBlurCommitRef = useRef(false);
+  // An editing session (focus → blur) is one undo step, same shape as a scrub
+  // drag: snapshot + startBatch at the first real commit, endBatch at the end.
+  // Starting lazily keeps focus-and-leave out of history entirely.
+  const sessionOpenRef = useRef(false);
+
+  // Escape is handled by a window keydown listener registered with
+  // { capture: true } (useCanvasKeyboardShortcuts): it clears the selection,
+  // which unmounts this input before its own keydown/blur handlers can run.
+  // Without this cleanup the batch outlives the component and batchDepth
+  // stays above 0, silently killing history recording for the whole session.
+  useEffect(
+    () => () => {
+      if (!sessionOpenRef.current) return;
+      useHistoryStore.getState().endBatch();
+      sessionOpenRef.current = false;
+    },
+    [],
+  );
 
   const formattedValue = isMixed ? "" : String(Math.round(value * 100) / 100);
   const displayValue = draft ?? formattedValue;
   const mixedProps = isMixed ? { placeholder: "Mixed" } : {};
+
+  const beginSession = () => {
+    if (sessionOpenRef.current) return;
+    const history = useHistoryStore.getState();
+    sessionOpenRef.current = true;
+    history.saveHistory(createSnapshot(useSceneStore.getState()));
+    history.startBatch();
+  };
+
+  const endSession = () => {
+    if (!sessionOpenRef.current) return;
+    useHistoryStore.getState().endBatch();
+    sessionOpenRef.current = false;
+  };
 
   const commitValue = (raw: string) => {
     const parsed = parseFloat(raw);
@@ -101,29 +132,24 @@ export function NumberInput({
     if (max !== undefined) next = Math.min(max, next);
     // In a mixed selection the displayed `value` is only the first node's, so
     // "unchanged vs value" says nothing about the other nodes — always commit.
-    if (isMixed || next !== value) onChange(next);
+    if (!isMixed && next === value) return;
+    beginSession();
+    onChange(next);
   };
 
   const handleFocus = () => {
     if (readOnly) return;
-    // A prior Escape/Enter may have armed the flag without a blur ever landing
-    // (e.g. the element was never actually focused) — never let it leak into
-    // the next editing session and swallow a real commit.
-    skipBlurCommitRef.current = false;
     setDraft(isMixed ? "" : formattedValue);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (readOnly) return;
     setDraft(e.target.value);
+    commitValue(e.target.value);
   };
 
   const handleBlur = () => {
-    if (skipBlurCommitRef.current) {
-      skipBlurCommitRef.current = false;
-      return;
-    }
-    if (!readOnly && draft !== null && draft !== formattedValue) commitValue(draft);
+    endSession();
     setDraft(null);
   };
 
@@ -131,11 +157,10 @@ export function NumberInput({
     if (readOnly) return;
     if (e.key === "Enter") {
       commitValue(e.currentTarget.value);
-      skipBlurCommitRef.current = true;
-      setDraft(null);
-      e.currentTarget.blur();
-    } else if (e.key === "Escape") {
-      skipBlurCommitRef.current = true;
+      // Close the session here rather than leaning on the blur below: Enter
+      // means "done editing" on its own, and blur only fires if the field
+      // actually held focus. handleBlur's endSession() is idempotent.
+      endSession();
       setDraft(null);
       e.currentTarget.blur();
     }
