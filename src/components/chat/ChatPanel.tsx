@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import {
   XIcon,
   PlusIcon,
@@ -7,7 +7,7 @@ import {
   DotsThreeVerticalIcon,
 } from "@phosphor-icons/react";
 import { useChatStore } from "@/store/chatStore";
-import type { AgentMode, ChatTab, ParallelCount } from "@/store/chatStore";
+import type { ChatTab, ParallelCount } from "@/store/chatStore";
 import { useDesignChat } from "@/hooks/useDesignChat";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
@@ -27,17 +27,9 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { CHAT_PRESETS } from "./chatPresets";
-import type { ChatPreset } from "./chatPresets";
 import type { ChatLaunchPayload } from "@/types/chat";
 import { useModelOptions } from "@/hooks/useModelOptions";
 import { chatToMarkdown, chatFilename, downloadMarkdown } from "@/lib/chatExport";
-
-const MODE_OPTIONS = [
-  { value: "edits", label: "Edits" },
-  { value: "prototype", label: "Prototype" },
-  { value: "research", label: "Research" },
-];
 
 const PARALLEL_COUNT_OPTIONS = [
   { value: "1", label: "x1" },
@@ -143,41 +135,12 @@ function TabBar() {
   );
 }
 
-function PresetList({ onSelect }: { onSelect: (preset: ChatPreset) => void }) {
-  return (
-    <div
-      className="flex-1 min-h-0 overflow-y-auto px-3 py-3 flex flex-col gap-2"
-      data-testid="preset-list"
-    >
-      {CHAT_PRESETS.map((preset) => (
-        <button
-          key={preset.id}
-          data-testid={`preset-${preset.id}`}
-          onClick={() => onSelect(preset)}
-          className="text-left px-3 py-2.5 rounded-md border border-border-default hover:bg-secondary"
-        >
-          <span className="text-[13px] text-text-primary leading-snug block">
-            {preset.message}
-          </span>
-          <span className="text-xs text-text-muted mt-1 block capitalize">
-            {preset.mode} / {preset.model}
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function ChatSession({
   sessionId,
   isActive,
-  showPresets,
-  onClosePresets,
 }: {
   sessionId: string;
   isActive: boolean;
-  showPresets: boolean;
-  onClosePresets: () => void;
 }) {
   const {
     messages,
@@ -191,8 +154,6 @@ function ChatSession({
     clearError,
   } = useDesignChat({ sessionId });
 
-  const setModel = useChatStore((s) => s.setModel);
-  const setAgentMode = useChatStore((s) => s.setAgentMode);
   const parallelCount = useChatStore((s) => s.parallelCount);
   const setParallelCount = useChatStore((s) => s.setParallelCount);
   const createTab = useChatStore((s) => s.createTab);
@@ -233,17 +194,6 @@ function ChatSession({
   // run on the main thread and become expensive when several agents stream.
   if (!isActive) {
     return null;
-  }
-
-  const handleSelectPreset = (preset: ChatPreset) => {
-    setAgentMode(preset.mode);
-    setModel(preset.model);
-    setInput(preset.message);
-    onClosePresets();
-  };
-
-  if (showPresets) {
-    return <PresetList onSelect={handleSelectPreset} />;
   }
 
   const handleSubmit = (payload: ChatLaunchPayload): boolean => {
@@ -318,13 +268,10 @@ export function ChatPanelContent() {
   const model = useChatStore((s) => s.model);
   const setModel = useChatStore((s) => s.setModel);
   const modelOptions = useModelOptions();
-  const agentMode = useChatStore((s) => s.agentMode);
-  const setAgentMode = useChatStore((s) => s.setAgentMode);
   const parallelCount = useChatStore((s) => s.parallelCount);
   const setParallelCount = useChatStore((s) => s.setParallelCount);
   const tabs = useChatStore((s) => s.tabs);
   const activeTabId = useChatStore((s) => s.activeTabId);
-  const [showPresets, setShowPresets] = useState(false);
 
   return (
     <div className="w-full h-full bg-surface-panel flex flex-col overflow-hidden">
@@ -333,23 +280,6 @@ export function ChatPanelContent() {
         <span className="text-sm font-medium text-text-primary flex-1">
           Design Agent
         </span>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <button
-                data-testid="presets-toggle"
-                onClick={() => setShowPresets((v) => !v)}
-                className={`-my-0.5 p-1 rounded-lg hover:bg-secondary ${showPresets ? "text-text-primary bg-secondary" : "text-text-muted"}`}
-                aria-label={showPresets ? "Hide presets" : "Show presets"}
-              >
-                <LightningIcon size={16} />
-              </button>
-            }
-          />
-          <TooltipContent>
-            {showPresets ? "Hide presets" : "Show presets"}
-          </TooltipContent>
-        </Tooltip>
         <Tooltip>
           <TooltipTrigger
             render={
@@ -372,7 +302,7 @@ export function ChatPanelContent() {
       </div>
 
       {/* Tab bar */}
-      {!showPresets && <TabBar />}
+      <TabBar />
 
       {/* Keep all sessions mounted so tab switch doesn't reset chat state */}
       {tabs.map((tab: ChatTab) => (
@@ -383,47 +313,33 @@ export function ChatPanelContent() {
             tab.id === activeTabId ? "flex-1 min-h-0 flex flex-col" : "hidden"
           }
         >
-          <ChatSession
-            sessionId={tab.id}
-            isActive={tab.id === activeTabId}
-            showPresets={showPresets}
-            onClosePresets={() => setShowPresets(false)}
-          />
+          <ChatSession sessionId={tab.id} isActive={tab.id === activeTabId} />
         </div>
       ))}
 
       {/* Model selector */}
-      {!showPresets && (
-        <div className="px-3 pb-2 shrink-0 flex items-center gap-2">
-          <SelectWithOptions
-            value={agentMode}
-            options={MODE_OPTIONS}
-            onValueChange={(value) => setAgentMode(value as AgentMode)}
-            size="sm"
-            className="w-fit"
-          />
-          <SelectWithOptions
-            value={model}
-            options={modelOptions}
-            onValueChange={(value) => {
-              if (value) setModel(value);
-            }}
-            size="sm"
-            className="min-w-0 flex-1"
-          />
-          <SelectWithOptions
-            value={String(parallelCount)}
-            options={PARALLEL_COUNT_OPTIONS}
-            onValueChange={(value) => {
-              if (!value) return;
-              setParallelCount(Number(value) as ParallelCount);
-            }}
-            size="sm"
-            className="w-fit gap-1 pl-1.5 pr-1.5"
-            triggerPrefix={<LightningIcon className="size-3 text-text-muted" />}
-          />
-        </div>
-      )}
+      <div className="px-3 pb-2 shrink-0 flex items-center gap-2">
+        <SelectWithOptions
+          value={model}
+          options={modelOptions}
+          onValueChange={(value) => {
+            if (value) setModel(value);
+          }}
+          size="sm"
+          className="min-w-0 flex-1"
+        />
+        <SelectWithOptions
+          value={String(parallelCount)}
+          options={PARALLEL_COUNT_OPTIONS}
+          onValueChange={(value) => {
+            if (!value) return;
+            setParallelCount(Number(value) as ParallelCount);
+          }}
+          size="sm"
+          className="w-fit gap-1 pl-1.5 pr-1.5"
+          triggerPrefix={<LightningIcon className="size-3 text-text-muted" />}
+        />
+      </div>
     </div>
   );
 }

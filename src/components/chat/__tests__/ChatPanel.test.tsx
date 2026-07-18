@@ -111,22 +111,6 @@ describe("<ChatPanelContent />", () => {
     expect(clearError).toHaveBeenCalledTimes(1);
   });
 
-  it("toggles the presets view from the header and renders presets", () => {
-    render(<ChatPanelContent />);
-    fireEvent.click(screen.getByTestId("presets-toggle"));
-    // Preset list replaces the message list.
-    expect(screen.getByTestId("preset-list")).toBeTruthy();
-  });
-
-  it("selecting a preset seeds the input and mode/model", () => {
-    render(<ChatPanelContent />);
-    fireEvent.click(screen.getByTestId("presets-toggle"));
-    // Click the first preset (research-pricing has a stable id).
-    fireEvent.click(screen.getByTestId("preset-research-pricing"));
-    expect(setInput).toHaveBeenCalledTimes(1);
-    expect(typeof setInput.mock.calls[0][0]).toBe("string");
-  });
-
   it("shows the Stop control while loading", () => {
     mockState.isLoading = true;
     render(<ChatPanelContent />);
