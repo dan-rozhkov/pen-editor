@@ -334,7 +334,9 @@ export function InlineTextEditor({
     (state) => state.updateNodeWithoutHistory,
   )
   const stopEditing = useSelectionStore((state) => state.stopEditing)
-  const { scale, x, y } = useViewportStore()
+  const scale = useViewportStore((s) => s.scale)
+  const x = useViewportStore((s) => s.x)
+  const y = useViewportStore((s) => s.y)
   const variables = useVariableStore((state) => state.variables)
 
   // Resolve the fill color. An explicit color always wins; a linked node with

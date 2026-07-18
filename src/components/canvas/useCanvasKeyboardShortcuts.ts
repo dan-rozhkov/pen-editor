@@ -7,7 +7,6 @@ import { createKeyDownHandler } from "./keyboardCommands";
 import { copyAsCss, copyAsSvg } from "./copyAsActions";
 
 interface CanvasKeyboardShortcutsParams {
-  copiedNodes: SceneNode[];
   dimensions: { width: number; height: number };
   isMiddleMouseDown: boolean;
   setIsSpacePressed: (value: boolean) => void;
@@ -35,7 +34,6 @@ interface CanvasKeyboardShortcutsParams {
 }
 
 export function useCanvasKeyboardShortcuts({
-  copiedNodes,
   dimensions,
   isMiddleMouseDown,
   setIsSpacePressed,
@@ -168,7 +166,6 @@ export function useCanvasKeyboardShortcuts({
     booleanOperation,
     cancelDrawing,
     clearSelection,
-    copiedNodes,
     copyNodes,
     deleteNode,
     dimensions,

@@ -28,7 +28,9 @@ export function InlineNameEditor({ node, absoluteX, absoluteY }: InlineNameEdito
   const editNameRef = useRef(editName) // Track current value
   const updateNode = useSceneStore((state) => state.updateNode)
   const stopEditing = useSelectionStore((state) => state.stopEditing)
-  const { scale, x, y } = useViewportStore()
+  const scale = useViewportStore((s) => s.scale)
+  const x = useViewportStore((s) => s.x)
+  const y = useViewportStore((s) => s.y)
 
   // Calculate screen position with fixed-size label
   const screenX = absoluteX * scale + x

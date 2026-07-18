@@ -2,7 +2,10 @@ import { PerspectiveIcon } from "@phosphor-icons/react";
 import { useLayers3DStore } from "@/store/layers3dStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
-import { resolveTargetFrame } from "@/pixi/layers3d/resolveTargetFrame";
+import {
+  resolveTargetFrame,
+  resolveTargetFrameFromState,
+} from "@/pixi/layers3d/resolveTargetFrame";
 import {
   Tooltip,
   TooltipContent,
@@ -14,14 +17,10 @@ export function Layers3DToggle() {
   const enter = useLayers3DStore((s) => s.enter);
   const exit = useLayers3DStore((s) => s.exit);
 
-  // Subscribed so the button re-renders when the resolved target frame
-  // could change — resolveTargetFrame() itself reads store state
-  // untracked, so without these subscriptions the disabled state would
-  // only refresh via incidental re-renders elsewhere.
-  useSelectionStore((s) => s.selectedIds);
-  useSceneStore((s) => s.rootIds);
-
-  const target = resolveTargetFrame();
+  const selectedIds = useSelectionStore((s) => s.selectedIds);
+  const target = useSceneStore((s) =>
+    resolveTargetFrame(s.nodesById, s.parentById, s.rootIds, selectedIds),
+  );
   const disabled = !active && target === null;
 
   const onClick = () => {
@@ -29,7 +28,7 @@ export function Layers3DToggle() {
       exit();
       return;
     }
-    const frameId = resolveTargetFrame();
+    const frameId = resolveTargetFrameFromState();
     if (frameId) void enter(frameId);
   };
 

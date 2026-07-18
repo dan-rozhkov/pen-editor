@@ -221,12 +221,19 @@ export function PixiCanvas() {
   );
   const booleanOperation = useSceneStore((state) => state.booleanOperation);
   const restoreSnapshot = useSceneStore((state) => state.restoreSnapshot);
-  const { copiedNodes, copyNodes } = useClipboardStore();
-  const { clearSelection, editingNodeId, editingMode } =
-    useSelectionStore();
+  const copyNodes = useClipboardStore((s) => s.copyNodes);
+  const clearSelection = useSelectionStore((s) => s.clearSelection);
+  const editingNodeId = useSelectionStore((s) => s.editingNodeId);
+  const editingMode = useSelectionStore((s) => s.editingMode);
   const selectedIds = useSelectionStore((s) => s.selectedIds);
-  const { undo, redo, saveHistory, startBatch, endBatch } = useHistoryStore();
-  const { activeTool, cancelDrawing, toggleTool } = useDrawModeStore();
+  const undo = useHistoryStore((s) => s.undo);
+  const redo = useHistoryStore((s) => s.redo);
+  const saveHistory = useHistoryStore((s) => s.saveHistory);
+  const startBatch = useHistoryStore((s) => s.startBatch);
+  const endBatch = useHistoryStore((s) => s.endBatch);
+  const activeTool = useDrawModeStore((s) => s.activeTool);
+  const cancelDrawing = useDrawModeStore((s) => s.cancelDrawing);
+  const toggleTool = useDrawModeStore((s) => s.toggleTool);
   const isCanvasLoading = useLoadingStore((s) => s.isCanvasLoading);
   const setPixiRefs = useCanvasRefStore((s) => s.setPixiRefs);
   const editorMode = useEditorModeStore((s) => s.mode);
@@ -262,7 +269,6 @@ export function PixiCanvas() {
 
   // Keyboard shortcuts (reuse existing hook)
   useCanvasKeyboardShortcuts({
-    copiedNodes,
     dimensions,
     isMiddleMouseDown,
     setIsSpacePressed,

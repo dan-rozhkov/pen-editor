@@ -24,7 +24,9 @@ import { Layers3DToggle } from "./canvas/Layers3DToggle";
 import { SpeakerNotesCard } from "./SpeakerNotesCard";
 
 export function PrimitivesPanel() {
-  const { activeTool, toggleTool, setActiveTool } = useDrawModeStore();
+  const activeTool = useDrawModeStore((s) => s.activeTool);
+  const toggleTool = useDrawModeStore((s) => s.toggleTool);
+  const setActiveTool = useDrawModeStore((s) => s.setActiveTool);
 
   const leadingTools = LEADING_TOOLS;
   const trailingTools = TRAILING_TOOLS;
