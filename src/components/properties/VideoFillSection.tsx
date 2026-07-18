@@ -1,22 +1,22 @@
 import { useState } from "react";
 import type { ImageCropRect, ImageFillMode, VideoFill } from "@/types/scene";
-import { CheckboxInput, NumberInput, SelectInput, TextInput } from "@/components/ui/PropertyInputs";
+import { CheckboxInput, TextInput } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
-import { IconButton } from "@/components/ui/IconButton";
-import { CropIcon } from "@phosphor-icons/react";
 import { useFileUpload } from "@/components/properties/useFileUpload";
 import { FileUploadControl } from "@/components/properties/FileUploadControl";
 import { FULL_CROP_RECT, clampCropRect, isFullCropRect } from "@/lib/imageCrop/cropRect";
 import { fillModeToObjectFit } from "@/lib/cssBackground";
 import { createDefaultVideoPlayback } from "@/utils/fillUtils";
 import { parseYouTubeId, youTubeThumbnailUrl } from "@/lib/video/youtube";
+import { CropRectGrid, MediaModeRow, MediaPreviewReplace } from "@/components/properties/mediaFillControls";
 
 /**
  * Editor for a single video fill — the moving-image sibling of
- * `ImageFillEditor`. Reuses the exact same fill/fit `mode` selector and crop
- * rect editor (the crop math is shared via `@/lib/imageCrop/cropRect`), and
- * adds playback controls (autoplay / loop / mute). Video has no color
- * adjustments (image-only), so that section is intentionally absent.
+ * `ImageFillEditor`. Shares the mode+crop-toggle row and the crop grid with
+ * `ImageFillEditor` via `mediaFillControls.tsx` (the crop math itself is
+ * shared via `@/lib/imageCrop/cropRect`), and adds playback controls
+ * (autoplay / loop / mute). Video has no color adjustments (image-only), so
+ * that section is intentionally absent.
  *
  * `onChange` receives the full updated `VideoFill` so the parent (FillSection)
  * can splice it back into the paint stack.
@@ -111,14 +111,12 @@ export function VideoFillEditor({
 
   return (
     <div className="flex flex-col gap-2">
-      <input
-        ref={fileInputRef}
-        type="file"
+      <MediaPreviewReplace
+        fileInputRef={fileInputRef}
+        onFileSelect={handleFileSelect}
         accept="video/mp4,video/webm,video/*"
-        className="hidden"
-        onChange={handleFileSelect}
-      />
-      <div className="group/video-preview relative overflow-hidden rounded border border-border-light bg-secondary">
+        replaceLabel="Replace Video"
+      >
         {youtubeId ? (
           <img
             src={youTubeThumbnailUrl(youtubeId)}
@@ -137,41 +135,15 @@ export function VideoFillEditor({
             playsInline
           />
         )}
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity group-hover/video-preview:opacity-100 group-focus-within/video-preview:opacity-100">
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            onClick={() => fileInputRef.current?.click()}
-            className="pointer-events-auto w-auto shrink-0 opacity-100 shadow-sm hover:opacity-100 focus-visible:opacity-100"
-          >
-            Replace Video
-          </Button>
-        </div>
-      </div>
+      </MediaPreviewReplace>
 
-      <div className="flex items-center gap-1">
-        <SelectInput
-          label="Mode"
-          value={video.mode}
-          options={[
-            { value: "fill", label: "Fill (Cover)" },
-            { value: "fit", label: "Fit (Contain)" },
-            { value: "stretch", label: "Stretch" },
-          ]}
-          onChange={handleModeChange}
-          labelClassName="text-xs font-normal"
-        />
-        <IconButton
-          type="button"
-          size="icon-sm"
-          variant={cropEditorOpen ? "default" : "ghost"}
-          onClick={() => setCropEditorOpen((v) => !v)}
-          tooltip="Crop video"
-        >
-          <CropIcon />
-        </IconButton>
-      </div>
+      <MediaModeRow
+        mode={video.mode}
+        onModeChange={handleModeChange}
+        cropEditorOpen={cropEditorOpen}
+        onToggleCropEditor={() => setCropEditorOpen((v) => !v)}
+        cropTooltip="Crop video"
+      />
 
       {cropped && (
         <div className="flex items-center gap-2">
@@ -181,46 +153,7 @@ export function VideoFillEditor({
         </div>
       )}
 
-      {cropEditorOpen && (
-        <div className="grid grid-cols-2 gap-2">
-          <NumberInput
-            label="Left"
-            value={Math.round(crop.x * 100)}
-            onChange={(v) => handleCropChange({ ...crop, x: v / 100 })}
-            min={0}
-            max={99}
-            step={1}
-            labelOutside
-          />
-          <NumberInput
-            label="Top"
-            value={Math.round(crop.y * 100)}
-            onChange={(v) => handleCropChange({ ...crop, y: v / 100 })}
-            min={0}
-            max={99}
-            step={1}
-            labelOutside
-          />
-          <NumberInput
-            label="Width"
-            value={Math.round(crop.width * 100)}
-            onChange={(v) => handleCropChange({ ...crop, width: v / 100 })}
-            min={1}
-            max={100}
-            step={1}
-            labelOutside
-          />
-          <NumberInput
-            label="Height"
-            value={Math.round(crop.height * 100)}
-            onChange={(v) => handleCropChange({ ...crop, height: v / 100 })}
-            min={1}
-            max={100}
-            step={1}
-            labelOutside
-          />
-        </div>
-      )}
+      {cropEditorOpen && <CropRectGrid crop={crop} onChange={handleCropChange} />}
 
       <div className="-mx-3 flex flex-col gap-2 border-t border-border-default px-3 pt-3">
         <CheckboxInput

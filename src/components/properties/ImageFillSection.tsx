@@ -1,10 +1,7 @@
 import { useState } from "react";
 import type { ImageAdjustments, ImageCropRect, ImageFillMode, SceneNode } from "@/types/scene";
-import { NumberInput, SelectInput } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
-import { IconButton } from "@/components/ui/IconButton";
 import { Slider } from "@/components/ui/slider";
-import { CropIcon } from "@phosphor-icons/react";
 import { useFileUpload } from "@/components/properties/useFileUpload";
 import { FileUploadControl } from "@/components/properties/FileUploadControl";
 import { FULL_CROP_RECT, clampCropRect, isFullCropRect, cropRectToBackgroundCss } from "@/lib/imageCrop/cropRect";
@@ -15,6 +12,7 @@ import {
   adjustmentsToCssFilter,
 } from "@/lib/imageAdjustments/imageAdjustments";
 import { imageModeToCssSize } from "@/lib/cssBackground";
+import { CropRectGrid, MediaModeRow, MediaPreviewReplace } from "@/components/properties/mediaFillControls";
 
 type EditableImageFill = {
   url: string;
@@ -137,14 +135,12 @@ export function ImageFillEditor({
 
   return (
     <div className="flex flex-col gap-2">
-      <input
-        ref={fileInputRef}
-        type="file"
+      <MediaPreviewReplace
+        fileInputRef={fileInputRef}
+        onFileSelect={handleFileSelect}
         accept="image/*"
-        className="hidden"
-        onChange={handleFileSelect}
-      />
-      <div className="group/image-preview relative overflow-hidden rounded border border-border-light bg-secondary">
+        replaceLabel="Replace Image"
+      >
         <div
           role="img"
           aria-label="Fill preview"
@@ -157,41 +153,15 @@ export function ImageFillEditor({
             filter: adjustmentsToCssFilter(imageFill.adjustments),
           }}
         />
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity group-hover/image-preview:opacity-100 group-focus-within/image-preview:opacity-100">
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            onClick={() => fileInputRef.current?.click()}
-            className="pointer-events-auto w-auto shrink-0 opacity-100 shadow-sm hover:opacity-100 focus-visible:opacity-100"
-          >
-            Replace Image
-          </Button>
-        </div>
-      </div>
+      </MediaPreviewReplace>
 
-      <div className="flex items-center gap-1">
-        <SelectInput
-          label="Mode"
-          value={imageFill.mode}
-          options={[
-            { value: "fill", label: "Fill (Cover)" },
-            { value: "fit", label: "Fit (Contain)" },
-            { value: "stretch", label: "Stretch" },
-          ]}
-          onChange={handleModeChange}
-          labelClassName="text-xs font-normal"
-        />
-        <IconButton
-          type="button"
-          size="icon-sm"
-          variant={cropEditorOpen ? "default" : "ghost"}
-          onClick={() => setCropEditorOpen((v) => !v)}
-          tooltip="Crop image"
-        >
-          <CropIcon />
-        </IconButton>
-      </div>
+      <MediaModeRow
+        mode={imageFill.mode}
+        onModeChange={handleModeChange}
+        cropEditorOpen={cropEditorOpen}
+        onToggleCropEditor={() => setCropEditorOpen((v) => !v)}
+        cropTooltip="Crop image"
+      />
 
       {cropped && (
         <div className="flex items-center gap-2">
@@ -201,46 +171,7 @@ export function ImageFillEditor({
         </div>
       )}
 
-      {cropEditorOpen && (
-        <div className="grid grid-cols-2 gap-2">
-          <NumberInput
-            label="Left"
-            value={Math.round(crop.x * 100)}
-            onChange={(v) => handleCropChange({ ...crop, x: v / 100 })}
-            min={0}
-            max={99}
-            step={1}
-            labelOutside
-          />
-          <NumberInput
-            label="Top"
-            value={Math.round(crop.y * 100)}
-            onChange={(v) => handleCropChange({ ...crop, y: v / 100 })}
-            min={0}
-            max={99}
-            step={1}
-            labelOutside
-          />
-          <NumberInput
-            label="Width"
-            value={Math.round(crop.width * 100)}
-            onChange={(v) => handleCropChange({ ...crop, width: v / 100 })}
-            min={1}
-            max={100}
-            step={1}
-            labelOutside
-          />
-          <NumberInput
-            label="Height"
-            value={Math.round(crop.height * 100)}
-            onChange={(v) => handleCropChange({ ...crop, height: v / 100 })}
-            min={1}
-            max={100}
-            step={1}
-            labelOutside
-          />
-        </div>
-      )}
+      {cropEditorOpen && <CropRectGrid crop={crop} onChange={handleCropChange} />}
 
       <div className="-mx-3 flex flex-col gap-2 border-t border-border-default px-3 pt-3">
         <div className="flex flex-col gap-2">

@@ -1,8 +1,8 @@
 import type { PatternFill } from "@/types/scene";
 import { NumberInput } from "@/components/ui/PropertyInputs";
-import { Button } from "@/components/ui/button";
 import { useFileUpload } from "@/components/properties/useFileUpload";
 import { FileUploadControl } from "@/components/properties/FileUploadControl";
+import { MediaPreviewReplace } from "@/components/properties/mediaFillControls";
 
 /**
  * Editor for a pattern paint's tile source + tiling params. Scale and row
@@ -34,31 +34,18 @@ export function PatternFillEditor({
 
   return (
     <div className="flex flex-col gap-2">
-      <input
-        ref={fileInputRef}
-        type="file"
+      <MediaPreviewReplace
+        fileInputRef={fileInputRef}
+        onFileSelect={handleFileSelect}
         accept="image/*"
-        className="hidden"
-        onChange={handleFileSelect}
-      />
-      <div className="group/pattern-preview relative h-20 w-full overflow-hidden rounded border border-border-light bg-secondary">
+        replaceLabel="Replace Tile"
+      >
         <img
           src={pattern.url}
           alt="Tile preview"
           className="h-full w-full object-contain"
         />
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity group-hover/pattern-preview:opacity-100 group-focus-within/pattern-preview:opacity-100">
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            onClick={() => fileInputRef.current?.click()}
-            className="pointer-events-auto w-auto shrink-0 opacity-100 shadow-sm hover:opacity-100 focus-visible:opacity-100"
-          >
-            Replace Tile
-          </Button>
-        </div>
-      </div>
+      </MediaPreviewReplace>
 
       <NumberInput
         label="Scale"
