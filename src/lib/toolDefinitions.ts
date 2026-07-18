@@ -28,7 +28,7 @@ export interface ToolDefinition {
   icon: ToolIconComponent;
   label: string;
   tool: DrawToolType;
-  shortcut: string;
+  shortcut?: string;
 }
 
 /**
@@ -65,7 +65,7 @@ export const RECT_SUB_TOOLS: ToolDefinition[] = [
   { icon: LineSegmentIcon, label: "Line", tool: "line", shortcut: "L" },
   { icon: HexagonIcon, label: "Polygon", tool: "polygon", shortcut: "G" },
   { icon: StarIcon, label: "Star", tool: "star", shortcut: "S" },
-  { icon: FlowArrow, label: "Connector", tool: "connector", shortcut: "C" },
+  { icon: FlowArrow, label: "Connector", tool: "connector", shortcut: "N" },
 ];
 
 export const PEN_TOOL: ToolDefinition = {
@@ -80,7 +80,7 @@ export const PEN_SUB_TOOLS: ToolDefinition[] = [
   // Click a vector path on canvas to convert it into text-on-a-path (fill
   // and effects migrate onto the new text layer; no source path node
   // remains). See src/pixi/interaction/textPathController.ts.
-  { icon: TextOnPathIcon, label: "Text on Path", tool: "text-path", shortcut: "⇧T" },
+  { icon: TextOnPathIcon, label: "Text on Path", tool: "text-path" },
 ];
 
 export const COMMENT_TOOL: ToolDefinition = {

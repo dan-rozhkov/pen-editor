@@ -93,6 +93,8 @@ describe("keyboardCommands — comment mode (C / Shift+C)", () => {
     const deps = makeDeps();
     const h = createKeyDownHandler(deps);
     h(key("KeyN"));
-    expect(deps.toggleTool).toHaveBeenCalledWith("connector");
+    // The tool-letter dispatch goes straight to the store (not the injected
+    // `toggleTool` dep) — see keyboardCommands.tools.test.ts.
+    expect(useDrawModeStore.getState().activeTool).toBe("connector");
   });
 });

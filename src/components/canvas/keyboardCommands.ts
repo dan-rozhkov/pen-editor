@@ -1,6 +1,7 @@
 import type { SceneNode, HistorySnapshot } from "@/types/scene";
 import type { BooleanOpKind } from "@/lib/booleanOps";
 import { useDrawModeStore } from "@/store/drawModeStore";
+import { ALL_TOOLS } from "@/lib/toolDefinitions";
 import { usePenToolStore } from "@/store/penToolStore";
 import { useUIVisibilityStore } from "@/store/uiVisibilityStore";
 import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
@@ -26,6 +27,15 @@ import {
   handleEnterEditing,
   handleTabNavigation,
 } from "./keyboardNavigation";
+
+// Letters V/F/R/O/T/L/P/G/S/E/D/N/C/K activate tools. This map is the single
+// source of truth: `toolDefinitions` feeds toolbar + palette display, and the
+// dispatch below is generated from it — change a letter in ONE place.
+// (C used to be Connector's hotkey; it now enters/exits comment mode
+// (cmt-01) — connector moved to N.)
+const TOOL_BY_KEY_CODE = new Map(
+  ALL_TOOLS.filter((t) => t.shortcut).map((t) => [`Key${t.shortcut}`, t.tool]),
+);
 
 /**
  * Dependencies the keydown handler needs from the host hook. These mirror the
@@ -548,76 +558,14 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
     }
 
     if (!isTyping && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
-      if (e.code === "KeyV") {
+      const tool = TOOL_BY_KEY_CODE.get(e.code);
+      if (tool) {
         e.preventDefault();
-        useDrawModeStore.getState().setActiveTool(null);
-        return;
-      }
-      if (e.code === "KeyF") {
-        e.preventDefault();
-        toggleTool("frame");
-        return;
-      }
-      if (e.code === "KeyR") {
-        e.preventDefault();
-        toggleTool("rect");
-        return;
-      }
-      if (e.code === "KeyO") {
-        e.preventDefault();
-        toggleTool("ellipse");
-        return;
-      }
-      if (e.code === "KeyT") {
-        e.preventDefault();
-        toggleTool("text");
-        return;
-      }
-      if (e.code === "KeyL") {
-        e.preventDefault();
-        toggleTool("line");
-        return;
-      }
-      if (e.code === "KeyP") {
-        e.preventDefault();
-        toggleTool("pen");
-        return;
-      }
-      if (e.code === "KeyG") {
-        e.preventDefault();
-        toggleTool("polygon");
-        return;
-      }
-      if (e.code === "KeyS") {
-        e.preventDefault();
-        toggleTool("star");
-        return;
-      }
-      if (e.code === "KeyE") {
-        e.preventDefault();
-        toggleTool("embed");
-        return;
-      }
-      if (e.code === "KeyD") {
-        e.preventDefault();
-        toggleTool("pencil");
-        return;
-      }
-      if (e.code === "KeyN") {
-        e.preventDefault();
-        toggleTool("connector");
-        return;
-      }
-      if (e.code === "KeyC") {
-        // C enters/exits comment mode (cmt-01). This replaced the connector
-        // tool's old C hotkey — connector moved to N (KeyN, above).
-        e.preventDefault();
-        useDrawModeStore.getState().toggleTool("comment");
-        return;
-      }
-      if (e.code === "KeyK") {
-        e.preventDefault();
-        toggleTool("scale");
+        if (tool === "cursor") {
+          useDrawModeStore.getState().setActiveTool(null);
+        } else {
+          useDrawModeStore.getState().toggleTool(tool);
+        }
         return;
       }
     }

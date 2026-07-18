@@ -84,7 +84,8 @@ Modifiers: **⌘/Ctrl** = Command on macOS / Control on Windows·Linux, **⌥/Al
 | `D` | Pencil (freehand) |
 | `T` | Text |
 | `E` | Embed (HTML) |
-| `C` | Connector |
+| `N` | Connector |
+| `C` | Comment |
 | `K` | Scale |
 
 ### Edit
@@ -114,6 +115,7 @@ Modifiers: **⌘/Ctrl** = Command on macOS / Control on Windows·Linux, **⌥/Al
 | `⌘/Ctrl` + `⌥/Alt` + `V` | Paste properties (style) |
 | `⌘/Ctrl` + `Shift` + `C` | Copy as CSS |
 | `⌘/Ctrl` + `Shift` + `S` | Copy as SVG |
+| `⌘/Ctrl` + `Shift` + `[` / `]` | Move node up / down among siblings |
 
 > Copy as CSS / SVG are also available from the canvas **right-click context menu**.
 
@@ -135,6 +137,10 @@ Modifiers: **⌘/Ctrl** = Command on macOS / Control on Windows·Linux, **⌥/Al
 | `⌘/Ctrl` + `\` | Toggle UI panels |
 | `Shift` + `R` | Toggle rulers |
 | `Shift` + `G` | Toggle layout grids |
+| `Shift` + `C` | Toggle comment pin visibility |
+| `Shift` + `D` | Toggle Dev (inspect) mode |
+| `Shift` + `M` | Toggle measure tool (in Dev mode) |
+| `⌘/Ctrl` + `Shift` + `O` | Toggle outline mode |
 | `⌘/Ctrl` + `Enter` | Enter present mode |
 
 ### Present mode
