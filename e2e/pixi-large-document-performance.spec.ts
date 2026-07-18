@@ -12,10 +12,20 @@ const PERF_NODES = Math.max(100, parseInt(process.env.PERF_NODES ?? "5000", 10) 
 // rounded up — max is noisier frame-to-frame (GC pauses, first-frame JIT) than
 // avg, so 1.5x on max alone would flake; 2x keeps it a regression tripwire
 // without gating on noise.
-const FLUSH_AVG_BUDGET_MS = 0.6; // measured ~0.33-0.35ms avg @5k (3 runs)
-const FLUSH_MAX_BUDGET_MS = 5; // measured ~2.4ms max @5k (3 runs)
-const CULLING_AVG_BUDGET_MS = 0.1; // measured ~0.03-0.045ms avg @5k (3 runs)
-const CULLING_MAX_BUDGET_MS = 0.5; // measured ~0.2ms max @5k (3 runs)
+// These budgets are calibrated on a local dev machine. GitHub's shared CI
+// runners have ~2-3x slower CPUs, and this cost is JS work in the sync layer,
+// not GPU — verified by forcing software WebGL locally, which does NOT move the
+// numbers (so the CI gap is pure CPU speed, and a fixed absolute-ms budget
+// calibrated locally fails on CI purely on hardware). We therefore use looser
+// budgets under CI. They stay a real regression tripwire: a reintroduced O(N)
+// hot path at 5k nodes lands ~10x over even the CI budget. Observed on CI:
+// flush avg ~0.75-0.95ms.
+const CI = !!process.env.CI;
+const budget = (local: number, ci: number) => (CI ? ci : local);
+const FLUSH_AVG_BUDGET_MS = budget(0.6, 2.0); // measured ~0.33-0.35ms avg @5k local
+const FLUSH_MAX_BUDGET_MS = budget(5, 12); // measured ~2.4ms max @5k local
+const CULLING_AVG_BUDGET_MS = budget(0.1, 0.4); // measured ~0.03-0.045ms avg @5k local
+const CULLING_MAX_BUDGET_MS = budget(0.5, 2); // measured ~0.2ms max @5k local
 
 // Perf probe: seeds PERF_NODES nodes, simulates pan + node move, reads
 // perfStats. Hard budgets below are calibrated at the default 5000-node size;

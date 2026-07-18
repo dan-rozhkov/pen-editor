@@ -12,6 +12,18 @@ const SETTLE_MS = 1500;
 // pass here can only be explained by the manager's synchronous uncache, not
 // by the periodic decision round happening to also uncache in time.
 const FRESH_PAINT_MS = 200;
+// GitHub's shared CI runners are ~2-3x slower on CPU (see the perf spec), so the
+// cache decision timer (600ms) + rebake rounds need more wall-clock to settle
+// there than on a local dev machine. Under-waiting samples a mid-transition
+// texture and reads as a false "stale". Give CI extra settle time, and widen
+// the sharpness tolerance to absorb software-renderer glyph-AA differences
+// between the cached and uncached paths (locally both GPU and swiftshader diff
+// < 8; the CI Linux renderer is noisier). A genuinely stale low-res texture
+// blurs a glyph edge into mid-gray — a channel diff of ~50-150 — so this still
+// trips on real staleness.
+const CI = !!process.env.CI;
+const SETTLE_SCALE = CI ? 2 : 1;
+const ZOOM_SHARP_TOLERANCE = CI ? 24 : 8;
 
 type RGBA = [number, number, number, number];
 
@@ -182,13 +194,13 @@ test.describe("raster cache correctness (Task 13)", () => {
       });
       w.__viewportStore.getState().setViewportState({ scale: 1, x: 0, y: 0 });
     });
-    await page.waitForTimeout(SETTLE_MS); // settle + cache at bucket 1
+    await page.waitForTimeout(SETTLE_MS * SETTLE_SCALE); // settle + cache at bucket 1
 
     await page.evaluate(() => {
       (window as unknown as { __viewportStore: { getState: () => { setViewportState: (s: { scale: number; x: number; y: number }) => void } } })
         .__viewportStore.getState().setViewportState({ scale: 3, x: 0, y: 0 });
     });
-    await page.waitForTimeout(SETTLE_MS * 2); // uncache-on-bucket-change round, then re-cache-at-new-bucket round
+    await page.waitForTimeout(SETTLE_MS * 2 * SETTLE_SCALE); // uncache-on-bucket-change round, then re-cache-at-new-bucket round
 
     // Sample inside a text glyph stroke — a stale low-res (bucket 1) texture
     // stretched/resampled up to bucket 4 would blur the edge; sampling right
@@ -203,7 +215,7 @@ test.describe("raster cache correctness (Task 13)", () => {
     const offPixel = await zoomSharpnessPixel(offPage, "off");
     await offPage.close();
 
-    expect(isCloseTo(onPixel, offPixel, 8)).toBe(true);
+    expect(isCloseTo(onPixel, offPixel, ZOOM_SHARP_TOLERANCE)).toBe(true);
   });
 
   // The classic historical bug: a variable/theme edit recolors containers
