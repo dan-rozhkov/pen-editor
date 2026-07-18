@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import type { SceneNode } from "@/types/scene";
 import { useSceneStore } from "@/store/sceneStore";
+import { collectSubtreeIds } from "@/utils/nodeUtils";
+import { useShallow } from "zustand/react/shallow";
 import { ColorInput, PropertySection } from "@/components/ui/PropertyInputs";
 import {
   collectSelectionColors,
@@ -65,18 +67,35 @@ export function SelectionColorRow({
  * single undo step. Hidden when the selection carries no colors.
  */
 export function SelectionColorsSection({ nodes }: SelectionColorsSectionProps) {
-  const nodesById = useSceneStore((s) => s.nodesById);
-  const childrenById = useSceneStore((s) => s.childrenById);
   const updateNodesById = useSceneStore((s) => s.updateNodesById);
 
-  const colors = useMemo(
-    () => collectSelectionColors(nodes, nodesById, childrenById),
-    [nodes, nodesById, childrenById],
+  // Narrow subscription: re-render only when a node inside the SELECTION's
+  // own subtrees changes, not on every scene mutation elsewhere (e.g. every
+  // frame of a drag on an unselected node) — mirrors the pattern in
+  // SizeSection.tsx. `basicMutations.ts` only replaces the touched id's entry
+  // in `nodesById`/`childrenById`, so untouched nodes keep their original
+  // object identity across mutations and `useShallow` short-circuits the
+  // re-render when nothing in these subtrees changed.
+  const rootIds = useMemo(() => nodes.map((n) => n.id), [nodes]);
+  const selectionSnapshot = useSceneStore(
+    useShallow((s) =>
+      collectSubtreeIds(rootIds, s.childrenById).map((id) => s.nodesById[id]),
+    ),
   );
+
+  const colors = useMemo(() => {
+    const { nodesById, childrenById } = useSceneStore.getState();
+    return collectSelectionColors(nodes, nodesById, childrenById);
+    // `selectionSnapshot` (not `nodesById`/`childrenById` directly) is the
+    // recompute trigger — see the comment above. It's not referenced in the
+    // body (the lookup happens via `getState()`), hence the lint override.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes, selectionSnapshot]);
 
   if (colors.length === 0) return null;
 
   const apply = (from: string, to: string) => {
+    const { nodesById, childrenById } = useSceneStore.getState();
     updateNodesById(remapSelectionColor(nodes, nodesById, childrenById, from, to));
   };
 

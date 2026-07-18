@@ -196,6 +196,37 @@ export function isDescendantOf(
 }
 
 /**
+ * Collect `rootIds` plus every descendant id reachable through `childrenById`
+ * (pre-order, duplicates included if roots overlap — callers that need a
+ * dedup'd/pruned set should wrap in `new Set(...)`).
+ *
+ * Used to build narrow, shallow-comparable store subscriptions: selecting
+ * `ids.map(id => nodesById[id])` via `useShallow` re-renders only when a node
+ * *inside these specific subtrees* changes (its `nodesById[id]` entry gets a
+ * new reference), not on every scene mutation — `basicMutations.ts` only
+ * replaces the touched id's entry in `nodesById`/`childrenById`, so untouched
+ * entries keep their original object identity across mutations.
+ */
+export function collectSubtreeIds(
+  rootIds: readonly string[],
+  childrenById: Record<string, string[]>,
+): string[] {
+  const ids: string[] = [];
+  const stack: string[] = [...rootIds];
+  while (stack.length > 0) {
+    const id = stack.pop()!;
+    ids.push(id);
+    const children = childrenById[id];
+    if (children) {
+      for (const childId of children) {
+        stack.push(childId);
+      }
+    }
+  }
+  return ids;
+}
+
+/**
  * Get all ancestor IDs for a node by walking the parent chain upwards.
  * Returns ancestors from immediate parent to root (bottom-up order).
  */

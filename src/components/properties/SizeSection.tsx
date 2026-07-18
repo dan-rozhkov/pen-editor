@@ -15,8 +15,10 @@ import type {
 } from "@/types/scene";
 import { flattenTree } from "@/types/scene";
 import type { FlatParentContext, ParentContext } from "@/utils/nodeUtils";
+import { collectSubtreeIds } from "@/utils/nodeUtils";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useSceneStore } from "@/store/sceneStore";
+import { useShallow } from "zustand/react/shallow";
 import { materializeLayoutRefs } from "@/utils/layoutRefUtils";
 import { calculateFrameIntrinsicSize } from "@/utils/yogaLayout";
 import { getPreparedNodeEffectiveSize } from "@/utils/instanceUtils";
@@ -263,8 +265,30 @@ export function SizeSection({
   useDirectUpdateOnly = false,
 }: SizeSectionProps) {
   const calculateLayoutForFrame = useLayoutStore((s) => s.calculateLayoutForFrame);
-  const nodesById = useSceneStore((s) => s.nodesById);
-  const childrenById = useSceneStore((s) => s.childrenById);
+  // Narrow subscription: re-render only when a node INSIDE the relevant
+  // subtree changes, not on every scene mutation. `basicMutations.ts` only
+  // replaces the touched id's entry in `nodesById`/`childrenById` (see
+  // updateNode), so untouched nodes keep their original object identity
+  // across mutations — `useShallow` short-circuits the re-render when every
+  // id in the snapshot still points at the same reference. The relevant root
+  // is the auto-layout parent (covers `node` itself as a child, for
+  // fill_container sizing) when inside auto-layout, otherwise `node` itself
+  // (covers descendants, for fit_content sizing). Reading the maps directly
+  // (via `useSceneStore.getState()`) elsewhere in this component instead of
+  // subscribing to them is what makes this narrowing effective — see
+  // `getMaterializedParent`/`effectiveWidth` below and the sizing-mode click
+  // handlers.
+  const relevantSubtreeRootId =
+    parentContext.isInsideAutoLayout && parentContext.parent
+      ? parentContext.parent.id
+      : node.id;
+  const relevantSubtreeSnapshot = useSceneStore(
+    useShallow((s) =>
+      collectSubtreeIds([relevantSubtreeRootId], s.childrenById).map(
+        (id) => s.nodesById[id],
+      ),
+    ),
+  );
   const updateNode = useSceneStore((s) => s.updateNode);
   const updateNodeWithoutHistory = useSceneStore((s) => s.updateNodeWithoutHistory);
   const [isFitting, setIsFitting] = useState(false);
@@ -286,17 +310,29 @@ export function SizeSection({
     let cached: FrameNode | null = null;
     return () => {
       if (!computed) {
-        cached =
+        if (
           parentContext.isInsideAutoLayout &&
           parentContext.parent &&
           parentContext.parent.type === "frame"
-            ? materializeLayoutRefs(parentContext.parent as FrameNode, nodesById, childrenById)
-            : null;
+        ) {
+          const { nodesById, childrenById } = useSceneStore.getState();
+          cached = materializeLayoutRefs(parentContext.parent as FrameNode, nodesById, childrenById);
+        } else {
+          cached = null;
+        }
         computed = true;
       }
       return cached;
     };
-  }, [parentContext.isInsideAutoLayout, parentContext.parent, nodesById, childrenById]);
+    // `relevantSubtreeSnapshot` (not `nodesById`/`childrenById` directly) is
+    // the recompute trigger: it only changes reference when a node inside
+    // the relevant subtree actually changed, so this thunk is invalidated
+    // exactly as often as the shallow-compared subscription re-renders this
+    // component — see the comment on `relevantSubtreeSnapshot` above. It's
+    // not referenced in the body (the lookup happens via `getState()`
+    // inside the thunk), hence the lint override below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parentContext.isInsideAutoLayout, parentContext.parent, relevantSubtreeSnapshot]);
 
   const reflowAutoLayoutSiblings = (
     dimension: "width" | "height",
@@ -362,6 +398,7 @@ export function SizeSection({
       const fitWidth = frame.sizing?.widthMode === "fit_content";
       const fitHeight = frame.sizing?.heightMode === "fit_content";
       if (fitWidth || fitHeight) {
+        const { nodesById, childrenById } = useSceneStore.getState();
         const layoutFrame = materializeLayoutRefs(frame, nodesById, childrenById);
         const intrinsicSize = calculateFrameIntrinsicSize(layoutFrame, {
           fitWidth,
@@ -394,12 +431,16 @@ export function SizeSection({
     }
 
     return { effectiveWidth: ew, effectiveHeight: eh };
+    // `relevantSubtreeSnapshot` is the recompute trigger in place of
+    // `nodesById`/`childrenById` — see the comment where it's defined above.
+    // It's not referenced in the body (the lookup happens via `getState()`),
+    // hence the lint override below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     node,
     parentContext,
     calculateLayoutForFrame,
-    nodesById,
-    childrenById,
+    relevantSubtreeSnapshot,
     isMultiSelect,
     getMaterializedParent,
   ]);
@@ -465,6 +506,7 @@ export function SizeSection({
                   )}
                   onClick={() => {
                     const newMode = option.value as SizingMode;
+                    const { nodesById, childrenById } = useSceneStore.getState();
                     const computedWidth = computeSizeForMode(
                       node,
                       parentContext,
@@ -523,6 +565,7 @@ export function SizeSection({
                   )}
                   onClick={() => {
                     const newMode = option.value as SizingMode;
+                    const { nodesById, childrenById } = useSceneStore.getState();
                     const computedHeight = computeSizeForMode(
                       node,
                       parentContext,
