@@ -67,6 +67,66 @@ export function svgTextToDataUrl(svgText: string): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`;
 }
 
+const SVG_OPEN_TAG_RE = /<svg\b[^>]*>/i;
+const DEFAULT_SVG_SIZE = 24;
+
+function readAttr(tag: string, name: string): string | null {
+  // Require a real attribute boundary (whitespace or a preceding quote) before
+  // the name so `width` does not also match `stroke-width` — Feather/Lucide
+  // roots carry `stroke-width`, and matching it would read the stroke width as
+  // the SVG width and skip injecting a real one, leaving the SVG 0x0.
+  const match = tag.match(new RegExp(`(?:\\s|["'])${name}\\s*=\\s*("([^"]*)"|'([^']*)')`, 'i'));
+  if (!match) return null;
+  return match[2] ?? match[3] ?? null;
+}
+
+/**
+ * Pure, DOM-free normalization of a raw `<svg>...</svg>` markup string:
+ * injects `width`/`height`/`viewBox`/`xmlns` into the root `<svg>` opening
+ * tag when missing, so `svgTextToDataUrl()` never produces a data: URL that
+ * decodes to a 0x0 image. Only the opening tag's attributes are touched —
+ * inner markup is left byte-for-byte as-is. Non-SVG input is returned
+ * unchanged.
+ */
+export function normalizeSvgMarkup(svgText: string, fallbackWidth: number, fallbackHeight: number): string {
+  const openTagMatch = svgText.match(SVG_OPEN_TAG_RE);
+  if (!openTagMatch) return svgText;
+
+  const openTag = openTagMatch[0];
+  const existingWidth = parseFloat(readAttr(openTag, 'width') ?? '');
+  const existingHeight = parseFloat(readAttr(openTag, 'height') ?? '');
+  const viewBox = readAttr(openTag, 'viewBox');
+  const viewBoxParts = viewBox?.trim().split(/[\s,]+/).map(Number);
+  const viewBoxWidth = viewBoxParts?.length === 4 ? viewBoxParts[2] : undefined;
+  const viewBoxHeight = viewBoxParts?.length === 4 ? viewBoxParts[3] : undefined;
+
+  const safeFallbackWidth = fallbackWidth > 0 ? fallbackWidth : DEFAULT_SVG_SIZE;
+  const safeFallbackHeight = fallbackHeight > 0 ? fallbackHeight : DEFAULT_SVG_SIZE;
+
+  const width = Number.isFinite(existingWidth) && existingWidth > 0
+    ? existingWidth
+    : (viewBoxWidth && viewBoxWidth > 0 ? viewBoxWidth : safeFallbackWidth);
+  const height = Number.isFinite(existingHeight) && existingHeight > 0
+    ? existingHeight
+    : (viewBoxHeight && viewBoxHeight > 0 ? viewBoxHeight : safeFallbackHeight);
+
+  let newOpenTag = openTag;
+  if (readAttr(newOpenTag, 'width') === null) {
+    newOpenTag = newOpenTag.replace(/<svg\b/i, `<svg width="${width}"`);
+  }
+  if (readAttr(newOpenTag, 'height') === null) {
+    newOpenTag = newOpenTag.replace(/<svg\b/i, `<svg height="${height}"`);
+  }
+  if (readAttr(newOpenTag, 'viewBox') === null) {
+    newOpenTag = newOpenTag.replace(/<svg\b/i, `<svg viewBox="0 0 ${width} ${height}"`);
+  }
+  if (readAttr(newOpenTag, 'xmlns') === null) {
+    newOpenTag = newOpenTag.replace(/<svg\b/i, `<svg xmlns="http://www.w3.org/2000/svg"`);
+  }
+
+  return svgText.slice(0, openTagMatch.index) + newOpenTag + svgText.slice((openTagMatch.index ?? 0) + openTag.length);
+}
+
 export function scaleAndOffsetNode(node: SceneNode, sx: number, sy: number, ox: number, oy: number): void {
   node.x = node.x * sx + ox;
   node.y = node.y * sy + oy;

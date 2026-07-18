@@ -4,7 +4,7 @@ import { calculateFrameLayout } from '@/utils/yogaLayout'
 import { convertH2dToSceneNodes } from '../h2dToScene'
 import { parseH2dClipboardHtml } from '../parseH2dClipboard'
 import { H2D_FIXTURE_HTML } from './h2dFixtureHtml'
-import { buildDocument, el, rect, text } from './h2dFixture'
+import { buildDocument, el, rect, svgEl, text } from './h2dFixture'
 
 function convertFixture() {
   const { document } = parseH2dClipboardHtml(H2D_FIXTURE_HTML)
@@ -232,6 +232,48 @@ describe('convertH2dToSceneNodes (synthetic cases)', () => {
     const { nodes } = convertH2dToSceneNodes(doc)
     const root = nodes[0] as FrameNode
     expect(root.children).toHaveLength(1)
+  })
+
+  it('normalizes an SVG with no width/height/viewBox into a data URL with injected dimensions', () => {
+    const body = el('BODY', rect(0, 0, 100, 100), {}, [
+      svgEl(rect(10, 10, 24, 24), '<svg><path d="M0 0L10 10"/></svg>'),
+    ])
+    const { nodes } = convertH2dToSceneNodes(buildDocument(body))
+    const root = nodes[0] as FrameNode
+    const svg = root.children[0] as FrameNode
+    expect(svg.imageFill?.mode).toBe('fit')
+    const url = svg.imageFill!.url
+    expect(url.startsWith('data:image/svg+xml')).toBe(true)
+    const decoded = decodeURIComponent(url.slice(url.indexOf(',') + 1))
+    expect(decoded).toMatch(/width="24"/)
+    expect(decoded).toMatch(/height="24"/)
+    expect(decoded).toMatch(/viewBox="0 0 24 24"/)
+  })
+
+  it('derives injected width/height from an existing viewBox and does not duplicate it', () => {
+    const body = el('BODY', rect(0, 0, 100, 100), {}, [
+      svgEl(rect(10, 10, 24, 24), '<svg viewBox="0 0 32 16"><path d="M0 0L10 10"/></svg>'),
+    ])
+    const { nodes } = convertH2dToSceneNodes(buildDocument(body))
+    const root = nodes[0] as FrameNode
+    const svg = root.children[0] as FrameNode
+    const url = svg.imageFill!.url
+    const decoded = decodeURIComponent(url.slice(url.indexOf(',') + 1))
+    expect(decoded).toMatch(/width="32"/)
+    expect(decoded).toMatch(/height="16"/)
+    expect(decoded.match(/viewBox=/g)).toHaveLength(1)
+    expect(decoded).toMatch(/viewBox="0 0 32 16"/)
+  })
+
+  it('gives an SVG with empty content a visible gray placeholder fill instead of silently vanishing', () => {
+    const body = el('BODY', rect(0, 0, 100, 100), {}, [svgEl(rect(10, 10, 24, 24), '')])
+    const doc = buildDocument(body)
+    const { nodes, warnings } = convertH2dToSceneNodes(doc)
+    const root = nodes[0] as FrameNode
+    const svg = root.children[0] as FrameNode
+    expect(svg.fill).toBe('#E0E0E0')
+    expect(svg.imageFill).toBeUndefined()
+    expect(warnings.some((w) => w.includes('SVG'))).toBe(true)
   })
 
   it('keeps inline text alongside a nested element (mixed children are not dropped)', () => {

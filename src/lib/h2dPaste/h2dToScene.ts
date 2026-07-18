@@ -12,7 +12,7 @@ import { generateId, type Effect, type FrameNode, type GradientFill, type PerCor
 import { extractCssUrl, parseColorWithOpacity } from '@/lib/htmlToDesign/colorParsing'
 import { parseCssGradient } from '@/lib/htmlToDesign/gradientParsing'
 import { applyTextProps, parseShadows } from '@/lib/htmlToDesign/styleApplication'
-import { svgTextToDataUrl } from '@/lib/htmlToDesign/svgHandling'
+import { normalizeSvgMarkup, svgTextToDataUrl } from '@/lib/htmlToDesign/svgHandling'
 import { base64ToBytes } from '@/lib/clipboardPayload'
 import { maybeApplyAutoLayout } from './autoLayoutInference'
 import { isH2dElementNode, isH2dTextNode } from './h2dTypes'
@@ -327,9 +327,11 @@ function convertSvg(node: H2dElementNode, parentRect: H2dRect, ctx: ConvertCtx):
   const rel = relRect(node.rect, parentRect)
   const frame = makeFrame('SVG', rel.x, rel.y, rel.width, rel.height)
   if (node.content) {
-    frame.imageFill = { url: svgTextToDataUrl(node.content), mode: 'fit' }
+    const normalized = normalizeSvgMarkup(node.content, rel.width, rel.height)
+    frame.imageFill = { url: svgTextToDataUrl(normalized), mode: 'fit' }
   } else {
     ctx.warnings.push('SVG element had no inline content — skipped fill')
+    frame.fill = '#E0E0E0'
   }
   applyCommonProps(frame, node, ctx)
   return frame
