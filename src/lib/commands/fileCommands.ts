@@ -15,11 +15,10 @@ import { useHistoryStore } from "@/store/historyStore";
 import type { PaletteCommand } from "./types";
 
 /**
- * Mirrors the Toolbar's File menu handlers (`handleSave`/`handleExportPublicPen`/
- * `handleOpen`) — same underlying `fileUtils`/`openDocumentIntoEditor` calls,
- * just invoked from the palette instead of a dropdown item.
+ * Document-level file operations (open/export/import), consumed by both the
+ * Toolbar's File menu and the command palette.
  */
-function exportAsJson(): void {
+export function exportAsJson(): void {
   usePageStore.getState().saveCurrentPageState();
   const { pages, componentArtifactsById } = usePageStore.getState();
   const pagesForExport = pages.map((page) => ({
@@ -45,7 +44,7 @@ function exportAsJson(): void {
   );
 }
 
-function exportAsPen(): void {
+export function exportAsPen(): void {
   const currentPageNodes = useSceneStore.getState().getNodes();
   const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
   downloadPublicPen(
@@ -146,7 +145,7 @@ function pickTokensFile(): Promise<string | null> {
   });
 }
 
-async function openDocument(): Promise<void> {
+export async function openDocument(): Promise<void> {
   try {
     const result = await openFilePicker();
     useDocumentStore.getState().setFileName(result.fileName);

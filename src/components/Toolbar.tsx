@@ -1,23 +1,14 @@
 import { useState } from "react";
 import { useSceneStore } from "../store/sceneStore";
 import { useSelectionStore } from "../store/selectionStore";
-import { useVariableStore } from "../store/variableStore";
-import { useTextStyleStore } from "../store/textStyleStore";
-import { useStyleStore } from "../store/styleStore";
-import { useThemeStore } from "../store/themeStore";
 import { useUIThemeStore } from "../store/uiThemeStore";
 import { usePixelGridStore } from "../store/pixelGridStore";
 import { useGuidesStore } from "../store/guidesStore";
 import { useRenderModeStore } from "../store/renderModeStore";
 import { useViewportStore } from "../store/viewportStore";
-import { usePageStore } from "../store/pageStore";
 import { useCanvasRefStore } from "../store/canvasRefStore";
-import { buildTree } from "../types/scene";
 
-import { downloadDocument, downloadPublicPen, openFilePicker } from "../utils/fileUtils";
-import { exportDesignTokens, importDesignTokens } from "../lib/commands/fileCommands";
-import { useDocumentStore } from "../store/documentStore";
-import { applyOpenedDocument } from "../utils/openDocumentIntoEditor";
+import { exportDesignTokens, importDesignTokens, exportAsJson, exportAsPen, openDocument } from "../lib/commands/fileCommands";
 import { parsePixsoNodes } from "../utils/pixsoImportUtils";
 import { Button } from "./ui/button";
 import {
@@ -44,10 +35,6 @@ import {
 
 export function Toolbar() {
   const addNode = useSceneStore((state) => state.addNode);
-  const variables = useVariableStore((state) => state.variables);
-  const textStyles = useTextStyleStore((state) => state.textStyles);
-  const fillStyles = useStyleStore((state) => state.fillStyles);
-  const effectStyles = useStyleStore((state) => state.effectStyles);
   const uiTheme = useUIThemeStore((s) => s.uiTheme);
   const showPixelGrid = usePixelGridStore((s) => s.showPixelGrid);
   const togglePixelGrid = usePixelGridStore((s) => s.togglePixelGrid);
@@ -64,43 +51,6 @@ export function Toolbar() {
   const [jsonText, setJsonText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isExportingPptx, setIsExportingPptx] = useState(false);
-
-  const handleSave = () => {
-    const pageStore = usePageStore.getState();
-    pageStore.saveCurrentPageState();
-
-    const { pages, componentArtifactsById } = usePageStore.getState();
-    const pagesForExport = pages.map((page) => ({
-      id: page.id,
-      name: page.name,
-      nodes: buildTree(page.rootIds, page.nodesById, page.childrenById),
-      pageBackground: page.pageBackground,
-      guides: page.guides,
-      slideOrder: page.slideOrder,
-      measurements: page.measurements,
-      comments: page.comments,
-    }));
-
-    const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
-    const activeTheme = useThemeStore.getState().activeTheme;
-    downloadDocument(
-      pagesForExport,
-      variables,
-      activeTheme,
-      componentArtifactsById,
-      `${name}.json`,
-      textStyles,
-      fillStyles,
-      effectStyles,
-    );
-  };
-
-  const handleExportPublicPen = () => {
-    const currentPageNodes = useSceneStore.getState().getNodes();
-    const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
-    const activeTheme = useThemeStore.getState().activeTheme;
-    downloadPublicPen(currentPageNodes, variables, activeTheme, `${name}.pen`);
-  };
 
   const handleExportPptx = async () => {
     if (!pixiRefs || !hasSlides || isExportingPptx) return;
@@ -119,20 +69,6 @@ export function Toolbar() {
 
   const handleImportTokens = () => {
     void importDesignTokens();
-  };
-
-  const handleOpen = async () => {
-    try {
-      const result = await openFilePicker();
-      useDocumentStore.getState().setFileName(result.fileName);
-      const canvasEl = document.querySelector("[data-canvas]");
-      applyOpenedDocument(result, {
-        viewportWidth: canvasEl?.clientWidth ?? window.innerWidth - 480,
-        viewportHeight: canvasEl?.clientHeight ?? window.innerHeight,
-      });
-    } catch (err) {
-      console.error("Failed to open file:", err);
-    }
   };
 
   const handleCopy = () => {
@@ -189,7 +125,7 @@ export function Toolbar() {
           <CaretDownIcon className="size-3 text-muted-foreground" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" sideOffset={4} className="min-w-56">
-          <DropdownMenuItem onClick={handleOpen}>
+          <DropdownMenuItem onClick={() => void openDocument()}>
             Open
           </DropdownMenuItem>
           <DropdownMenuSub>
@@ -217,10 +153,10 @@ export function Toolbar() {
               Export
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="min-w-56">
-              <DropdownMenuItem onClick={handleSave}>
+              <DropdownMenuItem onClick={exportAsJson}>
                 Export as .json
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleExportPublicPen}>
+              <DropdownMenuItem onClick={exportAsPen}>
                 Export as .pen
               </DropdownMenuItem>
               <DropdownMenuItem
