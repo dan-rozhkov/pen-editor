@@ -8,6 +8,31 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.46.1] - 2026-07-18
+
+### Fixed
+- **Rotation field is now a real `NumberInput` (bug-14).** The Rotation input in
+  the Position section was a hand-rolled control that committed to the store on
+  every keystroke — one undo entry per character — and ignored `useReadOnly()`,
+  so it stayed editable inside the Dev Mode Inspect panel's read-only wrapper. It
+  now routes through the shared `NumberInput`, inheriting the draft layer, the
+  single-undo-batch-per-edit behavior, min/max clamp, and the read-only guard —
+  matching the X/Y fields. (`NumberInput` gained an icon-only rendering branch.)
+- **Convert-to-design no longer silently drops inline SVG icons (bug-15).**
+  `convertSvg` passed captured `<svg>` markup straight to a `data:` URL. Markup
+  without an explicit `width`/`height`/`viewBox` (typical Feather/Lucide icons)
+  decoded to 0×0 and rendered as nothing, even though a node existed in the tree.
+  A new pure `normalizeSvgMarkup` injects the missing dimensions before encoding,
+  and an empty-content `<svg>` now gets a visible gray placeholder instead of an
+  invisible empty frame.
+- **SVG `data:` image fills without intrinsic size now render (bug-16).** The
+  Pixi image-fill loader rejected any image that decoded to natural size 0×0, so
+  a dimensionless SVG data-URI drew nothing regardless of its source (converter,
+  AI tool, manual paste). The loader now normalizes SVG markup as a last barrier
+  (reusing bug-15's `normalizeSvgMarkup`) and tolerates a 0×0 natural size for
+  SVG sources, rasterizing to the node's target size. The raster-image path is
+  unchanged — genuinely broken images still fail.
+
 ## [0.45.1] - 2026-07-17
 
 ### Fixed
