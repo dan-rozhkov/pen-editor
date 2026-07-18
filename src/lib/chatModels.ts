@@ -68,6 +68,37 @@ const FALLBACK_MODELS: ChatModelOption[] = [
     label: "DeepSeek V4 Pro",
     supportsVision: false,
   },
+  { value: "tencent/hy3", label: "Hy3", supportsVision: false },
+  {
+    value: "nvidia/nemotron-3-ultra-550b-a55b",
+    label: "Nemotron 3 Ultra",
+    supportsVision: false,
+  },
+  {
+    value: "stepfun/step-3.7-flash",
+    label: "Step 3.7 Flash",
+    supportsVision: true,
+  },
+  {
+    value: "x-ai/grok-build-0.1",
+    label: "Grok Build 0.1",
+    supportsVision: true,
+  },
+  {
+    value: "thinkingmachines/inkling",
+    label: "Inkling",
+    supportsVision: true,
+  },
+  {
+    value: "kwaipilot/kat-coder-pro-v2.5",
+    label: "KAT-Coder-Pro V2.5",
+    supportsVision: false,
+  },
+  {
+    value: "x-ai/grok-4.20",
+    label: "Grok 4.20",
+    supportsVision: false,
+  },
 ];
 
 // Backend wire shape (pen-editor-backend GET /api/models).
