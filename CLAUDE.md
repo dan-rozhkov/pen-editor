@@ -91,6 +91,19 @@ Nodes are stored as a flat map (`nodesById`) with parent-child references (`pare
 
 Pasting/converting external HTML (e.g. `convertEmbedToDesign`) renders the markup in a hidden iframe and captures its computed layout via `src/lib/h2dCapture/captureEmbed.ts` (wrapping the vendored `src/vendor/h2dCapture/` bundle), then converts the capture into scene nodes with `src/lib/h2dPaste/h2dToScene.ts`. `src/lib/htmlToDesign/` remains in use as the shared CSS-parsing library (colors, gradients, shadows, text properties) consumed by the h2d pipeline, and it still contains the legacy DOM-walk importer (`convertHtmlToDesignNodes`), which is unused by the store but kept for reference/tests.
 
+### Desktop shell bridge
+
+The Electron app (`../pen-editor-desktop`, its own repo) loads the deployed
+editor and exposes `window.penDesktop = { onMenuCommand(cb) }` from its
+preload. `src/lib/desktopBridge.ts` (called once in `main.tsx`) dispatches
+received ids through the command-palette registry (`getCommands()`), so
+**menu items in the desktop repo reference `PaletteCommand.id` values**
+(`file-open`, `file-export-pen`, `file-export-json`, `file-export-tokens`,
+`file-import-tokens`). Renaming or removing one of these ids breaks the
+desktop menu — update `pen-editor-desktop/src/main/menu.ts` (and its
+CLAUDE.md) in the same change. On the web `window.penDesktop` is absent and
+the bridge is a no-op.
+
 ### File Format
 
 The editor reads/writes `.pen` files. These are accessed exclusively through the Pencil MCP tools — never read `.pen` files directly with file I/O.
