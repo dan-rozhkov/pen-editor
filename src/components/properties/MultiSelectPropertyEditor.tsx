@@ -2,7 +2,6 @@ import { useCallback, useMemo } from "react";
 import type { FrameNode, SceneNode } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
 import { useSceneStore } from "@/store/sceneStore";
-import { saveHistory } from "@/store/sceneStore/helpers/history";
 import { getParentContextFlat } from "@/utils/nodeUtils";
 import {
   computeMergedProperties,
@@ -45,6 +44,7 @@ export function MultiSelectPropertyEditor({
   activeTheme,
 }: MultiSelectPropertyEditorProps) {
   const updateMultipleNodes = useSceneStore((s) => s.updateMultipleNodes);
+  const updateMultipleNodesMerged = useSceneStore((s) => s.updateMultipleNodesMerged);
 
   const merged = useMemo(
     () => computeMergedProperties(selectedNodes),
@@ -122,18 +122,7 @@ export function MultiSelectPropertyEditor({
       updateMultipleNodes(ids, updates);
       return;
     }
-    useSceneStore.setState((state) => {
-      saveHistory(state);
-      const newNodesById = { ...state.nodesById };
-      for (const id of ids) {
-        const existing = newNodesById[id];
-        if (!existing) continue;
-        const mergedSizing = { ...existing.sizing, ...sizingUpdate };
-        const { sizing: _s, ...restUpdates } = updates as Record<string, unknown>;
-        newNodesById[id] = { ...existing, ...restUpdates, sizing: mergedSizing } as typeof existing;
-      }
-      return { nodesById: newNodesById, _cachedTree: null };
-    });
+    updateMultipleNodesMerged(ids, updates, ["sizing"]);
   };
 
   // Auto-layout: show if any selected node is a frame with auto-layout enabled
@@ -201,19 +190,13 @@ export function MultiSelectPropertyEditor({
       if (Object.keys(changedProps).length === 0) return;
 
       // Merge only the changed properties into each node's existing layout
-      useSceneStore.setState((state) => {
-        saveHistory(state);
-        const newNodesById = { ...state.nodesById };
-        for (const id of autoLayoutData.frameIds) {
-          const existing = newNodesById[id];
-          if (!existing || existing.type !== "frame") continue;
-          const mergedLayout = { ...(existing as FrameNode).layout, ...changedProps };
-          newNodesById[id] = { ...existing, layout: mergedLayout };
-        }
-        return { nodesById: newNodesById, _cachedTree: null };
-      });
+      updateMultipleNodesMerged(
+        autoLayoutData.frameIds,
+        { layout: changedProps } as Partial<SceneNode>,
+        ["layout"],
+      );
     };
-  }, [autoLayoutData, updateMultipleNodes, handleUpdate]);
+  }, [autoLayoutData, updateMultipleNodes, updateMultipleNodesMerged, handleUpdate]);
 
   return (
     <div className="flex flex-col">

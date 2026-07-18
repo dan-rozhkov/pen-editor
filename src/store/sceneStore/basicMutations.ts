@@ -145,6 +145,49 @@ export function createBasicMutations(set: SetState, get: GetState) {
       });
     },
 
+    updateMultipleNodesMerged: (
+      ids: string[],
+      updates: Partial<SceneNode>,
+      deepMergeKeys: readonly string[],
+    ) => {
+      markNodesDirty(ids);
+      set((state) => {
+        saveHistory(state);
+        const newNodesById = { ...state.nodesById };
+        const needsTextSync = hasTextMeasureProps(updates);
+        const updatesRecord = updates as Record<string, unknown>;
+        for (const id of ids) {
+          const existing = newNodesById[id];
+          if (!existing) continue;
+          const existingRecord = existing as unknown as Record<string, unknown>;
+          let updated = { ...existing, ...updates } as FlatSceneNode;
+          const updatedRecord = updated as unknown as Record<string, unknown>;
+          for (const key of deepMergeKeys) {
+            const existingSub = existingRecord[key];
+            const updateSub = updatesRecord[key];
+            if (
+              existingSub &&
+              typeof existingSub === "object" &&
+              updateSub &&
+              typeof updateSub === "object"
+            ) {
+              updatedRecord[key] = { ...existingSub, ...updateSub };
+            }
+          }
+          if (updated.type === "text" && needsTextSync) {
+            updated = syncTextDimensions(updated);
+          }
+          newNodesById[id] = updated;
+        }
+        const componentArtifactsById = markComponentArtifactsStaleFromNative(
+          state.componentArtifactsById,
+          ids.map((id) => state.nodesById[id]),
+        );
+
+        return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
+      });
+    },
+
     updateNodeWithoutHistory: (id: string, updates: Partial<SceneNode>) =>
       set((state) => {
         const existing = state.nodesById[id];

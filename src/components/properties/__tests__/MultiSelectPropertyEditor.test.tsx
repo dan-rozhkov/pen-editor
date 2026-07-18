@@ -4,7 +4,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { MultiSelectPropertyEditor } from "../MultiSelectPropertyEditor";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
-import type { SceneNode } from "@/types/scene";
+import type { SceneNode, FlatSceneNode } from "@/types/scene";
 import { resetStores, seedScene } from "@/test/fixtures";
 
 /**
@@ -144,5 +144,115 @@ describe("<MultiSelectPropertyEditor />", () => {
     const r2Fills = nodeById("rect2").fills as Array<{ color: string }> | undefined;
     expect(r1Fills?.[0].color).toBe("#123456");
     expect(r2Fills?.[0].color).toBe("#123456");
+  });
+
+  // Regression: the sizing deep-merge used to bypass sceneStore entirely via a
+  // hand-rolled setState, silently dropping syncTextDimensions. A sizing-mode
+  // click on a text node emits `sizing` AND `textWidthMode` together (see
+  // SizeSection), so this is the exact trigger that used to leave stale
+  // measured dimensions on multi-selected text nodes.
+  it("re-measures text dimensions when a multi-select sizing-mode click carries both sizing and textWidthMode", () => {
+    // Put text1 + a second text node inside an auto-layout frame so the W/H
+    // sizing-mode buttons render (showSizingModes requires isInsideAutoLayout
+    // or a frame/ref node).
+    useSceneStore.setState((s) => {
+      const frame1 = s.nodesById.frame1 as unknown as { layout: Record<string, unknown> };
+      const text2 = {
+        id: "text2",
+        type: "text",
+        name: "Subtitle",
+        x: 10,
+        y: 130,
+        width: 60,
+        height: 20,
+        text: "World, a longer line of text",
+        fontSize: 16,
+        fontFamily: "Arial",
+        fill: "#000000",
+        textWidthMode: "fixed",
+      } as unknown as FlatSceneNode;
+      return {
+        nodesById: {
+          ...s.nodesById,
+          frame1: { ...s.nodesById.frame1, layout: { ...frame1.layout, autoLayout: true } },
+          text1: { ...s.nodesById.text1, textWidthMode: "fixed" } as FlatSceneNode,
+          text2,
+        },
+        childrenById: { ...s.childrenById, frame1: [...s.childrenById.frame1, "text2"] },
+        parentById: { ...s.parentById, text2: "frame1" },
+      };
+    });
+
+    renderEditor(["text1", "text2"]);
+
+    // W-row renders before H-row; both use the same "Fixed/Fill/Fit" labels,
+    // so the first "Fit" button in DOM order is the W (widthMode) control.
+    const fitButtons = screen.getAllByRole("button", { name: "Fit" });
+    fireEvent.click(fitButtons[0]);
+
+    // Reference: what a single-node updateNode with the same textWidthMode
+    // update produces for an identically-configured node (sizing never
+    // affects measurement, only textWidthMode does).
+    const referenceBefore = { ...nodeById("text1") };
+    useSceneStore.getState().updateNode(
+      "text1",
+      { textWidthMode: "auto" } as unknown as Partial<SceneNode>,
+    );
+    const referenceAfter = nodeById("text1");
+    // Restore text1 to its pre-reference-mutation state so this probe doesn't
+    // leak into later assertions.
+    useSceneStore.setState((s) => ({
+      nodesById: { ...s.nodesById, text1: referenceBefore as unknown as FlatSceneNode },
+    }));
+
+    expect(nodeById("text1").width).toBe(referenceAfter.width);
+    expect(nodeById("text1").height).toBe(referenceAfter.height);
+    expect(nodeById("text2").textWidthMode).toBe("auto");
+  });
+
+  // Regression: the auto-layout diff-merge used to bypass sceneStore's
+  // markComponentArtifactsStaleFromNative, leaving a reusable component's HTML
+  // export artifact marked in_sync after a native edit via multi-select.
+  it("marks a reusable auto-layout frame's component artifact stale on a multi-select gap change, without disturbing other frames' flexDirection", () => {
+    useSceneStore.setState((s) => ({
+      nodesById: {
+        ...s.nodesById,
+        frame1: {
+          ...s.nodesById.frame1,
+          reusable: true,
+          layout: {
+            ...(s.nodesById.frame1 as unknown as { layout: Record<string, unknown> }).layout,
+            autoLayout: true,
+            flexDirection: "column",
+            gap: 8,
+          },
+        } as unknown as FlatSceneNode,
+        rect2: {
+          ...s.nodesById.rect2,
+          type: "frame",
+          layout: { autoLayout: true, flexDirection: "row", gap: 8 },
+        } as unknown as FlatSceneNode,
+      },
+    }));
+
+    renderEditor(["frame1", "rect2"]);
+
+    const gapLabel = screen.getByText("Gap");
+    const gapInput = gapLabel.parentElement?.querySelector("input") as HTMLInputElement;
+    fireEvent.focus(gapInput);
+    fireEvent.change(gapInput, { target: { value: "24" } });
+    fireEvent.blur(gapInput);
+
+    const artifact = useSceneStore.getState().componentArtifactsById.frame1;
+    expect(artifact).toBeDefined();
+    expect(artifact?.syncState).not.toBe("in_sync");
+
+    const frame1Layout = (nodeById("frame1") as unknown as { layout: Record<string, unknown> }).layout;
+    const rect2Layout = (nodeById("rect2") as unknown as { layout: Record<string, unknown> }).layout;
+    expect(frame1Layout.gap).toBe(24);
+    expect(rect2Layout.gap).toBe(24);
+    // Only gap changed — each frame's own flexDirection survived the merge.
+    expect(frame1Layout.flexDirection).toBe("column");
+    expect(rect2Layout.flexDirection).toBe("row");
   });
 });

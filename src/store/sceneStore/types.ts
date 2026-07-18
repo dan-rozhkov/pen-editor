@@ -43,6 +43,18 @@ export interface SceneState {
   addChildToFrame: (frameId: string, child: SceneNode) => void;
   updateNode: (id: string, updates: Partial<SceneNode>) => void;
   updateMultipleNodes: (ids: string[], updates: Partial<SceneNode>) => void;
+  /**
+   * Like `updateMultipleNodes`, but for each key in `deepMergeKeys` the
+   * sub-object is merged per-node (`{ ...existing[key], ...updates[key] }`)
+   * instead of overwritten, so a partial sub-object update (e.g. `sizing`,
+   * `layout`) doesn't stamp the first node's value over every other node's
+   * other sub-keys.
+   */
+  updateMultipleNodesMerged: (
+    ids: string[],
+    updates: Partial<SceneNode>,
+    deepMergeKeys: readonly string[],
+  ) => void;
   updateNodeWithoutHistory: (id: string, updates: Partial<SceneNode>) => void;
   updateNodesWithoutHistory: (
     updatesById: Record<string, Partial<SceneNode>>,
