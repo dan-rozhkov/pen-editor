@@ -8,11 +8,6 @@ import {
   PropertyRow,
   PropertySection,
 } from "@/components/ui/PropertyInputs";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from "@/components/ui/input-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 
@@ -51,25 +46,14 @@ export function PositionSection({ node, onUpdate, mixedKeys, parentContext, alig
         <div className="text-[10px] text-text-primary">Rotation</div>
         <div className="flex gap-2">
           <div className="w-1/2">
-            <InputGroup>
-              <InputGroupAddon align="inline-start">
-                <ArrowClockwise size={14} />
-              </InputGroupAddon>
-              <InputGroupInput
-                type="number"
-                value={mixedKeys?.has("rotation") ? "" : Math.round((node.rotation ?? 0) * 100) / 100}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value);
-                  if (!isNaN(val)) {
-                    onUpdate({ rotation: val });
-                  }
-                }}
-                min={0}
-                max={360}
-                step={1}
-                placeholder={mixedKeys?.has("rotation") ? "Mixed" : undefined}
-              />
-            </InputGroup>
+            <NumberInput
+              icon={<ArrowClockwise size={14} />}
+              value={node.rotation ?? 0}
+              onChange={(v) => onUpdate({ rotation: v })}
+              min={0}
+              max={360}
+              isMixed={mixedKeys?.has("rotation")}
+            />
           </div>
           <div className="w-1/2">
             <FlipControls

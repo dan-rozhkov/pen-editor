@@ -213,6 +213,19 @@ export function NumberInput({
     );
   }
 
+  if (icon) {
+    return (
+      <div className="flex-1">
+        <InputGroup>
+          <InputGroupAddon align="inline-start">
+            {icon}
+          </InputGroupAddon>
+          <InputGroupInput {...inputProps} />
+        </InputGroup>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1">
       <Input {...inputProps} />
