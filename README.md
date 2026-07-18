@@ -7,7 +7,7 @@ A canvas-based design editor with an AI design agent, built with React, TypeScri
 - **React 19** — UI framework
 - **TypeScript** — strict type safety
 - **Vite** — build tool and dev server
-- **PixiJS** — canvas rendering backend (single renderer; Konva has been removed)
+- **PixiJS** — canvas rendering backend (single WebGL renderer)
 - **Zustand** — state management
 - **Tailwind CSS v4** — utility-first styling (via the Vite plugin)
 - **Yoga** — auto-layout engine
@@ -60,6 +60,11 @@ A canvas-based design editor with an AI design agent, built with React, TypeScri
 - **Present** and read-only **view** modes
 - Pages
 - **PWA** — installable, works offline
+
+### Performance
+- Built for **large documents**: incremental dirty-set sync (only changed nodes are re-processed), spatial-index viewport culling and hit-testing, and raster caching of unchanged top-level frames (Figma-style tiles)
+- Frame-time budgets enforced in CI on a synthetic thousands-of-layers document
+- Dev harness: open `/?perf=5000` in dev mode to seed a synthetic scene; `window.__perfStats.summary()` reports frame times
 
 ## Keyboard Shortcuts
 
