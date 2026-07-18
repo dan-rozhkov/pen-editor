@@ -1,5 +1,4 @@
 import { launchNodeAgentChat } from "@/lib/launchNodeAgentChat";
-import type { AgentMode } from "@/store/chatStore";
 
 /**
  * Start a Design Agent chat seeded by an on-canvas embed ("code layer"). Unlike
@@ -11,7 +10,6 @@ import type { AgentMode } from "@/store/chatStore";
 export function launchEmbedAgentChat(
   embedId: string,
   text: string,
-  agentMode?: AgentMode,
 ): Promise<boolean> {
-  return launchNodeAgentChat(embedId, text, { agentMode, attachScreenshot: false });
+  return launchNodeAgentChat(embedId, text, { attachScreenshot: false });
 }

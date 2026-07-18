@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { SparkleIcon, ArrowUpIcon } from "@phosphor-icons/react";
 import { IconButton } from "@/components/ui/IconButton";
 import { cn } from "@/lib/utils";
-import type { AgentMode } from "@/store/chatStore";
 import { useDevModeStore } from "@/store/devModeStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { embedScreenRect } from "@/components/canvas/embedLayerGeometry";
@@ -17,7 +16,7 @@ interface NodeAgentButtonProps {
   absoluteY: number;
   placeholder: string;
   isComponentContext?: boolean;
-  launch: (nodeId: string, text: string, mode?: AgentMode) => void | Promise<unknown>;
+  launch: (nodeId: string, text: string) => void | Promise<unknown>;
 }
 
 /**
@@ -79,7 +78,7 @@ export function NodeAgentButton({
 
   const runQuickAction = useCallback(
     (action: FrameQuickAction) => {
-      void launch(node.id, action.prompt, action.mode);
+      void launch(node.id, action.prompt);
       setText("");
       setOpen(false);
     },

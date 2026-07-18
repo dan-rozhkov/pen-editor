@@ -15,11 +15,9 @@ export interface ChatTab {
   id: string;
   title: string;
   model: string;
-  agentMode: AgentMode;
   parallelCount: ParallelCount;
 }
 
-export type AgentMode = "edits" | "prototype" | "research";
 export type ParallelCount = 1 | 2 | 3;
 
 /** Actions published by a mounted chat session so the tab bar can drive it. */
@@ -33,7 +31,6 @@ interface ChatState {
   isOpen: boolean;
   isExpanded: boolean;
   model: string;
-  agentMode: AgentMode;
   parallelCount: ParallelCount;
   tabs: ChatTab[];
   activeTabId: string;
@@ -60,19 +57,12 @@ interface ChatState {
   close: () => void;
   toggleExpanded: () => void;
   setModel: (model: string) => void;
-  setAgentMode: (mode: AgentMode) => void;
   setParallelCount: (count: ParallelCount) => void;
 
   createTab: () => string;
   closeTab: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
   setTabTitle: (tabId: string, title: string) => void;
-  /**
-   * Set a single tab's agent mode without touching the persisted global
-   * default. Used by on-canvas quick actions that need a specific mode
-   * (e.g. research) for one launched chat only.
-   */
-  setTabAgentMode: (tabId: string, mode: AgentMode) => void;
   queueLaunchPayload: (tabId: string, payload: ChatLaunchPayload) => void;
   consumeLaunchPayload: (tabId: string) => ChatLaunchPayload | undefined;
 
@@ -92,7 +82,6 @@ interface ChatState {
   ) => void;
 }
 
-const DEFAULT_AGENT_MODE: AgentMode = "prototype";
 const DEFAULT_PARALLEL_COUNT: ParallelCount = 1;
 
 function normalizeModel(model: string | null): string {
@@ -118,14 +107,6 @@ export function reconcileModels() {
   }
 }
 
-function normalizeAgentMode(mode: string | null): AgentMode {
-  if (mode === "prototype") return mode;
-  if (mode === "edits") return mode;
-  if (mode === "research") return mode;
-  if (mode === "fast") return "prototype";
-  return DEFAULT_AGENT_MODE;
-}
-
 function normalizeParallelCount(count: string | null): ParallelCount {
   if (count === "2") return 2;
   if (count === "3") return 3;
@@ -144,13 +125,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isOpen: false,
   isExpanded: localStorage.getItem("chat-expanded") === "true",
   model: normalizeModel(localStorage.getItem("chat-model")),
-  agentMode: normalizeAgentMode(localStorage.getItem("chat-agent-mode")),
   parallelCount: normalizeParallelCount(localStorage.getItem("chat-parallel-count")),
   tabs: [{
     id: initialTabId,
     title: "Chat 1",
     model: normalizeModel(localStorage.getItem("chat-model")),
-    agentMode: normalizeAgentMode(localStorage.getItem("chat-agent-mode")),
     parallelCount: normalizeParallelCount(localStorage.getItem("chat-parallel-count")),
   }],
   activeTabId: initialTabId,
@@ -176,14 +155,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       tabs: s.tabs.map((t) => t.id === activeTabId ? { ...t, model } : t),
     }));
   },
-  setAgentMode: (mode) => {
-    localStorage.setItem("chat-agent-mode", mode);
-    const { activeTabId } = get();
-    set((s) => ({
-      agentMode: mode,
-      tabs: s.tabs.map((t) => t.id === activeTabId ? { ...t, agentMode: mode } : t),
-    }));
-  },
   setParallelCount: (parallelCount) => {
     localStorage.setItem("chat-parallel-count", String(parallelCount));
     const { activeTabId } = get();
@@ -198,13 +169,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { tabs } = get();
     const title = `Chat ${tabs.length + 1}`;
     const model = normalizeModel(localStorage.getItem("chat-model"));
-    const agentMode = normalizeAgentMode(localStorage.getItem("chat-agent-mode"));
     const parallelCount = normalizeParallelCount(localStorage.getItem("chat-parallel-count"));
     set({
-      tabs: [...tabs, { id, title, model, agentMode, parallelCount }],
+      tabs: [...tabs, { id, title, model, parallelCount }],
       activeTabId: id,
       model,
-      agentMode,
       parallelCount,
     });
     return id;
@@ -232,7 +201,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const newControllers = { ...abortControllers };
       delete newControllers[tabId];
       const model = normalizeModel(localStorage.getItem("chat-model"));
-      const agentMode = normalizeAgentMode(localStorage.getItem("chat-agent-mode"));
       const parallelCount = normalizeParallelCount(localStorage.getItem("chat-parallel-count"));
       const newLaunchQueue = { ...launchQueue };
       delete newLaunchQueue[tabId];
@@ -241,10 +209,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const newDismissedSelection = { ...dismissedSelection };
       delete newDismissedSelection[tabId];
       set({
-        tabs: [{ id: newId, title: "Chat 1", model, agentMode, parallelCount }],
+        tabs: [{ id: newId, title: "Chat 1", model, parallelCount }],
         activeTabId: newId,
         model,
-        agentMode,
         parallelCount,
         abortControllers: newControllers,
         launchQueue: newLaunchQueue,
@@ -277,7 +244,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       tabs: newTabs,
       activeTabId: newActiveTabId,
       model: switchToTab?.model ?? get().model,
-      agentMode: switchToTab?.agentMode ?? get().agentMode,
       parallelCount: switchToTab?.parallelCount ?? get().parallelCount,
       abortControllers: newControllers,
       launchQueue: newLaunchQueue,
@@ -292,7 +258,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({
         activeTabId: tabId,
         model: tab.model,
-        agentMode: tab.agentMode,
         parallelCount: tab.parallelCount,
       });
     }
@@ -301,16 +266,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setTabTitle: (tabId: string, title: string) => {
     set((s) => ({
       tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, title } : t)),
-    }));
-  },
-
-  setTabAgentMode: (tabId, mode) => {
-    set((s) => ({
-      tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, agentMode: mode } : t)),
-      // Mirror onto the global field only while this tab is active, so the
-      // mode selector reflects reality. localStorage (the saved default) is
-      // intentionally left untouched.
-      agentMode: s.activeTabId === tabId ? mode : s.agentMode,
     }));
   },
 

@@ -1,5 +1,4 @@
 import { launchNodeAgentChat } from "@/lib/launchNodeAgentChat";
-import type { AgentMode } from "@/store/chatStore";
 
 /**
  * Start a Design Agent chat seeded by an on-canvas frame, attaching a
@@ -9,7 +8,6 @@ import type { AgentMode } from "@/store/chatStore";
 export function launchFrameAgentChat(
   frameId: string,
   text: string,
-  agentMode?: AgentMode,
 ): Promise<boolean> {
-  return launchNodeAgentChat(frameId, text, { agentMode, attachScreenshot: true });
+  return launchNodeAgentChat(frameId, text, { attachScreenshot: true });
 }

@@ -15,7 +15,7 @@ beforeEach(() => {
   mockCapture.mockReset();
   mockCapture.mockResolvedValue("data:image/png;base64,SHOT");
   useChatStore.setState({
-    tabs: [{ id: "tab-0", title: "Chat 1", model: "m", agentMode: "prototype", parallelCount: 1 }],
+    tabs: [{ id: "tab-0", title: "Chat 1", model: "m", parallelCount: 1 }],
     activeTabId: "tab-0",
     launchQueue: {},
   });
@@ -49,12 +49,6 @@ describe("launchNodeAgentChat", () => {
     expect(mockCapture).not.toHaveBeenCalled();
     const { activeTabId, launchQueue } = useChatStore.getState();
     expect(launchQueue[activeTabId]?.images).toBeUndefined();
-  });
-
-  it("forwards agentMode to the new tab", async () => {
-    await launchNodeAgentChat(NODE_ID, "go", { agentMode: "research", attachScreenshot: false });
-    const { tabs, activeTabId } = useChatStore.getState();
-    expect(tabs.find((t) => t.id === activeTabId)?.agentMode).toBe("research");
   });
 
   it("reveals and opens the agents panel", async () => {

@@ -145,20 +145,16 @@ describe("buildCanvasContext", () => {
     seedVariables();
   });
 
-  it("serializes scene roots, selection, variables, model and agent mode", () => {
+  it("serializes scene roots, selection, variables and model, with no agentMode", () => {
     useSelectionStore.setState({ selectedIds: ["rect1"] });
-    useChatStore.setState({ model: "test/model-x", agentMode: "edits" });
+    useChatStore.setState({ model: "test/model-x" });
 
-    const context = buildCanvasContext() as {
-      canvasContext: string;
-      model: string;
-      agentMode: string;
-    };
+    const context = buildCanvasContext() as Record<string, unknown>;
 
     expect(context.model).toBe("test/model-x");
-    expect(context.agentMode).toBe("edits");
+    expect(context).not.toHaveProperty("agentMode");
 
-    const canvas = JSON.parse(context.canvasContext);
+    const canvas = JSON.parse(context.canvasContext as string);
     expect(canvas.roots).toEqual([
       { id: "frame1", type: "frame", name: "Screen" },
       { id: "rect2", type: "rect", name: "Floating" },
@@ -186,35 +182,29 @@ describe("buildCanvasContext", () => {
     expect(canvas.selectedNodes).toEqual([{ id: "ghost" }]);
   });
 
-  // A streaming session must use ITS OWN tab's model/agentMode, not the global
-  // active-tab values — otherwise switching tabs mid-stream hijacks the
-  // background session's auto-continuation request with the wrong model/mode.
-  it("uses the session's own tab model/agentMode, not the active-tab global", () => {
+  // A streaming session must use ITS OWN tab's model, not the global
+  // active-tab value — otherwise switching tabs mid-stream hijacks the
+  // background session's auto-continuation request with the wrong model.
+  it("uses the session's own tab model, not the active-tab global", () => {
     useChatStore.setState({
       // Global reflects whatever tab is currently active (tab-active).
       model: "active/model",
-      agentMode: "research",
       tabs: [
-        { id: "tab-active", title: "A", model: "active/model", agentMode: "research", parallelCount: 1 },
-        { id: "tab-bg", title: "B", model: "background/model", agentMode: "prototype", parallelCount: 1 },
+        { id: "tab-active", title: "A", model: "active/model", parallelCount: 1 },
+        { id: "tab-bg", title: "B", model: "background/model", parallelCount: 1 },
       ],
       activeTabId: "tab-active",
     });
 
-    const context = buildCanvasContext("tab-bg") as {
-      model: string;
-      agentMode: string;
-    };
+    const context = buildCanvasContext("tab-bg") as { model: string };
 
     expect(context.model).toBe("background/model");
-    expect(context.agentMode).toBe("prototype");
   });
 
-  it("falls back to the global model/agentMode when no sessionId is given", () => {
-    useChatStore.setState({ model: "test/model-z", agentMode: "edits" });
-    const context = buildCanvasContext() as { model: string; agentMode: string };
+  it("falls back to the global model when no sessionId is given", () => {
+    useChatStore.setState({ model: "test/model-z" });
+    const context = buildCanvasContext() as { model: string };
     expect(context.model).toBe("test/model-z");
-    expect(context.agentMode).toBe("edits");
   });
 });
 
@@ -270,10 +260,9 @@ describe("useDesignChat (hook + UI message stream)", () => {
     // background. The global model reflects the active tab.
     useChatStore.setState({
       model: "active/model",
-      agentMode: "research",
       tabs: [
-        { id: "tab-active", title: "A", model: "active/model", agentMode: "research", parallelCount: 1 },
-        { id: "tab-bg", title: "B", model: "background/model", agentMode: "prototype", parallelCount: 1 },
+        { id: "tab-active", title: "A", model: "active/model", parallelCount: 1 },
+        { id: "tab-bg", title: "B", model: "background/model", parallelCount: 1 },
       ],
       activeTabId: "tab-active",
     });
@@ -286,7 +275,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
     expect(requests[0].model).toBe("background/model");
-    expect(requests[0].agentMode).toBe("prototype");
+    expect(requests[0]).not.toHaveProperty("agentMode");
   });
 
   it("executes a streamed tool call locally and sends the output back", async () => {

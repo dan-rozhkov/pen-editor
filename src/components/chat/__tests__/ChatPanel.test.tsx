@@ -60,7 +60,6 @@ beforeEach(() => {
         id: "tab-1",
         title: "Chat 1",
         model: "google/gemini-2.5-flash",
-        agentMode: "edits",
         parallelCount: 1,
       },
     ],

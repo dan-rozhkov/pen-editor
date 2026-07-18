@@ -5,21 +5,18 @@ import {
   MagnifyingGlassIcon,
   type Icon,
 } from "@phosphor-icons/react";
-import type { AgentMode } from "@/store/chatStore";
 
 /**
  * A one-click prompt shown in the on-canvas frame agent popup. Clicking an
- * action launches a fresh Design Agent chat seeded with `prompt`, scoped to the
- * selected frame (a screenshot is attached automatically by
- * `launchFrameAgentChat`). `mode`, when set, pins the launched chat to a
- * specific agent mode without changing the user's saved default.
+ * action launches a fresh Design Agent chat seeded with `prompt`, scoped to
+ * the selected frame (a screenshot is attached automatically by
+ * `launchFrameAgentChat`).
  */
 export interface FrameQuickAction {
   id: string;
   label: string;
   icon: Icon;
   prompt: string;
-  mode?: AgentMode;
 }
 
 export const FRAME_QUICK_ACTIONS: FrameQuickAction[] = [
@@ -50,6 +47,5 @@ export const FRAME_QUICK_ACTIONS: FrameQuickAction[] = [
     icon: MagnifyingGlassIcon,
     prompt:
       "Find reference screens and design patterns similar to this frame's layout and purpose. Show inspiring real-world examples I can learn from.",
-    mode: "research",
   },
 ];

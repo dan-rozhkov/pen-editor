@@ -13,7 +13,6 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useChatStore } from "@/store/chatStore";
-import type { AgentMode } from "@/store/chatStore";
 import { toolHandlers } from "@/lib/toolRegistry";
 import type { ChatLaunchPayload } from "@/types/chat";
 
@@ -27,20 +26,18 @@ export function resolveChatApiUrl(): string {
   return explicitApiUrl ?? resolveApiUrl("/api/chat");
 }
 
-// A session must use ITS OWN tab's model/agentMode rather than the global
-// active-tab values, which setActiveTab overwrites on every tab switch.
-// Without this, switching tabs while a background session streams hijacks that
-// session's auto-continuation request with the foreground tab's model/mode.
+// A session must use ITS OWN tab's model rather than the global active-tab
+// value, which setActiveTab overwrites on every tab switch. Without this,
+// switching tabs while a background session streams hijacks that session's
+// auto-continuation request with the foreground tab's model.
 // Exported for tests.
 export function resolveSessionConfig(sessionId?: string): {
   model: string;
-  agentMode: AgentMode;
 } {
-  const { model, agentMode, tabs } = useChatStore.getState();
+  const { model, tabs } = useChatStore.getState();
   const tab = sessionId ? tabs.find((t) => t.id === sessionId) : undefined;
   return {
     model: tab?.model ?? model,
-    agentMode: tab?.agentMode ?? agentMode,
   };
 }
 
@@ -71,7 +68,7 @@ export function buildCanvasContext(sessionId?: string): object {
     };
   });
 
-  const { model, agentMode } = resolveSessionConfig(sessionId);
+  const { model } = resolveSessionConfig(sessionId);
 
   return {
     canvasContext: JSON.stringify({
@@ -87,7 +84,6 @@ export function buildCanvasContext(sessionId?: string): object {
       })),
     }),
     model: resolveModel(model),
-    agentMode,
   };
 }
 

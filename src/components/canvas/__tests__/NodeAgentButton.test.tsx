@@ -110,11 +110,11 @@ describe("<NodeAgentButton />", () => {
     expect(launch).not.toHaveBeenCalled();
   });
 
-  it("runs a quick action with its prompt and mode", () => {
+  it("runs a quick action with its prompt", () => {
     renderButton();
     fireEvent.click(screen.getByLabelText("Ask agent"));
-    const research = FRAME_QUICK_ACTIONS.find((a) => a.mode === "research")!;
-    fireEvent.click(screen.getByRole("button", { name: research.label }));
-    expect(launch).toHaveBeenCalledWith("n-1", research.prompt, research.mode);
+    const action = FRAME_QUICK_ACTIONS[0];
+    fireEvent.click(screen.getByRole("button", { name: action.label }));
+    expect(launch).toHaveBeenCalledWith("n-1", action.prompt);
   });
 });

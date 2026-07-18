@@ -6,7 +6,7 @@ import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 
 beforeEach(() => {
   useChatStore.setState({
-    tabs: [{ id: "tab-0", title: "Chat 1", model: "m", agentMode: "edits", parallelCount: 1 }],
+    tabs: [{ id: "tab-0", title: "Chat 1", model: "m", parallelCount: 1 }],
     activeTabId: "tab-0",
     launchQueue: {},
   } as never);

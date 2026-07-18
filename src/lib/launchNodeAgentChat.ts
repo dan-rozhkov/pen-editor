@@ -1,5 +1,5 @@
 import { captureNodeScreenshot } from "@/lib/captureNodeScreenshot";
-import { useChatStore, type AgentMode } from "@/store/chatStore";
+import { useChatStore } from "@/store/chatStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
@@ -13,17 +13,16 @@ import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
  *
  * Returns false (no side effects) when the text is empty/whitespace.
  *
- * `opts.agentMode` pins the freshly created tab to a specific mode without
- * altering the user's saved default. `opts.attachScreenshot` (default true)
- * controls whether a PixiJS screenshot is attached — embeds render via a DOM
- * overlay with an empty Pixi container, so callers pass false for them.
+ * `opts.attachScreenshot` (default true) controls whether a PixiJS screenshot
+ * is attached — embeds render via a DOM overlay with an empty Pixi container,
+ * so callers pass false for them.
  */
 export async function launchNodeAgentChat(
   nodeId: string,
   text: string,
-  opts: { agentMode?: AgentMode; attachScreenshot?: boolean } = {},
+  opts: { attachScreenshot?: boolean } = {},
 ): Promise<boolean> {
-  const { agentMode, attachScreenshot = true } = opts;
+  const { attachScreenshot = true } = opts;
   const trimmed = text.trim();
   if (!trimmed) return false;
 
@@ -37,7 +36,6 @@ export async function launchNodeAgentChat(
   const payload: ChatLaunchPayload = { text: trimmed, images };
 
   const tabId = useChatStore.getState().createTab();
-  if (agentMode) useChatStore.getState().setTabAgentMode(tabId, agentMode);
   useChatStore.getState().queueLaunchPayload(tabId, payload);
   // Reveal the agents section AND open the panel: on a narrow (mobile) layout
   // LeftSidebar unmounts entirely while collapsed, which would leave the queued

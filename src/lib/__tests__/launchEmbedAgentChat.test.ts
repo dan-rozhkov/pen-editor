@@ -15,7 +15,7 @@ beforeEach(() => {
   mockCapture.mockReset();
   mockCapture.mockResolvedValue("data:image/png;base64,SHOT");
   useChatStore.setState({
-    tabs: [{ id: "tab-0", title: "Chat 1", model: "m", agentMode: "prototype", parallelCount: 1 }],
+    tabs: [{ id: "tab-0", title: "Chat 1", model: "m", parallelCount: 1 }],
     activeTabId: "tab-0",
     launchQueue: {},
   });
@@ -33,12 +33,6 @@ describe("launchEmbedAgentChat", () => {
     const { activeTabId, launchQueue } = useChatStore.getState();
     expect(launchQueue[activeTabId]?.text).toBe("improve it");
     expect(launchQueue[activeTabId]?.images).toBeUndefined();
-  });
-
-  it("forwards the agent mode", async () => {
-    await launchEmbedAgentChat(EMBED_ID, "find refs", "research");
-    const { tabs, activeTabId } = useChatStore.getState();
-    expect(tabs.find((t) => t.id === activeTabId)?.agentMode).toBe("research");
   });
 
   it("is a no-op for empty text", async () => {

@@ -66,11 +66,10 @@ describe("ChatPanel streaming across two sessions", () => {
     useChatStore.setState({
       isExpanded: false,
       model: "google/gemini-2.5-flash",
-      agentMode: "edits",
       parallelCount: 1,
       tabs: [
-        { id: "tab-1", title: "Chat 1", model: "google/gemini-2.5-flash", agentMode: "edits", parallelCount: 1 },
-        { id: "tab-2", title: "Chat 2", model: "google/gemini-2.5-flash", agentMode: "edits", parallelCount: 1 },
+        { id: "tab-1", title: "Chat 1", model: "google/gemini-2.5-flash", parallelCount: 1 },
+        { id: "tab-2", title: "Chat 2", model: "google/gemini-2.5-flash", parallelCount: 1 },
       ],
       activeTabId: "tab-1",
       abortControllers: {},
@@ -159,7 +158,7 @@ describe("ChatPanel streaming across two sessions", () => {
     // Start with a single tab — the new tab is created while tab-1 streams.
     useChatStore.setState({
       tabs: [
-        { id: "tab-1", title: "Chat 1", model: "google/gemini-2.5-flash", agentMode: "edits", parallelCount: 1 },
+        { id: "tab-1", title: "Chat 1", model: "google/gemini-2.5-flash", parallelCount: 1 },
       ],
       activeTabId: "tab-1",
     });

@@ -18,7 +18,7 @@ beforeEach(() => {
 
   // Reset chat store to a single fresh tab.
   useChatStore.setState({
-    tabs: [{ id: "tab-0", title: "Chat 1", model: "m", agentMode: "prototype", parallelCount: 1 }],
+    tabs: [{ id: "tab-0", title: "Chat 1", model: "m", parallelCount: 1 }],
     activeTabId: "tab-0",
     launchQueue: {},
   });

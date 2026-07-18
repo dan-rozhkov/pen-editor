@@ -122,24 +122,12 @@ describe("<FrameAgentButton />", () => {
     }
   });
 
-  it("launches a chat with the action's prompt and mode on click", () => {
+  it("launches a chat with the action's prompt on click", () => {
     renderButton();
     fireEvent.click(screen.getByLabelText("Ask agent"));
-    const research = FRAME_QUICK_ACTIONS.find((a) => a.mode === "research")!;
-    fireEvent.click(screen.getByRole("button", { name: research.label }));
-    expect(mockLaunch).toHaveBeenCalledWith(
-      "frame-1",
-      research.prompt,
-      research.mode,
-    );
-  });
-
-  it("passes undefined mode for actions without an explicit mode", () => {
-    renderButton();
-    fireEvent.click(screen.getByLabelText("Ask agent"));
-    const noMode = FRAME_QUICK_ACTIONS.find((a) => !a.mode)!;
-    fireEvent.click(screen.getByRole("button", { name: noMode.label }));
-    expect(mockLaunch).toHaveBeenCalledWith("frame-1", noMode.prompt, undefined);
+    const action = FRAME_QUICK_ACTIONS[0];
+    fireEvent.click(screen.getByRole("button", { name: action.label }));
+    expect(mockLaunch).toHaveBeenCalledWith("frame-1", action.prompt);
   });
 
   it("closes the composer after a quick action runs", () => {
