@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import clsx from "clsx";
 import { DotsThreeVertical, PlusIcon } from "@phosphor-icons/react";
 import { usePageStore } from "@/store/pageStore";
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { IconButton } from "@/components/ui/IconButton";
+import { EditableText } from "@/components/ui/EditableText";
 
 export function PagesPanel() {
   const pages = usePageStore((s) => s.pages);
@@ -23,24 +24,8 @@ export function PagesPanel() {
   const reorderPages = usePageStore((s) => s.reorderPages);
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
-
-  const handleStartRename = (pageId: string) => {
-    setEditingId(pageId);
-    requestAnimationFrame(() => {
-      inputRef.current?.select();
-    });
-  };
-
-  const handleFinishRename = (pageId: string) => {
-    const value = inputRef.current?.value.trim();
-    if (value) {
-      renamePage(pageId, value);
-    }
-    setEditingId(null);
-  };
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
     setDragIndex(index);
@@ -102,7 +87,6 @@ export function PagesPanel() {
                 switchToPage(page.id);
               }
             }}
-            onDoubleClick={() => handleStartRename(page.id)}
             className={clsx(
               "group/page flex items-center h-7 rounded-md pl-2 pr-1 text-xs cursor-default select-none",
               page.id === activePageId
@@ -114,22 +98,18 @@ export function PagesPanel() {
                 "border-t border-accent-primary",
             )}
           >
-            {editingId === page.id ? (
-              <input
-                ref={inputRef}
-                defaultValue={page.name}
-                onBlur={() => handleFinishRename(page.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleFinishRename(page.id);
-                  if (e.key === "Escape") setEditingId(null);
-                }}
-                onClick={(e) => e.stopPropagation()}
-                className="flex-1 min-w-0 bg-transparent outline-none text-xs"
-                autoFocus
-              />
-            ) : (
+            <EditableText
+              value={page.name}
+              onCommit={(name) => renamePage(page.id, name)}
+              activateOn="doubleClick"
+              onEditingChange={(editing) =>
+                setEditingId(editing ? page.id : null)
+              }
+              className="truncate flex-1"
+              inputClassName="flex-1 min-w-0 bg-transparent outline-none text-xs"
+            />
+            {editingId !== page.id && (
               <>
-                <span className="truncate flex-1">{page.name}</span>
                 <DropdownMenu>
                   <DropdownMenuTrigger
                     render={

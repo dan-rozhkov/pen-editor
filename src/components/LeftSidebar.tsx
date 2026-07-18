@@ -1,6 +1,6 @@
-import { useRef, useState } from "react";
 import { ArrowsInLineVertical } from "@phosphor-icons/react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { EditableText } from "@/components/ui/EditableText";
 import { LayersPanel } from "./layers";
 import { ComponentsPanel } from "./ComponentsPanel";
 import { SlidesPanel } from "./SlidesPanel";
@@ -33,26 +33,9 @@ export function LeftSidebar() {
   const collapseAllFrames = useSceneStore((s) => s.collapseAllFrames);
   const fileName = useDocumentStore((s) => s.fileName);
   const setFileName = useDocumentStore((s) => s.setFileName);
-  const [isEditing, setIsEditing] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const displayName = fileName ? fileName.replace(/\.[^.]+$/, "") : "Untitled";
   const extension = fileName?.match(/\.[^.]+$/)?.[0] ?? "";
-
-  const handleStartEdit = () => {
-    setIsEditing(true);
-    requestAnimationFrame(() => {
-      inputRef.current?.select();
-    });
-  };
-
-  const handleFinishEdit = () => {
-    setIsEditing(false);
-    const value = inputRef.current?.value.trim();
-    if (value) {
-      setFileName(value + extension);
-    }
-  };
 
   // On mobile the panel is hidden until the rail opens it, then it covers the
   // full screen width to the right of the rail. On desktop it is a fixed 300px
@@ -86,25 +69,12 @@ export function LeftSidebar() {
       )}
       {(activeSection === "pages" || activeSection === "slides") && (
         <div className="px-2 pb-2">
-          {isEditing ? (
-            <input
-              ref={inputRef}
-              defaultValue={displayName}
-              onBlur={handleFinishEdit}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleFinishEdit();
-                if (e.key === "Escape") setIsEditing(false);
-              }}
-              className="w-full h-7 px-1 py-0.5 rounded text-sm font-medium text-text-default bg-secondary outline-none"
-            />
-          ) : (
-            <div
-              onClick={handleStartEdit}
-              className="h-7 px-1 rounded truncate text-sm font-medium text-text-default cursor-text hover:bg-secondary flex items-center"
-            >
-              {displayName}
-            </div>
-          )}
+          <EditableText
+            value={displayName}
+            onCommit={(name) => setFileName(name + extension)}
+            className="h-7 px-1 rounded truncate text-sm font-medium text-text-default cursor-text hover:bg-secondary flex items-center"
+            inputClassName="w-full h-7 px-1 py-0.5 rounded text-sm font-medium text-text-default bg-secondary outline-none"
+          />
         </div>
       )}
       <div className="flex-1 relative overflow-hidden">

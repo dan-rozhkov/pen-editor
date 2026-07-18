@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import clsx from "clsx";
 import { useVariableStore } from "../store/variableStore";
 import { generateVariableId, getVariableValue } from "../types/variable";
 import type { Variable, VariableType, ThemeName } from "../types/variable";
 import { useLeftSidebarStore } from "../store/leftSidebarStore";
 import { CustomColorPicker } from "./ui/ColorPicker";
+import { EditableText } from "./ui/EditableText";
 import {
   Table,
   TableHeader,
@@ -43,78 +44,6 @@ const defaultNames: Record<VariableType, string> = {
   number: "Number",
   string: "String",
 };
-
-// Inline editable text cell
-function EditableCell({
-  value,
-  onCommit,
-  className,
-  inputType = "text",
-}: {
-  value: string;
-  onCommit: (value: string) => void;
-  className?: string;
-  inputType?: "text" | "number";
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (editing && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
-  }, [editing]);
-
-  const commit = () => {
-    const trimmed = draft.trim();
-    if (trimmed !== value) {
-      onCommit(trimmed);
-    }
-    setEditing(false);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") commit();
-    else if (e.key === "Escape") {
-      setDraft(value);
-      setEditing(false);
-    }
-  };
-
-  if (editing) {
-    return (
-      <input
-        ref={inputRef}
-        type={inputType}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={handleKeyDown}
-        className={clsx(
-          "w-full bg-secondary rounded px-2 py-1 text-xs text-text-primary outline-none",
-          className,
-        )}
-      />
-    );
-  }
-
-  return (
-    <span
-      className={clsx(
-        "text-xs text-text-secondary truncate cursor-text hover:text-text-primary block px-2 py-1 rounded hover:bg-secondary",
-        className,
-      )}
-      onClick={() => {
-        setDraft(value);
-        setEditing(true);
-      }}
-    >
-      {value || "(empty)"}
-    </span>
-  );
-}
 
 // Color cell with swatch + hex value
 function ColorCell({
@@ -158,10 +87,11 @@ function ValueCell({
 
   return (
     <div className="min-w-0 overflow-hidden">
-      <EditableCell
+      <EditableText
         value={value}
         onCommit={(v) => updateVariableThemeValue(variable.id, theme, v)}
         inputType={variable.type === "number" ? "number" : "text"}
+        allowEmpty
       />
     </div>
   );
@@ -192,9 +122,10 @@ function VariableRow({ variable }: { variable: Variable }) {
             {badge.label}
           </span>
           <div className="min-w-0 flex-1">
-            <EditableCell
+            <EditableText
               value={variable.name}
               onCommit={(name) => updateVariable(variable.id, { name })}
+              allowEmpty
             />
           </div>
         </div>

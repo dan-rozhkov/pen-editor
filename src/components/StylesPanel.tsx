@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { useStyleStore } from "@/store/styleStore";
 import {
   generateFillStyleId,
@@ -10,6 +10,7 @@ import type { Paint } from "@/types/scene";
 import { createSolidPaint, createShadowEffect } from "@/utils/fillUtils";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import { CustomColorPicker } from "./ui/ColorPicker";
+import { EditableText } from "./ui/EditableText";
 import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip";
 import { PaintBrushIcon, PlusIcon, TrashIcon, ArrowLineLeftIcon } from "@phosphor-icons/react";
 import { buildCSSGradient } from "@/utils/gradientUtils";
@@ -21,63 +22,6 @@ import {
 } from "./ui/dropdown-menu";
 import { IconButton } from "./ui/IconButton";
 import { PanelEmptyState } from "./PanelEmptyState";
-
-/** Inline editable name cell (mirrors TextStylesPanel/VariablesPanel EditableCell). */
-function EditableName({
-  value,
-  onCommit,
-}: {
-  value: string;
-  onCommit: (value: string) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (editing && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
-  }, [editing]);
-
-  const commit = () => {
-    const trimmed = draft.trim();
-    if (trimmed && trimmed !== value) onCommit(trimmed);
-    setEditing(false);
-  };
-
-  if (editing) {
-    return (
-      <input
-        ref={inputRef}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") commit();
-          else if (e.key === "Escape") {
-            setDraft(value);
-            setEditing(false);
-          }
-        }}
-        className="w-full bg-secondary rounded px-2 py-1 text-xs text-text-primary outline-none"
-      />
-    );
-  }
-
-  return (
-    <span
-      className="text-xs text-text-primary truncate cursor-text hover:bg-secondary block px-2 py-1 rounded"
-      onClick={() => {
-        setDraft(value);
-        setEditing(true);
-      }}
-    >
-      {value || "(unnamed)"}
-    </span>
-  );
-}
 
 /** Read-only preview swatch for any paint kind (mirrors FillSection's PaintSwatch). */
 function StyleSwatch({ paint }: { paint: Paint }) {
@@ -124,7 +68,12 @@ function FillStyleRow({ style }: { style: FillStyle }) {
         <StyleSwatch paint={paint} />
       )}
       <div className="min-w-0 flex-1">
-        <EditableName value={style.name} onCommit={(name) => updateFillStyle(style.id, { name })} />
+        <EditableText
+          value={style.name}
+          onCommit={(name) => updateFillStyle(style.id, { name })}
+          placeholder="(unnamed)"
+          className="text-xs text-text-primary truncate cursor-text hover:bg-secondary block px-2 py-1 rounded"
+        />
       </div>
       <span className="text-[11px] text-text-muted font-mono truncate w-28 text-right">
         {paintTypeLabel(paint)}
@@ -183,7 +132,12 @@ function EffectStyleRow({ style }: { style: EffectStyle }) {
         <div className="h-5 w-5 shrink-0 rounded border border-border-default bg-secondary" />
       )}
       <div className="min-w-0 flex-1">
-        <EditableName value={style.name} onCommit={(name) => updateEffectStyle(style.id, { name })} />
+        <EditableText
+          value={style.name}
+          onCommit={(name) => updateEffectStyle(style.id, { name })}
+          placeholder="(unnamed)"
+          className="text-xs text-text-primary truncate cursor-text hover:bg-secondary block px-2 py-1 rounded"
+        />
       </div>
       <span className="text-[11px] text-text-muted truncate w-28 text-right">{summary || "Empty"}</span>
       <Tooltip>

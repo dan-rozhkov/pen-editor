@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { useTextStyleStore } from "../store/textStyleStore";
 import { generateTextStyleId } from "../types/textStyle";
 import type { TextStyle, TextStylePropertyKey } from "../types/textStyle";
 import { useLeftSidebarStore } from "../store/leftSidebarStore";
+import { EditableText } from "./ui/EditableText";
 import {
   Table,
   TableHeader,
@@ -15,70 +16,6 @@ import { PlusIcon, TextAaIcon, TrashIcon, ArrowLineLeftIcon } from "@phosphor-ic
 import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip";
 import { IconButton } from "./ui/IconButton";
 import { PanelEmptyState } from "./PanelEmptyState";
-
-// Inline editable text/number cell (mirrors VariablesPanel's EditableCell).
-function EditableCell({
-  value,
-  onCommit,
-  inputType = "text",
-  placeholder,
-}: {
-  value: string;
-  onCommit: (value: string) => void;
-  inputType?: "text" | "number";
-  placeholder?: string;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (editing && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
-  }, [editing]);
-
-  const commit = () => {
-    const trimmed = draft.trim();
-    if (trimmed !== value) onCommit(trimmed);
-    setEditing(false);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") commit();
-    else if (e.key === "Escape") {
-      setDraft(value);
-      setEditing(false);
-    }
-  };
-
-  if (editing) {
-    return (
-      <input
-        ref={inputRef}
-        type={inputType}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={handleKeyDown}
-        className="w-full bg-secondary rounded px-2 py-1 text-xs text-text-primary outline-none"
-      />
-    );
-  }
-
-  return (
-    <span
-      className="text-xs text-text-secondary truncate cursor-text hover:text-text-primary block px-2 py-1 rounded hover:bg-secondary"
-      onClick={() => {
-        setDraft(value);
-        setEditing(true);
-      }}
-    >
-      {value || placeholder || "(empty)"}
-    </span>
-  );
-}
 
 function commitNumberOrClear(
   raw: string,
@@ -109,44 +46,49 @@ function TextStyleRow({ style }: { style: TextStyle }) {
       onMouseLeave={() => setHovered(false)}
     >
       <TableCell className="py-2 px-3">
-        <EditableCell value={style.name} onCommit={(v) => set("name", v)} />
+        <EditableText value={style.name} onCommit={(v) => set("name", v)} allowEmpty />
       </TableCell>
       <TableCell className="py-2 px-3 border-l border-border-light">
-        <EditableCell
+        <EditableText
           value={style.fontFamily ?? ""}
           onCommit={(v) => set("fontFamily", v || undefined)}
           placeholder="Arial"
+          allowEmpty
         />
       </TableCell>
       <TableCell className="py-2 px-3 border-l border-border-light">
-        <EditableCell
+        <EditableText
           value={style.fontSize !== undefined ? String(style.fontSize) : ""}
           inputType="number"
           onCommit={(v) => commitNumberOrClear(v, (n) => set("fontSize", n))}
           placeholder="16"
+          allowEmpty
         />
       </TableCell>
       <TableCell className="py-2 px-3 border-l border-border-light">
-        <EditableCell
+        <EditableText
           value={style.fontWeight ?? ""}
           onCommit={(v) => set("fontWeight", v || undefined)}
           placeholder="normal"
+          allowEmpty
         />
       </TableCell>
       <TableCell className="py-2 px-3 border-l border-border-light">
-        <EditableCell
+        <EditableText
           value={style.lineHeight !== undefined ? String(style.lineHeight) : ""}
           inputType="number"
           onCommit={(v) => commitNumberOrClear(v, (n) => set("lineHeight", n))}
           placeholder="1.2"
+          allowEmpty
         />
       </TableCell>
       <TableCell className="py-2 px-3 border-l border-border-light">
-        <EditableCell
+        <EditableText
           value={style.letterSpacing !== undefined ? String(style.letterSpacing) : ""}
           inputType="number"
           onCommit={(v) => commitNumberOrClear(v, (n) => set("letterSpacing", n))}
           placeholder="0"
+          allowEmpty
         />
       </TableCell>
       <TableCell className="py-2 px-3 border-l border-border-light">
