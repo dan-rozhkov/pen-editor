@@ -8,6 +8,43 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.47.0] - 2026-07-18
+
+### Fixed
+- **Multi-select edits now go through a sceneStore action (arch-01).**
+  `MultiSelectPropertyEditor` was the only production component writing to the
+  scene store via a hand-rolled `useSceneStore.setState`, re-implementing
+  `updateMultipleNodes` but silently dropping two contract steps:
+  `syncTextDimensions` (multi-selecting text nodes and changing a sizing mode
+  left stale measured dimensions) and `markComponentArtifactsStaleFromNative`
+  (editing a reusable component frame via multi-select left its HTML export
+  artifact marked `in_sync` while the native node changed). Both blocks now call
+  a new `updateMultipleNodesMerged` action that replicates the full mutation
+  contract (history, text re-measure, artifact stale-marking, dirty-tracking)
+  while keeping the per-node deep merge for `sizing`/`layout`.
+- **3D-layer toggle now tracks reparents (arch-02).** `Layers3DToggle`'s
+  `disabled` state resolved its target frame from untracked `getState()` reads
+  and subscriptions that didn't cover `parentById`, so moving a selected node to
+  a different frame could leave the button's enabled/disabled state stale.
+  `resolveTargetFrame` is now a pure function subscribed via a selector.
+
+### Changed
+- **Narrowed the last whole-store subscriptions (arch-02, perf).** `PixiCanvas`
+  (the heaviest component) subscribed wholesale to the clipboard, selection,
+  history, and drawMode stores — `drawModeStore`/`historyStore` churn at pointer
+  rate, so the whole canvas subtree re-rendered on every pointermove while
+  drawing and every undoable edit. These, plus `PrimitivesPanel`, the inline
+  name/text editors, and `useNodePlacement`, now use per-field selectors (or
+  imperative `getState()` reads inside click handlers). Also removed a dead
+  `copiedNodes` param that forced 9 window listeners to re-register on every copy.
+- **Toolbar File menu delegates to `fileCommands` (arch-03).** The File menu
+  re-implemented `exportAsJson`/`exportAsPen`/`openDocument` statement-for-
+  statement (including the 8-field `pagesForExport` mapping) and subscribed to
+  the variables/text-styles/fill-styles/effect-styles stores *only* to feed
+  those handlers — re-rendering the whole ~100-line menu tree on every keystroke
+  in those panels. It now calls the shared `fileCommands` functions and drops
+  the four handler-only subscriptions.
+
 ## [0.46.1] - 2026-07-18
 
 ### Fixed
