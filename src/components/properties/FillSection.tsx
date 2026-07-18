@@ -1,13 +1,9 @@
-import { useState } from "react";
-import clsx from "clsx";
 import type {
   GradientFill,
   ImageFill,
   Paint,
-  PaintBlendMode,
   SceneNode,
 } from "@/types/scene";
-import { PAINT_BLEND_MODES } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
 import {
   ColorInput,
@@ -16,24 +12,7 @@ import {
   SelectInput,
 } from "@/components/ui/PropertyInputs";
 import { IconButton } from "@/components/ui/IconButton";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  ArrowDown,
-  ArrowUp,
-  DropHalfIcon,
-  Eye,
-  EyeSlash,
-  MinusIcon,
-  PlusIcon,
-  DotsSixVertical,
-} from "@phosphor-icons/react";
+import { ArrowDown, ArrowUp, PlusIcon } from "@phosphor-icons/react";
 import { GradientEditor } from "@/components/properties/GradientEditor";
 import { ImageFillEditor } from "@/components/properties/ImageFillSection";
 import { PatternFillEditor } from "@/components/properties/PatternFillSection";
@@ -42,7 +21,6 @@ import { OverrideIndicator } from "@/components/properties/OverrideIndicator";
 import { StylePicker } from "@/components/properties/StylePicker";
 import { useStyleStore } from "@/store/styleStore";
 import { getFills, clearLegacyFillProps } from "@/utils/fillUtils";
-import { buildCSSGradient } from "@/utils/gradientUtils";
 import {
   addSolidFill,
   convertFillKind,
@@ -54,6 +32,7 @@ import {
   updateFillAt,
   type FillKind,
 } from "@/components/properties/fillSectionUtils";
+import { BlendModeDropdown, PaintSwatch, StackRowShell, useDragReorder } from "@/components/properties/stackRow";
 
 interface FillSectionProps {
   node: SceneNode;
@@ -66,122 +45,11 @@ interface FillSectionProps {
   mixedKeys?: Set<string>;
 }
 
-// Derived from the canonical blend-mode list ("color-dodge" → "Color Dodge").
-// Exported — shared with StrokeSection's paint-stack rows.
-export const BLEND_MODE_OPTIONS: { value: PaintBlendMode; label: string }[] =
-  PAINT_BLEND_MODES.map((mode) => ({
-    value: mode,
-    label: mode
-      .split("-")
-      .map((word) => word[0].toUpperCase() + word.slice(1))
-      .join(" "),
-  }));
-
-function blendModeLabel(mode: PaintBlendMode | undefined): string {
-  return BLEND_MODE_OPTIONS.find((option) => option.value === (mode ?? "normal"))?.label ?? "Normal";
-}
-
-export function BlendModeDropdown({
-  value,
-  onChange,
-}: {
-  value: PaintBlendMode | undefined;
-  onChange: (value: PaintBlendMode) => void;
-}) {
-  const label = blendModeLabel(value);
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <IconButton
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            tooltip={`Blend mode: ${label}`}
-            className="text-text-primary hover:bg-secondary"
-          >
-            <DropHalfIcon />
-          </IconButton>
-        }
-      />
-
-      <DropdownMenuContent align="end">
-        <DropdownMenuRadioGroup
-          value={value ?? "normal"}
-          onValueChange={(next) => onChange(next as PaintBlendMode)}
-        >
-          {BLEND_MODE_OPTIONS.map((option) => (
-            <DropdownMenuRadioItem key={option.value} value={option.value}>
-              {option.label}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-/** Small color/gradient/image preview swatch for a paint row. Exported — shared with StrokeSection. */
-export function PaintSwatch({ paint }: { paint: Paint }) {
-  let style: React.CSSProperties;
-  if (paint.type === "solid") {
-    style = { backgroundColor: paint.color };
-  } else if (paint.type === "gradient") {
-    if (paint.gradient.type === "radial") {
-      const stops = [...paint.gradient.stops]
-        .sort((a, b) => a.position - b.position)
-        .map((s) => `${s.color} ${Math.round(s.position * 100)}%`)
-        .join(", ");
-      style = { background: `radial-gradient(circle, ${stops})` };
-    } else {
-      style = { background: buildCSSGradient(paint.gradient.stops) };
-    }
-  } else if (paint.type === "pattern" && paint.pattern.url) {
-    // Approximate the tile's actual scale: clamp so the swatch preview stays
-    // legible at both extremes (a huge tile would otherwise render as one
-    // solid color; a tiny one as unrecognizable noise).
-    const scalePercent = Math.round(Math.min(1, Math.max(0.1, paint.pattern.scale ?? 1)) * 50);
-    style = {
-      backgroundImage: `url(${paint.pattern.url})`,
-      backgroundSize: `${scalePercent}%`,
-      backgroundRepeat: "repeat",
-    };
-  } else if (paint.type === "image" && paint.image.url) {
-    style = {
-      backgroundImage: `url(${paint.image.url})`,
-      backgroundSize: "cover",
-      backgroundPosition: "center",
-    };
-  } else if (paint.type === "video" && paint.video.src) {
-    // Checkerboard placeholder swatch — a poster frame would require decoding
-    // the video; the row label ("Video") disambiguates it.
-    style = {
-      background: "repeating-conic-gradient(#bbb 0% 25%, #eee 0% 50%) 50% / 6px 6px",
-    };
-  } else {
-    style = {
-      background: "repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 50% / 6px 6px",
-    };
-  }
-  return (
-    <div
-      className="h-4 w-4 shrink-0 rounded border border-border-default"
-      style={style}
-    />
-  );
-}
-
 const FILL_TYPE_OPTIONS = [
   { value: "solid", label: "Solid" },
   { value: "linear", label: "Linear" },
   { value: "radial", label: "Radial" },
 ];
-
-// Exported — shared with StrokeSection's paint-stack rows.
-export const FILL_ROW_TRIGGER_CLASS =
-  "flex min-w-0 flex-1 items-center gap-2 rounded bg-secondary px-1.5 py-1 text-left text-secondary-foreground hover:bg-secondary data-popup-open:bg-secondary";
-
 
 export function FillSection({
   node,
@@ -213,19 +81,8 @@ export function FillSection({
     commit(addSolidFill(fills));
   };
 
-  // --- Drag-to-reorder state (array-index space) ---
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [dropIndex, setDropIndex] = useState<number | null>(null);
-
-  const handleDrop = (target: number) => {
-    if (dragIndex !== null && dragIndex !== target) {
-      commit(moveItem(fills, dragIndex, target - dragIndex));
-    }
-    setDragIndex(null);
-    setDropIndex(null);
-  };
-
-  const canReorder = fills.length > 1;
+  const drag = useDragReorder(fills.length, (from, delta) => commit(moveItem(fills, from, delta)));
+  const canReorder = drag.canReorder;
 
   return (
     <PropertySection
@@ -250,8 +107,6 @@ export function FillSection({
               // arrayIndex toward end = top of stack. Up arrow moves toward top.
               const canMoveUp = arrayIndex < fills.length - 1;
               const canMoveDown = arrayIndex > 0;
-              const isDropTarget =
-                dropIndex === arrayIndex && dragIndex !== null && dragIndex !== arrayIndex;
 
               const typeOptions = supportsImage
                 ? [
@@ -263,226 +118,173 @@ export function FillSection({
                 : FILL_TYPE_OPTIONS;
 
               return (
-                <div
+                <StackRowShell
                   key={paint.id}
-                  className={clsx(
-                    "group/fill-row relative flex items-center gap-1 rounded",
-                    isDropTarget && "ring-1 ring-border-hover",
-                    dragIndex === arrayIndex && "opacity-50",
-                  )}
-                  onDragOver={(e) => {
-                    if (dragIndex !== null) {
-                      e.preventDefault();
-                      e.dataTransfer.dropEffect = "move";
-                      setDropIndex(arrayIndex);
-                    }
-                  }}
-                  onDrop={() => handleDrop(arrayIndex)}
-                >
-                  {/* Drag handle — reorder the stack by dragging */}
-                  <div
-                    draggable={canReorder}
-                    onDragStart={(e) => {
-                      if (!canReorder) return;
-                      e.dataTransfer.effectAllowed = "move";
-                      setDragIndex(arrayIndex);
-                    }}
-                    onDragEnd={() => {
-                      setDragIndex(null);
-                      setDropIndex(null);
-                    }}
-                    className={clsx(
-                      "absolute left-[-16px] top-1/2 flex h-6 w-4 -translate-y-1/2 items-center justify-center text-text-primary opacity-0 transition-opacity",
-                      canReorder
-                        ? "cursor-grab group-hover/fill-row:opacity-100 active:cursor-grabbing"
-                        : "pointer-events-none",
-                    )}
-                    title={canReorder ? "Drag to reorder" : undefined}
-                  >
-                    <DotsSixVertical size={16} />
-                  </div>
-
-                  {/* Compact trigger: swatch + summary opens the detail popover */}
-                  <Popover>
-                    <PopoverTrigger
-                      className={FILL_ROW_TRIGGER_CLASS}
-                      title="Edit fill"
-                    >
+                  arrayIndex={arrayIndex}
+                  canReorder={canReorder}
+                  drag={drag}
+                  visible={isVisible}
+                  onToggleVisible={() => commit(toggleFillVisibleAt(fills, arrayIndex))}
+                  onRemove={() => commit(removeFillAt(fills, arrayIndex))}
+                  itemLabel="fill"
+                  triggerTitle="Edit fill"
+                  triggerContent={
+                    <>
                       <PaintSwatch paint={paint} />
                       <span className="min-w-0 flex-1 truncate text-xs text-text-primary">
                         {paintSummary(paint)}
                       </span>
-                    </PopoverTrigger>
-                    <PopoverContent
-                      draggable
-                      dragHandleContent={<span className="text-[11px] font-semibold text-text-primary">Fill</span>}
-                    >
-                      {/* Type + reorder */}
-                      <div className="flex items-center gap-1">
-                        <div className="min-w-0 flex-1">
-                          <SelectInput
-                            value={kind}
-                            options={typeOptions}
-                            onChange={(v) =>
-                              commit(convertFillKind(fills, arrayIndex, v as FillKind))
-                            }
-                          />
-                        </div>
-                        <IconButton
-                          variant="ghost"
-                          size="icon-sm"
-                          disabled={!canMoveUp}
-                          onClick={() => commit(moveItem(fills, arrayIndex, 1))}
-                          tooltip="Move up"
-                        >
-                          <ArrowUp />
-                        </IconButton>
-                        <IconButton
-                          variant="ghost"
-                          size="icon-sm"
-                          disabled={!canMoveDown}
-                          onClick={() => commit(moveItem(fills, arrayIndex, -1))}
-                          tooltip="Move down"
-                        >
-                          <ArrowDown />
-                        </IconButton>
-                        <BlendModeDropdown
-                          value={paint.blendMode ?? "normal"}
-                          onChange={(nextBlendMode) =>
-                            commit(
-                              updateFillAt(fills, arrayIndex, {
-                                ...paint,
-                                blendMode: nextBlendMode,
-                              }),
-                            )
-                          }
-                        />
-                      </div>
-
-                      {/* Named fill-style binding (apply / detach) */}
-                      <StylePicker
-                        kindLabel="fill style"
-                        styles={fillStyles}
-                        boundId={paint.styleId}
-                        onPick={(styleId) =>
-                          commit(updateFillAt(fills, arrayIndex, { ...paint, styleId }))
-                        }
-                        onDetach={() => detachFillStyleFromPaint(node.id, paint.id)}
+                    </>
+                  }
+                  popoverTitle={<span className="text-[11px] font-semibold text-text-primary">Fill</span>}
+                  trailing={
+                    rowIndex === 0 && (
+                      <OverrideIndicator
+                        isOverridden={isOverridden(node.fill, component?.fill)}
+                        onReset={() => resetOverride("fill")}
                       />
-
-                      {/* Solid color + variable binding */}
-                      {paint.type === "solid" && (
-                        <ColorInput
-                          value={paint.color}
-                          onChange={(v) =>
-                            commit(updateFillAt(fills, arrayIndex, { ...paint, color: v }))
-                          }
-                          variableId={paint.colorBinding?.variableId}
-                          onVariableChange={(variableId) =>
-                            commit(
-                              updateFillAt(fills, arrayIndex, {
-                                ...paint,
-                                colorBinding: variableId ? { variableId } : undefined,
-                              }),
-                            )
-                          }
-                          availableVariables={colorVariables}
-                          activeTheme={activeTheme}
-                        />
-                      )}
-
-                      {/* Gradient editor */}
-                      {paint.type === "gradient" && (
-                        <GradientEditor
-                          gradient={paint.gradient}
-                          onChange={(g: GradientFill) =>
-                            commit(updateFillAt(fills, arrayIndex, { ...paint, gradient: g }))
-                          }
-                        />
-                      )}
-
-                      {/* Image editor */}
-                      {paint.type === "image" && (
-                        <ImageFillEditor
-                          imageFill={paint.image}
-                          onUpdate={(updates) => {
-                            const img = (updates as { imageFill?: ImageFill }).imageFill;
-                            if (!img) return;
-                            commit(
-                              updateFillAt(fills, arrayIndex, { ...paint, image: img }),
-                            );
-                          }}
-                        />
-                      )}
-
-                      {/* Pattern editor */}
-                      {paint.type === "pattern" && (
-                        <PatternFillEditor
-                          pattern={paint.pattern}
-                          onChange={(p) =>
-                            commit(
-                              updateFillAt(fills, arrayIndex, { ...paint, pattern: p }),
-                            )
-                          }
-                        />
-                      )}
-
-                      {/* Video editor */}
-                      {paint.type === "video" && (
-                        <VideoFillEditor
-                          video={paint.video}
-                          onChange={(v) =>
-                            commit(
-                              updateFillAt(fills, arrayIndex, { ...paint, video: v }),
-                            )
-                          }
-                        />
-                      )}
-
-                      {/* Layer opacity (percent in UI, 0-1 in the model) */}
-                      <NumberInput
-                        label="Opacity"
-                        labelOutside
-                        value={Math.round((paint.opacity ?? 1) * 100)}
-                        min={0}
-                        max={100}
+                    )
+                  }
+                >
+                  {/* Type + reorder */}
+                  <div className="flex items-center gap-1">
+                    <div className="min-w-0 flex-1">
+                      <SelectInput
+                        value={kind}
+                        options={typeOptions}
                         onChange={(v) =>
-                          commit(
-                            updateFillAt(fills, arrayIndex, {
-                              ...paint,
-                              opacity: Math.min(100, Math.max(0, v)) / 100,
-                            }),
-                          )
+                          commit(convertFillKind(fills, arrayIndex, v as FillKind))
                         }
                       />
+                    </div>
+                    <IconButton
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={!canMoveUp}
+                      onClick={() => commit(moveItem(fills, arrayIndex, 1))}
+                      tooltip="Move up"
+                    >
+                      <ArrowUp />
+                    </IconButton>
+                    <IconButton
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={!canMoveDown}
+                      onClick={() => commit(moveItem(fills, arrayIndex, -1))}
+                      tooltip="Move down"
+                    >
+                      <ArrowDown />
+                    </IconButton>
+                    <BlendModeDropdown
+                      value={paint.blendMode ?? "normal"}
+                      onChange={(nextBlendMode) =>
+                        commit(
+                          updateFillAt(fills, arrayIndex, {
+                            ...paint,
+                            blendMode: nextBlendMode,
+                          }),
+                        )
+                      }
+                    />
+                  </div>
 
-                    </PopoverContent>
-                  </Popover>
+                  {/* Named fill-style binding (apply / detach) */}
+                  <StylePicker
+                    kindLabel="fill style"
+                    styles={fillStyles}
+                    boundId={paint.styleId}
+                    onPick={(styleId) =>
+                      commit(updateFillAt(fills, arrayIndex, { ...paint, styleId }))
+                    }
+                    onDetach={() => detachFillStyleFromPaint(node.id, paint.id)}
+                  />
 
-                  <IconButton
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => commit(toggleFillVisibleAt(fills, arrayIndex))}
-                    tooltip={isVisible ? "Hide fill" : "Show fill"}
-                  >
-                    {isVisible ? <Eye /> : <EyeSlash />}
-                  </IconButton>
-                  <IconButton
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => commit(removeFillAt(fills, arrayIndex))}
-                    tooltip="Remove fill"
-                  >
-                    <MinusIcon />
-                  </IconButton>
-
-                  {rowIndex === 0 && (
-                    <OverrideIndicator
-                      isOverridden={isOverridden(node.fill, component?.fill)}
-                      onReset={() => resetOverride("fill")}
+                  {/* Solid color + variable binding */}
+                  {paint.type === "solid" && (
+                    <ColorInput
+                      value={paint.color}
+                      onChange={(v) =>
+                        commit(updateFillAt(fills, arrayIndex, { ...paint, color: v }))
+                      }
+                      variableId={paint.colorBinding?.variableId}
+                      onVariableChange={(variableId) =>
+                        commit(
+                          updateFillAt(fills, arrayIndex, {
+                            ...paint,
+                            colorBinding: variableId ? { variableId } : undefined,
+                          }),
+                        )
+                      }
+                      availableVariables={colorVariables}
+                      activeTheme={activeTheme}
                     />
                   )}
-                </div>
+
+                  {/* Gradient editor */}
+                  {paint.type === "gradient" && (
+                    <GradientEditor
+                      gradient={paint.gradient}
+                      onChange={(g: GradientFill) =>
+                        commit(updateFillAt(fills, arrayIndex, { ...paint, gradient: g }))
+                      }
+                    />
+                  )}
+
+                  {/* Image editor */}
+                  {paint.type === "image" && (
+                    <ImageFillEditor
+                      imageFill={paint.image}
+                      onUpdate={(updates) => {
+                        const img = (updates as { imageFill?: ImageFill }).imageFill;
+                        if (!img) return;
+                        commit(
+                          updateFillAt(fills, arrayIndex, { ...paint, image: img }),
+                        );
+                      }}
+                    />
+                  )}
+
+                  {/* Pattern editor */}
+                  {paint.type === "pattern" && (
+                    <PatternFillEditor
+                      pattern={paint.pattern}
+                      onChange={(p) =>
+                        commit(
+                          updateFillAt(fills, arrayIndex, { ...paint, pattern: p }),
+                        )
+                      }
+                    />
+                  )}
+
+                  {/* Video editor */}
+                  {paint.type === "video" && (
+                    <VideoFillEditor
+                      video={paint.video}
+                      onChange={(v) =>
+                        commit(
+                          updateFillAt(fills, arrayIndex, { ...paint, video: v }),
+                        )
+                      }
+                    />
+                  )}
+
+                  {/* Layer opacity (percent in UI, 0-1 in the model) */}
+                  <NumberInput
+                    label="Opacity"
+                    labelOutside
+                    value={Math.round((paint.opacity ?? 1) * 100)}
+                    min={0}
+                    max={100}
+                    onChange={(v) =>
+                      commit(
+                        updateFillAt(fills, arrayIndex, {
+                          ...paint,
+                          opacity: Math.min(100, Math.max(0, v)) / 100,
+                        }),
+                      )
+                    }
+                  />
+                </StackRowShell>
               );
             })}
         </div>

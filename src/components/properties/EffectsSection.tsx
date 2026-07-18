@@ -8,14 +8,13 @@ import {
   PropertySection,
 } from "@/components/ui/PropertyInputs";
 import { IconButton } from "@/components/ui/IconButton";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ArrowDown, ArrowUp, Eye, EyeSlash, MinusIcon, PlusIcon } from "@phosphor-icons/react";
+import { ArrowDown, ArrowUp, PlusIcon } from "@phosphor-icons/react";
 import { parseHexAlpha } from "@/utils/shadowUtils";
 import {
   createBackgroundBlurEffect,
@@ -33,6 +32,7 @@ import {
 } from "@/components/properties/fillSectionUtils";
 import { StylePicker } from "@/components/properties/StylePicker";
 import { useStyleStore } from "@/store/styleStore";
+import { StackRowShell, useDragReorder } from "@/components/properties/stackRow";
 
 /** Human label for an effect row, derived from the effect (not hardcoded). */
 function effectLabel(effect: Effect): string {
@@ -75,6 +75,10 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
   const updateShadow = (index: number, shadow: ShadowEffect) => {
     commit(updateEffectAt(effects, index, shadow));
   };
+
+  // Drag-to-reorder is deliberately left off for effects (see plans/017) —
+  // enabling it is a one-prop change (`canReorder`), a follow-up.
+  const drag = useDragReorder(effects.length, (from, delta) => commit(moveItem(effects, from, delta)));
 
   return (
     <PropertySection
@@ -141,13 +145,24 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
               const canMoveDown = arrayIndex > 0;
 
               return (
-                <div key={effect.id} className="flex items-center gap-1">
-                  {/* Compact trigger: swatch + label opens the detail popover */}
-                  <Popover>
-                    <PopoverTrigger
-                      className="flex min-w-0 flex-1 items-center gap-2 rounded bg-secondary px-1.5 py-1 text-left"
-                      title="Edit effect"
-                    >
+                <StackRowShell
+                  key={effect.id}
+                  arrayIndex={arrayIndex}
+                  canReorder={false}
+                  drag={drag}
+                  visible={isVisible}
+                  onToggleVisible={() => commit(toggleEffectVisibleAt(effects, arrayIndex))}
+                  onRemove={() => commit(removeEffectAt(effects, arrayIndex))}
+                  itemLabel="effect"
+                  triggerTitle="Edit effect"
+                  // Effects aren't paints — a hand-rolled swatch instead of
+                  // PaintSwatch — and the trigger class here has always been
+                  // a hardcoded subset of FILL_ROW_TRIGGER_CLASS (no hover/
+                  // open-state background), so it's kept as its own class
+                  // rather than switched to the shared constant.
+                  triggerClassName="flex min-w-0 flex-1 items-center gap-2 rounded bg-secondary px-1.5 py-1 text-left"
+                  triggerContent={
+                    <>
                       <div
                         className="h-4 w-4 shrink-0 rounded border border-border-default"
                         style={effect.type === "shadow" ? { backgroundColor: effect.color } : undefined}
@@ -155,156 +170,136 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
                       <span className="min-w-0 flex-1 truncate text-xs text-text-primary">
                         {effectLabel(effect)}
                       </span>
-                    </PopoverTrigger>
-                    <PopoverContent
-                      draggable
-                      dragHandleContent={
-                        <span className="text-[11px] font-semibold text-text-primary">
-                          {effectLabel(effect)}
-                        </span>
-                      }
+                    </>
+                  }
+                  popoverTitle={
+                    <span className="text-[11px] font-semibold text-text-primary">
+                      {effectLabel(effect)}
+                    </span>
+                  }
+                >
+                  {/* Title + reorder */}
+                  <div className="flex items-center gap-1">
+                    <span className="flex-1" />
+                    <IconButton
+                      tooltip="Move up"
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={!canMoveUp}
+                      onClick={() => commit(moveItem(effects, arrayIndex, 1))}
                     >
-                      {/* Title + reorder */}
-                      <div className="flex items-center gap-1">
-                        <span className="flex-1" />
-                        <IconButton
-                          tooltip="Move up"
-                          variant="ghost"
-                          size="icon-sm"
-                          disabled={!canMoveUp}
-                          onClick={() => commit(moveItem(effects, arrayIndex, 1))}
-                        >
-                          <ArrowUp />
-                        </IconButton>
-                        <IconButton
-                          tooltip="Move down"
-                          variant="ghost"
-                          size="icon-sm"
-                          disabled={!canMoveDown}
-                          onClick={() => commit(moveItem(effects, arrayIndex, -1))}
-                        >
-                          <ArrowDown />
-                        </IconButton>
-                      </div>
+                      <ArrowUp />
+                    </IconButton>
+                    <IconButton
+                      tooltip="Move down"
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={!canMoveDown}
+                      onClick={() => commit(moveItem(effects, arrayIndex, -1))}
+                    >
+                      <ArrowDown />
+                    </IconButton>
+                  </div>
 
-                      {effect.type === "shadow" && (
-                        <>
-                          {/* Color + opacity */}
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1">
-                              <ColorInput
-                                value={effect.color}
-                                onChange={(v) =>
-                                  updateShadow(arrayIndex, { ...effect, color: v || "#00000040" })
-                                }
-                              />
-                            </div>
-                            <div className="w-16 shrink-0">
-                              <NumberInput
-                                label="%"
-                                value={Math.round(parseHexAlpha(effect.color).opacity * 100)}
-                                onChange={(v) => {
-                                  const opacity = Math.max(0, Math.min(100, v)) / 100;
-                                  const alpha = Math.round(opacity * 255)
-                                    .toString(16)
-                                    .padStart(2, "0");
-                                  const baseColor = effect.color.slice(0, 7);
-                                  updateShadow(arrayIndex, { ...effect, color: baseColor + alpha });
-                                }}
-                                min={0}
-                                max={100}
-                                step={1}
-                              />
-                            </div>
-                          </div>
-
-                          <PropertyRow>
-                            <NumberInput
-                              label="X"
-                              value={effect.offset.x}
-                              onChange={(v) =>
-                                updateShadow(arrayIndex, {
-                                  ...effect,
-                                  offset: { ...effect.offset, x: v },
-                                })
-                              }
-                              step={1}
-                            />
-                            <NumberInput
-                              label="Y"
-                              value={effect.offset.y}
-                              onChange={(v) =>
-                                updateShadow(arrayIndex, {
-                                  ...effect,
-                                  offset: { ...effect.offset, y: v },
-                                })
-                              }
-                              step={1}
-                            />
-                          </PropertyRow>
-
-                          <PropertyRow>
-                            <NumberInput
-                              label="Blur"
-                              labelOutside
-                              value={effect.blur}
-                              onChange={(v) =>
-                                updateShadow(arrayIndex, { ...effect, blur: Math.max(0, v) })
-                              }
-                              min={0}
-                              step={1}
-                            />
-                            <NumberInput
-                              label="Spread"
-                              labelOutside
-                              value={effect.spread}
-                              onChange={(v) => updateShadow(arrayIndex, { ...effect, spread: v })}
-                              step={1}
-                            />
-                          </PropertyRow>
-                        </>
-                      )}
-
-                      {(effect.type === "blur" || effect.type === "background-blur") && (
-                        <PropertyRow>
-                          <NumberInput
-                            label="Blur"
-                            labelOutside
-                            value={effect.radius}
+                  {effect.type === "shadow" && (
+                    <>
+                      {/* Color + opacity */}
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <ColorInput
+                            value={effect.color}
                             onChange={(v) =>
-                              commit(
-                                updateEffectAt(effects, arrayIndex, {
-                                  ...effect,
-                                  radius: Math.max(0, Math.min(100, v)),
-                                }),
-                              )
+                              updateShadow(arrayIndex, { ...effect, color: v || "#00000040" })
                             }
+                          />
+                        </div>
+                        <div className="w-16 shrink-0">
+                          <NumberInput
+                            label="%"
+                            value={Math.round(parseHexAlpha(effect.color).opacity * 100)}
+                            onChange={(v) => {
+                              const opacity = Math.max(0, Math.min(100, v)) / 100;
+                              const alpha = Math.round(opacity * 255)
+                                .toString(16)
+                                .padStart(2, "0");
+                              const baseColor = effect.color.slice(0, 7);
+                              updateShadow(arrayIndex, { ...effect, color: baseColor + alpha });
+                            }}
                             min={0}
                             max={100}
                             step={1}
                           />
-                        </PropertyRow>
-                      )}
-                    </PopoverContent>
-                  </Popover>
+                        </div>
+                      </div>
 
-                  <IconButton
-                    tooltip={isVisible ? "Hide effect" : "Show effect"}
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => commit(toggleEffectVisibleAt(effects, arrayIndex))}
-                  >
-                    {isVisible ? <Eye /> : <EyeSlash />}
-                  </IconButton>
-                  <IconButton
-                    tooltip="Remove effect"
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => commit(removeEffectAt(effects, arrayIndex))}
-                  >
-                    <MinusIcon />
-                  </IconButton>
-                </div>
+                      <PropertyRow>
+                        <NumberInput
+                          label="X"
+                          value={effect.offset.x}
+                          onChange={(v) =>
+                            updateShadow(arrayIndex, {
+                              ...effect,
+                              offset: { ...effect.offset, x: v },
+                            })
+                          }
+                          step={1}
+                        />
+                        <NumberInput
+                          label="Y"
+                          value={effect.offset.y}
+                          onChange={(v) =>
+                            updateShadow(arrayIndex, {
+                              ...effect,
+                              offset: { ...effect.offset, y: v },
+                            })
+                          }
+                          step={1}
+                        />
+                      </PropertyRow>
+
+                      <PropertyRow>
+                        <NumberInput
+                          label="Blur"
+                          labelOutside
+                          value={effect.blur}
+                          onChange={(v) =>
+                            updateShadow(arrayIndex, { ...effect, blur: Math.max(0, v) })
+                          }
+                          min={0}
+                          step={1}
+                        />
+                        <NumberInput
+                          label="Spread"
+                          labelOutside
+                          value={effect.spread}
+                          onChange={(v) => updateShadow(arrayIndex, { ...effect, spread: v })}
+                          step={1}
+                        />
+                      </PropertyRow>
+                    </>
+                  )}
+
+                  {(effect.type === "blur" || effect.type === "background-blur") && (
+                    <PropertyRow>
+                      <NumberInput
+                        label="Blur"
+                        labelOutside
+                        value={effect.radius}
+                        onChange={(v) =>
+                          commit(
+                            updateEffectAt(effects, arrayIndex, {
+                              ...effect,
+                              radius: Math.max(0, Math.min(100, v)),
+                            }),
+                          )
+                        }
+                        min={0}
+                        max={100}
+                        step={1}
+                      />
+                    </PropertyRow>
+                  )}
+                </StackRowShell>
               );
             })}
         </div>
