@@ -8,11 +8,10 @@ import { useUIThemeStore } from "@/store/uiThemeStore";
 import { useRenderModeStore } from "@/store/renderModeStore";
 import { formatShortcut } from "./shortcutFormat";
 import type { PaletteCommand } from "./types";
+import { getCanvasViewportMetrics } from "@/utils/canvasViewport";
 
 function fitToContent(): void {
-  const canvasEl = document.querySelector("[data-canvas]");
-  const width = canvasEl?.clientWidth ?? window.innerWidth;
-  const height = canvasEl?.clientHeight ?? window.innerHeight;
+  const { width, height } = getCanvasViewportMetrics();
   const nodes = useSceneStore.getState().getNodes();
   useViewportStore.getState().fitToContent(nodes, width, height);
 }

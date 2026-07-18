@@ -2,6 +2,7 @@ import { useSceneStore } from '../store/sceneStore'
 import { useSelectionStore } from '../store/selectionStore'
 import { useViewportStore } from '../store/viewportStore'
 import { findNodeById } from '../utils/nodeUtils'
+import { getCanvasViewportMetrics } from '../utils/canvasViewport'
 import type { FrameNode } from '../types/scene'
 
 /**
@@ -21,8 +22,9 @@ export function useNodePlacement() {
   // Get center of viewport in canvas coordinates
   const getViewportCenter = () => {
     const { scale, x, y } = useViewportStore.getState()
-    const centerX = (window.innerWidth / 2 - x) / scale
-    const centerY = (window.innerHeight / 2 - y) / scale
+    const { width, height } = getCanvasViewportMetrics()
+    const centerX = (width / 2 - x) / scale
+    const centerY = (height / 2 - y) / scale
     return { centerX, centerY }
   }
 

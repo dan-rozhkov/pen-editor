@@ -9,6 +9,7 @@ import { useDocumentStore } from "@/store/documentStore";
 import { usePageStore } from "@/store/pageStore";
 import { downloadDocument, downloadPublicPen, openFilePicker } from "@/utils/fileUtils";
 import { applyOpenedDocument } from "@/utils/openDocumentIntoEditor";
+import { getCanvasViewportMetrics } from "@/utils/canvasViewport";
 import { toDtcg, fromDtcg, type ImportResult } from "@/lib/designTokens";
 import type { DtcgDocument } from "@/lib/designTokens";
 import { useHistoryStore } from "@/store/historyStore";
@@ -149,11 +150,8 @@ export async function openDocument(): Promise<void> {
   try {
     const result = await openFilePicker();
     useDocumentStore.getState().setFileName(result.fileName);
-    const canvasEl = document.querySelector("[data-canvas]");
-    applyOpenedDocument(result, {
-      viewportWidth: canvasEl?.clientWidth ?? window.innerWidth - 480,
-      viewportHeight: canvasEl?.clientHeight ?? window.innerHeight,
-    });
+    const { width: viewportWidth, height: viewportHeight } = getCanvasViewportMetrics();
+    applyOpenedDocument(result, { viewportWidth, viewportHeight });
   } catch (err) {
     console.error("Failed to open file:", err);
   }

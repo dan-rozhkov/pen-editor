@@ -10,6 +10,7 @@ import { useCanvasRefStore } from "../store/canvasRefStore";
 
 import { exportDesignTokens, importDesignTokens, exportAsJson, exportAsPen, openDocument } from "../lib/commands/fileCommands";
 import { parsePixsoNodes } from "../utils/pixsoImportUtils";
+import { getCanvasViewportMetrics } from "../utils/canvasViewport";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -101,9 +102,7 @@ export function Toolbar() {
       }
       nodes.forEach((node) => addNode(node));
       useSelectionStore.getState().setSelectedIds(nodes.map((n) => n.id));
-      const canvasEl = document.querySelector("[data-canvas]");
-      const viewportWidth = canvasEl?.clientWidth ?? window.innerWidth - 480;
-      const viewportHeight = canvasEl?.clientHeight ?? window.innerHeight;
+      const { width: viewportWidth, height: viewportHeight } = getCanvasViewportMetrics();
       useViewportStore
         .getState()
         .fitToContent(nodes, viewportWidth, viewportHeight);

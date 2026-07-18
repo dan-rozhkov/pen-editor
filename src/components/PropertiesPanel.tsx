@@ -18,6 +18,7 @@ import {
   getThemeFromAncestorFrames,
   type FlatParentContext,
 } from "@/utils/nodeUtils";
+import { getCanvasViewportMetrics } from "@/utils/canvasViewport";
 import { BooleanOperationsSection } from "@/components/properties/BooleanOperationsSection";
 import { DescendantPropertyEditor } from "@/components/properties/DescendantPropertyEditor";
 import { MultiSelectPropertyEditor } from "@/components/properties/MultiSelectPropertyEditor";
@@ -104,9 +105,7 @@ function FramePresetsPanel() {
   }) => {
     const { scale, x, y } = useViewportStore.getState();
     // Estimate canvas area from DOM
-    const canvasEl = document.querySelector("[data-canvas]");
-    const canvasWidth = canvasEl?.clientWidth ?? window.innerWidth - 480;
-    const canvasHeight = canvasEl?.clientHeight ?? window.innerHeight;
+    const { width: canvasWidth, height: canvasHeight } = getCanvasViewportMetrics();
 
     // Viewport center in world coordinates
     const worldCenterX = (-x + canvasWidth / 2) / scale;

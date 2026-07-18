@@ -9,20 +9,9 @@ import { useViewportStore } from "@/store/viewportStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { useDevModeStore } from "@/store/devModeStore";
 import { formatShortcut } from "@/lib/commands/shortcutFormat";
+import { getCanvasViewportCenter, getCanvasViewportMetrics } from "@/utils/canvasViewport";
 
 const ZOOM_PRESETS = [25, 50, 75, 100, 125, 150, 200, 300];
-
-function getCanvasMetrics() {
-  const canvasEl = document.querySelector("[data-canvas]");
-  const rect = canvasEl?.getBoundingClientRect();
-
-  return {
-    width: canvasEl?.clientWidth ?? window.innerWidth,
-    height: canvasEl?.clientHeight ?? window.innerHeight,
-    centerX: rect ? rect.left + rect.width / 2 : window.innerWidth / 2,
-    centerY: rect ? rect.top + rect.height / 2 : window.innerHeight / 2,
-  };
-}
 
 export function PageControls() {
   const scale = useViewportStore((s) => s.scale);
@@ -60,7 +49,7 @@ export function PageControls() {
 
     if (value === "fit") {
       const nodes = useSceneStore.getState().getNodes();
-      const { width, height } = getCanvasMetrics();
+      const { width, height } = getCanvasViewportMetrics();
       fitToContent(nodes, width, height);
       return;
     }
@@ -68,7 +57,7 @@ export function PageControls() {
     const nextScale = Number(value) / 100;
     if (!Number.isFinite(nextScale)) return;
 
-    const { centerX, centerY } = getCanvasMetrics();
+    const { centerX, centerY } = getCanvasViewportCenter();
     zoomAtPoint(nextScale, centerX, centerY);
   };
 

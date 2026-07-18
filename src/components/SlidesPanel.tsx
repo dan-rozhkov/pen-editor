@@ -7,6 +7,7 @@ import { useViewportStore } from "../store/viewportStore";
 import { generateId } from "../types/scene";
 import type { FlatFrameNode } from "../types/scene";
 import { resolveSlideOrder } from "../utils/slideOrder";
+import { getCanvasViewportMetrics } from "../utils/canvasViewport";
 import { useNodeThumbnails } from "../hooks/useComponentThumbnails";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { PanelEmptyState } from "./PanelEmptyState";
@@ -134,9 +135,7 @@ export function SlidesPanel() {
 
     const target = getNodes().find((n) => n.id === slideId);
     if (target) {
-      const canvas = document.querySelector<HTMLElement>("[data-canvas]");
-      const viewportWidth = canvas?.clientWidth ?? window.innerWidth;
-      const viewportHeight = canvas?.clientHeight ?? window.innerHeight;
+      const { width: viewportWidth, height: viewportHeight } = getCanvasViewportMetrics();
       const viewport = useViewportStore.getState();
 
       viewport.stopAnimation();

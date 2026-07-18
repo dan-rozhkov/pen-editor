@@ -8,6 +8,7 @@ import {
   getNodeAbsolutePositionWithLayout,
   getNodeEffectiveSize,
 } from "@/utils/nodeUtils";
+import { getCanvasElement } from "@/utils/canvasViewport";
 import { resolveAnchorPoint, buildClickAnchor, isAgentThread, type NodeRect } from "@/lib/comments/commentsLogic";
 import { findCanvasHitTargetAtPoint } from "@/pixi/interaction/hitTesting";
 import { sendCommentToAgent } from "@/lib/sendCommentToAgent";
@@ -44,14 +45,9 @@ function currentNodeRect(nodeId: string): NodeRect | null {
   };
 }
 
-function canvasRect(): DOMRect | null {
-  const el = document.querySelector("[data-canvas]");
-  return el ? el.getBoundingClientRect() : null;
-}
-
 /** Client (event) coords → world coords, via the viewport transform. */
 function clientToWorld(clientX: number, clientY: number): { x: number; y: number } {
-  const rect = canvasRect();
+  const rect = getCanvasElement()?.getBoundingClientRect() ?? null;
   const { scale, x, y } = useViewportStore.getState();
   const sx = clientX - (rect?.left ?? 0);
   const sy = clientY - (rect?.top ?? 0);

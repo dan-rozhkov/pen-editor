@@ -7,6 +7,7 @@ import {
   getNodeAbsolutePositionWithLayout,
   getNodeEffectiveSize,
 } from "@/utils/nodeUtils";
+import { getCanvasViewportMetrics } from "@/utils/canvasViewport";
 import { resolveAnchorPoint, type NodeRect } from "./commentsLogic";
 
 export interface ThreadLocation {
@@ -87,11 +88,7 @@ export function navigateToThread(threadId: string): void {
   const point = resolveAnchorPoint(location.thread.anchor, currentNodeRect);
   if (!point) return; // unattached / unresolvable — nothing to pan to
 
-  const canvasEl = document.querySelector("[data-canvas]");
-  const viewport = {
-    width: canvasEl?.clientWidth ?? window.innerWidth,
-    height: canvasEl?.clientHeight ?? window.innerHeight,
-  };
+  const viewport = getCanvasViewportMetrics();
   const scale = useViewportStore.getState().scale;
   const offset = centerOffsetForPoint(point, scale, viewport);
   useViewportStore.getState().setPosition(offset.x, offset.y);
