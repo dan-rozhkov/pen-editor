@@ -16,6 +16,7 @@ export function createNodeTreeManager(
 ) {
   const { sceneRoot, registry } = ctx;
   let hiddenInstanceContainer: Container | null = null;
+  let lastOverriddenIds = new Set<string>();
 
   function findContainerByLabel(parent: Container, label: string): Container | null {
     for (const child of parent.children) {
@@ -28,8 +29,52 @@ export function createNodeTreeManager(
     return null;
   }
 
-  function applyTextEditingVisibility(): void {
-    const { editingNodeId, editingMode, instanceContext } = useSelectionStore.getState();
+  /**
+   * The set of ids whose container visibility is currently overridden away
+   * from their own `baseVisible` — the edited node (text/embed editing) plus,
+   * while presenting, every root except the active slide. Computed fresh on
+   * every call; compared against the previous call's result so a targeted
+   * pass can visit exactly the ids whose override state might have changed.
+   */
+  function computeOverrides(): Set<string> {
+    const { editingNodeId, editingMode } = useSelectionStore.getState();
+    const overrides = new Set<string>();
+    if ((editingMode === "text" || editingMode === "embed") && editingNodeId) {
+      overrides.add(editingNodeId);
+    }
+
+    // Play/Present isolates the active slide by hiding every other top-level
+    // container (see PresentController, which applies this directly on
+    // enter/index-change/exit). Re-derive the same hide set here too so any
+    // resync this function runs for (selection change, theme update, a full
+    // rebuild off a font-load event, ...) can't clobber it back to visible —
+    // this loop is otherwise the single place that decides final container
+    // visibility on every resync.
+    const modeState = useEditorModeStore.getState();
+    if (modeState.mode === "present") {
+      const activeFrameId = modeState.presentFrameIds[modeState.presentIndex];
+      for (const id of useSceneStore.getState().rootIds) {
+        if (id !== activeFrameId) overrides.add(id);
+      }
+    }
+    return overrides;
+  }
+
+  /**
+   * Re-derives final container visibility from each node's own props plus
+   * any active override (text/embed editing, present-mode isolation).
+   *
+   * Without `affectedIds`: a full registry pass — used by `fullRebuild` and
+   * `incrementalThemeUpdate`, where every container's node reference may
+   * have moved regardless of a scene diff.
+   *
+   * With `affectedIds`: only visits `affectedIds ∪ lastOverriddenIds ∪
+   * newOverrides` — the override state for any id outside that union cannot
+   * have changed, since it wasn't touched by the scene flush and isn't part
+   * of an override transition.
+   */
+  function applyTextEditingVisibility(affectedIds?: Iterable<string>): void {
+    const { editingMode, editingNodeId, instanceContext } = useSelectionStore.getState();
     const isTextEditing = editingMode === "text" && editingNodeId != null;
     const isEmbedEditing = editingMode === "embed" && editingNodeId != null;
 
@@ -53,6 +98,11 @@ export function createNodeTreeManager(
       }
     }
 
+    const overrides = computeOverrides();
+    const targets = affectedIds == null
+      ? registry.keys()
+      : new Set([...affectedIds, ...lastOverriddenIds, ...overrides]);
+
     // Play/Present isolates the active slide by hiding every other top-level
     // container (see PresentController, which applies this directly on
     // enter/index-change/exit). Re-derive the same hide set here too so any
@@ -65,8 +115,9 @@ export function createNodeTreeManager(
     const activeFrameId = modeState.presentFrameIds[modeState.presentIndex];
     const rootIds = isPresenting ? new Set(useSceneStore.getState().rootIds) : null;
 
-    // Existing logic for registered (non-instance) nodes
-    for (const [id, entry] of registry) {
+    for (const id of targets) {
+      const entry = registry.get(id);
+      if (!entry) continue;
       const baseVisible = entry.node.visible !== false && entry.node.enabled !== false;
       const hideWhileEditing = (
         (isTextEditing && entry.node.type === "text" && editingNodeId === id) ||
@@ -75,6 +126,8 @@ export function createNodeTreeManager(
       const hideForPresentIsolation = rootIds !== null && rootIds.has(id) && id !== activeFrameId;
       entry.container.visible = baseVisible && !hideWhileEditing && !hideForPresentIsolation;
     }
+
+    lastOverriddenIds = overrides;
   }
 
   function buildNodeTree(

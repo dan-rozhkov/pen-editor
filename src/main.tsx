@@ -44,6 +44,12 @@ if (import.meta.env.DEV) {
   import('@/store/canvasRefStore').then(({ useCanvasRefStore }) => {
     (window as unknown as Record<string, unknown>).__canvasRefStore = useCanvasRefStore;
   });
+  // Raster-cache correctness e2e (Task 13) samples pixels via
+  // `renderer.extract.pixels({ frame })`, which requires a real `Rectangle`
+  // instance (a duck-typed {x,y,width,height} object lacks `copyTo`).
+  import('pixi.js').then(({ Rectangle }) => {
+    (window as unknown as Record<string, unknown>).__PixiRectangle = Rectangle;
+  });
 }
 
 createRoot(document.getElementById('root')!).render(

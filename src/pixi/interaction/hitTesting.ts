@@ -3,7 +3,9 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useLayoutStore } from "@/store/layoutStore";
+import { getCullingIndex } from "@/pixi/pixiSync";
 import type { SceneNode, FrameNode, FlatSceneNode, RefNode, ConnectorNode, LineNode } from "@/types/scene";
+import { isFitContentFrame } from "@/types/scene";
 import {
   getPreparedNodeEffectiveSize,
   prepareFrameNode,
@@ -25,6 +27,28 @@ export type CanvasHitTarget =
   | { kind: "instance-descendant"; instanceId: string; descendantPath: string };
 
 const LABEL_HIT_PADDING = 2;
+
+/**
+ * Screen-space padding (px) applied to the culling-index point query used to
+ * prune root subtrees in `findCanvasHitTargetAtPoint`. The index stores each
+ * node's raw (unrotated, store-coordinate) AABB, but `line`/`connector` hit
+ * tests accept clicks beyond that raw bbox — up to `max(5, capReach)/scale`
+ * for a line's rendered cap tip, and `5/scale` for a connector's stroke.
+ * Padding by a screen-space margin (converted to world units via /scale, the
+ * same convention those thresholds use) covers the fixed "5px stroke/handle
+ * tolerance" cases; it does NOT bound an arbitrarily large cap reach (which
+ * scales with strokeWidth, not with zoom) — `line`/`connector` roots are
+ * therefore excluded from pruning entirely below rather than relying on this
+ * padding alone.
+ */
+const ROOT_PRUNE_PADDING_PX = 8;
+
+// `isFitContentFrame` (why this hit-test path excludes fit_content frame
+// roots from culling-index pruning) is defined in `@/types/scene`, shared
+// with `rasterCacheManager.ts`'s caching-eligibility filter — see its doc
+// comment there. See the root-pruning comment in `findCanvasHitTargetAtPoint`
+// for why this case must be excluded from pruning rather than merely padded
+// around.
 const LABEL_FONT_FAMILY = "system-ui, -apple-system, sans-serif";
 const LABEL_TEXT_STYLE = new TextStyle({
   fontFamily: LABEL_FONT_FAMILY,
@@ -434,9 +458,50 @@ export function findCanvasHitTargetAtPoint(
     return { kind: "node", nodeId: node.id };
   };
 
+  // Task 11: prune root subtrees whose indexed AABB misses the point. `null`
+  // means no index is available (pixiSync not initialized) — behave exactly
+  // as before, unpruned. Padded by a screen-space margin to absorb the fixed
+  // stroke/handle hit tolerances (see ROOT_PRUNE_PADDING_PX).
+  //
+  // IMPORTANT for future call sites: `candidates` is a snapshot of the
+  // culling index's *last flush*, not the live store — it can lag a store
+  // write by up to one rAF (pixiSync's `scheduleSceneUpdate` is
+  // rAF-deferred). Anything hit-tested from *live* geometry that can diverge
+  // from what's indexed must be excluded from pruning below, not merely
+  // padded around, since the divergence isn't bounded by a fixed pixel
+  // amount. Two known cases, both excluded:
+  //  - `line`/`connector` roots: their hit tolerance (rendered cap reach;
+  //    connector endpoints that moved since the last flush) isn't reliably
+  //    bounded by ROOT_PRUNE_PADDING_PX.
+  //  - fit_content auto-layout frame roots: `getPreparedNodeEffectiveSize`
+  //    hit-tests against the *live* intrinsic (Yoga-computed) size, but the
+  //    index bboxes the frame from its *stored* `width`/`height` — for a
+  //    hug-contents frame those never converge, because `syncAutoLayout`
+  //    applies the intrinsic size only to the Pixi container, never writes
+  //    it back to the store. A click inside the real rendered frame but
+  //    outside the stale stored bbox would otherwise be wrongly pruned.
+  const scaleForPrune = useViewportStore.getState().scale || 1;
+  const prunePadding = ROOT_PRUNE_PADDING_PX / scaleForPrune;
+  const candidates = getCullingIndex()?.queryVisible({
+    minX: worldX - prunePadding,
+    minY: worldY - prunePadding,
+    maxX: worldX + prunePadding,
+    maxY: worldY + prunePadding,
+  }) ?? null;
+
   // Walk root nodes in reverse (top-most first).
   for (let i = sceneNodes.length - 1; i >= 0; i--) {
-    const hit = hitNode(sceneNodes[i], 0, 0);
+    const rootNode = sceneNodes[i];
+    if (
+      candidates &&
+      rootNode.type !== "connector" &&
+      rootNode.type !== "line" &&
+      !isFitContentFrame(rootNode) &&
+      !candidates.has(rootNode.id)
+    ) {
+      continue;
+    }
+    const hit = hitNode(rootNode, 0, 0);
     if (hit) return hit;
   }
   return null;

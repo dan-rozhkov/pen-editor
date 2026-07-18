@@ -26,6 +26,7 @@ import { useDragStore } from "@/store/dragStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useDevModeStore } from "@/store/devModeStore";
 import { resetStores } from "@/test/fixtures";
+import { consumeDirty } from "@/store/sceneStore/dirtyTracking";
 
 // Auto-layout column frame at world (300, 200) with two 50x50 children.
 // The stored child x/y are deliberately stale garbage — layout positions for
@@ -76,6 +77,30 @@ function seedAutoLayoutScene(): void {
     parentById: { frame: null, child1: "frame", child2: "frame" },
     childrenById: { frame: ["child1", "child2"] },
     rootIds: ["frame"],
+    _cachedTree: null,
+  });
+}
+
+// A single free (non-auto-layout, no parent) node — free-drag path only,
+// with no other nodes present so collectSnapTargets/persistentGuides never
+// perturb the raw pointer delta.
+function seedFreeDragScene(): void {
+  const a = {
+    id: "a",
+    type: "rect",
+    name: "A",
+    x: 100,
+    y: 100,
+    width: 50,
+    height: 50,
+    fill: "#ff0000",
+  } as unknown as FlatSceneNode;
+
+  useSceneStore.setState({
+    nodesById: { a },
+    parentById: { a: null },
+    childrenById: {},
+    rootIds: ["a"],
     _cachedTree: null,
   });
 }
@@ -217,6 +242,112 @@ describe("dragController auto-layout drag lifecycle", () => {
     // moveNode rebuilt the children list (identity change ⇒ relayout flush).
     expect(useSceneStore.getState().childrenById).not.toBe(childrenBefore);
     expect(useSceneStore.getState().childrenById["frame"]).toHaveLength(2);
+  });
+});
+
+describe("dragController free-drag rAF coalescing", () => {
+  // Coalescing (Task 6) schedules the store commit via requestAnimationFrame
+  // instead of writing on every pointermove — stub rAF so tests can
+  // deterministically flush it and, unlike a no-op cancel stub, actually
+  // remove a cancelled callback so cancel-then-flush races are meaningful.
+  let rafCallbacks: Map<number, FrameRequestCallback>;
+  let nextRafId: number;
+
+  function flushRaf(): void {
+    const callbacks = [...rafCallbacks.values()];
+    rafCallbacks.clear();
+    for (const cb of callbacks) cb(0);
+  }
+
+  beforeEach(() => {
+    seedFreeDragScene();
+    consumeDirty();
+    rafCallbacks = new Map();
+    nextRafId = 1;
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn((cb: FrameRequestCallback) => {
+        const id = nextRafId++;
+        rafCallbacks.set(id, cb);
+        return id;
+      }),
+    );
+    vi.stubGlobal(
+      "cancelAnimationFrame",
+      vi.fn((id: number) => {
+        rafCallbacks.delete(id);
+      }),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("coalesces pointermove store writes to one per frame and marks dirty ids", () => {
+    const controller = makeController();
+    controller.handlePointerDown(pointerEvent, { x: 100, y: 100 }, "a");
+
+    let setStateCalls = 0;
+    const unsub = useSceneStore.subscribe(() => {
+      setStateCalls += 1;
+    });
+
+    for (let i = 1; i <= 5; i++) {
+      controller.handlePointerMove(pointerEvent, { x: 100 + i, y: 100 });
+    }
+
+    // Only the first move schedules a frame; the rest coalesce into it.
+    expect(vi.mocked(requestAnimationFrame).mock.calls.length).toBe(1);
+    expect(setStateCalls).toBe(0);
+
+    flushRaf();
+    unsub();
+
+    expect(setStateCalls).toBe(1);
+    expect(useSceneStore.getState().nodesById.a.x).toBe(105);
+    expect(useSceneStore.getState().nodesById.a.y).toBe(100);
+
+    const dirty = consumeDirty();
+    expect(dirty.ids.has("a")).toBe(true);
+    expect(dirty.complete).toBe(true);
+  });
+
+  it("flushes the pending delta synchronously on pointerup, before drop/history logic runs", () => {
+    const controller = makeController();
+    controller.handlePointerDown(pointerEvent, { x: 100, y: 100 }, "a");
+    controller.handlePointerMove(pointerEvent, { x: 108, y: 100 });
+
+    // Not yet committed — still queued for the next frame.
+    expect(useSceneStore.getState().nodesById.a.x).toBe(100);
+
+    controller.handlePointerUp(pointerEvent, { x: 108, y: 100 });
+
+    // pointerup must flush before its own history-commit logic reads
+    // positions, or the final pointermove of the drag is lost.
+    expect(useSceneStore.getState().nodesById.a.x).toBe(108);
+  });
+
+  it("cancels the scheduled rAF on pointerup so a stray frame cannot resurrect the drag", () => {
+    const controller = makeController();
+    controller.handlePointerDown(pointerEvent, { x: 100, y: 100 }, "a");
+    controller.handlePointerMove(pointerEvent, { x: 105, y: 100 });
+    expect(rafCallbacks.size).toBe(1);
+
+    controller.handlePointerUp(pointerEvent, { x: 105, y: 100 });
+
+    // The rAF scheduled by the coalesced move must be cancelled, not left to
+    // fire later — otherwise it could re-apply a stale delta after other
+    // code (e.g. an undo) has since restored the node's position.
+    expect(rafCallbacks.size).toBe(0);
+
+    useSceneStore.setState((s) => ({
+      nodesById: { ...s.nodesById, a: { ...s.nodesById.a, x: 100, y: 100 } },
+    }));
+
+    flushRaf(); // no-op: nothing queued
+
+    expect(useSceneStore.getState().nodesById.a.x).toBe(100);
   });
 });
 

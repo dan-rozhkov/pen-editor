@@ -210,9 +210,13 @@ export function createFrameContainer(
     }
   }
 
-  // Disabled for now: cacheAsTexture can leave stale visual artifacts
-  // after structural reparent/move operations (ghost copies on canvas).
-  container.cacheAsTexture(false);
+  // Raster caching of this container (if any) is now owned entirely by
+  // rasterCacheManager.ts (Task 13), which caches/uncaches top-level frames
+  // behind a flag and uncaches synchronously before any mutation lands on a
+  // cached subtree — the fix for the historical stale-visual/ghost-copy bug
+  // that used to live here as a blanket `cacheAsTexture(false)`. A brand-new
+  // container (this function only runs on creation, never on update) starts
+  // with caching off by default, so no explicit disable is needed here.
 
   return container;
 }

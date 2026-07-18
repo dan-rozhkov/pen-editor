@@ -1,5 +1,6 @@
 import { Container } from "pixi.js";
 import { useSceneStore, type SceneState } from "@/store/sceneStore";
+import { consumeDirty } from "@/store/sceneStore/dirtyTracking";
 import { useDragStore } from "@/store/dragStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useStyleStore } from "@/store/styleStore";
@@ -9,10 +10,10 @@ import { useRenderModeStore } from "@/store/renderModeStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import type { FlatSceneNode } from "@/types/scene";
 import { isFlatFrameNode, isRefNode, isConnectorNode } from "@/types/scene";
+import { isActiveMasker } from "@/lib/masks/maskResolution";
 import { updateNodeContainer } from "./renderers";
 import { applySiblingMasks } from "./renderers/maskHelpers";
 import { isOutlineRenderMode } from "./renderers/outlineHelpers";
-import { isActiveMasker } from "@/lib/masks/maskResolution";
 import { requestCanvasRender } from "./renderScheduler";
 import {
   type RegistryEntry,
@@ -25,10 +26,15 @@ import { createResolutionManager } from "./syncResolution";
 import { createNodeTreeManager } from "./syncNodeTree";
 import { createConnectorManager } from "./syncConnectors";
 import { createAutoLayoutManager } from "./syncAutoLayout";
+import { createCullingIndex } from "./cullingIndex";
+import { perfStats } from "./perfStats";
+import { computeSceneDiffFull, computeSceneDiffDirty, type SceneDiff } from "./syncDiff";
+import { createRasterCacheManager, type RasterCacheManager } from "./rasterCacheManager";
 
 // Module-level registry accessor for the drag animator
 let registryAccessor: ((id: string) => Container | null) | null = null;
 let sceneRootAccessor: (() => Container) | null = null;
+let cullingIndexAccessor: (() => ReturnType<typeof createCullingIndex>) | null = null;
 
 export function getNodeContainer(id: string): Container | null {
   return registryAccessor?.(id) ?? null;
@@ -39,11 +45,39 @@ export function getSceneRoot(): Container | null {
 }
 
 /**
+ * The live culling index (Task 10), or `null` before `createPixiSync` has
+ * run its first flush / after its cleanup. Consumers (e.g. hit-testing) must
+ * treat `null` as "no index available" and fall back to unpruned behavior.
+ */
+export function getCullingIndex(): ReturnType<typeof createCullingIndex> | null {
+  return cullingIndexAccessor?.() ?? null;
+}
+
+/**
  * Sentinel "previous node" used to force all renderers to re-apply visual
  * properties (fill, stroke, shadow, etc.) without destroying containers.
  * Every property comparison with the real node will show "changed".
  */
 const THEME_SENTINEL = Object.freeze({ type: "none" }) as unknown as FlatSceneNode;
+
+/**
+ * DEV-only diff safety net (runs the full O(N) scan alongside the dirty-set
+ * diff and warns on mismatch). Kept on by default in dev, but can be opted
+ * out of via `localStorage.setItem("pen.diffCheck", "off")` so perf probes
+ * (which run in dev mode) can measure the shipped diff path uncontaminated.
+ */
+const diffCheckEnabled = import.meta.env.DEV && localStorage.getItem("pen.diffCheck") !== "off";
+
+/**
+ * Task 13: raster caching of quiet top-level frames, behind a flag.
+ * Dev-on by default (kill switch: `localStorage.setItem("pen.rasterCache", "off")`),
+ * prod-off by default (opt-in: `localStorage.setItem("pen.rasterCache", "on")`).
+ * When off, `createRasterCacheManager` is never called — see `rasterCacheManager`
+ * below, instantiated only if this is true.
+ */
+const rasterCacheEnabled = import.meta.env.DEV
+  ? localStorage.getItem("pen.rasterCache") !== "off"
+  : localStorage.getItem("pen.rasterCache") === "on";
 
 /**
  * A node is "variable-dependent" if its rendering can change when a design
@@ -95,7 +129,15 @@ export function createPixiSync(sceneRoot: Container): () => void {
   registryAccessor = (id) => registry.get(id)?.container ?? null;
   sceneRootAccessor = () => sceneRoot;
 
-  const ctx = { sceneRoot, registry };
+  // Declared here (assigned below, after autoLayoutMgr) so autoLayoutMgr's
+  // culling-eviction callbacks can close over it — they're only ever invoked
+  // on later viewport/scene events, by which point this is assigned.
+  let rasterCacheManager: RasterCacheManager | null = null;
+
+  // Task 10: grid-backed replacement for the per-frame full-tree culling walk.
+  const cullingIndex = createCullingIndex();
+  cullingIndexAccessor = () => cullingIndex;
+  const ctx = { sceneRoot, registry, cullingIndex };
   const resolutionMgr = createResolutionManager(ctx);
   const nodeTreeMgr = createNodeTreeManager(
     ctx,
@@ -115,9 +157,28 @@ export function createPixiSync(sceneRoot: Container): () => void {
     updateConnectorsForNodes,
   } = connectorMgr;
 
-  // Viewport culling + auto-layout position application.
-  const autoLayoutMgr = createAutoLayoutManager(ctx);
-  const { updateCulling, collectDirtyAutoLayoutFrames, applyAutoLayoutPositions } = autoLayoutMgr;
+  // Viewport culling + auto-layout position application. Created before the
+  // raster cache manager below so (a) its `hasCulledDescendant` can be wired
+  // in as a caching-eligibility dep (Bug 1a), and (b) it can request cache
+  // eviction on culling-state divergence (Bug 1b/1c) via the `rasterCacheManager`
+  // reference above, which is assigned immediately after.
+  const autoLayoutMgr = createAutoLayoutManager(ctx, {
+    onCullingEviction: (ids) => rasterCacheManager?.onDirectContainerMutation(ids, useSceneStore.getState()),
+    getCachedFrameIds: () => rasterCacheManager?.cachedFrameIds() ?? [],
+  });
+  const { updateCulling, resetCullingState, collectDirtyAutoLayoutFrames, applyAutoLayoutPositions, hasCulledDescendant } = autoLayoutMgr;
+
+  // Task 13: flagged raster cache manager — `null` (never called) when the
+  // flag is off, per the flag's contract.
+  rasterCacheManager = rasterCacheEnabled
+    ? createRasterCacheManager({
+        getContainer: (id) => registry.get(id)?.container ?? null,
+        getState: () => useSceneStore.getState(),
+        getScale: () => useViewportStore.getState().scale,
+        hasCulledContent: hasCulledDescendant,
+        getPixelRatio: () => window.devicePixelRatio || 1,
+      })
+    : null;
 
   // ─── Full Rebuild ────────────────────────────────────────────────────
 
@@ -161,8 +222,18 @@ export function createPixiSync(sceneRoot: Container): () => void {
     resolutionMgr.applyImageFillTextureResolution(resolutionMgr.getTargetImageFillResolution(useViewportStore.getState().scale));
     nodeTreeMgr.applyTextEditingVisibility();
 
+    // Task 10: (re)build the spatial culling index before the visual pass.
+    // Every container was just destroyed and recreated above — reset the
+    // diff-against-last-frame state so updateCulling() re-applies overview
+    // visibility to every visible id, and pass every node id as `settleIds`
+    // so ids that end up NOT visible (never previously in `lastVisible`,
+    // since it was just reset) get an explicit `renderable = false` instead
+    // of keeping Pixi's default `true` on their brand-new container.
+    cullingIndex.rebuild(state);
+    resetCullingState();
+
     // Phase 1: Apply culling after build
-    updateCulling();
+    updateCulling(Object.keys(state.nodesById));
   }
 
   // ─── Phase 7: Incremental Theme/Variable Update ──────────────────────
@@ -174,6 +245,12 @@ export function createPixiSync(sceneRoot: Container): () => void {
    */
   function incrementalThemeUpdate(): void {
     const state = useSceneStore.getState();
+    // Task 13 (Critical fix): this recolors containers directly — no scene
+    // mutation, so no SceneDiff ever observes it, and a cached top frame
+    // covering a variable-dependent node would otherwise keep its pre-edit
+    // GPU snapshot forever. Must run before the recolor loop below mutates
+    // anything.
+    rasterCacheManager?.onDirectContainerMutation(variableDependentIds, state);
     for (const id of variableDependentIds) {
       const entry = registry.get(id);
       if (!entry) continue;
@@ -195,71 +272,82 @@ export function createPixiSync(sceneRoot: Container): () => void {
   // ─── Incremental Update (Phases 3 + 4) ──────────────────────────────
 
   /**
+   * Compute this flush's diff (dirty-set fast path with a full-scan fallback,
+   * plus the DEV-only equivalence check), or `undefined` if nothing changed.
+   * Split out of `incrementalUpdate` (Task 13) so the diff is available
+   * *before* any container is mutated — `rasterCacheManager.onFlushStart`
+   * must run on this diff ahead of `incrementalUpdate` itself.
+   */
+  function computeDiff(
+    state: SceneState,
+    prev: SceneState,
+    dirty?: { ids: Set<string>; complete: boolean },
+  ): SceneDiff | undefined {
+    if (state.nodesById === prev.nodesById && state.rootIds === prev.rootIds && state.childrenById === prev.childrenById) {
+      return undefined; // No scene changes
+    }
+
+    // Phase 5: dirty-set diff when honest, full O(N) scan otherwise —
+    // byte-identical output either way (see syncDiff.ts equivalence tests).
+    const diff = dirty?.complete
+      ? computeSceneDiffDirty(state, prev, dirty.ids)
+      : computeSceneDiffFull(state, prev);
+
+    if (diffCheckEnabled && dirty?.complete) {
+      const fullCheck = computeSceneDiffFull(state, prev);
+      let mismatch = false;
+      for (const id of diff.changedIds) {
+        if (!fullCheck.changedIds.has(id)) { mismatch = true; break; }
+      }
+      if (!mismatch) {
+        for (const id of fullCheck.changedIds) {
+          if (!diff.changedIds.has(id)) { mismatch = true; break; }
+        }
+      }
+      if (mismatch) {
+        console.warn(
+          "[pixiSync] dirty-set diff mismatch vs full scan — a mutator likely skipped markNodesDirty",
+          { dirty: [...diff.changedIds], full: [...fullCheck.changedIds] },
+        );
+      }
+    }
+
+    return diff;
+  }
+
+  /**
    * Incremental update - only process changed nodes.
    */
-  function incrementalUpdate(state: SceneState, prev: SceneState): void {
-    if (state.nodesById === prev.nodesById && state.rootIds === prev.rootIds && state.childrenById === prev.childrenById) {
-      return; // No scene changes
-    }
-
-    // Phase 4: Combined change detection + theme override check in a single pass
-    const changedIds = new Set<string>();
+  function incrementalUpdate(state: SceneState, prev: SceneState, diff: SceneDiff): SceneDiff {
+    const changedIds = diff.changedIds;
     const themeChangedFrameIds: string[] = [];
-
-    for (const id of Object.keys(state.nodesById)) {
-      const node = state.nodesById[id];
-      const prevNode = prev.nodesById[id];
-      if (node !== prevNode) {
-        changedIds.add(id);
-        // A frame's themeOverride recolors its whole subtree — collect it for
-        // a targeted THEME_SENTINEL pass below instead of a full scene rebuild.
-        if (
-          node && prevNode &&
-          isFlatFrameNode(node) &&
-          node.themeOverride !== (isFlatFrameNode(prevNode) ? prevNode.themeOverride : undefined)
-        ) {
-          themeChangedFrameIds.push(id);
-        }
-      }
-    }
-
-    // Removed nodes
-    for (const id of Object.keys(prev.nodesById)) {
-      if (!state.nodesById[id]) {
-        changedIds.add(id);
-      }
-    }
-
-    // Children changes
-    for (const id of Object.keys(state.childrenById)) {
-      if (state.childrenById[id] !== prev.childrenById[id]) {
-        changedIds.add(id);
-      }
-    }
-    for (const id of Object.keys(prev.childrenById)) {
-      if (!state.childrenById[id]) {
-        changedIds.add(id);
-      }
-    }
+    // Set below (Task: theme-refresh visibility fix) when a frame's
+    // themeOverride changed this flush — the re-themed subtree's ids are
+    // excluded from `changedIds` by construction (their node objects didn't
+    // change, only their re-rendered colors did), so the final
+    // `applyTextEditingVisibility` call below must be widened to include
+    // them, or a node re-themed while text-editing would have its
+    // THEME_SENTINEL recolor pass reset `container.visible` (see
+    // renderers/index.ts's `visible !== prev.visible` check against the
+    // sentinel) without visibility ever being re-applied afterward.
+    let themeSubtreeIds: Set<string> | null = null;
 
     // Handle added nodes
-    for (const id of Object.keys(state.nodesById)) {
-      if (!prev.nodesById[id]) {
-        nodeTreeMgr.createAndAttachNode(id, state);
-        // Phase 3 + 6: Update indexes for new nodes
-        const node = state.nodesById[id];
-        if (node) {
-          if (isRefNode(node)) {
-            componentIndex.add(id, node.componentId);
-          }
-          if (isConnectorNode(node)) {
-            addToConnectorIndex(id, node);
-          }
-          if (isVariableDependent(node)) {
-            variableDependentIds.add(id);
-          }
-          resolutionMgr.trackNodeAdded(id, node);
+    for (const id of diff.addedIds) {
+      nodeTreeMgr.createAndAttachNode(id, state);
+      // Phase 3 + 6: Update indexes for new nodes
+      const node = state.nodesById[id];
+      if (node) {
+        if (isRefNode(node)) {
+          componentIndex.add(id, node.componentId);
         }
+        if (isConnectorNode(node)) {
+          addToConnectorIndex(id, node);
+        }
+        if (isVariableDependent(node)) {
+          variableDependentIds.add(id);
+        }
+        resolutionMgr.trackNodeAdded(id, node);
       }
     }
 
@@ -267,22 +355,20 @@ export function createPixiSync(sceneRoot: Container): () => void {
     const affectedInstanceIds = collectAffectedInstanceIds(state, prev, changedIds, componentIndex);
 
     // Handle removed nodes
-    for (const id of Object.keys(prev.nodesById)) {
-      if (!state.nodesById[id]) {
-        // Phase 3 + 6: Update indexes for removed nodes
-        const prevNode = prev.nodesById[id];
-        if (prevNode) {
-          if (isRefNode(prevNode)) {
-            componentIndex.remove(id, prevNode.componentId);
-          }
-          if (isConnectorNode(prevNode)) {
-            removeFromConnectorIndex(id, prevNode);
-          }
-          variableDependentIds.delete(id);
-          resolutionMgr.trackNodeRemoved(id);
+    for (const id of diff.removedIds) {
+      // Phase 3 + 6: Update indexes for removed nodes
+      const prevNode = prev.nodesById[id];
+      if (prevNode) {
+        if (isRefNode(prevNode)) {
+          componentIndex.remove(id, prevNode.componentId);
         }
-        nodeTreeMgr.removeNode(id, prev.childrenById, state.nodesById);
+        if (isConnectorNode(prevNode)) {
+          removeFromConnectorIndex(id, prevNode);
+        }
+        variableDependentIds.delete(id);
+        resolutionMgr.trackNodeRemoved(id);
       }
+      nodeTreeMgr.removeNode(id, prev.childrenById, state.nodesById);
     }
 
     // Nodes whose isMask flag (or masking-relevant visibility) flipped
@@ -296,10 +382,18 @@ export function createPixiSync(sceneRoot: Container): () => void {
     let rootMaskDirty = false;
 
     // Handle updated nodes (reference equality check)
-    for (const id of Object.keys(state.nodesById)) {
+    for (const id of diff.updatedIds) {
       const node = state.nodesById[id];
       const prevNode = prev.nodesById[id];
       if (node && prevNode && node !== prevNode) {
+        // A frame's themeOverride recolors its whole subtree — collect it for
+        // a targeted THEME_SENTINEL pass below instead of a full scene rebuild.
+        if (
+          isFlatFrameNode(node) &&
+          node.themeOverride !== (isFlatFrameNode(prevNode) ? prevNode.themeOverride : undefined)
+        ) {
+          themeChangedFrameIds.push(id);
+        }
         const entry = registry.get(id);
         if (entry) {
           if (isActiveMasker(node) !== isActiveMasker(prevNode)) {
@@ -390,6 +484,17 @@ export function createPixiSync(sceneRoot: Container): () => void {
         }
       };
       for (const frameId of themeChangedFrameIds) collect(frameId);
+      themeSubtreeIds = subtreeIds;
+
+      // Defense in depth, not a live gap: each `frameId` here is itself in
+      // `diff.updatedIds` (its `themeOverride` changed) and therefore in
+      // `changedIds`, which `onFlushStart` already walked (via manager.
+      // onFlushStart above, before this function ran) to uncache every
+      // frameId's top ancestor — and every id in `subtreeIds` shares that
+      // same top ancestor by construction (they're its descendants). Kept
+      // anyway so this pass stays correct on its own if it's ever called
+      // outside the current onFlushStart-then-incrementalUpdate ordering.
+      rasterCacheManager?.onDirectContainerMutation(subtreeIds, state);
 
       for (const id of subtreeIds) {
         if (changedIds.has(id)) continue; // already updated with its fresh node
@@ -410,7 +515,10 @@ export function createPixiSync(sceneRoot: Container): () => void {
           );
         });
       }
-      nodeTreeMgr.applyTextEditingVisibility();
+      // No `applyTextEditingVisibility` call here — the final call at the
+      // end of this function (widened to the `changedIds` ∪ `themeSubtreeIds`
+      // union via `themeSubtreeIds` above) covers this subtree's containers,
+      // which are already fully updated by this point.
     }
 
     // Update connectors when connected nodes move/resize. Collect the changed
@@ -487,7 +595,22 @@ export function createPixiSync(sceneRoot: Container): () => void {
     // New text nodes can appear during incremental subtree rebuilds (e.g. instance edits).
     // Re-apply current resolution so they don't stay at the default and look blurry.
     resolutionMgr.refreshTextResolution();
-    nodeTreeMgr.applyTextEditingVisibility();
+    // Widened to include `themeSubtreeIds` (a re-themed frame's descendants,
+    // excluded from `changedIds` by construction) — see the doc comment on
+    // `themeSubtreeIds` above for why an un-widened call here would leave a
+    // text-editing node hidden after its ancestor's themeOverride changes.
+    nodeTreeMgr.applyTextEditingVisibility(
+      themeSubtreeIds ? new Set([...changedIds, ...themeSubtreeIds]) : changedIds,
+    );
+
+    // Task 10: feed this flush's dirty ids to the spatial culling index
+    // *before* the visual pass below — `updateCulling()` queries the index,
+    // so if this ran after the visual pass instead, a node that moved
+    // on/off-screen this same flush would render with last frame's
+    // visibility for one extra frame (a stale-visible/stale-culled bug).
+    // Removed ids are dropped from the index; the rest are re-walked from
+    // their nearest rotated ancestor (or themselves) — see cullingIndex.ts.
+    cullingIndex.updateForChanged(state, changedIds);
 
     // Phase 1: Re-apply culling after tree changes.
     // NOTE: this call must stay last (and unconditional) in this function.
@@ -498,7 +621,12 @@ export function createPixiSync(sceneRoot: Container): () => void {
     // outside the viewport), but the ordering is fragile: reordering these
     // two, or short-circuiting before this line, can silently resurrect a
     // culled node or re-show an inert masker.
-    updateCulling();
+    // `diff.addedIds` are passed as settleIds: their containers are brand
+    // new this flush and carry no prior `lastVisible` membership, so a
+    // newly-added node that's culled from birth needs an explicit
+    // `renderable = false` (see updateCulling's settleIds doc).
+    updateCulling(diff.addedIds);
+    return diff;
   }
 
   // ─── Subscriptions ───────────────────────────────────────────────────
@@ -520,6 +648,9 @@ export function createPixiSync(sceneRoot: Container): () => void {
       resolutionMgr.scheduleTextResolutionUpdate(state.scale);
       resolutionMgr.scheduleEmbedResolutionUpdate(state.scale);
       resolutionMgr.scheduleImageFillResolutionUpdate(state.scale);
+      // Task 13: a zoom-bucket change uncaches immediately in the next
+      // decision round and re-caches once quiet again.
+      rasterCacheManager?.onViewportChange();
       // Phase 1: Update culling on zoom
       updateCulling();
     } else if (state.x !== lastX || state.y !== lastY) {
@@ -544,7 +675,16 @@ export function createPixiSync(sceneRoot: Container): () => void {
     if (!pendingSceneState) return;
     const nextState = pendingSceneState;
     pendingSceneState = null;
-    incrementalUpdate(nextState, prevState);
+    const dirty = consumeDirty();
+    perfStats.time("flush", () => {
+      const diff = computeDiff(nextState, prevState, dirty);
+      if (!diff) return;
+      // Task 13: uncache-before-update ordering. A cached subtree must drop
+      // its texture synchronously here, before incrementalUpdate mutates any
+      // container inside it — see rasterCacheManager.ts's onFlushStart doc.
+      rasterCacheManager?.onFlushStart(diff, nextState);
+      incrementalUpdate(nextState, prevState, diff);
+    });
     prevState = nextState;
   };
 
@@ -568,6 +708,11 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
   const rebuildFromCurrentState = (): void => {
     clearPendingSceneUpdate();
+    consumeDirty(); // discard — a full rebuild resolves everything, no stale ids should leak into the next incremental flush
+    // Task 13: every container is about to be destroyed and recreated — the
+    // manager's `cached`/`dirtyAt` bookkeeping refers to containers that are
+    // going away, so it must reset rather than be replayed against new ones.
+    rasterCacheManager?.onRebuild();
     fullRebuild(useSceneStore.getState());
     prevState = useSceneStore.getState();
   };
@@ -630,7 +775,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
   });
 
   const unsubSelection = useSelectionStore.subscribe(() => {
-    nodeTreeMgr.applyTextEditingVisibility();
+    nodeTreeMgr.applyTextEditingVisibility([]);
   });
 
   // Play/Present mode/slide changes aren't scene mutations, so nothing else
@@ -641,7 +786,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
   // (markActivity)` already owns scheduling a repaint for this store's
   // changes (`requestCanvasRender` === `invalidate` === `markActivity`).
   const unsubEditorMode = useEditorModeStore.subscribe(() => {
-    nodeTreeMgr.applyTextEditingVisibility();
+    nodeTreeMgr.applyTextEditingVisibility([]);
   });
 
   // The auto-layout drag animator (autoLayoutDragAnimator.ts) mutates
@@ -651,6 +796,25 @@ export function createPixiSync(sceneRoot: Container): () => void {
   // affected frame chain whenever a drag ends, so container positions always
   // reconcile with the computed layout regardless of how the drag finished.
   const unsubDrag = useDragStore.subscribe((dragState, prevDragState) => {
+    // Task 13 (Critical fix): drag START. autoLayoutDragAnimator.ts is about
+    // to start lerping the ghost + sibling containers on every RAF frame,
+    // entirely outside the scene store — no SceneDiff will ever see these
+    // mutations, so a top frame that's already cached at this instant would
+    // otherwise render a frozen pre-drag snapshot for the whole gesture.
+    // `applyDecisions` already refuses to (re)cache anything while
+    // `isDragging` is true, so a single uncache right here, before the first
+    // animator frame, is enough — nothing will re-cache mid-gesture. One
+    // frame covers the whole drag: dragController.ts sets
+    // `state.autoLayoutParentId` once at pointer-down and never reassigns it
+    // (the auto-layout reorder gesture always stays within the node's
+    // original parent — it never retargets to a different frame mid-drag,
+    // unlike a free/cross-frame drop, which commits via `moveNode` and so is
+    // already covered by the normal onFlushStart path), so the dragged
+    // node's top ancestor is the one and only frame this animator can touch.
+    if (!prevDragState.isDragging && dragState.isDragging && dragState.draggedNodeId) {
+      rasterCacheManager?.onDirectContainerMutation([dragState.draggedNodeId], useSceneStore.getState());
+      return;
+    }
     if (!prevDragState.isDragging || dragState.isDragging) return;
     const draggedId = prevDragState.draggedNodeId;
     if (!draggedId) return;
@@ -664,6 +828,12 @@ export function createPixiSync(sceneRoot: Container): () => void {
     );
     if (dirtyFrames.size > 0) {
       applyAutoLayoutPositions(sceneState, dirtyFrames);
+      // Task 13: this is itself a direct container mutation outside a store
+      // flush (drop-with-no-insert-target / cancel path) — refresh the
+      // manager's dirty timestamp for the affected chain the same way, so
+      // its QUIET_MS window restarts from when the mutation actually
+      // finished rather than from drag start.
+      rasterCacheManager?.onDirectContainerMutation(dirtyFrames, sceneState);
       // Direct container mutation outside a store flush — signal the renderer.
       requestCanvasRender();
     }
@@ -698,6 +868,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
     unsubDrag();
     unsubViewport();
     unsubRenderMode();
+    rasterCacheManager?.dispose();
     resolutionMgr.cleanup();
     clearPendingSceneUpdate();
     clearPendingThemeUpdate();
@@ -713,5 +884,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
     sceneRoot.removeChildren();
     registryAccessor = null;
     sceneRootAccessor = null;
+    cullingIndexAccessor = null;
   };
 }

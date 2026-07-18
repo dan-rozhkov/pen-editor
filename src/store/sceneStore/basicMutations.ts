@@ -32,6 +32,7 @@ import {
   removeOrphanedConnectors,
 } from "./helpers/flatStoreHelpers";
 import { markComponentArtifactsStaleFromNative } from "./componentArtifacts";
+import { markNodesDirty } from "./dirtyTracking";
 import type { SceneState } from "./types";
 import type { StoreApi } from "zustand";
 
@@ -111,10 +112,17 @@ export function createBasicMutations(set: SetState, get: GetState) {
           [existing],
         );
 
+        // Marked right before returning the changed state — NOT before this
+        // `set(...)` call — because zustand skips the subscriber notification
+        // entirely when a guard above returns `state` unchanged (Object.is
+        // check), which would leave `armed` stuck true and wrongly bless the
+        // next, unrelated mutation as tracked.
+        markNodesDirty([id]);
         return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
       }),
 
-    updateMultipleNodes: (ids: string[], updates: Partial<SceneNode>) =>
+    updateMultipleNodes: (ids: string[], updates: Partial<SceneNode>) => {
+      markNodesDirty(ids);
       set((state) => {
         saveHistory(state);
         const newNodesById = { ...state.nodesById };
@@ -134,7 +142,8 @@ export function createBasicMutations(set: SetState, get: GetState) {
         );
 
         return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
-      }),
+      });
+    },
 
     updateNodeWithoutHistory: (id: string, updates: Partial<SceneNode>) =>
       set((state) => {
@@ -152,6 +161,7 @@ export function createBasicMutations(set: SetState, get: GetState) {
           [existing],
         );
 
+        markNodesDirty([id]);
         return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
       }),
 
@@ -177,6 +187,7 @@ export function createBasicMutations(set: SetState, get: GetState) {
           staleSources,
         );
 
+        markNodesDirty(ids);
         return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
       }),
 
@@ -203,6 +214,7 @@ export function createBasicMutations(set: SetState, get: GetState) {
           staleSources,
         );
 
+        markNodesDirty(ids);
         return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
       }),
 
@@ -558,6 +570,17 @@ export function createBasicMutations(set: SetState, get: GetState) {
         } else {
           newRootIds.splice(newIndex, 0, nodeId);
         }
+
+        // Mark the moved node plus both parents whose childrenById entry just
+        // changed identity (old parent lost a child, new parent gained one).
+        // Marked here — right before this `set` callback returns — rather
+        // than before the outer `set(...)` call, since oldParentId is only
+        // known once we're inside the callback with `state`.
+        markNodesDirty(
+          [nodeId, oldParentId, newParentId].filter(
+            (id): id is string => id !== null && id !== undefined,
+          ),
+        );
 
         return {
           parentById: newParentById,

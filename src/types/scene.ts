@@ -915,6 +915,23 @@ export function isConnectorNode(node: FlatSceneNode): node is ConnectorNode {
   return node.type === 'connector'
 }
 
+/**
+ * True for an auto-layout frame with `fit_content` sizing on either axis —
+ * its rendered size is the *live* Yoga-computed intrinsic size, which is
+ * never written back to the store's `width`/`height`. Consumers that only
+ * have the stored size (culling-index AABBs, raster-cache pixel-size gating)
+ * must treat this case specially rather than trusting stored dimensions.
+ * Shared by `hitTesting.ts`'s pruning exclusion and `rasterCacheManager.ts`'s
+ * caching-eligibility filter — keep both call sites in sync with this.
+ */
+export function isFitContentFrame(node: SceneNode | FlatSceneNode): boolean {
+  if (node.type !== 'frame') return false
+  return (
+    node.layout?.autoLayout === true &&
+    (node.sizing?.widthMode === 'fit_content' || node.sizing?.heightMode === 'fit_content')
+  )
+}
+
 /** Get children of a container node, or empty array for leaf nodes */
 export function getNodeChildren(node: SceneNode): SceneNode[] {
   if (node.type === 'frame' || node.type === 'group') {

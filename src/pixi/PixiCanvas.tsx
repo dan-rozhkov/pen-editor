@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { Application, Container } from "pixi.js";
+import { useShallow } from "zustand/react/shallow";
 import { InlineNameEditor} from "@/components/InlineNameEditor";
 import { InlineTextEditor } from "@/components/InlineTextEditor";
 import { InlineEmbedEditor } from "@/components/InlineEmbedEditor";
@@ -26,6 +27,7 @@ import { useLayoutStore } from "@/store/layoutStore";
 import { useLoadingStore } from "@/store/loadingStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
+import type { EditingMode, InstanceContext } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
@@ -44,6 +46,156 @@ import { setupPixiInteraction } from "./interaction";
 import { createSelectionOverlay } from "./selectionOverlay";
 import { createOverlayRenderer } from "./OverlayRenderer";
 import { setupRenderScheduler } from "./renderScheduler";
+import { perfStats } from "./perfStats";
+
+/**
+ * Node-scoped derived state for selection/editing overlays.
+ *
+ * Extracted from `PixiCanvas` so each piece of derived state can subscribe
+ * to `sceneStore` narrowly — keyed on the specific node id(s) it needs —
+ * instead of the component subscribing to the entire `nodesById`/`parentById`
+ * maps (which would re-render on every scene mutation, including every drag
+ * frame).
+ *
+ * Exported (alongside the `PixiCanvas` component) only so its test can
+ * exercise it via `renderHook` instead of mounting the full component, which
+ * would require a real WebGL context.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function usePixiCanvasState({
+  editingNodeId,
+  editingMode,
+  instanceContext,
+  selectedIds,
+}: {
+  editingNodeId: string | null;
+  editingMode: EditingMode;
+  instanceContext: InstanceContext | null;
+  selectedIds: string[];
+}) {
+  // Resolve instance descendant if editing within a component instance.
+  // Reads the store imperatively (getState()) — recomputes only when
+  // editingNodeId/instanceContext change, not on unrelated mutations.
+  const resolvedDescendant = useMemo(() => {
+    if (!editingNodeId || !instanceContext) return null;
+    const state = useSceneStore.getState();
+    const refNode = state.nodesById[instanceContext.instanceId];
+    if (!refNode || refNode.type !== "ref") return null;
+    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+    return findResolvedDescendantByPath(
+      refNode as RefNode,
+      instanceContext.descendantPath,
+      state.nodesById,
+      state.childrenById,
+      state.parentById,
+      calculateLayoutForFrame,
+    );
+  }, [editingNodeId, instanceContext]);
+
+  // Node-scoped: identity changes only when THIS node changes.
+  const editingNodeFromStore = useSceneStore((s) =>
+    editingNodeId ? (s.nodesById[editingNodeId] ?? null) : null,
+  );
+  const editingNode = editingNodeId
+    ? (resolvedDescendant?.node ?? editingNodeFromStore)
+    : null;
+
+  // Calculate editing positions in world coordinates.
+  // Inline editors apply viewport transform internally.
+  const getEditingPosition = useCallback((nodeId: string) => {
+    const nodesTree = useSceneStore.getState().getNodes();
+    const calculateLayoutForFrame =
+      useLayoutStore.getState().calculateLayoutForFrame;
+    return getNodeAbsolutePositionWithLayout(
+      nodesTree,
+      nodeId,
+      calculateLayoutForFrame,
+    );
+  }, []);
+
+  // Reactive to the ancestor chain: while editing a node inside an
+  // auto-layout frame, a sibling resize can reflow the edited node to a new
+  // absolute position WITHOUT touching the edited node's own record (its
+  // x/y are computed by Yoga, not stored). A non-reactive read here would
+  // leave the inline editor overlay pinned at a stale position once the
+  // component stops re-rendering on every unrelated mutation. A single
+  // selector (rather than separate x/y selectors) so the layout walk
+  // (`getNodeAbsolutePositionWithLayout`) runs once per store notification
+  // instead of twice; `useShallow` prevents the fresh `{x, y}` object this
+  // selector returns every call from defeating zustand's default Object.is
+  // equality and re-rendering on every unrelated mutation.
+  const editingPosition = useSceneStore(
+    useShallow((s) => {
+      if (!editingNodeId) return null;
+      if (resolvedDescendant) {
+        return { x: resolvedDescendant.absX, y: resolvedDescendant.absY };
+      }
+      const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+      const pos = getNodeAbsolutePositionWithLayout(s.getNodes(), editingNodeId, calculateLayoutForFrame);
+      return pos ? { x: pos.x, y: pos.y } : null;
+    }),
+  );
+
+  // Theme lookup returns a primitive ('light' | 'dark'), so subscribing with
+  // a selector that reads the ancestor chain is safe without useShallow —
+  // zustand's default equality check (Object.is) bails out unless the
+  // resolved theme itself actually changes.
+  const editingTextTheme = useSceneStore((s) => {
+    if (!editingNodeId || editingMode !== "text") return null;
+    const themeNodeId = resolvedDescendant
+      ? instanceContext!.instanceId
+      : editingNodeId;
+    return getThemeFromAncestorFrames(s.parentById, s.nodesById, themeNodeId, 'light');
+  });
+
+  // Already imperative (getState()) — recomputes only on
+  // editingMode/editingNodeId/resolvedDescendant changes, not on unrelated
+  // scene mutations.
+  const editingTextIsInsideAutoLayout = useMemo(() => {
+    if (editingMode !== "text" || !editingNodeId) return false;
+    if (resolvedDescendant) return false;
+    const nodes = useSceneStore.getState().getNodes();
+    return findParentFrame(nodes, editingNodeId).isInsideAutoLayout;
+  }, [editingMode, editingNodeId, resolvedDescendant]);
+
+  // Node-scoped: a single subscription serves both the embed and frame
+  // derivations below — its identity changes only when the selected node
+  // itself changes, not on unrelated mutations.
+  const singleSelectedId = selectedIds.length === 1 ? selectedIds[0] : null;
+  const singleSelectedNode = useSceneStore((s) =>
+    singleSelectedId ? (s.nodesById[singleSelectedId] ?? null) : null,
+  );
+
+  const selectedEmbedNode =
+    singleSelectedNode?.type === "embed" ? (singleSelectedNode as EmbedNode) : null;
+
+  const selectedEmbedPosition = useMemo(() => {
+    if (!selectedEmbedNode) return null;
+    return getEditingPosition(selectedEmbedNode.id);
+  }, [selectedEmbedNode, getEditingPosition]);
+
+  const selectedFrameNode =
+    singleSelectedNode?.type === "frame" || singleSelectedNode?.type === "ref"
+      ? (singleSelectedNode as FrameNode | RefNode)
+      : null;
+
+  const selectedFramePosition = useMemo(() => {
+    if (!selectedFrameNode) return null;
+    return getEditingPosition(selectedFrameNode.id);
+  }, [selectedFrameNode, getEditingPosition]);
+
+  return {
+    resolvedDescendant,
+    editingNode,
+    editingPosition,
+    editingTextTheme,
+    editingTextIsInsideAutoLayout,
+    selectedEmbedNode,
+    selectedEmbedPosition,
+    selectedFrameNode,
+    selectedFramePosition,
+  };
+}
 
 export function PixiCanvas() {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -56,8 +208,6 @@ export function PixiCanvas() {
   const isPanning = useViewportStore((s) => s.isPanning);
   const setIsPanning = useViewportStore((s) => s.setIsPanning);
   const fitToContent = useViewportStore((s) => s.fitToContent);
-  const nodesById = useSceneStore((state) => state.nodesById);
-  const parentById = useSceneStore((state) => state.parentById);
   const pageBackground = useSceneStore((state) => state.pageBackground);
   const addNode = useSceneStore((state) => state.addNode);
   const addChildToFrame = useSceneStore((state) => state.addChildToFrame);
@@ -86,69 +236,16 @@ export function PixiCanvas() {
   // Selection data for inline editors
   const instanceContext = useSelectionStore((s) => s.instanceContext);
 
-  // Resolve instance descendant if editing within a component instance
-  const resolvedDescendant = useMemo(() => {
-    if (!editingNodeId || !instanceContext) return null;
-    const state = useSceneStore.getState();
-    const refNode = state.nodesById[instanceContext.instanceId];
-    if (!refNode || refNode.type !== "ref") return null;
-    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-    return findResolvedDescendantByPath(
-      refNode as RefNode,
-      instanceContext.descendantPath,
-      state.nodesById,
-      state.childrenById,
-      state.parentById,
-      calculateLayoutForFrame,
-    );
-  }, [editingNodeId, instanceContext]);
-
-  const editingNode = editingNodeId
-    ? (resolvedDescendant?.node ?? useSceneStore.getState().nodesById[editingNodeId])
-    : null;
-
-  // Calculate editing positions in world coordinates.
-  // Inline editors apply viewport transform internally.
-  const getEditingPosition = useCallback((nodeId: string) => {
-    const nodesTree = useSceneStore.getState().getNodes();
-    const calculateLayoutForFrame =
-      useLayoutStore.getState().calculateLayoutForFrame;
-    return getNodeAbsolutePositionWithLayout(
-      nodesTree,
-      nodeId,
-      calculateLayoutForFrame,
-    );
-  }, []);
-
-  const editingPosition = editingNodeId
-    ? (resolvedDescendant
-        ? { x: resolvedDescendant.absX, y: resolvedDescendant.absY }
-        : getEditingPosition(editingNodeId))
-    : null;
-  const editingTextTheme = useMemo(() => {
-    if (!editingNodeId || editingMode !== "text") return null;
-    if (resolvedDescendant) {
-      // For instance descendants, use the instance's ancestor theme
-      return getThemeFromAncestorFrames(
-        parentById,
-        nodesById,
-        instanceContext!.instanceId,
-        'light',
-      );
-    }
-    return getThemeFromAncestorFrames(
-      parentById,
-      nodesById,
-      editingNodeId,
-      'light',
-    );
-  }, [editingNodeId, editingMode, parentById, nodesById, resolvedDescendant, instanceContext]);
-  const editingTextIsInsideAutoLayout = useMemo(() => {
-    if (editingMode !== "text" || !editingNodeId) return false;
-    if (resolvedDescendant) return false;
-    const nodes = useSceneStore.getState().getNodes();
-    return findParentFrame(nodes, editingNodeId).isInsideAutoLayout;
-  }, [editingMode, editingNodeId, resolvedDescendant]);
+  const {
+    editingNode,
+    editingPosition,
+    editingTextTheme,
+    editingTextIsInsideAutoLayout,
+    selectedEmbedNode,
+    selectedEmbedPosition,
+    selectedFrameNode,
+    selectedFramePosition,
+  } = usePixiCanvasState({ editingNodeId, editingMode, instanceContext, selectedIds });
 
   const handleDocumentDrop = useCallback(
     (
@@ -162,30 +259,6 @@ export function PixiCanvas() {
     },
     [],
   );
-
-  const selectedEmbedNode = useMemo(() => {
-    if (selectedIds.length !== 1) return null;
-    const selectedNode = nodesById[selectedIds[0]];
-    return selectedNode?.type === "embed" ? (selectedNode as EmbedNode) : null;
-  }, [selectedIds, nodesById]);
-
-  const selectedEmbedPosition = useMemo(() => {
-    if (!selectedEmbedNode) return null;
-    return getEditingPosition(selectedEmbedNode.id);
-  }, [selectedEmbedNode, getEditingPosition]);
-
-  const selectedFrameNode = useMemo(() => {
-    if (selectedIds.length !== 1) return null;
-    const selectedNode = nodesById[selectedIds[0]];
-    return selectedNode?.type === "frame" || selectedNode?.type === "ref"
-      ? (selectedNode as FrameNode | RefNode)
-      : null;
-  }, [selectedIds, nodesById]);
-
-  const selectedFramePosition = useMemo(() => {
-    if (!selectedFrameNode) return null;
-    return getEditingPosition(selectedFrameNode.id);
-  }, [selectedFrameNode, getEditingPosition]);
 
   // Keyboard shortcuts (reuse existing hook)
   useCanvasKeyboardShortcuts({
@@ -311,6 +384,10 @@ export function PixiCanvas() {
         // Render on demand: detach Pixi's per-frame render and drive it from
         // store/overlay/font signals + a trailing window + a safety tick.
         const renderSchedulerCleanup = setupRenderScheduler(app);
+
+        if (import.meta.env.DEV) {
+          (window as unknown as { __perfStats: typeof perfStats }).__perfStats = perfStats;
+        }
 
         setPixiRefs({
           app,
