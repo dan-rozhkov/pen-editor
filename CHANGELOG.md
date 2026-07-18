@@ -8,6 +8,38 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.49.0] - 2026-07-19
+
+### Changed
+- **Shared paint-stack row shell (arch-06).** The "stack row" — drag handle +
+  popover trigger (swatch + summary) + visibility/remove buttons + drag-to-
+  reorder state — was written three times across the Fill, Stroke, and Effects
+  sections (~150 duplicated lines, already drifting). It now lives once in
+  `src/components/properties/stackRow.tsx` (`StackRowShell` + `useDragReorder`),
+  and the shared `PaintSwatch` / `BlendModeDropdown` / `FILL_ROW_TRIGGER_CLASS`
+  pieces moved out of the `FillSection` file into that honest shared-ui module.
+  Pure extraction — no behavior change; drag-to-reorder stays off in Effects.
+- **Shared media-fill editor controls (arch-07).** The mode+crop-toggle row,
+  the 4-field crop grid, and the preview + hover-reveal "Replace…" overlay were
+  copied across the Image, Video, and Pattern fill editors (~90 duplicated
+  lines). They now live once in `src/components/properties/mediaFillControls.tsx`
+  (`CropRectGrid`, `MediaModeRow`, `MediaPreviewReplace`). Pure presentational
+  extraction — no behavior change.
+
+### Fixed
+- **Unified canvas viewport metrics (arch-08).** The canvas viewport size was
+  derived in 9 places with three different fallback policies
+  (`window.innerWidth - 480`, plain `window.innerWidth`, a raw rect). All 9 now
+  read from a single `src/utils/canvasViewport.ts` helper. Two deliberate
+  consequences: the former `- 480` fallback sites fall back to plain window size
+  when no canvas is mounted, and **click-placed nodes now center on the canvas
+  (matching paste), not the window.**
+
+### Removed
+- **Dead code (arch-08).** Deleted the unused `useCanvasSelectionData` hook (225
+  lines that duplicated `PixiCanvas`'s inline memos) and the unused
+  `SegmentedControl` control from `PropertyInputs.tsx`.
+
 ## [0.48.0] - 2026-07-18
 
 ### Changed
