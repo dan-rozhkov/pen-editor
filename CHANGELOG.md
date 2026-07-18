@@ -8,6 +8,41 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.48.0] - 2026-07-18
+
+### Changed
+- **Properties panel no longer recomputes Yoga on unrelated drags (perf-02).**
+  `SizeSection` and `SelectionColorsSection` subscribed to the whole
+  `nodesById` / `childrenById` maps, which get a fresh reference on every scene
+  mutation, so both always-mounted sections re-rendered — and re-ran the Yoga
+  layout (`calculateFrameIntrinsicSize` / `calculateLayoutForFrame`) in their
+  render path — on every frame of a drag of *any* node (60–120 Hz). They now
+  subscribe (via `useShallow`) only to the node references inside the relevant
+  subtree (a new `collectSubtreeIds` helper) and read the maps via `getState()`
+  at point of use, so Yoga runs for the selected node only when that node's own
+  subtree actually changes. (This finishes the isolation `perf-01` started; the
+  displayed values are unchanged.)
+- **Tool hotkeys derive from a single source (arch-04).** The plain-letter tool
+  dispatch in `keyboardCommands.ts` — 14 hand-written `if (e.code === …)` blocks
+  — is now generated from `toolDefinitions` (`ALL_TOOLS`), so the shortcut shown
+  in the toolbar, command palette, and README can no longer drift from the one
+  that fires.
+
+### Fixed
+- **Corrected drifted tool-shortcut labels (arch-04).** The toolbar and command
+  palette advertised **Connector = `C`**, but `C` became comment mode in cmt-01
+  — the connector actually lives on **`N`**; and **Text on Path = `⇧T`** was a
+  phantom (no handler ever existed). Labels fixed and the README shortcut tables
+  brought up to date (Connector `N`, Comment `C`, `⇧D`/`⇧M`/`⇧C`/`⌘⇧O`/`⌘⇧[`/`]`).
+
+### Internal
+- **Extracted a shared `EditableText` inline-edit component (arch-05).** Five
+  drifted copies of the same click-to-edit field (`VariablesPanel`,
+  `TextStylesPanel`, `StylesPanel`, `PagesPanel`, `LeftSidebar`) collapsed into
+  one `src/components/ui/EditableText.tsx`. Each call site's behavior is
+  preserved via props (`allowEmpty`, `activateOn`, `onEditingChange`), so any
+  future UX fix (IME, select-all timing, click-outside) is a one-place change.
+
 ## [0.47.0] - 2026-07-18
 
 ### Fixed
