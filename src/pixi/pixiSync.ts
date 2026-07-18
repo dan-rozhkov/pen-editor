@@ -70,14 +70,12 @@ const diffCheckEnabled = import.meta.env.DEV && localStorage.getItem("pen.diffCh
 
 /**
  * Task 13: raster caching of quiet top-level frames, behind a flag.
- * Dev-on by default (kill switch: `localStorage.setItem("pen.rasterCache", "off")`),
- * prod-off by default (opt-in: `localStorage.setItem("pen.rasterCache", "on")`).
+ * On by default everywhere (kill switch:
+ * `localStorage.setItem("pen.rasterCache", "off")` + reload).
  * When off, `createRasterCacheManager` is never called — see `rasterCacheManager`
  * below, instantiated only if this is true.
  */
-const rasterCacheEnabled = import.meta.env.DEV
-  ? localStorage.getItem("pen.rasterCache") !== "off"
-  : localStorage.getItem("pen.rasterCache") === "on";
+const rasterCacheEnabled = localStorage.getItem("pen.rasterCache") !== "off";
 
 /**
  * A node is "variable-dependent" if its rendering can change when a design
