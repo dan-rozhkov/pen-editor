@@ -95,6 +95,23 @@ describe('convertH2dToSceneNodes (real fixture)', () => {
     expect(label).toBeTruthy()
   })
 
+  it('resolves percentage corner radii against the captured element size', () => {
+    const body = el('BODY', rect(0, 0, 100, 100), {}, [
+      el('DIV', rect(10, 10, 28, 28), {
+        backgroundColor: 'rgb(15, 118, 110)',
+        borderTopLeftRadius: '50%',
+        borderTopRightRadius: '50%',
+        borderBottomRightRadius: '50%',
+        borderBottomLeftRadius: '50%',
+      }),
+    ])
+
+    const { nodes } = convertH2dToSceneNodes(buildDocument(body))
+    const marker = (nodes[0] as FrameNode).children[0] as FrameNode
+
+    expect(marker.cornerRadius).toBe(14)
+  })
+
   it('converts IMG into a node with an image fill resolved to a data: URL', () => {
     const { nodes } = convertFixture()
     const root = nodes[0] as FrameNode
@@ -469,6 +486,20 @@ describe('convertH2dToSceneNodes (synthetic cases)', () => {
     expect(span.type).toBe('text')
     expect(span.fontSize).toBeUndefined()
     expect(span.lineHeight).toBeUndefined()
+  })
+
+  it('uses the scene default font size when capture omits the browser default', () => {
+    const body = el('BODY', rect(0, 0, 100, 100), {}, [
+      el('SPAN', rect(0, 0, 80, 24), { lineHeight: '24px' }, [
+        text('default size', rect(0, 0, 80, 24)),
+      ]),
+    ])
+
+    const { nodes } = convertH2dToSceneNodes(buildDocument(body))
+    const span = (nodes[0] as FrameNode).children[0] as TextNode
+
+    expect(span.fontSize).toBeUndefined()
+    expect(span.lineHeight).toBe(1.5)
   })
 
   it('approximates repeating-linear-gradient as a linear gradientFill', () => {

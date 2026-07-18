@@ -137,12 +137,27 @@ export function px(value: string | undefined): number | null {
   return Number.isFinite(n) ? n : null
 }
 
+/** Resolve a circular CSS radius to scene pixels. Percentage radii are relative
+ * to each box axis in CSS; the scene model has one scalar per corner, so use
+ * the smaller axis to preserve the inscribed rounded shape. */
+function cornerRadiusPx(value: string | undefined, width: number, height: number): number | null {
+  const absolute = px(value)
+  if (absolute !== null) return absolute
+  const match = value?.match(/^(\d+(?:\.\d+)?)%$/)
+  if (!match) return null
+  return (parseFloat(match[1]) / 100) * Math.min(width, height)
+}
+
 /** Uniform vs. per-corner border radius from the (only-non-default) resolved styles. */
-function cornerRadiusFromStyles(styles: Record<string, string>): { cornerRadius?: number; cornerRadiusPerCorner?: PerCornerRadius } {
-  const topLeft = px(styles.borderTopLeftRadius)
-  const topRight = px(styles.borderTopRightRadius)
-  const bottomRight = px(styles.borderBottomRightRadius)
-  const bottomLeft = px(styles.borderBottomLeftRadius)
+function cornerRadiusFromStyles(
+  styles: Record<string, string>,
+  width: number,
+  height: number,
+): { cornerRadius?: number; cornerRadiusPerCorner?: PerCornerRadius } {
+  const topLeft = cornerRadiusPx(styles.borderTopLeftRadius, width, height)
+  const topRight = cornerRadiusPx(styles.borderTopRightRadius, width, height)
+  const bottomRight = cornerRadiusPx(styles.borderBottomRightRadius, width, height)
+  const bottomLeft = cornerRadiusPx(styles.borderBottomLeftRadius, width, height)
   const values = [topLeft, topRight, bottomRight, bottomLeft]
   if (values.every((v) => v === null)) return {}
   if (values.every((v) => v !== null) && new Set(values).size === 1) {
@@ -276,7 +291,7 @@ function applyCommonProps(base: FrameNode, node: H2dElementNode, ctx: ConvertCtx
   if (styles.overflow === 'hidden' || styles.overflow === 'clip' || styles.overflowX === 'hidden' || styles.overflowX === 'clip') {
     base.clip = true
   }
-  const radii = cornerRadiusFromStyles(styles)
+  const radii = cornerRadiusFromStyles(styles, node.rect.width, node.rect.height)
   if (radii.cornerRadius !== undefined) base.cornerRadius = radii.cornerRadius
   if (radii.cornerRadiusPerCorner) base.cornerRadiusPerCorner = radii.cornerRadiusPerCorner
 

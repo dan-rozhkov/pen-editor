@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useRenderModeStore } from "@/store/renderModeStore";
-import { mountHtmlWithBodyStyles } from "@/utils/embedHtmlUtils";
+import {
+  applyEmbedInheritedDefaults,
+  mountHtmlWithBodyStyles,
+} from "@/utils/embedHtmlUtils";
 import { buildVariableStyleBlock } from "@/utils/variableCssUtils";
 import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
 import type { EmbedNode } from "@/types/scene";
@@ -43,6 +46,7 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
     content.style.width = `${width}px`;
     content.style.height = `${height}px`;
     content.style.overflow = "auto";
+    applyEmbedInheritedDefaults(content);
     const themeBlock = buildVariableStyleBlock(undefined, getEffectiveThemeForNode(nodeId));
     const html = themeBlock ? htmlContent + themeBlock : htmlContent;
     mountHtmlWithBodyStyles(content, html, width, height);

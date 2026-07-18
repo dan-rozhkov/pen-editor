@@ -1,5 +1,6 @@
 import type { H2dDocument } from "@/lib/h2dPaste/h2dTypes";
 import { sanitizeEmbedHtml } from "@/utils/sanitizeEmbedHtml";
+import { EMBED_DEFAULT_LINE_HEIGHT } from "@/utils/embedHtmlUtils";
 import captureBundleSource from "@/vendor/h2dCapture/capture.js?raw";
 
 interface H2dCaptureWindow extends Window {
@@ -51,7 +52,7 @@ export async function captureEmbedHtmlToH2d(
   // real control here, not the iframe's sandboxing.
   const safeHtmlContent = sanitizeEmbedHtml(htmlContent);
   iframe.srcdoc =
-    "<!doctype html><html><head><script>" +
+    `<!doctype html><html style="line-height:${EMBED_DEFAULT_LINE_HEIGHT}"><head><script>` +
     captureBundleSource.replace(/<\/script>/gi, "<\\/script>") +
     "</script></head><body style=\"margin:0\">" +
     safeHtmlContent +

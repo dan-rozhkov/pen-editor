@@ -210,9 +210,20 @@ const CSS_GENERIC_FAMILIES = new Set([
 /** Apply typography properties from CSS to a TextNode */
 export function applyTextProps(node: TextNode, style: TextStyleSource): void {
   // Font size
-  const fontSize = parseFloat(style.fontSize ?? "");
+  const fontSizeValue = style.fontSize ?? "";
+  const fontSize = parseFloat(fontSizeValue);
   const hasFontSize = Number.isFinite(fontSize) && fontSize > 0;
   if (hasFontSize) node.fontSize = fontSize;
+  // h2d omits browser-default values from its style payload. Missing 16px is
+  // therefore different from an explicitly invalid/zero font size: Pixi will
+  // render the former at the scene default of 16px, so typography ratios must
+  // be calculated against that same value.
+  let effectiveFontSize: number | undefined;
+  if (hasFontSize) {
+    effectiveFontSize = fontSize;
+  } else if (fontSizeValue === "") {
+    effectiveFontSize = node.fontSize ?? 16;
+  }
 
   // Font family (first family), plus the CSS generic fallback if present
   const fontFamily = style.fontFamily;
@@ -251,8 +262,8 @@ export function applyTextProps(node: TextNode, style: TextStyleSource): void {
 
   // Line height
   const lineHeight = parseFloat(style.lineHeight ?? "");
-  if (Number.isFinite(lineHeight) && lineHeight > 0 && hasFontSize) {
-    const ratio = lineHeight / fontSize;
+  if (Number.isFinite(lineHeight) && lineHeight > 0 && effectiveFontSize !== undefined) {
+    const ratio = lineHeight / effectiveFontSize;
     if (ratio > 0 && ratio !== 1.2 && isFinite(ratio)) {
       node.lineHeight = Math.round(ratio * 100) / 100;
     }

@@ -5,6 +5,14 @@
 
 import { sanitizeEmbedHtml } from "./sanitizeEmbedHtml";
 
+/** Inherited typography baseline shared by the live Shadow-DOM embed and the
+ * isolated iframe used by Convert to design. Source CSS can override it. */
+export const EMBED_DEFAULT_LINE_HEIGHT = "1.5";
+
+export function applyEmbedInheritedDefaults(element: HTMLElement): void {
+  element.style.lineHeight = EMBED_DEFAULT_LINE_HEIGHT;
+}
+
 /** Detect whether HTML contains `<body>` tags or CSS selectors targeting `html`/`body`. */
 export function hasBodyTargetedStyles(html: string): boolean {
   if (/<body[\s>]/i.test(html)) return true;

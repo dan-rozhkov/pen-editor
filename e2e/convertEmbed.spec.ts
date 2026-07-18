@@ -10,6 +10,8 @@ import { test, expect } from "@playwright/test";
 const EMBED_HTML = [
   '<div style="width:400px;height:300px;background:#f5f0e6;font-family:Plus Jakarta Sans,sans-serif">',
   '<div style="font-family:JetBrains Mono,monospace;font-size:16px">10,1</div>',
+  '<div style="font-size:16px">Inherited line height</div>',
+  '<div style="width:28px;height:28px;background:#0f766e;border-radius:50%"></div>',
   '<div style="width:80px;height:60px;background:linear-gradient(180deg,#fde68a 0%,#fbbf24 100%)"></div>',
   '<div style="width:80px;height:40px;background:repeating-linear-gradient(45deg,#fef3c7 0,#fde68a 16px)"></div>',
   "</div>",
@@ -64,6 +66,12 @@ test("convert embed to design via h2d capture", async ({ page }) => {
       embedGone: !s.nodesById["e2e-embed"],
       gradientCount: nodes.filter((n) => n.gradientFill).length,
       monoText: nodes.find((n) => n.type === "text" && n.text === "10,1"),
+      inheritedText: nodes.find(
+        (n) => n.type === "text" && n.text === "Inherited line height"
+      ),
+      roundMarker: nodes.find(
+        (n) => n.type === "frame" && n.width === 28 && n.height === 28
+      ),
     };
   }, EMBED_HTML);
 
@@ -75,4 +83,6 @@ test("convert embed to design via h2d capture", async ({ page }) => {
   expect(result.gradientCount).toBeGreaterThanOrEqual(2);
   expect(result.monoText?.fontFamily).toBe("JetBrains Mono");
   expect(result.monoText?.fontFallback).toBe("monospace");
+  expect(result.inheritedText?.lineHeight).toBe(1.5);
+  expect(result.roundMarker?.cornerRadius).toBe(14);
 });
