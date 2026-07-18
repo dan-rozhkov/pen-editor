@@ -7,6 +7,7 @@ import { buildPatternSprite } from "./patternFillHelpers";
 import { hasPerCornerRadius } from "@/utils/renderUtils";
 import { cropRectToPixels, coverPixelRect, type PixelRect } from "@/lib/imageCrop/cropRect";
 import { buildAdjustmentColorMatrix, isDefaultAdjustments } from "@/lib/imageAdjustments/imageAdjustments";
+import { normalizeSvgMarkup, svgTextToDataUrl } from "@/lib/htmlToDesign/svgHandling";
 
 /** Cache for loaded textures by URL (LRU, bounded — SVG keys include size/resolution,
  *  so interactive resize/zoom would otherwise grow it without limit) */
@@ -57,6 +58,39 @@ export function isSvgUrl(url: string): boolean {
   return /^data:image\/svg\+xml/i.test(url) || /\.svg(?:[?#]|$)/i.test(url);
 }
 
+const SVG_DATA_URL_RE = /^data:image\/svg\+xml([^,]*),(.*)$/is;
+
+/**
+ * Last-barrier normalization for an SVG `data:` URL: decode its markup
+ * (base64 or plain/percent-encoded), run it through the pure
+ * `normalizeSvgMarkup` (injects width/height/viewBox when the SVG lacks
+ * intrinsic dimensions), and re-encode. This guarantees the `<img>` element
+ * `loadImageElement` creates from the URL gets a non-zero natural size
+ * regardless of where the data URI originated (converter, AI tool, manual
+ * paste) — an un-normalized SVG with no explicit dims would otherwise decode
+ * to 0x0 and trip the natural-size reject in `loadImageElement`.
+ *
+ * Non-SVG-data-URL input (raster data URLs, remote URLs) is returned
+ * unchanged. Any decode/parse failure also falls back to the original url
+ * unchanged — this must be safe to call unconditionally, never throwing.
+ */
+export function normalizeSvgDataUrl(url: string, fallbackWidth: number, fallbackHeight: number): string {
+  const match = url.match(SVG_DATA_URL_RE);
+  if (!match) return url;
+
+  try {
+    const [, meta, payload] = match;
+    const isBase64 = /;base64/i.test(meta);
+    const markup = isBase64
+      ? decodeURIComponent(escape(atob(payload)))
+      : decodeURIComponent(payload);
+    const normalized = normalizeSvgMarkup(markup, fallbackWidth, fallbackHeight);
+    return svgTextToDataUrl(normalized);
+  } catch {
+    return url;
+  }
+}
+
 export function getTextureCacheKey(
   url: string,
   width: number,
@@ -69,14 +103,20 @@ export function getTextureCacheKey(
   return `svg:${url}:${Math.round(width)}x${Math.round(height)}@${resolutionBucket}`;
 }
 
-/** Load an image as an HTMLImageElement, optionally with CORS */
-function loadImageElement(url: string, useCors: boolean): Promise<HTMLImageElement> {
+/** Load an image as an HTMLImageElement, optionally with CORS.
+ *  `allowZeroSize` skips the natural-size reject — needed for SVG sources,
+ *  whose markup may (still) lack intrinsic width/height/viewBox despite the
+ *  `normalizeSvgDataUrl` last-barrier fix (e.g. a remote `.svg` URL we can't
+ *  rewrite); the caller then falls back to its own target width/height. Raster
+ *  loads keep the default `false` so a genuinely broken image still rejects
+ *  and falls through `loadRasterTextureFromUrl`'s retry chain. */
+function loadImageElement(url: string, useCors: boolean, allowZeroSize = false): Promise<HTMLImageElement> {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
     if (useCors) image.crossOrigin = "anonymous";
 
     image.onload = () => {
-      if (image.naturalWidth <= 0 || image.naturalHeight <= 0) {
+      if (!allowZeroSize && (image.naturalWidth <= 0 || image.naturalHeight <= 0)) {
         reject(new Error(`Image loaded with invalid dimensions: ${url}`));
         return;
       }
@@ -124,7 +164,13 @@ async function loadSvgTextureFromUrl(
   height: number,
   resolution: number,
 ): Promise<Texture> {
-  const image = await loadImageElement(url, true).catch(() => loadImageElement(url, false));
+  // Normalize the markup FIRST so a data-URI SVG with no explicit width/
+  // height/viewBox decodes to a non-zero natural size (see normalizeSvgDataUrl
+  // doc comment). `allowZeroSize: true` also tolerates a source we can't
+  // rewrite (e.g. remote .svg URL) that still decodes to 0x0 — the cover-scale
+  // math below already falls back to the passed target width/height.
+  const safeUrl = normalizeSvgDataUrl(url, width, height);
+  const image = await loadImageElement(safeUrl, true, true).catch(() => loadImageElement(safeUrl, false, true));
 
   const sourceWidth = Math.max(1, image.naturalWidth || width || 1);
   const sourceHeight = Math.max(1, image.naturalHeight || height || 1);
@@ -156,7 +202,7 @@ async function loadSvgPatternTextureFromUrl(
   scale: number,
   resolution: number,
 ): Promise<Texture> {
-  const image = await loadImageElement(url, true).catch(() => loadImageElement(url, false));
+  const image = await loadImageElement(url, true, true).catch(() => loadImageElement(url, false, true));
 
   const sourceWidth = Math.max(1, image.naturalWidth || 1);
   const sourceHeight = Math.max(1, image.naturalHeight || 1);

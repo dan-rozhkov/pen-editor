@@ -3,7 +3,20 @@ import {
   isSvgUrl,
   getTextureCacheKey,
   getPatternTextureCacheKey,
+  normalizeSvgDataUrl,
 } from "@/pixi/renderers/imageFillHelpers";
+
+/** Decode a `data:image/svg+xml` URL (either `;base64,` or plain/percent-encoded)
+ *  back to its markup string, for asserting on the normalized output. */
+function decodeSvgDataUrl(url: string): string {
+  const commaIndex = url.indexOf(",");
+  const prefix = url.slice(0, commaIndex);
+  const payload = url.slice(commaIndex + 1);
+  if (prefix.includes(";base64")) {
+    return decodeURIComponent(escape(atob(payload)));
+  }
+  return decodeURIComponent(payload);
+}
 
 describe("isSvgUrl", () => {
   it("treats SVG data URIs as SVG", () => {
@@ -62,6 +75,56 @@ describe("getTextureCacheKey", () => {
     // round(0.1 * 4)/4 = round(0.4)/4 = 0/4 = 0 → Math.max(1, 0) = 1
     const key = getTextureCacheKey(url, 100, 100, 0.1);
     expect(key).toBe("svg:https://example.com/icon.svg:100x100@1");
+  });
+});
+
+describe("normalizeSvgDataUrl", () => {
+  it("injects width/height/viewBox into a plain-encoded SVG with no dims", () => {
+    const url = `data:image/svg+xml,${encodeURIComponent("<svg><path/></svg>")}`;
+    const result = normalizeSvgDataUrl(url, 40, 20);
+    expect(result.startsWith("data:image/svg+xml")).toBe(true);
+    const markup = decodeSvgDataUrl(result);
+    expect(markup).toMatch(/width="40"/);
+    expect(markup).toMatch(/height="20"/);
+    expect(markup).toMatch(/viewBox="0 0 40 20"/);
+  });
+
+  it("injects width/height/viewBox into a base64-encoded SVG with no dims", () => {
+    const svgText = "<svg><path/></svg>";
+    const url = `data:image/svg+xml;base64,${btoa(svgText)}`;
+    const result = normalizeSvgDataUrl(url, 40, 20);
+    const markup = decodeSvgDataUrl(result);
+    expect(markup).toMatch(/width="40"/);
+    expect(markup).toMatch(/height="20"/);
+    expect(markup).toMatch(/viewBox="0 0 40 20"/);
+  });
+
+  it("leaves an already well-formed SVG's dims untouched (no doubling)", () => {
+    const svgText = '<svg width="10" height="10" viewBox="0 0 10 10"><path/></svg>';
+    const url = `data:image/svg+xml,${encodeURIComponent(svgText)}`;
+    const result = normalizeSvgDataUrl(url, 40, 20);
+    const markup = decodeSvgDataUrl(result);
+    expect(markup.match(/width="/g)?.length).toBe(1);
+    expect(markup.match(/height="/g)?.length).toBe(1);
+    expect(markup.match(/viewBox="/g)?.length).toBe(1);
+    expect(markup).toMatch(/width="10"/);
+    expect(markup).toMatch(/height="10"/);
+    expect(markup).toMatch(/viewBox="0 0 10 10"/);
+  });
+
+  it("returns non-SVG URLs unchanged", () => {
+    expect(normalizeSvgDataUrl("https://example.com/photo.png", 40, 20)).toBe(
+      "https://example.com/photo.png",
+    );
+    expect(normalizeSvgDataUrl("data:image/png;base64,AAAA", 40, 20)).toBe(
+      "data:image/png;base64,AAAA",
+    );
+  });
+
+  it("returns the original url unchanged on a malformed data URI (no throw)", () => {
+    const malformed = "data:image/svg+xml;base64,not-valid-base64!!!";
+    expect(() => normalizeSvgDataUrl(malformed, 40, 20)).not.toThrow();
+    expect(normalizeSvgDataUrl(malformed, 40, 20)).toBe(malformed);
   });
 });
 
