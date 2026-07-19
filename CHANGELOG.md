@@ -8,6 +8,37 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.50.0] - 2026-07-19
+
+### Fixed
+- **Per-side stroke follows corner radius (bug-17).** A node with a per-side
+  stroke (`strokeWidthPerSide`) drew each side as a straight segment and
+  ignored `cornerRadius`/`cornerRadiusPerCorner`, leaving square corners on a
+  rounded node while the fill was rounded. When all four sides share one width
+  and the node has a radius, the stroke now follows the shared rounded contour
+  (reusing the fill's path via Pixi's stroke `alignment` for inside/center/
+  outside). Unequal per-side widths keep the straight-segment rendering as a
+  documented limitation (no single contour to key a radius off of).
+- **Shadows no longer clip or disappear on zoom (bug-19).** After the raster/
+  culling perf work, drop/inner shadows could vanish or get clipped as the zoom
+  changed. Three fixes: (1) the culling spatial index now expands each node's
+  rect by its effect overhang (`|offset| + blur + spread`) so a node whose
+  shadow bleeds onto the viewport is no longer culled with its own rect;
+  (2) the raster cache sets an explicit `boundsArea` (from the container's real
+  local bounds, so a non-clipping frame's overflow and outside strokes are
+  preserved) expanded by the effect margin, since Pixi's bake bounds ignore
+  filter padding; (3) the shadow `BlurFilter` gets explicit padding ≥ blur and
+  `quality` 3→4. Zoom-adaptive blur resolution is deliberately deferred (perf).
+
+### Changed
+- **Play mode pins slides to the top-left, hides frame names (bug-18).** In
+  Play (present) mode a slide is now always pinned to the window's top and left
+  edge instead of being centered vertically (when it fit) or around the
+  midpoint when the MIN/MAX scale clamp bound. Top-level frame-name labels are
+  no longer drawn in Play and return on exit. `viewportStore.fitToWidth`'s
+  clamped-centering contract changed accordingly (only caller is the present
+  controller).
+
 ## [0.49.0] - 2026-07-19
 
 ### Changed
