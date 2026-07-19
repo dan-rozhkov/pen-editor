@@ -1,4 +1,5 @@
 import { getCommands } from "@/lib/commands/registry";
+import { useDocumentStore } from "@/store/documentStore";
 
 /**
  * Bridge to the Electron shell (pen-editor-desktop). The desktop preload
@@ -7,6 +8,7 @@ import { getCommands } from "@/lib/commands/registry";
  * On the web window.penDesktop is absent and this is a no-op.
  */
 export interface PenDesktopApi {
+  setDocumentTitle?(title: string): void;
   onMenuCommand(cb: (commandId: string) => void): () => void;
 }
 
@@ -19,7 +21,15 @@ declare global {
 export function initDesktopBridge(): () => void {
   const api = window.penDesktop;
   if (!api) return () => {};
-  return api.onMenuCommand((commandId) => {
+  const publishDocumentTitle = (fileName: string | null) => {
+    const title = fileName?.replace(/\.[^.]+$/, "").trim() || "Untitled";
+    api.setDocumentTitle?.(title);
+  };
+  publishDocumentTitle(useDocumentStore.getState().fileName);
+  const unsubscribeDocument = useDocumentStore.subscribe((state, previous) => {
+    if (state.fileName !== previous.fileName) publishDocumentTitle(state.fileName);
+  });
+  const unsubscribeMenu = api.onMenuCommand((commandId) => {
     const command = getCommands().find((c) => c.id === commandId);
     if (command) {
       command.run();
@@ -27,4 +37,8 @@ export function initDesktopBridge(): () => void {
       console.warn(`[desktopBridge] unknown menu command id: ${commandId}`);
     }
   });
+  return () => {
+    unsubscribeMenu();
+    unsubscribeDocument();
+  };
 }

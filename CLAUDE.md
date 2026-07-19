@@ -94,7 +94,7 @@ Pasting/converting external HTML (e.g. `convertEmbedToDesign`) renders the marku
 ### Desktop shell bridge
 
 The Electron app (`../pen-editor-desktop`, its own repo) loads the deployed
-editor and exposes `window.penDesktop = { onMenuCommand(cb) }` from its
+editor and exposes `window.penDesktop = { onMenuCommand(cb), setDocumentTitle(title) }` from its
 preload. `src/lib/desktopBridge.ts` (called once in `main.tsx`) dispatches
 received ids through the command-palette registry (`getCommands()`), so
 **menu items in the desktop repo reference `PaletteCommand.id` values**
