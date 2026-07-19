@@ -2,6 +2,7 @@ import type { H2dDocument } from "@/lib/h2dPaste/h2dTypes";
 import { sanitizeEmbedHtml } from "@/utils/sanitizeEmbedHtml";
 import { EMBED_DEFAULT_LINE_HEIGHT } from "@/utils/embedHtmlUtils";
 import captureBundleSource from "@/vendor/h2dCapture/capture.js?raw";
+import { inlinePhosphorIconSvgs } from "./phosphorIcons";
 
 interface H2dCaptureWindow extends Window {
   __h2d_clone?: { en: (selector: string) => Promise<string> };
@@ -76,6 +77,16 @@ export async function captureEmbedHtmlToH2d(
     const win = iframe.contentWindow as H2dCaptureWindow | null;
     if (!win) throw new Error("h2d capture iframe has no contentWindow");
     await win.document.fonts.ready;
+    // Swap Phosphor icon-font glyphs for inline SVGs so the capture emits
+    // them as SVG image fills instead of dropping the ::before glyph (which
+    // the converter can't render — the icon font doesn't exist on canvas).
+    // Icon inlining is strictly best-effort: on failure the icons drop (the
+    // pre-inlining behavior) but the conversion itself must proceed.
+    try {
+      await inlinePhosphorIconSvgs(win.document);
+    } catch (error) {
+      console.warn("Phosphor icon inlining failed; icons may be missing:", error);
+    }
     await new Promise<void>((resolve) =>
       win.requestAnimationFrame(() => resolve()),
     );
