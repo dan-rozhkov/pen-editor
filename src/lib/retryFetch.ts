@@ -1,11 +1,13 @@
-import { isOffline } from "@/lib/apiBase";
+import { isOffline, OFFLINE_MESSAGE } from "@/lib/apiBase";
 
-// Transport-level auto-retry for chat requests. Retries ONLY fetch-level
-// network failures (TypeError: "Failed to fetch" / "Load failed" /
-// "NetworkError"). HTTP responses of any status pass through untouched —
-// repeating a 4xx/5xx usually doesn't fix it — and a stream that dies after
-// it started is out of scope (retrying that would require regenerate(),
-// which re-executes tool calls against the scene).
+// Transport-level auto-retry for chat requests. Retries ANY fetch-level
+// network failure, surfaced by browsers as a TypeError (e.g. "Failed to
+// fetch" / "Load failed" / "NetworkError" — exact wording varies by browser
+// and there's no reliable way to distinguish transient from permanent ones).
+// HTTP responses of any status pass through untouched — repeating a 4xx/5xx
+// usually doesn't fix it — and a stream that dies after it started is out of
+// scope (retrying that would require regenerate(), which re-executes tool
+// calls against the scene).
 export interface RetryState {
   /** The retry about to run, 1-based. */
   attempt: number;
@@ -48,11 +50,12 @@ export function createRetryingFetch(options: RetryingFetchOptions): typeof fetch
         onRetryStateChange(null);
         return response;
       } catch (err) {
-        const retryable =
-          err instanceof TypeError &&
-          signal?.aborted !== true &&
-          !isOffline() &&
-          retriesDone < maxAttempts;
+        const wouldRetry = err instanceof TypeError && signal?.aborted !== true;
+        if (wouldRetry && isOffline()) {
+          onRetryStateChange(null);
+          throw new Error(OFFLINE_MESSAGE, { cause: err });
+        }
+        const retryable = wouldRetry && retriesDone < maxAttempts;
         if (!retryable) {
           onRetryStateChange(null);
           throw err;

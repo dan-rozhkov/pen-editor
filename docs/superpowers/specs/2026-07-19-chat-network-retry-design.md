@@ -60,7 +60,7 @@ Behavior of the returned `fetch`:
    - the request's `AbortSignal` is not aborted (user pressed Stop — never
      retry an intentional cancel);
    - the browser is not offline (`isOffline()` from `@/lib/apiBase`) — offline
-     has its own path and retrying against no connection is noise;
+     has its own path (see below) and retrying against no connection is noise;
    - retries remain (fewer than `maxAttempts` retries performed).
 3. Before waiting, report `{ attempt, maxAttempts }` so the UI can show the
    countdown. Wait `delayMs` with a cancelable timer that listens to the same
@@ -100,6 +100,12 @@ correct.
   treats it as a normal stop.
 - **Non-TypeError rejections** (programming errors, aborts): rethrown
   immediately, no retry, state `null`.
+- **Offline mid-retry:** a network `TypeError` that would otherwise be
+  retryable (not aborted) but `isOffline()` is true is not retried; state
+  reports `null` and the wrapper throws `new Error(OFFLINE_MESSAGE, { cause:
+  err })` (canonical copy from `@/lib/apiBase`) instead of the raw `TypeError`,
+  so the chat error banner shows the same offline copy used elsewhere rather
+  than a browser-specific message.
 - **Retry succeeds:** state resets to `null` before the `Response` is
   returned; streaming proceeds as if nothing happened.
 

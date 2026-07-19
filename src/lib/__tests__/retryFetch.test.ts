@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createRetryingFetch, type RetryState } from "@/lib/retryFetch";
+import { OFFLINE_MESSAGE } from "@/lib/apiBase";
 
 // isOffline reads navigator.onLine; toggle it per-test via the mock below.
 let offlineFlag = false;
@@ -145,7 +146,10 @@ describe("createRetryingFetch", () => {
     const fetchImpl = vi.fn<typeof fetch>().mockRejectedValue(err);
     const retryingFetch = createRetryingFetch({ onRetryStateChange, fetchImpl });
 
-    await expect(retryingFetch("/api/chat")).rejects.toBe(err);
+    await expect(retryingFetch("/api/chat")).rejects.toMatchObject({
+      message: OFFLINE_MESSAGE,
+      cause: err,
+    });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(states).toEqual([null]);
   });
