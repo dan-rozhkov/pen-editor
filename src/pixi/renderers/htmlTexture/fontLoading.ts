@@ -1,22 +1,59 @@
 /** Dedup stylesheet loads for external web-font providers */
 const pendingFontStylesheets = new Map<string, Promise<void>>();
 
-function extractGoogleFontStylesheetUrls(html: string): string[] {
-  const urls = new Set<string>();
-  const patterns: [RegExp, number][] = [
-    [/href=["'](https?:\/\/fonts\.googleapis\.com\/[^"']+)["']/gi, 1],
-    [/@import\s+url\((['"]?)(https?:\/\/fonts\.googleapis\.com\/[^'")]+)\1\)/gi, 2],
-  ];
+/**
+ * Hosts whose stylesheets we are willing to inject at the document level so that
+ * their `@font-face` rules register (Chrome only registers fonts from
+ * document-level styles, never from inside a shadow tree — see EmbedLayer).
+ *
+ * SECURITY: document-level CSS from embed content can restyle the entire app, so
+ * this allowlist is intentionally tight — only the web-font/icon-font CDNs the
+ * design agent actually emits. Do NOT widen it to arbitrary third-party hosts.
+ */
+const FONT_STYLESHEET_HOST_ALLOWLIST = new Set([
+  "fonts.googleapis.com",
+  "unpkg.com",
+]);
 
-  for (const [pattern, urlGroup] of patterns) {
-    let match: RegExpExecArray | null = null;
-    while ((match = pattern.exec(html)) !== null) {
-      const url = (match[urlGroup] ?? "").trim();
-      if (url) urls.add(url);
-    }
+function isAllowedFontStylesheetHost(url: string): boolean {
+  try {
+    return FONT_STYLESHEET_HOST_ALLOWLIST.has(new URL(url).hostname);
+  } catch {
+    // Relative / malformed URLs can't be resolved to an allowlisted host.
+    return false;
+  }
+}
+
+/**
+ * Extract external font-stylesheet URLs from raw embed HTML, from BOTH
+ * `@import url(...)` rules inside `<style>` blocks and `<link rel="stylesheet">`
+ * tags (the latter get stripped by sanitization downstream, so we read the raw
+ * HTML here). Only URLs on {@link FONT_STYLESHEET_HOST_ALLOWLIST} are returned.
+ */
+export function extractExternalFontStylesheetUrls(html: string): string[] {
+  const urls = new Set<string>();
+
+  // <link ... rel="stylesheet" ... href="..."> (attribute order independent)
+  const linkPattern = /<link\b[^>]*>/gi;
+  let linkMatch: RegExpExecArray | null = null;
+  while ((linkMatch = linkPattern.exec(html)) !== null) {
+    const tag = linkMatch[0];
+    if (!/\brel\s*=\s*["']?[^"'>]*\bstylesheet\b/i.test(tag)) continue;
+    const href = /\bhref\s*=\s*["']([^"']+)["']/i.exec(tag);
+    const url = href?.[1]?.trim();
+    if (url) urls.add(url);
   }
 
-  return [...urls];
+  // @import url(...) with optional quotes, and @import "..." string form.
+  const importPattern =
+    /@import\s+(?:url\(\s*(['"]?)([^'")]+)\1\s*\)|(['"])([^'"]+)\3)/gi;
+  let importMatch: RegExpExecArray | null = null;
+  while ((importMatch = importPattern.exec(html)) !== null) {
+    const url = (importMatch[2] ?? importMatch[4] ?? "").trim();
+    if (url) urls.add(url);
+  }
+
+  return [...urls].filter(isAllowedFontStylesheetHost);
 }
 
 function ensureFontStylesheetLoaded(url: string): Promise<void> {
@@ -53,7 +90,7 @@ function ensureFontStylesheetLoaded(url: string): Promise<void> {
 
 export async function ensureExternalFontStylesLoaded(html: string): Promise<void> {
   if (typeof document === "undefined") return;
-  const urls = extractGoogleFontStylesheetUrls(html);
+  const urls = extractExternalFontStylesheetUrls(html);
   if (urls.length === 0) return;
 
   await Promise.all(urls.map((url) => ensureFontStylesheetLoaded(url)));
