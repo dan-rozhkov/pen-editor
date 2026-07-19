@@ -87,8 +87,8 @@ get a fresh 3-retry budget.
 
 Where the chat panel currently renders the error / loading indicator: when
 `retryState != null`, show a neutral (non-red) status line —
-«Сетевая ошибка, повтор через 5 с (попытка N/3)…» — instead of the error
-block. The red error only appears after all attempts are exhausted (or for
+"Network error — retrying in 5 s (attempt N/3)…" (English, matching the rest
+of the UI) — instead of the error block. The red error only appears after all attempts are exhausted (or for
 non-retryable errors, immediately, as today). While retrying, `chat.status`
 stays `submitted`/`streaming`, so the existing spinner/Stop affordances remain
 correct.
