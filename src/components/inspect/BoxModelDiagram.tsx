@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import type { InspectData } from "@/lib/inspect/buildInspectData";
 import type { InspectUnits } from "@/store/devModeStore";
 import { formatLength } from "@/lib/inspect/units";
@@ -32,58 +31,126 @@ function RadiusCorner({ corner }: { corner: Corner }) {
 
 function TextMetricsDiagram({
   text,
-  box,
   formatValue,
 }: {
   text: NonNullable<InspectData["textMetrics"]>;
-  box: InspectData["box"];
   formatValue: (value: number) => string;
 }) {
-  const metrics = useMemo(() => {
-    const preview = text.text.trim().slice(0, 2) || "Ag";
-    const fallbackWidth = text.fontSize * 1.15;
-    if (typeof document === "undefined") {
-      return { preview, width: fallbackWidth };
-    }
-    const context = document.createElement("canvas").getContext("2d");
-    if (!context) return { preview, width: fallbackWidth };
-    context.font = `${text.fontStyle} ${text.fontWeight} ${text.fontSize}px ${text.fontFamily}`;
-    const measured = context.measureText(preview);
-    return { preview, width: measured.width || fallbackWidth };
-  }, [text]);
-
-  const previewWidth = Math.min(metrics.width, box.width);
-  const leftGap =
-    text.textAlign === "right"
-      ? box.width - previewWidth
-      : text.textAlign === "center"
-        ? (box.width - previewWidth) / 2
-        : 0;
-  const rightGap = Math.max(0, box.width - previewWidth - leftGap);
-  const previewScale = Math.min(1, 106 / Math.max(text.fontSize, 1));
+  // The preview is intentionally magnified so letterform and line-box
+  // relationships stay legible even for small text layers.
+  const fontSize = Math.round(Math.min(72, Math.max(58, text.fontSize * 4.5)));
+  const snapEvenPixel = (value: number) => Math.max(2, Math.round(value / 2) * 2);
+  const lineHeight = snapEvenPixel(
+    Math.min(
+      112,
+      Math.max(fontSize + 12, fontSize * (text.lineHeight / Math.max(text.fontSize, 1))),
+    ),
+  );
+  const fontBoxHeight = snapEvenPixel(Math.min(fontSize, lineHeight - 8));
+  const lineHeightBoxWidth = 112;
+  const fontBoxWidth = lineHeightBoxWidth;
+  const diagramWidth = 220;
+  const diagramHeight = 132;
+  const leftGuideX = 26;
+  const rightGuideX = diagramWidth - 26;
+  const fontBoxLeft = (diagramWidth - fontBoxWidth) / 2;
+  const lineHeightBoxLeft = (diagramWidth - lineHeightBoxWidth) / 2;
+  const lineHeightBoxRight = (diagramWidth + lineHeightBoxWidth) / 2;
+  const fontGuideTop = (diagramHeight - fontBoxHeight) / 2;
+  const lineHeightGuideTop = (diagramHeight - lineHeight) / 2;
 
   return (
     <div className="p-3">
       <div aria-label="Text metrics" className="relative h-[200px] overflow-hidden bg-surface-hover/30 p-6">
-        <div className="relative flex h-full items-center justify-center overflow-hidden rounded-[12px] bg-surface-panel">
-          <div className="relative flex h-[108px] w-[168px] items-center justify-center border border-blue-500">
-            <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-blue-500" />
+        <div className="relative flex h-full items-center justify-center overflow-hidden">
+          <div
+            className="relative flex items-center justify-center"
+            style={{ width: diagramWidth, height: diagramHeight }}
+          >
             <div
-              className="relative border border-dashed border-red-500 px-2 leading-none text-text-primary"
+              aria-hidden="true"
+              className="absolute border border-[#0d99ff]"
+              style={{
+                left: lineHeightBoxLeft,
+                top: lineHeightGuideTop,
+                width: lineHeightBoxWidth,
+                height: lineHeight,
+              }}
+            />
+            <div
+              aria-hidden="true"
+              className="absolute border-y border-dashed border-[#0d99ff]"
+              style={{
+                left: fontBoxLeft,
+                top: fontGuideTop,
+                width: fontBoxWidth,
+                height: fontBoxHeight,
+              }}
+            />
+            <span
+              aria-hidden="true"
+              className="absolute border-l border-[#f24822]"
+              style={{ left: leftGuideX, top: fontGuideTop, height: fontBoxHeight }}
+            />
+            <span
+              aria-hidden="true"
+              className="absolute border-t border-dashed border-[#f24822]"
+              style={{ left: leftGuideX, top: fontGuideTop, width: fontBoxLeft - leftGuideX }}
+            />
+            <span
+              aria-hidden="true"
+              className="absolute border-t border-dashed border-[#f24822]"
+              style={{
+                left: leftGuideX,
+                top: fontGuideTop + fontBoxHeight - 1,
+                width: fontBoxLeft - leftGuideX,
+              }}
+            />
+            <span
+              aria-hidden="true"
+              className="absolute border-l border-[#f24822]"
+              style={{ left: rightGuideX, top: lineHeightGuideTop, height: lineHeight }}
+            />
+            <span
+              aria-hidden="true"
+              className="absolute border-t border-dashed border-[#f24822]"
+              style={{
+                left: lineHeightBoxRight,
+                top: lineHeightGuideTop,
+                width: rightGuideX - lineHeightBoxRight,
+              }}
+            />
+            <span
+              aria-hidden="true"
+              className="absolute border-t border-dashed border-[#f24822]"
+              style={{
+                left: lineHeightBoxRight,
+                top: lineHeightGuideTop + lineHeight - 1,
+                width: rightGuideX - lineHeightBoxRight,
+              }}
+            />
+            <span
+              className="relative leading-none text-text-primary"
               style={{
                 fontFamily: text.fontFamily,
-                fontSize: `${Math.max(18, text.fontSize * previewScale)}px`,
+                fontSize: `${fontSize}px`,
                 fontStyle: text.fontStyle,
                 fontWeight: text.fontWeight,
               }}
             >
-              {metrics.preview}
-            </div>
-            <span className="absolute -left-2 top-1/2 -translate-x-full -translate-y-1/2 rounded bg-orange-500 px-1.5 py-0.5 text-xs font-medium text-white">
-              {formatValue(leftGap)}
+              Ag
             </span>
-            <span className="absolute -right-2 top-1/2 translate-x-full -translate-y-1/2 rounded bg-orange-500 px-1.5 py-0.5 text-xs font-medium text-white">
-              {formatValue(rightGap)}
+            <span
+              className="pointer-events-none absolute top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-[2px] bg-[#f24822] px-1 py-0.5 text-[11px] font-medium leading-[11px] text-white"
+              style={{ left: leftGuideX }}
+            >
+              {formatValue(text.fontSize)}
+            </span>
+            <span
+              className="pointer-events-none absolute top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-[2px] bg-[#f24822] px-1 py-0.5 text-[11px] font-medium leading-[11px] text-white"
+              style={{ left: rightGuideX }}
+            >
+              {formatValue(text.lineHeight)}
             </span>
           </div>
         </div>
@@ -121,7 +188,7 @@ export function BoxModelDiagram({
   const borderLabelLeft = hasRadius ? 48 : undefined;
 
   if (textMetrics) {
-    return <TextMetricsDiagram text={textMetrics} box={box} formatValue={fmt} />;
+    return <TextMetricsDiagram text={textMetrics} formatValue={fmt} />;
   }
 
   return (

@@ -56,9 +56,9 @@ export interface InspectData {
     gap?: number;
   };
   textMetrics?: {
-    text: string;
     fontFamily: string;
     fontSize: number;
+    lineHeight: number;
     fontWeight: string;
     fontStyle: string;
     textAlign: "left" | "center" | "right";
@@ -456,9 +456,9 @@ export function buildInspectData(input: BuildInspectDataInput): InspectData | nu
     textMetrics:
       node.type === "text"
         ? {
-            text: node.text,
             fontFamily: node.fontFamily ?? "Arial",
             fontSize: node.fontSize ?? 16,
+            lineHeight: (node.fontSize ?? 16) * (node.lineHeight ?? 1.2),
             fontWeight: node.fontWeight ?? "normal",
             fontStyle: node.fontStyle ?? "normal",
             textAlign: node.textAlign ?? "left",
