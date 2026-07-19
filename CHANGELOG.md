@@ -8,6 +8,23 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.50.2] - 2026-07-19
+
+### Fixed
+- **Phosphor icons vanished when converting an embed to design.** The
+  icon-font glyphs live entirely in `::before`/`::after` pseudo-element
+  content, which the h2d capture→scene converter drops (and the Phosphor font
+  doesn't exist on the Pixi canvas anyway). Before capture, every
+  `ph`/`ph-<weight>` icon element's glyph is now swapped for the matching
+  `@phosphor-icons/core` SVG inside the capture iframe — sized from the
+  element's `font-size`, colored from its computed `color`, with both glyph
+  pseudo layers suppressed (duotone renders in `::before` AND `::after`) — so
+  conversion emits icons as SVG image fills. Icon inlining is strictly
+  best-effort and per-icon: an unfetchable or unprocessable icon drops (the
+  old behavior) without failing the conversion, `font-size: 0` icons stay
+  hidden, and each distinct icon asset is fetched once and cached for the
+  session (`src/lib/h2dCapture/phosphorIcons.ts`).
+
 ## [0.50.1] - 2026-07-19
 
 ### Fixed
