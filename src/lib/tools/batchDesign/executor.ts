@@ -97,6 +97,27 @@ function normalizeEmbedNode(
 }
 
 /**
+ * Build an actionable "unresolved binding" error message: names the missing
+ * binding, lists the ones that *are* available in this script (so a typo is
+ * obvious), and reminds the model that bindings are scoped to a single
+ * batch_design call — so a name created in an earlier call, or just the
+ * node's `name`/`id` field rather than a `binding=I(...)`/`binding=R(...)`
+ * assignment, will never resolve here. This is meant to let the model fix
+ * the reference itself instead of spending a round-trip on batch_get.
+ */
+function unresolvedBindingError(name: string, ctx: ExecutionContext): Error {
+  const known = [...ctx.bindings.keys()].filter((key) => key !== "document");
+  const knownList = known.length > 0 ? known.join(", ") : "(none yet)";
+  return new Error(
+    `Unresolved binding: "${name}". Bindings created so far in this script: ${knownList}. ` +
+      `A binding only exists if this script assigned it with "${name}=I(...)" or "${name}=R(...)" ` +
+      `— it is NOT the node's \`name\`/\`id\` field, and it does not carry over from a previous ` +
+      `batch_design call or a previous batch_get result. To reference an existing node from ` +
+      `outside this script, pass its real node id as a quoted string instead (e.g. U("${name}", {...})).`,
+  );
+}
+
+/**
  * Resolve a ParsedArg to its string value using the execution context bindings.
  */
 function resolveArg(arg: ParsedArg, ctx: ExecutionContext): string {
@@ -115,7 +136,7 @@ function resolveArg(arg: ParsedArg, ctx: ExecutionContext): string {
         return arg.name;
       }
 
-      throw new Error(`Unresolved binding: "${arg.name}"`);
+      throw unresolvedBindingError(arg.name, ctx);
     }
     case "concat": {
       const base = ctx.bindings.get(arg.bindingName);
@@ -128,7 +149,7 @@ function resolveArg(arg: ParsedArg, ctx: ExecutionContext): string {
         return arg.bindingName + arg.pathSuffix;
       }
 
-      throw new Error(`Unresolved binding: "${arg.bindingName}"`);
+      throw unresolvedBindingError(arg.bindingName, ctx);
     }
     case "number":
       return String(arg.value);

@@ -111,7 +111,10 @@ export const batchDesign: ToolHandler = async (args) => {
   };
 
   if (ctx.issues.length > 0) {
-    response.issues = ctx.issues;
+    // Dedupe: the same guidance (e.g. "an `id` field is ignored") is pushed
+    // once per affected node, so a script touching many nodes would otherwise
+    // repeat identical strings and bloat the result returned to the model.
+    response.issues = [...new Set(ctx.issues)];
   }
 
   return JSON.stringify(response);

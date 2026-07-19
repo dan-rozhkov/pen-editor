@@ -754,6 +754,23 @@ export function createNodeFromAiDataWithTheme(
   const defaultHeight =
     sizing?.heightMode && sizing.heightMode !== "fixed" ? 0 : 100;
 
+  // Node ids are always generated here — never taken from the AI's nodeData.
+  // Models occasionally echo an `id`-like field in nodeData (e.g. mirroring
+  // a `binding=I(...)` name), and mapNodeData's default pass-through case
+  // copies any unrecognized key straight through, so `mapped.id` may be set.
+  // Strip it BEFORE spreading `mapped` into `base` so it can never override
+  // the generated id (previously the code deleted `base.id` afterwards
+  // instead, leaving the node with NO id at all — every later reference to
+  // its binding then resolved to `undefined` and threw "Unresolved binding").
+  if ("id" in mapped) {
+    delete (mapped as Record<string, unknown>).id;
+    warnings?.push(
+      `An \`id\` field in nodeData is ignored — node ids are assigned automatically. ` +
+        `Use "binding=I(...)"/"binding=R(...)" to name the created node and reference ` +
+        `it later in the same script via that binding, or via the id returned in createdNodes.`,
+    );
+  }
+
   const base = {
     id: generateId(),
     type,
@@ -763,9 +780,6 @@ export function createNodeFromAiDataWithTheme(
     height: defaultHeight,
     ...mapped,
   };
-
-  // Don't override id if not already set — generateId handles it
-  if (data.id) delete (base as Record<string, unknown>).id;
 
   if (type === "frame" || type === "group") {
     const children: SceneNode[] = [];

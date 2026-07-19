@@ -1223,6 +1223,37 @@ describe("batch_design", () => {
     });
   });
 
+  describe("binding resolution", () => {
+    it("resolves a binding later in the script even when nodeData carries a stray `id` field", async () => {
+      // Models sometimes echo an `id`-like field in the nodeData JSON (e.g.
+      // mirroring the binding name) alongside the DSL's own `binding=I(...)`
+      // syntax. The engine must ignore that field and still assign a real
+      // generated id to the created node, so a later reference to the
+      // binding resolves instead of throwing "Unresolved binding".
+      const result = JSON.parse(
+        await batchDesign({
+          operations: [
+            'scrollArea=I(document, {type: "frame", name: "Scroll Area", id: "scrollArea", width: 100, height: 100})',
+            'U(scrollArea, {name: "Renamed Scroll Area"})',
+          ].join("\n"),
+        })
+      );
+
+      expect(result.error).toBeUndefined();
+      expect(result.success).toBe(true);
+      expect(result.operationsExecuted).toBe(2);
+
+      const created = result.createdNodes[0];
+      expect(created.id).toBeTruthy();
+      expect(created.id).not.toBe("scrollArea");
+
+      const { nodesById } = sceneState();
+      expect(nodesById[created.id]?.name).toBe("Renamed Scroll Area");
+      // The stray `id` value must never leak in as the real node id.
+      expect(nodesById["scrollArea"]).toBeUndefined();
+    });
+  });
+
   describe("error handling", () => {
     it("returns an error for empty operations and leaves the store untouched", async () => {
       const before = sceneState();
