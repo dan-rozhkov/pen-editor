@@ -53,7 +53,10 @@ describe("captureEmbedHtmlToH2d", () => {
 
     const iframe = document.querySelector("iframe");
     const srcdoc = iframe!.srcdoc;
-    expect(srcdoc).toMatch(/^<!doctype html><html><head><script>/);
+    // The <html> tag carries EMBED_DEFAULT_LINE_HEIGHT (see captureEmbed.ts —
+    // "preserve embed conversion styles"); match the structure without pinning
+    // the exact numeric default.
+    expect(srcdoc).toMatch(/^<!doctype html><html style="line-height:[\d.]+"><head><script>/);
     expect(srcdoc).toContain("__h2d_clone");
     expect(srcdoc).toContain(`<body style="margin:0">${SANITIZED_MARKER}</body>`);
   });
