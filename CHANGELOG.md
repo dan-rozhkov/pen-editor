@@ -8,6 +8,31 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.51.1] - 2026-07-19
+
+### Fixed
+- **`batch_design` "Unresolved binding" when a node's `nodeData` echoed an `id`
+  field (FIR-51).** Models occasionally include an `id` field in a node's data
+  (e.g. mirroring a `binding=I(...)` name). `mapNodeData`'s pass-through default
+  copied that `id` straight onto the created node, overriding the auto-generated
+  id — and the old code then *deleted* the id entirely, leaving the node with no
+  id at all. Every later reference to that node's binding in the same script then
+  resolved to `undefined` and threw `Unresolved binding`, forcing the agent into
+  a wasted `batch_get` round-trip. The mapper now strips any stray `id` from
+  `nodeData` *before* the node is built, so the generated id always stands, and
+  emits a one-line guidance issue telling the model to use `binding=I(...)`
+  instead (`src/lib/tools/batchDesign/nodeMapper.ts`).
+
+### Changed
+- **Clearer "Unresolved binding" error.** When a binding genuinely cannot be
+  resolved, the error now names the missing binding, lists the bindings that
+  *are* defined so far in the script (so a typo is obvious), and explains that
+  bindings are scoped to a single `batch_design` call and are not a node's
+  `name`/`id` — with the concrete fix (pass the real node id as a quoted string).
+  Lets the model self-correct without a `batch_get`
+  (`src/lib/tools/batchDesign/executor.ts`). Duplicate guidance issues are now
+  de-duplicated before being returned (`src/lib/tools/batchDesign/index.ts`).
+
 ## [0.51.0] - 2026-07-19
 
 ### Added
