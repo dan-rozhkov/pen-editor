@@ -1,4 +1,12 @@
-import type { FlatSceneNode } from "@/types/scene";
+import type { EmbedNode, FlatFrameNode, FlatSceneNode } from "@/types/scene";
+
+export type SlideNode = FlatFrameNode | EmbedNode;
+
+export function isSlideNode(
+  node: FlatSceneNode | undefined,
+): node is SlideNode {
+  return node?.type === "frame" || node?.type === "embed";
+}
 
 /**
  * Resolve the slide (presentation) order for top-level frames and embeds.
@@ -22,10 +30,7 @@ export function resolveSlideOrder(
   slideOrder: string[],
 ): string[] {
   const topLevelSlideIds = new Set(
-    rootIds.filter((id) => {
-      const type = nodesById[id]?.type;
-      return type === "frame" || type === "embed";
-    }),
+    rootIds.filter((id) => isSlideNode(nodesById[id])),
   );
 
   const ordered: string[] = [];

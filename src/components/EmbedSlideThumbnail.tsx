@@ -8,6 +8,7 @@ import {
 /** Live, inert HTML preview for a root embed shown in the Slides panel. */
 export function EmbedSlideThumbnail({ node }: { node: EmbedNode }) {
   const viewportRef = useRef<HTMLDivElement>(null);
+  const { width: embedWidth, height: embedHeight, htmlContent } = node;
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -17,33 +18,36 @@ export function EmbedSlideThumbnail({ node }: { node: EmbedNode }) {
     shadow.replaceChildren();
 
     const content = document.createElement("div");
-    content.style.width = `${node.width}px`;
-    content.style.height = `${node.height}px`;
+    content.style.width = `${embedWidth}px`;
+    content.style.height = `${embedHeight}px`;
     content.style.overflow = "hidden";
     content.style.transformOrigin = "top left";
     applyEmbedInheritedDefaults(content);
-    mountHtmlWithBodyStyles(content, node.htmlContent, node.width, node.height);
+    mountHtmlWithBodyStyles(content, htmlContent, embedWidth, embedHeight);
     shadow.appendChild(content);
 
-    const position = () => {
+    const syncPreviewLayout = () => {
       const { width, height } = viewport.getBoundingClientRect();
-      if (width <= 0 || height <= 0 || node.width <= 0 || node.height <= 0) return;
-      const scale = Math.min(width / node.width, height / node.height);
-      content.style.transform = `translate(${(width - node.width * scale) / 2}px, ${(height - node.height * scale) / 2}px) scale(${scale})`;
+      if (width <= 0 || height <= 0 || embedWidth <= 0 || embedHeight <= 0) return;
+
+      const scale = Math.min(width / embedWidth, height / embedHeight);
+      const offsetX = (width - embedWidth * scale) / 2;
+      const offsetY = (height - embedHeight * scale) / 2;
+      content.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
     };
 
-    position();
+    syncPreviewLayout();
     const observer = typeof ResizeObserver === "undefined"
       ? null
-      : new ResizeObserver(position);
+      : new ResizeObserver(syncPreviewLayout);
     observer?.observe(viewport);
-    window.addEventListener("resize", position);
+    window.addEventListener("resize", syncPreviewLayout);
 
     return () => {
       observer?.disconnect();
-      window.removeEventListener("resize", position);
+      window.removeEventListener("resize", syncPreviewLayout);
     };
-  }, [node.height, node.htmlContent, node.width]);
+  }, [embedHeight, embedWidth, htmlContent]);
 
   return (
     <div

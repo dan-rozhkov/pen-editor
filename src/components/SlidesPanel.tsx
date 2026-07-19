@@ -5,18 +5,50 @@ import { useSceneStore } from "../store/sceneStore";
 import { useSelectionStore } from "../store/selectionStore";
 import { useViewportStore } from "../store/viewportStore";
 import { generateId } from "../types/scene";
-import type { EmbedNode, FlatFrameNode } from "../types/scene";
-import { resolveSlideOrder } from "../utils/slideOrder";
+import type { FlatFrameNode } from "../types/scene";
+import {
+  isSlideNode,
+  resolveSlideOrder,
+  type SlideNode,
+} from "../utils/slideOrder";
 import { getCanvasViewportMetrics } from "../utils/canvasViewport";
 import { useNodeThumbnails } from "../hooks/useComponentThumbnails";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { PanelEmptyState } from "./PanelEmptyState";
 import { EmbedSlideThumbnail } from "./EmbedSlideThumbnail";
 
-type SlideNode = FlatFrameNode | EmbedNode;
-
 /** Pointer movement (px) before a press is treated as a drag rather than a click. */
 const DRAG_THRESHOLD_PX = 4;
+
+function SlideThumbnail({
+  slide,
+  thumbnail,
+}: {
+  slide: SlideNode;
+  thumbnail: string | undefined;
+}) {
+  if (slide.type === "embed") {
+    return <EmbedSlideThumbnail node={slide} />;
+  }
+
+  if (thumbnail) {
+    return (
+      <img
+        src={thumbnail}
+        alt={slide.name || "Slide"}
+        className="max-w-full max-h-full object-contain pointer-events-none"
+      />
+    );
+  }
+
+  return (
+    <CardsIcon
+      size={28}
+      weight="thin"
+      className="text-text-secondary"
+    />
+  );
+}
 
 interface DragVisual {
   /** Slide currently being dragged. */
@@ -79,7 +111,7 @@ export function SlidesPanel() {
     const order = resolveSlideOrder(nodesById, rootIds, slideOrder);
     return order
       .map((id) => nodesById[id])
-      .filter((n): n is SlideNode => !!n && (n.type === "frame" || n.type === "embed"));
+      .filter(isSlideNode);
   }, [nodesById, rootIds, slideOrder]);
   // Frame previews come from Pixi. Embeds are DOM overlays and therefore need
   // their own live HTML preview instead of extracting their empty Pixi host.
@@ -318,21 +350,7 @@ export function SlidesPanel() {
                       {index + 1}
                     </span>
                     <div className="min-w-0 flex-1 flex items-center justify-center overflow-hidden">
-                      {slide.type === "embed" ? (
-                        <EmbedSlideThumbnail node={slide} />
-                      ) : thumb ? (
-                        <img
-                          src={thumb}
-                          alt={slide.name || "Slide"}
-                          className="max-w-full max-h-full object-contain pointer-events-none"
-                        />
-                      ) : (
-                        <CardsIcon
-                          size={28}
-                          weight="thin"
-                          className="text-text-secondary"
-                        />
-                      )}
+                      <SlideThumbnail slide={slide} thumbnail={thumb} />
                     </div>
                   </div>
                   <span data-testid="slide-name" className="pl-6 text-[11px] text-text-secondary truncate">

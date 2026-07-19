@@ -97,22 +97,21 @@ export function EmbedLayer() {
   // form of its own, so it's hidden entirely rather than shown on top of a
   // wireframe scene.
   const isOutline = useRenderModeStore((s) => s.renderMode === "outline");
-  const embedIds = useMemo(
-    () =>
-      isOutline
-        ? []
-        : Object.keys(nodesById).filter((id) => {
-            const n = nodesById[id];
-            // Render only visible, enabled embeds — mirrors the Pixi
-            // visibility rule (renderers/index.ts) so hiding a layer hides
-            // its DOM too.
-            if (n?.type !== "embed" || n.visible === false || n.enabled === false) {
-              return false;
-            }
-            return mode !== "present" || topLevelAncestorId(parentById, id) === activeSlideId;
-          }),
-    [nodesById, parentById, isOutline, mode, activeSlideId],
-  );
+  const embedIds = useMemo(() => {
+    if (isOutline) return [];
+
+    return Object.keys(nodesById).filter((id) => {
+      const node = nodesById[id];
+      // Render only visible, enabled embeds — mirrors the Pixi visibility
+      // rule so hiding a layer also hides its DOM overlay.
+      if (node?.type !== "embed" || node.visible === false || node.enabled === false) {
+        return false;
+      }
+
+      if (mode !== "present") return true;
+      return topLevelAncestorId(parentById, id) === activeSlideId;
+    });
+  }, [nodesById, parentById, isOutline, mode, activeSlideId]);
 
   return (
     <div
