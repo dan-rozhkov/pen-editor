@@ -4,6 +4,7 @@
  */
 
 import { sanitizeEmbedHtml } from "./sanitizeEmbedHtml";
+import { ensureExternalFontStylesLoaded } from "./fontStylesheets";
 
 /** Inherited typography baseline shared by the live Shadow-DOM embed and the
  * isolated iframe used by Convert to design. Source CSS can override it. */
@@ -139,6 +140,12 @@ export function mountHtmlWithBodyStyles(
   height: number,
 ): MountResult {
   const originalHasBodyTag = /<body[\s>]/i.test(html);
+  // Hoist allowlisted external font stylesheets (Google Fonts / Phosphor icon
+  // fonts) to document level for EVERY shadow-DOM mount. Their class rules apply
+  // inside the shadow tree, but Chrome only registers `@font-face` fonts from
+  // document-level styles — without this, web/icon fonts render as tofu. Read
+  // from the raw `html` because sanitization strips <link> tags below.
+  void ensureExternalFontStylesLoaded(html);
   // Embed HTML is untrusted (AI output, pasted markup, shared .pen files) —
   // strip scripts and event handlers before it touches the DOM.
   const safeHtml = sanitizeEmbedHtml(html);

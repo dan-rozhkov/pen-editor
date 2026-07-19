@@ -6,7 +6,6 @@ import {
   applyEmbedInheritedDefaults,
   mountHtmlWithBodyStyles,
 } from "@/utils/embedHtmlUtils";
-import { ensureExternalFontStylesLoaded } from "@/pixi/renderers/htmlTexture/fontLoading";
 import { buildVariableStyleBlock } from "@/utils/variableCssUtils";
 import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
 import type { EmbedNode } from "@/types/scene";
@@ -50,15 +49,13 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
     applyEmbedInheritedDefaults(content);
     const themeBlock = buildVariableStyleBlock(undefined, getEffectiveThemeForNode(nodeId));
     const html = themeBlock ? htmlContent + themeBlock : htmlContent;
+    // mountHtmlWithBodyStyles hoists allowlisted external font stylesheets
+    // (Google Fonts / Phosphor icon fonts) to document level — Chrome only
+    // registers `@font-face` fonts from document-level styles, never from a
+    // shadow tree, so without this icon/text web fonts render as tofu.
     mountHtmlWithBodyStyles(content, html, width, height);
     shadow.appendChild(content);
     contentRef.current = content;
-
-    // Hoist allowlisted external font stylesheets (Google Fonts / Phosphor icon
-    // fonts) to document level. Their class rules already apply inside the
-    // shadow tree, but Chrome only registers `@font-face` fonts from
-    // document-level styles — without this, icon/text web fonts render as tofu.
-    void ensureExternalFontStylesLoaded(htmlContent);
 
     // Position now that content exists (applies the current scale transform).
     position();
