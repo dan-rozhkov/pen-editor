@@ -26,6 +26,19 @@ function rect(id: string): FlatSceneNode {
   } as unknown as FlatSceneNode;
 }
 
+function embed(id: string): FlatSceneNode {
+  return {
+    id,
+    type: "embed",
+    name: id,
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 100,
+    htmlContent: "<p>slide</p>",
+  } as FlatSceneNode;
+}
+
 describe("resolveSlideOrder", () => {
   it("returns slideOrder's order for existing top-level frames", () => {
     const nodesById = { A: frame("A"), B: frame("B"), C: frame("C") };
@@ -44,6 +57,14 @@ describe("resolveSlideOrder", () => {
       "B",
       "A",
       "C",
+    ]);
+  });
+
+  it("includes top-level embeds in the persisted slide order", () => {
+    const nodesById = { A: frame("A"), E: embed("E") };
+    expect(resolveSlideOrder(nodesById, ["A", "E"], ["E", "A"])).toEqual([
+      "E",
+      "A",
     ]);
   });
 

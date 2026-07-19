@@ -5,12 +5,15 @@ import { useSceneStore } from "../store/sceneStore";
 import { useSelectionStore } from "../store/selectionStore";
 import { useViewportStore } from "../store/viewportStore";
 import { generateId } from "../types/scene";
-import type { FlatFrameNode } from "../types/scene";
+import type { EmbedNode, FlatFrameNode } from "../types/scene";
 import { resolveSlideOrder } from "../utils/slideOrder";
 import { getCanvasViewportMetrics } from "../utils/canvasViewport";
 import { useNodeThumbnails } from "../hooks/useComponentThumbnails";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { PanelEmptyState } from "./PanelEmptyState";
+import { EmbedSlideThumbnail } from "./EmbedSlideThumbnail";
+
+type SlideNode = FlatFrameNode | EmbedNode;
 
 /** Pointer movement (px) before a press is treated as a drag rather than a click. */
 const DRAG_THRESHOLD_PX = 4;
@@ -71,14 +74,20 @@ export function SlidesPanel() {
   // changed descendant to its owning slide and refreshes only that preview.
   // Order comes from slideOrder (independent of canvas x/y and rootIds
   // z-order) via resolveSlideOrder — it drops deleted ids and appends new
-  // top-level frames not yet in slideOrder.
+  // top-level frames/embeds not yet in slideOrder.
   const slides = useMemo(() => {
     const order = resolveSlideOrder(nodesById, rootIds, slideOrder);
     return order
       .map((id) => nodesById[id])
-      .filter((n): n is FlatFrameNode => !!n && n.type === "frame");
+      .filter((n): n is SlideNode => !!n && (n.type === "frame" || n.type === "embed"));
   }, [nodesById, rootIds, slideOrder]);
-  const thumbnails = useNodeThumbnails(slides);
+  // Frame previews come from Pixi. Embeds are DOM overlays and therefore need
+  // their own live HTML preview instead of extracting their empty Pixi host.
+  const frameSlides = useMemo(
+    () => slides.filter((slide): slide is FlatFrameNode => slide.type === "frame"),
+    [slides],
+  );
+  const thumbnails = useNodeThumbnails(frameSlides);
 
   const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
   const pendingDragRef = useRef<PendingDrag | null>(null);
@@ -309,7 +318,9 @@ export function SlidesPanel() {
                       {index + 1}
                     </span>
                     <div className="min-w-0 flex-1 flex items-center justify-center overflow-hidden">
-                      {thumb ? (
+                      {slide.type === "embed" ? (
+                        <EmbedSlideThumbnail node={slide} />
+                      ) : thumb ? (
                         <img
                           src={thumb}
                           alt={slide.name || "Slide"}

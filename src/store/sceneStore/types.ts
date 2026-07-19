@@ -27,7 +27,7 @@ export interface SceneState {
   pageBackground: string;
 
   /**
-   * Persistent presentation order of top-level frame ids ("slides"),
+   * Persistent presentation order of top-level frame/embed ids ("slides"),
    * independent of canvas x/y and of `rootIds` (tree/z-order). The single
    * source of truth for both SlidesPanel and Present mode; resolve against
    * the current scene via `resolveSlideOrder` (drops deleted ids, appends

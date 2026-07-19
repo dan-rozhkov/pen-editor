@@ -3,6 +3,7 @@ import { render, cleanup, act } from "@testing-library/react";
 import { EmbedLayer } from "../EmbedLayer";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
+import { useEditorModeStore } from "@/store/editorModeStore";
 import { resetStores } from "@/test/fixtures";
 import type { FlatSceneNode } from "@/types/scene";
 
@@ -75,5 +76,32 @@ describe("<EmbedLayer />", () => {
       });
     });
     expect(container.querySelector('[data-embed-id="e1"]')).toBeNull();
+  });
+
+  it("shows only embeds belonging to the active slide while presenting", () => {
+    useSceneStore.setState({
+      nodesById: {
+        frame: { id: "frame", type: "frame", x: 0, y: 0, width: 100, height: 80 },
+        nested: { id: "nested", type: "embed", x: 0, y: 0, width: 100, height: 80, htmlContent: "<p>nested</p>" },
+        root: { id: "root", type: "embed", x: 120, y: 0, width: 100, height: 80, htmlContent: "<p>root</p>" },
+      } as never,
+      parentById: { frame: null, nested: "frame", root: null },
+      childrenById: { frame: ["nested"] },
+      rootIds: ["frame", "root"],
+      _cachedTree: null,
+    });
+    useEditorModeStore.setState({
+      mode: "present",
+      presentFrameIds: ["frame", "root"],
+      presentIndex: 1,
+    });
+
+    const { container } = render(<EmbedLayer />);
+    expect(container.querySelector('[data-embed-id="root"]')).not.toBeNull();
+    expect(container.querySelector('[data-embed-id="nested"]')).toBeNull();
+
+    act(() => useEditorModeStore.setState({ presentIndex: 0 }));
+    expect(container.querySelector('[data-embed-id="root"]')).toBeNull();
+    expect(container.querySelector('[data-embed-id="nested"]')).not.toBeNull();
   });
 });

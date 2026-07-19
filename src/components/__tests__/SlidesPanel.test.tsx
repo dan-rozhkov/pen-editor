@@ -38,6 +38,19 @@ function frameNode(
   } as unknown as FlatSceneNode;
 }
 
+function embedNode(id: string, name: string): FlatSceneNode {
+  return {
+    id,
+    type: "embed",
+    name,
+    x: 0,
+    y: 0,
+    width: 960,
+    height: 540,
+    htmlContent: "<main><h1>Generated slide</h1></main>",
+  } as FlatSceneNode;
+}
+
 /** Seed the flat scene store directly with the given root nodes. */
 function seedNodes(nodes: FlatSceneNode[]): void {
   const nodesById: Record<string, FlatSceneNode> = {};
@@ -109,6 +122,18 @@ describe("<SlidesPanel />", () => {
     expect(screen.queryByText("No slides yet")).toBeNull();
     const names = screen.getAllByTestId("slide-name").map((el) => el.textContent);
     expect(names).toEqual(["Intro", "Outro"]);
+  });
+
+  it("lists a top-level embed and renders its HTML preview", () => {
+    seedNodes([frameNode("f1", "Intro"), embedNode("e1", "Generated")]);
+    render(<SlidesPanel />);
+
+    expect(screen.getAllByTestId("slide-name").map((el) => el.textContent)).toEqual([
+      "Intro",
+      "Generated",
+    ]);
+    const preview = screen.getByTestId("embed-slide-thumbnail-e1");
+    expect(preview.shadowRoot?.textContent).toContain("Generated slide");
   });
 
   it("places the slide number inside the preview above the title", () => {

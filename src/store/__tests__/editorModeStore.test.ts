@@ -68,6 +68,26 @@ describe("editorModeStore", () => {
     expect(useEditorModeStore.getState().presentFrameIds).toEqual(["A", "B"]);
   });
 
+  it("includes a root embed in Present mode", () => {
+    useSceneStore.setState((state) => ({
+      nodesById: {
+        ...state.nodesById,
+        E: { id: "E", type: "embed", x: 20, y: 0, width: 100, height: 60, htmlContent: "<p>slide</p>" },
+      } as never,
+      parentById: { ...state.parentById, E: null },
+      rootIds: [...state.rootIds, "E"],
+      slideOrder: ["A", "E", "B"],
+    }));
+    useSelectionStore.setState({ selectedIds: ["E"] } as never);
+
+    useEditorModeStore.getState().enterPresent();
+
+    expect(useEditorModeStore.getState()).toMatchObject({
+      presentFrameIds: ["A", "E", "B"],
+      presentIndex: 1,
+    });
+  });
+
   it("enterPresent clears the selection but still starts at the selected frame", () => {
     useSelectionStore.getState().setSelectedIds(["B"]);
     useEditorModeStore.getState().enterPresent();

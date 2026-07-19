@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useRenderModeStore } from "@/store/renderModeStore";
+import { useEditorModeStore } from "@/store/editorModeStore";
 import {
   applyEmbedInheritedDefaults,
   mountHtmlWithBodyStyles,
@@ -9,6 +10,7 @@ import {
 import { buildVariableStyleBlock } from "@/utils/variableCssUtils";
 import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
 import type { EmbedNode } from "@/types/scene";
+import { topLevelAncestorId } from "@/utils/topLevelAncestor";
 import { useOverlayHostRect } from "./useOverlayHostRect";
 
 /** One Shadow-DOM host for a single embed node, synced to the viewport. */
@@ -85,6 +87,11 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
  */
 export function EmbedLayer() {
   const nodesById = useSceneStore((s) => s.nodesById);
+  const parentById = useSceneStore((s) => s.parentById);
+  const mode = useEditorModeStore((s) => s.mode);
+  const activeSlideId = useEditorModeStore(
+    (s) => s.presentFrameIds[s.presentIndex],
+  );
   // Outline mode renders every embed as a plain bbox stroke in Pixi
   // (embedRenderer.ts) instead — the live HTML content has no wireframe
   // form of its own, so it's hidden entirely rather than shown on top of a
@@ -99,9 +106,12 @@ export function EmbedLayer() {
             // Render only visible, enabled embeds — mirrors the Pixi
             // visibility rule (renderers/index.ts) so hiding a layer hides
             // its DOM too.
-            return n?.type === "embed" && n.visible !== false && n.enabled !== false;
+            if (n?.type !== "embed" || n.visible === false || n.enabled === false) {
+              return false;
+            }
+            return mode !== "present" || topLevelAncestorId(parentById, id) === activeSlideId;
           }),
-    [nodesById, isOutline],
+    [nodesById, parentById, isOutline, mode, activeSlideId],
   );
 
   return (

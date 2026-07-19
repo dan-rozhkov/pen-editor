@@ -32,7 +32,7 @@ export interface PageData {
   history: { past: HistorySnapshot[]; future: HistorySnapshot[] };
   // Per-page ruler guides
   guides: Guide[];
-  // Per-page slide (presentation) order — see src/utils/slideOrder.ts
+  // Per-page frame/embed slide (presentation) order — see src/utils/slideOrder.ts
   slideOrder: string[];
   // Per-page pinned distance measurements
   measurements: PersistedMeasurement[];
