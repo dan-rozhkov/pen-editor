@@ -39,7 +39,7 @@ type FillSource = Pick<
   'fill' | 'fillOpacity' | 'fillBinding' | 'gradientFill' | 'imageFill'
 > & { fills?: Paint[] }
 
-type EffectSource = Pick<SceneNode | FlatSceneNode, 'effect'> & { effects?: Effect[] }
+export type EffectSource = Pick<SceneNode | FlatSceneNode, 'effect'> & { effects?: Effect[] }
 
 export function createSolidPaint(color: string, init?: Partial<Omit<SolidPaint, 'type' | 'color'>>): SolidPaint {
   return { id: generateId(), type: 'solid', color, ...init }

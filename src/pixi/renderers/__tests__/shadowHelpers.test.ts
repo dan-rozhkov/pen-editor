@@ -103,4 +103,26 @@ describe("applyShadows", () => {
     applyShadows(container, [], 100, 80);
     expect(container.getChildByLabel("inner-shadow-layer")).toBeNull();
   });
+
+  // bug-19 mechanism 2: the blur filter's own padding must cover the full
+  // blur radius so the blurred edge always has room to render (Pixi's
+  // BlurFilter already auto-computes padding = 2 * strength, but this pins
+  // the invariant explicitly rather than relying on that internal default).
+  it("an outer shadow's blur filter padding covers the full blur radius", () => {
+    const container = new Container();
+    applyShadows(container, [outerShadow({ blur: 24 })], 100, 80);
+    const layer = container.getChildByLabel("shadow-layer");
+    const filters = Array.isArray(layer?.filters) ? layer!.filters : [layer!.filters];
+    const blurFilter = filters.find((f) => f instanceof BlurFilter) as BlurFilter;
+    expect(blurFilter.padding).toBeGreaterThanOrEqual(24);
+  });
+
+  it("an inner shadow's blur filter padding covers the full blur radius", () => {
+    const container = new Container();
+    applyShadows(container, [innerShadow({ blur: 18 })], 100, 80);
+    const layer = container.getChildByLabel("inner-shadow-layer");
+    const filters = Array.isArray(layer?.filters) ? layer!.filters : [layer!.filters];
+    const blurFilter = filters.find((f) => f instanceof BlurFilter) as BlurFilter;
+    expect(blurFilter.padding).toBeGreaterThanOrEqual(18);
+  });
 });

@@ -1,5 +1,6 @@
 import type { SceneState } from "@/store/sceneStore";
 import { createSpatialGrid, type Rect } from "./spatialGrid";
+import { nodeEffectMargin } from "./effectMargin";
 
 /**
  * Grid-backed replacement for the per-frame `computeViewportRenderability`
@@ -45,8 +46,9 @@ export function createCullingIndex() {
    */
   function collectLocalSubtreeBox(id: string): Rect {
     const rootNode = nodesById[id];
+    const rootMargin = rootNode ? nodeEffectMargin(rootNode) : 0;
     const box: Rect = rootNode
-      ? { minX: 0, minY: 0, maxX: rootNode.width, maxY: rootNode.height }
+      ? { minX: -rootMargin, minY: -rootMargin, maxX: rootNode.width + rootMargin, maxY: rootNode.height + rootMargin }
       : { minX: 0, minY: 0, maxX: 0, maxY: 0 };
 
     const expand = (r: Rect): void => {
@@ -68,7 +70,13 @@ export function createCullingIndex() {
           expand(rotatedAabb(childLocalBox, childRotation, x, y));
           continue; // covered conservatively — don't also visit its children
         }
-        expand({ minX: x, minY: y, maxX: x + child.width, maxY: y + child.height });
+        const childMargin = nodeEffectMargin(child);
+        expand({
+          minX: x - childMargin,
+          minY: y - childMargin,
+          maxX: x + child.width + childMargin,
+          maxY: y + child.height + childMargin,
+        });
         visit(childId, x, y);
       }
     };
@@ -153,7 +161,8 @@ export function createCullingIndex() {
     rotatedCovering.delete(id);
     const x = offsetX + node.x;
     const y = offsetY + node.y;
-    grid.set(id, { minX: x, minY: y, maxX: x + node.width, maxY: y + node.height });
+    const margin = nodeEffectMargin(node);
+    grid.set(id, { minX: x - margin, minY: y - margin, maxX: x + node.width + margin, maxY: y + node.height + margin });
     indexedIds.add(id);
     for (const childId of childrenById[id] ?? []) {
       reindexSubtree(childId, x, y);

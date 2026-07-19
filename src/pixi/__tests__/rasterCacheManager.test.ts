@@ -6,6 +6,7 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useDragStore } from "@/store/dragStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { QUIET_MS } from "../rasterCache";
+import type { ShadowEffect } from "@/types/scene";
 
 // A minimal frame node shape — only the fields computeRasterCacheDecisions
 // and rasterCacheManager read.
@@ -397,6 +398,113 @@ describe("createRasterCacheManager", () => {
     manager.onFlushStart(diffFor(["f1"]), state);
     vi.advanceTimersByTime(600 + QUIET_MS + 600);
     expect(c1.cacheAsTexture).toHaveBeenCalledWith({ resolution: 2, antialias: true });
+  });
+
+  // bug-19 mechanism 2: a top-level frame containing a shadow that overhangs
+  // the frame's own geometric bounds must have `boundsArea` widened before
+  // `cacheAsTexture` bakes it, or the bake clips the overhang at the
+  // texture's edge (Pixi's own bake-bounds computation ignores filter
+  // padding — see the `CacheableContainer.boundsArea` doc).
+  it("widens boundsArea to cover a descendant shadow's overhang before caching", () => {
+    const c1 = makeContainer();
+    const state = makeState(["f1"]);
+    const shadow: ShadowEffect = {
+      type: "shadow",
+      shadowType: "outer",
+      color: "#00000080",
+      offset: { x: 10, y: 0 },
+      blur: 20,
+      spread: 0,
+    };
+    state.nodesById["n1"] = {
+      type: "rect",
+      width: 10,
+      height: 10,
+      effects: [shadow],
+    } as unknown as SceneState["nodesById"][string];
+    state.parentById["n1"] = "f1";
+    state.childrenById["f1"] = ["n1"];
+    const getState = vi.fn<() => SceneState>(() => state);
+    const getScale = vi.fn<() => number>(() => 1);
+    const getContainer = vi.fn((id: string) => (id === "f1" ? c1 : null));
+    const manager = createRasterCacheManager({ getContainer, getState, getScale });
+
+    manager.onFlushStart(diffFor(["f1"]), state);
+    vi.advanceTimersByTime(600 + QUIET_MS + 600);
+
+    expect(c1.cacheAsTexture).toHaveBeenCalledWith({ resolution: 1, antialias: true });
+    // margin = |offset.x|(10) + blur(20) + spread(0) = 30
+    expect(c1.boundsArea).toMatchObject({ x: -30, y: -30, width: 1440 + 60, height: 900 + 60 });
+  });
+
+  it("does not set boundsArea when nothing in the subtree overhangs", () => {
+    const c1 = makeContainer();
+    const { manager } = setup({ f1: c1 });
+
+    manager.onFlushStart(diffFor(["f1"]), makeState());
+    vi.advanceTimersByTime(600 + QUIET_MS + 600);
+
+    expect(c1.cacheAsTexture).toHaveBeenCalledWith({ resolution: 1, antialias: true });
+    expect(c1.boundsArea).toBeNull();
+  });
+
+  it("clears boundsArea when a previously-overhanging frame is uncached", () => {
+    const c1 = makeContainer();
+    const state = makeState(["f1"]);
+    const shadow: ShadowEffect = {
+      type: "shadow",
+      shadowType: "outer",
+      color: "#00000080",
+      offset: { x: 0, y: 0 },
+      blur: 15,
+      spread: 0,
+    };
+    state.nodesById["n1"] = { type: "rect", width: 10, height: 10, effects: [shadow] } as unknown as SceneState["nodesById"][string];
+    state.parentById["n1"] = "f1";
+    state.childrenById["f1"] = ["n1"];
+    const getState = vi.fn<() => SceneState>(() => state);
+    const getScale = vi.fn<() => number>(() => 1);
+    const getContainer = vi.fn((id: string) => (id === "f1" ? c1 : null));
+    const manager = createRasterCacheManager({ getContainer, getState, getScale });
+
+    manager.onFlushStart(diffFor(["f1"]), state);
+    vi.advanceTimersByTime(600 + QUIET_MS + 600);
+    expect(c1.boundsArea).toMatchObject({ x: -15, y: -15 });
+
+    manager.onDirectContainerMutation(["n1"], state);
+    expect(c1.boundsArea).toBeNull();
+  });
+
+  it("expands the container's REAL local bounds (not the bare frame rect) so a non-clipping frame's overflow is not clipped by the bake", () => {
+    const c1: CacheableContainer & { cacheAsTexture: ReturnType<typeof vi.fn<CacheAsTextureFn>> } = {
+      ...makeContainer(),
+      // Simulate a non-clipping frame whose child overflows to the right/bottom
+      // (real bounds wider than the frame's own 1440x900 geometric rect).
+      getLocalBounds: () => ({ minX: 0, minY: 0, maxX: 1600, maxY: 1000 }),
+    };
+    const state = makeState(["f1"]);
+    const shadow: ShadowEffect = {
+      type: "shadow",
+      shadowType: "outer",
+      color: "#00000080",
+      offset: { x: 10, y: 0 },
+      blur: 20,
+      spread: 0,
+    };
+    state.nodesById["n1"] = { type: "rect", width: 10, height: 10, effects: [shadow] } as unknown as SceneState["nodesById"][string];
+    state.parentById["n1"] = "f1";
+    state.childrenById["f1"] = ["n1"];
+    const getState = vi.fn<() => SceneState>(() => state);
+    const getScale = vi.fn<() => number>(() => 1);
+    const getContainer = vi.fn((id: string) => (id === "f1" ? c1 : null));
+    const manager = createRasterCacheManager({ getContainer, getState, getScale });
+
+    manager.onFlushStart(diffFor(["f1"]), state);
+    vi.advanceTimersByTime(600 + QUIET_MS + 600);
+
+    // margin = |offset.x|(10) + blur(20) = 30, applied to the REAL bounds
+    // (1600x1000), not the 1440x900 frame rect — overflow preserved.
+    expect(c1.boundsArea).toMatchObject({ x: -30, y: -30, width: 1600 + 60, height: 1000 + 60 });
   });
 
   it("cachedFrameIds() reflects the live cached set", () => {

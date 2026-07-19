@@ -166,6 +166,61 @@ describe("cullingIndex", () => {
     expect(visible.has(movedId)).toBe(true);
   });
 
+  // bug-19 mechanism 3: culling rects were built from node geometry only,
+  // ignoring shadow/blur overhang — a node whose own rect is off-screen but
+  // whose shadow/blur bleeds onto the viewport was wrongly hidden entirely.
+  it("a node's drop-shadow overhang keeps it visible even when its own rect is just off-screen", () => {
+    const nodesById = {
+      root: { id: "root", type: "frame", name: "root", x: 0, y: 0, width: 100, height: 100 },
+      shadowNode: {
+        id: "shadowNode",
+        type: "rect",
+        name: "shadowed",
+        x: 2010, // just past the 2000-wide viewport used below
+        y: 0,
+        width: 50,
+        height: 50,
+        effects: [
+          { type: "shadow", shadowType: "outer", color: "#00000080", offset: { x: -30, y: 0 }, blur: 20, spread: 0 },
+        ],
+      },
+    };
+    const state = {
+      nodesById,
+      parentById: { root: null, shadowNode: "root" },
+      childrenById: { root: ["shadowNode"], shadowNode: [] },
+      rootIds: ["root"],
+    } as never;
+
+    const index = createCullingIndex();
+    index.rebuild(state);
+    const bounds = { minX: 0, minY: 0, maxX: 2000, maxY: 1200 };
+    // Raw rect [2010,2060] is fully past maxX=2000 — without the margin fix
+    // this node (and its shadow) would be culled. With margin
+    // (|offset.x|=30 + blur=20 = 50), the effective rect starts at 2010-50=1960,
+    // which intersects the viewport.
+    expect(index.queryVisible(bounds).has("shadowNode")).toBe(true);
+  });
+
+  it("a node with no effects gets the same rect as before (unchanged)", () => {
+    const nodesById = {
+      root: { id: "root", type: "frame", name: "root", x: 0, y: 0, width: 100, height: 100 },
+      plain: { id: "plain", type: "rect", name: "plain", x: 2010, y: 0, width: 50, height: 50 },
+    };
+    const state = {
+      nodesById,
+      parentById: { root: null, plain: "root" },
+      childrenById: { root: ["plain"], plain: [] },
+      rootIds: ["root"],
+    } as never;
+
+    const index = createCullingIndex();
+    index.rebuild(state);
+    const bounds = { minX: 0, minY: 0, maxX: 2000, maxY: 1200 };
+    // Fully off-screen, no effects — still culled.
+    expect(index.queryVisible(bounds).has("plain")).toBe(false);
+  });
+
   it("removed ids are dropped from the index", () => {
     const scene = generatePerfScene(1, 1);
     const index = createCullingIndex();

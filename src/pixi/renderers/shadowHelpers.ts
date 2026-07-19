@@ -95,10 +95,57 @@ function buildShadowLayer(
   shadowContainer.addChild(shadowGfx);
 
   if (effect.blur > 0) {
-    shadowContainer.filters = [new BlurFilter({ strength: effect.blur / 2, quality: 3 })];
+    shadowContainer.filters = [buildShadowBlurFilter(effect.blur)];
   }
 
   return shadowContainer;
+}
+
+/**
+ * Build the `BlurFilter` used for a shadow layer's blur, with `padding`
+ * explicitly set so the blurred edge always has room to render.
+ *
+ * Pixi's own `BlurFilter.updatePadding()` already sets `padding = 2 *
+ * strength` (i.e. `blur`, since `strength = blur / 2` here) automatically —
+ * so a *live*, uncached shadow already renders its full blur unclipped. The
+ * explicit `padding` here exists for two reasons: (1) it documents the
+ * invariant inline instead of relying on an internal Pixi computation nobody
+ * reading this file would otherwise know about, and (2) it protects against
+ * a future Pixi upgrade changing that default. It does NOT need to also
+ * cover the shadow's `offset` — the offset is applied via
+ * `shadowContainer.position`, so the filter's padding (centered on the
+ * container's own un-offset local content) already travels with the shadow.
+ *
+ * This does not fix the raster-cache clipping bug (bug-19 mechanism 2): a
+ * top-level frame's `cacheAsTexture` bake sizes its texture from
+ * `getLocalBounds()`, which does not consult filter padding at all (Pixi's
+ * `FilterEffect` has no `addLocalBounds`/`addBounds`) — only `boundsArea` on
+ * the frame's own container (set by `rasterCacheManager.ts` from
+ * `effectMargin.ts`) makes the bake wide enough.
+ *
+ * `quality` (blur pass count, not related to `padding` above) is bumped from
+ * the prior `3` to Pixi's own default of `4` — a small, static, zoom-
+ * independent smoothness improvement for the "coarse/stepped blur" complaint
+ * (bug-19 mechanism 1). It does NOT address the dominant contributor to that
+ * complaint: `rasterCacheManager.ts` bakes a quiet top-level frame's whole
+ * subtree — shadows included — into a texture sized for one of 4 fixed
+ * resolution buckets (`resolutionBucketFor` in `rasterCache.ts`: 0.5/1/2/4).
+ * Anywhere inside a bucket's zoom range that isn't exactly the bucket's own
+ * resolution, the baked texture is shown scaled, and a blurred gradient
+ * shows that scaling far more visibly than a sharp edge does. Making that
+ * quantization finer (or excluding shadow-bearing frames from caching, or
+ * re-baking on every zoom tick) was deliberately NOT done here: it's a
+ * whole-frame, zoom-dependent tradeoff (not shadow-specific), threading
+ * viewport scale into every `applyShadows` call site risks turning this into
+ * a per-frame hot path during interactive zoom, and any such change needs a
+ * live zoom test against `e2e/pixi-large-document-performance.spec.ts`'s
+ * frame-time budgets to verify it doesn't regress them — not possible from
+ * this pass (no browser). Flagged for the parent to decide on a follow-up.
+ */
+function buildShadowBlurFilter(blur: number): BlurFilter {
+  const filter = new BlurFilter({ strength: blur / 2, quality: 4 });
+  filter.padding = Math.max(filter.padding, blur);
+  return filter;
 }
 
 /** Trace the node's own shape (rect/round-rect/per-corner/ellipse) into `gfx` at the given offset+size, without filling. */
@@ -185,7 +232,7 @@ function buildInnerShadowLayer(
   shadowContainer.addChild(gfx);
 
   if (effect.blur > 0) {
-    shadowContainer.filters = [new BlurFilter({ strength: effect.blur / 2, quality: 3 })];
+    shadowContainer.filters = [buildShadowBlurFilter(effect.blur)];
   }
 
   // Clip to the node's own shape so the shadow never bleeds past its bounds.

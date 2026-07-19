@@ -1,3 +1,4 @@
+import { Rectangle } from "pixi.js";
 import type { SceneState } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useDragStore } from "@/store/dragStore";
@@ -6,6 +7,7 @@ import { isFitContentFrame } from "@/types/scene";
 import { computeRasterCacheDecisions } from "./rasterCache";
 import { requestCanvasRender } from "./renderScheduler";
 import { isOverviewScale } from "./viewportCulling";
+import { subtreeEffectMargin } from "./effectMargin";
 import type { SceneDiff } from "./syncDiff";
 
 // The decision timer (Task 12's QUIET_MS is the *quiet* threshold; this is
@@ -19,6 +21,30 @@ const DECISION_INTERVAL_MS = 600;
  */
 export interface CacheableContainer {
   cacheAsTexture(value: boolean | { resolution?: number; antialias?: boolean }): void;
+  /**
+   * Bug-19 mechanism 2 (field report): `cacheAsTexture`'s bake sizes its
+   * texture from `getLocalBounds()`, which does NOT account for filter
+   * padding at all (Pixi's `FilterEffect` has no `addLocalBounds`/
+   * `addBounds` — verified against `node_modules/pixi.js`'s
+   * `getLocalBounds.js`/`RenderGroupSystem.js`) — only `boundsArea` short-
+   * circuits that computation with an explicit rect. A frame with a
+   * shadow/blur overhanging its own geometric bounds must have this set
+   * before caching (see `subtreeEffectMargin` in `effectMargin.ts`), or the
+   * baked texture clips the overhang at its edge. Optional so plain mock
+   * containers in tests that don't care about this can omit it — matches
+   * real `Container.boundsArea`, which likewise starts `undefined`.
+   */
+  boundsArea?: { x: number; y: number; width: number; height: number } | null;
+  /**
+   * The container's real rendered local bounds (fills, strokes, and ALL
+   * children — including ones that overflow the frame's own geometric rect
+   * when `clip` is false — but NOT filter padding, which is exactly the gap
+   * `boundsArea` closes). Used as the base for `boundsArea` so widening for
+   * a shadow's blur overhang never clips a non-clipping frame's overflowing
+   * children or an outside stroke. Optional: real Pixi `Container`s provide
+   * it; test mocks that only care about the geometric-rect fallback omit it.
+   */
+  getLocalBounds?(): { minX: number; minY: number; maxX: number; maxY: number };
 }
 
 export interface RasterCacheManagerDeps {
@@ -104,7 +130,14 @@ export function createRasterCacheManager(deps: RasterCacheManagerDeps): RasterCa
 
   const uncache = (id: string): void => {
     const c = deps.getContainer(id);
-    if (c) c.cacheAsTexture(false);
+    if (c) {
+      c.cacheAsTexture(false);
+      // Clear any effect-overhang boundsArea set while caching (see
+      // `applyDecisions`'s toCache loop) — leaving it set would keep
+      // short-circuiting this container's live (uncached) bounds
+      // computation (hit-testing, filters, etc.) indefinitely.
+      c.boundsArea = null;
+    }
     cached.delete(id);
   };
 
@@ -178,12 +211,24 @@ export function createRasterCacheManager(deps: RasterCacheManagerDeps): RasterCa
       if (overview || deps.hasCulledContent?.(id, state)) hot.add(id);
     }
 
+    // Bug-19 mechanism 2: how far each frame's subtree overhangs its own
+    // geometric bounds via shadow/blur effects (see `subtreeEffectMargin`
+    // doc) — folded into `framePixelSize` below so the MAX_TEXTURE_PX gate
+    // in `rasterCache.ts` sees the texture's real (expanded) size, and used
+    // again in the toCache loop to actually set `boundsArea` before baking.
+    const frameEffectMargins = new Map(
+      topLevelFrameIds.map((id) => [id, subtreeEffectMargin(state.nodesById, state.childrenById, id)] as const),
+    );
+
     // RAW local-unit size — NOT premultiplied by scale (see
-    // RasterCacheInput.framePixelSize doc in rasterCache.ts).
+    // RasterCacheInput.framePixelSize doc in rasterCache.ts). Widened by
+    // 2x the effect margin (both sides) so a shadow/blur overhang is
+    // accounted for by the texture-size gate too.
     const framePixelSize = new Map(
       topLevelFrameIds.map((id) => {
         const n = state.nodesById[id];
-        return [id, { width: n?.width ?? 0, height: n?.height ?? 0 }] as const;
+        const margin = frameEffectMargins.get(id) ?? 0;
+        return [id, { width: (n?.width ?? 0) + margin * 2, height: (n?.height ?? 0) + margin * 2 }] as const;
       }),
     );
 
@@ -202,6 +247,25 @@ export function createRasterCacheManager(deps: RasterCacheManagerDeps): RasterCa
     for (const { id, resolutionBucket } of decisions.toCache) {
       const c = deps.getContainer(id);
       if (!c) continue;
+      const margin = frameEffectMargins.get(id) ?? 0;
+      if (margin > 0) {
+        // Base the explicit bake rect on the container's REAL rendered local
+        // bounds (which already include an outside stroke and any children
+        // that overflow a non-clipping frame's geometric rect) expanded by
+        // the effect margin — NOT on the frame's bare width/height, which
+        // would clip that overflow. Falls back to the geometric rect only
+        // when getLocalBounds is unavailable (test mocks). Short-circuits
+        // Pixi's own bake-bounds computation, which ignores filter padding
+        // entirely — see the doc on `CacheableContainer.boundsArea` above.
+        const lb = c.getLocalBounds?.();
+        const baseX = lb ? lb.minX : 0;
+        const baseY = lb ? lb.minY : 0;
+        const baseW = lb ? lb.maxX - lb.minX : state.nodesById[id]?.width ?? 0;
+        const baseH = lb ? lb.maxY - lb.minY : state.nodesById[id]?.height ?? 0;
+        c.boundsArea = new Rectangle(baseX - margin, baseY - margin, baseW + margin * 2, baseH + margin * 2);
+      } else {
+        c.boundsArea = null;
+      }
       c.cacheAsTexture({ resolution: resolutionBucket, antialias: true });
       cached.set(id, { resolutionBucket });
     }
