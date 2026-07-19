@@ -8,6 +8,25 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.50.1] - 2026-07-19
+
+### Fixed
+- **Web/icon fonts in embeds rendered as tofu on the live canvas.** Embed
+  `htmlContent` mounts into a Shadow DOM, and Chrome only registers
+  `@font-face` rules from document-level styles — so fonts referenced via
+  `@import`/`<link>` inside the embed (e.g. the Phosphor icon font the AI agent
+  now emits) never loaded on the canvas. External font stylesheets are now
+  extracted from embed HTML and hoisted to `document.head` on every shadow-DOM
+  mount (`mountHtmlWithBodyStyles`: live canvas, inline embed editor, and the
+  natural-size measurement path), deduped per URL. Extraction logic lives in
+  `src/utils/fontStylesheets.ts`.
+- Security: hoisted stylesheets are restricted to a tight host allowlist —
+  `fonts.googleapis.com`, plus `unpkg.com` only for `/@phosphor-icons/` paths —
+  since document-level CSS could otherwise restyle the whole app.
+- A failed font-stylesheet load no longer wedges the dedupe cache (the broken
+  `<link>` is removed so a later mount retries); protocol-relative URLs are
+  normalized instead of dropped; `rel="alternate stylesheet"` links are ignored.
+
 ## [0.50.0] - 2026-07-19
 
 ### Fixed
