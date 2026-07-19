@@ -14,7 +14,7 @@ export interface PresentScrollRange {
 /**
  * The vertical scroll range for the active present-mode frame, or `null` when
  * the frame (at the current scale) fits within the viewport — in that case it
- * stays centered by fitToWidth and no scrolling is allowed.
+ * stays top-aligned by fitToWidth and no scrolling is allowed.
  */
 export function computePresentScrollRange(
   frameTop: number,

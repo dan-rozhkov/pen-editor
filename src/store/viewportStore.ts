@@ -193,24 +193,18 @@ export const useViewportStore = create<ViewportState>((set, get) => ({
     }
 
     const frameWidth = bounds.maxX - bounds.minX;
-    const frameHeight = bounds.maxY - bounds.minY;
 
     const rawScale = frameWidth > 0 ? viewportWidth / frameWidth : 1;
     const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, rawScale));
 
-    // Center horizontally around the frame's midpoint rather than pinning its
-    // left edge to x=0 — the two only coincide when rawScale is unclamped.
-    // When MIN_SCALE/MAX_SCALE binds (e.g. a very narrow or very wide frame),
-    // pinning the left edge leaves all the slack on one side instead of
-    // splitting it evenly (see viewportStore.test.ts's clamped-centering cases).
-    const centerX = bounds.minX + frameWidth / 2;
-    const newX = viewportWidth / 2 - centerX * newScale;
-
-    const scaledHeight = frameHeight * newScale;
-    const newY =
-      scaledHeight <= viewportHeight
-        ? (viewportHeight - scaledHeight) / 2 - bounds.minY * newScale
-        : -bounds.minY * newScale; // top-align: tall slides scroll from the top
+    // A presented slide is ALWAYS pinned to the window's top-left corner —
+    // never centered, even when MIN_SCALE/MAX_SCALE clamps the raw
+    // fit-to-width scale (a very narrow or very wide frame). `fitToWidth`'s
+    // only caller is PresentController; other callers needing centered
+    // fit-to-content behavior use `fitToContent` above, which this does not
+    // touch.
+    const newX = -bounds.minX * newScale;
+    const newY = -bounds.minY * newScale;
 
     set({ scale: newScale, x: newX, y: newY });
   },

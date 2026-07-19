@@ -4,6 +4,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useHoverStore } from "@/store/hoverStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useDevModeStore } from "@/store/devModeStore";
+import { useEditorModeStore } from "@/store/editorModeStore";
 import { getViewportBounds } from "@/utils/viewportUtils";
 import type { FlatFrameNode, FlatSceneNode } from "@/types/scene";
 import { truncateLabelToWidth } from "@/pixi/frameLabelUtils";
@@ -69,6 +70,12 @@ export function createFrameNameRenderer(): FrameNameRenderer {
 
   function redraw(frameNamesContainer: Container): void {
     recycleFrameNames(frameNamesContainer);
+
+    // Play/Present mode is read-only fullscreen presentation — no editor
+    // chrome (selection outlines/handles are already dropped by clearing
+    // selection on enterPresent; frame name labels aren't tied to selection,
+    // so they need their own explicit check here).
+    if (useEditorModeStore.getState().mode === "present") return;
 
     const state = useSceneStore.getState();
     const { selectedIds, editingNodeId, editingMode } = useSelectionStore.getState();

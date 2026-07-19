@@ -133,13 +133,16 @@ export function createSelectionOverlay(
     scheduleSelectionRedraw(DIRTY_SELECTION | DIRTY_FRAME_NAMES | DIRTY_HOVER);
   });
 
-  // Editor mode toggles whether transform handles are drawn — redraw on change.
+  // Editor mode toggles whether transform handles are drawn, and whether
+  // frame name labels are drawn at all (suppressed in Play/Present) —
+  // redraw both on change so labels disappear entering Play and reappear
+  // on exit.
   let lastMode = useEditorModeStore.getState().mode;
   const unsubMode = useEditorModeStore.subscribe(() => {
     const mode = useEditorModeStore.getState().mode;
     if (mode === lastMode) return;
     lastMode = mode;
-    scheduleSelectionRedraw(DIRTY_SELECTION);
+    scheduleSelectionRedraw(DIRTY_SELECTION | DIRTY_FRAME_NAMES);
   });
 
   // Viewport — synchronous to stay in sync with pixiViewport.ts transform.
