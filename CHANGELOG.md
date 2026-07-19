@@ -8,6 +8,22 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-07-19
+
+### Added
+- **Auto-retry for chat network errors.** `/api/chat` requests that fail at
+  the fetch level (connection blip, dropped connection before the stream
+  starts) are now retried automatically — up to 3 retries with a 5 s pause,
+  covering both the first request and every auto-continuation request of the
+  tool loop. While retrying, the chat shows a neutral "Network error —
+  retrying in 5 s (attempt N/3)…" status line instead of the red error, which
+  now only appears after retries are exhausted. Stop cancels a pending retry
+  pause immediately. HTTP error responses and mid-stream drops are
+  deliberately not retried (a mid-stream retry would re-execute tool calls
+  against the scene). Going offline mid-retry surfaces the canonical offline
+  message instead of a raw browser error
+  (`src/lib/retryFetch.ts`, `useDesignChat`, `ChatPanel`).
+
 ## [0.50.2] - 2026-07-19
 
 ### Fixed
