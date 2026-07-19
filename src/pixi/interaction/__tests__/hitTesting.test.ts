@@ -4,7 +4,10 @@ import type { FlatSceneNode } from "@/types/scene";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { resetStores } from "@/test/fixtures";
-import { findNodeAtPoint } from "@/pixi/interaction/hitTesting";
+import {
+  findCanvasClickTargetAtPoint,
+  findNodeAtPoint,
+} from "@/pixi/interaction/hitTesting";
 import { createPixiSync } from "@/pixi/pixiSync";
 import * as instanceUtils from "@/utils/instanceUtils";
 
@@ -151,6 +154,33 @@ describe("findNodeAtPoint", () => {
     }));
     // With rectTop hidden, (160,160) now falls through to frameA.
     expect(findNodeAtPoint(160, 160)).toBe("frameA");
+  });
+});
+
+describe("findCanvasClickTargetAtPoint", () => {
+  beforeEach(() => {
+    resetStores();
+    seedHitScene();
+  });
+
+  it("deep-selects on a plain click in dev mode", () => {
+    expect(
+      findCanvasClickTargetAtPoint(20, 20, {
+        metaKey: false,
+        ctrlKey: false,
+        devModeActive: true,
+      }),
+    ).toEqual({ kind: "node", nodeId: "rect1" });
+  });
+
+  it("keeps plain edit-mode clicks clamped to the top-level container", () => {
+    expect(
+      findCanvasClickTargetAtPoint(20, 20, {
+        metaKey: false,
+        ctrlKey: false,
+        devModeActive: false,
+      }),
+    ).toEqual({ kind: "node", nodeId: "frameA" });
   });
 });
 

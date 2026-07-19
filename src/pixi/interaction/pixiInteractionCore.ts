@@ -21,6 +21,7 @@ import { resolveDrillChild } from "./drillDown";
 import type { InteractionContext } from "./types";
 import {
   screenToWorld,
+  findCanvasClickTargetAtPoint,
   findCanvasHitTargetAtPoint,
   findNodeAtPoint,
   findFrameLabelAtPoint,
@@ -334,8 +335,12 @@ export function setupPixiInteraction(
         return;
       }
 
-      const deepSelect = e.metaKey || e.ctrlKey;
-      const hitTarget = findCanvasHitTargetAtPoint(world.x, world.y, { deepSelect });
+      const devModeActive = useDevModeStore.getState().active;
+      const hitTarget = findCanvasClickTargetAtPoint(world.x, world.y, {
+        metaKey: e.metaKey,
+        ctrlKey: e.ctrlKey,
+        devModeActive,
+      });
       const hitId = hitTarget?.kind === "node" ? hitTarget.nodeId : null;
       if (hitTarget?.kind === "instance-descendant") {
         useSelectionStore
@@ -373,7 +378,10 @@ export function setupPixiInteraction(
         return;
       }
 
-      const dragHitId = resolveDragTargetId(hitId);
+      // Group drag targeting intentionally promotes a child hit back to its
+      // selected group in edit mode. Inspect mode never drags, so preserving
+      // the deepest hit is required for direct selection at any nesting level.
+      const dragHitId = devModeActive ? hitId : resolveDragTargetId(hitId);
       const selectionState = useSelectionStore.getState();
       const currentNodes = useSceneStore.getState().getNodes();
       const calculateLayoutForFrame =

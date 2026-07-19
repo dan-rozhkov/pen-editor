@@ -2,6 +2,8 @@ import { TextStyle } from "pixi.js";
 
 export const SELECTION_COLOR = 0x0d99ff;
 export const HOVER_COLOR = 0x0d99ff;
+export const GUIDE_COLOR = 0xff3366;
+export const MEASURE_COLOR = 0xf24822;
 export const COMPONENT_SELECTION_COLOR = 0x8b5cf6;
 export const TEXT_BASELINE_COLOR = 0x0d99ff;
 export const HANDLE_SIZE = 8;

@@ -17,6 +17,7 @@ import {
   GAP_COLOR,
   GAP_OVERLAY_ALPHA,
   HOVER_COLOR,
+  MEASURE_COLOR,
   PADDING_OVERLAY_ALPHA,
   SELECTION_COLOR,
   TEXT_BASELINE_COLOR,
@@ -89,6 +90,8 @@ export function redrawHover(
   const { hoveredNodeId, hoveredInstanceId, hoveredDescendantPath } =
     useHoverStore.getState();
   const { selectedIds, instanceContext } = useSelectionStore.getState();
+  const devModeActive = useDevModeStore.getState().active;
+  const hasDevModeComparison = devModeActive && selectedIds.length === 1;
 
   // Instance descendant hover
   if (hoveredDescendantPath && hoveredInstanceId) {
@@ -114,7 +117,10 @@ export function redrawHover(
       target.drawRect.width,
       target.drawRect.height,
     );
-    hovOutline.stroke({ color: COMPONENT_SELECTION_COLOR, width: strokeWidth });
+    const outlineColor = hasDevModeComparison
+      ? MEASURE_COLOR
+      : COMPONENT_SELECTION_COLOR;
+    hovOutline.stroke({ color: outlineColor, width: strokeWidth });
 
     if (target.node.type === "text") {
       drawTextBaselines(
@@ -132,15 +138,22 @@ export function redrawHover(
 
   const state = useSceneStore.getState();
   const selectedId = selectedIds.length === 1 ? selectedIds[0] : null;
+  const hoveredFrameId =
+    devModeActive && hoveredNodeId && state.nodesById[hoveredNodeId]?.type === "frame"
+      ? hoveredNodeId
+      : null;
   const selectedFrameId =
-    useDevModeStore.getState().active && selectedId && state.nodesById[selectedId]?.type === "frame"
+    devModeActive && selectedId && state.nodesById[selectedId]?.type === "frame"
       ? selectedId
       : null;
   const selectedTargetId =
-    hoveredNodeId && selectedIds.includes(hoveredNodeId) ? hoveredNodeId : selectedFrameId;
+    hoveredFrameId ??
+    (hoveredNodeId && selectedIds.includes(hoveredNodeId) ? hoveredNodeId : selectedFrameId);
 
-  // A selected frame's auto-layout spacing is persistent in Dev Mode. Outside
-  // Dev Mode, keep the existing hover-only behaviour.
+  // In Dev Mode, a hovered auto-layout frame takes priority so its spacing is
+  // inspectable without selecting it. With no hovered frame, keep the selected
+  // frame's spacing persistent. Outside Dev Mode, preserve the existing
+  // selected-node hover behaviour.
   if (selectedTargetId) {
     const children = state.childrenById[selectedTargetId];
     const scale = useViewportStore.getState().scale;
@@ -170,7 +183,10 @@ export function redrawHover(
         }
       }
     }
-    return;
+    // A hovered node different from the current selection still needs its own
+    // guide-colored outline. Fall through after drawing spacing; only a hover
+    // on the selected node (or no hover) should be absorbed by this branch.
+    if (!hoveredNodeId || selectedIds.includes(hoveredNodeId)) return;
   }
 
   if (!hoveredNodeId) return;
@@ -183,9 +199,11 @@ export function redrawHover(
   if (!drawRect) return;
 
   const scale = useViewportStore.getState().scale;
-  const hoverColor = helpers.isInComponentContext(hoveredNodeId)
-    ? COMPONENT_SELECTION_COLOR
-    : HOVER_COLOR;
+  const hoverColor = hasDevModeComparison
+    ? MEASURE_COLOR
+    : helpers.isInComponentContext(hoveredNodeId)
+      ? COMPONENT_SELECTION_COLOR
+      : HOVER_COLOR;
   hovOutline.rect(drawRect.x, drawRect.y, drawRect.width, drawRect.height);
   hovOutline.stroke({ color: hoverColor, width: 1 / scale });
 

@@ -184,6 +184,21 @@ export function findNodeAtPoint(
   return target?.kind === "node" ? target.nodeId : null;
 }
 
+/** Resolve a canvas pointer-down hit using the editor's click-selection policy. */
+export function findCanvasClickTargetAtPoint(
+  worldX: number,
+  worldY: number,
+  options: {
+    metaKey: boolean;
+    ctrlKey: boolean;
+    devModeActive: boolean;
+  },
+): CanvasHitTarget | null {
+  return findCanvasHitTargetAtPoint(worldX, worldY, {
+    deepSelect: options.devModeActive || options.metaKey || options.ctrlKey,
+  });
+}
+
 export function findCanvasHitTargetAtPoint(
   worldX: number,
   worldY: number,
