@@ -50,6 +50,15 @@ function getSidePosition(
   }
 }
 
+/**
+ * True when the node carries a corner radius (unified or per-corner) that
+ * should round the stroke's contour, not just the fill's.
+ */
+function nodeHasCornerRadius(node: FlatSceneNode): boolean {
+  const n = node as { cornerRadius?: number; cornerRadiusPerCorner?: PerCornerRadius };
+  return !!n.cornerRadius || hasPerCornerRadius(n.cornerRadiusPerCorner);
+}
+
 export function drawPerSideStroke(
   gfx: Graphics,
   width: number,
@@ -657,7 +666,40 @@ export function applyStroke(
     const solid = [...strokes].reverse().find((p): p is SolidPaint => p.type === 'solid');
     const strokeColor = solid ? strokePaintColor(solid) : undefined;
     if (strokeColor) {
-      drawPerSideStroke(gfx, width, height, strokeColor, perSide, align);
+      const { top = 0, right = 0, bottom = 0, left = 0 } = perSide;
+      const allEqual = top > 0 && top === right && right === bottom && bottom === left;
+
+      // bug-17: per-side stroke used to always draw 4 independent straight
+      // segments (drawPerSideStroke), ignoring cornerRadius entirely — square
+      // corners on a rounded node. When all 4 sides share one width AND the
+      // node has a radius, there IS a single well-defined rounded contour
+      // (the same one the fill/whole-stroke path already draws via
+      // `drawShape`), so draw and stroke that instead — reusing Pixi's native
+      // `alignment` for inside/outside/center, exactly like the uniform
+      // (non-per-side) branch below.
+      //
+      // Individual per-side widths that differ have no single contour to key
+      // a radius off of (each side would need its own arc radius blended at
+      // the corners) — that combination intentionally keeps the straight-
+      // segment rendering (square corners) as a documented limitation rather
+      // than silently rounding with a guessed/wrong radius.
+      if (allEqual && nodeHasCornerRadius(node)) {
+        // Reuse the fill's already-fresh path when present (`pathReady`),
+        // otherwise draw the rounded contour ourselves — same one-redraw
+        // optimization as the uniform branch below. Drawing unconditionally
+        // would append a second identical subpath, so a semi-transparent
+        // stroke would composite twice (visible darkening).
+        if (!pathReady) drawShape(gfx);
+        const alignment = align === 'inside' ? 1 : align === 'outside' ? 0 : 0.5;
+        gfx.stroke({
+          color: parseColor(strokeColor),
+          alpha: parseAlpha(strokeColor),
+          width: top,
+          alignment,
+        });
+      } else {
+        drawPerSideStroke(gfx, width, height, strokeColor, perSide, align);
+      }
       syncBlendLayers(false);
       return;
     }

@@ -170,6 +170,65 @@ describe("applyStroke", () => {
     }
   });
 
+  // --- bug-17: per-side stroke ignored corner radius ----------------------
+
+  it("bug-17: equal-width per-side stroke on a node with a corner radius draws along the rounded contour (single stroke pass), not square straight segments", () => {
+    const gfx = new Graphics();
+    const strokeSpy = vi.spyOn(gfx, "stroke");
+    const drawShape = vi.fn();
+    const node = makeNode({
+      cornerRadius: 20,
+      strokeWidthPerSide: { top: 4, right: 4, bottom: 4, left: 4 },
+      stroke: "#ff0000",
+    } as Partial<FlatSceneNode>);
+
+    applyStroke(gfx, node, 400, 200, drawShape, false);
+
+    // The rounded contour is drawn via the caller's `drawShape` (which already
+    // knows how to build the node's rounded-rect path), then stroked in a
+    // single pass with Pixi's native `alignment` — same mechanism as the
+    // uniform (non-per-side) stroke branch — instead of 4 independent
+    // straight moveTo/lineTo segments with square corners.
+    expect(drawShape).toHaveBeenCalledTimes(1);
+    expect(strokeSpy).toHaveBeenCalledTimes(1);
+    expect(strokeSpy.mock.calls[0][0]).toMatchObject({ width: 4, alignment: 0.5 });
+  });
+
+  it("bug-17: equal-width per-side stroke + radius respects strokeAlign (inside/outside) via Pixi's stroke alignment", () => {
+    const gfx = new Graphics();
+    const strokeSpy = vi.spyOn(gfx, "stroke");
+    const drawShape = vi.fn();
+    const node = makeNode({
+      cornerRadius: 20,
+      strokeAlign: "outside",
+      strokeWidthPerSide: { top: 6, right: 6, bottom: 6, left: 6 },
+      stroke: "#ff0000",
+    } as Partial<FlatSceneNode>);
+
+    applyStroke(gfx, node, 400, 200, drawShape, false);
+
+    expect(strokeSpy.mock.calls[0][0]).toMatchObject({ width: 6, alignment: 0 });
+  });
+
+  it("bug-17: unequal per-side widths + radius keep the straight-segment fallback (documented limitation, not silently broken)", () => {
+    const gfx = new Graphics();
+    const strokeSpy = vi.spyOn(gfx, "stroke");
+    const drawShape = vi.fn();
+    const node = makeNode({
+      cornerRadius: 20,
+      strokeWidthPerSide: { top: 2, right: 4, bottom: 2, left: 4 },
+      stroke: "#ff0000",
+    } as Partial<FlatSceneNode>);
+
+    applyStroke(gfx, node, 400, 200, drawShape, false);
+
+    // Unequal per-side widths have no single rounded contour to key off of —
+    // this keeps the pre-existing straight-segment rendering (4 calls),
+    // rather than silently rounding one side's width incorrectly.
+    expect(drawShape).not.toHaveBeenCalled();
+    expect(strokeSpy).toHaveBeenCalledTimes(4);
+  });
+
   // --- Finding 1: per-paint blendMode was a no-op on strokes -------------
 
   it("routes a non-normal blend-mode stroke paint onto its own blended sibling layer", () => {
