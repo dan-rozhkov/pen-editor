@@ -152,6 +152,7 @@ function ChatSession({
     stop,
     error,
     clearError,
+    retryState,
   } = useDesignChat({ sessionId });
 
   const parallelCount = useChatStore((s) => s.parallelCount);
@@ -238,6 +239,17 @@ function ChatSession({
             dismissLabel="Dismiss error"
           >
             {error.message || "Something went wrong"}
+          </InlineAlert>
+        </div>
+      )}
+
+      {/* Neutral status while the transport auto-retries a network failure;
+          the red error banner only appears after retries are exhausted. */}
+      {retryState && !error && (
+        <div className="px-3 pt-2">
+          <InlineAlert role="status">
+            Network error — retrying in 5 s (attempt {retryState.attempt}/
+            {retryState.maxAttempts})…
           </InlineAlert>
         </div>
       )}
