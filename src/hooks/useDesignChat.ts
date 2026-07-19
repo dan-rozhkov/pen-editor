@@ -7,6 +7,7 @@ import {
 } from "ai";
 import { modelSupportsVision, resolveModel } from "@/lib/chatModels";
 import { resolveApiUrl, isOffline, OFFLINE_MESSAGE } from "@/lib/apiBase";
+import { createRetryingFetch, type RetryState } from "@/lib/retryFetch";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
@@ -160,10 +161,15 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   // never issued, so there is nothing to hang.
   const [offlineError, setOfflineError] = useState<Error | undefined>();
 
+  // Non-null while the transport is auto-retrying a network failure; drives
+  // the neutral "retrying…" status line instead of the red error banner.
+  const [retryState, setRetryState] = useState<RetryState | null>(null);
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
         api: resolveChatApiUrl(),
+        fetch: createRetryingFetch({ onRetryStateChange: setRetryState }),
         body: () => buildCanvasContext(sessionId),
         prepareSendMessagesRequest: ({ id, messages, body, trigger, messageId }) => {
           const { model } = resolveSessionConfig(sessionId);
@@ -324,5 +330,6 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     error: offlineError ?? chat.error,
     clearError,
     setMessages: chat.setMessages,
+    retryState,
   };
 }

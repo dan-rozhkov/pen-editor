@@ -517,4 +517,105 @@ describe("useDesignChat (hook + UI message stream)", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(useChatStore.getState().launchQueue[sessionId]).toBeUndefined();
   });
+
+  // RTL's `waitFor` polls via `setInterval`, which is itself mocked once
+  // `vi.useFakeTimers()` is active — nothing ever advances it, so a plain
+  // `waitFor` hangs until the test timeout. Poll manually instead, ticking
+  // the fake clock a little each iteration so pending microtasks (e.g. the
+  // rejected-fetch retry catch handler) get a chance to flush.
+  async function waitForFakeTimers(
+    assertion: () => void,
+    { timeoutMs = 2000, stepMs = 10 }: { timeoutMs?: number; stepMs?: number } = {},
+  ): Promise<void> {
+    let elapsed = 0;
+    for (;;) {
+      try {
+        assertion();
+        return;
+      } catch (err) {
+        if (elapsed >= timeoutMs) {
+          throw err;
+        }
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(stepMs);
+        });
+        elapsed += stepMs;
+      }
+    }
+  }
+
+  it("auto-retries network failures and recovers, exposing retryState", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockImplementationOnce(async () =>
+        sseResponse([
+          { type: "start" },
+          { type: "start-step" },
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", delta: "recovered" },
+          { type: "text-end", id: "t1" },
+          { type: "finish-step" },
+          { type: "finish" },
+        ]),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useDesignChat({ sessionId: "s1" }));
+    expect(result.current.retryState).toBeNull();
+
+    act(() => result.current.setInput("hello"));
+    await act(async () => {
+      result.current.sendMessage();
+    });
+
+    await waitForFakeTimers(() =>
+      expect(result.current.retryState).toEqual({ attempt: 1, maxAttempts: 3 }),
+    );
+    // No red error while retrying.
+    expect(result.current.error).toBeUndefined();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    await waitForFakeTimers(() =>
+      expect(result.current.retryState).toEqual({ attempt: 2, maxAttempts: 3 }),
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+
+    await waitForFakeTimers(() => expect(result.current.retryState).toBeNull());
+    await waitForFakeTimers(() => {
+      const assistant = result.current.messages.find((m) => m.role === "assistant");
+      expect(assistant).toBeDefined();
+    });
+    expect(result.current.error).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("surfaces the error and clears retryState after retries are exhausted", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useDesignChat({ sessionId: "s1" }));
+    act(() => result.current.setInput("hello"));
+    await act(async () => {
+      result.current.sendMessage();
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000); // 3 pauses
+    });
+
+    await waitForFakeTimers(() => expect(result.current.error).toBeDefined());
+    expect(result.current.retryState).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(4); // initial + 3 retries
+  });
 });
