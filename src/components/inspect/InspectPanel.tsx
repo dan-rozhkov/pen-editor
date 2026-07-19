@@ -75,7 +75,7 @@ function Section({ title, children, action }: { title: string; children: React.R
         </button>
         {action}
       </div>
-      {expanded && <div className="pb-1">{children}</div>}
+      {expanded && <div className="[&:not(:empty)]:pb-1">{children}</div>}
     </div>
   );
 }

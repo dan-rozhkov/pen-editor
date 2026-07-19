@@ -32,6 +32,27 @@ beforeEach(() => {
 });
 
 describe("<EmbedActionBar /> convert-to-design failure handling", () => {
+  it("replaces the pen icon with a loader without disabling the button while converting", () => {
+    let resolveConversion: (frameId: string | null) => void;
+    const convertEmbedToDesign = vi.fn(
+      () => new Promise<string | null>((resolve) => {
+        resolveConversion = resolve;
+      }),
+    );
+    useSceneStore.setState({ convertEmbedToDesign });
+
+    render(<EmbedActionBar node={node} absoluteX={0} absoluteY={0} />);
+    const button = screen.getByLabelText("Convert to design");
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    expect(convertEmbedToDesign).toHaveBeenCalledTimes(1);
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+    expect(button.querySelector("svg")?.classList.contains("animate-spin")).toBe(true);
+
+    resolveConversion!(null);
+  });
+
   it("surfaces a toast and console.error when conversion rejects, and re-enables the button", async () => {
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const failure = new Error("capture blew up");

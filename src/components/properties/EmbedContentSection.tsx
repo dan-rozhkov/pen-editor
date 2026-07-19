@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { CircleNotch } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import type { EmbedNode } from "@/types/scene";
 import { PropertySection } from "@/components/ui/PropertyInputs";
@@ -14,6 +15,7 @@ interface EmbedContentSectionProps {
 export function EmbedContentSection({ node }: EmbedContentSectionProps) {
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [converting, setConverting] = useState(false);
+  const conversionInFlightRef = useRef(false);
   const copyResetRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
@@ -37,6 +39,8 @@ export function EmbedContentSection({ node }: EmbedContentSectionProps) {
   };
 
   const handleConvertToDesign = async () => {
+    if (conversionInFlightRef.current) return;
+    conversionInFlightRef.current = true;
     setConverting(true);
     try {
       const newFrameId = await useSceneStore.getState().convertEmbedToDesign(node.id);
@@ -47,6 +51,7 @@ export function EmbedContentSection({ node }: EmbedContentSectionProps) {
       console.error("Failed to convert embed to design:", error);
       toast.error("Couldn't convert this embed to a design — please try again.");
     } finally {
+      conversionInFlightRef.current = false;
       setConverting(false);
     }
   };
@@ -61,8 +66,21 @@ export function EmbedContentSection({ node }: EmbedContentSectionProps) {
               ? "Copy failed"
               : "Copy as HTML"}
         </Button>
-        <Button onClick={handleConvertToDesign} variant="secondary" className="w-full" disabled={converting}>
-          {converting ? "Converting..." : "Convert to Design"}
+        <Button
+          onClick={handleConvertToDesign}
+          variant="secondary"
+          className="w-full"
+          aria-label={converting ? "Converting to Design" : undefined}
+        >
+          {converting ? (
+            <CircleNotch
+              aria-hidden="true"
+              className="animate-spin"
+              weight="thin"
+            />
+          ) : (
+            "Convert to Design"
+          )}
         </Button>
       </div>
     </PropertySection>

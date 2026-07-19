@@ -32,8 +32,11 @@ afterEach(() => {
 describe("<ExportSettingsSection />", () => {
   it("renders the section with no rows and no Export all button when there are no settings", () => {
     render(<ExportSettingsSection node={makeNode()} onUpdate={vi.fn()} />);
-    expect(screen.getByText("Export")).toBeTruthy();
+    const title = screen.getByText("Export");
+    expect(title).toBeTruthy();
     expect(screen.queryByText("Export all")).toBeNull();
+    expect(title.parentElement?.parentElement?.className).toContain("pb-3");
+    expect(title.parentElement?.nextElementSibling).toBeNull();
   });
 
   it("adding a row calls onUpdate with a new exportSettings array", () => {

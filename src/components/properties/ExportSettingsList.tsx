@@ -207,7 +207,11 @@ export function ExportSettingsList({ nodeId, nodeName, settings, onChange, hideH
     </>
   );
 
+  const hasBody = settings.length > 0 || presets.length > 0 || status !== null;
+
   if (hideHeader) {
+    if (!hasBody && hideBodyAddAction) return null;
+
     return (
       <div className="flex flex-col gap-2 px-3 pb-2">
         {!hideBodyAddAction && <div className="flex justify-end">{action}</div>}
@@ -218,7 +222,7 @@ export function ExportSettingsList({ nodeId, nodeName, settings, onChange, hideH
 
   return (
     <PropertySection title="Export" action={action}>
-      {body}
+      {hasBody ? body : null}
     </PropertySection>
   );
 }

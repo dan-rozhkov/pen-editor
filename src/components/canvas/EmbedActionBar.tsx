@@ -1,5 +1,5 @@
-import { useCallback, useState } from "react";
-import { PenNibIcon, PencilSimpleLineIcon } from "@phosphor-icons/react";
+import { useCallback, useRef, useState } from "react";
+import { CircleNotch, PenNibIcon, PencilSimpleLineIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { IconButton } from "@/components/ui/IconButton";
 import type { EmbedNode } from "@/types/scene";
@@ -20,6 +20,7 @@ export function EmbedActionBar({
   absoluteY,
 }: EmbedActionBarProps) {
   const [isConverting, setIsConverting] = useState(false);
+  const conversionInFlightRef = useRef(false);
   const editorMode = useEditorModeStore((s) => s.mode);
   const scale = useViewportStore((s) => s.scale);
   const panX = useViewportStore((s) => s.x);
@@ -48,7 +49,8 @@ export function EmbedActionBar({
     async (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if (isConverting) return;
+      if (conversionInFlightRef.current) return;
+      conversionInFlightRef.current = true;
       setIsConverting(true);
       try {
         const newFrameId = await useSceneStore.getState().convertEmbedToDesign(node.id);
@@ -59,10 +61,11 @@ export function EmbedActionBar({
         console.error("Failed to convert embed to design:", error);
         toast.error("Couldn't convert this embed to a design — please try again.");
       } finally {
+        conversionInFlightRef.current = false;
         setIsConverting(false);
       }
     },
-    [isConverting, node.id],
+    [node.id],
   );
 
   // The action bar only offers editing affordances (inline edit, convert) —
@@ -97,9 +100,12 @@ export function EmbedActionBar({
         size="icon-sm"
         className="size-9 rounded-lg p-1"
         onClick={handleConvertToDesign}
-        disabled={isConverting}
       >
-        <PenNibIcon className="size-6" weight="light" />
+        {isConverting ? (
+          <CircleNotch className="size-6 animate-spin" weight="thin" />
+        ) : (
+          <PenNibIcon className="size-6" weight="light" />
+        )}
       </IconButton>
     </div>
   );

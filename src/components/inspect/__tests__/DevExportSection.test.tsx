@@ -93,6 +93,20 @@ describe("<DevExportSection />", () => {
     expect(screen.queryByText("Export all")).toBeNull();
   });
 
+  it("renders no empty body wrapper when the InspectPanel header owns the add action", () => {
+    useDevExportStore.setState({ overrides: { n1: [] } });
+    const { container } = render(
+      <DevExportSection
+        nodeId="n1"
+        nodeName="Icon"
+        exportSettings={undefined}
+        hideBodyAddAction
+      />,
+    );
+
+    expect(container.childElementCount).toBe(0);
+  });
+
   it("does not mint a new default-row id on every recompute for the same untouched node (finding 5)", () => {
     const spy = vi.spyOn(exportSettingsUtils, "createExportSetting");
     const { rerender } = render(
