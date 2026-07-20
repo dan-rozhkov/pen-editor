@@ -10,15 +10,12 @@ import {
   hitTestStartOffsetHandle,
   offsetFromWorldPoint,
 } from "./textPathOffsetGeometry";
-import type { InteractionContext } from "./types";
+import type { InteractionContext, PointerGestureHandlers } from "./types";
 
 /** Screen-space hit radius for the handle, converted to world units by zoom (mirrors `pathEditGeometry.ts`'s `HIT_RADIUS_PX`). */
 const HANDLE_HIT_RADIUS_PX = 8;
 
-export interface TextPathOffsetController {
-  handlePointerDown(e: PointerEvent, world: { x: number; y: number }): boolean;
-  handlePointerMove(e: PointerEvent, world: { x: number; y: number }): boolean;
-  handlePointerUp(e: PointerEvent, world: { x: number; y: number }): boolean;
+export interface TextPathOffsetController extends PointerGestureHandlers {
   isActive: () => boolean;
   isDragging: () => boolean;
 }

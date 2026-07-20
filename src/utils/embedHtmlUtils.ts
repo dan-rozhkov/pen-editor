@@ -5,6 +5,7 @@
 
 import { sanitizeEmbedHtml } from "./sanitizeEmbedHtml";
 import { ensureExternalFontStylesLoaded } from "./fontStylesheets";
+import { splitSelectorList as splitSelectorListRaw } from "@/lib/htmlToDesign/cssScoping";
 
 /** Inherited typography baseline shared by the live Shadow-DOM embed and the
  * isolated iframe used by Convert to design. Source CSS can override it. */
@@ -27,30 +28,7 @@ export interface MountResult {
 }
 
 function splitSelectorList(selectorText: string): string[] {
-  const selectors: string[] = [];
-  let current = "";
-  let parenDepth = 0;
-  let bracketDepth = 0;
-
-  for (let i = 0; i < selectorText.length; i++) {
-    const ch = selectorText[i];
-    if (ch === "(") parenDepth++;
-    else if (ch === ")") parenDepth = Math.max(0, parenDepth - 1);
-    else if (ch === "[") bracketDepth++;
-    else if (ch === "]") bracketDepth = Math.max(0, bracketDepth - 1);
-
-    if (ch === "," && parenDepth === 0 && bracketDepth === 0) {
-      const selector = current.trim();
-      if (selector) selectors.push(selector);
-      current = "";
-      continue;
-    }
-    current += ch;
-  }
-
-  const tail = current.trim();
-  if (tail) selectors.push(tail);
-  return selectors;
+  return splitSelectorListRaw(selectorText).filter(Boolean);
 }
 
 function selectorTargetsGlobalRoot(selector: string): boolean {

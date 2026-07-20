@@ -10,12 +10,9 @@ import {
   type AnchorEditTarget,
   type PathEditHit,
 } from "./pathEditGeometry";
-import type { InteractionContext } from "./types";
+import type { InteractionContext, PointerGestureHandlers } from "./types";
 
-export interface PathEditController {
-  handlePointerDown(e: PointerEvent, world: { x: number; y: number }): boolean;
-  handlePointerMove(e: PointerEvent, world: { x: number; y: number }): boolean;
-  handlePointerUp(e: PointerEvent, world: { x: number; y: number }): boolean;
+export interface PathEditController extends PointerGestureHandlers {
   isActive: () => boolean;
   isDragging: () => boolean;
 }

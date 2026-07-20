@@ -184,18 +184,22 @@ function getLastNodeId(nodeIds: string[]): string | null {
   return nodeIds[nodeIds.length - 1];
 }
 
-export async function createImageImportPlan({
-  blob,
-  name,
-  anchorWorld,
-  canvasSize,
-  nodes,
-  selectedIds,
-  enteredContainerId,
-  fallbackName,
-}: ImageImportParams): Promise<ImageImportPlan> {
+async function buildMediaImportPlan(
+  {
+    blob,
+    name,
+    anchorWorld,
+    canvasSize,
+    nodes,
+    selectedIds,
+    enteredContainerId,
+    fallbackName,
+  }: ImageImportParams,
+  loadNaturalSize: (dataUrl: string) => Promise<Size>,
+  buildFillFields: (dataUrl: string) => Pick<RectNode, "fill" | "imageFill"> | Pick<RectNode, "fills">,
+): Promise<ImageImportPlan> {
   const dataUrl = await readBlobAsDataURL(blob);
-  const naturalSize = await loadImageSize(dataUrl);
+  const naturalSize = await loadNaturalSize(dataUrl);
   const placement = resolvePlacement(
     nodes,
     selectedIds,
@@ -215,11 +219,17 @@ export async function createImageImportPlan({
       y: Math.round(placement.center.y - scaledSize.height / 2),
       width: scaledSize.width,
       height: scaledSize.height,
-      fill: "#ffffff",
       cornerRadius: 0,
-      imageFill: { url: dataUrl, mode: "fill" },
-    },
+      ...buildFillFields(dataUrl),
+    } as RectNode,
   };
+}
+
+export function createImageImportPlan(params: ImageImportParams): Promise<ImageImportPlan> {
+  return buildMediaImportPlan(params, loadImageSize, (dataUrl) => ({
+    fill: "#ffffff",
+    imageFill: { url: dataUrl, mode: "fill" },
+  }));
 }
 
 /**
@@ -228,47 +238,16 @@ export async function createImageImportPlan({
  * dimensions (clamped to the viewport/container budget) with a single video
  * paint (autoplay + loop + muted by default — see `createDefaultVideoPlayback`).
  */
-export async function createVideoImportPlan({
-  blob,
-  name,
-  anchorWorld,
-  canvasSize,
-  nodes,
-  selectedIds,
-  enteredContainerId,
-  fallbackName,
-}: ImageImportParams): Promise<ImageImportPlan> {
-  const dataUrl = await readBlobAsDataURL(blob);
-  const naturalSize = await loadVideoSize(dataUrl);
-  const placement = resolvePlacement(
-    nodes,
-    selectedIds,
-    enteredContainerId,
-    anchorWorld,
-    canvasSize,
-  );
-  const scaledSize = clampSizeToBudget(naturalSize, placement.budget);
-
-  return {
-    parentId: placement.parentId,
-    node: {
-      id: generateId(),
-      type: "rect",
-      name: getImportName(name, fallbackName),
-      x: Math.round(placement.center.x - scaledSize.width / 2),
-      y: Math.round(placement.center.y - scaledSize.height / 2),
-      width: scaledSize.width,
-      height: scaledSize.height,
-      cornerRadius: 0,
-      fills: [
-        createVideoPaint({
-          src: dataUrl,
-          mode: "fill",
-          playback: createDefaultVideoPlayback(),
-        }),
-      ],
-    },
-  };
+export function createVideoImportPlan(params: ImageImportParams): Promise<ImageImportPlan> {
+  return buildMediaImportPlan(params, loadVideoSize, (dataUrl) => ({
+    fills: [
+      createVideoPaint({
+        src: dataUrl,
+        mode: "fill",
+        playback: createDefaultVideoPlayback(),
+      }),
+    ],
+  }));
 }
 
 export function setImportedSelection(nodeIds: string[]): void {

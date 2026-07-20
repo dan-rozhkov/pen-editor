@@ -6,6 +6,7 @@ import { useConnectorStore } from "@/store/connectorStore";
 import type { AnchorPosition, ConnectorNode } from "@/types/scene";
 import { generateId } from "@/types/scene";
 import { getAnchorWorldPosition } from "@/utils/connectorUtils";
+import { computeConnectorBounds } from "./connectorGeometry";
 import type { InteractionContext } from "./types";
 
 const ANCHOR_THRESHOLD = 20;
@@ -142,13 +143,7 @@ export function createConnectorController(
         return true;
       }
 
-      const minX = Math.min(startPos.x, endPos.x);
-      const minY = Math.min(startPos.y, endPos.y);
-      const maxX = Math.max(startPos.x, endPos.x);
-      const maxY = Math.max(startPos.y, endPos.y);
-
-      const nodeWidth = Math.max(maxX - minX, 1);
-      const nodeHeight = Math.max(maxY - minY, 1);
+      const { minX, minY, nodeWidth, nodeHeight } = computeConnectorBounds(startPos, endPos);
 
       const id = generateId();
       const connectorNode: ConnectorNode = {

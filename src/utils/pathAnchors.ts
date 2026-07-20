@@ -210,6 +210,15 @@ export function svgPathToAnchors(d: string): { points: PathAnchor[]; closed: boo
     points[idx] = { ...points[idx], handleOut: handle };
   }
 
+  function commitCubicTo(c1: PathHandle, ox: number, oy: number): void {
+    const c2 = { x: nextNum() + ox, y: nextNum() + oy };
+    const end = { x: nextNum() + ox, y: nextNum() + oy };
+    setHandleOut(points.length - 1, c1);
+    ensureAnchor(end.x, end.y, c2);
+    cur = end;
+    lastControl = c2;
+  }
+
   while (i < tokens.length) {
     const tok = tokens[i];
     const isCmd = /^[a-zA-Z]$/.test(tok);
@@ -264,12 +273,7 @@ export function svgPathToAnchors(d: string): { points: PathAnchor[]; closed: boo
         const ox = cmd === "c" ? cur.x : 0;
         const oy = cmd === "c" ? cur.y : 0;
         const c1 = { x: nextNum() + ox, y: nextNum() + oy };
-        const c2 = { x: nextNum() + ox, y: nextNum() + oy };
-        const end = { x: nextNum() + ox, y: nextNum() + oy };
-        setHandleOut(points.length - 1, c1);
-        ensureAnchor(end.x, end.y, c2);
-        cur = end;
-        lastControl = c2;
+        commitCubicTo(c1, ox, oy);
         lastCmd = cmd;
         break;
       }
@@ -278,12 +282,7 @@ export function svgPathToAnchors(d: string): { points: PathAnchor[]; closed: boo
         const ox = cmd === "s" ? cur.x : 0;
         const oy = cmd === "s" ? cur.y : 0;
         const c1 = lastControl ? mirrorHandle(cur, lastControl) : { ...cur };
-        const c2 = { x: nextNum() + ox, y: nextNum() + oy };
-        const end = { x: nextNum() + ox, y: nextNum() + oy };
-        setHandleOut(points.length - 1, c1);
-        ensureAnchor(end.x, end.y, c2);
-        cur = end;
-        lastControl = c2;
+        commitCubicTo(c1, ox, oy);
         lastCmd = cmd;
         break;
       }

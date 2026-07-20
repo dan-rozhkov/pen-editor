@@ -1,13 +1,8 @@
-import { useSceneStore } from "@/store/sceneStore";
-import { useLayoutStore } from "@/store/layoutStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useCommentsStore } from "@/store/commentsStore";
-import {
-  getNodeAbsolutePositionWithLayout,
-  getNodeEffectiveSize,
-} from "@/utils/nodeUtils";
 import { buildClickAnchor } from "@/lib/comments/commentsLogic";
 import { findCanvasHitTargetAtPoint } from "./hitTesting";
+import { resolveNodeAbsolutePosition } from "./nodeRectResolution";
 import type { InteractionContext } from "./types";
 
 export interface CommentToolRect {
@@ -35,14 +30,9 @@ function defaultHitTest(worldX: number, worldY: number): string | null {
 }
 
 function defaultGetRect(nodeId: string): CommentToolRect | null {
-  const state = useSceneStore.getState();
-  const node = state.nodesById[nodeId];
-  if (!node) return null;
-  const nodes = state.getNodes();
-  const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-  const pos = getNodeAbsolutePositionWithLayout(nodes, nodeId, calculateLayoutForFrame);
-  if (!pos) return null;
-  const size = getNodeEffectiveSize(nodes, nodeId, calculateLayoutForFrame);
+  const resolved = resolveNodeAbsolutePosition(nodeId);
+  if (!resolved) return null;
+  const { node, pos, size } = resolved;
   return {
     x: pos.x,
     y: pos.y,

@@ -1,6 +1,8 @@
 import { CaretDownIcon } from "@phosphor-icons/react";
 import { Fragment } from "react";
 import { useDrawModeStore } from "../store/drawModeStore";
+import type { DrawToolType } from "../store/drawModeStore";
+import type { ToolDefinition } from "../lib/toolDefinitions";
 import {
   LEADING_TOOLS,
   MOVE_TOOL,
@@ -22,6 +24,91 @@ import {
 } from "./ui/dropdown-menu";
 import { Layers3DToggle } from "./canvas/Layers3DToggle";
 import { SpeakerNotesCard } from "./SpeakerNotesCard";
+
+interface ToolDropdownGroupProps {
+  mainTool: ToolDefinition;
+  onMainClick: () => void;
+  isMainActive: boolean;
+  subMenuTooltip: string;
+  subTools: ToolDefinition[];
+  activeTool: DrawToolType | null;
+  isSubGroupActive: boolean;
+  onToggleTool: (tool: DrawToolType) => void;
+  toolButtonBaseClass: string;
+}
+
+function ToolDropdownGroup({
+  mainTool,
+  onMainClick,
+  isMainActive,
+  subMenuTooltip,
+  subTools,
+  activeTool,
+  isSubGroupActive,
+  onToggleTool,
+  toolButtonBaseClass,
+}: ToolDropdownGroupProps) {
+  return (
+    <DropdownMenu>
+      <div className="flex items-center gap-1">
+        <IconButton
+          variant="ghost"
+          size="lg"
+          tooltip={mainTool.label}
+          shortcut={mainTool.shortcut}
+          side="top"
+          onClick={onMainClick}
+          className={`${toolButtonBaseClass} ${
+            isMainActive
+              ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
+              : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
+          }`}
+        >
+          <mainTool.icon size={40} className="size-6" weight="light" />
+        </IconButton>
+
+        <DropdownMenuTrigger
+          render={
+            <IconButton
+              variant="ghost"
+              size="lg"
+              tooltip={subMenuTooltip}
+              side="top"
+              className={`${toolButtonBaseClass} -ml-1 w-6 justify-center ${
+                isSubGroupActive
+                  ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
+                  : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
+              }`}
+            >
+              <CaretDownIcon size={12} className="size-3" weight="bold" />
+            </IconButton>
+          }
+        />
+      </div>
+
+      <DropdownMenuContent align="center" sideOffset={8}>
+        {subTools.map(({ icon: Icon, label, tool, shortcut }) => {
+          const isActive = activeTool === tool;
+          return (
+            <DropdownMenuItem
+              key={label}
+              onClick={() => onToggleTool(tool)}
+              className={`flex items-center gap-2 ${
+                isActive ? "bg-accent text-accent-foreground" : ""
+              }`}
+            >
+              <Icon size={16} weight="light" />
+              <span>{label}</span>
+              <span className="ml-auto text-xs text-muted-foreground">
+                {shortcut}
+              </span>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 export function PrimitivesPanel() {
   const activeTool = useDrawModeStore((s) => s.activeTool);
@@ -45,64 +132,17 @@ export function PrimitivesPanel() {
   return (
     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2">
       <div className="flex items-center gap-1 p-1.5 bg-surface-panel border border-border-default rounded-2xl shadow-[0_0px_3px_rgba(0,0,0,0.04)]">
-        <DropdownMenu>
-          <div className="flex items-center gap-1">
-            <IconButton
-              variant="ghost"
-              size="lg"
-              tooltip={MOVE_TOOL.label}
-              shortcut={MOVE_TOOL.shortcut}
-              side="top"
-              onClick={() => setActiveTool(null)}
-              className={`${toolButtonBaseClass} ${
-                isMoveActive
-                  ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
-                  : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
-              }`}
-            >
-              <MOVE_TOOL.icon size={40} className="size-6" weight="light" />
-            </IconButton>
-
-            <DropdownMenuTrigger
-              render={
-                <IconButton
-                  variant="ghost"
-                  size="lg"
-                  tooltip="More move tools"
-                  side="top"
-                  className={`${toolButtonBaseClass} -ml-1 w-6 justify-center ${
-                    isMoveSubToolActive
-                      ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
-                      : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
-                  }`}
-                >
-                  <CaretDownIcon size={12} className="size-3" weight="bold" />
-                </IconButton>
-              }
-            />
-          </div>
-
-          <DropdownMenuContent align="center" sideOffset={8}>
-            {MOVE_SUB_TOOLS.map(({ icon: Icon, label, tool, shortcut }) => {
-              const isActive = activeTool === tool;
-              return (
-                <DropdownMenuItem
-                  key={label}
-                  onClick={() => toggleTool(tool)}
-                  className={`flex items-center gap-2 ${
-                    isActive ? "bg-accent text-accent-foreground" : ""
-                  }`}
-                >
-                  <Icon size={16} weight="light" />
-                  <span>{label}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {shortcut}
-                  </span>
-                </DropdownMenuItem>
-              );
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <ToolDropdownGroup
+          mainTool={MOVE_TOOL}
+          onMainClick={() => setActiveTool(null)}
+          isMainActive={isMoveActive}
+          subMenuTooltip="More move tools"
+          subTools={MOVE_SUB_TOOLS}
+          activeTool={activeTool}
+          isSubGroupActive={isMoveSubToolActive}
+          onToggleTool={toggleTool}
+          toolButtonBaseClass={toolButtonBaseClass}
+        />
 
         {leadingTools.map(({ icon: Icon, label, tool, shortcut }) => {
           const isActive =
@@ -129,123 +169,29 @@ export function PrimitivesPanel() {
           );
         })}
 
-        <DropdownMenu>
-          <div className="flex items-center gap-1">
-            <IconButton
-              variant="ghost"
-              size="lg"
-              tooltip={RECT_TOOL.label}
-              shortcut={RECT_TOOL.shortcut}
-              side="top"
-              onClick={() => toggleTool("rect")}
-              className={`${toolButtonBaseClass} ${
-                isRectangleActive
-                  ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
-                  : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
-              }`}
-            >
-              <RECT_TOOL.icon size={40} className="size-6" weight="light" />
-            </IconButton>
+        <ToolDropdownGroup
+          mainTool={RECT_TOOL}
+          onMainClick={() => toggleTool("rect")}
+          isMainActive={isRectangleActive}
+          subMenuTooltip="More shapes"
+          subTools={rectSubTools}
+          activeTool={activeTool}
+          isSubGroupActive={isRectSubToolActive}
+          onToggleTool={toggleTool}
+          toolButtonBaseClass={toolButtonBaseClass}
+        />
 
-            <DropdownMenuTrigger
-              render={
-                <IconButton
-                  variant="ghost"
-                  size="lg"
-                  tooltip="More shapes"
-                  side="top"
-                  className={`${toolButtonBaseClass} -ml-1 w-6 justify-center ${
-                    isRectSubToolActive
-                      ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
-                      : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
-                  }`}
-                >
-                  <CaretDownIcon size={12} className="size-3" weight="bold" />
-                </IconButton>
-              }
-            />
-          </div>
-
-          <DropdownMenuContent align="center" sideOffset={8}>
-            {rectSubTools.map(({ icon: Icon, label, tool, shortcut }) => {
-              const isActive = activeTool === tool;
-              return (
-                <DropdownMenuItem
-                  key={label}
-                  onClick={() => toggleTool(tool)}
-                  className={`flex items-center gap-2 ${
-                    isActive ? "bg-accent text-accent-foreground" : ""
-                  }`}
-                >
-                  <Icon size={16} weight="light" />
-                  <span>{label}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {shortcut}
-                  </span>
-                </DropdownMenuItem>
-              );
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <DropdownMenu>
-          <div className="flex items-center gap-1">
-            <IconButton
-              variant="ghost"
-              size="lg"
-              tooltip={PEN_TOOL.label}
-              shortcut={PEN_TOOL.shortcut}
-              side="top"
-              onClick={() => toggleTool("pen")}
-              className={`${toolButtonBaseClass} ${
-                isPenActive
-                  ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
-                  : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
-              }`}
-            >
-              <PEN_TOOL.icon size={40} className="size-6" weight="light" />
-            </IconButton>
-
-            <DropdownMenuTrigger
-              render={
-                <IconButton
-                  variant="ghost"
-                  size="lg"
-                  tooltip="More pen tools"
-                  side="top"
-                  className={`${toolButtonBaseClass} -ml-1 w-6 justify-center ${
-                    isPenSubToolActive
-                      ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
-                      : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
-                  }`}
-                >
-                  <CaretDownIcon size={12} className="size-3" weight="bold" />
-                </IconButton>
-              }
-            />
-          </div>
-
-          <DropdownMenuContent align="center" sideOffset={8}>
-            {penSubTools.map(({ icon: Icon, label, tool, shortcut }) => {
-              const isActive = activeTool === tool;
-              return (
-                <DropdownMenuItem
-                  key={label}
-                  onClick={() => toggleTool(tool)}
-                  className={`flex items-center gap-2 ${
-                    isActive ? "bg-accent text-accent-foreground" : ""
-                  }`}
-                >
-                  <Icon size={16} weight="light" />
-                  <span>{label}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {shortcut}
-                  </span>
-                </DropdownMenuItem>
-              );
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <ToolDropdownGroup
+          mainTool={PEN_TOOL}
+          onMainClick={() => toggleTool("pen")}
+          isMainActive={isPenActive}
+          subMenuTooltip="More pen tools"
+          subTools={penSubTools}
+          activeTool={activeTool}
+          isSubGroupActive={isPenSubToolActive}
+          onToggleTool={toggleTool}
+          toolButtonBaseClass={toolButtonBaseClass}
+        />
 
         <IconButton
           onClick={() => toggleTool(COMMENT_TOOL.tool)}

@@ -104,6 +104,56 @@ export function MediaModeRow({
 }
 
 /**
+ * The mode row + "Reset Crop" button + crop grid, shared between the image
+ * and video fill editors: `MediaModeRow` (with its crop-toggle icon button),
+ * a conditional "Reset Crop" button when the crop isn't the full rect, and
+ * the `CropRectGrid` when the crop editor is open.
+ */
+export function MediaCropControls({
+  mode,
+  onModeChange,
+  cropEditorOpen,
+  onToggleCropEditor,
+  cropTooltip,
+  cropped,
+  crop,
+  onCropChange,
+  onResetCrop,
+}: {
+  mode: ImageFillMode;
+  onModeChange: (mode: string) => void;
+  cropEditorOpen: boolean;
+  onToggleCropEditor: () => void;
+  cropTooltip: string;
+  cropped: boolean;
+  crop: ImageCropRect;
+  onCropChange: (next: ImageCropRect) => void;
+  onResetCrop: () => void;
+}) {
+  return (
+    <>
+      <MediaModeRow
+        mode={mode}
+        onModeChange={onModeChange}
+        cropEditorOpen={cropEditorOpen}
+        onToggleCropEditor={onToggleCropEditor}
+        cropTooltip={cropTooltip}
+      />
+
+      {cropped && (
+        <div className="flex items-center gap-2">
+          <Button type="button" size="sm" variant="ghost" onClick={onResetCrop}>
+            Reset Crop
+          </Button>
+        </div>
+      )}
+
+      {cropEditorOpen && <CropRectGrid crop={crop} onChange={onCropChange} />}
+    </>
+  );
+}
+
+/**
  * The hidden file input + preview container + hover-reveal "Replace …"
  * overlay shared across the image/video/pattern fill editors. `children` is
  * the section-specific inner media element (background-image div, img, or

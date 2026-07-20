@@ -76,6 +76,18 @@ export function AppearanceSection({
     } as Partial<SceneNode>);
   };
 
+  const handleSidesChange = (v: number) => {
+    const sides = Math.max(3, Math.min(12, v));
+    const innerRadiusRatio = polygonNode?.innerRadiusRatio;
+    const points = generatePolygonPoints(
+      sides,
+      node.width,
+      node.height,
+      innerRadiusRatio
+    );
+    onUpdate({ sides, points } as Partial<SceneNode>);
+  };
+
   return (
     <PropertySection title="Appearance">
       <PropertyRow>
@@ -131,17 +143,7 @@ export function AppearanceSection({
           <NumberInput
             label="Sides"
             value={polygonNode.sides ?? 6}
-            onChange={(v) => {
-              const sides = Math.max(3, Math.min(12, v));
-              const innerRadiusRatio = polygonNode.innerRadiusRatio;
-              const points = generatePolygonPoints(
-                sides,
-                node.width,
-                node.height,
-                innerRadiusRatio
-              );
-              onUpdate({ sides, points } as Partial<SceneNode>);
-            }}
+            onChange={handleSidesChange}
             min={3}
             max={12}
             step={1}
@@ -155,17 +157,7 @@ export function AppearanceSection({
           <NumberInput
             label="Points"
             value={polygonNode.sides ?? 6}
-            onChange={(v) => {
-              const sides = Math.max(3, Math.min(12, v));
-              const innerRadiusRatio = polygonNode.innerRadiusRatio;
-              const points = generatePolygonPoints(
-                sides,
-                node.width,
-                node.height,
-                innerRadiusRatio
-              );
-              onUpdate({ sides, points } as Partial<SceneNode>);
-            }}
+            onChange={handleSidesChange}
             min={3}
             max={12}
             step={1}

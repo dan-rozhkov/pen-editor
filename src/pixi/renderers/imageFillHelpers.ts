@@ -8,35 +8,14 @@ import { hasPerCornerRadius } from "@/utils/renderUtils";
 import { cropRectToPixels, coverPixelRect, type PixelRect } from "@/lib/imageCrop/cropRect";
 import { buildAdjustmentColorMatrix, isDefaultAdjustments } from "@/lib/imageAdjustments/imageAdjustments";
 import { normalizeSvgMarkup, svgTextToDataUrl } from "@/lib/htmlToDesign/svgHandling";
+import { LruTextureCache } from "./lruTextureCache";
 
 /** Cache for loaded textures by URL (LRU, bounded — SVG keys include size/resolution,
  *  so interactive resize/zoom would otherwise grow it without limit) */
-const textureCache = new Map<string, Texture>();
-const TEXTURE_CACHE_MAX_ENTRIES = 128;
+const textureCache = new LruTextureCache(128);
 /** Callbacks queued while a URL is already loading */
 const loadingCallbacks = new Map<string, Array<() => void>>();
 
-function getCachedTexture(key: string): Texture | undefined {
-  const texture = textureCache.get(key);
-  if (texture) {
-    // Refresh LRU position
-    textureCache.delete(key);
-    textureCache.set(key, texture);
-  }
-  return texture;
-}
-
-function setCachedTexture(key: string, texture: Texture): void {
-  textureCache.delete(key);
-  textureCache.set(key, texture);
-  // Evict oldest entries without destroying — live sprites may still reference
-  // them; Pixi's texture GC reclaims unused GPU memory once unreferenced.
-  while (textureCache.size > TEXTURE_CACHE_MAX_ENTRIES) {
-    const oldestKey = textureCache.keys().next().value;
-    if (oldestKey === undefined) break;
-    textureCache.delete(oldestKey);
-  }
-}
 /** Current resolution used for image fill textures, updated on zoom */
 let currentImageFillResolution = window.devicePixelRatio || 1;
 
@@ -158,6 +137,29 @@ function clampTextureDimension(value: number): number {
   return Math.max(1, Math.min(SVG_TEXTURE_MAX_DIMENSION, Math.round(value)));
 }
 
+/** Rasterize `image` onto a canvas at `sourceWidth × sourceHeight × targetScale`
+ *  (clamped to `SVG_TEXTURE_MAX_DIMENSION`) and wrap it as a Texture. Shared by
+ *  the cover-fit SVG image-fill loader and the natural-size SVG pattern-tile
+ *  loader, which differ only in how `targetScale` is derived. */
+function rasterizeImageToTexture(
+  image: HTMLImageElement,
+  sourceWidth: number,
+  sourceHeight: number,
+  targetScale: number,
+): Texture {
+  const targetWidth = clampTextureDimension(sourceWidth * targetScale);
+  const targetHeight = clampTextureDimension(sourceHeight * targetScale);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return createTextureFromImage(image);
+  ctx.clearRect(0, 0, targetWidth, targetHeight);
+  ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
+  return Texture.from(canvas);
+}
+
 async function loadSvgTextureFromUrl(
   url: string,
   width: number,
@@ -177,17 +179,7 @@ async function loadSvgTextureFromUrl(
   const coverScale = Math.max(width / sourceWidth, height / sourceHeight, 1);
   const targetScale = Math.max(1, coverScale * Math.max(1, resolution));
 
-  const targetWidth = clampTextureDimension(sourceWidth * targetScale);
-  const targetHeight = clampTextureDimension(sourceHeight * targetScale);
-
-  const canvas = document.createElement("canvas");
-  canvas.width = targetWidth;
-  canvas.height = targetHeight;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return createTextureFromImage(image);
-  ctx.clearRect(0, 0, targetWidth, targetHeight);
-  ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
-  return Texture.from(canvas);
+  return rasterizeImageToTexture(image, sourceWidth, sourceHeight, targetScale);
 }
 
 /**
@@ -208,17 +200,7 @@ async function loadSvgPatternTextureFromUrl(
   const sourceHeight = Math.max(1, image.naturalHeight || 1);
   const targetScale = Math.max(1, scale * Math.max(1, resolution));
 
-  const targetWidth = clampTextureDimension(sourceWidth * targetScale);
-  const targetHeight = clampTextureDimension(sourceHeight * targetScale);
-
-  const canvas = document.createElement("canvas");
-  canvas.width = targetWidth;
-  canvas.height = targetHeight;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return createTextureFromImage(image);
-  ctx.clearRect(0, 0, targetWidth, targetHeight);
-  ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
-  return Texture.from(canvas);
+  return rasterizeImageToTexture(image, sourceWidth, sourceHeight, targetScale);
 }
 
 /**
@@ -245,6 +227,48 @@ export function getPatternTextureCacheKey(
   return `svg-pattern:${url}:${scale}@${resolutionBucket}`;
 }
 
+/**
+ * Resolve `cacheKey` through the shared texture cache: serve a cached hit
+ * immediately, queue `onReady` behind an in-flight load for the same key, or
+ * kick off `load()` and populate the cache/queue on completion. Shared by
+ * `withPatternTileTexture` and `withTexture`, which differ only in their
+ * cache key and loader.
+ */
+function withCachedTexture(
+  cacheKey: string,
+  container: Container,
+  onReady: (texture: Texture) => void,
+  load: () => Promise<Texture>,
+  failureLabel: string,
+  url: string,
+): void {
+  const cached = textureCache.get(cacheKey);
+  if (cached) {
+    onReady(cached);
+    return;
+  }
+
+  if (loadingCallbacks.has(cacheKey)) {
+    loadingCallbacks.get(cacheKey)!.push(() => {
+      const tex = textureCache.peek(cacheKey);
+      if (tex && !container.destroyed) onReady(tex);
+    });
+    return;
+  }
+
+  loadingCallbacks.set(cacheKey, []);
+  load().then((texture) => {
+    textureCache.set(cacheKey, texture);
+    if (!container.destroyed) onReady(texture);
+    const cbs = loadingCallbacks.get(cacheKey);
+    loadingCallbacks.delete(cacheKey);
+    cbs?.forEach((cb) => cb());
+  }).catch(() => {
+    loadingCallbacks.delete(cacheKey);
+    console.warn(`[pixi] Failed to load ${failureLabel}`, url);
+  });
+}
+
 function withPatternTileTexture(
   url: string,
   pattern: PatternFill,
@@ -259,31 +283,14 @@ function withPatternTileTexture(
   const p = normalizePattern(pattern);
   const cacheKey = getPatternTextureCacheKey(url, p.scale, currentImageFillResolution);
 
-  const cached = getCachedTexture(cacheKey);
-  if (cached) {
-    onReady(cached);
-    return;
-  }
-
-  if (loadingCallbacks.has(cacheKey)) {
-    loadingCallbacks.get(cacheKey)!.push(() => {
-      const tex = textureCache.get(cacheKey);
-      if (tex && !container.destroyed) onReady(tex);
-    });
-    return;
-  }
-
-  loadingCallbacks.set(cacheKey, []);
-  loadSvgPatternTextureFromUrl(url, p.scale, currentImageFillResolution).then((texture) => {
-    setCachedTexture(cacheKey, texture);
-    if (!container.destroyed) onReady(texture);
-    const cbs = loadingCallbacks.get(cacheKey);
-    loadingCallbacks.delete(cacheKey);
-    cbs?.forEach((cb) => cb());
-  }).catch(() => {
-    loadingCallbacks.delete(cacheKey);
-    console.warn("[pixi] Failed to load pattern tile", url);
-  });
+  withCachedTexture(
+    cacheKey,
+    container,
+    onReady,
+    () => loadSvgPatternTextureFromUrl(url, p.scale, currentImageFillResolution),
+    "pattern tile",
+    url,
+  );
 }
 
 async function loadTextureFromUrl(
@@ -309,31 +316,15 @@ export function withTexture(
   onReady: (texture: Texture) => void,
 ): void {
   const cacheKey = getTextureCacheKey(url, width, height, currentImageFillResolution);
-  const cached = getCachedTexture(cacheKey);
-  if (cached) {
-    onReady(cached);
-    return;
-  }
 
-  if (loadingCallbacks.has(cacheKey)) {
-    loadingCallbacks.get(cacheKey)!.push(() => {
-      const tex = textureCache.get(cacheKey);
-      if (tex && !container.destroyed) onReady(tex);
-    });
-    return;
-  }
-
-  loadingCallbacks.set(cacheKey, []);
-  loadTextureFromUrl(url, width, height, currentImageFillResolution).then((texture) => {
-    setCachedTexture(cacheKey, texture);
-    if (!container.destroyed) onReady(texture);
-    const cbs = loadingCallbacks.get(cacheKey);
-    loadingCallbacks.delete(cacheKey);
-    cbs?.forEach((cb) => cb());
-  }).catch(() => {
-    loadingCallbacks.delete(cacheKey);
-    console.warn("[pixi] Failed to load image fill", url);
-  });
+  withCachedTexture(
+    cacheKey,
+    container,
+    onReady,
+    () => loadTextureFromUrl(url, width, height, currentImageFillResolution),
+    "image fill",
+    url,
+  );
 }
 
 function destroyImageSprite(container: Container): void {

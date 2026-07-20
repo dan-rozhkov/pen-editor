@@ -3,6 +3,7 @@ import { useLayoutStore } from "@/store/layoutStore";
 import type { FlatSceneNode, ConnectorNode } from "@/types/scene";
 import { isConnectorNode } from "@/types/scene";
 import { getAnchorWorldPosition } from "@/utils/connectorUtils";
+import { computeConnectorBounds } from "./interaction/connectorGeometry";
 
 /**
  * Maintains the connector index (targetNodeId → connectorIds referencing it)
@@ -69,12 +70,7 @@ export function createConnectorManager() {
       const endPos = getAnchorWorldPosition(conn.endConnection.nodeId, conn.endConnection.anchor, nodes, calcLayout);
       if (!startPos || !endPos) continue;
 
-      const minX = Math.min(startPos.x, endPos.x);
-      const minY = Math.min(startPos.y, endPos.y);
-      const maxX = Math.max(startPos.x, endPos.x);
-      const maxY = Math.max(startPos.y, endPos.y);
-      const nodeWidth = Math.max(maxX - minX, 1);
-      const nodeHeight = Math.max(maxY - minY, 1);
+      const { minX, minY, nodeWidth, nodeHeight } = computeConnectorBounds(startPos, endPos);
       const points = [
         startPos.x - minX,
         startPos.y - minY,

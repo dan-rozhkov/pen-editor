@@ -96,39 +96,27 @@ export function LeftRail() {
     }
   };
 
+  const renderRailButton = (item: (typeof SECTIONS)[number]) => (
+    <RailButton
+      key={item.section}
+      testid={item.testid}
+      title={item.title}
+      active={
+        isMobile
+          ? isPanelOpen && activeSection === item.section
+          : activeSection === item.section
+      }
+      onClick={() => handleSectionClick(item.section)}
+    >
+      {item.icon}
+    </RailButton>
+  );
+
   return (
     <div className="w-14 h-full flex flex-col items-center gap-3 pt-2 pb-4 bg-surface-panel border-r border-border-default">
-      {SECTIONS.map((item) => (
-        <RailButton
-          key={item.section}
-          testid={item.testid}
-          title={item.title}
-          active={
-            isMobile
-              ? isPanelOpen && activeSection === item.section
-              : activeSection === item.section
-          }
-          onClick={() => handleSectionClick(item.section)}
-        >
-          {item.icon}
-        </RailButton>
-      ))}
+      {SECTIONS.map(renderRailButton)}
       <div className="h-px w-5 bg-border-default" />
-      {STYLE_SECTIONS.map((item) => (
-        <RailButton
-          key={item.section}
-          testid={item.testid}
-          title={item.title}
-          active={
-            isMobile
-              ? isPanelOpen && activeSection === item.section
-              : activeSection === item.section
-          }
-          onClick={() => handleSectionClick(item.section)}
-        >
-          {item.icon}
-        </RailButton>
-      ))}
+      {STYLE_SECTIONS.map(renderRailButton)}
     </div>
   );
 }

@@ -58,6 +58,11 @@ const sizingModeButtonClass =
 const activeSizingModeButtonClass =
   "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel";
 
+function scaleLinePoints(node: SceneNode, scaleX: number, scaleY: number): number[] {
+  const ln = node as unknown as { points: number[] };
+  return ln.points.map((p: number, i: number) => (i % 2 === 0 ? p * scaleX : p * scaleY));
+}
+
 function computeFrameFitToContentSize(
   frame: FrameNode,
   allNodes: SceneNode[],
@@ -630,11 +635,7 @@ export function SizeSection({
             } else if (node.type === "line") {
               const scaleX = v / effectiveWidth;
               const scaleY = node.aspectRatioLocked ? newH / effectiveHeight : 1;
-              const ln = node as unknown as { points: number[] };
-              (updates as Record<string, unknown>).points = ln.points.map(
-                (p: number, i: number) =>
-                  i % 2 === 0 ? p * scaleX : p * scaleY
-              );
+              (updates as Record<string, unknown>).points = scaleLinePoints(node, scaleX, scaleY);
             } else if (node.type === "text") {
               // Figma rule: typing a width fixes the width (auto -> auto-height).
               // Including the mode in the update triggers height re-measure.
@@ -668,11 +669,7 @@ export function SizeSection({
             } else if (node.type === "line") {
               const scaleX = node.aspectRatioLocked ? newW / effectiveWidth : 1;
               const scaleY = v / effectiveHeight;
-              const ln = node as unknown as { points: number[] };
-              (updates as Record<string, unknown>).points = ln.points.map(
-                (p: number, i: number) =>
-                  i % 2 === 0 ? p * scaleX : p * scaleY
-              );
+              (updates as Record<string, unknown>).points = scaleLinePoints(node, scaleX, scaleY);
             } else if (node.type === "text") {
               // Figma rule: typing a height fixes both dimensions (fixed-size).
               (updates as Partial<TextNode>).textWidthMode = "fixed-height";

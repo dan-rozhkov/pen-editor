@@ -169,6 +169,17 @@ function collectLinearGradients(
   return gradients;
 }
 
+/** Parse a `points="x1,y1 x2,y2 ..."` attribute into an `M...L...` path string. */
+function pointsAttrToPathData(pointsAttr: string): string | null {
+  const coords = pointsAttr.trim().split(/[\s,]+/).map(Number);
+  if (coords.length < 4) return null;
+  let d = `M${coords[0]},${coords[1]}`;
+  for (let i = 2; i < coords.length; i += 2) {
+    d += ` L${coords[i]},${coords[i + 1]}`;
+  }
+  return d;
+}
+
 /**
  * Convert basic SVG shapes to path data.
  */
@@ -240,25 +251,14 @@ function shapeToPathData(el: Element): string | null {
   if (tag === "polygon") {
     const points = el.getAttribute("points");
     if (!points) return null;
-    const coords = points.trim().split(/[\s,]+/).map(Number);
-    if (coords.length < 4) return null;
-    let d = `M${coords[0]},${coords[1]}`;
-    for (let i = 2; i < coords.length; i += 2) {
-      d += ` L${coords[i]},${coords[i + 1]}`;
-    }
-    return d + " Z";
+    const d = pointsAttrToPathData(points);
+    return d ? d + " Z" : null;
   }
 
   if (tag === "polyline") {
     const points = el.getAttribute("points");
     if (!points) return null;
-    const coords = points.trim().split(/[\s,]+/).map(Number);
-    if (coords.length < 4) return null;
-    let d = `M${coords[0]},${coords[1]}`;
-    for (let i = 2; i < coords.length; i += 2) {
-      d += ` L${coords[i]},${coords[i + 1]}`;
-    }
-    return d;
+    return pointsAttrToPathData(points);
   }
 
   return null;

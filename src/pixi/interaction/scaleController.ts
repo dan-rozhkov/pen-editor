@@ -6,6 +6,7 @@ import { hitTestTransformHandle, getResizeCursor } from "./hitTesting";
 import { computeScaleUpdates } from "@/store/sceneStore/scaleOperations";
 import { saveHistory } from "@/store/sceneStore/helpers/history";
 import { markNodesDirty } from "@/store/sceneStore/dirtyTracking";
+import { computeHandleDragOrigin } from "./handleDragOrigin";
 
 const MIN_SIZE = 5;
 
@@ -193,14 +194,7 @@ export function createScaleController(context: InteractionContext): ScaleControl
       state.isScaling = true;
       state.nodeId = handleHit.nodeId;
       state.corner = handleHit.corner;
-      state.startNodeX = node.x;
-      state.startNodeY = node.y;
-      state.startNodeW = handleHit.width;
-      state.startNodeH = handleHit.height;
-      state.absX = handleHit.absX;
-      state.absY = handleHit.absY;
-      state.parentOffsetX = handleHit.absX - node.x;
-      state.parentOffsetY = handleHit.absY - node.y;
+      Object.assign(state, computeHandleDragOrigin(node, handleHit));
       state.originalNodesById = sceneState.nodesById;
       state.originalChildrenById = sceneState.childrenById;
       state.originalParentById = sceneState.parentById;

@@ -3,8 +3,7 @@ import { SparkleIcon, ArrowUpIcon } from "@phosphor-icons/react";
 import { IconButton } from "@/components/ui/IconButton";
 import { cn } from "@/lib/utils";
 import { useDevModeStore } from "@/store/devModeStore";
-import { useViewportStore } from "@/store/viewportStore";
-import { embedScreenRect } from "@/components/canvas/embedLayerGeometry";
+import { useEmbedScreenRect } from "@/components/canvas/useEmbedScreenRect";
 import {
   FRAME_QUICK_ACTIONS,
   type FrameQuickAction,
@@ -36,21 +35,7 @@ export function NodeAgentButton({
   launch,
 }: NodeAgentButtonProps) {
   const isDevMode = useDevModeStore((state) => state.active);
-  const scale = useViewportStore((s) => s.scale);
-  const panX = useViewportStore((s) => s.x);
-  const panY = useViewportStore((s) => s.y);
-  const dpr = window.devicePixelRatio || 1;
-
-  const rect = embedScreenRect(
-    absoluteX,
-    absoluteY,
-    node.width,
-    node.height,
-    scale,
-    panX,
-    panY,
-    dpr,
-  );
+  const rect = useEmbedScreenRect(absoluteX, absoluteY, node.width, node.height);
 
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");

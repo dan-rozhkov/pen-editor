@@ -1,7 +1,6 @@
 import type {
   BlurEffect,
   FlatSceneNode,
-  GradientFill,
   LineCapShape,
   PerCornerRadius,
   ShadowEffect,
@@ -11,6 +10,7 @@ import { getRenderableEffects, getRenderableFills, getRenderableStrokes } from "
 import { hasPerCornerRadius } from "@/utils/renderUtils";
 import { buildSquircleRectPath, type PathSegment } from "@/lib/shapePath/squircleCorner";
 import { buildCapMarkerDef } from "@/utils/lineCapUtils";
+import { gradientToSvgDef } from "@/lib/svgGradientDef";
 
 /** Mutable state threaded through the recursive SVG conversion. */
 export interface SvgConversionContext {
@@ -62,23 +62,6 @@ export function buildFillLayers(node: FlatSceneNode, ctx: SvgConversionContext):
     }
   }
   return layers;
-}
-
-function gradientToSvgDef(g: GradientFill, id: string): string {
-  const stops = [...g.stops]
-    .sort((a, b) => a.position - b.position)
-    .map(
-      (s) =>
-        `<stop offset="${s.position}" stop-color="${s.color}"${
-          s.opacity != null && s.opacity !== 1 ? ` stop-opacity="${s.opacity}"` : ""
-        }/>`,
-    )
-    .join("");
-  if (g.type === "radial") {
-    const r = g.endRadius ?? (Math.hypot(g.endX - g.startX, g.endY - g.startY) || 0.5);
-    return `<radialGradient id="${id}" cx="${g.startX}" cy="${g.startY}" r="${r}">${stops}</radialGradient>`;
-  }
-  return `<linearGradient id="${id}" x1="${g.startX}" y1="${g.startY}" x2="${g.endX}" y2="${g.endY}">${stops}</linearGradient>`;
 }
 
 /**

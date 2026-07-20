@@ -81,6 +81,46 @@ function stripWrapperNoiseLines(input: string): string {
   return lines.join("\n");
 }
 
+/**
+ * Tracks backslash-escape and quote-string state across a character scan, so
+ * callers can skip escape/string-interior characters before applying their
+ * own depth-tracking (paren/brace/bracket). Shared by `splitOperationLines`
+ * and `extractBalancedArgs`, which otherwise duplicate this exact state
+ * machine around different depth-tracking logic.
+ */
+function createQuoteScanner() {
+  let escaped = false;
+  let stringDelimiter: '"' | "'" | "`" | null = null;
+  return {
+    /** Feed one character; returns true if the caller should skip further processing of it. */
+    consume(ch: string): boolean {
+      if (escaped) {
+        escaped = false;
+        return true;
+      }
+
+      if (ch === "\\") {
+        escaped = true;
+        return true;
+      }
+
+      if (stringDelimiter) {
+        if (ch === stringDelimiter) {
+          stringDelimiter = null;
+        }
+        return true;
+      }
+
+      if (ch === '"' || ch === "'" || ch === "`") {
+        stringDelimiter = ch;
+        return true;
+      }
+
+      return false;
+    },
+  };
+}
+
 function splitOperationLines(input: string): Array<{ text: string; line: number }> {
   const parts: Array<{ text: string; line: number }> = [];
   let current = "";
@@ -90,8 +130,7 @@ function splitOperationLines(input: string): Array<{ text: string; line: number 
   let parenDepth = 0;
   let braceDepth = 0;
   let bracketDepth = 0;
-  let escaped = false;
-  let stringDelimiter: '"' | "'" | "`" | null = null;
+  const scanner = createQuoteScanner();
 
   for (let i = 0; i < input.length; i++) {
     const ch = input[i];
@@ -101,25 +140,7 @@ function splitOperationLines(input: string): Array<{ text: string; line: number 
       line++;
     }
 
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-
-    if (ch === "\\") {
-      escaped = true;
-      continue;
-    }
-
-    if (stringDelimiter) {
-      if (ch === stringDelimiter) {
-        stringDelimiter = null;
-      }
-      continue;
-    }
-
-    if (ch === '"' || ch === "'" || ch === "`") {
-      stringDelimiter = ch;
+    if (scanner.consume(ch)) {
       continue;
     }
 
@@ -192,31 +213,12 @@ function extractBalancedArgs(str: string, lineNum: number): string {
   let depth = 1; // we already consumed the opening paren
   let braceDepth = 0;
   let bracketDepth = 0;
-  let stringDelimiter: '"' | "'" | "`" | null = null;
-  let escaped = false;
+  const scanner = createQuoteScanner();
 
   for (let i = 0; i < str.length; i++) {
     const ch = str[i];
 
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-
-    if (ch === "\\") {
-      escaped = true;
-      continue;
-    }
-
-    if (stringDelimiter) {
-      if (ch === stringDelimiter) {
-        stringDelimiter = null;
-      }
-      continue;
-    }
-
-    if (ch === '"' || ch === "'" || ch === "`") {
-      stringDelimiter = ch;
+    if (scanner.consume(ch)) {
       continue;
     }
 

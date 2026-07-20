@@ -433,6 +433,17 @@ export function getNodeEffectiveSize(
   return findWithPath(nodes, null);
 }
 
+/** Whether `child` is visible/enabled and contains the given local point. */
+function isChildHitAt(child: SceneNode, localX: number, localY: number): boolean {
+  if (child.visible === false || child.enabled === false) return false;
+  return (
+    localX >= child.x &&
+    localX <= child.x + child.width &&
+    localY >= child.y &&
+    localY <= child.y + child.height
+  );
+}
+
 /**
  * Find a child node at the given local coordinates (relative to parent)
  * Returns the ID of the child at that position, or null if none found
@@ -445,13 +456,7 @@ export function findChildAtPosition(
 ): string | null {
   for (let i = children.length - 1; i >= 0; i--) {
     const child = children[i];
-    if (child.visible === false || child.enabled === false) continue;
-    if (
-      localX >= child.x &&
-      localX <= child.x + child.width &&
-      localY >= child.y &&
-      localY <= child.y + child.height
-    ) {
+    if (isChildHitAt(child, localX, localY)) {
       return child.id;
     }
   }
@@ -469,13 +474,7 @@ export function findDeepestChildAtPosition(
 ): string | null {
   for (let i = children.length - 1; i >= 0; i--) {
     const child = children[i];
-    if (child.visible === false || child.enabled === false) continue;
-    if (
-      localX >= child.x &&
-      localX <= child.x + child.width &&
-      localY >= child.y &&
-      localY <= child.y + child.height
-    ) {
+    if (isChildHitAt(child, localX, localY)) {
       if (isContainerNode(child)) {
         const nestedId = findDeepestChildAtPosition(
           child.children,

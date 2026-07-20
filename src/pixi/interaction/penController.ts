@@ -4,12 +4,9 @@ import { useViewportStore } from "@/store/viewportStore";
 import { isNearWorldPoint } from "./pathEditGeometry";
 import { finishPenDraft } from "./penDraftCommit";
 import { DRAG_CLICK_THRESHOLD } from "./dragController";
-import type { InteractionContext } from "./types";
+import type { InteractionContext, PointerGestureHandlers } from "./types";
 
-export interface PenController {
-  handlePointerDown(e: PointerEvent, world: { x: number; y: number }): boolean;
-  handlePointerMove(e: PointerEvent, world: { x: number; y: number }): boolean;
-  handlePointerUp(e: PointerEvent, world: { x: number; y: number }): boolean;
+export interface PenController extends PointerGestureHandlers {
   isDrawing: () => boolean;
 }
 

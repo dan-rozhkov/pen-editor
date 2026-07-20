@@ -80,6 +80,20 @@ interface StyleResult {
   status: "created" | "updated";
 }
 
+/** Build a new `FillStyle` from a raw tool-call object, or push a formatted error and return null. */
+function buildFillStyle(obj: Record<string, unknown>, errors: string[]): FillStyle | null {
+  const paintResult = normalizePaint(obj);
+  if ("error" in paintResult) {
+    errors.push(`Fill style '${normalizeName(obj.name)}': ${paintResult.error}`);
+    return null;
+  }
+  return {
+    id: (obj.id as string) || generateFillStyleId(),
+    name: normalizeName(obj.name),
+    paint: paintResult.paint,
+  };
+}
+
 export const setStyles: ToolHandler = async (args) => {
   const rawFillStyles = args.fillStyles;
   const rawEffectStyles = args.effectStyles;
@@ -109,16 +123,8 @@ export const setStyles: ToolHandler = async (args) => {
     if (Array.isArray(rawFillStyles)) {
       const built: FillStyle[] = [];
       for (const obj of fillEntries) {
-        const paintResult = normalizePaint(obj);
-        if ("error" in paintResult) {
-          errors.push(`Fill style '${normalizeName(obj.name)}': ${paintResult.error}`);
-          continue;
-        }
-        const style: FillStyle = {
-          id: (obj.id as string) || generateFillStyleId(),
-          name: normalizeName(obj.name),
-          paint: paintResult.paint,
-        };
+        const style = buildFillStyle(obj, errors);
+        if (!style) continue;
         built.push(style);
         fillResults.push({ id: style.id, name: style.name, status: "created" });
       }
@@ -161,16 +167,8 @@ export const setStyles: ToolHandler = async (args) => {
         existingFillByName.set(updated.name, updated);
         fillResults.push({ id: match.id, name: updated.name, status: "updated" });
       } else {
-        const paintResult = normalizePaint(obj);
-        if ("error" in paintResult) {
-          errors.push(`Fill style '${normalizeName(obj.name)}': ${paintResult.error}`);
-          continue;
-        }
-        const style: FillStyle = {
-          id: (obj.id as string) || generateFillStyleId(),
-          name: normalizeName(obj.name),
-          paint: paintResult.paint,
-        };
+        const style = buildFillStyle(obj, errors);
+        if (!style) continue;
         useStyleStore.getState().addFillStyle(style);
         existingFillById.set(style.id, style);
         existingFillByName.set(style.name, style);

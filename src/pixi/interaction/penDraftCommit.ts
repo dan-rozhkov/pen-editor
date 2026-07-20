@@ -1,12 +1,9 @@
 import { usePenToolStore } from "@/store/penToolStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
-import { useSceneStore } from "@/store/sceneStore";
-import { useSelectionStore } from "@/store/selectionStore";
-import { useLayoutStore } from "@/store/layoutStore";
 import { anchorsToSVGPath, computeAnchorsBBox } from "@/utils/pathAnchors";
-import { findTopmostFrameContainingRectWithLayout } from "@/utils/nodeUtils";
 import { generateId } from "@/types/scene";
 import type { PathAnchor, SceneNode } from "@/types/scene";
+import { addDrawnNodeWithAutoParenting } from "./autoParentPlacement";
 
 // An open path needs at least 2 anchors (one segment); a closed contour
 // needs at least 3 (otherwise it's just a doubled-back line).
@@ -58,26 +55,7 @@ export function finishPenDraft(closed: boolean): void {
     },
   };
 
-  const sceneState = useSceneStore.getState();
-  const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-  const targetRect = { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height };
-  const targetFrame = findTopmostFrameContainingRectWithLayout(
-    sceneState.getNodes(),
-    targetRect,
-    calculateLayoutForFrame,
-  );
-
-  if (targetFrame) {
-    sceneState.addChildToFrame(targetFrame.frame.id, {
-      ...node,
-      x: bbox.x - targetFrame.absoluteX,
-      y: bbox.y - targetFrame.absoluteY,
-    });
-  } else {
-    sceneState.addNode(node);
-  }
-
-  useSelectionStore.getState().select(id);
+  addDrawnNodeWithAutoParenting(node, bbox, id);
 }
 
 /** Discard the in-progress pen draft entirely (no node created) and exit the tool. */

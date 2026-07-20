@@ -30,6 +30,7 @@ import {
   toggleFillVisibleAt,
   updateFillAt,
   type FillKind,
+  type PaintSectionProps,
 } from "@/components/properties/fillSectionUtils";
 
 // Strokes intentionally support only solid/linear/radial paints (no image/
@@ -40,16 +41,7 @@ const STROKE_TYPE_OPTIONS = [
   { value: "radial", label: "Radial" },
 ];
 
-interface StrokeSectionProps {
-  node: SceneNode;
-  onUpdate: (updates: Partial<SceneNode>) => void;
-  component: SceneNode | null;
-  colorVariables: Variable[];
-  activeTheme: ThemeName;
-  isOverridden: <T>(instanceVal: T | undefined, componentVal: T | undefined) => boolean;
-  resetOverride: (property: keyof SceneNode) => void;
-  mixedKeys?: Set<string>;
-}
+type StrokeSectionProps = PaintSectionProps;
 
 type StrokeMode = "unified" | "per-side";
 

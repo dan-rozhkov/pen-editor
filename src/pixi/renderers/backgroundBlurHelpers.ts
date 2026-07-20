@@ -1,8 +1,8 @@
 import { BlurFilter, Container, Graphics, Rectangle, Sprite, Texture } from "pixi.js";
 import type { Effect, FlatSceneNode, PerCornerRadius } from "@/types/scene";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
-import { drawRoundedShape } from "./fillStrokeHelpers";
 import { pickBackgroundBlurRadius } from "./blurHelpers";
+import { buildShapeMask } from "./shapeMask";
 
 /**
  * Background blur ("backdrop blur" / glassmorphism): blurs whatever is
@@ -136,16 +136,7 @@ export function isSizeOnlyBackgroundBlurChange(node: FlatSceneNode, prev: FlatSc
 
 /** Build the shape mask matching the node outline at the given rendered size. */
 function buildMask(node: FlatSceneNode, width: number, height: number): Graphics {
-  const mask = new Graphics();
-  mask.label = BACKDROP_MASK_LABEL;
-  if (node.type === "ellipse") {
-    mask.ellipse(width / 2, height / 2, width / 2, height / 2);
-  } else {
-    const cn = node as CornerNode;
-    drawRoundedShape(mask, width, height, cn.cornerRadius, cn.cornerRadiusPerCorner, cn.cornerSmoothing);
-  }
-  mask.fill(0xffffff);
-  return mask;
+  return buildShapeMask(node, width, height, BACKDROP_MASK_LABEL);
 }
 
 /** Remove the background-blur sprite + mask from a container (owns its baked texture). */

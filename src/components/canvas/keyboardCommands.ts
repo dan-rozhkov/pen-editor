@@ -38,11 +38,11 @@ const TOOL_BY_KEY_CODE = new Map(
 );
 
 /**
- * Dependencies the keydown handler needs from the host hook. These mirror the
- * store-mutating callbacks supplied to {@link useCanvasKeyboardShortcuts}, plus
- * the clipboard command handlers created by `createClipboardActions`.
+ * Store-mutating callbacks shared by the keydown handler and its host hook
+ * ({@link useCanvasKeyboardShortcuts}) — every dependency that isn't specific
+ * to clipboard wiring on either side.
  */
-export interface KeyDownHandlerDeps {
+export interface SharedKeyboardDeps {
   dimensions: { width: number; height: number };
   setIsSpacePressed: (value: boolean) => void;
   setIsPanning: (value: boolean) => void;
@@ -63,6 +63,14 @@ export interface KeyDownHandlerDeps {
   toggleTool: (tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon" | "star" | "embed" | "pencil" | "connector" | "pen" | "scale" | "measure") => void;
   cancelDrawing: () => void;
   clearSelection: () => void;
+}
+
+/**
+ * Dependencies the keydown handler needs from the host hook. Extends the
+ * shared deps with the clipboard command handlers created by
+ * `createClipboardActions`.
+ */
+export interface KeyDownHandlerDeps extends SharedKeyboardDeps {
   copySelection: () => void;
   cutSelection: () => void;
   copyStyleSelection: () => void;

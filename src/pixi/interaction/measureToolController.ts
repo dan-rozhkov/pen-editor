@@ -1,17 +1,17 @@
 import { useSceneStore } from "@/store/sceneStore";
-import { useLayoutStore } from "@/store/layoutStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useDevModeStore } from "@/store/devModeStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useMeasureStore } from "@/store/measureStore";
 import { useMeasurementsStore } from "@/store/measurementsStore";
-import { getNodeAbsolutePositionWithLayout, getNodeEffectiveSize, isDescendantOfFlat } from "@/utils/nodeUtils";
+import { isDescendantOfFlat } from "@/utils/nodeUtils";
 import { computeMeasurementLines, measureLineEndpoints } from "@/utils/measureUtils";
 import { distanceToSegment } from "@/utils/geometryUtils";
 import { getEmbedAwareDrawRect } from "@/pixi/selectionOverlay/helpers";
 import { formatMeasureLine } from "@/lib/inspect/units";
 import { findCanvasHitTargetAtPoint } from "./hitTesting";
-import type { InteractionContext, MeasureToolState } from "./types";
+import { resolveNodeAbsolutePosition } from "./nodeRectResolution";
+import type { InteractionContext, MeasureToolState, PointerGestureHandlers } from "./types";
 
 export interface MeasureRect {
   x: number;
@@ -30,10 +30,7 @@ export interface MeasureToolControllerOverrides {
   getRect?: GetRectFn;
 }
 
-export interface MeasureToolController {
-  handlePointerDown(e: PointerEvent, world: { x: number; y: number }): boolean;
-  handlePointerMove(e: PointerEvent, world: { x: number; y: number }): boolean;
-  handlePointerUp(e: PointerEvent, world: { x: number; y: number }): boolean;
+export interface MeasureToolController extends PointerGestureHandlers {
   isActive: () => boolean;
 }
 
@@ -71,14 +68,9 @@ function defaultHitTest(worldX: number, worldY: number): string | null {
 // — this used to be a separate, non-rounding implementation (a real
 // divergence for embed nodes), now backed by the shared helper.
 function defaultGetRect(nodeId: string): MeasureRect | null {
-  const state = useSceneStore.getState();
-  const node = state.nodesById[nodeId];
-  if (!node) return null;
-  const nodes = state.getNodes();
-  const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-  const pos = getNodeAbsolutePositionWithLayout(nodes, nodeId, calculateLayoutForFrame);
-  if (!pos) return null;
-  const size = getNodeEffectiveSize(nodes, nodeId, calculateLayoutForFrame);
+  const resolved = resolveNodeAbsolutePosition(nodeId);
+  if (!resolved) return null;
+  const { node, pos, size } = resolved;
   return getEmbedAwareDrawRect(node, pos, {
     width: size?.width ?? node.width,
     height: size?.height ?? node.height,

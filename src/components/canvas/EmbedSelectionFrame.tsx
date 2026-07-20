@@ -1,7 +1,6 @@
-import { useViewportStore } from "@/store/viewportStore";
 import { useSceneStore } from "@/store/sceneStore";
 import type { EmbedNode, FlatFrameNode } from "@/types/scene";
-import { embedScreenRect } from "./embedLayerGeometry";
+import { useEmbedScreenRect } from "./useEmbedScreenRect";
 
 const SELECTION_COLOR = "#0d99ff";
 const COMPONENT_SELECTION_COLOR = "#8b5cf6";
@@ -56,21 +55,7 @@ export function EmbedSelectionFrame({
   absoluteX,
   absoluteY,
 }: EmbedSelectionFrameProps) {
-  const scale = useViewportStore((s) => s.scale);
-  const panX = useViewportStore((s) => s.x);
-  const panY = useViewportStore((s) => s.y);
-  const dpr = window.devicePixelRatio || 1;
-
-  const rect = embedScreenRect(
-    absoluteX,
-    absoluteY,
-    node.width,
-    node.height,
-    scale,
-    panX,
-    panY,
-    dpr,
-  );
+  const rect = useEmbedScreenRect(absoluteX, absoluteY, node.width, node.height);
 
   const color = isInComponentContext(node.id)
     ? COMPONENT_SELECTION_COLOR

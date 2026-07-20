@@ -2,7 +2,9 @@ import type {
   Effect,
   GradientType,
   Paint,
+  SceneNode,
 } from "@/types/scene";
+import type { ThemeName, Variable } from "@/types/variable";
 import {
   createDefaultVideoPlayback,
   createGradientPaint,
@@ -15,6 +17,18 @@ import { getDefaultGradient } from "@/utils/gradientUtils";
 
 /** Discrete fill kinds shown in the per-paint type selector. */
 export type FillKind = "solid" | "linear" | "radial" | "image" | "pattern" | "video";
+
+/** Props shared by `FillSection` and `StrokeSection`. */
+export interface PaintSectionProps {
+  node: SceneNode;
+  onUpdate: (updates: Partial<SceneNode>) => void;
+  component: SceneNode | null;
+  colorVariables: Variable[];
+  activeTheme: ThemeName;
+  isOverridden: <T>(instanceVal: T | undefined, componentVal: T | undefined) => boolean;
+  resetOverride: (property: keyof SceneNode) => void;
+  mixedKeys?: Set<string>;
+}
 
 /**
  * One-line summary shown on a paint row's collapsed popover trigger. Shared

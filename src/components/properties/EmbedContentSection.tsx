@@ -1,12 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { CircleNotch } from "@phosphor-icons/react";
-import { toast } from "sonner";
 import type { EmbedNode } from "@/types/scene";
 import { PropertySection } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
-import { useSceneStore } from "@/store/sceneStore";
-import { useSelectionStore } from "@/store/selectionStore";
 import { writeTextToClipboard } from "@/utils/clipboard";
+import { useConvertEmbedToDesign } from "@/components/properties/useConvertEmbedToDesign";
 
 interface EmbedContentSectionProps {
   node: EmbedNode;
@@ -14,8 +12,7 @@ interface EmbedContentSectionProps {
 
 export function EmbedContentSection({ node }: EmbedContentSectionProps) {
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
-  const [converting, setConverting] = useState(false);
-  const conversionInFlightRef = useRef(false);
+  const { converting, convertToDesign: handleConvertToDesign } = useConvertEmbedToDesign(node.id);
   const copyResetRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
@@ -36,24 +33,6 @@ export function EmbedContentSection({ node }: EmbedContentSectionProps) {
     const copied = await writeTextToClipboard(value);
     setCopyStatus(copied ? "copied" : "error");
     resetCopyStatus();
-  };
-
-  const handleConvertToDesign = async () => {
-    if (conversionInFlightRef.current) return;
-    conversionInFlightRef.current = true;
-    setConverting(true);
-    try {
-      const newFrameId = await useSceneStore.getState().convertEmbedToDesign(node.id);
-      if (newFrameId) {
-        useSelectionStore.getState().setSelectedIds([newFrameId]);
-      }
-    } catch (error) {
-      console.error("Failed to convert embed to design:", error);
-      toast.error("Couldn't convert this embed to a design — please try again.");
-    } finally {
-      conversionInFlightRef.current = false;
-      setConverting(false);
-    }
   };
 
   return (

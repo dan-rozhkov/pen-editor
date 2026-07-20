@@ -844,6 +844,29 @@ function remeasureTextHeights(
 }
 
 /**
+ * Run the flex sizing pipeline (build items, wrap into lines, resolve main
+ * axis, resolve cross axis, re-measure wrapped text, then re-resolve cross
+ * axis on the post-remeasure sizes — see `remeasureTextHeights` for why that
+ * second cross-size pass is required). Shared by `calculateFrameLayout` and
+ * `calculateFrameIntrinsicSize`.
+ */
+function layoutFlexItems(
+  visibleChildren: SceneNode[],
+  container: FlexContainer,
+): { items: FlexItem[]; lines: FlexItem[][]; lineCrossSizes: number[] } {
+  const items = visibleChildren.map((child) => buildFlexItem(child, container));
+
+  const lines = layoutLines(items, container);
+  for (const line of lines) resolveMainAxisSizes(line, container);
+
+  resolveAndAssignLineCrossSizes(lines, container);
+  remeasureTextHeights(items, visibleChildren, container);
+  const lineCrossSizes = resolveAndAssignLineCrossSizes(lines, container);
+
+  return { items, lines, lineCrossSizes };
+}
+
+/**
  * Calculate layout for a Frame and its children.
  * Returns updated positions for all visible children.
  */
@@ -865,23 +888,7 @@ export function calculateFrameLayout(frame: FrameNode): LayoutResult[] {
     return [];
   }
 
-  const items = visibleChildren.map((child) => buildFlexItem(child, container));
-
-  const lines = layoutLines(items, container);
-  for (const line of lines) resolveMainAxisSizes(line, container);
-
-  resolveAndAssignLineCrossSizes(lines, container);
-
-  // Second pass: re-measure text heights using layout-computed widths. Text
-  // wrapping depends on the final width, which is only known after
-  // main/cross sizing resolves fill_container widths. This mutates
-  // crossBaseSize for remeasured items (a wrapped-taller text child grows
-  // its line's cross size), so line cross sizes and stretch assignment must
-  // be recomputed from the post-remeasure sizes before positioning —
-  // otherwise a taller remeasured child would overlap the next wrapped line.
-  remeasureTextHeights(items, visibleChildren, container);
-
-  const lineCrossSizes = resolveAndAssignLineCrossSizes(lines, container);
+  const { items, lines, lineCrossSizes } = layoutFlexItems(visibleChildren, container);
 
   positionLines(lines, lineCrossSizes, container);
 
@@ -922,17 +929,11 @@ export function calculateFrameIntrinsicSize(
     };
   }
 
-  const items = visibleChildren.map((child) => buildFlexItem(child, container));
-
   // Run sizing phases to get accurate sizes. Cross sizes are resolved both
   // before and after remeasureTextHeights (which can change a remeasured
   // item's crossBaseSize) so the intrinsicCross sum below reflects the final
   // sizes — see the same ordering fix in calculateFrameLayout.
-  const lines = layoutLines(items, container);
-  for (const line of lines) resolveMainAxisSizes(line, container);
-  resolveAndAssignLineCrossSizes(lines, container);
-  remeasureTextHeights(items, visibleChildren, container);
-  const lineCrossSizes = resolveAndAssignLineCrossSizes(lines, container);
+  const { items, lineCrossSizes } = layoutFlexItems(visibleChildren, container);
 
   const totalGap =
     items.length > 1 ? container.mainGap * (items.length - 1) : 0;

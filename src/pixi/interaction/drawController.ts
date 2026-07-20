@@ -9,12 +9,9 @@ import {
   findTopmostFrameContainingRectWithLayout,
 } from "@/utils/nodeUtils";
 import { generatePolygonPoints } from "@/utils/polygonUtils";
-import type { InteractionContext, DrawState } from "./types";
+import type { InteractionContext, DrawState, PointerGestureHandlers } from "./types";
 
-export interface DrawController {
-  handlePointerDown(e: PointerEvent, world: { x: number; y: number }): boolean;
-  handlePointerMove(e: PointerEvent, world: { x: number; y: number }): boolean;
-  handlePointerUp(e: PointerEvent, world: { x: number; y: number }): boolean;
+export interface DrawController extends PointerGestureHandlers {
   isDrawing: () => boolean;
 }
 

@@ -103,6 +103,13 @@ export interface TransformState {
   }> | null;
 }
 
+/** Shared pointer-event handler shape every gesture controller implements. */
+export interface PointerGestureHandlers {
+  handlePointerDown(e: PointerEvent, world: { x: number; y: number }): boolean;
+  handlePointerMove(e: PointerEvent, world: { x: number; y: number }): boolean;
+  handlePointerUp(e: PointerEvent, world: { x: number; y: number }): boolean;
+}
+
 export interface MeasureToolState {
   /** Node id recorded on pointerDown; the measurement's "from" endpoint. */
   fromId: string | null;

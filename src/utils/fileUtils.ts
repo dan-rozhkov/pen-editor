@@ -59,8 +59,10 @@ export interface DocumentData {
 
 const CURRENT_VERSION = '1.1'
 
+type PenPageInput = { id: string; name: string; nodes: SceneNode[]; pageBackground: string; guides?: Guide[]; slideOrder?: string[]; measurements?: PersistedMeasurement[]; comments?: CommentThread[] }
+
 export function serializeDocument(
-  pages: { id: string; name: string; nodes: SceneNode[]; pageBackground: string; guides?: Guide[]; slideOrder?: string[]; measurements?: PersistedMeasurement[]; comments?: CommentThread[] }[],
+  pages: PenPageInput[],
   variables: Variable[],
   activeTheme: ThemeName,
   componentArtifacts: Record<string, ComponentArtifact> = {},
@@ -133,7 +135,7 @@ export function deserializeDocument(json: string): DocumentData {
 }
 
 export function downloadDocument(
-  pages: { id: string; name: string; nodes: SceneNode[]; pageBackground: string; guides?: Guide[]; slideOrder?: string[]; measurements?: PersistedMeasurement[]; comments?: CommentThread[] }[],
+  pages: PenPageInput[],
   variables: Variable[],
   activeTheme: ThemeName,
   componentArtifacts: Record<string, ComponentArtifact> = {},

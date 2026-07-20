@@ -1,5 +1,6 @@
 import { extractCssUrl } from "@/lib/htmlToDesign";
 import { loadImage } from "./foreignObject";
+import { isSourceVisuallyEmpty } from "./visualEmptinessCheck";
 
 export interface PreloadedRenderAssets {
   imageMap: Map<string, HTMLImageElement>;
@@ -90,6 +91,14 @@ function serializeSvgWithInlineComputedStyles(svg: SVGSVGElement, styleTexts: st
     cloneEl.setAttribute("style", declarations.join(""));
   }
 
+  return finalizeSvgClone(svg, clone, styleTexts);
+}
+
+/** Apply the resolved width/height/viewBox/xmlns attributes and any inlined
+ *  `<style>` text to `clone`, then serialize it. Shared by the rich
+ *  (computed-styles) and basic serialization paths, which differ only in how
+ *  `clone`'s own attributes/styles were populated before this call. */
+function finalizeSvgClone(svg: SVGSVGElement, clone: SVGSVGElement, styleTexts: string[]): string {
   const { width, height } = resolveSvgDimensions(svg, clone);
   clone.setAttribute("width", `${width}`);
   clone.setAttribute("height", `${height}`);
@@ -108,18 +117,7 @@ function serializeSvgWithInlineComputedStyles(svg: SVGSVGElement, styleTexts: st
 
 function serializeSvgBasic(svg: SVGSVGElement, styleTexts: string[]): string {
   const clone = svg.cloneNode(true) as SVGSVGElement;
-  const { width, height } = resolveSvgDimensions(svg, clone);
-  clone.setAttribute("width", `${width}`);
-  clone.setAttribute("height", `${height}`);
-  if (!clone.getAttribute("viewBox")) clone.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  if (!clone.getAttribute("xmlns")) clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-  if (!clone.getAttribute("xmlns:xlink")) clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
-  if (styleTexts.length > 0) {
-    const styleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");
-    styleEl.textContent = styleTexts.join("\n");
-    clone.insertBefore(styleEl, clone.firstChild);
-  }
-  return new XMLSerializer().serializeToString(clone);
+  return finalizeSvgClone(svg, clone, styleTexts);
 }
 
 async function loadSvgTextAsImage(svgText: string): Promise<HTMLImageElement | null> {
@@ -134,26 +132,10 @@ async function loadSvgTextAsImage(svgText: string): Promise<HTMLImageElement | n
   }
 }
 
-function isImageVisuallyEmpty(image: HTMLImageElement): boolean {
-  const sampleCanvas = document.createElement("canvas");
-  sampleCanvas.width = 16;
-  sampleCanvas.height = 16;
-  const sampleCtx = sampleCanvas.getContext("2d");
-  if (!sampleCtx) return false;
-
-  sampleCtx.clearRect(0, 0, sampleCanvas.width, sampleCanvas.height);
-  sampleCtx.drawImage(image, 0, 0, sampleCanvas.width, sampleCanvas.height);
-  const sample = sampleCtx.getImageData(0, 0, sampleCanvas.width, sampleCanvas.height).data;
-  for (let i = 3; i < sample.length; i += 4) {
-    if (sample[i] !== 0) return false;
-  }
-  return true;
-}
-
 async function loadInlineSvgAsImage(svg: SVGSVGElement, styleTexts: string[]): Promise<HTMLImageElement | null> {
   const rich = serializeSvgWithInlineComputedStyles(svg, styleTexts);
   const richImage = await loadSvgTextAsImage(rich);
-  if (richImage && !isImageVisuallyEmpty(richImage)) return richImage;
+  if (richImage && !isSourceVisuallyEmpty(richImage)) return richImage;
 
   // Fallback for browsers that fail with verbose computed-style serialization.
   const basic = serializeSvgBasic(svg, styleTexts);

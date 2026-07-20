@@ -1,6 +1,7 @@
 import { Container, Graphics, FillGradient } from "pixi.js";
 import type { BLEND_MODES } from "pixi.js";
 import type {
+  BaseNode,
   FlatSceneNode,
   GradientFill,
   Paint,
@@ -346,6 +347,30 @@ export function drawRoundedShape(
 }
 
 /**
+ * Check if the fill/stroke paint properties shared by every fillable node
+ * type (color/binding/opacity for fill and stroke, stroke width/align,
+ * gradient fill, the `fills` paint stack, and size) changed. Shared base for
+ * the per-node-type "does this need to redraw" checks (path, polygon, and
+ * `hasVisualPropsChanged` below).
+ */
+export function hasBasePaintPropsChanged(node: BaseNode, prev: BaseNode): boolean {
+  return (
+    node.width !== prev.width ||
+    node.height !== prev.height ||
+    node.fill !== prev.fill ||
+    node.fillBinding !== prev.fillBinding ||
+    node.fillOpacity !== prev.fillOpacity ||
+    node.stroke !== prev.stroke ||
+    node.strokeBinding !== prev.strokeBinding ||
+    node.strokeOpacity !== prev.strokeOpacity ||
+    node.strokeWidth !== prev.strokeWidth ||
+    node.strokeAlign !== prev.strokeAlign ||
+    node.gradientFill !== prev.gradientFill ||
+    node.fills !== prev.fills
+  );
+}
+
+/**
  * Check if any visual properties affecting the vector shape (fill, stroke,
  * size, cornerRadius) changed.
  *
@@ -360,16 +385,7 @@ export function hasVisualPropsChanged(
   prev: FlatSceneNode,
 ): boolean {
   return (
-    node.width !== prev.width ||
-    node.height !== prev.height ||
-    node.fill !== prev.fill ||
-    node.fillBinding !== prev.fillBinding ||
-    node.fillOpacity !== prev.fillOpacity ||
-    node.stroke !== prev.stroke ||
-    node.strokeBinding !== prev.strokeBinding ||
-    node.strokeOpacity !== prev.strokeOpacity ||
-    node.strokeWidth !== prev.strokeWidth ||
-    node.strokeAlign !== prev.strokeAlign ||
+    hasBasePaintPropsChanged(node, prev) ||
     node.strokeWidthPerSide !== prev.strokeWidthPerSide ||
     (node as { cornerRadius?: number }).cornerRadius !==
       (prev as { cornerRadius?: number }).cornerRadius ||
@@ -377,8 +393,6 @@ export function hasVisualPropsChanged(
       (prev as { cornerRadiusPerCorner?: PerCornerRadius }).cornerRadiusPerCorner ||
     (node as { cornerSmoothing?: number }).cornerSmoothing !==
       (prev as { cornerSmoothing?: number }).cornerSmoothing ||
-    node.gradientFill !== prev.gradientFill ||
-    node.fills !== prev.fills ||
     node.strokes !== prev.strokes
   );
 }

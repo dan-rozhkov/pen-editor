@@ -1,12 +1,11 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback } from "react";
 import { CircleNotch, PenNibIcon, PencilSimpleLineIcon } from "@phosphor-icons/react";
-import { toast } from "sonner";
 import { IconButton } from "@/components/ui/IconButton";
 import type { EmbedNode } from "@/types/scene";
-import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
+import { useConvertEmbedToDesign } from "@/components/properties/useConvertEmbedToDesign";
 
 interface EmbedActionBarProps {
   node: EmbedNode;
@@ -19,8 +18,7 @@ export function EmbedActionBar({
   absoluteX,
   absoluteY,
 }: EmbedActionBarProps) {
-  const [isConverting, setIsConverting] = useState(false);
-  const conversionInFlightRef = useRef(false);
+  const { converting: isConverting, convertToDesign } = useConvertEmbedToDesign(node.id);
   const editorMode = useEditorModeStore((s) => s.mode);
   const scale = useViewportStore((s) => s.scale);
   const panX = useViewportStore((s) => s.x);
@@ -46,26 +44,12 @@ export function EmbedActionBar({
   );
 
   const handleConvertToDesign = useCallback(
-    async (e: React.MouseEvent) => {
+    (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if (conversionInFlightRef.current) return;
-      conversionInFlightRef.current = true;
-      setIsConverting(true);
-      try {
-        const newFrameId = await useSceneStore.getState().convertEmbedToDesign(node.id);
-        if (newFrameId) {
-          useSelectionStore.getState().setSelectedIds([newFrameId]);
-        }
-      } catch (error) {
-        console.error("Failed to convert embed to design:", error);
-        toast.error("Couldn't convert this embed to a design — please try again.");
-      } finally {
-        conversionInFlightRef.current = false;
-        setIsConverting(false);
-      }
+      void convertToDesign();
     },
-    [node.id],
+    [convertToDesign],
   );
 
   // The action bar only offers editing affordances (inline edit, convert) —

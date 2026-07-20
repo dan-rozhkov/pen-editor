@@ -12,7 +12,7 @@ import {
   adjustmentsToCssFilter,
 } from "@/lib/imageAdjustments/imageAdjustments";
 import { imageModeToCssSize } from "@/lib/cssBackground";
-import { CropRectGrid, MediaModeRow, MediaPreviewReplace } from "@/components/properties/mediaFillControls";
+import { MediaCropControls, MediaPreviewReplace } from "@/components/properties/mediaFillControls";
 
 type EditableImageFill = {
   url: string;
@@ -155,23 +155,17 @@ export function ImageFillEditor({
         />
       </MediaPreviewReplace>
 
-      <MediaModeRow
+      <MediaCropControls
         mode={imageFill.mode}
         onModeChange={handleModeChange}
         cropEditorOpen={cropEditorOpen}
         onToggleCropEditor={() => setCropEditorOpen((v) => !v)}
         cropTooltip="Crop image"
+        cropped={cropped}
+        crop={crop}
+        onCropChange={handleCropChange}
+        onResetCrop={handleResetCrop}
       />
-
-      {cropped && (
-        <div className="flex items-center gap-2">
-          <Button type="button" size="sm" variant="ghost" onClick={handleResetCrop}>
-            Reset Crop
-          </Button>
-        </div>
-      )}
-
-      {cropEditorOpen && <CropRectGrid crop={crop} onChange={handleCropChange} />}
 
       <div className="-mx-3 flex flex-col gap-2 border-t border-border-default px-3 pt-3">
         <div className="flex flex-col gap-2">

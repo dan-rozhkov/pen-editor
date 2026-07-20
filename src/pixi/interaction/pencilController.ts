@@ -1,18 +1,12 @@
-import { useSceneStore } from "@/store/sceneStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
-import { useSelectionStore } from "@/store/selectionStore";
-import { useLayoutStore } from "@/store/layoutStore";
 import type { SceneNode } from "@/types/scene";
 import { generateId } from "@/types/scene";
-import { findTopmostFrameContainingRectWithLayout } from "@/utils/nodeUtils";
 import { pointsToSmoothSVGPath } from "@/utils/pathSmoothing";
 import { getPathBBox } from "@/utils/svgUtils";
-import type { InteractionContext } from "./types";
+import { addDrawnNodeWithAutoParenting } from "./autoParentPlacement";
+import type { InteractionContext, PointerGestureHandlers } from "./types";
 
-export interface PencilController {
-  handlePointerDown(e: PointerEvent, world: { x: number; y: number }): boolean;
-  handlePointerMove(e: PointerEvent, world: { x: number; y: number }): boolean;
-  handlePointerUp(e: PointerEvent, world: { x: number; y: number }): boolean;
+export interface PencilController extends PointerGestureHandlers {
   isDrawing: () => boolean;
 }
 
@@ -87,28 +81,7 @@ export function createPencilController(_context: InteractionContext): PencilCont
         },
       };
 
-      // Auto-parent into frames
-      const sceneState = useSceneStore.getState();
-      const currentNodes = sceneState.getNodes();
-      const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-      const targetRect = { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height };
-      const targetFrame = findTopmostFrameContainingRectWithLayout(
-        currentNodes,
-        targetRect,
-        calculateLayoutForFrame,
-      );
-
-      if (targetFrame) {
-        sceneState.addChildToFrame(targetFrame.frame.id, {
-          ...node,
-          x: bbox.x - targetFrame.absoluteX,
-          y: bbox.y - targetFrame.absoluteY,
-        });
-      } else {
-        sceneState.addNode(node);
-      }
-
-      useSelectionStore.getState().select(id);
+      addDrawnNodeWithAutoParenting(node, bbox, id);
       useDrawModeStore.getState().endDrawing();
       return true;
     },

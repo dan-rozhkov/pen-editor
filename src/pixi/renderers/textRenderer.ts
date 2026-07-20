@@ -336,6 +336,24 @@ function buildPathContent(container: Container, node: TextNode): void {
 }
 
 /**
+ * Shared setup for underline/strikethrough decorations: bails out when
+ * neither is active, otherwise creates the `Graphics` object they're drawn
+ * into plus the font-size-derived thickness both rendering paths use.
+ */
+function beginTextDecorations(
+  node: TextNode,
+): { g: Graphics; fontSize: number; thickness: number; underline: boolean } | null {
+  const underline = hasEffectiveUnderline(node);
+  if (!underline && !node.strikethrough) return null;
+
+  const g = new Graphics();
+  g.label = "text-decorations";
+  const fontSize = node.fontSize ?? 16;
+  const thickness = Math.max(1, Math.round(fontSize / 14));
+  return { g, fontSize, thickness, underline };
+}
+
+/**
  * Underline/strikethrough for text-on-path: `drawTextDecorations`/
  * `drawListTextDecorations` draw axis-aligned `Graphics.rect()`s, which only
  * make sense for a straight baseline. On a curve each glyph gets its own
@@ -350,13 +368,9 @@ function drawPathTextDecorations(
   effectiveSide: "left" | "right",
   fillColor: string,
 ): void {
-  const underline = hasEffectiveUnderline(node);
-  if (!underline && !node.strikethrough) return;
-
-  const g = new Graphics();
-  g.label = "text-decorations";
-  const fontSize = node.fontSize ?? 16;
-  const thickness = Math.max(1, Math.round(fontSize / 14));
+  const decorations = beginTextDecorations(node);
+  if (!decorations) return;
+  const { g, fontSize, thickness, underline } = decorations;
   const underlineOffset = fontSize * 1.05;
   const strikeOffset = fontSize * 0.55;
   // Decoration segments sit "below" the glyph baseline in the glyph's own
@@ -511,13 +525,9 @@ function drawListTextDecorations(
   lineYs: number[],
   fillColor: string,
 ): void {
-  const underline = hasEffectiveUnderline(node);
-  if (!underline && !node.strikethrough) return;
-
-  const g = new Graphics();
-  g.label = "text-decorations";
-  const fontSize = node.fontSize ?? 16;
-  const thickness = Math.max(1, Math.round(fontSize / 14));
+  const decorations = beginTextDecorations(node);
+  if (!decorations) return;
+  const { g, fontSize, thickness, underline } = decorations;
 
   lines.forEach((line, i) => {
     if (!line.text) return;

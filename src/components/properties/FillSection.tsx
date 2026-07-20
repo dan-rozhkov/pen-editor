@@ -4,7 +4,6 @@ import type {
   Paint,
   SceneNode,
 } from "@/types/scene";
-import type { ThemeName, Variable } from "@/types/variable";
 import {
   ColorInput,
   NumberInput,
@@ -31,19 +30,11 @@ import {
   toggleFillVisibleAt,
   updateFillAt,
   type FillKind,
+  type PaintSectionProps,
 } from "@/components/properties/fillSectionUtils";
 import { BlendModeDropdown, PaintSwatch, StackRowShell, useDragReorder } from "@/components/properties/stackRow";
 
-interface FillSectionProps {
-  node: SceneNode;
-  onUpdate: (updates: Partial<SceneNode>) => void;
-  component: SceneNode | null;
-  colorVariables: Variable[];
-  activeTheme: ThemeName;
-  isOverridden: <T>(instanceVal: T | undefined, componentVal: T | undefined) => boolean;
-  resetOverride: (property: keyof SceneNode) => void;
-  mixedKeys?: Set<string>;
-}
+type FillSectionProps = PaintSectionProps;
 
 const FILL_TYPE_OPTIONS = [
   { value: "solid", label: "Solid" },

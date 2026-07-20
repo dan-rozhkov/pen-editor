@@ -108,6 +108,36 @@ function computeWrappingData(
   return { boundsMap, minX, minY, maxX, maxY, insertIndex };
 }
 
+/** Validate that all ids share a parent and resolve them to their nodes. */
+function resolveSameParentNodes(
+  ids: string[],
+  state: SceneState,
+): { parentId: string | null | undefined; selectedNodes: FlatSceneNode[] } | null {
+  const parentId = state.parentById[ids[0]];
+  if (!ids.every((id) => state.parentById[id] === parentId)) return null;
+
+  const selectedNodes = ids.map((id) => state.nodesById[id]).filter(Boolean);
+  if (selectedNodes.length !== ids.length) return null;
+
+  return { parentId, selectedNodes };
+}
+
+/** Resolve same-parent nodes plus their wrapping bounds/insert index. */
+function prepareWrapping(
+  ids: string[],
+  state: SceneState,
+): { parentId: string | null | undefined; selectedNodes: FlatSceneNode[]; boundsMap: Map<string, Bounds>; minX: number; minY: number; maxX: number; maxY: number; insertIndex: number } | null {
+  const resolved = resolveSameParentNodes(ids, state);
+  if (!resolved) return null;
+  const { parentId, selectedNodes } = resolved;
+
+  const layoutMap = buildLayoutMap(parentId, state);
+  const { boundsMap, minX, minY, maxX, maxY, insertIndex } =
+    computeWrappingData(ids, selectedNodes, parentId, state, layoutMap);
+
+  return { parentId, selectedNodes, boundsMap, minX, minY, maxX, maxY, insertIndex };
+}
+
 /** Rebuild nodesById/parentById/childrenById/rootIds after wrapping ids into a new container. */
 function applyContainerWrapping(
   ids: string[],
@@ -157,17 +187,9 @@ export function createComplexOperations(
       const state = get();
       if (ids.length < 2) return null;
 
-      // All nodes must share the same parent
-      const parentId = state.parentById[ids[0]];
-      if (!ids.every((id) => state.parentById[id] === parentId)) return null;
-
-      // Get the actual nodes
-      const selectedNodes = ids.map((id) => state.nodesById[id]).filter(Boolean);
-      if (selectedNodes.length !== ids.length) return null;
-
-      const layoutMap = buildLayoutMap(parentId, state);
-      const { boundsMap, minX, minY, maxX, maxY, insertIndex } =
-        computeWrappingData(ids, selectedNodes, parentId, state, layoutMap);
+      const prep = prepareWrapping(ids, state);
+      if (!prep) return null;
+      const { parentId, boundsMap, minX, minY, maxX, maxY, insertIndex } = prep;
 
       saveHistory(state);
 
@@ -376,16 +398,9 @@ export function createComplexOperations(
       const state = get();
       if (ids.length < 1) return null;
 
-      // All nodes must share the same parent
-      const parentId = state.parentById[ids[0]];
-      if (!ids.every((id) => state.parentById[id] === parentId)) return null;
-
-      const selectedNodes = ids.map((id) => state.nodesById[id]).filter(Boolean);
-      if (selectedNodes.length !== ids.length) return null;
-
-      const layoutMap = buildLayoutMap(parentId, state);
-      const { boundsMap, minX, minY, maxX, maxY, insertIndex } =
-        computeWrappingData(ids, selectedNodes, parentId, state, layoutMap);
+      const prep = prepareWrapping(ids, state);
+      if (!prep) return null;
+      const { parentId, boundsMap, minX, minY, maxX, maxY, insertIndex } = prep;
 
       saveHistory(state);
 
@@ -433,11 +448,9 @@ export function createComplexOperations(
       const state = get();
       if (ids.length < 1) return null;
 
-      const parentId = state.parentById[ids[0]];
-      if (!ids.every((id) => state.parentById[id] === parentId)) return null;
-
-      const selectedNodes = ids.map((id) => state.nodesById[id]).filter(Boolean);
-      if (selectedNodes.length !== ids.length) return null;
+      const resolved = resolveSameParentNodes(ids, state);
+      if (!resolved) return null;
+      const { parentId, selectedNodes } = resolved;
       if (!selectedNodes.every((node) => BOOLEAN_SUPPORTED_TYPES.has(node.type))) return null;
 
       const layoutMap = buildLayoutMap(parentId, state);

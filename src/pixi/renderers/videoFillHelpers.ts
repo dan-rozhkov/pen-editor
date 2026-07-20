@@ -4,6 +4,7 @@ import { getResolvedRenderableFills } from "./colorHelpers";
 import { drawRoundedShape } from "./fillStrokeHelpers";
 import { computeFillSpriteLayout } from "@/lib/imageCrop/spriteLayout";
 import { withTexture } from "./imageFillHelpers";
+import { fillLayerInsertIndex } from "./fillLayerInsertIndex";
 import { parseYouTubeId, youTubeThumbnailUrl } from "@/lib/video/youtube";
 import { videoPlaybackStarted, videoPlaybackStopped } from "./videoPlaybackLoop";
 
@@ -65,6 +66,20 @@ const stateByContainer = new WeakMap<Container, VideoFillState>();
 /** Containers that already have the destroy-cleanup hook attached. */
 const destroyHooked = new WeakSet<Container>();
 
+/** Detach `sprite` (and its mask, if any) from `container` and destroy the
+ *  sprite — but NOT its texture, which the caller owns separately. Shared by
+ *  the real-video and YouTube-thumbnail teardown paths. */
+function detachAndDestroySprite(container: Container, sprite: Sprite): void {
+  const mask = sprite.mask;
+  sprite.mask = null;
+  if (sprite.parent) container.removeChild(sprite);
+  if (mask instanceof Graphics && !mask.destroyed) {
+    if (mask.parent) container.removeChild(mask);
+    mask.destroy();
+  }
+  if (!sprite.destroyed) sprite.destroy({ children: false, texture: false });
+}
+
 /** Topmost renderable video paint's fill, if any. */
 function topVideoFill(node: FlatSceneNode): VideoFill | undefined {
   const fills = getResolvedRenderableFills(node);
@@ -96,15 +111,7 @@ function teardownVideo(container: Container): void {
   // are already destroyed too — skip touching them, but STILL release the
   // VideoSource/texture/element below (container.destroy leaves textures alone).
   if (!container.destroyed) {
-    const mask = sprite.mask;
-    sprite.mask = null;
-    if (sprite.parent) container.removeChild(sprite);
-    if (mask instanceof Graphics && !mask.destroyed) {
-      if (mask.parent) container.removeChild(mask);
-      mask.destroy();
-    }
-    // Destroy the sprite (not its texture — we own that separately below).
-    if (!sprite.destroyed) sprite.destroy({ children: false, texture: false });
+    detachAndDestroySprite(container, sprite);
   }
 
   // Release the derived sub-frame texture (a plain Texture over the shared
@@ -152,14 +159,7 @@ function teardownYouTubeThumbnail(container: Container): void {
   if (container.destroyed) return;
 
   const { sprite, baseTexture, derivedTexture } = state;
-  const mask = sprite.mask;
-  sprite.mask = null;
-  if (sprite.parent) container.removeChild(sprite);
-  if (mask instanceof Graphics && !mask.destroyed) {
-    if (mask.parent) container.removeChild(mask);
-    mask.destroy();
-  }
-  if (!sprite.destroyed) sprite.destroy({ children: false, texture: false });
+  detachAndDestroySprite(container, sprite);
   if (derivedTexture && derivedTexture !== baseTexture) derivedTexture.destroy(false);
 }
 
@@ -227,7 +227,7 @@ function applyYouTubeThumbnail(
     youtubeStateByContainer.set(container, state);
 
     layoutYouTubeSprite(state, video, width, height);
-    const index = videoInsertIndex(container);
+    const index = fillLayerInsertIndex(container);
     container.addChildAt(sprite, Math.min(index, container.children.length));
     rebuildMask(state);
   });
@@ -327,18 +327,6 @@ function layoutVideoSprite(
   const sourceW = state.el.videoWidth || state.baseTexture.width || containerW;
   const sourceH = state.el.videoHeight || state.baseTexture.height || containerH;
   applySpriteLayout(state, video, sourceW, sourceH, containerW, containerH);
-}
-
-/** Insertion index: above background + any image fill, below child nodes. */
-function videoInsertIndex(container: Container): number {
-  const imageFill = container.getChildByLabel("image-fill");
-  if (imageFill) return container.getChildIndex(imageFill) + 1;
-  const bg =
-    container.getChildByLabel("rect-bg") ??
-    container.getChildByLabel("ellipse-bg") ??
-    container.getChildByLabel("frame-bg");
-  if (bg) return container.getChildIndex(bg) + 1;
-  return 0;
 }
 
 /** Apply the live playback flags from the fill onto the `<video>` element. */
@@ -501,7 +489,7 @@ function applyVideoFill(
 
   // Initial placement (best-effort with whatever size is known so far).
   layoutVideoSprite(state, video, width, height);
-  const index = videoInsertIndex(container);
+  const index = fillLayerInsertIndex(container);
   container.addChildAt(state.sprite, Math.min(index, container.children.length));
   rebuildMask(state);
   applyPlaybackFlags(state.el, video);

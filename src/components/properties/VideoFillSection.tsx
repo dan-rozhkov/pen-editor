@@ -8,7 +8,7 @@ import { FULL_CROP_RECT, clampCropRect, isFullCropRect } from "@/lib/imageCrop/c
 import { fillModeToObjectFit } from "@/lib/cssBackground";
 import { createDefaultVideoPlayback } from "@/utils/fillUtils";
 import { parseYouTubeId, youTubeThumbnailUrl } from "@/lib/video/youtube";
-import { CropRectGrid, MediaModeRow, MediaPreviewReplace } from "@/components/properties/mediaFillControls";
+import { MediaCropControls, MediaPreviewReplace } from "@/components/properties/mediaFillControls";
 
 /**
  * Editor for a single video fill — the moving-image sibling of
@@ -137,23 +137,17 @@ export function VideoFillEditor({
         )}
       </MediaPreviewReplace>
 
-      <MediaModeRow
+      <MediaCropControls
         mode={video.mode}
         onModeChange={handleModeChange}
         cropEditorOpen={cropEditorOpen}
         onToggleCropEditor={() => setCropEditorOpen((v) => !v)}
         cropTooltip="Crop video"
+        cropped={cropped}
+        crop={crop}
+        onCropChange={handleCropChange}
+        onResetCrop={handleResetCrop}
       />
-
-      {cropped && (
-        <div className="flex items-center gap-2">
-          <Button type="button" size="sm" variant="ghost" onClick={handleResetCrop}>
-            Reset Crop
-          </Button>
-        </div>
-      )}
-
-      {cropEditorOpen && <CropRectGrid crop={crop} onChange={handleCropChange} />}
 
       <div className="-mx-3 flex flex-col gap-2 border-t border-border-default px-3 pt-3">
         <CheckboxInput

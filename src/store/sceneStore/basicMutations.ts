@@ -39,6 +39,82 @@ import type { StoreApi } from "zustand";
 type SetState = StoreApi<SceneState>["setState"];
 type GetState = StoreApi<SceneState>["getState"];
 
+function computeUpdatedNode(
+  existing: FlatSceneNode,
+  updates: Partial<SceneNode>,
+  deepMergeKeys?: readonly string[],
+): FlatSceneNode {
+  let updated = { ...existing, ...updates } as FlatSceneNode;
+  if (deepMergeKeys) {
+    const existingRecord = existing as unknown as Record<string, unknown>;
+    const updatedRecord = updated as unknown as Record<string, unknown>;
+    const updatesRecord = updates as Record<string, unknown>;
+    for (const key of deepMergeKeys) {
+      const existingSub = existingRecord[key];
+      const updateSub = updatesRecord[key];
+      if (
+        existingSub &&
+        typeof existingSub === "object" &&
+        updateSub &&
+        typeof updateSub === "object"
+      ) {
+        updatedRecord[key] = { ...existingSub, ...updateSub };
+      }
+    }
+  }
+  if (updated.type === "text" && hasTextMeasureProps(updates)) {
+    updated = syncTextDimensions(updated);
+  }
+  return updated;
+}
+
+function applySingleNodeUpdate(
+  state: SceneState,
+  id: string,
+  existing: FlatSceneNode,
+  updates: Partial<SceneNode>,
+) {
+  const updated = computeUpdatedNode(existing, updates);
+  const newNodesById = { ...state.nodesById, [id]: updated };
+  const componentArtifactsById = markComponentArtifactsStaleFromNative(
+    state.componentArtifactsById,
+    [existing],
+  );
+  return { newNodesById, componentArtifactsById };
+}
+
+function applyNodeUpdatesById(
+  state: SceneState,
+  ids: string[],
+  updatesById: Record<string, Partial<SceneNode>>,
+) {
+  const newNodesById = { ...state.nodesById };
+  const staleSources: FlatSceneNode[] = [];
+  for (const id of ids) {
+    const existing = state.nodesById[id];
+    newNodesById[id] = computeUpdatedNode(existing, updatesById[id]);
+    staleSources.push(existing);
+  }
+  const componentArtifactsById = markComponentArtifactsStaleFromNative(
+    state.componentArtifactsById,
+    staleSources,
+  );
+  return { newNodesById, componentArtifactsById };
+}
+
+function applySameUpdateToNodes(
+  newNodesById: Record<string, FlatSceneNode>,
+  ids: string[],
+  updates: Partial<SceneNode>,
+  deepMergeKeys?: readonly string[],
+) {
+  for (const id of ids) {
+    const existing = newNodesById[id];
+    if (!existing) continue;
+    newNodesById[id] = computeUpdatedNode(existing, updates, deepMergeKeys);
+  }
+}
+
 export function createBasicMutations(set: SetState, get: GetState) {
   return {
     addNode: (node: SceneNode) => {
@@ -101,15 +177,11 @@ export function createBasicMutations(set: SetState, get: GetState) {
         if (!existing) return state;
         saveHistory(state);
 
-        let updated = { ...existing, ...updates } as FlatSceneNode;
-        if (updated.type === "text" && hasTextMeasureProps(updates)) {
-          updated = syncTextDimensions(updated);
-        }
-
-        const newNodesById = { ...state.nodesById, [id]: updated };
-        const componentArtifactsById = markComponentArtifactsStaleFromNative(
-          state.componentArtifactsById,
-          [existing],
+        const { newNodesById, componentArtifactsById } = applySingleNodeUpdate(
+          state,
+          id,
+          existing,
+          updates,
         );
 
         // Marked right before returning the changed state — NOT before this
@@ -126,16 +198,7 @@ export function createBasicMutations(set: SetState, get: GetState) {
       set((state) => {
         saveHistory(state);
         const newNodesById = { ...state.nodesById };
-        const needsTextSync = hasTextMeasureProps(updates);
-        for (const id of ids) {
-          const existing = newNodesById[id];
-          if (!existing) continue;
-          let updated = { ...existing, ...updates } as FlatSceneNode;
-          if (updated.type === "text" && needsTextSync) {
-            updated = syncTextDimensions(updated);
-          }
-          newNodesById[id] = updated;
-        }
+        applySameUpdateToNodes(newNodesById, ids, updates);
         const componentArtifactsById = markComponentArtifactsStaleFromNative(
           state.componentArtifactsById,
           ids.map((id) => state.nodesById[id]),
@@ -154,31 +217,7 @@ export function createBasicMutations(set: SetState, get: GetState) {
       set((state) => {
         saveHistory(state);
         const newNodesById = { ...state.nodesById };
-        const needsTextSync = hasTextMeasureProps(updates);
-        const updatesRecord = updates as Record<string, unknown>;
-        for (const id of ids) {
-          const existing = newNodesById[id];
-          if (!existing) continue;
-          const existingRecord = existing as unknown as Record<string, unknown>;
-          let updated = { ...existing, ...updates } as FlatSceneNode;
-          const updatedRecord = updated as unknown as Record<string, unknown>;
-          for (const key of deepMergeKeys) {
-            const existingSub = existingRecord[key];
-            const updateSub = updatesRecord[key];
-            if (
-              existingSub &&
-              typeof existingSub === "object" &&
-              updateSub &&
-              typeof updateSub === "object"
-            ) {
-              updatedRecord[key] = { ...existingSub, ...updateSub };
-            }
-          }
-          if (updated.type === "text" && needsTextSync) {
-            updated = syncTextDimensions(updated);
-          }
-          newNodesById[id] = updated;
-        }
+        applySameUpdateToNodes(newNodesById, ids, updates, deepMergeKeys);
         const componentArtifactsById = markComponentArtifactsStaleFromNative(
           state.componentArtifactsById,
           ids.map((id) => state.nodesById[id]),
@@ -193,15 +232,11 @@ export function createBasicMutations(set: SetState, get: GetState) {
         const existing = state.nodesById[id];
         if (!existing) return state;
 
-        let updated = { ...existing, ...updates } as FlatSceneNode;
-        if (updated.type === "text" && hasTextMeasureProps(updates)) {
-          updated = syncTextDimensions(updated);
-        }
-
-        const newNodesById = { ...state.nodesById, [id]: updated };
-        const componentArtifactsById = markComponentArtifactsStaleFromNative(
-          state.componentArtifactsById,
-          [existing],
+        const { newNodesById, componentArtifactsById } = applySingleNodeUpdate(
+          state,
+          id,
+          existing,
+          updates,
         );
 
         markNodesDirty([id]);
@@ -213,21 +248,10 @@ export function createBasicMutations(set: SetState, get: GetState) {
         const ids = Object.keys(updatesById).filter((id) => state.nodesById[id]);
         if (ids.length === 0) return state;
 
-        const newNodesById = { ...state.nodesById };
-        const staleSources: FlatSceneNode[] = [];
-        for (const id of ids) {
-          const existing = state.nodesById[id];
-          const updates = updatesById[id];
-          let updated = { ...existing, ...updates } as FlatSceneNode;
-          if (updated.type === "text" && hasTextMeasureProps(updates)) {
-            updated = syncTextDimensions(updated);
-          }
-          newNodesById[id] = updated;
-          staleSources.push(existing);
-        }
-        const componentArtifactsById = markComponentArtifactsStaleFromNative(
-          state.componentArtifactsById,
-          staleSources,
+        const { newNodesById, componentArtifactsById } = applyNodeUpdatesById(
+          state,
+          ids,
+          updatesById,
         );
 
         markNodesDirty(ids);
@@ -240,21 +264,10 @@ export function createBasicMutations(set: SetState, get: GetState) {
         if (ids.length === 0) return state;
         saveHistory(state);
 
-        const newNodesById = { ...state.nodesById };
-        const staleSources: FlatSceneNode[] = [];
-        for (const id of ids) {
-          const existing = state.nodesById[id];
-          const updates = updatesById[id];
-          let updated = { ...existing, ...updates } as FlatSceneNode;
-          if (updated.type === "text" && hasTextMeasureProps(updates)) {
-            updated = syncTextDimensions(updated);
-          }
-          newNodesById[id] = updated;
-          staleSources.push(existing);
-        }
-        const componentArtifactsById = markComponentArtifactsStaleFromNative(
-          state.componentArtifactsById,
-          staleSources,
+        const { newNodesById, componentArtifactsById } = applyNodeUpdatesById(
+          state,
+          ids,
+          updatesById,
         );
 
         markNodesDirty(ids);

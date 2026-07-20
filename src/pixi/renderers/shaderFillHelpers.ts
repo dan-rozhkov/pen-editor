@@ -1,6 +1,7 @@
 import { Container, Graphics, Sprite, Texture } from "pixi.js";
 import type { FlatSceneNode, PerCornerRadius, ShaderConfig } from "@/types/scene";
-import { drawRoundedShape } from "./fillStrokeHelpers";
+import { fillLayerInsertIndex } from "./fillLayerInsertIndex";
+import { buildShapeMask } from "./shapeMask";
 import { SHADER_REGISTRY } from "@/lib/shaders/registry";
 import { rasterizeShader } from "@/lib/shaders/shaderRaster";
 import { extractNodeImage } from "@/lib/shaders/nodeRaster";
@@ -144,28 +145,7 @@ export function destroyShaderFill(container: Container): void {
 
 /** Build the shape mask matching the node outline at the given rendered size. */
 function buildMask(node: FlatSceneNode, width: number, height: number): Graphics {
-  const mask = new Graphics();
-  mask.label = SHADER_MASK_LABEL;
-  if (node.type === "ellipse") {
-    mask.ellipse(width / 2, height / 2, width / 2, height / 2);
-  } else {
-    const cn = node as CornerNode;
-    drawRoundedShape(mask, width, height, cn.cornerRadius, cn.cornerRadiusPerCorner, cn.cornerSmoothing);
-  }
-  mask.fill(0xffffff);
-  return mask;
-}
-
-/** Index right after the node's fill layers (background + any image fill). */
-function fillInsertIndex(container: Container): number {
-  const imageFill = container.getChildByLabel("image-fill");
-  if (imageFill) return container.getChildIndex(imageFill) + 1;
-  const bg =
-    container.getChildByLabel("rect-bg") ??
-    container.getChildByLabel("ellipse-bg") ??
-    container.getChildByLabel("frame-bg");
-  if (bg) return container.getChildIndex(bg) + 1;
-  return 0;
+  return buildShapeMask(node, width, height, SHADER_MASK_LABEL);
 }
 
 /**
@@ -188,7 +168,7 @@ export function placeShaderSprite(
   sprite.height = height;
 
   const mask = buildMask(node, width, height);
-  const index = fillInsertIndex(container);
+  const index = fillLayerInsertIndex(container);
   container.addChildAt(sprite, index);
   container.addChildAt(mask, index + 1);
   sprite.mask = mask;

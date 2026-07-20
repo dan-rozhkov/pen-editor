@@ -11,6 +11,7 @@ import { getNodeEffectiveSize } from "@/utils/nodeUtils";
 import { resolveTextResize, minTextWidth } from "./textResize";
 import { computeConstrainedRect } from "@/utils/constraintsLayout";
 import { snapResizeEdge } from "@/utils/smartGuideUtils";
+import { computeHandleDragOrigin } from "./handleDragOrigin";
 
 function clamp(value: number, min?: number, max?: number): number {
   let v = value;
@@ -95,14 +96,7 @@ export function createTransformController(context: InteractionContext): Transfor
             state.nodeId = handleHit.nodeId;
             state.corner = handleHit.corner;
             state.slotContext = null;
-            state.startNodeX = node.x;
-            state.startNodeY = node.y;
-            state.startNodeW = handleHit.width;
-            state.startNodeH = handleHit.height;
-            state.absX = handleHit.absX;
-            state.absY = handleHit.absY;
-            state.parentOffsetX = handleHit.absX - node.x;
-            state.parentOffsetY = handleHit.absY - node.y;
+            Object.assign(state, computeHandleDragOrigin(node, handleHit));
             state.startLinePoints = node.type === "line" ? [...(node as LineNode).points] : null;
             // Constraints apply only to direct children of a frame WITHOUT
             // auto-layout (auto-layout frames size children via Yoga).

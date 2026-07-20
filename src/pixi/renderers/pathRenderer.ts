@@ -10,7 +10,7 @@ import {
   parseAlpha,
   escapeXmlAttr,
 } from "./colorHelpers";
-import { buildPixiGradient, fillSolidPaint } from "./fillStrokeHelpers";
+import { buildPixiGradient, fillSolidPaint, hasBasePaintPropsChanged } from "./fillStrokeHelpers";
 import { isOutlineRenderMode, strokeOutlinePath } from "./outlineHelpers";
 
 /**
@@ -206,20 +206,9 @@ export function updatePathContainer(
 ): void {
   if (
     node.geometry !== prev.geometry ||
-    node.width !== prev.width ||
-    node.height !== prev.height ||
-    node.fill !== prev.fill ||
-    node.fillBinding !== prev.fillBinding ||
-    node.fillOpacity !== prev.fillOpacity ||
-    node.stroke !== prev.stroke ||
-    node.strokeBinding !== prev.strokeBinding ||
-    node.strokeOpacity !== prev.strokeOpacity ||
-    node.strokeWidth !== prev.strokeWidth ||
-    node.strokeAlign !== prev.strokeAlign ||
     node.pathStroke !== prev.pathStroke ||
-    node.gradientFill !== prev.gradientFill ||
     node.fillRule !== prev.fillRule ||
-    node.fills !== prev.fills
+    hasBasePaintPropsChanged(node, prev)
   ) {
     const gfx = container.getChildByLabel("path-gfx") as Graphics;
     if (gfx) {

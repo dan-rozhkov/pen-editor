@@ -1,35 +1,15 @@
 import { useEffect } from "react";
-import type { SceneNode, HistorySnapshot } from "@/types/scene";
-import type { BooleanOpKind } from "@/lib/booleanOps";
+import type { SceneNode } from "@/types/scene";
 import { createClipboardActions } from "./clipboardActions";
 import { createStyleClipboardActions } from "./styleClipboardActions";
 import { createKeyDownHandler } from "./keyboardCommands";
+import type { SharedKeyboardDeps } from "./keyboardCommands";
 import { copyAsCss, copyAsSvg } from "./copyAsActions";
 
-interface CanvasKeyboardShortcutsParams {
-  dimensions: { width: number; height: number };
+interface CanvasKeyboardShortcutsParams extends SharedKeyboardDeps {
   isMiddleMouseDown: boolean;
-  setIsSpacePressed: (value: boolean) => void;
-  setIsPanning: (value: boolean) => void;
   addNode: (node: SceneNode) => void;
   addChildToFrame: (frameId: string, child: SceneNode) => void;
-  deleteNode: (id: string) => void;
-  updateNode: (id: string, updates: Partial<SceneNode>) => void;
-  moveNode: (nodeId: string, targetParentId: string, index: number) => void;
-  groupNodes: (ids: string[]) => string | null;
-  ungroupNodes: (ids: string[]) => string[];
-  wrapInAutoLayoutFrame: (ids: string[]) => string | null;
-  booleanOperation: (ids: string[], op: BooleanOpKind) => string | null;
-  restoreSnapshot: (snapshot: HistorySnapshot) => void;
-  saveHistory: (snapshot: HistorySnapshot) => void;
-  startBatch: () => void;
-  endBatch: () => void;
-  undo: (snapshot: HistorySnapshot) => HistorySnapshot | null;
-  redo: (snapshot: HistorySnapshot) => HistorySnapshot | null;
-  fitToContent: (nodes: SceneNode[], width: number, height: number) => void;
-  toggleTool: (tool: "frame" | "rect" | "ellipse" | "text" | "line" | "polygon" | "star" | "embed" | "pencil" | "connector" | "pen" | "scale" | "measure") => void;
-  cancelDrawing: () => void;
-  clearSelection: () => void;
   copyNodes: (nodes: SceneNode[]) => void;
 }
 
