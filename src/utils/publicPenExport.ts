@@ -4,6 +4,7 @@ import type {
   GroupNode,
   JustifyContent,
   Paint,
+  PaintBlendMode,
   PathStroke,
   SceneNode,
   ShaderConfig,
@@ -101,6 +102,7 @@ interface PenNoiseEffect {
   noiseSize: number;
   noiseSizeY?: number;
   density: number;
+  blendMode?: PaintBlendMode;
   visible?: boolean;
 }
 
@@ -457,6 +459,7 @@ function exportEffects(node: SceneNode): PenEffect[] | undefined {
         ...(e.secondaryColor !== undefined ? { secondaryColor: e.secondaryColor } : {}),
         ...(e.opacity !== undefined ? { opacity: e.opacity } : {}),
         ...(e.noiseSizeY !== undefined ? { noiseSizeY: e.noiseSizeY } : {}),
+        ...(e.blendMode !== undefined ? { blendMode: e.blendMode } : {}),
         ...(e.visible === false ? { visible: false } : {}),
       };
     }

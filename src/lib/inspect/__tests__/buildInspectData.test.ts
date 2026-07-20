@@ -232,6 +232,46 @@ describe("buildInspectData", () => {
     expect(effects!.rows[0].swatchBackground).toBe("#00000040");
   });
 
+  it("builds an Effects row with a swatch for a mono noise effect", () => {
+    const rect: FlatSceneNode = {
+      id: "r4b",
+      type: "rect",
+      name: "Card2b",
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      effects: [
+        { type: "noise", noiseType: "mono", color: "#00000080", noiseSize: 4, density: 0.5 },
+      ],
+    };
+    const nodesById = { r4b: rect };
+    const data = buildOrThrow(baseArgs(nodesById, "r4b"));
+
+    const effects = data.sections.find((s) => s.title === "Effects");
+    expect(effects!.rows[0].swatchBackground).toBe("#00000080");
+  });
+
+  it("omits the swatch for a multi noise effect", () => {
+    const rect: FlatSceneNode = {
+      id: "r4c",
+      type: "rect",
+      name: "Card2c",
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      effects: [
+        { type: "noise", noiseType: "multi", color: "#00000080", noiseSize: 4, density: 0.5 },
+      ],
+    };
+    const nodesById = { r4c: rect };
+    const data = buildOrThrow(baseArgs(nodesById, "r4c"));
+
+    const effects = data.sections.find((s) => s.title === "Effects");
+    expect(effects!.rows[0].swatchBackground).toBeUndefined();
+  });
+
   it("builds a 4-value Radius row for per-corner radius", () => {
     const rect: FlatSceneNode = {
       id: "r5",

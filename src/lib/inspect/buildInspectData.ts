@@ -371,7 +371,11 @@ function describeEffect(effect: ShadowEffect | BlurEffect | BackgroundBlurEffect
   if (effect.type === "background-blur") {
     return { label: "Background blur", value: fmt(effect.radius, units, remBase) };
   }
-  return { label: "Noise", value: fmt(effect.noiseSize, units, remBase), swatchBackground: effect.color };
+  return {
+    label: "Noise",
+    value: fmt(effect.noiseSize, units, remBase),
+    ...(effect.noiseType !== "multi" ? { swatchBackground: effect.color } : {}),
+  };
 }
 
 function buildEffectsSection(

@@ -60,6 +60,17 @@ describe("needsRaster", () => {
     expect(needsRaster(rect(), [], [{ type: "blur", radius: 4, visible: false }])).toBe(false);
   });
 
+  it("visible noise effect rasters", () => {
+    expect(
+      needsRaster(rect(), [], [{ type: "noise", noiseType: "mono", color: "#00000080", noiseSize: 4, density: 0.5 }]),
+    ).toBe(true);
+    expect(
+      needsRaster(rect(), [], [
+        { type: "noise", noiseType: "mono", color: "#00000080", noiseSize: 4, density: 0.5, visible: false },
+      ]),
+    ).toBe(false);
+  });
+
   it("image/pattern/video paint rasters", () => {
     expect(needsRaster(rect(), [{ id: "p", type: "image", image: { url: "x", mode: "fill" } }], [])).toBe(true);
     expect(

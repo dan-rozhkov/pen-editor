@@ -100,7 +100,7 @@ export function toDtcg(input: ExportInput): { document: DtcgDocument; warnings: 
     const shadows = es.effects.filter((e): e is ShadowEffect => e.type === "shadow");
     const skipped = es.effects.length - shadows.length;
     if (skipped > 0) {
-      warnings.push(`Effect style "${es.name}" has ${skipped} blur effect(s) — no DTCG equivalent; skipped.`);
+      warnings.push(`Effect style "${es.name}" has ${skipped} non-shadow effect(s) — no DTCG equivalent; skipped.`);
     }
     if (shadows.length === 0) {
       if (es.effects.length > 0) warnings.push(`Effect style "${es.name}" has no shadows; skipped entirely.`);

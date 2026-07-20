@@ -118,6 +118,24 @@ describe("collectSelectionColors", () => {
     ]);
   });
 
+  it("picks up noise effect color and secondaryColor", () => {
+    const noiseNode = makeNode({
+      id: "noise-node",
+      effects: [
+        {
+          type: "noise",
+          noiseType: "duo",
+          color: "#222222",
+          secondaryColor: "#333333",
+          noiseSize: 4,
+          density: 0.5,
+        },
+      ],
+    });
+    const colors = collectSelectionColors([noiseNode], { "noise-node": noiseNode }, {});
+    expect(colors.map((c) => c.color)).toEqual(["#222222", "#333333"]);
+  });
+
   it("skips variable-bound fields (fill/stroke/effect colorBinding)", () => {
     const boundFill = makeNode({
       id: "bound-fill",
@@ -205,6 +223,31 @@ describe("remapSelectionColor", () => {
     expect(result.n1).toMatchObject({
       effects: [expect.objectContaining({ color: "#ff0000" })],
       effect: undefined,
+    });
+  });
+
+  it("rewrites noise effect color and secondaryColor independently", () => {
+    const node = makeNode({
+      id: "n1",
+      effects: [
+        {
+          type: "noise",
+          noiseType: "duo",
+          color: "#00000040",
+          secondaryColor: "#ffffff40",
+          noiseSize: 4,
+          density: 0.5,
+        },
+      ],
+    });
+    const result = remapSelectionColor([node], { n1: node }, {}, "#00000040", "#ff0000");
+    expect(result.n1).toMatchObject({
+      effects: [expect.objectContaining({ color: "#ff0000", secondaryColor: "#ffffff40" })],
+    });
+
+    const result2 = remapSelectionColor([node], { n1: node }, {}, "#ffffff40", "#00ff00");
+    expect(result2.n1).toMatchObject({
+      effects: [expect.objectContaining({ color: "#00000040", secondaryColor: "#00ff00" })],
     });
   });
 

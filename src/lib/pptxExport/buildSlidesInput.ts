@@ -86,7 +86,7 @@ export function needsRaster(node: SceneNode, fills: Paint[], effects: Effect[]):
   const visibleFills = fills.filter((p) => p.visible !== false);
   const visibleEffects = effects.filter((e) => e.visible !== false);
 
-  if (visibleEffects.some((e) => e.type === "blur" || e.type === "background-blur")) return true;
+  if (visibleEffects.some((e) => e.type === "blur" || e.type === "background-blur" || e.type === "noise")) return true;
   if (visibleFills.some((p) => p.type === "image" || p.type === "pattern" || p.type === "video")) return true;
   if (visibleFills.length > 1) return true;
   if (visibleFills.some((p) => p.blendMode && p.blendMode !== "normal")) return true;

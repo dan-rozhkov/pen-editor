@@ -64,6 +64,10 @@ function forEachNodeColor(node: ColorNode, onColor: (hex: string) => void): void
     if (effect.type === "shadow" && !effect.colorBinding) {
       onColor(effect.color);
     }
+    if (effect.type === "noise") {
+      onColor(effect.color);
+      if (effect.secondaryColor !== undefined) onColor(effect.secondaryColor);
+    }
   }
 }
 
@@ -163,7 +167,7 @@ function remapNodeColorUpdates(
     }
   }
 
-  // Effects (shadow colors)
+  // Effects (shadow + noise colors)
   const effects = getEffects(node);
   let effectsChanged = false;
   const nextEffects: Effect[] = effects.map((effect) => {
@@ -174,6 +178,18 @@ function remapNodeColorUpdates(
     ) {
       effectsChanged = true;
       return { ...effect, color: to } as ShadowEffect;
+    }
+    if (effect.type === "noise") {
+      let next = effect;
+      if (normalizeColorKey(effect.color) === fromKey) {
+        effectsChanged = true;
+        next = { ...next, color: to };
+      }
+      if (effect.secondaryColor !== undefined && normalizeColorKey(effect.secondaryColor) === fromKey) {
+        effectsChanged = true;
+        next = { ...next, secondaryColor: to };
+      }
+      return next;
     }
     return effect;
   });

@@ -34,6 +34,7 @@ import {
 import { StylePicker } from "@/components/properties/StylePicker";
 import { useStyleStore } from "@/store/styleStore";
 import { BlendModeDropdown, StackRowShell, useDragReorder } from "@/components/properties/stackRow";
+import { MAX_NOISE_EFFECTS } from "@/pixi/renderers/noiseEffectHelpers";
 
 const NOISE_TYPE_OPTIONS: { value: NoiseEffect["noiseType"]; label: string }[] = [
   { value: "mono", label: "Mono" },
@@ -125,7 +126,7 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => handleAdd(createNoiseEffect())}
-              disabled={noiseCount >= 2}
+              disabled={noiseCount >= MAX_NOISE_EFFECTS}
             >
               Noise
             </DropdownMenuItem>
