@@ -1,0 +1,7 @@
+{
+  "minTokens": 70,
+  "threshold": 0.1,
+  "ignore": ["**/__tests__/**", "**/vendor/**"],
+  "reporters": ["consoleFull"],
+  "gitignore": true
+}

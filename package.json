@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "test:e2e": "playwright test",
     "test:e2e:pwa": "playwright test --config=playwright.pwa.config.ts",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "check:dup": "jscpd src"
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.230",
@@ -57,6 +58,7 @@
     "fake-indexeddb": "^6.2.5",
     "globals": "^16.5.0",
     "happy-dom": "^20.10.2",
+    "jscpd": "^5.0.12",
     "playwright": "^1.58.2",
     "puppeteer": "^24.36.0",
     "typescript": "~5.9.3",
