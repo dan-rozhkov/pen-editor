@@ -193,6 +193,7 @@ describe("set_styles", () => {
                 color: "#00000080",
                 secondaryColor: "#ffffffff",
                 noiseSize: 2,
+                noiseSizeY: 3,
                 density: 0.3,
               },
             ],
@@ -209,6 +210,7 @@ describe("set_styles", () => {
       color: "#00000080",
       secondaryColor: "#ffffffff",
       noiseSize: 2,
+      noiseSizeY: 3,
       density: 0.3,
     });
 
@@ -223,6 +225,7 @@ describe("set_styles", () => {
           color: "#00000080",
           secondaryColor: "#ffffffff",
           noiseSize: 2,
+          noiseSizeY: 3,
           density: 0.3,
         },
       ],

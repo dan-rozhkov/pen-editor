@@ -306,7 +306,7 @@ describe("batch_design", () => {
       const result = JSON.parse(
         await batchDesign({
           operations:
-            'r=I(document, {type: "rectangle", name: "Grain", width: 10, height: 10, effects: [{type: "noise", noiseType: "duo", color: "#00000080", secondaryColor: "#ffffffff", noiseSize: 2, density: 0.3}]})',
+            'r=I(document, {type: "rectangle", name: "Grain", width: 10, height: 10, effects: [{type: "noise", noiseType: "duo", color: "#00000080", secondaryColor: "#ffffffff", noiseSize: 2, noiseSizeY: 3, density: 0.3}]})',
         })
       );
       expect(result.success).toBe(true);
@@ -319,6 +319,7 @@ describe("batch_design", () => {
         color: "#00000080",
         secondaryColor: "#ffffffff",
         noiseSize: 2,
+        noiseSizeY: 3,
         density: 0.3,
       });
     });
