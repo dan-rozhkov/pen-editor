@@ -819,4 +819,11 @@ export function applyLayoutSize(
   // Shader fill: the layout-driven size change bypasses node.width/height (and
   // thus shouldRebakeShader), so resize the baked sprite here and debounce-rebake.
   if (node.shader && !isOutlineRenderMode()) resizeShaderFill(container, node, layoutWidth, layoutHeight);
+
+  // Noise/grain: the layout-driven size change bypasses node.width/height (and
+  // thus the effects re-apply gate in updateNodeContainer), so re-apply here.
+  // No debounce needed — noise regeneration is cheap/synchronous, unlike the shader bake.
+  if (!isOutlineRenderMode()) {
+    applyNoiseEffects(container, node, getResolvedRenderableEffects(node), layoutWidth, layoutHeight);
+  }
 }
