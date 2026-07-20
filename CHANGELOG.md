@@ -8,6 +8,23 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.52.1] - 2026-07-20
+
+### Changed
+- **Internal: deduplicated production code across the codebase.** A jscpd scan
+  (`--min-tokens 70`) found 49 exact clone pairs in production code; 43 were
+  extracted into shared helpers (the remaining two are intentional light/dark
+  theme blocks in `index.css`, and test-file clones were left as is). New shared
+  modules include `LruTextureCache`, `buildShapeMask`, `fillLayerInsertIndex`
+  (pixi renderers), `PointerGestureHandlers`, `addDrawnNodeWithAutoParenting`,
+  `computeHandleDragOrigin`, `computeConnectorBounds` (pixi interaction),
+  `computeUpdatedNode` (sceneStore mutators), `ToolDropdownGroup`,
+  `MediaCropControls`, `useEmbedScreenRect`, `useConvertEmbedToDesign`
+  (components), and `applyStyleToNodes`, `svgGradientDef`, `createQuoteScanner`
+  (lib). Net −62 lines with 11 new helper modules; no behavior changes — AI tool
+  handler signatures/results, command-palette ids, memoization patterns, and the
+  dirty-tracking convention are all preserved.
+
 ## [0.52.0] - 2026-07-20
 
 ### Added
