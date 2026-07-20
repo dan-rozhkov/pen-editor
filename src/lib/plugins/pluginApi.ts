@@ -3,11 +3,17 @@ import { toolHandlers } from "@/lib/toolRegistry";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
+import { useLayoutStore } from "@/store/layoutStore";
+import { getNodeAbsolutePositionWithLayout } from "@/utils/nodeUtils";
 import type { SceneNode } from "@/types/scene";
 import { PLUGIN_ALLOWED_TOOLS } from "./toolAllowlist";
 
+/** encodeURIComponent leaves '.' unescaped; also escape it so pluginId/key
+ * segments containing dots can't collide with the `.` separators below. */
+const enc = (s: string) => encodeURIComponent(s).replace(/\./g, "%2E");
+
 function storageKey(pluginId: string, key: string): string {
-  return `pen.plugin.${pluginId}.${key}`;
+  return `pen.plugin.${enc(pluginId)}.${enc(key)}`;
 }
 
 function asStringArray(value: unknown, what: string): string[] {
@@ -25,17 +31,24 @@ async function runTool(name: unknown, args: unknown): Promise<string> {
   return handler((args ?? {}) as Record<string, unknown>);
 }
 
-/** Collect tree nodes matching ids (any depth) for viewport fitting. */
-function findTreeNodes(nodes: SceneNode[], ids: ReadonlySet<string>): SceneNode[] {
-  const found: SceneNode[] = [];
-  const walk = (list: SceneNode[]) => {
-    for (const node of list) {
-      if (ids.has(node.id)) found.push(node);
-      if ("children" in node && node.children) walk(node.children as SceneNode[]);
-    }
-  };
-  walk(nodes);
-  return found;
+/**
+ * Resolve ids to synthetic root-level nodes carrying ABSOLUTE x/y, suitable
+ * for `fitToContent`/`calculateNodesBounds`, which treat top-level array
+ * entries as canvas-absolute. `nodesById` entries are parent-relative.
+ */
+function resolveAbsoluteNodes(ids: ReadonlySet<string>): SceneNode[] {
+  const { nodesById, getNodes } = useSceneStore.getState();
+  const tree = getNodes();
+  const calc = useLayoutStore.getState().calculateLayoutForFrame;
+  const resolved: SceneNode[] = [];
+  for (const id of ids) {
+    const node = nodesById[id];
+    if (!node) continue;
+    const abs = getNodeAbsolutePositionWithLayout(tree, id, calc);
+    if (!abs) continue;
+    resolved.push({ ...node, x: abs.x, y: abs.y, children: [] } as SceneNode);
+  }
+  return resolved;
 }
 
 /**
@@ -65,11 +78,11 @@ export async function callPluginMethod(
       const { nodesById } = useSceneStore.getState();
       const known = ids.filter((id) => nodesById[id]);
       useSelectionStore.getState().setSelectedIds(known);
-      return null;
+      return known;
     }
     case "viewport.zoomTo": {
       const ids = new Set(asStringArray(args[0], "viewport.zoomTo ids"));
-      const targets = findTreeNodes(useSceneStore.getState().getNodes(), ids);
+      const targets = resolveAbsoluteNodes(ids);
       if (targets.length === 0) throw new Error("viewport.zoomTo: no matching nodes");
       useViewportStore.getState().fitToContent(targets, window.innerWidth, window.innerHeight);
       return null;
@@ -81,7 +94,12 @@ export async function callPluginMethod(
     case "storage.get": {
       if (typeof args[0] !== "string") throw new Error("storage.get: key must be a string");
       const raw = localStorage.getItem(storageKey(pluginId, args[0]));
-      return raw === null ? null : (JSON.parse(raw) as unknown);
+      if (raw === null) return null;
+      try {
+        return JSON.parse(raw) as unknown;
+      } catch {
+        throw new Error(`storage.get: corrupt value for key "${args[0]}"`);
+      }
     }
     case "storage.set": {
       if (typeof args[0] !== "string") throw new Error("storage.set: key must be a string");
