@@ -8,6 +8,24 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-07-20
+
+### Added
+- **Pasted/converted colors auto-bind to design Variables instead of arriving as
+  hardcoded hex.** When HTML is pasted (an html.to.design capture) or an embed is
+  converted to design, color styles that trace back to a CSS custom property now
+  bind to a color `Variable` minted from that token's definition, so they
+  re-resolve on theme switch: `background-color → fillBinding`, `border-color →
+  strokeBinding`, and text `color →` the text node's fill binding. The capture
+  bundle now emits the file's document-root design tokens (`:root`/`html` +
+  `.dark`/`[data-theme=dark]` toggles) as `{light, dark}` values, so an imported
+  token carries both theme values. Variables dedupe by name against the store
+  (first import wins); the resolved hex stays as each binding's fallback. Fonts
+  and spacing remain resolved for now — the scene model has no binding for
+  typography or auto-layout spacing yet (`src/lib/h2dPaste/h2dToScene.ts`,
+  `src/lib/h2dCapture/captureEmbed.ts`, re-vendored `src/vendor/h2dCapture/`;
+  capture side in the sibling `html-capture` repo's `extractVariableDefinitions`).
+
 ## [0.51.1] - 2026-07-19
 
 ### Fixed
