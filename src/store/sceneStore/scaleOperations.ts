@@ -49,11 +49,9 @@ function scaleEffect(effect: Effect, factor: number): Effect {
     };
   }
   if (effect.type === "noise") {
-    return {
-      ...effect,
-      noiseSize: roundTo(effect.noiseSize * factor),
-      noiseSizeY: effect.noiseSizeY !== undefined ? roundTo(effect.noiseSizeY * factor) : undefined,
-    };
+    // Noise cell size is a texture property, not geometry — Figma does not
+    // scale it on resize.
+    return effect;
   }
   return { ...effect, radius: roundTo(effect.radius * factor) };
 }
