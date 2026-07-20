@@ -1,5 +1,5 @@
 import { Container, Sprite, Texture } from "pixi.js";
-import type { Effect, FlatSceneNode, NoiseEffect } from "@/types/scene";
+import type { Effect, FlatSceneNode, NoiseEffect, PerCornerRadius } from "@/types/scene";
 import { generateNoisePixels, hashSeed, noiseCellCounts } from "@/lib/noise/generateNoise";
 import { resolvePaintBlendMode } from "./fillStrokeHelpers";
 import { buildMask } from "./shaderFillHelpers";
@@ -14,7 +14,7 @@ import { buildMask } from "./shaderFillHelpers";
 const NOISE_SPRITE_LABEL_PREFIX = "noise-effect-";
 const NOISE_MASK_LABEL_PREFIX = "noise-mask-";
 /** Figma limit: at most two noise effects render per node. */
-const MAX_NOISE_EFFECTS = 2;
+export const MAX_NOISE_EFFECTS = 2;
 
 /** First two visible noise effects in the stack with density > 0 (Figma limit). */
 export function pickNoiseEffects(effects: Effect[]): NoiseEffect[] {
@@ -29,25 +29,67 @@ export function pickNoiseEffects(effects: Effect[]): NoiseEffect[] {
   return picked;
 }
 
-/** JSON-ish change-detection key for a resolved noise-effect stack at a given rendered size. */
-export function noiseParamsKey(effects: NoiseEffect[], width: number, height: number): string {
-  const parts = effects.map((e) => [
-    e.noiseType,
-    e.color,
-    e.secondaryColor ?? "",
-    e.opacity ?? 1,
-    e.noiseSize,
-    e.noiseSizeY ?? e.noiseSize,
-    e.density,
-    e.blendMode ?? "normal",
-  ]);
-  return JSON.stringify([parts, width, height]);
+/**
+ * The subset of a node's shape that the noise mask depends on. Kept separate
+ * from `FlatSceneNode` so `noiseParamsKey` stays a pure function of its
+ * arguments rather than reaching into the node itself.
+ */
+export interface NoiseMaskShape {
+  ellipse: boolean;
+  cornerRadius?: number;
+  cornerRadiusPerCorner?: PerCornerRadius;
+  cornerSmoothing?: number;
 }
 
-/** Last-applied params key per container, for idempotent no-op re-applies. */
-const lastKeyByContainer = new WeakMap<Container, string>();
-/** Textures owned by the noise sprites currently on a container (freed on rebuild/destroy). */
-const texturesByContainer = new WeakMap<Container, Texture[]>();
+/** Derive the mask-relevant shape fields from a node (mirrors `buildShapeMask`'s reads). */
+export function getNoiseMaskShape(node: FlatSceneNode): NoiseMaskShape {
+  if (node.type === "ellipse") return { ellipse: true };
+  const cn = node as FlatSceneNode & {
+    cornerRadius?: number;
+    cornerRadiusPerCorner?: PerCornerRadius;
+    cornerSmoothing?: number;
+  };
+  return {
+    ellipse: false,
+    cornerRadius: cn.cornerRadius,
+    cornerRadiusPerCorner: cn.cornerRadiusPerCorner,
+    cornerSmoothing: cn.cornerSmoothing,
+  };
+}
+
+/**
+ * JSON-ish change-detection key for a resolved noise-effect stack at a given
+ * rendered size and mask shape. Uses the quantized cell-grid dimensions
+ * (`noiseCellCounts`) rather than raw width/height so sub-cell size changes
+ * (e.g. an interactive resize that doesn't cross a cell boundary) don't
+ * invalidate the key — `applyNoiseEffects` still restretches the sprites to
+ * the exact rendered size on a size-only change. Includes `shape` (corner
+ * radius/smoothing, ellipse-ness) so a shape-only change also invalidates the
+ * mask.
+ */
+export function noiseParamsKey(
+  effects: NoiseEffect[],
+  width: number,
+  height: number,
+  shape: NoiseMaskShape,
+): string {
+  const parts = effects.map((e) => {
+    const { cellsX, cellsY } = noiseCellCounts(e, width, height);
+    return [e.noiseType, e.color, e.secondaryColor ?? "", e.opacity ?? 1, cellsX, cellsY, e.density, e.blendMode ?? "normal"];
+  });
+  return JSON.stringify([parts, shape]);
+}
+
+/** Per-container record of the currently-applied noise sprites: cache key, last rendered size, and owned textures. */
+interface NoiseApplyRecord {
+  key: string;
+  width: number;
+  height: number;
+  textures: Texture[];
+}
+
+/** Last-applied noise state per container, for idempotent no-op re-applies and cheap resizes. */
+const noiseByContainer = new WeakMap<Container, NoiseApplyRecord>();
 /** Containers that already have the destroy-teardown hook registered. */
 const destroyHooked = new WeakSet<Container>();
 
@@ -63,10 +105,9 @@ function ensureNoiseDestroyHook(container: Container): void {
   if (destroyHooked.has(container)) return;
   destroyHooked.add(container);
   container.once("destroyed", () => {
-    const textures = texturesByContainer.get(container);
-    texturesByContainer.delete(container);
-    lastKeyByContainer.delete(container);
-    if (textures) for (const t of textures) t.destroy(true);
+    const record = noiseByContainer.get(container);
+    noiseByContainer.delete(container);
+    if (record) for (const t of record.textures) t.destroy(true);
   });
 }
 
@@ -90,10 +131,9 @@ function clearNoiseEffects(container: Container): void {
       orphanMask.destroy();
     }
   }
-  const textures = texturesByContainer.get(container);
-  texturesByContainer.delete(container);
-  if (textures) for (const t of textures) t.destroy(true);
-  lastKeyByContainer.delete(container);
+  const record = noiseByContainer.get(container);
+  noiseByContainer.delete(container);
+  if (record) for (const t of record.textures) t.destroy(true);
 }
 
 /** Build a nearest-neighbor texture for one noise effect at the given rendered size. */
@@ -111,11 +151,38 @@ function buildNoiseTexture(effect: NoiseEffect, width: number, height: number, s
 }
 
 /**
+ * Cheap path for a size-only change (same cache key, i.e. same effects/shape,
+ * only the rendered width/height moved without crossing a noise-cell
+ * boundary): restretch each existing noise sprite and rebuild its mask at the
+ * new size, without regenerating textures.
+ */
+function resizeNoiseSprites(container: Container, node: FlatSceneNode, count: number, width: number, height: number): void {
+  for (let index = 0; index < count; index++) {
+    const sprite = container.getChildByLabel(`${NOISE_SPRITE_LABEL_PREFIX}${index}`) as Sprite | null;
+    if (!sprite) continue;
+    sprite.width = width;
+    sprite.height = height;
+
+    const oldMask = sprite.mask;
+    let insertIndex = container.children.length;
+    if (oldMask instanceof Container) {
+      insertIndex = container.getChildIndex(oldMask);
+      container.removeChild(oldMask);
+      oldMask.destroy();
+    }
+    const mask = buildMask(node, width, height, `${NOISE_MASK_LABEL_PREFIX}${index}`);
+    container.addChildAt(mask, Math.min(insertIndex, container.children.length));
+    sprite.mask = mask;
+  }
+}
+
+/**
  * Apply (or clear) the node's noise/grain effect stack as masked
  * nearest-neighbor sprites on its container. Idempotent: unchanged params
- * (including size) are a no-op; changed params destroy and rebuild.
- * `effects` should already be the resolved+renderable stack (as returned by
- * `getResolvedRenderableEffects`).
+ * (including size and shape) are a no-op; a same-key size change restretches
+ * the existing sprites and masks (no texture regen); any other change
+ * destroys and rebuilds. `effects` should already be the resolved+renderable
+ * stack (as returned by `getResolvedRenderableEffects`).
  */
 export function applyNoiseEffects(
   container: Container,
@@ -126,12 +193,21 @@ export function applyNoiseEffects(
 ): void {
   const picked = pickNoiseEffects(effects);
   if (picked.length === 0) {
-    if (lastKeyByContainer.has(container)) clearNoiseEffects(container);
+    if (noiseByContainer.has(container)) clearNoiseEffects(container);
     return;
   }
 
-  const key = noiseParamsKey(picked, width, height);
-  if (lastKeyByContainer.get(container) === key) return;
+  const shape = getNoiseMaskShape(node);
+  const key = noiseParamsKey(picked, width, height, shape);
+  const existing = noiseByContainer.get(container);
+  if (existing && existing.key === key) {
+    if (existing.width !== width || existing.height !== height) {
+      resizeNoiseSprites(container, node, picked.length, width, height);
+      existing.width = width;
+      existing.height = height;
+    }
+    return;
+  }
 
   clearNoiseEffects(container);
 
@@ -156,7 +232,6 @@ export function applyNoiseEffects(
     sprite.mask = mask;
   });
 
-  texturesByContainer.set(container, textures);
-  lastKeyByContainer.set(container, key);
+  noiseByContainer.set(container, { key, width, height, textures });
   ensureNoiseDestroyHook(container);
 }

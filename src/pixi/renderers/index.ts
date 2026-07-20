@@ -822,8 +822,13 @@ export function applyLayoutSize(
 
   // Noise/grain: the layout-driven size change bypasses node.width/height (and
   // thus the effects re-apply gate in updateNodeContainer), so re-apply here.
-  // No debounce needed — noise regeneration is cheap/synchronous, unlike the shader bake.
-  if (!isOutlineRenderMode()) {
+  // No debounce needed: applyNoiseEffects itself is cheap on a same-key resize
+  // (unchanged effects/shape) — it restretches the existing sprites and rebuilds
+  // their masks at the new size without regenerating noise textures, only doing
+  // the full regenerate when the effect stack or shape actually changed. The
+  // presence check below skips the resolve+apply call entirely for nodes with
+  // no effect stack and no bound effect style.
+  if (!isOutlineRenderMode() && (node.effects?.length || node.effectStyleId)) {
     applyNoiseEffects(container, node, getResolvedRenderableEffects(node), layoutWidth, layoutHeight);
   }
 }
