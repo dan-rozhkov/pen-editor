@@ -6,6 +6,7 @@ export const GUIDE_COLOR = 0xff3366;
 export const MEASURE_COLOR = 0xf24822;
 export const COMPONENT_SELECTION_COLOR = 0x8b5cf6;
 export const TEXT_BASELINE_COLOR = 0x0d99ff;
+export const HOVER_STROKE_WIDTH = 2;
 export const HANDLE_SIZE = 8;
 export const HANDLE_FILL = 0xffffff;
 export const GAP_COLOR = 0xff44b4;

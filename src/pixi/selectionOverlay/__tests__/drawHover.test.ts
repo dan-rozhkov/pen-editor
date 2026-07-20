@@ -5,6 +5,7 @@ import { useDevModeStore } from "@/store/devModeStore";
 import { useHoverStore } from "@/store/hoverStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
+import { useViewportStore } from "@/store/viewportStore";
 import { resetStores } from "@/test/fixtures";
 import type { OverlayHelpers, Rect } from "@/pixi/selectionOverlay/helpers";
 import {
@@ -156,7 +157,61 @@ describe("redrawHover dev-mode spacing", () => {
       } as unknown as OverlayHelpers,
     );
 
-    expect(hoverOutline.context.instructions.find((item) => item.action === "stroke")?.data.style.color)
-      .toBe(0x0d99ff);
+    const stroke = hoverOutline.context.instructions.find(
+      (item) => item.action === "stroke",
+    )?.data.style;
+    expect(stroke?.color).toBe(0x0d99ff);
+    expect(stroke?.width).toBe(2);
+  });
+
+  it("keeps the native-node hover outline at two screen pixels when zoomed", () => {
+    useDevModeStore.setState({ active: false });
+    useViewportStore.setState({ scale: 2 });
+    useHoverStore.getState().setHoveredNode("second");
+    const hoverOutline = new Graphics();
+
+    redrawHover(
+      hoverOutline,
+      new Graphics(),
+      new Graphics(),
+      new Container(),
+      new Container(),
+      {
+        getNodeDrawRect: () => ({ x: 198, y: 108, width: 80, height: 84 }),
+        isInComponentContext: () => false,
+      } as unknown as OverlayHelpers,
+    );
+
+    expect(hoverOutline.context.instructions.find(
+      (item) => item.action === "stroke",
+    )?.data.style.width).toBe(1);
+  });
+
+  it("keeps the component-descendant hover outline at two screen pixels when zoomed", () => {
+    useDevModeStore.setState({ active: false });
+    useViewportStore.setState({ scale: 2 });
+    useHoverStore.getState().setHoveredDescendant("instance", "child");
+    const hoverOutline = new Graphics();
+
+    redrawHover(
+      hoverOutline,
+      new Graphics(),
+      new Graphics(),
+      new Container(),
+      new Container(),
+      {
+        getInstanceDescendantTarget: () => ({
+          instance: { id: "instance", type: "ref" },
+          node: { id: "child", type: "rect" },
+          drawRect: { x: 20, y: 30, width: 40, height: 50 },
+        }),
+      } as unknown as OverlayHelpers,
+    );
+
+    const stroke = hoverOutline.context.instructions.find(
+      (item) => item.action === "stroke",
+    )?.data.style;
+    expect(stroke?.color).toBe(0x8b5cf6);
+    expect(stroke?.width).toBe(1);
   });
 });

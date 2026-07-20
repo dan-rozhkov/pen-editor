@@ -17,6 +17,7 @@ import {
   GAP_COLOR,
   GAP_OVERLAY_ALPHA,
   HOVER_COLOR,
+  HOVER_STROKE_WIDTH,
   MEASURE_COLOR,
   PADDING_OVERLAY_ALPHA,
   SELECTION_COLOR,
@@ -110,7 +111,7 @@ export function redrawHover(
     if (!target) return;
 
     const scale = useViewportStore.getState().scale;
-    const strokeWidth = 1 / scale;
+    const strokeWidth = HOVER_STROKE_WIDTH / scale;
     hovOutline.rect(
       target.drawRect.x,
       target.drawRect.y,
@@ -205,7 +206,10 @@ export function redrawHover(
       ? COMPONENT_SELECTION_COLOR
       : HOVER_COLOR;
   hovOutline.rect(drawRect.x, drawRect.y, drawRect.width, drawRect.height);
-  hovOutline.stroke({ color: hoverColor, width: 1 / scale });
+  hovOutline.stroke({
+    color: hoverColor,
+    width: HOVER_STROKE_WIDTH / scale,
+  });
 
   if (node.type === "text") {
     const hoverBaselineColor = helpers.isInComponentContext(hoveredNodeId)
