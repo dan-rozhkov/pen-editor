@@ -5,7 +5,12 @@ import captureBundleSource from "@/vendor/h2dCapture/capture.js?raw";
 import { inlinePhosphorIconSvgs } from "./phosphorIcons";
 
 interface H2dCaptureWindow extends Window {
-  __h2d_clone?: { en: (selector: string) => Promise<string> };
+  __h2d_clone?: {
+    // `en(selector, extractSourceData, extractVariableDefinitions)` — the third
+    // arg opts into document-root CSS custom-property capture (`cssVariables`),
+    // which the converter binds pasted colors to editor Variables.
+    en: (selector: string, extractSourceData?: boolean, extractVariableDefinitions?: boolean) => Promise<string>;
+  };
 }
 
 /** Guard against a `load` event that never fires (e.g. a hung srcdoc parse). */
@@ -93,7 +98,7 @@ export async function captureEmbedHtmlToH2d(
     if (!win.__h2d_clone) {
       throw new Error("h2d capture bundle failed to install in iframe");
     }
-    const json = await win.__h2d_clone.en("body");
+    const json = await win.__h2d_clone.en("body", false, true);
     return JSON.parse(json) as H2dDocument;
   } finally {
     iframe.remove();

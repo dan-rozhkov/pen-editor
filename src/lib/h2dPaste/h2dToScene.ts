@@ -9,6 +9,7 @@
 // sibling of BODY and is never visited).
 
 import { generateId, type Effect, type FrameNode, type GradientFill, type PerCornerRadius, type SceneNode, type ShadowEffect, type TextNode } from '@/types/scene'
+import { generateVariableId, type Variable } from '@/types/variable'
 import { extractCssUrl, parseColorWithOpacity } from '@/lib/htmlToDesign/colorParsing'
 import { parseCssGradient } from '@/lib/htmlToDesign/gradientParsing'
 import { applyTextProps, parseShadows } from '@/lib/htmlToDesign/styleApplication'
@@ -21,11 +22,31 @@ import type { H2dDocument, H2dElementNode, H2dNode, H2dRect, H2dTextNode as H2dT
 export interface H2dConversionResult {
   nodes: SceneNode[]
   warnings: string[]
+  /**
+   * Color Variables newly minted from the document's `cssVariables` during this
+   * conversion (deduped against `options.existingVariables`). The caller commits
+   * these to the variable store; the returned nodes already reference them via
+   * `fillBinding`/`strokeBinding`.
+   */
+  variables: Variable[]
+}
+
+export interface H2dConversionOptions {
+  /** Variables already in the store, so a captured token reuses an existing id
+   * (by name) instead of creating a duplicate. First import wins on value. */
+  existingVariables?: Variable[]
 }
 
 interface ConvertCtx {
   document: H2dDocument
   warnings: string[]
+  /** Variables that exist before this conversion (store + already-created here),
+   * indexed by name for dedup. */
+  variablesByName: Map<string, Variable>
+  /** Newly minted Variables to return to the caller. */
+  newVariables: Variable[]
+  /** Memoized `cssVarName` → bindable `variableId` (or null when unbindable). */
+  colorVarIdCache: Map<string, string | null>
   /** Per-node memoization for the visibility checks below — each is a pure
    * function of the node's subtree, but `hasVisibleContent` recurses through
    * `shouldSkipElement` and vice-versa, so without caching a deep tree gets
@@ -37,8 +58,71 @@ interface ConvertCtx {
   assetUrlCache: Map<string, string | null>
 }
 
-function createConvertCtx(document: H2dDocument): ConvertCtx {
-  return { document, warnings: [], visibilityCache: new WeakMap(), skipCache: new WeakMap(), assetUrlCache: new Map() }
+function createConvertCtx(document: H2dDocument, options?: H2dConversionOptions): ConvertCtx {
+  const variablesByName = new Map<string, Variable>()
+  for (const v of options?.existingVariables ?? []) {
+    if (!variablesByName.has(v.name)) variablesByName.set(v.name, v)
+  }
+  return {
+    document,
+    warnings: [],
+    variablesByName,
+    newVariables: [],
+    colorVarIdCache: new Map(),
+    visibilityCache: new WeakMap(),
+    skipCache: new WeakMap(),
+    assetUrlCache: new Map(),
+  }
+}
+
+/**
+ * Resolve a captured CSS custom-property name (e.g. `"--primary"`) to a color
+ * Variable id, creating the Variable from the document's `cssVariables`
+ * definition on first use. Returns null when the token has no definition or its
+ * value isn't a parseable color (e.g. `oklch(...)`), in which case the caller
+ * leaves the resolved hardcoded value in place. Memoized per name.
+ */
+function resolveColorVarId(cssVarName: string, ctx: ConvertCtx): string | null {
+  const cached = ctx.colorVarIdCache.get(cssVarName)
+  if (cached !== undefined) return cached
+
+  const commit = (id: string | null): string | null => {
+    ctx.colorVarIdCache.set(cssVarName, id)
+    return id
+  }
+
+  const def = ctx.document.cssVariables?.[cssVarName]
+  if (!def) return commit(null)
+
+  const light = parseColorWithOpacity(def.light)
+  if (!light) return commit(null) // not a color token (font/spacing/unsupported syntax)
+  const darkParsed = parseColorWithOpacity(def.dark)
+  const darkHex = darkParsed ? darkParsed.color : light.color
+
+  const name = cssVarName.replace(/^--/, '')
+  const existing = ctx.variablesByName.get(name)
+  if (existing) return commit(existing.id) // reuse by name; first import wins on value
+
+  const variable: Variable = {
+    id: generateVariableId(),
+    name,
+    type: 'color',
+    // `value` mirrors the dark theme value, matching variableStore's convention
+    // (updateVariableThemeValue keeps `value` in sync with dark).
+    value: darkHex,
+    themeValues: { light: light.color, dark: darkHex },
+  }
+  ctx.variablesByName.set(name, variable)
+  ctx.newVariables.push(variable)
+  return commit(variable.id)
+}
+
+/** If `node.variableStyles[styleKey]` names a bindable color token, return its
+ * `variableId`; else null. */
+function colorBindingFor(node: H2dElementNode, styleKey: string, ctx: ConvertCtx): string | null {
+  const cssVarName = node.variableStyles?.[styleKey]
+  if (!cssVarName) return null
+  return resolveColorVarId(cssVarName, ctx)
 }
 
 const SKIPPED_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'LINK', 'META', 'HEAD', 'TEMPLATE'])
@@ -223,6 +307,8 @@ function applyBackground(base: Partial<FrameNode>, node: H2dElementNode, ctx: Co
     if (parsed) {
       base.fill = parsed.color
       if (parsed.opacity !== undefined) base.fillOpacity = parsed.opacity
+      const variableId = colorBindingFor(node, 'backgroundColor', ctx)
+      if (variableId) base.fillBinding = { variableId }
     }
   }
   const bgImage = node.styles.backgroundImage
@@ -299,6 +385,10 @@ function applyCommonProps(base: FrameNode, node: H2dElementNode, ctx: ConvertCtx
   if (stroke.stroke) {
     base.stroke = stroke.stroke
     base.strokeWidth = stroke.strokeWidth
+    // The cssvars engine recombines the border-color shorthand to `borderColor`;
+    // fall back to the top-side longhand it tracks individually.
+    const variableId = colorBindingFor(node, 'borderColor', ctx) ?? colorBindingFor(node, 'borderTopColor', ctx)
+    if (variableId) base.strokeBinding = { variableId }
   }
 
   const shadows = effectsFromBoxShadow(styles.boxShadow)
@@ -428,7 +518,7 @@ function convertInput(node: H2dElementNode, parentRect: H2dRect, ctx: ConvertCtx
   return frame
 }
 
-function convertTextElement(node: H2dElementNode, textChildren: H2dTextNodeType[], parentRect: H2dRect): TextNode {
+function convertTextElement(node: H2dElementNode, textChildren: H2dTextNodeType[], parentRect: H2dRect, ctx: ConvertCtx): TextNode {
   // Union of the text nodes' rects, relative to the parent.
   let minX = Infinity
   let minY = Infinity
@@ -466,6 +556,13 @@ function convertTextElement(node: H2dElementNode, textChildren: H2dTextNodeType[
   // live CSSStyleDeclaration) — applyTextProps only reads a narrow, string-only
   // subset (TextStyleSource), so it works the same as it does against the DOM.
   applyTextProps(textNode, node.styles)
+  // Text color lands on `textNode.fill` (applyTextProps); bind it to the token
+  // when `color` traces back to a CSS variable, keeping the resolved hex as the
+  // fallback value.
+  if (textNode.fill) {
+    const variableId = colorBindingFor(node, 'color', ctx)
+    if (variableId) textNode.fillBinding = { variableId }
+  }
   return textNode
 }
 
@@ -524,7 +621,7 @@ function convertFrame(node: H2dElementNode, elementChildren: H2dElementNode[], t
     // (relative to this element's own rect) from the union of the text nodes'
     // rects — this runs whether or not there are ALSO element children, so
     // `<p>Hello <a>world</a></p>` keeps the leading "Hello " text.
-    children.push(convertTextElement(node, textChildren, node.rect))
+    children.push(convertTextElement(node, textChildren, node.rect, ctx))
   }
   if (elementChildren.length > 0) {
     for (const child of elementChildren) {
@@ -545,26 +642,26 @@ function convertElement(node: H2dElementNode, parentRect: H2dRect, ctx: ConvertC
   const elementChildren = visibleElementChildren(node, ctx)
   const textChildren = visibleTextChildren(node)
   if (elementChildren.length === 0 && textChildren.length > 0 && !hasOwnVisualBox(node.styles)) {
-    return convertTextElement(node, textChildren, parentRect)
+    return convertTextElement(node, textChildren, parentRect, ctx)
   }
   return convertFrame(node, elementChildren, textChildren, parentRect, ctx)
 }
 
 /** Convert a decoded h2d clipboard document into editor scene nodes (1:1 layout). */
-export function convertH2dToSceneNodes(document: H2dDocument): H2dConversionResult {
-  const ctx = createConvertCtx(document)
+export function convertH2dToSceneNodes(document: H2dDocument, options?: H2dConversionOptions): H2dConversionResult {
+  const ctx = createConvertCtx(document, options)
   const body = findBody(document.root)
   if (!body && isH2dElementNode(document.root)) {
     const rootRect = document.root.rect
     const converted = convertElement(document.root, rootRect, ctx)
-    if (!converted) return { nodes: [], warnings: ctx.warnings }
+    if (!converted) return { nodes: [], warnings: ctx.warnings, variables: ctx.newVariables }
     converted.x = 0
     converted.y = 0
     converted.name = document.documentTitle?.trim() || converted.name
-    return { nodes: [converted], warnings: ctx.warnings }
+    return { nodes: [converted], warnings: ctx.warnings, variables: ctx.newVariables }
   }
   if (!body) {
-    return { nodes: [], warnings: ['h2d document has no convertible root element'] }
+    return { nodes: [], warnings: ['h2d document has no convertible root element'], variables: ctx.newVariables }
   }
 
   // Some full-page h2d captures keep BODY's resolved page styles in
@@ -594,5 +691,5 @@ export function convertH2dToSceneNodes(document: H2dDocument): H2dConversionResu
   // qualifies on that front the same way convertFrame's children do.
   applyAutoLayoutIfPossible(root, styledBody.styles, bodyElementChildren, [])
 
-  return { nodes: [root], warnings: ctx.warnings }
+  return { nodes: [root], warnings: ctx.warnings, variables: ctx.newVariables }
 }

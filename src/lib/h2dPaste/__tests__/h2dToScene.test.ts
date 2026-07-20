@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FrameNode, ShadowEffect, TextNode } from '@/types/scene'
+import type { Variable } from '@/types/variable'
 import { calculateFrameLayout } from '@/utils/yogaLayout'
 import { convertH2dToSceneNodes } from '../h2dToScene'
 import { parseH2dClipboardHtml } from '../parseH2dClipboard'
@@ -591,5 +592,120 @@ describe('convertH2dToSceneNodes (synthetic cases)', () => {
     expect(span.type).toBe('text')
     expect(span.letterSpacing).toBe(0.5)
     expect(span.underline).toBe(true)
+  })
+})
+
+describe('convertH2dToSceneNodes — CSS variable auto-binding (colors)', () => {
+  const CSS_VARS = {
+    '--surface': { light: '#ffffff', dark: '#111111' },
+    '--line': { light: '#000000', dark: '#eeeeee' },
+    '--primary': { light: '#3b82f6', dark: '#60a5fa' },
+  }
+
+  function docWithVars(cssVariables: Record<string, { light: string; dark: string }> = CSS_VARS) {
+    const surface = {
+      ...el('DIV', rect(0, 0, 100, 50), { backgroundColor: 'rgb(255, 255, 255)' }),
+      variableStyles: { backgroundColor: '--surface' },
+    }
+    const bordered = {
+      ...el('DIV', rect(0, 60, 100, 50), {
+        backgroundColor: 'rgb(240, 240, 240)',
+        borderTopWidth: '2px',
+        borderRightWidth: '2px',
+        borderBottomWidth: '2px',
+        borderLeftWidth: '2px',
+        borderTopStyle: 'solid',
+        borderTopColor: 'rgb(0, 0, 0)',
+      }),
+      variableStyles: { borderColor: '--line' },
+    }
+    const para = {
+      ...el('P', rect(0, 120, 100, 20), { color: 'rgb(59, 130, 246)' }, [
+        text('Hello', rect(0, 120, 100, 20)),
+      ]),
+      variableStyles: { color: '--primary' },
+    }
+    const body = el('BODY', rect(0, 0, 100, 200), {}, [surface, bordered, para])
+    return buildDocument(body, { cssVariables })
+  }
+
+  function byName(vars: Variable[], name: string): Variable | undefined {
+    return vars.find((v) => v.name === name)
+  }
+
+  it('binds a background color to a newly-created color Variable with light/dark themeValues', () => {
+    const { nodes, variables } = convertH2dToSceneNodes(docWithVars())
+    const root = nodes[0] as FrameNode
+    const surface = root.children[0] as FrameNode
+    const v = byName(variables, 'surface')
+    expect(v).toBeDefined()
+    expect(v!.type).toBe('color')
+    expect(v!.themeValues).toEqual({ light: '#ffffff', dark: '#111111' })
+    expect(surface.fillBinding?.variableId).toBe(v!.id)
+    // Resolved hex is still kept as the fallback value.
+    expect(surface.fill).toBe('#ffffff')
+  })
+
+  it('binds a border color to a stroke Variable', () => {
+    const { nodes, variables } = convertH2dToSceneNodes(docWithVars())
+    const root = nodes[0] as FrameNode
+    const bordered = root.children[1] as FrameNode
+    const v = byName(variables, 'line')
+    expect(v).toBeDefined()
+    expect(bordered.strokeBinding?.variableId).toBe(v!.id)
+    expect(bordered.stroke).toBe('#000000')
+  })
+
+  it('binds a text color to the text node fill Variable', () => {
+    const { nodes, variables } = convertH2dToSceneNodes(docWithVars())
+    const root = nodes[0] as FrameNode
+    const para = root.children[2] as TextNode
+    expect(para.type).toBe('text')
+    const v = byName(variables, 'primary')
+    expect(v).toBeDefined()
+    expect(para.fillBinding?.variableId).toBe(v!.id)
+  })
+
+  it('reuses an existing Variable by name instead of creating a duplicate', () => {
+    const existing = {
+      id: 'var_existing_surface',
+      name: 'surface',
+      type: 'color' as const,
+      value: '#abcdef',
+      themeValues: { light: '#abcdef', dark: '#abcdef' },
+    }
+    const { nodes, variables } = convertH2dToSceneNodes(docWithVars(), {
+      existingVariables: [existing],
+    })
+    const root = nodes[0] as FrameNode
+    const surface = root.children[0] as FrameNode
+    expect(surface.fillBinding?.variableId).toBe('var_existing_surface')
+    // No duplicate 'surface' variable minted; the other two are still new.
+    expect(byName(variables, 'surface')).toBeUndefined()
+    expect(variables.map((v) => v.name).sort()).toEqual(['line', 'primary'])
+  })
+
+  it('leaves the color hardcoded when the token value is not a parseable color', () => {
+    // A `transparent` token has no bindable color — the resolved hex stays.
+    const { nodes, variables } = convertH2dToSceneNodes(
+      docWithVars({ '--surface': { light: 'transparent', dark: 'transparent' } }),
+    )
+    const root = nodes[0] as FrameNode
+    const surface = root.children[0] as FrameNode
+    expect(surface.fillBinding).toBeUndefined()
+    expect(surface.fill).toBe('#ffffff')
+    expect(byName(variables, 'surface')).toBeUndefined()
+  })
+
+  it('produces no variables when the document has no cssVariables', () => {
+    const surface = {
+      ...el('DIV', rect(0, 0, 100, 50), { backgroundColor: 'rgb(255, 255, 255)' }),
+      variableStyles: { backgroundColor: '--surface' },
+    }
+    const body = el('BODY', rect(0, 0, 100, 100), {}, [surface])
+    const { nodes, variables } = convertH2dToSceneNodes(buildDocument(body))
+    const root = nodes[0] as FrameNode
+    expect((root.children[0] as FrameNode).fillBinding).toBeUndefined()
+    expect(variables).toEqual([])
   })
 })

@@ -9,6 +9,7 @@ import {
 import { useClipboardStore } from "@/store/clipboardStore";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
+import { useVariableStore } from "@/store/variableStore";
 import { cloneNodeWithNewId, deepCloneNode } from "@/utils/cloneNode";
 import { createRefFromComponent } from "@/utils/componentUtils";
 import { findNodeByPath } from "@/utils/instanceRuntime";
@@ -271,7 +272,10 @@ export function createClipboardActions(deps: ClipboardActionDeps) {
       // h2d clipboard (html.to.design / Figma-capture) — decode to native nodes, 1:1
       e.preventDefault();
       try {
-        const result = await convertH2dClipboardHtml(htmlText);
+        const variableStore = useVariableStore.getState();
+        const result = await convertH2dClipboardHtml(htmlText, {
+          existingVariables: variableStore.variables,
+        });
         if (result) {
           // Log warnings regardless of whether any nodes came out — an
           // empty result is exactly when the warnings are most useful.
@@ -279,6 +283,16 @@ export function createClipboardActions(deps: ClipboardActionDeps) {
             console.warn("[h2d-paste] imported with warnings:", result.warnings);
           }
           if (result.nodes.length > 0) {
+            // Register the color Variables the capture's CSS custom properties
+            // resolved to (deduped by name against the store) BEFORE the nodes
+            // render, so their fill/stroke bindings resolve immediately. Bulk
+            // merge keeps it a single store update; bindings gracefully fall
+            // back to the resolved hex if a variable is ever missing.
+            if (result.variables.length > 0) {
+              useVariableStore
+                .getState()
+                .setVariables([...variableStore.variables, ...result.variables]);
+            }
             applyExternalPasteNodes({
               nodes: result.nodes,
               viewportCenter: getViewportCenter(dimensions),

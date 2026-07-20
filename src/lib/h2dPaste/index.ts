@@ -3,10 +3,10 @@
 // convert it into native scene nodes.
 
 import { isH2dClipboardHtml } from './detect'
-import type { H2dConversionResult } from './h2dToScene'
+import type { H2dConversionResult, H2dConversionOptions } from './h2dToScene'
 
 export { isH2dClipboardHtml }
-export type { H2dConversionResult }
+export type { H2dConversionResult, H2dConversionOptions }
 
 /**
  * Full pipeline: h2d clipboard `text/html` → native SceneNodes.
@@ -14,12 +14,15 @@ export type { H2dConversionResult }
  * The parser/converter are dynamically imported so they stay out of the main
  * bundle until the first h2d paste.
  */
-export async function convertH2dClipboardHtml(html: string): Promise<H2dConversionResult | null> {
+export async function convertH2dClipboardHtml(
+  html: string,
+  options?: H2dConversionOptions,
+): Promise<H2dConversionResult | null> {
   if (!isH2dClipboardHtml(html)) return null
   const [{ parseH2dClipboardHtml }, { convertH2dToSceneNodes }] = await Promise.all([
     import('./parseH2dClipboard'),
     import('./h2dToScene'),
   ])
   const { document } = parseH2dClipboardHtml(html)
-  return convertH2dToSceneNodes(document)
+  return convertH2dToSceneNodes(document, options)
 }

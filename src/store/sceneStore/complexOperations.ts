@@ -553,19 +553,31 @@ export function createComplexOperations(
       // pipeline (same converter as clipboard paste). Both modules are
       // dynamically imported so the vendored capture bundle stays out of
       // the main chunk. (async — re-read state after)
-      const [{ captureEmbedHtmlToH2d }, { convertH2dToSceneNodes }] =
+      const [{ captureEmbedHtmlToH2d }, { convertH2dToSceneNodes }, { useVariableStore }] =
         await Promise.all([
           import("../../lib/h2dCapture/captureEmbed"),
           import("../../lib/h2dPaste/h2dToScene"),
+          import("../variableStore"),
         ]);
       const h2dDoc = await captureEmbedHtmlToH2d(
         embed.htmlContent,
         embed.width,
         embed.height,
       );
-      const { nodes: convertedNodes, warnings } = convertH2dToSceneNodes(h2dDoc);
+      const existingVariables = useVariableStore.getState().variables;
+      const { nodes: convertedNodes, warnings, variables: newVariables } =
+        convertH2dToSceneNodes(h2dDoc, { existingVariables });
       if (warnings.length > 0) {
         console.warn("convertEmbedToDesign:", warnings.join("; "));
+      }
+      // Register the color Variables the embed's CSS custom properties resolved
+      // to (deduped by name) so the converted nodes' fill/stroke bindings
+      // resolve. Bulk merge = one store update; the conversion's own history
+      // step (saveHistory below) covers the node insert.
+      if (newVariables.length > 0) {
+        useVariableStore
+          .getState()
+          .setVariables([...existingVariables, ...newVariables]);
       }
       const first = convertedNodes[0];
       if (!first || first.type !== "frame") return null;

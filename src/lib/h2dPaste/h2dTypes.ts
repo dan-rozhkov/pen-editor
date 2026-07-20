@@ -28,6 +28,14 @@ export interface H2dElementNode {
   childNodes: H2dNode[]
   /** Serialized outer `<svg>...</svg>` markup, present when `tag === 'SVG'`. */
   content?: string
+  /**
+   * Per-property map of the CSS custom property a resolved style traces back to
+   * (camelCase key → `"--name"`), e.g. `{ color: "--primary", backgroundColor:
+   * "--surface" }`. Emitted by the capture bundle's cssvars engine. The
+   * converter uses the color-valued entries to bind fills/strokes to editor
+   * Variables (see `cssVariables` on the document).
+   */
+  variableStyles?: Record<string, string>
 }
 
 /** A text node (`nodeType === 3`). */
@@ -72,6 +80,13 @@ export interface H2dDocument {
   version: number
   assets: Record<string, H2dAsset>
   fonts?: Record<string, H2dFont>
+  /**
+   * Document-root design tokens: CSS custom-property name (`"--primary"`) →
+   * resolved `{ light, dark }` color/value strings. Present only when the
+   * capture ran with `extractVariableDefinitions` (pen-editor's embed/paste
+   * path does). Feeds the color-Variable creation in `h2dToScene`.
+   */
+  cssVariables?: Record<string, { light: string; dark: string }>
 }
 
 export interface H2dClipboardMeta {
