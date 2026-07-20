@@ -125,6 +125,9 @@ export function generateVisualStyles(node: BaseNode): Record<string, string> {
   // Effects — from the effect stack (bottom-to-top).
   // CSS box-shadow lists paint the FIRST shadow on top, but our stack is
   // bottom-to-top, so reverse the stack to get correct visual stacking.
+  // Noise/grain effects have no CSS analogue and are intentionally dropped
+  // on HTML export (same as Figma's SVG export) — the type filters below
+  // simply never match `type: "noise"`.
   const effects = getRenderableEffects(node);
   const shadowCss = effects
     .filter((e): e is ShadowEffect => e.type === "shadow")

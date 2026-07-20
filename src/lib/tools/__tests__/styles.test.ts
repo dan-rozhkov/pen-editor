@@ -178,6 +178,57 @@ describe("set_styles", () => {
     expect(style.effects[0]).toMatchObject({ type: "shadow", blur: 8 });
   });
 
+  // Pin: a noise effect round-trips through an effect style just like shadow —
+  // set_styles stores it verbatim and get_styles serializes it back out.
+  it("round-trips a noise effect through set_styles/get_styles", async () => {
+    const setResult = JSON.parse(
+      await setStyles({
+        effectStyles: [
+          {
+            name: "Texture/Grain",
+            effects: [
+              {
+                type: "noise",
+                noiseType: "duo",
+                color: "#00000080",
+                secondaryColor: "#ffffffff",
+                noiseSize: 2,
+                density: 0.3,
+              },
+            ],
+          },
+        ] as unknown as Record<string, unknown>,
+      }),
+    );
+    expect(setResult).toMatchObject({ success: true, fillStyleCount: 0, effectStyleCount: 1 });
+    const style = useStyleStore.getState().effectStyles[0];
+    expect(style.effects).toHaveLength(1);
+    expect(style.effects[0]).toMatchObject({
+      type: "noise",
+      noiseType: "duo",
+      color: "#00000080",
+      secondaryColor: "#ffffffff",
+      noiseSize: 2,
+      density: 0.3,
+    });
+
+    const getResult = JSON.parse(await getStyles({}));
+    expect(getResult.effectStyles).toHaveLength(1);
+    expect(getResult.effectStyles[0]).toMatchObject({
+      name: "Texture/Grain",
+      effects: [
+        {
+          type: "noise",
+          noiseType: "duo",
+          color: "#00000080",
+          secondaryColor: "#ffffffff",
+          noiseSize: 2,
+          density: 0.3,
+        },
+      ],
+    });
+  });
+
   it("merges by name, updating an existing fill style's color and live-propagating to referencing nodes", async () => {
     seedFillStyles();
     useStyleStore.getState().applyFillStyleToNode("rect1", "fillstyle-brand");

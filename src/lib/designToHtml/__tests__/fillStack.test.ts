@@ -231,6 +231,26 @@ describe("designToHtml effect stack", () => {
     const styles = generateVisualStyles(rect({ effects }));
     expect(styles["backdrop-filter"]).toBeUndefined();
   });
+
+  // Pin: noise has no CSS analogue (like Figma's SVG export) — it must not
+  // emit box-shadow/filter/backdrop-filter, and must not throw.
+  it("noise effect produces no CSS and does not throw", () => {
+    const effects: Effect[] = [
+      {
+        type: "noise",
+        noiseType: "duo",
+        color: "#00000080",
+        secondaryColor: "#ffffffff",
+        noiseSize: 2,
+        density: 0.3,
+      },
+    ];
+    expect(() => generateVisualStyles(rect({ effects }))).not.toThrow();
+    const styles = generateVisualStyles(rect({ effects }));
+    expect(styles["box-shadow"]).toBeUndefined();
+    expect(styles.filter).toBeUndefined();
+    expect(styles["backdrop-filter"]).toBeUndefined();
+  });
 });
 
 describe("designToHtml image crop", () => {

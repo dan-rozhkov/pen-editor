@@ -51,6 +51,35 @@ describe("publicPenExport effects", () => {
     ]);
   });
 
+  it("exports a noise effect with all fields intact", () => {
+    const node = baseRect({
+      effects: [
+        {
+          type: "noise",
+          noiseType: "duo",
+          color: "#00000080",
+          secondaryColor: "#ffffffff",
+          noiseSize: 2,
+          density: 0.3,
+        },
+      ],
+    });
+
+    const doc = exportNodes([node]);
+    const exported = doc.children[0];
+
+    expect(exported.effect).toEqual([
+      {
+        type: "noise",
+        noiseType: "duo",
+        color: "#00000080",
+        secondaryColor: "#ffffffff",
+        noiseSize: 2,
+        density: 0.3,
+      },
+    ]);
+  });
+
   it("preserves visible: false and still exports legacy single effect", () => {
     const nodeA = baseRect({
       id: "rect-a",

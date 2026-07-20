@@ -299,6 +299,29 @@ describe("batch_design", () => {
       expect(effects[0].shadowType).toBe("outer");
       expect(effects[1].shadowType).toBe("inner");
     });
+
+    // Pin: `effects` passes through the nodeMapper's default case verbatim,
+    // so a noise effect round-trips with no special-casing required.
+    it("creates a node with a noise effect", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'r=I(document, {type: "rectangle", name: "Grain", width: 10, height: 10, effects: [{type: "noise", noiseType: "duo", color: "#00000080", secondaryColor: "#ffffffff", noiseSize: 2, density: 0.3}]})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const node = sceneState().nodesById[result.createdNodes[0].id];
+      const effects = node.effects as Effect[];
+      expect(effects).toHaveLength(1);
+      expect(effects[0]).toMatchObject({
+        type: "noise",
+        noiseType: "duo",
+        color: "#00000080",
+        secondaryColor: "#ffffffff",
+        noiseSize: 2,
+        density: 0.3,
+      });
+    });
   });
 
   describe("fills (paint stack)", () => {
