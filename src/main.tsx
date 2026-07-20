@@ -53,6 +53,10 @@ if (import.meta.env.DEV) {
   import('pixi.js').then(({ Rectangle }) => {
     (window as unknown as Record<string, unknown>).__PixiRectangle = Rectangle;
   });
+  // Plugin runtime e2e (plg-01): run/stop a plugin in a real sandboxed iframe.
+  import('@/lib/plugins/pluginHost').then(({ runPlugin, stopPlugin }) => {
+    (window as unknown as Record<string, unknown>).__pluginHost = { runPlugin, stopPlugin };
+  });
 }
 
 createRoot(document.getElementById('root')!).render(
