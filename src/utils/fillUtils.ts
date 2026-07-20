@@ -9,6 +9,7 @@ import {
   type GradientPaint,
   type ImageFill,
   type ImagePaint,
+  type NoiseEffect,
   type Paint,
   type PathStroke,
   type PatternFill,
@@ -198,6 +199,18 @@ export function createBackgroundBlurEffect(
   return {
     type: 'background-blur',
     radius: 4,
+    id: generateId(),
+    ...init,
+  }
+}
+
+export function createNoiseEffect(init?: Partial<Omit<NoiseEffect, 'type'>>): NoiseEffect {
+  return {
+    type: 'noise',
+    noiseType: 'mono',
+    color: '#00000080',
+    noiseSize: 1,
+    density: 0.5,
     id: generateId(),
     ...init,
   }

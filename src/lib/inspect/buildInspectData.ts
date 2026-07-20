@@ -4,6 +4,7 @@ import type {
   ShadowEffect,
   BlurEffect,
   BackgroundBlurEffect,
+  NoiseEffect,
   PathStroke,
 } from "@/types/scene";
 import type { Variable, ThemeName } from "@/types/variable";
@@ -358,7 +359,7 @@ function buildStrokesSection(
   return { title: "Strokes", rows };
 }
 
-function describeEffect(effect: ShadowEffect | BlurEffect | BackgroundBlurEffect, units: InspectUnits, remBase: number): InspectValue {
+function describeEffect(effect: ShadowEffect | BlurEffect | BackgroundBlurEffect | NoiseEffect, units: InspectUnits, remBase: number): InspectValue {
   if (effect.type === "shadow") {
     const label = effect.shadowType === "inner" ? "Inner shadow" : "Shadow";
     const value = `${fmt(effect.offset.x, units, remBase)} ${fmt(effect.offset.y, units, remBase)} ${fmt(effect.blur, units, remBase)} ${fmt(effect.spread, units, remBase)} ${effect.color}`;
@@ -367,7 +368,10 @@ function describeEffect(effect: ShadowEffect | BlurEffect | BackgroundBlurEffect
   if (effect.type === "blur") {
     return { label: "Blur", value: fmt(effect.radius, units, remBase) };
   }
-  return { label: "Background blur", value: fmt(effect.radius, units, remBase) };
+  if (effect.type === "background-blur") {
+    return { label: "Background blur", value: fmt(effect.radius, units, remBase) };
+  }
+  return { label: "Noise", value: fmt(effect.noiseSize, units, remBase), swatchBackground: effect.color };
 }
 
 function buildEffectsSection(

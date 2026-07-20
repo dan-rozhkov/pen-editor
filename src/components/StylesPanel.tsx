@@ -109,6 +109,7 @@ function EffectStyleRow({ style }: { style: EffectStyle }) {
     .map((e) => {
       if (e.type === "blur") return "Blur";
       if (e.type === "background-blur") return "Background blur";
+      if (e.type === "noise") return "Noise";
       return e.shadowType === "inner" ? "Inner shadow" : "Drop shadow";
     })
     .join(", ");

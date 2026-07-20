@@ -48,6 +48,13 @@ function scaleEffect(effect: Effect, factor: number): Effect {
       spread: roundTo(effect.spread * factor),
     };
   }
+  if (effect.type === "noise") {
+    return {
+      ...effect,
+      noiseSize: roundTo(effect.noiseSize * factor),
+      noiseSizeY: effect.noiseSizeY !== undefined ? roundTo(effect.noiseSizeY * factor) : undefined,
+    };
+  }
   return { ...effect, radius: roundTo(effect.radius * factor) };
 }
 

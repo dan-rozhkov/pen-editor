@@ -38,6 +38,7 @@ import { StackRowShell, useDragReorder } from "@/components/properties/stackRow"
 function effectLabel(effect: Effect): string {
   if (effect.type === "blur") return "Layer Blur";
   if (effect.type === "background-blur") return "Background Blur";
+  if (effect.type === "noise") return "Noise";
   return effect.shadowType === "inner" ? "Inner Shadow" : "Drop Shadow";
 }
 

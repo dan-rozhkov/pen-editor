@@ -92,7 +92,19 @@ interface PenBackgroundBlurEffect {
   visible?: boolean;
 }
 
-type PenEffect = PenShadowEffect | PenBlurEffect | PenBackgroundBlurEffect;
+interface PenNoiseEffect {
+  type: "noise";
+  noiseType: "mono" | "duo" | "multi";
+  color: string;
+  secondaryColor?: string;
+  opacity?: number;
+  noiseSize: number;
+  noiseSizeY?: number;
+  density: number;
+  visible?: boolean;
+}
+
+type PenEffect = PenShadowEffect | PenBlurEffect | PenBackgroundBlurEffect | PenNoiseEffect;
 
 interface PenBaseNode {
   id: string;
@@ -432,6 +444,19 @@ function exportEffects(node: SceneNode): PenEffect[] | undefined {
       return {
         type: e.type,
         radius: e.radius,
+        ...(e.visible === false ? { visible: false } : {}),
+      };
+    }
+    if (e.type === "noise") {
+      return {
+        type: "noise",
+        noiseType: e.noiseType,
+        color: e.color,
+        noiseSize: e.noiseSize,
+        density: e.density,
+        ...(e.secondaryColor !== undefined ? { secondaryColor: e.secondaryColor } : {}),
+        ...(e.opacity !== undefined ? { opacity: e.opacity } : {}),
+        ...(e.noiseSizeY !== undefined ? { noiseSizeY: e.noiseSizeY } : {}),
         ...(e.visible === false ? { visible: false } : {}),
       };
     }

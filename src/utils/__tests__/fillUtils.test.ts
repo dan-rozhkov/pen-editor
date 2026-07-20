@@ -8,6 +8,7 @@ import {
   createBlurEffect,
   createBackgroundBlurEffect,
   createImagePaint,
+  createNoiseEffect,
   createShadowEffect,
   createSolidPaint,
   getEffects,
@@ -258,5 +259,23 @@ describe('createBackgroundBlurEffect', () => {
       radius: 12,
       visible: false,
     })
+  })
+})
+
+describe('createNoiseEffect', () => {
+  it('creates a mono noise effect with defaults and an id', () => {
+    const e = createNoiseEffect()
+    expect(e.type).toBe('noise')
+    expect(e.noiseType).toBe('mono')
+    expect(e.color).toBe('#00000080')
+    expect(e.noiseSize).toBe(1)
+    expect(e.density).toBe(0.5)
+    expect(e.id).toBeTruthy()
+  })
+  it('accepts overrides', () => {
+    const e = createNoiseEffect({ noiseType: 'duo', secondaryColor: '#ffffffff', density: 0.2 })
+    expect(e.noiseType).toBe('duo')
+    expect(e.secondaryColor).toBe('#ffffffff')
+    expect(e.density).toBe(0.2)
   })
 })

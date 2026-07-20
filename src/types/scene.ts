@@ -269,11 +269,41 @@ export interface BackgroundBlurEffect {
 }
 
 /**
- * One effect layer in an effect stack. `effects: Effect[]` is ordered
- * bottom-to-top like `fills`. Shadows, layer blur, and background blur;
- * future effect kinds extend this union.
+ * Figma-parity Noise effect ("Noise & texture", Config 2025): random pixels
+ * over the layer — film grain. Field names follow Figma's REST API
+ * NoiseEffect schema (camelCase; `noiseSizeVector` → optional `noiseSizeY`;
+ * colors are project-style hex8 instead of RGBA objects). At most TWO noise
+ * effects render per node (Figma limit) — the first two visible win.
  */
-export type Effect = ShadowEffect | BlurEffect | BackgroundBlurEffect
+export interface NoiseEffect {
+  type: 'noise'
+  /** mono = one color, duo = color+secondaryColor, multi = random colors */
+  noiseType: 'mono' | 'duo' | 'multi'
+  /** Noise pixel color incl. alpha, e.g. '#00000080' (mono/duo; ignored for multi). */
+  color: string
+  /** Second color for duo noise. */
+  secondaryColor?: string
+  /** 0-1, multi only: opacity of the random-colored pixels. Default 1. */
+  opacity?: number
+  /** Noise cell size in px (>= 1). Applies to both axes unless noiseSizeY is set. */
+  noiseSize: number
+  /** Optional non-uniform vertical cell size in px (Figma noiseSizeVector.y). */
+  noiseSizeY?: number
+  /** 0-1: probability a cell is painted. */
+  density: number
+  /** Per-effect blend mode (defaults to 'normal'). */
+  blendMode?: PaintBlendMode
+  // Stable id for UI list keys when used inside `effects: Effect[]`
+  id?: string
+  visible?: boolean   // defaults to true
+}
+
+/**
+ * One effect layer in an effect stack. `effects: Effect[]` is ordered
+ * bottom-to-top like `fills`. Shadows, layer blur, background blur, and
+ * noise/grain; future effect kinds extend this union.
+ */
+export type Effect = ShadowEffect | BlurEffect | BackgroundBlurEffect | NoiseEffect
 
 // Per-side stroke widths (like CSS border-top, border-right, etc.)
 export interface PerSideStroke {
