@@ -8,6 +8,41 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.54.0] - 2026-07-21
+
+### Added
+- **Noise effect (Figma parity).** New `noise` member of the `effects` stack —
+  film-grain "random pixels" over a layer, mirroring Figma's Noise effect
+  (Config 2025) and its REST-API schema: `noiseType` mono/duo/multi, `color`
+  (+`secondaryColor` for duo, `opacity` for multi), `noiseSize`/`noiseSizeY`
+  (non-uniform cells), `density` 0–1, optional per-effect `blendMode`. Up to
+  2 noise effects render per node (first two visible win, like Figma).
+  - Deterministic hash-based white noise (`src/lib/noise/generateNoise.ts`):
+    one RGBA sample per cell, seeded from node id — stable across frames,
+    undo/redo, and exports.
+  - Rendered in Pixi as nearest-neighbor masked sprites above the node's
+    content (`src/pixi/renderers/noiseEffectHelpers.ts`): zoom-crisp cells,
+    native per-sprite blend modes, cheap restretch on sub-cell resizes
+    (texture regenerates only when cell counts or noise params change), and
+    mask rebuilds on corner-radius/smoothing changes. Textures are freed via
+    a container-destroy hook (no leak on node deletion).
+  - Effects panel: Noise row with Mono/Duo/Multi selector, color+opacity,
+    Size X/Y, Density and blend-mode controls; "Add → Noise" disables at the
+    2-effect cap.
+  - AI: `batch_design`/`set_styles` accept noise entries in `effects`
+    (backend 0.22.0 documents the shape); noise round-trips `.pen` save/load,
+    effect styles, and the public `.pen` export.
+  - Cross-surface wiring: PPTX export rasterizes noise-bearing shapes,
+    Selection Colors aggregates/remaps noise colors, Dev Mode inspect shows
+    the effect (color swatch hidden for multi), HTML export intentionally
+    drops noise (no CSS analogue — same as Figma's SVG export).
+
+### Known limitations
+- Figma clipboard paste does not yet import Figma NOISE effects (needs a real
+  payload capture); a 3rd+ noise effect from AI/import renders inert (only
+  the first two draw) while still listed in the panel; Texture (rough-edge)
+  effect is a separate follow-up task.
+
 ## [0.53.0] - 2026-07-21
 
 ### Added
