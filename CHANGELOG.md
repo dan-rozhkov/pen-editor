@@ -8,6 +8,33 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.53.0] - 2026-07-21
+
+### Added
+- **Plugin runtime (generative plugins, stage 1 of 4 — plg-01).** Foundation
+  for AI-generated plugins à la Figma's Config 2026 generative plugins: a
+  plugin is a JS string executed in a sandboxed iframe (`sandbox="allow-scripts"`,
+  null origin, hidden/headless in this stage) that talks to the editor
+  exclusively through an async `pen.*` API over a validated postMessage RPC
+  bridge (30s timeout, source-window checks on both sides). The API core is
+  `pen.tools.run(name, args)` over an allowlist of 20 existing AI tools —
+  `batch_design` transactionality and single-undo-entry semantics come for
+  free — plus sugar: `pen.scene.batch/get`, `pen.selection.get/set`,
+  `pen.viewport.zoomTo` (absolute-coordinate aware), `pen.notify`,
+  per-plugin-namespaced `pen.storage`, `pen.on("selectionchange")`,
+  `pen.close()`. New modules under `src/lib/plugins/`
+  (`types` / `toolAllowlist` / `pluginApi` / `bootstrap` / `pluginBridge` /
+  `pluginHost`), 32 unit tests + a real-iframe Playwright smoke
+  (`e2e/plugin-runtime.spec.ts`); dev-mode `window.__pluginHost` for testing.
+  Design spec: `docs/superpowers/specs/2026-07-21-generative-plugins-design.md`.
+  Next stages: plugin library + manager UI (plg-02), AI generation tools +
+  `/plugin` skill (plg-03), visible plugin panels (plg-04).
+
+### Changed
+- Internal: groundwork for a noise effect (deterministic hash-noise pixel
+  generator, `NoiseEffect` type/factory, constant cell size on resize) — not
+  yet user-facing; the effect ships in a later release.
+
 ## [0.52.1] - 2026-07-20
 
 ### Changed
