@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { Effect, SceneNode, ShadowEffect } from "@/types/scene";
+import type { Effect, NoiseEffect, SceneNode, ShadowEffect } from "@/types/scene";
 import { generateId } from "@/types/scene";
 import {
   ColorInput,
@@ -19,6 +19,7 @@ import { parseHexAlpha } from "@/utils/shadowUtils";
 import {
   createBackgroundBlurEffect,
   createBlurEffect,
+  createNoiseEffect,
   createShadowEffect,
   getEffects,
   clearLegacyEffectProps,
@@ -32,7 +33,13 @@ import {
 } from "@/components/properties/fillSectionUtils";
 import { StylePicker } from "@/components/properties/StylePicker";
 import { useStyleStore } from "@/store/styleStore";
-import { StackRowShell, useDragReorder } from "@/components/properties/stackRow";
+import { BlendModeDropdown, StackRowShell, useDragReorder } from "@/components/properties/stackRow";
+
+const NOISE_TYPE_OPTIONS: { value: NoiseEffect["noiseType"]; label: string }[] = [
+  { value: "mono", label: "Mono" },
+  { value: "duo", label: "Duo" },
+  { value: "multi", label: "Multi" },
+];
 
 /** Human label for an effect row, derived from the effect (not hardcoded). */
 function effectLabel(effect: Effect): string {
@@ -77,6 +84,12 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
     commit(updateEffectAt(effects, index, shadow));
   };
 
+  const updateNoise = (index: number, noise: NoiseEffect) => {
+    commit(updateEffectAt(effects, index, noise));
+  };
+
+  const noiseCount = effects.filter((e) => e.type === "noise").length;
+
   // Drag-to-reorder is deliberately left off for effects (see plans/017) —
   // enabling it is a one-prop change (`canReorder`), a follow-up.
   const drag = useDragReorder(effects.length, (from, delta) => commit(moveItem(effects, from, delta)));
@@ -109,6 +122,12 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => handleAdd(createBackgroundBlurEffect())}>
               Background blur
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => handleAdd(createNoiseEffect())}
+              disabled={noiseCount >= 2}
+            >
+              Noise
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -166,7 +185,12 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
                     <>
                       <div
                         className="h-4 w-4 shrink-0 rounded border border-border-default"
-                        style={effect.type === "shadow" ? { backgroundColor: effect.color } : undefined}
+                        style={
+                          effect.type === "shadow" ||
+                          (effect.type === "noise" && effect.noiseType !== "multi")
+                            ? { backgroundColor: effect.color }
+                            : undefined
+                        }
                       />
                       <span className="min-w-0 flex-1 truncate text-xs text-text-primary">
                         {effectLabel(effect)}
@@ -200,6 +224,17 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
                     >
                       <ArrowDown />
                     </IconButton>
+                    {effect.type === "noise" && (
+                      <BlendModeDropdown
+                        value={effect.blendMode}
+                        onChange={(nextBlendMode) =>
+                          updateNoise(arrayIndex, {
+                            ...effect,
+                            blendMode: nextBlendMode === "normal" ? undefined : nextBlendMode,
+                          })
+                        }
+                      />
+                    )}
                   </div>
 
                   {effect.type === "shadow" && (
@@ -299,6 +334,152 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
                         step={1}
                       />
                     </PropertyRow>
+                  )}
+
+                  {effect.type === "noise" && (
+                    <>
+                      {/* Noise type: mono (single color) / duo (two colors) / multi (random). */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={
+                            <button
+                              type="button"
+                              className="flex items-center justify-between rounded bg-secondary px-2 py-1 text-xs text-text-primary hover:bg-secondary/80"
+                            />
+                          }
+                        >
+                          {NOISE_TYPE_OPTIONS.find((o) => o.value === effect.noiseType)?.label ??
+                            "Mono"}
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start">
+                          {NOISE_TYPE_OPTIONS.map((option) => (
+                            <DropdownMenuItem
+                              key={option.value}
+                              onClick={() =>
+                                updateNoise(arrayIndex, {
+                                  ...effect,
+                                  noiseType: option.value,
+                                  secondaryColor:
+                                    option.value === "duo"
+                                      ? (effect.secondaryColor ?? "#ffffffff")
+                                      : effect.secondaryColor,
+                                })
+                              }
+                            >
+                              {option.label}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+
+                      {(effect.noiseType === "mono" || effect.noiseType === "duo") && (
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1">
+                            <ColorInput
+                              value={effect.color}
+                              onChange={(v) =>
+                                updateNoise(arrayIndex, { ...effect, color: v || "#00000080" })
+                              }
+                            />
+                          </div>
+                          <div className="w-16 shrink-0">
+                            <NumberInput
+                              label="%"
+                              value={Math.round(parseHexAlpha(effect.color).opacity * 100)}
+                              onChange={(v) => {
+                                const opacity = Math.max(0, Math.min(100, v)) / 100;
+                                const alpha = Math.round(opacity * 255)
+                                  .toString(16)
+                                  .padStart(2, "0");
+                                const baseColor = effect.color.slice(0, 7);
+                                updateNoise(arrayIndex, { ...effect, color: baseColor + alpha });
+                              }}
+                              min={0}
+                              max={100}
+                              step={1}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {effect.noiseType === "duo" && (
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1">
+                            <ColorInput
+                              value={effect.secondaryColor ?? "#ffffffff"}
+                              onChange={(v) =>
+                                updateNoise(arrayIndex, {
+                                  ...effect,
+                                  secondaryColor: v || "#ffffffff",
+                                })
+                              }
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {effect.noiseType === "multi" && (
+                        <div className="w-16 shrink-0 self-end">
+                          <NumberInput
+                            label="%"
+                            value={Math.round((effect.opacity ?? 1) * 100)}
+                            onChange={(v) =>
+                              updateNoise(arrayIndex, {
+                                ...effect,
+                                opacity: Math.max(0, Math.min(100, v)) / 100,
+                              })
+                            }
+                            min={0}
+                            max={100}
+                            step={1}
+                          />
+                        </div>
+                      )}
+
+                      <PropertyRow>
+                        <NumberInput
+                          label="Size X"
+                          labelOutside
+                          value={effect.noiseSize}
+                          onChange={(v) =>
+                            updateNoise(arrayIndex, { ...effect, noiseSize: Math.max(1, v) })
+                          }
+                          min={1}
+                          step={1}
+                        />
+                        <NumberInput
+                          label="Size Y"
+                          labelOutside
+                          value={effect.noiseSizeY ?? effect.noiseSize}
+                          onChange={(v) => {
+                            const size = Math.max(1, v);
+                            updateNoise(arrayIndex, {
+                              ...effect,
+                              noiseSizeY: size === effect.noiseSize ? undefined : size,
+                            });
+                          }}
+                          min={1}
+                          step={1}
+                        />
+                      </PropertyRow>
+
+                      <PropertyRow>
+                        <NumberInput
+                          label="Density"
+                          labelOutside
+                          value={Math.round(effect.density * 100)}
+                          onChange={(v) =>
+                            updateNoise(arrayIndex, {
+                              ...effect,
+                              density: Math.max(0, Math.min(100, v)) / 100,
+                            })
+                          }
+                          min={0}
+                          max={100}
+                          step={1}
+                        />
+                      </PropertyRow>
+                    </>
                   )}
                 </StackRowShell>
               );
