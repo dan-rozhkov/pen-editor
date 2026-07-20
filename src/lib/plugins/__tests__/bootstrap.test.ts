@@ -19,7 +19,7 @@ function getPen(): PenGlobal {
 
 /** Deliver a host message to the bootstrap's listener as the iframe would receive it. */
 function deliver(data: unknown): void {
-  window.dispatchEvent(new MessageEvent("message", { data }));
+  window.dispatchEvent(new MessageEvent("message", { data, source: window.parent }));
 }
 
 describe("pluginBootstrap", () => {
@@ -90,6 +90,16 @@ describe("pluginBootstrap", () => {
     deliver({ kind: "something-else" });
     deliver({ kind: "pen-rpc-response", callId: 99999, ok: true }); // unknown callId
     // no throw = pass
+  });
+
+  it("ignores messages whose source is not window.parent", async () => {
+    const promise = getPen().tools.run("get_editor_state", {});
+    const req = posted[0];
+    // Wrong source: plain MessageEvent with no `source` (defaults to null in happy-dom).
+    window.dispatchEvent(new MessageEvent("message", { data: { kind: "pen-rpc-response", callId: req.callId, ok: true, result: "SPOOFED" } }));
+    // Correctly-sourced response still resolves the same pending call.
+    deliver({ kind: "pen-rpc-response", callId: req.callId, ok: true, result: "STATE" });
+    await expect(promise).resolves.toBe("STATE");
   });
 });
 

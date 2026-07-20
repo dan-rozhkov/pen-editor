@@ -27,6 +27,7 @@ export function pluginBootstrap(): void {
   }
 
   window.addEventListener("message", (event: MessageEvent) => {
+    if (event.source !== window.parent) return;
     const data = event.data as { kind?: string; callId?: number; ok?: boolean; result?: unknown; error?: unknown; event?: string; payload?: unknown } | null;
     if (!data || typeof data !== "object") return;
     if (data.kind === "pen-rpc-response" && typeof data.callId === "number") {
@@ -52,7 +53,7 @@ export function pluginBootstrap(): void {
       set: (ids: string[]) => call("selection.set", ids),
     },
     viewport: { zoomTo: (ids: string[]) => call("viewport.zoomTo", ids) },
-    notify: (message: string) => { void call("notify", message); },
+    notify: (message: string) => { call("notify", message).catch(() => {}); },
     storage: {
       get: (key: string) => call("storage.get", key),
       set: (key: string, value: unknown) => call("storage.set", key, value),
@@ -60,7 +61,7 @@ export function pluginBootstrap(): void {
     on: (event: string, cb: (payload: unknown) => void) => {
       (listeners[event] ??= []).push(cb);
     },
-    close: () => { void call("close"); },
+    close: () => { call("close").catch(() => {}); },
   };
 }
 
