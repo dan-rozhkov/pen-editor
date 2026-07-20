@@ -36,6 +36,7 @@ import { createGroupContainer } from "./groupRenderer";
 import { createEmbedContainer, updateEmbedContainer } from "./embedRenderer";
 import { createConnectorContainer, updateConnectorContainer } from "./connectorRenderer";
 import { applyShaderFill, shouldRebakeShader, resizeShaderFill, isSizeOnlyShaderChange } from "./shaderFillHelpers";
+import { applyNoiseEffects } from "./noiseEffectHelpers";
 import { applyVideoFills, applyVideoFillsEllipse } from "./videoFillHelpers";
 import { drawOutlineBBox, isOutlineRenderMode } from "./outlineHelpers";
 import type { ConnectorNode } from "@/types/scene";
@@ -445,6 +446,15 @@ export function createNodeContainer(
     // Layer blur (container-level filter; first visible blur in the stack wins)
     applyLayerBlur(container, getResolvedRenderableEffects(node));
 
+    // Noise/grain (up to two masked sprites, appended above fills and children)
+    applyNoiseEffects(
+      container,
+      node,
+      getResolvedRenderableEffects(node),
+      initialShadowSize.width,
+      initialShadowSize.height,
+    );
+
     // Background blur ("backdrop blur"/glassmorphism): needs the container
     // already mounted at its final position to snapshot what's behind it, which
     // isn't true yet at this point in tree construction — defer to the next
@@ -602,6 +612,13 @@ export function updateNodeContainer(
       getNodeCornerSmoothing(node),
     );
     applyLayerBlur(container, getResolvedRenderableEffects(node));
+    applyNoiseEffects(
+      container,
+      node,
+      getResolvedRenderableEffects(node),
+      shadowSize.width,
+      shadowSize.height,
+    );
   }
 
   // Background blur: re-bake the backdrop snapshot when this node's own

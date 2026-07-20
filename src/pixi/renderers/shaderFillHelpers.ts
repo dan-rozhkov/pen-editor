@@ -143,9 +143,13 @@ export function destroyShaderFill(container: Container): void {
   }
 }
 
-/** Build the shape mask matching the node outline at the given rendered size. */
-function buildMask(node: FlatSceneNode, width: number, height: number): Graphics {
-  return buildShapeMask(node, width, height, SHADER_MASK_LABEL);
+/**
+ * Build the shape mask matching the node outline at the given rendered size.
+ * Exported for reuse by other masked-sprite effects (e.g. noiseEffectHelpers)
+ * that need the same node-shape mask but with their own label.
+ */
+export function buildMask(node: FlatSceneNode, width: number, height: number, label: string = SHADER_MASK_LABEL): Graphics {
+  return buildShapeMask(node, width, height, label);
 }
 
 /**
