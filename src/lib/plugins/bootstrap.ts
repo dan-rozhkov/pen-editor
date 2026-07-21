@@ -4,7 +4,13 @@ import { PLUGIN_UI_KIT_STYLES } from "./uiKitStyles";
 /** CSS custom properties (`src/index.css`) mirrored into a plugin iframe so
  * its own markup can read `var(--color-surface-panel)` etc. Read live via
  * `getComputedStyle` rather than hardcoded, so a future palette edit doesn't
- * need a matching change here. */
+ * need a matching change here.
+ *
+ * Includes the app's un-prefixed `--primary`/`--secondary`/`--input` family
+ * (declared directly on `:root`/`.dark`, alongside the `--color-*` tokens)
+ * because `.pen-button-primary`/`.pen-input`/`.pen-select` (`uiKitStyles.ts`)
+ * are keyed off those to match `src/components/ui/button.tsx`, `input.tsx`
+ * and `select.tsx`'s actual recipes, rather than the `--color-*` family. */
 export const THEME_CSS_VARS = [
   "--color-surface-base",
   "--color-surface-panel",
@@ -19,6 +25,11 @@ export const THEME_CSS_VARS = [
   "--color-text-muted",
   "--color-text-disabled",
   "--color-accent-primary",
+  "--primary",
+  "--primary-foreground",
+  "--secondary",
+  "--secondary-foreground",
+  "--input",
 ] as const;
 
 /** Snapshot the editor's current theme tokens off `<html>`. */

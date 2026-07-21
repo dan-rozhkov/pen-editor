@@ -5,12 +5,16 @@
  * markup can use `.pen-*` classes instead of hand-rolled CSS and still match
  * the editor's look in both themes.
  *
- * Every color is `var(--color-*)`, restricted to the tokens `bootstrap.ts`
- * (`THEME_CSS_VARS`) actually mirrors into the iframe, so live theme changes
- * (`themechange`) restyle these classes for free — see
- * `bootstrap.test.ts` / `uiKitStyles.test.ts` for the guard that keeps this
- * invariant. Radii/spacing are fixed constants: they don't vary by theme, so
- * there's no need to route them through the theme payload.
+ * Colors are `var(--color-*)` (the `--color-*` family bootstrap.ts mirrors
+ * into the iframe) plus the app's un-prefixed `--primary`/`--primary-foreground`,
+ * `--secondary`/`--secondary-foreground` and `--input` tokens (`src/index.css`)
+ * for the two recipes (Button's default variant, Input/Textarea, Select) that
+ * are keyed off those rather than the `--color-*` family — all of them listed
+ * in `THEME_CSS_VARS` (`bootstrap.ts`) so live theme changes (`themechange`)
+ * restyle these classes for free. See `bootstrap.test.ts` / `uiKitStyles.test.ts`
+ * for the guard that keeps this invariant. Radii/spacing are fixed constants:
+ * they don't vary by theme, so there's no need to route them through the
+ * theme payload.
  */
 export const PLUGIN_UI_KIT_STYLES = `
 *, *::before, *::after { box-sizing: border-box; }
@@ -82,32 +86,39 @@ body {
 }
 
 .pen-button-primary {
-  background: var(--color-accent-primary);
-  border-color: var(--color-accent-primary);
-  color: #ffffff;
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
 }
 
-.pen-button-primary:hover:not(:disabled) {
+/* Higher specificity than .pen-button:hover/:active (above) so the primary
+   variant's own background/border survive interaction states — without
+   this, the generic .pen-button hover/active rules win the
+   background/border-color tie-break and the primary button turns grey. */
+.pen-button.pen-button-primary:hover:not(:disabled) {
+  background: var(--primary);
+  border-color: var(--primary);
   opacity: 0.85;
 }
 
-.pen-button-primary:active:not(:disabled) {
+.pen-button.pen-button-primary:active:not(:disabled) {
+  background: var(--primary);
+  border-color: var(--primary);
   opacity: 0.7;
 }
 
 .pen-input,
-.pen-textarea,
-.pen-select {
-  height: 28px;
+.pen-textarea {
+  height: 24px;
   padding: 0 8px;
   border-radius: 6px;
-  border: 1px solid var(--color-border-default);
-  background: var(--color-surface-base);
-  color: var(--color-text-primary);
+  border: none;
+  background: var(--secondary);
+  color: var(--secondary-foreground);
   font: inherit;
   font-size: 12px;
   outline: none;
-  transition: border-color 0.1s;
+  transition: box-shadow 0.1s;
 }
 
 .pen-textarea {
@@ -122,33 +133,63 @@ body {
   color: var(--color-text-muted);
 }
 
-.pen-input:hover:not(:disabled),
-.pen-textarea:hover:not(:disabled),
-.pen-select:hover:not(:disabled) {
-  border-color: var(--color-border-hover);
-}
-
-.pen-input:focus-visible,
-.pen-textarea:focus-visible,
-.pen-select:focus-visible {
-  border-color: var(--color-accent-primary);
+.pen-input:focus-visible:not(:disabled),
+.pen-textarea:focus-visible:not(:disabled) {
   box-shadow: 0 0 0 1px var(--color-accent-primary);
 }
 
 .pen-input:disabled,
-.pen-textarea:disabled,
-.pen-select:disabled {
+.pen-textarea:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
 .pen-select {
+  height: 24px;
+  padding: 0 26px 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--input);
+  background-color: var(--color-surface-panel);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23666666' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 10px 6px;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
   cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: border-color 0.1s, box-shadow 0.1s;
 }
 
+[data-theme="dark"] .pen-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23999999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.pen-select:hover:not(:disabled) {
+  border-color: var(--color-border-hover);
+}
+
+.pen-select:focus-visible:not(:disabled) {
+  box-shadow: 0 0 0 1px var(--color-accent-primary);
+}
+
+.pen-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Native \`<input type="checkbox">\`, not a recreation of the app's custom
+   Checkbox (\`checkbox.tsx\`, a styled div with its own checkmark icon) — a
+   sandboxed plugin iframe can't ship that markup/JS, so this only matches
+   size (16px, App's \`size-4\`) and accent color; the box shape, corner
+   radius and checkmark glyph are the browser's native rendering and will
+   differ slightly across platforms. */
 .pen-checkbox {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   accent-color: var(--color-accent-primary);
   cursor: pointer;
 }
