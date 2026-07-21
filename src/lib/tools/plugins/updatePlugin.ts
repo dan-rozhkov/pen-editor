@@ -1,6 +1,6 @@
 import { usePluginStore, type PluginUpdatePatch } from "@/store/pluginStore";
 import type { ToolHandler } from "../../toolRegistry";
-import { MAX_PLUGIN_CODE_LENGTH, parseUiArg } from "./shared";
+import { normalizeIcon, parseUiArg, validateCodeLength } from "./shared";
 
 /**
  * update_plugin — patch an existing plugin's code/metadata (the iteration
@@ -34,18 +34,19 @@ export const updatePlugin: ToolHandler = async (args) => {
   }
 
   if (args.icon !== undefined) {
-    patch.icon = typeof args.icon === "string" ? args.icon : undefined;
+    const icon = normalizeIcon(args.icon);
+    if (icon === "invalid") {
+      return JSON.stringify({ error: "icon must be a string (single emoji)" });
+    }
+    patch.icon = icon;
   }
 
   if (args.code !== undefined) {
     if (typeof args.code !== "string" || !args.code) {
       return JSON.stringify({ error: "code must be a non-empty string" });
     }
-    if (args.code.length > MAX_PLUGIN_CODE_LENGTH) {
-      return JSON.stringify({
-        error: `code is too long (${args.code.length} chars, max ${MAX_PLUGIN_CODE_LENGTH})`,
-      });
-    }
+    const codeLengthError = validateCodeLength(args.code);
+    if (codeLengthError) return JSON.stringify({ error: codeLengthError });
     patch.code = args.code;
   }
 
@@ -53,7 +54,7 @@ export const updatePlugin: ToolHandler = async (args) => {
     const ui = parseUiArg(args.ui);
     if (ui === "invalid") {
       return JSON.stringify({
-        error: "ui must be {width, height} or null for a headless plugin",
+        error: "ui must be {width, height} (positive numbers) or null for a headless plugin",
       });
     }
     patch.ui = ui;

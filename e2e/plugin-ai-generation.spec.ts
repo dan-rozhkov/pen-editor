@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { SSE_HEADERS, sseBody } from "./support/sse";
 
 // Smoke test for AI plugin generation (plg-03): the backend is stubbed via
 // page.route the same way chat-smoke.spec.ts stubs it, but this time the
@@ -6,18 +7,6 @@ import { test, expect } from "@playwright/test";
 // tool call -> local pluginStore.install() -> command-palette entry ->
 // running the installed plugin in a real sandboxed iframe (plg-01 runtime)
 // actually does what its code says.
-
-const SSE_HEADERS = {
-  "content-type": "text/event-stream",
-  "x-vercel-ai-ui-message-stream": "v1",
-};
-
-function sseBody(chunks: Array<Record<string, unknown>>): string {
-  return (
-    chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("") +
-    "data: [DONE]\n\n"
-  );
-}
 
 const PLUGIN_NAME = "SmokeTestPlugin";
 const PLUGIN_CODE = `

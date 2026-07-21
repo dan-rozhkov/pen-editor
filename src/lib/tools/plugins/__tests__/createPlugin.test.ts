@@ -1,15 +1,12 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { usePluginStore } from "@/store/pluginStore";
-import { deletePlugin, getAllPlugins } from "@/utils/pluginDb";
+import { getAllPlugins } from "@/utils/pluginDb";
 import { createPlugin } from "../createPlugin";
 import { MAX_PLUGIN_CODE_LENGTH } from "../shared";
+import { resetPluginTestState } from "./testUtils";
 
-beforeEach(async () => {
-  const records = await getAllPlugins();
-  await Promise.all(records.map((r) => deletePlugin(r.id)));
-  usePluginStore.setState({ plugins: [], hydrated: false });
-});
+beforeEach(resetPluginTestState);
 
 describe("create_plugin handler", () => {
   it("installs a headless plugin (ui absent) and returns a confirmation string", async () => {

@@ -1,22 +1,11 @@
 import { test, expect } from "@playwright/test";
+import { SSE_HEADERS, sseBody } from "./support/sse";
 
 // Smoke test for the AI design chat. The backend is stubbed via page.route:
 // the first /api/chat request streams assistant text plus a batch_design tool
 // call (AI SDK v6 UI message stream / SSE), the tool executes locally in the
 // browser against the Zustand scene graph, and the resulting tool output
 // triggers an automatic follow-up request which we answer with final text.
-
-const SSE_HEADERS = {
-  "content-type": "text/event-stream",
-  "x-vercel-ai-ui-message-stream": "v1",
-};
-
-function sseBody(chunks: Array<Record<string, unknown>>): string {
-  return (
-    chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("") +
-    "data: [DONE]\n\n"
-  );
-}
 
 // batch_design DSL: insert a root frame with a unique, easy-to-spot name.
 const BATCH_DESIGN_OPERATIONS =

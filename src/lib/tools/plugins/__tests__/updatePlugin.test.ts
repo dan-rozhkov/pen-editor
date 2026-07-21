@@ -1,16 +1,13 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { usePluginStore } from "@/store/pluginStore";
-import { deletePlugin, getAllPlugins } from "@/utils/pluginDb";
+import { getAllPlugins } from "@/utils/pluginDb";
 import { createPlugin } from "../createPlugin";
 import { updatePlugin } from "../updatePlugin";
 import { MAX_PLUGIN_CODE_LENGTH } from "../shared";
+import { resetPluginTestState } from "./testUtils";
 
-beforeEach(async () => {
-  const records = await getAllPlugins();
-  await Promise.all(records.map((r) => deletePlugin(r.id)));
-  usePluginStore.setState({ plugins: [], hydrated: false });
-});
+beforeEach(resetPluginTestState);
 
 async function installOne() {
   await createPlugin({ name: "Original", description: "d", code: "c" });
@@ -91,6 +88,38 @@ describe("update_plugin handler", () => {
     const plugin = await installOne();
     const result = await updatePlugin({ id: plugin.id, ui: { width: 100 } });
     expect(JSON.parse(result).error).toContain("ui must be");
+  });
+
+  it("rejects a non-positive/non-finite ui width or height", async () => {
+    const plugin = await installOne();
+    for (const bad of [0, -10, NaN, Infinity]) {
+      const result = await updatePlugin({ id: plugin.id, ui: { width: bad, height: 100 } });
+      expect(JSON.parse(result).error).toContain("ui must be");
+      expect(usePluginStore.getState().plugins[0].ui).toBeNull();
+    }
+  });
+
+  it("rejects icon: null without wiping the stored icon", async () => {
+    await createPlugin({ name: "Original", description: "d", code: "c" });
+    const withIcon = usePluginStore.getState().plugins[0];
+    await updatePlugin({ id: withIcon.id, icon: "🔢" });
+    expect(usePluginStore.getState().plugins[0].icon).toBe("🔢");
+
+    const result = await updatePlugin({ id: withIcon.id, icon: null });
+    expect(JSON.parse(result).error).toContain("icon must be a string");
+
+    // The earlier `patch.icon = undefined` bug wiped the stored icon via
+    // `{...current, ...patch}` — assert it's still intact.
+    expect(usePluginStore.getState().plugins[0].icon).toBe("🔢");
+  });
+
+  it("treats icon: '' the same as omitted (clears to undefined)", async () => {
+    const plugin = await installOne();
+    await updatePlugin({ id: plugin.id, icon: "🔢" });
+    expect(usePluginStore.getState().plugins[0].icon).toBe("🔢");
+
+    await updatePlugin({ id: plugin.id, icon: "" });
+    expect(usePluginStore.getState().plugins[0].icon).toBeUndefined();
   });
 
   it("errors when no patch fields are provided", async () => {
