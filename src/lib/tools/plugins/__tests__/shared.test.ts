@@ -38,22 +38,30 @@ describe("parseUiArg", () => {
 
 describe("normalizeIcon", () => {
   it("treats undefined as no icon", () => {
-    expect(normalizeIcon(undefined)).toBeUndefined();
+    expect(normalizeIcon(undefined)).toEqual({ ok: true, icon: undefined });
   });
 
   it("normalizes an empty string to undefined", () => {
-    expect(normalizeIcon("")).toBeUndefined();
+    expect(normalizeIcon("")).toEqual({ ok: true, icon: undefined });
   });
 
   it("passes through a non-empty string", () => {
-    expect(normalizeIcon("🔢")).toBe("🔢");
+    expect(normalizeIcon("🔢")).toEqual({ ok: true, icon: "🔢" });
   });
 
   it("rejects null and non-string values", () => {
-    expect(normalizeIcon(null)).toBe("invalid");
-    expect(normalizeIcon(123)).toBe("invalid");
-    expect(normalizeIcon(true)).toBe("invalid");
-    expect(normalizeIcon({})).toBe("invalid");
+    expect(normalizeIcon(null)).toEqual({ ok: false });
+    expect(normalizeIcon(123)).toEqual({ ok: false });
+    expect(normalizeIcon(true)).toEqual({ ok: false });
+    expect(normalizeIcon({})).toEqual({ ok: false });
+  });
+
+  it("accepts the literal string \"invalid\" as a valid icon (no sentinel collision)", () => {
+    // Regression: an earlier version returned the bare string "invalid" as
+    // its own error sentinel, which was indistinguishable from a legitimate
+    // icon whose text happens to read "invalid". The discriminated {ok, icon}
+    // result makes that collision impossible.
+    expect(normalizeIcon("invalid")).toEqual({ ok: true, icon: "invalid" });
   });
 });
 

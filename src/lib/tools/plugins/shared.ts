@@ -32,20 +32,28 @@ export function parseUiArg(raw: unknown): UiArg | null | "invalid" {
   return "invalid";
 }
 
+export type NormalizeIconResult =
+  | { ok: true; icon: string | undefined }
+  | { ok: false };
+
 /**
  * Validate + normalize an `icon` tool argument. `undefined` (absent) is
  * valid and normalizes to `undefined` (no icon). A present value must be a
  * string; an empty string normalizes to `undefined` too, so create/update
  * treat "" and omitted identically. Anything else (e.g. `null`, a number) is
- * reported as `"invalid"` — the caller must return a validation error rather
- * than let a bad value fall through as `undefined`, which previously let
- * `update_plugin`'s own `{icon: undefined}` patch key silently wipe a
+ * reported as `{ok: false}` — the caller must return a validation error
+ * rather than let a bad value fall through as `undefined`, which previously
+ * let `update_plugin`'s own `{icon: undefined}` patch key silently wipe a
  * plugin's stored icon via `{...current, ...patch}` in pluginStore.
+ *
+ * Returns a discriminated `{ok, icon}` result rather than a string sentinel:
+ * a bare `"invalid"` string return value would be indistinguishable from a
+ * (perfectly legal) icon whose text literally reads "invalid".
  */
-export function normalizeIcon(icon: unknown): string | undefined | "invalid" {
-  if (icon === undefined) return undefined;
-  if (typeof icon !== "string") return "invalid";
-  return icon ? icon : undefined;
+export function normalizeIcon(icon: unknown): NormalizeIconResult {
+  if (icon === undefined) return { ok: true, icon: undefined };
+  if (typeof icon !== "string") return { ok: false };
+  return { ok: true, icon: icon ? icon : undefined };
 }
 
 /**

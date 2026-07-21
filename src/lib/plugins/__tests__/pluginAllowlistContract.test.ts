@@ -19,6 +19,15 @@ const backendSkillPath = resolve(
 );
 const backendExists = existsSync(backendSkillPath);
 
+// In the cross-repo CI job the sibling checkout is mandatory — a missing
+// backend must fail the job, not silently skip the contract. Mirrors
+// toolContract.test.ts's guard so this test can't self-skip there either.
+if (process.env.CONTRACT_REQUIRE_BACKEND && !backendExists) {
+  throw new Error(
+    `CONTRACT_REQUIRE_BACKEND is set but ${backendSkillPath} does not exist`,
+  );
+}
+
 function extractAllowlistNames(markdown: string): string[] {
   const lines = markdown.split("\n");
   const headingIndex = lines.findIndex((line) => /^####\s+Allowlist\s*$/.test(line.trim()));

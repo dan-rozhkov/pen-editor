@@ -67,7 +67,7 @@ jobs:
       # needs the backend's node_modules (ai, zod) to resolve.
       - run: npm ci
         working-directory: pen-editor-backend
-      - run: npx vitest run src/lib/__tests__/toolContract.test.ts
+      - run: npx vitest run src/lib/__tests__/toolContract.test.ts src/lib/plugins/__tests__/pluginAllowlistContract.test.ts
         working-directory: pen-editor
         env:
           CONTRACT_REQUIRE_BACKEND: "1"

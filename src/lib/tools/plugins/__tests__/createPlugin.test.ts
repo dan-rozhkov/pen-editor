@@ -54,6 +54,17 @@ describe("create_plugin handler", () => {
     expect(usePluginStore.getState().plugins[0].icon).toBe("🔢");
   });
 
+  it("accepts and stores the literal icon string \"invalid\" (no sentinel collision)", async () => {
+    const result = await createPlugin({
+      name: "Counter",
+      description: "d",
+      code: "c",
+      icon: "invalid",
+    });
+    expect(result).toContain("plugin installed");
+    expect(usePluginStore.getState().plugins[0].icon).toBe("invalid");
+  });
+
   it("trims name/description", async () => {
     await createPlugin({ name: "  Padded  ", description: "  d  ", code: "c" });
     expect(usePluginStore.getState().plugins[0].name).toBe("Padded");

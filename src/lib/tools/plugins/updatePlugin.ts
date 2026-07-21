@@ -34,11 +34,11 @@ export const updatePlugin: ToolHandler = async (args) => {
   }
 
   if (args.icon !== undefined) {
-    const icon = normalizeIcon(args.icon);
-    if (icon === "invalid") {
+    const iconResult = normalizeIcon(args.icon);
+    if (!iconResult.ok) {
       return JSON.stringify({ error: "icon must be a string (single emoji)" });
     }
-    patch.icon = icon;
+    patch.icon = iconResult.icon;
   }
 
   if (args.code !== undefined) {

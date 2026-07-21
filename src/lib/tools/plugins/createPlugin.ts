@@ -20,10 +20,11 @@ export const createPlugin: ToolHandler = async (args) => {
   const codeLengthError = validateCodeLength(code);
   if (codeLengthError) return JSON.stringify({ error: codeLengthError });
 
-  const icon = normalizeIcon(args.icon);
-  if (icon === "invalid") {
+  const iconResult = normalizeIcon(args.icon);
+  if (!iconResult.ok) {
     return JSON.stringify({ error: "icon must be a string (single emoji) or omitted" });
   }
+  const icon = iconResult.icon;
 
   const ui = parseUiArg(args.ui);
   if (ui === "invalid") {

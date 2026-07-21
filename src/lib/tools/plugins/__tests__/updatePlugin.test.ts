@@ -113,6 +113,13 @@ describe("update_plugin handler", () => {
     expect(usePluginStore.getState().plugins[0].icon).toBe("🔢");
   });
 
+  it("accepts and stores the literal icon string \"invalid\" (no sentinel collision)", async () => {
+    const plugin = await installOne();
+    const result = await updatePlugin({ id: plugin.id, icon: "invalid" });
+    expect(result).toBe(`plugin updated: ${plugin.id} "Original".`);
+    expect(usePluginStore.getState().plugins[0].icon).toBe("invalid");
+  });
+
   it("treats icon: '' the same as omitted (clears to undefined)", async () => {
     const plugin = await installOne();
     await updatePlugin({ id: plugin.id, icon: "🔢" });
