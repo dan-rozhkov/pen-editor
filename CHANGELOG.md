@@ -8,6 +8,31 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.55.0] - 2026-07-21
+
+### Added
+- **Plugin library & manager (plg-02).** Installed plugins now persist in
+  IndexedDB (`src/utils/pluginDb.ts`, built on a new shared
+  `createIndexedDbStore` factory also adopted by the custom-font store) with an
+  in-memory zustand `pluginStore` (hydration-safe: installs await the initial
+  load, colliding ids get a fresh id instead of overwriting). New
+  **Plugin Manager** panel: run, rename inline, view code (read-only), delete
+  with confirmation, export as JSON and import from JSON
+  (`src/lib/plugins/pluginTransfer.ts`). Command palette gains a **Plugins**
+  group — one run-command per installed plugin (`mutatesScene`, hidden in
+  Dev Mode; the manager's Run button is likewise disabled there) plus
+  "Manage plugins…".
+- **AI plugin generation (plg-03, pairs with backend 0.23.0).** New
+  client-executed tool handlers `create_plugin` / `update_plugin` /
+  `list_plugins` (`src/lib/tools/plugins/`): the agent writes plugin code in
+  chat, it lands in the library ready to run, and iterates via
+  list → update. Strict validation (required fields, 100 KB code cap,
+  positive panel size, icon type checks that never wipe an existing icon).
+  Covered by unit tests, an e2e smoke (stubbed `/api/chat` streams
+  `create_plugin` → plugin installs and runs in a real sandboxed iframe) and
+  two cross-repo contract tests — tool names and the `/plugin` skill's
+  allowed-tools list are both CI-guarded against drift.
+
 ## [0.54.0] - 2026-07-21
 
 ### Added
