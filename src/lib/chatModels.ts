@@ -99,6 +99,16 @@ const FALLBACK_MODELS: ChatModelOption[] = [
     label: "Grok 4.20",
     supportsVision: false,
   },
+  {
+    value: "google/gemini-3.5-flash-lite",
+    label: "Gemini 3.5 Flash-Lite",
+    supportsVision: true,
+  },
+  {
+    value: "google/gemini-3.6-flash",
+    label: "Gemini 3.6 Flash",
+    supportsVision: true,
+  },
 ];
 
 // Backend wire shape (pen-editor-backend GET /api/models).
