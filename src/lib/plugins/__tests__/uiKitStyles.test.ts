@@ -14,6 +14,23 @@ describe("PLUGIN_UI_KIT_STYLES", () => {
       ".pen-checkbox",
       ".pen-row",
       ".pen-stack",
+      ".pen-badge",
+      ".pen-card",
+      ".pen-separator",
+      ".pen-slider",
+      ".pen-tabs",
+      ".pen-tab",
+      ".pen-alert",
+      ".pen-table",
+      ".pen-field",
+      ".pen-help",
+      ".pen-icon-button",
+      ".pen-button-group",
+      ".pen-input-group",
+      ".pen-heading",
+      ".pen-muted",
+      ".pen-kbd",
+      ".pen-link",
     ]) {
       expect(PLUGIN_UI_KIT_STYLES).toContain(cls);
     }

@@ -184,6 +184,11 @@ describe("buildSrcdoc", () => {
     expect(html).toContain(".pen-checkbox");
     expect(html).toContain(".pen-row");
     expect(html).toContain(".pen-stack");
+    expect(html).toContain(".pen-badge");
+    expect(html).toContain(".pen-card");
+    expect(html).toContain(".pen-slider");
+    expect(html).toContain(".pen-tabs");
+    expect(html).toContain(".pen-table");
   });
 
   it("includes the UI-kit stylesheet even for a headless plugin (no `ui` field)", () => {
