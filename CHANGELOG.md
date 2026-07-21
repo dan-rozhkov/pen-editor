@@ -8,6 +8,22 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.57.0] - 2026-07-21
+
+### Added
+- **Plugin UI kit (plg-06).** The plugin sandbox now ships a base stylesheet
+  baked into every plugin document: `.pen-button` / `.pen-button-primary`,
+  `.pen-input`, `.pen-textarea`, `.pen-select` (custom caret, no native
+  chrome), `.pen-label`, `.pen-checkbox`, `.pen-row`, `.pen-stack` — styled
+  on the editor's own tokens (`--primary`/`--primary-foreground`,
+  `--secondary`, `--input`, surface/text vars, all now injected and
+  live-updating on theme switch) and mirroring the real primitives' recipes
+  (borderless 24px inputs, 28px buttons, SelectTrigger-style select).
+  AI-generated plugins now look native instead of hand-rolling CSS; the
+  `/plugin` skill documents the class catalog, and a cross-repo contract
+  test keeps the catalog and the stylesheet in sync.
+- Floating panels and sidebar headers alignment pass (concurrent session).
+
 ## [0.56.0] - 2026-07-21
 
 ### Added
