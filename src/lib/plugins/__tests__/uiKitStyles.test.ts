@@ -49,4 +49,18 @@ describe("PLUGIN_UI_KIT_STYLES", () => {
     expect(body).toMatch(/background:/);
     expect(body).toMatch(/border-color:/);
   });
+
+  it("declares background/border-color on the primary button's own active rule (specificity guard)", () => {
+    // Same bug, same fix, for :active: `.pen-button:active` re-declares
+    // background/border-color at the same tie-broken specificity as a bare
+    // `.pen-button-primary:active` would, so the compound
+    // `.pen-button.pen-button-primary:active` selector must outrank it too.
+    const match = PLUGIN_UI_KIT_STYLES.match(
+      /\.pen-button\.pen-button-primary:active:not\(:disabled\)\s*{([^}]*)}/,
+    );
+    expect(match).not.toBeNull();
+    const body = match![1];
+    expect(body).toMatch(/background:/);
+    expect(body).toMatch(/border-color:/);
+  });
 });
