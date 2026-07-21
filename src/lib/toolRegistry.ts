@@ -24,6 +24,9 @@ import { readComments } from "./tools/readComments";
 import { replyComment } from "./tools/replyComment";
 import { resolveComment } from "./tools/resolveComment";
 import { leaveComment } from "./tools/leaveComment";
+import { createPlugin } from "./tools/plugins/createPlugin";
+import { updatePlugin } from "./tools/plugins/updatePlugin";
+import { listPlugins } from "./tools/plugins/listPlugins";
 export type ToolHandler = (
   args: Record<string, unknown>
 ) => Promise<string>;
@@ -58,4 +61,7 @@ export const toolHandlers: Record<string, ToolHandler> = {
   reply_comment: replyComment,
   resolve_comment: resolveComment,
   leave_comment: leaveComment,
+  create_plugin: createPlugin,
+  update_plugin: updatePlugin,
+  list_plugins: listPlugins,
 };

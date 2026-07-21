@@ -38,6 +38,9 @@ const EXPECTED_CLIENT_TOOLS = [
   "reply_comment",
   "resolve_comment",
   "leave_comment",
+  "create_plugin",
+  "update_plugin",
+  "list_plugins",
 ];
 
 // Tools whose schema also has a backend `execute` — they run server-side, the

@@ -57,6 +57,14 @@ if (import.meta.env.DEV) {
   import('@/lib/plugins/pluginHost').then(({ runPlugin, stopPlugin }) => {
     (window as unknown as Record<string, unknown>).__pluginHost = { runPlugin, stopPlugin };
   });
+  // AI plugin generation e2e (plg-03): inspect installed plugins and the
+  // command palette entries create_plugin/update_plugin produce.
+  import('@/store/pluginStore').then(({ usePluginStore }) => {
+    (window as unknown as Record<string, unknown>).__pluginStore = usePluginStore;
+  });
+  import('@/lib/commands/registry').then(({ getCommands }) => {
+    (window as unknown as Record<string, unknown>).__getCommands = getCommands;
+  });
 }
 
 createRoot(document.getElementById('root')!).render(
