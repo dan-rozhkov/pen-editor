@@ -12,6 +12,7 @@ import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import { DotsSixIcon } from "@phosphor-icons/react";
 
 import { cn } from "@/lib/utils";
+import { usePointerDragGesture } from "@/hooks/usePointerDragGesture";
 import {
   clampPositionToViewport,
   computeDragPosition,
@@ -58,22 +59,15 @@ function PopoverContent({
   }) {
   const positionerRef = useRef<HTMLDivElement>(null);
   const [tornOffPosition, setTornOffPosition] = useState<Point | null>(null);
-  // Cleanup for the in-progress drag's window listeners. Held in a ref so
-  // pointerup/pointercancel AND an unmount-mid-drag can all tear it down —
-  // otherwise an interrupted gesture (e.g. touch pointercancel, or the popover
-  // dismissing while dragging) would leak listeners that keep tracking the
-  // pointer on the next interaction.
-  const dragCleanupRef = useRef<(() => void) | null>(null);
+  // Pointer-capture drag/window-listener wiring, shared with PluginPanels'
+  // titlebar drag and resize handle (`usePointerDragGesture.ts`).
+  const drag = usePointerDragGesture();
 
   const handleDragHandlePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       if (event.button !== 0) return;
       const positionerEl = positionerRef.current;
       if (!positionerEl) return;
-      event.preventDefault();
-      event.currentTarget.setPointerCapture(event.pointerId);
-      // Clear any prior drag that never received its pointerup.
-      dragCleanupRef.current?.();
 
       const rect = positionerEl.getBoundingClientRect();
       const origin: DragOrigin = {
@@ -85,7 +79,7 @@ function PopoverContent({
       // jump before the first pointer move.
       setTornOffPosition(origin.position);
 
-      const onMove = (moveEvent: PointerEvent) => {
+      drag.start(event, (moveEvent) => {
         setTornOffPosition(
           computeDragPosition(
             origin,
@@ -94,24 +88,14 @@ function PopoverContent({
             { width: window.innerWidth, height: window.innerHeight },
           ),
         );
-      };
-      const cleanup = () => {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", cleanup);
-        window.removeEventListener("pointercancel", cleanup);
-        dragCleanupRef.current = null;
-      };
-      dragCleanupRef.current = cleanup;
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", cleanup);
-      window.addEventListener("pointercancel", cleanup);
+      });
     },
-    [],
+    [drag],
   );
 
   // Tear down a drag that is still active when the popover unmounts (e.g.
   // dismissed mid-drag), so its window listeners don't outlive the component.
-  useEffect(() => () => dragCleanupRef.current?.(), []);
+  useEffect(() => () => drag.cancel(), [drag]);
 
   // Keep a torn-off popover on screen when the viewport shrinks (window resize
   // / orientation change), matching the clamp applied during the drag itself.

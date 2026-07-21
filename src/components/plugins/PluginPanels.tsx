@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useCallback, useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
 import { DotsSixIcon, XIcon } from "@phosphor-icons/react";
 
-import { stopPlugin } from "@/lib/plugins/pluginHost";
+import { getRunningPlugin, stopPlugin } from "@/lib/plugins/pluginHost";
 import { usePluginPanelStore, type PluginPanelState } from "@/store/pluginPanelStore";
-import { clampPositionToViewport, computeDragPosition } from "@/components/ui/popoverDrag";
+import { usePluginStore } from "@/store/pluginStore";
+import { computeDragPosition } from "@/components/ui/popoverDrag";
+import { usePointerDragGesture } from "@/hooks/usePointerDragGesture";
 import { IconButton } from "@/components/ui/IconButton";
 
 /**
@@ -18,16 +20,33 @@ export function PluginPanels() {
   return (
     <>
       {Object.values(panels).map((panel) => (
-        <PluginPanelWindow key={panel.plugin.id} panel={panel} />
+        <PluginPanelWindow key={panel.pluginId} panel={panel} />
       ))}
     </>
   );
 }
 
-function PluginPanelWindow({ panel }: { panel: PluginPanelState }) {
+/**
+ * Memoized so dragging/resizing one panel doesn't re-render every other open
+ * panel: `PluginPanels` subscribes to the whole `panels` record, but `open`/
+ * `move`/`resize` only replace the touched entry (see `pluginPanelStore.ts`),
+ * so every *other* panel's `panel` prop keeps its old reference — memo turns
+ * that into an actual skipped re-render instead of a wasted one.
+ */
+const PluginPanelWindow = memo(function PluginPanelWindow({ panel }: { panel: PluginPanelState }) {
   const bodyRef = useRef<HTMLDivElement>(null);
-  const dragCleanupRef = useRef<(() => void) | null>(null);
-  const resizeCleanupRef = useRef<(() => void) | null>(null);
+  // Plugin metadata for the titlebar: read live from `pluginStore` by id so a
+  // rename doesn't go stale here (the panel only keeps geometry + iframe,
+  // not a `PenPlugin` snapshot). Plugins run directly against `pluginHost`
+  // without going through `pluginStore` (e.g. the e2e/dev harness) fall back
+  // to the running instance's own copy.
+  const installedPlugin = usePluginStore((s) => s.plugins.find((p) => p.id === panel.pluginId));
+  const runningPlugin = installedPlugin ? undefined : getRunningPlugin(panel.pluginId)?.plugin;
+  const name = installedPlugin?.name ?? runningPlugin?.name ?? panel.pluginId;
+  const icon = installedPlugin?.icon ?? runningPlugin?.icon;
+
+  const drag = usePointerDragGesture();
+  const resizeDrag = usePointerDragGesture();
 
   // The iframe is owned by pluginHost (created in runPlugin, torn down in
   // dispose()) — this effect only re-parents it into the panel's visible DOM.
@@ -39,29 +58,21 @@ function PluginPanelWindow({ panel }: { panel: PluginPanelState }) {
 
   // Tear down any in-progress drag/resize gesture's window listeners on
   // unmount (panel closed mid-drag), same rationale as popover.tsx.
-  useEffect(
-    () => () => {
-      dragCleanupRef.current?.();
-      resizeCleanupRef.current?.();
-    },
-    [],
-  );
+  useEffect(() => () => {
+    drag.cancel();
+    resizeDrag.cancel();
+  }, [drag, resizeDrag]);
 
   const handleTitleBarPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (event.button !== 0) return;
-      event.preventDefault();
-      event.currentTarget.setPointerCapture(event.pointerId);
-      dragCleanupRef.current?.();
-
-      const pluginId = panel.plugin.id;
+      const pluginId = panel.pluginId;
       const origin = {
         pointer: { x: event.clientX, y: event.clientY },
         position: { x: panel.x, y: panel.y },
       };
       const size = { width: panel.width, height: panel.height };
 
-      const onMove = (moveEvent: PointerEvent) => {
+      drag.start(event, (moveEvent) => {
         const next = computeDragPosition(
           origin,
           { x: moveEvent.clientX, y: moveEvent.clientY },
@@ -69,70 +80,38 @@ function PluginPanelWindow({ panel }: { panel: PluginPanelState }) {
           { width: window.innerWidth, height: window.innerHeight },
         );
         usePluginPanelStore.getState().move(pluginId, next.x, next.y);
-      };
-      const cleanup = () => {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", cleanup);
-        window.removeEventListener("pointercancel", cleanup);
-        dragCleanupRef.current = null;
-      };
-      dragCleanupRef.current = cleanup;
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", cleanup);
-      window.addEventListener("pointercancel", cleanup);
+      });
     },
-    [panel.plugin.id, panel.x, panel.y, panel.width, panel.height],
+    [drag, panel.pluginId, panel.x, panel.y, panel.width, panel.height],
   );
 
   const handleResizeHandlePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (event.button !== 0) return;
-      event.preventDefault();
-      event.currentTarget.setPointerCapture(event.pointerId);
-      resizeCleanupRef.current?.();
-
-      const pluginId = panel.plugin.id;
+      const pluginId = panel.pluginId;
       const startPointer = { x: event.clientX, y: event.clientY };
       const startSize = { width: panel.width, height: panel.height };
 
-      const onMove = (moveEvent: PointerEvent) => {
+      resizeDrag.start(event, (moveEvent) => {
         const width = startSize.width + (moveEvent.clientX - startPointer.x);
         const height = startSize.height + (moveEvent.clientY - startPointer.y);
         usePluginPanelStore.getState().resize(pluginId, width, height);
-      };
-      const cleanup = () => {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", cleanup);
-        window.removeEventListener("pointercancel", cleanup);
-        resizeCleanupRef.current = null;
-      };
-      resizeCleanupRef.current = cleanup;
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", cleanup);
-      window.addEventListener("pointercancel", cleanup);
+      });
     },
-    [panel.plugin.id, panel.width, panel.height],
+    [resizeDrag, panel.pluginId, panel.width, panel.height],
   );
 
-  // Keep the panel on screen when the viewport shrinks (window resize),
-  // mirroring popover.tsx's torn-off-position clamp.
+  // Keep the panel on screen when the viewport shrinks (window resize):
+  // shrink its size to fit first, then clamp position — mirrors popover.tsx's
+  // torn-off-position clamp, but also fixes the resize handle (bottom-right
+  // corner) ending up off-screen when only position used to be clamped.
   useEffect(() => {
-    const pluginId = panel.plugin.id;
+    const pluginId = panel.pluginId;
     const onResize = () => {
-      const current = usePluginPanelStore.getState().panels[pluginId];
-      if (!current) return;
-      const clamped = clampPositionToViewport(
-        { x: current.x, y: current.y },
-        { width: current.width, height: current.height },
-        { width: window.innerWidth, height: window.innerHeight },
-      );
-      if (clamped.x !== current.x || clamped.y !== current.y) {
-        usePluginPanelStore.getState().move(pluginId, clamped.x, clamped.y);
-      }
+      usePluginPanelStore.getState().fitToViewport(pluginId, window.innerWidth, window.innerHeight);
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [panel.plugin.id]);
+  }, [panel.pluginId]);
 
   return (
     <div
@@ -144,12 +123,12 @@ function PluginPanelWindow({ panel }: { panel: PluginPanelState }) {
         onPointerDown={handleTitleBarPointerDown}
       >
         <DotsSixIcon size={12} weight="bold" className="shrink-0 text-text-muted" />
-        {panel.plugin.icon && (
+        {icon && (
           <span aria-hidden className="shrink-0">
-            {panel.plugin.icon}
+            {icon}
           </span>
         )}
-        <span className="min-w-0 flex-1 truncate">{panel.plugin.name}</span>
+        <span className="min-w-0 flex-1 truncate">{name}</span>
         <IconButton
           tooltip="Close"
           size="icon-sm"
@@ -160,7 +139,7 @@ function PluginPanelWindow({ panel }: { panel: PluginPanelState }) {
           // eventual click's target to the capturing element), and the
           // close button would silently stop responding to clicks.
           onPointerDown={(event) => event.stopPropagation()}
-          onClick={() => stopPlugin(panel.plugin.id)}
+          onClick={() => stopPlugin(panel.pluginId)}
         >
           <XIcon />
         </IconButton>
@@ -176,4 +155,4 @@ function PluginPanelWindow({ panel }: { panel: PluginPanelState }) {
       />
     </div>
   );
-}
+});

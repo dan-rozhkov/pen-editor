@@ -3,6 +3,7 @@ import { resetStores, seedScene } from "@/test/fixtures";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useUIThemeStore } from "@/store/uiThemeStore";
 import { usePluginPanelStore } from "@/store/pluginPanelStore";
+import { useEditorModeStore } from "@/store/editorModeStore";
 import { runPlugin, stopPlugin, getRunningPlugin, stopAllPlugins } from "../pluginHost";
 import type { PenPlugin } from "../types";
 
@@ -105,6 +106,30 @@ describe("pluginHost", () => {
       expect(panel.iframe).not.toBe(first.iframe);
     });
 
+    it("re-running a plugin that dropped its ui (edited to headless) closes the now-stale panel instead of orphaning it", () => {
+      runPlugin(uiPlugin("p1"));
+      expect(usePluginPanelStore.getState().panels["p1"]).toBeDefined();
+
+      runPlugin(plugin("p1")); // same id, ui now absent
+
+      expect(usePluginPanelStore.getState().panels["p1"]).toBeUndefined();
+    });
+
+    it("re-running a UI plugin keeps its panel's geometry (plg-04 fix)", () => {
+      runPlugin(uiPlugin());
+      usePluginPanelStore.getState().move("p1", 321, 654);
+      usePluginPanelStore.getState().resize("p1", 500, 400);
+      const before = usePluginPanelStore.getState().panels["p1"];
+
+      runPlugin(uiPlugin());
+      const after = usePluginPanelStore.getState().panels["p1"];
+
+      expect(after.x).toBe(before.x);
+      expect(after.y).toBe(before.y);
+      expect(after.width).toBe(before.width);
+      expect(after.height).toBe(before.height);
+    });
+
     it("stopPlugin on a UI plugin closes its panel and removes the iframe (no leaks)", () => {
       const instance = runPlugin(uiPlugin());
       expect(usePluginPanelStore.getState().panels["p1"]).toBeDefined();
@@ -139,6 +164,90 @@ describe("pluginHost", () => {
       stopPlugin("p1");
       useUIThemeStore.getState().setUITheme("dark");
       expect(post).not.toHaveBeenCalled();
+    });
+
+    it("theme changes fan out to every running UI instance from one shared subscription, and skip headless instances", () => {
+      const uiA = runPlugin(uiPlugin("p1"));
+      const uiB = runPlugin(uiPlugin("p2"));
+      const headless = runPlugin(plugin("p3"));
+      const postA = vi.fn();
+      const postB = vi.fn();
+      const postHeadless = vi.fn();
+      Object.defineProperty(uiA.iframe, "contentWindow", { value: { postMessage: postA }, configurable: true });
+      Object.defineProperty(uiB.iframe, "contentWindow", { value: { postMessage: postB }, configurable: true });
+      Object.defineProperty(headless.iframe, "contentWindow", {
+        value: { postMessage: postHeadless }, configurable: true,
+      });
+
+      useUIThemeStore.getState().setUITheme("dark");
+
+      expect(postA).toHaveBeenCalledTimes(1);
+      expect(postB).toHaveBeenCalledTimes(1);
+      expect(postHeadless).not.toHaveBeenCalled();
+    });
+
+    it("replies to the readiness handshake with the current theme, validating the source window", () => {
+      const instance = runPlugin(uiPlugin());
+      const post = vi.fn();
+      Object.defineProperty(instance.iframe, "contentWindow", {
+        value: { postMessage: post }, configurable: true,
+      });
+      useUIThemeStore.getState().setUITheme("dark");
+      post.mockClear(); // drop the broadcast from the theme change above
+
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { kind: "pen-plugin-ready" },
+          source: instance.iframe.contentWindow as unknown as Window,
+        }),
+      );
+
+      expect(post).toHaveBeenCalledTimes(1);
+      const [message] = post.mock.calls[0] as [{ kind: string; event: string; payload: { theme: string } }];
+      expect(message.kind).toBe("pen-host-event");
+      expect(message.event).toBe("themechange");
+      expect(message.payload.theme).toBe("dark");
+    });
+
+    it("ignores a readiness handshake whose source isn't this instance's iframe", () => {
+      const instance = runPlugin(uiPlugin());
+      const post = vi.fn();
+      Object.defineProperty(instance.iframe, "contentWindow", {
+        value: { postMessage: post }, configurable: true,
+      });
+
+      window.dispatchEvent(new MessageEvent("message", { data: { kind: "pen-plugin-ready" } })); // no source
+      expect(post).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("mode-switch teardown (plg-04 fix)", () => {
+    afterEach(() => {
+      useEditorModeStore.setState({ mode: "edit", presentFrameIds: [], presentIndex: 0 });
+    });
+
+    it("stops every running instance (and closes UI panels) when the editor leaves edit mode", () => {
+      const headless = runPlugin(plugin("p-headless"));
+      const ui = runPlugin(uiPlugin("p-ui"));
+      expect(getRunningPlugin("p-headless")).toBeDefined();
+      expect(usePluginPanelStore.getState().panels["p-ui"]).toBeDefined();
+
+      useEditorModeStore.setState({ mode: "view" });
+
+      expect(getRunningPlugin("p-headless")).toBeUndefined();
+      expect(getRunningPlugin("p-ui")).toBeUndefined();
+      expect(usePluginPanelStore.getState().panels["p-ui"]).toBeUndefined();
+      expect(document.body.contains(headless.iframe)).toBe(false);
+      expect(document.body.contains(ui.iframe)).toBe(false);
+    });
+
+    it("does not react to a mode change that never passes through edit", () => {
+      useEditorModeStore.setState({ mode: "view" });
+      const instance = runPlugin(plugin("p-view"));
+      useEditorModeStore.setState({ mode: "present" });
+      expect(getRunningPlugin("p-view")).toBeDefined();
+      instance.dispose();
+      useEditorModeStore.setState({ mode: "edit" });
     });
   });
 });

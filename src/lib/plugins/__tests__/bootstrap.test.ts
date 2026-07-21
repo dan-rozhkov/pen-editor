@@ -23,6 +23,14 @@ function deliver(data: unknown): void {
   window.dispatchEvent(new MessageEvent("message", { data, source: window.parent }));
 }
 
+/** The first thing posted every test is the one-time `pen-plugin-ready`
+ * handshake (`beforeEach` calls `pluginBootstrap()` before the test body
+ * runs) — tests that assert on a specific RPC request look past it here
+ * rather than indexing `posted[0]` directly. */
+function lastPosted(posted: Array<Record<string, unknown>>): Record<string, unknown> {
+  return posted[posted.length - 1];
+}
+
 describe("pluginBootstrap", () => {
   let posted: Array<Record<string, unknown>>;
   let postSpy: ReturnType<typeof vi.spyOn>;
@@ -54,7 +62,7 @@ describe("pluginBootstrap", () => {
 
   it("posts an rpc request and resolves on ok response", async () => {
     const promise = getPen().tools.run("get_editor_state", {});
-    const req = posted[0];
+    const req = lastPosted(posted);
     expect(req.kind).toBe("pen-rpc-request");
     expect(req.method).toBe("tools.run");
     expect(req.args).toEqual(["get_editor_state", {}]);
@@ -64,7 +72,7 @@ describe("pluginBootstrap", () => {
 
   it("rejects on error response", async () => {
     const promise = getPen().scene.batch("bad");
-    const req = posted[0];
+    const req = lastPosted(posted);
     deliver({ kind: "pen-rpc-response", callId: req.callId, ok: false, error: "boom" });
     await expect(promise).rejects.toThrow("boom");
   });
@@ -88,9 +96,15 @@ describe("pluginBootstrap", () => {
     expect(cb).toHaveBeenCalledWith(["a"]);
   });
 
+  it("posts a one-time pen-plugin-ready handshake right after wiring up its listener", () => {
+    // pluginBootstrap() already ran in beforeEach and posted synchronously —
+    // the handshake must be the very first thing posted, before any RPC call.
+    expect(posted).toEqual([{ kind: "pen-plugin-ready" }]);
+  });
+
   it("posts a ui.resize rpc request", () => {
     void getPen().ui.resize(500, 400);
-    const req = posted[0];
+    const req = lastPosted(posted);
     expect(req.kind).toBe("pen-rpc-request");
     expect(req.method).toBe("ui.resize");
     expect(req.args).toEqual([500, 400]);
@@ -124,7 +138,7 @@ describe("pluginBootstrap", () => {
 
   it("ignores messages whose source is not window.parent", async () => {
     const promise = getPen().tools.run("get_editor_state", {});
-    const req = posted[0];
+    const req = lastPosted(posted);
     // Wrong source: plain MessageEvent with no `source` (defaults to null in happy-dom).
     window.dispatchEvent(new MessageEvent("message", { data: { kind: "pen-rpc-response", callId: req.callId, ok: true, result: "SPOOFED" } }));
     // Correctly-sourced response still resolves the same pending call.

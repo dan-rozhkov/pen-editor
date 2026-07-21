@@ -44,3 +44,12 @@ export interface PluginRpcResponse {
 export type PluginHostEvent =
   | { kind: "pen-host-event"; event: "selectionchange"; payload: unknown }
   | { kind: "pen-host-event"; event: "themechange"; payload: PluginThemePayload };
+
+/** iframe → host, one-time readiness handshake: the bootstrap script posts
+ * this right after registering its own `message` listener, so the host knows
+ * it's now safe to deliver the current theme without racing the listener's
+ * registration (plg-04 — a `themechange` posted before this arrives would
+ * otherwise be silently dropped). */
+export interface PluginReadyMessage {
+  kind: "pen-plugin-ready";
+}

@@ -107,6 +107,14 @@ export function pluginBootstrap(): void {
     }
   });
 
+  // One-time readiness handshake: without this, a `themechange` the host
+  // posts immediately on iframe load can arrive before this very listener
+  // above finishes registering (the srcdoc's initial theme is baked in
+  // separately, so the *first* paint is always right — but a toggle that
+  // races the listener would otherwise be silently dropped with no retry).
+  // The host replies with the CURRENT theme once this arrives (pluginHost.ts).
+  window.parent.postMessage({ kind: "pen-plugin-ready" }, "*");
+
   (window as unknown as Record<string, unknown>).pen = {
     tools: { run: (name: string, args: unknown) => call("tools.run", name, args) },
     scene: {

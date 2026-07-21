@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { resetStores, seedScene } from "@/test/fixtures";
-import { isRpcRequest, handlePluginMessage } from "../pluginBridge";
+import { isRpcRequest, isPluginReadyMessage, handlePluginMessage } from "../pluginBridge";
 import type { PluginRpcResponse } from "../types";
 
 vi.mock("sonner", () => ({ toast: vi.fn() }));
@@ -17,6 +17,16 @@ describe("isRpcRequest", () => {
     expect(isRpcRequest({ kind: "other", callId: 1, method: "x", args: [] })).toBe(false);
     expect(isRpcRequest({ kind: "pen-rpc-request", callId: "1", method: "x", args: [] })).toBe(false);
     expect(isRpcRequest({ kind: "pen-rpc-request", callId: 1, method: "x", args: "no" })).toBe(false);
+  });
+});
+
+describe("isPluginReadyMessage", () => {
+  it("accepts the readiness handshake and rejects everything else", () => {
+    expect(isPluginReadyMessage({ kind: "pen-plugin-ready" })).toBe(true);
+    expect(isPluginReadyMessage(null)).toBe(false);
+    expect(isPluginReadyMessage("pen-plugin-ready")).toBe(false);
+    expect(isPluginReadyMessage({ kind: "pen-rpc-request" })).toBe(false);
+    expect(isPluginReadyMessage(req("selection.get"))).toBe(false);
   });
 });
 

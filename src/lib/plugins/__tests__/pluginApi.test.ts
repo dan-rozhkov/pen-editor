@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { resetStores, seedScene } from "@/test/fixtures";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
@@ -8,6 +8,7 @@ import { useLayoutStore } from "@/store/layoutStore";
 import { calculateNodesBounds } from "@/utils/viewportUtils";
 import { getNodeAbsolutePositionWithLayout } from "@/utils/nodeUtils";
 import { usePluginPanelStore } from "@/store/pluginPanelStore";
+import { useDevModeStore } from "@/store/devModeStore";
 import { callPluginMethod } from "../pluginApi";
 
 vi.mock("sonner", () => ({ toast: vi.fn() }));
@@ -144,10 +145,7 @@ describe("callPluginMethod", () => {
     });
 
     it("resizes an open panel and clamps to the sane range", async () => {
-      usePluginPanelStore.getState().open(
-        { id: "p1", name: "T", description: "", code: "", ui: { width: 300, height: 200 }, source: "ai", createdAt: 0, updatedAt: 0 },
-        document.createElement("iframe"),
-      );
+      usePluginPanelStore.getState().open("p1", { width: 300, height: 200 }, document.createElement("iframe"));
       await callPluginMethod("p1", "ui.resize", [9999, 9999]);
       const panel = usePluginPanelStore.getState().panels["p1"];
       expect(panel.width).toBeLessThan(9999);
@@ -155,13 +153,54 @@ describe("callPluginMethod", () => {
     });
 
     it("rejects non-numeric width/height", async () => {
-      usePluginPanelStore.getState().open(
-        { id: "p1", name: "T", description: "", code: "", ui: { width: 300, height: 200 }, source: "ai", createdAt: 0, updatedAt: 0 },
-        document.createElement("iframe"),
-      );
+      usePluginPanelStore.getState().open("p1", { width: 300, height: 200 }, document.createElement("iframe"));
       await expect(callPluginMethod("p1", "ui.resize", ["500", 400])).rejects.toThrow(
         /must be finite numbers/,
       );
+    });
+  });
+
+  describe("Dev Mode gating (plg-04 fix)", () => {
+    afterEach(() => {
+      useDevModeStore.setState({ active: false });
+    });
+
+    it("rejects a mutating tools.run call while Dev Mode is active", async () => {
+      useDevModeStore.setState({ active: true });
+      await expect(
+        callPluginMethod("p1", "tools.run", [
+          "batch_design",
+          { operations: 'n=I(document, {type:"frame", name:"X", x:0,y:0,width:10,height:10})' },
+        ]),
+      ).rejects.toThrow(/Dev Mode/);
+    });
+
+    it("still allows an allowlisted read-only tool while Dev Mode is active", async () => {
+      useDevModeStore.setState({ active: true });
+      const result = await callPluginMethod("p1", "tools.run", ["get_editor_state", {}]);
+      expect(typeof result).toBe("string");
+    });
+
+    it("rejects scene.batch (routes to batch_design) while Dev Mode is active", async () => {
+      useDevModeStore.setState({ active: true });
+      await expect(
+        callPluginMethod("p1", "scene.batch", [
+          'n=I(document, {type:"frame", name:"X", x:0,y:0,width:10,height:10})',
+        ]),
+      ).rejects.toThrow(/Dev Mode/);
+    });
+
+    it("allows mutating tools again once Dev Mode is exited", async () => {
+      useDevModeStore.setState({ active: true });
+      await expect(callPluginMethod("p1", "tools.run", ["batch_design", { operations: "" }])).rejects.toThrow(
+        /Dev Mode/,
+      );
+      useDevModeStore.setState({ active: false });
+      const result = await callPluginMethod("p1", "tools.run", [
+        "batch_design",
+        { operations: 'n=I(document, {type:"frame", name:"Y", x:0,y:0,width:10,height:10})' },
+      ]);
+      expect(typeof result).toBe("string");
     });
   });
 });

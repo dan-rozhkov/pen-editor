@@ -5,9 +5,10 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { usePluginPanelStore } from "@/store/pluginPanelStore";
+import { useDevModeStore } from "@/store/devModeStore";
 import { getNodeAbsolutePositionWithLayout } from "@/utils/nodeUtils";
 import type { SceneNode } from "@/types/scene";
-import { PLUGIN_ALLOWED_TOOLS } from "./toolAllowlist";
+import { PLUGIN_ALLOWED_TOOLS, READ_ONLY_PLUGIN_TOOLS } from "./toolAllowlist";
 
 /** encodeURIComponent leaves '.' unescaped; also escape it so pluginId/key
  * segments containing dots can't collide with the `.` separators below. */
@@ -27,6 +28,16 @@ function asStringArray(value: unknown, what: string): string[] {
 async function runTool(name: unknown, args: unknown): Promise<string> {
   if (typeof name !== "string") throw new Error("tools.run: tool name must be a string");
   if (!PLUGIN_ALLOWED_TOOLS.has(name)) throw new Error(`tools.run: tool "${name}" is not allowed for plugins`);
+  // Dev Mode is a read-only inspect overlay: the Manager's Run button and the
+  // command-palette entries are already hidden/disabled there (see
+  // PluginManagerPanel.tsx / pluginCommands.ts), but an *already-running*
+  // plugin's UI panel can still reach this facade directly, so the guarantee
+  // has to be enforced here too — the one place every mutation path
+  // (tools.run, and scene.batch below, which is just batch_design by another
+  // name) funnels through.
+  if (useDevModeStore.getState().active && !READ_ONLY_PLUGIN_TOOLS.has(name)) {
+    throw new Error(`tools.run: tool "${name}" is disabled while Dev Mode is active (read-only)`);
+  }
   const handler = toolHandlers[name];
   if (!handler) throw new Error(`tools.run: unknown tool "${name}"`);
   return handler((args ?? {}) as Record<string, unknown>);

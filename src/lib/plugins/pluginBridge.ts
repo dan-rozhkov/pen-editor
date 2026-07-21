@@ -1,5 +1,5 @@
 import { callPluginMethod } from "./pluginApi";
-import type { PluginRpcRequest, PluginRpcResponse } from "./types";
+import type { PluginReadyMessage, PluginRpcRequest, PluginRpcResponse } from "./types";
 
 export function isRpcRequest(data: unknown): data is PluginRpcRequest {
   if (typeof data !== "object" || data === null) return false;
@@ -10,6 +10,13 @@ export function isRpcRequest(data: unknown): data is PluginRpcRequest {
     typeof d.method === "string" &&
     Array.isArray(d.args)
   );
+}
+
+/** The one-time readiness handshake a plugin iframe posts right after wiring
+ * up its own listener (see `PluginReadyMessage`). */
+export function isPluginReadyMessage(data: unknown): data is PluginReadyMessage {
+  if (typeof data !== "object" || data === null) return false;
+  return (data as Record<string, unknown>).kind === "pen-plugin-ready";
 }
 
 /**
