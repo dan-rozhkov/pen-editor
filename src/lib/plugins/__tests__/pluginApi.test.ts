@@ -7,6 +7,7 @@ import { useViewportStore } from "@/store/viewportStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { calculateNodesBounds } from "@/utils/viewportUtils";
 import { getNodeAbsolutePositionWithLayout } from "@/utils/nodeUtils";
+import { usePluginPanelStore } from "@/store/pluginPanelStore";
 import { callPluginMethod } from "../pluginApi";
 
 vi.mock("sonner", () => ({ toast: vi.fn() }));
@@ -129,5 +130,38 @@ describe("callPluginMethod", () => {
 
   it("rejects unknown methods", async () => {
     await expect(callPluginMethod("p1", "eval", ["x"])).rejects.toThrow(/Unknown pen method/);
+  });
+
+  describe("ui.resize", () => {
+    beforeEach(() => {
+      usePluginPanelStore.setState({ panels: {} });
+    });
+
+    it("rejects when the plugin has no open panel (headless plugin)", async () => {
+      await expect(callPluginMethod("p1", "ui.resize", [500, 400])).rejects.toThrow(
+        /has no open panel/,
+      );
+    });
+
+    it("resizes an open panel and clamps to the sane range", async () => {
+      usePluginPanelStore.getState().open(
+        { id: "p1", name: "T", description: "", code: "", ui: { width: 300, height: 200 }, source: "ai", createdAt: 0, updatedAt: 0 },
+        document.createElement("iframe"),
+      );
+      await callPluginMethod("p1", "ui.resize", [9999, 9999]);
+      const panel = usePluginPanelStore.getState().panels["p1"];
+      expect(panel.width).toBeLessThan(9999);
+      expect(panel.height).toBeLessThan(9999);
+    });
+
+    it("rejects non-numeric width/height", async () => {
+      usePluginPanelStore.getState().open(
+        { id: "p1", name: "T", description: "", code: "", ui: { width: 300, height: 200 }, source: "ai", createdAt: 0, updatedAt: 0 },
+        document.createElement("iframe"),
+      );
+      await expect(callPluginMethod("p1", "ui.resize", ["500", 400])).rejects.toThrow(
+        /must be finite numbers/,
+      );
+    });
   });
 });

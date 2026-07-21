@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { pluginBootstrap, buildSrcdoc } from "../bootstrap";
+import { pluginBootstrap, buildSrcdoc, buildThemePayload, buildThemeMessage, readThemeVars } from "../bootstrap";
 import type { PenPlugin } from "../types";
 
 interface PenGlobal {
@@ -7,6 +7,7 @@ interface PenGlobal {
   scene: { batch: (ops: string) => Promise<unknown>; get: (ids?: string[]) => Promise<unknown> };
   selection: { get: () => Promise<unknown>; set: (ids: string[]) => Promise<unknown> };
   viewport: { zoomTo: (ids: string[]) => Promise<unknown> };
+  ui: { resize: (width: number, height: number) => Promise<unknown> };
   notify: (msg: string) => void;
   storage: { get: (k: string) => Promise<unknown>; set: (k: string, v: unknown) => Promise<unknown> };
   on: (event: string, cb: (payload: unknown) => void) => void;
@@ -38,6 +39,8 @@ describe("pluginBootstrap", () => {
   afterEach(() => {
     postSpy.mockRestore();
     delete (window as unknown as Record<string, unknown>).pen;
+    document.documentElement.removeAttribute("data-theme");
+    document.getElementById("pen-theme-vars")?.remove();
   });
 
   it("defines the pen global with the full v1 surface", () => {
@@ -85,6 +88,33 @@ describe("pluginBootstrap", () => {
     expect(cb).toHaveBeenCalledWith(["a"]);
   });
 
+  it("posts a ui.resize rpc request", () => {
+    void getPen().ui.resize(500, 400);
+    const req = posted[0];
+    expect(req.kind).toBe("pen-rpc-request");
+    expect(req.method).toBe("ui.resize");
+    expect(req.args).toEqual([500, 400]);
+  });
+
+  it("applies a themechange event to its own document (data-theme + CSS vars), independent of pen.on", () => {
+    deliver({
+      kind: "pen-host-event",
+      event: "themechange",
+      payload: { theme: "dark", cssVars: { "--color-surface-panel": "#2a2a2a" } },
+    });
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+    const style = document.getElementById("pen-theme-vars");
+    expect(style?.textContent).toContain("--color-surface-panel:#2a2a2a;");
+  });
+
+  it("still dispatches themechange to any pen.on listener too", () => {
+    const cb = vi.fn();
+    getPen().on("themechange", cb);
+    const payload = { theme: "light", cssVars: {} };
+    deliver({ kind: "pen-host-event", event: "themechange", payload });
+    expect(cb).toHaveBeenCalledWith(payload);
+  });
+
   it("ignores malformed messages", () => {
     deliver(null);
     deliver({ kind: "something-else" });
@@ -115,5 +145,49 @@ describe("buildSrcdoc", () => {
     expect(html).toContain('<script type="module">');
     expect(html).not.toContain("// </script>");
     expect(html).toContain("<\\/script>");
+  });
+
+  it("defaults to a light theme with no vars when initialTheme is omitted", () => {
+    const html = buildSrcdoc(plugin);
+    expect(html).toContain('data-theme="light"');
+  });
+
+  it("bakes the given initial theme's data-theme and CSS vars into the srcdoc", () => {
+    const html = buildSrcdoc(plugin, { theme: "dark", cssVars: { "--color-surface-panel": "#2a2a2a" } });
+    expect(html).toContain('data-theme="dark"');
+    expect(html).toContain("--color-surface-panel:#2a2a2a;");
+  });
+});
+
+describe("theme helpers", () => {
+  afterEach(() => {
+    document.documentElement.style.cssText = "";
+  });
+
+  it("readThemeVars reads resolved CSS custom properties off <html>", () => {
+    document.documentElement.style.setProperty("--color-surface-panel", "#123456");
+    const vars = readThemeVars();
+    expect(vars["--color-surface-panel"]).toBe("#123456");
+  });
+
+  it("readThemeVars omits vars that resolve empty", () => {
+    const vars = readThemeVars();
+    // Nothing set on <html> in this test (jsdom/happy-dom has no @theme block
+    // loaded) — every listed var should come back empty and be dropped.
+    expect(Object.keys(vars).length).toBe(0);
+  });
+
+  it("buildThemePayload/buildThemeMessage shape the theme + cssVars payload", () => {
+    document.documentElement.style.setProperty("--color-text-primary", "black");
+    const payload = buildThemePayload("dark");
+    expect(payload.theme).toBe("dark");
+    expect(payload.cssVars["--color-text-primary"]).toBe("black");
+
+    const message = buildThemeMessage("light");
+    expect(message).toEqual({
+      kind: "pen-host-event",
+      event: "themechange",
+      payload: { theme: "light", cssVars: expect.any(Object) },
+    });
   });
 });

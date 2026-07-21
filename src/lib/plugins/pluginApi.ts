@@ -4,6 +4,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useLayoutStore } from "@/store/layoutStore";
+import { usePluginPanelStore } from "@/store/pluginPanelStore";
 import { getNodeAbsolutePositionWithLayout } from "@/utils/nodeUtils";
 import type { SceneNode } from "@/types/scene";
 import { PLUGIN_ALLOWED_TOOLS } from "./toolAllowlist";
@@ -85,6 +86,18 @@ export async function callPluginMethod(
       const targets = resolveAbsoluteNodes(ids);
       if (targets.length === 0) throw new Error("viewport.zoomTo: no matching nodes");
       useViewportStore.getState().fitToContent(targets, window.innerWidth, window.innerHeight);
+      return null;
+    }
+    case "ui.resize": {
+      const width = args[0];
+      const height = args[1];
+      if (typeof width !== "number" || !Number.isFinite(width) || typeof height !== "number" || !Number.isFinite(height)) {
+        throw new Error("ui.resize: width/height must be finite numbers");
+      }
+      if (!usePluginPanelStore.getState().panels[pluginId]) {
+        throw new Error("ui.resize: this plugin has no open panel (headless plugins have no UI)");
+      }
+      usePluginPanelStore.getState().resize(pluginId, width, height);
       return null;
     }
     case "notify": {

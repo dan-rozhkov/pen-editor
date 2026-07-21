@@ -1,5 +1,7 @@
 import { useSelectionStore } from "@/store/selectionStore";
-import { buildSrcdoc } from "./bootstrap";
+import { useUIThemeStore } from "@/store/uiThemeStore";
+import { usePluginPanelStore } from "@/store/pluginPanelStore";
+import { buildSrcdoc, buildThemeMessage, buildThemePayload } from "./bootstrap";
 import { handlePluginMessage } from "./pluginBridge";
 import type { PenPlugin } from "./types";
 
@@ -13,17 +15,30 @@ const instances = new Map<string, PluginInstance>();
 
 /**
  * Start (or restart) a plugin: builds a sandboxed iframe running the plugin
- * code and wires its RPC traffic to the host facade. v1 iframes are always
- * hidden (headless); visible panels arrive with plg-04.
+ * code and wires its RPC traffic to the host facade. Headless plugins
+ * (`ui` null/absent) get a hidden iframe appended to `document.body`, as in
+ * v1. UI plugins (`ui` set) get a visible, panel-sized iframe and an entry
+ * in `pluginPanelStore`; `PluginPanels` re-parents the iframe into the
+ * panel's body DOM node once it mounts.
  */
 export function runPlugin(plugin: PenPlugin): PluginInstance {
   stopPlugin(plugin.id);
 
+  const isUiPlugin = plugin.ui != null;
   const iframe = document.createElement("iframe");
   iframe.setAttribute("sandbox", "allow-scripts");
-  iframe.style.display = "none";
-  iframe.srcdoc = buildSrcdoc(plugin);
+  if (isUiPlugin) {
+    iframe.style.width = "100%";
+    iframe.style.height = "100%";
+    iframe.style.border = "none";
+    iframe.style.display = "block";
+  } else {
+    iframe.style.display = "none";
+  }
+  iframe.srcdoc = buildSrcdoc(plugin, buildThemePayload(useUIThemeStore.getState().uiTheme));
   document.body.appendChild(iframe);
+
+  if (isUiPlugin) usePluginPanelStore.getState().open(plugin, iframe);
 
   const onMessage = (event: MessageEvent) => {
     if (event.source !== iframe.contentWindow) return;
@@ -46,9 +61,18 @@ export function runPlugin(plugin: PenPlugin): PluginInstance {
     );
   });
 
+  let lastTheme = useUIThemeStore.getState().uiTheme;
+  const unsubscribeTheme = useUIThemeStore.subscribe((state) => {
+    if (state.uiTheme === lastTheme) return;
+    lastTheme = state.uiTheme;
+    iframe.contentWindow?.postMessage(buildThemeMessage(state.uiTheme), "*");
+  });
+
   const dispose = () => {
     window.removeEventListener("message", onMessage);
     unsubscribeSelection();
+    unsubscribeTheme();
+    if (isUiPlugin) usePluginPanelStore.getState().close(plugin.id);
     iframe.remove();
     instances.delete(plugin.id);
   };
