@@ -6,11 +6,21 @@ export interface PenPlugin {
   icon?: string;
   /** JS source, executed as a <script type="module"> inside the sandbox iframe. */
   code: string;
-  /** null/absent = headless (no visible panel; panels are plg-04). */
+  /** null/absent = headless (no visible panel). Set = the iframe mounts in a
+   * floating `PluginPanel` sized to this on open (plg-04). */
   ui?: { width: number; height: number } | null;
   source: "ai" | "imported";
   createdAt: number;
   updatedAt: number;
+}
+
+/** Editor UI theme, mirrored into a plugin iframe's `data-theme`/CSS vars. */
+export type PluginTheme = "light" | "dark";
+
+/** Snapshot of the editor's theme tokens delivered to a plugin iframe. */
+export interface PluginThemePayload {
+  theme: PluginTheme;
+  cssVars: Record<string, string>;
 }
 
 /** iframe → host */
@@ -30,9 +40,7 @@ export interface PluginRpcResponse {
   error?: string;
 }
 
-/** host → iframe, событийный канал (v1: только selectionchange) */
-export interface PluginHostEvent {
-  kind: "pen-host-event";
-  event: "selectionchange";
-  payload: unknown;
-}
+/** host → iframe, событийный канал: selectionchange (v1) + themechange (plg-04). */
+export type PluginHostEvent =
+  | { kind: "pen-host-event"; event: "selectionchange"; payload: unknown }
+  | { kind: "pen-host-event"; event: "themechange"; payload: PluginThemePayload };
