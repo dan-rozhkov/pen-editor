@@ -268,7 +268,7 @@ export function AutoLayoutSection({ node, onUpdate, mixedKeys }: AutoLayoutSecti
                                 />
                               </div>
                             ) : (
-                              <div className="w-1 h-1 rounded-full bg-primary" />
+                              <div className="w-1 h-1 rounded-full bg-foreground" />
                             )}
                           </button>
                         }

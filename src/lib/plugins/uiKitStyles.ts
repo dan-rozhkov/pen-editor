@@ -87,7 +87,7 @@ body {
 
 .pen-button-primary {
   background: var(--primary);
-  border-color: var(--primary);
+  border-color: var(--color-border-default);
   color: var(--primary-foreground);
 }
 
@@ -96,15 +96,13 @@ body {
    this, the generic .pen-button hover/active rules win the
    background/border-color tie-break and the primary button turns grey. */
 .pen-button.pen-button-primary:hover:not(:disabled) {
-  background: var(--primary);
-  border-color: var(--primary);
-  opacity: 0.85;
+  background: color-mix(in oklab, var(--primary), var(--primary-foreground) 8%);
+  border-color: var(--color-border-hover);
 }
 
 .pen-button.pen-button-primary:active:not(:disabled) {
-  background: var(--primary);
-  border-color: var(--primary);
-  opacity: 0.7;
+  background: color-mix(in oklab, var(--primary), var(--primary-foreground) 14%);
+  border-color: var(--color-border-hover);
 }
 
 .pen-input,
