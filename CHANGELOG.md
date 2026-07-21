@@ -8,6 +8,28 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.56.0] - 2026-07-21
+
+### Added
+- **UI plugins: floating panels (plg-04).** Plugins that declare `ui: {width,
+  height}` now open in a draggable, resizable floating panel (titlebar with
+  icon, name and close; the plugin's sandbox iframe fills the body) instead of
+  running hidden. `pen.ui.resize(w, h)` resizes the panel from inside
+  (clamped); closing the panel — or the plugin calling `pen.close()` — tears
+  the instance down cleanly. Re-running a plugin keeps the panel where the
+  user put it. Headless plugins are unchanged.
+- **Theme in plugin iframes.** The host bakes the editor's theme token CSS
+  variables and `data-theme` into the plugin document and pushes live updates
+  on light/dark switches via a single host-level broadcaster and a
+  ready-handshake (no lost messages during iframe load).
+- **Dev Mode stays read-only.** Mutating `pen.tools.run`/`pen.scene.batch`
+  calls from plugins are rejected while Dev/Inspect Mode is active
+  (read-only tools keep working); leaving edit mode stops all running
+  plugin instances.
+- Shared `usePointerDragGesture` hook now backs the draggable popovers,
+  panel drag and panel resize (one pointer-capture implementation instead
+  of three copies).
+
 ## [0.55.0] - 2026-07-21
 
 ### Added
