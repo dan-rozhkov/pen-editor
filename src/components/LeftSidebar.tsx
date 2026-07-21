@@ -1,5 +1,7 @@
-import { ArrowsInLineVertical } from "@phosphor-icons/react";
+import { ArrowsInLineVertical, CloudSlash } from "@phosphor-icons/react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { OFFLINE_DOCUMENT_TITLE } from "@/lib/apiBase";
 import { EditableText } from "@/components/ui/EditableText";
 import { LayersPanel } from "./layers";
 import { ComponentsPanel } from "./ComponentsPanel";
@@ -33,6 +35,7 @@ export function LeftSidebar() {
   const collapseAllFrames = useSceneStore((s) => s.collapseAllFrames);
   const fileName = useDocumentStore((s) => s.fileName);
   const setFileName = useDocumentStore((s) => s.setFileName);
+  const isOnline = useOnlineStatus();
 
   const displayName = fileName ? fileName.replace(/\.[^.]+$/, "") : "Untitled";
   const extension = fileName?.match(/\.[^.]+$/)?.[0] ?? "";
@@ -68,13 +71,31 @@ export function LeftSidebar() {
         </div>
       )}
       {(activeSection === "pages" || activeSection === "slides") && (
-        <div className="px-2 pb-2">
+        <div className="px-2 pb-2 flex items-center gap-1">
           <EditableText
             value={displayName}
             onCommit={(name) => setFileName(name + extension)}
-            className="h-7 px-1 rounded truncate text-sm font-medium text-text-default cursor-text hover:bg-secondary flex items-center"
+            className="flex-1 min-w-0 h-7 px-1 rounded truncate text-sm font-medium text-text-default cursor-text hover:bg-secondary flex items-center"
             inputClassName="w-full h-7 px-1 py-0.5 rounded text-sm font-medium text-text-default bg-secondary outline-none"
           />
+          {!isOnline && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span
+                    role="img"
+                    aria-label={OFFLINE_DOCUMENT_TITLE}
+                    className="shrink-0 flex items-center text-text-muted"
+                  >
+                    <CloudSlash size={14} />
+                  </span>
+                }
+              />
+              <TooltipContent side="bottom">
+                {OFFLINE_DOCUMENT_TITLE}
+              </TooltipContent>
+            </Tooltip>
+          )}
         </div>
       )}
       <div className="flex-1 relative overflow-hidden">

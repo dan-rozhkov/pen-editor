@@ -41,3 +41,9 @@ export const OFFLINE_MESSAGE =
   "Offline. AI and backend features are disabled until the connection is restored.";
 
 export const OFFLINE_SEND_TITLE = "Offline — sending is disabled";
+
+// Shown as the tooltip/aria-label on the crossed-cloud indicator beside the
+// document name while offline. Documents are local-only (no cloud sync), so
+// "offline" and "document is local-only" are the same condition here.
+export const OFFLINE_DOCUMENT_TITLE =
+  "Offline — document is available locally only";

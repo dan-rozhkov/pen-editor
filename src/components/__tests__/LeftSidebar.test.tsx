@@ -42,6 +42,14 @@ vi.mock("../StylesPanel", () => ({
 }));
 
 import { LeftSidebar } from "../LeftSidebar";
+import { OFFLINE_DOCUMENT_TITLE } from "@/lib/apiBase";
+
+function setOnline(online: boolean) {
+  Object.defineProperty(navigator, "onLine", {
+    configurable: true,
+    get: () => online,
+  });
+}
 
 function setPages(count: number) {
   const pages = Array.from({ length: count }, (_, i) => ({
@@ -71,6 +79,7 @@ describe("<LeftSidebar />", () => {
     useDocumentStore.setState({ fileName: null });
     useLeftSidebarStore.setState({ activeSection: "pages" });
     setPages(1);
+    setOnline(true);
   });
 
   afterEach(() => {
@@ -163,6 +172,27 @@ describe("<LeftSidebar />", () => {
     expect(wrapper?.className).toContain("fixed");
     expect(wrapper?.className).toContain("z-[60]");
     expect(container).toBeTruthy();
+  });
+
+  it("shows the offline document indicator beside the file name when offline", () => {
+    setOnline(false);
+    useDocumentStore.setState({ fileName: "design.pen" });
+    render(<LeftSidebar />);
+    expect(screen.getByLabelText(OFFLINE_DOCUMENT_TITLE)).toBeTruthy();
+  });
+
+  it("hides the offline document indicator while online", () => {
+    setOnline(true);
+    useDocumentStore.setState({ fileName: "design.pen" });
+    render(<LeftSidebar />);
+    expect(screen.queryByLabelText(OFFLINE_DOCUMENT_TITLE)).toBeNull();
+  });
+
+  it("shows the offline indicator in the Slides section too", () => {
+    setOnline(false);
+    useLeftSidebarStore.setState({ activeSection: "slides" });
+    render(<LeftSidebar />);
+    expect(screen.getByLabelText(OFFLINE_DOCUMENT_TITLE)).toBeTruthy();
   });
 
   it("renames the document via the editable file name field", () => {
