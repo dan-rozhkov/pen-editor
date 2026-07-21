@@ -2,6 +2,7 @@ import { getToolCommands } from "./toolCommands";
 import { getEditCommands } from "./editCommands";
 import { getViewCommands } from "./viewCommands";
 import { getFileCommands } from "./fileCommands";
+import { getPluginCommands } from "./pluginCommands";
 import type { PaletteCommand } from "./types";
 
 export type { PaletteCommand, CommandGroupName } from "./types";
@@ -21,5 +22,6 @@ export function getCommands(): PaletteCommand[] {
     ...getEditCommands(),
     ...getViewCommands(),
     ...getFileCommands(),
+    ...getPluginCommands(),
   ];
 }

@@ -14,7 +14,7 @@ import { useDevModeStore } from "@/store/devModeStore";
 import { getCommands, commandFilter, type CommandGroupName } from "@/lib/commands/registry";
 import { isTypingTarget } from "@/components/canvas/keyboardShortcutUtils";
 
-const GROUP_ORDER: CommandGroupName[] = ["Tools", "Edit", "View", "File"];
+const GROUP_ORDER: CommandGroupName[] = ["Tools", "Edit", "View", "File", "Plugins"];
 
 /**
  * Global search overlay (Cmd+/ or Cmd+K) listing every tool and menu action

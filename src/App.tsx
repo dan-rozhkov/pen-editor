@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from "react";
 import { loadModels } from "./lib/chatModels";
 import { reconcileModels } from "./store/chatStore";
 import { useCustomFontStore } from "./store/customFontStore";
+import { usePluginStore } from "./store/pluginStore";
 import { useSceneStore } from "./store/sceneStore";
 import { LeftRail } from "./components/LeftRail";
 import { LeftSidebar } from "./components/LeftSidebar";
@@ -9,6 +10,7 @@ import { RightPanel } from "./components/RightPanel";
 import { PrimitivesPanel } from "./components/PrimitivesPanel";
 import { PresentOverlay } from "./components/PresentOverlay";
 import { CommandPalette } from "./components/CommandPalette";
+import { PluginManagerPanel } from "./components/PluginManagerPanel";
 import { PresentController } from "./components/PresentController";
 import { ReadOnlyProvider } from "./components/ReadOnlyProvider";
 import { FpsDisplay } from "./components/canvas/CanvasOverlays";
@@ -49,6 +51,11 @@ function App() {
   // text using it renders correctly after a reload, instead of falling back.
   useEffect(() => {
     useCustomFontStore.getState().restoreCustomFonts();
+  }, []);
+
+  // Hydrate the installed-plugin list from IndexedDB so plugins survive a reload.
+  useEffect(() => {
+    void usePluginStore.getState().init();
   }, []);
 
   // Read-only view mode is entered only via the `?view` URL parameter
@@ -122,6 +129,11 @@ function App() {
           directly and would otherwise bypass the read-only guarantee that
           `canEditScene` enforces for view/present mode. */}
       {mode === "edit" && <CommandPalette />}
+
+      {/* Plugin manager modal — opened via the "Manage plugins…" command
+          palette entry, so it's reachable only where the palette itself is
+          (edit mode). */}
+      {mode === "edit" && <PluginManagerPanel />}
 
       {/* UI panels — overlay on top of canvas */}
       {!isUIHidden && !isPresent && (

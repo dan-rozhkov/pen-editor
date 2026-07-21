@@ -1,6 +1,6 @@
 import type { ToolIconComponent } from "@/lib/toolDefinitions";
 
-export type CommandGroupName = "Tools" | "Edit" | "View" | "File";
+export type CommandGroupName = "Tools" | "Edit" | "View" | "File" | "Plugins";
 
 export interface PaletteCommand {
   /** Stable, unique identifier (e.g. "tool-rect", "edit-undo"). */
