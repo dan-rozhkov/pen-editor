@@ -171,6 +171,26 @@ describe("buildSrcdoc", () => {
     expect(html).toContain('data-theme="dark"');
     expect(html).toContain("--color-surface-panel:#2a2a2a;");
   });
+
+  it("includes the UI-kit stylesheet (.pen-button and friends)", () => {
+    const html = buildSrcdoc(plugin);
+    expect(html).toContain('id="pen-ui-kit"');
+    expect(html).toContain(".pen-button");
+    expect(html).toContain(".pen-button-primary");
+    expect(html).toContain(".pen-input");
+    expect(html).toContain(".pen-textarea");
+    expect(html).toContain(".pen-select");
+    expect(html).toContain(".pen-label");
+    expect(html).toContain(".pen-checkbox");
+    expect(html).toContain(".pen-row");
+    expect(html).toContain(".pen-stack");
+  });
+
+  it("includes the UI-kit stylesheet even for a headless plugin (no `ui` field)", () => {
+    const headless: PenPlugin = { ...plugin, ui: null };
+    const html = buildSrcdoc(headless);
+    expect(html).toContain('id="pen-ui-kit"');
+  });
 });
 
 describe("theme helpers", () => {

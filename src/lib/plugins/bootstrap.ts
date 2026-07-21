@@ -1,10 +1,11 @@
 import type { PenPlugin, PluginHostEvent, PluginTheme, PluginThemePayload } from "./types";
+import { PLUGIN_UI_KIT_STYLES } from "./uiKitStyles";
 
 /** CSS custom properties (`src/index.css`) mirrored into a plugin iframe so
  * its own markup can read `var(--color-surface-panel)` etc. Read live via
  * `getComputedStyle` rather than hardcoded, so a future palette edit doesn't
  * need a matching change here. */
-const THEME_CSS_VARS = [
+export const THEME_CSS_VARS = [
   "--color-surface-base",
   "--color-surface-panel",
   "--color-surface-elevated",
@@ -157,6 +158,10 @@ export function buildSrcdoc(plugin: PenPlugin, initialTheme?: PluginThemePayload
   return [
     `<!doctype html><html data-theme="${theme.theme}"><head><meta charset="utf-8">`,
     `<style id="pen-theme-vars">:root{${decls}}</style>`,
+    // Always included, even for headless plugins with no visible panel: it's
+    // invisible dead CSS in that case, and keeping buildSrcdoc's output shape
+    // uniform is simpler than branching on `plugin.ui` here.
+    `<style id="pen-ui-kit">${PLUGIN_UI_KIT_STYLES}</style>`,
     "</head><body>",
     `<script>(${pluginBootstrap.toString()})();</script>`,
     `<script type="module">${safeCode}</script>`,
