@@ -126,4 +126,22 @@ describe("<PluginPanels />", () => {
     expect(panelEl.style.width).toBe("320px");
     expect(panelEl.style.height).toBe("240px");
   });
+
+  it("uses the draggable-popover surface while keeping plugin content full-bleed", () => {
+    const plugin = makePlugin();
+    installPlugin(plugin);
+    usePluginPanelStore.getState().open(plugin.id, plugin.ui, makeIframe());
+    const { container } = render(<PluginPanels />);
+
+    const panel = container.querySelector('[data-slot="plugin-panel"]');
+    const handle = container.querySelector('[data-slot="popover-drag-handle"]');
+    const title = screen.getByText("Color picker");
+    expect(panel?.className).toContain("rounded-xl");
+    expect(panel?.className).not.toContain("p-3");
+    expect(handle?.className).toContain("mx-3");
+    expect(handle?.className).toContain("h-5");
+    expect(handle?.className).not.toContain("bg-surface-elevated");
+    expect(handle?.className).not.toContain("border-b");
+    expect(title.className).toContain("text-text-primary");
+  });
 });

@@ -132,6 +132,7 @@ describe("<LeftSidebar />", () => {
     useLeftSidebarStore.setState({ activeSection: "components" });
     render(<LeftSidebar />);
     expect(screen.getByTestId("components-shim")).toBeTruthy();
+    expect(screen.getByText("Components").parentElement?.className).toContain("h-[49px]");
     // Pages section content is not mounted while components is active.
     expect(screen.queryByTestId("layers-shim")).toBeNull();
   });

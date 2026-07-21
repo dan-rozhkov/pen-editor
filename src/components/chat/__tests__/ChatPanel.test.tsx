@@ -71,7 +71,7 @@ beforeEach(() => {
 describe("<ChatPanelContent />", () => {
   it("composes the header, message list and input", () => {
     render(<ChatPanelContent />);
-    expect(screen.getByText("Design Agent")).toBeTruthy();
+    expect(screen.getByText("Design Agent").parentElement?.className).toContain("h-[49px]");
     // MessageList empty state
     expect(screen.getByText("Ask the design agent anything")).toBeTruthy();
     // ChatInput textarea

@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
-import { DotsSixIcon, XIcon } from "@phosphor-icons/react";
+import { XIcon } from "@phosphor-icons/react";
 
 import { getRunningPlugin, stopPlugin } from "@/lib/plugins/pluginHost";
 import { usePluginPanelStore, type PluginPanelState } from "@/store/pluginPanelStore";
@@ -7,6 +7,11 @@ import { usePluginStore } from "@/store/pluginStore";
 import { computeDragPosition } from "@/components/ui/popoverDrag";
 import { usePointerDragGesture } from "@/hooks/usePointerDragGesture";
 import { IconButton } from "@/components/ui/IconButton";
+import {
+  DRAGGABLE_SURFACE_CLASS,
+  DraggableSurfaceHandle,
+} from "@/components/ui/DraggableSurface";
+import { cn } from "@/lib/utils";
 
 /**
  * Floating windows for running UI plugins (`PenPlugin.ui` set). One window
@@ -115,24 +120,25 @@ const PluginPanelWindow = memo(function PluginPanelWindow({ panel }: { panel: Pl
 
   return (
     <div
-      className="fixed z-[10040] flex flex-col overflow-hidden rounded-xl border border-border-light bg-surface-panel text-text-primary shadow-lg"
+      data-slot="plugin-panel"
+      className={cn("fixed z-[10040] flex flex-col overflow-hidden", DRAGGABLE_SURFACE_CLASS)}
       style={{ left: panel.x, top: panel.y, width: panel.width, height: panel.height }}
     >
-      <div
-        className="flex h-8 shrink-0 cursor-grab touch-none select-none items-center gap-1.5 border-b border-border-light bg-surface-elevated px-2 text-xs font-medium text-text-primary active:cursor-grabbing"
+      <DraggableSurfaceHandle
+        className="mx-3 mt-3 mb-2 h-5 text-[11px] font-semibold"
         onPointerDown={handleTitleBarPointerDown}
       >
-        <DotsSixIcon size={12} weight="bold" className="shrink-0 text-text-muted" />
         {icon && (
           <span aria-hidden className="shrink-0">
             {icon}
           </span>
         )}
-        <span className="min-w-0 flex-1 truncate">{name}</span>
+        <span className="min-w-0 flex-1 truncate text-text-primary">{name}</span>
         <IconButton
           tooltip="Close"
           size="icon-sm"
           variant="ghost"
+          className="ml-auto size-5 rounded-sm text-text-muted hover:text-text-primary [&_svg:not([class*='size-'])]:size-3.5"
           // Stop the pointerdown here so it never bubbles to the titlebar's
           // own handler above: `setPointerCapture` there would otherwise
           // hijack this button's click (pointer capture redirects the
@@ -143,7 +149,7 @@ const PluginPanelWindow = memo(function PluginPanelWindow({ panel }: { panel: Pl
         >
           <XIcon />
         </IconButton>
-      </div>
+      </DraggableSurfaceHandle>
 
       <div ref={bodyRef} className="relative min-h-0 flex-1" />
 

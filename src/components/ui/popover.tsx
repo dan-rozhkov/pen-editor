@@ -9,10 +9,13 @@ import {
   type ReactNode,
 } from "react";
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
-import { DotsSixIcon } from "@phosphor-icons/react";
 
 import { cn } from "@/lib/utils";
 import { usePointerDragGesture } from "@/hooks/usePointerDragGesture";
+import {
+  DRAGGABLE_SURFACE_CLASS,
+  DraggableSurfaceHandle,
+} from "@/components/ui/DraggableSurface";
 import {
   clampPositionToViewport,
   computeDragPosition,
@@ -147,7 +150,8 @@ function PopoverContent({
           className={cn(
             // Mirrors the existing color-picker popover surface so all popovers
             // in the editor read as the same object.
-            "data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 z-50 flex w-[220px] flex-col gap-2 rounded-xl border border-border-light bg-surface-panel p-3 text-text-primary shadow-lg duration-100 outline-none",
+            "data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 z-50 flex w-[220px] flex-col gap-2 p-3 duration-100",
+            DRAGGABLE_SURFACE_CLASS,
             className,
           )}
           {...props}
@@ -156,19 +160,9 @@ function PopoverContent({
             // Plain in-flow bar (no edge-bleed negative margins) so it looks
             // right regardless of a consumer's own padding overrides (e.g.
             // TypographySection's text-styles popover uses `p-0`).
-            <div
-              data-slot="popover-drag-handle"
-              role="presentation"
-              title="Drag to move"
-              className={cn(
-                "flex h-4 shrink-0 cursor-grab touch-none select-none items-center rounded-md text-text-muted transition-colors hover:text-text-primary active:cursor-grabbing",
-                dragHandleContent ? "gap-1.5" : "justify-center",
-              )}
-              onPointerDown={handleDragHandlePointerDown}
-            >
-              <DotsSixIcon size={14} weight="bold" className="rotate-90" />
+            <DraggableSurfaceHandle onPointerDown={handleDragHandlePointerDown}>
               {dragHandleContent}
-            </div>
+            </DraggableSurfaceHandle>
           )}
           {children}
         </PopoverPrimitive.Popup>
