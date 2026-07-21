@@ -50,7 +50,10 @@ export function filenameFromUrl(
   return `reference-${index}.${extFromMediaType(resolvedMediaType)}`;
 }
 
-function saveBlob(blob: Blob, filename: string): void {
+/** Save a Blob to disk via a throwaway object-URL anchor. Shared by the
+ * image-reference download path below and other blob-download call sites
+ * (e.g. plugin export) that don't need the URL/CORS fallback logic. */
+export function saveBlob(blob: Blob, filename: string): void {
   const objectUrl = URL.createObjectURL(blob);
   try {
     triggerAnchorDownload(objectUrl, filename);

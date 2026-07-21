@@ -35,41 +35,67 @@ interface PluginStoreState {
  * stores already schedule a repaint), so this store is deliberately NOT
  * subscribed in `renderScheduler.ts`'s markActivity allowlist.
  */
-export const usePluginStore = create<PluginStoreState>((set, get) => ({
-  plugins: [],
-  hydrated: false,
+export const usePluginStore = create<PluginStoreState>((set, get) => {
+  // In-flight hydration promise, shared by concurrent callers so a mutation
+  // that races `init()` (e.g. an import right after app boot) waits for the
+  // same read instead of running against a still-empty in-memory list —
+  // that race previously let a colliding id silently overwrite a persisted
+  // record. Cleared once the read settles: `hydrated` then short-circuits
+  // future calls, and if a caller ever forces `hydrated` back to false (only
+  // done in tests, to simulate a fresh reload against the same DB) a later
+  // `init()` correctly starts a new read rather than replaying a stale one.
+  let initPromise: Promise<void> | null = null;
 
-  init: async () => {
-    if (get().hydrated) return;
-    const plugins = await getAllPlugins();
-    set({ plugins, hydrated: true });
-  },
+  /** Kick off hydration if it hasn't started, await it if it's in flight,
+   * no-op if already hydrated. Every mutator that reads `get().plugins`
+   * calls this first so it never observes a partially-hydrated list. */
+  const ensureHydrated = (): Promise<void> => {
+    if (get().hydrated) return Promise.resolve();
+    if (!initPromise) {
+      initPromise = getAllPlugins()
+        .then((plugins) => set({ plugins, hydrated: true }))
+        .finally(() => {
+          initPromise = null;
+        });
+    }
+    return initPromise;
+  };
 
-  install: async (input) => {
-    const existingIds = new Set(get().plugins.map((p) => p.id));
-    const id = input.id && !existingIds.has(input.id) ? input.id : generateId();
-    const now = Date.now();
-    const plugin: PenPlugin = { ...input, id, createdAt: now, updatedAt: now };
-    await putPlugin(plugin);
-    set((s) => ({ plugins: [...s.plugins.filter((p) => p.id !== id), plugin] }));
-    return plugin;
-  },
+  return {
+    plugins: [],
+    hydrated: false,
 
-  update: async (id, patch) => {
-    const current = get().plugins.find((p) => p.id === id);
-    if (!current) return;
-    const updated: PenPlugin = { ...current, ...patch, updatedAt: Date.now() };
-    await putPlugin(updated);
-    set((s) => ({ plugins: s.plugins.map((p) => (p.id === id ? updated : p)) }));
-  },
+    init: ensureHydrated,
 
-  rename: async (id, name) => {
-    await get().update(id, { name });
-  },
+    install: async (input) => {
+      await ensureHydrated();
+      const existingIds = new Set(get().plugins.map((p) => p.id));
+      const id = input.id && !existingIds.has(input.id) ? input.id : generateId();
+      const now = Date.now();
+      const plugin: PenPlugin = { ...input, id, createdAt: now, updatedAt: now };
+      await putPlugin(plugin);
+      set((s) => ({ plugins: [...s.plugins.filter((p) => p.id !== id), plugin] }));
+      return plugin;
+    },
 
-  remove: async (id) => {
-    stopPlugin(id);
-    await deletePlugin(id);
-    set((s) => ({ plugins: s.plugins.filter((p) => p.id !== id) }));
-  },
-}));
+    update: async (id, patch) => {
+      await ensureHydrated();
+      const current = get().plugins.find((p) => p.id === id);
+      if (!current) return;
+      const updated: PenPlugin = { ...current, ...patch, updatedAt: Date.now() };
+      await putPlugin(updated);
+      set((s) => ({ plugins: s.plugins.map((p) => (p.id === id ? updated : p)) }));
+    },
+
+    rename: async (id, name) => {
+      await get().update(id, { name });
+    },
+
+    remove: async (id) => {
+      await ensureHydrated();
+      stopPlugin(id);
+      await deletePlugin(id);
+      set((s) => ({ plugins: s.plugins.filter((p) => p.id !== id) }));
+    },
+  };
+});

@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { usePluginStore } from "@/store/pluginStore";
-import { deletePlugin, getAllPlugins } from "@/utils/pluginDb";
+import { deletePlugin, getAllPlugins, putPlugin } from "@/utils/pluginDb";
 import type { PenPlugin } from "@/lib/plugins/types";
 
 function baseInput(overrides: Partial<PenPlugin> = {}) {
@@ -61,6 +61,38 @@ describe("pluginStore", () => {
 
     expect(second.id).not.toBe(first.id);
     expect(usePluginStore.getState().plugins).toHaveLength(2);
+  });
+
+  it("install awaits an in-flight hydration instead of racing it", async () => {
+    // A plugin already persisted (e.g. from a previous session) that hasn't
+    // been loaded into this fresh store instance yet.
+    await putPlugin({
+      id: "existing",
+      name: "Original",
+      description: "Pre-existing persisted plugin.",
+      code: "pen.notify('orig')",
+      source: "ai",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    expect(usePluginStore.getState().hydrated).toBe(false);
+
+    // Kick off hydration (as the App.tsx mount effect would) and, before it
+    // resolves, call install() with a colliding id — install must wait for
+    // the same hydration read rather than checking a still-empty in-memory
+    // `plugins` list, which would silently overwrite the persisted record.
+    const initPromise = usePluginStore.getState().init();
+    const installPromise = usePluginStore
+      .getState()
+      .install(baseInput({ id: "existing", name: "Imported" } as never));
+
+    await initPromise;
+    const installed = await installPromise;
+
+    expect(installed.id).not.toBe("existing");
+    const dbRecords = await getAllPlugins();
+    expect(dbRecords.find((r) => r.id === "existing")?.name).toBe("Original");
+    expect(dbRecords.find((r) => r.id === installed.id)?.name).toBe("Imported");
   });
 
   it("update patches fields and bumps updatedAt", async () => {

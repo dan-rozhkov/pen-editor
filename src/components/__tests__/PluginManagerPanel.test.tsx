@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { usePluginStore } from "@/store/pluginStore";
 import { usePluginManagerStore } from "@/store/pluginManagerStore";
+import { useDevModeStore } from "@/store/devModeStore";
 import { deletePlugin, getAllPlugins } from "@/utils/pluginDb";
 import type { PenPlugin } from "@/lib/plugins/types";
 
@@ -32,6 +33,7 @@ beforeEach(async () => {
   await Promise.all(records.map((r) => deletePlugin(r.id)));
   usePluginStore.setState({ plugins: [], hydrated: true });
   usePluginManagerStore.setState({ open: true });
+  useDevModeStore.setState({ active: false });
   runPlugin.mockClear();
 });
 
@@ -56,6 +58,19 @@ describe("<PluginManagerPanel />", () => {
     render(<PluginManagerPanel />);
     fireEvent.click(screen.getByRole("button", { name: "Run" }));
     expect(runPlugin).toHaveBeenCalledWith(plugin);
+  });
+
+  it("disables Run in Dev Mode and does not dispatch to runPlugin", () => {
+    const plugin = makePlugin();
+    usePluginStore.setState({ plugins: [plugin], hydrated: true });
+    useDevModeStore.setState({ active: true });
+    render(<PluginManagerPanel />);
+
+    const runButton = screen.getByRole("button", { name: "Run" }) as HTMLButtonElement;
+    expect(runButton.disabled).toBe(true);
+
+    fireEvent.click(runButton);
+    expect(runPlugin).not.toHaveBeenCalled();
   });
 
   it("View code opens a read-only view with the plugin's code", () => {

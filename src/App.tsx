@@ -53,10 +53,14 @@ function App() {
     useCustomFontStore.getState().restoreCustomFonts();
   }, []);
 
-  // Hydrate the installed-plugin list from IndexedDB so plugins survive a reload.
+  // Hydrate the installed-plugin list from IndexedDB so plugins survive a
+  // reload. Gated to edit mode — present/view (and dev-mode-only sessions,
+  // e.g. embedded/read-only viewers) never need the plugin library, and
+  // `init()` is idempotent so switching into edit mode later still hydrates.
   useEffect(() => {
+    if (mode !== "edit") return;
     void usePluginStore.getState().init();
-  }, []);
+  }, [mode]);
 
   // Read-only view mode is entered only via the `?view` URL parameter
   // (e.g. ?view or ?view=1). There is no in-app toggle.

@@ -1,9 +1,11 @@
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { PlayIcon, TrashIcon, CodeIcon, DownloadSimpleIcon, UploadSimpleIcon } from "@phosphor-icons/react";
 import { usePluginManagerStore } from "@/store/pluginManagerStore";
-import { usePluginStore, type PluginInstallInput } from "@/store/pluginStore";
+import { usePluginStore } from "@/store/pluginStore";
+import { useDevModeStore } from "@/store/devModeStore";
 import { runPlugin } from "@/lib/plugins/pluginHost";
-import type { PenPlugin } from "@/lib/plugins/types";
+import { exportPluginToFile, parsePluginImport } from "@/lib/plugins/pluginTransfer";
 import {
   Dialog,
   DialogContent,
@@ -26,32 +28,10 @@ import { IconButton } from "@/components/ui/IconButton";
 import { EditableText } from "@/components/ui/EditableText";
 import { Textarea } from "@/components/ui/textarea";
 import { PanelEmptyState } from "@/components/PanelEmptyState";
-import { PlayIcon, TrashIcon, CodeIcon, DownloadSimpleIcon, UploadSimpleIcon } from "@phosphor-icons/react";
 
-/** Shape we accept on import: the required `PenPlugin` fields, everything
- * else (id/timestamps/source) is optional — `id` (if present and not
- * colliding with an installed plugin) round-trips our own exports back to
- * the same record; `pluginStore.install` assigns a fresh id otherwise. */
-function isImportablePlugin(
-  value: unknown,
-): value is Partial<PenPlugin> & Pick<PenPlugin, "name" | "description" | "code"> {
-  if (value == null || typeof value !== "object") return false;
-  const v = value as Record<string, unknown>;
-  return typeof v.name === "string" && typeof v.description === "string" && typeof v.code === "string";
-}
-
-function downloadPluginJson(plugin: PenPlugin): void {
-  const blob = new Blob([JSON.stringify(plugin, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${plugin.name.replace(/[^a-z0-9-_]+/gi, "-") || "plugin"}.json`;
-  a.style.display = "none";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
+/** Which per-plugin dialog (if any) is open, and for which plugin — replaces
+ * two parallel `id | null` states (+ their `plugins.find()`s) with one. */
+type ActiveDialog = { kind: "code" | "delete"; id: string } | null;
 
 /**
  * Manager panel for installed plugins (opened via the "Manage plugins…"
@@ -65,38 +45,31 @@ export function PluginManagerPanel() {
   const rename = usePluginStore((s) => s.rename);
   const remove = usePluginStore((s) => s.remove);
   const install = usePluginStore((s) => s.install);
+  // Dev (inspect) mode is read-only, mirroring the `mutatesScene` guard that
+  // hides per-plugin Run commands from the command palette (pluginCommands.ts)
+  // — a plugin can call scene-mutating tools, so Run must not be reachable
+  // from here either while dev mode is active.
+  const isDevMode = useDevModeStore((s) => s.active);
 
-  const [viewingCodeId, setViewingCodeId] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [activeDialog, setActiveDialog] = useState<ActiveDialog>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const viewingPlugin = plugins.find((p) => p.id === viewingCodeId) ?? null;
-  const deletingPlugin = plugins.find((p) => p.id === deletingId) ?? null;
+  const viewingPlugin =
+    activeDialog?.kind === "code" ? (plugins.find((p) => p.id === activeDialog.id) ?? null) : null;
+  const deletingPlugin =
+    activeDialog?.kind === "delete" ? (plugins.find((p) => p.id === activeDialog.id) ?? null) : null;
 
   async function handleImportFile(file: File): Promise<void> {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(await file.text());
-    } catch {
-      toast("That file isn't valid JSON.");
+    const result = parsePluginImport(await file.text());
+    if (!result.ok) {
+      toast(
+        result.reason === "invalid-json"
+          ? "That file isn't valid JSON."
+          : "That file doesn't look like a plugin export.",
+      );
       return;
     }
-    if (!isImportablePlugin(parsed)) {
-      toast("That file doesn't look like a plugin export.");
-      return;
-    }
-    const input: PluginInstallInput = {
-      name: parsed.name,
-      description: parsed.description,
-      code: parsed.code,
-      icon: parsed.icon,
-      ui: parsed.ui,
-      source: "imported",
-      // `install` dedupes: a colliding id (or none) is replaced with a fresh
-      // one, an id from our own export round-trips back to the same record.
-      id: parsed.id,
-    };
-    const installed = await install(input);
+    const installed = await install(result.input);
     toast(`Imported "${installed.name}".`);
   }
 
@@ -132,19 +105,22 @@ export function PluginManagerPanel() {
                   <p className="text-xs text-text-muted truncate px-2">{plugin.description}</p>
                 </div>
                 <div className="flex items-center gap-0.5 shrink-0">
-                  <IconButton
-                    tooltip="Run"
-                    size="icon-sm"
-                    variant="ghost"
-                    onClick={() => runPlugin(plugin)}
-                  >
-                    <PlayIcon />
-                  </IconButton>
+                  <span title={isDevMode ? "Run is disabled in Dev Mode" : undefined}>
+                    <IconButton
+                      tooltip="Run"
+                      size="icon-sm"
+                      variant="ghost"
+                      disabled={isDevMode}
+                      onClick={() => runPlugin(plugin)}
+                    >
+                      <PlayIcon />
+                    </IconButton>
+                  </span>
                   <IconButton
                     tooltip="View code"
                     size="icon-sm"
                     variant="ghost"
-                    onClick={() => setViewingCodeId(plugin.id)}
+                    onClick={() => setActiveDialog({ kind: "code", id: plugin.id })}
                   >
                     <CodeIcon />
                   </IconButton>
@@ -152,7 +128,7 @@ export function PluginManagerPanel() {
                     tooltip="Export"
                     size="icon-sm"
                     variant="ghost"
-                    onClick={() => downloadPluginJson(plugin)}
+                    onClick={() => exportPluginToFile(plugin)}
                   >
                     <DownloadSimpleIcon />
                   </IconButton>
@@ -160,7 +136,7 @@ export function PluginManagerPanel() {
                     tooltip="Delete"
                     size="icon-sm"
                     variant="ghost"
-                    onClick={() => setDeletingId(plugin.id)}
+                    onClick={() => setActiveDialog({ kind: "delete", id: plugin.id })}
                   >
                     <TrashIcon />
                   </IconButton>
@@ -189,7 +165,7 @@ export function PluginManagerPanel() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={viewingPlugin != null} onOpenChange={(next) => !next && setViewingCodeId(null)}>
+      <Dialog open={viewingPlugin != null} onOpenChange={(next) => !next && setActiveDialog(null)}>
         <DialogContent className="sm:max-w-lg" showCloseButton>
           <DialogHeader>
             <DialogTitle>{viewingPlugin?.name}</DialogTitle>
@@ -199,7 +175,7 @@ export function PluginManagerPanel() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={deletingPlugin != null} onOpenChange={(next) => !next && setDeletingId(null)}>
+      <AlertDialog open={deletingPlugin != null} onOpenChange={(next) => !next && setActiveDialog(null)}>
         <AlertDialogContent size="sm">
           <AlertDialogHeader>
             <AlertDialogTitle>Delete "{deletingPlugin?.name}"?</AlertDialogTitle>
@@ -213,7 +189,7 @@ export function PluginManagerPanel() {
               variant="destructive"
               onClick={() => {
                 if (deletingPlugin) void remove(deletingPlugin.id);
-                setDeletingId(null);
+                setActiveDialog(null);
               }}
             >
               Delete

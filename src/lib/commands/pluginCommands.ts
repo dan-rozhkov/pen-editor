@@ -16,7 +16,7 @@ export function getPluginCommands(): PaletteCommand[] {
     id: `plugin-${plugin.id}`,
     label: plugin.icon ? `${plugin.icon} ${plugin.name}` : plugin.name,
     group: "Plugins",
-    keywords: ["plugin", plugin.description].filter((s): s is string => Boolean(s)),
+    keywords: ["plugin", plugin.description].filter(Boolean),
     mutatesScene: true,
     run: () => {
       runPlugin(plugin);

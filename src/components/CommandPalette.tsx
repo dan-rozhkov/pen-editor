@@ -47,7 +47,9 @@ export function CommandPalette() {
   // paste, etc.) must not be reachable via ⌘K, mirroring the keyboard-shortcut
   // guard in keyboardCommands.ts. Undo/redo aren't flagged `mutatesScene` and
   // stay available (see PaletteCommand.mutatesScene doc).
-  const commands = getCommands().filter((c) => !isDevMode || !c.mutatesScene);
+  // `getCommands()` rebuilds every group's command list from scratch (cheap,
+  // but non-zero) — only pay for it while the palette is actually open.
+  const commands = open ? getCommands().filter((c) => !isDevMode || !c.mutatesScene) : [];
   const groups = GROUP_ORDER.map((group) => ({
     group,
     commands: commands.filter((c) => c.group === group),
