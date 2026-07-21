@@ -11,6 +11,7 @@ import { PrimitivesPanel } from "./components/PrimitivesPanel";
 import { PresentOverlay } from "./components/PresentOverlay";
 import { CommandPalette } from "./components/CommandPalette";
 import { PluginManagerPanel } from "./components/PluginManagerPanel";
+import { PluginPanels } from "./components/plugins/PluginPanels";
 import { PresentController } from "./components/PresentController";
 import { ReadOnlyProvider } from "./components/ReadOnlyProvider";
 import { FpsDisplay } from "./components/canvas/CanvasOverlays";
@@ -138,6 +139,10 @@ function App() {
           palette entry, so it's reachable only where the palette itself is
           (edit mode). */}
       {mode === "edit" && <PluginManagerPanel />}
+
+      {/* Floating windows for running UI plugins (`PenPlugin.ui` set) — same
+          gating as the manager above; plugins only run in edit mode. */}
+      {mode === "edit" && <PluginPanels />}
 
       {/* UI panels — overlay on top of canvas */}
       {!isUIHidden && !isPresent && (
