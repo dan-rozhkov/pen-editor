@@ -8,6 +8,24 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.59.0] - 2026-07-21
+
+### Added
+- **Plugin UI-kit expanded to cover every app-analog primitive.**
+  `PLUGIN_UI_KIT_STYLES` grows from 9 to 26 `.pen-*` classes — adding `badge`,
+  `card`, `separator`, `slider`, `tabs`/`tab`, `alert`, `table`, `field`,
+  `help`, `icon-button`, `button-group`, `input-group`, `heading`, `muted`,
+  `kbd` and `link` on top of the original controls — so the design agent has an
+  editor-matching, live-theming analog for every `src/components/ui/` primitive
+  that renders faithfully inside a sandboxed static plugin iframe. All classes
+  reference only `THEME_CSS_VARS` tokens (no new theme var); the backend
+  `/plugin` skill catalog stays in sync, guarded by the cross-repo
+  `pluginAllowlistContract` test. Pairs with backend 0.24.0.
+- **Offline indicator beside the document name.** A crossed-cloud (`CloudSlash`)
+  glyph with a tooltip now appears next to the file name while the browser is
+  offline, driven by `useOnlineStatus`; documents are local-only, so "offline"
+  and "document is local-only" are the same condition.
+
 ## [0.58.0] - 2026-07-21
 
 ### Changed
