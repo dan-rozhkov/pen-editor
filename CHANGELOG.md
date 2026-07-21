@@ -8,6 +8,18 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.58.0] - 2026-07-21
+
+### Changed
+- **Primary buttons restyled: white with an outline instead of black fill.**
+  Light theme `--primary` is now white with near-black text and a visible
+  border on the Button default variant (hover darkens slightly via
+  color-mix); dark theme keeps the light button, now also outlined. The
+  plugin UI kit's `.pen-button-primary` mirrors the same recipe. Ink-colored
+  consumers of the old `--primary` (default badge, link variants, field
+  checked-highlight, auto-layout dot) now use `--foreground` so they keep
+  their contrast.
+
 ## [0.57.0] - 2026-07-21
 
 ### Added
