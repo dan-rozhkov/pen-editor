@@ -1,13 +1,13 @@
 import { usePluginStore } from "@/store/pluginStore";
-import { usePluginManagerStore } from "@/store/pluginManagerStore";
 import { runPlugin } from "@/lib/plugins/pluginHost";
+import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import type { PaletteCommand } from "./types";
 
 /**
  * One command per installed plugin (runs it — flagged `mutatesScene` since a
  * plugin can call scene-mutating tools, so it's hidden in dev/inspect mode
  * like every other mutating command) plus a "Manage plugins…" entry that
- * opens the manager panel (`pluginManagerStore`).
+ * navigates to the Plugins section of the left sidebar.
  */
 export function getPluginCommands(): PaletteCommand[] {
   const plugins = usePluginStore.getState().plugins;
@@ -28,7 +28,11 @@ export function getPluginCommands(): PaletteCommand[] {
     label: "Manage plugins…",
     group: "Plugins",
     keywords: ["plugins", "manager", "install", "import", "export"],
-    run: () => usePluginManagerStore.getState().setOpen(true),
+    run: () => {
+      const { setActiveSection, setPanelOpen } = useLeftSidebarStore.getState();
+      setActiveSection("toolbox");
+      setPanelOpen(true);
+    },
   };
 
   return [...runCommands, manageCommand];

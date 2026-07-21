@@ -30,7 +30,7 @@ async function runTool(name: unknown, args: unknown): Promise<string> {
   if (!PLUGIN_ALLOWED_TOOLS.has(name)) throw new Error(`tools.run: tool "${name}" is not allowed for plugins`);
   // Dev Mode is a read-only inspect overlay: the Manager's Run button and the
   // command-palette entries are already hidden/disabled there (see
-  // PluginManagerPanel.tsx / pluginCommands.ts), but an *already-running*
+  // PluginsPanel.tsx / pluginCommands.ts), but an *already-running*
   // plugin's UI panel can still reach this facade directly, so the guarantee
   // has to be enforced here too — the one place every mutation path
   // (tools.run, and scene.batch below, which is just batch_design by another

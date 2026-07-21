@@ -2,8 +2,8 @@ import "fake-indexeddb/auto";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { usePluginStore } from "@/store/pluginStore";
-import { usePluginManagerStore } from "@/store/pluginManagerStore";
 import { useDevModeStore } from "@/store/devModeStore";
+import { ReadOnlyContext } from "@/hooks/useReadOnly";
 import { deletePlugin, getAllPlugins } from "@/utils/pluginDb";
 import type { PenPlugin } from "@/lib/plugins/types";
 
@@ -13,7 +13,7 @@ vi.mock("@/lib/plugins/pluginHost", () => ({
   stopPlugin: vi.fn(),
 }));
 
-const { PluginManagerPanel } = await import("../PluginManagerPanel");
+const { PluginsPanel } = await import("../PluginsPanel");
 
 function makePlugin(overrides: Partial<PenPlugin> = {}): PenPlugin {
   return {
@@ -32,22 +32,21 @@ beforeEach(async () => {
   const records = await getAllPlugins();
   await Promise.all(records.map((r) => deletePlugin(r.id)));
   usePluginStore.setState({ plugins: [], hydrated: true });
-  usePluginManagerStore.setState({ open: true });
   useDevModeStore.setState({ active: false });
   runPlugin.mockClear();
 });
 
 afterEach(() => cleanup());
 
-describe("<PluginManagerPanel />", () => {
+describe("<PluginsPanel />", () => {
   it("shows an empty state with no plugins installed", () => {
-    render(<PluginManagerPanel />);
+    render(<PluginsPanel />);
     expect(screen.getByText(/no plugins installed/i)).toBeTruthy();
   });
 
   it("lists installed plugins with name and description", () => {
     usePluginStore.setState({ plugins: [makePlugin()], hydrated: true });
-    render(<PluginManagerPanel />);
+    render(<PluginsPanel />);
     expect(screen.getByText("Rename layers")).toBeTruthy();
     expect(screen.getByText("Renames the selection sequentially.")).toBeTruthy();
   });
@@ -55,7 +54,7 @@ describe("<PluginManagerPanel />", () => {
   it("Run dispatches to runPlugin", () => {
     const plugin = makePlugin();
     usePluginStore.setState({ plugins: [plugin], hydrated: true });
-    render(<PluginManagerPanel />);
+    render(<PluginsPanel />);
     fireEvent.click(screen.getByRole("button", { name: "Run" }));
     expect(runPlugin).toHaveBeenCalledWith(plugin);
   });
@@ -64,7 +63,23 @@ describe("<PluginManagerPanel />", () => {
     const plugin = makePlugin();
     usePluginStore.setState({ plugins: [plugin], hydrated: true });
     useDevModeStore.setState({ active: true });
-    render(<PluginManagerPanel />);
+    render(<PluginsPanel />);
+
+    const runButton = screen.getByRole("button", { name: "Run" }) as HTMLButtonElement;
+    expect(runButton.disabled).toBe(true);
+
+    fireEvent.click(runButton);
+    expect(runPlugin).not.toHaveBeenCalled();
+  });
+
+  it("disables Run in view mode (read-only) and does not dispatch to runPlugin", () => {
+    const plugin = makePlugin();
+    usePluginStore.setState({ plugins: [plugin], hydrated: true });
+    render(
+      <ReadOnlyContext.Provider value={true}>
+        <PluginsPanel />
+      </ReadOnlyContext.Provider>,
+    );
 
     const runButton = screen.getByRole("button", { name: "Run" }) as HTMLButtonElement;
     expect(runButton.disabled).toBe(true);
@@ -75,7 +90,7 @@ describe("<PluginManagerPanel />", () => {
 
   it("View code opens a read-only view with the plugin's code", () => {
     usePluginStore.setState({ plugins: [makePlugin()], hydrated: true });
-    render(<PluginManagerPanel />);
+    render(<PluginsPanel />);
     fireEvent.click(screen.getByRole("button", { name: "View code" }));
     const textarea = screen.getByDisplayValue("pen.notify('hi')") as HTMLTextAreaElement;
     expect(textarea.readOnly).toBe(true);
@@ -84,7 +99,7 @@ describe("<PluginManagerPanel />", () => {
   it("Delete requires confirmation, then removes the plugin from the store and pluginDb", async () => {
     const plugin = makePlugin();
     usePluginStore.setState({ plugins: [plugin], hydrated: true });
-    render(<PluginManagerPanel />);
+    render(<PluginsPanel />);
 
     // Opens the confirm dialog; the plugin isn't removed yet.
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
@@ -102,7 +117,7 @@ describe("<PluginManagerPanel />", () => {
   it("rename commits through EditableText", async () => {
     const plugin = makePlugin();
     usePluginStore.setState({ plugins: [plugin], hydrated: true });
-    render(<PluginManagerPanel />);
+    render(<PluginsPanel />);
 
     fireEvent.click(screen.getByText("Rename layers"));
     const input = screen.getByDisplayValue("Rename layers");

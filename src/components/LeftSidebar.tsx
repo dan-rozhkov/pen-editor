@@ -5,6 +5,7 @@ import { OFFLINE_DOCUMENT_TITLE } from "@/lib/apiBase";
 import { EditableText } from "@/components/ui/EditableText";
 import { LayersPanel } from "./layers";
 import { ComponentsPanel } from "./ComponentsPanel";
+import { PluginsPanel } from "./PluginsPanel";
 import { SlidesPanel } from "./SlidesPanel";
 import { PagesPanel } from "./PagesPanel";
 import { ChatPanelContent } from "./chat/ChatPanel";
@@ -70,6 +71,13 @@ export function LeftSidebar() {
           </span>
         </div>
       )}
+      {activeSection === "toolbox" && (
+        <div className="flex h-[49px] items-center gap-2 px-4 py-3 border-b border-border-default shrink-0">
+          <span className="text-sm font-medium text-text-primary flex-1">
+            Plugins
+          </span>
+        </div>
+      )}
       {(activeSection === "pages" || activeSection === "slides") && (
         <div className="px-2 pb-2 flex items-center gap-1">
           <EditableText
@@ -132,6 +140,13 @@ export function LeftSidebar() {
         {activeSection === "components" && (
           <div className="absolute inset-0 flex flex-col overflow-hidden">
             <ComponentsPanel />
+          </div>
+        )}
+
+        {/* Toolbox (plugins) section */}
+        {activeSection === "toolbox" && (
+          <div className="absolute inset-0 flex flex-col overflow-hidden">
+            <PluginsPanel />
           </div>
         )}
 

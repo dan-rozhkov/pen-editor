@@ -10,7 +10,6 @@ import { RightPanel } from "./components/RightPanel";
 import { PrimitivesPanel } from "./components/PrimitivesPanel";
 import { PresentOverlay } from "./components/PresentOverlay";
 import { CommandPalette } from "./components/CommandPalette";
-import { PluginManagerPanel } from "./components/PluginManagerPanel";
 import { PluginPanels } from "./components/plugins/PluginPanels";
 import { PresentController } from "./components/PresentController";
 import { ReadOnlyProvider } from "./components/ReadOnlyProvider";
@@ -135,13 +134,10 @@ function App() {
           `canEditScene` enforces for view/present mode. */}
       {mode === "edit" && <CommandPalette />}
 
-      {/* Plugin manager modal — opened via the "Manage plugins…" command
-          palette entry, so it's reachable only where the palette itself is
-          (edit mode). */}
-      {mode === "edit" && <PluginManagerPanel />}
-
-      {/* Floating windows for running UI plugins (`PenPlugin.ui` set) — same
-          gating as the manager above; plugins only run in edit mode. */}
+      {/* Floating windows for running UI plugins (`PenPlugin.ui` set) —
+          plugins only run in edit mode. The plugin manager list itself now
+          lives in the left sidebar's Toolbox section (PluginsPanel), not a
+          modal here. */}
       {mode === "edit" && <PluginPanels />}
 
       {/* UI panels — overlay on top of canvas */}

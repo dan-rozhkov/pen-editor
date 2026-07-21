@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { usePluginStore } from "@/store/pluginStore";
-import { usePluginManagerStore } from "@/store/pluginManagerStore";
+import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import type { PenPlugin } from "@/lib/plugins/types";
 
 const runPlugin = vi.fn();
@@ -27,7 +27,7 @@ function makePlugin(overrides: Partial<PenPlugin> = {}): PenPlugin {
 
 beforeEach(() => {
   usePluginStore.setState({ plugins: [], hydrated: true });
-  usePluginManagerStore.setState({ open: false });
+  useLeftSidebarStore.setState({ activeSection: "pages", isPanelOpen: false });
   runPlugin.mockClear();
 });
 
@@ -65,9 +65,9 @@ describe("getPluginCommands", () => {
     expect(runPlugin).toHaveBeenCalledWith(plugin);
   });
 
-  it("the manage command opens the plugin manager panel", () => {
+  it("the manage command navigates to the toolbox section", () => {
     const commands = getPluginCommands();
     commands.find((c) => c.id === "plugins-manage")?.run();
-    expect(usePluginManagerStore.getState().open).toBe(true);
+    expect(useLeftSidebarStore.getState().activeSection).toBe("toolbox");
   });
 });
