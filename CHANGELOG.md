@@ -8,6 +8,29 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.60.1] - 2026-07-22
+
+### Fixed
+- **Repeated double-click drill-down at the same cursor position.** Drilling
+  into nested containers stopped after one level when double-clicking again
+  without moving the mouse: the browser keeps incrementing the click train's
+  `detail` (1,2,3,4…) for rapid clicks at one spot and only dispatches native
+  `dblclick` at exactly 2, so clicks 3+4 never produced an event. Double-click
+  detection is now manual (`doubleClickDetector.ts`, wired into pointerup):
+  every pair of rapid clicks (≤500ms, ≤5px) fires and resets, so each
+  successive double-click drills one level deeper. `handleDblClick` behavior
+  (text edit, embeds, instance drill) is unchanged. Also: `pointercancel` is
+  excluded explicitly, the pointerup `button` check is dropped (WebKit touch
+  `button = -1` quirk), the pairing window is 500ms to match stock OS
+  double-click defaults, and pointerup computes screen coords once.
+
+## [0.60.0] - 2026-07-21
+
+### Changed
+- **Plugins moved from a modal into the left sidebar.** The plugins manager
+  now lives as a rail section in the Toolbox panel (below Assets) instead of
+  a modal dialog; Run is gated by read-only (view) mode.
+
 ## [0.59.0] - 2026-07-21
 
 ### Added
