@@ -16,6 +16,7 @@ import { findNodeByPath } from "@/utils/instanceRuntime";
 import { parseSvgToNodes } from "@/utils/svgUtils";
 import { convertFigmaClipboardHtml, isFigmaClipboardHtml } from "@/lib/figmaPaste";
 import { convertH2dClipboardHtml, isH2dClipboardHtml } from "@/lib/h2dPaste";
+import { convertPixsoClipboardHtml, isPixsoClipboardHtml } from "@/lib/pixsoPaste";
 import { applyExternalPasteNodes } from "./externalPasteImport";
 import {
   applyImageImportPlans,
@@ -267,6 +268,35 @@ export function createClipboardActions(deps: ClipboardActionDeps) {
         }
       } catch (error) {
         console.warn("[figma-paste] failed to decode Figma clipboard data:", error);
+      }
+    } else if (isPixsoClipboardHtml(htmlText)) {
+      // Pixso clipboard (Cmd+C in Pixso) — decode to native nodes, 1:1
+      e.preventDefault();
+      try {
+        const result = await convertPixsoClipboardHtml(htmlText);
+        if (result && result.nodes.length > 0) {
+          applyExternalPasteNodes({
+            nodes: result.nodes,
+            viewportCenter: getViewportCenter(dimensions),
+            addNode,
+            saveHistory,
+            startBatch,
+            endBatch,
+          });
+          externalPasteHandled = true;
+          if (result.unresolvedImageCount > 0) {
+            toast(
+              "Some image fills couldn't be transferred — Pixso doesn't put image pixels in the clipboard on a normal copy.",
+            );
+          }
+          if (result.warnings.length > 0) {
+            console.warn("[pixso-paste] imported with warnings:", result.warnings);
+          }
+        } else if (result) {
+          console.warn("[pixso-paste] decoded clipboard produced no nodes");
+        }
+      } catch (error) {
+        console.warn("[pixso-paste] failed to decode Pixso clipboard data:", error);
       }
     } else if (isH2dClipboardHtml(htmlText)) {
       // h2d clipboard (html.to.design / Figma-capture) — decode to native nodes, 1:1
