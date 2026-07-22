@@ -41,39 +41,56 @@ payloads** (a red 96×40 rectangle, a text node, a frame — captured 2026-07-22
   3. Bytes 24+ are a single **zstd frame** (`28 b5 2f fd …`). `fzstd`-decompress it.
   4. The decompressed bytes are a **kiwi message using Figma's fig-kiwi schema**.
 
-- **The kiwi schema is a public, fetchable asset — no WASM needed to decode.**
-  `https://cdn.pixso.net/app/fs.binary` (~70 KB) is a standard kiwi *binary schema*
-  (`decodeBinarySchema()` → 619 definitions): `Message` (field 1 `type` MessageType,
-  2 `sessionID`, 3 `ackID`, 4 `nodeChanges NodeChange[]`, 6 `blobs Blob[]`,
-  30 `blobBaseIndex`), `NodeChange` (600 fields: `type`/`name`/`size`/`guid`/
-  `parentIndex`/`fillPaints`/…), `Paint`, `TextData`, `Effect`, etc. This is
-  byte-for-byte the same schema family our `figmaPaste` decoder already consumes.
+- **The kiwi schema is a public, fetchable asset — no WASM needed to decode
+  (confirmed end-to-end with our own `kiwi-schema` npm lib).** The clipboard codec uses
+  **`https://cdn.pixso.net/app/pixso.binary`** (~32 KB, Pixso's OWN schema — 243 defs),
+  NOT `/app/fs.binary` (that ~70 KB asset is the Figma-lineage *collab* schema; feeding
+  it to the clipboard payload was the original dead end). `pixso.binary`'s root message
+  is `PixsoMsg` (`1 type` NodeChangesType, `2 sessionID`, `3 pixsoNodes PixsoNode[]`,
+  `4 blobs Blob[]`, `20 pasteFileKey`, …). `PixsoNode` (247 fields) is Figma-`NodeChange`
+  shaped: `guid{sessionID,localID}`, `parentIndex`, `phase`, `transform{m00..m12}`,
+  `type` NodeType (159 values: RECTANGLE/FRAME/TEXT/CANVAS/…), `name`, `size{x,y}`,
+  `cornerRadius`, `fillPaints Paint[]`, `textData`, `lineHeight`, effects, stack
+  (auto-layout) fields.
 
-- **Container framing** (still being pinned to the byte by a native-decode task at
-  design time): the decompressed buffer begins with a `Message` header
-  (`type`/`sessionID`/`ackID`), followed by the node data as `nodeChanges`. The exact
-  framing (single `Message` vs. a short stream / length-prefixed chunks — a naive
-  `decodeMessage` surfaces only the 3 header fields, and node data clearly begins ~byte
-  7) is being resolved by decoding a sample with Pixso's own WASM core
-  (`FusionCore.f893a380.wasm`, downloaded) as ground truth. **This does not change the
-  architecture below** — once framing is known, the decoder produces a
-  `{ nodeChanges, blobs, blobBaseIndex }` object identical in shape to
-  `figmaPaste`'s `FigMessage`.
+- **The one decode quirk — a +1 type-index remap.** Pixso's kiwi encoder has one extra
+  builtin type, so `decodeBinarySchema(pixso.binary)` from our npm `kiwi-schema` resolves
+  every user-defined field type off by +1 (e.g. `PixsoMsg.pixsoNodes` mis-reads as type
+  `DynamicStrokeSettings` instead of `PixsoNode`). Fix, applied once at schema-compile:
+  after `decodeBinarySchema`, for every message field whose `type` names a definition,
+  replace it with the definition +1 further in the `definitions` array; then
+  `compileSchema`. Derive the offset from the anchor `idx(PixsoNode) −
+  idx(DynamicStrokeSettings)` so it self-corrects if Pixso bumps kiwi again. With the
+  remap, `compiled.decodePixsoMsg(bytes)` decodes cleanly.
+
+- **Confirmed decode output** (3 real captures, exact): rect → `type:"NODE_CHANGES"`,
+  `pixsoNodes:[CANVAS,CANVAS,RECTANGLE]`, the RECTANGLE = name "Прямоугольник 3", size
+  `{200,100}`, `fillPaints:[{type:"SOLID",color:{r:255,g:0,b:0,a:255},…}]`; frame → FRAME
+  `{288,288}` with an IMAGE fill (`image.hash` + `dataBlob` index, Figma-style blob refs);
+  text → TEXT with full `textData.characters`, `fontName:{family:"Inter",style:"Regular"}`,
+  size `{304,154}`, 33 font-outline blobs.
+
+- **Colors are 0–255 ints**, not Figma's 0–1 floats — the converter must scale
+  (`/255`). This and Pixso-specific NodeType/enum names are why the converter is an
+  *adaptation* of the Figma converter, not blind reuse (below).
 
 - Not relevant to our importer: a `text/plain` secondary channel
-  (`<!-- pixso json data -->…`, `<!-- pixso binary data -->…`) and an optional
-  `data-bos-shape` base64 sub-channel for whiteboard objects.
+  (`<!-- pixso json data -->…`) and an optional `data-bos-shape` base64 whiteboard
+  sub-channel.
 
-### Consequence for the design: reuse the Figma converter
+### Consequence for the design: adapt the Figma converter
 
-Because Pixso's decoded message is the same `nodeChanges`/`blobs`/`blobBaseIndex` shape
-as Figma's, the node→SceneNode conversion **reuses the existing, tested
-`convertFigmaPasteToSceneNodes(data: FigPasteData)`** from
-`src/lib/figmaPaste/figmaToScene.ts` unchanged. `pixsoPaste`'s job is only: detect →
-extract `data-fic` → strip the `pixso-kw`/zstd header → decompress → decode with the
-bundled Pixso schema → wrap as a `FigPasteData` (`{ meta, message, version }`) → hand to
-`convertFigmaPasteToSceneNodes`. Any Pixso-specific field/enum-id drift surfaced during
-testing is handled by a thin adapter, not a fork of the converter.
+Pixso's `pixsoNodes` are the same field *families* as Figma's `nodeChanges`
+(guid/parentIndex/phase/transform/type/size/fillPaints/textData/…), so the
+node→SceneNode conversion **borrows heavily from
+`src/lib/figmaPaste/figmaToScene/`** — the tree-building (`buildFigTree` keyed on
+`guid`/`parentIndex`), coordinate mapping (transform → x/y/rotation), and shape/text/
+auto-layout builders are structurally reusable. But it is an **adaptation, not blind
+reuse**: Pixso's NodeType enum names, 0–255 colors, and paint/style extras differ, so
+`pixsoPaste` gets its own converter that reuses figmaToScene's pure helpers where the
+shapes already match and maps the differences explicitly. Blob-referenced image fills
+follow the exact same fate as the Figma branch (placeholder + toast when pixels aren't
+in the buffer).
 
 ## Architecture
 
@@ -86,32 +103,35 @@ New module `src/lib/pixsoPaste/`, shaped like `src/lib/figmaPaste/`:
   `data-fic-meta` JSON) out of `span#pixso-data`. Regex-based (the `handlePaste` path
   runs in happy-dom in tests and in the browser in prod; a regex avoids a DOMParser
   dependency and matches how `figmaPaste` extracts its section).
-- `schema.ts` — the bundled Pixso kiwi schema. `fs.binary` (~70 KB) is committed as
-  `src/lib/pixsoPaste/pixso.kiwi.b64` (base64 text asset) and compiled lazily once via
-  `kiwi-schema`'s `decodeBinarySchema` + `compileSchema`, memoized. Bundling (vs.
-  fetching from `cdn.pixso.net` at paste time) keeps paste offline-capable and
-  deterministic; a version note records the source URL + `fs.binary` hash for refresh.
-- `decode.ts` — `decodePixsoDataFic(base64): FigPasteData`:
+- `schema.ts` — the bundled Pixso kiwi schema. `pixso.binary` (~32 KB) is committed as
+  `src/lib/pixsoPaste/pixso.kiwi.b64` (base64 text asset). Lazily, once, memoized:
+  `decodeBinarySchema` → apply the **+1 type-index remap** (see format section; derive
+  the offset from `idx(PixsoNode) − idx(DynamicStrokeSettings)`) → `compileSchema`.
+  Bundling (vs. fetching `cdn.pixso.net` at paste time) keeps paste offline-capable and
+  deterministic; a comment records the source URL + schema hash for refresh.
+- `decode.ts` — `decodePixsoDataFic(base64): PixsoMessage`:
   1. base64 → bytes.
-  2. Validate the `pixso-kw` magic; read past the 24-byte
-     `pixso-kw…compress:zstd` header (parse the `compress:<algo>` token rather than
-     hard-coding 24, so a future `compress:deflate` still works — fall back to the
-     shared `decompressFigmaChunk` for deflate).
+  2. Validate the `pixso-kw` magic; skip the header by parsing its
+     `<len><pixso-kw>...<len>compress:zstd` structure (parse the `compress:<algo>` token
+     rather than hard-coding 24 bytes, so a future algo still works).
   3. `fzstd`-decompress the remainder.
-  4. Decode the kiwi `Message` with the bundled schema using the framing confirmed by
-     the native-decode task (single `Message`, or the short header+stream it turns out
-     to be — encapsulated entirely here), yielding
-     `{ nodeChanges, blobs, blobBaseIndex }`.
-  5. Return `{ meta, message, version }` shaped as `figmaPaste`'s `FigPasteData`.
-- `index.ts` — `convertPixsoClipboardHtml(html): Promise<FigmaConversionResult | null>`:
-  returns null when `isPixsoClipboardHtml` is false; otherwise dynamically imports
-  `decode` + the schema + `figmaPaste`'s `convertFigmaPasteToSceneNodes`, chaining
-  decode → convert. Reuses `FigmaConversionResult` (nodes + warnings +
-  unresolvedImageCount) — no new result type, since the converter is shared.
+  4. `compiled.decodePixsoMsg(bytes)` → `{ type, sessionID, pixsoNodes, blobs,
+     pasteFileKey, ... }`. Type: `PixsoMessage` (a small hand-written interface over the
+     fields the converter reads).
+- `convert.ts` — `convertPixsoMessageToSceneNodes(msg): PixsoConversionResult`. Builds
+  the node tree from `pixsoNodes` (keyed on `guid`/`parentIndex`, reusing figmaToScene's
+  `buildFigTree` logic or a thin port), then maps each `PixsoNode` → `SceneNode`,
+  borrowing figmaToScene's pure shape/text/auto-layout/transform helpers where shapes
+  match and handling the Pixso deltas explicitly: NodeType enum names, **0–255 → 0–1
+  color scaling**, blob-referenced image fills (`fillPaints[].image.hash`/`dataBlob`
+  resolved via `blobs`/`blobBaseIndex`, placeholder + `unresolvedImages++` when absent).
+  Returns `{ nodes: SceneNode[]; warnings: string[]; unresolvedImageCount: number }`.
+- `index.ts` — `convertPixsoClipboardHtml(html): Promise<PixsoConversionResult | null>`:
+  null when `isPixsoClipboardHtml` is false; otherwise dynamically imports
+  `extract` + `decode` + `schema` + `convert`, chaining extract → decode → convert.
 
-If a real Pixso capture exposes a field/enum-id that our Figma converter mishandles
-(possible: 600-field `NodeChange`, Pixso enum drift), the fix is a small pre-convert
-normalizer in `decode.ts`, keeping `figmaToScene` untouched.
+`PixsoConversionResult` mirrors `FigmaConversionResult`'s field set (nodes + warnings +
+unresolvedImageCount) so the `handlePaste` branch is copy-shaped against the Figma one.
 
 ### Wiring into the paste pipeline
 
