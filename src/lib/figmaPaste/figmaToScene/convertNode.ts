@@ -4,6 +4,7 @@ import type { FrameNode, GroupNode, SceneNode, SizingProperties } from '@/types/
 import { figGuidKey, type FigNodeChange } from '../figTypes'
 import { applyStackChildProps, buildAutoLayout, hugSizing, isStackContainer } from './autoLayout'
 import { buildBase, perCornerRadius } from './base'
+import { buildComponentPropMap, resolveComponentProps } from './componentProps'
 import { buildOverrideMap, mergeChange } from './overrides'
 import { convertEllipse, convertLine, convertRect, convertVectorLike } from './shapes'
 import { convertText } from './text'
@@ -117,7 +118,11 @@ function convertFrame(node: FigTreeNode, change: FigNodeChange, ctx: ConvertCont
 }
 
 function convertInstance(change: FigNodeChange, ctx: ConvertContext): SceneNode | null {
-  const symbolKey = change.symbolData?.symbolID ? figGuidKey(change.symbolData.symbolID) : ''
+  // A swapped-in instance (INSTANCE_SWAP component prop, or a direct
+  // override) points at a different master than the one the node was
+  // authored against — prefer it when present.
+  const symbolGuid = change.overriddenSymbolID ?? change.symbolData?.symbolID
+  const symbolKey = symbolGuid ? figGuidKey(symbolGuid) : ''
   const symbol = symbolKey ? ctx.byGuid.get(symbolKey) : undefined
   if (!symbol) {
     ctx.warnings.push(
@@ -131,13 +136,24 @@ function convertInstance(change: FigNodeChange, ctx: ConvertContext): SceneNode 
   // fills…); mergeChange skips undefined fields and keeps type pinned to FRAME
   const mergedChange = mergeChange({ ...symbol.change, type: 'FRAME' }, change)
 
+  const componentProps = buildComponentPropMap(
+    change,
+    ctx.componentProps,
+    symbol.change.componentPropDef,
+  )
   const instanceCtx: ConvertContext = {
     ...ctx,
     instance: { overrides: buildOverrideMap(change), path: [] },
+    componentProps,
   }
+  // The master's own root frame can carry component-prop bindings (e.g. a
+  // VISIBLE or OVERRIDDEN_SYMBOL_ID declared on the outer frame). Descendants
+  // are resolved in convertNode; resolve the root here since it bypasses that
+  // entry path.
+  const resolvedRoot = resolveComponentProps(mergedChange, componentProps)
   const frame = convertFrame(
-    { change: mergedChange, children: symbol.children },
-    mergedChange,
+    { change: resolvedRoot, children: symbol.children },
+    resolvedRoot,
     instanceCtx,
   )
   return frame
@@ -153,6 +169,11 @@ export function convertNode(node: FigTreeNode, ctx: ConvertContext): SceneNode |
     if (override) change = mergeChange(change, override)
     ctx = { ...ctx, instance: { ...ctx.instance, path } }
   }
+
+  // Resolve this node's own component-property bindings (a no-op unless the
+  // node declares componentPropRef and the enclosing instance supplied a
+  // matching value).
+  change = resolveComponentProps(change, ctx.componentProps)
 
   switch (change.type) {
     case 'FRAME':

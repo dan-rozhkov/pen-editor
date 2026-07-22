@@ -130,6 +130,39 @@ export interface FigArcData {
   innerRadius?: number
 }
 
+/** Value carried by a component-property assignment or definition default.
+ * `textValue` is usually a plain string, but Pixso's real payloads carry a
+ * full rich-text sub-message here (same shape as `FigTextData`); of it only the
+ * `characters` are applied — the bound node keeps the master placeholder's
+ * style (`resolveComponentProps` accepts either shape). */
+export interface FigComponentPropValue {
+  textValue?: string | FigTextData
+  boolValue?: boolean
+  guidValue?: FigGUID
+}
+
+/** Declared on a component master: binds a prop id to a name/type/default. */
+export interface FigComponentPropDef {
+  id?: FigGUID
+  name?: string
+  type?: 'TEXT' | 'BOOL' | 'INSTANCE_SWAP'
+  initialValue?: FigComponentPropValue
+}
+
+/** Declared on a node inside a component master: binds the node's own field
+ * to a component-prop id, so an instance's assignment can drive it. */
+export interface FigComponentPropRef {
+  defID?: FigGUID
+  componentPropNodeField?: 'TEXT_DATA' | 'VISIBLE' | 'OVERRIDDEN_SYMBOL_ID' | 'INHERIT_FILL_STYLE_ID'
+}
+
+/** Declared on an instance (root or nested in symbolOverrides): supplies the
+ * value for a component-prop id defined on its master. */
+export interface FigComponentPropAssignment {
+  defID?: FigGUID
+  value?: FigComponentPropValue
+}
+
 export type FigStackSize = 'FIXED' | 'RESIZE_TO_FIT' | 'RESIZE_TO_FIT_WITH_IMPLICIT_SIZE'
 
 export type FigNodeType =
@@ -240,6 +273,10 @@ export interface FigNodeChange {
   guidPath?: FigGUIDPath
   overrideKey?: FigGUID
   internalOnly?: boolean
+  // Component properties
+  componentPropDef?: FigComponentPropDef[]
+  componentPropRef?: FigComponentPropRef[]
+  componentPropAssignment?: FigComponentPropAssignment[]
 }
 
 export interface FigBlob {

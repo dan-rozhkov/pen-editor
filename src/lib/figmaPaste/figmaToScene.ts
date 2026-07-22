@@ -19,6 +19,7 @@
 import type { SceneNode } from '@/types/scene'
 import type { FigPasteData } from './figTypes'
 import { convertNode } from './figmaToScene/convertNode'
+import { normalizeFitContentSizes } from './figmaToScene/fitContentSize'
 import { buildFigTree } from './figmaToScene/tree'
 import type { ConvertContext, FigmaConversionResult } from './figmaToScene/types'
 
@@ -38,5 +39,8 @@ export function convertFigmaPasteToSceneNodes(data: FigPasteData): FigmaConversi
   const nodes = roots
     .map((root) => convertNode(root, ctx))
     .filter((node): node is SceneNode => node != null)
+  // Grow auto-layout hug frames whose imported stored size understates their
+  // (possibly swap-expanded) content, so a clip mask can't collapse over it.
+  normalizeFitContentSizes(nodes)
   return { nodes, warnings: ctx.warnings, unresolvedImageCount: ctx.stats.unresolvedImages }
 }

@@ -10,6 +10,7 @@ import type {
   ShadowEffect,
 } from '@/types/scene'
 import type { FigBlob, FigNodeChange } from '../figTypes'
+import type { ComponentPropMap } from './componentProps'
 
 export interface FigmaConversionResult {
   nodes: SceneNode[]
@@ -48,6 +49,13 @@ export interface ConvertContext {
   /** Mutable counters shared across the recursive conversion (incl. instances). */
   stats: { unresolvedImages: number }
   instance?: InstanceContext
+  /**
+   * defID -> value map supplied by the innermost enclosing component
+   * instance (merged with any outer instance's map). Absent outside of an
+   * instance subtree, so `resolveComponentProps` is a no-op at the top
+   * level and for plain Figma paste payloads that never set this.
+   */
+  componentProps?: ComponentPropMap
 }
 
 export type MutableBase = {
