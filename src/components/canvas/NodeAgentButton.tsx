@@ -102,7 +102,7 @@ export function NodeAgentButton({
           variant="default"
           size="icon-sm"
           className={cn(
-            "size-6 rounded-lg text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)]",
+            "size-6 rounded-lg border-transparent text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)]",
             isComponentContext
               ? "bg-[#8b5cf6] hover:bg-[#8b5cf6]/90"
               : "bg-accent-primary hover:bg-accent-primary/90",

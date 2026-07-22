@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { PlayIcon, CodeIcon } from "@phosphor-icons/react";
+import { CodeIcon } from "@phosphor-icons/react";
 
 import { SelectWithOptions } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -91,12 +91,11 @@ export function PageControls() {
         <Button
           variant="default"
           size="sm"
-          className="gap-1.5 h-auto px-3 py-1.5 -my-1.5 bg-accent-primary text-white hover:bg-accent-primary/90"
+          className="gap-1.5 h-auto px-3 py-1.5 -my-1.5 border-transparent bg-accent-primary text-white hover:bg-accent-primary/90"
           onClick={() => enterPresent()}
           title="Present (fullscreen)"
           data-testid="page-present"
         >
-          <PlayIcon size={14} weight="light" />
           Play
         </Button>
       </div>

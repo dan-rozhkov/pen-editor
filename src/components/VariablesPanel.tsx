@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import clsx from "clsx";
 import { useVariableStore } from "../store/variableStore";
 import { generateVariableId, getVariableValue } from "../types/variable";
@@ -14,7 +14,7 @@ import {
   TableHead,
   TableCell,
 } from "./ui/table";
-import { PlusCircleIcon, PlusIcon, TrashIcon, ArrowLineLeftIcon } from "@phosphor-icons/react";
+import { PlusCircleIcon, PlusIcon, TrashIcon, ArrowLineLeftIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -23,6 +23,7 @@ import {
 } from "./ui/dropdown-menu";
 import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip";
 import { IconButton } from "./ui/IconButton";
+import { Input } from "./ui/input";
 import { PanelEmptyState } from "./PanelEmptyState";
 
 // Type badge labels and colors
@@ -211,6 +212,15 @@ export function VariablesPanelContent() {
   const addVariable = useVariableStore((s) => s.addVariable);
   const isExpanded = useLeftSidebarStore((s) => s.isExpanded);
   const toggleExpanded = useLeftSidebarStore((s) => s.toggleExpanded);
+  const [searchQuery, setSearchQuery] = useState("");
+  const filteredVariables = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+    if (!normalizedQuery) return variables;
+
+    return variables.filter((variable) =>
+      variable.name.toLocaleLowerCase().includes(normalizedQuery),
+    );
+  }, [searchQuery, variables]);
 
   const handleAddVariable = (type: VariableType) => {
     const defaultVal = defaultValues[type];
@@ -263,12 +273,29 @@ export function VariablesPanelContent() {
         </IconButton>
       </div>
 
+      <div className="relative px-3 pt-3 pb-2">
+        <MagnifyingGlassIcon
+          aria-hidden
+          size={14}
+          className="pointer-events-none absolute top-[26px] left-5 -translate-y-1/2 text-text-muted"
+        />
+        <Input
+          aria-label="Search variables"
+          placeholder="Search variables…"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          className="h-7 pl-7"
+        />
+      </div>
+
       {/* Table */}
       <div className="flex-1 overflow-y-auto">
         {variables.length === 0 ? (
           <PanelEmptyState icon={<PlusCircleIcon size={28} weight="light" />}>
             No variables yet
           </PanelEmptyState>
+        ) : filteredVariables.length === 0 ? (
+          <PanelEmptyState icon={null}>No variables found.</PanelEmptyState>
         ) : (
         <Table className="border-collapse select-none table-fixed">
           <TableHeader>
@@ -286,20 +313,10 @@ export function VariablesPanelContent() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {variables.map((v) => <VariableRow key={v.id} variable={v} />)}
+            {filteredVariables.map((v) => <VariableRow key={v.id} variable={v} />)}
           </TableBody>
         </Table>
         )}
-      </div>
-
-      {/* Footer */}
-      <div className="border-t border-border-light px-4 py-3">
-        <AddVariableDropdown onAdd={handleAddVariable} side="top">
-          <button className="flex items-center gap-2 text-xs text-text-muted hover:text-text-primary transition-colors">
-            <PlusIcon className="size-4" weight="light" />
-            Create variable
-          </button>
-        </AddVariableDropdown>
       </div>
     </div>
   );

@@ -1,21 +1,27 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import {
   XIcon,
   PlusIcon,
   LightningIcon,
+  SphereIcon,
+  ArrowUpIcon,
+  StopIcon,
+  CaretDownIcon,
+  ImageIcon,
   ArrowLineLeftIcon,
   DotsThreeVerticalIcon,
 } from "@phosphor-icons/react";
 import { useChatStore } from "@/store/chatStore";
+import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import type { ChatTab, ParallelCount } from "@/store/chatStore";
 import { useDesignChat } from "@/hooks/useDesignChat";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
 import { hasPendingAskUser } from "./pendingAskUser";
-import { SelectWithOptions } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { InlineAlert } from "@/components/ui/inline-alert";
 import { IconButton } from "@/components/ui/IconButton";
+import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipTrigger,
@@ -26,6 +32,8 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import type { ChatLaunchPayload } from "@/types/chat";
@@ -45,6 +53,18 @@ function cloneLaunchPayload(payload: ChatLaunchPayload): ChatLaunchPayload {
     images: payload.images?.map((image) => ({ ...image })),
   };
 }
+
+interface ComposerControlsProps {
+  formId: string;
+  canSubmit: boolean;
+  canAttach: boolean;
+  attachLabel: string;
+  openFilePicker: () => void;
+  isLoading: boolean;
+  stop: () => void;
+}
+
+type ComposerControlsRenderer = (props: ComposerControlsProps) => ReactNode;
 
 function TabBar() {
   const tabs = useChatStore((s) => s.tabs);
@@ -140,9 +160,13 @@ function TabBar() {
 function ChatSession({
   sessionId,
   isActive,
+  shouldFocus,
+  composerControls,
 }: {
   sessionId: string;
   isActive: boolean;
+  shouldFocus: boolean;
+  composerControls: ComposerControlsRenderer;
 }) {
   const {
     messages,
@@ -267,16 +291,24 @@ function ChatSession({
         addToolOutput={addToolOutput}
       />
 
-      {/* Input */}
-      <ChatInput
-        sessionId={sessionId}
-        input={input}
-        setInput={setInput}
-        onSubmit={handleSubmit}
-        isLoading={isLoading}
-        stop={stop}
-        awaitingAnswer={awaitingAnswer}
-      />
+      {/* Composer */}
+      <div className="m-3 mt-2 shrink-0 overflow-hidden rounded-xl border border-border-default bg-surface-panel shadow-[0_1px_3px_rgba(0,0,0,0.08)] focus-within:border-accent-light">
+        <ChatInput
+          sessionId={sessionId}
+          input={input}
+          setInput={setInput}
+          onSubmit={handleSubmit}
+          isLoading={isLoading}
+          stop={stop}
+          shouldFocus={shouldFocus}
+          awaitingAnswer={awaitingAnswer}
+          renderFooter={(footerProps) => (
+            <div className="flex items-center gap-1 px-2 pb-2 pt-1.5">
+              {composerControls(footerProps)}
+            </div>
+          )}
+        />
+      </div>
     </>
   );
 }
@@ -291,6 +323,122 @@ export function ChatPanelContent() {
   const setParallelCount = useChatStore((s) => s.setParallelCount);
   const tabs = useChatStore((s) => s.tabs);
   const activeTabId = useChatStore((s) => s.activeTabId);
+  const isAgentsSectionActive = useLeftSidebarStore((s) => s.activeSection === "agents");
+  const activeModelLabel =
+    modelOptions.find((option) => option.value === model)?.label ?? "Model";
+  const composerControls: ComposerControlsRenderer = ({
+    formId,
+    canSubmit,
+    canAttach,
+    attachLabel,
+    openFilePicker,
+    isLoading,
+    stop,
+  }) => (
+    <>
+      <IconButton
+        type="button"
+        variant="ghost"
+        size="icon"
+        tooltip={attachLabel}
+        onClick={openFilePicker}
+        disabled={!canAttach}
+        className="size-[30px] text-text-muted hover:bg-secondary"
+      >
+        <ImageIcon size={18} weight="light" />
+      </IconButton>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <IconButton
+              variant="ghost"
+              size="icon"
+              tooltip={`Model: ${activeModelLabel}`}
+              className="ml-auto size-[30px] text-text-muted hover:bg-secondary"
+            >
+              <SphereIcon size={18} weight="light" />
+            </IconButton>
+          }
+        />
+        <DropdownMenuContent side="top" align="start" className="w-56">
+          <DropdownMenuRadioGroup value={model} onValueChange={setModel}>
+            {modelOptions.map((option) => (
+              <DropdownMenuRadioItem key={option.value} value={option.value}>
+                {option.label}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              type="button"
+              variant="ghost"
+              size="default"
+              className="-ml-1 inline-flex h-[30px] items-center gap-1 rounded-lg px-2 text-xs leading-none text-text-muted hover:bg-secondary"
+              aria-label={`Parallel agents: x${parallelCount}`}
+            >
+              <LightningIcon className="size-4" />
+              <span>x{parallelCount}</span>
+              <CaretDownIcon className="size-3" />
+            </Button>
+          }
+        />
+        <DropdownMenuContent side="top" align="end" className="min-w-20">
+          <DropdownMenuRadioGroup
+            value={String(parallelCount)}
+            onValueChange={(value) => setParallelCount(Number(value) as ParallelCount)}
+          >
+            {PARALLEL_COUNT_OPTIONS.map((option) => (
+              <DropdownMenuRadioItem key={option.value} value={option.value}>
+                {option.label}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {isLoading ? (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                onClick={stop}
+                className="inline-flex size-[30px] shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-secondary transition-colors"
+                aria-label="Stop"
+              >
+                <StopIcon size={18} />
+              </button>
+            }
+          />
+          <TooltipContent>Stop</TooltipContent>
+        </Tooltip>
+      ) : (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                type="submit"
+                form={formId}
+                disabled={!canSubmit}
+                className={
+                  canSubmit
+                    ? "inline-flex size-[30px] shrink-0 items-center justify-center rounded-lg bg-accent-primary text-white hover:bg-accent-primary/90 transition-colors"
+                    : "inline-flex size-[30px] shrink-0 items-center justify-center rounded-lg border border-border-default bg-transparent text-text-muted hover:bg-transparent disabled:opacity-100"
+                }
+                aria-label="Send"
+              >
+                <ArrowUpIcon size={18} weight="regular" />
+              </button>
+            }
+          />
+          <TooltipContent>Send</TooltipContent>
+        </Tooltip>
+      )}
+    </>
+  );
 
   return (
     <div className="w-full h-full bg-surface-panel flex flex-col overflow-hidden">
@@ -332,33 +480,14 @@ export function ChatPanelContent() {
             tab.id === activeTabId ? "flex-1 min-h-0 flex flex-col" : "hidden"
           }
         >
-          <ChatSession sessionId={tab.id} isActive={tab.id === activeTabId} />
+          <ChatSession
+            sessionId={tab.id}
+            isActive={tab.id === activeTabId}
+            shouldFocus={isAgentsSectionActive}
+            composerControls={composerControls}
+          />
         </div>
       ))}
-
-      {/* Model selector */}
-      <div className="px-3 pb-2 shrink-0 flex items-center gap-2">
-        <SelectWithOptions
-          value={model}
-          options={modelOptions}
-          onValueChange={(value) => {
-            if (value) setModel(value);
-          }}
-          size="sm"
-          className="min-w-0 flex-1"
-        />
-        <SelectWithOptions
-          value={String(parallelCount)}
-          options={PARALLEL_COUNT_OPTIONS}
-          onValueChange={(value) => {
-            if (!value) return;
-            setParallelCount(Number(value) as ParallelCount);
-          }}
-          size="sm"
-          className="w-fit gap-1 pl-1.5 pr-1.5"
-          triggerPrefix={<LightningIcon className="size-3 text-text-muted" />}
-        />
-      </div>
     </div>
   );
 }

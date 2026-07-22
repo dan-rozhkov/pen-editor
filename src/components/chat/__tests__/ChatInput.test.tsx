@@ -65,6 +65,11 @@ describe("<ChatInput />", () => {
     expect(textarea.value).toBe("hello agent");
   });
 
+  it("leaves room for a full text line and its vertical padding", () => {
+    render(<Harness onSubmit={vi.fn()} />);
+    expect(screen.getByRole("textbox").className).toContain("min-h-[29px]");
+  });
+
   it("submits the trimmed text via the Send button", () => {
     const onSubmit = vi.fn();
     render(<Harness onSubmit={onSubmit} />);
