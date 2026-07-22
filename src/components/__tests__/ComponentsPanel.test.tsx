@@ -70,6 +70,7 @@ describe("<ComponentsPanel />", () => {
   it("shows the empty state when there are no components", () => {
     render(<ComponentsPanel />);
     expect(screen.getByText("No components yet")).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Search components" })).toBeTruthy();
   });
 
   it("treats a plain (non-reusable) frame as not a component", () => {

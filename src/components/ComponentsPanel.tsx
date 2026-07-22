@@ -56,16 +56,6 @@ export function ComponentsPanel() {
     useSelectionStore.getState().select(instance.id);
   };
 
-  if (components.length === 0) {
-    return (
-      <div className="h-full bg-surface-panel flex flex-col select-none">
-        <PanelEmptyState icon={<DiamondsFour size={28} weight="light" />}>
-          No components yet
-        </PanelEmptyState>
-      </div>
-    );
-  }
-
   return (
     <div className="h-full bg-surface-panel flex flex-col select-none overflow-hidden">
       <div className="relative px-3 pt-3 pb-2">
@@ -83,7 +73,11 @@ export function ComponentsPanel() {
         />
       </div>
       <div className="flex-1 overflow-y-auto px-4 pb-5">
-        {filteredComponents.length === 0 ? (
+        {components.length === 0 ? (
+          <PanelEmptyState icon={<DiamondsFour size={28} weight="light" />}>
+            No components yet
+          </PanelEmptyState>
+        ) : filteredComponents.length === 0 ? (
           <PanelEmptyState icon={null}>No components found.</PanelEmptyState>
         ) : (
           <div className="grid grid-cols-2 gap-2">
