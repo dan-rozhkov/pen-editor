@@ -51,28 +51,43 @@ describe("<PluginsPanel />", () => {
     expect(screen.getByText("Renames the selection sequentially.")).toBeTruthy();
   });
 
-  it("Run dispatches to runPlugin", () => {
+  it("filters plugins by name and description on the client", () => {
+    usePluginStore.setState({
+      plugins: [
+        makePlugin(),
+        makePlugin({ id: "p2", name: "Generate palette", description: "Creates a color palette." }),
+      ],
+      hydrated: true,
+    });
+    render(<PluginsPanel />);
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Search plugins" }), {
+      target: { value: "color" },
+    });
+
+    expect(screen.queryByText("Rename layers")).toBeNull();
+    expect(screen.getByText("Generate palette")).toBeTruthy();
+  });
+
+  it("clicking a plugin card dispatches to runPlugin", () => {
     const plugin = makePlugin();
     usePluginStore.setState({ plugins: [plugin], hydrated: true });
     render(<PluginsPanel />);
-    fireEvent.click(screen.getByRole("button", { name: "Run" }));
+    fireEvent.click(screen.getByTestId("plugin-card-p1"));
     expect(runPlugin).toHaveBeenCalledWith(plugin);
   });
 
-  it("disables Run in Dev Mode and does not dispatch to runPlugin", () => {
+  it("does not run a plugin card in Dev Mode", () => {
     const plugin = makePlugin();
     usePluginStore.setState({ plugins: [plugin], hydrated: true });
     useDevModeStore.setState({ active: true });
     render(<PluginsPanel />);
 
-    const runButton = screen.getByRole("button", { name: "Run" }) as HTMLButtonElement;
-    expect(runButton.disabled).toBe(true);
-
-    fireEvent.click(runButton);
+    fireEvent.click(screen.getByTestId("plugin-card-p1"));
     expect(runPlugin).not.toHaveBeenCalled();
   });
 
-  it("disables Run in view mode (read-only) and does not dispatch to runPlugin", () => {
+  it("does not run a plugin card in view mode", () => {
     const plugin = makePlugin();
     usePluginStore.setState({ plugins: [plugin], hydrated: true });
     render(
@@ -81,19 +96,8 @@ describe("<PluginsPanel />", () => {
       </ReadOnlyContext.Provider>,
     );
 
-    const runButton = screen.getByRole("button", { name: "Run" }) as HTMLButtonElement;
-    expect(runButton.disabled).toBe(true);
-
-    fireEvent.click(runButton);
+    fireEvent.click(screen.getByTestId("plugin-card-p1"));
     expect(runPlugin).not.toHaveBeenCalled();
-  });
-
-  it("View code opens a read-only view with the plugin's code", () => {
-    usePluginStore.setState({ plugins: [makePlugin()], hydrated: true });
-    render(<PluginsPanel />);
-    fireEvent.click(screen.getByRole("button", { name: "View code" }));
-    const textarea = screen.getByDisplayValue("pen.notify('hi')") as HTMLTextAreaElement;
-    expect(textarea.readOnly).toBe(true);
   });
 
   it("Delete requires confirmation, then removes the plugin from the store and pluginDb", async () => {
@@ -102,13 +106,11 @@ describe("<PluginsPanel />", () => {
     render(<PluginsPanel />);
 
     // Opens the confirm dialog; the plugin isn't removed yet.
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Plugin options" }));
+    fireEvent.click(screen.getByText("Delete"));
     expect(usePluginStore.getState().plugins).toHaveLength(1);
 
-    // Two "Delete" buttons now exist (the row action + the dialog's confirm
-    // action) — the confirm action is the last one rendered.
-    const deleteButtons = screen.getAllByRole("button", { name: "Delete" });
-    fireEvent.click(deleteButtons[deleteButtons.length - 1]);
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
 
     await waitFor(() => expect(usePluginStore.getState().plugins).toHaveLength(0));
     expect(await getAllPlugins()).toEqual([]);

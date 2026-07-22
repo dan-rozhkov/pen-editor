@@ -1,6 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import clsx from "clsx";
-import { DiamondsFour } from "@phosphor-icons/react";
+import { DiamondsFour, MagnifyingGlassIcon } from "@phosphor-icons/react";
 import { useSceneStore } from "../store/sceneStore";
 import { useSelectionStore } from "../store/selectionStore";
 import { getAllComponentsFlat } from "../utils/componentUtils";
@@ -9,12 +9,14 @@ import type { SceneNode, FlatFrameNode, RefNode } from "../types/scene";
 import { useNodePlacement } from "../hooks/useNodePlacement";
 import { useComponentThumbnails } from "../hooks/useComponentThumbnails";
 import { PanelEmptyState } from "./PanelEmptyState";
+import { Input } from "./ui/input";
 
 export function ComponentsPanel() {
   const nodesById = useSceneStore((state) => state.nodesById);
   const addNode = useSceneStore((state) => state.addNode);
   const addChildToFrame = useSceneStore((state) => state.addChildToFrame);
   const { getSelectedFrame, getViewportCenter } = useNodePlacement();
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Thumbnail generation updates local state. Keep this derived list stable
   // across that render so it cannot recursively trigger another extraction.
@@ -23,6 +25,10 @@ export function ComponentsPanel() {
     [nodesById],
   );
   const thumbnails = useComponentThumbnails(components);
+  const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+  const filteredComponents = normalizedQuery
+    ? components.filter((component) => (component.name ?? "").toLocaleLowerCase().includes(normalizedQuery))
+    : components;
 
   const createInstance = (component: FlatFrameNode) => {
     const { centerX, centerY } = getViewportCenter();
@@ -62,9 +68,26 @@ export function ComponentsPanel() {
 
   return (
     <div className="h-full bg-surface-panel flex flex-col select-none overflow-hidden">
-      <div className="flex-1 overflow-y-auto px-4 pt-3 pb-5">
-        <div className="grid grid-cols-2 gap-2">
-          {components.map((component) => {
+      <div className="relative px-3 pt-3 pb-2">
+        <MagnifyingGlassIcon
+          aria-hidden
+          size={14}
+          className="pointer-events-none absolute top-[26px] left-5 -translate-y-1/2 text-text-muted"
+        />
+        <Input
+          aria-label="Search components"
+          placeholder="Search components…"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          className="h-7 pl-7"
+        />
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 pb-5">
+        {filteredComponents.length === 0 ? (
+          <PanelEmptyState icon={null}>No components found.</PanelEmptyState>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            {filteredComponents.map((component) => {
             const thumb = thumbnails.get(component.id);
             return (
               <button
@@ -95,8 +118,9 @@ export function ComponentsPanel() {
                 </span>
               </button>
             );
-          })}
-        </div>
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

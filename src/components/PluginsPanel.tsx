@@ -1,18 +1,16 @@
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { PlayIcon, TrashIcon, CodeIcon, DownloadSimpleIcon, UploadSimpleIcon } from "@phosphor-icons/react";
+import {
+  UploadSimpleIcon,
+  PuzzlePieceIcon,
+  DotsThreeVertical,
+  MagnifyingGlassIcon,
+} from "@phosphor-icons/react";
 import { usePluginStore } from "@/store/pluginStore";
 import { useDevModeStore } from "@/store/devModeStore";
 import { useReadOnly } from "@/hooks/useReadOnly";
 import { runPlugin } from "@/lib/plugins/pluginHost";
 import { exportPluginToFile, parsePluginImport } from "@/lib/plugins/pluginTransfer";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,21 +21,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
 import { EditableText } from "@/components/ui/EditableText";
-import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { PanelEmptyState } from "@/components/PanelEmptyState";
-
-/** Which per-plugin dialog (if any) is open, and for which plugin — replaces
- * two parallel `id | null` states (+ their `plugins.find()`s) with one. */
-type ActiveDialog = { kind: "code" | "delete"; id: string } | null;
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 /**
  * Left-sidebar panel for installed plugins (reachable via the Toolbox rail
  * icon, or the "Manage plugins…" command palette entry which navigates
- * here). Lists installed plugins with run/rename/view-code/delete/export
- * actions, plus JSON import.
+ * here). Lists installed plugins with run/rename/delete/export actions,
+ * plus JSON import.
  */
 export function PluginsPanel() {
   const plugins = usePluginStore((s) => s.plugins);
@@ -53,13 +52,18 @@ export function PluginsPanel() {
   const isDevMode = useDevModeStore((s) => s.active);
   const isReadOnly = useReadOnly();
 
-  const [activeDialog, setActiveDialog] = useState<ActiveDialog>(null);
+  const [deletingPluginId, setDeletingPluginId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const viewingPlugin =
-    activeDialog?.kind === "code" ? (plugins.find((p) => p.id === activeDialog.id) ?? null) : null;
   const deletingPlugin =
-    activeDialog?.kind === "delete" ? (plugins.find((p) => p.id === activeDialog.id) ?? null) : null;
+    deletingPluginId ? (plugins.find((p) => p.id === deletingPluginId) ?? null) : null;
+  const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+  const filteredPlugins = normalizedQuery
+    ? plugins.filter((plugin) =>
+        `${plugin.name} ${plugin.description}`.toLocaleLowerCase().includes(normalizedQuery),
+      )
+    : plugins;
 
   async function handleImportFile(file: File): Promise<void> {
     const result = parsePluginImport(await file.text());
@@ -77,80 +81,8 @@ export function PluginsPanel() {
 
   return (
     <div className="flex h-full flex-col">
-      <p className="px-3 pt-3 pb-2 text-xs text-text-muted">
-        Installed generative plugins. Run one from here or from the command palette.
-      </p>
-
-      <div className="flex-1 flex flex-col gap-2 overflow-y-auto px-2">
-        {plugins.length === 0 && (
-          <PanelEmptyState icon={null}>No plugins installed yet.</PanelEmptyState>
-        )}
-        {plugins.map((plugin) => (
-          <div
-            key={plugin.id}
-            className="flex items-start gap-2 rounded-md bg-secondary px-2 py-2"
-          >
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                {plugin.icon && <span aria-hidden>{plugin.icon}</span>}
-                <EditableText
-                  value={plugin.name}
-                  onCommit={(name) => void rename(plugin.id, name)}
-                  className="text-xs font-medium text-text-primary truncate"
-                />
-              </div>
-              <p className="text-xs text-text-muted truncate px-2">{plugin.description}</p>
-            </div>
-            <div className="flex items-center gap-0.5 shrink-0">
-              <span
-                title={
-                  isDevMode
-                    ? "Run is disabled in Dev Mode"
-                    : isReadOnly
-                      ? "Run is disabled in view mode"
-                      : undefined
-                }
-              >
-                <IconButton
-                  tooltip="Run"
-                  size="icon-sm"
-                  variant="ghost"
-                  disabled={isDevMode || isReadOnly}
-                  onClick={() => runPlugin(plugin)}
-                >
-                  <PlayIcon />
-                </IconButton>
-              </span>
-              <IconButton
-                tooltip="View code"
-                size="icon-sm"
-                variant="ghost"
-                onClick={() => setActiveDialog({ kind: "code", id: plugin.id })}
-              >
-                <CodeIcon />
-              </IconButton>
-              <IconButton
-                tooltip="Export"
-                size="icon-sm"
-                variant="ghost"
-                onClick={() => exportPluginToFile(plugin)}
-              >
-                <DownloadSimpleIcon />
-              </IconButton>
-              <IconButton
-                tooltip="Delete"
-                size="icon-sm"
-                variant="ghost"
-                onClick={() => setActiveDialog({ kind: "delete", id: plugin.id })}
-              >
-                <TrashIcon />
-              </IconButton>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex justify-end px-3 py-2">
+      <div className="flex h-[49px] shrink-0 items-center gap-2 border-b border-border-default px-4 py-3">
+        <span className="flex-1 text-sm font-medium text-text-primary">Plugins</span>
         <input
           ref={fileInputRef}
           type="file"
@@ -162,23 +94,103 @@ export function PluginsPanel() {
             if (file) void handleImportFile(file);
           }}
         />
-        <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-          <UploadSimpleIcon data-icon="inline-start" />
-          Import…
-        </Button>
+        <IconButton
+          tooltip="Import plugin"
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <UploadSimpleIcon size={16} />
+        </IconButton>
+      </div>
+      <div className="relative px-3 pt-3 pb-2">
+        <MagnifyingGlassIcon
+          aria-hidden
+          size={14}
+          className="pointer-events-none absolute top-[26px] left-5 -translate-y-1/2 text-text-muted"
+        />
+        <Input
+          aria-label="Search plugins"
+          placeholder="Search plugins…"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          className="h-7 pl-7"
+        />
       </div>
 
-      <Dialog open={viewingPlugin != null} onOpenChange={(next) => !next && setActiveDialog(null)}>
-        <DialogContent className="sm:max-w-lg" showCloseButton>
-          <DialogHeader>
-            <DialogTitle>{viewingPlugin?.name}</DialogTitle>
-            <DialogDescription>Read-only — code lives in this plugin's stored record.</DialogDescription>
-          </DialogHeader>
-          <Textarea value={viewingPlugin?.code ?? ""} readOnly className="min-h-64 font-mono text-xs" />
-        </DialogContent>
-      </Dialog>
+      <div className="flex-1 flex flex-col gap-2 overflow-y-auto px-2">
+        {plugins.length === 0 && (
+          <PanelEmptyState icon={null}>No plugins installed yet.</PanelEmptyState>
+        )}
+        {plugins.length > 0 && filteredPlugins.length === 0 && (
+          <PanelEmptyState icon={null}>No plugins found.</PanelEmptyState>
+        )}
+        {filteredPlugins.map((plugin) => (
+          <div
+            key={plugin.id}
+            data-testid={`plugin-card-${plugin.id}`}
+            title={
+              isDevMode
+                ? "Run is disabled in Dev Mode"
+                : isReadOnly
+                  ? "Run is disabled in view mode"
+                  : "Run plugin"
+            }
+            className={`group flex gap-3 rounded-lg px-2 py-3 ${
+              isDevMode || isReadOnly
+                ? "cursor-default"
+                : "cursor-pointer hover:bg-secondary/60"
+            }`}
+            onClick={() => {
+              if (!isDevMode && !isReadOnly) void runPlugin(plugin);
+            }}
+          >
+            <div
+              aria-hidden
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-text-muted"
+            >
+              <PuzzlePieceIcon size={20} weight="light" />
+            </div>
+            <div className="relative min-w-0 flex flex-1 flex-col pr-7">
+              <div className="min-w-0" onClick={(event) => event.stopPropagation()}>
+                <EditableText
+                  value={plugin.name}
+                  onCommit={(name) => void rename(plugin.id, name)}
+                  className="text-xs font-medium text-text-primary truncate"
+                />
+              </div>
+              <p className="truncate text-xs leading-4 text-text-muted">{plugin.description}</p>
+              <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <IconButton
+                        tooltip="Plugin options"
+                        size="icon-sm"
+                        variant="ghost"
+                        className="text-text-muted hover:text-text-primary"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <DotsThreeVertical size={16} weight="bold" />
+                      </IconButton>
+                    }
+                  />
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => exportPluginToFile(plugin)}>
+                      Export
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setDeletingPluginId(plugin.id)}>
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
 
-      <AlertDialog open={deletingPlugin != null} onOpenChange={(next) => !next && setActiveDialog(null)}>
+      <AlertDialog open={deletingPlugin != null} onOpenChange={(next) => !next && setDeletingPluginId(null)}>
         <AlertDialogContent size="sm">
           <AlertDialogHeader>
             <AlertDialogTitle>Delete "{deletingPlugin?.name}"?</AlertDialogTitle>
@@ -192,7 +204,7 @@ export function PluginsPanel() {
               variant="destructive"
               onClick={() => {
                 if (deletingPlugin) void remove(deletingPlugin.id);
-                setActiveDialog(null);
+                setDeletingPluginId(null);
               }}
             >
               Delete

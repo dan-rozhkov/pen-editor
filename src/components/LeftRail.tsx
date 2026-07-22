@@ -36,7 +36,7 @@ function RailButton({ testid, title, active, onClick, children }: RailButtonProp
         className={
           active
             ? "flex size-9 items-center justify-center rounded-lg bg-accent-primary/10 text-accent-primary"
-            : "flex size-9 items-center justify-center rounded-lg group-hover:bg-secondary"
+            : "flex size-9 items-center justify-center rounded-lg text-text-primary group-hover:bg-secondary"
         }
       >
         {children}
@@ -57,7 +57,7 @@ const SECTIONS: {
   { section: "pages", testid: "rail-pages", title: "Pages", icon: <FileIcon size={20} weight="light" /> },
   { section: "slides", testid: "rail-slides", title: "Slides", icon: <CardsIcon size={20} weight="light" /> },
   { section: "agents", testid: "rail-agents", title: "Agents", icon: <SparkleIcon size={20} weight="light" /> },
-  { section: "components", testid: "rail-components", title: "Assets", icon: <DiamondsFourIcon size={18} weight="light" /> },
+  { section: "components", testid: "rail-components", title: "Assets", icon: <DiamondsFourIcon size={20} weight="light" /> },
   { section: "toolbox", testid: "rail-toolbox", title: "Plugins", icon: <ToolboxIcon size={20} weight="light" /> },
   { section: "comments", testid: "rail-comments", title: "Threads", icon: <ChatCircleIcon size={20} weight="light" /> },
 ];

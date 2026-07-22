@@ -94,6 +94,21 @@ describe("<ComponentsPanel />", () => {
     expect(screen.getAllByRole("button").length).toBe(2);
   });
 
+  it("filters components by name on the client", () => {
+    seedNodes([
+      componentFrame("c1", "Button"),
+      componentFrame("c2", "Card"),
+    ]);
+    render(<ComponentsPanel />);
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Search components" }), {
+      target: { value: "card" },
+    });
+
+    expect(screen.queryByText("Button")).toBeNull();
+    expect(screen.getByText("Card")).toBeTruthy();
+  });
+
   it("falls back to 'Component' for an unnamed component", () => {
     seedNodes([componentFrame("c1", "")]);
     render(<ComponentsPanel />);
