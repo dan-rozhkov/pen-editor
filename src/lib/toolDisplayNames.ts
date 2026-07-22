@@ -26,6 +26,7 @@ const toolDisplayNames: Record<string, string> = {
   mcp_refero_search_flows: "Search Flows",
   mcp_refero_get_flow: "Get Flow",
   mcp_refero_get_design_guidance: "Design Guidance",
+  ask_user: "Ask a question",
 };
 
 export function getToolDisplayName(toolName: string): string {
