@@ -8,6 +8,11 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.63.0] - 2026-07-23
+
+### Added
+- **The design agent asks clarifying questions as an interactive form in the chat.** When the agent needs direction — mandatory before it creates anything new on the canvas — it renders an inline form instead of guessing: single/multi chips, a dropdown, and text fields, each with a "Decide for me" option (delegates the choice back to the agent) and an "Other…" free-text field. Answering resumes the agent with your choices; while a question is pending the composer is blocked so your answer can't be stranded. Requires backend 0.25.0 (the `ask_user` tool).
+
 ## [0.62.0] - 2026-07-23
 
 ### Fixed
