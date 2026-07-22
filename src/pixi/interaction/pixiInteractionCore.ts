@@ -18,6 +18,7 @@ import {
   isDescendantOfFlat,
 } from "@/utils/nodeUtils";
 import { resolveDrillChild } from "./drillDown";
+import { createDoubleClickDetector } from "./doubleClickDetector";
 import type { InteractionContext } from "./types";
 import {
   screenToWorld,
@@ -55,6 +56,15 @@ import { saveHistory } from "@/store/sceneStore/helpers/history";
 import { createSnapshot } from "@/store/sceneStore";
 
 const EMPTY_POINTER_EVENT = {} as PointerEvent;
+
+// Screen-space movement allowed between pointerdown and pointerup for the
+// gesture to still count as a "click" (not a drag/marquee/resize), and also
+// the max distance allowed between the two clicks of a double-click pair.
+const CLICK_MOVE_THRESHOLD_PX = 5;
+// Max time between the two clicks of a double-click pair. No web API exposes
+// the OS-level double-click interval (native "dblclick" honored it
+// implicitly), so 500ms approximates the common Windows/macOS stock default.
+const DOUBLE_CLICK_TIME_MS = 500;
 
 function getSelectionBoundingBox(
   selectedIds: string[],
@@ -177,6 +187,18 @@ export function setupPixiInteraction(
   // Last real pointer event, used to release an in-flight single-finger
   // interaction the moment a two-finger gesture takes over.
   let lastPointerEvent: PointerEvent | null = null;
+
+  // Manual double-click detection (see doubleClickDetector.ts): native
+  // "dblclick" only fires when a click train's `detail` is exactly 2, so
+  // clicks 3+4 of a rapid four-click burst never produce a second native
+  // event. `pointerDownScreen` records where the current click started, so
+  // pointerup can tell a plain click (small movement) from a drag/marquee/
+  // resize before feeding it to the detector.
+  let pointerDownScreen: { x: number; y: number } | null = null;
+  const dblClickDetector = createDoubleClickDetector({
+    timeThresholdMs: DOUBLE_CLICK_TIME_MS,
+    distanceThreshold: CLICK_MOVE_THRESHOLD_PX,
+  });
   const transform = createTransformController(context);
   const scaleTool = createScaleController(context);
   const draw = createDrawController(context);
@@ -260,6 +282,8 @@ export function setupPixiInteraction(
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
     const world = screenToWorld(screenX, screenY);
+
+    pointerDownScreen = e.button === 0 ? { x: screenX, y: screenY } : null;
 
     // Priority 1: Pan (Space+click or middle-mouse) — allowed in edit and view.
     if (pan.handlePointerDown(e)) return;
@@ -485,6 +509,50 @@ export function setupPixiInteraction(
     const rect = canvas.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
+    processPointerUp(e, screenX, screenY);
+    maybeTriggerDoubleClick(e, screenX, screenY);
+  }
+
+  // Runs after processPointerUp unconditionally (including its early
+  // returns) so double-click detection mirrors how the browser's native
+  // "dblclick" used to fire — after pointerup handling has already settled
+  // selection/drag/etc. for this click.
+  function maybeTriggerDoubleClick(e: PointerEvent, screenX: number, screenY: number): void {
+    const downScreen = pointerDownScreen;
+    pointerDownScreen = null;
+
+    // pointercancel (touch scroll/pinch, stylus loss, OS interrupts) is
+    // routed to this same handler — never a real click, so exclude it
+    // explicitly rather than relying on e.button (see below).
+    if (e.type !== "pointerup") {
+      dblClickDetector.reset();
+      return;
+    }
+
+    // Note: no `e.button !== 0` check here — pointerDownScreen is only ever
+    // set for a button-0 pointerdown, so `!downScreen` already excludes
+    // non-primary clicks. Some WebKit versions report button = -1 on a touch
+    // pointerup, which would otherwise wrongly break double-tap.
+    if (touch.isGesturing() || !downScreen) {
+      dblClickDetector.reset();
+      return;
+    }
+
+    const isQualifyingClick =
+      Math.abs(screenX - downScreen.x) <= CLICK_MOVE_THRESHOLD_PX &&
+      Math.abs(screenY - downScreen.y) <= CLICK_MOVE_THRESHOLD_PX;
+
+    if (!isQualifyingClick) {
+      dblClickDetector.reset();
+      return;
+    }
+
+    if (dblClickDetector.registerClick({ x: screenX, y: screenY, time: Date.now() })) {
+      handleDblClick(e);
+    }
+  }
+
+  function processPointerUp(e: PointerEvent, screenX: number, screenY: number): void {
     const world = screenToWorld(screenX, screenY);
 
     // Finalize descendant drag
@@ -777,7 +845,6 @@ export function setupPixiInteraction(
   // Treat cancelled pointers (touch scroll/pinch, stylus loss, OS interrupts)
   // like pointerup — otherwise drag/transform state gets stuck.
   canvas.addEventListener("pointercancel", handlePointerUp);
-  canvas.addEventListener("dblclick", handleDblClick);
   canvas.addEventListener("contextmenu", handleContextMenu);
   window.addEventListener("keydown", handleKeyDown);
   window.addEventListener("keyup", handleKeyUp);
@@ -799,7 +866,6 @@ export function setupPixiInteraction(
     canvas.removeEventListener("pointermove", handlePointerMove);
     canvas.removeEventListener("pointerup", handlePointerUp);
     canvas.removeEventListener("pointercancel", handlePointerUp);
-    canvas.removeEventListener("dblclick", handleDblClick);
     canvas.removeEventListener("contextmenu", handleContextMenu);
     window.removeEventListener("keydown", handleKeyDown);
     window.removeEventListener("keyup", handleKeyUp);
