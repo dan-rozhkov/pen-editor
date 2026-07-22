@@ -8,6 +8,22 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.62.0] - 2026-07-23
+
+### Fixed
+- **Pasting complex Pixso selections now reproduces them faithfully.** Heavily
+  componentised Pixso designs previously lost most of their content on paste
+  (fields dropped, text collapsed to empty, instance-swap slots stuck on a
+  "◇ Swap" placeholder). The importer now resolves Pixso/Figma **component
+  properties** — text, boolean visibility, and instance-swap values — against
+  each instance's assignments and its master's defaults, so bound text and
+  swapped-in components appear as authored.
+- **Auto-layout fidelity for pasted Pixso frames.** Mapped Pixso's auto-layout
+  child fields (absolute positioning, counter-axis fill, per-side padding) to
+  the editor's layout model, and grow auto-layout hug frames to fit their
+  (swap-expanded) content so a clip mask no longer collapses over it — a
+  multi-field form pastes with every field visible.
+
 ## [0.61.0] - 2026-07-22
 
 ### Added
