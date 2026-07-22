@@ -120,7 +120,18 @@ export function PluginsPanel() {
 
       <div className="flex-1 flex flex-col gap-2 overflow-y-auto px-2">
         {plugins.length === 0 && (
-          <PanelEmptyState icon={null}>No plugins installed yet.</PanelEmptyState>
+          <PanelEmptyState
+            icon={
+              <PuzzlePieceIcon
+                aria-hidden
+                data-testid="plugins-empty-state-icon"
+                size={28}
+                weight="light"
+              />
+            }
+          >
+            No plugins installed yet
+          </PanelEmptyState>
         )}
         {plugins.length > 0 && filteredPlugins.length === 0 && (
           <PanelEmptyState icon={null}>No plugins found.</PanelEmptyState>

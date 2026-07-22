@@ -41,7 +41,8 @@ afterEach(() => cleanup());
 describe("<PluginsPanel />", () => {
   it("shows an empty state with no plugins installed", () => {
     render(<PluginsPanel />);
-    expect(screen.getByText(/no plugins installed/i)).toBeTruthy();
+    expect(screen.getByText("No plugins installed yet")).toBeTruthy();
+    expect(screen.getByTestId("plugins-empty-state-icon")).toBeTruthy();
   });
 
   it("lists installed plugins with name and description", () => {
