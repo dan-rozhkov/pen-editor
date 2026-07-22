@@ -39,3 +39,10 @@ it("is true once a streaming ask_user part has input", () => {
       input: { questions: [{ id: "q", label: "L", type: "text" }] } }]),
   ])).toBe(true);
 });
+
+it("is false when an ask_user tool call errored (output-error)", () => {
+  expect(hasPendingAskUser([
+    assistant([{ type: "tool-ask_user", toolCallId: "c", state: "output-error",
+      input: { questions: [{ id: "q", label: "L", type: "text" }] }, errorText: "bad" }]),
+  ])).toBe(false);
+});

@@ -8,7 +8,9 @@ import type { UIMessage } from "ai";
  * A part only counts as pending once its `input` has arrived — a form is only
  * "pending" once it can actually be rendered; otherwise an interrupted
  * tool-call stream (no `input` yet) would block the composer with nothing
- * on screen to answer.
+ * on screen to answer. A part that already resolved to an error
+ * (`output-error`, e.g. a schema-invalid call) is not pending either — the
+ * SDK considers it settled, so waiting on it would soft-lock the composer.
  */
 export function hasPendingAskUser(messages: UIMessage[]): boolean {
   return messages.some(
@@ -17,8 +19,9 @@ export function hasPendingAskUser(messages: UIMessage[]): boolean {
       m.parts.some(
         (p) =>
           (p as { type?: string }).type === "tool-ask_user" &&
+          (p as { input?: unknown }).input != null &&
           (p as { state?: string }).state !== "output-available" &&
-          (p as { input?: unknown }).input != null,
+          (p as { state?: string }).state !== "output-error",
       ),
   );
 }

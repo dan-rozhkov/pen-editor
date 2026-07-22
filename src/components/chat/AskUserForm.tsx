@@ -128,9 +128,12 @@ export function AskUserForm({
   disabled?: boolean;
   onSubmit: (output: string) => void;
 }) {
-  const [answers, setAnswers] = useState(() => initAnswerState(input.questions));
+  const { questions } = input;
+  const [answers, setAnswers] = useState(() => initAnswerState(questions ?? []));
   const [submitted, setSubmitted] = useState(state === "output");
   const readOnly = submitted || state === "output" || disabled;
+
+  if (!questions?.length) return null;
 
   const setValue = (id: string, value: string | string[]) => {
     setAnswers((prev) => ({ ...prev, [id]: { ...prev[id], value } }));
@@ -149,8 +152,8 @@ export function AskUserForm({
     return (
       <div className="w-full rounded-lg border border-border-default bg-surface-panel/60 p-3 space-y-1.5">
         <div className="font-semibold text-text-primary">Questions answered</div>
-        {rows.map((row) => (
-          <div key={row.label} className="flex items-center gap-2">
+        {rows.map((row, i) => (
+          <div key={i} className="flex items-center gap-2">
             <span className="text-text-muted">{row.label}</span>
             <Badge variant="secondary">{row.display || "—"}</Badge>
           </div>

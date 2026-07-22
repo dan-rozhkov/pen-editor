@@ -237,17 +237,25 @@ export function MessageList({ messages, isLoading, onRollback, addToolOutput }: 
                     state?: string;
                     input?: AskUserInput;
                   };
-                  if (!tp.input) return null;
-                  return (
-                    <AskUserForm
-                      key={tp.toolCallId}
-                      input={tp.input}
-                      state={tp.state === "output-available" ? "output" : "input"}
-                      onSubmit={(output) =>
-                        addToolOutput?.({ tool: "ask_user", toolCallId: tp.toolCallId, output })
-                      }
-                    />
-                  );
+                  // Only own the render for a ready form (input-available) or its
+                  // answered summary (output-available). While the tool input is
+                  // still streaming (partial/absent) or the call errored, fall
+                  // through to the generic ToolCallIndicator below.
+                  if (
+                    tp.input &&
+                    (tp.state === "input-available" || tp.state === "output-available")
+                  ) {
+                    return (
+                      <AskUserForm
+                        key={tp.toolCallId}
+                        input={tp.input}
+                        state={tp.state === "output-available" ? "output" : "input"}
+                        onSubmit={(output) =>
+                          addToolOutput?.({ tool: "ask_user", toolCallId: tp.toolCallId, output })
+                        }
+                      />
+                    );
+                  }
                 }
                 if (isToolUIPart(part)) {
                   const tp = part as { toolCallId: string };
