@@ -207,16 +207,6 @@ export function TextStylesPanelContent() {
         </Table>
         )}
       </div>
-
-      <div className="border-t border-border-light px-4 py-3">
-        <button
-          className="flex items-center gap-2 text-xs text-text-muted hover:text-text-primary transition-colors"
-          onClick={handleAdd}
-        >
-          <PlusIcon className="size-4" weight="light" />
-          Create text style
-        </button>
-      </div>
     </div>
   );
 }

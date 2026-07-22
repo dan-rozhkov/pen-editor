@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, type ReactNode } from "react";
 import {
   PaperPlaneRightIcon,
   StopIcon,
@@ -38,6 +38,18 @@ interface ChatInputProps {
   onSubmit: (payload: ChatLaunchPayload) => boolean;
   isLoading: boolean;
   stop: () => void;
+  shouldFocus?: boolean;
+  renderFooter?: (props: ChatInputFooterProps) => ReactNode;
+}
+
+interface ChatInputFooterProps {
+  formId: string;
+  canSubmit: boolean;
+  canAttach: boolean;
+  attachLabel: string;
+  openFilePicker: () => void;
+  isLoading: boolean;
+  stop: () => void;
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -64,6 +76,8 @@ export function ChatInput({
   onSubmit,
   isLoading,
   stop,
+  shouldFocus = false,
+  renderFooter,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -85,6 +99,11 @@ export function ChatInput({
   // Sending always needs the backend — disable the send control while offline
   // (the pre-send guard in useDesignChat is kept as defense in depth).
   const isOnline = useOnlineStatus();
+  const formId = `chat-composer-${sessionId}`;
+
+  useEffect(() => {
+    if (shouldFocus) textareaRef.current?.focus();
+  }, [shouldFocus]);
 
   // Screenshots of the currently selected canvas nodes, attached to the message
   // as visual context. The user can drop individual ones for the message they
@@ -140,6 +159,19 @@ export function ChatInput({
   const overImageLimit =
     supportsVision &&
     visibleSelection.length + attachedImages.length > MAX_IMAGES;
+  const canSubmit =
+    isOnline &&
+    (input.trim().length > 0 ||
+      attachedImages.length > 0 ||
+      visibleSelection.length > 0);
+  const canAttach =
+    supportsVision && visibleSelection.length + attachedImages.length < MAX_IMAGES;
+  const attachLabel = !supportsVision
+    ? "Selected model can't read images"
+    : visibleSelection.length + attachedImages.length >= MAX_IMAGES
+      ? `Max ${MAX_IMAGES} images`
+      : "Attach image";
+  const openFilePicker = () => fileInputRef.current?.click();
 
   // Extract slash query from input (e.g. "/aud" -> "aud", "/" -> "")
   const slashQuery = useMemo(() => {
@@ -317,12 +349,14 @@ export function ChatInput({
   );
 
   return (
-    <form
+    <>
+      <form
+      id={formId}
       onSubmit={handleSubmit}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`relative border-t border-border-default px-3 py-2 ${isDragOver ? "bg-secondary" : ""}`}
+      className={`relative px-2 pb-1.5 pt-2 ${isDragOver ? "bg-secondary" : ""}`}
     >
       {showSlashMenu && slashQuery !== null && (
         <SlashCommandMenu
@@ -414,38 +448,24 @@ export function ChatInput({
       )}
 
       <div className="flex items-end gap-2">
-        {/* Attach image button */}
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={
-                  !supportsVision ||
-                  visibleSelection.length + attachedImages.length >= MAX_IMAGES
-                }
-                className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted disabled:text-text-disabled disabled:pointer-events-none transition-colors"
-                aria-label={
-                  !supportsVision
-                    ? "Selected model can't read images"
-                    : visibleSelection.length + attachedImages.length >= MAX_IMAGES
-                      ? `Max ${MAX_IMAGES} images`
-                      : "Attach image"
-                }
-              >
-                <ImageIcon size={18} weight="light" />
-              </button>
-            }
-          />
-          <TooltipContent>
-            {!supportsVision
-              ? "Selected model can't read images"
-              : visibleSelection.length + attachedImages.length >= MAX_IMAGES
-                ? `Max ${MAX_IMAGES} images`
-                : "Attach image"}
-          </TooltipContent>
-        </Tooltip>
+        {!renderFooter && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  onClick={openFilePicker}
+                  disabled={!canAttach}
+                  className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted disabled:text-text-disabled disabled:pointer-events-none transition-colors"
+                  aria-label={attachLabel}
+                >
+                  <ImageIcon size={18} weight="light" />
+                </button>
+              }
+            />
+            <TooltipContent>{attachLabel}</TooltipContent>
+          </Tooltip>
+        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -466,9 +486,9 @@ export function ChatInput({
           onPaste={handlePaste}
           placeholder="Ask the design agent..."
           rows={1}
-          className="flex-1 resize-none bg-transparent text-sm text-text-primary placeholder:text-text-disabled outline-none min-h-[24px] max-h-[96px] py-1 leading-normal"
+          className="flex-1 resize-none bg-transparent pl-2 text-sm text-text-primary placeholder:text-text-disabled outline-none min-h-[29px] max-h-[96px] py-1 leading-normal"
         />
-        {isLoading ? (
+        {!renderFooter && isLoading ? (
           <Tooltip>
             <TooltipTrigger
               render={
@@ -484,18 +504,13 @@ export function ChatInput({
             />
             <TooltipContent>Stop</TooltipContent>
           </Tooltip>
-        ) : (
+        ) : !renderFooter ? (
           <Tooltip>
             <TooltipTrigger
               render={
                 <button
                   type="submit"
-                  disabled={
-                    !isOnline ||
-                    (!input.trim() &&
-                      attachedImages.length === 0 &&
-                      visibleSelection.length === 0)
-                  }
+                  disabled={!canSubmit}
                   className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted disabled:text-text-disabled transition-colors"
                   aria-label={isOnline ? "Send" : OFFLINE_SEND_TITLE}
                 >
@@ -507,8 +522,18 @@ export function ChatInput({
               {isOnline ? "Send" : OFFLINE_SEND_TITLE}
             </TooltipContent>
           </Tooltip>
-        )}
+        ) : null}
       </div>
-    </form>
+      </form>
+      {renderFooter?.({
+        formId,
+        canSubmit,
+        canAttach,
+        attachLabel,
+        openFilePicker,
+        isLoading,
+        stop,
+      })}
+    </>
   );
 }
