@@ -198,6 +198,13 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     experimental_throttle: STREAM_RENDER_THROTTLE_MS,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onToolCall: async ({ toolCall }) => {
+      // ask_user is answered by the in-chat form (AskUserForm), which calls
+      // addToolOutput on submit. Leaving the part unresolved keeps the turn
+      // paused (sendAutomaticallyWhen only fires once every tool call has an
+      // output), which is exactly the desired human-in-the-loop behavior.
+      if (toolCall.toolName === "ask_user") {
+        return;
+      }
       const result = await executeToolCall(toolCall.toolName, toolCall.input);
       chat.addToolOutput({
         tool: toolCall.toolName,
@@ -331,5 +338,6 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     clearError,
     setMessages: chat.setMessages,
     retryState,
+    addToolOutput: chat.addToolOutput,
   };
 }
