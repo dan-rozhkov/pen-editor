@@ -8,6 +8,25 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.61.0] - 2026-07-22
+
+### Added
+- **Paste from Pixso.** Copying elements in the Pixso v2 web editor (Cmd+C) and
+  pasting into pen-editor (Cmd+V) now inserts native scene nodes, mirroring the
+  existing paste-from-Figma path. Pixso writes a `text/html` clipboard payload
+  marked with `<!--PixsoClipboardData-->`, carrying a base64 `data-fic` blob:
+  a `pixso-kw` header, a zstd frame, and a kiwi message on Pixso's own schema
+  (`pixso.binary`, bundled). The new `src/lib/pixsoPaste/` module detects the
+  sentinel, extracts and zstd-decompresses the payload, decodes it with
+  `kiwi-schema` (applying a +1 type-index remap, since Pixso's kiwi encoder has
+  one extra builtin type), normalizes it (colors 0–255 → 0–1, `pixsoNodes` →
+  `nodeChanges`) into a Figma-shaped message, and reuses the tested
+  `figmaToScene` converter. Wired into `handlePaste` beside the Figma/h2d
+  branches; decode is offline (schema bundled, no network). Image fills come in
+  as placeholders with a toast — Pixso, like Figma, omits image pixels from a
+  plain copy. Tests run against three real captured payloads (rect, text,
+  frame).
+
 ## [0.60.1] - 2026-07-22
 
 ### Fixed
