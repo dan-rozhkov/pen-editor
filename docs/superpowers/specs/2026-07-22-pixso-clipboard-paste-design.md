@@ -118,20 +118,29 @@ New module `src/lib/pixsoPaste/`, shaped like `src/lib/figmaPaste/`:
   4. `compiled.decodePixsoMsg(bytes)` → `{ type, sessionID, pixsoNodes, blobs,
      pasteFileKey, ... }`. Type: `PixsoMessage` (a small hand-written interface over the
      fields the converter reads).
-- `convert.ts` — `convertPixsoMessageToSceneNodes(msg): PixsoConversionResult`. Builds
-  the node tree from `pixsoNodes` (keyed on `guid`/`parentIndex`, reusing figmaToScene's
-  `buildFigTree` logic or a thin port), then maps each `PixsoNode` → `SceneNode`,
-  borrowing figmaToScene's pure shape/text/auto-layout/transform helpers where shapes
-  match and handling the Pixso deltas explicitly: NodeType enum names, **0–255 → 0–1
-  color scaling**, blob-referenced image fills (`fillPaints[].image.hash`/`dataBlob`
-  resolved via `blobs`/`blobBaseIndex`, placeholder + `unresolvedImages++` when absent).
-  Returns `{ nodes: SceneNode[]; warnings: string[]; unresolvedImageCount: number }`.
-- `index.ts` — `convertPixsoClipboardHtml(html): Promise<PixsoConversionResult | null>`:
+- `adapt.ts` — `pixsoMessageToFigPasteData(msg): FigPasteData`. Because Pixso's
+  `PixsoNode` matches Figma's `FigNodeChange` field-for-field on everything the converter
+  reads (`guid`/`parentIndex`/`phase`/`transform`/`type`/`name`/`size`/`cornerRadius`/
+  `fillPaints`/`strokePaints`/`effects`/`textData`/`lineHeight`/`fontName`/stack fields)
+  and the NodeType/PaintType/etc. enum *values* are the same strings
+  (RECTANGLE/FRAME/TEXT/CANVAS/SOLID/IMAGE/…), the conversion **reuses the tested
+  `convertFigmaPasteToSceneNodes` unchanged** after one normalization pass: (1) rename
+  `pixsoNodes` → `nodeChanges`; (2) **deep-scale colors 0–255 → 0–1** — walk the message
+  and for every plain object with numeric `r`,`g`,`b`, divide `r`/`g`/`b`/`a` by 255
+  (covers solid/gradient-stop/effect/text colors uniformly, since Figma's `colorToHex`
+  expects [0,1]); (3) carry `blobs`/`blobBaseIndex` through so image-fill blob refs
+  resolve exactly as in the Figma path. Returns `{ meta:{}, message:{nodeChanges, blobs,
+  blobBaseIndex}, version }`.
+- `index.ts` — `convertPixsoClipboardHtml(html): Promise<FigmaConversionResult | null>`:
   null when `isPixsoClipboardHtml` is false; otherwise dynamically imports
-  `extract` + `decode` + `schema` + `convert`, chaining extract → decode → convert.
+  `extract` + `decode` + `schema` + `adapt` + `figmaToScene`, chaining extract → decode →
+  adapt → `convertFigmaPasteToSceneNodes`. Reuses `FigmaConversionResult` (nodes +
+  warnings + unresolvedImageCount) directly.
 
-`PixsoConversionResult` mirrors `FigmaConversionResult`'s field set (nodes + warnings +
-unresolvedImageCount) so the `handlePaste` branch is copy-shaped against the Figma one.
+Any Pixso-only node type or field the Figma converter doesn't recognize falls through
+its existing default branch (warning + skip / vector salvage) — no crash. If a real
+capture exposes a genuinely divergent shape, the fix is localized to `adapt.ts`, leaving
+`figmaToScene` untouched.
 
 ### Wiring into the paste pipeline
 
