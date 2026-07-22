@@ -27,6 +27,7 @@ import { leaveComment } from "./tools/leaveComment";
 import { createPlugin } from "./tools/plugins/createPlugin";
 import { updatePlugin } from "./tools/plugins/updatePlugin";
 import { listPlugins } from "./tools/plugins/listPlugins";
+import { askUser } from "./tools/askUser";
 export type ToolHandler = (
   args: Record<string, unknown>
 ) => Promise<string>;
@@ -64,4 +65,5 @@ export const toolHandlers: Record<string, ToolHandler> = {
   create_plugin: createPlugin,
   update_plugin: updatePlugin,
   list_plugins: listPlugins,
+  ask_user: askUser,
 };

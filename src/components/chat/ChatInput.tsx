@@ -38,6 +38,8 @@ interface ChatInputProps {
   onSubmit: (payload: ChatLaunchPayload) => boolean;
   isLoading: boolean;
   stop: () => void;
+  /** True while an ask_user question is unanswered — blocks sending so the answer isn't stranded. */
+  awaitingAnswer?: boolean;
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -64,6 +66,7 @@ export function ChatInput({
   onSubmit,
   isLoading,
   stop,
+  awaitingAnswer,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -219,7 +222,7 @@ export function ChatInput({
       // disabled while offline, but Enter bypasses it. Calling onSubmit
       // unconditionally lets its offline guard (in useDesignChat) surface a
       // visible per-message error instead of Enter being a silent no-op.
-      if ((input.trim() || images.length > 0) && !isLoading) {
+      if ((input.trim() || images.length > 0) && !isLoading && !awaitingAnswer) {
         const didSend = onSubmit({
           text: input.trim(),
           images: images.length > 0 ? images : undefined,
@@ -241,6 +244,7 @@ export function ChatInput({
       visibleSelection,
       supportsVision,
       isLoading,
+      awaitingAnswer,
       onSubmit,
       setAttachedImages,
       setDismissedSelection,
@@ -464,8 +468,13 @@ export function ChatInput({
           }}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder="Ask the design agent..."
+          placeholder={
+            awaitingAnswer
+              ? "Answer the question above to continue…"
+              : "Ask the design agent..."
+          }
           rows={1}
+          disabled={awaitingAnswer}
           className="flex-1 resize-none bg-transparent text-sm text-text-primary placeholder:text-text-disabled outline-none min-h-[24px] max-h-[96px] py-1 leading-normal"
         />
         {isLoading ? (
@@ -494,7 +503,8 @@ export function ChatInput({
                     !isOnline ||
                     (!input.trim() &&
                       attachedImages.length === 0 &&
-                      visibleSelection.length === 0)
+                      visibleSelection.length === 0) ||
+                    awaitingAnswer
                   }
                   className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted disabled:text-text-disabled transition-colors"
                   aria-label={isOnline ? "Send" : OFFLINE_SEND_TITLE}

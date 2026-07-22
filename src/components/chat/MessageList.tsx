@@ -14,6 +14,8 @@ import { SimpleMarkdown } from "./SimpleMarkdown";
 import { ToolCallIndicator } from "./ToolCallIndicator";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 import { ImageLightbox } from "./ImageLightbox";
+import { AskUserForm } from "./AskUserForm";
+import type { AskUserInput } from "@/types/askUser";
 import {
   Tooltip,
   TooltipTrigger,
@@ -115,9 +117,10 @@ interface MessageListProps {
   messages: UIMessage[];
   isLoading: boolean;
   onRollback?: (messageId: string) => void;
+  addToolOutput?: (o: { tool: string; toolCallId: string; output: string }) => void;
 }
 
-export function MessageList({ messages, isLoading, onRollback }: MessageListProps) {
+export function MessageList({ messages, isLoading, onRollback, addToolOutput }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isAutoScrollRef = useRef(true);
 
@@ -227,6 +230,32 @@ export function MessageList({ messages, isLoading, onRollback }: MessageListProp
                 }
                 if (part.type === "reasoning" && part.text) {
                   return <ThinkingIndicator key={`reasoning-${i}`} part={part} />;
+                }
+                if (part.type === "tool-ask_user") {
+                  const tp = part as {
+                    toolCallId: string;
+                    state?: string;
+                    input?: AskUserInput;
+                  };
+                  // Only own the render for a ready form (input-available) or its
+                  // answered summary (output-available). While the tool input is
+                  // still streaming (partial/absent) or the call errored, fall
+                  // through to the generic ToolCallIndicator below.
+                  if (
+                    tp.input &&
+                    (tp.state === "input-available" || tp.state === "output-available")
+                  ) {
+                    return (
+                      <AskUserForm
+                        key={tp.toolCallId}
+                        input={tp.input}
+                        state={tp.state === "output-available" ? "output" : "input"}
+                        onSubmit={(output) =>
+                          addToolOutput?.({ tool: "ask_user", toolCallId: tp.toolCallId, output })
+                        }
+                      />
+                    );
+                  }
                 }
                 if (isToolUIPart(part)) {
                   const tp = part as { toolCallId: string };

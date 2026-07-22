@@ -11,6 +11,7 @@ import type { ChatTab, ParallelCount } from "@/store/chatStore";
 import { useDesignChat } from "@/hooks/useDesignChat";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
+import { hasPendingAskUser } from "./pendingAskUser";
 import { SelectWithOptions } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { InlineAlert } from "@/components/ui/inline-alert";
@@ -154,7 +155,10 @@ function ChatSession({
     error,
     clearError,
     retryState,
+    addToolOutput,
   } = useDesignChat({ sessionId });
+
+  const awaitingAnswer = hasPendingAskUser(messages);
 
   const parallelCount = useChatStore((s) => s.parallelCount);
   const setParallelCount = useChatStore((s) => s.setParallelCount);
@@ -260,6 +264,7 @@ function ChatSession({
         messages={messages}
         isLoading={isLoading}
         onRollback={isLoading ? undefined : handleRollback}
+        addToolOutput={addToolOutput}
       />
 
       {/* Input */}
@@ -270,6 +275,7 @@ function ChatSession({
         onSubmit={handleSubmit}
         isLoading={isLoading}
         stop={stop}
+        awaitingAnswer={awaitingAnswer}
       />
     </>
   );

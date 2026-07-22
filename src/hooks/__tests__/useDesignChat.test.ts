@@ -376,6 +376,52 @@ describe("useDesignChat (hook + UI message stream)", () => {
     ).toBe(true);
   });
 
+  it("does not auto-resolve ask_user; the turn pauses until addToolOutput", async () => {
+    const fetchMock = vi.fn(async () =>
+      sseResponse([
+        { type: "start" },
+        { type: "start-step" },
+        {
+          type: "tool-input-available",
+          toolCallId: "call-ask",
+          toolName: "ask_user",
+          input: {
+            questions: [
+              { id: "audience", label: "Audience?", type: "single",
+                options: [{ value: "devs", label: "Developers" }] },
+            ],
+          },
+        },
+        { type: "finish-step" },
+        { type: "finish" },
+      ]),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const sessionId = `ask-session-${Date.now()}`;
+    const { result } = renderHook(() => useDesignChat({ sessionId }));
+
+    act(() => result.current.setInput("design me a landing page"));
+    await act(async () => {
+      result.current.sendMessage();
+    });
+
+    // First (and only) request so far; ask_user must NOT trigger a follow-up.
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Submitting the form answer resumes the turn.
+    await act(async () => {
+      result.current.addToolOutput({
+        tool: "ask_user",
+        toolCallId: "call-ask",
+        output: JSON.stringify({ answers: [{ id: "audience", value: "devs" }] }),
+      });
+    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2), { timeout: 5000 });
+  });
+
   // Research mode streams backend-executed MCP (dynamic) tools. The AI SDK MCP
   // client tags each tool chunk with `toolMetadata`; the UI message stream
   // schema must accept it, or the whole stream is rejected with a
