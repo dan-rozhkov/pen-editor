@@ -70,6 +70,29 @@ describe("tool registry contract", () => {
   });
 });
 
+// MCP bridged tool names (pen-editor-backend/src/mcp/server.ts
+// BRIDGED_TOOL_NAMES) — duplicated here rather than imported, matching this
+// file's existing convention of hardcoding the backend's tool-name list on
+// this side of the contract; pen-editor-backend/test/mcp-tools-contract.test.ts
+// pins the same list on the backend side.
+const EXPECTED_BRIDGED_MCP_TOOLS = [
+  "get_editor_state",
+  "batch_get",
+  "snapshot_layout",
+  "get_variables",
+  "get_screenshot",
+  "batch_design",
+  "set_variables",
+];
+
+describe("MCP bridged tool contract", () => {
+  it("every bridged MCP tool name has a toolHandlers entry", () => {
+    for (const name of EXPECTED_BRIDGED_MCP_TOOLS) {
+      expect(name in toolHandlers, name).toBe(true);
+    }
+  });
+});
+
 // Vitest runs with cwd = pen-editor/, the sibling backend repo lives next to it.
 const backendToolsPath = resolve(
   process.cwd(),
