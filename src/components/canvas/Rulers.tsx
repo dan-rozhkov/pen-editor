@@ -4,7 +4,10 @@ import { useGuidesStore } from "@/store/guidesStore";
 import { useUIThemeStore } from "@/store/uiThemeStore";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
+import { useSelectionStore } from "@/store/selectionStore";
+import { useLayoutStore } from "@/store/layoutStore";
 import { useHistoryStore } from "@/store/historyStore";
+import { getNodeAbsolutePositionWithLayout, getNodeEffectiveSize } from "@/utils/nodeUtils";
 
 export const RULER_SIZE = 20;
 const GUIDE_HIT_SIZE = 6;
@@ -12,6 +15,84 @@ const GUIDE_HIT_SIZE = 6;
 interface CreatingGuide {
   orientation: "horizontal" | "vertical";
   screenPos: number;
+}
+
+interface SelectionWorldBounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+/**
+ * Union bounding box of the current selection, in WORLD (store) coordinates —
+ * the same space the ruler ticks are drawn in (a frame at x=0 shows tick
+ * "0"). Reuses the same absolute-position/effective-size helpers the
+ * selection overlay (`selectionOverlay/helpers.ts`'s `getAbsolutePosition`/
+ * `getEffectiveSize`) and the properties Size panel's layout-aware sizing
+ * ultimately rest on, so the band's edges agree 1:1 with the on-canvas
+ * selection box. Empty selection (or a selection with no resolvable nodes,
+ * e.g. stale ids) -> null, meaning "no highlight".
+ *
+ * Result is memoized on the two store references it depends on: `selectedIds`
+ * (a fresh array only when the selection actually changes) and `nodesById` (a
+ * fresh map on any scene mutation). This keeps the pan/zoom hot path O(1) —
+ * `draw()` runs every frame while panning, but neither ref changes then, so we
+ * don't re-walk the whole scene tree per selected id. Font loads reflow
+ * auto-layout without touching `nodesById`, so the effect explicitly busts
+ * this cache (see `boundsCacheNodesById = null` on "loadingdone").
+ */
+let boundsCacheSelectedIds: string[] | null = null;
+let boundsCacheNodesById: unknown = null;
+let boundsCache: SelectionWorldBounds | null = null;
+
+function computeSelectionWorldBounds(
+  selectedIds: string[],
+): SelectionWorldBounds | null {
+  if (selectedIds.length === 0) return null;
+
+  const sceneState = useSceneStore.getState();
+  if (
+    selectedIds === boundsCacheSelectedIds &&
+    sceneState.nodesById === boundsCacheNodesById
+  ) {
+    return boundsCache;
+  }
+  const nodes = sceneState.getNodes();
+  const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+
+  let bounds: SelectionWorldBounds | null = null;
+
+  for (const id of selectedIds) {
+    const node = sceneState.nodesById[id];
+    if (!node) continue;
+
+    const pos = getNodeAbsolutePositionWithLayout(nodes, id, calculateLayoutForFrame);
+    if (!pos) continue;
+
+    const size = getNodeEffectiveSize(nodes, id, calculateLayoutForFrame);
+    const width = size?.width ?? node.width;
+    const height = size?.height ?? node.height;
+
+    const minX = pos.x;
+    const minY = pos.y;
+    const maxX = pos.x + width;
+    const maxY = pos.y + height;
+
+    if (!bounds) {
+      bounds = { minX, minY, maxX, maxY };
+    } else {
+      bounds.minX = Math.min(bounds.minX, minX);
+      bounds.minY = Math.min(bounds.minY, minY);
+      bounds.maxX = Math.max(bounds.maxX, maxX);
+      bounds.maxY = Math.max(bounds.maxY, maxY);
+    }
+  }
+
+  boundsCacheSelectedIds = selectedIds;
+  boundsCacheNodesById = sceneState.nodesById;
+  boundsCache = bounds;
+  return bounds;
 }
 
 /** The Pixi canvas fills the whole window behind the floating UI panels, so
@@ -106,6 +187,9 @@ export function Rulers() {
     const bg = isDark ? "#2b2b2b" : "#ffffff";
     const tickColor = isDark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.3)";
     const labelColor = isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)";
+    // Figma-style accent for the selection highlight band + its edge labels.
+    const bandFill = isDark ? "rgba(56,132,255,0.28)" : "rgba(56,132,255,0.18)";
+    const accentLabel = isDark ? "#7ab0ff" : "#3884ff";
 
     function niceStep(scale: number, minPxGap: number): number {
       const worldGap = minPxGap / scale;
@@ -119,6 +203,20 @@ export function Rulers() {
     // Draw one ruler strip. axis "x" = the top (horizontal) ruler, "y" = the
     // left (vertical) ruler; the two differ only by which dimension spans and
     // whether the tick labels are upright or rotated.
+    // Converts a world-space edge to this ruler's own canvas-local coordinate
+    // — the same formula the tick loop below uses per tick. Not the React
+    // `worldToLocal` helper: that one is relative to the component's root,
+    // while drawRuler works in ruler-canvas space (already offset by
+    // RULER_SIZE).
+    function worldToRulerLocal(
+      w: number,
+      pan: number,
+      offset: number,
+      scale: number,
+    ): number {
+      return w * scale + pan - offset - RULER_SIZE;
+    }
+
     function drawRuler(
       canvas: HTMLCanvasElement | null,
       axis: "x" | "y",
@@ -128,6 +226,7 @@ export function Rulers() {
       scale: number,
       step: number,
       dpr: number,
+      selectionRange: { min: number; max: number } | null,
     ): void {
       if (!canvas) return;
       const isVertical = axis === "y";
@@ -139,6 +238,22 @@ export function Rulers() {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, isVertical ? RULER_SIZE : span, isVertical ? span : RULER_SIZE);
+
+      // Selection highlight band — painted after the background, before the
+      // tick marks/labels so the ticks stay legible on top of it.
+      if (selectionRange) {
+        const s1 = worldToRulerLocal(selectionRange.min, pan, offset, scale);
+        const s2 = worldToRulerLocal(selectionRange.max, pan, offset, scale);
+        const bandStart = Math.min(s1, s2);
+        const bandEnd = Math.max(s1, s2);
+        ctx.fillStyle = bandFill;
+        if (isVertical) {
+          ctx.fillRect(0, bandStart, RULER_SIZE, bandEnd - bandStart);
+        } else {
+          ctx.fillRect(bandStart, 0, bandEnd - bandStart, RULER_SIZE);
+        }
+      }
+
       const worldMin = (RULER_SIZE + offset - pan) / scale;
       const worldMax = (RULER_SIZE + span + offset - pan) / scale;
       const start = Math.floor(worldMin / step) * step;
@@ -168,6 +283,26 @@ export function Rulers() {
           ctx.fillText(String(Math.round(w)), s, 1);
         }
       }
+
+      // Accent edge labels — redraw the two boundary numbers in the accent
+      // color, on top of the muted tick labels drawn above.
+      if (selectionRange) {
+        ctx.fillStyle = accentLabel;
+        for (const w of [selectionRange.min, selectionRange.max]) {
+          const s = worldToRulerLocal(w, pan, offset, scale);
+          if (isVertical) {
+            ctx.save();
+            ctx.translate(RULER_SIZE * 0.5, s);
+            ctx.rotate(-Math.PI / 2);
+            ctx.textAlign = "center";
+            ctx.fillText(String(Math.round(w)), 0, -8);
+            ctx.restore();
+          } else {
+            ctx.textAlign = "center";
+            ctx.fillText(String(Math.round(w)), s, 1);
+          }
+        }
+      }
     }
 
     function draw(): void {
@@ -180,13 +315,41 @@ export function Rulers() {
       const offsetX = rootRect.left - canvasRect.left;
       const offsetY = rootRect.top - canvasRect.top;
 
-      drawRuler(topCanvasRef.current, "x", size.width, vs.x, offsetX, vs.scale, step, dpr);
-      drawRuler(leftCanvasRef.current, "y", size.height, vs.y, offsetY, vs.scale, step, dpr);
+      const selectedIds = useSelectionStore.getState().selectedIds;
+      const bounds = computeSelectionWorldBounds(selectedIds);
+      const xRange = bounds ? { min: bounds.minX, max: bounds.maxX } : null;
+      const yRange = bounds ? { min: bounds.minY, max: bounds.maxY } : null;
+
+      drawRuler(topCanvasRef.current, "x", size.width, vs.x, offsetX, vs.scale, step, dpr, xRange);
+      drawRuler(leftCanvasRef.current, "y", size.height, vs.y, offsetY, vs.scale, step, dpr, yRange);
     }
 
     draw();
-    const unsubscribe = useViewportStore.subscribe(draw);
-    return () => unsubscribe();
+    // Redraw on pan/zoom, on selection changes, and on scene mutations
+    // (moving/resizing a selected node changes nodesById directly and
+    // doesn't touch the viewport, so it needs its own subscription for the
+    // band to track drags/resizes).
+    const unsubscribeViewport = useViewportStore.subscribe(draw);
+    const unsubscribeSelection = useSelectionStore.subscribe(draw);
+    const unsubscribeScene = useSceneStore.subscribe(draw);
+
+    // A font finishing loading reflows auto-layout frames (layoutStore's cache
+    // is invalidated on "loadingdone") without mutating nodesById — so neither
+    // the scene nor viewport subscription fires. Redraw explicitly, busting the
+    // bounds memo first so a selected auto-layout child's band isn't stale.
+    const hasFonts = typeof document !== "undefined" && "fonts" in document;
+    const onFontsLoaded = (): void => {
+      boundsCacheNodesById = null;
+      draw();
+    };
+    if (hasFonts) document.fonts.addEventListener("loadingdone", onFontsLoaded);
+
+    return () => {
+      unsubscribeViewport();
+      unsubscribeSelection();
+      unsubscribeScene();
+      if (hasFonts) document.fonts.removeEventListener("loadingdone", onFontsLoaded);
+    };
   }, [showRulers, uiTheme, size, hasPixiCanvas]);
 
   // Position the guide hit-sensors imperatively (no setState → no per-frame
