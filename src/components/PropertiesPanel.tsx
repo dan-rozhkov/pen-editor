@@ -14,6 +14,7 @@ import type {
 } from "@/types/scene";
 import { generateId } from "@/types/scene";
 import {
+  getAbsolutePositionFlat,
   getParentContextFlat,
   getThemeFromAncestorFrames,
   type FlatParentContext,
@@ -25,6 +26,7 @@ import { MultiSelectPropertyEditor } from "@/components/properties/MultiSelectPr
 import { PageProperties } from "@/components/properties/PageProperties";
 import { PencilToolProperties } from "@/components/properties/PencilToolProperties";
 import { PropertyEditor } from "@/components/properties/PropertyEditor";
+import { PrototypeExportSection } from "@/components/properties/PrototypeExportSection";
 import { SpacingSection } from "@/components/properties/AlignmentSection";
 import { CaretRightIcon } from "@phosphor-icons/react";
 import clsx from "clsx";
@@ -254,6 +256,23 @@ export function PropertiesPanel() {
             activeTheme={effectiveTheme}
           />
         )}
+        {selectedNodes.length > 1 &&
+          activeTool !== "frame" &&
+          selectedNodes.every((n) => n.type === "embed") && (
+            <PrototypeExportSection
+              embeds={selectedNodes.map((n) => {
+                const { nodesById, parentById } = useSceneStore.getState();
+                const abs = getAbsolutePositionFlat(n.id, nodesById, parentById);
+                return {
+                  id: n.id,
+                  name: n.name ?? n.id,
+                  html: (n as { htmlContent: string }).htmlContent,
+                  x: abs.x,
+                  y: abs.y,
+                };
+              })}
+            />
+          )}
         {instanceContext && activeTool !== "frame" && (
           <DescendantPropertyEditor
             instanceContext={instanceContext}
