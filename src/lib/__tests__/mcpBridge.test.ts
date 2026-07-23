@@ -208,6 +208,25 @@ describe("McpBridge", () => {
     bridge.stop();
   });
 
+  it("sets status off and does not enter a reconnect loop when the WebSocket constructor throws", () => {
+    vi.useFakeTimers();
+    const throwingFactory = vi.fn(() => {
+      throw new DOMException("Invalid URL", "SyntaxError");
+    });
+    const bridge = new McpBridge("secret-token", throwingFactory);
+
+    bridge.start();
+
+    expect(throwingFactory).toHaveBeenCalledTimes(1);
+    expect(useMcpBridgeStore.getState().status).toBe("off");
+
+    // No reconnect scheduled — advancing time must not call the factory again.
+    vi.advanceTimersByTime(60_000);
+    expect(throwingFactory).toHaveBeenCalledTimes(1);
+
+    bridge.stop();
+  });
+
   it("stop() tears down listeners, closes the socket, and sets status to off", () => {
     const factory = makeFactory();
     const bridge = new McpBridge("secret-token", factory);

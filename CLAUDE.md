@@ -116,6 +116,11 @@ in `LeftSidebar.tsx` (beside the offline cloud indicator). See
 `pen-editor-backend/docs/superpowers/specs/2026-07-23-mcp-server-design.md`
 for the full design.
 
+**`VITE_MCP_WS_TOKEN` is baked into the public JS bundle at build time —
+local/dev builds only. Never set it on a publicly deployed frontend build:**
+every visitor's tab would get the secret and silently register itself as a
+bridge session that anyone holding the token can drive.
+
 ### File Format
 
 The editor reads/writes `.pen` files. These are accessed exclusively through the Pencil MCP tools — never read `.pen` files directly with file I/O.

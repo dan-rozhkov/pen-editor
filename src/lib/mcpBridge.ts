@@ -82,7 +82,19 @@ export class McpBridge {
   private connect(): void {
     if (this.stopped) return;
     useMcpBridgeStore.getState().setStatus("connecting");
-    const socket = this.wsFactory(resolveWsUrl(this.token));
+
+    let socket: WebSocket;
+    try {
+      socket = this.wsFactory(resolveWsUrl(this.token));
+    } catch {
+      // e.g. an unsupported/relative API base resolving to a URL the
+      // WebSocket constructor rejects synchronously — protects app boot.
+      // stop() tears down the focus/visibilitychange listeners start()
+      // registered and sets status "off"; no reconnect loop, since retrying
+      // the same bad URL can't succeed.
+      this.stop();
+      return;
+    }
     this.socket = socket;
 
     socket.addEventListener("open", () => {

@@ -98,6 +98,10 @@ const backendToolsPath = resolve(
   process.cwd(),
   "../pen-editor-backend/src/ai/tools.ts"
 );
+const backendMcpServerPath = resolve(
+  process.cwd(),
+  "../pen-editor-backend/src/mcp/server.ts"
+);
 const backendExists = existsSync(backendToolsPath);
 
 // In the cross-repo CI job the sibling checkout is mandatory — a missing
@@ -138,6 +142,15 @@ describe.runIf(backendExists)("backend penTools sync", () => {
       .filter(([, tool]) => typeof tool.execute === "function")
       .map(([name]) => name);
     expect(backendExecuted.sort()).toEqual([...BACKEND_EXECUTED_TOOLS].sort());
+  });
+
+  it("this file's hardcoded bridged-tool list matches the backend's BRIDGED_TOOL_NAMES", async () => {
+    const mod = (await import(
+      /* @vite-ignore */ backendMcpServerPath
+    )) as { BRIDGED_TOOL_NAMES: readonly string[] };
+    expect([...EXPECTED_BRIDGED_MCP_TOOLS].sort()).toEqual(
+      [...mod.BRIDGED_TOOL_NAMES].sort()
+    );
   });
 });
 
