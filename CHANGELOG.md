@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.66.1] - 2026-07-23
+
+### Fixed
+- **Prototype export: screens weren't getting linked.** The AI link step was the sole linker and often returned an empty graph. Now each screen is keyed by a stable slug and sends a visible-text content excerpt so the model reasons over real content and returns ids it can echo reliably; a deterministic heuristic pass always wires candidates whose label clearly names another screen (e.g. a "Pricing" link → `pricing.html`), merged with the model's links (heuristic wins on conflict); and if the backend call fails, linking falls back to the heuristic instead of producing nothing.
+
 ## [0.66.0] - 2026-07-23
 
 ### Added
