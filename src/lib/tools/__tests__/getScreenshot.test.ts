@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { getScreenshot } from "@/lib/tools/getScreenshot";
+import { useCanvasRefStore, type PixiExportRefs } from "@/store/canvasRefStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { resetStores, seedScene } from "@/test/fixtures";
 
@@ -33,5 +34,42 @@ describe("get_screenshot", () => {
   it("still errors when an explicit nodeId does not exist", async () => {
     const result = JSON.parse(await getScreenshot({ nodeId: "ghost" }));
     expect(result.error).toBe("Node not found: ghost");
+  });
+
+  // Regression: Pixi's extract.base64 already returns a full data URL —
+  // the handler must not prepend a second "data:image/png;base64," prefix
+  // (found live: MCP clients rejected the doubled prefix as invalid base64).
+  it("does not double the data-URL prefix from extract.base64", async () => {
+    const fakeRefs = {
+      app: {
+        renderer: {
+          extract: { base64: async () => "data:image/png;base64,AAAA" },
+        },
+      },
+      sceneRoot: { label: "frame1", children: [] },
+    } as unknown as PixiExportRefs;
+    useCanvasRefStore.getState().setPixiRefs(fakeRefs);
+    try {
+      const result = JSON.parse(await getScreenshot({ nodeId: "frame1" }));
+      expect(result.imageData).toBe("data:image/png;base64,AAAA");
+    } finally {
+      useCanvasRefStore.getState().setPixiRefs(null);
+    }
+  });
+
+  it("adds the data-URL prefix when the renderer returns bare base64", async () => {
+    const fakeRefs = {
+      app: {
+        renderer: { extract: { base64: async () => "AAAA" } },
+      },
+      sceneRoot: { label: "frame1", children: [] },
+    } as unknown as PixiExportRefs;
+    useCanvasRefStore.getState().setPixiRefs(fakeRefs);
+    try {
+      const result = JSON.parse(await getScreenshot({ nodeId: "frame1" }));
+      expect(result.imageData).toBe("data:image/png;base64,AAAA");
+    } finally {
+      useCanvasRefStore.getState().setPixiRefs(null);
+    }
   });
 });

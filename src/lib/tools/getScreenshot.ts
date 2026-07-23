@@ -29,8 +29,13 @@ export const getScreenshot: ToolHandler = async (args) => {
     const target = findPixiChild(sceneRoot, nodeId);
     if (target) {
       try {
+        // Pixi's extract.base64 already returns a full data URL; older
+        // renderers returned bare base64, so only add the prefix when missing.
         const dataUrl = await app.renderer.extract.base64(target);
-        return JSON.stringify({ imageData: `data:image/png;base64,${dataUrl}` });
+        const imageData = dataUrl.startsWith("data:")
+          ? dataUrl
+          : `data:image/png;base64,${dataUrl}`;
+        return JSON.stringify({ imageData });
       } catch (e) {
         return JSON.stringify({
           error: `PixiJS screenshot failed: ${e instanceof Error ? e.message : "unknown error"}`,
