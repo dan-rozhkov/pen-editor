@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.65.0] - 2026-07-23
+
+### Added
+- **MCP bridge**: when built with `VITE_MCP_WS_TOKEN`, the editor tab connects to the backend's `/api/mcp/ws` so external MCP clients (Claude Code etc.) can read and edit the open document through the same tool handlers the built-in chat uses. Serial tool-call queue, exponential reconnect backoff with jitter, activity pings on focus/visibility, and a status dot with tooltip next to the file name.
+- `get_screenshot` accepts an omitted `nodeId` and falls back to the single selected node.
+
+### Fixed
+- `get_screenshot` no longer doubles the `data:image/png;base64,` prefix (Pixi's `extract.base64` already returns a full data URL).
+
 ## [Unreleased]
 
 ## [0.64.0] - 2026-07-23
