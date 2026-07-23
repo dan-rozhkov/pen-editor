@@ -11,6 +11,7 @@ import { getNodeAbsolutePositionWithLayout, getNodeEffectiveSize } from "@/utils
 
 export const RULER_SIZE = 20;
 const GUIDE_HIT_SIZE = 6;
+const RULER_LABEL_GAP = 3;
 
 interface CreatingGuide {
   orientation: "horizontal" | "vertical";
@@ -187,9 +188,14 @@ export function Rulers() {
     const bg = isDark ? "#2b2b2b" : "#ffffff";
     const tickColor = isDark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.3)";
     const labelColor = isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)";
-    // Figma-style accent for the selection highlight band + its edge labels.
-    const bandFill = isDark ? "rgba(56,132,255,0.28)" : "rgba(56,132,255,0.18)";
-    const accentLabel = isDark ? "#7ab0ff" : "#3884ff";
+    // Resolve the same tokens used by the rail and Layers so the canvas-drawn
+    // ruler selection cannot drift to a separate shade.
+    const themeStyles = getComputedStyle(document.documentElement);
+    const bandFill =
+      themeStyles.getPropertyValue("--color-accent-selection").trim() ||
+      (isDark ? "#27353f" : "#e7f5ff");
+    const accentLabel =
+      themeStyles.getPropertyValue("--color-accent-primary").trim() || "#0d99ff";
 
     function niceStep(scale: number, minPxGap: number): number {
       const worldGap = minPxGap / scale;
@@ -215,6 +221,24 @@ export function Rulers() {
       scale: number,
     ): number {
       return w * scale + pan - offset - RULER_SIZE;
+    }
+
+    function getLabelInterval(
+      position: number,
+      width: number,
+      align: CanvasTextAlign,
+      isVertical: boolean,
+    ): { start: number; end: number } {
+      if (align === "center") {
+        return { start: position - width / 2, end: position + width / 2 };
+      }
+
+      // The vertical ruler rotates labels -90deg, reversing the direction in
+      // which left/right alignment extends along the ruler axis.
+      const extendsForward = isVertical ? align === "right" : align === "left";
+      return extendsForward
+        ? { start: position, end: position + width }
+        : { start: position - width, end: position };
     }
 
     function drawRuler(
@@ -258,48 +282,98 @@ export function Rulers() {
       const worldMax = (RULER_SIZE + span + offset - pan) / scale;
       const start = Math.floor(worldMin / step) * step;
       ctx.font = "9px system-ui, sans-serif";
+
+      // Keep selection labels inside the highlighted band when there is room.
+      // For a narrow selection, place them on opposite outer sides instead.
+      // Their occupied intervals are also used below to suppress colliding
+      // regular tick labels while leaving the tick marks themselves visible.
+      const selectionLabels = selectionRange
+        ? (() => {
+            const values = [selectionRange.min, selectionRange.max];
+            const positions = values.map((value) =>
+              worldToRulerLocal(value, pan, offset, scale),
+            );
+            const texts = values.map((value) => String(Math.round(value)));
+            const widths = texts.map((text) => ctx.measureText(text).width);
+            const hasInnerRoom =
+              Math.abs(positions[1] - positions[0]) >=
+              widths[0] + widths[1] + RULER_LABEL_GAP * 2;
+            const aligns: [CanvasTextAlign, CanvasTextAlign] = isVertical
+              ? hasInnerRoom
+                ? ["right", "left"]
+                : ["left", "right"]
+              : hasInnerRoom
+                ? ["left", "right"]
+                : ["right", "left"];
+
+            return values.map((value, index) => ({
+              value,
+              text: texts[index],
+              position: positions[index],
+              align: aligns[index],
+              interval: getLabelInterval(
+                positions[index],
+                widths[index],
+                aligns[index],
+                isVertical,
+              ),
+            }));
+          })()
+        : [];
+
       ctx.fillStyle = labelColor;
       ctx.strokeStyle = tickColor;
       ctx.lineWidth = 1;
       ctx.textBaseline = "top";
       for (let w = start; w <= worldMax; w += step) {
         const s = w * scale + pan - offset - RULER_SIZE;
+        const tickText = String(Math.round(w));
+        const tickWidth = ctx.measureText(tickText).width;
+        const tickStart = s - tickWidth / 2;
+        const tickEnd = s + tickWidth / 2;
+        const labelCollides = selectionLabels.some(
+          ({ interval }) =>
+            tickEnd + RULER_LABEL_GAP > interval.start &&
+            tickStart - RULER_LABEL_GAP < interval.end,
+        );
         ctx.beginPath();
         if (isVertical) {
           ctx.moveTo(RULER_SIZE - 6, s + 0.5);
           ctx.lineTo(RULER_SIZE, s + 0.5);
           ctx.stroke();
-          ctx.save();
-          ctx.translate(RULER_SIZE * 0.5, s);
-          ctx.rotate(-Math.PI / 2);
-          ctx.textAlign = "center";
-          ctx.fillText(String(Math.round(w)), 0, -8);
-          ctx.restore();
-        } else {
-          ctx.moveTo(s + 0.5, RULER_SIZE - 6);
-          ctx.lineTo(s + 0.5, RULER_SIZE);
-          ctx.stroke();
-          ctx.textAlign = "center";
-          ctx.fillText(String(Math.round(w)), s, 1);
-        }
-      }
-
-      // Accent edge labels — redraw the two boundary numbers in the accent
-      // color, on top of the muted tick labels drawn above.
-      if (selectionRange) {
-        ctx.fillStyle = accentLabel;
-        for (const w of [selectionRange.min, selectionRange.max]) {
-          const s = worldToRulerLocal(w, pan, offset, scale);
-          if (isVertical) {
+          if (!labelCollides) {
             ctx.save();
             ctx.translate(RULER_SIZE * 0.5, s);
             ctx.rotate(-Math.PI / 2);
             ctx.textAlign = "center";
-            ctx.fillText(String(Math.round(w)), 0, -8);
+            ctx.fillText(tickText, 0, -8);
+            ctx.restore();
+          }
+        } else {
+          ctx.moveTo(s + 0.5, RULER_SIZE - 6);
+          ctx.lineTo(s + 0.5, RULER_SIZE);
+          ctx.stroke();
+          if (!labelCollides) {
+            ctx.textAlign = "center";
+            ctx.fillText(tickText, s, 1);
+          }
+        }
+      }
+
+      // Accent edge labels occupy the collision-free slots calculated above.
+      if (selectionLabels.length > 0) {
+        ctx.fillStyle = accentLabel;
+        for (const label of selectionLabels) {
+          if (isVertical) {
+            ctx.save();
+            ctx.translate(RULER_SIZE * 0.5, label.position);
+            ctx.rotate(-Math.PI / 2);
+            ctx.textAlign = label.align;
+            ctx.fillText(label.text, 0, -8);
             ctx.restore();
           } else {
-            ctx.textAlign = "center";
-            ctx.fillText(String(Math.round(w)), s, 1);
+            ctx.textAlign = label.align;
+            ctx.fillText(label.text, label.position, 1);
           }
         }
       }

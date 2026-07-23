@@ -220,7 +220,7 @@ export const LayerItem = memo(function LayerItem({
         className={clsx(
           "group flex items-center cursor-pointer h-[28px]",
           isSelected
-            ? "bg-accent-selection hover:bg-accent-selection/80"
+            ? "bg-accent-selection hover:bg-accent-selection"
             : "hover:bg-secondary",
           isDragging && "opacity-50",
           isDropTarget &&
@@ -312,7 +312,7 @@ export const LayerItem = memo(function LayerItem({
               panel base so the eye-icon region matches the row instead of
               double-stacking the alpha (which would read as a second shade). */}
           {isSelected && (
-            <div className="absolute inset-0 pointer-events-none bg-accent-selection group-hover:bg-accent-selection/80" />
+            <div className="absolute inset-0 pointer-events-none bg-accent-selection group-hover:bg-accent-selection" />
           )}
           <Tooltip>
             <TooltipTrigger

@@ -21,6 +21,12 @@ describe("<LeftRail />", () => {
     expect(screen.getByTestId("rail-styles")).toBeTruthy();
   });
 
+  it("uses the shared selection background for the active item", () => {
+    render(<LeftRail />);
+    const activeIcon = screen.getByTestId("rail-pages").querySelector("span");
+    expect(activeIcon?.className).toContain("bg-accent-selection");
+  });
+
   it("switches to the slides section when its rail icon is clicked", () => {
     render(<LeftRail />);
     fireEvent.click(screen.getByTestId("rail-slides"));

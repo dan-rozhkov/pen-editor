@@ -7,6 +7,7 @@ import { useGuidesStore } from "@/store/guidesStore";
 import { useUIThemeStore } from "@/store/uiThemeStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useSelectionStore } from "@/store/selectionStore";
+import { useSceneStore } from "@/store/sceneStore";
 import { resetStores, seedScene } from "@/test/fixtures";
 
 const ROOT_WIDTH = 800;
@@ -16,6 +17,7 @@ interface MockCtx {
   fillRect: ReturnType<typeof vi.fn>;
   fillText: ReturnType<typeof vi.fn>;
   fillStyleLog: string[];
+  textAlignLog: CanvasTextAlign[];
 }
 
 let lastCtx: MockCtx | null = null;
@@ -33,11 +35,14 @@ function mockCanvasContext(): void {
   ): CanvasRenderingContext2D | null {
     if (contextId !== "2d") return null;
     const fillStyleLog: string[] = [];
+    const textAlignLog: CanvasTextAlign[] = [];
     let fillStyle = "";
+    let textAlign: CanvasTextAlign = "start";
     const ctx = {
       beginPath: vi.fn(),
       fillRect: vi.fn(() => fillStyleLog.push(fillStyle)),
-      fillText: vi.fn(),
+      fillText: vi.fn(() => textAlignLog.push(textAlign)),
+      measureText: vi.fn((text: string) => ({ width: text.length * 5 })),
       lineTo: vi.fn(),
       moveTo: vi.fn(),
       restore: vi.fn(),
@@ -52,11 +57,18 @@ function mockCanvasContext(): void {
       set fillStyle(value: string) {
         fillStyle = value;
       },
+      get textAlign() {
+        return textAlign;
+      },
+      set textAlign(value: CanvasTextAlign) {
+        textAlign = value;
+      },
     } as unknown as CanvasRenderingContext2D;
     lastCtx = {
       fillRect: ctx.fillRect as unknown as ReturnType<typeof vi.fn>,
       fillText: ctx.fillText as unknown as ReturnType<typeof vi.fn>,
       fillStyleLog,
+      textAlignLog,
     };
     return ctx;
   } as typeof HTMLCanvasElement.prototype.getContext);
@@ -143,7 +155,7 @@ describe("<Rulers />", () => {
     });
 
     // Background clear + the accent band fillRect.
-    expect(lastCtx!.fillStyleLog).toContain("rgba(56,132,255,0.18)");
+    expect(lastCtx!.fillStyleLog).toContain("#e7f5ff");
 
     // Accent-colored edge labels are drawn for the rounded bbox edges. The
     // top ruler's edges are 600/800 (x), the left ruler's are 100/200 (y);
@@ -166,5 +178,29 @@ describe("<Rulers />", () => {
     } else {
       expect(accentTexts).toEqual(new Set(["100", "200"]));
     }
+
+    // Boundary values are painted once in accent, rather than being drawn a
+    // second time on top of the regular ruler label.
+    for (const text of accentTexts) {
+      expect(fillTextCalls.filter(([value]) => value === text)).toHaveLength(1);
+    }
+  });
+
+  it("places edge labels on opposite outer sides for a narrow selection", async () => {
+    seedScene();
+    useSceneStore.getState().updateNode("rect2", { width: 4, height: 4 });
+    useSelectionStore.getState().setSelectedIds(["rect2"]);
+
+    render(<Rulers />);
+    registerPixiCanvas();
+
+    await waitFor(() => {
+      expect(lastCtx).not.toBeNull();
+      expect(lastCtx!.fillStyleLog.length).toBeGreaterThan(1);
+    });
+
+    // The left ruler draws last. After its -90deg rotation, left/right align
+    // extend the min/max labels away from one another along the vertical axis.
+    expect(lastCtx!.textAlignLog.slice(-2)).toEqual(["left", "right"]);
   });
 });

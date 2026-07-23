@@ -143,7 +143,10 @@
   --color-accent-hover: #0d99ff;
   --color-accent-bright: #0d99ff;
   --color-accent-light: #0d99ff;
-  --color-accent-selection: rgba(13, 153, 255, 0.12);
+  /* Opaque visual result of #0d99ff at 10% over the panel background.
+     Keeping this opaque makes the tint identical across rail, Layers, and
+     canvas-rendered rulers instead of re-blending against each surface. */
+  --color-accent-selection: #e7f5ff;
 
   /* Play/Present mode's canvas backdrop — always dark, independent of the
      editor's light/dark theme (Figma Present / Keynote convention). Defined
@@ -184,7 +187,7 @@
   --color-accent-hover: #0d99ff;
   --color-accent-bright: #0d99ff;
   --color-accent-light: #0d99ff;
-  --color-accent-selection: rgba(13, 153, 255, 0.22);
+  --color-accent-selection: #27353f;
 
   /* Syntax-highlight colors (Dev-mode Code section) — dark theme. */
   --color-code-keyword: #c084fc;

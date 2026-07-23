@@ -35,7 +35,7 @@ function RailButton({ testid, title, active, onClick, children }: RailButtonProp
       <span
         className={
           active
-            ? "flex size-9 items-center justify-center rounded-lg bg-accent-primary/10 text-accent-primary"
+            ? "flex size-9 items-center justify-center rounded-lg bg-accent-selection text-accent-primary"
             : "flex size-9 items-center justify-center rounded-lg text-text-primary group-hover:bg-secondary"
         }
       >
