@@ -29,6 +29,7 @@ import {
   hitTestTransformHandle,
   getResizeCursor,
 } from "./hitTesting";
+import type { TouchControllerDeps } from "./touchController";
 import { createPanController, wheelDeltaScale } from "./panController";
 import { computePresentScrollRange, clampPresentScrollY } from "./presentScroll";
 import { calculateNodesBounds } from "@/utils/viewportUtils";
@@ -180,12 +181,49 @@ export function setupPixiInteraction(
     isSpaceHeld: () => isSpaceHeld,
   };
 
+  // Touch-driven tap-select: same hit-test policy as a plain mouse click
+  // (no meta/ctrl deep-select, no shift add-to-selection — touch never gets
+  // multi-select semantics), but never gated on canEditScene: selection
+  // itself is read-only and allowed in view/dev mode just like mouse click.
+  const touchDeps: TouchControllerDeps = {
+    onTap: (world) => {
+      // Mirror handlePointerDown's priority: a frame/group/embed's name
+      // label is drawn above the node's own hit bounds, so it must be
+      // checked first — otherwise a tap on the label falls through to empty
+      // space and clears the selection instead of selecting the frame.
+      const labelHitId = findFrameLabelAtPoint(world.x, world.y);
+      if (labelHitId) {
+        useSelectionStore.getState().select(labelHitId);
+        return;
+      }
+
+      const devModeActive = useDevModeStore.getState().active;
+      const hitTarget = findCanvasClickTargetAtPoint(world.x, world.y, {
+        metaKey: false,
+        ctrlKey: false,
+        devModeActive,
+      });
+      if (!hitTarget) {
+        useSelectionStore.getState().clearSelection();
+      } else if (hitTarget.kind === "instance-descendant") {
+        useSelectionStore
+          .getState()
+          .selectDescendant(hitTarget.instanceId, hitTarget.descendantPath);
+      } else {
+        useSelectionStore.getState().select(hitTarget.nodeId);
+      }
+    },
+  };
+
   // Create all controllers
   const pan = createPanController(context);
-  const touch = createTouchController(context);
+  const touch = createTouchController(context, touchDeps);
 
-  // Last real pointer event, used to release an in-flight single-finger
-  // interaction the moment a two-finger gesture takes over.
+  // Last real (non-touch) pointer event — a mouse/pen drag that armed just
+  // before a second finger landed must be released before the pinch takes
+  // over, or it later commits against a viewport the pinch has since moved.
+  // Touch pointer events never reach this (gated at the top of
+  // handlePointerDown/Move), so this only ever tracks mouse/pen.
   let lastPointerEvent: PointerEvent | null = null;
 
   // Manual double-click detection (see doubleClickDetector.ts): native
@@ -271,6 +309,10 @@ export function setupPixiInteraction(
   }
 
   function handlePointerDown(e: PointerEvent): void {
+    // Touch is handled entirely by the touch listeners (pan/tap-select,
+    // read-only) — never let its synthetic pointer events reach
+    // drag/marquee/transform/draw.
+    if (e.pointerType === "touch") return;
     lastPointerEvent = e;
     // A two-finger touch gesture (pan/zoom) owns the canvas — ignore the
     // per-finger pointer events it also emits.
@@ -433,6 +475,7 @@ export function setupPixiInteraction(
   }
 
   function handlePointerMove(e: PointerEvent): void {
+    if (e.pointerType === "touch") return;
     lastPointerEvent = e;
     if (touch.isGesturing()) return;
     const rect = canvas.getBoundingClientRect();
@@ -506,6 +549,14 @@ export function setupPixiInteraction(
   }
 
   function handlePointerUp(e: PointerEvent): void {
+    if (e.pointerType === "touch") {
+      // A touch tap is never a click for double-click purposes, but it can
+      // land between two real mouse clicks — reset the click-train so a
+      // later mouse click within the window doesn't wrongly pair with a
+      // stale first click from before the tap.
+      dblClickDetector.reset();
+      return;
+    }
     const rect = canvas.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
@@ -796,9 +847,11 @@ export function setupPixiInteraction(
     if (!canInteractCanvas(useEditorModeStore.getState().mode)) return;
     const wasGesturing = touch.isGesturing();
     if (touch.handleTouchStart(e) && !wasGesturing && lastPointerEvent) {
-      // The first finger may have started a drag/marquee before the second
-      // landed — release it so it doesn't commit while we pan/zoom.
+      // A second finger just landed while a mouse/pen drag was in flight
+      // (e.g. Apple Pencil + finger) — release it now, before the pinch
+      // moves the viewport, so it can't later commit against stale coordinates.
       handlePointerUp(lastPointerEvent);
+      lastPointerEvent = null;
     }
   }
 
