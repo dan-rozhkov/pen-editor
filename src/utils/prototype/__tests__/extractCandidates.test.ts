@@ -39,4 +39,58 @@ describe("extractPrototypeCandidates", () => {
     const { contentText } = extractPrototypeCandidates(html);
     expect(contentText.length).toBeLessThanOrEqual(1200);
   });
+
+  it("extracts non-semantic clickable-looking elements (cards, tabs) common in design embeds", () => {
+    // Real design embeds mark navigational cards/tabs as styled <div>s with no
+    // <a>/<button>/role — the whole reason the plant-card → detail link failed.
+    const html = `<body>
+      <div class="plant-grid">
+        <div class="plant-card"><div class="meta"><h4>Monstera Deliciosa</h4></div></div>
+        <div class="plant-card"><div class="meta"><h4>Phalaenopsis</h4></div></div>
+      </div>
+      <div class="tab-bar">
+        <div class="tab active">Home</div>
+        <div class="tab">Garden</div>
+      </div>
+    </body>`;
+    const { candidates } = extractPrototypeCandidates(html);
+    const texts = candidates.map((c) => c.text);
+    expect(texts).toContain("Monstera Deliciosa");
+    expect(texts).toContain("Phalaenopsis");
+    expect(texts).toContain("Home");
+    expect(texts).toContain("Garden");
+    // Container elements that only wrap other candidates must NOT be stamped
+    // (would produce nested <a> and swallow per-item navigation).
+    expect(texts).not.toContain("HomeGarden");
+    expect(candidates.every((c) => c.text !== "Monstera DeliciosaPhalaenopsis")).toBe(true);
+    // The class attribute is surfaced as a hint for the link-graph reasoner.
+    const card = candidates.find((c) => c.text === "Monstera Deliciosa");
+    expect(card?.classHint).toContain("plant-card");
+  });
+
+  it("keeps only the innermost match when clickables nest (semantic button inside a card)", () => {
+    const html = `<body><div class="card"><span>Label</span><button>Buy</button></div></body>`;
+    const { candidates } = extractPrototypeCandidates(html);
+    // The card wraps a real <button>; only the button is stamped, so applying a
+    // link never wraps a card in <a> around an inner <a>.
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]).toMatchObject({ tag: "button", text: "Buy" });
+  });
+
+  it("does not stamp clickable-classed content nested inside an existing <a> (avoids nested anchors)", () => {
+    // Designer already wrapped the card in a real anchor — the <a> is the
+    // clickable, and its child must not become a second candidate (which
+    // applyLinks would wrap in another <a>, nesting anchors).
+    const html = `<body><a href="/detail"><div class="plant-card"><h4>Monstera</h4></div></a></body>`;
+    const { candidates } = extractPrototypeCandidates(html);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].tag).toBe("a");
+  });
+
+  it("extracts elements with inline cursor:pointer styling", () => {
+    const html = `<body><div style="cursor: pointer">Tap me</div></body>`;
+    const { candidates } = extractPrototypeCandidates(html);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].text).toBe("Tap me");
+  });
 });

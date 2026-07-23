@@ -5,6 +5,10 @@ export interface PrototypeCandidate {
   text: string;
   ariaLabel?: string;
   href?: string;
+  /** The element's `class` attribute (whitespace-collapsed, capped) — a
+   * strong intent signal for the link-graph reasoner when visible text is
+   * thin (icon-only buttons) or generic (`plant-card` → a plant detail). */
+  classHint?: string;
 }
 
 export interface PrototypeScreenInput {
