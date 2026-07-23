@@ -15,7 +15,7 @@ describe("buildPrototypeFiles", () => {
     const names = files.map((f) => f.name).sort();
     expect(names).toEqual(["dashboard.html", "index.html", "login.html"]);
     const login = files.find((f) => f.name === "login.html")!;
-    expect(login.content).toMatch(/<a href="dashboard\.html"><button>Continue<\/button><\/a>/);
+    expect(login.content).toMatch(/<a href="dashboard\.html" style="[^"]*"><button>Continue<\/button><\/a>/);
     const index = files.find((f) => f.name === "index.html")!;
     expect(index.content).toContain("url=login.html"); // start screen = top-left (a)
   });

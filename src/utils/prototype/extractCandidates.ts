@@ -37,7 +37,7 @@ const MAX_CONTENT_TEXT = 1200;
  * simply left unlinked.
  */
 const INTERACTIVE_CLASS =
-  /(?:^|[\s_-])(?:card|btn|button|tab|nav|link|item|tile|row|cell|chip|pill|back|option|menu|thumb)(?:$|[\s_-])/i;
+  /(?:^|[\s_-])(?:card|btn|button|tab|nav|link|item|tile|row|cell|chip|pill|back|option|menu|thumb|avatar|profile|account)(?:$|[\s_-])/i;
 
 function isClickableCandidate(el: Element): boolean {
   if (el.matches(SEMANTIC_SELECTOR)) return true;

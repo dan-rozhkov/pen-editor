@@ -93,4 +93,14 @@ describe("extractPrototypeCandidates", () => {
     expect(candidates).toHaveLength(1);
     expect(candidates[0].text).toBe("Tap me");
   });
+
+  it("extracts a header avatar / profile photo (imageonly, no text) as a candidate", () => {
+    // A profile photo in a header commonly navigates to a profile/settings
+    // screen; it's a text-less <div class="avatar"><img></div>, so it needs
+    // the class hint to be linkable at all.
+    const html = `<body><div class="header"><div class="avatar"><img src="me.jpg"></div></div></body>`;
+    const { candidates } = extractPrototypeCandidates(html);
+    const avatar = candidates.find((c) => c.classHint?.includes("avatar"));
+    expect(avatar).toBeTruthy();
+  });
 });

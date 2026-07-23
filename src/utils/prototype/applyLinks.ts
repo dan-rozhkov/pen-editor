@@ -6,7 +6,15 @@
  * `<a>`. All `data-proto-id` attributes (matched or not) are stripped
  * before returning, so the shipped HTML carries no trace of the
  * extraction pass.
+ *
+ * The wrapper `<a>` is styled `display:contents` (so it generates no box of
+ * its own and the wrapped element keeps its place in any grid/flex layout —
+ * an inline `<a>` around a block card would otherwise become the layout item
+ * and break the design) plus `color:inherit;text-decoration:none` so a linked
+ * element is visually indistinguishable from an unlinked one — no underline,
+ * no link color.
  */
+const WRAPPER_STYLE = "display:contents;color:inherit;text-decoration:none";
 export function applyPrototypeLinks(
   annotatedHtml: string,
   links: { protoId: string; targetSlug: string }[],
@@ -21,6 +29,7 @@ export function applyPrototypeLinks(
     } else {
       const a = doc.createElement("a");
       a.setAttribute("href", target);
+      a.setAttribute("style", WRAPPER_STYLE);
       el.parentNode?.insertBefore(a, el);
       a.appendChild(el);
     }
