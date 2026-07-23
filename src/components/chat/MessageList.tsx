@@ -220,10 +220,25 @@ export function MessageList({ messages, isLoading, onRollback, addToolOutput }: 
           isLoading &&
           msg === lastMessage &&
           !hasAnyContent;
+        const hasAskUserForm = msg.parts.some((part) => {
+          if (part.type !== "tool-ask_user") return false;
+          const askUserPart = part as { state?: string; input?: AskUserInput };
+          return Boolean(
+            askUserPart.input &&
+              (askUserPart.state === "input-available" ||
+                askUserPart.state === "output-available"),
+          );
+        });
 
         return (
           <div key={msg.id} className="group flex flex-col items-start gap-1">
-            <div className="max-w-[85%] rounded-xl px-3 py-2 text-text-primary">
+            <div
+              className={
+                hasAskUserForm
+                  ? "w-full rounded-xl px-3 py-2 text-text-primary"
+                  : "max-w-[85%] rounded-xl px-3 py-2 text-text-primary"
+              }
+            >
               {msg.parts.map((part, i) => {
                 if (part.type === "text" && part.text) {
                   return <SimpleMarkdown key={i} content={part.text} />;

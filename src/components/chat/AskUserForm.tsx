@@ -5,8 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { SelectWithOptions } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { DECIDE_FOR_ME, type AskUserInput, type AskUserQuestion } from "@/types/askUser";
+import { type AskUserInput, type AskUserQuestion } from "@/types/askUser";
 import {
   initAnswerState,
   allRequiredAnswered,
@@ -24,12 +23,11 @@ interface QuestionFieldProps {
 
 function QuestionField({ q, value, note, onValue, onNote }: QuestionFieldProps) {
   const allowOther = q.allowOther ?? q.type !== "text";
-  const allowAuto = q.allowDecideForMe ?? (q.type === "single" || q.type === "multi");
   const arr = Array.isArray(value) ? value : [];
 
   return (
     <div className="space-y-1.5">
-      <Label className="block text-text-primary">{q.label}</Label>
+      <Label className="block font-normal leading-normal text-text-primary">{q.label}</Label>
       {q.hint && <div className="text-[11px] text-text-muted">{q.hint}</div>}
 
       {q.type === "single" && (
@@ -38,34 +36,31 @@ function QuestionField({ q, value, note, onValue, onNote }: QuestionFieldProps) 
             <Button
               key={o.value}
               size="sm"
-              variant={value === o.value ? "secondary" : "outline"}
+              variant="outline"
               onClick={() => onValue(o.value)}
+              className={
+                value === o.value
+                  ? "h-auto min-h-6 max-w-full border-accent-primary bg-accent-primary py-0.5 text-left font-normal !text-white whitespace-normal break-words hover:bg-accent-primary hover:!text-white"
+                  : "h-auto min-h-6 max-w-full whitespace-normal break-words py-0.5 text-left font-normal"
+              }
             >
               {o.label}
             </Button>
           ))}
-          {allowAuto && (
-            <Button
-              size="sm"
-              variant={value === DECIDE_FOR_ME ? "secondary" : "outline"}
-              onClick={() => onValue(DECIDE_FOR_ME)}
-            >
-              Decide for me
-            </Button>
-          )}
         </div>
       )}
 
       {q.type === "multi" && (
         <div className="flex flex-col gap-1.5">
           {q.options?.map((o) => (
-            <label key={o.value} className="flex items-center gap-1.5">
+            <label key={o.value} className="flex items-center gap-1.5 text-xs leading-normal">
               <Checkbox
+                className="data-checked:!bg-accent-primary data-checked:!text-white"
                 checked={arr.includes(o.value)}
                 onCheckedChange={(next) =>
                   onValue(
                     next
-                      ? [...arr.filter((v) => v !== DECIDE_FOR_ME), o.value]
+                      ? [...arr, o.value]
                       : arr.filter((v) => v !== o.value),
                   )
                 }
@@ -73,25 +68,13 @@ function QuestionField({ q, value, note, onValue, onNote }: QuestionFieldProps) 
               {o.label}
             </label>
           ))}
-          {allowAuto && (
-            <label className="flex items-center gap-1.5">
-              <Checkbox
-                checked={arr.includes(DECIDE_FOR_ME)}
-                onCheckedChange={(next) => onValue(next ? [DECIDE_FOR_ME] : [])}
-              />
-              Decide for me
-            </label>
-          )}
         </div>
       )}
 
       {q.type === "select" && (
         <SelectWithOptions
           value={typeof value === "string" ? value : ""}
-          options={[
-            ...(q.options ?? []),
-            ...(allowAuto ? [{ value: DECIDE_FOR_ME, label: "Decide for me" }] : []),
-          ]}
+          options={q.options ?? []}
           onValueChange={(v) => onValue(v ?? "")}
           size="sm"
           className="w-full"
@@ -150,12 +133,14 @@ export function AskUserForm({
   if (readOnly) {
     const rows = summarizeAnswers(input.questions, answers);
     return (
-      <div className="w-full rounded-lg border border-border-default bg-surface-panel/60 p-3 space-y-1.5">
-        <div className="font-semibold text-text-primary">Questions answered</div>
+      <div className="mt-3 w-full space-y-3 rounded-lg border border-border-default bg-surface-panel/60 p-3 text-xs">
+        <div className="font-medium text-text-primary">Questions answered</div>
         {rows.map((row, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <span className="text-text-muted">{row.label}</span>
-            <Badge variant="secondary">{row.display || "—"}</Badge>
+          <div key={i} className="space-y-1">
+            <div className="font-normal text-text-muted">{row.label}</div>
+            <span className="inline-flex min-h-6 max-w-full items-center rounded-md border border-transparent bg-secondary px-2 py-0.5 text-xs leading-tight font-normal !text-secondary-foreground whitespace-normal break-words">
+              {row.display || "—"}
+            </span>
           </div>
         ))}
       </div>
@@ -165,8 +150,8 @@ export function AskUserForm({
   const canSubmit = allRequiredAnswered(input.questions, answers);
 
   return (
-    <div className="w-full rounded-lg border border-border-default bg-surface-panel/60 p-3 space-y-4">
-      {input.title && <div className="font-semibold text-text-primary">{input.title}</div>}
+    <div className="mt-3 w-full space-y-4 rounded-lg border border-border-default bg-surface-panel/60 p-3">
+      {input.title && <div className="text-xs font-semibold text-text-primary">{input.title}</div>}
       {input.questions.map((q) => (
         <QuestionField
           key={q.id}

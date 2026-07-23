@@ -6,21 +6,22 @@ const SELECTION_COLOR = "#0d99ff";
 const COMPONENT_SELECTION_COLOR = "#8b5cf6";
 // Mirror the Pixi overlay (drawSelection.ts): an 8px white handle fill with a
 // 1px stroke that is *centered* on the perimeter (Pixi's default stroke
-// alignment), plus a 1px outline stroke centered on the node edge. A centered
+// alignment). A centered CSS outline stroke straddles the node edge, so we
 // stroke straddles its path by half its width, so to reproduce it with CSS
 // (whose borders sit fully inside a border-box) we grow the element by the
 // stroke width and offset it by half the stroke. This makes the handle's outer
 // box HANDLE_BOX (9px) with a 7px white interior — matching Pixi exactly.
 const HANDLE_FILL_SIZE = 8;
-const STROKE_WIDTH = 1;
-const HANDLE_BOX = HANDLE_FILL_SIZE + STROKE_WIDTH;
+const HANDLE_STROKE_WIDTH = 1;
+const HANDLE_BOX = HANDLE_FILL_SIZE + HANDLE_STROKE_WIDTH;
 const HANDLE_OFFSET = HANDLE_BOX / 2;
-const STROKE_HALF = STROKE_WIDTH / 2;
 
 interface EmbedSelectionFrameProps {
   node: EmbedNode;
   absoluteX: number;
   absoluteY: number;
+  outlineStrokeWidth?: number;
+  showHandles?: boolean;
 }
 
 /** Walk ancestors to detect whether the node lives inside a component/instance. */
@@ -54,12 +55,16 @@ export function EmbedSelectionFrame({
   node,
   absoluteX,
   absoluteY,
+  outlineStrokeWidth = 1,
+  showHandles = true,
 }: EmbedSelectionFrameProps) {
   const rect = useEmbedScreenRect(absoluteX, absoluteY, node.width, node.height);
 
   const color = isInComponentContext(node.id)
     ? COMPONENT_SELECTION_COLOR
     : SELECTION_COLOR;
+
+  const outlineStrokeHalf = outlineStrokeWidth / 2;
 
   // Four corner handles (matches drawSelection.ts).
   const corners: Array<{ left: number; top: number }> = [
@@ -82,23 +87,23 @@ export function EmbedSelectionFrame({
         zIndex: 11,
       }}
     >
-      {/* Outline: a 1px border centered on the node edge, matching Pixi's
-          centered stroke. Grown by STROKE_HALF on every side so the border band
+      {/* Outline centered on the node edge. Grown by half the stroke width on
+          every side so the border band
           straddles the edge instead of sitting inside it. */}
       <div
         data-embed-selection-outline
         style={{
           position: "absolute",
-          left: -STROKE_HALF,
-          top: -STROKE_HALF,
-          right: -STROKE_HALF,
-          bottom: -STROKE_HALF,
-          border: `${STROKE_WIDTH}px solid ${color}`,
+          left: -outlineStrokeHalf,
+          top: -outlineStrokeHalf,
+          right: -outlineStrokeHalf,
+          bottom: -outlineStrokeHalf,
+          border: `${outlineStrokeWidth}px solid ${color}`,
           boxSizing: "border-box",
           pointerEvents: "none",
         }}
       />
-      {corners.map((c, i) => (
+      {showHandles && corners.map((c, i) => (
         <div
           key={i}
           data-embed-selection-handle
@@ -109,7 +114,7 @@ export function EmbedSelectionFrame({
             width: HANDLE_BOX,
             height: HANDLE_BOX,
             background: "#ffffff",
-            border: `${STROKE_WIDTH}px solid ${color}`,
+            border: `${HANDLE_STROKE_WIDTH}px solid ${color}`,
             boxSizing: "border-box",
             pointerEvents: "none",
           }}

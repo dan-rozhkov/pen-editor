@@ -23,6 +23,7 @@ import { CircleNotch } from "@phosphor-icons/react";
 import { useClipboardStore } from "@/store/clipboardStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useHistoryStore } from "@/store/historyStore";
+import { useHoverStore } from "@/store/hoverStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useLoadingStore } from "@/store/loadingStore";
 import { useSceneStore } from "@/store/sceneStore";
@@ -253,6 +254,20 @@ export function PixiCanvas() {
     selectedFrameNode,
     selectedFramePosition,
   } = usePixiCanvasState({ editingNodeId, editingMode, instanceContext, selectedIds });
+  const hoveredNodeId = useHoverStore((s) => s.hoveredNodeId);
+  const hoveredEmbedNode = useSceneStore((s) =>
+    hoveredNodeId && s.nodesById[hoveredNodeId]?.type === "embed"
+      ? (s.nodesById[hoveredNodeId] as EmbedNode)
+      : null,
+  );
+  const hoveredEmbedPosition = useMemo(() => {
+    if (!hoveredEmbedNode) return null;
+    return getNodeAbsolutePositionWithLayout(
+      useSceneStore.getState().getNodes(),
+      hoveredEmbedNode.id,
+      useLayoutStore.getState().calculateLayoutForFrame,
+    );
+  }, [hoveredEmbedNode]);
 
   const handleDocumentDrop = useCallback(
     (
@@ -481,6 +496,18 @@ export function PixiCanvas() {
           absoluteY={selectedEmbedPosition.y}
         />
       )}
+      {hoveredEmbedNode &&
+        hoveredEmbedPosition &&
+        hoveredEmbedNode.id !== selectedEmbedNode?.id &&
+        editingMode !== "embed" && (
+          <EmbedSelectionFrame
+            node={hoveredEmbedNode}
+            absoluteX={hoveredEmbedPosition.x}
+            absoluteY={hoveredEmbedPosition.y}
+            outlineStrokeWidth={2}
+            showHandles={false}
+          />
+        )}
       {selectedEmbedNode && selectedEmbedPosition && editingMode !== "embed" && (
         <EmbedActionBar
           node={selectedEmbedNode}

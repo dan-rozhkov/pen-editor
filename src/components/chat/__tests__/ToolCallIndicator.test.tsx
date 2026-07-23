@@ -30,6 +30,11 @@ describe("<ToolCallIndicator />", () => {
     expect(screen.getByText("Get Variables")).toBeTruthy();
   });
 
+  it("renders a readable label for load_skill", () => {
+    render(<ToolCallIndicator part={toolPart({ type: "tool-load_skill" })} />);
+    expect(screen.getByText("Load skill")).toBeTruthy();
+  });
+
   it("falls back to the raw tool name when unmapped", () => {
     render(
       <ToolCallIndicator

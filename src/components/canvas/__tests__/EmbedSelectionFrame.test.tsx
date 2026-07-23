@@ -57,6 +57,7 @@ describe("<EmbedSelectionFrame />", () => {
       "[data-embed-selection-outline]",
     ) as HTMLElement;
     expect(outline.style.borderColor).toBe("#0d99ff");
+    expect(outline.style.borderWidth).toBe("1px");
   });
 
   it("is non-interactive so pointer events reach the Pixi canvas underneath", () => {
@@ -67,6 +68,23 @@ describe("<EmbedSelectionFrame />", () => {
       "[data-embed-selection-frame]",
     ) as HTMLElement;
     expect(frame.style.pointerEvents).toBe("none");
+  });
+
+  it("supports a 2px hover outline without transform handles", () => {
+    const { container } = render(
+      <EmbedSelectionFrame
+        node={embed}
+        absoluteX={0}
+        absoluteY={0}
+        outlineStrokeWidth={2}
+        showHandles={false}
+      />,
+    );
+    const outline = container.querySelector(
+      "[data-embed-selection-outline]",
+    ) as HTMLElement;
+    expect(outline.style.borderWidth).toBe("2px");
+    expect(container.querySelectorAll("[data-embed-selection-handle]")).toHaveLength(0);
   });
 
   it("uses the component selection color when the embed is inside a component", () => {
