@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.66.0] - 2026-07-23
+
+### Added
+- **Clickable prototype export** (PROTO-01): select 2+ embed screens and a **Prototype** section appears in the properties panel. "Export prototype (.zip)" extracts each screen's clickable elements, asks the backend (`/api/prototype-link`) to wire a navigation graph, applies it as native relative `<a href>` links (no JS injection — works from `file://`), and packages one standalone `.html` per screen plus an `index.html` redirect to the top-left start screen. Each file preserves its `<head>` styles/links so the prototype keeps its CSS. Zips via `fflate`.
+
 ## [0.65.0] - 2026-07-23
 
 ### Added
