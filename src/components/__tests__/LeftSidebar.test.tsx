@@ -4,6 +4,7 @@ import { resetStores } from "@/test/fixtures";
 import { useDocumentStore } from "@/store/documentStore";
 import { usePageStore } from "@/store/pageStore";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
+import { useMcpBridgeStore } from "@/store/mcpBridgeStore";
 
 /**
  * LeftSidebar is a layout container composing the Toolbar, an editable file
@@ -193,6 +194,28 @@ describe("<LeftSidebar />", () => {
     useLeftSidebarStore.setState({ activeSection: "slides" });
     render(<LeftSidebar />);
     expect(screen.getByLabelText(OFFLINE_DOCUMENT_TITLE)).toBeTruthy();
+  });
+
+  it("shows the MCP connected indicator when the bridge is connected", () => {
+    useMcpBridgeStore.setState({ status: "connected" });
+    useDocumentStore.setState({ fileName: "design.pen" });
+    render(<LeftSidebar />);
+    expect(screen.getByLabelText("MCP connected")).toBeTruthy();
+  });
+
+  it("shows the MCP connecting indicator while reconnecting", () => {
+    useMcpBridgeStore.setState({ status: "connecting" });
+    useDocumentStore.setState({ fileName: "design.pen" });
+    render(<LeftSidebar />);
+    expect(screen.getByLabelText("MCP connecting")).toBeTruthy();
+  });
+
+  it("hides the MCP indicator when the bridge is off", () => {
+    useMcpBridgeStore.setState({ status: "off" });
+    useDocumentStore.setState({ fileName: "design.pen" });
+    render(<LeftSidebar />);
+    expect(screen.queryByLabelText("MCP connected")).toBeNull();
+    expect(screen.queryByLabelText("MCP connecting")).toBeNull();
   });
 
   it("renames the document via the editable file name field", () => {

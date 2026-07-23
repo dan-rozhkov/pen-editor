@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 
 import { registerServiceWorker } from '@/pwa/registerServiceWorker'
 import { initDesktopBridge } from '@/lib/desktopBridge'
+import { startMcpBridgeIfConfigured } from '@/lib/mcpBridge'
 
 import './index.css'
 import App from './App.tsx'
@@ -14,6 +15,7 @@ if (import.meta.env.PROD) {
 }
 
 initDesktopBridge()
+startMcpBridgeIfConfigured()
 
 // Dev-only: expose internals for E2E testing
 if (import.meta.env.DEV) {
