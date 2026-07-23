@@ -164,7 +164,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
     onCullingEviction: (ids) => rasterCacheManager?.onDirectContainerMutation(ids, useSceneStore.getState()),
     getCachedFrameIds: () => rasterCacheManager?.cachedFrameIds() ?? [],
   });
-  const { updateCulling, resetCullingState, collectDirtyAutoLayoutFrames, applyAutoLayoutPositions, hasCulledDescendant } = autoLayoutMgr;
+  const { updateCulling, resetCullingState, collectDirtyAutoLayoutFrames, applyAutoLayoutPositions, resetFramesLeavingAutoLayout, hasCulledDescendant } = autoLayoutMgr;
 
   // Task 13: flagged raster cache manager — `null` (never called) when the
   // flag is off, per the flag's contract.
@@ -590,6 +590,12 @@ export function createPixiSync(sceneRoot: Container): () => void {
     if (dirtyAutoLayoutFrames.size > 0) {
       applyAutoLayoutPositions(state, dirtyAutoLayoutFrames);
     }
+    // Frames that just *left* auto-layout aren't in `dirtyAutoLayoutFrames`
+    // (they no longer have `layout.autoLayout`), yet their children may still
+    // sit at the yoga positions written straight onto the containers. Snap
+    // those children back to their stored coordinates so the canvas updates
+    // without waiting for a full rebuild (e.g. a page switch).
+    resetFramesLeavingAutoLayout(state, prev, changedIds);
     // New text nodes can appear during incremental subtree rebuilds (e.g. instance edits).
     // Re-apply current resolution so they don't stay at the default and look blurry.
     resolutionMgr.refreshTextResolution();

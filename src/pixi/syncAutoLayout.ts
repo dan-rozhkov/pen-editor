@@ -367,11 +367,70 @@ export function createAutoLayoutManager(ctx: SyncContext, cullingEviction?: Cull
     }
   }
 
+  /**
+   * Snap a frame's direct children back to their stored positions/sizes when
+   * that frame stops being auto-layout — undo of "enable auto layout", the
+   * disable-auto-layout button, clearing `layout.autoLayout`, or retyping the
+   * frame to another node type.
+   *
+   * Auto-layout positions/sizes are written straight onto child *containers*
+   * by `applyAutoLayoutPositions`, out-of-band from each child's stored
+   * `x/y/width/height`. Nothing un-applies them: toggling a frame's
+   * auto-layout never moves the children's stored coordinates, so the
+   * incremental diff sees each child node as unchanged (or, on undo, changed
+   * to the very same stored values) and `updateNodeContainer` skips
+   * repositioning. The container therefore keeps its stale yoga position until
+   * the next full rebuild (e.g. switching pages). This pass detects frames
+   * leaving auto-layout and resets their direct children so the canvas
+   * updates immediately.
+   */
+  function resetFramesLeavingAutoLayout(
+    state: SceneState,
+    prev: SceneState,
+    changedIds: Set<string>,
+  ): void {
+    for (const id of changedIds) {
+      const prevNode = prev.nodesById[id];
+      // Only frames that *were* auto-layout can have stale yoga positions to undo.
+      if (!prevNode || !isFlatFrameNode(prevNode) || !prevNode.layout?.autoLayout) {
+        continue;
+      }
+      const node = state.nodesById[id];
+      // Still an auto-layout frame → its children are (correctly) yoga-positioned.
+      if (node && isFlatFrameNode(node) && node.layout?.autoLayout) continue;
+
+      for (const childId of state.childrenById[id] ?? []) {
+        const childNode = state.nodesById[childId];
+        const childEntry = registry.get(childId);
+        if (!childNode || !childEntry) continue;
+        // Position within the now-plain parent is always the child's stored x/y.
+        childEntry.container.position.set(childNode.x, childNode.y);
+        // Size: only restore stored dimensions for leaf-ish children. A child
+        // that is *itself* an auto-layout frame owns its own display size via
+        // its layout (e.g. fit_content, which diverges from the stored size) —
+        // forcing the stored size here would clobber that. Its position moving
+        // with the parent is enough; its own layout keeps its size.
+        if (isFlatFrameNode(childNode) && childNode.layout?.autoLayout) continue;
+        withAncestorThemes(childId, state.parentById, state.nodesById, () => {
+          applyLayoutSize(
+            childEntry.container,
+            childNode,
+            childNode.width,
+            childNode.height,
+            state.nodesById,
+            state.childrenById,
+          );
+        });
+      }
+    }
+  }
+
   return {
     updateCulling,
     resetCullingState,
     collectDirtyAutoLayoutFrames,
     applyAutoLayoutPositions,
+    resetFramesLeavingAutoLayout,
     hasCulledDescendant,
   };
 }
