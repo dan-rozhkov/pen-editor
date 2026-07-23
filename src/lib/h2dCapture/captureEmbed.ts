@@ -1,6 +1,6 @@
 import type { H2dDocument } from "@/lib/h2dPaste/h2dTypes";
 import { sanitizeEmbedHtml } from "@/utils/sanitizeEmbedHtml";
-import { EMBED_DEFAULT_LINE_HEIGHT } from "@/utils/embedHtmlUtils";
+import { EMBED_DEFAULT_LINE_HEIGHT, forceEagerImageLoading } from "@/utils/embedHtmlUtils";
 import captureBundleSource from "@/vendor/h2dCapture/capture.js?raw";
 import { inlinePhosphorIconSvgs } from "./phosphorIcons";
 
@@ -15,6 +15,63 @@ interface H2dCaptureWindow extends Window {
 
 /** Guard against a `load` event that never fires (e.g. a hung srcdoc parse). */
 const IFRAME_LOAD_TIMEOUT_MS = 10_000;
+
+/**
+ * Guard against an image that never settles (load/error) after eager loading
+ * is forced — a hung/blocked network request must never stall conversion.
+ */
+const IMAGE_SETTLE_TIMEOUT_MS = 10_000;
+
+/**
+ * Neutralise lazy-loading on every image in `doc` (see `forceEagerImageLoading`'s
+ * doc comment for why: the capture iframe is off-screen and `visibility:hidden`,
+ * which is exactly the condition that makes `loading="lazy"` never fire in
+ * WebKit) and then wait for any image that isn't `complete` yet to actually
+ * finish loading (or fail) before the capture reads it.
+ *
+ * This matters beyond `forceEagerImageLoading`'s original live-embed use case:
+ * the capture bundle reads `img.currentSrc` and records layout directly, so an
+ * image that hasn't started loading yet has an empty `currentSrc` (silently
+ * dropped from the h2d document) and may also report the wrong box.
+ *
+ * Best-effort: never rejects and never hangs past `timeoutMs`, mirroring how
+ * Phosphor icon inlining below is best-effort — a slow/broken image must
+ * degrade (missing image) rather than block the whole conversion.
+ */
+export async function settleCaptureImages(
+  doc: Document,
+  timeoutMs: number = IMAGE_SETTLE_TIMEOUT_MS,
+): Promise<void> {
+  forceEagerImageLoading(doc);
+
+  // `querySelectorAll` rather than `doc.images`: for a real DOM document both
+  // are equivalent, but `doc.images` is unavailable on a happy-dom document
+  // created via `document.implementation.createHTMLDocument` (used by this
+  // function's own unit tests to sidestep the srcdoc-iframe limitation
+  // documented in captureEmbed.test.ts) — querySelectorAll works uniformly.
+  const pending = Array.from(doc.querySelectorAll("img")).filter((img) => !img.complete);
+  if (pending.length === 0) return;
+
+  const waitForImage = (img: HTMLImageElement): Promise<void> =>
+    new Promise((resolve) => {
+      const settle = () => resolve();
+      img.addEventListener("load", settle, { once: true });
+      img.addEventListener("error", settle, { once: true });
+    });
+
+  // Clear the guard once the images win the race — otherwise every conversion
+  // leaves a live 10s timer behind (and keeps a pending timer in tests).
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, timeoutMs);
+  });
+
+  try {
+    await Promise.race([Promise.all(pending.map(waitForImage)), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /**
  * Render `htmlContent` in a hidden same-origin iframe at the embed's size and
@@ -81,6 +138,13 @@ export async function captureEmbedHtmlToH2d(
     });
     const win = iframe.contentWindow as H2dCaptureWindow | null;
     if (!win) throw new Error("h2d capture iframe has no contentWindow");
+    // Kick off eager image loading as early as possible so the network
+    // requests race fonts/Phosphor-inlining instead of starting after them —
+    // see `forceEagerImageLoading`'s doc comment for why this iframe (hidden,
+    // off-screen) needs it at all. `settleCaptureImages` below calls this
+    // again before waiting; it's idempotent, so this early call only buys
+    // parallelism, it isn't load-bearing on its own.
+    forceEagerImageLoading(win.document);
     await win.document.fonts.ready;
     // Swap Phosphor icon-font glyphs for inline SVGs so the capture emits
     // them as SVG image fills instead of dropping the ::before glyph (which
@@ -92,6 +156,10 @@ export async function captureEmbedHtmlToH2d(
     } catch (error) {
       console.warn("Phosphor icon inlining failed; icons may be missing:", error);
     }
+    // Wait for images to actually finish loading (or fail) before the
+    // capture reads `img.currentSrc`/layout — see `settleCaptureImages`'s
+    // doc comment. Best-effort/bounded, so this can never hang conversion.
+    await settleCaptureImages(win.document);
     await new Promise<void>((resolve) =>
       win.requestAnimationFrame(() => resolve()),
     );

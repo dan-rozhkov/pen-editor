@@ -20,7 +20,7 @@ vi.mock("@/utils/sanitizeEmbedHtml", () => ({
 }));
 
 import { sanitizeEmbedHtml } from "@/utils/sanitizeEmbedHtml";
-import { captureEmbedHtmlToH2d } from "../captureEmbed";
+import { captureEmbedHtmlToH2d, settleCaptureImages } from "../captureEmbed";
 
 const sanitizeEmbedHtmlMock = vi.mocked(sanitizeEmbedHtml);
 
@@ -97,5 +97,110 @@ describe("captureEmbedHtmlToH2d", () => {
       // finally block removes the iframe even on the timeout path
       expect(document.querySelector("iframe")).toBeNull();
     });
+  });
+});
+
+/**
+ * `settleCaptureImages` is extracted specifically so it can be exercised
+ * directly against a hand-built happy-dom `Document`, bypassing the
+ * srcdoc-iframe limitation documented above.
+ *
+ * IMPORTANT happy-dom quirk verified empirically here (not assumed): a
+ * freshly created `<img>` reports `complete === true` even after `src` is
+ * set and the element is attached to the document — happy-dom never
+ * simulates real image network loading, so `load`/`error` are never fired on
+ * their own either. To exercise the "pending image" paths below we therefore
+ * force `complete` to `false` with `Object.defineProperty` and fire the
+ * `load`/`error` event ourselves; that's the only way to construct a
+ * "pending" image under this environment.
+ */
+describe("settleCaptureImages", () => {
+  function makePendingImage(doc: Document): HTMLImageElement {
+    const img = doc.createElement("img");
+    img.src = "https://example.com/pic.png";
+    img.loading = "lazy";
+    Object.defineProperty(img, "complete", { value: false, configurable: true });
+    doc.body.appendChild(img);
+    return img;
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("resolves immediately when the document has no images", async () => {
+    const doc = document.implementation.createHTMLDocument("empty");
+    await expect(settleCaptureImages(doc)).resolves.toBeUndefined();
+  });
+
+  it("sets loading=eager and decoding=async on lazy images in the document", async () => {
+    const doc = document.implementation.createHTMLDocument("lazy");
+    const img = doc.createElement("img");
+    img.loading = "lazy";
+    doc.body.appendChild(img);
+
+    await settleCaptureImages(doc);
+
+    // The empty `currentSrc` that drops an image from the h2d document is
+    // caused by `loading=lazy`; `decoding=async` rides along from
+    // `forceEagerImageLoading` and keeps the extra decodes off the main thread.
+    expect(img.getAttribute("loading")).toBe("eager");
+    expect(img.getAttribute("decoding")).toBe("async");
+  });
+
+  it("waits for a pending image and resolves once it fires load", async () => {
+    const doc = document.implementation.createHTMLDocument("pending");
+    const img = makePendingImage(doc);
+
+    const settled = vi.fn();
+    const promise = settleCaptureImages(doc).then(settled);
+
+    // Not settled yet — the image hasn't fired load/error.
+    await Promise.resolve();
+    expect(settled).not.toHaveBeenCalled();
+
+    img.dispatchEvent(new Event("load"));
+    await promise;
+
+    expect(settled).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves (does not hang or reject) when an image fires error", async () => {
+    const doc = document.implementation.createHTMLDocument("broken");
+    const img = makePendingImage(doc);
+
+    const promise = settleCaptureImages(doc);
+    img.dispatchEvent(new Event("error"));
+
+    await expect(promise).resolves.toBeUndefined();
+  });
+
+  it("resolves via the timeout when an image never settles", async () => {
+    vi.useFakeTimers();
+    const doc = document.implementation.createHTMLDocument("hung");
+    makePendingImage(doc);
+
+    const settled = vi.fn();
+    void settleCaptureImages(doc, 10_000).then(settled);
+
+    await Promise.resolve();
+    expect(settled).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(settled).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays resolved when an image errors after the timeout already won the race", async () => {
+    const doc = document.implementation.createHTMLDocument("safe");
+    const img = makePendingImage(doc);
+
+    // Timeout wins first (the image never settles within 5ms)...
+    await expect(settleCaptureImages(doc, 5)).resolves.toBeUndefined();
+
+    // ...and the late `error` must not resurface as an unhandled rejection or
+    // throw through the listener that is still attached to the abandoned image.
+    expect(() => img.dispatchEvent(new Event("error"))).not.toThrow();
+    await expect(Promise.resolve()).resolves.toBeUndefined();
   });
 });
