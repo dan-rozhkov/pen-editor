@@ -11,6 +11,7 @@ import { useGuidesStore } from "@/store/guidesStore";
 import { useMeasurementsStore } from "@/store/measurementsStore";
 import { useCommentsStore } from "@/store/commentsStore";
 import { useDevExportStore } from "@/store/devExportStore";
+import { useMcpBridgeStore } from "@/store/mcpBridgeStore";
 
 /** Reset every store the tool handlers touch to a clean baseline. */
 export function resetStores(): void {
@@ -50,6 +51,7 @@ export function resetStores(): void {
   // side effect — reset explicitly here so overrides don't leak between
   // tests in the same file.
   useDevExportStore.setState({ overrides: {} });
+  useMcpBridgeStore.setState({ status: "off" });
 }
 
 /**
