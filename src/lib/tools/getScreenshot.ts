@@ -1,12 +1,21 @@
 import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { useSceneStore } from "@/store/sceneStore";
+import { useSelectionStore } from "@/store/selectionStore";
 import { findPixiChild } from "@/utils/pixiUtils";
 import type { ToolHandler } from "../toolRegistry";
 
 export const getScreenshot: ToolHandler = async (args) => {
-  const nodeId = args.nodeId as string | undefined;
+  let nodeId = args.nodeId as string | undefined;
+
   if (!nodeId) {
-    return JSON.stringify({ error: "nodeId is required" });
+    const { selectedIds } = useSelectionStore.getState();
+    if (selectedIds.length === 0) {
+      return JSON.stringify({ error: "nodeId is required (no node is selected)." });
+    }
+    if (selectedIds.length > 1) {
+      return JSON.stringify({ error: "nodeId is required when multiple nodes are selected." });
+    }
+    nodeId = selectedIds[0];
   }
 
   const { nodesById } = useSceneStore.getState();
