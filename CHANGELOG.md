@@ -8,6 +8,11 @@ While on `0.x`, minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.64.0] - 2026-07-23
+
+### Added
+- **Eyedropper: press `I` to set the fill from any color on screen.** With one or more elements selected, `I` opens the native screen-color picker (Figma-style) and applies the sampled color as the Fill of every selected node. Cancel with Escape for no change; picking across a multi-selection is a single undo step. Feature-detected — a no-op in browsers without the EyeDropper API and in view mode.
+
 ## [0.63.0] - 2026-07-23
 
 ### Added
