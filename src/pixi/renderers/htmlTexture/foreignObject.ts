@@ -1,4 +1,5 @@
 import { sanitizeEmbedHtml } from "@/utils/sanitizeEmbedHtml";
+import { forceEagerImageLoading } from "@/utils/embedHtmlUtils";
 import { isSourceVisuallyEmpty } from "./visualEmptinessCheck";
 
 const EMBED_PREFLIGHT_STYLE_ID = "embed-tailwind-preflight";
@@ -153,6 +154,12 @@ export function normalizeHtmlForEmbedRender(html: string): string {
         el.style.position = "absolute";
       }
     }
+
+    // This pipeline rasterizes the embed entirely off-screen, so a
+    // `loading="lazy"` image would never intersect any viewport and would
+    // silently rasterize blank on WebKit — the same root cause the live
+    // Shadow-DOM mount fixes. See `forceEagerImageLoading`'s doc comment.
+    forceEagerImageLoading(container);
 
     return container.innerHTML;
   } catch {
