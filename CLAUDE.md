@@ -104,6 +104,18 @@ desktop menu — update `pen-editor-desktop/src/main/menu.ts` (and its
 CLAUDE.md) in the same change. On the web `window.penDesktop` is absent and
 the bridge is a no-op.
 
+### MCP bridge
+
+`src/lib/mcpBridge.ts` connects this tab to the backend's `/api/mcp/ws`
+(started once from `main.tsx` iff `VITE_MCP_WS_TOKEN` is set) so external
+MCP clients can drive the editor through the same `toolHandlers` the
+built-in chat uses. `src/store/mcpBridgeStore.ts` tracks
+`off | connecting | connected`, shown as a small dot next to the file name
+in `LeftSidebar.tsx` (beside the offline cloud indicator). See
+`pen-editor-backend/CLAUDE.md`'s "MCP server" section and
+`pen-editor-backend/docs/superpowers/specs/2026-07-23-mcp-server-design.md`
+for the full design.
+
 ### File Format
 
 The editor reads/writes `.pen` files. These are accessed exclusively through the Pencil MCP tools — never read `.pen` files directly with file I/O.
