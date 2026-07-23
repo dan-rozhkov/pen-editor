@@ -22,6 +22,7 @@ import { cancelActiveScale } from "@/pixi/interaction/scaleController";
 import { cancelActiveMeasure } from "@/pixi/interaction/measureToolController";
 import { enterPathEditMode } from "@/pixi/interaction/pathEditMode";
 import { isTypingTarget, selectAllInScope } from "./keyboardShortcutUtils";
+import { applyEyedropperColor } from "@/lib/eyedropper";
 import {
   handleArrowKeys,
   handleEnterEditing,
@@ -562,6 +563,26 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
       // defensive activeTool re-check in measureToolController).
       cancelActiveMeasure();
       toggleTool("measure");
+      return;
+    }
+
+    // Eyedropper (Figma-style, ai-05): "I" samples a color from anywhere on
+    // screen via the native EyeDropper API and applies it as the Fill of
+    // every selected node. Fire-once action, not a persistent draw tool —
+    // deliberately not in TOOL_BY_KEY_CODE. Placed before that generic
+    // dispatch (no tool currently claims "I" — see toolDefinitions.ts).
+    // Selection is captured synchronously since the native picker blocks
+    // interaction, so it can't change mid-pick. Not added to the read-only
+    // allowlist above — editing fills requires edit mode.
+    if (!isTyping && e.code === "KeyI" && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+      const ids = useSelectionStore.getState().selectedIds;
+      if (ids.length > 0 && typeof window !== "undefined" && "EyeDropper" in window) {
+        e.preventDefault();
+        new window.EyeDropper!()
+          .open()
+          .then((r) => applyEyedropperColor(r.sRGBHex, ids))
+          .catch(() => {}); // cancelled (Escape) or unsupported — no change
+      }
       return;
     }
 
