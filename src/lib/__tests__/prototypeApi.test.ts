@@ -11,8 +11,8 @@ describe("fetchPrototypeLinks", () => {
     ));
     vi.stubGlobal("fetch", fetchMock);
     const links = await fetchPrototypeLinks([
-      { id: "a", name: "Login", candidates: [] },
-      { id: "b", name: "Dashboard", candidates: [] },
+      { id: "a", name: "Login", content: "", candidates: [] },
+      { id: "b", name: "Dashboard", content: "", candidates: [] },
     ]);
     expect(links).toEqual([{ screenId: "a", protoId: "p0", targetScreenId: "b" }]);
     expect(fetchMock).toHaveBeenCalledOnce();
@@ -22,6 +22,8 @@ describe("fetchPrototypeLinks", () => {
 
   it("throws on non-ok response", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 502 })));
-    await expect(fetchPrototypeLinks([{ id: "a", name: "A", candidates: [] }])).rejects.toThrow();
+    await expect(
+      fetchPrototypeLinks([{ id: "a", name: "A", content: "", candidates: [] }]),
+    ).rejects.toThrow();
   });
 });

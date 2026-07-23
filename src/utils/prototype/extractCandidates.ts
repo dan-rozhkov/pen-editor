@@ -12,10 +12,18 @@ export interface ExtractResult {
    */
   headHtml: string;
   candidates: PrototypeCandidate[];
+  /**
+   * The screen's visible text (`doc.body.textContent`), whitespace-collapsed
+   * and capped at ~1200 chars — sent to the link-graph LLM so it has enough
+   * context to reason about where a screen fits in the flow, without
+   * shipping the full HTML (expensive on tokens).
+   */
+  contentText: string;
 }
 
 const SELECTOR = 'a, button, [role="button"], [onclick]';
 const MAX_TEXT = 80;
+const MAX_CONTENT_TEXT = 1200;
 
 /**
  * Parse a screen's `htmlContent`, find clickable elements (`a`, `button`,
@@ -38,9 +46,15 @@ export function extractPrototypeCandidates(html: string): ExtractResult {
     if (href) cand.href = href;
     candidates.push(cand);
   });
+  const contentText = (doc.body.textContent ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, MAX_CONTENT_TEXT);
+
   return {
     annotatedHtml: doc.body.innerHTML,
     headHtml: doc.head.innerHTML,
     candidates,
+    contentText,
   };
 }

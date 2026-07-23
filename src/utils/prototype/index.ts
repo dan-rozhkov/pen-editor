@@ -6,6 +6,7 @@ import { assignScreenSlugs, pickStartScreenId } from "./slug";
 import { applyPrototypeLinks } from "./applyLinks";
 import { planPrototypeFiles, type PrototypeFile } from "./buildFiles";
 import { fetchPrototypeLinks } from "@/lib/prototypeApi";
+import { heuristicPrototypeLinks } from "./heuristicLinks";
 
 export interface PrototypeEmbed {
   id: string;
@@ -30,15 +31,50 @@ export async function buildPrototypeFiles(
   const extracted = embeds.map((e) => ({ ...e, ...extractPrototypeCandidates(e.html) }));
   const slugs = assignScreenSlugs(embeds);
   const startId = pickStartScreenId(embeds);
+  const slugSet = new Set(slugs.values());
 
-  const links = await fetchLinks(
-    extracted.map((e) => ({ id: e.id, name: e.name, candidates: e.candidates })),
+  // Screens are keyed by slug (not the embed's node id) so the model reasons
+  // over and returns stable slugs — both for its own screenId/targetScreenId
+  // and so they line up 1:1 with the deterministic heuristic pass below.
+  const screenInputs = extracted.map((e) => ({
+    id: slugs.get(e.id)!,
+    name: e.name,
+    content: e.contentText,
+    candidates: e.candidates,
+  }));
+
+  // Deterministic pass: always runs, never fails, catches the obvious cases
+  // (a "Pricing" button on a screen named "Pricing") even when the model
+  // returns nothing or the backend call fails outright.
+  const heuristicLinks = heuristicPrototypeLinks(
+    screenInputs.map((s) => ({ slug: s.id, name: s.name, candidates: s.candidates })),
   );
 
+  let modelLinks: PrototypeLink[];
+  try {
+    modelLinks = await fetchLinks(screenInputs);
+  } catch (err) {
+    console.warn("prototype-link: fetchLinks failed, falling back to heuristic links only", err);
+    modelLinks = [];
+  }
+
+  // Merge: one target per (screenId, protoId). Model links first, then
+  // heuristic links overwrite on conflict — a heuristic match is a
+  // high-confidence exact/near-exact name match, so it wins over the
+  // model's guess. Both sides are keyed and targeted by slug already.
+  const merged = new Map<string, string>();
+  for (const l of modelLinks) {
+    if (!slugSet.has(l.screenId) || !slugSet.has(l.targetScreenId)) continue;
+    merged.set(`${l.screenId}::${l.protoId}`, l.targetScreenId);
+  }
+  for (const l of heuristicLinks) {
+    merged.set(`${l.screenId}::${l.protoId}`, l.targetScreenId);
+  }
+
   const screens = extracted.map((e) => {
-    const forScreen = links
-      .filter((l) => l.screenId === e.id)
-      .map((l) => ({ protoId: l.protoId, targetSlug: slugs.get(l.targetScreenId) }))
+    const slug = slugs.get(e.id)!;
+    const forScreen = e.candidates
+      .map((c) => ({ protoId: c.protoId, targetSlug: merged.get(`${slug}::${c.protoId}`) }))
       .filter((l): l is { protoId: string; targetSlug: string } => l.targetSlug != null);
     return {
       id: e.id,

@@ -10,6 +10,7 @@ export interface PrototypeCandidate {
 export interface PrototypeScreenInput {
   id: string;
   name: string;
+  content: string;
   candidates: PrototypeCandidate[];
 }
 

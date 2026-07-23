@@ -27,4 +27,16 @@ describe("extractPrototypeCandidates", () => {
     expect(headHtml).toContain(".a{color:red}");
     expect(annotatedHtml).not.toContain("<style>");
   });
+
+  it("returns whitespace-collapsed visible text as contentText", () => {
+    const html = `<body>  <h1>Welcome\n\nback</h1>  <p>Sign  in   below.</p></body>`;
+    const { contentText } = extractPrototypeCandidates(html);
+    expect(contentText).toBe("Welcome back Sign in below.");
+  });
+
+  it("caps contentText at ~1200 chars", () => {
+    const html = `<body><p>${"x".repeat(2000)}</p></body>`;
+    const { contentText } = extractPrototypeCandidates(html);
+    expect(contentText.length).toBeLessThanOrEqual(1200);
+  });
 });
