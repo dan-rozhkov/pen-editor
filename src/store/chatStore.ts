@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
+import type { AttachedImage, ChatLaunchPayload, QueuedChatMessage } from "@/types/chat";
 import { getDefaultModel, getModelOptions } from "@/lib/chatModels";
 
 /** Stable empty reference so the per-session selector never returns a fresh
@@ -10,6 +10,10 @@ export const NO_ATTACHED_IMAGES: AttachedImage[] = [];
 /** Stable empty reference for sessions with no dismissed selection previews,
  * for the same reason as NO_ATTACHED_IMAGES. Never mutated. */
 export const NO_DISMISSED_SELECTION: ReadonlySet<string> = new Set<string>();
+
+/** Stable empty reference for sessions with no queued messages, for the same
+ * reason as NO_ATTACHED_IMAGES. Never mutated. */
+export const NO_QUEUED_MESSAGES: QueuedChatMessage[] = [];
 
 export interface ChatTab {
   id: string;
@@ -37,6 +41,15 @@ interface ChatState {
   /** AbortControllers keyed by tab id — managed outside React */
   abortControllers: Record<string, AbortController>;
   launchQueue: Record<string, ChatLaunchPayload | undefined>;
+  /**
+   * Messages the user submitted while the agent was busy (chat status
+   * "submitted"/"streaming"), keyed by tab id, in FIFO send order. Distinct
+   * from `launchQueue` (a one-shot payload used to fan a single send out to
+   * extra parallel tabs) — this is a genuine per-tab queue that can hold
+   * several pending messages, drained one at a time as the session returns
+   * to "ready".
+   */
+  messageQueue: Record<string, QueuedChatMessage[]>;
   /** Export/clear handlers published by each mounted session, keyed by tab id */
   sessionActions: Record<string, ChatSessionActions>;
   /**
@@ -65,6 +78,11 @@ interface ChatState {
   setTabTitle: (tabId: string, title: string) => void;
   queueLaunchPayload: (tabId: string, payload: ChatLaunchPayload) => void;
   consumeLaunchPayload: (tabId: string) => ChatLaunchPayload | undefined;
+
+  enqueueMessage: (tabId: string, payload: ChatLaunchPayload) => void;
+  peekNextMessage: (tabId: string) => QueuedChatMessage | undefined;
+  removeQueuedMessage: (tabId: string, id: string) => void;
+  clearMessageQueue: (tabId: string) => void;
 
   registerAbortController: (tabId: string, controller: AbortController) => void;
   unregisterAbortController: (tabId: string) => void;
@@ -119,6 +137,12 @@ function generateTabId(): string {
   return `tab-${Date.now()}-${nextTabCounter++}`;
 }
 
+let nextMessageIdCounter = 1;
+
+function generateQueuedMessageId(): string {
+  return `qmsg-${Date.now()}-${nextMessageIdCounter++}`;
+}
+
 const initialTabId = generateTabId();
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -135,6 +159,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   activeTabId: initialTabId,
   abortControllers: {},
   launchQueue: {},
+  messageQueue: {},
   sessionActions: {},
   attachedImages: {},
   dismissedSelection: {},
@@ -185,6 +210,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       activeTabId,
       abortControllers,
       launchQueue,
+      messageQueue,
       attachedImages,
       dismissedSelection,
     } = get();
@@ -204,6 +230,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const parallelCount = normalizeParallelCount(localStorage.getItem("chat-parallel-count"));
       const newLaunchQueue = { ...launchQueue };
       delete newLaunchQueue[tabId];
+      const newMessageQueue = { ...messageQueue };
+      delete newMessageQueue[tabId];
       const newAttachedImages = { ...attachedImages };
       delete newAttachedImages[tabId];
       const newDismissedSelection = { ...dismissedSelection };
@@ -215,6 +243,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         parallelCount,
         abortControllers: newControllers,
         launchQueue: newLaunchQueue,
+        messageQueue: newMessageQueue,
         attachedImages: newAttachedImages,
         dismissedSelection: newDismissedSelection,
       });
@@ -224,10 +253,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const newTabs = tabs.filter((t) => t.id !== tabId);
     const newControllers = { ...abortControllers };
     const newLaunchQueue = { ...launchQueue };
+    const newMessageQueue = { ...messageQueue };
     const newAttachedImages = { ...attachedImages };
     const newDismissedSelection = { ...dismissedSelection };
     delete newControllers[tabId];
     delete newLaunchQueue[tabId];
+    delete newMessageQueue[tabId];
     delete newAttachedImages[tabId];
     delete newDismissedSelection[tabId];
 
@@ -247,6 +278,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       parallelCount: switchToTab?.parallelCount ?? get().parallelCount,
       abortControllers: newControllers,
       launchQueue: newLaunchQueue,
+      messageQueue: newMessageQueue,
       attachedImages: newAttachedImages,
       dismissedSelection: newDismissedSelection,
     });
@@ -289,6 +321,46 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return { launchQueue: nextQueue };
     });
     return payload;
+  },
+
+  enqueueMessage: (tabId, payload) => {
+    const queued: QueuedChatMessage = { id: generateQueuedMessageId(), payload };
+    set((s) => ({
+      messageQueue: {
+        ...s.messageQueue,
+        [tabId]: [...(s.messageQueue[tabId] ?? []), queued],
+      },
+    }));
+  },
+
+  peekNextMessage: (tabId) => {
+    const queue = get().messageQueue[tabId];
+    return queue && queue.length > 0 ? queue[0] : undefined;
+  },
+
+  removeQueuedMessage: (tabId, id) => {
+    set((s) => {
+      const queue = s.messageQueue[tabId];
+      if (!queue) return s;
+      const next = queue.filter((m) => m.id !== id);
+      if (next.length === queue.length) return s;
+      const nextQueue = { ...s.messageQueue };
+      if (next.length === 0) {
+        delete nextQueue[tabId];
+      } else {
+        nextQueue[tabId] = next;
+      }
+      return { messageQueue: nextQueue };
+    });
+  },
+
+  clearMessageQueue: (tabId) => {
+    set((s) => {
+      if (!s.messageQueue[tabId]) return s;
+      const nextQueue = { ...s.messageQueue };
+      delete nextQueue[tabId];
+      return { messageQueue: nextQueue };
+    });
   },
 
   registerAbortController: (tabId: string, controller: AbortController) => {

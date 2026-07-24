@@ -3,7 +3,7 @@ import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/re
 import { useState } from "react";
 import { ChatInput } from "../ChatInput";
 import { useChatStore } from "@/store/chatStore";
-import type { ChatLaunchPayload } from "@/types/chat";
+import type { ChatLaunchPayload, QueuedChatMessage } from "@/types/chat";
 import type { SelectionScreenshot } from "@/hooks/useSelectionScreenshots";
 
 // Controllable selection screenshots — the real hook needs the PixiJS renderer.
@@ -34,6 +34,8 @@ interface HarnessProps {
   stop?: () => void;
   initialInput?: string;
   sessionId?: string;
+  queuedMessages?: QueuedChatMessage[];
+  onRemoveQueued?: (id: string) => void;
 }
 
 /** Wrap ChatInput with local input state, mirroring the real parent wiring. */
@@ -43,6 +45,8 @@ function Harness({
   stop = () => {},
   initialInput = "",
   sessionId = "test-session",
+  queuedMessages = [],
+  onRemoveQueued = () => {},
 }: HarnessProps) {
   const [input, setInput] = useState(initialInput);
   return (
@@ -53,6 +57,8 @@ function Harness({
       onSubmit={onSubmit}
       isLoading={isLoading}
       stop={stop}
+      queuedMessages={queuedMessages}
+      onRemoveQueued={onRemoveQueued}
     />
   );
 }
@@ -119,12 +125,15 @@ describe("<ChatInput />", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it("does not submit while loading even with text present", () => {
-    const onSubmit = vi.fn();
+  it("still calls onSubmit on Enter while loading — the caller queues it", () => {
+    // While the agent is busy, Enter no longer no-ops: useDesignChat's
+    // sendPayload queues the message and returns true so the composer
+    // clears, showing up in the queue stack instead of failing silently.
+    const onSubmit = vi.fn(() => true);
     render(<Harness onSubmit={onSubmit} isLoading initialInput="ready" />);
     const textarea = screen.getByRole("textbox");
     fireEvent.keyDown(textarea, { key: "Enter" });
-    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onSubmit).toHaveBeenCalledWith({ text: "ready", images: undefined });
   });
 
   it("shows a Stop button while loading and fires the stop callback", () => {
@@ -135,6 +144,31 @@ describe("<ChatInput />", () => {
     expect(stop).toHaveBeenCalledTimes(1);
     // While loading, the Send button is replaced.
     expect(screen.queryByLabelText("Send")).toBeNull();
+  });
+
+  // FIX 4: the point of the queue feature is that mouse/touch users need a
+  // visible way to submit-to-queue too, not just Enter. When the agent is
+  // busy AND there's content in the composer, a queue-send control must sit
+  // alongside Stop (which stays available at all times).
+  it("shows a queue-send control alongside Stop while loading with content present", () => {
+    const stop = vi.fn();
+    const onSubmit = vi.fn(() => true);
+    render(
+      <Harness onSubmit={onSubmit} isLoading stop={stop} initialInput="queue me" />
+    );
+
+    expect(screen.getByLabelText("Stop")).toBeTruthy();
+    const queueBtn = screen.getByLabelText("Queue message") as HTMLButtonElement;
+    expect(queueBtn.disabled).toBe(false);
+
+    fireEvent.click(queueBtn);
+    expect(onSubmit).toHaveBeenCalledWith({ text: "queue me", images: undefined });
+  });
+
+  it("does not show a queue-send control while loading with an empty composer", () => {
+    render(<Harness onSubmit={vi.fn()} isLoading stop={vi.fn()} />);
+    expect(screen.getByLabelText("Stop")).toBeTruthy();
+    expect(screen.queryByLabelText("Queue message")).toBeNull();
   });
 
   it("surfaces the slash-command menu when the input is a slash query", () => {
@@ -415,6 +449,39 @@ describe("<ChatInput />", () => {
       mockSelection = selection;
       rerender(<Harness onSubmit={vi.fn()} />);
       expect(screen.getByAltText("Screen")).toBeTruthy();
+    });
+  });
+
+  describe("queued messages stack", () => {
+    const queued: QueuedChatMessage[] = [
+      { id: "q1", payload: { text: "first queued message" } },
+      { id: "q2", payload: { text: "second queued message" } },
+    ];
+
+    it("renders each queued message's text", () => {
+      render(<Harness onSubmit={vi.fn()} queuedMessages={queued} />);
+      expect(screen.getByText("first queued message")).toBeTruthy();
+      expect(screen.getByText("second queued message")).toBeTruthy();
+    });
+
+    it("calls onRemoveQueued with the item's id when its remove button is clicked", () => {
+      const onRemoveQueued = vi.fn();
+      render(
+        <Harness
+          onSubmit={vi.fn()}
+          queuedMessages={queued}
+          onRemoveQueued={onRemoveQueued}
+        />
+      );
+      const removeButtons = screen.getAllByLabelText("Remove queued message");
+      expect(removeButtons).toHaveLength(2);
+      fireEvent.click(removeButtons[0]);
+      expect(onRemoveQueued).toHaveBeenCalledWith("q1");
+    });
+
+    it("renders nothing when the queue is empty", () => {
+      render(<Harness onSubmit={vi.fn()} queuedMessages={[]} />);
+      expect(screen.queryByLabelText("Remove queued message")).toBeNull();
     });
   });
 });

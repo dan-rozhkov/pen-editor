@@ -7,7 +7,7 @@ import {
 } from "@phosphor-icons/react";
 import { SlashCommandMenu } from "./SlashCommandMenu";
 import type { SlashCommand } from "./slashCommands";
-import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
+import type { AttachedImage, ChatLaunchPayload, QueuedChatMessage } from "@/types/chat";
 import {
   useChatStore,
   NO_ATTACHED_IMAGES,
@@ -42,6 +42,10 @@ interface ChatInputProps {
   awaitingAnswer?: boolean;
   shouldFocus?: boolean;
   renderFooter?: (props: ChatInputFooterProps) => ReactNode;
+  /** Messages submitted while the agent was busy, shown as a stack above the input. */
+  queuedMessages: QueuedChatMessage[];
+  /** Removes a queued message before it gets auto-sent. */
+  onRemoveQueued: (id: string) => void;
 }
 
 interface ChatInputFooterProps {
@@ -81,6 +85,8 @@ export function ChatInput({
   awaitingAnswer,
   shouldFocus = false,
   renderFooter,
+  queuedMessages,
+  onRemoveQueued,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -257,7 +263,7 @@ export function ChatInput({
       // disabled while offline, but Enter bypasses it. Calling onSubmit
       // unconditionally lets its offline guard (in useDesignChat) surface a
       // visible per-message error instead of Enter being a silent no-op.
-      if ((input.trim() || images.length > 0) && !isLoading && !awaitingAnswer) {
+      if ((input.trim() || images.length > 0) && !awaitingAnswer) {
         const didSend = onSubmit({
           text: input.trim(),
           images: images.length > 0 ? images : undefined,
@@ -278,7 +284,6 @@ export function ChatInput({
       attachedImages,
       visibleSelection,
       supportsVision,
-      isLoading,
       awaitingAnswer,
       onSubmit,
       setAttachedImages,
@@ -454,6 +459,41 @@ export function ChatInput({
         </div>
       )}
 
+      {/* Messages submitted while the agent was busy — sent automatically,
+          one at a time, once the current turn finishes. */}
+      {queuedMessages.length > 0 && (
+        <div className="mb-2 flex flex-col gap-1">
+          {queuedMessages.map((queued) => (
+            <div
+              key={queued.id}
+              className="group flex items-center gap-2 rounded-md border border-border-default bg-secondary px-2 py-1 text-xs text-text-muted"
+            >
+              {queued.payload.images && queued.payload.images.length > 0 && (
+                <ImageIcon size={12} weight="light" className="shrink-0" />
+              )}
+              <span className="min-w-0 flex-1 truncate">
+                {queued.payload.text || "(image)"}
+              </span>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      onClick={() => onRemoveQueued(queued.id)}
+                      aria-label="Remove queued message"
+                      className="shrink-0 rounded p-0.5 text-text-muted opacity-0 transition-opacity hover:bg-secondary group-hover:opacity-100"
+                    >
+                      <XIcon size={10} />
+                    </button>
+                  }
+                />
+                <TooltipContent>Remove queued message</TooltipContent>
+              </Tooltip>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-end gap-2">
         {!renderFooter && (
           <Tooltip>
@@ -500,7 +540,7 @@ export function ChatInput({
           disabled={awaitingAnswer}
           className="flex-1 resize-none bg-transparent pl-2 text-sm text-text-primary placeholder:text-text-disabled outline-none min-h-[29px] max-h-[96px] py-1 leading-normal"
         />
-        {!renderFooter && isLoading ? (
+        {!renderFooter && isLoading && (
           <Tooltip>
             <TooltipTrigger
               render={
@@ -516,7 +556,14 @@ export function ChatInput({
             />
             <TooltipContent>Stop</TooltipContent>
           </Tooltip>
-        ) : !renderFooter ? (
+        )}
+        {/* While loading, Stop must stay available at all times, but the
+            queue is the point of this feature — a mouse/touch user needs a
+            visible way to queue a message too, not just Enter. Show Send
+            alongside Stop whenever there's something to submit; it goes
+            through the same `doSubmit` -> onSubmit path, which enqueues
+            instead of sending while the agent is busy. */}
+        {!renderFooter && (!isLoading || canSubmit) && (
           <Tooltip>
             <TooltipTrigger
               render={
@@ -524,17 +571,19 @@ export function ChatInput({
                   type="submit"
                   disabled={!canSubmit}
                   className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted disabled:text-text-disabled transition-colors"
-                  aria-label={isOnline ? "Send" : OFFLINE_SEND_TITLE}
+                  aria-label={
+                    isLoading ? "Queue message" : isOnline ? "Send" : OFFLINE_SEND_TITLE
+                  }
                 >
                   <PaperPlaneRightIcon size={18} />
                 </button>
               }
             />
             <TooltipContent>
-              {isOnline ? "Send" : OFFLINE_SEND_TITLE}
+              {isLoading ? "Queue message" : isOnline ? "Send" : OFFLINE_SEND_TITLE}
             </TooltipContent>
           </Tooltip>
-        ) : null}
+        )}
       </div>
       </form>
       {/* openFilePicker reads fileInputRef only when invoked (on click), never

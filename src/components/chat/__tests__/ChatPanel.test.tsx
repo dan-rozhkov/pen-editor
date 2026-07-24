@@ -9,6 +9,7 @@ const setInput = vi.fn();
 const setMessages = vi.fn();
 const stop = vi.fn();
 const clearError = vi.fn();
+const removeQueuedMessage = vi.fn();
 
 let mockState: {
   messages: UIMessage[];
@@ -28,6 +29,8 @@ vi.mock("@/hooks/useDesignChat", () => ({
     stop,
     error: mockState.error,
     clearError,
+    queuedMessages: [],
+    removeQueuedMessage,
   }),
 }));
 
@@ -115,5 +118,33 @@ describe("<ChatPanelContent />", () => {
     render(<ChatPanelContent />);
     expect(screen.getByLabelText("Stop")).toBeTruthy();
     expect(screen.queryByLabelText("Send")).toBeNull();
+  });
+
+  it("shows a queue-send control alongside Stop while loading with content in the composer", () => {
+    mockState.isLoading = true;
+    mockState.input = "queue me";
+    render(<ChatPanelContent />);
+    expect(screen.getByLabelText("Stop")).toBeTruthy();
+    expect(screen.getByLabelText("Queue message")).toBeTruthy();
+  });
+
+  // FIX 2 regression: clearing the chat must also drop anything sitting in
+  // the messageQueue, or the auto-drain effect sends a message into the
+  // now-empty session once the in-flight turn finishes.
+  it("clears the message queue when Clear chat is used", () => {
+    useChatStore.getState().enqueueMessage("tab-1", { text: "queued while busy" });
+    mockState.messages = [
+      { id: "u1", role: "user", parts: [{ type: "text", text: "hi" }] },
+    ];
+    render(<ChatPanelContent />);
+
+    // Drive the published clearChat handler directly (same one the tab bar's
+    // "Clear chat" menu item calls) rather than through the dropdown-menu
+    // popover, which needs real positioning/portal behavior this test isn't
+    // set up to exercise.
+    useChatStore.getState().sessionActions["tab-1"]?.clearChat();
+
+    expect(setMessages).toHaveBeenCalledWith([]);
+    expect(useChatStore.getState().messageQueue["tab-1"]).toBeUndefined();
   });
 });

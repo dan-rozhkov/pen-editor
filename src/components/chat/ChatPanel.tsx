@@ -180,6 +180,8 @@ function ChatSession({
     clearError,
     retryState,
     addToolOutput,
+    queuedMessages,
+    removeQueuedMessage,
   } = useDesignChat({ sessionId });
 
   const awaitingAnswer = hasPendingAskUser(messages);
@@ -214,6 +216,10 @@ function ChatSession({
       },
       clearChat: () => {
         sessionDataRef.current.setMessages([]);
+        // Also drop any messages queued while the agent was busy — otherwise
+        // the auto-drain effect in useDesignChat sends a "cleared" message
+        // into the now-empty session once the in-flight turn finishes.
+        useChatStore.getState().clearMessageQueue(sessionId);
       },
     });
     return () => unregisterSessionActions(sessionId);
@@ -302,6 +308,8 @@ function ChatSession({
           stop={stop}
           shouldFocus={shouldFocus}
           awaitingAnswer={awaitingAnswer}
+          queuedMessages={queuedMessages}
+          onRemoveQueued={removeQueuedMessage}
           renderFooter={(footerProps) => (
             <div className="flex items-center gap-1 px-2 pb-2 pt-1.5">
               {composerControls(footerProps)}
@@ -399,7 +407,7 @@ export function ChatPanelContent() {
           </DropdownMenuRadioGroup>
         </DropdownMenuContent>
       </DropdownMenu>
-      {isLoading ? (
+      {isLoading && (
         <Tooltip>
           <TooltipTrigger
             render={
@@ -415,7 +423,12 @@ export function ChatPanelContent() {
           />
           <TooltipContent>Stop</TooltipContent>
         </Tooltip>
-      ) : (
+      )}
+      {/* Stop above always stays available while loading; this button is the
+          mouse/touch affordance for queuing a message on top of a busy agent
+          (Enter already does this) — shown whenever there's content to send,
+          loading or not. */}
+      {(!isLoading || canSubmit) && (
         <Tooltip>
           <TooltipTrigger
             render={
@@ -428,13 +441,13 @@ export function ChatPanelContent() {
                     ? "inline-flex size-[30px] shrink-0 items-center justify-center rounded-lg bg-accent-primary text-white hover:bg-accent-primary/90 transition-colors"
                     : "inline-flex size-[30px] shrink-0 items-center justify-center rounded-lg border border-border-default bg-transparent text-text-muted hover:bg-transparent disabled:opacity-100"
                 }
-                aria-label="Send"
+                aria-label={isLoading ? "Queue message" : "Send"}
               >
                 <ArrowUpIcon size={18} weight="regular" />
               </button>
             }
           />
-          <TooltipContent>Send</TooltipContent>
+          <TooltipContent>{isLoading ? "Queue message" : "Send"}</TooltipContent>
         </Tooltip>
       )}
     </>

@@ -13,9 +13,10 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useVariableStore } from "@/store/variableStore";
-import { useChatStore } from "@/store/chatStore";
+import { useChatStore, NO_QUEUED_MESSAGES } from "@/store/chatStore";
 import { toolHandlers } from "@/lib/toolRegistry";
 import type { ChatLaunchPayload } from "@/types/chat";
+import { hasPendingAskUser } from "@/components/chat/pendingAskUser";
 
 const STREAM_RENDER_THROTTLE_MS = 50;
 
@@ -222,6 +223,21 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   const registerAbortController = useChatStore((s) => s.registerAbortController);
   const unregisterAbortController = useChatStore((s) => s.unregisterAbortController);
   const consumeLaunchPayload = useChatStore((s) => s.consumeLaunchPayload);
+  const enqueueMessage = useChatStore((s) => s.enqueueMessage);
+  const peekNextMessage = useChatStore((s) => s.peekNextMessage);
+  const removeQueuedMessageAction = useChatStore((s) => s.removeQueuedMessage);
+  const queuedMessages = useChatStore(
+    (s) => s.messageQueue[sessionId] ?? NO_QUEUED_MESSAGES,
+  );
+  const removeQueuedMessage = useCallback(
+    (id: string) => removeQueuedMessageAction(sessionId, id),
+    [removeQueuedMessageAction, sessionId],
+  );
+  // True while an ask_user question is unanswered — the auto-send effect below
+  // must not dequeue the next message on top of a paused turn awaiting a form
+  // answer (the composer itself is also disabled for typing/submitting while
+  // this is true, via ChatInput's `awaitingAnswer` prop).
+  const awaitingAnswer = hasPendingAskUser(chat.messages);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -260,6 +276,12 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       // user can retry instead of the chat being stuck.
       if (chat.status === "error") {
         chat.clearError();
+      } else if (chat.status === "submitted" || chat.status === "streaming") {
+        // The agent is busy — queue instead of dropping the message. The
+        // caller (ChatInput) treats a `true` return as "accepted" and clears
+        // the composer, even though nothing was sent to the network yet.
+        enqueueMessage(sessionId, payload);
+        return true;
       } else if (chat.status !== "ready") {
         return false;
       }
@@ -280,26 +302,92 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       }
       return true;
     },
-    [chat]
+    [chat, enqueueMessage, sessionId]
   );
 
+  // Drains, at most once per "ready" transition, either the one-shot
+  // launchQueue (a parallel-tab fan-out payload) or — with lower priority —
+  // the user-facing messageQueue (messages submitted via Enter while the
+  // agent was busy). Both live in the same effect, with an early `return`
+  // right after the launchQueue send, so the two can never both fire a send
+  // in the same tick: if a launch payload was pending, it wins and the
+  // messageQueue isn't even inspected until the next "ready" transition
+  // (which the send itself will eventually cause, once the follow-up
+  // request settles).
   useEffect(() => {
-    if (chat.status !== "ready" || !isOnline) {
+    if (chat.status !== "ready" || !isOnline || isOffline()) {
       // Consuming while offline would delete the queued payload from the
       // store without ever sending it (sendPayload's offline guard rejects
       // it), destroying a parallel-tab launch permanently. Leave it queued;
       // the isOnline dependency reruns this effect once connectivity
       // returns, at which point it's consumed and sent normally.
+      //
+      // The extra live `isOffline()` check guards the narrow race where the
+      // isOnline *state* is still stale-true (the browser's "offline" event
+      // hasn't landed yet) but connectivity is already gone: bail here,
+      // before any consume/send, so we never reach sendPayload's
+      // setOfflineError side-effect from inside this effect. Doing so would
+      // schedule a re-render that reruns this effect and — with the queue
+      // still non-empty — spin until the "offline" event finally arrives.
       return;
     }
 
     const queuedPayload = consumeLaunchPayload(sessionId);
-    if (!queuedPayload) {
+    if (queuedPayload) {
+      sendPayload(cloneLaunchPayload(queuedPayload));
       return;
     }
 
-    sendPayload(cloneLaunchPayload(queuedPayload));
-  }, [chat.status, isOnline, consumeLaunchPayload, sendPayload, sessionId]);
+    if (awaitingAnswer) {
+      // Don't dequeue on top of a turn paused for an ask_user answer.
+      return;
+    }
+
+    // Guard against a narrow race: answering an ask_user question via
+    // addToolOutput synchronously flips its tool part to "output-available"
+    // (so `awaitingAnswer` above already reads false), but the SDK's own
+    // automatic-continuation effect only flips chat.status away from "ready"
+    // in a later microtask. In that window this effect could otherwise fire
+    // a queued send at the same moment the SDK auto-continues the turn,
+    // producing two overlapping requests.
+    // `lastAssistantMessageIsCompleteWithToolCalls` returns true exactly when
+    // the SDK is about to auto-send (last assistant message's last step has
+    // one or more non-provider-executed tool calls and all are resolved) —
+    // that's the same predicate `sendAutomaticallyWhen` uses above. When it's
+    // false — no tool calls in the last step (an ordinary finished turn) or a
+    // tool call still unresolved — the SDK will not auto-continue, so it's
+    // safe to drain a queued message here. Skipping this tick when it's true
+    // is not a lost send: once the SDK's follow-up request settles, status
+    // returns to "ready" and reruns this effect with the predicate now false.
+    if (lastAssistantMessageIsCompleteWithToolCalls({ messages: chat.messages })) {
+      return;
+    }
+
+    const next = peekNextMessage(sessionId);
+    if (!next) {
+      return;
+    }
+
+    const sent = sendPayload(cloneLaunchPayload(next.payload));
+    if (sent) {
+      // Only drop it from the queue once it's actually been handed off —
+      // sendPayload can return false (offline race, re-entered "busy" state,
+      // etc.), and dropping the item unconditionally on a peek would lose the
+      // message forever. Leaving it queued on failure keeps FIFO order intact
+      // and gets it retried on the next "ready" transition.
+      removeQueuedMessage(next.id);
+    }
+  }, [
+    chat.status,
+    chat.messages,
+    isOnline,
+    awaitingAnswer,
+    consumeLaunchPayload,
+    peekNextMessage,
+    removeQueuedMessage,
+    sendPayload,
+    sessionId,
+  ]);
 
   const sendMessage = useCallback((): boolean => {
     const didSend = sendPayload({ text: input.trim() });
@@ -339,5 +427,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     setMessages: chat.setMessages,
     retryState,
     addToolOutput: chat.addToolOutput,
+    queuedMessages,
+    removeQueuedMessage,
   };
 }

@@ -643,6 +643,226 @@ describe("useDesignChat (hook + UI message stream)", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
+  // Regression coverage for the "chat message queue" feature: sending while
+  // the agent is busy (status "submitted"/"streaming") must not drop the
+  // message — it goes into chatStore's messageQueue and is auto-sent, one at
+  // a time, once the session returns to "ready".
+  describe("message queue", () => {
+    it("queues sendPayload calls made while a request is in flight, and auto-sends the first once ready", async () => {
+      let resolveFirst: ((res: Response) => void) | undefined;
+      const firstResponse = new Promise<Response>((resolve) => {
+        resolveFirst = resolve;
+      });
+      const requests: Array<Record<string, unknown>> = [];
+      const fetchMock = vi.fn(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+          const body = JSON.parse(String(init?.body));
+          requests.push(body);
+          if (requests.length === 1) {
+            return firstResponse;
+          }
+          return sseResponse([
+            { type: "start" },
+            { type: "start-step" },
+            { type: "text-start", id: "t2" },
+            { type: "text-delta", id: "t2", delta: "second reply" },
+            { type: "text-end", id: "t2" },
+            { type: "finish-step" },
+            { type: "finish" },
+          ]);
+        }
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      const sessionId = `queue-session-${Date.now()}`;
+      const { result } = renderHook(() => useDesignChat({ sessionId }));
+
+      act(() => result.current.setInput("first message"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      // Still mid-flight — the first request hasn't resolved yet.
+      expect(["submitted", "streaming"]).toContain(result.current.status);
+
+      // A second send while busy must be accepted (queued), not dropped.
+      // Exercised via submitLaunchPayload (what ChatInput's onSubmit calls),
+      // rather than sendMessage/input, since the first send already cleared
+      // `input`.
+      let queuedOk = false;
+      act(() => {
+        queuedOk = result.current.submitLaunchPayload({ text: "second message" });
+      });
+      expect(queuedOk).toBe(true);
+
+      expect(useChatStore.getState().messageQueue[sessionId]).toHaveLength(1);
+      expect(
+        useChatStore.getState().messageQueue[sessionId]?.[0].payload.text
+      ).toBe("second message");
+      expect(result.current.queuedMessages).toHaveLength(1);
+      expect(result.current.queuedMessages[0].payload.text).toBe("second message");
+      // Only one network request has gone out so far — the queued message
+      // was NOT sent immediately.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      // Resolve the first (in-flight) request; the session returns to
+      // "ready", which should auto-send the queued message.
+      await act(async () => {
+        resolveFirst!(
+          sseResponse([
+            { type: "start" },
+            { type: "start-step" },
+            { type: "text-start", id: "t1" },
+            { type: "text-delta", id: "t1", delta: "first reply" },
+            { type: "text-end", id: "t1" },
+            { type: "finish-step" },
+            { type: "finish" },
+          ])
+        );
+      });
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2), {
+        timeout: 5000,
+      });
+      await waitFor(() => expect(result.current.status).toBe("ready"), {
+        timeout: 5000,
+      });
+
+      // The queue is drained.
+      expect(useChatStore.getState().messageQueue[sessionId]).toBeUndefined();
+      expect(result.current.queuedMessages).toHaveLength(0);
+    });
+
+    // Regression for FIX 1: the auto-drain effect must peek the queue and
+    // only remove the item once sendPayload actually succeeds. Previously it
+    // dequeued (removed) first and sent second, so a `false` return (e.g. an
+    // offline race) silently lost the message forever.
+    it("keeps a queued message in the queue when sendPayload fails, and sends it once the condition clears", async () => {
+      let resolveFirst: ((res: Response) => void) | undefined;
+      const firstResponse = new Promise<Response>((resolve) => {
+        resolveFirst = resolve;
+      });
+      const requests: Array<Record<string, unknown>> = [];
+      const fetchMock = vi.fn(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+          const body = JSON.parse(String(init?.body));
+          requests.push(body);
+          if (requests.length === 1) {
+            return firstResponse;
+          }
+          return sseResponse([
+            { type: "start" },
+            { type: "start-step" },
+            { type: "text-start", id: "t2" },
+            { type: "text-delta", id: "t2", delta: "second reply" },
+            { type: "text-end", id: "t2" },
+            { type: "finish-step" },
+            { type: "finish" },
+          ]);
+        }
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      // Control connectivity through a stubbed navigator (whose `onLine` the
+      // live `isOffline()` check reads) plus the "offline"/"online" events
+      // that drive useOnlineStatus's `isOnline` state — keeping the two in
+      // sync, exactly as a real browser does.
+      const nav = { onLine: true };
+      vi.stubGlobal("navigator", nav);
+
+      const sessionId = `queue-offline-race-${Date.now()}`;
+      const { result } = renderHook(() => useDesignChat({ sessionId }));
+
+      act(() => result.current.setInput("first message"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      expect(["submitted", "streaming"]).toContain(result.current.status);
+
+      act(() => {
+        result.current.submitLaunchPayload({ text: "second message" });
+      });
+      expect(useChatStore.getState().messageQueue[sessionId]).toHaveLength(1);
+      const queuedId = useChatStore.getState().messageQueue[sessionId]![0].id;
+
+      // Go offline before the in-flight request settles: nav.onLine flips and
+      // the "offline" event flips useOnlineStatus's isOnline to false.
+      act(() => {
+        nav.onLine = false;
+        window.dispatchEvent(new Event("offline"));
+      });
+      await act(async () => {
+        resolveFirst!(
+          sseResponse([
+            { type: "start" },
+            { type: "start-step" },
+            { type: "text-start", id: "t1" },
+            { type: "text-delta", id: "t1", delta: "first reply" },
+            { type: "text-end", id: "t1" },
+            { type: "finish-step" },
+            { type: "finish" },
+          ])
+        );
+      });
+      await waitFor(() => expect(result.current.status).toBe("ready"));
+
+      // Session is "ready" but offline — the drain effect bails before any
+      // send, so the message must still be in the queue, with its original
+      // id, not lost.
+      expect(useChatStore.getState().messageQueue[sessionId]).toHaveLength(1);
+      expect(useChatStore.getState().messageQueue[sessionId]![0].id).toBe(queuedId);
+      expect(useChatStore.getState().messageQueue[sessionId]![0].payload.text).toBe(
+        "second message"
+      );
+      // Only the first request has gone out — the queued one was never sent.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      // Connectivity genuinely returns — the "online" event flips `isOnline`
+      // back to true, the effect reruns, and the still-queued message is
+      // finally sent.
+      act(() => {
+        nav.onLine = true;
+        window.dispatchEvent(new Event("online"));
+      });
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2), {
+        timeout: 5000,
+      });
+      expect(requests[1].messages).toBeDefined();
+      await waitFor(() =>
+        expect(useChatStore.getState().messageQueue[sessionId]).toBeUndefined()
+      );
+    });
+
+    it("removeQueuedMessage removes an item before it gets auto-sent", async () => {
+      // A request that never resolves keeps the session in "submitted" so
+      // the queued item is never auto-drained during this test.
+      const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+      vi.stubGlobal("fetch", fetchMock);
+
+      const sessionId = `queue-remove-session-${Date.now()}`;
+      const { result } = renderHook(() => useDesignChat({ sessionId }));
+
+      act(() => result.current.setInput("first message"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      expect(["submitted", "streaming"]).toContain(result.current.status);
+
+      act(() => {
+        result.current.submitLaunchPayload({ text: "will be removed" });
+      });
+      expect(result.current.queuedMessages).toHaveLength(1);
+      const id = result.current.queuedMessages[0].id;
+
+      act(() => result.current.removeQueuedMessage(id));
+
+      expect(result.current.queuedMessages).toHaveLength(0);
+      expect(useChatStore.getState().messageQueue[sessionId]).toBeUndefined();
+    });
+  });
+
   it("surfaces the error and clears retryState after retries are exhausted", async () => {
     vi.useFakeTimers();
     const fetchMock = vi
