@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.69.0] - 2026-07-27
+
+### Fixed
+- **Turning on auto-layout no longer blows the layout apart.** Enabling it on a frame with manually positioned children reset everything to horizontal, gap 0, zero padding and tree (z-)order, so a tidy vertical stack with 24px gaps came back as a squashed row in creation order. Enabling auto-layout is supposed to preserve appearance, the way it does in Figma. Direction, gap, padding, cross-axis alignment and the child order are now all inferred from the children's current geometry: direction from how their axis projections overlap, gap from the actual spacing (equal gaps taken as-is, otherwise the median), padding from the children's bbox against the frame, and the order from position along the main axis rather than z-order. `justifyContent` is deliberately always `flex-start` — `space-between` and an explicit gap cannot both be honoured, and `flex-start` plus a real gap reproduces the original geometry exactly.
+- **"Wrap selection in an auto-layout frame" had the same bug with different defaults** — it hardcoded column, gap 0 and zero padding, and inserted children in selection order. It now runs the same inference.
+- A child sticking out past the frame edge is no longer silently yanked inside when auto-layout turns on. Auto-layout padding cannot be negative, so the frame grows (and shifts) to enclose its children instead, keeping every node where it was on screen.
+
 ## [0.68.0] - 2026-07-27
 
 ### Fixed
