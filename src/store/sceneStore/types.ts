@@ -101,6 +101,13 @@ export interface SceneState {
   convertNodeType: (id: string) => boolean;
   wrapInAutoLayoutFrame: (ids: string[]) => string | null;
   /**
+   * Turn on auto-layout for an existing frame, deriving direction/gap/padding/
+   * alignment and visual child order from its current child geometry (see
+   * `inferAutoLayoutFromGeometry`) so the layout looks the same before/after
+   * (FIR-60). Returns false (no-op, no history) if `frameId` isn't a frame.
+   */
+  enableAutoLayoutOnFrame: (frameId: string) => boolean;
+  /**
    * Proportionally scale the given nodes AND their entire descendant
    * subtree by `factor` — geometry, typography, strokes, radii, effects,
    * and auto-layout gap/padding all scale together as one history entry.

@@ -81,6 +81,11 @@ export const PropertyEditor = memo(function PropertyEditor({
 
   const selectionNodes = useMemo(() => [node], [node]);
 
+  const enableAutoLayoutOnFrame = useSceneStore((s) => s.enableAutoLayoutOnFrame);
+  const handleEnableAutoLayout = useCallback(() => {
+    enableAutoLayoutOnFrame(node.id);
+  }, [enableAutoLayoutOnFrame, node.id]);
+
   return (
     <div className="flex flex-col">
       <TypeSection
@@ -117,7 +122,11 @@ export const PropertyEditor = memo(function PropertyEditor({
           <ConstraintsSection node={node} onUpdate={onUpdate} />
         )}
       {node.type === "frame" && (
-        <AutoLayoutSection node={node} onUpdate={onUpdate} />
+        <AutoLayoutSection
+          node={node}
+          onUpdate={onUpdate}
+          onEnableAutoLayout={handleEnableAutoLayout}
+        />
       )}
       {node.type === "frame" && (
         <LayoutGridSection node={node} onUpdate={onUpdate} />

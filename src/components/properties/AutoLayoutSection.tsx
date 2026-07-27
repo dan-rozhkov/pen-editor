@@ -29,12 +29,34 @@ interface AutoLayoutSectionProps {
   node: FrameNode;
   onUpdate: (updates: Partial<SceneNode>) => void;
   mixedKeys?: Set<string>;
+  /**
+   * Called instead of the default `onUpdate`-based enable when provided —
+   * lets a caller with access to the real sceneStore geometry (currently
+   * only the single-selected-frame editor) derive direction/gap/padding/
+   * order from the frame's current children (`enableAutoLayoutOnFrame`,
+   * FIR-60) instead of resetting to row/gap:0/paddings:0.
+   *
+   * Callers that can't resolve real child geometry — the instance-descendant
+   * override editor, whose "node" is a resolved override tree rather than a
+   * store node — omit this and fall back to the plain `onUpdate` path below.
+   * MultiSelectPropertyEditor omits it too, but never reaches the enable
+   * branch: it only renders this section for frames that already have
+   * auto-layout on, so `hasAutoLayout` is always true there.
+   */
+  onEnableAutoLayout?: () => void;
 }
 
-export function AutoLayoutSection({ node, onUpdate, mixedKeys }: AutoLayoutSectionProps) {
+export function AutoLayoutSection({ node, onUpdate, mixedKeys, onEnableAutoLayout }: AutoLayoutSectionProps) {
   const hasAutoLayout = !!node.layout?.autoLayout;
 
   const enableAutoLayout = () => {
+    if (onEnableAutoLayout) {
+      onEnableAutoLayout();
+      return;
+    }
+    // Fallback for contexts without real sceneStore child geometry to infer
+    // from (e.g. an instance-descendant override node) — best effort, not
+    // appearance-preserving.
     const updates: Partial<SceneNode> = {
       layout: { ...node.layout, autoLayout: true },
     };

@@ -319,6 +319,48 @@ describe("complexOperations", () => {
       expect(scene().wrapInAutoLayoutFrame(["rect1", "rect2"])).toBeNull();
       expect(pastLen()).toBe(before);
     });
+
+    it("infers row direction, gap, and visual order for horizontally laid-out siblings (FIR-60)", () => {
+      // Add two more root siblings, side by side, z-order reversed relative
+      // to their visual (left-to-right) order.
+      const s0 = scene();
+      const colB: FlatSceneNode = {
+        id: "colB",
+        type: "rect",
+        name: "B",
+        x: 220,
+        y: 100,
+        width: 100,
+        height: 60,
+        fill: "#0000ff",
+      } as unknown as FlatSceneNode;
+      const colA: FlatSceneNode = {
+        id: "colA",
+        type: "rect",
+        name: "A",
+        x: 100,
+        y: 100,
+        width: 100,
+        height: 60,
+        fill: "#ff00ff",
+      } as unknown as FlatSceneNode;
+      useSceneStore.setState({
+        nodesById: { ...s0.nodesById, colA, colB },
+        parentById: { ...s0.parentById, colA: null, colB: null },
+        rootIds: [...s0.rootIds, "colB", "colA"],
+        _cachedTree: null,
+      });
+
+      // z-order is [colB, colA] but colA is visually first (smaller x)
+      const frameId = scene().wrapInAutoLayoutFrame(["colB", "colA"]);
+      expect(frameId).toBeTruthy();
+
+      const s = scene();
+      const frame = s.nodesById[frameId!] as FlatFrameNode;
+      expect(frame.layout?.flexDirection).toBe("row");
+      expect(frame.layout?.gap).toBe(20); // 220 - (100 + 100)
+      expect(s.childrenById[frameId!]).toEqual(["colA", "colB"]);
+    });
   });
 
   describe("convertDesignToEmbed", () => {

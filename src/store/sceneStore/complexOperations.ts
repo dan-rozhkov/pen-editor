@@ -7,11 +7,11 @@ import type {
   PathNode,
   SceneNode,
 } from "../../types/scene";
-import { generateId, buildTree, collectDescendantIds } from "../../types/scene";
+import { generateId, collectDescendantIds } from "../../types/scene";
 import { convertDesignNodesToHtml } from "../../lib/designToHtml";
 import { loadGoogleFontsFromNodes } from "../../utils/fontUtils";
-import { useLayoutStore } from "../layoutStore";
-import { calculateFrameIntrinsicSize, calculateFrameLayout } from "../../utils/yogaLayout";
+import { calculateFrameLayout } from "../../utils/yogaLayout";
+import { inferAutoLayoutFromGeometry } from "../../utils/inferAutoLayoutFromGeometry";
 import { saveHistory } from "./helpers/history";
 import { useMeasurementsStore } from "../measurementsStore";
 import {
@@ -19,65 +19,10 @@ import {
   removeNodeAndDescendants,
   removeOrphanedConnectors,
 } from "./helpers/flatStoreHelpers";
+import { buildLayoutMap, getEffectiveBounds, type Bounds } from "./helpers/effectiveBounds";
 import { computeBooleanOp, BOOLEAN_SUPPORTED_TYPES, type BooleanOpKind } from "../../lib/booleanOps";
 import { computeScaleUpdates } from "./scaleOperations";
 import type { SceneState } from "./types";
-
-type Bounds = { x: number; y: number; width: number; height: number };
-
-/** Build a map of Yoga-computed positions for children of an auto-layout parent. */
-function buildLayoutMap(
-  parentId: string | null | undefined,
-  state: SceneState,
-): Map<string, Bounds> {
-  const layoutMap = new Map<string, Bounds>();
-  if (!parentId) return layoutMap;
-
-  const parentNode = state.nodesById[parentId];
-  if (
-    parentNode &&
-    parentNode.type === "frame" &&
-    (parentNode as FlatFrameNode).layout?.autoLayout
-  ) {
-    const calculateLayoutForFrame =
-      useLayoutStore.getState().calculateLayoutForFrame;
-    const parentTree = buildTree([parentId], state.nodesById, state.childrenById)[0] as FrameNode;
-    const layoutNodes = calculateLayoutForFrame(parentTree);
-    for (const ln of layoutNodes) {
-      layoutMap.set(ln.id, { x: ln.x, y: ln.y, width: ln.width, height: ln.height });
-    }
-  }
-  return layoutMap;
-}
-
-/** Get effective bounds for a node, accounting for auto-layout and fit-content frames. */
-function getEffectiveBounds(
-  node: FlatSceneNode,
-  layoutMap: Map<string, Bounds>,
-  state: SceneState,
-): Bounds {
-  const layoutNode = layoutMap.get(node.id);
-  const x = layoutNode?.x ?? node.x;
-  const y = layoutNode?.y ?? node.y;
-  let width = layoutNode?.width ?? node.width;
-  let height = layoutNode?.height ?? node.height;
-
-  if (node.type === "frame") {
-    const frame = node as FlatFrameNode;
-    if (frame.layout?.autoLayout) {
-      const fitWidth = frame.sizing?.widthMode === "fit_content";
-      const fitHeight = frame.sizing?.heightMode === "fit_content";
-      if (fitWidth || fitHeight) {
-        const frameTree = buildTree([node.id], state.nodesById, state.childrenById)[0] as FrameNode;
-        const intrinsic = calculateFrameIntrinsicSize(frameTree, { fitWidth, fitHeight });
-        if (fitWidth) width = intrinsic.width;
-        if (fitHeight) height = intrinsic.height;
-      }
-    }
-  }
-
-  return { x, y, width, height };
-}
 
 /** Compute bounding box + boundsMap + insertIndex for a set of nodes being wrapped. */
 function computeWrappingData(
@@ -149,6 +94,10 @@ function applyContainerWrapping(
   minY: number,
   insertIndex: number,
   state: SceneState,
+  // Visual order for the new container's children (defaults to the
+  // caller's selection order — z-order — for callers, like groupNodes, that
+  // don't have a more meaningful order to offer).
+  childOrder: string[] = ids,
 ): { newNodesById: Record<string, FlatSceneNode>; newParentById: Record<string, string | null>; newChildrenById: Record<string, string[]>; newRootIds: string[] } {
   const newNodesById = { ...state.nodesById, [containerId]: containerNode };
   const newParentById = { ...state.parentById, [containerId]: parentId ?? null };
@@ -162,7 +111,7 @@ function applyContainerWrapping(
     newParentById[id] = containerId;
   }
 
-  newChildrenById[containerId] = ids;
+  newChildrenById[containerId] = childOrder;
 
   let newRootIds = state.rootIds;
   if (parentId !== null && parentId !== undefined) {
@@ -402,6 +351,22 @@ export function createComplexOperations(
       if (!prep) return null;
       const { parentId, boundsMap, minX, minY, maxX, maxY, insertIndex } = prep;
 
+      // Wrapping is appearance-preserving (like enabling auto-layout on an
+      // existing frame — see enableAutoLayoutOnFrame): derive direction,
+      // gap, padding, alignment and child order from where the selected
+      // nodes actually sit, in the new frame's local space (bounds minus
+      // minX/minY), rather than hardcoding column/gap:0/paddings:0. The
+      // frame is sized exactly to the children's bbox, so the derived
+      // padding is always 0 — that's expected, not a bug.
+      const relativeChildren = ids.map((id) => {
+        const bounds = boundsMap.get(id)!;
+        return { id, x: bounds.x - minX, y: bounds.y - minY, width: bounds.width, height: bounds.height };
+      });
+      const inferred = inferAutoLayoutFromGeometry({
+        frame: { width: maxX - minX, height: maxY - minY },
+        children: relativeChildren,
+      });
+
       saveHistory(state);
 
       const frameId = generateId();
@@ -414,17 +379,12 @@ export function createComplexOperations(
         height: maxY - minY,
         layout: {
           autoLayout: true,
-          flexDirection: "column",
-          gap: 0,
-          paddingTop: 0,
-          paddingRight: 0,
-          paddingBottom: 0,
-          paddingLeft: 0,
+          ...inferred.layout,
         },
       };
 
       const { newNodesById, newParentById, newChildrenById, newRootIds } =
-        applyContainerWrapping(ids, frameId, frameNode, parentId, boundsMap, minX, minY, insertIndex, state);
+        applyContainerWrapping(ids, frameId, frameNode, parentId, boundsMap, minX, minY, insertIndex, state, inferred.orderedIds);
 
       setState({
         nodesById: newNodesById,
@@ -434,6 +394,92 @@ export function createComplexOperations(
         _cachedTree: null,
       });
       return frameId;
+    },
+
+    /**
+     * Enable auto-layout on an EXISTING frame, appearance-preserving (FIR-60):
+     * derive direction/gap/padding/alignment and visual child order from the
+     * frame's current (manual) child geometry via
+     * `inferAutoLayoutFromGeometry`, instead of resetting to hardcoded
+     * row/gap:0/paddings:0/tree-order. Since the frame's own auto-layout is
+     * off up to this point, each child's stored x/y/width/height already IS
+     * its visual position — no yoga replay needed for the target frame
+     * itself (a nested auto-layout child with fit-content sizing still goes
+     * through `getEffectiveBounds`, same as `wrapInAutoLayoutFrame`/group
+     * ops, so its intrinsic size is accounted for). Children that overflow
+     * the frame grow it rather than being clamped inside (see below). One
+     * history entry covers the layout change, the reorder and the resize.
+     */
+    enableAutoLayoutOnFrame: (frameId: string): boolean => {
+      const state = get();
+      const frame = state.nodesById[frameId];
+      if (!frame || frame.type !== "frame") return false;
+
+      const childIds = state.childrenById[frameId] ?? [];
+      const emptyLayoutMap = new Map<string, Bounds>();
+      const rawChildren = childIds.map((id) => {
+        const bounds = getEffectiveBounds(state.nodesById[id], emptyLayoutMap, state);
+        return { id, ...bounds };
+      });
+
+      // Auto-layout padding can't be negative (there is no such thing in the
+      // flex model), so a child sitting OUTSIDE the frame would otherwise be
+      // yanked inside the moment auto-layout turns on — the exact kind of
+      // silent reflow this whole operation exists to avoid. Grow the frame to
+      // contain its children instead (what Figma does: an auto-layout frame
+      // always encloses its content) and re-base the children into the grown
+      // frame's local space, so every node keeps its on-screen position.
+      const overflowMinX = Math.min(0, ...rawChildren.map((c) => c.x));
+      const overflowMinY = Math.min(0, ...rawChildren.map((c) => c.y));
+      const contentMaxX = Math.max(frame.width, ...rawChildren.map((c) => c.x + c.width));
+      const contentMaxY = Math.max(frame.height, ...rawChildren.map((c) => c.y + c.height));
+      const frameX = frame.x + overflowMinX;
+      const frameY = frame.y + overflowMinY;
+      const frameWidth = contentMaxX - overflowMinX;
+      const frameHeight = contentMaxY - overflowMinY;
+
+      const children = rawChildren.map((c) => ({
+        ...c,
+        x: c.x - overflowMinX,
+        y: c.y - overflowMinY,
+      }));
+
+      const inferred = inferAutoLayoutFromGeometry({
+        frame: { width: frameWidth, height: frameHeight },
+        children,
+      });
+
+      saveHistory(state);
+
+      const frameNode = frame as FlatFrameNode;
+      const newFrame: FlatFrameNode = {
+        ...frameNode,
+        x: frameX,
+        y: frameY,
+        width: frameWidth,
+        height: frameHeight,
+        layout: { ...frameNode.layout, autoLayout: true, ...inferred.layout },
+        sizing: { ...frameNode.sizing, heightMode: "fit_content" },
+      };
+
+      const newNodesById = { ...state.nodesById, [frameId]: newFrame as FlatSceneNode };
+      // Persist the re-based child coordinates. Yoga drives their on-canvas
+      // position from here on, but the stored values are what a later
+      // "disable auto-layout" falls back to — leaving the pre-shift values
+      // there would make turning auto-layout back off move everything.
+      if (overflowMinX !== 0 || overflowMinY !== 0) {
+        for (const child of children) {
+          const node = state.nodesById[child.id];
+          newNodesById[child.id] = { ...node, x: child.x, y: child.y };
+        }
+      }
+
+      setState({
+        nodesById: newNodesById,
+        childrenById: { ...state.childrenById, [frameId]: inferred.orderedIds },
+        _cachedTree: null,
+      });
+      return true;
     },
 
     /**
