@@ -4,25 +4,52 @@ import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { fetchShowcase, type ShowcaseScreen } from "@/lib/showcase";
 import { ShowcaseCard } from "@/components/showcase/ShowcaseCard";
+import {
+  columnOffset,
+  distributeIntoColumns,
+  useColumnCount,
+} from "@/components/showcase/masonry";
 
 type Status = "loading" | "ready" | "error";
 
-const MASONRY_CLASSES =
-  "columns-2 gap-4 sm:columns-3 lg:columns-4 xl:columns-5";
+/**
+ * Columns are laid out by hand rather than with CSS `columns-*`: multi-column
+ * fills each column top-to-bottom in turn, so the newest screens ended up
+ * stacked down the first column instead of running left→right across the top.
+ */
+function MasonryGrid({ children }: { children: React.ReactNode[] }) {
+  const columnCount = useColumnCount();
+  const columns = distributeIntoColumns(children, columnCount);
+  return (
+    <div className="flex gap-4 items-start">
+      {columns.map((items, i) => (
+        <div
+          key={i}
+          className="flex min-w-0 flex-1 flex-col gap-4"
+          style={{ marginTop: columnOffset(i) }}
+        >
+          {items}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function SkeletonGrid() {
   // Varying heights so the loading state reads as a masonry grid rather than
   // a uniform table, without needing real image dimensions yet.
   const heights = [220, 320, 260, 380, 240, 300, 210, 340];
   return (
-    <div className={MASONRY_CLASSES} aria-hidden="true">
-      {heights.map((height, i) => (
-        <div
-          key={i}
-          className="mb-4 animate-pulse break-inside-avoid rounded-3xl bg-surface-elevated"
-          style={{ height }}
-        />
-      ))}
+    <div aria-hidden="true">
+      <MasonryGrid>
+        {heights.map((height, i) => (
+          <div
+            key={i}
+            className="animate-pulse rounded-3xl bg-surface-elevated"
+            style={{ height }}
+          />
+        ))}
+      </MasonryGrid>
     </div>
   );
 }
@@ -124,11 +151,11 @@ export function ShowcasePage() {
 
         {status === "ready" && screens.length > 0 && (
           <>
-            <div className={MASONRY_CLASSES}>
+            <MasonryGrid>
               {screens.map((screen) => (
                 <ShowcaseCard key={screen.id} screen={screen} />
               ))}
-            </div>
+            </MasonryGrid>
 
             {nextCursor != null && (
               <div className="mt-6 flex justify-center">

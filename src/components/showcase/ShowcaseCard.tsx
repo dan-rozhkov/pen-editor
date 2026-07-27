@@ -7,7 +7,7 @@ import type { ShowcaseScreen } from "@/lib/showcase";
 export function ShowcaseCard({ screen }: { screen: ShowcaseScreen }) {
   return (
     <div
-      className="mb-4 w-full break-inside-avoid overflow-hidden rounded-3xl bg-surface-elevated"
+      className="w-full overflow-hidden rounded-3xl bg-surface-elevated"
       style={{ aspectRatio: `${screen.width} / ${screen.height}` }}
     >
       <img
