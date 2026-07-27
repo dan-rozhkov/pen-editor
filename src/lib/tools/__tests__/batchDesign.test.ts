@@ -1321,13 +1321,175 @@ describe("batch_design", () => {
       expect(result.error).toMatch(/Unresolved binding|Node not found/);
     });
 
-    it("rejects more than 25 operations", async () => {
-      const ops = Array.from({ length: 26 }, (_, i) =>
-        `I(document, {type: "rectangle", name: "N${i}", width: 1, height: 1})`
-      ).join("\n");
-      const result = JSON.parse(await batchDesign({ operations: ops }));
-      expect(result.error).toMatch(/Too many operations/);
-      expect(Object.keys(sceneState().nodesById)).toHaveLength(4);
+  });
+
+  describe("truncation (> MAX_OPERATIONS)", () => {
+    function insertOp(i: number) {
+      return `b${i}=I(document, {type: "rectangle", name: "N${i}", width: 1, height: 1})`;
+    }
+
+    it("executes only the first 25 of a 30-operation script and reports resumption info", async () => {
+      const ops = Array.from({ length: 30 }, (_, i) => insertOp(i));
+      const result = JSON.parse(
+        await batchDesign({ operations: ops.join("\n") })
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.truncated).toBe(true);
+      expect(result.operationsSubmitted).toBe(30);
+      expect(result.operationsExecuted).toBe(25);
+
+      const { nodesById } = sceneState();
+      const names = Object.values(nodesById).map((n) => n.name);
+      for (let i = 0; i < 25; i++) {
+        expect(names).toContain(`N${i}`);
+      }
+      for (let i = 25; i < 30; i++) {
+        expect(names).not.toContain(`N${i}`);
+      }
+    });
+
+    it("returns remainingOperations verbatim for the unexecuted tail", async () => {
+      const ops = Array.from({ length: 30 }, (_, i) => insertOp(i));
+      const result = JSON.parse(
+        await batchDesign({ operations: ops.join("\n") })
+      );
+
+      expect(result.remainingOperations).toHaveLength(5);
+      expect(result.remainingOperations[0]).toBe(insertOp(25));
+      expect(result.remainingOperations[4]).toBe(insertOp(29));
+    });
+
+    it("returns bindings for created nodes, excluding document, resolving to real ids in the store", async () => {
+      const ops = Array.from({ length: 30 }, (_, i) => insertOp(i));
+      const result = JSON.parse(
+        await batchDesign({ operations: ops.join("\n") })
+      );
+
+      expect(result.bindings.document).toBeUndefined();
+      // 25 executed operations each bind b0..b24
+      for (let i = 0; i < 25; i++) {
+        const id = result.bindings[`b${i}`];
+        expect(id).toBeTruthy();
+        expect(sceneState().nodesById[id]).toBeDefined();
+        expect(sceneState().nodesById[id].name).toBe(`N${i}`);
+      }
+      expect(result.bindings.b25).toBeUndefined();
+    });
+
+    it("does not add truncated fields when exactly at the limit (25 operations)", async () => {
+      const ops = Array.from({ length: 25 }, (_, i) => insertOp(i));
+      const result = JSON.parse(
+        await batchDesign({ operations: ops.join("\n") })
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.operationsExecuted).toBe(25);
+      expect(result.truncated).toBeUndefined();
+      expect(result.operationsSubmitted).toBeUndefined();
+      expect(result.bindings).toBeUndefined();
+      expect(result.remainingOperations).toBeUndefined();
+      expect(result.note).toBeUndefined();
+    });
+
+    it("truncates at the boundary of 26 operations (25 executed, 1 remaining)", async () => {
+      const ops = Array.from({ length: 26 }, (_, i) => insertOp(i));
+      const result = JSON.parse(
+        await batchDesign({ operations: ops.join("\n") })
+      );
+
+      expect(result.truncated).toBe(true);
+      expect(result.operationsExecuted).toBe(25);
+      expect(result.operationsSubmitted).toBe(26);
+      expect(result.remainingOperations).toHaveLength(1);
+      expect(result.remainingOperations[0]).toBe(insertOp(25));
+      expect(result.remainingOperationsTruncated).toBeUndefined();
+      // Full (unbudget-truncated) list: note must not claim the list is incomplete.
+      expect(result.note).not.toMatch(/NOT the full remainder/i);
+      expect(result.note).not.toMatch(/cut short/i);
+    });
+
+    it("caps remainingOperations by character budget and flags remainingOperationsTruncated", async () => {
+      // 25 cheap ops to execute, followed by many large unexecuted ops whose
+      // combined raw text exceeds the 8000-char budget.
+      const executedOps = Array.from({ length: 25 }, (_, i) => insertOp(i));
+      const bigHtml = "x".repeat(2000);
+      const largeOps = Array.from(
+        { length: 10 },
+        (_, i) =>
+          `I(document, {type: "embed", name: "Big${i}", width: 1, height: 1, htmlContent: "${bigHtml}"})`
+      );
+      const ops = [...executedOps, ...largeOps];
+      const result = JSON.parse(
+        await batchDesign({ operations: ops.join("\n") })
+      );
+
+      expect(result.truncated).toBe(true);
+      expect(result.operationsSubmitted).toBe(35);
+      expect(result.operationsExecuted).toBe(25);
+      expect(result.remainingOperationsTruncated).toBe(true);
+      expect(result.remainingOperations.length).toBeGreaterThan(0);
+      expect(result.remainingOperations.length).toBeLessThan(10);
+
+      const totalLen = result.remainingOperations.reduce(
+        (sum: number, s: string) => sum + s.length,
+        0
+      );
+      expect(totalLen).toBeLessThanOrEqual(8000);
+
+      // The note must not claim the (budget-truncated) list is complete —
+      // it must say how many are listed out of how many remain, and that
+      // the rest must come from the model's own script.
+      expect(result.note).toMatch(/NOT the full remainder/i);
+      expect(result.note).toContain(String(result.remainingOperations.length));
+      expect(result.note).toContain("10");
+    });
+
+    it("always includes at least one operation in remainingOperations, even if it alone exceeds the budget", async () => {
+      const executedOps = Array.from({ length: 25 }, (_, i) => insertOp(i));
+      // The first unexecuted operation alone exceeds the 8000-char budget,
+      // followed by a second unexecuted op — the degenerate case where a
+      // naive cutoff computation (budget exceeded on item 0) would yield an
+      // empty remainingOperations list instead of including that one item.
+      const hugeHtml = "x".repeat(9000);
+      const hugeOp = `I(document, {type: "embed", name: "Huge", width: 1, height: 1, htmlContent: "${hugeHtml}"})`;
+      const ops = [...executedOps, hugeOp, insertOp(26)];
+      const result = JSON.parse(
+        await batchDesign({ operations: ops.join("\n") })
+      );
+
+      expect(result.truncated).toBe(true);
+      expect(result.remainingOperationsTruncated).toBe(true);
+      expect(result.remainingOperations).toHaveLength(1);
+      expect(result.remainingOperations[0]).toContain("Huge");
+      expect(result.note).toMatch(/NOT the full remainder/i);
+    });
+
+    it("flags truncated:true on the error response when the executed slice fails mid-way", async () => {
+      const before = sceneState();
+      const executedOps = Array.from({ length: 24 }, (_, i) => insertOp(i));
+      // 25th executed op fails (bad reference), forcing the catch branch
+      // while the batch as a whole is truncated (30 submitted > 25 cap).
+      const failingOp = "U(nonexistent_node, {fill: \"#000000\"})";
+      const tailOps = Array.from({ length: 5 }, (_, i) => insertOp(25 + i));
+      const ops = [...executedOps, failingOp, ...tailOps];
+      const result = JSON.parse(
+        await batchDesign({ operations: ops.join("\n") })
+      );
+
+      expect(result.error).toMatch(/^Execution error:/);
+      expect(result.truncated).toBe(true);
+      expect(result.operationsSubmitted).toBe(30);
+      expect(result.completedOperations).toHaveLength(24);
+
+      // Store untouched: not even the partially-executed insert leaked.
+      expect(sceneState().nodesById).toBe(before.nodesById);
+      expect(sceneState().rootIds).toBe(before.rootIds);
+      for (let i = 0; i < 24; i++) {
+        expect(
+          Object.values(sceneState().nodesById).some((n) => n.name === `N${i}`)
+        ).toBe(false);
+      }
     });
   });
 

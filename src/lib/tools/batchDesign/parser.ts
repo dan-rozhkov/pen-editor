@@ -2,7 +2,15 @@ import type { OpType, ParsedArg, ParsedOperation } from "./types";
 import JSON5 from "json5";
 
 const OP_TYPES = new Set<string>(["I", "C", "U", "R", "M", "D", "G"]);
-const MAX_OPERATIONS = 25;
+
+/**
+ * Cap on how many operations from a single batch_design call are actually
+ * executed. Scripts longer than this are parsed in full but only the first
+ * MAX_OPERATIONS are run — see batchDesign/index.ts, which slices the
+ * parsed list and reports a resumption point (remainingOperations/bindings)
+ * for the model to continue with in a follow-up call.
+ */
+export const MAX_OPERATIONS = 25;
 
 /**
  * Parse a batch_design operations script into structured operations.
@@ -24,11 +32,6 @@ export function parseOperations(input: string): ParsedOperation[] {
 
   if (operations.length === 0) {
     throw new Error("No operations to execute");
-  }
-  if (operations.length > MAX_OPERATIONS) {
-    throw new Error(
-      `Too many operations (${operations.length}). Maximum is ${MAX_OPERATIONS}.`
-    );
   }
 
   return operations;

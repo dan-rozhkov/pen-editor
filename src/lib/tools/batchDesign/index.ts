@@ -9,7 +9,7 @@ import {
 import { propagateComponentChanges } from "@/utils/embedTemplateUtils";
 import type { ToolHandler } from "../../toolRegistry";
 import type { ExecutionContext } from "./types";
-import { parseOperations } from "./parser";
+import { parseOperations, MAX_OPERATIONS } from "./parser";
 import { executeOperation, serializeCreatedNodes } from "./executor";
 
 export const batchDesign: ToolHandler = async (args) => {
@@ -28,6 +28,11 @@ export const batchDesign: ToolHandler = async (args) => {
       error: `Parse error: ${err instanceof Error ? err.message : String(err)}`,
     });
   }
+
+  const operationsSubmitted = parsed.length;
+  const truncated = operationsSubmitted > MAX_OPERATIONS;
+  const executable = truncated ? parsed.slice(0, MAX_OPERATIONS) : parsed;
+  const remaining = truncated ? parsed.slice(MAX_OPERATIONS) : [];
 
   // 2. Get current store state, create mutable copies
   const state = useSceneStore.getState();
@@ -49,10 +54,11 @@ export const batchDesign: ToolHandler = async (args) => {
     removedIdsForMeasurementCleanup: new Set(),
   };
 
-  // 3. Execute operations sequentially
+  // 3. Execute operations sequentially (only the first MAX_OPERATIONS when
+  // the submitted script exceeds the cap — see truncation handling below).
   const completedOps: string[] = [];
   try {
-    for (const op of parsed) {
+    for (const op of executable) {
       executeOperation(op, ctx);
       completedOps.push(
         `${op.binding ? op.binding + "=" : ""}${op.op}(...) [line ${op.line}]`
@@ -63,7 +69,8 @@ export const batchDesign: ToolHandler = async (args) => {
     return JSON.stringify({
       error: `Execution error: ${err instanceof Error ? err.message : String(err)}`,
       completedOperations: completedOps,
-      totalOperations: parsed.length,
+      totalOperations: executable.length,
+      ...(truncated ? { truncated: true, operationsSubmitted } : {}),
     });
   }
 
@@ -115,6 +122,64 @@ export const batchDesign: ToolHandler = async (args) => {
     // once per affected node, so a script touching many nodes would otherwise
     // repeat identical strings and bloat the result returned to the model.
     response.issues = [...new Set(ctx.issues)];
+  }
+
+  if (truncated) {
+    response.truncated = true;
+    response.operationsSubmitted = operationsSubmitted;
+
+    // Bindings created in this batch (excluding the predefined "document").
+    // The model needs these to translate binding references in the
+    // remaining operations into real node ids in its next call.
+    const bindings: Record<string, string> = {};
+    for (const [name, id] of ctx.bindings) {
+      if (name === "document") continue;
+      bindings[name] = id;
+    }
+    response.bindings = bindings;
+
+    // Remaining operations, verbatim, capped to a character budget so the
+    // response itself doesn't balloon on very large batches. At least one
+    // operation is always included, even if it alone exceeds the budget —
+    // an empty list here would tell the model to send nothing, silently
+    // dropping the entire remaining tail.
+    const REMAINING_OPS_CHAR_BUDGET = 8000;
+    const remainingRaw = remaining.map((op) => op.raw);
+    let budget = 0;
+    let cutoff = remainingRaw.length;
+    for (let i = 0; i < remainingRaw.length; i++) {
+      budget += remainingRaw[i].length;
+      if (budget > REMAINING_OPS_CHAR_BUDGET) {
+        cutoff = i;
+        break;
+      }
+    }
+    if (cutoff === 0) {
+      cutoff = 1;
+    }
+    response.remainingOperations = remainingRaw.slice(0, cutoff);
+    const remainingListTruncated = cutoff < remainingRaw.length;
+    if (remainingListTruncated) {
+      response.remainingOperationsTruncated = true;
+    }
+
+    if (remainingListTruncated) {
+      response.note =
+        `Executed the first ${MAX_OPERATIONS} of ${operationsSubmitted} submitted operations. ` +
+        `${remainingRaw.length} operations remain unexecuted; "remainingOperations" below lists only the first ${cutoff} ` +
+        `of those ${remainingRaw.length} (it was cut short to stay under the response size budget) — it is NOT the full remainder. ` +
+        `Send the "remainingOperations" listed here verbatim in your next batch_design call, then continue with the rest of the ` +
+        `unexecuted operations from your own script (the ones after these) in subsequent calls, in order — ` +
+        `do not repeat the operations already executed, or you will create duplicate nodes. ` +
+        `Replace any binding references with the real node ids in "bindings".`;
+    } else {
+      response.note =
+        `Executed the first ${MAX_OPERATIONS} of ${operationsSubmitted} submitted operations. ` +
+        `"remainingOperations" below lists all operations that were NOT executed, verbatim. ` +
+        `Send ONLY those remaining operations in your next batch_design call — ` +
+        `do not repeat the operations already executed, or you will create duplicate nodes. ` +
+        `Replace any binding references from this call with the real node ids in "bindings".`;
+    }
   }
 
   return JSON.stringify(response);
