@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.69.3] - 2026-07-28
+
+### Fixed
+- **"A new version is available" never appeared on the showcase.** When the gallery took over `/` and the editor moved to `/app`, `<PwaUpdateToast />` and the sonner portal stayed mounted inside the editor's `App`. `registerServiceWorker()` still runs on every entry, so an update detected while the user was sitting on the showcase set `pwaStore.updateReady` and then had nowhere to render — the prompt only turned up if you happened to walk into the editor. It is mounted above the route split now (`PwaUpdateGate`), bringing its own toast portal on the routes the editor doesn't own. The gate loads sonner and the toast chrome through `lazy()`, only once an update actually exists, so the showcase entry chunk is unchanged (~46 kB) instead of carrying ~125 kB of toast machinery it almost never needs.
+- Present mode still hides the prompt, now via `pwaStore.toastSuppressed` rather than by unmounting it — `updateReady` is untouched, so the prompt returns on exit.
+- **The e2e job on CI went red for every push**, unrelated to the change being pushed. Since the editor became a lazy route chunk, the first spec to open `/app` waits for the dev server to transform App + PixiJS, which on a cold CI runner overruns Playwright's 5s expect default (a retry against a warm server took 27s and passed). Specs now wait for the canvas through a shared `expectEditorMounted` helper sized for that first load.
+
+### Known issues
+- **`/app` returns 404 on the deployed host.** The SPA rewrite the showcase move required was never added on Render, so the editor opens only for visitors whose service worker is already registered (workbox's `navigateFallback` serves the precached shell). A first visit by URL — new browser, cleared site data, the Electron shell, the PWA `start_url` — gets a bare "Not Found" and never registers a worker, so it never receives update prompts or offline support either. Fix is host-side: rewrite `/*` → `/index.html`.
+
 ## [0.69.2] - 2026-07-28
 
 ### Security
