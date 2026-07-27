@@ -108,8 +108,8 @@ export function ShowcasePage() {
   // document scroll, rather than loosening the global rule the editor depends
   // on.
   return (
-    <div className="h-full overflow-y-auto bg-surface-base">
-      <header className="mx-auto max-w-6xl px-6 pt-12 pb-8 sm:px-8">
+    <div className="h-full overflow-y-auto bg-white">
+      <header className="mx-auto max-w-6xl px-6 pt-12 pb-8 sm:px-8 lg:max-w-none">
         <h1 className="text-2xl font-semibold text-text-primary">
           Pen Editor Showcase
         </h1>
@@ -125,7 +125,7 @@ export function ShowcasePage() {
         </Link>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 pb-16 sm:px-8">
+      <main className="mx-auto max-w-6xl px-6 pb-16 sm:px-8 lg:max-w-none">
         {status === "loading" && <SkeletonGrid />}
 
         {status === "error" && (

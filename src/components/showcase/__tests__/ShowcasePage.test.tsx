@@ -147,6 +147,27 @@ describe("<ShowcasePage />", () => {
     expect(image.closest("button")).toBeNull();
     expect(image.closest("a")).toBeNull();
   });
+
+  it("uses a white surface, outlined screenshots, and full-width desktop containers", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ screens: [screen1()], nextCursor: null })),
+    );
+
+    const { container } = renderPage();
+
+    const image = await screen.findByAltText("Onboarding flow");
+    const page = container.firstElementChild;
+    const header = page?.querySelector("header");
+    const main = page?.querySelector("main");
+    const card = image.parentElement;
+
+    expect(page?.classList.contains("bg-white")).toBe(true);
+    expect(header?.classList.contains("lg:max-w-none")).toBe(true);
+    expect(main?.classList.contains("lg:max-w-none")).toBe(true);
+    expect(card?.classList.contains("border")).toBe(true);
+    expect(card?.classList.contains("border-gray-200")).toBe(true);
+  });
 });
 
 // ShowcaseLightbox is not rendered by ShowcasePage right now (opening the
