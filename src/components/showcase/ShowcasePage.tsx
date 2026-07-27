@@ -4,7 +4,6 @@ import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { fetchShowcase, type ShowcaseScreen } from "@/lib/showcase";
 import { ShowcaseCard } from "@/components/showcase/ShowcaseCard";
-import { ShowcaseLightbox } from "@/components/showcase/ShowcaseLightbox";
 
 type Status = "loading" | "ready" | "error";
 
@@ -20,7 +19,7 @@ function SkeletonGrid() {
       {heights.map((height, i) => (
         <div
           key={i}
-          className="mb-4 animate-pulse break-inside-avoid rounded-lg bg-surface-elevated"
+          className="mb-4 animate-pulse break-inside-avoid rounded-3xl bg-surface-elevated"
           style={{ height }}
         />
       ))}
@@ -34,7 +33,6 @@ export function ShowcasePage() {
   const [status, setStatus] = useState<Status>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [selectedScreen, setSelectedScreen] = useState<ShowcaseScreen | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -76,8 +74,14 @@ export function ShowcasePage() {
 
   const isEmpty = status === "ready" && screens.length === 0;
 
+  // index.css locks html/body/#root to height:100% + overflow:hidden so the
+  // editor owns a fixed viewport. A page taller than the screen is therefore
+  // clipped with no way to scroll it — which is what made the grid
+  // unscrollable on phones. Scroll inside this container instead of relying on
+  // document scroll, rather than loosening the global rule the editor depends
+  // on.
   return (
-    <div className="min-h-screen bg-surface-base">
+    <div className="h-full overflow-y-auto bg-surface-base">
       <header className="mx-auto max-w-6xl px-6 pt-12 pb-8 sm:px-8">
         <h1 className="text-2xl font-semibold text-text-primary">
           Pen Editor Showcase
@@ -122,11 +126,7 @@ export function ShowcasePage() {
           <>
             <div className={MASONRY_CLASSES}>
               {screens.map((screen) => (
-                <ShowcaseCard
-                  key={screen.id}
-                  screen={screen}
-                  onSelect={setSelectedScreen}
-                />
+                <ShowcaseCard key={screen.id} screen={screen} />
               ))}
             </div>
 
@@ -144,13 +144,6 @@ export function ShowcasePage() {
           </>
         )}
       </main>
-
-      <ShowcaseLightbox
-        screen={selectedScreen}
-        onOpenChange={(open) => {
-          if (!open) setSelectedScreen(null);
-        }}
-      />
     </div>
   );
 }

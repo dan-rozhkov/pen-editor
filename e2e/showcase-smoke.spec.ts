@@ -31,7 +31,8 @@ test("/ shows the showcase, not the editor", async ({ page }) => {
   await page.goto("/");
 
   // The showcase renders — not the editor shell (no Pixi canvas).
-  await expect(page.getByText("Onboarding flow")).toBeVisible();
+  // Cards are image-only, so the title lives in alt text, not a caption.
+  await expect(page.getByAltText("Onboarding flow")).toBeVisible();
   await expect(page.locator("[data-canvas]")).toHaveCount(0);
 
   // Navigating to /app still loads the editor.
@@ -41,4 +42,44 @@ test("/ shows the showcase, not the editor", async ({ page }) => {
   await page.getByRole("link", { name: /open the editor/i }).click();
   await expect(page).toHaveURL(/\/app$/);
   await expect(page.locator("[data-canvas]")).toBeVisible();
+});
+
+// Regression: index.css locks html/body/#root to height:100% + overflow:hidden
+// so the editor owns a fixed viewport. The showcase inherited that lock, so a
+// grid taller than the screen was clipped with no way to reach the rest of it
+// — most obvious on a phone, where the two-column grid gets tall fast. Only a
+// real browser can catch this; happy-dom reports no layout.
+test("the grid scrolls on a phone-sized viewport", async ({ page }) => {
+  const screens = Array.from({ length: 12 }, (_, i) => ({
+    id: `s${i}`,
+    runId: "r1",
+    theme: "dark",
+    title: `Screen ${i}`,
+    model: "test/smoke-model",
+    imageUrl: "https://example.com/s.png",
+    width: 390,
+    height: 844,
+    htmlUrl: "https://example.com/s.html",
+    createdAt: "2026-07-01T00:00:00.000Z",
+  }));
+  await page.route("**/api/showcase**", (route) =>
+    route.fulfill({ json: { screens, nextCursor: null } })
+  );
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await expect(page.getByAltText("Screen 0")).toBeVisible();
+
+  // Whichever element owns the scroll, the page must both overflow and move.
+  const scroller = page.locator("main").locator("xpath=..");
+  await expect
+    .poll(async () =>
+      scroller.evaluate((el) => el.scrollHeight > el.clientHeight)
+    )
+    .toBe(true);
+
+  await scroller.evaluate((el) => el.scrollBy(0, 600));
+  await expect
+    .poll(async () => scroller.evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(0);
 });

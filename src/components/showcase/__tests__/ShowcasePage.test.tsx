@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { ShowcasePage } from "@/components/showcase/ShowcasePage";
+import { ShowcaseLightbox } from "@/components/showcase/ShowcaseLightbox";
 import type { ShowcaseScreen } from "@/lib/showcase";
 
 afterEach(() => {
@@ -64,7 +65,7 @@ describe("<ShowcasePage />", () => {
 
     renderPage();
 
-    await screen.findByText("Onboarding flow");
+    await screen.findByAltText("Onboarding flow");
     expect(screen.queryByText("Show more")).toBeNull();
   });
 
@@ -116,20 +117,20 @@ describe("<ShowcasePage />", () => {
 
     renderPage();
 
-    await screen.findByText("Onboarding flow");
+    await screen.findByAltText("Onboarding flow");
     const showMore = screen.getByRole("button", { name: "Show more" });
     fireEvent.click(showMore);
 
-    await screen.findByText("Checkout page");
+    await screen.findByAltText("Checkout page");
     // Both pages are visible after loading more.
-    expect(screen.getByText("Onboarding flow")).toBeTruthy();
+    expect(screen.getByAltText("Onboarding flow")).toBeTruthy();
     // No further cursor — the button disappears.
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: "Show more" })).toBeNull(),
     );
   });
 
-  it("opens a lightbox whose iframe sandbox never includes allow-same-origin", async () => {
+  it("renders screens as bare images — no caption, no click target", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => jsonResponse({ screens: [screen1()], nextCursor: null })),
@@ -137,8 +138,27 @@ describe("<ShowcasePage />", () => {
 
     renderPage();
 
-    const card = await screen.findByText("Onboarding flow");
-    fireEvent.click(card.closest("button")!);
+    const image = await screen.findByAltText("Onboarding flow");
+    // The metadata that used to sit under each card must not come back as
+    // visible text.
+    expect(screen.queryByText("test/model")).toBeNull();
+    expect(screen.queryByText(/dark/)).toBeNull();
+    // The live-HTML lightbox is switched off, so a card is not interactive.
+    expect(image.closest("button")).toBeNull();
+    expect(image.closest("a")).toBeNull();
+  });
+});
+
+// ShowcaseLightbox is not rendered by ShowcasePage right now (opening the
+// agent's HTML in an iframe is switched off), but the component is kept for
+// when it is switched back on — and so is the guard that matters most about
+// it. `allow-scripts` together with `allow-same-origin` lifts the sandbox
+// entirely, which must never happen for LLM-authored markup.
+describe("ShowcaseLightbox", () => {
+  it("sandboxes the iframe to allow-scripts, never allow-same-origin", async () => {
+    render(
+      <ShowcaseLightbox screen={screen1()} onOpenChange={() => {}} />,
+    );
 
     const iframe = await screen.findByTitle("Onboarding flow");
     const sandbox = iframe.getAttribute("sandbox") ?? "";
