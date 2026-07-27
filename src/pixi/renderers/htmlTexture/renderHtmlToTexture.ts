@@ -159,6 +159,27 @@ async function doRender(
   resolution: number,
   cacheKey: string,
 ): Promise<Texture | null> {
+  const canvas = await renderHtmlToCanvas(html, width, height, resolution);
+  if (!canvas) return null;
+
+  const texture = Texture.from({ resource: canvas, resolution });
+  textureCache.set(cacheKey, texture);
+  return texture;
+}
+
+/**
+ * Render HTML/CSS content to a plain `HTMLCanvasElement`, with no Pixi/Texture
+ * wrapping or caching. Shared by `renderHtmlToTexture` (on-canvas HTML
+ * textures) and `captureEmbedScreenshot` (the `get_screenshot` tool's embed
+ * path) — the latter needs a raster image it can turn into a data URL, not a
+ * GPU texture, and embeds don't go through this module's LRU cache at all.
+ */
+export async function renderHtmlToCanvas(
+  html: string,
+  width: number,
+  height: number,
+  resolution: number,
+): Promise<HTMLCanvasElement | null> {
   const normalizedHtml = normalizeHtmlForEmbedRender(html);
   await ensureExternalFontStylesLoaded(normalizedHtml);
   const pixelWidth = Math.max(1, Math.round(width * resolution));
@@ -181,9 +202,7 @@ async function doRender(
     );
     if (foreignObjectCanvas) {
       bleedTransparentEdgeColors(foreignObjectCanvas);
-      const texture = Texture.from({ resource: foreignObjectCanvas, resolution });
-      textureCache.set(cacheKey, texture);
-      return texture;
+      return foreignObjectCanvas;
     }
   }
 
@@ -250,9 +269,7 @@ async function doRender(
 
     bleedTransparentEdgeColors(canvas);
 
-    const texture = Texture.from({ resource: canvas, resolution });
-    textureCache.set(cacheKey, texture);
-    return texture;
+    return canvas;
   } catch {
     return null;
   } finally {

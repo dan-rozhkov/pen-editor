@@ -1,6 +1,8 @@
 import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { findPixiChild } from "@/utils/pixiUtils";
+import { captureEmbedScreenshot } from "@/lib/embedScreenshot";
+import type { EmbedNode } from "@/types/scene";
 
 /**
  * Best-effort PNG screenshot of a scene node as a data URL, captured straight
@@ -16,7 +18,16 @@ export async function captureNodeScreenshot(
   nodeId: string,
 ): Promise<string | null> {
   const { nodesById } = useSceneStore.getState();
-  if (!nodesById[nodeId]) return null;
+  const node = nodesById[nodeId];
+  if (!node) return null;
+
+  // Embeds render as a live Shadow-DOM overlay above the PixiJS canvas, with
+  // an intentionally empty PixiJS container (see embedRenderer.ts and
+  // getScreenshot.ts) — extract their preview from the HTML content directly
+  // instead of returning a blank image. See FIR-56.
+  if (node.type === "embed") {
+    return captureEmbedScreenshot(node as EmbedNode);
+  }
 
   const { pixiRefs } = useCanvasRefStore.getState();
   if (!pixiRefs) return null;

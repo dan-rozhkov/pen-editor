@@ -2,6 +2,8 @@ import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { findPixiChild } from "@/utils/pixiUtils";
+import { captureEmbedScreenshot } from "@/lib/embedScreenshot";
+import type { EmbedNode } from "@/types/scene";
 import type { ToolHandler } from "../toolRegistry";
 
 export const getScreenshot: ToolHandler = async (args) => {
@@ -19,8 +21,25 @@ export const getScreenshot: ToolHandler = async (args) => {
   }
 
   const { nodesById } = useSceneStore.getState();
-  if (!nodesById[nodeId]) {
+  const node = nodesById[nodeId];
+  if (!node) {
     return JSON.stringify({ error: `Node not found: ${nodeId}` });
+  }
+
+  // Embeds render as a live Shadow-DOM overlay above the PixiJS canvas (see
+  // EmbedLayer.tsx), not as PixiJS scene content — their PixiJS container is
+  // deliberately empty (embedRenderer.ts), so extracting pixels from PixiJS
+  // below would always return a blank image regardless of whether the
+  // embed's own content (including any external images) actually rendered.
+  // See FIR-56.
+  if (node.type === "embed") {
+    const imageData = await captureEmbedScreenshot(node as EmbedNode);
+    if (imageData) {
+      return JSON.stringify({ imageData });
+    }
+    return JSON.stringify({
+      error: `Embed "${nodeId}" could not be rendered to an image (its HTML may be empty, or contain a cross-origin image served without CORS headers).`,
+    });
   }
 
   const { pixiRefs } = useCanvasRefStore.getState();
