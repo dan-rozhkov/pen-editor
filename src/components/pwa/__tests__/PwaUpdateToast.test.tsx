@@ -28,7 +28,11 @@ function renderToast() {
 }
 
 beforeEach(() => {
-  usePwaStore.setState({ updateReady: false, offlineReady: false });
+  usePwaStore.setState({
+    updateReady: false,
+    offlineReady: false,
+    toastSuppressed: false,
+  });
 });
 
 afterEach(() => {
@@ -73,6 +77,37 @@ describe("PwaUpdateToast", () => {
     // A single click applies the update — there is no "unsaved work" confirm.
     expect(updateSW).toHaveBeenCalledWith(true);
     expect(screen.queryByText(/unsaved work/i)).toBeNull();
+  });
+
+  it("stays hidden while the editor suppresses toasts (present mode)", async () => {
+    usePwaStore.setState({ updateReady: true, toastSuppressed: true });
+
+    renderToast();
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("pwa-update-toast")).toBeNull(),
+    );
+  });
+
+  it("appears once suppression is lifted (leaving present mode)", async () => {
+    usePwaStore.setState({ updateReady: true, toastSuppressed: true });
+    renderToast();
+
+    act(() => usePwaStore.getState().setToastSuppressed(false));
+
+    expect(await screen.findByTestId("pwa-update-toast")).toBeTruthy();
+  });
+
+  it("hides an already-visible toast when suppression turns on", async () => {
+    usePwaStore.setState({ updateReady: true });
+    renderToast();
+    await screen.findByTestId("pwa-update-toast");
+
+    act(() => usePwaStore.getState().setToastSuppressed(true));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("pwa-update-toast")).toBeNull(),
+    );
   });
 
   it("dismissing clears updateReady without applying the update", async () => {

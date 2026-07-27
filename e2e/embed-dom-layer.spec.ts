@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { expectEditorMounted } from "./support/editor";
 
 // Smoke test for the code-layer DOM overlay (EmbedLayer). An embed node is
 // added to the scene store (dev-only global), and we verify it renders as a
@@ -18,7 +19,7 @@ test("embed renders as a DOM overlay and enters interactive state", async ({ pag
   );
 
   await page.goto("/app");
-  await expect(page.locator("[data-canvas]")).toBeVisible();
+  await expectEditorMounted(page);
 
   // Add an embed node via the scene store (dev-only global).
   await page.evaluate(() => {

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectEditorMounted } from "./support/editor";
 
 // Node count is parameterized via PERF_NODES (defaults to 5000) so the same
 // probe can be re-run at larger sizes, e.g. `PERF_NODES=20000 npm run test:e2e`.
@@ -36,7 +37,7 @@ test("large document: sync flush and culling stay within budget", async ({ page 
   // diff path, not the full-scan comparison run alongside it in dev.
   await page.addInitScript(() => localStorage.setItem("pen.diffCheck", "off"));
   await page.goto(`/app?perf=${PERF_NODES}`);
-  await expect(page.locator("[data-canvas]")).toBeVisible();
+  await expectEditorMounted(page);
   await page.waitForTimeout(1500); // initial build settles
 
   const result = await page.evaluate(async () => {

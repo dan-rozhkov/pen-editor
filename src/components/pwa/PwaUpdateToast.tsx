@@ -10,9 +10,14 @@ import { IconButton } from "@/components/ui/IconButton";
 // waiting to activate (registerServiceWorker sets pwaStore's updateReady), it
 // fires a persistent sonner toast (rendered by the app-level <Toaster />).
 // Reading from pwaStore rather than a one-shot event means state set before
-// this component mounts, or while it's unmounted (e.g. present mode:
-// `{!isPresent && <PwaUpdateToast />}`), is still picked up as soon as it
-// (re)mounts and the subscription reads current state.
+// this component mounts is still picked up as soon as it mounts and the
+// subscription reads current state.
+//
+// Mounted in AppRouter, not in the editor's App: the editor is only one of
+// two routes now ("/" is the showcase), and registerServiceWorker runs on
+// every entry — so hosting the toast inside App meant an update detected on
+// the showcase had nowhere to render. Present mode hides it via pwaStore's
+// `toastSuppressed` instead of by unmounting.
 //
 // The toast shows a single "Update" button that reloads immediately on the
 // first click via getUpdateSW()?.(true) — no confirm step. Its dismiss (X)
@@ -27,10 +32,13 @@ const TOAST_ID = "pwa-update";
 
 export function PwaUpdateToast() {
   const updateReady = usePwaStore((s) => s.updateReady);
+  const suppressed = usePwaStore((s) => s.toastSuppressed);
   const setUpdateReady = usePwaStore((s) => s.setUpdateReady);
 
   useEffect(() => {
-    if (!updateReady) return;
+    // Suppression turning on mid-toast retracts the visible one: the effect
+    // re-runs, its cleanup dismisses, and this bails before re-firing.
+    if (!updateReady || suppressed) return;
     toast.custom(
       () => (
           // toast.custom renders unstyled (no sonner background/border/shadow),
@@ -62,12 +70,12 @@ export function PwaUpdateToast() {
         ),
         { id: TOAST_ID, duration: Infinity },
       );
-    // Dismiss on unmount (e.g. entering present mode) so the toast doesn't
-    // linger in the always-mounted <Toaster /> portal after its owner is gone.
+    // Dismiss on unmount so the toast doesn't linger in the always-mounted
+    // <Toaster /> portal after its owner is gone.
     return () => {
       toast.dismiss(TOAST_ID);
     };
-  }, [updateReady, setUpdateReady]);
+  }, [updateReady, suppressed, setUpdateReady]);
 
   return null;
 }

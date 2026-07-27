@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { expectEditorMounted } from "./support/editor";
 
 // Smoke test for FIR-61 part D: "/" now serves the public showcase of
 // autonomously-designed screens instead of the editor, which moved to
@@ -41,7 +42,7 @@ test("/ shows the showcase, not the editor", async ({ page }) => {
   );
   await page.getByRole("link", { name: /open the editor/i }).click();
   await expect(page).toHaveURL(/\/app$/);
-  await expect(page.locator("[data-canvas]")).toBeVisible();
+  await expectEditorMounted(page);
 });
 
 // Regression: index.css locks html/body/#root to height:100% + overflow:hidden

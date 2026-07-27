@@ -4,6 +4,7 @@ import { reconcileModels } from "./store/chatStore";
 import { useCustomFontStore } from "./store/customFontStore";
 import { usePluginStore } from "./store/pluginStore";
 import { useSceneStore } from "./store/sceneStore";
+import { usePwaStore } from "./store/pwaStore";
 import { LeftRail } from "./components/LeftRail";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { RightPanel } from "./components/RightPanel";
@@ -23,7 +24,6 @@ import { useLayers3DStore } from "./store/layers3dStore";
 import { useIsMobile } from "./hooks/useIsMobile";
 import { useOnlineStatus } from "./hooks/useOnlineStatus";
 import { OfflineBanner } from "./components/pwa/OfflineBanner";
-import { PwaUpdateToast } from "./components/pwa/PwaUpdateToast";
 import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
 import "./store/uiThemeStore"; // Initialize UI theme (applies .dark class before first render)
@@ -61,6 +61,16 @@ function App() {
     if (mode !== "edit") return;
     void usePluginStore.getState().init();
   }, [mode]);
+
+  // Present mode hides all editor chrome, and the PWA update toast is no
+  // exception — but it's mounted in AppRouter now (so it can also fire on the
+  // showcase route), out of reach of conditional rendering here. Flag it
+  // instead; leaving present mode brings the toast back, since `updateReady`
+  // is never cleared by this.
+  useEffect(() => {
+    usePwaStore.getState().setToastSuppressed(isPresent);
+    return () => usePwaStore.getState().setToastSuppressed(false);
+  }, [isPresent]);
 
   // Read-only view mode is entered only via the `?view` URL parameter
   // (e.g. ?view or ?view=1). There is no in-app toggle.
@@ -108,6 +118,10 @@ function App() {
         </CanvasContextMenu>
       </div>
 
+      {/* Sonner toast portal — hosts the editor's toasts plus the
+          router-level PwaUpdateToast. Themed with the editor's UI theme. */}
+      <Toaster />
+
       {/* Keeps the present-mode frame fitted to the window; no-op otherwise. */}
       <PresentController />
 
@@ -119,14 +133,6 @@ function App() {
           interaction. PixiCanvas stays mounted; only backend-dependent
           features are unavailable while offline. */}
       {!isOnline && !isPresent && <OfflineBanner />}
-
-      {/* Update-available toast — appears once a new service worker version
-          has installed and is waiting to activate. Headless: it fires a sonner
-          toast into the <Toaster /> portal below. */}
-      {!isPresent && <PwaUpdateToast />}
-
-      {/* Sonner toast portal (hosts PwaUpdateToast's toast). */}
-      <Toaster />
 
       {/* Cmd+/ or Cmd+K search overlay — lists every tool/menu action from
           the command registry. Edit-mode only: its commands mutate the scene

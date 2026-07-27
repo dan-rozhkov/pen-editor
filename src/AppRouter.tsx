@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 
+import { PwaUpdateGate } from "@/components/pwa/PwaUpdateGate";
 import { ShowcasePage } from "@/components/showcase/ShowcasePage";
 
 // The editor pulls in PixiJS and the whole canvas/tool stack; the showcase at
@@ -23,6 +24,11 @@ export function AppRouter() {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+
+      {/* "A new version is available" prompt — above the route split so it
+          also fires on the showcase at "/", where the editor (its previous
+          host) never mounts. Lazy and self-gating; see PwaUpdateGate. */}
+      <PwaUpdateGate />
     </BrowserRouter>
   );
 }

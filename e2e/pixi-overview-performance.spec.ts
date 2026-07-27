@@ -1,11 +1,12 @@
 import { expect, test } from "@playwright/test";
+import { expectEditorMounted } from "./support/editor";
 
 test("overview culls nested detail and restores it after zooming in", async ({ page }) => {
   await page.route("**/api/models", (route) =>
     route.fulfill({ json: { models: [], default: null } }),
   );
   await page.goto("/app");
-  await expect(page.locator("[data-canvas]")).toBeVisible();
+  await expectEditorMounted(page);
 
   await page.evaluate(() => {
     const w = window as unknown as {

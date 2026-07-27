@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { expectEditorMounted } from "../support/editor";
 
 // PWA offline smoke test. Unlike e2e/*.spec.ts (which run against the Vite
 // dev server), the service worker only exists in production builds
@@ -31,7 +32,7 @@ test("editor shell and offline banner load offline after a first online visit", 
   );
 
   await page.goto("/app");
-  await expect(page.locator("[data-canvas]")).toBeVisible();
+  await expectEditorMounted(page);
 
   // Wait for the service worker to finish installing and activating.
   await page.waitForFunction(
@@ -61,7 +62,7 @@ test("editor shell and offline banner load offline after a first online visit", 
   // The precached app shell (index.html + main/vendor chunks) loads from the
   // service worker cache, and the Pixi canvas — whose lazy chunk was already
   // fetched during the online visit — initializes normally.
-  await expect(page.locator("[data-canvas]")).toBeVisible();
+  await expectEditorMounted(page);
 
   // The offline-only banner communicates that AI/backend features are down.
   await expect(page.getByTestId("offline-banner")).toBeVisible();

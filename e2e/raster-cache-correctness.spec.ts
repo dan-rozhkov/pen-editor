@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { expectEditorMounted } from "./support/editor";
 
 // Task 13's correctness matrix: raster caching of quiet top-level frames must
 // never show a stale texture after a mutation/reparent/undo lands inside a
@@ -97,7 +98,7 @@ test.describe("raster cache correctness (Task 13)", () => {
     await page.route("**/api/models", (route) => route.fulfill({ json: { models: [], default: null } }));
     await page.addInitScript(() => localStorage.setItem("pen.rasterCache", "on"));
     await page.goto("/app");
-    await expect(page.locator("[data-canvas]")).toBeVisible();
+    await expectEditorMounted(page);
     await seedMutateReparentScene(page);
 
     // Let frame-a's subtree go quiet so the manager caches it.
@@ -119,7 +120,7 @@ test.describe("raster cache correctness (Task 13)", () => {
     await page.route("**/api/models", (route) => route.fulfill({ json: { models: [], default: null } }));
     await page.addInitScript(() => localStorage.setItem("pen.rasterCache", "on"));
     await page.goto("/app");
-    await expect(page.locator("[data-canvas]")).toBeVisible();
+    await expectEditorMounted(page);
     await seedMutateReparentScene(page);
 
     await page.waitForTimeout(SETTLE_MS); // both frame-a and frame-b cache
@@ -145,7 +146,7 @@ test.describe("raster cache correctness (Task 13)", () => {
     await page.route("**/api/models", (route) => route.fulfill({ json: { models: [], default: null } }));
     await page.addInitScript(() => localStorage.setItem("pen.rasterCache", "on"));
     await page.goto("/app");
-    await expect(page.locator("[data-canvas]")).toBeVisible();
+    await expectEditorMounted(page);
     await seedMutateReparentScene(page);
 
     await page.waitForTimeout(SETTLE_MS);
@@ -168,7 +169,7 @@ test.describe("raster cache correctness (Task 13)", () => {
     await page.route("**/api/models", (route) => route.fulfill({ json: { models: [], default: null } }));
     await page.addInitScript((flag) => localStorage.setItem("pen.rasterCache", flag), rasterCacheFlag);
     await page.goto("/app");
-    await expect(page.locator("[data-canvas]")).toBeVisible();
+    await expectEditorMounted(page);
     await page.evaluate(() => {
       const w = window as unknown as {
         __sceneStore: { setState: (state: unknown) => void };
@@ -226,7 +227,7 @@ test.describe("raster cache correctness (Task 13)", () => {
     await page.route("**/api/models", (route) => route.fulfill({ json: { models: [], default: null } }));
     await page.addInitScript(() => localStorage.setItem("pen.rasterCache", "on"));
     await page.goto("/app");
-    await expect(page.locator("[data-canvas]")).toBeVisible();
+    await expectEditorMounted(page);
 
     await page.evaluate(() => {
       const w = window as unknown as {
@@ -280,7 +281,7 @@ test.describe("raster cache correctness (Task 13)", () => {
     await page.route("**/api/models", (route) => route.fulfill({ json: { models: [], default: null } }));
     await page.addInitScript(() => localStorage.setItem("pen.rasterCache", "on"));
     await page.goto("/app");
-    await expect(page.locator("[data-canvas]")).toBeVisible();
+    await expectEditorMounted(page);
 
     await page.evaluate(() => {
       const w = window as unknown as {
