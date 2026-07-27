@@ -379,6 +379,26 @@ export function getNodeAbsolutePositionWithLayout(
   return findWithPath(nodes, 0, 0, null);
 }
 
+// Memoized flattenTree: keyed on the `nodes` array reference. The scene's
+// tree cache (store/sceneStore/helpers/treeCache.ts) hands back the SAME
+// array reference for `state.getNodes()` as long as nodesById/rootIds/
+// childrenById haven't changed identity, so a WeakMap keyed on that
+// reference gives an exact, always-fresh cache: any real mutation produces a
+// new tree array (new key, cache miss), while repeated calls against an
+// unchanged tree (e.g. every node in a single serialize pass) reuse the same
+// flattened maps instead of re-walking the whole document each time. Callers
+// that build ad-hoc subtree arrays simply miss the cache every time (still
+// correct, just uncached) since those arrays are fresh objects.
+const flattenTreeCache = new WeakMap<SceneNode[], ReturnType<typeof flattenTree>>();
+
+function getFlattenedTreeCached(nodes: SceneNode[]): ReturnType<typeof flattenTree> {
+  const cached = flattenTreeCache.get(nodes);
+  if (cached) return cached;
+  const flat = flattenTree(nodes);
+  flattenTreeCache.set(nodes, flat);
+  return flat;
+}
+
 /**
  * Get effective size of a node, taking into account Yoga layout calculations.
  * For nodes inside auto-layout frames, width/height may be computed by Yoga.
@@ -389,7 +409,7 @@ export function getNodeEffectiveSize(
   targetId: string,
   calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
 ): { width: number; height: number } | null {
-  const flatTree = flattenTree(nodes);
+  const flatTree = getFlattenedTreeCached(nodes);
 
   function findWithPath(
     searchNodes: SceneNode[],

@@ -49,6 +49,51 @@ describe("captureNodeScreenshot (FIR-56)", () => {
     spy.mockRestore();
   });
 
+  // Finding #2 (2026-07-27 review): mirrors the getScreenshot.ts fix — an
+  // embed sized fill_container stores a 0-placeholder width in the flat
+  // node, which used to slip straight into captureEmbedScreenshot's
+  // `!node.width` guard.
+  it("resolves a fill_container embed's real width before screenshotting", async () => {
+    const scene = useSceneStore.getState();
+    const wrapFrame = {
+      id: "wrap1",
+      type: "frame",
+      name: "Wrap",
+      x: 0,
+      y: 0,
+      width: 300,
+      height: 200,
+      layout: { autoLayout: true, flexDirection: "column" },
+    } as unknown as EmbedNode;
+    const fillEmbed = {
+      id: "embed2",
+      type: "embed",
+      name: "Code",
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 50,
+      sizing: { widthMode: "fill_container", heightMode: "fixed" },
+      htmlContent: '<img src="https://picsum.photos/200">',
+    } as unknown as EmbedNode;
+    useSceneStore.setState({
+      nodesById: { ...scene.nodesById, wrap1: wrapFrame, embed2: fillEmbed },
+      parentById: { ...scene.parentById, wrap1: null, embed2: "wrap1" },
+      childrenById: { ...scene.childrenById, wrap1: ["embed2"] },
+      rootIds: [...scene.rootIds, "wrap1"],
+    });
+
+    const spy = vi
+      .spyOn(embedScreenshot, "captureEmbedScreenshot")
+      .mockResolvedValue("data:image/png;base64,EMBED");
+
+    const result = await captureNodeScreenshot("embed2");
+
+    expect(result).toBe("data:image/png;base64,EMBED");
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ width: 300, height: 50 }));
+    spy.mockRestore();
+  });
+
   it("still uses PixiJS extraction for non-embed nodes", async () => {
     const extractBase64 = vi.fn(async () => "data:image/png;base64,PIXI");
     const fakeRefs = {

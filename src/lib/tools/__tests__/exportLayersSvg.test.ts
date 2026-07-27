@@ -26,6 +26,13 @@ describe("export_layers_svg", () => {
     expect(result.error).toBeTruthy();
   });
 
+  it("treats an explicit empty nodeIds array as 'export nothing', NOT as a fallback to the current selection", async () => {
+    useSelectionStore.setState({ selectedIds: ["rect2"] });
+    const result = JSON.parse(await exportLayersSvg({ nodeIds: [] }));
+    expect(result.error).toBeTruthy();
+    expect(result.success).toBeUndefined();
+  });
+
   it("defaults to the current selection when nodeIds is omitted", async () => {
     useSelectionStore.setState({ selectedIds: ["rect2"] });
     const result = JSON.parse(await exportLayersSvg({}));
@@ -113,5 +120,75 @@ describe("export_layers_svg", () => {
     const result = JSON.parse(await exportLayersSvg({ nodeIds: ["rectHuge"] }));
     expect(result.error).toBeTruthy();
     expect(result.error).toMatch(/too large/i);
+  });
+
+  it("pads the canvas and warns for a rotated node, instead of clipping it to the unrotated bbox", async () => {
+    const rotatedRect = {
+      id: "rotatedRect",
+      type: "rect",
+      name: "Rotated",
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 40,
+      fill: "#ff0000",
+      rotation: 45,
+    } as unknown as import("@/types/scene").RectNode;
+    useSceneStore.setState((state) => ({
+      nodesById: { ...state.nodesById, rotatedRect },
+      rootIds: [...state.rootIds, "rotatedRect"],
+    }));
+
+    const result = JSON.parse(await exportLayersSvg({ nodeIds: ["rotatedRect"] }));
+    expect(result.success).toBe(true);
+    // Unrotated bbox is 100x40; a 45° rotation about its own center needs
+    // extra room on every side to avoid the viewBox clipping the corners.
+    expect(result.width).toBeGreaterThan(100);
+    expect(result.height).toBeGreaterThan(40);
+    expect(result.warnings).toBeDefined();
+    expect(result.warnings.join(" ")).toMatch(/rotated|padded/i);
+  });
+
+  it("pads the canvas and warns for a node with a drop-shadow effect", async () => {
+    const shadowedRect = {
+      id: "shadowedRect",
+      type: "rect",
+      name: "Shadowed",
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 40,
+      fill: "#ff0000",
+      effects: [
+        {
+          type: "shadow",
+          shadowType: "outer",
+          color: "#00000080",
+          offset: { x: 4, y: 4 },
+          blur: 20,
+          spread: 0,
+          id: "e1",
+        },
+      ],
+    } as unknown as import("@/types/scene").RectNode;
+    useSceneStore.setState((state) => ({
+      nodesById: { ...state.nodesById, shadowedRect },
+      rootIds: [...state.rootIds, "shadowedRect"],
+    }));
+
+    const result = JSON.parse(await exportLayersSvg({ nodeIds: ["shadowedRect"] }));
+    expect(result.success).toBe(true);
+    expect(result.width).toBeGreaterThan(100);
+    expect(result.height).toBeGreaterThan(40);
+    expect(result.warnings).toBeDefined();
+    expect(result.warnings.join(" ")).toMatch(/blur|shadow|padded/i);
+  });
+
+  it("does not pad the canvas for a plain axis-aligned node with no effects", async () => {
+    const result = JSON.parse(await exportLayersSvg({ nodeIds: ["rect1"] }));
+    expect(result.success).toBe(true);
+    expect(result.width).toBe(100);
+    expect(result.height).toBe(50);
+    expect(result.warnings).toBeUndefined();
   });
 });

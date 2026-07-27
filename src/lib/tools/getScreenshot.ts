@@ -1,8 +1,10 @@
 import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { useSceneStore } from "@/store/sceneStore";
+import { useLayoutStore } from "@/store/layoutStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { findPixiChild } from "@/utils/pixiUtils";
 import { captureEmbedScreenshot } from "@/lib/embedScreenshot";
+import { getNodeEffectiveSize } from "@/utils/nodeUtils";
 import type { EmbedNode } from "@/types/scene";
 import type { ToolHandler } from "../toolRegistry";
 
@@ -33,7 +35,22 @@ export const getScreenshot: ToolHandler = async (args) => {
   // embed's own content (including any external images) actually rendered.
   // See FIR-56.
   if (node.type === "embed") {
-    const imageData = await captureEmbedScreenshot(node as EmbedNode);
+    // FIR-59-style gap: an embed sized fill_container/fit_content stores 0 as
+    // a creation-time placeholder in the flat node (batchDesign/nodeMapper.ts)
+    // — the raw `node` here would look 0×0 even though it renders at its real
+    // resolved size on screen. Resolve the effective size the same way tool
+    // reads already do (serializeUtils.ts) so the screenshot uses the real
+    // rendered dimensions instead of tripping the htmlContent/CORS guard in
+    // captureEmbedScreenshot for a node that's actually fine.
+    const effectiveSize = getNodeEffectiveSize(
+      useSceneStore.getState().getNodes(),
+      nodeId,
+      useLayoutStore.getState().calculateLayoutForFrame,
+    );
+    const embedNode: EmbedNode = effectiveSize
+      ? { ...(node as EmbedNode), width: effectiveSize.width, height: effectiveSize.height }
+      : (node as EmbedNode);
+    const imageData = await captureEmbedScreenshot(embedNode);
     if (imageData) {
       return JSON.stringify({ imageData });
     }

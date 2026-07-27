@@ -129,5 +129,60 @@ describe("get_screenshot", () => {
       expect(result.error).toMatch(/embed1.*could not be rendered/i);
       spy.mockRestore();
     });
+
+    // Finding #2 (2026-07-27 review): an embed sized fill_container/fit_content
+    // stores 0 as a creation-time placeholder in the flat node
+    // (batchDesign/nodeMapper.ts) — the exact same gap FIR-59 closed for
+    // batch_get/batch_design reads. get_screenshot used to pass that raw
+    // (0-width) node straight to captureEmbedScreenshot, whose
+    // `!node.width || !node.height` guard then rejected a node that actually
+    // renders fine on screen, producing a confidently wrong "may be empty, or
+    // CORS" error. Verify the effective (layout-resolved) size is used instead.
+    it("resolves a fill_container embed's real size before screenshotting, instead of misreporting a rendering error", async () => {
+      const scene = useSceneStore.getState();
+      const wrapFrame = {
+        id: "wrap1",
+        type: "frame",
+        name: "Wrap",
+        x: 0,
+        y: 0,
+        width: 300,
+        height: 200,
+        layout: { autoLayout: true, flexDirection: "column" },
+      } as unknown as EmbedNode;
+      const fillEmbed = {
+        id: "embed2",
+        type: "embed",
+        name: "Code",
+        x: 0,
+        y: 0,
+        // 0-placeholder, exactly as batchDesign/nodeMapper.ts stores it for
+        // non-fixed sizing modes — the real width only exists post-layout.
+        width: 0,
+        height: 50,
+        sizing: { widthMode: "fill_container", heightMode: "fixed" },
+        htmlContent: '<img src="https://picsum.photos/200">',
+      } as unknown as EmbedNode;
+      useSceneStore.setState({
+        nodesById: { ...scene.nodesById, wrap1: wrapFrame, embed2: fillEmbed },
+        parentById: { ...scene.parentById, wrap1: null, embed2: "wrap1" },
+        childrenById: { ...scene.childrenById, wrap1: ["embed2"] },
+        rootIds: [...scene.rootIds, "wrap1"],
+      });
+
+      const spy = vi
+        .spyOn(embedScreenshot, "captureEmbedScreenshot")
+        .mockResolvedValue("data:image/png;base64,EMBED");
+
+      const result = JSON.parse(await getScreenshot({ nodeId: "embed2" }));
+
+      expect(result.error).toBeUndefined();
+      expect(result.imageData).toBe("data:image/png;base64,EMBED");
+      // The frame is 300 wide with no padding — a fill_container child in a
+      // column layout must stretch to the full 300, not stay at the raw
+      // stored 0.
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ width: 300, height: 50 }));
+      spy.mockRestore();
+    });
   });
 });

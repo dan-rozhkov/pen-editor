@@ -1,7 +1,25 @@
-import type { FlatSceneNode, EmbedNode, Paint } from "@/types/scene";
+import type { FrameNode, FlatSceneNode, EmbedNode, Paint, SceneNode } from "@/types/scene";
 import { useSceneStore } from "@/store/sceneStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { getNodeAbsolutePositionWithLayout, getNodeEffectiveSize } from "@/utils/nodeUtils";
+
+type SerializeOptions = {
+  resolveVars?: boolean;
+  variableLookup?: Record<string, string>;
+  preferSourceTemplate?: boolean;
+};
+
+// Per-document context shared across an entire serializeNodeToDepth call
+// (one root node plus every descendant it recurses into). Reading the store
+// and resolving the tree/layout-resolver ONCE here — instead of once per
+// node, as before — avoids re-deriving the same document-wide values on
+// every recursive step. See the perf note above `serializeNodeInternal` for
+// why this matters.
+interface SerializeContext {
+  state: ReturnType<typeof useSceneStore.getState>;
+  tree: SceneNode[];
+  calculateLayoutForFrame: (frame: FrameNode) => SceneNode[];
+}
 
 /**
  * Serialize a flat node to a plain JSON object with depth-limited children.
@@ -12,11 +30,35 @@ export function serializeNodeToDepth(
   nodesById: Record<string, FlatSceneNode>,
   childrenById: Record<string, string[]>,
   depth: number,
-  options?: {
-    resolveVars?: boolean;
-    variableLookup?: Record<string, string>;
-    preferSourceTemplate?: boolean;
-  },
+  options?: SerializeOptions,
+): Record<string, unknown> | null {
+  const state = useSceneStore.getState();
+  const ctx: SerializeContext = {
+    state,
+    tree: state.getNodes(),
+    calculateLayoutForFrame: useLayoutStore.getState().calculateLayoutForFrame,
+  };
+  return serializeNodeInternal(nodeId, nodesById, childrenById, depth, ctx, options);
+}
+
+// perf (see finding #1 in the 2026-07-27 review): getNodeEffectiveSize /
+// getNodeAbsolutePositionWithLayout each walk from the document root, so
+// calling them per node while recursing over N nodes of an M-node document
+// cost O(N·M). serializeNodeToDepth above now resolves the shared
+// state/tree/calculateLayoutForFrame ONCE per top-level call and threads it
+// through this recursive worker (nodeUtils.ts additionally memoizes the
+// flattenTree() call inside getNodeEffectiveSize by tree reference, which
+// covers the other call sites of that helper too). Combined with the fast
+// path below — skipping layout resolution entirely for nodes that have no
+// non-fixed sizing and no auto-layout parent — this keeps the common case
+// cheap regardless of document size.
+function serializeNodeInternal(
+  nodeId: string,
+  nodesById: Record<string, FlatSceneNode>,
+  childrenById: Record<string, string[]>,
+  depth: number,
+  ctx: SerializeContext,
+  options?: SerializeOptions,
 ): Record<string, unknown> | null {
   const node = nodesById[nodeId];
   if (!node) return null;
@@ -41,40 +83,66 @@ export function serializeNodeToDepth(
   // after the first stacked at the same x/y, even though the canvas
   // rendered correctly. Resolve both here so tool reads match what's on
   // screen.
-  try {
-    const state = useSceneStore.getState();
-    const tree = state.getNodes();
-    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+  const { state, tree, calculateLayoutForFrame } = ctx;
+  const parentId = state.parentById[nodeId];
+  const parentNode = parentId ? state.nodesById[parentId] : undefined;
+  const parentIsAutoLayout =
+    parentNode?.type === "frame" &&
+    !!(parentNode as FlatSceneNode & { layout?: { autoLayout?: boolean } }).layout?.autoLayout;
+  const nodeSizing = (node as FlatSceneNode & {
+    sizing?: { widthMode?: string; heightMode?: string };
+  }).sizing;
+  const hasNonFixedSizing =
+    !!nodeSizing &&
+    ((!!nodeSizing.widthMode && nodeSizing.widthMode !== "fixed") ||
+      (!!nodeSizing.heightMode && nodeSizing.heightMode !== "fixed"));
 
-    // getNodeEffectiveSize walks the tree top-down from the root, so nested
-    // fill_container/fit_content chains resolve correctly: each frame's
-    // *own* resolved size (from its parent's layout pass) is what feeds the
-    // next level's computation, not the raw 0-placeholder in the flat store.
-    const size = getNodeEffectiveSize(tree, nodeId, calculateLayoutForFrame);
-    if (size) {
-      result.width = size.width;
-      result.height = size.height;
-    }
+  // Fast path: a node whose own sizing is fixed (or unset) and whose
+  // immediate parent isn't an auto-layout frame has nothing for yoga to
+  // recompute — its stored width/height/x/y already ARE the effective
+  // values, so skip the layout walk entirely.
+  if (parentIsAutoLayout || hasNonFixedSizing) {
+    try {
+      // getNodeEffectiveSize walks the tree top-down from the root, so nested
+      // fill_container/fit_content chains resolve correctly: each frame's
+      // *own* resolved size (from its parent's layout pass) is what feeds the
+      // next level's computation, not the raw 0-placeholder in the flat store.
+      const size = getNodeEffectiveSize(tree, nodeId, calculateLayoutForFrame);
+      if (size) {
+        result.width = size.width;
+        result.height = size.height;
+      }
 
-    // Position is only rewritten for children of an auto-layout frame — that
-    // is the only case where yoga (not the stored x/y) determines placement.
-    // getNodeAbsolutePositionWithLayout returns canvas-absolute coordinates,
-    // so re-derive the parent-relative value the flat store actually uses by
-    // subtracting the parent's own absolute position (also layout-resolved,
-    // for a parent that is itself nested inside auto-layout ancestors).
-    const parentId = state.parentById[nodeId];
-    const parentNode = parentId ? state.nodesById[parentId] : undefined;
-    if (parentNode?.type === "frame" && (parentNode as FlatSceneNode & { layout?: { autoLayout?: boolean } }).layout?.autoLayout) {
-      const pos = getNodeAbsolutePositionWithLayout(tree, nodeId, calculateLayoutForFrame);
-      const parentPos = getNodeAbsolutePositionWithLayout(tree, parentId!, calculateLayoutForFrame);
-      if (pos && parentPos) {
-        result.x = pos.x - parentPos.x;
-        result.y = pos.y - parentPos.y;
+      // Position is only rewritten for children of an auto-layout frame — that
+      // is the only case where yoga (not the stored x/y) determines placement.
+      // getNodeAbsolutePositionWithLayout returns canvas-absolute coordinates,
+      // so re-derive the parent-relative value the flat store actually uses by
+      // subtracting the parent's own absolute position (also layout-resolved,
+      // for a parent that is itself nested inside auto-layout ancestors).
+      if (parentIsAutoLayout) {
+        const pos = getNodeAbsolutePositionWithLayout(tree, nodeId, calculateLayoutForFrame);
+        const parentPos = getNodeAbsolutePositionWithLayout(tree, parentId!, calculateLayoutForFrame);
+        if (pos && parentPos) {
+          result.x = pos.x - parentPos.x;
+          result.y = pos.y - parentPos.y;
+        }
+      }
+    } catch (err) {
+      // Best-effort: fall back to the raw stored fields. The expected/benign
+      // trigger is a node not part of the LIVE global scene store (e.g. an
+      // ad-hoc/detached node built by a test fixture) — stay silent for that,
+      // since state.getNodes()/state.parentById above are read from the real
+      // store and simply won't know about such a node. Anything that throws
+      // for a node the live store DOES know about is a genuine regression in
+      // layout resolution, so surface it in dev builds (mirrors
+      // instanceRuntime.ts's resolveRefToTree DEV-only warn).
+      if (import.meta.env.DEV && state.nodesById[nodeId]) {
+        console.warn(
+          `[serializeNodeToDepth] layout resolution failed for node ${nodeId}, falling back to raw stored fields:`,
+          err,
+        );
       }
     }
-  } catch {
-    // Best-effort: fall back to the raw stored fields (e.g. node not part of
-    // the live tree, such as an ad-hoc/detached node in a test fixture).
   }
 
   // When preferSourceTemplate is set, replace htmlContent with sourceTemplate
@@ -115,7 +183,7 @@ export function serializeNodeToDepth(
     } else {
       result.children = childIds
         .map((cid) =>
-          serializeNodeToDepth(cid, nodesById, childrenById, depth - 1, options)
+          serializeNodeInternal(cid, nodesById, childrenById, depth - 1, ctx, options)
         )
         .filter(Boolean);
     }

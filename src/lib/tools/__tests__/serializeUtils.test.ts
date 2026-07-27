@@ -1,5 +1,6 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it, beforeEach, vi } from "vitest";
 import type { FlatSceneNode } from "@/types/scene";
+import * as sceneTypes from "@/types/scene";
 import { serializeNodeToDepth } from "../serializeUtils";
 import { batchDesign } from "@/lib/tools/batchDesign";
 import { batchGet } from "@/lib/tools/batchGet";
@@ -162,5 +163,57 @@ describe("serializeNodeToDepth — FIR-59 fill_container/fit_content resolution"
     expect(a.y).toBe(0);
     expect(b.y).toBe(60); // 50 (A's height) + 10 (gap)
     expect(b.x).toBe(0);
+  });
+});
+
+// Perf regression (2026-07-27 review, finding #1): getNodeEffectiveSize used
+// to call flattenTree() over the WHOLE document on every invocation, and
+// serializeNodeToDepth called it once per node — so reading N nodes out of
+// an M-node document cost O(N·M) flattenTree work. serializeUtils.ts now
+// resolves the shared tree/state once per top-level call, and nodeUtils.ts
+// memoizes flattenTree by tree reference. A quadratic regression would show
+// up here as flattenTree being invoked roughly once per serialized node
+// instead of a small constant number of times for the whole read.
+describe("serializeNodeToDepth — perf: flattenTree is not re-walked per node", () => {
+  beforeEach(() => {
+    resetStores();
+  });
+
+  it("calls flattenTree O(1) times, not once per node, when reading many siblings", async () => {
+    // batch_design caps at MAX_OPERATIONS (25) per call, so seed the "main"
+    // frame in its own call and add children across several follow-up calls.
+    const created = JSON.parse(
+      await batchDesign({
+        operations: `main=I(document, {type: "frame", name: "Main", width: 400, height: 2000, layout: "vertical"})`,
+      })
+    );
+    expect(created.success).toBe(true);
+    const mainId = created.createdNodes[0].id;
+
+    const CHILD_COUNT = 60;
+    const BATCH_SIZE = 20;
+    for (let batch = 0; batch * BATCH_SIZE < CHILD_COUNT; batch++) {
+      const start = batch * BATCH_SIZE;
+      const end = Math.min(start + BATCH_SIZE, CHILD_COUNT);
+      const ops = Array.from(
+        { length: end - start },
+        (_, i) => `c${start + i}=I(${mainId}, {type: "frame", name: "Child${start + i}", width: "fill_container", height: 20})`,
+      ).join("\n");
+      const res = JSON.parse(await batchDesign({ operations: ops }));
+      expect(res.success).toBe(true);
+    }
+
+    const flattenTreeSpy = vi.spyOn(sceneTypes, "flattenTree");
+    flattenTreeSpy.mockClear();
+
+    const got = JSON.parse(await batchGet({ nodeIds: [mainId], readDepth: 2 }));
+    expect(got[0].children).toHaveLength(CHILD_COUNT);
+
+    // Before the fix this was == CHILD_COUNT (one full-tree flatten per
+    // child read). A small constant bound (well under the child count)
+    // proves the per-node re-flatten is gone.
+    expect(flattenTreeSpy.mock.calls.length).toBeLessThan(CHILD_COUNT / 2);
+
+    flattenTreeSpy.mockRestore();
   });
 });

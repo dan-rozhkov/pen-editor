@@ -1,7 +1,9 @@
 import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { useSceneStore } from "@/store/sceneStore";
+import { useLayoutStore } from "@/store/layoutStore";
 import { findPixiChild } from "@/utils/pixiUtils";
 import { captureEmbedScreenshot } from "@/lib/embedScreenshot";
+import { getNodeEffectiveSize } from "@/utils/nodeUtils";
 import type { EmbedNode } from "@/types/scene";
 
 /**
@@ -26,7 +28,20 @@ export async function captureNodeScreenshot(
   // getScreenshot.ts) — extract their preview from the HTML content directly
   // instead of returning a blank image. See FIR-56.
   if (node.type === "embed") {
-    return captureEmbedScreenshot(node as EmbedNode);
+    // See getScreenshot.ts: an embed sized fill_container/fit_content stores
+    // a 0-placeholder width/height on the raw flat node (FIR-59-style gap) —
+    // resolve the real, rendered size before handing it to
+    // captureEmbedScreenshot, or its `!node.width || !node.height` guard
+    // rejects a node that actually renders fine.
+    const effectiveSize = getNodeEffectiveSize(
+      useSceneStore.getState().getNodes(),
+      nodeId,
+      useLayoutStore.getState().calculateLayoutForFrame,
+    );
+    const embedNode: EmbedNode = effectiveSize
+      ? { ...(node as EmbedNode), width: effectiveSize.width, height: effectiveSize.height }
+      : (node as EmbedNode);
+    return captureEmbedScreenshot(embedNode);
   }
 
   const { pixiRefs } = useCanvasRefStore.getState();
