@@ -20,6 +20,7 @@ import { booleanOperation } from "./tools/booleanOperation";
 import { getGuidelines, getStyleGuide, getStyleGuideTags } from "./tools/staticTools";
 import { generateImage, generateFrameImage } from "./tools/generateImage";
 import { setExportSettings } from "./tools/setExportSettings";
+import { exportLayersSvg } from "./tools/exportLayersSvg";
 import { readComments } from "./tools/readComments";
 import { replyComment } from "./tools/replyComment";
 import { resolveComment } from "./tools/resolveComment";
@@ -58,6 +59,7 @@ export const toolHandlers: Record<string, ToolHandler> = {
   generate_image: generateImage,
   generate_frame_image: generateFrameImage,
   set_export_settings: setExportSettings,
+  export_layers_svg: exportLayersSvg,
   read_comments: readComments,
   reply_comment: replyComment,
   resolve_comment: resolveComment,
