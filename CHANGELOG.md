@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.69.2] - 2026-07-28
+
+### Security
+- **Every production dependency advisory is resolved; `npm audit --omit=dev` is clean.** The non-breaking half came from `npm audit fix`: a critical `seroval` deserialization type confusion, high-severity path traversal in `postcss` and host confusion in `fast-uri`, plus `dompurify`, `body-parser`, `hono` and `@hono/node-server`.
+- **react-router 7.18.1 → 8.3.0** for GHSA-qwww-vcr4-c8h2 (high — CSRF bypass letting an action run before the 400 response in RSC mode). Nothing was backported to the 7.x line, so the major is the only fix available. The editor only uses `BrowserRouter`/`Routes`/`Route`/`Navigate`/`Link`/`MemoryRouter`, none of which changed, so no source edits were needed.
+
+### Known issues
+- The dev-only `brace-expansion` advisories (glob-pattern DoS, reached through minimatch 3/5/9 under eslint, typescript-eslint and vite-plugin-pwa) are knowingly left in place. Only 5.0.8 carries the patch and nothing landed on 1.x/2.x, so an `overrides` pin to `^5.0.8` breaks `npm run lint` outright — minimatch@3 cannot consume the v5 API. `npm audit fix --force` would pull eslint@10 and still not reach zero: the `vite-plugin-pwa → workbox-build → ejs → jake → filelist → minimatch@5` chain has no fixed release at all, and vite-plugin-pwa is already at its latest version. None of it ships to users.
+
 ## [0.69.0] - 2026-07-27
 
 ### Fixed
