@@ -34,6 +34,7 @@ const EXPECTED_CLIENT_TOOLS = [
   "generate_image",
   "generate_frame_image",
   "set_export_settings",
+  "export_layers_svg",
   "read_comments",
   "reply_comment",
   "resolve_comment",
