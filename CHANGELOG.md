@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.68.0] - 2026-07-27
+
+### Fixed
+- **The agent read every auto-layout child back as 0×0, stacked at one coordinate, and then "fixed" layouts that were actually fine.** `batch_get` and `batch_design`'s `createdNodes` both serialize through `serializeNodeToDepth`, which spread the raw flat-store fields — and a node sized `fill_container`/`fit_content` carries a `0` placeholder there, since its real size exists only as a layout result. The canvas rendered correctly the whole time; only the agent's view was wrong, so it would spend a session debugging blind and hardcoding pixel sizes. Serialization now resolves effective size through the layout store and overrides `x`/`y` for children of auto-layout frames with the yoga-computed parent-relative position, falling back to raw fields for detached nodes.
+- **`get_screenshot` returned a blank image for every embed.** Embeds live in a Shadow-DOM overlay above the canvas and their Pixi container is deliberately empty, but both screenshot paths extracted pixels from the Pixi scene graph only. This is why agents across many sessions independently concluded that picsum/Unsplash/OpenStreetMap images "don't load inside embeds" while the human looking at the live canvas saw them load fine. Embed nodes now route through `renderHtmlToCanvas`, and a failed render returns a descriptive error instead of a silently blank image. An embed sized `fill_container` also no longer reads the `0` placeholder and reports a confidently wrong "HTML may be empty, or a cross-origin image" error.
+- `serializeNodeToDepth` resolved the store's whole tree once per node, making a read of N nodes in an M-node document cost O(N×M) on the `batch_get`/`batch_design` hot path. `flattenTree` is now memoized on the tree reference, store lookups are hoisted out of the recursion, and fixed-size nodes under a non-auto-layout parent skip layout resolution entirely.
+
+### Changed
+- **A `batch_design` call over the 25-operation cap now executes its first 25 operations instead of being discarded.** Previously the whole script failed at parse time — the top tool error in agent traces, and the costliest, since the model had to regenerate everything. The handler now runs the first 25 and returns a resumption point: `truncated`, `operationsSubmitted`, `bindings` (binding name → real node id), `remainingOperations` (the skipped operations verbatim) and a `note` explaining how to continue. `bindings` is what makes resuming possible at all: bindings live only within one call, so the skipped operations reference names that no longer exist on the next turn. `remainingOperations` is capped at 8000 characters but always carries at least one operation, and says so explicitly when the list is cut short. Responses for batches within the cap are byte-identical to before.
+
+### Added
+- **`export_layers_svg` tool** — serializes given node ids (or the current selection) to an SVG data URI plus intrinsic size, reusing the same serializer as "Copy as SVG", so the agent can drop real vector art into embed HTML instead of reconstructing paths by hand. Raw markup is capped at 200k chars so an accidental whole-screen export returns an actionable error rather than dumping a huge blob into the model's context. The exported viewBox is padded for rotation overflow and blur/shadow bleed, since an SVG loaded through `<img>` always clips to its viewBox.
+
 ## [0.66.3] - 2026-07-23
 
 ### Fixed
