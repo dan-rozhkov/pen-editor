@@ -1,4 +1,7 @@
 import type { FlatSceneNode, EmbedNode, Paint } from "@/types/scene";
+import { useSceneStore } from "@/store/sceneStore";
+import { useLayoutStore } from "@/store/layoutStore";
+import { getNodeAbsolutePositionWithLayout, getNodeEffectiveSize } from "@/utils/nodeUtils";
 
 /**
  * Serialize a flat node to a plain JSON object with depth-limited children.
@@ -23,6 +26,55 @@ export function serializeNodeToDepth(
     if (value !== undefined) {
       result[key] = value;
     }
+  }
+
+  // FIR-59: a node declared with `width`/`height: "fill_container"` (or
+  // "fit_content") stores 0 as a creation-time placeholder in the flat node
+  // (see batchDesign/nodeMapper.ts) — the real size (and, inside an
+  // auto-layout parent, the real parent-relative position) only exists as a
+  // layout *result*, computed on demand by the auto-layout engine
+  // (src/utils/yogaLayout.ts via layoutStore.calculateLayoutForFrame). That
+  // computation normally happens in the Pixi render path
+  // (nodeRectResolution.ts) but was never applied when tools read nodes back
+  // (batch_get, and batch_design's own createdNodes response) — so the agent
+  // saw every fill_container/fit_content child as 0×0, and every sibling
+  // after the first stacked at the same x/y, even though the canvas
+  // rendered correctly. Resolve both here so tool reads match what's on
+  // screen.
+  try {
+    const state = useSceneStore.getState();
+    const tree = state.getNodes();
+    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
+
+    // getNodeEffectiveSize walks the tree top-down from the root, so nested
+    // fill_container/fit_content chains resolve correctly: each frame's
+    // *own* resolved size (from its parent's layout pass) is what feeds the
+    // next level's computation, not the raw 0-placeholder in the flat store.
+    const size = getNodeEffectiveSize(tree, nodeId, calculateLayoutForFrame);
+    if (size) {
+      result.width = size.width;
+      result.height = size.height;
+    }
+
+    // Position is only rewritten for children of an auto-layout frame — that
+    // is the only case where yoga (not the stored x/y) determines placement.
+    // getNodeAbsolutePositionWithLayout returns canvas-absolute coordinates,
+    // so re-derive the parent-relative value the flat store actually uses by
+    // subtracting the parent's own absolute position (also layout-resolved,
+    // for a parent that is itself nested inside auto-layout ancestors).
+    const parentId = state.parentById[nodeId];
+    const parentNode = parentId ? state.nodesById[parentId] : undefined;
+    if (parentNode?.type === "frame" && (parentNode as FlatSceneNode & { layout?: { autoLayout?: boolean } }).layout?.autoLayout) {
+      const pos = getNodeAbsolutePositionWithLayout(tree, nodeId, calculateLayoutForFrame);
+      const parentPos = getNodeAbsolutePositionWithLayout(tree, parentId!, calculateLayoutForFrame);
+      if (pos && parentPos) {
+        result.x = pos.x - parentPos.x;
+        result.y = pos.y - parentPos.y;
+      }
+    }
+  } catch {
+    // Best-effort: fall back to the raw stored fields (e.g. node not part of
+    // the live tree, such as an ad-hoc/detached node in a test fixture).
   }
 
   // When preferSourceTemplate is set, replace htmlContent with sourceTemplate
