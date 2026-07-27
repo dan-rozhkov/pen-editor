@@ -39,7 +39,12 @@ test("?view URL param enables read-only view mode", async ({ page }) => {
     route.fulfill({ json: { models: [], default: null } })
   );
 
-  await page.goto("/?view=1");
+  await page.goto("/app?view=1");
+  // The editor itself is lazy-loaded (its own chunk, separate from the
+  // showcase at "/"), so wait for it to actually be mounted before touching
+  // window internals it exposes — a fresh dev-server transform of the
+  // editor's module graph can take a beat longer than an immediate poll.
+  await expect(page.getByTestId("rail-pages")).toBeVisible();
   // The app enters view mode on load from the URL param.
   await expect.poll(() => getMode(page)).toBe("view");
   // There is no in-app view toggle anymore.
@@ -51,7 +56,10 @@ test("Present mode via the Play button and overlay navigation", async ({ page })
     route.fulfill({ json: { models: [], default: null } })
   );
 
-  await page.goto("/");
+  await page.goto("/app");
+  // Wait for the (lazily-loaded) editor to mount before touching window
+  // internals it exposes — see the comment in the test above.
+  await expect(page.getByTestId("rail-pages")).toBeVisible();
   await page.evaluate(SEED_FRAME);
 
   // The blue Play button in the page controls enters Present mode.

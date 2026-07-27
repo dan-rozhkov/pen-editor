@@ -83,7 +83,7 @@ test("AI chat streams a batch_design tool call, executes it locally and auto-con
     });
   });
 
-  await page.goto("/");
+  await page.goto("/app");
 
   // Open the chat panel via the Agents item in the left rail.
   await page.getByTestId("rail-agents").click();

@@ -2,11 +2,9 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import { registerServiceWorker } from '@/pwa/registerServiceWorker'
-import { initDesktopBridge } from '@/lib/desktopBridge'
-import { startMcpBridgeIfConfigured } from '@/lib/mcpBridge'
 
 import './index.css'
-import App from './App.tsx'
+import { AppRouter } from './AppRouter'
 
 // vite-plugin-pwa's generateSW output only exists for production builds
 // (no devOptions are enabled), so only register there.
@@ -14,8 +12,20 @@ if (import.meta.env.PROD) {
   registerServiceWorker()
 }
 
-initDesktopBridge()
-startMcpBridgeIfConfigured()
+// desktopBridge/mcpBridge statically import the command registry and the
+// full tool-execution registry respectively (menu dispatch, MCP-bridged tool
+// calls) — both drag in most of the editor's module graph (sceneStore,
+// selectionStore, canvasRefStore, pixi.js, ...). Both are no-ops on an
+// ordinary web visit anyway (desktopBridge bails without `window.penDesktop`;
+// mcpBridge bails without `VITE_MCP_WS_TOKEN`), so check the same conditions
+// *before* importing rather than after, to keep the showcase entry bundle
+// free of the editor's weight. Same runtime behavior, lazier import.
+if (window.penDesktop) {
+  import('@/lib/desktopBridge').then(({ initDesktopBridge }) => initDesktopBridge())
+}
+if (import.meta.env.VITE_MCP_WS_TOKEN) {
+  import('@/lib/mcpBridge').then(({ startMcpBridgeIfConfigured }) => startMcpBridgeIfConfigured())
+}
 
 // Dev-only: expose internals for E2E testing
 if (import.meta.env.DEV) {
@@ -71,6 +81,6 @@ if (import.meta.env.DEV) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <AppRouter />
   </StrictMode>,
 )

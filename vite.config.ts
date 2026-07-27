@@ -30,7 +30,9 @@ export default defineConfig({
         name: "Pen Editor",
         short_name: "Pen",
         description: "AI-first canvas design editor.",
-        start_url: base,
+        // The showcase now lives at `base` ("/"); an installed PWA should
+        // still open straight into the editor at "/app", not the showcase.
+        start_url: `${base}app`,
         scope: base,
         display: "standalone",
         background_color: "#111111",
@@ -68,6 +70,20 @@ export default defineConfig({
     }),
   ],
   build: {
+    modulePreload: {
+      // The showcase route ("/") never touches the editor, but Rolldown's
+      // chunk graph leaves a stray cross-chunk import edge into pixi-vendor
+      // from the entry chunk (confirmed via sourcemap: no first- or
+      // third-party module actually reachable from main.tsx/AppRouter
+      // references pixi.js — the edge carries no real code, just an inert
+      // binding) which otherwise earns pixi-vendor a <link rel=modulepreload>
+      // in index.html, eagerly fetching 500+kB of PixiJS for every showcase
+      // visit. Strip it from the entry HTML's preload list specifically;
+      // the editor's own "/app" chunk (App-*.js) still gets its legitimate
+      // modulepreload of pixi-vendor when that dynamic import actually fires.
+      resolveDependencies: (_filename, deps, { hostId }) =>
+        hostId === "index.html" ? deps.filter((d) => !d.includes("pixi-vendor")) : deps,
+    },
     rollupOptions: {
       output: {
         manualChunks(id) {

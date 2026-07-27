@@ -35,7 +35,7 @@ interface SceneStoreState {
 }
 
 test("convert embed to design via h2d capture", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/app");
   await page.waitForFunction(
     () => Boolean((window as unknown as { __sceneStore?: unknown }).__sceneStore)
   );

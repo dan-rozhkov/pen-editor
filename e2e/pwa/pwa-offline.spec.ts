@@ -30,7 +30,7 @@ test("editor shell and offline banner load offline after a first online visit", 
     }),
   );
 
-  await page.goto("/");
+  await page.goto("/app");
   await expect(page.locator("[data-canvas]")).toBeVisible();
 
   // Wait for the service worker to finish installing and activating.

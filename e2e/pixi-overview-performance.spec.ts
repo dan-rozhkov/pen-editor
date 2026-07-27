@@ -4,7 +4,7 @@ test("overview culls nested detail and restores it after zooming in", async ({ p
   await page.route("**/api/models", (route) =>
     route.fulfill({ json: { models: [], default: null } }),
   );
-  await page.goto("/");
+  await page.goto("/app");
   await expect(page.locator("[data-canvas]")).toBeVisible();
 
   await page.evaluate(() => {

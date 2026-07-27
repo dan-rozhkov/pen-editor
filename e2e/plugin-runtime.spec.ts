@@ -12,7 +12,7 @@ const BATCH_OPERATIONS =
 test("a plugin running in a real sandboxed iframe creates a node via pen.scene.batch", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/app");
   await page.waitForFunction(() =>
     Boolean((window as unknown as Record<string, unknown>).__pluginHost)
   );
@@ -64,7 +64,7 @@ const UI_BATCH_OPERATIONS =
 test("a UI plugin opens a panel; clicking its button mutates the scene via pen.tools.run", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/app");
   await page.waitForFunction(() =>
     Boolean((window as unknown as Record<string, unknown>).__pluginHost)
   );

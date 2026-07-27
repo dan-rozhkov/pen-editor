@@ -17,7 +17,7 @@ test("embed renders as a DOM overlay and enters interactive state", async ({ pag
     }),
   );
 
-  await page.goto("/");
+  await page.goto("/app");
   await expect(page.locator("[data-canvas]")).toBeVisible();
 
   // Add an embed node via the scene store (dev-only global).

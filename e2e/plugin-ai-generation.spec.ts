@@ -83,7 +83,7 @@ test("AI chat streams a create_plugin tool call, installs it, and it runs from t
     });
   });
 
-  await page.goto("/");
+  await page.goto("/app");
 
   await page.getByTestId("rail-agents").click();
   await expect(page.getByText("Design Agent", { exact: true })).toBeVisible();

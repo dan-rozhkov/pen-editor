@@ -96,7 +96,7 @@ test.describe("raster cache correctness (Task 13)", () => {
   test("mutate inside a cached frame shows fresh pixels, not a stale texture", async ({ page }) => {
     await page.route("**/api/models", (route) => route.fulfill({ json: { models: [], default: null } }));
     await page.addInitScript(() => localStorage.setItem("pen.rasterCache", "on"));
-    await page.goto("/");
+    await page.goto("/app");
     await expect(page.locator("[data-canvas]")).toBeVisible();
     await seedMutateReparentScene(page);
 
@@ -118,7 +118,7 @@ test.describe("raster cache correctness (Task 13)", () => {
   test("reparent A -> B: node disappears from A, appears (with its latest fill) in B", async ({ page }) => {
     await page.route("**/api/models", (route) => route.fulfill({ json: { models: [], default: null } }));
     await page.addInitScript(() => localStorage.setItem("pen.rasterCache", "on"));
-    await page.goto("/");
+    await page.goto("/app");
     await expect(page.locator("[data-canvas]")).toBeVisible();
     await seedMutateReparentScene(page);
 
@@ -144,7 +144,7 @@ test.describe("raster cache correctness (Task 13)", () => {
   test("revert (undo-equivalent) restores the original pixels", async ({ page }) => {
     await page.route("**/api/models", (route) => route.fulfill({ json: { models: [], default: null } }));
     await page.addInitScript(() => localStorage.setItem("pen.rasterCache", "on"));
-    await page.goto("/");
+    await page.goto("/app");
     await expect(page.locator("[data-canvas]")).toBeVisible();
     await seedMutateReparentScene(page);
 
@@ -167,7 +167,7 @@ test.describe("raster cache correctness (Task 13)", () => {
   async function zoomSharpnessPixel(page: Page, rasterCacheFlag: "on" | "off"): Promise<RGBA> {
     await page.route("**/api/models", (route) => route.fulfill({ json: { models: [], default: null } }));
     await page.addInitScript((flag) => localStorage.setItem("pen.rasterCache", flag), rasterCacheFlag);
-    await page.goto("/");
+    await page.goto("/app");
     await expect(page.locator("[data-canvas]")).toBeVisible();
     await page.evaluate(() => {
       const w = window as unknown as {
@@ -225,7 +225,7 @@ test.describe("raster cache correctness (Task 13)", () => {
   test("variable edit inside a cached frame shows fresh pixels, not a stale texture", async ({ page }) => {
     await page.route("**/api/models", (route) => route.fulfill({ json: { models: [], default: null } }));
     await page.addInitScript(() => localStorage.setItem("pen.rasterCache", "on"));
-    await page.goto("/");
+    await page.goto("/app");
     await expect(page.locator("[data-canvas]")).toBeVisible();
 
     await page.evaluate(() => {
@@ -279,7 +279,7 @@ test.describe("raster cache correctness (Task 13)", () => {
   test("panning into a cached wide frame reveals a child baked out of the cache, not a hole", async ({ page }) => {
     await page.route("**/api/models", (route) => route.fulfill({ json: { models: [], default: null } }));
     await page.addInitScript(() => localStorage.setItem("pen.rasterCache", "on"));
-    await page.goto("/");
+    await page.goto("/app");
     await expect(page.locator("[data-canvas]")).toBeVisible();
 
     await page.evaluate(() => {

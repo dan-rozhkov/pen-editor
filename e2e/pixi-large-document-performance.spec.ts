@@ -35,7 +35,7 @@ test("large document: sync flush and culling stay within budget", async ({ page 
   // Disable the DEV-only diff safety net so this probe measures the shipped
   // diff path, not the full-scan comparison run alongside it in dev.
   await page.addInitScript(() => localStorage.setItem("pen.diffCheck", "off"));
-  await page.goto(`/?perf=${PERF_NODES}`);
+  await page.goto(`/app?perf=${PERF_NODES}`);
   await expect(page.locator("[data-canvas]")).toBeVisible();
   await page.waitForTimeout(1500); // initial build settles
 
