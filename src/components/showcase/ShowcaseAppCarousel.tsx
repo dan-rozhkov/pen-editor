@@ -96,8 +96,8 @@ export function ShowcaseAppCarousel({ app }: { app: ShowcaseApp }) {
 
         {hasMultipleScreens && (
           <>
-            <CarouselPrevious className="-left-[2.75rem] size-10 border-transparent bg-surface-active/70 text-white shadow-none opacity-0 pointer-events-none backdrop-blur-sm transition-[opacity,background-color] group-hover/carousel:pointer-events-auto group-hover/carousel:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 hover:bg-surface-active/85 hover:text-white sm:-left-[3.25rem]" />
-            <CarouselNext className="-right-[2.75rem] size-10 border-transparent bg-surface-active/70 text-white shadow-none opacity-0 pointer-events-none backdrop-blur-sm transition-[opacity,background-color] group-hover/carousel:pointer-events-auto group-hover/carousel:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 hover:bg-surface-active/85 hover:text-white sm:-right-[3.25rem]" />
+            <CarouselPrevious className="-left-[2.75rem] size-10 border-transparent bg-surface-active/80 text-white shadow-none opacity-0 pointer-events-none backdrop-blur-sm transition-[opacity,background-color] group-hover/carousel:pointer-events-auto group-hover/carousel:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 hover:bg-surface-active/90 hover:text-white sm:-left-[3.25rem]" />
+            <CarouselNext className="-right-[2.75rem] size-10 border-transparent bg-surface-active/80 text-white shadow-none opacity-0 pointer-events-none backdrop-blur-sm transition-[opacity,background-color] group-hover/carousel:pointer-events-auto group-hover/carousel:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 hover:bg-surface-active/90 hover:text-white sm:-right-[3.25rem]" />
           </>
         )}
       </Carousel>
