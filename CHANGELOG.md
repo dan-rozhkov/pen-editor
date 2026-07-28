@@ -6,10 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
-## [0.72.5] - 2026-07-28
+## [0.72.6] - 2026-07-28
 
-### Fixed
-- **The gallery slide, not the screenshots, was cutting screens off at the bottom.** Every slide was framed at a hardcoded `aspect-[390/844]` and filled with `object-cover object-top`, but 18 of the 65 live screens are taller than that frame — 750x1688 up to 750x2082 — so the surplus was cropped away, as much as 22% of the screen. The stored PNG was whole the entire time: save one of the "cut off" images and it opens complete. The slide now takes its shape from the screen's own dimensions, so there is nothing to crop and no letterboxing either (0.72.3 tried fitting the over-tall screens inside the fixed frame and was reverted — gutters and shrunken cards read worse than the crop). Rows that mix screen heights are handled by `items-start` on the grid: each app panel hugs its own screens, so every screen in a row starts on the same line instead of floating in the middle of a stretched panel. Screens with missing or zero dimensions fall back to the old 390:844 frame.
+### Reverted
+- **0.72.5's per-screen slide shaping is out — the long screens came out looking crooked.** Sizing each slide from the screen's own `width`/`height` did remove the crop (worst case 22% → 0.51% measured across the live feed), but with `items-start` on the grid the over-tall apps hang well below their neighbours and the rows stop reading as a grid. Every slide is back to the fixed `aspect-[390/844]` frame with `object-cover object-top`, and the grid back to its default stretch. That restores the crop on the 18 live screens taller than the frame — the third approach tried and rejected on looks, after 0.72.3's letterboxing and a capture-side height cap. The 0.72.2 Safari border-box fix is untouched.
 
 ## [0.72.4] - 2026-07-28
 

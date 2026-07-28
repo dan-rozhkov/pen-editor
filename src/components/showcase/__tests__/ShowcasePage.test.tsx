@@ -270,12 +270,7 @@ describe("<ShowcasePage />", () => {
     expect(main?.classList.contains("sm:pr-[calc(4rem+env(safe-area-inset-right))]")).toBe(true);
     expect(header?.classList.contains("lg:max-w-none")).toBe(true);
     expect(main?.classList.contains("lg:max-w-none")).toBe(true);
-    // The slide is shaped by the screen it holds, not by a hardcoded frame —
-    // a fixed 390:844 box cropped the bottom off every screen taller than it
-    // (see ShowcaseCard.tsx). Asserted as an inline style, since that's how a
-    // per-screen ratio has to be expressed.
-    expect(card?.classList.contains("aspect-[390/844]")).toBe(false);
-    expect((card as HTMLElement | null)?.style.aspectRatio).toBe("390 / 844");
+    expect(card?.classList.contains("aspect-[390/844]")).toBe(true);
     expect(card?.classList.contains("rounded-3xl")).toBe(true);
     // No `border` on the card itself — a real border participates in
     // border-box sizing, which WebKit and Blink resolve percentage heights

@@ -11,14 +11,7 @@ type Status = "loading" | "ready" | "error";
 
 function ShowcaseGrid({ children }: { children: ReactNode }) {
   return (
-    // `items-start`, not the default `stretch`: slides are shaped by the
-    // screen they hold (ShowcaseCard), so a row can mix a 750x1624 app with a
-    // 750x2082 one. Stretched, the short panels grow to the row's height and
-    // their `items-center` scroller floats the card in the middle, so no two
-    // screens in a row start at the same y — the eye reads that as misaligned.
-    // Letting each panel hug its own screens keeps every top edge on one line
-    // and only the bottoms ragged.
-    <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {children}
     </div>
   );
