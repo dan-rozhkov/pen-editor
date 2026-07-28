@@ -1,47 +1,25 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Link } from "react-router";
 
 import { Button } from "@/components/ui/button";
 import { fetchShowcase, type ShowcaseScreen } from "@/lib/showcase";
 import { ShowcaseCard } from "@/components/showcase/ShowcaseCard";
-import {
-  columnOffset,
-  distributeIntoColumns,
-  useColumnCount,
-} from "@/components/showcase/masonry";
 
 type Status = "loading" | "ready" | "error";
 
-/**
- * Columns are laid out by hand rather than with CSS `columns-*`: multi-column
- * fills each column top-to-bottom in turn, so the newest screens ended up
- * stacked down the first column instead of running left→right across the top.
- */
-function MasonryGrid({ children }: { children: React.ReactNode[] }) {
-  const columnCount = useColumnCount();
-  const columns = distributeIntoColumns(children, columnCount);
+function ShowcaseGrid({ children }: { children: ReactNode }) {
   return (
-    <div className="flex gap-4 items-start">
-      {columns.map((items, i) => (
-        <div
-          key={i}
-          className="flex min-w-0 flex-1 flex-col gap-4"
-          style={{ marginTop: columnOffset(i) }}
-        >
-          {items}
-        </div>
-      ))}
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {children}
     </div>
   );
 }
 
 function SkeletonGrid() {
-  // Varying heights so the loading state reads as a masonry grid rather than
-  // a uniform table, without needing real image dimensions yet.
   const heights = [220, 320, 260, 380, 240, 300, 210, 340];
   return (
     <div aria-hidden="true">
-      <MasonryGrid>
+      <ShowcaseGrid>
         {heights.map((height, i) => (
           <div
             key={i}
@@ -49,7 +27,7 @@ function SkeletonGrid() {
             style={{ height }}
           />
         ))}
-      </MasonryGrid>
+      </ShowcaseGrid>
     </div>
   );
 }
@@ -151,11 +129,11 @@ export function ShowcasePage() {
 
         {status === "ready" && screens.length > 0 && (
           <>
-            <MasonryGrid>
+            <ShowcaseGrid>
               {screens.map((screen) => (
                 <ShowcaseCard key={screen.id} screen={screen} />
               ))}
-            </MasonryGrid>
+            </ShowcaseGrid>
 
             {nextCursor != null && (
               <div className="mt-6 flex justify-center">

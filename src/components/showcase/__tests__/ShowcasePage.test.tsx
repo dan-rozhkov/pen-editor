@@ -148,7 +148,7 @@ describe("<ShowcasePage />", () => {
     expect(image.closest("a")).toBeNull();
   });
 
-  it("uses doubled side gutters, a white surface, outlined screenshots, and full-width desktop containers", async () => {
+  it("uses a four-column maximum grid, doubled side gutters, outlined screenshots, and full-width desktop containers", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => jsonResponse({ screens: [screen1()], nextCursor: null })),
@@ -161,8 +161,14 @@ describe("<ShowcasePage />", () => {
     const header = page?.querySelector("header");
     const main = page?.querySelector("main");
     const card = image.parentElement;
+    const grid = card?.parentElement;
 
     expect(page?.classList.contains("bg-white")).toBe(true);
+    expect(grid?.classList.contains("grid")).toBe(true);
+    expect(grid?.classList.contains("grid-cols-1")).toBe(true);
+    expect(grid?.classList.contains("sm:grid-cols-2")).toBe(true);
+    expect(grid?.classList.contains("lg:grid-cols-3")).toBe(true);
+    expect(grid?.classList.contains("xl:grid-cols-4")).toBe(true);
     expect(header?.classList.contains("px-12")).toBe(true);
     expect(header?.classList.contains("sm:px-16")).toBe(true);
     expect(main?.classList.contains("px-12")).toBe(true);
