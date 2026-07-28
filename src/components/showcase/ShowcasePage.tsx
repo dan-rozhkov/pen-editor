@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { Link } from "react-router";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { fetchShowcase, type ShowcaseScreen } from "@/lib/showcase";
 import { ShowcaseAppCarousel } from "@/components/showcase/ShowcaseAppCarousel";
 import { groupScreensByApp } from "@/components/showcase/showcaseApps";
@@ -82,14 +83,44 @@ export function ShowcasePage() {
   const apps = groupScreensByApp(screens);
 
   // index.css locks html/body/#root to height:100% + overflow:hidden so the
-  // editor owns a fixed viewport. A page taller than the screen is therefore
-  // clipped with no way to scroll it — which is what made the grid
-  // unscrollable on phones. Scroll inside this container instead of relying on
-  // document scroll, rather than loosening the global rule the editor depends
-  // on.
+  // editor at "/app" owns a fixed viewport. That lock is what turned iOS
+  // Safari's collapsing address bar into a grey band here: `height:100%`
+  // resolves against the small viewport, so the strips behind the
+  // expanding/collapsing chrome fell outside the box and painted with the
+  // body background. The fix is real document scroll, not a scroller nested
+  // inside a fixed-height box — only document scroll lets Safari collapse its
+  // chrome and content pass under it. `route-showcase` (toggled below) turns
+  // off the lock while this page is mounted, without touching it for "/app".
+  useEffect(() => {
+    const html = document.documentElement;
+    html.classList.add("route-showcase");
+    const meta = document.querySelector('meta[name="theme-color"]');
+    const previousThemeColor = meta?.getAttribute("content") ?? null;
+    meta?.setAttribute("content", "#ffffff");
+    return () => {
+      html.classList.remove("route-showcase");
+      if (previousThemeColor !== null) {
+        meta?.setAttribute("content", previousThemeColor);
+      }
+    };
+  }, []);
+
   return (
-    <div className="h-full overflow-y-auto bg-white">
-      <header className="mx-auto max-w-6xl px-12 pt-12 pb-8 sm:px-16 lg:max-w-none">
+    <div className="min-h-[100dvh] bg-white">
+      <header
+        className={cn(
+          "mx-auto max-w-6xl pb-8 lg:max-w-none",
+          // pl-/pr-/pt- (not the px-/pt- shorthand) so the safe-area addition
+          // below is the only rule touching each side — no shorthand vs.
+          // longhand ordering to worry about. `env(safe-area-inset-*)` is 0
+          // on browsers/orientations without a safe area, so this is just
+          // pt-12/px-12/sm:px-16 plus Safari's status bar and, in landscape,
+          // its side insets.
+          "pt-[calc(3rem+env(safe-area-inset-top))]",
+          "pl-[calc(3rem+env(safe-area-inset-left))] pr-[calc(3rem+env(safe-area-inset-right))]",
+          "sm:pl-[calc(4rem+env(safe-area-inset-left))] sm:pr-[calc(4rem+env(safe-area-inset-right))]",
+        )}
+      >
         <h1 className="text-2xl font-semibold text-text-primary">
           Pen Editor Showcase
         </h1>
@@ -105,7 +136,17 @@ export function ShowcasePage() {
         </Link>
       </header>
 
-      <main className="mx-auto max-w-6xl px-12 pb-16 sm:px-16 lg:max-w-none">
+      <main
+        className={cn(
+          "mx-auto max-w-6xl lg:max-w-none",
+          // Same pl-/pr- reasoning as the header above; pb- adds Safari's
+          // bottom inset so the last row and "Show more" aren't hidden
+          // behind the address bar.
+          "pb-[calc(4rem+env(safe-area-inset-bottom))]",
+          "pl-[calc(3rem+env(safe-area-inset-left))] pr-[calc(3rem+env(safe-area-inset-right))]",
+          "sm:pl-[calc(4rem+env(safe-area-inset-left))] sm:pr-[calc(4rem+env(safe-area-inset-right))]",
+        )}
+      >
         {status === "loading" && <SkeletonGrid />}
 
         {status === "error" && (

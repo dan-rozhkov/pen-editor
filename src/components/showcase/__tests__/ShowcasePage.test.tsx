@@ -250,16 +250,58 @@ describe("<ShowcasePage />", () => {
     expect(grid?.classList.contains("sm:grid-cols-2")).toBe(true);
     expect(grid?.classList.contains("lg:grid-cols-3")).toBe(true);
     expect(grid?.classList.contains("xl:grid-cols-4")).toBe(true);
-    expect(header?.classList.contains("px-12")).toBe(true);
-    expect(header?.classList.contains("sm:px-16")).toBe(true);
-    expect(main?.classList.contains("px-12")).toBe(true);
-    expect(main?.classList.contains("sm:px-16")).toBe(true);
+    // Horizontal padding is expressed as pl-/pr- (not the px- shorthand) so
+    // it can carry the safe-area-inset addition on each side individually —
+    // see ShowcasePage's comment above the header/main className.
+    expect(header?.classList.contains("pl-[calc(3rem+env(safe-area-inset-left))]")).toBe(true);
+    expect(header?.classList.contains("pr-[calc(3rem+env(safe-area-inset-right))]")).toBe(true);
+    expect(header?.classList.contains("sm:pl-[calc(4rem+env(safe-area-inset-left))]")).toBe(true);
+    expect(header?.classList.contains("sm:pr-[calc(4rem+env(safe-area-inset-right))]")).toBe(true);
+    expect(main?.classList.contains("pl-[calc(3rem+env(safe-area-inset-left))]")).toBe(true);
+    expect(main?.classList.contains("pr-[calc(3rem+env(safe-area-inset-right))]")).toBe(true);
+    expect(main?.classList.contains("sm:pl-[calc(4rem+env(safe-area-inset-left))]")).toBe(true);
+    expect(main?.classList.contains("sm:pr-[calc(4rem+env(safe-area-inset-right))]")).toBe(true);
     expect(header?.classList.contains("lg:max-w-none")).toBe(true);
     expect(main?.classList.contains("lg:max-w-none")).toBe(true);
     expect(card?.classList.contains("aspect-[390/844]")).toBe(true);
     expect(card?.classList.contains("rounded-3xl")).toBe(true);
     expect(card?.classList.contains("border")).toBe(true);
     expect(card?.classList.contains("border-gray-200")).toBe(true);
+  });
+
+  it("marks <html> as the showcase route and whitens theme-color while mounted, undoing both on unmount", async () => {
+    const meta = document.createElement("meta");
+    meta.setAttribute("name", "theme-color");
+    meta.setAttribute("content", "#111111");
+    document.head.appendChild(meta);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ screens: [screen1()], nextCursor: null })),
+    );
+
+    try {
+      expect(document.documentElement.classList.contains("route-showcase")).toBe(
+        false,
+      );
+
+      const { unmount } = renderPage();
+      await screen.findByAltText("Onboarding flow");
+
+      expect(document.documentElement.classList.contains("route-showcase")).toBe(
+        true,
+      );
+      expect(meta.getAttribute("content")).toBe("#ffffff");
+
+      unmount();
+
+      expect(document.documentElement.classList.contains("route-showcase")).toBe(
+        false,
+      );
+      expect(meta.getAttribute("content")).toBe("#111111");
+    } finally {
+      meta.remove();
+    }
   });
 });
 
