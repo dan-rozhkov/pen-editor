@@ -13,15 +13,58 @@ import {
   getShowcaseModelLabel,
   type ShowcaseApp,
 } from "@/components/showcase/showcaseApps";
+import { accumulateWindow, getInitialWindow } from "@/components/showcase/carouselWindow";
 import type { ShowcaseScreen } from "@/lib/showcase";
 import { writeTextToClipboard } from "@/utils/clipboard";
 
 const COPY_FEEDBACK_DURATION_MS = 2000;
 
-export function ShowcaseAppCarousel({ app }: { app: ShowcaseApp }) {
+interface ShowcaseAppCarouselProps {
+  app: ShowcaseApp;
+  /**
+   * The first carousel in the grid gets its first slide loaded eagerly
+   * (fetchPriority="high" + loading="eager") — it's the one screen that's
+   * guaranteed above-the-fold.
+   */
+  isFirstInGrid?: boolean;
+}
+
+export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppCarouselProps) {
   const hasMultipleScreens = app.screens.length > 1;
   const [api, setApi] = useState<CarouselApi>();
   const [selectedIndex, setSelectedIndex] = useState(0);
+
+  // Identifies "this app's slide set" so the accumulated window below can
+  // be reset if it ever changes under an existing instance. ShowcasePage
+  // keys carousels by `runId`, so normally a different app is a whole new
+  // component instance with fresh state for free — this guards the case
+  // where the same runId's screens list changes shape in place (e.g. a
+  // background refetch), which the `runId` key alone wouldn't catch.
+  const screensKey = app.screens.map((screen) => screen.id).join("|");
+  const currentWindow = getInitialWindow(app.screens.length, selectedIndex);
+
+  // Mirrors React's "adjusting state when a prop changes" pattern: reading
+  // and conditionally calling a setter during render (rather than mutating
+  // a ref) is what react-hooks/refs and Fast Refresh both require here.
+  // React re-renders immediately with the updated state before committing,
+  // so `loadedIndices` below always reflects the value computed in this
+  // pass.
+  const [mountedScreensKey, setMountedScreensKey] = useState(screensKey);
+  const [mountedIndices, setMountedIndices] = useState(currentWindow);
+
+  let loadedIndices = mountedIndices;
+  if (mountedScreensKey !== screensKey) {
+    setMountedScreensKey(screensKey);
+    setMountedIndices(currentWindow);
+    loadedIndices = currentWindow;
+  } else {
+    const nextIndices = accumulateWindow(mountedIndices, currentWindow);
+    if (nextIndices !== mountedIndices) {
+      setMountedIndices(nextIndices);
+    }
+    loadedIndices = nextIndices;
+  }
+
   const [copyFeedback, setCopyFeedback] = useState<{
     screenId: string;
     status: ShowcaseCopyFeedback;
@@ -126,6 +169,14 @@ export function ShowcaseAppCarousel({ app }: { app: ShowcaseApp }) {
                 screen={screen}
                 onCopyId={handleCopyScreenId}
                 feedback={copyFeedback?.screenId === screen.id ? copyFeedback.status : null}
+                // Only gate mounting on the window when there's an `lqip`
+                // to show in its place — without one (pre-backfill rows,
+                // or if the frontend ships before the backend backfill
+                // finishes) an unmounted slide would be a blank rectangle
+                // forever, not a placeholder. Load it eagerly instead, same
+                // as before this feature existed.
+                loadImage={!screen.lqip || loadedIndices.has(index)}
+                eager={isFirstInGrid && index === 0}
               />
             </CarouselItem>
           ))}

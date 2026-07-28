@@ -173,8 +173,8 @@ export function ShowcasePage() {
         {status === "ready" && apps.length > 0 && (
           <>
             <ShowcaseGrid>
-              {apps.map((app) => (
-                <ShowcaseAppCarousel key={app.runId} app={app} />
+              {apps.map((app, index) => (
+                <ShowcaseAppCarousel key={app.runId} app={app} isFirstInGrid={index === 0} />
               ))}
             </ShowcaseGrid>
 

@@ -12,6 +12,11 @@ export interface ShowcaseScreen {
   title: string;
   model: string;
   imageUrl: string;
+  // Optional: absent on rows published before the WebP-derivatives backfill
+  // (see pen-editor-backend docs/superpowers/specs/2026-07-28-showcase-image-delivery-design.md).
+  // A screen missing them just renders the plain `imageUrl` as before.
+  imageUrl1x?: string;
+  lqip?: string;
   htmlUrl: string;
   width: number;
   height: number;
