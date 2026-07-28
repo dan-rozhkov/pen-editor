@@ -103,8 +103,7 @@ describe("<ShowcasePage />", () => {
     expect(selector.classList.contains("absolute")).toBe(true);
     expect(selector.classList.contains("top-5")).toBe(true);
     expect(selector.classList.contains("right-5")).toBe(true);
-    expect(selector.classList.contains("opacity-0")).toBe(true);
-    expect(selector.classList.contains("group-hover/carousel:opacity-100")).toBe(true);
+    expect(selector.classList.contains("opacity-0")).toBe(false);
     const [modelBadge] = screen.getAllByText("Model");
     expect(modelBadge.classList.contains("bottom-3")).toBe(true);
     expect(modelBadge.classList.contains("left-1/2")).toBe(true);

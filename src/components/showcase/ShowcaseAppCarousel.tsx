@@ -104,7 +104,7 @@ export function ShowcaseAppCarousel({ app }: { app: ShowcaseApp }) {
 
       {hasMultipleScreens && (
         <div
-          className="absolute top-5 right-5 flex gap-1.5 opacity-0 pointer-events-none transition-opacity group-hover/carousel:pointer-events-auto group-hover/carousel:opacity-100 group-focus-within/carousel:pointer-events-auto group-focus-within/carousel:opacity-100 sm:top-6 sm:right-6"
+          className="absolute top-5 right-5 flex gap-1.5 sm:top-6 sm:right-6"
           aria-label="Screen selector"
         >
           {app.screens.map((screen, index) => (
