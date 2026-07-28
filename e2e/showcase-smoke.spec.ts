@@ -6,7 +6,7 @@ import { expectEditorMounted } from "./support/editor";
 // "/app" (see chat-smoke.spec.ts and friends). /api/showcase is stubbed —
 // no backend needed.
 
-test("/ shows the showcase, not the editor", async ({ page }) => {
+test("/ shows the showcase, not the editor", async ({ page }, testInfo) => {
   await page.route("**/api/showcase**", (route) =>
     route.fulfill({
       json: {
@@ -35,6 +35,15 @@ test("/ shows the showcase, not the editor", async ({ page }) => {
   // Cards are image-only, so the title lives in alt text, not a caption.
   await expect(page.getByAltText("Onboarding flow")).toBeVisible();
   await expect(page.locator("[data-canvas]")).toHaveCount(0);
+
+  // The `/app` navigation mounts the full WebGL/Pixi editor, which is
+  // already covered on chromium. webkit-mobile (iPhone 14) exists only to
+  // guard showcase layout — mounting the editor there is new, unneeded
+  // surface (and a plausible flake/slowness source in CI), so this project
+  // stops at the showcase-only assertions above.
+  if (testInfo.project.name === "webkit-mobile") {
+    return;
+  }
 
   // Navigating to /app still loads the editor.
   await page.route("**/api/models", (route) =>
@@ -122,7 +131,18 @@ test("the grid scrolls the document on a phone-sized viewport", async ({
 // it, since happy-dom has no layout/scroll model at all.
 test("horizontal wheel snaps the carousel; vertical wheel scrolls the page, not the card", async ({
   page,
-}) => {
+}, testInfo) => {
+  // `page.mouse.wheel` has no touch-input equivalent and throws on
+  // Playwright's mobile-emulated WebKit ("Mouse wheel is not supported in
+  // mobile WebKit") — a Playwright/engine limitation, not a real regression.
+  // The new webkit-mobile project (iPhone 14) picks up every test in this
+  // file by design (see playwright.config.ts), so this one opts itself out
+  // rather than the project excluding the whole spec.
+  testInfo.skip(
+    testInfo.project.name === "webkit-mobile",
+    "mouse wheel emulation is unsupported on mobile WebKit"
+  );
+
   const carouselScreens = Array.from({ length: 5 }, (_, i) => ({
     id: `carousel-${i}`,
     runId: "r-carousel",
@@ -213,4 +233,76 @@ test("horizontal wheel snaps the carousel; vertical wheel scrolls the page, not 
     .toBeGreaterThan(pageScrollYBefore);
 
   expect(await scroller.evaluate((el) => el.scrollLeft)).toBe(scrollLeftBeforeVertical);
+});
+
+// Regression: ShowcaseCard used a real `border` on the card, which
+// participates in border-box sizing. WebKit resolves the button/img's
+// `height:100%` chain (from `size-full`) against the card's *border* box,
+// while Blink resolves it against the *content* box — so the 1px border made
+// WebKit's content box 2px shorter than the border box the aspect-ratio sized.
+// The `object-cover object-top` image then rendered 2px taller than its box
+// in WebKit only, and `overflow-hidden` clipped it off the bottom — on real
+// screenshots that sliced through the app's tab bar. The fix swaps the border
+// for an inset ring (`inset-ring-*`), which paints without affecting layout.
+// 0.5px tolerance covers ordinary sub-pixel layout rounding; the 2px WebKit
+// bug is an order of magnitude past that, so the assertion still catches it.
+test("screenshot fills the card without clipping its bottom (WebKit border-box regression)", async ({
+  page,
+}) => {
+  // A 390x844 SVG data URL — the card's real aspect ratio — so the browser
+  // actually has to lay out and clip an image of the right shape; a network
+  // fetch isn't needed since data: URLs never leave the page.
+  const imageUrl =
+    "data:image/svg+xml;utf8," +
+    encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844"><rect width="390" height="844" fill="#334"/></svg>`
+    );
+
+  await page.route("**/api/showcase**", (route) =>
+    route.fulfill({
+      json: {
+        screens: [
+          {
+            id: "clip-check",
+            runId: "r-clip-check",
+            theme: "dark",
+            title: "Clip check screen",
+            model: "test/smoke-model",
+            imageUrl,
+            htmlUrl: "https://example.com/s.html",
+            width: 390,
+            height: 844,
+            createdAt: "2026-07-01T00:00:00.000Z",
+          },
+        ],
+        nextCursor: null,
+      },
+    })
+  );
+
+  await page.goto("/");
+  const img = page.getByAltText("Clip check screen");
+  await expect(img).toBeVisible();
+
+  // Wait for the image to actually finish decoding before measuring it.
+  await expect
+    .poll(() =>
+      img.evaluate(
+        (el: HTMLImageElement) => el.complete && el.naturalWidth > 0
+      )
+    )
+    .toBe(true);
+
+  const overflowPx = await img.evaluate((el: HTMLImageElement) => {
+    const card = el.closest<HTMLElement>('[data-slot="showcase-card"]')!;
+    const cardRect = card.getBoundingClientRect();
+    const cardBottom = cardRect.top + card.clientTop + card.clientHeight;
+    const imgRect = el.getBoundingClientRect();
+    return Math.max(
+      imgRect.bottom - cardBottom,
+      imgRect.height - card.clientHeight
+    );
+  });
+
+  expect(overflowPx).toBeLessThanOrEqual(0.5);
 });

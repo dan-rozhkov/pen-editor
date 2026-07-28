@@ -272,8 +272,21 @@ describe("<ShowcasePage />", () => {
     expect(main?.classList.contains("lg:max-w-none")).toBe(true);
     expect(card?.classList.contains("aspect-[390/844]")).toBe(true);
     expect(card?.classList.contains("rounded-3xl")).toBe(true);
-    expect(card?.classList.contains("border")).toBe(true);
-    expect(card?.classList.contains("border-gray-200")).toBe(true);
+    // No `border` on the card itself — a real border participates in
+    // border-box sizing, which WebKit and Blink resolve percentage heights
+    // against differently, clipping 2px off screenshots in Safari (see
+    // ShowcaseCard.tsx).
+    expect(card?.classList.contains("border")).toBe(false);
+    // The hairline instead lives on a dedicated overlay div painted after the
+    // screenshot button, found structurally (its `aria-hidden` marker) rather
+    // than by class, so this assertion can't pass vacuously if the overlay
+    // were ever removed.
+    const hairlineOverlay = card?.querySelector('[aria-hidden="true"]');
+    expect(hairlineOverlay).not.toBeNull();
+    expect(hairlineOverlay?.classList.contains("absolute")).toBe(true);
+    expect(hairlineOverlay?.classList.contains("inset-0")).toBe(true);
+    expect(hairlineOverlay?.classList.contains("inset-ring-1")).toBe(true);
+    expect(hairlineOverlay?.classList.contains("inset-ring-gray-200")).toBe(true);
   });
 
   it("marks <html> as the showcase route and whitens theme-color while mounted, undoing both on unmount", async () => {

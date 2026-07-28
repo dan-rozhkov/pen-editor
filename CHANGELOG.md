@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.72.2] - 2026-07-28
+
+### Fixed
+- **Showcase screenshots were silently missing their bottom 2px in Safari, slicing through the app's tab bar.** `ShowcaseCard`'s card used a real `border`, which participates in border-box sizing; WebKit resolves the card's `height:100%` chain (button + image) against the border box, while Blink resolves it against the content box, so the 1px border made WebKit's content box 2px shorter than the aspect-ratio-sized border box. The `object-cover object-top` image then rendered 2px too tall for WebKit's content box and `overflow-hidden` clipped it off the bottom — invisible on Chromium, visible on real iOS Safari and Playwright's `webkit`. The card no longer has a `border` at all; the gray hairline is now a separate `aria-hidden` overlay div (`inset-ring-*`, an inset shadow) painted *after* the screenshot button in DOM order, so it stays layout-neutral (no border box) and still paints on top of the full-bleed image instead of underneath it — an inset shadow on the card itself would have been invisible behind the loaded screenshot.
+
+### Testing
+- New `webkit-mobile` Playwright project (`iPhone 14`, scoped to `showcase-*.spec.ts`) plus a new regression test in `showcase-smoke.spec.ts` asserting the screenshot image never extends past the card's padding box (0.5px tolerance) — this is the only way to catch a WebKit-vs-Blink layout divergence, since happy-dom has no layout model. CI's e2e job now installs `webkit` alongside `chromium`.
+
 ## [0.72.1] - 2026-07-28
 
 ### Fixed

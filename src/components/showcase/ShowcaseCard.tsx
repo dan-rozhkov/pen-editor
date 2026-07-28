@@ -106,7 +106,18 @@ export function ShowcaseCard({
   return (
     <div
       data-slot="showcase-card"
-      className="relative aspect-[390/844] w-full overflow-hidden rounded-3xl border border-gray-200 bg-surface-elevated bg-cover bg-top"
+      // No `border` here: `border` participates in border-box sizing, and
+      // WebKit resolves this card's `aspect-[390/844]`-derived `height:100%`
+      // chain (button + img) against the border box while Blink resolves it
+      // against the content box — so a real 1px border silently made the
+      // WebKit content box 2px shorter, pushing the `object-cover object-top`
+      // image 2px past the bottom edge where `overflow-hidden` clipped it
+      // (visible as a sliced tab bar on real screenshots). The hairline is
+      // painted by a separate overlay div below, not as this element's own
+      // `inset-ring` — an inset box-shadow paints *under* an element's own
+      // children, so a ring here would sit behind the full-bleed screenshot
+      // and never be seen once the image loads.
+      className="relative aspect-[390/844] w-full overflow-hidden rounded-3xl bg-surface-elevated bg-cover bg-top"
       style={showLqip ? { backgroundImage: `url(${screen.lqip})` } : undefined}
     >
       <button
@@ -141,6 +152,17 @@ export function ShowcaseCard({
           />
         )}
       </button>
+
+      {/* Hairline overlay: painted after the button in DOM order so it sits
+          on top of the (opaque, full-bleed) screenshot. `inset-ring-*` here
+          is a layout-neutral inset shadow — no border box, so no WebKit/Blink
+          divergence — and living outside the card's own box-shadow layer
+          means it isn't hidden by the image the way a ring on the card
+          itself would be. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 rounded-3xl inset-ring-1 inset-ring-gray-200"
+      />
 
       {feedback && (
         <div

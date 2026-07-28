@@ -23,6 +23,16 @@ export default defineConfig({
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
     },
+    // Regression coverage for a WebKit-only border-box/content-box layout
+    // divergence in the showcase (see showcase-smoke.spec.ts). Scoped to the
+    // showcase spec only — pixi-large-document-performance.spec.ts enforces
+    // CI-tuned frame-time budgets and the chat specs are chromium-only by
+    // design, neither of which should run twice.
+    {
+      name: "webkit-mobile",
+      use: { ...devices["iPhone 14"] },
+      testMatch: /showcase-.*\.spec\.ts/,
+    },
   ],
   webServer: {
     command: "npm run dev -- --port 5173 --strictPort",
