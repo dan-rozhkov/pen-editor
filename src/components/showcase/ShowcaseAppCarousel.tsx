@@ -3,12 +3,9 @@ import { ArrowLeftIcon, ArrowRightIcon } from "@phosphor-icons/react";
 
 import { Button } from "@/components/ui/button";
 import { ShowcaseCard, type ShowcaseCopyFeedback } from "@/components/showcase/ShowcaseCard";
-import {
-  getShowcaseModelLabel,
-  type ShowcaseApp,
-} from "@/components/showcase/showcaseApps";
+import { getShowcaseModelLabel } from "@/components/showcase/showcaseApps";
 import { accumulateWindow, getInitialWindow } from "@/components/showcase/carouselWindow";
-import type { ShowcaseScreen } from "@/lib/showcase";
+import type { ShowcaseApp, ShowcaseScreen } from "@/lib/showcase";
 import { cn } from "@/lib/utils";
 import { writeTextToClipboard } from "@/utils/clipboard";
 
@@ -325,7 +322,7 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
       )}
 
       <span className="absolute bottom-3 left-1/2 max-w-[calc(100%-2rem)] -translate-x-1/2 truncate text-center text-xs font-normal text-text-muted sm:bottom-4">
-        {getShowcaseModelLabel(app.screens[0].model)}
+        {getShowcaseModelLabel(app.model)}
       </span>
     </div>
   );

@@ -10,18 +10,23 @@ test("/ shows the showcase, not the editor", async ({ page }, testInfo) => {
   await page.route("**/api/showcase**", (route) =>
     route.fulfill({
       json: {
-        screens: [
+        apps: [
           {
-            id: "s1",
             runId: "r1",
             theme: "dark",
-            title: "Onboarding flow",
             model: "test/smoke-model",
-            imageUrl: "https://example.com/s1.png",
-            htmlUrl: "https://example.com/s1.html",
-            width: 390,
-            height: 844,
             createdAt: "2026-07-01T00:00:00.000Z",
+            screens: [
+              {
+                id: "s1",
+                title: "Onboarding flow",
+                imageUrl: "https://example.com/s1.png",
+                htmlUrl: "https://example.com/s1.html",
+                width: 390,
+                height: 844,
+                createdAt: "2026-07-01T00:00:00.000Z",
+              },
+            ],
           },
         ],
         nextCursor: null,
@@ -72,20 +77,25 @@ test("/ shows the showcase, not the editor", async ({ page }, testInfo) => {
 test("the grid scrolls the document on a phone-sized viewport", async ({
   page,
 }) => {
-  const screens = Array.from({ length: 12 }, (_, i) => ({
-    id: `s${i}`,
+  const apps = Array.from({ length: 12 }, (_, i) => ({
     runId: `r${i}`,
     theme: "dark",
-    title: `Screen ${i}`,
     model: "test/smoke-model",
-    imageUrl: "https://example.com/s.png",
-    width: 390,
-    height: 844,
-    htmlUrl: "https://example.com/s.html",
     createdAt: "2026-07-01T00:00:00.000Z",
+    screens: [
+      {
+        id: `s${i}`,
+        title: `Screen ${i}`,
+        imageUrl: "https://example.com/s.png",
+        width: 390,
+        height: 844,
+        htmlUrl: "https://example.com/s.html",
+        createdAt: "2026-07-01T00:00:00.000Z",
+      },
+    ],
   }));
   await page.route("**/api/showcase**", (route) =>
-    route.fulfill({ json: { screens, nextCursor: null } })
+    route.fulfill({ json: { apps, nextCursor: null } })
   );
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -143,34 +153,42 @@ test("horizontal wheel snaps the carousel; vertical wheel scrolls the page, not 
     "mouse wheel emulation is unsupported on mobile WebKit"
   );
 
-  const carouselScreens = Array.from({ length: 5 }, (_, i) => ({
-    id: `carousel-${i}`,
+  const carouselApp = {
     runId: "r-carousel",
     theme: "dark",
-    title: `Carousel screen ${i}`,
     model: "test/smoke-model",
-    imageUrl: "https://example.com/s.png",
-    width: 390,
-    height: 844,
     createdAt: "2026-07-01T00:00:00.000Z",
-  }));
+    screens: Array.from({ length: 5 }, (_, i) => ({
+      id: `carousel-${i}`,
+      title: `Carousel screen ${i}`,
+      imageUrl: "https://example.com/s.png",
+      width: 390,
+      height: 844,
+      createdAt: "2026-07-01T00:00:00.000Z",
+    })),
+  };
   // Extra single-screen apps below give the page enough height to actually
   // scroll vertically on a phone-sized viewport.
-  const fillerScreens = Array.from({ length: 10 }, (_, i) => ({
-    id: `filler-${i}`,
+  const fillerApps = Array.from({ length: 10 }, (_, i) => ({
     runId: `r-filler-${i}`,
     theme: "dark",
-    title: `Filler screen ${i}`,
     model: "test/smoke-model",
-    imageUrl: "https://example.com/s.png",
-    width: 390,
-    height: 844,
     createdAt: "2026-07-01T00:00:00.000Z",
+    screens: [
+      {
+        id: `filler-${i}`,
+        title: `Filler screen ${i}`,
+        imageUrl: "https://example.com/s.png",
+        width: 390,
+        height: 844,
+        createdAt: "2026-07-01T00:00:00.000Z",
+      },
+    ],
   }));
 
   await page.route("**/api/showcase**", (route) =>
     route.fulfill({
-      json: { screens: [...carouselScreens, ...fillerScreens], nextCursor: null },
+      json: { apps: [carouselApp, ...fillerApps], nextCursor: null },
     })
   );
 
@@ -261,18 +279,23 @@ test("screenshot fills the card without clipping its bottom (WebKit border-box r
   await page.route("**/api/showcase**", (route) =>
     route.fulfill({
       json: {
-        screens: [
+        apps: [
           {
-            id: "clip-check",
             runId: "r-clip-check",
             theme: "dark",
-            title: "Clip check screen",
             model: "test/smoke-model",
-            imageUrl,
-            htmlUrl: "https://example.com/s.html",
-            width: 390,
-            height: 844,
             createdAt: "2026-07-01T00:00:00.000Z",
+            screens: [
+              {
+                id: "clip-check",
+                title: "Clip check screen",
+                imageUrl,
+                htmlUrl: "https://example.com/s.html",
+                width: 390,
+                height: 844,
+                createdAt: "2026-07-01T00:00:00.000Z",
+              },
+            ],
           },
         ],
         nextCursor: null,

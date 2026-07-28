@@ -11,10 +11,7 @@ import type { ShowcaseScreen } from "@/lib/showcase";
 function makeScreen(overrides: Partial<ShowcaseScreen> = {}): ShowcaseScreen {
   return {
     id: "screen-a",
-    runId: "run-1",
-    theme: "dark",
     title: "Onboarding flow",
-    model: "test/model",
     imageUrl: "https://example.com/screen-a.webp",
     htmlUrl: "https://example.com/screen-a.html",
     width: 750,

@@ -3,9 +3,8 @@ import { Link } from "react-router";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { fetchShowcase, type ShowcaseScreen } from "@/lib/showcase";
+import { fetchShowcase, type ShowcaseApp } from "@/lib/showcase";
 import { ShowcaseAppCarousel } from "@/components/showcase/ShowcaseAppCarousel";
-import { groupScreensByApp } from "@/components/showcase/showcaseApps";
 
 type Status = "loading" | "ready" | "error";
 
@@ -35,7 +34,9 @@ function SkeletonGrid() {
 }
 
 export function ShowcasePage() {
-  const [screens, setScreens] = useState<ShowcaseScreen[]>([]);
+  // Apps, not screens: the feed hands back whole apps (see lib/showcase.ts),
+  // so pages append cleanly and no card is ever rendered half-populated.
+  const [apps, setApps] = useState<ShowcaseApp[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -48,7 +49,7 @@ export function ShowcasePage() {
       if (!result.ok) {
         if (result.notConfigured) {
           // 503 (storage not configured) reads identically to an empty feed.
-          setScreens([]);
+          setApps([]);
           setNextCursor(null);
           setStatus("ready");
         } else {
@@ -57,7 +58,7 @@ export function ShowcasePage() {
         }
         return;
       }
-      setScreens(result.data.screens);
+      setApps(result.data.apps);
       setNextCursor(result.data.nextCursor);
       setStatus("ready");
     });
@@ -71,7 +72,7 @@ export function ShowcasePage() {
     setLoadingMore(true);
     const result = await fetchShowcase(nextCursor);
     if (result.ok) {
-      setScreens((prev) => [...prev, ...result.data.screens]);
+      setApps((prev) => [...prev, ...result.data.apps]);
       setNextCursor(result.data.nextCursor);
     }
     // A failure loading more just leaves the current page in place; the
@@ -79,8 +80,7 @@ export function ShowcasePage() {
     setLoadingMore(false);
   }
 
-  const isEmpty = status === "ready" && screens.length === 0;
-  const apps = groupScreensByApp(screens);
+  const isEmpty = status === "ready" && apps.length === 0;
 
   // index.css locks html/body/#root to height:100% + overflow:hidden so the
   // editor at "/app" owns a fixed viewport. That lock is what turned iOS

@@ -1,26 +1,8 @@
 import { getModelOptions } from "@/lib/chatModels";
-import type { ShowcaseScreen } from "@/lib/showcase";
 
-export interface ShowcaseApp {
-  runId: string;
-  screens: ShowcaseScreen[];
-}
-
-/** Preserve feed order while collecting every screen generated in one run. */
-export function groupScreensByApp(screens: ShowcaseScreen[]): ShowcaseApp[] {
-  const apps = new Map<string, ShowcaseApp>();
-
-  for (const screen of screens) {
-    const app = apps.get(screen.runId);
-    if (app) {
-      app.screens.push(screen);
-    } else {
-      apps.set(screen.runId, { runId: screen.runId, screens: [screen] });
-    }
-  }
-
-  return [...apps.values()];
-}
+// Apps arrive already grouped from the backend (GET /api/showcase paginates
+// by app), so the client-side `groupScreensByApp` that the masonry-era flat
+// screen feed needed is gone. What's left is presentation.
 
 /** Turns provider model ids into the friendly labels used by the editor. */
 export function getShowcaseModelLabel(model: string): string {

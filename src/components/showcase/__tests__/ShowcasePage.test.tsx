@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router";
 import { ShowcasePage } from "@/components/showcase/ShowcasePage";
 import { ShowcaseLightbox } from "@/components/showcase/ShowcaseLightbox";
-import type { ShowcaseScreen } from "@/lib/showcase";
+import type { ShowcaseApp, ShowcaseScreen } from "@/lib/showcase";
 
 afterEach(() => {
   cleanup();
@@ -14,10 +14,7 @@ afterEach(() => {
 function screen1(): ShowcaseScreen {
   return {
     id: "s1",
-    runId: "r1",
-    theme: "dark",
     title: "Onboarding flow",
-    model: "test/model",
     imageUrl: "https://example.com/s1.png",
     htmlUrl: "https://example.com/s1.html",
     width: 390,
@@ -29,10 +26,7 @@ function screen1(): ShowcaseScreen {
 function screen2(): ShowcaseScreen {
   return {
     id: "s2",
-    runId: "r2",
-    theme: "light",
     title: "Checkout page",
-    model: "test/model",
     imageUrl: "https://example.com/s2.png",
     htmlUrl: "https://example.com/s2.html",
     width: 390,
@@ -47,6 +41,18 @@ function screen3(): ShowcaseScreen {
     id: "s3",
     title: "Onboarding details",
     imageUrl: "https://example.com/s3.png",
+  };
+}
+
+// The feed hands back whole apps, so fixtures are apps too — there is no
+// client-side grouping left to exercise.
+function app(runId: string, screens: ShowcaseScreen[]): ShowcaseApp {
+  return {
+    runId,
+    theme: "dark",
+    model: "test/model",
+    createdAt: screens[0].createdAt,
+    screens,
   };
 }
 
@@ -66,11 +72,14 @@ function renderPage() {
 }
 
 describe("<ShowcasePage />", () => {
-  it("groups each application's screens into one carousel", async () => {
+  it("renders one carousel per app, with all of its screens", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
-        jsonResponse({ screens: [screen1(), screen2(), screen3()], nextCursor: null }),
+        jsonResponse({
+          apps: [app("r1", [screen1(), screen3()]), app("r2", [screen2()])],
+          nextCursor: null,
+        }),
       ),
     );
 
@@ -141,10 +150,10 @@ describe("<ShowcasePage />", () => {
     expect(shimmer?.classList.contains("rounded-3xl")).toBe(true);
   });
 
-  it("shows an empty-state message when there are no screens", async () => {
+  it("shows an empty-state message when there are no apps", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => jsonResponse({ screens: [], nextCursor: null })),
+      vi.fn(async () => jsonResponse({ apps: [], nextCursor: null })),
     );
 
     renderPage();
@@ -181,9 +190,9 @@ describe("<ShowcasePage />", () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("cursor=")) {
-        return jsonResponse({ screens: [screen2()], nextCursor: null });
+        return jsonResponse({ apps: [app("r2", [screen2()])], nextCursor: null });
       }
-      return jsonResponse({ screens: [screen1()], nextCursor: "cursor-2" });
+      return jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: "cursor-2" });
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -205,7 +214,7 @@ describe("<ShowcasePage />", () => {
   it("renders screens without a caption, but with a copy-id click target", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => jsonResponse({ screens: [screen1()], nextCursor: null })),
+      vi.fn(async () => jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null })),
     );
 
     renderPage();
@@ -227,7 +236,7 @@ describe("<ShowcasePage />", () => {
   it("uses carousel-backed apps in a four-column maximum grid with doubled side gutters", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => jsonResponse({ screens: [screen1()], nextCursor: null })),
+      vi.fn(async () => jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null })),
     );
 
     const { container } = renderPage();
@@ -297,7 +306,7 @@ describe("<ShowcasePage />", () => {
 
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => jsonResponse({ screens: [screen1()], nextCursor: null })),
+      vi.fn(async () => jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null })),
     );
 
     try {
@@ -333,7 +342,12 @@ describe("<ShowcasePage />", () => {
 describe("ShowcaseLightbox", () => {
   it("sandboxes the iframe to allow-scripts, never allow-same-origin", async () => {
     render(
-      <ShowcaseLightbox screen={screen1()} onOpenChange={() => {}} />,
+      <ShowcaseLightbox
+        screen={screen1()}
+        theme="dark"
+        model="test/model"
+        onOpenChange={() => {}}
+      />,
     );
 
     const iframe = await screen.findByTitle("Onboarding flow");

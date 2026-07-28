@@ -2,8 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ShowcaseAppCarousel } from "@/components/showcase/ShowcaseAppCarousel";
 import { accumulateWindow, getInitialWindow } from "@/components/showcase/carouselWindow";
-import type { ShowcaseApp } from "@/components/showcase/showcaseApps";
-import type { ShowcaseScreen } from "@/lib/showcase";
+import type { ShowcaseApp, ShowcaseScreen } from "@/lib/showcase";
 
 // This is a real native scroll-snap scroller now (no Embla), so clicking a
 // card is a plain click — there is no drag-vs-click suppression to reason
@@ -19,10 +18,7 @@ import type { ShowcaseScreen } from "@/lib/showcase";
 function makeScreen(id: string): ShowcaseScreen {
   return {
     id,
-    runId: "run-1",
-    theme: "dark",
     title: `Screen ${id}`,
-    model: "test/model",
     imageUrl: `https://example.com/${id}.png`,
     // Present on every screen in this suite so the lazy-mounting tests
     // exercise the window logic — a screen without `lqip` always loads
@@ -36,7 +32,15 @@ function makeScreen(id: string): ShowcaseScreen {
 }
 
 function makeApp(screens: ShowcaseScreen[]): ShowcaseApp {
-  return { runId: "run-1", screens };
+  return {
+    runId: "run-1",
+    theme: "dark",
+    // The model badge reads this app-level field — screens no longer carry
+    // theme/model at all.
+    model: "test/model",
+    createdAt: "2026-07-28T00:00:00.000Z",
+    screens,
+  };
 }
 
 function stubClipboard(writeText: ReturnType<typeof vi.fn>) {

@@ -19,11 +19,18 @@ function formatDate(iso: string): string {
   });
 }
 
+// `theme`/`model` are passed alongside the screen rather than read off it:
+// they describe the whole app (one generation run), and the feed now carries
+// them at the app level instead of repeating them on every screen.
 export function ShowcaseLightbox({
   screen,
+  theme,
+  model,
   onOpenChange,
 }: {
   screen: ShowcaseScreen | null;
+  theme?: string;
+  model?: string;
   onOpenChange: (open: boolean) => void;
 }) {
   return (
@@ -34,7 +41,9 @@ export function ShowcaseLightbox({
           <DialogDescription>
             {screen && (
               <>
-                {screen.theme} · {screen.model} · {formatDate(screen.createdAt)}
+                {[theme, model, formatDate(screen.createdAt)]
+                  .filter(Boolean)
+                  .join(" · ")}
               </>
             )}
           </DialogDescription>

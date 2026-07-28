@@ -1,16 +1,17 @@
 import { resolveApiUrl } from "@/lib/apiBase";
 
 // Client for the backend's read-only showcase feed (GET /api/showcase),
-// listing screens the AI design agent produced autonomously (no human in the
+// listing apps the AI design agent produced autonomously (no human in the
 // loop) for the public showcase at "/". Contract is owned by the backend
 // (pen-editor-backend's src/routes/showcase.ts); this module mirrors it.
+//
+// The feed paginates by *app*, not by screen: the gallery renders one card
+// per app, and a page measured in screens used to cut an app in half at the
+// boundary — its carousel silently grew when the visitor clicked "Show more".
 
 export interface ShowcaseScreen {
   id: string;
-  runId: string;
-  theme: string;
   title: string;
-  model: string;
   imageUrl: string;
   // Optional: absent on rows published before the WebP-derivatives backfill
   // (see pen-editor-backend docs/superpowers/specs/2026-07-28-showcase-image-delivery-design.md).
@@ -23,8 +24,17 @@ export interface ShowcaseScreen {
   createdAt: string;
 }
 
-export interface ShowcasePage {
+/** One app: every screen of a single generation run, cover first. */
+export interface ShowcaseApp {
+  runId: string;
+  theme: string;
+  model: string;
+  createdAt: string;
   screens: ShowcaseScreen[];
+}
+
+export interface ShowcasePage {
+  apps: ShowcaseApp[];
   nextCursor: string | null;
 }
 
@@ -35,7 +45,8 @@ export type ShowcaseResult =
   | { ok: false; notConfigured: true }
   | { ok: false; notConfigured: false; error: string };
 
-const DEFAULT_LIMIT = 24;
+// Apps per page, not screens — 12 fills three rows of the four-column grid.
+const DEFAULT_LIMIT = 12;
 
 export function resolveShowcaseApiUrl(
   cursor?: string | null,

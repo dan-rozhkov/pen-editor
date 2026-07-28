@@ -32,7 +32,7 @@ for (const route of ["/app", "/"]) {
         },
       }),
     );
-    await page.route("**/api/showcase*", (r) => r.fulfill({ json: { screens: [] } }));
+    await page.route("**/api/showcase*", (r) => r.fulfill({ json: { apps: [], nextCursor: null } }));
 
     await page.goto(route);
     if (route === "/app") {
