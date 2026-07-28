@@ -9,7 +9,10 @@ import {
   CarouselPrevious,
 } from "@/components/ui/carousel";
 import { ShowcaseCard } from "@/components/showcase/ShowcaseCard";
-import type { ShowcaseApp } from "@/components/showcase/showcaseApps";
+import {
+  getShowcaseModelLabel,
+  type ShowcaseApp,
+} from "@/components/showcase/showcaseApps";
 
 export function ShowcaseAppCarousel({ app }: { app: ShowcaseApp }) {
   const hasMultipleScreens = app.screens.length > 1;
@@ -122,7 +125,7 @@ export function ShowcaseAppCarousel({ app }: { app: ShowcaseApp }) {
       )}
 
       <span className="absolute bottom-5 left-5 rounded-full bg-surface-active/80 px-3 py-1 text-xs font-medium text-text-secondary backdrop-blur-sm sm:bottom-6 sm:left-6">
-        {app.screens[0].model}
+        {getShowcaseModelLabel(app.screens[0].model)}
       </span>
     </div>
   );

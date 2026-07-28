@@ -105,7 +105,7 @@ describe("<ShowcasePage />", () => {
     expect(selector.classList.contains("right-5")).toBe(true);
     expect(selector.classList.contains("opacity-0")).toBe(true);
     expect(selector.classList.contains("group-hover/carousel:opacity-100")).toBe(true);
-    const [modelBadge] = screen.getAllByText("test/model");
+    const [modelBadge] = screen.getAllByText("Model");
     expect(modelBadge.classList.contains("bottom-5")).toBe(true);
     expect(modelBadge.classList.contains("left-5")).toBe(true);
     expect(modelBadge.classList.contains("bg-surface-active/80")).toBe(true);
@@ -205,7 +205,7 @@ describe("<ShowcasePage />", () => {
 
     const image = await screen.findByAltText("Onboarding flow");
     // The model is intentionally shown as a compact card badge, not a caption.
-    expect(screen.getByText("test/model").classList.contains("rounded-full")).toBe(true);
+    expect(screen.getByText("Model").classList.contains("rounded-full")).toBe(true);
     expect(screen.queryByText(/dark/)).toBeNull();
     // The live-HTML lightbox is switched off, so a card is not interactive.
     expect(image.closest("button")).toBeNull();

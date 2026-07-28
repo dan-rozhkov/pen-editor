@@ -1,3 +1,4 @@
+import { getModelOptions } from "@/lib/chatModels";
 import type { ShowcaseScreen } from "@/lib/showcase";
 
 export interface ShowcaseApp {
@@ -19,4 +20,17 @@ export function groupScreensByApp(screens: ShowcaseScreen[]): ShowcaseApp[] {
   }
 
   return [...apps.values()];
+}
+
+/** Turns provider model ids into the friendly labels used by the editor. */
+export function getShowcaseModelLabel(model: string): string {
+  const knownModel = getModelOptions().find((option) => option.value === model);
+  if (knownModel) return knownModel.label;
+
+  const modelName = model.split("/").at(-1) || model;
+  return modelName
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }

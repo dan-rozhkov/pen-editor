@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { groupScreensByApp } from "@/components/showcase/showcaseApps";
+import {
+  getShowcaseModelLabel,
+  groupScreensByApp,
+} from "@/components/showcase/showcaseApps";
 import type { ShowcaseScreen } from "@/lib/showcase";
 
 function screen(id: string, runId: string): ShowcaseScreen {
@@ -29,5 +32,12 @@ describe("groupScreensByApp", () => {
       { runId: "run-a", screens: [screen("a1", "run-a"), screen("a2", "run-a")] },
       { runId: "run-b", screens: [screen("b1", "run-b")] },
     ]);
+  });
+
+  it("uses friendly editor labels for model badges", () => {
+    expect(getShowcaseModelLabel("google/gemini-2.5-flash")).toBe(
+      "Gemini 2.5 Flash",
+    );
+    expect(getShowcaseModelLabel("test/model")).toBe("Model");
   });
 });
