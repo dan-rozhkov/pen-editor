@@ -198,7 +198,7 @@ describe("<ShowcasePage />", () => {
     );
   });
 
-  it("renders screens without a caption or click target", async () => {
+  it("renders screens without a caption, but with a copy-id click target", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => jsonResponse({ screens: [screen1()], nextCursor: null })),
@@ -210,9 +210,14 @@ describe("<ShowcasePage />", () => {
     // The model is intentionally shown as a compact card badge, not a caption.
     expect(screen.getByText("Model").classList.contains("text-text-muted")).toBe(true);
     expect(screen.queryByText(/dark/)).toBeNull();
-    // The live-HTML lightbox is switched off, so a card is not interactive.
-    expect(image.closest("button")).toBeNull();
+    // The live-HTML lightbox is switched off, but the card is still a real
+    // <button> so clicking (or Enter/Space on) a screen copies its id.
     expect(image.closest("a")).toBeNull();
+    const button = image.closest("button");
+    expect(button).not.toBeNull();
+    expect(button?.getAttribute("aria-label")).toBe(
+      "Copy screen id: Onboarding flow",
+    );
   });
 
   it("uses carousel-backed apps in a four-column maximum grid with doubled side gutters", async () => {
@@ -227,7 +232,9 @@ describe("<ShowcasePage />", () => {
     const page = container.firstElementChild;
     const header = page?.querySelector("header");
     const main = page?.querySelector("main");
-    const card = image.parentElement;
+    // The image's direct parent is now the copy-id <button>, so reach for the
+    // card by its slot marker instead of by DOM position.
+    const card = image.closest('[data-slot="showcase-card"]');
     const carousel = image.closest("[data-slot=carousel]");
     const appCarousel = carousel?.closest("[data-slot=showcase-app-carousel]");
     const grid = appCarousel?.parentElement;

@@ -8,16 +8,44 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from "@/components/ui/carousel";
-import { ShowcaseCard } from "@/components/showcase/ShowcaseCard";
+import { ShowcaseCard, type ShowcaseCopyFeedback } from "@/components/showcase/ShowcaseCard";
 import {
   getShowcaseModelLabel,
   type ShowcaseApp,
 } from "@/components/showcase/showcaseApps";
+import type { ShowcaseScreen } from "@/lib/showcase";
+import { writeTextToClipboard } from "@/utils/clipboard";
+
+const COPY_FEEDBACK_DURATION_MS = 2000;
 
 export function ShowcaseAppCarousel({ app }: { app: ShowcaseApp }) {
   const hasMultipleScreens = app.screens.length > 1;
   const [api, setApi] = useState<CarouselApi>();
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [copyFeedback, setCopyFeedback] = useState<{
+    screenId: string;
+    status: ShowcaseCopyFeedback;
+  } | null>(null);
+
+  // Embla itself swallows the native `click` event that would otherwise fire
+  // on mouseup/touchend once a drag has crossed its distance threshold (see
+  // embla-carousel's DragHandler: it calls stopPropagation/preventDefault on
+  // a capture-phase `click` listener attached to the carousel root, above
+  // every slide button). So a real drag never reaches this handler at all —
+  // there is nothing extra to guard here, and no `clickAllowed()`-style
+  // method exists on this Embla version's public API to call defensively.
+  const handleCopyScreenId = useCallback((screen: ShowcaseScreen) => {
+    void writeTextToClipboard(screen.id).then((copied) => {
+      setCopyFeedback({ screenId: screen.id, status: copied ? "success" : "error" });
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!copyFeedback) return;
+
+    const timeout = setTimeout(() => setCopyFeedback(null), COPY_FEEDBACK_DURATION_MS);
+    return () => clearTimeout(timeout);
+  }, [copyFeedback]);
 
   const onSelect = useCallback((carouselApi: NonNullable<CarouselApi>) => {
     setSelectedIndex(carouselApi.selectedScrollSnap());
@@ -26,9 +54,14 @@ export function ShowcaseAppCarousel({ app }: { app: ShowcaseApp }) {
   useEffect(() => {
     if (!api) return;
 
-    onSelect(api);
     api.on("select", onSelect);
     api.on("reInit", onSelect);
+    // Prime selectedIndex for the current api instead of calling onSelect(api)
+    // synchronously here: Embla's own emit() re-runs the just-registered
+    // "select" listener, so the state update happens inside that callback
+    // (the pattern react-hooks/set-state-in-effect asks for) rather than
+    // directly in the effect body.
+    api.emit("select");
 
     return () => {
       api.off("select", onSelect);
@@ -89,7 +122,11 @@ export function ShowcaseAppCarousel({ app }: { app: ShowcaseApp }) {
               className="pl-0 will-change-opacity"
               aria-label={`Screen ${index + 1} of ${app.screens.length}`}
             >
-              <ShowcaseCard screen={screen} />
+              <ShowcaseCard
+                screen={screen}
+                onCopyId={handleCopyScreenId}
+                feedback={copyFeedback?.screenId === screen.id ? copyFeedback.status : null}
+              />
             </CarouselItem>
           ))}
         </CarouselContent>
