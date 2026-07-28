@@ -3,7 +3,8 @@ import { Link } from "react-router";
 
 import { Button } from "@/components/ui/button";
 import { fetchShowcase, type ShowcaseScreen } from "@/lib/showcase";
-import { ShowcaseCard } from "@/components/showcase/ShowcaseCard";
+import { ShowcaseAppCarousel } from "@/components/showcase/ShowcaseAppCarousel";
+import { groupScreensByApp } from "@/components/showcase/showcaseApps";
 
 type Status = "loading" | "ready" | "error";
 
@@ -16,7 +17,7 @@ function ShowcaseGrid({ children }: { children: ReactNode }) {
 }
 
 function SkeletonGrid() {
-  const heights = [220, 320, 260, 380, 240, 300, 210, 340];
+  const heights = [320, 320, 320, 320];
   return (
     <div aria-hidden="true">
       <ShowcaseGrid>
@@ -78,6 +79,7 @@ export function ShowcasePage() {
   }
 
   const isEmpty = status === "ready" && screens.length === 0;
+  const apps = groupScreensByApp(screens);
 
   // index.css locks html/body/#root to height:100% + overflow:hidden so the
   // editor owns a fixed viewport. A page taller than the screen is therefore
@@ -127,11 +129,11 @@ export function ShowcasePage() {
           </div>
         )}
 
-        {status === "ready" && screens.length > 0 && (
+        {status === "ready" && apps.length > 0 && (
           <>
             <ShowcaseGrid>
-              {screens.map((screen) => (
-                <ShowcaseCard key={screen.id} screen={screen} />
+              {apps.map((app) => (
+                <ShowcaseAppCarousel key={app.runId} app={app} />
               ))}
             </ShowcaseGrid>
 

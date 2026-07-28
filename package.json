@@ -25,6 +25,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "dompurify": "^3.4.8",
+    "embla-carousel-react": "^8.6.0",
     "fflate": "^0.8.3",
     "fzstd": "^0.1.1",
     "json5": "^2.2.3",

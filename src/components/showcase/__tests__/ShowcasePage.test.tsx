@@ -41,6 +41,15 @@ function screen2(): ShowcaseScreen {
   };
 }
 
+function screen3(): ShowcaseScreen {
+  return {
+    ...screen1(),
+    id: "s3",
+    title: "Onboarding details",
+    imageUrl: "https://example.com/s3.png",
+  };
+}
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -57,15 +66,32 @@ function renderPage() {
 }
 
 describe("<ShowcasePage />", () => {
-  it("renders the fetched screens", async () => {
+  it("groups each application's screens into one carousel", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => jsonResponse({ screens: [screen1()], nextCursor: null })),
+      vi.fn(async () =>
+        jsonResponse({ screens: [screen1(), screen2(), screen3()], nextCursor: null }),
+      ),
     );
 
     renderPage();
 
     await screen.findByAltText("Onboarding flow");
+    const carousels = screen.getAllByRole("region");
+    const selector = screen.getByLabelText("Screen selector");
+    expect(carousels).toHaveLength(2);
+    const nextScreen = screen.getByRole("button", { name: "Next screen" });
+    expect(nextScreen.classList.contains("size-10")).toBe(true);
+    expect(nextScreen.classList.contains("bg-gray-300/70")).toBe(true);
+    expect(nextScreen.classList.contains("backdrop-blur-sm")).toBe(true);
+    expect(nextScreen.classList.contains("hover:text-white")).toBe(true);
+    expect(nextScreen.classList.contains("-right-10")).toBe(true);
+    expect(nextScreen.classList.contains("text-white")).toBe(true);
+    expect(selector.classList.contains("absolute")).toBe(true);
+    expect(selector.classList.contains("top-5")).toBe(true);
+    expect(selector.classList.contains("right-5")).toBe(true);
+    expect(screen.getByRole("button", { name: "Go to screen 1" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Go to screen 2" })).toBeTruthy();
     expect(screen.queryByText("Show more")).toBeNull();
   });
 
@@ -148,7 +174,7 @@ describe("<ShowcasePage />", () => {
     expect(image.closest("a")).toBeNull();
   });
 
-  it("uses a four-column maximum grid, doubled side gutters, outlined screenshots, and full-width desktop containers", async () => {
+  it("uses carousel-backed apps in a four-column maximum grid with doubled side gutters", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => jsonResponse({ screens: [screen1()], nextCursor: null })),
@@ -161,9 +187,16 @@ describe("<ShowcasePage />", () => {
     const header = page?.querySelector("header");
     const main = page?.querySelector("main");
     const card = image.parentElement;
-    const grid = card?.parentElement;
+    const carousel = image.closest("[data-slot=carousel]");
+    const appCarousel = carousel?.closest("[data-slot=showcase-app-carousel]");
+    const grid = appCarousel?.parentElement;
 
     expect(page?.classList.contains("bg-white")).toBe(true);
+    expect(appCarousel?.classList.contains("bg-gray-100")).toBe(true);
+    expect(appCarousel?.classList.contains("px-12")).toBe(true);
+    expect(appCarousel?.classList.contains("py-10")).toBe(true);
+    expect(appCarousel?.classList.contains("sm:px-16")).toBe(true);
+    expect(appCarousel?.classList.contains("sm:py-12")).toBe(true);
     expect(grid?.classList.contains("grid")).toBe(true);
     expect(grid?.classList.contains("grid-cols-1")).toBe(true);
     expect(grid?.classList.contains("sm:grid-cols-2")).toBe(true);
@@ -175,6 +208,8 @@ describe("<ShowcasePage />", () => {
     expect(main?.classList.contains("sm:px-16")).toBe(true);
     expect(header?.classList.contains("lg:max-w-none")).toBe(true);
     expect(main?.classList.contains("lg:max-w-none")).toBe(true);
+    expect(card?.classList.contains("aspect-[390/844]")).toBe(true);
+    expect(card?.classList.contains("rounded-3xl")).toBe(true);
     expect(card?.classList.contains("border")).toBe(true);
     expect(card?.classList.contains("border-gray-200")).toBe(true);
   });
