@@ -148,7 +148,7 @@ describe("<ShowcasePage />", () => {
     expect(image.closest("a")).toBeNull();
   });
 
-  it("uses a white surface, outlined screenshots, and full-width desktop containers", async () => {
+  it("uses doubled side gutters, a white surface, outlined screenshots, and full-width desktop containers", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => jsonResponse({ screens: [screen1()], nextCursor: null })),
@@ -163,6 +163,10 @@ describe("<ShowcasePage />", () => {
     const card = image.parentElement;
 
     expect(page?.classList.contains("bg-white")).toBe(true);
+    expect(header?.classList.contains("px-12")).toBe(true);
+    expect(header?.classList.contains("sm:px-16")).toBe(true);
+    expect(main?.classList.contains("px-12")).toBe(true);
+    expect(main?.classList.contains("sm:px-16")).toBe(true);
     expect(header?.classList.contains("lg:max-w-none")).toBe(true);
     expect(main?.classList.contains("lg:max-w-none")).toBe(true);
     expect(card?.classList.contains("border")).toBe(true);
