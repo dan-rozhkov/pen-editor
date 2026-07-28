@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.70.1] - 2026-07-28
+
+### Fixed
+- **A grey band sat behind mobile Safari's status bar and address bar on the showcase.** `index.css` pins `html`/`body`/`#root` to `height:100%` + `overflow:hidden` so the editor at `/app` owns a fixed viewport it can pan and zoom inside. On iOS that 100% resolves against the *small* viewport, so the strips behind Safari's collapsing chrome fell outside the page box and painted with the body background (`--color-surface-base`, `#f5f5f5`) instead of the gallery. The lock is now lifted for `/` alone, via a `route-showcase` class that `ShowcasePage` puts on `<html>` while it is mounted — `/app` is untouched. The gallery scrolls the document, which is also the only thing that lets Safari collapse its chrome at all; `viewport-fit=cover` plus `env(safe-area-inset-*)` padding on the header and grid keep content clear of the system UI while the background runs edge to edge, and `theme-color` goes white for as long as the showcase is on screen.
+
+### Testing
+- The phone-scroll e2e spec had been red on `main` since the carousel landed: its fixture gave all 12 screens the same `runId`, and one card is one *run*, so they collapsed into a single carousel that fit on screen with nothing to scroll. It now uses distinct runIds, and asserts the **document** scrolls — with a check that no ancestor of `<main>` has taken the scroll back — rather than reaching for the parent of `<main>`.
+
+## [0.70.0] - 2026-07-28
+
+### Added
+- **Click a screen in the gallery to copy its id.** Pinning a screen to the front of the feed (`showcase:pin -- --screen <uuid>`, backend v0.33.0) needs the screen's uuid, which previously meant querying Postgres by hand. Cards are real `<button>`s, so Enter/Space work too, and a capture-phase listener on the carousel root swallows the click that ends an Embla drag — swiping never copies.
+
 ## [0.69.4] - 2026-07-28
 
 ### Fixed
