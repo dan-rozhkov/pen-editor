@@ -310,12 +310,12 @@ describe("<ShowcasePage />", () => {
     // Horizontal padding is expressed as pl-/pr- (not the px- shorthand) so
     // it can carry the safe-area-inset addition on each side individually —
     // see ShowcasePage's comment above the header/main className.
-    expect(header?.classList.contains("pl-[calc(3rem+env(safe-area-inset-left))]")).toBe(true);
-    expect(header?.classList.contains("pr-[calc(3rem+env(safe-area-inset-right))]")).toBe(true);
+    expect(header?.classList.contains("pl-[calc(1rem+env(safe-area-inset-left))]")).toBe(true);
+    expect(header?.classList.contains("pr-[calc(1rem+env(safe-area-inset-right))]")).toBe(true);
     expect(header?.classList.contains("sm:pl-[calc(4rem+env(safe-area-inset-left))]")).toBe(true);
     expect(header?.classList.contains("sm:pr-[calc(4rem+env(safe-area-inset-right))]")).toBe(true);
-    expect(main?.classList.contains("pl-[calc(3rem+env(safe-area-inset-left))]")).toBe(true);
-    expect(main?.classList.contains("pr-[calc(3rem+env(safe-area-inset-right))]")).toBe(true);
+    expect(main?.classList.contains("pl-[calc(1rem+env(safe-area-inset-left))]")).toBe(true);
+    expect(main?.classList.contains("pr-[calc(1rem+env(safe-area-inset-right))]")).toBe(true);
     expect(main?.classList.contains("sm:pl-[calc(4rem+env(safe-area-inset-left))]")).toBe(true);
     expect(main?.classList.contains("sm:pr-[calc(4rem+env(safe-area-inset-right))]")).toBe(true);
     expect(header?.classList.contains("lg:max-w-none")).toBe(true);

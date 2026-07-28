@@ -122,10 +122,10 @@ export function ShowcasePage() {
           // below is the only rule touching each side — no shorthand vs.
           // longhand ordering to worry about. `env(safe-area-inset-*)` is 0
           // on browsers/orientations without a safe area, so this is just
-          // pt-12/px-12/sm:px-16 plus Safari's status bar and, in landscape,
+          // pt-12/px-4/sm:px-16 plus Safari's status bar and, in landscape,
           // its side insets.
           "pt-[calc(3rem+env(safe-area-inset-top))]",
-          "pl-[calc(3rem+env(safe-area-inset-left))] pr-[calc(3rem+env(safe-area-inset-right))]",
+          "pl-[calc(1rem+env(safe-area-inset-left))] pr-[calc(1rem+env(safe-area-inset-right))]",
           "sm:pl-[calc(4rem+env(safe-area-inset-left))] sm:pr-[calc(4rem+env(safe-area-inset-right))]",
         )}
       >
@@ -152,7 +152,7 @@ export function ShowcasePage() {
           // bottom inset so the last row and "Show more" aren't hidden
           // behind the address bar.
           "pb-[calc(4rem+env(safe-area-inset-bottom))]",
-          "pl-[calc(3rem+env(safe-area-inset-left))] pr-[calc(3rem+env(safe-area-inset-right))]",
+          "pl-[calc(1rem+env(safe-area-inset-left))] pr-[calc(1rem+env(safe-area-inset-right))]",
           "sm:pl-[calc(4rem+env(safe-area-inset-left))] sm:pr-[calc(4rem+env(safe-area-inset-right))]",
         )}
       >
