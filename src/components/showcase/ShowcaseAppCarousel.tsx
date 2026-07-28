@@ -120,6 +120,10 @@ export function ShowcaseAppCarousel({ app }: { app: ShowcaseApp }) {
           ))}
         </div>
       )}
+
+      <span className="absolute bottom-5 left-5 rounded-full bg-surface-active/80 px-3 py-1 text-xs font-medium text-text-secondary backdrop-blur-sm sm:bottom-6 sm:left-6">
+        {app.screens[0].model}
+      </span>
     </div>
   );
 }
