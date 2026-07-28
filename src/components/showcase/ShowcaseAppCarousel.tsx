@@ -112,8 +112,8 @@ export function ShowcaseAppCarousel({ app }: { app: ShowcaseApp }) {
               aria-current={selectedIndex === index ? "true" : undefined}
               className={`size-1.5 rounded-full transition-colors ${
                 selectedIndex === index
-                  ? "bg-gray-900"
-                  : "bg-gray-300 hover:bg-gray-500"
+                  ? "bg-text-primary"
+                  : "bg-surface-active hover:bg-border-hover"
               }`}
               onClick={() => api?.scrollTo(index)}
             />

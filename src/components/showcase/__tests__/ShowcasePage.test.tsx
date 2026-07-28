@@ -105,8 +105,12 @@ describe("<ShowcasePage />", () => {
     expect(selector.classList.contains("right-5")).toBe(true);
     expect(selector.classList.contains("opacity-0")).toBe(true);
     expect(selector.classList.contains("group-hover/carousel:opacity-100")).toBe(true);
-    expect(screen.getByRole("button", { name: "Go to screen 1" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Go to screen 2" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Go to screen 1" }).classList.contains("bg-text-primary"),
+    ).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Go to screen 2" }).classList.contains("bg-surface-active"),
+    ).toBe(true);
     expect(screen.queryByText("Show more")).toBeNull();
   });
 
