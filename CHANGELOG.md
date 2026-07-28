@@ -6,10 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
-## [0.72.3] - 2026-07-28
+## [0.72.4] - 2026-07-28
 
-### Fixed
-- **Showcase screens materially taller than one phone frame no longer have their bottoms cut off.** `ShowcaseCard` fits every screenshot into a fixed 390:844 frame with `object-cover object-top`, which is correct for the vast majority of the feed but silently clips the bottom of pages whose content ran taller than a single phone screen — up to 22% of the height on the worst live case (a 750x2082 "Reports & Analytics" screen). A new `getScreenFit` (in the sibling `screenFit.ts`, kept out of `ShowcaseCard.tsx` so the file still only exports a component, per `react-refresh/only-export-components`) compares the screen's own aspect ratio against the frame ratio and switches to `object-contain` (whole image, letterboxed, centred) once plain `object-cover` would clip more than 2% of the image's height — a threshold picked to absorb the sub-percent rounding noise between the two real capture sizes (780x1688 vs 750x1624) without adding visible gutters for a crop nobody would notice. The card's LQIP placeholder background switches the same way (`bg-contain bg-center bg-no-repeat` instead of `bg-cover bg-top`) so the placeholder doesn't jump once the real image loads. Non-positive or non-finite dimensions (old rows missing width/height) fall back to today's `cover` behaviour. The card frame itself, the grid/carousel layout, and every screen close to the frame ratio are unchanged.
+### Reverted
+- **0.72.3's letterboxing of over-tall showcase screens is out — it looked worse than the crop it removed.** The rule was sound on paper (a screen taller than the 390:844 frame was fitted whole with `object-contain` instead of losing up to 22% of its bottom), but in the gallery it reads badly: the letterboxed screens sit smaller than their neighbours with gutters down both sides, and the over-tall captures carry a lot of dead space at the bottom anyway, so fitting them whole mostly buys empty pixels at the cost of a ragged-looking grid. `getScreenFit` and its tests are gone; every card is back to `object-cover object-top`. The underlying data problem is unchanged and still open: the capture pipeline doesn't cap a screenshot's height to the phone frame, so 18 of 65 live screens are taller than 390:844 and lose 4–22% off the bottom. Fixing that belongs upstream in the capture, not in how the gallery fits what it's given.
 
 ## [0.72.2] - 2026-07-28
 
