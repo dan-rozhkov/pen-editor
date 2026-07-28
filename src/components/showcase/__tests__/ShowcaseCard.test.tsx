@@ -97,6 +97,20 @@ describe("<ShowcaseCard />", () => {
     expect(image.getAttribute("loading")).toBe("eager");
   });
 
+  it("sets loading=eager without fetchPriority when selected is set (no eager)", () => {
+    // Native loading="lazy" never defers a carousel slide (Embla's slides
+    // overlap inside an overflow:hidden viewport), so the carousel's
+    // currently-selected slide must get loading="eager" regardless of
+    // whether it's also the above-the-fold `eager` card — but it must NOT
+    // pick up fetchPriority="high", which stays reserved for the single
+    // above-the-fold card via `eager`.
+    render(<ShowcaseCard screen={makeScreen()} onCopyId={() => {}} selected />);
+
+    const image = screen.getByAltText("Onboarding flow");
+    expect(image.getAttribute("loading")).toBe("eager");
+    expect(image.getAttribute("fetchpriority")).toBeNull();
+  });
+
   it("paints the lqip as a background and does not mount an <img> when loadImage is false", () => {
     const { container } = render(
       <ShowcaseCard

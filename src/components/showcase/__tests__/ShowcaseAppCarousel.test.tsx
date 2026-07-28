@@ -188,6 +188,38 @@ describe("<ShowcaseAppCarousel /> lazy slide mounting", () => {
     expect(images[1].getAttribute("loading")).toBe("lazy");
   });
 
+  it("marks the selected slide loading=eager even when it isn't the first-in-grid card, and its neighbor stays lazy", () => {
+    // Regression test for the prod bug: native loading="lazy" never defers a
+    // carousel slide (Embla's overlapping-slide viewport defeats the
+    // browser's own lazy heuristic), so every non-first carousel on the page
+    // was stuck forever on its LQIP. The selected slide must load eagerly
+    // regardless of grid position; fetchPriority stays reserved for the
+    // true above-the-fold card (`isFirstInGrid` unset here).
+    const screens = ["a", "b", "c"].map((id) => makeScreen(id));
+    render(<ShowcaseAppCarousel app={makeApp(screens)} />);
+
+    const selected = screen.getByAltText("Screen a");
+    expect(selected.getAttribute("loading")).toBe("eager");
+    expect(selected.getAttribute("fetchpriority")).toBeNull();
+
+    const neighbor = screen.getByAltText("Screen b");
+    expect(neighbor.getAttribute("loading")).toBe("lazy");
+    expect(neighbor.getAttribute("fetchpriority")).toBeNull();
+  });
+
+  it("moves the eager slide to whichever slide becomes selected", () => {
+    const screens = ["a", "b", "c"].map((id) => makeScreen(id));
+    render(<ShowcaseAppCarousel app={makeApp(screens)} />);
+
+    expect(screen.getByAltText("Screen a").getAttribute("loading")).toBe("eager");
+    expect(screen.getByAltText("Screen b").getAttribute("loading")).toBe("lazy");
+
+    fireEvent.click(screen.getByRole("button", { name: "Go to screen 2" }));
+
+    expect(screen.getByAltText("Screen a").getAttribute("loading")).toBe("lazy");
+    expect(screen.getByAltText("Screen b").getAttribute("loading")).toBe("eager");
+  });
+
   it("does not carry a previous app's mounted window into a different screen set under the same instance", () => {
     // Both apps have >3 screens so each computes a real ±1 window (not the
     // length<=3 "show everything" branch) — if the accumulated window

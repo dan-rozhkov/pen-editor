@@ -177,6 +177,7 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
                 // as before this feature existed.
                 loadImage={!screen.lqip || loadedIndices.has(index)}
                 eager={isFirstInGrid && index === 0}
+                selected={index === selectedIndex}
               />
             </CarouselItem>
           ))}

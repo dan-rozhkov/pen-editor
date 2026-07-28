@@ -42,6 +42,20 @@ interface ShowcaseCardProps {
   /** fetchPriority="high" + loading="eager" for the one above-the-fold card. */
   eager?: boolean;
   /**
+   * loading="eager" (without fetchPriority) for the currently-selected slide
+   * of a carousel. Native `loading="lazy"` never defers a carousel slide in
+   * the first place — Embla's slides overlap inside an `overflow:hidden`
+   * viewport with a transform, so every mounted slide reads as "near the
+   * viewport" to the browser's lazy-load heuristic and never actually
+   * fetches. Deferring is already fully handled by ShowcaseAppCarousel's own
+   * mount window (±1 around the selected index); `loading="lazy"` on the
+   * mounted neighbors just adds a second, broken gate on top of it. Marking
+   * only the selected slide eager removes that dead gate for the slide that
+   * needs to load now, while neighbors stay lazy until a swipe makes them
+   * selected in turn (and picks up eager at that point).
+   */
+  selected?: boolean;
+  /**
    * Whether to actually mount the <img>. False renders just the same-sized
    * box painted with the LQIP (or nothing, pre-backfill) — used by
    * ShowcaseAppCarousel for slides outside the selected ±1 window, since
@@ -65,6 +79,7 @@ export function ShowcaseCard({
   onCopyId,
   feedback,
   eager = false,
+  selected = false,
   loadImage = true,
 }: ShowcaseCardProps) {
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -114,7 +129,7 @@ export function ShowcaseCard({
             }
             sizes={screen.imageUrl1x ? SHOWCASE_IMAGE_SIZES : undefined}
             alt={screen.title}
-            loading={eager ? "eager" : "lazy"}
+            loading={eager || selected ? "eager" : "lazy"}
             fetchPriority={eager ? "high" : undefined}
             onLoad={() => setImageLoaded(true)}
             className="size-full object-cover object-top"
