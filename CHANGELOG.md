@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.69.4] - 2026-07-28
+
+### Fixed
+- **The showcase applies a new version itself instead of asking.** 0.69.3 gave the update prompt somewhere to render on `/`, but the prompt was still the only way a waiting worker ever activated — so a visitor who refreshed the gallery on a stale bundle (mobile Safari, several reloads) kept getting the old one, with no toast in sight: the toast that would have offered the update lives in the build they can't reach. The gallery holds no unsaved state, so `PwaUpdateGate` now sends `SKIP_WAITING` and reloads on its own the moment an update is ready, on every route except the editor. `/app` keeps the prompt — it may hold an unsaved document. One auto-apply per tab (`sessionStorage`); if the activation doesn't take, the next load prompts rather than reloading again.
+
+### Note
+- A client already stuck on a pre-0.69.4 bundle can't be reached by this fix — it needs code it never downloads. Closing every tab of the site (so no client remains) lets the waiting worker activate, and the next visit is current.
+
 ## [0.69.3] - 2026-07-28
 
 ### Fixed
@@ -14,7 +22,7 @@ While on `0.x`, minor bumps may include breaking changes.
 - **The e2e job on CI went red for every push**, unrelated to the change being pushed. Since the editor became a lazy route chunk, the first spec to open `/app` waits for the dev server to transform App + PixiJS, which on a cold CI runner overruns Playwright's 5s expect default (a retry against a warm server took 27s and passed). Specs now wait for the canvas through a shared `expectEditorMounted` helper sized for that first load.
 
 ### Known issues
-- **`/app` returns 404 on the deployed host.** The SPA rewrite the showcase move required was never added on Render, so the editor opens only for visitors whose service worker is already registered (workbox's `navigateFallback` serves the precached shell). A first visit by URL — new browser, cleared site data, the Electron shell, the PWA `start_url` — gets a bare "Not Found" and never registers a worker, so it never receives update prompts or offline support either. Fix is host-side: rewrite `/*` → `/index.html`.
+- ~~**`/app` returns 404 on the deployed host.**~~ Resolved host-side: `GET /app` on `pen-editor.onrender.com` answers 200 with the SPA shell as of 2026-07-28.
 
 ## [0.69.2] - 2026-07-28
 

@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { PwaUpdateGate } from "@/components/pwa/PwaUpdateGate";
+import { PwaUpdateGate, AUTO_APPLY_KEY } from "@/components/pwa/PwaUpdateGate";
 import { Toaster } from "@/components/ui/sonner";
+import { getUpdateSW } from "@/pwa/registerServiceWorker";
 import { usePwaStore } from "@/store/pwaStore";
+
+const applyUpdate = vi.fn();
 
 vi.mock("@/pwa/registerServiceWorker", () => ({
   getUpdateSW: vi.fn(),
@@ -38,6 +41,9 @@ beforeEach(() => {
     offlineReady: false,
     toastSuppressed: false,
   });
+  sessionStorage.clear();
+  applyUpdate.mockClear();
+  vi.mocked(getUpdateSW).mockReturnValue(applyUpdate);
 });
 
 afterEach(() => {
@@ -46,12 +52,30 @@ afterEach(() => {
 });
 
 describe("PwaUpdateGate", () => {
-  it("shows the update toast on the showcase route, which mounts no editor", async () => {
+  // The showcase holds no unsaved state, so asking permission buys nothing and
+  // costs everything: a visitor who never opens the editor has no reason to
+  // notice a prompt, and prompt-mode keeps serving the stale bundle until
+  // someone clicks it. Apply it for them.
+  it("applies the update itself on the showcase route, without prompting", async () => {
+    usePwaStore.setState({ updateReady: true });
+
+    renderGate("/");
+
+    await waitFor(() => expect(applyUpdate).toHaveBeenCalledWith(true), IMPORT_TIMEOUT);
+    expect(screen.queryByTestId("pwa-update-toast")).toBeNull();
+  });
+
+  // Guard against a reload loop: if the activation didn't take (the update is
+  // still waiting on the next load), stop trying and let the visitor decide.
+  it("prompts instead when an auto-apply already ran in this tab", async () => {
+    sessionStorage.setItem(AUTO_APPLY_KEY, "1");
     usePwaStore.setState({ updateReady: true });
 
     renderGate("/");
 
     expect(await screen.findByTestId("pwa-update-toast", undefined, IMPORT_TIMEOUT)).toBeTruthy();
+    expect(applyUpdate).not.toHaveBeenCalled();
+    expect(document.querySelectorAll("[data-sonner-toaster]")).toHaveLength(1);
   });
 
   it("shows the update toast on the editor route, reusing App's portal", async () => {
@@ -67,16 +91,9 @@ describe("PwaUpdateGate", () => {
     );
 
     expect(await screen.findByTestId("pwa-update-toast", undefined, IMPORT_TIMEOUT)).toBeTruthy();
-  });
-
-  it("brings exactly one toast portal on the showcase route", async () => {
-    usePwaStore.setState({ updateReady: true });
-
-    renderGate("/");
-    await screen.findByTestId("pwa-update-toast", undefined, IMPORT_TIMEOUT);
-
-    expect(document.querySelectorAll("[data-sonner-toaster]")).toHaveLength(1);
-    expect(screen.getAllByTestId("pwa-update-toast")).toHaveLength(1);
+    // The editor may hold an unsaved document; reloading it out from under the
+    // user is not the gate's call to make.
+    expect(applyUpdate).not.toHaveBeenCalled();
   });
 
   it("stays silent — and loads nothing — while no update is waiting", async () => {
