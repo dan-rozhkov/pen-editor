@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { ShowcasePage } from "@/components/showcase/ShowcasePage";
 import { ShowcaseLightbox } from "@/components/showcase/ShowcaseLightbox";
 import { consumeShowcaseAgentPrompt } from "@/lib/showcaseAgentHandoff";
-import type { ShowcaseApp, ShowcaseScreen } from "@/lib/showcase";
+import type { ShowcaseApp, ShowcaseCategory, ShowcaseScreen } from "@/lib/showcase";
 
 afterEach(() => {
   cleanup();
@@ -47,12 +47,13 @@ function screen3(): ShowcaseScreen {
 
 // The feed hands back whole apps, so fixtures are apps too — there is no
 // client-side grouping left to exercise.
-function app(runId: string, screens: ShowcaseScreen[]): ShowcaseApp {
+function app(runId: string, screens: ShowcaseScreen[], likes = 0): ShowcaseApp {
   return {
     runId,
     theme: "dark",
     model: "test/model",
     createdAt: screens[0].createdAt,
+    likes,
     screens,
   };
 }
@@ -61,6 +62,20 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json" },
+  });
+}
+
+// The page always fetches /api/showcase/categories alongside the feed now;
+// tests that only care about the feed response route this to an empty list
+// so the mock doesn't need a per-test branch for it.
+function withCategories(
+  handler: (input: RequestInfo | URL) => Promise<Response> | Response,
+) {
+  return vi.fn(async (input: RequestInfo | URL) => {
+    if (String(input).includes("/api/showcase/categories")) {
+      return jsonResponse({ categories: [] });
+    }
+    return handler(input);
   });
 }
 
@@ -81,6 +96,31 @@ function renderNavigablePage() {
       </Routes>
     </MemoryRouter>,
   );
+}
+
+// Renders the visible location.search alongside the page (as a `data-search`
+// attribute) so tests can assert on the URL that clicking a tab/chip
+// produces, without reaching into MemoryRouter internals.
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location-search" data-search={location.search} />;
+}
+
+function renderPageAt(path: string) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <LocationProbe />
+      <ShowcasePage />
+    </MemoryRouter>,
+  );
+}
+
+function currentSearch() {
+  return screen.getByTestId("location-search").getAttribute("data-search");
+}
+
+function categoriesResponse(categories: ShowcaseCategory[]): Response {
+  return jsonResponse({ categories });
 }
 
 describe("<ShowcasePage />", () => {
@@ -116,7 +156,7 @@ describe("<ShowcasePage />", () => {
   it("renders one carousel per app, with all of its screens", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
+      withCategories(async () =>
         jsonResponse({
           apps: [app("r1", [screen1(), screen3()]), app("r2", [screen2()])],
           nextCursor: null,
@@ -159,9 +199,8 @@ describe("<ShowcasePage />", () => {
     expect(selector.classList.contains("right-5")).toBe(true);
     expect(selector.classList.contains("opacity-0")).toBe(false);
     const [modelBadge] = screen.getAllByText("Model");
-    expect(modelBadge.classList.contains("bottom-3")).toBe(true);
-    expect(modelBadge.classList.contains("left-1/2")).toBe(true);
-    expect(modelBadge.classList.contains("-translate-x-1/2")).toBe(true);
+    expect(modelBadge.classList.contains("flex-1")).toBe(true);
+    expect(modelBadge.classList.contains("min-w-0")).toBe(true);
     expect(modelBadge.classList.contains("truncate")).toBe(true);
     expect(modelBadge.classList.contains("text-center")).toBe(true);
     expect(modelBadge.classList.contains("font-normal")).toBe(true);
@@ -194,7 +233,7 @@ describe("<ShowcasePage />", () => {
   it("shows an empty-state message when there are no apps", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => jsonResponse({ apps: [], nextCursor: null })),
+      withCategories(async () => jsonResponse({ apps: [], nextCursor: null })),
     );
 
     renderPage();
@@ -205,7 +244,7 @@ describe("<ShowcasePage />", () => {
   it("renders the same empty-state message on a 503 (storage not configured)", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
+      withCategories(async () =>
         jsonResponse({ error: "Showcase storage is not configured" }, 503),
       ),
     );
@@ -218,7 +257,7 @@ describe("<ShowcasePage />", () => {
   it("shows an error message on other failures, without crashing", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => jsonResponse({ error: "limit out of range" }, 400)),
+      withCategories(async () => jsonResponse({ error: "limit out of range" }, 400)),
     );
 
     renderPage();
@@ -228,7 +267,7 @@ describe("<ShowcasePage />", () => {
   });
 
   it("'Show more' loads the next page and appends it to the current list", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = withCategories(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("cursor=")) {
         return jsonResponse({ apps: [app("r2", [screen2()])], nextCursor: null });
@@ -372,6 +411,252 @@ describe("<ShowcasePage />", () => {
     } finally {
       meta.remove();
     }
+  });
+});
+
+describe("<ShowcasePage /> filters", () => {
+  it("defaults to Most popular with no query params, and requests sort=popular", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/showcase/categories")) {
+        return categoriesResponse([{ theme: "mobile banking", apps: 2 }]);
+      }
+      expect(url).toContain("sort=popular");
+      expect(url).not.toContain("category=");
+      return jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPageAt("/");
+
+    await screen.findByAltText("Onboarding flow");
+    expect(currentSearch()).toBe("");
+    expect(
+      screen.getByRole("button", { name: "Most popular" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("clicking Latest requests sort=latest and writes it to the URL, without touching the canonical default on Most popular", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/showcase/categories")) {
+        return categoriesResponse([]);
+      }
+      return jsonResponse({
+        apps: [app("r1", [screen1()], url.includes("sort=latest") ? 0 : 1)],
+        nextCursor: null,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPageAt("/");
+    await screen.findByAltText("Onboarding flow");
+
+    fireEvent.click(screen.getByRole("button", { name: "Latest" }));
+
+    await waitFor(() => expect(currentSearch()).toBe("?sort=latest"));
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([input]) => String(input).includes("sort=latest")),
+      ).toBe(true),
+    );
+  });
+
+  it("clicking a category chip requests and URL-encodes it, and resets to page 1", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/showcase/categories")) {
+        return categoriesResponse([{ theme: "mobile banking", apps: 2 }]);
+      }
+      if (url.includes("category=mobile+banking")) {
+        return jsonResponse({ apps: [app("r2", [screen2()])], nextCursor: null });
+      }
+      return jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: "cursor-2" });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPageAt("/");
+    await screen.findByAltText("Onboarding flow");
+
+    fireEvent.click(screen.getByRole("button", { name: "mobile banking" }));
+
+    await screen.findByAltText("Checkout page");
+    expect(currentSearch()).toBe("?category=mobile+banking");
+    expect(screen.queryByAltText("Onboarding flow")).toBeNull();
+  });
+
+  it("restores sort and category from the URL on load", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/showcase/categories")) {
+        return categoriesResponse([{ theme: "mobile banking", apps: 2 }]);
+      }
+      expect(url).toContain("sort=latest");
+      expect(url).toContain("category=mobile+banking");
+      return jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPageAt("/?sort=latest&category=mobile+banking");
+
+    await screen.findByAltText("Onboarding flow");
+    expect(
+      screen.getByRole("button", { name: "Latest" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      screen.getByRole("button", { name: "mobile banking" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("restores a category from the URL that isn't in the chip list without breaking the row", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/showcase/categories")) {
+        return categoriesResponse([{ theme: "mobile banking", apps: 2 }]);
+      }
+      return jsonResponse({ apps: [], nextCursor: null });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPageAt("/?category=retro+arcade");
+
+    await screen.findByText("Nothing generated in this category yet.");
+    expect(
+      screen.getByRole("button", { name: "mobile banking" }).getAttribute("aria-pressed"),
+    ).toBe("false");
+    expect(screen.getByRole("button", { name: "All" }).getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+  });
+
+  it("shows an empty state with a reset-to-All button for a category with no apps", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/showcase/categories")) {
+        return categoriesResponse([{ theme: "mobile banking", apps: 2 }]);
+      }
+      if (url.includes("category=")) {
+        return jsonResponse({ apps: [], nextCursor: null });
+      }
+      return jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPageAt("/?category=mobile+banking");
+
+    await screen.findByText("Nothing generated in this category yet.");
+    fireEvent.click(screen.getByRole("button", { name: "Show all" }));
+
+    await screen.findByAltText("Onboarding flow");
+    expect(currentSearch()).toBe("");
+  });
+
+  it("discards a stale filter response instead of clobbering the newer one", async () => {
+    // Wrapped in an object rather than a bare `let` — TS's control-flow
+    // narrowing doesn't track a reassignment that only happens inside a
+    // nested closure, and ends up narrowing a bare `let` to `null` forever.
+    const popular: { resolve: ((res: Response) => void) | null } = { resolve: null };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/showcase/categories")) {
+        return categoriesResponse([]);
+      }
+      if (url.includes("sort=latest")) {
+        return jsonResponse({ apps: [app("r-latest", [screen2()])], nextCursor: null });
+      }
+      // The initial (default, sort=popular) request never resolves until we
+      // release it below, well after the user has already switched to Latest.
+      return new Promise<Response>((resolve) => {
+        popular.resolve = resolve;
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPageAt("/");
+    fireEvent.click(await screen.findByRole("button", { name: "Latest" }));
+
+    await screen.findByAltText("Checkout page");
+
+    // Now let the stale "popular" response land — it must not overwrite the
+    // grid with data for a filter nobody has selected anymore.
+    popular.resolve?.(jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null }));
+
+    await waitFor(() => expect(screen.queryByAltText("Onboarding flow")).toBeNull());
+    expect(screen.getByAltText("Checkout page")).toBeTruthy();
+  });
+
+  it("discards a 'Show more' response that outlives a popular -> latest -> popular round trip", async () => {
+    // Reproduces the exact reported sequence: page 1 loads, "Show more" is
+    // clicked and hangs, the visitor bounces to Latest and back to Most
+    // popular (both resolve normally), and only then does the stale page-2
+    // response land. A guard that compares filter *values* sees the same
+    // {sort: "popular", category: null} both times "Show more" was clicked
+    // under and lets the stale response through — duplicating a card (React
+    // warns on the repeated key) and clobbering `nextCursor` back to the
+    // stale page's `null`, which makes the real "Show more" button vanish.
+    const popularPage2: { resolve: ((res: Response) => void) | null } = { resolve: null };
+    const reloadScreen: ShowcaseScreen = { ...screen1(), id: "s4", title: "Popular reload" };
+    let popularPage1Requests = 0;
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/showcase/categories")) {
+        return categoriesResponse([]);
+      }
+      if (url.includes("sort=latest")) {
+        return jsonResponse({ apps: [app("r-latest", [screen3()])], nextCursor: null });
+      }
+      // Everything else is sort=popular (the default, never written to the URL).
+      if (url.includes("cursor=cursor-2")) {
+        // The "Show more" request — hangs until released below, by which
+        // point the visitor has already gone to Latest and back.
+        return new Promise<Response>((resolve) => {
+          popularPage2.resolve = resolve;
+        });
+      }
+      popularPage1Requests += 1;
+      if (popularPage1Requests > 1) {
+        // Second lap through "popular" page 1 (after the trip to Latest).
+        return jsonResponse({ apps: [app("r1b", [reloadScreen])], nextCursor: "cursor-3" });
+      }
+      // First lap: popular page 1.
+      return jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: "cursor-2" });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPage();
+    await screen.findByAltText("Onboarding flow");
+
+    fireEvent.click(screen.getByRole("button", { name: "Show more" }));
+    // The page-2 request is now in flight (and will hang until we resolve it
+    // further down).
+
+    fireEvent.click(screen.getByRole("button", { name: "Latest" }));
+    await screen.findByAltText("Onboarding details");
+
+    fireEvent.click(screen.getByRole("button", { name: "Most popular" }));
+    await screen.findByAltText("Popular reload");
+    // `loadingMore` is page-scoped and is still pinned true by the
+    // never-resolved "Show more" request, so the button reads "Loading…"
+    // (disabled) rather than "Show more" right now — that part is expected.
+    // The page-1 fetch for this second popular lap already set a fresh
+    // `nextCursor` ("cursor-3") independently of `loadingMore`, though, and
+    // that's what the assertions below check survives the stale response.
+    expect(screen.getByRole("button", { name: "Loading…" })).toBeTruthy();
+
+    // Now let the long-hung "Show more" response land.
+    popularPage2.resolve?.(
+      jsonResponse({ apps: [app("r-stale", [screen2()])], nextCursor: null }),
+    );
+
+    // It must never appear — neither as a duplicated card nor by clobbering
+    // the current page's nextCursor (which would hide "Show more" once
+    // `loadingMore` clears).
+    await waitFor(() => expect(screen.queryByAltText("Checkout page")).toBeNull());
+    expect(screen.getByAltText("Popular reload")).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Show more" })).toBeTruthy(),
+    );
   });
 });
 

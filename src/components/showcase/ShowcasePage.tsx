@@ -1,14 +1,35 @@
-import { type ReactNode, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router";
 
 import { ShowcaseAgentComposer } from "@/components/showcase/ShowcaseAgentComposer";
+import { ShowcaseFilterBar } from "@/components/showcase/ShowcaseFilterBar";
 import { Button } from "@/components/ui/button";
 import { storeShowcaseAgentPrompt } from "@/lib/showcaseAgentHandoff";
 import { cn } from "@/lib/utils";
-import { fetchShowcase, type ShowcaseApp } from "@/lib/showcase";
+import {
+  fetchShowcase,
+  fetchShowcaseCategories,
+  type ShowcaseApp,
+  type ShowcaseCategory,
+  type ShowcaseSort,
+} from "@/lib/showcase";
 import { ShowcaseAppCarousel } from "@/components/showcase/ShowcaseAppCarousel";
 
 type Status = "loading" | "ready" | "error";
+
+function parseSort(value: string | null): ShowcaseSort {
+  return value === "latest" ? "latest" : "popular";
+}
+
+// `?category=` (present but empty — e.g. typed by hand, or left behind by a
+// stripped chip) reads back as `""` from URLSearchParams, not `null`. Every
+// consumer of `category` in this file (the request, the empty-state branch,
+// `filtersKey`, the "All" chip's active state) must agree on what "no
+// category" looks like, so normalizing happens once, here, rather than at
+// each call site.
+function parseCategory(value: string | null): string | null {
+  return value ? value : null;
+}
 
 function ShowcaseGrid({ children }: { children: ReactNode }) {
   return (
@@ -37,6 +58,14 @@ function SkeletonGrid() {
 
 export function ShowcasePage() {
   const navigate = useNavigate();
+  // `useSearchParams` is the single source of truth for filter state — no
+  // duplicated `useState`. Defaults (`sort=popular`, no category) are never
+  // written to the URL, so the canonical "/" stays clean; the reverse
+  // (`?sort=popular` explicitly in the URL) is treated the same as absent.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sort = parseSort(searchParams.get("sort"));
+  const category = parseCategory(searchParams.get("category"));
+
   // Apps, not screens: the feed hands back whole apps (see lib/showcase.ts),
   // so pages append cleanly and no card is ever rendered half-populated.
   const [apps, setApps] = useState<ShowcaseApp[]>([]);
@@ -44,10 +73,66 @@ export function ShowcasePage() {
   const [status, setStatus] = useState<Status>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [categories, setCategories] = useState<ShowcaseCategory[]>([]);
 
+  // Monotonic id for the most recent request against the feed — bumped both
+  // when the filters change (a new page-1 fetch, in the effect below) and
+  // before every "Show more" request. A response is only applied if this ref
+  // still holds the id it was issued under. That's a different question from
+  // "do the filter *values* still match" (the guard this replaced): popular
+  // -> latest -> popular makes the values equal again while page 1 (latest)
+  // and the stale page-2 (the first popular lap) are two different requests
+  // for the same-looking filters — a value comparison can't tell those
+  // apart, which is exactly what let a stale "Show more" response reappear
+  // and get appended after that sequence.
+  const requestIdRef = useRef(0);
+
+  // Drop back to the skeleton the moment the filters change, not after the
+  // fetch effect below gets around to it — setting state synchronously
+  // inside an effect body is a lint error (cascading renders), so this
+  // follows the same "adjust state during render" pattern ShowcaseAppCarousel
+  // already uses for its screensKey: compare the new key against the last one
+  // rendered, and if it moved, call the setters right here rather than in an
+  // effect. React re-renders immediately before committing, so nothing ever
+  // paints the stale grid under the new filter's tab/chip.
+  const filtersKey = `${sort}|${category ?? ""}`;
+  const [loadedFiltersKey, setLoadedFiltersKey] = useState(filtersKey);
+  if (loadedFiltersKey !== filtersKey) {
+    setLoadedFiltersKey(filtersKey);
+    setStatus("loading");
+    setErrorMessage(null);
+  }
+
+  // Categories only ever need to load once — the chip list itself doesn't
+  // depend on which chip is selected. A failure (or an empty database) just
+  // means the chip row doesn't render; the sort tabs still work on their own.
   useEffect(() => {
     let cancelled = false;
-    fetchShowcase(null).then((result) => {
+    fetchShowcaseCategories().then((result) => {
+      if (cancelled) return;
+      if (result.ok) {
+        setCategories(result.categories);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Changing sort or category resets the cursor and refetches page 1. The
+  // filter row itself stays mounted (it's rendered outside this effect's
+  // control below); only the grid drops back to the skeleton.
+  useEffect(() => {
+    let cancelled = false;
+    // Bumping here (not just reading) is what invalidates any "Show more"
+    // request already in flight for the previous filters — see
+    // `requestIdRef`'s comment above.
+    requestIdRef.current += 1;
+    fetchShowcase(null, undefined, { sort, category }).then((result) => {
+      // `cancelled` (set by this effect's own cleanup, below) already covers
+      // "this exact effect instance was torn down or superseded" — a
+      // filter-value comparison here would be redundant with it, not an
+      // additional safety net, so there's nothing else to check.
       if (cancelled) return;
       if (!result.ok) {
         if (result.notConfigured) {
@@ -68,19 +153,50 @@ export function ShowcasePage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [sort, category]);
 
   async function handleLoadMore() {
     if (!nextCursor || loadingMore) return;
     setLoadingMore(true);
-    const result = await fetchShowcase(nextCursor);
-    if (result.ok) {
+    // Captured *after* incrementing, so this request owns the id it checks
+    // against below. If the filter-change effect bumps the ref again before
+    // this resolves — the user switched tabs while "Show more" was in
+    // flight — the comparison fails and the response is dropped instead of
+    // being appended to a list built under different filters.
+    const requestId = ++requestIdRef.current;
+    const result = await fetchShowcase(nextCursor, undefined, { sort, category });
+    if (requestIdRef.current === requestId && result.ok) {
       setApps((prev) => [...prev, ...result.data.apps]);
       setNextCursor(result.data.nextCursor);
     }
     // A failure loading more just leaves the current page in place; the
-    // "Show more" button stays put so the user can retry.
+    // "Show more" button stays put so the user can retry. A stale response
+    // (filters changed mid-request) is silently dropped the same way.
     setLoadingMore(false);
+  }
+
+  function updateFilters(next: { sort?: ShowcaseSort; category?: string | null }) {
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        if (next.sort !== undefined) {
+          if (next.sort === "popular") {
+            params.delete("sort");
+          } else {
+            params.set("sort", next.sort);
+          }
+        }
+        if (next.category !== undefined) {
+          if (next.category === null) {
+            params.delete("category");
+          } else {
+            params.set("category", next.category);
+          }
+        }
+        return params;
+      },
+      { replace: true },
+    );
   }
 
   function handleAgentPrompt(prompt: string) {
@@ -156,6 +272,16 @@ export function ShowcasePage() {
           "sm:pl-[calc(4rem+env(safe-area-inset-left))] sm:pr-[calc(4rem+env(safe-area-inset-right))]",
         )}
       >
+        <div className="mb-6">
+          <ShowcaseFilterBar
+            sort={sort}
+            category={category}
+            categories={categories}
+            onSortChange={(newSort) => updateFilters({ sort: newSort })}
+            onCategoryChange={(newCategory) => updateFilters({ category: newCategory })}
+          />
+        </div>
+
         {status === "loading" && <SkeletonGrid />}
 
         {status === "error" && (
@@ -167,7 +293,25 @@ export function ShowcasePage() {
           </div>
         )}
 
-        {isEmpty && (
+        {isEmpty && category != null && (
+          <div className="rounded-lg bg-surface-panel px-6 py-10 text-center ring-1 ring-border-default">
+            <p className="text-sm text-text-primary">
+              Nothing generated in this category yet.
+            </p>
+            <p className="mt-1 text-xs text-text-muted">
+              Check back soon, or browse everything the agent has designed.
+            </p>
+            <Button
+              variant="outline"
+              className="mt-4"
+              onClick={() => updateFilters({ category: null })}
+            >
+              Show all
+            </Button>
+          </div>
+        )}
+
+        {isEmpty && category == null && (
           <div className="rounded-lg bg-surface-panel px-6 py-10 text-center ring-1 ring-border-default">
             <p className="text-sm text-text-primary">
               Nothing generated yet.

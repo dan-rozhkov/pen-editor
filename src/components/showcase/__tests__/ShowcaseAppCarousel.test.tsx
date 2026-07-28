@@ -3,6 +3,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { ShowcaseAppCarousel } from "@/components/showcase/ShowcaseAppCarousel";
 import { accumulateWindow, getInitialWindow } from "@/components/showcase/carouselWindow";
 import type { ShowcaseApp, ShowcaseScreen } from "@/lib/showcase";
+import * as showcaseApi from "@/lib/showcase";
+import { hasLikedShowcaseApp } from "@/lib/showcaseLikes";
 
 // This is a real native scroll-snap scroller now (no Embla), so clicking a
 // card is a plain click — there is no drag-vs-click suppression to reason
@@ -31,7 +33,7 @@ function makeScreen(id: string): ShowcaseScreen {
   };
 }
 
-function makeApp(screens: ShowcaseScreen[]): ShowcaseApp {
+function makeApp(screens: ShowcaseScreen[], likes = 0): ShowcaseApp {
   return {
     runId: "run-1",
     theme: "dark",
@@ -39,6 +41,7 @@ function makeApp(screens: ShowcaseScreen[]): ShowcaseApp {
     // theme/model at all.
     model: "test/model",
     createdAt: "2026-07-28T00:00:00.000Z",
+    likes,
     screens,
   };
 }
@@ -82,6 +85,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.useRealTimers();
+  localStorage.clear();
 });
 
 describe("<ShowcaseAppCarousel /> copy-id-on-click", () => {
@@ -529,5 +533,85 @@ describe("<ShowcaseAppCarousel /> off-centre fade", () => {
     for (const item of screen.getAllByRole("listitem")) {
       expect(item.style.opacity).toBe("");
     }
+  });
+});
+
+describe("<ShowcaseAppCarousel /> like button", () => {
+  beforeEach(() => {
+    stubClipboard(vi.fn().mockResolvedValue(undefined));
+  });
+
+  it("renders bottom-right, always visible, with the app's initial like count", () => {
+    render(<ShowcaseAppCarousel app={makeApp([makeScreen("screen-a")], 7)} />);
+
+    const heart = screen.getByRole("button", { name: /Like dark, 7 likes/ });
+    // The pill sits inside the shared bottom-bar row (absolute inset-x-4
+    // bottom-4 sm:inset-x-5 sm:bottom-5) rather than being independently
+    // positioned itself — see the "bottom-right" wrapper it's nested in.
+    expect(heart.closest("div")?.classList.contains("bottom-4")).toBe(true);
+    expect(heart.classList.contains("shrink-0")).toBe(true);
+    // No opacity-0/hover-gated classes — unlike the carousel arrows, this
+    // must be visible without a hover affordance (it doesn't exist on touch).
+    expect(heart.className).not.toContain("opacity-0");
+    expect(heart.textContent).toContain("7");
+    // Contrast fix: dark text-on-token pairing instead of white-on-white-ish.
+    expect(heart.classList.contains("text-text-primary")).toBe(true);
+    expect(heart.classList.contains("focus-visible:outline-accent-primary")).toBe(true);
+  });
+
+  it("increments the count optimistically on click and sends one debounced request", async () => {
+    vi.useFakeTimers();
+    const likeSpy = vi
+      .spyOn(showcaseApi, "likeShowcaseApp")
+      .mockResolvedValue({ ok: true, likes: 9 });
+
+    render(<ShowcaseAppCarousel app={makeApp([makeScreen("screen-a")], 7)} />);
+
+    const heart = screen.getByRole("button", { name: /Like dark/ });
+    fireEvent.click(heart);
+    fireEvent.click(heart);
+
+    expect(screen.getByRole("button", { name: /Like dark, 9 likes/ })).toBeTruthy();
+    expect(likeSpy).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(700);
+    });
+
+    expect(likeSpy).toHaveBeenCalledTimes(1);
+    expect(likeSpy).toHaveBeenCalledWith("run-1", 2);
+  });
+
+  it("clicking the heart does not trigger the screen's copy-id handler", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubClipboard(writeText);
+    vi.spyOn(showcaseApi, "likeShowcaseApp").mockResolvedValue({ ok: true, likes: 1 });
+
+    render(<ShowcaseAppCarousel app={makeApp([makeScreen("screen-a")])} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Like dark/ }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Like dark, 1 like/ })).toBeTruthy(),
+    );
+    expect(writeText).not.toHaveBeenCalled();
+  });
+
+  it("marks the app liked in localStorage on the first click, and a remount reads it back (cosmetic only)", () => {
+    vi.spyOn(showcaseApi, "likeShowcaseApp").mockResolvedValue({ ok: true, likes: 1 });
+
+    expect(hasLikedShowcaseApp("run-1")).toBe(false);
+
+    const { unmount } = render(<ShowcaseAppCarousel app={makeApp([makeScreen("screen-a")])} />);
+    fireEvent.click(screen.getByRole("button", { name: /Like dark/ }));
+    expect(hasLikedShowcaseApp("run-1")).toBe(true);
+    unmount();
+
+    // A fresh mount for the same runId still shows the filled state — the
+    // heart icon in the button switches `weight` based on this, but the
+    // localStorage read (not the DOM) is what's actually asserted here.
+    render(<ShowcaseAppCarousel app={makeApp([makeScreen("screen-a")])} />);
+    expect(hasLikedShowcaseApp("run-1")).toBe(true);
+    expect(screen.getByRole("button", { name: /Like dark/ })).toBeTruthy();
   });
 });

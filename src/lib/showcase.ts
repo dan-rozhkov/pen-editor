@@ -30,12 +30,20 @@ export interface ShowcaseApp {
   theme: string;
   model: string;
   createdAt: string;
+  likes: number;
   screens: ShowcaseScreen[];
 }
 
 export interface ShowcasePage {
   apps: ShowcaseApp[];
   nextCursor: string | null;
+}
+
+export type ShowcaseSort = "popular" | "latest";
+
+export interface ShowcaseFilters {
+  sort?: ShowcaseSort;
+  category?: string | null;
 }
 
 export type ShowcaseResult =
@@ -51,11 +59,18 @@ const DEFAULT_LIMIT = 12;
 export function resolveShowcaseApiUrl(
   cursor?: string | null,
   limit: number = DEFAULT_LIMIT,
+  filters?: ShowcaseFilters,
 ): string {
   const params = new URLSearchParams();
   params.set("limit", String(limit));
   if (cursor) {
     params.set("cursor", cursor);
+  }
+  if (filters?.sort) {
+    params.set("sort", filters.sort);
+  }
+  if (filters?.category) {
+    params.set("category", filters.category);
   }
   return resolveApiUrl(`/api/showcase?${params.toString()}`);
 }
@@ -63,10 +78,11 @@ export function resolveShowcaseApiUrl(
 export async function fetchShowcase(
   cursor?: string | null,
   limit: number = DEFAULT_LIMIT,
+  filters?: ShowcaseFilters,
 ): Promise<ShowcaseResult> {
   let res: Response;
   try {
-    res = await fetch(resolveShowcaseApiUrl(cursor, limit));
+    res = await fetch(resolveShowcaseApiUrl(cursor, limit, filters));
   } catch {
     return {
       ok: false,
@@ -94,4 +110,79 @@ export async function fetchShowcase(
 
   const data = (await res.json()) as ShowcasePage;
   return { ok: true, data };
+}
+
+export interface ShowcaseCategory {
+  theme: string;
+  apps: number;
+}
+
+export type ShowcaseCategoriesResult =
+  | { ok: true; categories: ShowcaseCategory[] }
+  | { ok: false };
+
+/**
+ * GET /api/showcase/categories — themes present in the database, ordered by
+ * app count descending. A failure (network, 503, non-2xx) resolves to
+ * `{ ok: false }` rather than throwing: ShowcaseFilterBar's spec is to just
+ * not render the chip row when this comes back empty, same as an empty list.
+ */
+export async function fetchShowcaseCategories(): Promise<ShowcaseCategoriesResult> {
+  let res: Response;
+  try {
+    res = await fetch(resolveApiUrl("/api/showcase/categories"));
+  } catch {
+    return { ok: false };
+  }
+  if (!res.ok) {
+    return { ok: false };
+  }
+  try {
+    const data = (await res.json()) as { categories: ShowcaseCategory[] };
+    return { ok: true, categories: data.categories ?? [] };
+  } catch {
+    return { ok: false };
+  }
+}
+
+export type LikeShowcaseAppResult =
+  | { ok: true; likes: number }
+  | { ok: false };
+
+/**
+ * POST /api/showcase/:runId/like — increments the app's like counter by
+ * `count` (1..25, enforced server-side) and returns the new total. Errors
+ * (network, non-2xx) resolve to `{ ok: false }` so the caller (useShowcaseLikes)
+ * can roll back its optimistic delta without throwing across a debounce timer.
+ */
+export async function likeShowcaseApp(
+  runId: string,
+  count: number,
+): Promise<LikeShowcaseAppResult> {
+  let res: Response;
+  try {
+    res = await fetch(resolveApiUrl(`/api/showcase/${encodeURIComponent(runId)}/like`), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ count }),
+      // The body is a couple bytes, well inside the keepalive limit — this is
+      // what lets the flush-on-visibilitychange/unmount calls in
+      // useShowcaseLikes actually reach the server instead of being cut off
+      // by the browser the instant the tab closes (a plain `fetch` is
+      // aborted on page unload). GET requests elsewhere in this file don't
+      // need it — they aren't racing the page going away.
+      keepalive: true,
+    });
+  } catch {
+    return { ok: false };
+  }
+  if (!res.ok) {
+    return { ok: false };
+  }
+  try {
+    const data = (await res.json()) as { likes: number };
+    return { ok: true, likes: data.likes };
+  } catch {
+    return { ok: false };
+  }
 }
