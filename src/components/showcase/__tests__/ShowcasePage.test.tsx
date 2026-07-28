@@ -86,6 +86,7 @@ describe("<ShowcasePage />", () => {
     expect(nextScreen.classList.contains("backdrop-blur-sm")).toBe(true);
     expect(nextScreen.classList.contains("hover:text-white")).toBe(true);
     expect(nextScreen.classList.contains("-right-10")).toBe(true);
+    expect(nextScreen.classList.contains("sm:-right-14")).toBe(true);
     expect(nextScreen.classList.contains("text-white")).toBe(true);
     expect(selector.classList.contains("absolute")).toBe(true);
     expect(selector.classList.contains("top-5")).toBe(true);
@@ -192,7 +193,7 @@ describe("<ShowcasePage />", () => {
     const grid = appCarousel?.parentElement;
 
     expect(page?.classList.contains("bg-white")).toBe(true);
-    expect(appCarousel?.classList.contains("bg-gray-100")).toBe(true);
+    expect(appCarousel?.classList.contains("bg-surface-base")).toBe(true);
     expect(appCarousel?.classList.contains("px-12")).toBe(true);
     expect(appCarousel?.classList.contains("py-10")).toBe(true);
     expect(appCarousel?.classList.contains("sm:px-16")).toBe(true);

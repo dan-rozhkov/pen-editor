@@ -36,7 +36,7 @@ export function ShowcaseAppCarousel({ app }: { app: ShowcaseApp }) {
   return (
     <div
       data-slot="showcase-app-carousel"
-      className="group/carousel relative rounded-[2rem] bg-gray-100 px-12 py-10 sm:px-16 sm:py-12"
+      className="group/carousel relative rounded-[2rem] bg-surface-base px-12 py-10 sm:px-16 sm:py-12"
     >
       <Carousel
         opts={{ loop: hasMultipleScreens }}
@@ -57,8 +57,8 @@ export function ShowcaseAppCarousel({ app }: { app: ShowcaseApp }) {
 
         {hasMultipleScreens && (
           <>
-            <CarouselPrevious className="-left-10 size-10 border-transparent bg-gray-300/70 text-white shadow-none opacity-0 pointer-events-none backdrop-blur-sm transition-[opacity,background-color] group-hover/carousel:pointer-events-auto group-hover/carousel:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 hover:bg-gray-300/85 hover:text-white" />
-            <CarouselNext className="-right-10 size-10 border-transparent bg-gray-300/70 text-white shadow-none opacity-0 pointer-events-none backdrop-blur-sm transition-[opacity,background-color] group-hover/carousel:pointer-events-auto group-hover/carousel:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 hover:bg-gray-300/85 hover:text-white" />
+            <CarouselPrevious className="-left-10 size-10 border-transparent bg-gray-300/70 text-white shadow-none opacity-0 pointer-events-none backdrop-blur-sm transition-[opacity,background-color] group-hover/carousel:pointer-events-auto group-hover/carousel:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 hover:bg-gray-300/85 hover:text-white sm:-left-14" />
+            <CarouselNext className="-right-10 size-10 border-transparent bg-gray-300/70 text-white shadow-none opacity-0 pointer-events-none backdrop-blur-sm transition-[opacity,background-color] group-hover/carousel:pointer-events-auto group-hover/carousel:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 hover:bg-gray-300/85 hover:text-white sm:-right-14" />
           </>
         )}
       </Carousel>
