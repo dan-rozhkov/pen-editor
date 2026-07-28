@@ -446,3 +446,81 @@ describe("<ShowcaseAppCarousel /> existing controls", () => {
     expect(screen.queryByLabelText("Screen selector")).toBeNull();
   });
 });
+
+describe("<ShowcaseAppCarousel /> off-centre fade", () => {
+  // Queue rAF callbacks and run them on demand rather than calling them
+  // inline: the component throttles with `rafId = requestAnimationFrame(...)`,
+  // and a mock that invokes the callback synchronously runs `measure` (which
+  // clears the handle) *before* the assignment lands — leaving a stale handle
+  // that swallows every later scroll. Deferring keeps the real ordering.
+  let pendingFrames: FrameRequestCallback[] = [];
+
+  function flushFrames() {
+    const frames = pendingFrames;
+    pendingFrames = [];
+    for (const frame of frames) frame(0);
+  }
+
+  beforeEach(() => {
+    stubClipboard(vi.fn().mockResolvedValue(undefined));
+    pendingFrames = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      pendingFrames.push(cb);
+      return pendingFrames.length;
+    });
+  });
+
+  // Measured off mobbin.com/discover/apps/ios/latest, which writes an inline
+  // opacity per slide per scroll frame: `max(0, 1 - |offset| / stride)`, where
+  // offset is the slide's centre relative to the scroller's and stride is the
+  // distance between snap points. The peek at the scroller's edges is a faded
+  // hint of the next screen, not a hard-clipped crop.
+  it("fades each slide linearly with its distance from the scroller's centre", () => {
+    const screens = ["a", "b", "c"].map((id) => makeScreen(id));
+    render(<ShowcaseAppCarousel app={makeApp(screens)} />);
+
+    const scroller = screen.getByRole("list", { name: "Screen a screens" });
+    const items = screen.getAllByRole("listitem");
+    // Items are 400 wide on a 432 stride (a 32px gap), laid out with the
+    // middle one centred in a 400-wide scroller — i.e. resting on a snap
+    // point. Centres: -232, 200, 632.
+    stubRect(items[0], { left: -432, width: 400 });
+    stubRect(items[1], { left: 0, width: 400 });
+    stubRect(items[2], { left: 432, width: 400 });
+
+    stubRect(scroller, { left: 0, width: 400 }); // centre 200 → on slide 1
+    act(() => {
+      scroller.dispatchEvent(new Event("scroll"));
+      flushFrames();
+    });
+
+    expect(items[1].style.opacity).toBe("1.000");
+    // Exactly one stride out, so fully faded — and it never goes negative.
+    expect(items[0].style.opacity).toBe("0.000");
+    expect(items[2].style.opacity).toBe("0.000");
+
+    // Now halfway between two snap points: both neighbours sit half a stride
+    // from the centre and are equally half-faded, which is the cross-fade you
+    // see mid-swipe.
+    stubRect(scroller, { left: 216, width: 400 }); // centre 416
+    act(() => {
+      scroller.dispatchEvent(new Event("scroll"));
+      flushFrames();
+    });
+
+    expect(items[1].style.opacity).toBe("0.500");
+    expect(items[2].style.opacity).toBe("0.500");
+    expect(items[0].style.opacity).toBe("0.000");
+  });
+
+  it("leaves slides untouched when there is no layout to measure", () => {
+    const screens = ["a", "b"].map((id) => makeScreen(id));
+    render(<ShowcaseAppCarousel app={makeApp(screens)} />);
+
+    // happy-dom reports a zero-width scroller, so the measurement bails before
+    // touching any style — slides must not be left invisible.
+    for (const item of screen.getAllByRole("listitem")) {
+      expect(item.style.opacity).toBe("");
+    }
+  });
+});

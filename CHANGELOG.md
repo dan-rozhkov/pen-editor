@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.72.1] - 2026-07-28
+
+### Fixed
+- **Restored the gallery's off-centre slide fade, which 0.72.0 dropped.** The old Embla carousel dimmed its slides by distance, and I removed that along with Embla, reading it as a workaround for overlapping slides. It isn't — Mobbin does the same thing, and measuring the live site pins the exact law: an inline opacity per slide per scroll frame, `max(0, 1 - |offset from the scroller's centre| / stride)`, where one stride is the distance between snap points. It is now computed in the same rAF-throttled pass that tracks the centred slide, so at rest only the centred screen is visible and a swipe cross-fades between neighbours instead of dragging a hard-clipped crop across the card's edges.
+
 ## [0.72.0] - 2026-07-28
 
 ### Changed

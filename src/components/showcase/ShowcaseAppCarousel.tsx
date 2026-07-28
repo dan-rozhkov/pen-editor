@@ -14,6 +14,21 @@ import { writeTextToClipboard } from "@/utils/clipboard";
 
 const COPY_FEEDBACK_DURATION_MS = 2000;
 
+// One stride is the distance between two neighbouring snap points — the item
+// width plus the scroller's column gap — measured from the DOM rather than
+// assumed, so it stays right across the `sm:` padding breakpoint and any
+// viewport width. Arrow clicks scroll by it, and the fade normalizes by it,
+// so a slide reaches opacity 0 exactly as the next one lands centred.
+function measureItemStride(items: (HTMLLIElement | null)[]): number {
+  const first = items[0];
+  if (!first) return 0;
+  const second = items[1];
+  if (second) {
+    return second.getBoundingClientRect().left - first.getBoundingClientRect().left;
+  }
+  return first.getBoundingClientRect().width;
+}
+
 interface ShowcaseAppCarouselProps {
   app: ShowcaseApp;
   /**
@@ -106,6 +121,8 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
       if (!scrollerRect.width) return;
       const scrollerCenter = scrollerRect.left + scrollerRect.width / 2;
 
+      const stride = measureItemStride(itemRefs.current);
+
       let closestIndex = 0;
       let closestDistance = Infinity;
       itemRefs.current.forEach((item, index) => {
@@ -118,6 +135,18 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
           closestDistance = distance;
           closestIndex = index;
         }
+
+        // Mobbin fades its off-centre slides rather than letting them sit
+        // hard-clipped at the scroller's edges, and the peek reads as a hint
+        // of the next screen instead of a cropped one. Measured off the live
+        // site: it writes an inline opacity per frame following exactly
+        // `max(0, 1 - |offset| / stride)` — linear in the distance from the
+        // centre, gone one stride out. Setting the style directly (rather
+        // than through state) keeps this off React's render path; it runs on
+        // every scroll frame.
+        item.style.opacity = stride
+          ? Math.max(0, 1 - distance / stride).toFixed(3)
+          : "1";
       });
 
       setSelectedIndex(closestIndex);
@@ -151,18 +180,9 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
     };
   }, [app.screens.length]);
 
-  // The stride is measured from the DOM (item width + column-gap) rather
-  // than assumed, so arrow clicks land on the same snap points as a drag
-  // regardless of viewport width / the sm: padding breakpoint.
   const getItemStride = useCallback(() => {
-    const scroller = scrollerRef.current;
-    const first = itemRefs.current[0];
-    const second = itemRefs.current[1];
-    if (!scroller || !first) return 0;
-    if (second) {
-      return second.getBoundingClientRect().left - first.getBoundingClientRect().left;
-    }
-    return first.getBoundingClientRect().width;
+    if (!scrollerRef.current) return 0;
+    return measureItemStride(itemRefs.current);
   }, []);
 
   const scrollByOffset = useCallback((direction: 1 | -1) => {
