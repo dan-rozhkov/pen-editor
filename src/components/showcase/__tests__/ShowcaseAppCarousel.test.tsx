@@ -184,6 +184,9 @@ describe("<ShowcaseAppCarousel /> scroll-snap markup", () => {
     ]) {
       expect(scroller.classList.contains(cls)).toBe(true);
     }
+    expect(scroller.classList.contains("px-20")).toBe(true);
+    expect(scroller.classList.contains("sm:px-16")).toBe(true);
+    expect(scroller.classList.contains("px-12")).toBe(false);
   });
 
   it("renders one <li> per screen with the item snap classes and aria labels", () => {

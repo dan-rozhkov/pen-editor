@@ -216,7 +216,7 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
       <ol
         ref={scrollerRef}
         aria-label={`${app.screens[0].title} screens`}
-        className="scrollbar-none flex items-center gap-x-6 overflow-x-auto overflow-y-hidden overscroll-x-contain snap-x snap-mandatory scroll-smooth px-12 sm:px-16"
+        className="scrollbar-none flex items-center gap-x-6 overflow-x-auto overflow-y-hidden overscroll-x-contain snap-x snap-mandatory scroll-smooth px-20 sm:px-16"
       >
         {app.screens.map((screen, index) => (
           <li

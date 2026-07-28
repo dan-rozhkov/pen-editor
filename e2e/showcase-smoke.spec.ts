@@ -156,6 +156,28 @@ test("the grid scrolls the document on a phone-sized viewport", async ({
   await page.goto("/");
   await expect(page.getByAltText("Screen 0")).toBeVisible();
 
+  // The page gutter was deliberately reduced from 48px to 16px on mobile.
+  // Compensating inside the grey app panel (80px instead of 48px per side)
+  // keeps the screenshot itself at its previous 198px width:
+  // 390 - 2×16 - 2×80 = 198.
+  const mobileGeometry = await page
+    .getByRole("region", { name: "Screen 0 screens" })
+    .evaluate((panel) => {
+      const panelRect = panel.getBoundingClientRect();
+      const scroller = panel.querySelector("ol")!;
+      const card = panel.querySelector<HTMLElement>('[data-slot="showcase-card"]')!;
+      return {
+        panelLeft: panelRect.left,
+        scrollerPaddingLeft: Number.parseFloat(getComputedStyle(scroller).paddingLeft),
+        cardWidth: card.getBoundingClientRect().width,
+      };
+    });
+  expect(mobileGeometry).toEqual({
+    panelLeft: 16,
+    scrollerPaddingLeft: 80,
+    cardWidth: 198,
+  });
+
   // The document overflows...
   await expect
     .poll(async () =>

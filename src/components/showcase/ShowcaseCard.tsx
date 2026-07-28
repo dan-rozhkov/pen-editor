@@ -9,11 +9,11 @@ export type ShowcaseCopyFeedback = "success" | "error";
 // overstated the card by 1.7-2.4x, which was enough to make retina desktop
 // fetch the 750w source when the card only ever renders at ~148px there.
 //
-// - `<main>` (ShowcasePage): `px-12 sm:px-16` → 48px/64px *per side*.
+// - `<main>` (ShowcasePage): `px-4 sm:px-16` → 16px/64px *per side*.
 // - `ShowcaseGrid`: `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4`
 //   with `gap-4` (16px) between cells.
 // - `ShowcaseAppCarousel` (the direct parent of `ShowcaseCard`, inside each
-//   grid cell): `px-12 sm:px-16` again → another 48px/64px *per side*
+//   grid cell): `px-20 sm:px-16` → another 80px/64px *per side*
 //   around the image itself.
 //
 // card width = (100vw - 2×mainPad - (cols-1)×gap) / cols - 2×carouselPad
@@ -24,8 +24,8 @@ export type ShowcaseCopyFeedback = "success" | "error";
 //     (100vw - 128 - 2×16) / 3 - 128 = (100vw - 160)/3 - 128
 //   sm (>=640, 2 cols, sm padding):
 //     (100vw - 128 - 1×16) / 2 - 128 = (100vw - 144)/2 - 128
-//   base (<640, 1 col, base padding 48 both sides, no gap):
-//     100vw - 96 - 96 = 100vw - 192
+//   base (<640, 1 col, 16px main + 80px carousel padding per side, no gap):
+//     100vw - 32 - 160 = 100vw - 192
 const SHOWCASE_IMAGE_SIZES = [
   "(min-width:1280px) calc((100vw - 176px)/4 - 128px)",
   "(min-width:1024px) calc((100vw - 160px)/3 - 128px)",

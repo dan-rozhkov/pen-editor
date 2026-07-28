@@ -274,7 +274,7 @@ describe("<ShowcasePage />", () => {
     );
   });
 
-  it("uses carousel-backed apps in a four-column maximum grid with doubled side gutters", async () => {
+  it("uses carousel-backed apps in a four-column maximum grid with compensated mobile gutters", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null })),
@@ -300,7 +300,7 @@ describe("<ShowcasePage />", () => {
     // The panel keeps only vertical padding — horizontal padding moved onto
     // the scroller so it scrolls with the content (that's what produces the
     // Mobbin-style peek at both edges).
-    expect(scroller?.classList.contains("px-12")).toBe(true);
+    expect(scroller?.classList.contains("px-20")).toBe(true);
     expect(scroller?.classList.contains("sm:px-16")).toBe(true);
     expect(grid?.classList.contains("grid")).toBe(true);
     expect(grid?.classList.contains("grid-cols-1")).toBe(true);
