@@ -80,17 +80,31 @@ describe("<ShowcasePage />", () => {
     const carousels = screen.getAllByRole("region");
     const selector = screen.getByLabelText("Screen selector");
     expect(carousels).toHaveLength(2);
+    expect(
+      carousels[0]
+        .closest("[data-slot=showcase-app-carousel]")
+        ?.classList.contains("overflow-hidden"),
+    ).toBe(true);
+    expect(carousels[0].getAttribute("data-transition")).toBe("fade-slide");
+    expect(
+      screen
+        .getByAltText("Onboarding flow")
+        .closest("[data-slot=carousel-item]")
+        ?.classList.contains("will-change-opacity"),
+    ).toBe(true);
     const nextScreen = screen.getByRole("button", { name: "Next screen" });
     expect(nextScreen.classList.contains("size-10")).toBe(true);
     expect(nextScreen.classList.contains("bg-surface-active/70")).toBe(true);
     expect(nextScreen.classList.contains("backdrop-blur-sm")).toBe(true);
     expect(nextScreen.classList.contains("hover:text-white")).toBe(true);
-    expect(nextScreen.classList.contains("-right-10")).toBe(true);
-    expect(nextScreen.classList.contains("sm:-right-14")).toBe(true);
+    expect(nextScreen.classList.contains("-right-[2.75rem]")).toBe(true);
+    expect(nextScreen.classList.contains("sm:-right-[3.25rem]")).toBe(true);
     expect(nextScreen.classList.contains("text-white")).toBe(true);
     expect(selector.classList.contains("absolute")).toBe(true);
     expect(selector.classList.contains("top-5")).toBe(true);
     expect(selector.classList.contains("right-5")).toBe(true);
+    expect(selector.classList.contains("opacity-0")).toBe(true);
+    expect(selector.classList.contains("group-hover/carousel:opacity-100")).toBe(true);
     expect(screen.getByRole("button", { name: "Go to screen 1" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Go to screen 2" })).toBeTruthy();
     expect(screen.queryByText("Show more")).toBeNull();
