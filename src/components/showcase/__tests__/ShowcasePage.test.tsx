@@ -96,6 +96,22 @@ describe("<ShowcasePage />", () => {
     expect(screen.queryByText("Show more")).toBeNull();
   });
 
+  it("matches loading placeholders to carousel card dimensions and surfaces", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+
+    const { container } = renderPage();
+
+    const shimmer = container.querySelector(".animate-pulse");
+    const skeletonCard = shimmer?.parentElement;
+
+    expect(skeletonCard?.classList.contains("bg-surface-base")).toBe(true);
+    expect(skeletonCard?.classList.contains("rounded-[2rem]")).toBe(true);
+    expect(skeletonCard?.classList.contains("px-12")).toBe(true);
+    expect(skeletonCard?.classList.contains("sm:px-16")).toBe(true);
+    expect(shimmer?.classList.contains("aspect-[390/844]")).toBe(true);
+    expect(shimmer?.classList.contains("rounded-3xl")).toBe(true);
+  });
+
   it("shows an empty-state message when there are no screens", async () => {
     vi.stubGlobal(
       "fetch",

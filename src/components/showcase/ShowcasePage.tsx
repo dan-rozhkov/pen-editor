@@ -17,16 +17,16 @@ function ShowcaseGrid({ children }: { children: ReactNode }) {
 }
 
 function SkeletonGrid() {
-  const heights = [320, 320, 320, 320];
   return (
     <div aria-hidden="true">
       <ShowcaseGrid>
-        {heights.map((height, i) => (
+        {Array.from({ length: 4 }, (_, i) => (
           <div
             key={i}
-            className="animate-pulse rounded-3xl bg-surface-elevated"
-            style={{ height }}
-          />
+            className="rounded-[2rem] bg-surface-base px-12 py-10 sm:px-16 sm:py-12"
+          >
+            <div className="aspect-[390/844] animate-pulse rounded-3xl bg-surface-elevated" />
+          </div>
         ))}
       </ShowcaseGrid>
     </div>
