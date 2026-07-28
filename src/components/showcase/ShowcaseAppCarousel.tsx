@@ -124,7 +124,7 @@ export function ShowcaseAppCarousel({ app }: { app: ShowcaseApp }) {
         </div>
       )}
 
-      <span className="absolute bottom-5 left-1/2 -translate-x-1/2 text-xs font-medium text-text-muted sm:bottom-6">
+      <span className="absolute bottom-3 left-1/2 max-w-[calc(100%-2rem)] -translate-x-1/2 truncate text-center text-xs font-normal text-text-muted sm:bottom-4">
         {getShowcaseModelLabel(app.screens[0].model)}
       </span>
     </div>

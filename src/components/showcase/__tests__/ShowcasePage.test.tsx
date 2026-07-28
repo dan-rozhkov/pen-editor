@@ -106,9 +106,12 @@ describe("<ShowcasePage />", () => {
     expect(selector.classList.contains("opacity-0")).toBe(true);
     expect(selector.classList.contains("group-hover/carousel:opacity-100")).toBe(true);
     const [modelBadge] = screen.getAllByText("Model");
-    expect(modelBadge.classList.contains("bottom-5")).toBe(true);
+    expect(modelBadge.classList.contains("bottom-3")).toBe(true);
     expect(modelBadge.classList.contains("left-1/2")).toBe(true);
     expect(modelBadge.classList.contains("-translate-x-1/2")).toBe(true);
+    expect(modelBadge.classList.contains("truncate")).toBe(true);
+    expect(modelBadge.classList.contains("text-center")).toBe(true);
+    expect(modelBadge.classList.contains("font-normal")).toBe(true);
     expect(modelBadge.classList.contains("text-text-muted")).toBe(true);
     expect(
       screen.getByRole("button", { name: "Go to screen 1" }).classList.contains("bg-text-primary"),
