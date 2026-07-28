@@ -82,7 +82,7 @@ describe("<ShowcasePage />", () => {
     expect(carousels).toHaveLength(2);
     const nextScreen = screen.getByRole("button", { name: "Next screen" });
     expect(nextScreen.classList.contains("size-10")).toBe(true);
-    expect(nextScreen.classList.contains("bg-gray-300/70")).toBe(true);
+    expect(nextScreen.classList.contains("bg-surface-active/70")).toBe(true);
     expect(nextScreen.classList.contains("backdrop-blur-sm")).toBe(true);
     expect(nextScreen.classList.contains("hover:text-white")).toBe(true);
     expect(nextScreen.classList.contains("-right-10")).toBe(true);

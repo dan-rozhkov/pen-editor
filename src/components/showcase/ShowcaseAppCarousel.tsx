@@ -57,8 +57,8 @@ export function ShowcaseAppCarousel({ app }: { app: ShowcaseApp }) {
 
         {hasMultipleScreens && (
           <>
-            <CarouselPrevious className="-left-10 size-10 border-transparent bg-gray-300/70 text-white shadow-none opacity-0 pointer-events-none backdrop-blur-sm transition-[opacity,background-color] group-hover/carousel:pointer-events-auto group-hover/carousel:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 hover:bg-gray-300/85 hover:text-white sm:-left-14" />
-            <CarouselNext className="-right-10 size-10 border-transparent bg-gray-300/70 text-white shadow-none opacity-0 pointer-events-none backdrop-blur-sm transition-[opacity,background-color] group-hover/carousel:pointer-events-auto group-hover/carousel:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 hover:bg-gray-300/85 hover:text-white sm:-right-14" />
+            <CarouselPrevious className="-left-10 size-10 border-transparent bg-surface-active/70 text-white shadow-none opacity-0 pointer-events-none backdrop-blur-sm transition-[opacity,background-color] group-hover/carousel:pointer-events-auto group-hover/carousel:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 hover:bg-surface-active/85 hover:text-white sm:-left-14" />
+            <CarouselNext className="-right-10 size-10 border-transparent bg-surface-active/70 text-white shadow-none opacity-0 pointer-events-none backdrop-blur-sm transition-[opacity,background-color] group-hover/carousel:pointer-events-auto group-hover/carousel:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 hover:bg-surface-active/85 hover:text-white sm:-right-14" />
           </>
         )}
       </Carousel>
