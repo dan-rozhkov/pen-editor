@@ -73,7 +73,7 @@ export function ShowcaseAppCarousel({ app }: { app: ShowcaseApp }) {
       className="group/carousel relative overflow-hidden rounded-[2rem] bg-surface-base px-12 py-10 sm:px-16 sm:py-12"
     >
       <Carousel
-        opts={{ loop: hasMultipleScreens, duration: 32 }}
+        opts={{ loop: hasMultipleScreens, duration: 20 }}
         setApi={setApi}
         data-transition="fade-slide"
         className="[&>div:first-child]:overflow-visible"
