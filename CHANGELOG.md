@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.72.5] - 2026-07-28
+
+### Fixed
+- **The gallery slide, not the screenshots, was cutting screens off at the bottom.** Every slide was framed at a hardcoded `aspect-[390/844]` and filled with `object-cover object-top`, but 18 of the 65 live screens are taller than that frame — 750x1688 up to 750x2082 — so the surplus was cropped away, as much as 22% of the screen. The stored PNG was whole the entire time: save one of the "cut off" images and it opens complete. The slide now takes its shape from the screen's own dimensions, so there is nothing to crop and no letterboxing either (0.72.3 tried fitting the over-tall screens inside the fixed frame and was reverted — gutters and shrunken cards read worse than the crop). Rows that mix screen heights are handled by `items-start` on the grid: each app panel hugs its own screens, so every screen in a row starts on the same line instead of floating in the middle of a stretched panel. Screens with missing or zero dimensions fall back to the old 390:844 frame.
+
 ## [0.72.4] - 2026-07-28
 
 ### Reverted

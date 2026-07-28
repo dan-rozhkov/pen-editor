@@ -166,4 +166,44 @@ describe("<ShowcaseCard />", () => {
     const card = container.querySelector('[data-slot="showcase-card"]') as HTMLElement;
     expect(card.style.backgroundImage).toBe("");
   });
+
+  // A hardcoded 390:844 slide was what actually cut the screens off: the
+  // stored PNG is whole, but 18 of the 65 live screens are taller than that
+  // frame (750x1688 through 750x2082) and `object-cover` threw the surplus
+  // away — up to 22% of the screen. The slide takes the screen's own shape
+  // instead, so there is nothing to crop.
+  it("shapes the slide from the screen's own dimensions", () => {
+    const { container } = render(
+      <ShowcaseCard screen={makeScreen({ width: 750, height: 2082 })} onCopyId={() => {}} />,
+    );
+
+    const card = container.querySelector('[data-slot="showcase-card"]') as HTMLElement;
+    expect(card.style.aspectRatio).toBe("750 / 2082");
+    expect(card.classList.contains("aspect-[390/844]")).toBe(false);
+  });
+
+  it("falls back to the baseline phone frame when the stored dimensions are unusable", () => {
+    // Old rows predate the width/height columns and can arrive as 0 — an
+    // `aspect-ratio: 750 / 0` would collapse the slide to nothing.
+    const { container } = render(
+      <ShowcaseCard screen={makeScreen({ width: 0, height: 0 })} onCopyId={() => {}} />,
+    );
+
+    const card = container.querySelector('[data-slot="showcase-card"]') as HTMLElement;
+    expect(card.style.aspectRatio).toBe("390 / 844");
+  });
+
+  it("keeps the LQIP placeholder on a slide shaped by an over-tall screen", () => {
+    const { container } = render(
+      <ShowcaseCard
+        screen={makeScreen({ width: 750, height: 2082, lqip: "data:image/webp;base64,AAA" })}
+        onCopyId={() => {}}
+        loadImage={false}
+      />,
+    );
+
+    const card = container.querySelector('[data-slot="showcase-card"]') as HTMLElement;
+    expect(card.style.aspectRatio).toBe("750 / 2082");
+    expect(card.style.backgroundImage).toContain("data:image/webp;base64,AAA");
+  });
 });

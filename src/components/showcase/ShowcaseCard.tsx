@@ -102,12 +102,30 @@ export function ShowcaseCard({
   // multi-second TTFB, since the placeholder ships inline in the feed JSON
   // and paints before any image request even starts.
   const showLqip = !!screen.lqip && (!loadImage || !imageLoaded);
+  // The slide takes the shape of the screen it holds. A single hardcoded
+  // 390:844 frame was the actual source of the "screens are cut off at the
+  // bottom" reports: the stored PNG is whole (save one and it opens
+  // complete), but 18 of the 65 live screens are taller than that frame —
+  // 750x1688 up to 750x2082 — and `object-cover` cropped the surplus away,
+  // up to 22% of the screen. Letterboxing them inside the fixed frame was
+  // tried and reverted: gutters and shrunken cards read worse than the crop.
+  // Sizing the slide from the screen's own dimensions crops nothing and adds
+  // no gutters. Screens from one run share a size, so a carousel stays
+  // uniform; grid cells still stretch to their row, and the scroller's
+  // `items-center` centres a shorter card in the leftover space.
+  const frameRatio =
+    Number.isFinite(screen.width) &&
+    Number.isFinite(screen.height) &&
+    screen.width > 0 &&
+    screen.height > 0
+      ? `${screen.width} / ${screen.height}`
+      : "390 / 844";
 
   return (
     <div
       data-slot="showcase-card"
       // No `border` here: `border` participates in border-box sizing, and
-      // WebKit resolves this card's `aspect-[390/844]`-derived `height:100%`
+      // WebKit resolves this card's `aspect-ratio`-derived `height:100%`
       // chain (button + img) against the border box while Blink resolves it
       // against the content box — so a real 1px border silently made the
       // WebKit content box 2px shorter, pushing the `object-cover object-top`
@@ -117,8 +135,11 @@ export function ShowcaseCard({
       // `inset-ring` — an inset box-shadow paints *under* an element's own
       // children, so a ring here would sit behind the full-bleed screenshot
       // and never be seen once the image loads.
-      className="relative aspect-[390/844] w-full overflow-hidden rounded-3xl bg-surface-elevated bg-cover bg-top"
-      style={showLqip ? { backgroundImage: `url(${screen.lqip})` } : undefined}
+      className="relative w-full overflow-hidden rounded-3xl bg-surface-elevated bg-cover bg-top"
+      style={{
+        aspectRatio: frameRatio,
+        ...(showLqip ? { backgroundImage: `url(${screen.lqip})` } : {}),
+      }}
     >
       <button
         type="button"
