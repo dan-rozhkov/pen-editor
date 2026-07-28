@@ -50,10 +50,22 @@ test("/ shows the showcase, not the editor", async ({ page }) => {
 // grid taller than the screen was clipped with no way to reach the rest of it
 // — most obvious on a phone, where the two-column grid gets tall fast. Only a
 // real browser can catch this; happy-dom reports no layout.
-test("the grid scrolls on a phone-sized viewport", async ({ page }) => {
+//
+// The scroll must be the DOCUMENT's, not a nested container's: on iOS Safari
+// only document scroll lets the browser collapse its chrome, and a nested
+// scroller pinned to height:100% leaves the strips behind the status bar and
+// address bar outside the page — they then paint with the body background as
+// a grey band. So this asserts both that the page scrolls and that html (not
+// some inner div) is what owns that scroll.
+//
+// One card per RUN, so distinct runIds are what make the page tall — 12
+// screens sharing a runId collapse into a single carousel and fit on screen.
+test("the grid scrolls the document on a phone-sized viewport", async ({
+  page,
+}) => {
   const screens = Array.from({ length: 12 }, (_, i) => ({
     id: `s${i}`,
-    runId: "r1",
+    runId: `r${i}`,
     theme: "dark",
     title: `Screen ${i}`,
     model: "test/smoke-model",
@@ -71,16 +83,32 @@ test("the grid scrolls on a phone-sized viewport", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByAltText("Screen 0")).toBeVisible();
 
-  // Whichever element owns the scroll, the page must both overflow and move.
-  const scroller = page.locator("main").locator("xpath=..");
+  // The document overflows...
   await expect
     .poll(async () =>
-      scroller.evaluate((el) => el.scrollHeight > el.clientHeight)
+      page.evaluate(() => {
+        const el = document.scrollingElement!;
+        return el.scrollHeight > el.clientHeight;
+      })
     )
     .toBe(true);
 
-  await scroller.evaluate((el) => el.scrollBy(0, 600));
+  // ...and no ancestor of <main> has taken the scroll away from it.
+  expect(
+    await page
+      .locator("main")
+      .evaluate((main) => {
+        let el: HTMLElement | null = main.parentElement;
+        while (el && el !== document.body) {
+          if (el.scrollHeight > el.clientHeight) return el.className;
+          el = el.parentElement;
+        }
+        return null;
+      })
+  ).toBeNull();
+
+  await page.evaluate(() => window.scrollBy(0, 600));
   await expect
-    .poll(async () => scroller.evaluate((el) => el.scrollTop))
+    .poll(async () => page.evaluate(() => window.scrollY))
     .toBeGreaterThan(0);
 });
