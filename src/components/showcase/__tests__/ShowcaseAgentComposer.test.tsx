@@ -1,0 +1,58 @@
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { ShowcaseAgentComposer } from "@/components/showcase/ShowcaseAgentComposer";
+
+afterEach(cleanup);
+
+describe("<ShowcaseAgentComposer />", () => {
+  it("keeps send disabled for an empty or whitespace-only prompt", () => {
+    render(<ShowcaseAgentComposer onSubmit={vi.fn()} />);
+
+    const input = screen.getByPlaceholderText("Ask the design agent to create…");
+    const send = screen.getByRole("button", { name: "Send" });
+
+    expect((send as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(input, { target: { value: "   " } });
+    expect((send as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("submits a trimmed prompt with Enter", () => {
+    const onSubmit = vi.fn();
+    render(<ShowcaseAgentComposer onSubmit={onSubmit} />);
+
+    const input = screen.getByPlaceholderText("Ask the design agent to create…");
+    fireEvent.change(input, {
+      target: { value: "  Build a calm finance dashboard  " },
+    });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(onSubmit).toHaveBeenCalledOnce();
+    expect(onSubmit).toHaveBeenCalledWith("Build a calm finance dashboard");
+  });
+
+  it("leaves Shift+Enter to the textarea without submitting", () => {
+    const onSubmit = vi.fn();
+    render(<ShowcaseAgentComposer onSubmit={onSubmit} />);
+
+    const input = screen.getByPlaceholderText("Ask the design agent to create…");
+    fireEvent.change(input, { target: { value: "first line" } });
+    fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect((input as HTMLTextAreaElement).value).toBe("first line");
+  });
+
+  it("submits through the visible arrow button", () => {
+    const onSubmit = vi.fn();
+    render(<ShowcaseAgentComposer onSubmit={onSubmit} />);
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Ask the design agent to create…"),
+      { target: { value: "Create a portfolio" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(onSubmit).toHaveBeenCalledWith("Create a portfolio");
+  });
+});

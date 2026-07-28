@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { expectEditorMounted } from "./support/editor";
+import { SSE_HEADERS, sseBody } from "./support/sse";
 
 // Smoke test for FIR-61 part D: "/" now serves the public showcase of
 // autonomously-designed screens instead of the editor, which moved to
@@ -57,6 +58,59 @@ test("/ shows the showcase, not the editor", async ({ page }, testInfo) => {
   await page.getByRole("link", { name: /open the editor/i }).click();
   await expect(page).toHaveURL(/\/app$/);
   await expectEditorMounted(page);
+});
+
+test("a showcase prompt opens a new agent chat and sends the message", async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name === "webkit-mobile",
+    "The mobile WebKit project only guards the showcase layout.",
+  );
+
+  const prompt = "Build a calm finance dashboard";
+  const chatRequests: unknown[] = [];
+
+  await page.route("**/api/showcase**", (route) =>
+    route.fulfill({ json: { apps: [], nextCursor: null } }),
+  );
+  await page.route("**/api/models", (route) =>
+    route.fulfill({
+      json: {
+        models: [
+          {
+            id: "test/smoke-model",
+            label: "Smoke Model",
+            supportsVision: true,
+          },
+        ],
+        default: "test/smoke-model",
+      },
+    }),
+  );
+  await page.route("**/api/chat", async (route) => {
+    chatRequests.push(route.request().postDataJSON());
+    await route.fulfill({
+      headers: SSE_HEADERS,
+      body: sseBody([
+        { type: "start" },
+        { type: "start-step" },
+        { type: "finish-step" },
+        { type: "finish" },
+      ]),
+    });
+  });
+
+  await page.goto("/");
+  const input = page.getByPlaceholder("Ask the design agent to create…");
+  await input.fill(prompt);
+  await input.press("Enter");
+
+  await expect(page).toHaveURL(/\/app$/);
+  await expectEditorMounted(page);
+  await expect(page.getByText("Design Agent", { exact: true })).toBeVisible();
+  await expect(page.getByText(prompt, { exact: true })).toBeVisible();
+  await expect.poll(() => chatRequests.length).toBe(1);
 });
 
 // Regression: index.css locks html/body/#root to height:100% + overflow:hidden

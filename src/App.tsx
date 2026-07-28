@@ -23,6 +23,7 @@ import { useDevModeStore } from "./store/devModeStore";
 import { useLayers3DStore } from "./store/layers3dStore";
 import { useIsMobile } from "./hooks/useIsMobile";
 import { useOnlineStatus } from "./hooks/useOnlineStatus";
+import { launchShowcaseAgentChat } from "./lib/launchShowcaseAgentChat";
 import { OfflineBanner } from "./components/pwa/OfflineBanner";
 import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
@@ -45,6 +46,10 @@ function App() {
   // selection it no longer allows. Falls back to the hardcoded list on failure.
   useEffect(() => {
     loadModels().then(reconcileModels);
+  }, []);
+
+  useEffect(() => {
+    launchShowcaseAgentChat();
   }, []);
 
   // Re-register every custom (uploaded) font's FontFace with the browser so

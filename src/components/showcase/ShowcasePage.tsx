@@ -1,7 +1,9 @@
 import { type ReactNode, useEffect, useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 
+import { ShowcaseAgentComposer } from "@/components/showcase/ShowcaseAgentComposer";
 import { Button } from "@/components/ui/button";
+import { storeShowcaseAgentPrompt } from "@/lib/showcaseAgentHandoff";
 import { cn } from "@/lib/utils";
 import { fetchShowcase, type ShowcaseApp } from "@/lib/showcase";
 import { ShowcaseAppCarousel } from "@/components/showcase/ShowcaseAppCarousel";
@@ -34,6 +36,7 @@ function SkeletonGrid() {
 }
 
 export function ShowcasePage() {
+  const navigate = useNavigate();
   // Apps, not screens: the feed hands back whole apps (see lib/showcase.ts),
   // so pages append cleanly and no card is ever rendered half-populated.
   const [apps, setApps] = useState<ShowcaseApp[]>([]);
@@ -80,6 +83,11 @@ export function ShowcasePage() {
     setLoadingMore(false);
   }
 
+  function handleAgentPrompt(prompt: string) {
+    storeShowcaseAgentPrompt(prompt);
+    navigate("/app");
+  }
+
   const isEmpty = status === "ready" && apps.length === 0;
 
   // index.css locks html/body/#root to height:100% + overflow:hidden so the
@@ -122,15 +130,16 @@ export function ShowcasePage() {
         )}
       >
         <h1 className="text-2xl font-semibold text-text-primary">
-          Pen Editor Showcase
+          Design, on autopilot.
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-text-muted">
           Every screen below was designed autonomously by the AI design
           agent — no human touched a mouse or keyboard.
         </p>
+        <ShowcaseAgentComposer onSubmit={handleAgentPrompt} />
         <Link
           to="/app"
-          className="mt-4 inline-flex text-sm font-medium text-accent-primary hover:underline"
+          className="mt-3 inline-flex text-sm font-medium text-accent-primary hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary"
         >
           Open the editor →
         </Link>

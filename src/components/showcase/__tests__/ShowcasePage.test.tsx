@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, Route, Routes } from "react-router";
 import { ShowcasePage } from "@/components/showcase/ShowcasePage";
 import { ShowcaseLightbox } from "@/components/showcase/ShowcaseLightbox";
+import { consumeShowcaseAgentPrompt } from "@/lib/showcaseAgentHandoff";
 import type { ShowcaseApp, ShowcaseScreen } from "@/lib/showcase";
 
 afterEach(() => {
@@ -71,7 +72,47 @@ function renderPage() {
   );
 }
 
+function renderNavigablePage() {
+  return render(
+    <MemoryRouter initialEntries={["/"]}>
+      <Routes>
+        <Route path="/" element={<ShowcasePage />} />
+        <Route path="/app" element={<div>Editor route</div>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 describe("<ShowcasePage />", () => {
+  it("presents the design agent as the primary showcase action", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+
+    renderPage();
+
+    expect(
+      screen.getByRole("heading", { name: "Design, on autopilot." }),
+    ).toBeTruthy();
+    expect(
+      screen.getByPlaceholderText("Ask the design agent to create…"),
+    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open the editor →" })).toBeTruthy();
+  });
+
+  it("stores a trimmed prompt and navigates to the editor", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    sessionStorage.clear();
+    renderNavigablePage();
+
+    const input = screen.getByPlaceholderText("Ask the design agent to create…");
+    fireEvent.change(input, {
+      target: { value: "  Build a calm finance dashboard  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await screen.findByText("Editor route");
+    expect(consumeShowcaseAgentPrompt()).toBe("Build a calm finance dashboard");
+  });
+
   it("renders one carousel per app, with all of its screens", async () => {
     vi.stubGlobal(
       "fetch",
