@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ShowcaseCard } from "@/components/showcase/ShowcaseCard";
+import { getScreenFit } from "@/components/showcase/screenFit";
 import type { ShowcaseScreen } from "@/lib/showcase";
 
 // Covers pen-editor-backend docs/superpowers/specs/2026-07-28-showcase-image-delivery-design.md
@@ -35,6 +36,45 @@ const SHOWCASE_IMAGE_SIZES = [
   "(min-width:640px) calc((100vw - 144px)/2 - 128px)",
   "calc(100vw - 192px)",
 ].join(", ");
+
+describe("getScreenFit", () => {
+  // Real sizes measured across the live feed (see 2026-07-28 showcase-tall-
+  // screens spec): both capture pipelines round to slightly different
+  // ratios, but neither clips more than the sub-percent tolerance.
+  it("keeps cover for the two real near-frame capture sizes", () => {
+    expect(getScreenFit(780, 1688)).toBe("cover");
+    expect(getScreenFit(750, 1624)).toBe("cover");
+  });
+
+  it("switches to contain once the clip crosses 2% (750x1688, ~4%)", () => {
+    expect(getScreenFit(750, 1688)).toBe("contain");
+  });
+
+  it("switches to contain for the worst live case (750x2082, ~22%)", () => {
+    expect(getScreenFit(750, 2082)).toBe("contain");
+  });
+
+  it("keeps cover just under the 2% threshold", () => {
+    // FRAME_RATIO = 390/844. Pick a height that clips ~1.5%: solve
+    // clippedFraction = 1 - (w/h)/(390/844) for h at w=390.
+    // 1 - 844/h = 0.015  =>  h = 844 / 0.985 ≈ 856.9
+    expect(getScreenFit(390, 857)).toBe("cover");
+  });
+
+  it("falls back to cover for degenerate/missing dimensions instead of NaN or letterboxing", () => {
+    expect(getScreenFit(0, 844)).toBe("cover");
+    expect(getScreenFit(390, 0)).toBe("cover");
+    expect(getScreenFit(-390, 844)).toBe("cover");
+    expect(getScreenFit(390, -844)).toBe("cover");
+    expect(getScreenFit(Number.NaN, 844)).toBe("cover");
+    expect(getScreenFit(390, Number.NaN)).toBe("cover");
+    expect(getScreenFit(Number.POSITIVE_INFINITY, 844)).toBe("cover");
+    // `undefined`/missing values coerced through the same numeric param —
+    // an old row with an absent field arrives as `undefined` at runtime
+    // despite the TS type, so guard against that shape too.
+    expect(getScreenFit(undefined as unknown as number, 844)).toBe("cover");
+  });
+});
 
 describe("<ShowcaseCard />", () => {
   it("renders srcset/sizes when imageUrl1x is present, with descriptors derived from the real screen width", () => {
@@ -165,5 +205,34 @@ describe("<ShowcaseCard />", () => {
 
     const card = container.querySelector('[data-slot="showcase-card"]') as HTMLElement;
     expect(card.style.backgroundImage).toBe("");
+  });
+
+  it("fits a normal screen with object-cover object-top, unchanged", () => {
+    render(<ShowcaseCard screen={makeScreen({ width: 750, height: 1624 })} onCopyId={() => {}} />);
+
+    const image = screen.getByAltText("Onboarding flow");
+    expect(image.className).toContain("object-cover");
+    expect(image.className).toContain("object-top");
+    expect(image.className).not.toContain("object-contain");
+  });
+
+  it("fits a screen materially taller than the frame with object-contain, letterboxed", () => {
+    // 750x2082 clips 22% under object-cover — the worst live case.
+    const { container } = render(
+      <ShowcaseCard screen={makeScreen({ width: 750, height: 2082 })} onCopyId={() => {}} />,
+    );
+
+    const image = screen.getByAltText("Onboarding flow");
+    expect(image.className).toContain("object-contain");
+    expect(image.className).toContain("object-center");
+    expect(image.className).not.toContain("object-cover");
+
+    const card = container.querySelector('[data-slot="showcase-card"]') as HTMLElement;
+    expect(card.className).toContain("bg-contain");
+    expect(card.className).toContain("bg-center");
+    expect(card.className).toContain("bg-no-repeat");
+    expect(card.className).not.toContain("bg-cover");
+    // The letterbox backdrop is still the card's own surface color.
+    expect(card.className).toContain("bg-surface-elevated");
   });
 });

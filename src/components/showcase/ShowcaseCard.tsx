@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 
 import type { ShowcaseScreen } from "@/lib/showcase";
+import { getScreenFit } from "@/components/showcase/screenFit";
 
 export type ShowcaseCopyFeedback = "success" | "error";
 
@@ -73,9 +74,11 @@ interface ShowcaseCardProps {
 // distinction, and the feedback timer. No permanent caption/badge is added
 // here on purpose: the showcase is a portfolio, the screenshots are the
 // content, and `feedback` only renders for ~2s after a click.
-// Every card uses the baseline phone-screen ratio. `object-cover object-top`
-// keeps the top of a longer screen visible and clips its overflow at the
-// bottom, so carousels and grid rows retain a consistent size.
+// Every card uses the baseline phone-screen ratio. Screens close to that
+// ratio use `object-cover object-top`, which keeps the top of a slightly
+// longer screen visible and clips a negligible amount off the bottom, so
+// carousels and grid rows retain a consistent size. Screens materially
+// taller than the frame use `object-contain` instead — see `getScreenFit`.
 export function ShowcaseCard({
   screen,
   onCopyId,
@@ -102,6 +105,9 @@ export function ShowcaseCard({
   // multi-second TTFB, since the placeholder ships inline in the feed JSON
   // and paints before any image request even starts.
   const showLqip = !!screen.lqip && (!loadImage || !imageLoaded);
+  const fit = getScreenFit(screen.width, screen.height);
+  const fitClasses =
+    fit === "contain" ? "bg-contain bg-center bg-no-repeat" : "bg-cover bg-top";
 
   return (
     <div
@@ -117,7 +123,7 @@ export function ShowcaseCard({
       // `inset-ring` — an inset box-shadow paints *under* an element's own
       // children, so a ring here would sit behind the full-bleed screenshot
       // and never be seen once the image loads.
-      className="relative aspect-[390/844] w-full overflow-hidden rounded-3xl bg-surface-elevated bg-cover bg-top"
+      className={`relative aspect-[390/844] w-full overflow-hidden rounded-3xl bg-surface-elevated ${fitClasses}`}
       style={showLqip ? { backgroundImage: `url(${screen.lqip})` } : undefined}
     >
       <button
@@ -148,7 +154,9 @@ export function ShowcaseCard({
             // Native image drag would otherwise fight the scroller's own
             // pointer gesture.
             draggable={false}
-            className="size-full object-cover object-top"
+            className={
+              fit === "contain" ? "size-full object-contain object-center" : "size-full object-cover object-top"
+            }
           />
         )}
       </button>
