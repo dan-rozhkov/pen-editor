@@ -43,16 +43,18 @@ interface ShowcaseCardProps {
   eager?: boolean;
   /**
    * loading="eager" (without fetchPriority) for the currently-selected slide
-   * of a carousel. Native `loading="lazy"` never defers a carousel slide in
-   * the first place — Embla's slides overlap inside an `overflow:hidden`
-   * viewport with a transform, so every mounted slide reads as "near the
-   * viewport" to the browser's lazy-load heuristic and never actually
-   * fetches. Deferring is already fully handled by ShowcaseAppCarousel's own
-   * mount window (±1 around the selected index); `loading="lazy"` on the
-   * mounted neighbors just adds a second, broken gate on top of it. Marking
-   * only the selected slide eager removes that dead gate for the slide that
-   * needs to load now, while neighbors stay lazy until a swipe makes them
-   * selected in turn (and picks up eager at that point).
+   * of a carousel. Deferring is already handled by ShowcaseAppCarousel's own
+   * mount window (±1 around the selected index), and a mounted slide is one
+   * that is on screen or peeking at the scroller's edge — so `loading="lazy"`
+   * on it is a second gate that can only delay the image the viewer is
+   * actually looking at. Marking the selected slide eager removes that,
+   * while neighbours stay lazy until a swipe makes them selected in turn.
+   *
+   * (This started life as a workaround for Embla, whose slides overlapped
+   * inside an `overflow:hidden` viewport so that every mounted slide read as
+   * "near the viewport" and `loading="lazy"` never deferred anything. The
+   * scroller is native scroll-snap now and lazy loading works properly, but
+   * eager-loading the slide in view is still the right call.)
    */
   selected?: boolean;
   /**
@@ -132,6 +134,9 @@ export function ShowcaseCard({
             loading={eager || selected ? "eager" : "lazy"}
             fetchPriority={eager ? "high" : undefined}
             onLoad={() => setImageLoaded(true)}
+            // Native image drag would otherwise fight the scroller's own
+            // pointer gesture.
+            draggable={false}
             className="size-full object-cover object-top"
           />
         )}

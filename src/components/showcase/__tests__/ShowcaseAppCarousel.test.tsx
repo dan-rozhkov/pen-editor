@@ -5,14 +5,16 @@ import { accumulateWindow, getInitialWindow } from "@/components/showcase/carous
 import type { ShowcaseApp } from "@/components/showcase/showcaseApps";
 import type { ShowcaseScreen } from "@/lib/showcase";
 
-// Clicking a slide is meant to copy `screen.id` to the clipboard, for
-// `npm run showcase:pin -- --screen <uuid>` on the backend. Drag-vs-click
-// suppression is Embla's own job (its DragHandler swallows the native click
-// event once a drag crosses its distance threshold, via a capture-phase
-// listener on the carousel root — see ShowcaseAppCarousel.tsx) and isn't
-// reproducible here: happy-dom has no real pointer/layout model for Embla to
-// compute a drag distance against, so that path is exercised only by hand /
-// e2e, not this suite.
+// This is a real native scroll-snap scroller now (no Embla), so clicking a
+// card is a plain click — there is no drag-vs-click suppression to reason
+// about here anymore.
+//
+// happy-dom implements neither layout nor `Element.prototype.scrollTo`/
+// `scrollBy` (scrolling a real element throws "not implemented"), so every
+// test that would depend on real geometry (which screen is "centred", where
+// an arrow/dot scrolls to) stubs `scrollBy`/`scrollTo` and asserts on the
+// call arguments instead of on the resulting scroll position. Real
+// snap-centering behaviour is covered by e2e (showcase-smoke.spec.ts).
 
 function makeScreen(id: string): ShowcaseScreen {
   return {
@@ -43,6 +45,33 @@ function stubClipboard(writeText: ReturnType<typeof vi.fn>) {
     configurable: true,
   });
 }
+
+// happy-dom has no layout engine, so every element reports a zero rect.
+// Stub `getBoundingClientRect` on the given elements with the rects we want
+// the component's "which screen is centred"/"stride" math to see.
+function stubRect(el: Element, rect: Partial<DOMRect>) {
+  vi.spyOn(el, "getBoundingClientRect").mockReturnValue({
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    toJSON() {
+      return this;
+    },
+    ...rect,
+  } as DOMRect);
+}
+
+beforeEach(() => {
+  // happy-dom throws "not implemented" for these; stub on the prototype so
+  // every scroller element in a test picks them up without individual setup.
+  Element.prototype.scrollBy = vi.fn();
+  Element.prototype.scrollTo = vi.fn();
+});
 
 afterEach(() => {
   cleanup();
@@ -128,24 +157,62 @@ describe("<ShowcaseAppCarousel /> copy-id-on-click", () => {
   });
 });
 
+describe("<ShowcaseAppCarousel /> scroll-snap markup", () => {
+  beforeEach(() => {
+    stubClipboard(vi.fn().mockResolvedValue(undefined));
+  });
+
+  it("renders a single native scroller with the required scroll-snap classes", () => {
+    render(
+      <ShowcaseAppCarousel app={makeApp([makeScreen("screen-a"), makeScreen("screen-b")])} />,
+    );
+
+    const scroller = screen.getByRole("list", { name: "Screen screen-a screens" });
+    expect(scroller.tagName).toBe("OL");
+    for (const cls of [
+      "overflow-x-auto",
+      "overflow-y-hidden",
+      "snap-x",
+      "snap-mandatory",
+      "scroll-smooth",
+      "overscroll-x-contain",
+      "scrollbar-none",
+    ]) {
+      expect(scroller.classList.contains(cls)).toBe(true);
+    }
+  });
+
+  it("renders one <li> per screen with the item snap classes and aria labels", () => {
+    render(
+      <ShowcaseAppCarousel app={makeApp([makeScreen("screen-a"), makeScreen("screen-b")])} />,
+    );
+
+    const items = screen.getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    expect(items[0].getAttribute("aria-label")).toBe("Screen 1 of 2");
+    expect(items[1].getAttribute("aria-label")).toBe("Screen 2 of 2");
+    for (const cls of ["w-full", "shrink-0", "snap-center", "snap-always"]) {
+      expect(items[0].classList.contains(cls)).toBe(true);
+    }
+  });
+});
+
 describe("<ShowcaseAppCarousel /> lazy slide mounting", () => {
   beforeEach(() => {
     stubClipboard(vi.fn().mockResolvedValue(undefined));
   });
 
-  it("mounts exactly 3 <img> elements for a 5-screen app (selected ± 1)", () => {
+  it("mounts exactly 2 <img> elements for a 5-screen app (selected ± 1, clamped)", () => {
     const screens = ["a", "b", "c", "d", "e"].map((id) => makeScreen(id));
     render(<ShowcaseAppCarousel app={makeApp(screens)} />);
 
-    // Embla doesn't run its layout/scroll machinery under happy-dom, so
-    // `selectedIndex` stays at the initial 0 — the loaded window is
-    // therefore {last, 0, 1} for a looped 5-slide carousel: screens
-    // "e" (index 4), "a" (index 0), "b" (index 1).
+    // happy-dom has no layout, so the scroll measurement bails and
+    // `selectedIndex` stays at 0. The native scroller does not loop, so the
+    // window at index 0 is clamped to {0, 1} — screens "a" and "b".
     const images = Array.from(document.querySelectorAll("img"));
     expect(images.map((img) => img.getAttribute("alt")).sort()).toEqual([
       "Screen a",
       "Screen b",
-      "Screen e",
     ]);
   });
 
@@ -153,8 +220,8 @@ describe("<ShowcaseAppCarousel /> lazy slide mounting", () => {
     const screens = ["a", "b", "c", "d", "e"].map((id) => makeScreen(id));
     render(<ShowcaseAppCarousel app={makeApp(screens)} />);
 
-    // Screen "c" (index 2) sits outside {4, 0, 1} for a 5-slide looped
-    // carousel starting at index 0 — its card mounts but without an <img>.
+    // Screen "c" (index 2) sits outside {0, 1} — its card mounts but
+    // without an <img>.
     const farCard = screen
       .getByRole("button", { name: "Go to screen 3" })
       .closest("[data-slot=showcase-app-carousel]")
@@ -207,6 +274,11 @@ describe("<ShowcaseAppCarousel /> lazy slide mounting", () => {
     expect(neighbor.getAttribute("fetchpriority")).toBeNull();
   });
 
+  // Selection is no longer something a click can set directly: the native
+  // scroller derives it from where the content actually sits, so this drives
+  // it the way the browser would — stub the geometry so the second item is
+  // the one centred, then fire the scroller's own `scroll` event. rAF is made
+  // synchronous so the throttled measurement runs inside `act`.
   it("moves the eager slide to whichever slide becomes selected", () => {
     const screens = ["a", "b", "c"].map((id) => makeScreen(id));
     render(<ShowcaseAppCarousel app={makeApp(screens)} />);
@@ -214,8 +286,24 @@ describe("<ShowcaseAppCarousel /> lazy slide mounting", () => {
     expect(screen.getByAltText("Screen a").getAttribute("loading")).toBe("eager");
     expect(screen.getByAltText("Screen b").getAttribute("loading")).toBe("lazy");
 
-    fireEvent.click(screen.getByRole("button", { name: "Go to screen 2" }));
+    const scroller = screen.getByRole("list", { name: "Screen a screens" });
+    const items = screen.getAllByRole("listitem");
+    stubRect(scroller, { left: 0, width: 400 });
+    stubRect(items[0], { left: -432, width: 400 });
+    stubRect(items[1], { left: 0, width: 400 });
+    stubRect(items[2], { left: 432, width: 400 });
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      cb(0);
+      return 0;
+    });
 
+    act(() => {
+      scroller.dispatchEvent(new Event("scroll"));
+    });
+
+    expect(screen.getByRole("button", { name: "Go to screen 2" }).getAttribute("aria-current")).toBe(
+      "true",
+    );
     expect(screen.getByAltText("Screen a").getAttribute("loading")).toBe("lazy");
     expect(screen.getByAltText("Screen b").getAttribute("loading")).toBe("eager");
   });
@@ -227,7 +315,7 @@ describe("<ShowcaseAppCarousel /> lazy slide mounting", () => {
     // more than 3 images (its own window unioned with the stale one).
     const appA = makeApp(["a", "b", "c", "d", "e"].map((id) => makeScreen(id)));
     const { rerender } = render(<ShowcaseAppCarousel app={appA} />);
-    expect(document.querySelectorAll("img").length).toBe(3);
+    expect(document.querySelectorAll("img").length).toBe(2);
 
     const appB = makeApp(
       ["v", "w", "x", "y", "z", "0", "1", "2", "3", "4"].map((id) => makeScreen(id)),
@@ -235,9 +323,8 @@ describe("<ShowcaseAppCarousel /> lazy slide mounting", () => {
     rerender(<ShowcaseAppCarousel app={appB} />);
 
     const images = Array.from(document.querySelectorAll("img"));
-    // Window at selectedIndex 0 for a 10-slide looped carousel: {9, 0, 1}.
+    // Window at selectedIndex 0 for a 10-slide non-looping scroller: {0, 1}.
     expect(images.map((img) => img.getAttribute("alt")).sort()).toEqual([
-      "Screen 4",
       "Screen v",
       "Screen w",
     ]);
@@ -246,33 +333,35 @@ describe("<ShowcaseAppCarousel /> lazy slide mounting", () => {
 
 describe("getInitialWindow / accumulateWindow (pure window logic)", () => {
   // These exercise the actual fix for "return to an already-viewed slide
-  // shows an empty card" directly: happy-dom's Embla instance never runs
-  // real layout, so `selectedIndex` can't be driven through simulated
-  // scrolling/dragging in a DOM-level test (see the file-level comment
-  // above and the existing "existing controls" suite, which only checks
-  // that clicking a dot doesn't misfire the copy handler).
+  // shows an empty card" directly: happy-dom runs no layout at all, so
+  // `selectedIndex` can't be driven through simulated scrolling in a
+  // DOM-level test (see the file-level comment above and the existing
+  // "existing controls" suite, which only checks that clicking a dot
+  // doesn't misfire the copy handler).
 
   it("returns every index for 3 or fewer screens", () => {
     expect(getInitialWindow(3, 1)).toEqual(new Set([0, 1, 2]));
     expect(getInitialWindow(1, 0)).toEqual(new Set([0]));
   });
 
-  it("returns the selected slide plus its wrap-around neighbors for more than 3 screens", () => {
-    expect(getInitialWindow(5, 0)).toEqual(new Set([4, 0, 1]));
+  // The scroller does not loop (a native scroll container cannot), so the
+  // window clamps at both ends instead of wrapping.
+  it("returns the selected slide plus its clamped neighbors for more than 3 screens", () => {
+    expect(getInitialWindow(5, 0)).toEqual(new Set([0, 1]));
     expect(getInitialWindow(5, 2)).toEqual(new Set([1, 2, 3]));
-    expect(getInitialWindow(5, 4)).toEqual(new Set([3, 4, 0]));
+    expect(getInitialWindow(5, 4)).toEqual(new Set([3, 4]));
   });
 
   it("keeps a slide mounted after the window scrolls past it and back (the leave-and-return case)", () => {
-    let mounted = getInitialWindow(5, 0); // {4, 0, 1} — carousel opens on slide 0
+    let mounted = getInitialWindow(5, 0); // {0, 1} — the scroller opens on slide 0
     mounted = accumulateWindow(mounted, getInitialWindow(5, 2)); // scroll to slide 2: window becomes {1, 2, 3}
-    expect(mounted).toEqual(new Set([4, 0, 1, 2, 3]));
+    expect(mounted).toEqual(new Set([0, 1, 2, 3]));
 
-    // Scroll back toward the start: slide 2 is no longer in the *current*
-    // window ({4, 0, 1}), but it was shown once, so it must stay mounted.
+    // Scroll back to the start: slide 2 is no longer in the *current*
+    // window ({0, 1}), but it was shown once, so it must stay mounted.
     mounted = accumulateWindow(mounted, getInitialWindow(5, 0));
     expect(mounted.has(2)).toBe(true);
-    expect(mounted).toEqual(new Set([4, 0, 1, 2, 3]));
+    expect(mounted).toEqual(new Set([0, 1, 2, 3]));
   });
 
   it("returns the same Set reference when the window contributes nothing new", () => {
@@ -297,5 +386,63 @@ describe("<ShowcaseAppCarousel /> existing controls", () => {
     fireEvent.click(goToScreen2);
     // Clicking the dot must not trigger a clipboard copy.
     expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("scrolls the matching item into view (centred) when a dot is clicked", () => {
+    render(
+      <ShowcaseAppCarousel app={makeApp([makeScreen("screen-a"), makeScreen("screen-b")])} />,
+    );
+
+    const scroller = screen.getByRole("list", { name: "Screen screen-a screens" });
+    const items = screen.getAllByRole("listitem");
+    stubRect(scroller, { left: 0, width: 400 });
+    stubRect(items[0], { left: 0, width: 400 });
+    stubRect(items[1], { left: 432, width: 400 });
+
+    fireEvent.click(screen.getByRole("button", { name: "Go to screen 2" }));
+
+    expect(scroller.scrollBy).toHaveBeenCalledWith({ left: 432, behavior: "smooth" });
+  });
+
+  // At an end of the track an arrow stays mounted and is marked
+  // `aria-disabled` with a no-op handler — it is neither unmounted (that would
+  // drop keyboard focus to <body> the moment a keyboard user reaches the last
+  // screen) nor given the native `disabled` attribute (`Button`'s
+  // `disabled:opacity-50` outranks the `opacity-0` that keeps arrows hidden
+  // until hover, leaving a dead arrow permanently visible). Embla never hit
+  // any of this because it looped.
+  it("scrolls by one item stride on the next arrow, and marks the spent arrow aria-disabled", () => {
+    render(
+      <ShowcaseAppCarousel app={makeApp([makeScreen("screen-a"), makeScreen("screen-b")])} />,
+    );
+
+    const scroller = screen.getByRole("list", { name: "Screen screen-a screens" });
+    const items = screen.getAllByRole("listitem");
+    stubRect(scroller, { left: 0, width: 400 });
+    stubRect(items[0], { left: 0, width: 400 });
+    stubRect(items[1], { left: 432, width: 400 });
+    Object.defineProperty(scroller, "scrollWidth", { value: 832, configurable: true });
+    Object.defineProperty(scroller, "clientWidth", { value: 400, configurable: true });
+    Object.defineProperty(scroller, "scrollLeft", { value: 0, configurable: true, writable: true });
+
+    const next = screen.getByRole("button", { name: "Next screen" });
+    fireEvent.click(next);
+    expect(scroller.scrollBy).toHaveBeenCalledWith({ left: 432, behavior: "smooth" });
+
+    // Sitting at scrollLeft 0 there is nowhere to go back to, so "previous"
+    // is still focusable but inert.
+    const prev = screen.getByRole("button", { name: "Previous screen" });
+    expect(prev.getAttribute("aria-disabled")).toBe("true");
+    (scroller.scrollBy as ReturnType<typeof vi.fn>).mockClear();
+    fireEvent.click(prev);
+    expect(scroller.scrollBy).not.toHaveBeenCalled();
+  });
+
+  it("does not render arrows or dots for a single-screen app", () => {
+    render(<ShowcaseAppCarousel app={makeApp([makeScreen("screen-a")])} />);
+
+    expect(screen.queryByRole("button", { name: "Next screen" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Previous screen" })).toBeNull();
+    expect(screen.queryByLabelText("Screen selector")).toBeNull();
   });
 });

@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.72.0] - 2026-07-28
+
+### Changed
+- **The gallery's per-app screen scrolling is now a native CSS scroll-snap scroller, matching mobbin.com/discover/apps.** Embla (and the shadcn `ui/carousel` wrapper around it) is gone, along with the hand-written per-slide opacity effect that faked a fade between overlapping slides. Each card is an `<ol>` with `overflow-x:auto; overflow-y:hidden; scroll-snap-type: x mandatory` and `snap-center snap-always` items — the same structure Mobbin uses. That buys real trackpad/touch inertia and snapping for free, and, crucially, `overflow-y:hidden` means a **vertical** gesture over a card scrolls the page instead of being swallowed by the card. The panel's horizontal padding moved onto the scroller, so the neighbouring screens now peek at both edges the way they do on Mobbin. Slides no longer overlap, so `loading="lazy"` on the screen images works on its own.
+- Hover arrows and the dot selector are kept (Mobbin has neither, but a plain mouse has no horizontal-scroll gesture, so without them the other screens would be unreachable). They drive `scrollBy`/`scrollTo` against measured DOM geometry. The carousel no longer wraps around — a native scroller has real ends — so at each end its arrow goes `aria-disabled` and dims rather than disappearing: unmounting it drops keyboard focus to `<body>` exactly when a keyboard user reaches the last screen, and the native `disabled` attribute is no better because `Button`'s `disabled:opacity-50` outranks the `opacity-0` that keeps arrows hidden until hover, leaving a dead arrow permanently on screen.
+- `role="region"`/`aria-roledescription="carousel"` sit on the card panel, not on the `<ol>`: an explicit role on the list would strip its `list` role and orphan the `<li>`s.
+
+### Fixed
+- The scroller's scrollbar is hidden with a plain **unlayered** `.scrollbar-none` rule. As a Tailwind `@utility` it lost — the global `:where(*) { scrollbar-width: thin }` rules in `index.css` are themselves unlayered, and unlayered CSS beats layered CSS regardless of specificity — so a scrollbar sat across the bottom of every card.
+
+### Testing
+- New e2e in `showcase-smoke.spec.ts`: a horizontal wheel over a card scrolls it and lands snap-centred (asserted against real geometry), and a vertical wheel over the same card scrolls the document while leaving the card's `scrollLeft` untouched. That second half is the anti-hijack regression test, and e2e is the only place it can be observed — happy-dom has no layout or scroll model.
+
+## [0.71.0] - 2026-07-28
+
+### Added
+- Responsive WebP `srcset` + inline LQIP placeholders for gallery screens, and a windowed slide mount so only the visible screens fetch a full image. 0.71.1 followed with eager loading for the selected slide. (Both released without a changelog entry; summarised here from commits `7fba58f`/`e10c275` so the history has no gap.)
+
 ## [0.70.1] - 2026-07-28
 
 ### Fixed

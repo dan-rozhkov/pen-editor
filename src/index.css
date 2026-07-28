@@ -309,3 +309,22 @@ html.route-showcase {
 .dark :where(*)::-webkit-scrollbar-thumb:hover {
   background-color: rgba(225, 225, 225, 0.58);
 }
+
+/* The showcase's Mobbin-style scroll-snap scroller hides its scrollbar
+   entirely (no visible affordance, matching the reference site) — scoped to
+   this one class rather than loosening the global thin-scrollbar styling
+   above.
+
+   This is deliberately a plain unlayered rule and NOT an `@utility`: the
+   `:where(*)` scrollbar rules above sit outside every cascade layer, and
+   unlayered CSS always beats layered CSS regardless of specificity — so a
+   Tailwind utility (which lands in `@layer utilities`) loses and the
+   scrollbar stays visible. Verified in the browser: as an `@utility` the
+   scroller still computed `scrollbar-width: thin`. */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

@@ -80,25 +80,29 @@ describe("<ShowcasePage />", () => {
     const carousels = screen.getAllByRole("region");
     const selector = screen.getByLabelText("Screen selector");
     expect(carousels).toHaveLength(2);
+    expect(carousels[0].getAttribute("data-slot")).toBe("showcase-app-carousel");
+    expect(carousels[0].classList.contains("overflow-hidden")).toBe(true);
+    // `role="region"` is on the panel, not on the scroller — an explicit role
+    // on the <ol> would strip its `list` role and orphan the <li>s. The
+    // scroller is the panel's list child and carries the native scroll-snap
+    // classes (no more Embla `data-transition`/slide opacity plumbing).
+    const scroller = screen.getAllByRole("list")[0];
+    expect(scroller.tagName).toBe("OL");
+    expect(scroller.classList.contains("snap-mandatory")).toBe(true);
+    expect(scroller.classList.contains("overflow-y-hidden")).toBe(true);
     expect(
-      carousels[0]
-        .closest("[data-slot=showcase-app-carousel]")
-        ?.classList.contains("overflow-hidden"),
-    ).toBe(true);
-    expect(carousels[0].getAttribute("data-transition")).toBe("fade-slide");
-    expect(
-      screen
-        .getByAltText("Onboarding flow")
-        .closest("[data-slot=carousel-item]")
-        ?.classList.contains("will-change-opacity"),
+      screen.getByAltText("Onboarding flow").closest("li")?.classList.contains("snap-center"),
     ).toBe(true);
     const nextScreen = screen.getByRole("button", { name: "Next screen" });
     expect(nextScreen.classList.contains("size-10")).toBe(true);
     expect(nextScreen.classList.contains("bg-surface-active/80")).toBe(true);
     expect(nextScreen.classList.contains("backdrop-blur-sm")).toBe(true);
     expect(nextScreen.classList.contains("hover:text-white")).toBe(true);
-    expect(nextScreen.classList.contains("-right-[2.75rem]")).toBe(true);
-    expect(nextScreen.classList.contains("sm:-right-[3.25rem]")).toBe(true);
+    // Inside the panel, not hanging off it: the panel's horizontal padding
+    // moved onto the scroller (it is what produces the peek), so a negative
+    // offset would put the arrow outside the panel's `overflow-hidden` box.
+    expect(nextScreen.classList.contains("right-1")).toBe(true);
+    expect(nextScreen.classList.contains("sm:right-3")).toBe(true);
     expect(nextScreen.classList.contains("text-white")).toBe(true);
     expect(selector.classList.contains("absolute")).toBe(true);
     expect(selector.classList.contains("top-5")).toBe(true);
@@ -235,16 +239,19 @@ describe("<ShowcasePage />", () => {
     // The image's direct parent is now the copy-id <button>, so reach for the
     // card by its slot marker instead of by DOM position.
     const card = image.closest('[data-slot="showcase-card"]');
-    const carousel = image.closest("[data-slot=carousel]");
-    const appCarousel = carousel?.closest("[data-slot=showcase-app-carousel]");
+    const scroller = image.closest("ol");
+    const appCarousel = scroller?.closest("[data-slot=showcase-app-carousel]");
     const grid = appCarousel?.parentElement;
 
     expect(page?.classList.contains("bg-white")).toBe(true);
     expect(appCarousel?.classList.contains("bg-surface-base")).toBe(true);
-    expect(appCarousel?.classList.contains("px-12")).toBe(true);
     expect(appCarousel?.classList.contains("py-10")).toBe(true);
-    expect(appCarousel?.classList.contains("sm:px-16")).toBe(true);
     expect(appCarousel?.classList.contains("sm:py-12")).toBe(true);
+    // The panel keeps only vertical padding — horizontal padding moved onto
+    // the scroller so it scrolls with the content (that's what produces the
+    // Mobbin-style peek at both edges).
+    expect(scroller?.classList.contains("px-12")).toBe(true);
+    expect(scroller?.classList.contains("sm:px-16")).toBe(true);
     expect(grid?.classList.contains("grid")).toBe(true);
     expect(grid?.classList.contains("grid-cols-1")).toBe(true);
     expect(grid?.classList.contains("sm:grid-cols-2")).toBe(true);

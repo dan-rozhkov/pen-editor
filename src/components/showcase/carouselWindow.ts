@@ -1,30 +1,28 @@
 // Pure window-mounting logic for ShowcaseAppCarousel, split into its own
 // module so ShowcaseAppCarousel.tsx only exports the component (fast
 // refresh requires component-only files) and so this logic is directly
-// unit-testable without spinning up Embla under happy-dom — it never runs
-// real layout there, so `selectedIndex` can't be driven through simulated
-// DOM interaction in tests (see __tests__/ShowcaseAppCarousel.test.tsx).
+// unit-testable: happy-dom runs no layout, so `selectedIndex` can't be
+// driven through simulated DOM interaction in tests (see
+// __tests__/ShowcaseAppCarousel.test.tsx).
 
-// Slides overlap inside the carousel viewport (the fade-slide transition
-// keeps neighbors partially visible), so the browser's native
-// loading="lazy" never defers them — every slide's <img> is "near" the
-// viewport from the start. Mounting only the selected slide plus its
-// immediate neighbors is the actual fix: farther slides render as a
-// same-sized LQIP-only box until scrolled into range. length<=3 just shows
+// Mount only the selected slide plus its immediate neighbours; farther
+// slides render as a same-sized LQIP-only box until scrolled into range.
+// The neighbours are exactly the ones that peek at the scroller's edges, so
+// this window is what is actually on screen. length<=3 just shows
 // everything — a ±1 window over 3 slides is already the whole set, so
 // there's no bandwidth win in special-casing it further.
 //
-// Every app with more than 3 screens is rendered with `loop: true`
-// (`hasMultipleScreens` is `length > 1`, and any length in {1,2,3} is
-// already handled by the branch below), so once we're past that branch
-// there is no non-loop case left — a `loop` parameter would only ever be
-// called with `true`.
+// The indices clamp rather than wrap: this used to be a looping Embla
+// carousel, where index 0's "previous" neighbour was the last slide. A
+// native scroll container cannot loop, so at index 0 there is nothing to
+// the left and mounting the last slide would just fetch an image nobody
+// can see yet.
 export function getInitialWindow(length: number, selectedIndex: number): Set<number> {
   if (length <= 3) {
     return new Set(Array.from({ length }, (_, i) => i));
   }
-  const prev = (selectedIndex - 1 + length) % length;
-  const next = (selectedIndex + 1) % length;
+  const prev = Math.max(0, selectedIndex - 1);
+  const next = Math.min(length - 1, selectedIndex + 1);
   return new Set([prev, selectedIndex, next]);
 }
 

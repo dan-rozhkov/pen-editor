@@ -1,13 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowLeftIcon, ArrowRightIcon } from "@phosphor-icons/react";
 
-import {
-  type CarouselApi,
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-} from "@/components/ui/carousel";
+import { Button } from "@/components/ui/button";
 import { ShowcaseCard, type ShowcaseCopyFeedback } from "@/components/showcase/ShowcaseCard";
 import {
   getShowcaseModelLabel,
@@ -15,6 +9,7 @@ import {
 } from "@/components/showcase/showcaseApps";
 import { accumulateWindow, getInitialWindow } from "@/components/showcase/carouselWindow";
 import type { ShowcaseScreen } from "@/lib/showcase";
+import { cn } from "@/lib/utils";
 import { writeTextToClipboard } from "@/utils/clipboard";
 
 const COPY_FEEDBACK_DURATION_MS = 2000;
@@ -29,10 +24,21 @@ interface ShowcaseAppCarouselProps {
   isFirstInGrid?: boolean;
 }
 
+// Mobbin's own scroller (discover/apps/ios/latest) is a plain
+// `<ol class="… snap-x snap-mandatory overflow-x-auto overflow-y-hidden …">`
+// — no JS carousel library, no drag handler, no wheel handler. `overflow-y:
+// hidden` is what makes a vertical wheel/trackpad gesture over a card scroll
+// the PAGE instead of getting hijacked; native scroll-snap does the rest
+// (centering, smooth landing). We replicate that structure exactly and only
+// add what Mobbin doesn't need: hover arrows and selector dots, because a
+// plain-mouse user has no horizontal-scroll gesture at all.
 export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppCarouselProps) {
   const hasMultipleScreens = app.screens.length > 1;
-  const [api, setApi] = useState<CarouselApi>();
+  const scrollerRef = useRef<HTMLOListElement>(null);
+  const itemRefs = useRef<(HTMLLIElement | null)[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [canScrollPrev, setCanScrollPrev] = useState(false);
+  const [canScrollNext, setCanScrollNext] = useState(hasMultipleScreens);
 
   // Identifies "this app's slide set" so the accumulated window below can
   // be reset if it ever changes under an existing instance. ShowcasePage
@@ -70,13 +76,6 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
     status: ShowcaseCopyFeedback;
   } | null>(null);
 
-  // Embla itself swallows the native `click` event that would otherwise fire
-  // on mouseup/touchend once a drag has crossed its distance threshold (see
-  // embla-carousel's DragHandler: it calls stopPropagation/preventDefault on
-  // a capture-phase `click` listener attached to the carousel root, above
-  // every slide button). So a real drag never reaches this handler at all —
-  // there is nothing extra to guard here, and no `clickAllowed()`-style
-  // method exists on this Embla version's public API to call defensively.
   const handleCopyScreenId = useCallback((screen: ShowcaseScreen) => {
     void writeTextToClipboard(screen.id).then((copied) => {
       setCopyFeedback({ screenId: screen.id, status: copied ? "success" : "error" });
@@ -90,106 +89,198 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
     return () => clearTimeout(timeout);
   }, [copyFeedback]);
 
-  const onSelect = useCallback((carouselApi: NonNullable<CarouselApi>) => {
-    setSelectedIndex(carouselApi.selectedScrollSnap());
+  // Track which screen is centred by watching scroll position, rather than
+  // an IntersectionObserver, so the same math drives both "which dot is lit"
+  // and "can prev/next still move" from one measurement pass. Throttled to
+  // one measurement per animation frame; the rAF handle is cleared on
+  // scroll-away and on unmount so nothing runs after teardown.
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+
+    let rafId: number | null = null;
+
+    const measure = () => {
+      rafId = null;
+      const scrollerRect = scroller.getBoundingClientRect();
+      if (!scrollerRect.width) return;
+      const scrollerCenter = scrollerRect.left + scrollerRect.width / 2;
+
+      let closestIndex = 0;
+      let closestDistance = Infinity;
+      itemRefs.current.forEach((item, index) => {
+        if (!item) return;
+        const itemRect = item.getBoundingClientRect();
+        if (!itemRect.width) return;
+        const itemCenter = itemRect.left + itemRect.width / 2;
+        const distance = Math.abs(itemCenter - scrollerCenter);
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestIndex = index;
+        }
+      });
+
+      setSelectedIndex(closestIndex);
+      setCanScrollPrev(scroller.scrollLeft > 1);
+      setCanScrollNext(
+        scroller.scrollLeft < scroller.scrollWidth - scroller.clientWidth - 1,
+      );
+    };
+
+    const onScroll = () => {
+      if (rafId != null) return;
+      rafId = requestAnimationFrame(measure);
+    };
+
+    measure();
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+
+    // A `scroll` event alone is not enough to keep this state honest: resizing
+    // the window (or rotating a phone) changes the item width and therefore
+    // both the centred index and whether there is anything left to scroll to,
+    // without ever firing `scroll`. Without this, the arrows and dots freeze
+    // in whatever state the previous layout left them in.
+    const resizeObserver =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(onScroll);
+    resizeObserver?.observe(scroller);
+
+    return () => {
+      scroller.removeEventListener("scroll", onScroll);
+      resizeObserver?.disconnect();
+      if (rafId != null) cancelAnimationFrame(rafId);
+    };
+  }, [app.screens.length]);
+
+  // The stride is measured from the DOM (item width + column-gap) rather
+  // than assumed, so arrow clicks land on the same snap points as a drag
+  // regardless of viewport width / the sm: padding breakpoint.
+  const getItemStride = useCallback(() => {
+    const scroller = scrollerRef.current;
+    const first = itemRefs.current[0];
+    const second = itemRefs.current[1];
+    if (!scroller || !first) return 0;
+    if (second) {
+      return second.getBoundingClientRect().left - first.getBoundingClientRect().left;
+    }
+    return first.getBoundingClientRect().width;
   }, []);
 
-  useEffect(() => {
-    if (!api) return;
+  const scrollByOffset = useCallback((direction: 1 | -1) => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    const stride = getItemStride();
+    if (!stride) return;
+    scroller.scrollBy({ left: direction * stride, behavior: "smooth" });
+  }, [getItemStride]);
 
-    api.on("select", onSelect);
-    api.on("reInit", onSelect);
-    // Prime selectedIndex for the current api instead of calling onSelect(api)
-    // synchronously here: Embla's own emit() re-runs the just-registered
-    // "select" listener, so the state update happens inside that callback
-    // (the pattern react-hooks/set-state-in-effect asks for) rather than
-    // directly in the effect body.
-    api.emit("select");
-
-    return () => {
-      api.off("select", onSelect);
-      api.off("reInit", onSelect);
-    };
-  }, [api, onSelect]);
-
-  useEffect(() => {
-    if (!api) return;
-
-    const updateSlideOpacity = () => {
-      const content = api.rootNode().querySelector<HTMLElement>(
-        '[data-slot="carousel-content"]',
-      );
-      const viewport = content?.parentElement;
-
-      if (!viewport) return;
-
-      const viewportRect = viewport.getBoundingClientRect();
-      if (!viewportRect.width) return;
-
-      api.slideNodes().forEach((slide) => {
-        const distanceFromViewport = Math.abs(
-          slide.getBoundingClientRect().left - viewportRect.left,
-        );
-        const opacity = Math.max(0, 1 - distanceFromViewport / viewportRect.width);
-
-        slide.style.opacity = opacity.toFixed(3);
-      });
-    };
-
-    updateSlideOpacity();
-    api.on("scroll", updateSlideOpacity);
-    api.on("reInit", updateSlideOpacity);
-
-    return () => {
-      api.off("scroll", updateSlideOpacity);
-      api.off("reInit", updateSlideOpacity);
-    };
-  }, [api]);
+  const scrollToIndex = useCallback((index: number) => {
+    const scroller = scrollerRef.current;
+    const item = itemRefs.current[index];
+    if (!scroller || !item) return;
+    const scrollerRect = scroller.getBoundingClientRect();
+    const itemRect = item.getBoundingClientRect();
+    const delta =
+      itemRect.left + itemRect.width / 2 - (scrollerRect.left + scrollerRect.width / 2);
+    scroller.scrollBy({ left: delta, behavior: "smooth" });
+  }, []);
 
   return (
     <div
       data-slot="showcase-app-carousel"
-      className="group/carousel relative overflow-hidden rounded-[2rem] bg-surface-base px-12 py-10 sm:px-16 sm:py-12"
+      role="region"
+      aria-roledescription="carousel"
+      aria-label={`${app.screens[0].title} screens`}
+      className="group/carousel relative overflow-hidden rounded-[2rem] bg-surface-base py-10 sm:py-12"
     >
-      <Carousel
-        opts={{ loop: hasMultipleScreens, duration: 20 }}
-        setApi={setApi}
-        data-transition="fade-slide"
-        className="[&>div:first-child]:overflow-visible"
+      {/* `role="region"` lives on the panel, NOT on the <ol>: an explicit role
+          on the list would replace its implicit `list` role, and an <li>
+          requires a list parent to be a `listitem` at all. The <ol> keeps its
+          own accessible name so the scroller is still addressable on its own. */}
+      <ol
+        ref={scrollerRef}
         aria-label={`${app.screens[0].title} screens`}
+        className="scrollbar-none flex items-center gap-x-6 overflow-x-auto overflow-y-hidden overscroll-x-contain snap-x snap-mandatory scroll-smooth px-12 sm:px-16"
       >
-        <CarouselContent className="ml-0">
-          {app.screens.map((screen, index) => (
-            <CarouselItem
-              key={screen.id}
-              className="pl-0 will-change-opacity"
-              aria-label={`Screen ${index + 1} of ${app.screens.length}`}
-            >
-              <ShowcaseCard
-                screen={screen}
-                onCopyId={handleCopyScreenId}
-                feedback={copyFeedback?.screenId === screen.id ? copyFeedback.status : null}
-                // Only gate mounting on the window when there's an `lqip`
-                // to show in its place — without one (pre-backfill rows,
-                // or if the frontend ships before the backend backfill
-                // finishes) an unmounted slide would be a blank rectangle
-                // forever, not a placeholder. Load it eagerly instead, same
-                // as before this feature existed.
-                loadImage={!screen.lqip || loadedIndices.has(index)}
-                eager={isFirstInGrid && index === 0}
-                selected={index === selectedIndex}
-              />
-            </CarouselItem>
-          ))}
-        </CarouselContent>
+        {app.screens.map((screen, index) => (
+          <li
+            key={screen.id}
+            ref={(el) => {
+              itemRefs.current[index] = el;
+            }}
+            aria-label={`Screen ${index + 1} of ${app.screens.length}`}
+            className="w-full shrink-0 snap-center snap-always"
+          >
+            <ShowcaseCard
+              screen={screen}
+              onCopyId={handleCopyScreenId}
+              feedback={copyFeedback?.screenId === screen.id ? copyFeedback.status : null}
+              // Only gate mounting on the window when there's an `lqip`
+              // to show in its place — without one (pre-backfill rows,
+              // or if the frontend ships before the backend backfill
+              // finishes) an unmounted slide would be a blank rectangle
+              // forever, not a placeholder. Load it eagerly instead, same
+              // as before this feature existed.
+              loadImage={!screen.lqip || loadedIndices.has(index)}
+              eager={isFirstInGrid && index === 0}
+              selected={index === selectedIndex}
+            />
+          </li>
+        ))}
+      </ol>
 
-        {hasMultipleScreens && (
-          <>
-            <CarouselPrevious className="-left-[2.75rem] size-10 border-transparent bg-surface-active/80 text-white shadow-none opacity-0 pointer-events-none backdrop-blur-sm transition-[opacity,background-color] group-hover/carousel:pointer-events-auto group-hover/carousel:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 hover:bg-surface-active/90 hover:text-white sm:-left-[3.25rem]" />
-            <CarouselNext className="-right-[2.75rem] size-10 border-transparent bg-surface-active/80 text-white shadow-none opacity-0 pointer-events-none backdrop-blur-sm transition-[opacity,background-color] group-hover/carousel:pointer-events-auto group-hover/carousel:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 hover:bg-surface-active/90 hover:text-white sm:-right-[3.25rem]" />
-          </>
-        )}
-      </Carousel>
+      {/* The arrows sit INSIDE the panel (left-1/right-1), not hanging off it
+          with a negative offset as they did under Embla: the panel's own
+          horizontal padding now lives on the scroller (that padding is what
+          produces the peek), so anything positioned outside the panel box is
+          clipped by its `overflow-hidden`. Verified in the browser — with the
+          old negative offsets the arrows were invisible on hover.
+
+          At the ends of the track an arrow is neither unmounted nor given the
+          `disabled` attribute — it is marked `aria-disabled` and dimmed, and
+          its handler no-ops. Embla looped, so neither arrow was ever spent and
+          none of this came up. Unmounting the arrow you just clicked drops
+          keyboard focus to <body> at exactly the moment a keyboard user
+          reaches the last screen; the native `disabled` attribute is no better
+          because `Button`'s own `disabled:opacity-50` outranks the `opacity-0`
+          that keeps arrows hidden until hover, which left a dead arrow
+          permanently visible on every card (both seen in the browser). Note
+          the two `group-hover/carousel:opacity-*` classes below collide by
+          design and are resolved by `cn`'s tailwind-merge, last one winning. */}
+      {hasMultipleScreens && (
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label="Previous screen"
+          aria-disabled={!canScrollPrev}
+          onClick={() => canScrollPrev && scrollByOffset(-1)}
+          className={cn(
+            "absolute top-1/2 left-1 size-10 -translate-y-1/2 rounded-full border-transparent bg-surface-active/80 text-white opacity-0 shadow-none backdrop-blur-sm transition-[opacity,background-color] pointer-events-none group-hover/carousel:pointer-events-auto group-hover/carousel:opacity-100 hover:bg-surface-active/90 hover:text-white focus-visible:pointer-events-auto focus-visible:opacity-100 sm:left-3",
+            !canScrollPrev && "cursor-default group-hover/carousel:opacity-30 hover:bg-surface-active/80",
+          )}
+        >
+          <ArrowLeftIcon aria-hidden="true" weight="bold" />
+          <span className="sr-only">Previous screen</span>
+        </Button>
+      )}
+
+      {hasMultipleScreens && (
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label="Next screen"
+          aria-disabled={!canScrollNext}
+          onClick={() => canScrollNext && scrollByOffset(1)}
+          className={cn(
+            "absolute top-1/2 right-1 size-10 -translate-y-1/2 rounded-full border-transparent bg-surface-active/80 text-white opacity-0 shadow-none backdrop-blur-sm transition-[opacity,background-color] pointer-events-none group-hover/carousel:pointer-events-auto group-hover/carousel:opacity-100 hover:bg-surface-active/90 hover:text-white focus-visible:pointer-events-auto focus-visible:opacity-100 sm:right-3",
+            !canScrollNext && "cursor-default group-hover/carousel:opacity-30 hover:bg-surface-active/80",
+          )}
+        >
+          <ArrowRightIcon aria-hidden="true" weight="bold" />
+          <span className="sr-only">Next screen</span>
+        </Button>
+      )}
 
       {hasMultipleScreens && (
         <div
@@ -207,7 +298,7 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
                   ? "bg-text-primary"
                   : "bg-surface-active hover:bg-border-hover"
               }`}
-              onClick={() => api?.scrollTo(index)}
+              onClick={() => scrollToIndex(index)}
             />
           ))}
         </div>
