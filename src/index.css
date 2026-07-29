@@ -328,3 +328,16 @@ html.route-showcase {
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }
+
+/* Keep the showcase page scrollable while removing the persistent document
+   scrollbar from its gallery-style presentation. The editor route retains
+   the global thin scrollbar rules above. */
+html.route-showcase,
+html.route-showcase body {
+  scrollbar-width: none;
+}
+
+html.route-showcase::-webkit-scrollbar,
+html.route-showcase body::-webkit-scrollbar {
+  display: none;
+}

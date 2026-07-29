@@ -79,6 +79,45 @@ function withCategories(
   });
 }
 
+function installIntersectionObserver() {
+  let callback: IntersectionObserverCallback | null = null;
+  let target: Element | null = null;
+
+  class MockIntersectionObserver {
+    readonly root = null;
+    readonly rootMargin = "600px 0px";
+    readonly thresholds = [0];
+
+    constructor(nextCallback: IntersectionObserverCallback) {
+      callback = nextCallback;
+    }
+
+    observe(element: Element) {
+      target = element;
+    }
+
+    unobserve() {}
+    disconnect() {}
+    takeRecords(): IntersectionObserverEntry[] {
+      return [];
+    }
+  }
+
+  vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
+
+  return {
+    intersect() {
+      if (!callback || !target) {
+        throw new Error("IntersectionObserver is not observing the load-more sentinel");
+      }
+      callback(
+        [{ isIntersecting: true, target } as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      );
+    },
+  };
+}
+
 function renderPage() {
   return render(
     <MemoryRouter>
@@ -129,13 +168,26 @@ describe("<ShowcasePage />", () => {
 
     renderPage();
 
+    const heading = screen.getByRole("heading", {
+      name: "Design, on autopilot.",
+    });
+    const editorButton = screen.getByRole("button", {
+      name: "Open the editor →",
+    });
+
+    expect(heading).toBeTruthy();
     expect(
-      screen.getByRole("heading", { name: "Design, on autopilot." }),
-    ).toBeTruthy();
+      heading.classList.contains("text-[clamp(2.25rem,4vw,3.25rem)]"),
+    ).toBe(true);
+    expect(heading.classList.contains("tracking-tight")).toBe(true);
     expect(
       screen.getByPlaceholderText("Ask the design agent to create…"),
     ).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Open the editor →" })).toBeTruthy();
+    expect(editorButton.parentElement).toBe(heading.parentElement);
+    expect(editorButton.classList.contains("bg-accent-primary/10")).toBe(true);
+    expect(editorButton.parentElement?.classList.contains("justify-between")).toBe(
+      true,
+    );
   });
 
   it("stores a trimmed prompt and navigates to the editor", async () => {
@@ -151,6 +203,15 @@ describe("<ShowcasePage />", () => {
 
     await screen.findByText("Editor route");
     expect(consumeShowcaseAgentPrompt()).toBe("Build a calm finance dashboard");
+  });
+
+  it("opens the editor from the header button", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    renderNavigablePage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open the editor →" }));
+
+    await screen.findByText("Editor route");
   });
 
   it("renders one carousel per app, with all of its screens", async () => {
@@ -220,14 +281,15 @@ describe("<ShowcasePage />", () => {
     const { container } = renderPage();
 
     const shimmer = container.querySelector(".animate-pulse");
-    const skeletonCard = shimmer?.parentElement;
 
-    expect(skeletonCard?.classList.contains("bg-surface-base")).toBe(true);
-    expect(skeletonCard?.classList.contains("rounded-[2rem]")).toBe(true);
-    expect(skeletonCard?.classList.contains("px-12")).toBe(true);
-    expect(skeletonCard?.classList.contains("sm:px-16")).toBe(true);
-    expect(shimmer?.classList.contains("aspect-[390/844]")).toBe(true);
-    expect(shimmer?.classList.contains("rounded-3xl")).toBe(true);
+    expect(shimmer?.classList.contains("bg-surface-base")).toBe(true);
+    expect(shimmer?.classList.contains("rounded-[2rem]")).toBe(true);
+    expect(shimmer?.classList.contains("px-12")).toBe(true);
+    expect(shimmer?.classList.contains("sm:px-16")).toBe(true);
+    expect(shimmer?.firstElementChild?.classList.contains("aspect-[390/844]")).toBe(true);
+    expect(
+      shimmer?.firstElementChild?.classList.contains("bg-surface-elevated"),
+    ).toBe(false);
   });
 
   it("shows an empty-state message when there are no apps", async () => {
@@ -266,7 +328,8 @@ describe("<ShowcasePage />", () => {
     await screen.findByText("limit out of range");
   });
 
-  it("'Show more' loads the next page and appends it to the current list", async () => {
+  it("loads the next page when the bottom sentinel enters the viewport", async () => {
+    const intersectionObserver = installIntersectionObserver();
     const fetchMock = withCategories(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("cursor=")) {
@@ -279,16 +342,19 @@ describe("<ShowcasePage />", () => {
     renderPage();
 
     await screen.findByAltText("Onboarding flow");
-    const showMore = screen.getByRole("button", { name: "Show more" });
-    fireEvent.click(showMore);
+    await waitFor(() =>
+      expect(screen.getByTestId("showcase-load-more-sentinel")).toBeTruthy(),
+    );
+    intersectionObserver.intersect();
 
     await screen.findByAltText("Checkout page");
     // Both pages are visible after loading more.
     expect(screen.getByAltText("Onboarding flow")).toBeTruthy();
-    // No further cursor — the button disappears.
+    // No further cursor — the sentinel disappears.
     await waitFor(() =>
-      expect(screen.queryByRole("button", { name: "Show more" })).toBeNull(),
+      expect(screen.queryByTestId("showcase-load-more-sentinel")).toBeNull(),
     );
+    expect(screen.queryByRole("button", { name: "Show more" })).toBeNull();
   });
 
   it("renders screens without a caption, but with a copy-id click target", async () => {
@@ -478,7 +544,7 @@ describe("<ShowcasePage /> filters", () => {
     renderPageAt("/");
     await screen.findByAltText("Onboarding flow");
 
-    fireEvent.click(screen.getByRole("button", { name: "mobile banking" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mobile banking" }));
 
     await screen.findByAltText("Checkout page");
     expect(currentSearch()).toBe("?category=mobile+banking");
@@ -504,7 +570,7 @@ describe("<ShowcasePage /> filters", () => {
       screen.getByRole("button", { name: "Latest" }).getAttribute("aria-pressed"),
     ).toBe("true");
     expect(
-      screen.getByRole("button", { name: "mobile banking" }).getAttribute("aria-pressed"),
+      screen.getByRole("button", { name: "Mobile banking" }).getAttribute("aria-pressed"),
     ).toBe("true");
   });
 
@@ -522,7 +588,7 @@ describe("<ShowcasePage /> filters", () => {
 
     await screen.findByText("Nothing generated in this category yet.");
     expect(
-      screen.getByRole("button", { name: "mobile banking" }).getAttribute("aria-pressed"),
+      screen.getByRole("button", { name: "Mobile banking" }).getAttribute("aria-pressed"),
     ).toBe("false");
     expect(screen.getByRole("button", { name: "All" }).getAttribute("aria-pressed")).toBe(
       "false",
@@ -585,15 +651,16 @@ describe("<ShowcasePage /> filters", () => {
     expect(screen.getByAltText("Checkout page")).toBeTruthy();
   });
 
-  it("discards a 'Show more' response that outlives a popular -> latest -> popular round trip", async () => {
-    // Reproduces the exact reported sequence: page 1 loads, "Show more" is
-    // clicked and hangs, the visitor bounces to Latest and back to Most
+  it("discards an infinite-scroll response that outlives a popular -> latest -> popular round trip", async () => {
+    const intersectionObserver = installIntersectionObserver();
+    // Reproduces the exact reported sequence: page 1 loads, the sentinel
+    // starts page 2 and hangs, the visitor bounces to Latest and back to Most
     // popular (both resolve normally), and only then does the stale page-2
     // response land. A guard that compares filter *values* sees the same
-    // {sort: "popular", category: null} both times "Show more" was clicked
+    // {sort: "popular", category: null} both times pagination was triggered
     // under and lets the stale response through — duplicating a card (React
     // warns on the repeated key) and clobbering `nextCursor` back to the
-    // stale page's `null`, which makes the real "Show more" button vanish.
+    // stale page's `null`, which removes the current pagination sentinel.
     const popularPage2: { resolve: ((res: Response) => void) | null } = { resolve: null };
     const reloadScreen: ShowcaseScreen = { ...screen1(), id: "s4", title: "Popular reload" };
     let popularPage1Requests = 0;
@@ -608,7 +675,7 @@ describe("<ShowcasePage /> filters", () => {
       }
       // Everything else is sort=popular (the default, never written to the URL).
       if (url.includes("cursor=cursor-2")) {
-        // The "Show more" request — hangs until released below, by which
+        // The page-2 request hangs until released below, by which
         // point the visitor has already gone to Latest and back.
         return new Promise<Response>((resolve) => {
           popularPage2.resolve = resolve;
@@ -627,7 +694,10 @@ describe("<ShowcasePage /> filters", () => {
     renderPage();
     await screen.findByAltText("Onboarding flow");
 
-    fireEvent.click(screen.getByRole("button", { name: "Show more" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("showcase-load-more-sentinel")).toBeTruthy(),
+    );
+    intersectionObserver.intersect();
     // The page-2 request is now in flight (and will hang until we resolve it
     // further down).
 
@@ -637,26 +707,26 @@ describe("<ShowcasePage /> filters", () => {
     fireEvent.click(screen.getByRole("button", { name: "Most popular" }));
     await screen.findByAltText("Popular reload");
     // `loadingMore` is page-scoped and is still pinned true by the
-    // never-resolved "Show more" request, so the button reads "Loading…"
-    // (disabled) rather than "Show more" right now — that part is expected.
+    // never-resolved page-2 request.
     // The page-1 fetch for this second popular lap already set a fresh
     // `nextCursor` ("cursor-3") independently of `loadingMore`, though, and
     // that's what the assertions below check survives the stale response.
-    expect(screen.getByRole("button", { name: "Loading…" })).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe("Loading more…");
 
-    // Now let the long-hung "Show more" response land.
+    // Now let the long-hung page-2 response land.
     popularPage2.resolve?.(
       jsonResponse({ apps: [app("r-stale", [screen2()])], nextCursor: null }),
     );
 
     // It must never appear — neither as a duplicated card nor by clobbering
-    // the current page's nextCursor (which would hide "Show more" once
+    // the current page's nextCursor (which would remove the sentinel once
     // `loadingMore` clears).
     await waitFor(() => expect(screen.queryByAltText("Checkout page")).toBeNull());
     expect(screen.getByAltText("Popular reload")).toBeTruthy();
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Show more" })).toBeTruthy(),
+      expect(screen.getByTestId("showcase-load-more-sentinel")).toBeTruthy(),
     );
+    expect(screen.queryByRole("button", { name: "Show more" })).toBeNull();
   });
 });
 

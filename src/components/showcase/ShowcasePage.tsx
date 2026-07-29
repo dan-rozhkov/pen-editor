@@ -1,5 +1,5 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 
 import { ShowcaseAgentComposer } from "@/components/showcase/ShowcaseAgentComposer";
 import { ShowcaseFilterBar } from "@/components/showcase/ShowcaseFilterBar";
@@ -46,9 +46,9 @@ function SkeletonGrid() {
         {Array.from({ length: 4 }, (_, i) => (
           <div
             key={i}
-            className="rounded-[2rem] bg-surface-base px-12 py-10 sm:px-16 sm:py-12"
+            className="animate-pulse rounded-[2rem] bg-surface-base px-12 py-10 sm:px-16 sm:py-12"
           >
-            <div className="aspect-[390/844] animate-pulse rounded-3xl bg-surface-elevated" />
+            <div className="aspect-[390/844]" />
           </div>
         ))}
       </ShowcaseGrid>
@@ -74,16 +74,17 @@ export function ShowcasePage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [categories, setCategories] = useState<ShowcaseCategory[]>([]);
+  const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
 
   // Monotonic id for the most recent request against the feed — bumped both
   // when the filters change (a new page-1 fetch, in the effect below) and
-  // before every "Show more" request. A response is only applied if this ref
+  // before every next-page request. A response is only applied if this ref
   // still holds the id it was issued under. That's a different question from
   // "do the filter *values* still match" (the guard this replaced): popular
   // -> latest -> popular makes the values equal again while page 1 (latest)
   // and the stale page-2 (the first popular lap) are two different requests
   // for the same-looking filters — a value comparison can't tell those
-  // apart, which is exactly what let a stale "Show more" response reappear
+  // apart, which is exactly what let a stale pagination response reappear
   // and get appended after that sequence.
   const requestIdRef = useRef(0);
 
@@ -124,7 +125,7 @@ export function ShowcasePage() {
   // control below); only the grid drops back to the skeleton.
   useEffect(() => {
     let cancelled = false;
-    // Bumping here (not just reading) is what invalidates any "Show more"
+    // Bumping here (not just reading) is what invalidates any next-page
     // request already in flight for the previous filters — see
     // `requestIdRef`'s comment above.
     requestIdRef.current += 1;
@@ -155,12 +156,12 @@ export function ShowcasePage() {
     };
   }, [sort, category]);
 
-  async function handleLoadMore() {
+  const handleLoadMore = useCallback(async () => {
     if (!nextCursor || loadingMore) return;
     setLoadingMore(true);
     // Captured *after* incrementing, so this request owns the id it checks
     // against below. If the filter-change effect bumps the ref again before
-    // this resolves — the user switched tabs while "Show more" was in
+    // this resolves — the user switched tabs while infinite-scroll loading was
     // flight — the comparison fails and the response is dropped instead of
     // being appended to a list built under different filters.
     const requestId = ++requestIdRef.current;
@@ -169,11 +170,37 @@ export function ShowcasePage() {
       setApps((prev) => [...prev, ...result.data.apps]);
       setNextCursor(result.data.nextCursor);
     }
-    // A failure loading more just leaves the current page in place; the
-    // "Show more" button stays put so the user can retry. A stale response
-    // (filters changed mid-request) is silently dropped the same way.
+    // A failure loading more leaves the current page in place; because the
+    // sentinel remains mounted, scrolling away and back allows a retry. A
+    // stale response (filters changed mid-request) is silently dropped.
     setLoadingMore(false);
-  }
+  }, [category, loadingMore, nextCursor, sort]);
+
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current;
+    if (
+      !sentinel ||
+      status !== "ready" ||
+      nextCursor == null ||
+      loadingMore ||
+      typeof IntersectionObserver === "undefined"
+    ) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          void handleLoadMore();
+        }
+      },
+      // Start the request before the visitor reaches the final row so the
+      // next page can append without a visible pause at the bottom.
+      { rootMargin: "600px 0px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [handleLoadMore, loadingMore, nextCursor, status]);
 
   function updateFilters(next: { sort?: ShowcaseSort; category?: string | null }) {
     setSearchParams(
@@ -245,28 +272,31 @@ export function ShowcasePage() {
           "sm:pl-[calc(4rem+env(safe-area-inset-left))] sm:pr-[calc(4rem+env(safe-area-inset-right))]",
         )}
       >
-        <h1 className="text-2xl font-semibold text-text-primary">
-          Design, on autopilot.
-        </h1>
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="text-[clamp(2.25rem,4vw,3.25rem)] leading-[1.05] font-semibold tracking-tight text-text-primary">
+            Design, on autopilot.
+          </h1>
+          <button
+            type="button"
+            onClick={() => navigate("/app")}
+            className="inline-flex shrink-0 items-center rounded-lg bg-accent-primary/10 px-4 py-2 text-sm font-medium text-accent-primary transition-colors hover:bg-accent-primary/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary"
+          >
+            Open the editor →
+          </button>
+        </div>
         <p className="mt-2 max-w-2xl text-sm text-text-muted">
           Every screen below was designed autonomously by the AI design
           agent — no human touched a mouse or keyboard.
         </p>
         <ShowcaseAgentComposer onSubmit={handleAgentPrompt} />
-        <Link
-          to="/app"
-          className="mt-3 inline-flex text-sm font-medium text-accent-primary hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary"
-        >
-          Open the editor →
-        </Link>
       </header>
 
       <main
         className={cn(
           "mx-auto max-w-6xl lg:max-w-none",
           // Same pl-/pr- reasoning as the header above; pb- adds Safari's
-          // bottom inset so the last row and "Show more" aren't hidden
-          // behind the address bar.
+          // bottom inset so the final row isn't hidden behind the address
+          // bar.
           "pb-[calc(4rem+env(safe-area-inset-bottom))]",
           "pl-[calc(1rem+env(safe-area-inset-left))] pr-[calc(1rem+env(safe-area-inset-right))]",
           "sm:pl-[calc(4rem+env(safe-area-inset-left))] sm:pr-[calc(4rem+env(safe-area-inset-right))]",
@@ -332,16 +362,14 @@ export function ShowcasePage() {
             </ShowcaseGrid>
 
             {nextCursor != null && (
-              <div className="mt-6 flex justify-center">
-                <Button
-                  variant="outline"
-                  onClick={handleLoadMore}
-                  disabled={loadingMore}
-                >
-                  {loadingMore ? "Loading…" : "Show more"}
-                </Button>
-              </div>
+              <div
+                ref={loadMoreSentinelRef}
+                data-testid="showcase-load-more-sentinel"
+                aria-hidden="true"
+                className="h-px"
+              />
             )}
+            {loadingMore && <p className="sr-only" role="status">Loading more…</p>}
           </>
         )}
       </main>

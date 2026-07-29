@@ -37,8 +37,8 @@ export function ShowcaseAgentComposer({
         onChange={(event) => setPrompt(event.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="Ask the design agent to create…"
-        rows={2}
-        className="block min-h-20 w-full resize-none bg-transparent px-4 pt-3 text-sm leading-6 text-text-primary outline-none placeholder:text-text-disabled"
+        rows={1}
+        className="block min-h-14 w-full resize-none bg-transparent px-4 pt-3 text-sm leading-6 text-text-primary outline-none placeholder:text-text-disabled"
       />
       <div className="flex justify-end px-2 pb-2">
         <button

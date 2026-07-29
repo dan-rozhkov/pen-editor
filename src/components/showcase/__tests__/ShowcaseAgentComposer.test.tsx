@@ -12,6 +12,8 @@ describe("<ShowcaseAgentComposer />", () => {
     const input = screen.getByPlaceholderText("Ask the design agent to create…");
     const send = screen.getByRole("button", { name: "Send" });
 
+    expect(input.getAttribute("rows")).toBe("1");
+    expect(input.classList.contains("min-h-14")).toBe(true);
     expect((send as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(input, { target: { value: "   " } });
     expect((send as HTMLButtonElement).disabled).toBe(true);

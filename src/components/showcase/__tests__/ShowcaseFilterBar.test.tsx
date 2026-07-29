@@ -31,6 +31,20 @@ describe("<ShowcaseFilterBar />", () => {
     expect(screen.getByRole("button", { name: "Latest" }).getAttribute("aria-pressed")).toBe(
       "false",
     );
+    const sortRow = screen.getByRole("button", { name: "Latest" }).parentElement;
+    const filterBar = sortRow?.parentElement;
+
+    expect(sortRow?.classList.contains("shrink-0")).toBe(true);
+    expect(filterBar?.classList.contains("overflow-x-hidden")).toBe(false);
+    expect(
+      screen.getByRole("button", { name: "Most popular" }).classList.contains("font-semibold"),
+    ).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Most popular" }).classList.contains("pb-1.5"),
+    ).toBe(true);
+    expect(screen.getByRole("button", { name: "All" }).classList.contains("text-sm")).toBe(
+      true,
+    );
   });
 
   it("calls onSortChange with the clicked tab's value", () => {
@@ -61,8 +75,11 @@ describe("<ShowcaseFilterBar />", () => {
     );
 
     const chips = screen.getAllByRole("button").map((b) => b.textContent);
-    expect(chips).toEqual(["Most popular", "Latest", "All", "mobile banking", "fitness tracker"]);
-    expect(screen.getByRole("button", { name: "All" }).getAttribute("aria-pressed")).toBe("true");
+    expect(chips).toEqual(["Most popular", "Latest", "All", "Mobile banking", "Fitness tracker"]);
+    const allChip = screen.getByRole("button", { name: "All" });
+    expect(allChip.getAttribute("aria-pressed")).toBe("true");
+    expect(allChip.classList.contains("border-text-primary")).toBe(true);
+    expect(allChip.classList.contains("bg-transparent")).toBe(true);
   });
 
   it("calls onCategoryChange with the theme when a chip is clicked, and null for All", () => {
@@ -77,7 +94,7 @@ describe("<ShowcaseFilterBar />", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "fitness tracker" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fitness tracker" }));
     expect(onCategoryChange).toHaveBeenCalledWith("fitness tracker");
 
     fireEvent.click(screen.getByRole("button", { name: "All" }));
@@ -96,7 +113,7 @@ describe("<ShowcaseFilterBar />", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "fitness tracker" }).getAttribute("aria-pressed"),
+      screen.getByRole("button", { name: "Fitness tracker" }).getAttribute("aria-pressed"),
     ).toBe("true");
     expect(screen.getByRole("button", { name: "All" }).getAttribute("aria-pressed")).toBe("false");
   });
@@ -127,7 +144,7 @@ describe("<ShowcaseFilterBar />", () => {
       />,
     );
 
-    for (const name of ["All", "mobile banking", "fitness tracker"]) {
+    for (const name of ["All", "Mobile banking", "Fitness tracker"]) {
       expect(screen.getByRole("button", { name }).getAttribute("aria-pressed")).toBe("false");
     }
   });
