@@ -75,11 +75,40 @@ describe("<ShowcaseFilterBar />", () => {
     );
 
     const chips = screen.getAllByRole("button").map((b) => b.textContent);
-    expect(chips).toEqual(["Most popular", "Latest", "All", "Mobile banking", "Fitness tracker"]);
+    expect(chips).toEqual([
+      "Mobile",
+      "Web",
+      "Most popular",
+      "Latest",
+      "All",
+      "Mobile banking",
+      "Fitness tracker",
+    ]);
     const allChip = screen.getByRole("button", { name: "All" });
     expect(allChip.getAttribute("aria-pressed")).toBe("true");
     expect(allChip.classList.contains("border-text-primary")).toBe(true);
     expect(allChip.classList.contains("bg-transparent")).toBe(true);
+  });
+
+  it("switches the platform control's active appearance without filtering the feed", () => {
+    render(
+      <ShowcaseFilterBar
+        sort="popular"
+        category={null}
+        categories={categories}
+        onSortChange={() => {}}
+        onCategoryChange={() => {}}
+      />,
+    );
+
+    const mobile = screen.getByRole("button", { name: "Mobile" });
+    const web = screen.getByRole("button", { name: "Web" });
+    expect(mobile.getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(web);
+
+    expect(mobile.getAttribute("aria-pressed")).toBe("false");
+    expect(web.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("calls onCategoryChange with the theme when a chip is clicked, and null for All", () => {

@@ -260,35 +260,38 @@ export function ShowcasePage() {
     <div className="min-h-[100dvh] bg-white">
       <header
         className={cn(
-          "mx-auto max-w-6xl pb-8 lg:max-w-none",
+          "relative mx-auto max-w-6xl pb-8 sm:pb-16 lg:max-w-none",
           // pl-/pr-/pt- (not the px-/pt- shorthand) so the safe-area addition
           // below is the only rule touching each side — no shorthand vs.
           // longhand ordering to worry about. `env(safe-area-inset-*)` is 0
           // on browsers/orientations without a safe area, so this is just
           // pt-12/px-4/sm:px-16 plus Safari's status bar and, in landscape,
           // its side insets.
-          "pt-[calc(3rem+env(safe-area-inset-top))]",
+          "pt-[calc(3rem+env(safe-area-inset-top))] sm:pt-[calc(4rem+env(safe-area-inset-top))]",
           "pl-[calc(1rem+env(safe-area-inset-left))] pr-[calc(1rem+env(safe-area-inset-right))]",
           "sm:pl-[calc(4rem+env(safe-area-inset-left))] sm:pr-[calc(4rem+env(safe-area-inset-right))]",
         )}
       >
-        <div className="flex items-start justify-between gap-4">
-          <h1 className="text-[clamp(2.25rem,4vw,3.25rem)] leading-[1.05] font-semibold tracking-tight text-text-primary">
-            Design, on autopilot.
+        <div className="relative text-center">
+          <h1 className="text-[3.125rem] leading-[0.9] font-semibold tracking-tight text-text-primary sm:text-[clamp(3.375rem,6vw,4.875rem)]">
+            <span className="block">Design,</span>
+            <span className="block">on autopilot.</span>
           </h1>
-          <button
-            type="button"
-            onClick={() => navigate("/app")}
-            className="inline-flex shrink-0 items-center rounded-lg bg-accent-primary/10 px-4 py-2 text-sm font-medium text-accent-primary transition-colors hover:bg-accent-primary/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary"
-          >
-            Open the editor →
-          </button>
         </div>
-        <p className="mt-2 max-w-2xl text-sm text-text-muted">
+        <button
+          type="button"
+          onClick={() => navigate("/app")}
+          className="absolute top-[calc(1rem+env(safe-area-inset-top))] right-[calc(1rem+env(safe-area-inset-right))] hidden shrink-0 items-center rounded-full bg-accent-primary/10 px-4 py-2 text-sm font-medium text-accent-primary transition-colors hover:bg-accent-primary/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary sm:inline-flex"
+        >
+          Open the editor →
+        </button>
+        <p className="mx-auto mt-6 max-w-2xl text-center text-base text-text-muted">
           Every screen below was designed autonomously by the AI design
           agent — no human touched a mouse or keyboard.
         </p>
-        <ShowcaseAgentComposer onSubmit={handleAgentPrompt} />
+        <div className="mx-auto max-w-2xl">
+          <ShowcaseAgentComposer onSubmit={handleAgentPrompt} />
+        </div>
       </header>
 
       <main
@@ -302,7 +305,7 @@ export function ShowcasePage() {
           "sm:pl-[calc(4rem+env(safe-area-inset-left))] sm:pr-[calc(4rem+env(safe-area-inset-right))]",
         )}
       >
-        <div className="mb-6">
+        <div className="sticky top-0 z-10 mb-6 bg-white py-2">
           <ShowcaseFilterBar
             sort={sort}
             category={category}

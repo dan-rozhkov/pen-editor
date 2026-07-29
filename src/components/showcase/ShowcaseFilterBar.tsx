@@ -1,3 +1,6 @@
+import { useState } from "react";
+import { DeviceMobileIcon, LaptopIcon } from "@phosphor-icons/react";
+
 import { cn } from "@/lib/utils";
 import type { ShowcaseCategory, ShowcaseSort } from "@/lib/showcase";
 
@@ -33,13 +36,56 @@ export function ShowcaseFilterBar({
   onSortChange,
   onCategoryChange,
 }: ShowcaseFilterBarProps) {
+  const [platform, setPlatform] = useState<"ios" | "web">("ios");
+
   return (
     // Keep overflow visible on this outer row. Setting only `overflow-x`
     // forces the browser to compute `overflow-y: auto`, which creates a tiny
     // vertical scrollbar around the underline/focus-ring space. The category
-    // row below owns horizontal scrolling itself. Below `sm` the row splits
-    // into two so the sort controls retain a comfortable tappable width.
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+    // row below owns horizontal scrolling itself. The sort tabs keep their
+    // width while the category row scrolls horizontally beside them.
+    <div className="flex items-center gap-4">
+      <div className="flex shrink-0 items-center gap-4">
+        <div
+          role="group"
+          aria-label="Platform"
+          className="flex rounded-full bg-surface-base p-1"
+        >
+          {(["ios", "web"] as const).map((option) => {
+            const active = platform === option;
+            return (
+              <button
+                key={option}
+                type="button"
+                aria-label={option === "ios" ? "Mobile" : "Web"}
+                aria-pressed={active}
+                onClick={() => setPlatform(option)}
+                className={cn(
+                  "flex items-center justify-center rounded-full px-3 py-1.5 text-sm font-medium transition-colors sm:px-4",
+                  FOCUS_RING,
+                  active
+                    ? "bg-white text-text-primary shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
+                    : "text-text-muted hover:text-text-primary",
+                )}
+              >
+                {option === "ios" ? (
+                  <>
+                    <DeviceMobileIcon aria-hidden="true" className="size-4 sm:hidden" />
+                    <span className="hidden sm:inline">Mobile</span>
+                  </>
+                ) : (
+                  <>
+                    <LaptopIcon aria-hidden="true" className="size-4 sm:hidden" />
+                    <span className="hidden sm:inline">Web</span>
+                  </>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        <div aria-hidden="true" className="h-4 w-px bg-border-default" />
+      </div>
+
       <div className="-my-1 flex shrink-0 items-center gap-4 py-1">
         {SORT_OPTIONS.map((option) => {
           const active = option.value === sort;
@@ -50,7 +96,7 @@ export function ShowcaseFilterBar({
               aria-pressed={active}
               onClick={() => onSortChange(option.value)}
               className={cn(
-                "relative shrink-0 pb-1.5 text-sm font-semibold whitespace-nowrap transition-colors",
+                "relative shrink-0 px-1 pt-2 pb-1.5 text-sm font-semibold whitespace-nowrap transition-colors",
                 FOCUS_RING,
                 active ? "text-text-primary" : "text-text-muted hover:text-text-primary",
               )}
@@ -92,7 +138,7 @@ export function ShowcaseFilterBar({
               aria-pressed={category === null}
               onClick={() => onCategoryChange(null)}
               className={cn(
-                "shrink-0 rounded-full border px-3 py-1 text-sm font-medium whitespace-nowrap transition-colors",
+                "shrink-0 rounded-full border px-4 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
                 FOCUS_RING,
                 category === null
                   ? "border-text-primary bg-transparent text-text-primary"
@@ -110,7 +156,7 @@ export function ShowcaseFilterBar({
                   aria-pressed={active}
                   onClick={() => onCategoryChange(c.theme)}
                   className={cn(
-                    "shrink-0 rounded-full border px-3 py-1 text-sm font-medium whitespace-nowrap transition-colors",
+                    "shrink-0 rounded-full border px-4 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
                     FOCUS_RING,
                     active
                       ? "border-text-primary bg-transparent text-text-primary"

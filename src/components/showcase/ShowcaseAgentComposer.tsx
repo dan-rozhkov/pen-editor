@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type KeyboardEvent } from "react";
+import { useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { ArrowUpIcon } from "@phosphor-icons/react";
 
 interface ShowcaseAgentComposerProps {
@@ -9,6 +9,7 @@ export function ShowcaseAgentComposer({
   onSubmit,
 }: ShowcaseAgentComposerProps) {
   const [prompt, setPrompt] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const trimmedPrompt = prompt.trim();
 
   function submitPrompt() {
@@ -30,9 +31,14 @@ export function ShowcaseAgentComposer({
   return (
     <form
       onSubmit={handleSubmit}
-      className="mt-6 max-w-2xl overflow-hidden rounded-xl border border-border-default bg-surface-panel shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-colors focus-within:border-accent-light"
+      onClick={(event) => {
+        if (event.target instanceof Element && event.target.closest("button")) return;
+        textareaRef.current?.focus();
+      }}
+      className="mx-auto mt-6 max-w-xl overflow-hidden rounded-2xl border border-border-default bg-surface-panel shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-colors focus-within:border-accent-light"
     >
       <textarea
+        ref={textareaRef}
         value={prompt}
         onChange={(event) => setPrompt(event.target.value)}
         onKeyDown={handleKeyDown}
@@ -47,8 +53,8 @@ export function ShowcaseAgentComposer({
           aria-label="Send"
           className={
             trimmedPrompt
-              ? "inline-flex size-[30px] shrink-0 items-center justify-center rounded-lg bg-accent-primary text-white transition-colors hover:bg-accent-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary"
-              : "inline-flex size-[30px] shrink-0 items-center justify-center rounded-lg border border-border-default bg-transparent text-text-muted opacity-60"
+              ? "inline-flex size-[30px] shrink-0 items-center justify-center rounded-full bg-accent-primary text-white transition-colors hover:bg-accent-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary"
+              : "inline-flex size-[30px] shrink-0 items-center justify-center rounded-full border border-border-default bg-transparent text-text-muted opacity-60"
           }
         >
           <ArrowUpIcon size={18} weight="regular" />

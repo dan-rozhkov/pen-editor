@@ -278,11 +278,11 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
           aria-disabled={!canScrollPrev}
           onClick={() => canScrollPrev && scrollByOffset(-1)}
           className={cn(
-            "absolute top-1/2 left-1 size-10 -translate-y-1/2 rounded-full border-transparent bg-surface-active/80 text-white opacity-0 shadow-none backdrop-blur-sm transition-[opacity,background-color] pointer-events-none group-hover/carousel:pointer-events-auto group-hover/carousel:opacity-100 hover:bg-surface-active/90 hover:text-white focus-visible:pointer-events-auto focus-visible:opacity-100 sm:left-3",
+            "absolute top-1/2 left-1 size-10 -translate-y-1/2 rounded-full border-transparent bg-surface-active/80 text-text-primary opacity-0 shadow-none backdrop-blur-sm transition-[opacity,background-color] pointer-events-none group-hover/carousel:pointer-events-auto group-hover/carousel:opacity-100 hover:bg-surface-active/90 focus-visible:pointer-events-auto focus-visible:opacity-100 sm:left-3",
             !canScrollPrev && "cursor-default group-hover/carousel:opacity-30 hover:bg-surface-active/80",
           )}
         >
-          <ArrowLeftIcon aria-hidden="true" weight="bold" />
+          <ArrowLeftIcon aria-hidden="true" weight="thin" />
           <span className="sr-only">Previous screen</span>
         </Button>
       )}
@@ -296,11 +296,11 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
           aria-disabled={!canScrollNext}
           onClick={() => canScrollNext && scrollByOffset(1)}
           className={cn(
-            "absolute top-1/2 right-1 size-10 -translate-y-1/2 rounded-full border-transparent bg-surface-active/80 text-white opacity-0 shadow-none backdrop-blur-sm transition-[opacity,background-color] pointer-events-none group-hover/carousel:pointer-events-auto group-hover/carousel:opacity-100 hover:bg-surface-active/90 hover:text-white focus-visible:pointer-events-auto focus-visible:opacity-100 sm:right-3",
+            "absolute top-1/2 right-1 size-10 -translate-y-1/2 rounded-full border-transparent bg-surface-active/80 text-text-primary opacity-0 shadow-none backdrop-blur-sm transition-[opacity,background-color] pointer-events-none group-hover/carousel:pointer-events-auto group-hover/carousel:opacity-100 hover:bg-surface-active/90 focus-visible:pointer-events-auto focus-visible:opacity-100 sm:right-3",
             !canScrollNext && "cursor-default group-hover/carousel:opacity-30 hover:bg-surface-active/80",
           )}
         >
-          <ArrowRightIcon aria-hidden="true" weight="bold" />
+          <ArrowRightIcon aria-hidden="true" weight="thin" />
           <span className="sr-only">Next screen</span>
         </Button>
       )}
@@ -327,39 +327,32 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
         </div>
       )}
 
-      {/* Model label and like pill are flex siblings in one row, not two
-          independently-positioned absolute elements — that's what makes
-          their overlap impossible by construction instead of by a
-          hand-tuned max-width that only happens to fit today's copy. The
-          label truncates in whatever space is left of the pill (`shrink-0`
-          claims its own width first); it's centred within that remaining
-          space rather than the full panel width, which is the trade-off for
-          never colliding with a pill wide enough to hold a 3-digit count. */}
-      <div className="absolute inset-x-4 bottom-4 flex items-center gap-2 sm:inset-x-5 sm:bottom-5">
-        <span className="min-w-0 flex-1 truncate text-center text-xs font-normal text-text-muted">
+      <div className="absolute inset-x-4 bottom-4 sm:inset-x-5 sm:bottom-5">
+        <span className="block truncate text-center text-xs font-normal text-text-muted">
           {getShowcaseModelLabel(app.model)}
         </span>
-        <button
-          type="button"
-          onClick={like}
-          aria-label={`Like ${app.theme}, ${likeCount} ${likeCount === 1 ? "like" : "likes"}`}
-          // `text-text-primary` on `bg-surface-active/80` is ~12.7:1 in the
-          // light theme (surface-active #d9d9d9 blended over the panel's
-          // surface-base #f5f5f5, text-primary's near-black composited on
-          // top) — the previous `text-white` pairing measured ~1.35:1 here,
-          // well under the 4.5:1 floor. `focus-visible:outline-accent-primary`
-          // replaces `outline-white`, which was invisible against this
-          // page's white background.
-          className="flex shrink-0 items-center gap-1 rounded-full bg-surface-active/80 px-2.5 py-1 text-xs font-medium text-text-primary backdrop-blur-sm transition-colors hover:bg-surface-active/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary"
-        >
-          <HeartIcon
-            aria-hidden="true"
-            weight={liked ? "fill" : "regular"}
-            className="size-3.5"
-          />
-          {likeCount}
-        </button>
       </div>
+
+      <button
+        type="button"
+        onClick={like}
+        aria-label={`Like ${app.theme}, ${likeCount} ${likeCount === 1 ? "like" : "likes"}`}
+        // `text-text-primary` on `bg-surface-active/80` is ~12.7:1 in the
+        // light theme (surface-active #d9d9d9 blended over the panel's
+        // surface-base #f5f5f5, text-primary's near-black composited on
+        // top) — the previous `text-white` pairing measured ~1.35:1 here,
+        // well under the 4.5:1 floor. `focus-visible:outline-accent-primary`
+        // replaces `outline-white`, which was invisible against this
+        // page's white background.
+        className="pointer-events-none absolute top-4 left-4 flex items-center gap-1 rounded-full bg-surface-active/80 px-2.5 py-1.5 text-xs font-medium text-text-primary opacity-0 backdrop-blur-sm transition-[opacity,background-color] group-hover/carousel:pointer-events-auto group-hover/carousel:opacity-100 hover:bg-surface-active/90 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary sm:top-5 sm:left-5"
+      >
+        <HeartIcon
+          aria-hidden="true"
+          weight={liked ? "fill" : "regular"}
+          className="size-3.5"
+        />
+        {likeCount}
+      </button>
     </div>
   );
 }

@@ -19,6 +19,15 @@ describe("<ShowcaseAgentComposer />", () => {
     expect((send as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it("focuses the textarea when the composer container is clicked", () => {
+    render(<ShowcaseAgentComposer onSubmit={vi.fn()} />);
+
+    const input = screen.getByPlaceholderText("Ask the design agent to create…");
+    fireEvent.click(input.closest("form")!);
+
+    expect(document.activeElement).toBe(input);
+  });
+
   it("submits a trimmed prompt with Enter", () => {
     const onSubmit = vi.fn();
     render(<ShowcaseAgentComposer onSubmit={onSubmit} />);

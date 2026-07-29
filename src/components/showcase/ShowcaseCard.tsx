@@ -168,7 +168,7 @@ export function ShowcaseCard({
         <div
           role="status"
           aria-live="polite"
-          className="pointer-events-none absolute inset-x-3 bottom-3 rounded-full bg-surface-active/90 px-3 py-1.5 text-center text-xs font-medium text-white backdrop-blur-sm"
+          className="pointer-events-none absolute inset-x-3 bottom-3 rounded-full bg-surface-active/90 px-3 py-1.5 text-center text-xs font-medium text-text-primary backdrop-blur-sm"
         >
           {feedback === "success" ? "ID copied" : "Couldn't copy"}
         </div>

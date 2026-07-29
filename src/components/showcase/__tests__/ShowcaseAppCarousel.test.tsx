@@ -541,18 +541,15 @@ describe("<ShowcaseAppCarousel /> like button", () => {
     stubClipboard(vi.fn().mockResolvedValue(undefined));
   });
 
-  it("renders bottom-right, always visible, with the app's initial like count", () => {
+  it("renders top-left and reveals on carousel hover, with the app's initial like count", () => {
     render(<ShowcaseAppCarousel app={makeApp([makeScreen("screen-a")], 7)} />);
 
     const heart = screen.getByRole("button", { name: /Like dark, 7 likes/ });
-    // The pill sits inside the shared bottom-bar row (absolute inset-x-4
-    // bottom-4 sm:inset-x-5 sm:bottom-5) rather than being independently
-    // positioned itself — see the "bottom-right" wrapper it's nested in.
-    expect(heart.closest("div")?.classList.contains("bottom-4")).toBe(true);
-    expect(heart.classList.contains("shrink-0")).toBe(true);
-    // No opacity-0/hover-gated classes — unlike the carousel arrows, this
-    // must be visible without a hover affordance (it doesn't exist on touch).
-    expect(heart.className).not.toContain("opacity-0");
+    expect(heart.classList.contains("absolute")).toBe(true);
+    expect(heart.classList.contains("top-4")).toBe(true);
+    expect(heart.classList.contains("left-4")).toBe(true);
+    expect(heart.classList.contains("opacity-0")).toBe(true);
+    expect(heart.classList.contains("group-hover/carousel:opacity-100")).toBe(true);
     expect(heart.textContent).toContain("7");
     // Contrast fix: dark text-on-token pairing instead of white-on-white-ish.
     expect(heart.classList.contains("text-text-primary")).toBe(true);

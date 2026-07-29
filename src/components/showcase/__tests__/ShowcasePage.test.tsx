@@ -177,17 +177,18 @@ describe("<ShowcasePage />", () => {
 
     expect(heading).toBeTruthy();
     expect(
-      heading.classList.contains("text-[clamp(2.25rem,4vw,3.25rem)]"),
+      heading.classList.contains("sm:text-[clamp(3.375rem,6vw,4.875rem)]"),
     ).toBe(true);
     expect(heading.classList.contains("tracking-tight")).toBe(true);
     expect(
       screen.getByPlaceholderText("Ask the design agent to create…"),
     ).toBeTruthy();
-    expect(editorButton.parentElement).toBe(heading.parentElement);
+    expect(editorButton.parentElement?.tagName).toBe("HEADER");
     expect(editorButton.classList.contains("bg-accent-primary/10")).toBe(true);
-    expect(editorButton.parentElement?.classList.contains("justify-between")).toBe(
-      true,
-    );
+    expect(editorButton.classList.contains("absolute")).toBe(true);
+    expect(
+      editorButton.classList.contains("right-[calc(1rem+env(safe-area-inset-right))]"),
+    ).toBe(true);
   });
 
   it("stores a trimmed prompt and navigates to the editor", async () => {
@@ -248,20 +249,18 @@ describe("<ShowcasePage />", () => {
     expect(nextScreen.classList.contains("size-10")).toBe(true);
     expect(nextScreen.classList.contains("bg-surface-active/80")).toBe(true);
     expect(nextScreen.classList.contains("backdrop-blur-sm")).toBe(true);
-    expect(nextScreen.classList.contains("hover:text-white")).toBe(true);
     // Inside the panel, not hanging off it: the panel's horizontal padding
     // moved onto the scroller (it is what produces the peek), so a negative
     // offset would put the arrow outside the panel's `overflow-hidden` box.
     expect(nextScreen.classList.contains("right-1")).toBe(true);
     expect(nextScreen.classList.contains("sm:right-3")).toBe(true);
-    expect(nextScreen.classList.contains("text-white")).toBe(true);
+    expect(nextScreen.classList.contains("text-text-primary")).toBe(true);
     expect(selector.classList.contains("absolute")).toBe(true);
     expect(selector.classList.contains("top-5")).toBe(true);
     expect(selector.classList.contains("right-5")).toBe(true);
     expect(selector.classList.contains("opacity-0")).toBe(false);
     const [modelBadge] = screen.getAllByText("Model");
-    expect(modelBadge.classList.contains("flex-1")).toBe(true);
-    expect(modelBadge.classList.contains("min-w-0")).toBe(true);
+    expect(modelBadge.classList.contains("block")).toBe(true);
     expect(modelBadge.classList.contains("truncate")).toBe(true);
     expect(modelBadge.classList.contains("text-center")).toBe(true);
     expect(modelBadge.classList.contains("font-normal")).toBe(true);
