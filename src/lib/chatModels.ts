@@ -16,7 +16,7 @@ export interface ChatModelOption {
 }
 
 // Sentinel selection that resolves to whatever the backend reports as its
-// default model (currently Gemini 2.5 Flash). Exposed as a synthetic "Auto"
+// default model (currently DeepSeek V4 Pro). Exposed as a synthetic "Auto"
 // option at the top of the list so the user doesn't have to track which
 // concrete model is the recommended default.
 export const AUTO_MODEL_VALUE = "auto";
@@ -111,6 +111,8 @@ const FALLBACK_MODELS: ChatModelOption[] = [
   },
 ];
 
+const FALLBACK_AUTO_MODEL = "deepseek/deepseek-v4-pro";
+
 // Backend wire shape (pen-editor-backend GET /api/models).
 interface ModelsResponse {
   models: { id: string; label: string; supportsVision: boolean }[];
@@ -119,7 +121,7 @@ interface ModelsResponse {
 
 let currentModels: ChatModelOption[] = [AUTO_OPTION, ...FALLBACK_MODELS];
 // The concrete model that "Auto" resolves to — the backend's reported default.
-let autoTargetModel: string = FALLBACK_MODELS[0].value;
+let autoTargetModel: string = FALLBACK_AUTO_MODEL;
 const listeners = new Set<() => void>();
 
 function notify() {

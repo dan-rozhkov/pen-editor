@@ -40,15 +40,15 @@ describe("chatModels Auto option", () => {
     ]);
   });
 
-  it("resolves Auto to the backend default (Gemini 2.5 Flash by default)", () => {
-    expect(resolveModel(AUTO_MODEL_VALUE)).toBe("google/gemini-2.5-flash");
+  it("resolves Auto to the backend default (DeepSeek V4 Pro by default)", () => {
+    expect(resolveModel(AUTO_MODEL_VALUE)).toBe("deepseek/deepseek-v4-pro");
   });
 
   it("passes concrete model ids through unchanged", () => {
     expect(resolveModel("moonshotai/kimi-k2.5")).toBe("moonshotai/kimi-k2.5");
   });
 
-  it("treats Auto as vision-capable via its resolved model", () => {
-    expect(modelSupportsVision(AUTO_MODEL_VALUE)).toBe(true);
+  it("uses the resolved model capabilities for Auto", () => {
+    expect(modelSupportsVision(AUTO_MODEL_VALUE)).toBe(false);
   });
 });
