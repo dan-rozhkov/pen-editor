@@ -80,6 +80,15 @@ describe("<ShowcaseCard />", () => {
     expect(image.getAttribute("sizes")).toBeNull();
   });
 
+  it("pins the image directly to the card box instead of a nested percentage-height chain", () => {
+    render(<ShowcaseCard screen={makeScreen()} onCopyId={() => {}} />);
+
+    const image = screen.getByAltText("Onboarding flow");
+    for (const cls of ["absolute", "inset-0", "block", "size-full"]) {
+      expect(image.classList.contains(cls)).toBe(true);
+    }
+  });
+
   it("sets fetchPriority=high and loading=eager only when eager is set", () => {
     const { rerender } = render(<ShowcaseCard screen={makeScreen()} onCopyId={() => {}} />);
 

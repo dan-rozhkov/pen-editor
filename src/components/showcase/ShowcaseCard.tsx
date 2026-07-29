@@ -148,7 +148,14 @@ export function ShowcaseCard({
             // Native image drag would otherwise fight the scroller's own
             // pointer gesture.
             draggable={false}
-            className="size-full object-cover object-top"
+            // Pin the replaced element straight to the positioned card.
+            // Keeping it in normal flow made WebKit resolve two nested
+            // percentage heights (button → img) at a fractional mobile card
+            // height; its compositor could round the image past the card's
+            // bottom clip even when layout geometry reported equal boxes.
+            // Absolute insets use the card itself as the containing block,
+            // while `block` also removes inline-image baseline participation.
+            className="absolute inset-0 block size-full object-cover object-top"
           />
         )}
       </button>
