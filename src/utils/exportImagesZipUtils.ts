@@ -2,7 +2,6 @@ import type { PixiExportRefs } from "@/store/canvasRefStore";
 import {
   findContainerByLabel,
   extractImageBytes,
-  withForcedRenderable,
   downloadBlob,
   resolvePageExportBaseName,
   type RasterExportFormat,
@@ -27,11 +26,13 @@ const LOSSY_QUALITY = 0.92;
  * `exportPdfUtils`) so a raster ("ZIP") export never pulls in the PDF chunk
  * (`pdf-lib` via `assemblePdf.ts`) — see `PageExportSection`'s format branch.
  *
- * Rasterization reuses the exact two PDF-export gotchas this codebase has
- * already hit: `withForcedRenderable` (viewport culling would otherwise
+ * Rasterization reuses the exact PDF-export gotchas this codebase has
+ * already hit — `withForcedRenderable` (viewport culling would otherwise
  * blank out any frame currently off-screen) and `toExtractFrame`-pinned
- * extract via `extractImageBytes` (bug-02 — Pixi's implicit content-bounds
- * region can come out smaller than the frame's declared size).
+ * extract (bug-02 — Pixi's implicit content-bounds region can come out
+ * smaller than the frame's declared size) — via the shared
+ * `extractImageBytes`/`renderNodeToCanvas`, which also renders `embed`
+ * content instead of the blank Pixi container it sits in (FIR-63).
  *
  * File names are derived from `frame.name` (falling back to `frame.id`) via
  * `sanitizeExportBaseName`; duplicate names (e.g. two frames both named
@@ -68,8 +69,13 @@ export async function exportFramesToImagesZip(
         continue;
       }
 
-      const bytes = withForcedRenderable(container, pixiRefs.sceneRoot, () =>
-        extractImageBytes(pixiRefs, container, scale, { width: frame.width, height: frame.height }, mimeType, quality),
+      const bytes = await extractImageBytes(
+        pixiRefs,
+        frame.id,
+        scale,
+        { width: frame.width, height: frame.height },
+        mimeType,
+        quality,
       );
       files.push({ name: `${sanitizeExportBaseName(frame.name || frame.id)}.${ext}`, bytes });
     }

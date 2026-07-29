@@ -67,8 +67,16 @@ export interface BuildDeps {
   getNodeEffects: (node: SceneNode) => Effect[];
   /** Resolve a possibly-variable-bound color to a literal hex string, e.g. via a variableId binding. */
   resolveColor: (lookup: ColorLookup, node: SceneNode) => string | undefined;
-  /** Rasterize a node subtree at the given px size; null on failure (node is then skipped). */
-  rasterizeNode: (nodeId: string, widthPx: number, heightPx: number, scale: number) => Uint8Array | null;
+  /**
+   * Rasterize a node subtree at the given px size; null on a benign "not
+   * found in canvas" miss (node is then skipped). An `embed` node's HTML
+   * content is rendered off the live Pixi scene (see `renderNodeToCanvas` in
+   * `exportUtils.ts`) — when that fails (no content, or a tainted
+   * cross-origin canvas), the implementation REJECTS rather than resolving
+   * null, so a slide with unrenderable embed content fails the whole export
+   * instead of silently coming out with that shape missing (FIR-63).
+   */
+  rasterizeNode: (nodeId: string, widthPx: number, heightPx: number, scale: number) => Promise<Uint8Array | null>;
 }
 
 function clamp01(n: number): number {
@@ -392,11 +400,11 @@ function ellipseShape(
   };
 }
 
-function rasterize(node: SceneNode, absX: number, absY: number, ctx: WalkCtx): void {
+async function rasterize(node: SceneNode, absX: number, absY: number, ctx: WalkCtx): Promise<void> {
   const rect = toSlideRect(absX, absY, node.width, node.height, ctx);
   if (rect.width <= 0 || rect.height <= 0) return;
   const scale = Math.min(3, Math.max(1, 2 * ctx.fitScale));
-  const bytes = ctx.deps.rasterizeNode(node.id, rect.width, rect.height, scale);
+  const bytes = await ctx.deps.rasterizeNode(node.id, rect.width, rect.height, scale);
   if (!bytes) return;
   ctx.shapes.push({ kind: "picture", name: node.name, rect, media: { bytes, mime: "image/png" } });
 }
@@ -421,13 +429,13 @@ function isSkipped(node: SceneNode): boolean {
   return node.visible === false || node.enabled === false || node.opacity === 0 || node.type === "connector";
 }
 
-function walkNode(node: SceneNode, parentAbsX: number, parentAbsY: number, ctx: WalkCtx): void {
+async function walkNode(node: SceneNode, parentAbsX: number, parentAbsY: number, ctx: WalkCtx): Promise<void> {
   if (isSkipped(node)) return;
 
   if (node.type === "ref") {
     const resolved = ctx.deps.resolveRef(node);
     if (!resolved) return;
-    walkNode(resolved, parentAbsX, parentAbsY, ctx);
+    await walkNode(resolved, parentAbsX, parentAbsY, ctx);
     return;
   }
 
@@ -439,10 +447,10 @@ function walkNode(node: SceneNode, parentAbsX: number, parentAbsY: number, ctx: 
   if (node.type === "group") {
     const children = (node as GroupNode).children ?? [];
     if (needsRaster(node, fills, effects)) {
-      rasterize(node, absX, absY, ctx);
+      await rasterize(node, absX, absY, ctx);
       return;
     }
-    for (const child of children) walkNode(child, absX, absY, ctx);
+    for (const child of children) await walkNode(child, absX, absY, ctx);
     return;
   }
 
@@ -451,17 +459,17 @@ function walkNode(node: SceneNode, parentAbsX: number, parentAbsY: number, ctx: 
     const children = ctx.deps.layoutChildren(frame);
     const overflow = frame.clip === true && frameChildrenOverflow(frame, children);
     if (needsRaster(node, fills, effects) || overflow) {
-      rasterize(node, absX, absY, ctx);
+      await rasterize(node, absX, absY, ctx);
       return;
     }
     const rect = toSlideRect(absX, absY, frame.width, frame.height, ctx);
     emitFrameBackground(frame, fills, effects, rect, ctx);
-    for (const child of children) walkNode(child, absX, absY, ctx);
+    for (const child of children) await walkNode(child, absX, absY, ctx);
     return;
   }
 
   if (needsRaster(node, fills, effects)) {
-    rasterize(node, absX, absY, ctx);
+    await rasterize(node, absX, absY, ctx);
     return;
   }
 
@@ -484,7 +492,7 @@ function walkNode(node: SceneNode, parentAbsX: number, parentAbsY: number, ctx: 
   }
 }
 
-function walkFrameAsSlide(frame: FrameNode, ctx: WalkCtx): void {
+async function walkFrameAsSlide(frame: FrameNode, ctx: WalkCtx): Promise<void> {
   const fills = ctx.deps.getNodeFills(frame);
   const effects = ctx.deps.getNodeEffects(frame);
   const children = ctx.deps.layoutChildren(frame);
@@ -496,29 +504,39 @@ function walkFrameAsSlide(frame: FrameNode, ctx: WalkCtx): void {
   // rasterize the whole slide rather than silently dropping the background.
   const overflow = frame.clip === true && frameChildrenOverflow(frame, children);
   if (needsRaster(frame, fills, effects) || overflow) {
-    rasterize(frame, 0, 0, ctx);
+    await rasterize(frame, 0, 0, ctx);
     return;
   }
 
   const rect = toSlideRect(0, 0, frame.width, frame.height, ctx);
   emitFrameBackground(frame, fills, effects, rect, ctx);
-  for (const child of children) walkNode(child, 0, 0, ctx);
+  for (const child of children) await walkNode(child, 0, 0, ctx);
 }
 
-export function buildSlidesInput(frames: FrameNode[], deps: BuildDeps): PptxDocInput {
+/**
+ * Async because rasterizing an `embed` node (or a container forced to
+ * rasterize whole because it contains one — see `needsRaster`) renders live
+ * HTML off-canvas (`captureEmbedCanvas`/`renderHtmlToCanvas`), which is
+ * inherently async. Slides are built sequentially (not `Promise.all`) so a
+ * rejection from one slide's `rasterizeNode` call surfaces as this
+ * function's rejection without leaving other in-flight rasterizations
+ * dangling.
+ */
+export async function buildSlidesInput(frames: FrameNode[], deps: BuildDeps): Promise<PptxDocInput> {
   if (frames.length === 0) return { widthPx: 960, heightPx: 540, slides: [] };
 
   const widthPx = frames[0].width;
   const heightPx = frames[0].height;
 
-  const slides: SlideShapes[] = frames.map((frame) => {
+  const slides: SlideShapes[] = [];
+  for (const frame of frames) {
     const fitScale = Math.min(widthPx / frame.width, heightPx / frame.height);
     const offsetX = (widthPx - frame.width * fitScale) / 2;
     const offsetY = (heightPx - frame.height * fitScale) / 2;
     const ctx: WalkCtx = { deps, shapes: [], fitScale, offsetX, offsetY };
-    walkFrameAsSlide(frame, ctx);
-    return { shapes: ctx.shapes };
-  });
+    await walkFrameAsSlide(frame, ctx);
+    slides.push({ shapes: ctx.shapes });
+  }
 
   return { widthPx, heightPx, slides };
 }

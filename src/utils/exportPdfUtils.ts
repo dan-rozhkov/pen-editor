@@ -1,9 +1,7 @@
-import type { Container as PixiContainer } from "pixi.js";
 import type { PixiExportRefs } from "@/store/canvasRefStore";
 import {
   findContainerByLabel,
   extractImageBytes,
-  withForcedRenderable,
   downloadBlob,
   resolvePageExportBaseName,
   type PdfFrameDescriptor,
@@ -13,17 +11,18 @@ import { assemblePdfFromPngPages, type PdfPageImage } from "@/lib/pdfExport/asse
 export type { PdfFrameDescriptor } from "./exportUtils";
 
 /**
- * Extract a Pixi container's live pixels as raw PNG bytes (not a data URL),
- * so they can be handed to pdf-lib's `embedPng`. Thin PNG-specific wrapper
- * around the shared `extractImageBytes` (see `exportUtils.ts`).
+ * Extract a frame's live pixels as raw PNG bytes (not a data URL), so they
+ * can be handed to pdf-lib's `embedPng`. Thin PNG-specific wrapper around the
+ * shared `extractImageBytes` (see `exportUtils.ts`), which special-cases
+ * `embed` content (FIR-63) and does its own `withForcedRenderable`.
  */
 function extractPngBytes(
   pixiRefs: PixiExportRefs,
-  container: PixiContainer,
+  frameId: string,
   scale: number,
   size: { width: number; height: number },
-): Uint8Array {
-  return extractImageBytes(pixiRefs, container, scale, size, "image/png");
+): Promise<Uint8Array> {
+  return extractImageBytes(pixiRefs, frameId, scale, size, "image/png");
 }
 
 /**
@@ -78,9 +77,7 @@ export async function exportFramesToPdf(
       }
 
       pages.push({
-        pngBytes: withForcedRenderable(container, pixiRefs.sceneRoot, () =>
-          extractPngBytes(pixiRefs, container, scale, { width: frame.width, height: frame.height }),
-        ),
+        pngBytes: await extractPngBytes(pixiRefs, frame.id, scale, { width: frame.width, height: frame.height }),
         widthPt: frame.width,
         heightPt: frame.height,
       });

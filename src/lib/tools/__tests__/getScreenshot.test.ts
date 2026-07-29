@@ -117,6 +117,8 @@ describe("get_screenshot", () => {
       expect(result.imageData).toBe("data:image/png;base64,EMBED");
       expect(spy).toHaveBeenCalledWith(
         expect.objectContaining({ id: "embed1", htmlContent: expect.stringContaining("picsum") }),
+        undefined,
+        "embed1",
       );
       spy.mockRestore();
     });
@@ -181,7 +183,7 @@ describe("get_screenshot", () => {
       // The frame is 300 wide with no padding — a fill_container child in a
       // column layout must stretch to the full 300, not stay at the raw
       // stored 0.
-      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ width: 300, height: 50 }));
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ width: 300, height: 50 }), undefined, "embed2");
       spy.mockRestore();
     });
   });

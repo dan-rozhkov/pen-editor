@@ -104,11 +104,15 @@ export function ExportSettingsList({ nodeId, nodeName, settings, onChange, hideH
     try {
       const results = await runExportSettingsForNode(nodeId, nodeName, settings, pixiRefs);
       const failed = results.filter((r) => !r.success);
-      setStatus(
-        failed.length === 0
-          ? `Exported ${results.length} file${results.length === 1 ? "" : "s"}.`
-          : `Exported ${results.length - failed.length}/${results.length}; ${failed.length} failed.`,
-      );
+      if (failed.length === 0) {
+        setStatus(`Exported ${results.length} file${results.length === 1 ? "" : "s"}.`);
+      } else {
+        // Surface *why* each setting failed (e.g. FIR-63: an embed with no
+        // content) instead of just a bare "N failed" — see review finding
+        // #10, exportImageFromPixiWithFilename's doc comment.
+        const reasons = failed.map((r) => `${r.filename}: ${r.error ?? "unknown error"}`).join("; ");
+        setStatus(`Exported ${results.length - failed.length}/${results.length}; ${failed.length} failed — ${reasons}`);
+      }
     } finally {
       setIsExporting(false);
     }

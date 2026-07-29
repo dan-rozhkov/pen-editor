@@ -17,6 +17,8 @@ const pendingRenders = new Map<string, Promise<Texture | null>>();
 
 const HTML_TEXTURE_RENDER_VERSION = 12;
 const EDGE_BLEED_RADIUS = 2;
+/** Fallback bound on the one-frame layout wait in `renderHtmlToCanvas` — see its comment. */
+const HTML_LAYOUT_FRAME_TIMEOUT_MS = 500;
 
 function makeCacheKey(html: string, width: number, height: number, resolution: number): string {
   return `v${HTML_TEXTURE_RENDER_VERSION}:${width}x${height}@${resolution}:${html}`;
@@ -235,8 +237,17 @@ export async function renderHtmlToCanvas(
   shadow.appendChild(container);
   document.body.appendChild(host);
 
-  // Wait one frame for the browser to compute layout
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  // Wait one frame for the browser to compute layout. `requestAnimationFrame`
+  // is throttled/suspended in a backgrounded tab (a known gotcha elsewhere in
+  // this codebase — see `captureEmbed.ts`'s NOTE), so a bare rAF wait can hang
+  // forever if an export/screenshot is kicked off (or the tab is backgrounded
+  // mid-render) while the tab isn't visible — leaving the caller's spinner up
+  // forever. Race it against a fixed timeout so rendering proceeds with
+  // whatever layout is already computed instead of hanging indefinitely.
+  await Promise.race([
+    new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+    new Promise<void>((resolve) => setTimeout(resolve, HTML_LAYOUT_FRAME_TIMEOUT_MS)),
+  ]);
 
   try {
     materializePseudoElements(renderRoot);

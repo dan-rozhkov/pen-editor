@@ -41,7 +41,7 @@ export async function captureNodeScreenshot(
     const embedNode: EmbedNode = effectiveSize
       ? { ...(node as EmbedNode), width: effectiveSize.width, height: effectiveSize.height }
       : (node as EmbedNode);
-    return captureEmbedScreenshot(embedNode);
+    return captureEmbedScreenshot(embedNode, undefined, nodeId);
   }
 
   const { pixiRefs } = useCanvasRefStore.getState();

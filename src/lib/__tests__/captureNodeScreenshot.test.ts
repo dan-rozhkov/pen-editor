@@ -45,7 +45,7 @@ describe("captureNodeScreenshot (FIR-56)", () => {
     const result = await captureNodeScreenshot("embed1");
 
     expect(result).toBe("data:image/png;base64,EMBED");
-    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ id: "embed1" }));
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ id: "embed1" }), undefined, "embed1");
     spy.mockRestore();
   });
 
@@ -90,7 +90,7 @@ describe("captureNodeScreenshot (FIR-56)", () => {
     const result = await captureNodeScreenshot("embed2");
 
     expect(result).toBe("data:image/png;base64,EMBED");
-    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ width: 300, height: 50 }));
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ width: 300, height: 50 }), undefined, "embed2");
     spy.mockRestore();
   });
 

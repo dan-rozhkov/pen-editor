@@ -33,6 +33,7 @@ import { formatShortcut } from "../lib/commands/shortcutFormat";
 import {
   CaretDownIcon,
 } from "@phosphor-icons/react";
+import { toast } from "sonner";
 
 export function Toolbar() {
   const addNode = useSceneStore((state) => state.addNode);
@@ -58,7 +59,8 @@ export function Toolbar() {
     setIsExportingPptx(true);
     try {
       const { exportSlidesToPptx } = await import("../utils/exportPptxUtils");
-      await exportSlidesToPptx(pixiRefs);
+      const ok = await exportSlidesToPptx(pixiRefs);
+      if (!ok) toast("Export failed — couldn't export slides to PPTX.");
     } finally {
       setIsExportingPptx(false);
     }

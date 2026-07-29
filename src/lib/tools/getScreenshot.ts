@@ -50,7 +50,7 @@ export const getScreenshot: ToolHandler = async (args) => {
     const embedNode: EmbedNode = effectiveSize
       ? { ...(node as EmbedNode), width: effectiveSize.width, height: effectiveSize.height }
       : (node as EmbedNode);
-    const imageData = await captureEmbedScreenshot(embedNode);
+    const imageData = await captureEmbedScreenshot(embedNode, undefined, nodeId);
     if (imageData) {
       return JSON.stringify({ imageData });
     }

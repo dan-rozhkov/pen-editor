@@ -1,5 +1,7 @@
 import type { EmbedNode } from "@/types/scene";
 import { renderHtmlToCanvas } from "@/pixi/renderers/htmlTexture/renderHtmlToTexture";
+import { buildVariableStyleBlock } from "@/utils/variableCssUtils";
+import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
 
 /**
  * Render an embed node's live HTML content to a PNG data URL, for use as a
@@ -22,13 +24,40 @@ import { renderHtmlToCanvas } from "@/pixi/renderers/htmlTexture/renderHtmlToTex
  * (previously dormant — kept for "a future screenshot/export path", per
  * `embedRenderer.ts`) instead of duplicating it.
  */
+/**
+ * Render an embed node's live HTML content to a canvas (not yet encoded to a
+ * data URL) — the shared core of `captureEmbedScreenshot` below, also used
+ * directly by the raster export path (`renderNodeToCanvas` in
+ * `exportUtils.ts`) so it can composite an embed's pixels into a bigger
+ * exported bitmap (a whole exported frame, PDF page, etc.) without a
+ * throwaway PNG-encode/decode round trip.
+ *
+ * `nodeId`, when passed, resolves the node's effective theme
+ * (`getEffectiveThemeForNode`) and appends the same `buildVariableStyleBlock`
+ * `<style>:root{...}</style>` block that `EmbedLayer.tsx` injects before
+ * mounting the live Shadow-DOM overlay — without it, `var(--color-...)`
+ * references in the embed's HTML have nothing to resolve against off-canvas
+ * (a foreignObject SVG document doesn't inherit page-level custom
+ * properties), so exported/screenshotted colors would silently fall back to
+ * their CSS default instead of the resolved value visible on screen.
+ */
+export async function captureEmbedCanvas(
+  node: Pick<EmbedNode, "htmlContent" | "width" | "height">,
+  resolution: number = window.devicePixelRatio || 1,
+  nodeId?: string,
+): Promise<HTMLCanvasElement | null> {
+  if (!node.htmlContent || !node.width || !node.height) return null;
+  const themeBlock = nodeId ? buildVariableStyleBlock(undefined, getEffectiveThemeForNode(nodeId)) : "";
+  const html = themeBlock ? node.htmlContent + themeBlock : node.htmlContent;
+  return renderHtmlToCanvas(html, node.width, node.height, resolution);
+}
+
 export async function captureEmbedScreenshot(
   node: Pick<EmbedNode, "htmlContent" | "width" | "height">,
   resolution: number = window.devicePixelRatio || 1,
+  nodeId?: string,
 ): Promise<string | null> {
-  if (!node.htmlContent || !node.width || !node.height) return null;
-
-  const canvas = await renderHtmlToCanvas(node.htmlContent, node.width, node.height, resolution);
+  const canvas = await captureEmbedCanvas(node, resolution, nodeId);
   if (!canvas) return null;
 
   try {

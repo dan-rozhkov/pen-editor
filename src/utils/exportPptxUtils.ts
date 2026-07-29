@@ -9,7 +9,7 @@ import { getFills, getRenderableStrokes, resolveFillStylePaint, resolveEffectSta
 import { resolveRefToTree } from "@/utils/instanceRuntime";
 import { getTopLevelFramesFlat } from "@/utils/componentUtils";
 import { resolveSlideOrder } from "@/utils/slideOrder";
-import { findContainerByLabel, extractImageBytes, withForcedRenderable, downloadBlob } from "@/utils/exportUtils";
+import { findContainerByLabel, extractImageBytes, downloadBlob, nodeContainsEmbed } from "@/utils/exportUtils";
 import { sanitizeExportBaseName } from "@/utils/exportSettingsUtils";
 import { buildSlidesInput, type BuildDeps } from "@/lib/pptxExport/buildSlidesInput";
 import { assemblePptx } from "@/lib/pptxExport/assemblePptx";
@@ -64,14 +64,23 @@ export async function exportSlidesToPptx(pixiRefs: PixiExportRefs): Promise<bool
       const theme = getEffectiveThemeForNode(node.id);
       return resolveColor(lookup.color, lookup.binding, variables, theme);
     },
-    rasterizeNode: (nodeId, widthPx, heightPx, scale) => {
+    // `container` missing is a benign "node vanished from the canvas mid-export"
+    // case — skip the shape. An `extractImageBytes` failure whose node (or a
+    // ref-resolved descendant) is an `embed` (FIR-63: no content, or a tainted
+    // cross-origin canvas) is NOT caught here — it propagates through
+    // `buildSlidesInput` and fails the whole PPTX export (see
+    // `exportSlidesToPptx`'s try/catch below) rather than silently dropping
+    // that shape from the slide. Any other rasterization failure (a
+    // non-embed node — path/polygon/image-fill/blur — hitting a lost WebGL
+    // context or similar) degrades gracefully to a skipped shape, same as
+    // before FIR-63.
+    rasterizeNode: async (nodeId, widthPx, heightPx, scale) => {
       const container = findContainerByLabel(pixiRefs.sceneRoot, nodeId);
       if (!container) return null;
       try {
-        return withForcedRenderable(container, pixiRefs.sceneRoot, () =>
-          extractImageBytes(pixiRefs, container, scale, { width: widthPx, height: heightPx }, "image/png"),
-        );
+        return await extractImageBytes(pixiRefs, nodeId, scale, { width: widthPx, height: heightPx }, "image/png");
       } catch (error) {
+        if (nodeContainsEmbed(nodeId)) throw error;
         console.warn(`PPTX export: raster fallback failed for node ${nodeId}`, error);
         return null;
       }
@@ -79,7 +88,7 @@ export async function exportSlidesToPptx(pixiRefs: PixiExportRefs): Promise<bool
   };
 
   try {
-    const input = buildSlidesInput(frames, deps);
+    const input = await buildSlidesInput(frames, deps);
     const bytes = assemblePptx(input);
     downloadBlob(
       bytes,

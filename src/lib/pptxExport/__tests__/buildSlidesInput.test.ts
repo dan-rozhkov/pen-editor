@@ -21,7 +21,7 @@ const deps: BuildDeps = {
   getNodeStrokes: (n) => getRenderableStrokes(n),
   getNodeEffects: (n) => n.effects ?? [],
   resolveColor: (lookup) => lookup.color,
-  rasterizeNode: () => new Uint8Array([1, 2, 3]),
+  rasterizeNode: async () => new Uint8Array([1, 2, 3]),
 };
 
 function frame(partial: Partial<FrameNode> = {}): FrameNode {
@@ -131,8 +131,8 @@ describe("needsRaster", () => {
 });
 
 describe("buildSlidesInput", () => {
-  it("frame background becomes a full-slide rect shape", () => {
-    const input = buildSlidesInput([frame({ fills: [{ id: "p1", type: "solid", color: "#ffffff" }] })], deps);
+  it("frame background becomes a full-slide rect shape", async () => {
+    const input = await buildSlidesInput([frame({ fills: [{ id: "p1", type: "solid", color: "#ffffff" }] })], deps);
     const shape = input.slides[0].shapes[0];
     expect(shape).toMatchObject({
       kind: "rect",
@@ -141,7 +141,7 @@ describe("buildSlidesInput", () => {
     });
   });
 
-  it("smaller second frame is scaled and centered", () => {
+  it("smaller second frame is scaled and centered", async () => {
     const s1 = frame({ id: "a", width: 960, height: 540 });
     const s2 = frame({
       id: "b",
@@ -157,7 +157,7 @@ describe("buildSlidesInput", () => {
         }),
       ],
     });
-    const input = buildSlidesInput([s1, s2], deps);
+    const input = await buildSlidesInput([s1, s2], deps);
     expect(input.widthPx).toBe(960);
     // 480×270 → fitScale 2, offset 0: child covers the full slide
     const shape = input.slides[1].shapes[0];
@@ -167,8 +167,8 @@ describe("buildSlidesInput", () => {
     }
   });
 
-  it("image-filled rect becomes a picture via rasterizeNode", () => {
-    const input = buildSlidesInput(
+  it("image-filled rect becomes a picture via rasterizeNode", async () => {
+    const input = await buildSlidesInput(
       [
         frame({
           children: [rect({ fills: [{ id: "p", type: "image", image: { url: "data:x", mode: "fill" } }] })],
@@ -179,11 +179,11 @@ describe("buildSlidesInput", () => {
     expect(input.slides[0].shapes[0].kind).toBe("picture");
   });
 
-  it("a slide frame whose own background can't map (image fill) rasters the whole slide", () => {
+  it("a slide frame whose own background can't map (image fill) rasters the whole slide", async () => {
     // The slide frame itself has an image fill — it must degrade to a single
     // full-slide picture, not silently drop the background and only emit
     // children.
-    const input = buildSlidesInput(
+    const input = await buildSlidesInput(
       [
         frame({
           fills: [{ id: "p", type: "image", image: { url: "data:x", mode: "fill" } }],
@@ -200,20 +200,42 @@ describe("buildSlidesInput", () => {
     }
   });
 
-  it("rasterizeNode returning null skips the node", () => {
-    const input = buildSlidesInput(
+  it("rasterizeNode returning null skips the node", async () => {
+    const input = await buildSlidesInput(
       [
         frame({
           children: [rect({ fills: [{ id: "p", type: "image", image: { url: "data:x", mode: "fill" } }] })],
         }),
       ],
-      { ...deps, rasterizeNode: () => null },
+      { ...deps, rasterizeNode: async () => null },
     );
     expect(input.slides[0].shapes).toHaveLength(0);
   });
 
-  it("nested offsets accumulate through frame > group > rect", () => {
-    const input = buildSlidesInput(
+  it("an embed whose rasterizeNode rejects (FIR-63: unrenderable HTML) fails the whole build instead of silently dropping the shape", async () => {
+    const embed: SceneNode = {
+      id: "emb1",
+      type: "embed",
+      name: "Broken embed",
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      htmlContent: "<div>hi</div>",
+    } as unknown as SceneNode;
+
+    await expect(
+      buildSlidesInput([frame({ children: [embed] })], {
+        ...deps,
+        rasterizeNode: async () => {
+          throw new Error('Export failed: could not render embed "Broken embed"');
+        },
+      }),
+    ).rejects.toThrow(/Broken embed/);
+  });
+
+  it("nested offsets accumulate through frame > group > rect", async () => {
+    const input = await buildSlidesInput(
       [
         frame({
           children: [
@@ -234,7 +256,7 @@ describe("buildSlidesInput", () => {
     }
   });
 
-  it("ref nodes are resolved via deps.resolveRef and walked at the ref position", () => {
+  it("ref nodes are resolved via deps.resolveRef and walked at the ref position", async () => {
     // Mirrors resolveRefToTree: the resolved tree carries the ref's own x/y/width/height.
     const target = rect({ id: "resolved", x: 30, y: 30, width: 40, height: 40 });
     const refNode: RefNode = {
@@ -246,7 +268,7 @@ describe("buildSlidesInput", () => {
       width: 40,
       height: 40,
     };
-    const input = buildSlidesInput(
+    const input = await buildSlidesInput(
       [frame({ children: [refNode] })],
       { ...deps, resolveRef: () => target },
     );
@@ -257,14 +279,14 @@ describe("buildSlidesInput", () => {
     }
   });
 
-  it("ref resolving to null is skipped without crashing", () => {
+  it("ref resolving to null is skipped without crashing", async () => {
     const refNode: RefNode = { id: "ref1", type: "ref", componentId: "comp1", x: 0, y: 0, width: 10, height: 10 };
-    const input = buildSlidesInput([frame({ children: [refNode] })], { ...deps, resolveRef: () => null });
+    const input = await buildSlidesInput([frame({ children: [refNode] })], { ...deps, resolveRef: () => null });
     expect(input.slides[0].shapes).toHaveLength(0);
   });
 
-  it("skips invisible/disabled/zero-opacity/connector nodes", () => {
-    const input = buildSlidesInput(
+  it("skips invisible/disabled/zero-opacity/connector nodes", async () => {
+    const input = await buildSlidesInput(
       [
         frame({
           children: [
@@ -280,8 +302,8 @@ describe("buildSlidesInput", () => {
     expect(input.slides[0].shapes).toHaveLength(0);
   });
 
-  it("text mapping: transform, align, anchor, and bold weight >= 600", () => {
-    const input = buildSlidesInput(
+  it("text mapping: transform, align, anchor, and bold weight >= 600", async () => {
+    const input = await buildSlidesInput(
       [
         frame({
           children: [
@@ -306,8 +328,8 @@ describe("buildSlidesInput", () => {
     }
   });
 
-  it("gradient angle math: vertical vector (0,0)→(0,1) is 90deg", () => {
-    const input = buildSlidesInput(
+  it("gradient angle math: vertical vector (0,0)→(0,1) is 90deg", async () => {
+    const input = await buildSlidesInput(
       [
         frame({
           children: [
@@ -342,8 +364,8 @@ describe("buildSlidesInput", () => {
     }
   });
 
-  it("per-side stroke collapses to the max side width", () => {
-    const input = buildSlidesInput(
+  it("per-side stroke collapses to the max side width", async () => {
+    const input = await buildSlidesInput(
       [frame({ children: [rect({ stroke: "#000000", strokeWidthPerSide: { top: 1, right: 3, bottom: 2, left: 0 } })] })],
       deps,
     );
@@ -352,8 +374,8 @@ describe("buildSlidesInput", () => {
     if (shape.kind === "rect") expect(shape.stroke?.widthPx).toBe(3);
   });
 
-  it("gradient stroke is approximated with its first stop's color", () => {
-    const input = buildSlidesInput(
+  it("gradient stroke is approximated with its first stop's color", async () => {
+    const input = await buildSlidesInput(
       [
         frame({
           children: [
@@ -389,8 +411,8 @@ describe("buildSlidesInput", () => {
     }
   });
 
-  it("multi-paint stroke stack approximates with the topmost visible paint", () => {
-    const input = buildSlidesInput(
+  it("multi-paint stroke stack approximates with the topmost visible paint", async () => {
+    const input = await buildSlidesInput(
       [
         frame({
           children: [
@@ -411,8 +433,8 @@ describe("buildSlidesInput", () => {
     if (shape.kind === "rect") expect(shape.stroke).toMatchObject({ rgb: "00FF00", widthPx: 2 });
   });
 
-  it("stroke stack with only a hidden paint yields no stroke, not a crash", () => {
-    const input = buildSlidesInput(
+  it("stroke stack with only a hidden paint yields no stroke, not a crash", async () => {
+    const input = await buildSlidesInput(
       [frame({ children: [rect({ strokeWidth: 2, strokes: [{ id: "s", type: "solid", color: "#000", visible: false }] })] })],
       deps,
     );
@@ -421,8 +443,8 @@ describe("buildSlidesInput", () => {
     if (shape.kind === "rect") expect(shape.stroke).toBeUndefined();
   });
 
-  it("shadow effect mapping", () => {
-    const input = buildSlidesInput(
+  it("shadow effect mapping", async () => {
+    const input = await buildSlidesInput(
       [
         frame({
           children: [
@@ -444,13 +466,13 @@ describe("buildSlidesInput", () => {
     }
   });
 
-  it("rect corner radii: per-corner overrides uniform, only emitted when > 0", () => {
-    const withUniform = buildSlidesInput([frame({ children: [rect({ cornerRadius: 8 })] })], deps);
+  it("rect corner radii: per-corner overrides uniform, only emitted when > 0", async () => {
+    const withUniform = await buildSlidesInput([frame({ children: [rect({ cornerRadius: 8 })] })], deps);
     const shape1 = withUniform.slides[0].shapes[0];
     expect(shape1.kind).toBe("rect");
     if (shape1.kind === "rect") expect(shape1.cornerRadii).toEqual([8, 8, 8, 8]);
 
-    const withPerCorner = buildSlidesInput(
+    const withPerCorner = await buildSlidesInput(
       [frame({ children: [rect({ cornerRadius: 8, cornerRadiusPerCorner: { topLeft: 2 } })] })],
       deps,
     );
@@ -458,14 +480,14 @@ describe("buildSlidesInput", () => {
     expect(shape2.kind).toBe("rect");
     if (shape2.kind === "rect") expect(shape2.cornerRadii).toEqual([2, 8, 8, 8]);
 
-    const sharp = buildSlidesInput([frame({ children: [rect()] })], deps);
+    const sharp = await buildSlidesInput([frame({ children: [rect()] })], deps);
     const shape3 = sharp.slides[0].shapes[0];
     expect(shape3.kind).toBe("rect");
     if (shape3.kind === "rect") expect(shape3.cornerRadii).toBeUndefined();
   });
 
-  it("line endpoints are absolute and pass through cap styles", () => {
-    const input = buildSlidesInput(
+  it("line endpoints are absolute and pass through cap styles", async () => {
+    const input = await buildSlidesInput(
       [frame({ children: [line({ x: 10, y: 20, points: [0, 0, 50, 0], stroke: "#ff0000", endCap: "arrow" })] })],
       deps,
     );
@@ -476,15 +498,15 @@ describe("buildSlidesInput", () => {
     }
   });
 
-  it("leaf rotation passes through as rotationDeg", () => {
-    const input = buildSlidesInput([frame({ children: [rect({ rotation: 33, stroke: "#000", strokeWidth: 1 })] })], deps);
+  it("leaf rotation passes through as rotationDeg", async () => {
+    const input = await buildSlidesInput([frame({ children: [rect({ rotation: 33, stroke: "#000", strokeWidth: 1 })] })], deps);
     const shape = input.slides[0].shapes[0];
     expect(shape.kind).toBe("rect");
     if (shape.kind === "rect") expect(shape.rotationDeg).toBe(33);
   });
 
-  it("group nodes have no own visuals and simply walk children", () => {
-    const input = buildSlidesInput(
+  it("group nodes have no own visuals and simply walk children", async () => {
+    const input = await buildSlidesInput(
       [frame({ children: [group({ children: [rect({ stroke: "#000", strokeWidth: 1 })] })] })],
       deps,
     );
