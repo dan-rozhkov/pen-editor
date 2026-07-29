@@ -1,6 +1,10 @@
 import type { H2dDocument } from "@/lib/h2dPaste/h2dTypes";
 import { sanitizeEmbedHtml } from "@/utils/sanitizeEmbedHtml";
-import { EMBED_DEFAULT_LINE_HEIGHT, forceEagerImageLoading } from "@/utils/embedHtmlUtils";
+import {
+  EMBED_DEFAULT_LINE_HEIGHT,
+  EMBED_UA_RESET_CSS,
+  forceEagerImageLoading,
+} from "@/utils/embedHtmlUtils";
 import captureBundleSource from "@/vendor/h2dCapture/capture.js?raw";
 import { inlinePhosphorIconSvgs } from "./phosphorIcons";
 
@@ -117,7 +121,10 @@ export async function captureEmbedHtmlToH2d(
   iframe.srcdoc =
     `<!doctype html><html style="line-height:${EMBED_DEFAULT_LINE_HEIGHT}"><head><script>` +
     captureBundleSource.replace(/<\/script>/gi, "<\\/script>") +
-    "</script></head><body style=\"margin:0\">" +
+    // The same layered UA reset the live shadow-DOM mount applies. Capture and
+    // canvas must see one document: without it, converting an embed to design
+    // would bake Chromium's bevelled button border into real nodes.
+    `</script><style>${EMBED_UA_RESET_CSS}</style></head><body style="margin:0">` +
     safeHtmlContent +
     "</body></html>";
 

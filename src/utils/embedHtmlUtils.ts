@@ -15,6 +15,54 @@ export function applyEmbedInheritedDefaults(element: HTMLElement): void {
   element.style.lineHeight = EMBED_DEFAULT_LINE_HEIGHT;
 }
 
+/**
+ * Neutralizes the user-agent styles that leak into embed content.
+ *
+ * Embeds mount into a Shadow root (and, for Convert to design, into a bare
+ * iframe), so nothing the app's own reset does reaches them: a `<button>` the
+ * embed's CSS doesn't style renders with Chromium's `border: 2px outset`,
+ * `font-family: Arial` and grey ButtonFace — a system widget dropped into a
+ * design set in its own typeface. It showed up as a bevelled ring around a
+ * showcase screen's CTA and an Arial label inside it.
+ *
+ * The mechanism is a CASCADE LAYER: unlayered author declarations beat layered
+ * ones regardless of specificity or order, so this can only ever fill in where
+ * the embed said nothing. `padding`/`text-align` on buttons and the appearance
+ * of checkbox/radio/range/color/file inputs are deliberately left to the UA —
+ * designs lean on that centering, and those inputs ARE the native widget.
+ */
+export const EMBED_UA_RESET_CSS = `@layer embed-ua-reset {
+  button, input, select, textarea {
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    border-radius: 0;
+  }
+  button, textarea,
+  input:not([type]), input[type="text"], input[type="search"], input[type="email"],
+  input[type="password"], input[type="number"], input[type="tel"], input[type="url"],
+  input[type="date"], input[type="time"], input[type="datetime-local"],
+  input[type="month"], input[type="week"],
+  input[type="submit"], input[type="button"], input[type="reset"] {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  button { cursor: pointer; }
+  textarea { resize: none; }
+}`;
+
+/** Puts the UA reset FIRST in the mount container. Position is cosmetic — a
+ * layered rule loses to every unlayered one wherever it sits — but it keeps
+ * the embed's own `<style>` blocks reading as the top of the document. */
+function prependUaReset(container: HTMLElement): void {
+  const style = document.createElement("style");
+  style.setAttribute("data-embed-ua-reset", "");
+  style.textContent = EMBED_UA_RESET_CSS;
+  container.insertBefore(style, container.firstChild);
+}
+
 /** Detect whether HTML contains `<body>` tags or CSS selectors targeting `html`/`body`. */
 export function hasBodyTargetedStyles(html: string): boolean {
   if (/<body[\s>]/i.test(html)) return true;
@@ -173,6 +221,7 @@ export function mountHtmlWithBodyStyles(
   const safeHtml = sanitizeEmbedHtml(html);
   if (!hasBodyTargetedStyles(html)) {
     container.innerHTML = safeHtml;
+    prependUaReset(container);
     applyGlobalRootCustomProperties(container, container);
     forceEagerImageLoading(container);
     return { root: container, wrappedBody: false, originalHasBodyTag: false };
@@ -198,12 +247,14 @@ export function mountHtmlWithBodyStyles(
     if (parsedBodyStyle) body.style.cssText += `;${parsedBodyStyle}`;
     body.innerHTML = parsed.body.innerHTML;
     container.appendChild(body);
+    prependUaReset(container);
     applyGlobalRootCustomProperties(container, body);
     forceEagerImageLoading(container);
 
     return { root: body, wrappedBody: true, originalHasBodyTag };
   } catch {
     container.innerHTML = safeHtml;
+    prependUaReset(container);
     applyGlobalRootCustomProperties(container, container);
     forceEagerImageLoading(container);
     return { root: container, wrappedBody: false, originalHasBodyTag };
