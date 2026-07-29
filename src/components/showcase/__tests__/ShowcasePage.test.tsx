@@ -375,12 +375,14 @@ describe("<ShowcasePage />", () => {
     expect(screen.getByText("Model").classList.contains("text-text-muted")).toBe(true);
     expect(screen.queryByText(/dark/)).toBeNull();
     // The live-HTML lightbox is switched off, but the card is still a real
-    // <button> so clicking (or Enter/Space on) a screen copies its id.
+    // <button> so clicking (or Enter/Space on) a screen reveals the hover/tap
+    // overlay (FIR-62) — "Copy Screen ID" now lives on its own button there,
+    // not on the whole-card click.
     expect(image.closest("a")).toBeNull();
     const button = image.closest("button");
     expect(button).not.toBeNull();
     expect(button?.getAttribute("aria-label")).toBe(
-      "Copy screen id: Onboarding flow",
+      "Show actions for Onboarding flow",
     );
   });
 

@@ -1,9 +1,14 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 
 import type { ShowcaseScreen } from "@/lib/showcase";
+import { useShowcaseOverlayStore } from "@/store/showcaseOverlayStore";
 import { cn } from "@/lib/utils";
 
-export type ShowcaseCopyFeedback = "success" | "error";
+// "success"/"error" are the "Copy Screen ID" outcomes; "handoff-error" is
+// "Open in Editor" failing to even stash its sessionStorage payload (quota
+// exceeded, or blocked entirely — e.g. Safari private mode) — a distinct
+// message from a failed copy, but the same transient banner mechanism below.
+export type ShowcaseCopyFeedback = "success" | "error" | "handoff-error";
 
 // Derived from the actual geometry, not eyeballed vw fractions — those
 // undercounted the two *fixed* paddings that dominate at this card size and
@@ -96,8 +101,17 @@ function resolveAspectRatio(width: number, height: number): string {
 
 interface ShowcaseCardProps {
   screen: ShowcaseScreen;
-  /** Called on a real (non-drag) click. Owner holds the clipboard logic. */
+  /** "Copy Screen ID" in the hover/tap overlay. Owner holds the clipboard logic. */
   onCopyId: (screen: ShowcaseScreen) => void;
+  /**
+   * "Open in Editor" in the hover/tap overlay. Owner (ShowcaseAppCarousel)
+   * always hands this the *app's* full screen list, not just this one —
+   * FIR-62 opens every screen of the app on the canvas regardless of which
+   * screen's button was clicked. Optional (rather than required) purely so
+   * every pre-existing display-only test of this component doesn't have to
+   * pass a handler it never exercises.
+   */
+  onOpenInEditor?: (screen: ShowcaseScreen) => void;
   /** Transient result of the last copy attempt for this specific card. */
   feedback?: ShowcaseCopyFeedback | null;
   /** fetchPriority="high" + loading="eager" for the one above-the-fold card. */
@@ -149,12 +163,16 @@ interface ShowcaseCardProps {
   coverHeight?: number;
 }
 
-// The whole screen is a button so clicking it copies `screen.id` to the
-// clipboard (for `showcase:pin -- --screen <uuid>`) — see
-// ShowcaseAppCarousel, which owns the clipboard call, the drag-vs-click
-// distinction, and the feedback timer. No permanent caption/badge is added
-// here on purpose: the showcase is a portfolio, the screenshots are the
-// content, and `feedback` only renders for ~2s after a click.
+// The whole screen is a button (FIR-62): clicking/tapping it toggles a
+// hover/tap overlay with "Open in Editor" and "Copy Screen ID" — clicking
+// the card itself no longer copies the id directly (that moved to its own
+// button in the overlay). ShowcaseAppCarousel owns the clipboard call, the
+// "Open in Editor" handoff, and the feedback timer; native scroll-snap
+// scrolling suppresses the click event on a drag-release on its own, so no
+// manual drag-vs-click bookkeeping is needed here. No permanent
+// caption/badge is added on purpose: the showcase is a portfolio, the
+// screenshots are the content, and `feedback` only renders for ~2s after a
+// copy.
 // Each card's box takes on the app's cover aspect ratio (`coverWidth`/
 // `coverHeight`, see `resolveAspectRatio` above and the prop doc below)
 // rather than one baseline phone-screen ratio — mobile and desktop
@@ -166,6 +184,7 @@ interface ShowcaseCardProps {
 export function ShowcaseCard({
   screen,
   onCopyId,
+  onOpenInEditor,
   feedback,
   eager = false,
   selected = false,
@@ -200,8 +219,93 @@ export function ShowcaseCard({
   // and paints before any image request even starts.
   const showLqip = !!screen.lqip && (!loadImage || !imageLoaded);
 
+  // Hover (mouse) reveals the overlay purely via CSS (`group-hover/card`,
+  // below) — no state needed for that reveal itself. But a *click* while
+  // hover-revealed still has to land on something: the overlay div sits on
+  // top of the toggle button once `group-hover/card:pointer-events-auto`
+  // (or `isOverlayOpen`) kicks in, so it needs its own click handler too —
+  // see `handleOverlayBackgroundClick` below. Touch has no hover, so the
+  // first tap has to *open* it via JS; `useShowcaseOverlayStore` keeps that
+  // state global (not local to this card) so at most one overlay is open
+  // across the whole showcase — tapping a different screen's card closes
+  // this one. A tap while already open toggles it back off, satisfying
+  // "second tap outside the buttons hides it": the action buttons stop
+  // propagation, so only a tap that reaches the toggle button or the overlay
+  // background ever runs the toggle. Selector compares to this screen's own
+  // id (rather than returning the raw `openScreenId`) so a change to some
+  // *other* card's open state doesn't re-render every other card too.
+  const cardRef = useRef<HTMLDivElement>(null);
+  const isOverlayOpen = useShowcaseOverlayStore((s) => s.openScreenId === screen.id);
+  const toggleOverlay = useCallback(() => {
+    const { openScreenId: current, setOpenScreenId } = useShowcaseOverlayStore.getState();
+    setOpenScreenId(current === screen.id ? null : screen.id);
+  }, [screen.id]);
+  // The overlay background (not the action buttons — they stop propagation)
+  // shares the same toggle as the card's own button: on touch it's what a
+  // second tap actually hits once the overlay is covering the card, and on
+  // desktop it's what a hover-revealed click hits, so a mouse click also
+  // gets to flip `isOverlayOpen`/`aria-expanded` instead of being silently
+  // swallowed by the overlay sitting on top.
+  const handleOverlayBackgroundClick = useCallback(
+    (event: MouseEvent) => {
+      event.stopPropagation();
+      toggleOverlay();
+    },
+    [toggleOverlay],
+  );
+  const handleOpenInEditorClick = useCallback(
+    (event: MouseEvent) => {
+      event.stopPropagation();
+      useShowcaseOverlayStore.getState().setOpenScreenId(null);
+      onOpenInEditor?.(screen);
+    },
+    [onOpenInEditor, screen],
+  );
+  const handleCopyIdClick = useCallback(
+    (event: MouseEvent) => {
+      event.stopPropagation();
+      onCopyId(screen);
+    },
+    [onCopyId, screen],
+  );
+
+  // Global dismiss for the tap-opened overlay: a click anywhere outside this
+  // card, or Escape, closes it. Only registered while this screen's overlay
+  // is actually open (not on every mount), and guarded against the store's
+  // own "at most one open" invariant — if a different card's click has
+  // already moved `openScreenId` on to *its* screen by the time this
+  // listener runs (it always runs after React's own onClick handlers, since
+  // those are attached closer to the root), this must not clobber that
+  // card's freshly-opened state back to closed.
+  useEffect(() => {
+    if (!isOverlayOpen) return;
+
+    const stillThisScreen = () =>
+      useShowcaseOverlayStore.getState().openScreenId === screen.id;
+
+    const handleOutsideClick = (event: globalThis.MouseEvent) => {
+      if (!stillThisScreen()) return;
+      if (cardRef.current && !cardRef.current.contains(event.target as Node)) {
+        useShowcaseOverlayStore.getState().setOpenScreenId(null);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (!stillThisScreen()) return;
+      useShowcaseOverlayStore.getState().setOpenScreenId(null);
+    };
+
+    document.addEventListener("click", handleOutsideClick);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("click", handleOutsideClick);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOverlayOpen, screen.id]);
+
   return (
     <div
+      ref={cardRef}
       data-slot="showcase-card"
       // No `border` here: `border` participates in border-box sizing, and
       // WebKit resolves this card's `aspectRatio`-derived `height:100%`
@@ -221,7 +325,7 @@ export function ShowcaseCard({
       // class can't take a runtime value, so this has to be a real style
       // property.
       className={cn(
-        "relative w-full overflow-hidden bg-surface-elevated bg-cover bg-top",
+        "group/card relative w-full overflow-hidden bg-surface-elevated bg-cover bg-top",
         screenRadius,
       )}
       style={{
@@ -231,8 +335,9 @@ export function ShowcaseCard({
     >
       <button
         type="button"
-        onClick={() => onCopyId(screen)}
-        aria-label={`Copy screen id: ${screen.title}`}
+        onClick={toggleOverlay}
+        aria-label={`Show actions for ${screen.title}`}
+        aria-expanded={isOverlayOpen}
         className="block size-full cursor-pointer"
       >
         {loadImage && (
@@ -287,13 +392,70 @@ export function ShowcaseCard({
         )}
       />
 
+      {/* Hover/tap action overlay. Hidden by default (`opacity-0
+          pointer-events-none`); a hover-capable pointer reveals it via
+          `group-hover/card` alone, no state involved. Touch has no hover, so
+          `isOverlayOpen` (this screen's tap-toggle state, see above) forces
+          it open too — the two conditions are additive, not exclusive, so a
+          desktop user who tapped (rather than clicked a button) still sees
+          it stay open the same way a touch user would.
+
+          Once either condition makes this div `pointer-events-auto`, it sits
+          on top of the toggle button underneath it in DOM order, so it needs
+          its own `onClick` (`handleOverlayBackgroundClick`, toggles the same
+          store state) rather than relying on that button's handler ever
+          firing again — otherwise a second tap (touch) or a click while
+          hover-revealed (desktop) would hit this div and silently do
+          nothing. The action buttons inside stop propagation, so this only
+          fires for a click on the semi-transparent background itself.
+          Escape and a click anywhere outside the card (see the `useEffect`
+          above) close it the same way. */}
+      {/* Not `aria-hidden` when visually hidden: unlike the arrows/dots
+          elsewhere on this page, whether this overlay is *visually* shown is
+          driven by CSS `:hover`/tap state that React never mirrors into an
+          attribute, so there is no boolean here that would track real
+          visibility — hiding it from the accessibility tree would make these
+          two actions permanently unreachable by keyboard/screen-reader
+          users instead of just visually deferred until hover/focus. */}
+      <div
+        onClick={handleOverlayBackgroundClick}
+        className={cn(
+          "pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/45 opacity-0 transition-opacity",
+          "group-hover/card:pointer-events-auto group-hover/card:opacity-100",
+          "focus-within:pointer-events-auto focus-within:opacity-100",
+          isOverlayOpen && "pointer-events-auto opacity-100",
+          screenRadius,
+        )}
+      >
+        <button
+          type="button"
+          onClick={handleOpenInEditorClick}
+          aria-label={`Open ${screen.title} in the editor`}
+          className="rounded-full bg-white px-4 py-2 text-xs font-medium text-black shadow-sm transition-colors hover:bg-white/90"
+        >
+          Open in Editor
+        </button>
+        <button
+          type="button"
+          onClick={handleCopyIdClick}
+          aria-label={`Copy screen id: ${screen.title}`}
+          className="rounded-full bg-white/15 px-4 py-2 text-xs font-medium text-white backdrop-blur-sm transition-colors hover:bg-white/25"
+        >
+          Copy Screen ID
+        </button>
+      </div>
+
       {feedback && (
         <div
           role="status"
           aria-live="polite"
           className="pointer-events-none absolute inset-x-3 bottom-3 rounded-full bg-surface-active/90 px-3 py-1.5 text-center text-xs font-medium text-text-primary backdrop-blur-sm"
         >
-          {feedback === "success" ? "ID copied" : "Couldn't copy"}
+          {feedback === "success"
+            ? "ID copied"
+            : feedback === "handoff-error"
+              ? "Couldn't open in editor"
+              : "Couldn't copy"}
         </div>
       )}
     </div>

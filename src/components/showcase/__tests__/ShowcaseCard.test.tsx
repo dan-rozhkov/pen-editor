@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ShowcaseCard } from "@/components/showcase/ShowcaseCard";
+import { useShowcaseOverlayStore } from "@/store/showcaseOverlayStore";
 import type { ShowcaseScreen } from "@/lib/showcase";
 
 // Covers pen-editor-backend docs/superpowers/specs/2026-07-28-showcase-image-delivery-design.md
@@ -24,6 +25,7 @@ function makeScreen(overrides: Partial<ShowcaseScreen> = {}): ShowcaseScreen {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  useShowcaseOverlayStore.setState({ openScreenId: null });
 });
 
 const SHOWCASE_IMAGE_SIZES = [
@@ -313,5 +315,170 @@ describe("<ShowcaseCard />", () => {
 
     image = screen.getByAltText("Onboarding flow");
     expect(image.getAttribute("sizes")).toBe(SHOWCASE_IMAGE_SIZES);
+  });
+});
+
+describe("<ShowcaseCard /> hover/tap overlay (FIR-62)", () => {
+  it("renders both overlay buttons with the required English captions", () => {
+    render(<ShowcaseCard screen={makeScreen()} onCopyId={() => {}} />);
+    expect(screen.getByText("Open in Editor")).toBeTruthy();
+    expect(screen.getByText("Copy Screen ID")).toBeTruthy();
+  });
+
+  it("calls onCopyId (not onOpenInEditor) when Copy Screen ID is clicked", () => {
+    const onCopyId = vi.fn();
+    const onOpenInEditor = vi.fn();
+    render(
+      <ShowcaseCard screen={makeScreen()} onCopyId={onCopyId} onOpenInEditor={onOpenInEditor} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy screen id: Onboarding flow" }));
+
+    expect(onCopyId).toHaveBeenCalledWith(makeScreen());
+    expect(onOpenInEditor).not.toHaveBeenCalled();
+  });
+
+  it("calls onOpenInEditor (not onCopyId) when Open in Editor is clicked", () => {
+    const onCopyId = vi.fn();
+    const onOpenInEditor = vi.fn();
+    render(
+      <ShowcaseCard screen={makeScreen()} onCopyId={onCopyId} onOpenInEditor={onOpenInEditor} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Onboarding flow in the editor" }));
+
+    expect(onOpenInEditor).toHaveBeenCalledWith(makeScreen());
+    expect(onCopyId).not.toHaveBeenCalled();
+  });
+
+  it("clicking the card itself no longer copies the screen id", () => {
+    const onCopyId = vi.fn();
+    render(<ShowcaseCard screen={makeScreen()} onCopyId={onCopyId} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Show actions for Onboarding flow" }));
+
+    expect(onCopyId).not.toHaveBeenCalled();
+  });
+
+  it("a tap on the card toggles the shared overlay-open state for this screen, and clears it again", () => {
+    render(<ShowcaseCard screen={makeScreen({ id: "screen-a" })} onCopyId={() => {}} />);
+    const cardButton = screen.getByRole("button", { name: "Show actions for Onboarding flow" });
+
+    expect(useShowcaseOverlayStore.getState().openScreenId).toBeNull();
+    fireEvent.click(cardButton);
+    expect(useShowcaseOverlayStore.getState().openScreenId).toBe("screen-a");
+    expect(cardButton.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("opening a different screen's overlay closes this one (at most one open across the showcase)", () => {
+    useShowcaseOverlayStore.setState({ openScreenId: "some-other-screen" });
+    render(<ShowcaseCard screen={makeScreen({ id: "screen-a" })} onCopyId={() => {}} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Show actions for Onboarding flow" }));
+
+    expect(useShowcaseOverlayStore.getState().openScreenId).toBe("screen-a");
+  });
+
+  it("clicking Open in Editor closes the overlay without needing a second tap", () => {
+    useShowcaseOverlayStore.setState({ openScreenId: "screen-a" });
+    render(
+      <ShowcaseCard
+        screen={makeScreen({ id: "screen-a" })}
+        onCopyId={() => {}}
+        onOpenInEditor={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Onboarding flow in the editor" }));
+
+    expect(useShowcaseOverlayStore.getState().openScreenId).toBeNull();
+  });
+
+  // Regression coverage for the review finding: the overlay div is a DOM
+  // sibling painted AFTER the toggle button and becomes `pointer-events-auto`
+  // once open, so it physically sits on top of that button — a naive test
+  // that fires `click` straight at the (now-covered, but still present in the
+  // DOM) toggle button would pass even if the overlay itself had no dismiss
+  // handler at all. These tests click the actual topmost element instead, the
+  // same node a real tap/click would hit.
+  it("a second tap that lands on the overlay background (not a button) closes it, on a touch device", () => {
+    useShowcaseOverlayStore.setState({ openScreenId: "screen-a" });
+    const { container } = render(
+      <ShowcaseCard screen={makeScreen({ id: "screen-a" })} onCopyId={() => {}} />,
+    );
+
+    // The overlay background is the div that hosts the two action buttons —
+    // find it by walking up from one of them, then click it directly rather
+    // than the (now-covered) toggle button underneath.
+    const overlayBackground = screen.getByText("Open in Editor").parentElement!;
+    fireEvent.click(overlayBackground);
+
+    expect(useShowcaseOverlayStore.getState().openScreenId).toBeNull();
+    // Sanity: this really is the overlay div, not one of the action buttons.
+    expect(overlayBackground.tagName).toBe("DIV");
+    const card = container.querySelector('[data-slot="showcase-card"]');
+    expect(card?.contains(overlayBackground)).toBe(true);
+  });
+
+  it("clicking the overlay background does NOT also fire the covered action buttons' handlers", () => {
+    useShowcaseOverlayStore.setState({ openScreenId: "screen-a" });
+    const onCopyId = vi.fn();
+    const onOpenInEditor = vi.fn();
+    render(
+      <ShowcaseCard
+        screen={makeScreen({ id: "screen-a" })}
+        onCopyId={onCopyId}
+        onOpenInEditor={onOpenInEditor}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Open in Editor").parentElement!);
+
+    expect(onCopyId).not.toHaveBeenCalled();
+    expect(onOpenInEditor).not.toHaveBeenCalled();
+  });
+
+  it("a click anywhere else on the document closes the open overlay", () => {
+    render(<ShowcaseCard screen={makeScreen({ id: "screen-a" })} onCopyId={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Show actions for Onboarding flow" }));
+    expect(useShowcaseOverlayStore.getState().openScreenId).toBe("screen-a");
+
+    fireEvent.click(document.body);
+
+    expect(useShowcaseOverlayStore.getState().openScreenId).toBeNull();
+  });
+
+  it("Escape closes the open overlay", () => {
+    render(<ShowcaseCard screen={makeScreen({ id: "screen-a" })} onCopyId={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Show actions for Onboarding flow" }));
+    expect(useShowcaseOverlayStore.getState().openScreenId).toBe("screen-a");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(useShowcaseOverlayStore.getState().openScreenId).toBeNull();
+  });
+
+  it("does not close on outside click/Escape once the overlay is already closed (no stray global listeners)", () => {
+    render(<ShowcaseCard screen={makeScreen({ id: "screen-a" })} onCopyId={() => {}} />);
+    // Never opened — outside click/Escape must be harmless no-ops, not throw.
+    expect(() => fireEvent.click(document.body)).not.toThrow();
+    expect(() => fireEvent.keyDown(document, { key: "Escape" })).not.toThrow();
+    expect(useShowcaseOverlayStore.getState().openScreenId).toBeNull();
+  });
+
+  it("an outside click does not clobber a different card's overlay that opened in the same tick", () => {
+    // Regression for the ordering hazard: this card's dismiss listener must
+    // re-check the store at fire time, not assume it still owns the open
+    // state just because it did when the listener was registered.
+    render(<ShowcaseCard screen={makeScreen({ id: "screen-a" })} onCopyId={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Show actions for Onboarding flow" }));
+    expect(useShowcaseOverlayStore.getState().openScreenId).toBe("screen-a");
+
+    // Simulate another card's own toggle claiming the store before this
+    // card's document-level listener runs.
+    useShowcaseOverlayStore.setState({ openScreenId: "screen-b" });
+    fireEvent.click(document.body);
+
+    expect(useShowcaseOverlayStore.getState().openScreenId).toBe("screen-b");
   });
 });

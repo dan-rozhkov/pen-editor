@@ -5,6 +5,16 @@ import { accumulateWindow, getInitialWindow } from "@/components/showcase/carous
 import type { ShowcaseApp, ShowcaseScreen } from "@/lib/showcase";
 import * as showcaseApi from "@/lib/showcase";
 import { hasLikedShowcaseApp } from "@/lib/showcaseLikes";
+import { consumeShowcaseScreensHandoff } from "@/lib/showcaseScreenHandoff";
+import { useShowcaseOverlayStore } from "@/store/showcaseOverlayStore";
+
+// ShowcaseAppCarousel calls `useNavigate()` for "Open in Editor" (FIR-62),
+// which throws outside a Router — mocked rather than wrapping every one of
+// this file's many `render(<ShowcaseAppCarousel .../>)` calls in a
+// MemoryRouter. `mockNavigate` is asserted on directly in the "Open in
+// Editor" describe block below.
+const { mockNavigate } = vi.hoisted(() => ({ mockNavigate: vi.fn() }));
+vi.mock("react-router", () => ({ useNavigate: () => mockNavigate }));
 
 // This is a real native scroll-snap scroller now (no Embla), so clicking a
 // card is a plain click — there is no drag-vs-click suppression to reason
@@ -163,6 +173,73 @@ describe("<ShowcaseAppCarousel /> copy-id-on-click", () => {
 
     const status = await screen.findByRole("status");
     expect(status.textContent).toBe("Couldn't copy");
+  });
+});
+
+describe("<ShowcaseAppCarousel /> Open in Editor handoff (FIR-62)", () => {
+  afterEach(() => {
+    mockNavigate.mockClear();
+    useShowcaseOverlayStore.setState({ openScreenId: null });
+  });
+
+  it("stores every screen of the app (not just the clicked one) and navigates to /app", () => {
+    const screens = [makeScreen("screen-a"), makeScreen("screen-b"), makeScreen("screen-c")];
+    render(<ShowcaseAppCarousel app={makeApp(screens)} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Screen screen-a in the editor" }));
+
+    expect(mockNavigate).toHaveBeenCalledWith("/app");
+    const handoff = consumeShowcaseScreensHandoff();
+    expect(handoff?.runId).toBe("run-1");
+    expect(handoff?.screens.map((s) => s.id)).toEqual(["screen-a", "screen-b", "screen-c"]);
+  });
+
+  // #10: sessionStorage can throw (quota exceeded, or blocked outright — e.g.
+  // Safari private mode), in which case `storeShowcaseScreensHandoff` returns
+  // `false`. Silently navigating to `/app` anyway used to land the visitor in
+  // an empty editor with no explanation.
+  it("does not navigate and shows feedback on the clicked screen's card when the handoff fails to store", () => {
+    vi.stubGlobal("sessionStorage", {
+      getItem: vi.fn(() => null),
+      removeItem: vi.fn(),
+      setItem: vi.fn(() => {
+        throw new DOMException("Blocked", "SecurityError");
+      }),
+    });
+
+    const screens = [makeScreen("screen-a"), makeScreen("screen-b")];
+    render(<ShowcaseAppCarousel app={makeApp(screens)} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Screen screen-a in the editor" }));
+
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("shows a distinct 'couldn't open in editor' message (not the copy-id error) when the handoff fails to store", async () => {
+    vi.stubGlobal("sessionStorage", {
+      getItem: vi.fn(() => null),
+      removeItem: vi.fn(),
+      setItem: vi.fn(() => {
+        throw new DOMException("Blocked", "SecurityError");
+      }),
+    });
+
+    render(<ShowcaseAppCarousel app={makeApp([makeScreen("screen-a")])} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Screen screen-a in the editor" }));
+
+    const status = await screen.findByRole("status");
+    expect(status.textContent).toBe("Couldn't open in editor");
+  });
+
+  it("stores the same full screen list regardless of which screen's button was clicked", () => {
+    const screens = [makeScreen("screen-a"), makeScreen("screen-b")];
+    render(<ShowcaseAppCarousel app={makeApp(screens)} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Screen screen-b in the editor" }));
+
+    const handoff = consumeShowcaseScreensHandoff();
+    expect(handoff?.screens.map((s) => s.id)).toEqual(["screen-a", "screen-b"]);
   });
 });
 

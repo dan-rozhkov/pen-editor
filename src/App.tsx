@@ -24,6 +24,7 @@ import { useLayers3DStore } from "./store/layers3dStore";
 import { useIsMobile } from "./hooks/useIsMobile";
 import { useOnlineStatus } from "./hooks/useOnlineStatus";
 import { launchShowcaseAgentChat } from "./lib/launchShowcaseAgentChat";
+import { importShowcaseScreensFromHandoff } from "./lib/importShowcaseScreens";
 import { OfflineBanner } from "./components/pwa/OfflineBanner";
 import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
@@ -50,6 +51,15 @@ function App() {
 
   useEffect(() => {
     launchShowcaseAgentChat();
+  }, []);
+
+  // "Open in Editor" handoff (FIR-62): a showcase card's screens, dropped
+  // onto the canvas the first time the editor mounts after the click. See
+  // importShowcaseScreens.ts for why this needs an async fetch (the S3
+  // htmlUrl itself can't be read cross-origin) rather than reading
+  // everything synchronously like launchShowcaseAgentChat above.
+  useEffect(() => {
+    void importShowcaseScreensFromHandoff();
   }, []);
 
   // Re-register every custom (uploaded) font's FontFace with the browser so

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router";
 import { ArrowLeftIcon, ArrowRightIcon, HeartIcon } from "@phosphor-icons/react";
 
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,7 @@ import { getShowcaseModelLabel } from "@/components/showcase/showcaseApps";
 import { accumulateWindow, getInitialWindow } from "@/components/showcase/carouselWindow";
 import type { ShowcaseApp, ShowcaseScreen } from "@/lib/showcase";
 import { useShowcaseLikes } from "@/lib/showcaseLikes";
+import { storeShowcaseScreensHandoff } from "@/lib/showcaseScreenHandoff";
 import { cn } from "@/lib/utils";
 import { writeTextToClipboard } from "@/utils/clipboard";
 
@@ -94,6 +96,37 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
       setCopyFeedback({ screenId: screen.id, status: copied ? "success" : "error" });
     });
   }, []);
+
+  // "Open in Editor" always hands the editor every screen of this *app*
+  // (`app.screens`, cover first) rather than just the one whose button was
+  // clicked — FIR-62 lays out the whole run on the canvas at once. The
+  // payload carries only `runId` (plus an id/title list so an empty app can
+  // be rejected) — not the HTML, or even each screen's `htmlUrl`/dimensions;
+  // see showcaseScreenHandoff.ts for why the editor doesn't need any of that
+  // and importShowcaseScreens.ts for how it turns the runId alone into scene
+  // nodes.
+  //
+  // `storeShowcaseScreensHandoff` can fail (sessionStorage full or blocked —
+  // e.g. Safari private mode) and returns `false` in that case; navigating to
+  // `/app` anyway would land the visitor in an editor with nothing to import
+  // and no explanation. Surfacing that through the same transient
+  // feedback banner "Copy Screen ID" already uses (rather than a separate
+  // mechanism) keeps this to the one small, already-tested piece of UI.
+  const navigate = useNavigate();
+  const handleOpenInEditor = useCallback(
+    (screen: ShowcaseScreen) => {
+      const stored = storeShowcaseScreensHandoff({
+        runId: app.runId,
+        screens: app.screens.map((s) => ({ id: s.id, title: s.title })),
+      });
+      if (!stored) {
+        setCopyFeedback({ screenId: screen.id, status: "handoff-error" });
+        return;
+      }
+      navigate("/app");
+    },
+    [app.runId, app.screens, navigate],
+  );
 
   useEffect(() => {
     if (!copyFeedback) return;
@@ -273,6 +306,7 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
             <ShowcaseCard
               screen={screen}
               onCopyId={handleCopyScreenId}
+              onOpenInEditor={handleOpenInEditor}
               feedback={copyFeedback?.screenId === screen.id ? copyFeedback.status : null}
               // Only gate mounting on the window when there's an `lqip`
               // to show in its place — without one (pre-backfill rows,
