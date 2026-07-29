@@ -42,6 +42,7 @@ function makeApp(screens: ShowcaseScreen[], likes = 0): ShowcaseApp {
     model: "test/model",
     createdAt: "2026-07-28T00:00:00.000Z",
     likes,
+    platform: "mobile",
     screens,
   };
 }
@@ -191,6 +192,38 @@ describe("<ShowcaseAppCarousel /> scroll-snap markup", () => {
     expect(scroller.classList.contains("px-20")).toBe(true);
     expect(scroller.classList.contains("sm:px-16")).toBe(true);
     expect(scroller.classList.contains("px-12")).toBe(false);
+  });
+
+  it("gives every card in the carousel the same aspect ratio, from the cover screen, even when the screens' own captured heights differ", () => {
+    // Regression test for the height-jump-on-swipe bug: the backend fits
+    // each screenshot's viewport to that screen's own body height, so
+    // screens in the same app often have different captured heights while
+    // sharing one capture width.
+    const screens = [
+      { ...makeScreen("cover"), width: 390, height: 844 },
+      { ...makeScreen("tall"), width: 390, height: 1200 },
+      { ...makeScreen("short"), width: 390, height: 600 },
+    ];
+    const { container } = render(<ShowcaseAppCarousel app={makeApp(screens)} />);
+
+    const cards = container.querySelectorAll('[data-slot="showcase-card"]');
+    expect(cards).toHaveLength(3);
+    for (const card of cards) {
+      expect((card as HTMLElement).style.aspectRatio).toBe("390 / 844");
+    }
+  });
+
+  it("falls back to the baseline mobile ratio for every card when the cover screen itself has zero dimensions", () => {
+    const screens = [
+      { ...makeScreen("cover"), width: 0, height: 0 },
+      { ...makeScreen("tall"), width: 390, height: 1200 },
+    ];
+    const { container } = render(<ShowcaseAppCarousel app={makeApp(screens)} />);
+
+    const cards = container.querySelectorAll('[data-slot="showcase-card"]');
+    for (const card of cards) {
+      expect((card as HTMLElement).style.aspectRatio).toBe("390 / 844");
+    }
   });
 
   it("renders one <li> per screen with the item snap classes and aria labels", () => {

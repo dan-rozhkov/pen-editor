@@ -47,13 +47,19 @@ function screen3(): ShowcaseScreen {
 
 // The feed hands back whole apps, so fixtures are apps too — there is no
 // client-side grouping left to exercise.
-function app(runId: string, screens: ShowcaseScreen[], likes = 0): ShowcaseApp {
+function app(
+  runId: string,
+  screens: ShowcaseScreen[],
+  likes = 0,
+  platform: ShowcaseApp["platform"] = "mobile",
+): ShowcaseApp {
   return {
     runId,
     theme: "dark",
     model: "test/model",
     createdAt: screens[0].createdAt,
     likes,
+    platform,
     screens,
   };
 }
@@ -285,7 +291,7 @@ describe("<ShowcasePage />", () => {
     expect(shimmer?.classList.contains("rounded-[2rem]")).toBe(true);
     expect(shimmer?.classList.contains("px-12")).toBe(true);
     expect(shimmer?.classList.contains("sm:px-16")).toBe(true);
-    expect(shimmer?.firstElementChild?.classList.contains("aspect-[390/844]")).toBe(true);
+    expect((shimmer?.firstElementChild as HTMLElement)?.style.aspectRatio).toBe("390 / 844");
     expect(
       shimmer?.firstElementChild?.classList.contains("bg-surface-elevated"),
     ).toBe(false);
@@ -424,7 +430,10 @@ describe("<ShowcasePage />", () => {
     expect(main?.classList.contains("sm:pr-[calc(4rem+env(safe-area-inset-right))]")).toBe(true);
     expect(header?.classList.contains("lg:max-w-none")).toBe(true);
     expect(main?.classList.contains("lg:max-w-none")).toBe(true);
-    expect(card?.classList.contains("aspect-[390/844]")).toBe(true);
+    // screen1() is 390x844 (mobile portrait) — the aspect ratio is an inline
+    // style derived from the screen's own width/height, not a static
+    // Tailwind class, since a real desktop screen's ratio differs per row.
+    expect((card as HTMLElement | null)?.style.aspectRatio).toBe("390 / 844");
     expect(card?.classList.contains("rounded-3xl")).toBe(true);
     // No `border` on the card itself — a real border participates in
     // border-box sizing, which WebKit and Blink resolve percentage heights
@@ -614,6 +623,129 @@ describe("<ShowcasePage /> filters", () => {
 
     await screen.findByAltText("Onboarding flow");
     expect(currentSearch()).toBe("");
+  });
+
+  it("defaults to the mobile platform with no query param, and requests platform=mobile without writing it to the URL", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/showcase/categories")) {
+        expect(url).toContain("platform=mobile");
+        return categoriesResponse([]);
+      }
+      expect(url).toContain("platform=mobile");
+      return jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPageAt("/");
+
+    await screen.findByAltText("Onboarding flow");
+    expect(currentSearch()).toBe("");
+    expect(
+      screen.getByRole("button", { name: "Mobile" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("clicking the Web toggle requests platform=desktop, writes it to the URL, and re-fetches categories for the new platform", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/showcase/categories")) {
+        return categoriesResponse(
+          url.includes("platform=desktop")
+            ? [{ theme: "landing page", apps: 4 }]
+            : [{ theme: "mobile banking", apps: 2 }],
+        );
+      }
+      return jsonResponse({
+        apps: [app("r1", [screen1()], url.includes("platform=desktop") ? 0 : 1)],
+        nextCursor: null,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPageAt("/");
+    await screen.findByAltText("Onboarding flow");
+
+    fireEvent.click(screen.getByRole("button", { name: "Web" }));
+
+    await waitFor(() => expect(currentSearch()).toBe("?platform=desktop"));
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([input]) => String(input).includes("platform=desktop")),
+      ).toBe(true),
+    );
+    // The new platform's own categories replace the old ones.
+    await screen.findByRole("button", { name: "Landing page" });
+    expect(screen.queryByRole("button", { name: "Mobile banking" })).toBeNull();
+  });
+
+  it("switching platform resets an active category instead of carrying it over to a platform whose chip list doesn't recognize it", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/showcase/categories")) {
+        return categoriesResponse([{ theme: "mobile banking", apps: 2 }]);
+      }
+      return jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPageAt("/?category=mobile+banking");
+    await screen.findByAltText("Onboarding flow");
+    expect(
+      screen.getByRole("button", { name: "Mobile banking" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Web" }));
+
+    await waitFor(() => expect(currentSearch()).toBe("?platform=desktop"));
+    expect(currentSearch()).not.toContain("category=");
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([input]) =>
+            String(input).includes("platform=desktop") &&
+            !String(input).includes("category="),
+        ),
+      ).toBe(true),
+    );
+  });
+
+  it("restores platform=desktop from the URL and marks the Web toggle active", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/showcase/categories")) {
+        return categoriesResponse([]);
+      }
+      expect(url).toContain("platform=desktop");
+      return jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPageAt("/?platform=desktop");
+
+    await screen.findByAltText("Onboarding flow");
+    expect(
+      screen.getByRole("button", { name: "Web" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("treats an invalid platform value in the URL as the mobile default", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/showcase/categories")) {
+        return categoriesResponse([]);
+      }
+      expect(url).toContain("platform=mobile");
+      return jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPageAt("/?platform=nonsense");
+
+    await screen.findByAltText("Onboarding flow");
+    expect(
+      screen.getByRole("button", { name: "Mobile" }).getAttribute("aria-pressed"),
+    ).toBe("true");
   });
 
   it("discards a stale filter response instead of clobbering the newer one", async () => {

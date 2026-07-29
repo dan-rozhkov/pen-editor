@@ -20,8 +20,10 @@ describe("<ShowcaseFilterBar />", () => {
         sort="popular"
         category={null}
         categories={categories}
+        platform="mobile"
         onSortChange={() => {}}
         onCategoryChange={() => {}}
+        onPlatformChange={() => {}}
       />,
     );
 
@@ -62,8 +64,10 @@ describe("<ShowcaseFilterBar />", () => {
         sort="popular"
         category={null}
         categories={categories}
+        platform="mobile"
         onSortChange={onSortChange}
         onCategoryChange={() => {}}
+        onPlatformChange={() => {}}
       />,
     );
 
@@ -77,8 +81,10 @@ describe("<ShowcaseFilterBar />", () => {
         sort="popular"
         category={null}
         categories={categories}
+        platform="mobile"
         onSortChange={() => {}}
         onCategoryChange={() => {}}
+        onPlatformChange={() => {}}
       />,
     );
 
@@ -98,22 +104,47 @@ describe("<ShowcaseFilterBar />", () => {
     expect(allChip.classList.contains("bg-transparent")).toBe(true);
   });
 
-  it("switches the platform control's active appearance without filtering the feed", () => {
-    render(
+  it("is a controlled platform toggle: aria-pressed follows the `platform` prop, and clicking calls onPlatformChange rather than flipping local state", () => {
+    const onPlatformChange = vi.fn();
+    const { rerender } = render(
       <ShowcaseFilterBar
         sort="popular"
         category={null}
         categories={categories}
+        platform="mobile"
         onSortChange={() => {}}
         onCategoryChange={() => {}}
+        onPlatformChange={onPlatformChange}
       />,
     );
 
     const mobile = screen.getByRole("button", { name: "Mobile" });
     const web = screen.getByRole("button", { name: "Web" });
     expect(mobile.getAttribute("aria-pressed")).toBe("true");
+    expect(web.getAttribute("aria-pressed")).toBe("false");
 
     fireEvent.click(web);
+
+    // Clicking calls the handler with the clicked value...
+    expect(onPlatformChange).toHaveBeenCalledWith("desktop");
+    // ...but nothing here re-renders the component, so a purely-local
+    // useState would have already flipped `aria-pressed` by now. This bar
+    // has none: it stays showing whatever `platform` prop it was given
+    // until the owner (ShowcasePage) re-renders it with a new one.
+    expect(mobile.getAttribute("aria-pressed")).toBe("true");
+    expect(web.getAttribute("aria-pressed")).toBe("false");
+
+    rerender(
+      <ShowcaseFilterBar
+        sort="popular"
+        category={null}
+        categories={categories}
+        platform="desktop"
+        onSortChange={() => {}}
+        onCategoryChange={() => {}}
+        onPlatformChange={onPlatformChange}
+      />,
+    );
 
     expect(mobile.getAttribute("aria-pressed")).toBe("false");
     expect(web.getAttribute("aria-pressed")).toBe("true");
@@ -126,8 +157,10 @@ describe("<ShowcaseFilterBar />", () => {
         sort="popular"
         category={null}
         categories={categories}
+        platform="mobile"
         onSortChange={() => {}}
         onCategoryChange={onCategoryChange}
+        onPlatformChange={() => {}}
       />,
     );
 
@@ -144,8 +177,10 @@ describe("<ShowcaseFilterBar />", () => {
         sort="popular"
         category="fitness tracker"
         categories={categories}
+        platform="mobile"
         onSortChange={() => {}}
         onCategoryChange={() => {}}
+        onPlatformChange={() => {}}
       />,
     );
 
@@ -161,8 +196,10 @@ describe("<ShowcaseFilterBar />", () => {
         sort="popular"
         category={null}
         categories={[]}
+        platform="mobile"
         onSortChange={() => {}}
         onCategoryChange={() => {}}
+        onPlatformChange={() => {}}
       />,
     );
 
@@ -176,8 +213,10 @@ describe("<ShowcaseFilterBar />", () => {
         sort="popular"
         category="retro arcade"
         categories={categories}
+        platform="mobile"
         onSortChange={() => {}}
         onCategoryChange={() => {}}
+        onPlatformChange={() => {}}
       />,
     );
 

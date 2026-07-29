@@ -1,15 +1,16 @@
-import { useState } from "react";
 import { DeviceMobileIcon, LaptopIcon } from "@phosphor-icons/react";
 
 import { cn } from "@/lib/utils";
-import type { ShowcaseCategory, ShowcaseSort } from "@/lib/showcase";
+import type { ShowcaseCategory, ShowcasePlatform, ShowcaseSort } from "@/lib/showcase";
 
 interface ShowcaseFilterBarProps {
   sort: ShowcaseSort;
   category: string | null;
   categories: ShowcaseCategory[];
+  platform: ShowcasePlatform;
   onSortChange: (sort: ShowcaseSort) => void;
   onCategoryChange: (category: string | null) => void;
+  onPlatformChange: (platform: ShowcasePlatform) => void;
 }
 
 const SORT_OPTIONS: { value: ShowcaseSort; label: string }[] = [
@@ -35,11 +36,11 @@ export function ShowcaseFilterBar({
   sort,
   category,
   categories,
+  platform,
   onSortChange,
   onCategoryChange,
+  onPlatformChange,
 }: ShowcaseFilterBarProps) {
-  const [platform, setPlatform] = useState<"ios" | "web">("ios");
-
   return (
     // Mobile uses a single horizontal scroller for every filter control. The
     // explicit vertical clipping avoids the implicit `overflow-y:auto` that
@@ -53,15 +54,15 @@ export function ShowcaseFilterBar({
           aria-label="Platform"
           className="flex rounded-full bg-surface-base p-1"
         >
-          {(["ios", "web"] as const).map((option) => {
+          {(["mobile", "desktop"] as const).map((option) => {
             const active = platform === option;
             return (
               <button
                 key={option}
                 type="button"
-                aria-label={option === "ios" ? "Mobile" : "Web"}
+                aria-label={option === "mobile" ? "Mobile" : "Web"}
                 aria-pressed={active}
-                onClick={() => setPlatform(option)}
+                onClick={() => onPlatformChange(option)}
                 className={cn(
                   "flex items-center justify-center rounded-full px-3 py-1.5 text-sm font-medium transition-colors sm:px-4",
                   FOCUS_RING,
@@ -70,7 +71,7 @@ export function ShowcaseFilterBar({
                     : "text-text-muted hover:text-text-primary",
                 )}
               >
-                {option === "ios" ? (
+                {option === "mobile" ? (
                   <>
                     <DeviceMobileIcon aria-hidden="true" className="size-4 sm:hidden" />
                     <span className="hidden sm:inline">Mobile</span>

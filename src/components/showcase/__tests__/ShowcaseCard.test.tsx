@@ -33,6 +33,12 @@ const SHOWCASE_IMAGE_SIZES = [
   "calc(100vw - 192px)",
 ].join(", ");
 
+const DESKTOP_SHOWCASE_IMAGE_SIZES = [
+  "(min-width:1280px) calc((100vw - 160px)/3 - 128px)",
+  "(min-width:640px) calc((100vw - 144px)/2 - 128px)",
+  "calc(100vw - 192px)",
+].join(", ");
+
 describe("<ShowcaseCard />", () => {
   it("renders srcset/sizes when imageUrl1x is present, with descriptors derived from the real screen width", () => {
     render(
@@ -171,5 +177,137 @@ describe("<ShowcaseCard />", () => {
 
     const card = container.querySelector('[data-slot="showcase-card"]') as HTMLElement;
     expect(card.style.backgroundImage).toBe("");
+  });
+
+  it("sizes the card box from the screen's own width/height as a CSS aspect-ratio, portrait or landscape", () => {
+    const { container: portrait } = render(
+      <ShowcaseCard screen={makeScreen({ width: 750, height: 1624 })} onCopyId={() => {}} />,
+    );
+    const portraitCard = portrait.querySelector('[data-slot="showcase-card"]') as HTMLElement;
+    expect(portraitCard.style.aspectRatio).toBe("750 / 1624");
+
+    cleanup();
+
+    const { container: landscape } = render(
+      <ShowcaseCard
+        screen={makeScreen({ width: 2880, height: 2048 })}
+        onCopyId={() => {}}
+      />,
+    );
+    const landscapeCard = landscape.querySelector('[data-slot="showcase-card"]') as HTMLElement;
+    expect(landscapeCard.style.aspectRatio).toBe("2880 / 2048");
+  });
+
+  it("falls back to the baseline mobile portrait ratio when width/height are absent or zero", () => {
+    const { container } = render(
+      <ShowcaseCard
+        screen={makeScreen({ width: 0, height: 0 })}
+        onCopyId={() => {}}
+      />,
+    );
+    const card = container.querySelector('[data-slot="showcase-card"]') as HTMLElement;
+    expect(card.style.aspectRatio).toBe("390 / 844");
+  });
+
+  it("uses coverWidth/coverHeight for the box aspect ratio instead of the screen's own dimensions when given", () => {
+    // Regression test: screens within one app share a fixed capture width but
+    // a floating captured height (the backend fits the viewport to each
+    // screen's actual body height) — sizing the box off the screen's own
+    // height made a carousel's height visibly jump between slides.
+    const { container } = render(
+      <ShowcaseCard
+        screen={makeScreen({ width: 780, height: 2200 })}
+        onCopyId={() => {}}
+        coverWidth={780}
+        coverHeight={1688}
+      />,
+    );
+    const card = container.querySelector('[data-slot="showcase-card"]') as HTMLElement;
+    expect(card.style.aspectRatio).toBe("780 / 1688");
+  });
+
+  it("falls back to the screen's own width/height when coverWidth/coverHeight are absent", () => {
+    const { container } = render(
+      <ShowcaseCard screen={makeScreen({ width: 2880, height: 2048 })} onCopyId={() => {}} />,
+    );
+    const card = container.querySelector('[data-slot="showcase-card"]') as HTMLElement;
+    expect(card.style.aspectRatio).toBe("2880 / 2048");
+  });
+
+  it("falls back to the baseline mobile ratio when coverWidth/coverHeight are zero, even though the screen has real dimensions", () => {
+    const { container } = render(
+      <ShowcaseCard
+        screen={makeScreen({ width: 750, height: 1624 })}
+        onCopyId={() => {}}
+        coverWidth={0}
+        coverHeight={0}
+      />,
+    );
+    const card = container.querySelector('[data-slot="showcase-card"]') as HTMLElement;
+    expect(card.style.aspectRatio).toBe("390 / 844");
+  });
+
+  it("gives a 780x1688 cover (hand-authored runs) the same numeric ratio as the legacy 390/844 baseline", () => {
+    const { container } = render(
+      <ShowcaseCard
+        screen={makeScreen({ width: 780, height: 1688 })}
+        onCopyId={() => {}}
+        coverWidth={780}
+        coverHeight={1688}
+      />,
+    );
+    const card = container.querySelector('[data-slot="showcase-card"]') as HTMLElement;
+    expect(card.style.aspectRatio).toBe("780 / 1688");
+    expect(780 / 1688).toBeCloseTo(390 / 844, 10);
+  });
+
+  it("derives the sizes formula (portrait vs landscape) from coverWidth/coverHeight rather than the screen's own dimensions", () => {
+    // A portrait screen inside a landscape (desktop) app's carousel must still
+    // pick the desktop sizes formula, since layout is governed by the cover.
+    render(
+      <ShowcaseCard
+        screen={makeScreen({
+          width: 390,
+          height: 844,
+          imageUrl1x: "https://example.com/screen-a@1x.webp",
+        })}
+        onCopyId={() => {}}
+        coverWidth={2880}
+        coverHeight={2048}
+      />,
+    );
+
+    const image = screen.getByAltText("Onboarding flow");
+    expect(image.getAttribute("sizes")).toBe(DESKTOP_SHOWCASE_IMAGE_SIZES);
+  });
+
+  it("picks the landscape (desktop) sizes formula for a landscape screen, and the portrait one otherwise", () => {
+    const { rerender } = render(
+      <ShowcaseCard
+        screen={makeScreen({
+          width: 2880,
+          height: 2048,
+          imageUrl1x: "https://example.com/screen-a@1x.webp",
+        })}
+        onCopyId={() => {}}
+      />,
+    );
+
+    let image = screen.getByAltText("Onboarding flow");
+    expect(image.getAttribute("sizes")).toBe(DESKTOP_SHOWCASE_IMAGE_SIZES);
+
+    rerender(
+      <ShowcaseCard
+        screen={makeScreen({
+          width: 750,
+          height: 1624,
+          imageUrl1x: "https://example.com/screen-a@1x.webp",
+        })}
+        onCopyId={() => {}}
+      />,
+    );
+
+    image = screen.getByAltText("Onboarding flow");
+    expect(image.getAttribute("sizes")).toBe(SHOWCASE_IMAGE_SIZES);
   });
 });

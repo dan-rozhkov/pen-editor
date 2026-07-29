@@ -24,6 +24,8 @@ export interface ShowcaseScreen {
   createdAt: string;
 }
 
+export type ShowcasePlatform = "mobile" | "desktop";
+
 /** One app: every screen of a single generation run, cover first. */
 export interface ShowcaseApp {
   runId: string;
@@ -31,6 +33,12 @@ export interface ShowcaseApp {
   model: string;
   createdAt: string;
   likes: number;
+  // Optional: no component actually reads an app's own `platform` field —
+  // ShowcasePage derives the platform it's displaying from the `?platform=`
+  // URL param (a request-level filter), not from data on individual apps.
+  // Kept optional rather than removed since the frontend and backend deploy
+  // independently and an older/newer backend may or may not send it.
+  platform?: ShowcasePlatform;
   screens: ShowcaseScreen[];
 }
 
@@ -44,6 +52,7 @@ export type ShowcaseSort = "popular" | "latest";
 export interface ShowcaseFilters {
   sort?: ShowcaseSort;
   category?: string | null;
+  platform?: ShowcasePlatform;
 }
 
 export type ShowcaseResult =
@@ -72,6 +81,15 @@ export function resolveShowcaseApiUrl(
   if (filters?.category) {
     params.set("category", filters.category);
   }
+  // Unlike sort/category (omitted at their default so the request URL
+  // doesn't change gratuitously), platform is always sent explicitly. The
+  // backend's own default is "mobile" too, so this is redundant on the
+  // common path — but an explicit param can't silently drift from the
+  // backend's default if that default ever changes, and every caller here
+  // already knows which platform it wants (ShowcasePage always has one from
+  // the URL/parsePlatform), so there's no "caller doesn't care" case to
+  // optimize for.
+  params.set("platform", filters?.platform ?? "mobile");
   return resolveApiUrl(`/api/showcase?${params.toString()}`);
 }
 
@@ -123,14 +141,19 @@ export type ShowcaseCategoriesResult =
 
 /**
  * GET /api/showcase/categories — themes present in the database, ordered by
- * app count descending. A failure (network, 503, non-2xx) resolves to
+ * app count descending. The set of themes differs per platform (mobile and
+ * desktop apps aren't necessarily generated from the same theme list), so
+ * callers must re-fetch whenever the platform changes rather than reusing a
+ * mount-time snapshot. A failure (network, 503, non-2xx) resolves to
  * `{ ok: false }` rather than throwing: ShowcaseFilterBar's spec is to just
  * not render the chip row when this comes back empty, same as an empty list.
  */
-export async function fetchShowcaseCategories(): Promise<ShowcaseCategoriesResult> {
+export async function fetchShowcaseCategories(
+  platform: ShowcasePlatform = "mobile",
+): Promise<ShowcaseCategoriesResult> {
   let res: Response;
   try {
-    res = await fetch(resolveApiUrl("/api/showcase/categories"));
+    res = await fetch(resolveApiUrl(`/api/showcase/categories?platform=${platform}`));
   } catch {
     return { ok: false };
   }

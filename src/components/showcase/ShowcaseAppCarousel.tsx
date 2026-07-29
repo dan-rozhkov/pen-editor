@@ -196,6 +196,17 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
   // lives here rather than on ShowcaseCard.
   const { count: likeCount, liked, like } = useShowcaseLikes(app.runId, app.likes);
 
+  // Aspect ratio is resolved once per app, from the cover screen
+  // (`app.screens[0]`, already pinned-first), and handed to every card in
+  // this carousel — see the `coverWidth`/`coverHeight` doc on ShowcaseCard.
+  // Screens in the same app share one captured width but a floating captured
+  // height (the backend fits the screenshot viewport to each screen's actual
+  // body height), so sizing each card off its own screen made the carousel's
+  // height visibly jump mid-swipe.
+  const coverScreen = app.screens[0];
+  const coverWidth = coverScreen.width;
+  const coverHeight = coverScreen.height;
+
   const scrollToIndex = useCallback((index: number) => {
     const scroller = scrollerRef.current;
     const item = itemRefs.current[index];
@@ -246,6 +257,8 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
               loadImage={!screen.lqip || loadedIndices.has(index)}
               eager={isFirstInGrid && index === 0}
               selected={index === selectedIndex}
+              coverWidth={coverWidth}
+              coverHeight={coverHeight}
             />
           </li>
         ))}

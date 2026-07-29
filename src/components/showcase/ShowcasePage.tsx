@@ -11,6 +11,7 @@ import {
   fetchShowcaseCategories,
   type ShowcaseApp,
   type ShowcaseCategory,
+  type ShowcasePlatform,
   type ShowcaseSort,
 } from "@/lib/showcase";
 import { ShowcaseAppCarousel } from "@/components/showcase/ShowcaseAppCarousel";
@@ -31,24 +32,51 @@ function parseCategory(value: string | null): string | null {
   return value ? value : null;
 }
 
-function ShowcaseGrid({ children }: { children: ReactNode }) {
+// `?platform=` follows the exact same rule as sort: the default ("mobile")
+// is never written to the URL, so canonical "/" stays the mobile feed with a
+// clean address bar, and any other value (including garbage) reads back as
+// the default.
+function parsePlatform(value: string | null): ShowcasePlatform {
+  return value === "desktop" ? "desktop" : "mobile";
+}
+
+// Desktop screenshots are landscape (~2880x2048) and unreadable at four (or
+// even three) to a row, so the desktop feed drops to a 1/2/3-column grid —
+// one fewer breakpoint than mobile's 1/2/3/4, with no separate `lg` step
+// (2 columns already carries from `sm` through `xl`). See the geometry
+// comment on `SHOWCASE_IMAGE_SIZES` in ShowcaseCard.tsx, which mirrors these
+// exact breakpoints/column counts to keep `sizes` truthful.
+function ShowcaseGrid({
+  children,
+  platform,
+}: {
+  children: ReactNode;
+  platform: ShowcasePlatform;
+}) {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div
+      className={cn(
+        "grid grid-cols-1 gap-4 sm:grid-cols-2",
+        platform === "desktop" ? "xl:grid-cols-3" : "lg:grid-cols-3 xl:grid-cols-4",
+      )}
+    >
       {children}
     </div>
   );
 }
 
-function SkeletonGrid() {
+function SkeletonGrid({ platform }: { platform: ShowcasePlatform }) {
   return (
     <div aria-hidden="true">
-      <ShowcaseGrid>
+      <ShowcaseGrid platform={platform}>
         {Array.from({ length: 4 }, (_, i) => (
           <div
             key={i}
             className="animate-pulse rounded-[2rem] bg-surface-base px-12 py-10 sm:px-16 sm:py-12"
           >
-            <div className="aspect-[390/844]" />
+            <div
+              style={{ aspectRatio: platform === "desktop" ? "2880 / 2048" : "390 / 844" }}
+            />
           </div>
         ))}
       </ShowcaseGrid>
@@ -65,6 +93,7 @@ export function ShowcasePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const sort = parseSort(searchParams.get("sort"));
   const category = parseCategory(searchParams.get("category"));
+  const platform = parsePlatform(searchParams.get("platform"));
 
   // Apps, not screens: the feed hands back whole apps (see lib/showcase.ts),
   // so pages append cleanly and no card is ever rendered half-populated.
@@ -96,7 +125,7 @@ export function ShowcasePage() {
   // rendered, and if it moved, call the setters right here rather than in an
   // effect. React re-renders immediately before committing, so nothing ever
   // paints the stale grid under the new filter's tab/chip.
-  const filtersKey = `${sort}|${category ?? ""}`;
+  const filtersKey = `${sort}|${category ?? ""}|${platform}`;
   const [loadedFiltersKey, setLoadedFiltersKey] = useState(filtersKey);
   if (loadedFiltersKey !== filtersKey) {
     setLoadedFiltersKey(filtersKey);
@@ -104,32 +133,40 @@ export function ShowcasePage() {
     setErrorMessage(null);
   }
 
-  // Categories only ever need to load once — the chip list itself doesn't
-  // depend on which chip is selected. A failure (or an empty database) just
-  // means the chip row doesn't render; the sort tabs still work on their own.
+  // The chip list itself doesn't depend on which chip is selected, but it
+  // does depend on platform — mobile and desktop apps aren't drawn from the
+  // same theme list, so switching the toggle must re-fetch this, not just
+  // reuse a mount-time snapshot. Guarded by the same `cancelled` closure
+  // pattern as the feed fetch below: each effect instance's own flag is
+  // flipped by its own cleanup, so a response for a platform the visitor has
+  // since switched away from is dropped instead of overwriting the current
+  // chip row. A failure (or an empty database) just means the chip row
+  // doesn't render; the sort tabs still work on their own.
   useEffect(() => {
     let cancelled = false;
-    fetchShowcaseCategories().then((result) => {
+    fetchShowcaseCategories(platform).then((result) => {
       if (cancelled) return;
       if (result.ok) {
         setCategories(result.categories);
+      } else {
+        setCategories([]);
       }
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [platform]);
 
-  // Changing sort or category resets the cursor and refetches page 1. The
-  // filter row itself stays mounted (it's rendered outside this effect's
-  // control below); only the grid drops back to the skeleton.
+  // Changing sort, category, or platform resets the cursor and refetches
+  // page 1. The filter row itself stays mounted (it's rendered outside this
+  // effect's control below); only the grid drops back to the skeleton.
   useEffect(() => {
     let cancelled = false;
     // Bumping here (not just reading) is what invalidates any next-page
     // request already in flight for the previous filters — see
     // `requestIdRef`'s comment above.
     requestIdRef.current += 1;
-    fetchShowcase(null, undefined, { sort, category }).then((result) => {
+    fetchShowcase(null, undefined, { sort, category, platform }).then((result) => {
       // `cancelled` (set by this effect's own cleanup, below) already covers
       // "this exact effect instance was torn down or superseded" — a
       // filter-value comparison here would be redundant with it, not an
@@ -154,7 +191,7 @@ export function ShowcasePage() {
     return () => {
       cancelled = true;
     };
-  }, [sort, category]);
+  }, [sort, category, platform]);
 
   const handleLoadMore = useCallback(async () => {
     if (!nextCursor || loadingMore) return;
@@ -165,7 +202,7 @@ export function ShowcasePage() {
     // flight — the comparison fails and the response is dropped instead of
     // being appended to a list built under different filters.
     const requestId = ++requestIdRef.current;
-    const result = await fetchShowcase(nextCursor, undefined, { sort, category });
+    const result = await fetchShowcase(nextCursor, undefined, { sort, category, platform });
     if (requestIdRef.current === requestId && result.ok) {
       setApps((prev) => [...prev, ...result.data.apps]);
       setNextCursor(result.data.nextCursor);
@@ -174,7 +211,7 @@ export function ShowcasePage() {
     // sentinel remains mounted, scrolling away and back allows a retry. A
     // stale response (filters changed mid-request) is silently dropped.
     setLoadingMore(false);
-  }, [category, loadingMore, nextCursor, sort]);
+  }, [category, loadingMore, nextCursor, platform, sort]);
 
   useEffect(() => {
     const sentinel = loadMoreSentinelRef.current;
@@ -202,7 +239,11 @@ export function ShowcasePage() {
     return () => observer.disconnect();
   }, [handleLoadMore, loadingMore, nextCursor, status]);
 
-  function updateFilters(next: { sort?: ShowcaseSort; category?: string | null }) {
+  function updateFilters(next: {
+    sort?: ShowcaseSort;
+    category?: string | null;
+    platform?: ShowcasePlatform;
+  }) {
     setSearchParams(
       (prev) => {
         const params = new URLSearchParams(prev);
@@ -220,10 +261,31 @@ export function ShowcasePage() {
             params.set("category", next.category);
           }
         }
+        if (next.platform !== undefined) {
+          if (next.platform === "mobile") {
+            params.delete("platform");
+          } else {
+            params.set("platform", next.platform);
+          }
+        }
         return params;
       },
       { replace: true },
     );
+  }
+
+  // Mobile and desktop apps aren't drawn from the same theme list (see the
+  // categories effect above), so a category selected under one platform is
+  // almost certainly meaningless — or simply absent — under the other. Left
+  // in place, it would carry over as a `?category=` the new platform's chip
+  // row doesn't recognize, landing on the "every chip inactive" empty state
+  // instead of the full new-platform feed the visitor actually asked for by
+  // flipping the toggle. Clearing it is the one-line fix: `updateFilters`
+  // already treats `category: null` and a real `platform` change as a single
+  // atomic URL update (and a single `filtersKey` change), so this can't land
+  // as two renders/fetches where the second briefly shows a stale category.
+  function handlePlatformChange(newPlatform: ShowcasePlatform) {
+    updateFilters({ platform: newPlatform, category: null });
   }
 
   function handleAgentPrompt(prompt: string) {
@@ -310,12 +372,14 @@ export function ShowcasePage() {
             sort={sort}
             category={category}
             categories={categories}
+            platform={platform}
             onSortChange={(newSort) => updateFilters({ sort: newSort })}
             onCategoryChange={(newCategory) => updateFilters({ category: newCategory })}
+            onPlatformChange={handlePlatformChange}
           />
         </div>
 
-        {status === "loading" && <SkeletonGrid />}
+        {status === "loading" && <SkeletonGrid platform={platform} />}
 
         {status === "error" && (
           <div className="rounded-lg bg-surface-panel px-6 py-10 text-center ring-1 ring-border-default">
@@ -358,7 +422,7 @@ export function ShowcasePage() {
 
         {status === "ready" && apps.length > 0 && (
           <>
-            <ShowcaseGrid>
+            <ShowcaseGrid platform={platform}>
               {apps.map((app, index) => (
                 <ShowcaseAppCarousel key={app.runId} app={app} isFirstInGrid={index === 0} />
               ))}
