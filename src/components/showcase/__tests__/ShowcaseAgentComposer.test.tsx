@@ -14,6 +14,8 @@ describe("<ShowcaseAgentComposer />", () => {
 
     expect(input.getAttribute("rows")).toBe("1");
     expect(input.classList.contains("min-h-14")).toBe(true);
+    expect(input.classList.contains("text-base")).toBe(true);
+    expect(input.classList.contains("sm:text-sm")).toBe(true);
     expect((send as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(input, { target: { value: "   " } });
     expect((send as HTMLButtonElement).disabled).toBe(true);

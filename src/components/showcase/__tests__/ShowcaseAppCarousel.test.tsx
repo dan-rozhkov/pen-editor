@@ -541,19 +541,28 @@ describe("<ShowcaseAppCarousel /> like button", () => {
     stubClipboard(vi.fn().mockResolvedValue(undefined));
   });
 
-  it("renders top-left and reveals on carousel hover, with the app's initial like count", () => {
+  it("renders top-left, stays visible on mobile, and reveals on desktop carousel hover", () => {
     render(<ShowcaseAppCarousel app={makeApp([makeScreen("screen-a")], 7)} />);
 
     const heart = screen.getByRole("button", { name: /Like dark, 7 likes/ });
     expect(heart.classList.contains("absolute")).toBe(true);
     expect(heart.classList.contains("top-4")).toBe(true);
     expect(heart.classList.contains("left-4")).toBe(true);
-    expect(heart.classList.contains("opacity-0")).toBe(true);
-    expect(heart.classList.contains("group-hover/carousel:opacity-100")).toBe(true);
+    expect(heart.classList.contains("opacity-100")).toBe(true);
+    expect(heart.classList.contains("pointer-events-auto")).toBe(true);
+    expect(heart.classList.contains("sm:opacity-0")).toBe(true);
+    expect(heart.classList.contains("sm:group-hover/carousel:opacity-100")).toBe(true);
     expect(heart.textContent).toContain("7");
     // Contrast fix: dark text-on-token pairing instead of white-on-white-ish.
     expect(heart.classList.contains("text-text-primary")).toBe(true);
     expect(heart.classList.contains("focus-visible:outline-accent-primary")).toBe(true);
+  });
+
+  it("shows only the heart icon when an app has no likes", () => {
+    render(<ShowcaseAppCarousel app={makeApp([makeScreen("screen-a")])} />);
+
+    const heart = screen.getByRole("button", { name: "Like dark, 0 likes" });
+    expect(heart.textContent).toBe("");
   });
 
   it("increments the count optimistically on click and sends one debounced request", async () => {

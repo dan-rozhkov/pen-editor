@@ -35,13 +35,21 @@ describe("<ShowcaseFilterBar />", () => {
     const filterBar = sortRow?.parentElement;
 
     expect(sortRow?.classList.contains("shrink-0")).toBe(true);
-    expect(filterBar?.classList.contains("overflow-x-hidden")).toBe(false);
-    expect(
-      screen.getByRole("button", { name: "Most popular" }).classList.contains("font-semibold"),
-    ).toBe(true);
-    expect(
-      screen.getByRole("button", { name: "Most popular" }).classList.contains("pb-1.5"),
-    ).toBe(true);
+    expect(filterBar?.classList.contains("overflow-x-auto")).toBe(true);
+    expect(filterBar?.classList.contains("sm:overflow-visible")).toBe(true);
+    const categoryRow = screen.getByRole("group", { name: "Categories" });
+    expect(categoryRow.classList.contains("overflow-x-auto")).toBe(false);
+    expect(categoryRow.classList.contains("scrollbar-none")).toBe(true);
+    expect(categoryRow.classList.contains("sm:overflow-x-auto")).toBe(true);
+    expect(screen.getByRole("button", { name: "Most popular" }).classList.contains("rounded-full")).toBe(
+      true,
+    );
+    expect(screen.getByRole("button", { name: "Most popular" }).classList.contains("border-text-primary")).toBe(
+      true,
+    );
+    expect(screen.getByRole("button", { name: "Latest" }).classList.contains("border-border-default")).toBe(
+      true,
+    );
     expect(screen.getByRole("button", { name: "All" }).classList.contains("text-sm")).toBe(
       true,
     );

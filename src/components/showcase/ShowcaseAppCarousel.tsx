@@ -344,14 +344,17 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
         // well under the 4.5:1 floor. `focus-visible:outline-accent-primary`
         // replaces `outline-white`, which was invisible against this
         // page's white background.
-        className="pointer-events-none absolute top-4 left-4 flex items-center gap-1 rounded-full bg-surface-active/80 px-2.5 py-1.5 text-xs font-medium text-text-primary opacity-0 backdrop-blur-sm transition-[opacity,background-color] group-hover/carousel:pointer-events-auto group-hover/carousel:opacity-100 hover:bg-surface-active/90 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary sm:top-5 sm:left-5"
+        // Touch devices do not have a persistent hover state, so the like
+        // action stays visible and tappable at the mobile breakpoint. Desktop
+        // retains the unobtrusive reveal-on-hover treatment.
+        className="pointer-events-auto absolute top-4 left-4 flex items-center gap-1 rounded-full bg-surface-active/80 px-2.5 py-1.5 text-xs font-medium text-text-primary opacity-100 backdrop-blur-sm transition-[opacity,background-color] hover:bg-surface-active/90 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary sm:pointer-events-none sm:opacity-0 sm:group-hover/carousel:pointer-events-auto sm:group-hover/carousel:opacity-100 sm:top-5 sm:left-5"
       >
         <HeartIcon
           aria-hidden="true"
           weight={liked ? "fill" : "regular"}
           className="size-3.5"
         />
-        {likeCount}
+        {likeCount > 0 && <span>{likeCount}</span>}
       </button>
     </div>
   );

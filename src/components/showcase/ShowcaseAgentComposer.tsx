@@ -44,7 +44,9 @@ export function ShowcaseAgentComposer({
         onKeyDown={handleKeyDown}
         placeholder="Ask the design agent to create…"
         rows={1}
-        className="block min-h-14 w-full resize-none bg-transparent px-4 pt-3 text-sm leading-6 text-text-primary outline-none placeholder:text-text-disabled"
+        // iOS Safari zooms focused form controls below 16px. Keep the
+        // mobile textarea at 16px, then restore the denser desktop type size.
+        className="block min-h-14 w-full resize-none bg-transparent px-4 pt-3 text-base leading-6 text-text-primary outline-none placeholder:text-text-disabled sm:text-sm"
       />
       <div className="flex justify-end px-2 pb-2">
         <button
