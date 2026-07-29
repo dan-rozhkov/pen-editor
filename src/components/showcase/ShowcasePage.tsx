@@ -72,7 +72,15 @@ function SkeletonGrid({ platform }: { platform: ShowcasePlatform }) {
         {Array.from({ length: 4 }, (_, i) => (
           <div
             key={i}
-            className="animate-pulse rounded-[2rem] bg-surface-base px-12 py-10 sm:px-16 sm:py-12"
+            // Mirrors ShowcaseAppCarousel's own padding per platform, so the
+            // skeleton occupies the same box the real card lands in — desktop
+            // cards pad by a fraction of their width (9% / 24.5%), mobile ones
+            // by the fixed px steps.
+            className={
+              platform === "desktop"
+                ? "animate-pulse rounded-[2rem] bg-surface-base px-[9%] py-[24.5%]"
+                : "animate-pulse rounded-[2rem] bg-surface-base px-12 py-10 sm:px-16 sm:py-12"
+            }
           >
             <div
               style={{ aspectRatio: platform === "desktop" ? "2880 / 2048" : "390 / 844" }}

@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 
 import type { ShowcaseScreen } from "@/lib/showcase";
+import { cn } from "@/lib/utils";
 
 export type ShowcaseCopyFeedback = "success" | "error";
 
@@ -19,8 +20,10 @@ export type ShowcaseCopyFeedback = "success" | "error";
 //   entirely: 2 columns already spans `sm` through `xl`) with `gap-4` (16px)
 //   between cells.
 // - `ShowcaseAppCarousel` (the direct parent of `ShowcaseCard`, inside each
-//   grid cell): `px-20 sm:px-16` → another 80px/64px *per side*
-//   around the image itself. Also unchanged by platform.
+//   grid cell): `px-20 sm:px-16` → another 80px/64px *per side* around the
+//   image itself for mobile apps. Desktop apps take `px-[9%]` instead — a
+//   fraction of the cell, not a constant — so the two platforms no longer
+//   share this term (see DESKTOP_SHOWCASE_IMAGE_SIZES below).
 //
 // card width = (100vw - 2×mainPad - (cols-1)×gap) / cols - 2×carouselPad
 //
@@ -42,18 +45,36 @@ const MOBILE_SHOWCASE_IMAGE_SIZES = [
 
 // Desktop grid (1 / sm:2 / xl:3, no `lg` step — 2 columns already covers
 // `sm` through `xl`, so there's nothing for a `min-width:1024px` entry to
-// express that the `min-width:640px` one doesn't already cover):
-//   xl (>=1280, 3 cols, sm padding):
-//     (100vw - 128 - 2×16) / 3 - 128 = (100vw - 160)/3 - 128
-//   sm (>=640, 2 cols, sm padding):
-//     (100vw - 128 - 1×16) / 2 - 128 = (100vw - 144)/2 - 128
-//   base (<640, 1 col): same as mobile's — column count and paddings agree
-//     below `sm` regardless of platform.
+// express that the `min-width:640px` one doesn't already cover).
+//
+// The desktop carousel's own padding is `px-[9%]` rather than a fixed px step
+// (see ShowcaseAppCarousel), so here the card is a *fraction* of the cell
+// instead of the cell minus a constant: card width = cell × (1 - 2×0.09)
+// = cell × 0.82. That also makes the base (<640) entry differ from mobile's,
+// which the fixed-padding version could share.
+//   xl (>=1280, 3 cols, sm main padding): ((100vw - 160)/3) × 0.82
+//   sm (>=640, 2 cols, sm main padding): ((100vw - 144)/2) × 0.82
+//   base (<640, 1 col, 16px main padding per side): (100vw - 32) × 0.82
 const DESKTOP_SHOWCASE_IMAGE_SIZES = [
-  "(min-width:1280px) calc((100vw - 160px)/3 - 128px)",
-  "(min-width:640px) calc((100vw - 144px)/2 - 128px)",
-  "calc(100vw - 192px)",
+  "(min-width:1280px) calc((100vw - 160px)/3*0.82)",
+  "(min-width:640px) calc((100vw - 144px)/2*0.82)",
+  "calc((100vw - 32px)*0.82)",
 ].join(", ");
+
+// Corner radius of the screen itself. The mobile card keeps `rounded-3xl`
+// (24px) — a phone screenshot reads as a phone. Desktop screenshots in the
+// reference are rounded far more lightly: 28px against a 956px-wide screen,
+// i.e. ~2.9% of the screen's width. Across the widths a desktop card actually
+// renders at (~280px on a phone, ~415px in a 2-column grid, ~480px on a wide
+// monitor) that ratio lands between 8 and 14px, so 12px is the fixed value
+// that matches it over the common range — a percentage radius would go
+// elliptical on a landscape box.
+const DESKTOP_SCREEN_RADIUS = "rounded-xl";
+const MOBILE_SCREEN_RADIUS = "rounded-3xl";
+
+function resolveScreenRadius(width: number, height: number): string {
+  return width > height ? DESKTOP_SCREEN_RADIUS : MOBILE_SCREEN_RADIUS;
+}
 
 // ShowcaseCard isn't handed the platform directly — the caller already
 // resolves a portrait-vs-landscape shape via `width`/`height` (the app's
@@ -159,6 +180,7 @@ export function ShowcaseCard({
   // back to the screen's own width/height.
   const layoutWidth = coverWidth ?? screen.width;
   const layoutHeight = coverHeight ?? screen.height;
+  const screenRadius = resolveScreenRadius(layoutWidth, layoutHeight);
   const [imageLoaded, setImageLoaded] = useState(false);
   // `onLoad` never fires for an image the browser had already fully decoded
   // before this node was inserted (e.g. a same-URL slide revisited after
@@ -198,7 +220,10 @@ export function ShowcaseCard({
       // desktop ones are landscape (~2880/2048) — an arbitrary-value Tailwind
       // class can't take a runtime value, so this has to be a real style
       // property.
-      className="relative w-full overflow-hidden rounded-3xl bg-surface-elevated bg-cover bg-top"
+      className={cn(
+        "relative w-full overflow-hidden bg-surface-elevated bg-cover bg-top",
+        screenRadius,
+      )}
       style={{
         aspectRatio: resolveAspectRatio(layoutWidth, layoutHeight),
         ...(showLqip ? { backgroundImage: `url(${screen.lqip})` } : null),
@@ -256,7 +281,10 @@ export function ShowcaseCard({
           itself would be. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 rounded-3xl inset-ring-1 inset-ring-gray-200"
+        className={cn(
+          "pointer-events-none absolute inset-0 inset-ring-1 inset-ring-gray-200",
+          screenRadius,
+        )}
       />
 
       {feedback && (

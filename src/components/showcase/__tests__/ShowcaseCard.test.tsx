@@ -33,10 +33,14 @@ const SHOWCASE_IMAGE_SIZES = [
   "calc(100vw - 192px)",
 ].join(", ");
 
+// Desktop cards pad by a fraction of the grid cell (`px-[9%]` on the
+// carousel), so their card width is the cell scaled by 0.82 rather than the
+// cell minus a fixed 2x64px — including below `sm`, where the mobile formula
+// still subtracts its constant peek.
 const DESKTOP_SHOWCASE_IMAGE_SIZES = [
-  "(min-width:1280px) calc((100vw - 160px)/3 - 128px)",
-  "(min-width:640px) calc((100vw - 144px)/2 - 128px)",
-  "calc(100vw - 192px)",
+  "(min-width:1280px) calc((100vw - 160px)/3*0.82)",
+  "(min-width:640px) calc((100vw - 144px)/2*0.82)",
+  "calc((100vw - 32px)*0.82)",
 ].join(", ");
 
 describe("<ShowcaseCard />", () => {

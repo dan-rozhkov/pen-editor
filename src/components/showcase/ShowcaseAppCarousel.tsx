@@ -206,6 +206,11 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
   const coverScreen = app.screens[0];
   const coverWidth = coverScreen.width;
   const coverHeight = coverScreen.height;
+  // Same landscape-vs-portrait test ShowcaseCard uses to pick its image
+  // `sizes` and corner radius — deriving the platform from the shape the
+  // carousel already resolved keeps one source of truth instead of a second
+  // prop that could disagree with the dimensions it's describing.
+  const isDesktop = coverWidth > coverHeight;
 
   const scrollToIndex = useCallback((index: number) => {
     const scroller = scrollerRef.current;
@@ -224,7 +229,19 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
       role="region"
       aria-roledescription="carousel"
       aria-label={`${app.screens[0].title} screens`}
-      className="group/carousel relative overflow-hidden rounded-[2rem] bg-surface-base py-10 sm:py-12"
+      // Desktop apps get their padding as a *fraction of the card's width*
+      // rather than the mobile branch's fixed px steps. Measured off the
+      // reference card (1170x1170 outer, 956x596 screen): 107px horizontal and
+      // 287px vertical padding, i.e. 9.15% and 24.5% of the card's width.
+      // Both axes of a percentage padding resolve against the containing
+      // block's *width* — the grid cell here, which is also this panel's own
+      // width — so the landscape screenshot keeps that generous, square-ish
+      // frame at every breakpoint instead of turning into a squat strip at the
+      // wide end and a hairline-padded one at the narrow end.
+      className={cn(
+        "group/carousel relative overflow-hidden rounded-[2rem] bg-surface-base",
+        isDesktop ? "py-[24.5%]" : "py-10 sm:py-12",
+      )}
     >
       {/* `role="region"` lives on the panel, NOT on the <ol>: an explicit role
           on the list would replace its implicit `list` role, and an <li>
@@ -233,7 +250,16 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
       <ol
         ref={scrollerRef}
         aria-label={`${app.screens[0].title} screens`}
-        className="scrollbar-none flex items-center gap-x-6 overflow-x-auto overflow-y-hidden overscroll-x-contain snap-x snap-mandatory scroll-smooth px-20 sm:px-16"
+        className={cn(
+          "scrollbar-none flex items-center gap-x-6 overflow-x-auto overflow-y-hidden overscroll-x-contain snap-x snap-mandatory scroll-smooth",
+          // See the padding note on the panel above: 9% of the card's width for
+          // desktop, the original fixed peek for mobile. This padding is also
+          // what sets each slide's width (the slides are `w-full` of the
+          // scroller's content box), so changing it changes the rendered image
+          // width — DESKTOP_SHOWCASE_IMAGE_SIZES in ShowcaseCard is derived
+          // from this exact number and has to move with it.
+          isDesktop ? "px-[9%]" : "px-20 sm:px-16",
+        )}
       >
         {app.screens.map((screen, index) => (
           <li
