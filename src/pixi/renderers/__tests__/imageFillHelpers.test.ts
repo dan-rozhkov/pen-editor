@@ -1,9 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { Assets, Container } from "pixi.js";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import {
   isSvgUrl,
   getTextureCacheKey,
   getPatternTextureCacheKey,
   normalizeSvgDataUrl,
+  withTexture,
 } from "@/pixi/renderers/imageFillHelpers";
 
 /** Decode a `data:image/svg+xml` URL (either `;base64,` or plain/percent-encoded)
@@ -151,5 +153,43 @@ describe("getPatternTextureCacheKey", () => {
     const url = "https://example.com/tile.png";
     expect(getPatternTextureCacheKey(url, 1, 1)).toBe(getPatternTextureCacheKey(url, 5, 3));
     expect(getPatternTextureCacheKey(url, 1, 1)).toBe("img:https://example.com/tile.png");
+  });
+});
+
+describe("loadRasterTextureFromUrl", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("does not retry a remote image without CORS and create a tainted WebGL texture", async () => {
+    const crossOriginAtLoad: Array<string | null> = [];
+
+    class FakeImage {
+      crossOrigin: string | null = null;
+      naturalWidth = 100;
+      naturalHeight = 100;
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+
+      set src(_url: string) {
+        crossOriginAtLoad.push(this.crossOrigin);
+        queueMicrotask(() => this.onerror?.());
+      }
+    }
+
+    vi.spyOn(Assets, "load").mockRejectedValueOnce(new Error("CORS blocked"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubGlobal("Image", FakeImage);
+
+    const url = "https://cdn.example.test/no-cors.jpg";
+    const onReady = vi.fn();
+    withTexture(url, 100, 100, new Container(), onReady);
+
+    await vi.waitFor(() => {
+      expect(warn).toHaveBeenCalledWith("[pixi] Failed to load image fill", url);
+    });
+    expect(crossOriginAtLoad).toEqual(["anonymous"]);
+    expect(onReady).not.toHaveBeenCalled();
   });
 });

@@ -86,3 +86,92 @@ test("convert embed to design via h2d capture", async ({ page }) => {
   expect(result.inheritedText?.lineHeight).toBe(1.5);
   expect(result.roundMarker?.cornerRadius).toBe(14);
 });
+
+test("a remote image without CORS does not blank the converted design", async ({ page }) => {
+  const textureUploadErrors: string[] = [];
+  page.on("console", (message) => {
+    const text = message.text();
+    if (
+      message.type() === "error" &&
+      text.includes("texImage2D") &&
+      text.includes("cross-origin")
+    ) {
+      textureUploadErrors.push(text);
+    }
+  });
+  page.on("pageerror", (error) => {
+    if (
+      error.message.includes("texImage2D") &&
+      error.message.includes("cross-origin")
+    ) {
+      textureUploadErrors.push(error.message);
+    }
+  });
+
+  const remoteImageUrl = "https://no-cors.example/hero.png";
+  await page.route(remoteImageUrl, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "image/png",
+      // Intentionally omit Access-Control-Allow-Origin. A plain DOM <img>
+      // may display this response, but a CORS image request and WebGL upload
+      // must reject it.
+      body: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl3bNwAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    });
+  });
+
+  await page.goto("/app");
+  await page.waitForFunction(
+    () => Boolean((window as unknown as { __sceneStore?: unknown }).__sceneStore),
+  );
+
+  const result = await page.evaluate(async ({ html, imageUrl }) => {
+    const store = (
+      window as unknown as { __sceneStore: { getState: () => SceneStoreState } }
+    ).__sceneStore;
+    store.getState().setNodes([
+      {
+        id: "e2e-no-cors-embed",
+        type: "embed",
+        x: 0,
+        y: 0,
+        width: 400,
+        height: 300,
+        name: "No CORS Embed",
+        htmlContent: html.replace("__IMAGE_URL__", imageUrl),
+      },
+    ]);
+    const rootId = await store
+      .getState()
+      .convertEmbedToDesign("e2e-no-cors-embed");
+    const state = store.getState();
+    return {
+      rootId,
+      embedGone: !state.nodesById["e2e-no-cors-embed"],
+      survivingText: Object.values(state.nodesById).some(
+        (node) => node.type === "text" && node.text === "Native content survives",
+      ),
+    };
+  }, {
+    html: [
+      '<div style="width:400px;height:300px;background:#123456">',
+      '<div style="color:#ffffff;font-size:24px">Native content survives</div>',
+      '<img src="__IMAGE_URL__" style="width:100px;height:100px">',
+      "</div>",
+    ].join(""),
+    imageUrl: remoteImageUrl,
+  });
+
+  expect(result.rootId).not.toBeNull();
+  expect(result.embedGone).toBe(true);
+  expect(result.survivingText).toBe(true);
+
+  // Let the async image-fill loader reach its failure path and Pixi render a
+  // frame. Before the fix, the non-CORS fallback created a tainted texture and
+  // texImage2D aborted the entire batch here.
+  await page.waitForTimeout(500);
+  expect(textureUploadErrors).toEqual([]);
+});

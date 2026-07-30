@@ -129,8 +129,11 @@ async function loadRasterTextureFromUrl(url: string): Promise<Texture> {
     // fall through
   }
 
-  // Attempt 3: Browser image without CORS (works when server lacks CORS headers)
-  return createTextureFromImage(await loadImageElement(url, false));
+  // A remote image that only loads without CORS cannot be uploaded to WebGL:
+  // the browser accepts it in an <img>, but texImage2D throws SecurityError
+  // and aborts Pixi's whole render batch. Degrade to a missing image instead
+  // of blanking every other node in the converted design.
+  throw new Error(`Image URL is not available with CORS: ${url}`);
 }
 
 function clampTextureDimension(value: number): number {
