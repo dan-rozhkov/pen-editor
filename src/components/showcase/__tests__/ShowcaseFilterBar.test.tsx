@@ -257,7 +257,7 @@ describe("<ShowcaseFilterBar />", () => {
     }
   });
 
-  it("renders a controlled model select with 'All models' plus a labelled option per model", () => {
+  it("renders a controlled model select with 'All models' plus a label-only option per model", () => {
     const onModelChange = vi.fn();
     const { rerender } = render(
       <ShowcaseFilterBar
@@ -277,9 +277,15 @@ describe("<ShowcaseFilterBar />", () => {
     const select = screen.getByRole("combobox", { name: "Model" }) as HTMLSelectElement;
     expect(select.value).toBe("");
     expect(select.classList.contains("[field-sizing:content]")).toBe(true);
+    expect(select.classList.contains("max-w-[200px]")).toBe(true);
+    expect(select.classList.contains("truncate")).toBe(true);
+    expect(select.classList.contains("focus-visible:outline-1")).toBe(true);
+    expect(select.classList.contains("focus-visible:outline-text-primary")).toBe(true);
+    expect(select.classList.contains("focus-visible:outline-accent-primary")).toBe(false);
     const options = Array.from(select.querySelectorAll("option")).map((o) => o.textContent);
     expect(options[0]).toBe("All models");
-    expect(options).toContain("DeepSeek V4 Pro (12)");
+    expect(options).toContain("DeepSeek V4 Pro");
+    expect(options).not.toContain("DeepSeek V4 Pro (12)");
 
     fireEvent.change(select, { target: { value: "deepseek/deepseek-v4-pro" } });
 

@@ -29,6 +29,8 @@ const SORT_OPTIONS: { value: ShowcaseSort; label: string }[] = [
 
 const FOCUS_RING =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary";
+const SELECT_FOCUS_RING =
+  "focus-visible:outline-1 focus-visible:outline-offset-0 focus-visible:outline-text-primary";
 
 function capitalizeFirst(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
@@ -186,8 +188,8 @@ export function ShowcaseFilterBar({
               value={model ?? ""}
               onChange={(event) => onModelChange(event.target.value || null)}
               className={cn(
-                "shrink-0 appearance-none rounded-full border bg-transparent py-1.5 pr-8 pl-4 text-sm font-medium whitespace-nowrap transition-colors [field-sizing:content]",
-                FOCUS_RING,
+                "max-w-[200px] shrink-0 appearance-none truncate rounded-full border bg-transparent py-1.5 pr-8 pl-4 text-sm font-medium transition-colors [field-sizing:content]",
+                SELECT_FOCUS_RING,
                 model !== null
                   ? "border-text-primary text-text-primary"
                   : "border-border-default text-text-muted hover:text-text-primary",
@@ -205,7 +207,7 @@ export function ShowcaseFilterBar({
               )}
               {models.map((m) => (
                 <option key={m.model} value={m.model}>
-                  {getShowcaseModelLabel(m.model)} ({m.apps})
+                  {getShowcaseModelLabel(m.model)}
                 </option>
               ))}
             </select>

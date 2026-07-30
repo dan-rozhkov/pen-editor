@@ -69,7 +69,13 @@ test("the model filter sizes itself to its selected option", async ({ page }, te
   await page.route(/\/api\/showcase\/models(?:\?|$)/, (route) =>
     route.fulfill({
       json: {
-        models: [{ model: "deepseek/deepseek-v4-pro", apps: 128 }],
+        models: [
+          { model: "deepseek/deepseek-v4-pro", apps: 128 },
+          {
+            model: "test/an-extremely-long-model-name-that-exceeds-the-two-hundred-pixel-limit",
+            apps: 1,
+          },
+        ],
       },
     }),
   );
@@ -86,6 +92,12 @@ test("the model filter sizes itself to its selected option", async ({ page }, te
   await expect
     .poll(() => select.evaluate((element) => element.getBoundingClientRect().width))
     .toBeGreaterThan(allModelsWidth);
+
+  await select.selectOption("test/an-extremely-long-model-name-that-exceeds-the-two-hundred-pixel-limit");
+  await expect(select).toHaveCSS("text-overflow", "ellipsis");
+  await expect
+    .poll(() => select.evaluate((element) => element.getBoundingClientRect().width))
+    .toBeLessThanOrEqual(200);
 });
 
 test("a showcase prompt opens a new agent chat and sends the message", async ({
