@@ -1,15 +1,34 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { PwaUpdateGate, AUTO_APPLY_KEY } from "@/components/pwa/PwaUpdateGate";
+import { PwaUpdateGate } from "@/components/pwa/PwaUpdateGate";
 import { Toaster } from "@/components/ui/sonner";
-import { getUpdateSW } from "@/pwa/registerServiceWorker";
 import { usePwaStore } from "@/store/pwaStore";
 
 const applyUpdate = vi.fn();
 
 vi.mock("@/pwa/registerServiceWorker", () => ({
-  getUpdateSW: vi.fn(),
+  getUpdateSW: vi.fn(() => applyUpdate),
+}));
+
+// `autoApplyAlreadyTried` is a constant updateSelfHeal.ts reads once from
+// sessionStorage at module import time (see that module's comment — it must
+// be readable before React ever mounts, so it can't be a hook or a
+// useState snapshot). A real re-import per test would need vi.resetModules(),
+// which would also hand PwaUpdateGate a second, disconnected copy of `react`
+// and `react-router` from the ones MemoryRouter/testing-library already hold
+// — two React copies in one render tree breaks hooks outright. Mock the
+// module instead, with a mutable getter (`state.autoApplyAlreadyTried`) so
+// each test can flip the value without touching the module graph.
+const state = vi.hoisted(() => ({ autoApplyAlreadyTried: false }));
+vi.mock("@/pwa/updateSelfHeal", () => ({
+  get autoApplyAlreadyTried() {
+    return state.autoApplyAlreadyTried;
+  },
+  // Real implementation is a pure string check with no module-load-order
+  // concerns, so unlike autoApplyAlreadyTried it doesn't need the mutable
+  // getter above — just re-export the actual segment-match logic.
+  isEditorPath: (pathname: string) => pathname === "/app" || pathname.startsWith("/app/"),
 }));
 
 // The gate pulls its toast + sonner portal in through lazy() dynamic imports.
@@ -27,6 +46,12 @@ const IMPORT_TIMEOUT = { timeout: 5000 };
 // editor's App — so an update detected while the user was on the showcase set
 // pwaStore.updateReady and then rendered nowhere. The gate lives above the
 // route split and brings its own sonner portal when the editor isn't there.
+//
+// Applying the update itself no longer happens in this component — that
+// moved to registerServiceWorker's onNeedRefresh (see
+// registerServiceWorker.test.ts and updateSelfHeal.test.ts), so it survives
+// even a render that never commits. This gate now only decides whether to
+// show the fallback toast.
 function renderGate(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -40,10 +65,11 @@ beforeEach(() => {
     updateReady: false,
     offlineReady: false,
     toastSuppressed: false,
+    autoApplyStalled: false,
   });
   sessionStorage.clear();
   applyUpdate.mockClear();
-  vi.mocked(getUpdateSW).mockReturnValue(applyUpdate);
+  state.autoApplyAlreadyTried = false;
 });
 
 afterEach(() => {
@@ -52,23 +78,11 @@ afterEach(() => {
 });
 
 describe("PwaUpdateGate", () => {
-  // The showcase holds no unsaved state, so asking permission buys nothing and
-  // costs everything: a visitor who never opens the editor has no reason to
-  // notice a prompt, and prompt-mode keeps serving the stale bundle until
-  // someone clicks it. Apply it for them.
-  it("applies the update itself on the showcase route, without prompting", async () => {
-    usePwaStore.setState({ updateReady: true });
-
-    renderGate("/");
-
-    await waitFor(() => expect(applyUpdate).toHaveBeenCalledWith(true), IMPORT_TIMEOUT);
-    expect(screen.queryByTestId("pwa-update-toast")).toBeNull();
-  });
-
-  // Guard against a reload loop: if the activation didn't take (the update is
-  // still waiting on the next load), stop trying and let the visitor decide.
-  it("prompts instead when an auto-apply already ran in this tab", async () => {
-    sessionStorage.setItem(AUTO_APPLY_KEY, "1");
+  // Auto-apply already ran this session (registerServiceWorker's
+  // onNeedRefresh) and we're still rendering, so either it's still pending or
+  // it silently didn't take — the toast is the fallback path either way.
+  it("shows the toast on the showcase once auto-apply has already been tried this session", async () => {
+    state.autoApplyAlreadyTried = true;
     usePwaStore.setState({ updateReady: true });
 
     renderGate("/");
@@ -76,6 +90,32 @@ describe("PwaUpdateGate", () => {
     expect(await screen.findByTestId("pwa-update-toast", undefined, IMPORT_TIMEOUT)).toBeTruthy();
     expect(applyUpdate).not.toHaveBeenCalled();
     expect(document.querySelectorAll("[data-sonner-toaster]")).toHaveLength(1);
+  });
+
+  // applyUpdateNow's own stall timer (updateSelfHeal.ts) is the fallback for
+  // when autoApplyAlreadyTried never gets a chance to matter — the update
+  // fired but the reload it should trigger never arrived. autoApplyStalled
+  // is store state (unlike autoApplyAlreadyTried, a session flag read once
+  // at import time), so it's exercised directly through usePwaStore rather
+  // than the updateSelfHeal mock.
+  it("shows the toast on the showcase once the auto-apply stall timer fires", async () => {
+    usePwaStore.setState({ updateReady: true, autoApplyStalled: true });
+
+    renderGate("/");
+
+    expect(await screen.findByTestId("pwa-update-toast", undefined, IMPORT_TIMEOUT)).toBeTruthy();
+  });
+
+  // Auto-apply hasn't been tried yet this session — give it a chance to work
+  // silently (a separate mechanism entirely, not this component) before
+  // falling back to a prompt.
+  it("stays silent on the showcase before auto-apply has been tried", async () => {
+    usePwaStore.setState({ updateReady: true });
+
+    const { container } = renderGate("/");
+
+    await waitFor(() => expect(container.firstChild).toBeNull(), IMPORT_TIMEOUT);
+    expect(screen.queryByTestId("pwa-update-toast")).toBeNull();
   });
 
   it("shows the update toast on the editor route, reusing App's portal", async () => {

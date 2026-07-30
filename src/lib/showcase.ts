@@ -126,8 +126,145 @@ export async function fetchShowcase(
     return { ok: false, notConfigured: false, error: message };
   }
 
-  const data = (await res.json()) as ShowcasePage;
+  let raw: unknown;
+  try {
+    raw = await res.json();
+  } catch {
+    return {
+      ok: false,
+      notConfigured: false,
+      error: STALE_CLIENT_ERROR,
+    };
+  }
+
+  const data = parseShowcasePage(raw);
+  if (!data) {
+    return {
+      ok: false,
+      notConfigured: false,
+      error: STALE_CLIENT_ERROR,
+    };
+  }
   return { ok: true, data };
+}
+
+// Both repos deploy independently and a returning visitor's service worker
+// can keep serving an old bundle against a newer backend (this is exactly
+// how a prior outage happened: a stale client crashed on a response shape
+// the backend had since changed). A response shape this client doesn't
+// recognize is the signature of that same skew, so the error nudges toward
+// the fix that actually works (reload to pick up the matching bundle)
+// rather than a generic "something broke".
+const STALE_CLIENT_ERROR =
+  "The showcase feed returned data this page doesn't recognize — try reloading the page to get the latest version.";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+// Validates exactly the fields the render path dereferences unconditionally
+// (array .length/.map, array indexing, string interpolation used as a DOM
+// attribute) — not the full response shape. Anything genuinely optional
+// (`platform`, `lqip`, `imageUrl1x`, screen `createdAt` used only inside
+// coercing contexts) is intentionally left unchecked, so the next backend
+// field addition doesn't turn into another outage here.
+//
+// Invalid *apps*/*screens* are dropped rather than failing the whole page:
+// ShowcasePage already renders a shorter (or empty) grid gracefully, so one
+// malformed row shouldn't blank the rest of a page that mostly parsed fine.
+// The response is only rejected outright when the top-level envelope itself
+// doesn't match (missing/wrong-typed `apps`, e.g. the old `{screens: [...]}`
+// shape) — that's not "one bad row", it's "this isn't the shape we speak".
+function parseShowcasePage(raw: unknown): ShowcasePage | null {
+  if (!isRecord(raw) || !Array.isArray(raw.apps)) {
+    return null;
+  }
+
+  const apps: ShowcaseApp[] = [];
+  for (const candidate of raw.apps) {
+    const app = parseShowcaseApp(candidate);
+    if (app) {
+      apps.push(app);
+    }
+  }
+
+  const nextCursor = typeof raw.nextCursor === "string" ? raw.nextCursor : null;
+  return { apps, nextCursor };
+}
+
+function parseShowcaseApp(raw: unknown): ShowcaseApp | null {
+  if (!isRecord(raw) || typeof raw.runId !== "string" || raw.runId.length === 0) {
+    // Unconditional (not import.meta.env.DEV-gated): this is the one signal
+    // that a backend field rename silently emptied the showcase, and that
+    // class of bug shows up in production deploys, not dev sessions — the
+    // frontend and backend here deploy independently (see the module
+    // comment), so this is diagnostic for prod, not noise to gate out of it.
+    console.warn(
+      "[showcase] dropping app: missing or invalid runId",
+      isRecord(raw) ? raw.runId : raw,
+    );
+    return null;
+  }
+  if (!Array.isArray(raw.screens)) {
+    console.warn(`[showcase] dropping app ${raw.runId}: screens is not an array`);
+    return null;
+  }
+
+  const screens: ShowcaseScreen[] = [];
+  for (const candidate of raw.screens) {
+    const screen = parseShowcaseScreen(candidate);
+    if (screen) {
+      screens.push(screen);
+    }
+  }
+  // ShowcaseAppCarousel reads `app.screens[0]` unconditionally (the cover
+  // screen) — an app with zero surviving screens would crash exactly the
+  // same way the malformed response it's guarding against does.
+  if (screens.length === 0) {
+    console.warn(`[showcase] dropping app ${raw.runId}: no valid screens survived parsing`);
+    return null;
+  }
+
+  return {
+    runId: raw.runId,
+    theme: typeof raw.theme === "string" ? raw.theme : "",
+    model: typeof raw.model === "string" ? raw.model : "",
+    createdAt: typeof raw.createdAt === "string" ? raw.createdAt : "",
+    likes: typeof raw.likes === "number" ? raw.likes : 0,
+    platform: raw.platform === "mobile" || raw.platform === "desktop" ? raw.platform : undefined,
+    screens,
+  };
+}
+
+function parseShowcaseScreen(raw: unknown): ShowcaseScreen | null {
+  if (
+    !isRecord(raw) ||
+    typeof raw.id !== "string" ||
+    raw.id.length === 0 ||
+    typeof raw.title !== "string" ||
+    typeof raw.imageUrl !== "string" ||
+    raw.imageUrl.length === 0 ||
+    typeof raw.width !== "number" ||
+    typeof raw.height !== "number"
+  ) {
+    console.warn(
+      "[showcase] dropping screen: missing/invalid required field",
+      isRecord(raw) && typeof raw.id === "string" ? raw.id : raw,
+    );
+    return null;
+  }
+
+  return {
+    id: raw.id,
+    title: raw.title,
+    imageUrl: raw.imageUrl,
+    imageUrl1x: typeof raw.imageUrl1x === "string" ? raw.imageUrl1x : undefined,
+    lqip: typeof raw.lqip === "string" ? raw.lqip : undefined,
+    htmlUrl: typeof raw.htmlUrl === "string" ? raw.htmlUrl : "",
+    width: raw.width,
+    height: raw.height,
+    createdAt: typeof raw.createdAt === "string" ? raw.createdAt : "",
+  };
 }
 
 export interface ShowcaseCategory {
@@ -160,12 +297,26 @@ export async function fetchShowcaseCategories(
   if (!res.ok) {
     return { ok: false };
   }
+  let raw: unknown;
   try {
-    const data = (await res.json()) as { categories: ShowcaseCategory[] };
-    return { ok: true, categories: data.categories ?? [] };
+    raw = await res.json();
   } catch {
     return { ok: false };
   }
+  if (!isRecord(raw) || !Array.isArray(raw.categories)) {
+    return { ok: false };
+  }
+
+  const categories: ShowcaseCategory[] = [];
+  for (const candidate of raw.categories) {
+    if (isRecord(candidate) && typeof candidate.theme === "string") {
+      categories.push({
+        theme: candidate.theme,
+        apps: typeof candidate.apps === "number" ? candidate.apps : 0,
+      });
+    }
+  }
+  return { ok: true, categories };
 }
 
 export type LikeShowcaseAppResult =
@@ -202,10 +353,14 @@ export async function likeShowcaseApp(
   if (!res.ok) {
     return { ok: false };
   }
+  let raw: unknown;
   try {
-    const data = (await res.json()) as { likes: number };
-    return { ok: true, likes: data.likes };
+    raw = await res.json();
   } catch {
     return { ok: false };
   }
+  if (!isRecord(raw) || typeof raw.likes !== "number") {
+    return { ok: false };
+  }
+  return { ok: true, likes: raw.likes };
 }

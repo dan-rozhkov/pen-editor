@@ -1,7 +1,9 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
+import { RootErrorBoundary } from '@/components/RootErrorBoundary'
 import { registerServiceWorker } from '@/pwa/registerServiceWorker'
+import { recoverFromFatalError } from '@/pwa/updateSelfHeal'
 
 import './index.css'
 import { AppRouter } from './AppRouter'
@@ -10,6 +12,28 @@ import { AppRouter } from './AppRouter'
 // (no devOptions are enabled), so only register there.
 if (import.meta.env.PROD) {
   registerServiceWorker()
+}
+
+// RootErrorBoundary only catches crashes that happen *during React's render*.
+// By ES module semantics, every static import above this line (RootErrorBoundary,
+// registerServiceWorker, updateSelfHeal, AppRouter, index.css) has already
+// finished evaluating by the time this listener is registered, so it cannot
+// catch a crash while THIS module or its static imports are still evaluating
+// — catching that would need an inline script in index.html, which is
+// deliberately out of scope here. What it *does* catch: a crash while
+// evaluating a module loaded via dynamic `import()` after this point (the
+// editor itself, since AppRouter lazy-loads App), and any async error thrown
+// before React's first commit. Guarded to production only (mirrors
+// registerServiceWorker above — there's no service worker to recover from in
+// dev) and to an empty #root specifically, so a later, unrelated runtime
+// error in a fully-mounted app doesn't reload a live session out from under
+// the user.
+if (import.meta.env.PROD) {
+  window.addEventListener('error', () => {
+    if (!document.getElementById('root')?.childElementCount) {
+      recoverFromFatalError()
+    }
+  })
 }
 
 // desktopBridge/mcpBridge statically import the command registry and the
@@ -81,6 +105,8 @@ if (import.meta.env.DEV) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AppRouter />
+    <RootErrorBoundary>
+      <AppRouter />
+    </RootErrorBoundary>
   </StrictMode>,
 )

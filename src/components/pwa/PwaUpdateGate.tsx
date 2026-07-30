@@ -1,7 +1,7 @@
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy } from "react";
 import { useLocation } from "react-router";
 
-import { getUpdateSW } from "@/pwa/registerServiceWorker";
+import { autoApplyAlreadyTried, isEditorPath } from "@/pwa/updateSelfHeal";
 import { usePwaStore } from "@/store/pwaStore";
 
 // The update prompt is mounted above the route split (AppRouter) because
@@ -24,46 +24,33 @@ const ToasterBase = lazy(() =>
   import("@/components/ui/ToasterBase").then((m) => ({ default: m.ToasterBase })),
 );
 
-// Marks "this tab already tried to activate a waiting worker". Read once at
-// mount and cleared immediately: a successful auto-apply reloads into a build
-// with nothing waiting, so the next load starts clean, while a failed one
-// still sees the flag from before the reload and falls back to the prompt
-// instead of reloading forever. sessionStorage (not local) keeps that scoped
-// to the tab that did the reloading. (Cost of that simplicity: a second deploy
-// landing in the very next load of the same tab prompts instead of applying
-// itself. A prompt that works is a fine worst case; a reload loop is not.)
-export const AUTO_APPLY_KEY = "pen.pwaAutoApplied";
-
 export function PwaUpdateGate() {
   const updateReady = usePwaStore((s) => s.updateReady);
   const suppressed = usePwaStore((s) => s.toastSuppressed);
-  const isEditorRoute = useLocation().pathname.startsWith("/app");
+  const autoApplyStalled = usePwaStore((s) => s.autoApplyStalled);
+  // Route check shared with updateSelfHeal.ts (isEditorPath) rather than an
+  // inline startsWith("/app") here — a second, drifting copy of "what counts
+  // as the editor route" is exactly the kind of footgun that check's own
+  // comment warns about.
+  const isEditorRoute = isEditorPath(useLocation().pathname);
 
-  // Snapshot at first render — before the effects below can write the flag and
-  // before `updateReady` flips (registerServiceWorker resolves a tick or two
-  // after mount), so this never reads our own write back.
-  const [autoApplyTried] = useState(
-    () => sessionStorage.getItem(AUTO_APPLY_KEY) !== null,
-  );
-  // Clearing lives in its own mount effect, declared before the apply effect so
-  // it can't wipe the flag that one sets in the same commit.
-  useEffect(() => sessionStorage.removeItem(AUTO_APPLY_KEY), []);
+  // Auto-applying the update itself no longer happens here — it runs from
+  // registerServiceWorker's onNeedRefresh callback (see updateSelfHeal.ts),
+  // outside React entirely, so it survives even a render that never
+  // commits. This gate is left with exactly one job: the toast, which is
+  // the fallback path. It always shows on the editor route (which never
+  // auto-applies — it may hold an unsaved document). On the showcase it
+  // shows once auto-apply has already been tried this session (pending or
+  // silently failed either way), OR once applyUpdateNow's own stall timer
+  // fires (autoApplyStalled) — that second condition exists because
+  // autoApplyAlreadyTried is a session-flag read once at module init, so a
+  // page that never reloads (activation hung, getUpdateSW() was undefined)
+  // would otherwise never see this flip and the visitor would get neither
+  // the silent update nor a toast for the rest of the session.
+  const showToast =
+    updateReady && !suppressed && (isEditorRoute || autoApplyAlreadyTried || autoApplyStalled);
 
-  // The showcase is a stateless gallery: a prompt there only means the visitor
-  // keeps reading a stale bundle until they happen to click a toast — which is
-  // exactly how a shipped style change sat unseen behind a refresh that could
-  // never pick it up. Activate the waiting worker and reload right away.
-  // The editor keeps the prompt: it may hold an unsaved document.
-  const autoApply = updateReady && !suppressed && !isEditorRoute && !autoApplyTried;
-  useEffect(() => {
-    if (!autoApply) return;
-    sessionStorage.setItem(AUTO_APPLY_KEY, "1");
-    // Sends SKIP_WAITING; vite-plugin-pwa reloads once the new worker takes
-    // control. Nothing to await — the page goes away.
-    void getUpdateSW()?.(true);
-  }, [autoApply]);
-
-  if (!updateReady || suppressed || autoApply) return null;
+  if (!showToast) return null;
 
   return (
     <Suspense fallback={null}>

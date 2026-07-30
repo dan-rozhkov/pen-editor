@@ -18,16 +18,29 @@ interface PwaState {
    * the toast reappears as soon as suppression lifts.
    */
   toastSuppressed: boolean;
+  /**
+   * Set by applyUpdateNow() a few seconds after it fires the update, as a
+   * fallback for the showcase toast (see PwaUpdateGate). If the reload it
+   * triggered actually happens, the page navigates away and this timer never
+   * fires — it only matters when the auto-apply silently didn't take
+   * (activation hung, or there was no update function registered yet), which
+   * would otherwise leave the visitor with neither a silent update nor a
+   * prompt for the rest of the session.
+   */
+  autoApplyStalled: boolean;
   setUpdateReady: (updateReady: boolean) => void;
   setOfflineReady: (offlineReady: boolean) => void;
   setToastSuppressed: (toastSuppressed: boolean) => void;
+  setAutoApplyStalled: (autoApplyStalled: boolean) => void;
 }
 
 export const usePwaStore = create<PwaState>((set) => ({
   updateReady: false,
   offlineReady: false,
   toastSuppressed: false,
+  autoApplyStalled: false,
   setUpdateReady: (updateReady) => set({ updateReady }),
   setOfflineReady: (offlineReady) => set({ offlineReady }),
   setToastSuppressed: (toastSuppressed) => set({ toastSuppressed }),
+  setAutoApplyStalled: (autoApplyStalled) => set({ autoApplyStalled }),
 }));
