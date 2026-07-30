@@ -71,15 +71,18 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-// The page always fetches /api/showcase/categories alongside the feed now;
-// tests that only care about the feed response route this to an empty list
-// so the mock doesn't need a per-test branch for it.
+// The page always fetches /api/showcase/categories and /api/showcase/models
+// alongside the feed now; tests that only care about the feed response route
+// both to an empty list so the mock doesn't need a per-test branch for them.
 function withCategories(
   handler: (input: RequestInfo | URL) => Promise<Response> | Response,
 ) {
   return vi.fn(async (input: RequestInfo | URL) => {
     if (String(input).includes("/api/showcase/categories")) {
       return jsonResponse({ categories: [] });
+    }
+    if (String(input).includes("/api/showcase/models")) {
+      return jsonResponse({ models: [] });
     }
     return handler(input);
   });
@@ -497,6 +500,9 @@ describe("<ShowcasePage /> filters", () => {
       if (url.includes("/api/showcase/categories")) {
         return categoriesResponse([{ theme: "mobile banking", apps: 2 }]);
       }
+      if (url.includes("/api/showcase/models")) {
+        return jsonResponse({ models: [] });
+      }
       expect(url).toContain("sort=popular");
       expect(url).not.toContain("category=");
       return jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null });
@@ -567,6 +573,9 @@ describe("<ShowcasePage /> filters", () => {
       if (url.includes("/api/showcase/categories")) {
         return categoriesResponse([{ theme: "mobile banking", apps: 2 }]);
       }
+      if (url.includes("/api/showcase/models")) {
+        return jsonResponse({ models: [] });
+      }
       expect(url).toContain("sort=latest");
       expect(url).toContain("category=mobile+banking");
       return jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null });
@@ -633,6 +642,10 @@ describe("<ShowcasePage /> filters", () => {
       if (url.includes("/api/showcase/categories")) {
         expect(url).toContain("platform=mobile");
         return categoriesResponse([]);
+      }
+      if (url.includes("/api/showcase/models")) {
+        expect(url).toContain("platform=mobile");
+        return jsonResponse({ models: [] });
       }
       expect(url).toContain("platform=mobile");
       return jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null });
@@ -718,6 +731,10 @@ describe("<ShowcasePage /> filters", () => {
       if (url.includes("/api/showcase/categories")) {
         return categoriesResponse([]);
       }
+      if (url.includes("/api/showcase/models")) {
+        expect(url).toContain("platform=desktop");
+        return jsonResponse({ models: [] });
+      }
       expect(url).toContain("platform=desktop");
       return jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null });
     });
@@ -731,11 +748,108 @@ describe("<ShowcasePage /> filters", () => {
     ).toBe("true");
   });
 
+  it("selecting a model writes ?model= to the URL and refetches", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/showcase/categories")) {
+        return categoriesResponse([]);
+      }
+      if (url.includes("/api/showcase/models")) {
+        return jsonResponse({
+          models: [{ model: "deepseek/deepseek-v4-pro", apps: 2 }],
+        });
+      }
+      if (url.includes("model=deepseek")) {
+        return jsonResponse({ apps: [app("r2", [screen2()])], nextCursor: null });
+      }
+      return jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPageAt("/");
+    await screen.findByAltText("Onboarding flow");
+
+    const select = await screen.findByRole("combobox", { name: "Model" });
+    fireEvent.change(select, { target: { value: "deepseek/deepseek-v4-pro" } });
+
+    await screen.findByAltText("Checkout page");
+    expect(currentSearch()).toBe(
+      `?model=${encodeURIComponent("deepseek/deepseek-v4-pro")}`,
+    );
+    expect(screen.queryByAltText("Onboarding flow")).toBeNull();
+  });
+
+  it("changing platform clears the model param", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/showcase/categories")) {
+        return categoriesResponse([]);
+      }
+      if (url.includes("/api/showcase/models")) {
+        return jsonResponse({
+          models: [{ model: "deepseek/deepseek-v4-pro", apps: 2 }],
+        });
+      }
+      return jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPageAt("/?model=deepseek%2Fdeepseek-v4-pro");
+    await screen.findByAltText("Onboarding flow");
+    expect(currentSearch()).toBe(`?model=${encodeURIComponent("deepseek/deepseek-v4-pro")}`);
+
+    fireEvent.click(screen.getByRole("button", { name: "Web" }));
+
+    await waitFor(() => expect(currentSearch()).toBe("?platform=desktop"));
+    expect(currentSearch()).not.toContain("model=");
+  });
+
+  it("carries the model filter into the load-more (paginated) request", async () => {
+    const intersectionObserver = installIntersectionObserver();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/showcase/categories")) {
+        return categoriesResponse([]);
+      }
+      if (url.includes("/api/showcase/models")) {
+        return jsonResponse({
+          models: [{ model: "deepseek/deepseek-v4-pro", apps: 2 }],
+        });
+      }
+      if (url.includes("cursor=")) {
+        return jsonResponse({ apps: [app("r2", [screen2()])], nextCursor: null });
+      }
+      return jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: "cursor-2" });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPageAt("/?model=deepseek%2Fdeepseek-v4-pro");
+    await screen.findByAltText("Onboarding flow");
+    await waitFor(() =>
+      expect(screen.getByTestId("showcase-load-more-sentinel")).toBeTruthy(),
+    );
+    intersectionObserver.intersect();
+
+    await screen.findByAltText("Checkout page");
+
+    const paginatedCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).includes("cursor="),
+    );
+    expect(paginatedCall).toBeTruthy();
+    const paginatedUrl = String(paginatedCall![0]);
+    expect(paginatedUrl).toContain("cursor=cursor-2");
+    expect(paginatedUrl).toContain(`model=${encodeURIComponent("deepseek/deepseek-v4-pro")}`);
+  });
+
   it("treats an invalid platform value in the URL as the mobile default", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("/api/showcase/categories")) {
         return categoriesResponse([]);
+      }
+      if (url.includes("/api/showcase/models")) {
+        expect(url).toContain("platform=mobile");
+        return jsonResponse({ models: [] });
       }
       expect(url).toContain("platform=mobile");
       return jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null });
@@ -802,6 +916,9 @@ describe("<ShowcasePage /> filters", () => {
       const url = String(input);
       if (url.includes("/api/showcase/categories")) {
         return categoriesResponse([]);
+      }
+      if (url.includes("/api/showcase/models")) {
+        return jsonResponse({ models: [] });
       }
       if (url.includes("sort=latest")) {
         return jsonResponse({ apps: [app("r-latest", [screen3()])], nextCursor: null });

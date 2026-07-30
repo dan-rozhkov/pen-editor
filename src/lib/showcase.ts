@@ -53,6 +53,7 @@ export interface ShowcaseFilters {
   sort?: ShowcaseSort;
   category?: string | null;
   platform?: ShowcasePlatform;
+  model?: string | null;
 }
 
 export type ShowcaseResult =
@@ -80,6 +81,9 @@ export function resolveShowcaseApiUrl(
   }
   if (filters?.category) {
     params.set("category", filters.category);
+  }
+  if (filters?.model) {
+    params.set("model", filters.model);
   }
   // Unlike sort/category (omitted at their default so the request URL
   // doesn't change gratuitously), platform is always sent explicitly. The
@@ -317,6 +321,57 @@ export async function fetchShowcaseCategories(
     }
   }
   return { ok: true, categories };
+}
+
+export interface ShowcaseModel {
+  model: string;
+  apps: number;
+}
+
+export type ShowcaseModelsResult =
+  | { ok: true; models: ShowcaseModel[] }
+  | { ok: false };
+
+/**
+ * GET /api/showcase/models — model ids present in the database, ordered by
+ * app count descending. Mirrors `fetchShowcaseCategories` exactly: the model
+ * set differs per platform, so callers must re-fetch on platform change, and
+ * a failure (network, non-2xx, malformed body) resolves to `{ ok: false }`
+ * rather than throwing — ShowcaseFilterBar's spec is to just not render the
+ * model select when this comes back empty, same as an empty list.
+ */
+export async function fetchShowcaseModels(
+  platform: ShowcasePlatform = "mobile",
+): Promise<ShowcaseModelsResult> {
+  let res: Response;
+  try {
+    res = await fetch(resolveApiUrl(`/api/showcase/models?platform=${platform}`));
+  } catch {
+    return { ok: false };
+  }
+  if (!res.ok) {
+    return { ok: false };
+  }
+  let raw: unknown;
+  try {
+    raw = await res.json();
+  } catch {
+    return { ok: false };
+  }
+  if (!isRecord(raw) || !Array.isArray(raw.models)) {
+    return { ok: false };
+  }
+
+  const models: ShowcaseModel[] = [];
+  for (const candidate of raw.models) {
+    if (isRecord(candidate) && typeof candidate.model === "string") {
+      models.push({
+        model: candidate.model,
+        apps: typeof candidate.apps === "number" ? candidate.apps : 0,
+      });
+    }
+  }
+  return { ok: true, models };
 }
 
 export type LikeShowcaseAppResult =

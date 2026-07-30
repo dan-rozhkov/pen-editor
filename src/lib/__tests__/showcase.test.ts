@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fetchShowcase, fetchShowcaseCategories, likeShowcaseApp } from "@/lib/showcase";
+import {
+  fetchShowcase,
+  fetchShowcaseCategories,
+  fetchShowcaseModels,
+  likeShowcaseApp,
+  resolveShowcaseApiUrl,
+} from "@/lib/showcase";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -145,6 +151,85 @@ describe("fetchShowcase", () => {
     if (!result.ok && !result.notConfigured) {
       expect(result.error).toMatch(/reload/i);
     }
+  });
+});
+
+describe("resolveShowcaseApiUrl", () => {
+  it("omits model when unset", () => {
+    const url = resolveShowcaseApiUrl(null, undefined, { sort: "popular" });
+    expect(url).not.toContain("model=");
+  });
+
+  it("includes model when set", () => {
+    const url = resolveShowcaseApiUrl(null, undefined, { model: "deepseek/deepseek-v4-pro" });
+    expect(url).toContain(`model=${encodeURIComponent("deepseek/deepseek-v4-pro")}`);
+  });
+});
+
+describe("fetchShowcaseModels", () => {
+  it("passes through a well-formed response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse({ models: [{ model: "deepseek/deepseek-v4-pro", apps: 12 }] }),
+      ),
+    );
+
+    const result = await fetchShowcaseModels();
+    expect(result).toEqual({
+      ok: true,
+      models: [{ model: "deepseek/deepseek-v4-pro", apps: 12 }],
+    });
+  });
+
+  it("skips malformed entries rather than throwing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse({
+          models: [{ model: "deepseek/deepseek-v4-pro", apps: 12 }, { apps: 3 }, "nope"],
+        }),
+      ),
+    );
+
+    const result = await fetchShowcaseModels();
+    expect(result).toEqual({
+      ok: true,
+      models: [{ model: "deepseek/deepseek-v4-pro", apps: 12 }],
+    });
+  });
+
+  it("resolves to ok:false instead of throwing when models is missing", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ notModels: [] })));
+
+    const result = await fetchShowcaseModels();
+    expect(result).toEqual({ ok: false });
+  });
+
+  it("resolves to ok:false on a non-2xx response", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ error: "nope" }, 500)));
+
+    const result = await fetchShowcaseModels();
+    expect(result).toEqual({ ok: false });
+  });
+
+  it("resolves to ok:false on a non-JSON body", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 200 })));
+
+    const result = await fetchShowcaseModels();
+    expect(result).toEqual({ ok: false });
+  });
+
+  it("resolves to ok:false instead of throwing on a network error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("network down");
+      }),
+    );
+
+    const result = await fetchShowcaseModels();
+    expect(result).toEqual({ ok: false });
   });
 });
 

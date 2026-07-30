@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { ShowcaseFilterBar } from "@/components/showcase/ShowcaseFilterBar";
-import type { ShowcaseCategory } from "@/lib/showcase";
+import type { ShowcaseCategory, ShowcaseModel } from "@/lib/showcase";
 
 afterEach(() => {
   cleanup();
@@ -13,6 +13,11 @@ const categories: ShowcaseCategory[] = [
   { theme: "fitness tracker", apps: 3 },
 ];
 
+const models: ShowcaseModel[] = [
+  { model: "deepseek/deepseek-v4-pro", apps: 12 },
+  { model: "openai/gpt-5", apps: 4 },
+];
+
 describe("<ShowcaseFilterBar />", () => {
   it("renders sort tabs and marks the active one", () => {
     render(
@@ -21,9 +26,12 @@ describe("<ShowcaseFilterBar />", () => {
         category={null}
         categories={categories}
         platform="mobile"
+        model={null}
+        models={[]}
         onSortChange={() => {}}
         onCategoryChange={() => {}}
         onPlatformChange={() => {}}
+        onModelChange={() => {}}
       />,
     );
 
@@ -65,9 +73,12 @@ describe("<ShowcaseFilterBar />", () => {
         category={null}
         categories={categories}
         platform="mobile"
+        model={null}
+        models={[]}
         onSortChange={onSortChange}
         onCategoryChange={() => {}}
         onPlatformChange={() => {}}
+        onModelChange={() => {}}
       />,
     );
 
@@ -82,9 +93,12 @@ describe("<ShowcaseFilterBar />", () => {
         category={null}
         categories={categories}
         platform="mobile"
+        model={null}
+        models={[]}
         onSortChange={() => {}}
         onCategoryChange={() => {}}
         onPlatformChange={() => {}}
+        onModelChange={() => {}}
       />,
     );
 
@@ -112,9 +126,12 @@ describe("<ShowcaseFilterBar />", () => {
         category={null}
         categories={categories}
         platform="mobile"
+        model={null}
+        models={[]}
         onSortChange={() => {}}
         onCategoryChange={() => {}}
         onPlatformChange={onPlatformChange}
+        onModelChange={() => {}}
       />,
     );
 
@@ -140,9 +157,12 @@ describe("<ShowcaseFilterBar />", () => {
         category={null}
         categories={categories}
         platform="desktop"
+        model={null}
+        models={[]}
         onSortChange={() => {}}
         onCategoryChange={() => {}}
         onPlatformChange={onPlatformChange}
+        onModelChange={() => {}}
       />,
     );
 
@@ -158,9 +178,12 @@ describe("<ShowcaseFilterBar />", () => {
         category={null}
         categories={categories}
         platform="mobile"
+        model={null}
+        models={[]}
         onSortChange={() => {}}
         onCategoryChange={onCategoryChange}
         onPlatformChange={() => {}}
+        onModelChange={() => {}}
       />,
     );
 
@@ -178,9 +201,12 @@ describe("<ShowcaseFilterBar />", () => {
         category="fitness tracker"
         categories={categories}
         platform="mobile"
+        model={null}
+        models={[]}
         onSortChange={() => {}}
         onCategoryChange={() => {}}
         onPlatformChange={() => {}}
+        onModelChange={() => {}}
       />,
     );
 
@@ -197,9 +223,12 @@ describe("<ShowcaseFilterBar />", () => {
         category={null}
         categories={[]}
         platform="mobile"
+        model={null}
+        models={[]}
         onSortChange={() => {}}
         onCategoryChange={() => {}}
         onPlatformChange={() => {}}
+        onModelChange={() => {}}
       />,
     );
 
@@ -214,14 +243,148 @@ describe("<ShowcaseFilterBar />", () => {
         category="retro arcade"
         categories={categories}
         platform="mobile"
+        model={null}
+        models={[]}
         onSortChange={() => {}}
         onCategoryChange={() => {}}
         onPlatformChange={() => {}}
+        onModelChange={() => {}}
       />,
     );
 
     for (const name of ["All", "Mobile banking", "Fitness tracker"]) {
       expect(screen.getByRole("button", { name }).getAttribute("aria-pressed")).toBe("false");
     }
+  });
+
+  it("renders a controlled model select with 'All models' plus a labelled option per model", () => {
+    const onModelChange = vi.fn();
+    const { rerender } = render(
+      <ShowcaseFilterBar
+        sort="popular"
+        category={null}
+        categories={categories}
+        platform="mobile"
+        model={null}
+        models={models}
+        onSortChange={() => {}}
+        onCategoryChange={() => {}}
+        onPlatformChange={() => {}}
+        onModelChange={onModelChange}
+      />,
+    );
+
+    const select = screen.getByRole("combobox", { name: "Model" }) as HTMLSelectElement;
+    expect(select.value).toBe("");
+    const options = Array.from(select.querySelectorAll("option")).map((o) => o.textContent);
+    expect(options[0]).toBe("All models");
+    expect(options).toContain("DeepSeek V4 Pro (12)");
+
+    fireEvent.change(select, { target: { value: "deepseek/deepseek-v4-pro" } });
+
+    // Selecting an option calls onModelChange...
+    expect(onModelChange).toHaveBeenCalledWith("deepseek/deepseek-v4-pro");
+
+    // ...but the select stays controlled: re-rendering with the *same*
+    // `model` prop (rather than the value the browser just wrote into the
+    // DOM) snaps the select back to it — a purely-local useState wouldn't be
+    // corrected by a render that doesn't touch its own state.
+    rerender(
+      <ShowcaseFilterBar
+        sort="popular"
+        category={null}
+        categories={categories}
+        platform="mobile"
+        model={null}
+        models={models}
+        onSortChange={() => {}}
+        onCategoryChange={() => {}}
+        onPlatformChange={() => {}}
+        onModelChange={onModelChange}
+      />,
+    );
+    expect(select.value).toBe("");
+
+    rerender(
+      <ShowcaseFilterBar
+        sort="popular"
+        category={null}
+        categories={categories}
+        platform="mobile"
+        model="deepseek/deepseek-v4-pro"
+        models={models}
+        onSortChange={() => {}}
+        onCategoryChange={() => {}}
+        onPlatformChange={() => {}}
+        onModelChange={onModelChange}
+      />,
+    );
+
+    expect(select.value).toBe("deepseek/deepseek-v4-pro");
+  });
+
+  it("does not render the model select when there are no models", () => {
+    render(
+      <ShowcaseFilterBar
+        sort="popular"
+        category={null}
+        categories={categories}
+        platform="mobile"
+        model={null}
+        models={[]}
+        onSortChange={() => {}}
+        onCategoryChange={() => {}}
+        onPlatformChange={() => {}}
+        onModelChange={() => {}}
+      />,
+    );
+
+    expect(screen.queryByRole("combobox", { name: "Model" })).toBeNull();
+  });
+
+  it("keeps a stale deep-linked model selected and visible even though it's absent from `models`", () => {
+    render(
+      <ShowcaseFilterBar
+        sort="popular"
+        category={null}
+        categories={categories}
+        platform="mobile"
+        model="mistral/old-retired-model"
+        models={models}
+        onSortChange={() => {}}
+        onCategoryChange={() => {}}
+        onPlatformChange={() => {}}
+        onModelChange={() => {}}
+      />,
+    );
+
+    const select = screen.getByRole("combobox", { name: "Model" }) as HTMLSelectElement;
+    expect(select.value).toBe("mistral/old-retired-model");
+    const options = Array.from(select.querySelectorAll("option")).map((o) => o.textContent);
+    expect(options).toContain("Old Retired Model");
+  });
+
+  it("still renders the model select (showing the active model) when `models` is empty but a model filter is set", () => {
+    const onModelChange = vi.fn();
+    render(
+      <ShowcaseFilterBar
+        sort="popular"
+        category={null}
+        categories={categories}
+        platform="mobile"
+        model="mistral/old-retired-model"
+        models={[]}
+        onSortChange={() => {}}
+        onCategoryChange={() => {}}
+        onPlatformChange={() => {}}
+        onModelChange={onModelChange}
+      />,
+    );
+
+    const select = screen.getByRole("combobox", { name: "Model" }) as HTMLSelectElement;
+    expect(select.value).toBe("mistral/old-retired-model");
+
+    fireEvent.change(select, { target: { value: "" } });
+    expect(onModelChange).toHaveBeenCalledWith(null);
   });
 });

@@ -9,8 +9,10 @@ import { cn } from "@/lib/utils";
 import {
   fetchShowcase,
   fetchShowcaseCategories,
+  fetchShowcaseModels,
   type ShowcaseApp,
   type ShowcaseCategory,
+  type ShowcaseModel,
   type ShowcasePlatform,
   type ShowcaseSort,
 } from "@/lib/showcase";
@@ -29,6 +31,12 @@ function parseSort(value: string | null): ShowcaseSort {
 // category" looks like, so normalizing happens once, here, rather than at
 // each call site.
 function parseCategory(value: string | null): string | null {
+  return value ? value : null;
+}
+
+// `?model=` follows the exact same rule as category: absent (or empty) means
+// no filter, and a filter is only ever written to the URL when non-empty.
+function parseModel(value: string | null): string | null {
   return value ? value : null;
 }
 
@@ -102,6 +110,7 @@ export function ShowcasePage() {
   const sort = parseSort(searchParams.get("sort"));
   const category = parseCategory(searchParams.get("category"));
   const platform = parsePlatform(searchParams.get("platform"));
+  const model = parseModel(searchParams.get("model"));
 
   // Apps, not screens: the feed hands back whole apps (see lib/showcase.ts),
   // so pages append cleanly and no card is ever rendered half-populated.
@@ -111,6 +120,7 @@ export function ShowcasePage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [categories, setCategories] = useState<ShowcaseCategory[]>([]);
+  const [models, setModels] = useState<ShowcaseModel[]>([]);
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
 
   // Monotonic id for the most recent request against the feed — bumped both
@@ -133,7 +143,7 @@ export function ShowcasePage() {
   // rendered, and if it moved, call the setters right here rather than in an
   // effect. React re-renders immediately before committing, so nothing ever
   // paints the stale grid under the new filter's tab/chip.
-  const filtersKey = `${sort}|${category ?? ""}|${platform}`;
+  const filtersKey = `${sort}|${category ?? ""}|${platform}|${model ?? ""}`;
   const [loadedFiltersKey, setLoadedFiltersKey] = useState(filtersKey);
   if (loadedFiltersKey !== filtersKey) {
     setLoadedFiltersKey(filtersKey);
@@ -165,6 +175,25 @@ export function ShowcasePage() {
     };
   }, [platform]);
 
+  // Same pattern as the categories effect above, and for the same reason:
+  // the model set differs per platform, so this must re-fetch on platform
+  // change rather than reuse a mount-time snapshot. A failure (or empty
+  // database) just means the model select doesn't render.
+  useEffect(() => {
+    let cancelled = false;
+    fetchShowcaseModels(platform).then((result) => {
+      if (cancelled) return;
+      if (result.ok) {
+        setModels(result.models);
+      } else {
+        setModels([]);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [platform]);
+
   // Changing sort, category, or platform resets the cursor and refetches
   // page 1. The filter row itself stays mounted (it's rendered outside this
   // effect's control below); only the grid drops back to the skeleton.
@@ -174,7 +203,7 @@ export function ShowcasePage() {
     // request already in flight for the previous filters — see
     // `requestIdRef`'s comment above.
     requestIdRef.current += 1;
-    fetchShowcase(null, undefined, { sort, category, platform }).then((result) => {
+    fetchShowcase(null, undefined, { sort, category, platform, model }).then((result) => {
       // `cancelled` (set by this effect's own cleanup, below) already covers
       // "this exact effect instance was torn down or superseded" — a
       // filter-value comparison here would be redundant with it, not an
@@ -199,7 +228,7 @@ export function ShowcasePage() {
     return () => {
       cancelled = true;
     };
-  }, [sort, category, platform]);
+  }, [sort, category, platform, model]);
 
   const handleLoadMore = useCallback(async () => {
     if (!nextCursor || loadingMore) return;
@@ -210,7 +239,7 @@ export function ShowcasePage() {
     // flight — the comparison fails and the response is dropped instead of
     // being appended to a list built under different filters.
     const requestId = ++requestIdRef.current;
-    const result = await fetchShowcase(nextCursor, undefined, { sort, category, platform });
+    const result = await fetchShowcase(nextCursor, undefined, { sort, category, platform, model });
     if (requestIdRef.current === requestId && result.ok) {
       setApps((prev) => [...prev, ...result.data.apps]);
       setNextCursor(result.data.nextCursor);
@@ -219,7 +248,7 @@ export function ShowcasePage() {
     // sentinel remains mounted, scrolling away and back allows a retry. A
     // stale response (filters changed mid-request) is silently dropped.
     setLoadingMore(false);
-  }, [category, loadingMore, nextCursor, platform, sort]);
+  }, [category, loadingMore, model, nextCursor, platform, sort]);
 
   useEffect(() => {
     const sentinel = loadMoreSentinelRef.current;
@@ -251,6 +280,7 @@ export function ShowcasePage() {
     sort?: ShowcaseSort;
     category?: string | null;
     platform?: ShowcasePlatform;
+    model?: string | null;
   }) {
     setSearchParams(
       (prev) => {
@@ -276,6 +306,13 @@ export function ShowcasePage() {
             params.set("platform", next.platform);
           }
         }
+        if (next.model !== undefined) {
+          if (next.model === null) {
+            params.delete("model");
+          } else {
+            params.set("model", next.model);
+          }
+        }
         return params;
       },
       { replace: true },
@@ -293,7 +330,7 @@ export function ShowcasePage() {
   // atomic URL update (and a single `filtersKey` change), so this can't land
   // as two renders/fetches where the second briefly shows a stale category.
   function handlePlatformChange(newPlatform: ShowcasePlatform) {
-    updateFilters({ platform: newPlatform, category: null });
+    updateFilters({ platform: newPlatform, category: null, model: null });
   }
 
   function handleAgentPrompt(prompt: string) {
@@ -381,9 +418,12 @@ export function ShowcasePage() {
             category={category}
             categories={categories}
             platform={platform}
+            model={model}
+            models={models}
             onSortChange={(newSort) => updateFilters({ sort: newSort })}
             onCategoryChange={(newCategory) => updateFilters({ category: newCategory })}
             onPlatformChange={handlePlatformChange}
+            onModelChange={(newModel) => updateFilters({ model: newModel })}
           />
         </div>
 

@@ -1,16 +1,25 @@
-import { DeviceMobileIcon, LaptopIcon } from "@phosphor-icons/react";
+import { CaretDownIcon, DeviceMobileIcon, LaptopIcon } from "@phosphor-icons/react";
 
 import { cn } from "@/lib/utils";
-import type { ShowcaseCategory, ShowcasePlatform, ShowcaseSort } from "@/lib/showcase";
+import { getShowcaseModelLabel } from "@/components/showcase/showcaseApps";
+import type {
+  ShowcaseCategory,
+  ShowcaseModel,
+  ShowcasePlatform,
+  ShowcaseSort,
+} from "@/lib/showcase";
 
 interface ShowcaseFilterBarProps {
   sort: ShowcaseSort;
   category: string | null;
   categories: ShowcaseCategory[];
   platform: ShowcasePlatform;
+  model: string | null;
+  models: ShowcaseModel[];
   onSortChange: (sort: ShowcaseSort) => void;
   onCategoryChange: (category: string | null) => void;
   onPlatformChange: (platform: ShowcasePlatform) => void;
+  onModelChange: (model: string | null) => void;
 }
 
 const SORT_OPTIONS: { value: ShowcaseSort; label: string }[] = [
@@ -37,9 +46,12 @@ export function ShowcaseFilterBar({
   category,
   categories,
   platform,
+  model,
+  models,
   onSortChange,
   onCategoryChange,
   onPlatformChange,
+  onModelChange,
 }: ShowcaseFilterBarProps) {
   return (
     // Mobile uses a single horizontal scroller for every filter control. The
@@ -163,6 +175,46 @@ export function ShowcaseFilterBar({
             })}
           </div>
         </>
+      )}
+
+      {(models.length > 0 || model !== null) && (
+        <div className="flex shrink-0 items-center gap-4">
+          <div aria-hidden="true" className="h-4 w-px shrink-0 bg-border-default" />
+          <div className="relative shrink-0">
+            <select
+              aria-label="Model"
+              value={model ?? ""}
+              onChange={(event) => onModelChange(event.target.value || null)}
+              className={cn(
+                "shrink-0 appearance-none rounded-full border bg-transparent py-1.5 pr-8 pl-4 text-sm font-medium whitespace-nowrap transition-colors",
+                FOCUS_RING,
+                model !== null
+                  ? "border-text-primary text-text-primary"
+                  : "border-border-default text-text-muted hover:text-text-primary",
+              )}
+            >
+              <option value="">All models</option>
+              {/* A deep-linked/bookmarked `model` can outlive its entry in
+                  `models` (e.g. the models list fetch failed, or the model
+                  was dropped from GET /api/showcase/models). Without this,
+                  the select would silently fall back to "All models" while
+                  the feed stays filtered, with no option to select that
+                  matches the active value. */}
+              {model !== null && !models.some((m) => m.model === model) && (
+                <option value={model}>{getShowcaseModelLabel(model)}</option>
+              )}
+              {models.map((m) => (
+                <option key={m.model} value={m.model}>
+                  {getShowcaseModelLabel(m.model)} ({m.apps})
+                </option>
+              ))}
+            </select>
+            <CaretDownIcon
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-text-muted"
+            />
+          </div>
+        </div>
       )}
     </div>
   );
