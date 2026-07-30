@@ -276,6 +276,7 @@ describe("<ShowcaseFilterBar />", () => {
 
     const select = screen.getByRole("combobox", { name: "Model" }) as HTMLSelectElement;
     expect(select.value).toBe("");
+    expect(select.classList.contains("[field-sizing:content]")).toBe(true);
     const options = Array.from(select.querySelectorAll("option")).map((o) => o.textContent);
     expect(options[0]).toBe("All models");
     expect(options).toContain("DeepSeek V4 Pro (12)");

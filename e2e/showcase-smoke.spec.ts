@@ -60,6 +60,34 @@ test("/ shows the showcase, not the editor", async ({ page }, testInfo) => {
   await expectEditorMounted(page);
 });
 
+test("the model filter sizes itself to its selected option", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "field-sizing is verified in the target browser");
+
+  await page.route("**/api/showcase**", (route) =>
+    route.fulfill({ json: { apps: [], nextCursor: null } }),
+  );
+  await page.route(/\/api\/showcase\/models(?:\?|$)/, (route) =>
+    route.fulfill({
+      json: {
+        models: [{ model: "deepseek/deepseek-v4-pro", apps: 128 }],
+      },
+    }),
+  );
+
+  await page.goto("/");
+
+  const select = page.getByRole("combobox", { name: "Model" });
+  await expect(select).toBeVisible();
+  const allModelsWidth = await select.evaluate((element) => element.getBoundingClientRect().width);
+  await expect(select).toHaveCSS("field-sizing", "content");
+
+  await select.selectOption("deepseek/deepseek-v4-pro");
+  await expect(page).toHaveURL(/model=deepseek%2Fdeepseek-v4-pro/);
+  await expect
+    .poll(() => select.evaluate((element) => element.getBoundingClientRect().width))
+    .toBeGreaterThan(allModelsWidth);
+});
+
 test("a showcase prompt opens a new agent chat and sends the message", async ({
   page,
 }, testInfo) => {
