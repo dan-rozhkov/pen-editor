@@ -19,7 +19,7 @@ const models: ShowcaseModel[] = [
 ];
 
 describe("<ShowcaseFilterBar />", () => {
-  it("renders sort tabs and marks the active one", () => {
+  it("renders a controlled sort select", () => {
     render(
       <ShowcaseFilterBar
         sort="popular"
@@ -35,37 +35,33 @@ describe("<ShowcaseFilterBar />", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Most popular" }).getAttribute("aria-pressed")).toBe(
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "Latest" }).getAttribute("aria-pressed")).toBe(
-      "false",
-    );
-    const sortRow = screen.getByRole("button", { name: "Latest" }).parentElement;
-    const filterBar = sortRow?.parentElement;
+    const sortSelect = screen.getByRole("combobox", { name: "Sort" }) as HTMLSelectElement;
+    expect(sortSelect.value).toBe("popular");
+    expect(Array.from(sortSelect.options).map((option) => option.textContent)).toEqual([
+      "Most popular",
+      "Latest",
+    ]);
+    const sortContainer = sortSelect.parentElement;
+    const sortGroup = sortContainer?.parentElement;
+    const filterBar = sortGroup?.parentElement;
 
-    expect(sortRow?.classList.contains("shrink-0")).toBe(true);
+    expect(sortGroup?.classList.contains("shrink-0")).toBe(true);
     expect(filterBar?.classList.contains("overflow-x-auto")).toBe(true);
     expect(filterBar?.classList.contains("sm:overflow-visible")).toBe(true);
     const categoryRow = screen.getByRole("group", { name: "Categories" });
     expect(categoryRow.classList.contains("overflow-x-auto")).toBe(false);
     expect(categoryRow.classList.contains("scrollbar-none")).toBe(true);
     expect(categoryRow.classList.contains("sm:overflow-x-auto")).toBe(true);
-    expect(screen.getByRole("button", { name: "Most popular" }).classList.contains("rounded-full")).toBe(
-      true,
-    );
-    expect(screen.getByRole("button", { name: "Most popular" }).classList.contains("border-text-primary")).toBe(
-      true,
-    );
-    expect(screen.getByRole("button", { name: "Latest" }).classList.contains("border-border-default")).toBe(
-      true,
-    );
+    expect(sortSelect.classList.contains("rounded-full")).toBe(true);
+    expect(sortSelect.classList.contains("border-text-primary")).toBe(true);
+    expect(sortSelect.classList.contains("[field-sizing:content]")).toBe(true);
+    expect(sortSelect.classList.contains("focus-visible:outline-text-primary")).toBe(true);
     expect(screen.getByRole("button", { name: "All" }).classList.contains("text-sm")).toBe(
       true,
     );
   });
 
-  it("calls onSortChange with the clicked tab's value", () => {
+  it("calls onSortChange when the selected sort changes", () => {
     const onSortChange = vi.fn();
     render(
       <ShowcaseFilterBar
@@ -82,7 +78,9 @@ describe("<ShowcaseFilterBar />", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Latest" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Sort" }), {
+      target: { value: "latest" },
+    });
     expect(onSortChange).toHaveBeenCalledWith("latest");
   });
 
@@ -106,8 +104,6 @@ describe("<ShowcaseFilterBar />", () => {
     expect(chips).toEqual([
       "Mobile",
       "Web",
-      "Most popular",
-      "Latest",
       "All",
       "Mobile banking",
       "Fitness tracker",
@@ -216,7 +212,7 @@ describe("<ShowcaseFilterBar />", () => {
     expect(screen.getByRole("button", { name: "All" }).getAttribute("aria-pressed")).toBe("false");
   });
 
-  it("does not render the chip row when there are no categories, but keeps the sort tabs", () => {
+  it("does not render the chip row when there are no categories, but keeps the sort select", () => {
     render(
       <ShowcaseFilterBar
         sort="popular"
@@ -232,7 +228,7 @@ describe("<ShowcaseFilterBar />", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Most popular" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Sort" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "All" })).toBeNull();
   });
 
@@ -275,7 +271,9 @@ describe("<ShowcaseFilterBar />", () => {
     );
 
     const select = screen.getByRole("combobox", { name: "Model" }) as HTMLSelectElement;
+    const sortSelect = screen.getByRole("combobox", { name: "Sort" });
     expect(select.value).toBe("");
+    expect(select.compareDocumentPosition(sortSelect) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(select.classList.contains("[field-sizing:content]")).toBe(true);
     expect(select.classList.contains("max-w-[200px]")).toBe(true);
     expect(select.classList.contains("truncate")).toBe(true);

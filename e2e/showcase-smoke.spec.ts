@@ -83,7 +83,14 @@ test("the model filter sizes itself to its selected option", async ({ page }, te
   await page.goto("/");
 
   const select = page.getByRole("combobox", { name: "Model" });
+  const sortSelect = page.getByRole("combobox", { name: "Sort" });
   await expect(select).toBeVisible();
+  await expect(sortSelect).toBeVisible();
+  expect(
+    await page
+      .locator('select[aria-label="Model"], select[aria-label="Sort"]')
+      .evaluateAll((controls) => controls.map((control) => control.getAttribute("aria-label"))),
+  ).toEqual(["Model", "Sort"]);
   const allModelsWidth = await select.evaluate((element) => element.getBoundingClientRect().width);
   await expect(select).toHaveCSS("field-sizing", "content");
 

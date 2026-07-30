@@ -159,7 +159,7 @@ export function ShowcasePage() {
   // flipped by its own cleanup, so a response for a platform the visitor has
   // since switched away from is dropped instead of overwriting the current
   // chip row. A failure (or an empty database) just means the chip row
-  // doesn't render; the sort tabs still work on their own.
+  // doesn't render; the sort control still works on its own.
   useEffect(() => {
     let cancelled = false;
     fetchShowcaseCategories(platform).then((result) => {

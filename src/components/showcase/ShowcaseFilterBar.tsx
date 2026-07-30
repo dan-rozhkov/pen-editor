@@ -36,13 +36,8 @@ function capitalizeFirst(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-// Mobbin's discover header: sort tabs on the left, a vertical divider, then a
-// horizontally scrolling row of category chips. On mobile the complete
-// control row scrolls together, so the platform toggle and sort tabs aren't
-// stranded while only the chips move. Sort is expressed as plain
-// buttons with `aria-pressed` rather than a `role="tablist"` — the grid below
-// isn't a tabpanel, so a real tab/tabpanel pairing would be a lie about what
-// this controls.
+// On mobile the complete control row scrolls together, so platform, category,
+// model, and sort controls remain available in one sequence.
 export function ShowcaseFilterBar({
   sort,
   category,
@@ -62,7 +57,7 @@ export function ShowcaseFilterBar({
     // and focus-ring pixels inside that clip. From `sm` onward the outer row
     // goes back to visible overflow and the categories own their own scroll.
     <div className="scrollbar-none -my-1 flex items-center gap-4 overflow-x-auto overflow-y-hidden overscroll-x-contain py-1 sm:overflow-visible">
-      <div className="flex shrink-0 items-center gap-4">
+      <div className="flex shrink-0 items-center">
         <div
           role="group"
           aria-label="Platform"
@@ -100,39 +95,10 @@ export function ShowcaseFilterBar({
             );
           })}
         </div>
-        <div aria-hidden="true" className="h-4 w-px bg-border-default" />
-      </div>
-
-      <div className="flex shrink-0 items-center gap-2">
-        {SORT_OPTIONS.map((option) => {
-          const active = option.value === sort;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              aria-pressed={active}
-              onClick={() => onSortChange(option.value)}
-              className={cn(
-                "shrink-0 rounded-full border px-4 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
-                FOCUS_RING,
-                active
-                  ? "border-text-primary bg-transparent text-text-primary"
-                  : "border-border-default bg-transparent text-text-muted hover:text-text-primary",
-              )}
-            >
-              {option.label}
-            </button>
-          );
-        })}
       </div>
 
       {categories.length > 0 && (
         <>
-          <div
-            aria-hidden="true"
-            className="h-4 w-px shrink-0 bg-border-default"
-          />
-
           <div
             role="group"
             aria-label="Categories"
@@ -180,8 +146,7 @@ export function ShowcaseFilterBar({
       )}
 
       {(models.length > 0 || model !== null) && (
-        <div className="flex shrink-0 items-center gap-4">
-          <div aria-hidden="true" className="h-4 w-px shrink-0 bg-border-default" />
+        <div className="flex shrink-0 items-center">
           <div className="relative shrink-0">
             <select
               aria-label="Model"
@@ -218,6 +183,30 @@ export function ShowcaseFilterBar({
           </div>
         </div>
       )}
+
+      <div className="flex shrink-0 items-center">
+        <div className="relative shrink-0">
+          <select
+            aria-label="Sort"
+            value={sort}
+            onChange={(event) => onSortChange(event.target.value as ShowcaseSort)}
+            className={cn(
+              "shrink-0 appearance-none rounded-full border border-text-primary bg-transparent py-1.5 pr-8 pl-4 text-sm font-medium text-text-primary transition-colors [field-sizing:content]",
+              SELECT_FOCUS_RING,
+            )}
+          >
+            {SORT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <CaretDownIcon
+            aria-hidden="true"
+            className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-text-muted"
+          />
+        </div>
+      </div>
     </div>
   );
 }

@@ -513,12 +513,12 @@ describe("<ShowcasePage /> filters", () => {
 
     await screen.findByAltText("Onboarding flow");
     expect(currentSearch()).toBe("");
-    expect(
-      screen.getByRole("button", { name: "Most popular" }).getAttribute("aria-pressed"),
-    ).toBe("true");
+    expect((screen.getByRole("combobox", { name: "Sort" }) as HTMLSelectElement).value).toBe(
+      "popular",
+    );
   });
 
-  it("clicking Latest requests sort=latest and writes it to the URL, without touching the canonical default on Most popular", async () => {
+  it("selecting Latest requests sort=latest and writes it to the URL, without touching the canonical default on Most popular", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("/api/showcase/categories")) {
@@ -534,7 +534,9 @@ describe("<ShowcasePage /> filters", () => {
     renderPageAt("/");
     await screen.findByAltText("Onboarding flow");
 
-    fireEvent.click(screen.getByRole("button", { name: "Latest" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Sort" }), {
+      target: { value: "latest" },
+    });
 
     await waitFor(() => expect(currentSearch()).toBe("?sort=latest"));
     await waitFor(() =>
@@ -585,9 +587,9 @@ describe("<ShowcasePage /> filters", () => {
     renderPageAt("/?sort=latest&category=mobile+banking");
 
     await screen.findByAltText("Onboarding flow");
-    expect(
-      screen.getByRole("button", { name: "Latest" }).getAttribute("aria-pressed"),
-    ).toBe("true");
+    expect((screen.getByRole("combobox", { name: "Sort" }) as HTMLSelectElement).value).toBe(
+      "latest",
+    );
     expect(
       screen.getByRole("button", { name: "Mobile banking" }).getAttribute("aria-pressed"),
     ).toBe("true");
@@ -886,7 +888,9 @@ describe("<ShowcasePage /> filters", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     renderPageAt("/");
-    fireEvent.click(await screen.findByRole("button", { name: "Latest" }));
+    fireEvent.change(await screen.findByRole("combobox", { name: "Sort" }), {
+      target: { value: "latest" },
+    });
 
     await screen.findByAltText("Checkout page");
 
@@ -951,10 +955,14 @@ describe("<ShowcasePage /> filters", () => {
     // The page-2 request is now in flight (and will hang until we resolve it
     // further down).
 
-    fireEvent.click(screen.getByRole("button", { name: "Latest" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Sort" }), {
+      target: { value: "latest" },
+    });
     await screen.findByAltText("Onboarding details");
 
-    fireEvent.click(screen.getByRole("button", { name: "Most popular" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Sort" }), {
+      target: { value: "popular" },
+    });
     await screen.findByAltText("Popular reload");
     // `loadingMore` is page-scoped and is still pinned true by the
     // never-resolved page-2 request.
