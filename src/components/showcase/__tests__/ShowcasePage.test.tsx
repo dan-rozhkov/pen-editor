@@ -180,7 +180,7 @@ describe("<ShowcasePage />", () => {
     const heading = screen.getByRole("heading", {
       name: "Design, on autopilot.",
     });
-    const editorButton = screen.getByRole("button", {
+    const editorLink = screen.getByRole("link", {
       name: "Open the editor →",
     });
 
@@ -192,11 +192,12 @@ describe("<ShowcasePage />", () => {
     expect(
       screen.getByPlaceholderText("Ask the design agent to create…"),
     ).toBeTruthy();
-    expect(editorButton.parentElement?.tagName).toBe("HEADER");
-    expect(editorButton.classList.contains("bg-accent-primary/10")).toBe(true);
-    expect(editorButton.classList.contains("absolute")).toBe(true);
+    expect(editorLink.parentElement?.tagName).toBe("HEADER");
+    expect(editorLink.getAttribute("href")).toBe("/app");
+    expect(editorLink.classList.contains("bg-accent-primary/10")).toBe(true);
+    expect(editorLink.classList.contains("absolute")).toBe(true);
     expect(
-      editorButton.classList.contains("right-[calc(1rem+env(safe-area-inset-right))]"),
+      editorLink.classList.contains("right-[calc(1rem+env(safe-area-inset-right))]"),
     ).toBe(true);
   });
 
@@ -215,11 +216,11 @@ describe("<ShowcasePage />", () => {
     expect(consumeShowcaseAgentPrompt()).toBe("Build a calm finance dashboard");
   });
 
-  it("opens the editor from the header button", async () => {
+  it("opens the editor from the header link", async () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
     renderNavigablePage();
 
-    fireEvent.click(screen.getByRole("button", { name: "Open the editor →" }));
+    fireEvent.click(screen.getByRole("link", { name: "Open the editor →" }));
 
     await screen.findByText("Editor route");
   });

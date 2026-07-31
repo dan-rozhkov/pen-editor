@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 
 import { ShowcaseAgentComposer } from "@/components/showcase/ShowcaseAgentComposer";
 import { ShowcaseFilterBar } from "@/components/showcase/ShowcaseFilterBar";
@@ -385,13 +385,15 @@ export function ShowcasePage() {
             <span className="block">on autopilot.</span>
           </h1>
         </div>
-        <button
-          type="button"
-          onClick={() => navigate("/app")}
+        {/* A real <Link>, not a button with navigate(): this is plain
+            navigation, so it must keep link semantics (middle-click / "open
+            in new tab", and the `link` role the e2e smoke test asserts). */}
+        <Link
+          to="/app"
           className="absolute top-[calc(1rem+env(safe-area-inset-top))] right-[calc(1rem+env(safe-area-inset-right))] hidden shrink-0 items-center rounded-full bg-accent-primary/10 px-4 py-2 text-sm font-medium text-accent-primary transition-colors hover:bg-accent-primary/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary sm:inline-flex"
         >
           Open the editor →
-        </button>
+        </Link>
         <p className="mx-auto mt-6 max-w-2xl text-center text-base text-text-muted">
           Every screen below was designed autonomously by the AI design
           agent — no human touched a mouse or keyboard.
