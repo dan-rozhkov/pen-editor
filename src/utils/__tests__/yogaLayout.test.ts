@@ -754,3 +754,66 @@ describe("CSS-aligned auto layout: frame edge insets and padding floor", () => {
     expect(size.height).toBe(10 + 10);
   });
 });
+
+describe("CSS-aligned auto layout: border-box fill distribution", () => {
+  it("fill sibling with a thicker inside stroke gets more outer width (equal content areas)", () => {
+    const f = frame({ flexDirection: "row", gap: 0 }, { width: 300, height: 100 }, [
+      rect("a", 10, 40, { sizing: { widthMode: "fill_container" } }),
+      rect("b", 10, 40, {
+        sizing: { widthMode: "fill_container" },
+        stroke: "#000",
+        strokeWidth: 10,
+        strokeAlign: "inside",
+      }),
+    ]);
+    const r = byId(calculateFrameLayout(f));
+    // contentSpace 300, borders consume 20 (b only), 280 content split equally
+    expect(r.a.width).toBe(140);
+    expect(r.b.width).toBe(160); // 140 content + 20 border
+    expect(r.b.x).toBe(140);
+  });
+
+  it("center-stroked fill sibling splits space evenly (stroke is layout-inert)", () => {
+    const f = frame({ flexDirection: "row", gap: 0 }, { width: 300, height: 100 }, [
+      rect("a", 10, 40, { sizing: { widthMode: "fill_container" } }),
+      rect("b", 10, 40, {
+        sizing: { widthMode: "fill_container" },
+        stroke: "#000",
+        strokeWidth: 10,
+        strokeAlign: "center",
+      }),
+    ]);
+    const r = byId(calculateFrameLayout(f));
+    expect(r.a.width).toBe(150);
+    expect(r.b.width).toBe(150);
+  });
+
+  it("overflowing fill item never shrinks below its own border sum", () => {
+    // fixed sibling eats all space; fill item with 20px total border keeps >= 20
+    const f = frame({ flexDirection: "row", gap: 0 }, { width: 100, height: 100 }, [
+      rect("a", 100, 40),
+      rect("b", 10, 40, {
+        sizing: { widthMode: "fill_container" },
+        stroke: "#000",
+        strokeWidth: 10,
+        strokeAlign: "inside",
+      }),
+    ]);
+    const r = byId(calculateFrameLayout(f));
+    expect(r.b.width).toBe(20);
+  });
+
+  it("fixed and hug children are unchanged by their inside strokes (stored size is already border-box)", () => {
+    const f = frame({ flexDirection: "row", gap: 0 }, { width: 300, height: 100 }, [
+      rect("a", 50, 40, {
+        stroke: "#000",
+        strokeWidth: 10,
+        strokeAlign: "inside",
+      }),
+      rect("b", 60, 40),
+    ]);
+    const r = byId(calculateFrameLayout(f));
+    expect(r.a.width).toBe(50);
+    expect(r.b.x).toBe(50);
+  });
+});

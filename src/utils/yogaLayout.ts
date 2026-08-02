@@ -256,7 +256,7 @@ function buildFlexItem(child: SceneNode, container: FlexContainer): FlexItem {
     resolveEffectiveSize(child, widthMode, heightMode);
 
   const sizing = child.sizing;
-  const mainMin = isHorizontal ? sizing?.minWidth : sizing?.minHeight;
+  let mainMin = isHorizontal ? sizing?.minWidth : sizing?.minHeight;
   const mainMax = isHorizontal ? sizing?.maxWidth : sizing?.maxHeight;
   const crossMin = isHorizontal ? sizing?.minHeight : sizing?.minWidth;
   const crossMax = isHorizontal ? sizing?.maxHeight : sizing?.maxWidth;
@@ -280,7 +280,19 @@ function buildFlexItem(child: SceneNode, container: FlexContainer): FlexItem {
   if (mainSizeMode === "fill_container") {
     flexGrow = 1;
     flexShrink = 1;
-    flexBasis = 0;
+    // Border-box distribution (CSS): the flexible pass distributes CONTENT
+    // space; a fill item's inside-stroke (border) sum is its basis, so its
+    // final outer size is contentShare + ownBorder — siblings with thicker
+    // inside strokes get proportionally more outer size and equal content
+    // areas. The border also floors the item: borders don't shrink.
+    const childInsets = resolveStrokeInsets(child);
+    const mainBorder = isHorizontal
+      ? childInsets.left + childInsets.right
+      : childInsets.top + childInsets.bottom;
+    flexBasis = mainBorder;
+    if (mainBorder > 0) {
+      mainMin = Math.max(mainMin ?? 0, mainBorder);
+    }
   }
 
   if (crossSizeMode === "fill_container") {
