@@ -5,10 +5,29 @@ import { useLayoutStore } from "@/store/layoutStore";
 import { resetStores } from "@/test/fixtures";
 
 /**
- * Pin: mutating stroke GEOMETRY through the real store path re-runs auto
- * layout (layout cache keys off nodesById identity; no special wiring).
- * Guards the "layout invalidation" clause of the CSS-aligned auto layout
- * spec — if layout caching ever becomes finer-grained, this must not break.
+ * Pin: mutating stroke GEOMETRY through the real store path (`updateNode`)
+ * re-runs auto layout on the next `getNodes()` + `calculateLayoutForFrame`
+ * read — no special wiring exists for stroke fields specifically.
+ *
+ * This exercises the real path end-to-end (fresh tree node each read), which
+ * is what actually matters for the app: every call site re-derives the frame
+ * from `getNodes()` before laying out, so it always sees a fresh object.
+ *
+ * It does NOT isolate `layoutStore`'s WeakMap identity-guard
+ * (`nodesById !== layoutCacheNodesById`) as a unit: reusing the SAME stale
+ * frame reference across a mutation doesn't observe the guard either way,
+ * because `materializeLayoutRefs`/`getNodeChildren` read children off the
+ * frame object's own (already-materialized) `.children` array when present,
+ * not fresh off `nodesById` — so a stale frame's recompute-on-miss produces
+ * the same output as a stale cache hit would have. Verified empirically:
+ * mutating a fill_container sibling's stroke and re-calling
+ * `calculateLayoutForFrame` with the ORIGINAL frame reference leaves the
+ * other child's computed width unchanged (150), while re-deriving the frame
+ * via a fresh `getNodes()` call after the same mutation picks it up (140).
+ * If the guard is ever deleted, this file would not catch it; a unit test
+ * against the guard would need a scenario where `materializeLayoutRefs`
+ * reads live `nodesById` off a stale frame object (e.g. a `ref` node,
+ * resolved via `resolveRefToTree(node, nodesById, ...)` on every call).
  */
 
 function seedRow(): void {
