@@ -35,7 +35,7 @@ export function ShowcaseAgentComposer({
         if (event.target instanceof Element && event.target.closest("button")) return;
         textareaRef.current?.focus();
       }}
-      className="mx-auto mt-6 max-w-xl overflow-hidden rounded-2xl border border-border-default bg-surface-panel shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-colors focus-within:border-accent-light"
+      className="mx-auto mt-6 max-w-xl overflow-hidden rounded-2xl border border-border-default bg-surface-panel shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-colors focus-within:border-accent-light dark:border-border-hover dark:focus-within:border-accent-light"
     >
       <textarea
         ref={textareaRef}
