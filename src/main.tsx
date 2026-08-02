@@ -2,11 +2,17 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import { RootErrorBoundary } from '@/components/RootErrorBoundary'
+import { applyStoredUITheme } from '@/lib/uiTheme'
 import { registerServiceWorker } from '@/pwa/registerServiceWorker'
 import { recoverFromFatalError } from '@/pwa/updateSelfHeal'
 
 import './index.css'
 import { AppRouter } from './AppRouter'
+
+// Both routes share the editor's persisted UI preference. Applying the tiny,
+// dependency-free theme bootstrap here keeps the showcase out of the editor
+// store graph while still preventing a light flash on a direct dark visit.
+applyStoredUITheme()
 
 // vite-plugin-pwa's generateSW output only exists for production builds
 // (no devOptions are enabled), so only register there.

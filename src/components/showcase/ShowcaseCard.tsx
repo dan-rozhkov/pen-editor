@@ -387,7 +387,7 @@ export function ShowcaseCard({
       <div
         aria-hidden="true"
         className={cn(
-          "pointer-events-none absolute inset-0 inset-ring-1 inset-ring-gray-200",
+          "pointer-events-none absolute inset-0 inset-ring-1 inset-ring-border-default",
           screenRadius,
         )}
       />

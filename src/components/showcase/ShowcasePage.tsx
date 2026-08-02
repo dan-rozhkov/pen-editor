@@ -12,6 +12,7 @@ import { ShowcaseAgentComposer } from "@/components/showcase/ShowcaseAgentCompos
 import { ShowcaseFilterBar } from "@/components/showcase/ShowcaseFilterBar";
 import { Button } from "@/components/ui/button";
 import { storeShowcaseAgentPrompt } from "@/lib/showcaseAgentHandoff";
+import { getAppliedUITheme } from "@/lib/uiTheme";
 import { cn } from "@/lib/utils";
 import {
   fetchShowcase,
@@ -357,24 +358,20 @@ export function ShowcasePage() {
   // chrome and content pass under it. `route-showcase` (toggled below) turns
   // off the lock while this page is mounted, without touching it for "/app".
   //
-  // The showcase is also deliberately a light-only surface. Client-side
-  // navigation from a dark editor leaves `.dark` on <html>; keeping it here
-  // makes every token-backed showcase control dark while the explicit page
-  // background stays white. Remove it before paint, then restore it on route
-  // exit so a cached dark editor returns in the theme the user selected.
+  // The showcase shares the editor's persisted theme. Its surfaces use theme
+  // tokens below, so `.dark` deliberately stays on <html> during client-side
+  // navigation instead of being treated as editor-only state.
   useLayoutEffect(() => {
     const html = document.documentElement;
-    const restoreDarkTheme = html.classList.contains("dark");
-    html.classList.remove("dark");
     html.classList.add("route-showcase");
     const meta = document.querySelector('meta[name="theme-color"]');
     const previousThemeColor = meta?.getAttribute("content") ?? null;
-    meta?.setAttribute("content", "#ffffff");
+    meta?.setAttribute(
+      "content",
+      getAppliedUITheme() === "dark" ? "#2a2a2a" : "#ffffff",
+    );
     return () => {
       html.classList.remove("route-showcase");
-      if (restoreDarkTheme) {
-        html.classList.add("dark");
-      }
       if (previousThemeColor !== null) {
         meta?.setAttribute("content", previousThemeColor);
       }
@@ -382,7 +379,7 @@ export function ShowcasePage() {
   }, []);
 
   return (
-    <div className="min-h-[100dvh] bg-white">
+    <div className="min-h-[100dvh] bg-surface-panel">
       <header
         className={cn(
           "relative mx-auto max-w-6xl pb-8 sm:pb-16 lg:max-w-none",
@@ -432,7 +429,7 @@ export function ShowcasePage() {
           "sm:pl-[calc(4rem+env(safe-area-inset-left))] sm:pr-[calc(4rem+env(safe-area-inset-right))]",
         )}
       >
-        <div className="sticky top-0 z-10 mb-6 bg-white py-2">
+        <div className="sticky top-0 z-10 mb-6 bg-surface-panel py-2">
           <ShowcaseFilterBar
             sort={sort}
             category={category}

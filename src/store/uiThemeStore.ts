@@ -1,30 +1,19 @@
 import { create } from 'zustand'
+import {
+  applyUITheme,
+  getStoredUITheme,
+  UI_THEME_STORAGE_KEY,
+  type UITheme,
+} from '@/lib/uiTheme'
 import { useSceneStore } from './sceneStore'
 
-type UITheme = 'light' | 'dark'
-
-const STORAGE_KEY = 'ui-theme'
 const PAGE_BG_LIGHT = '#f5f5f5'
 const PAGE_BG_DARK = '#1a1a1a'
-
-function getInitialTheme(): UITheme {
-  const stored = localStorage.getItem(STORAGE_KEY)
-  if (stored === 'light' || stored === 'dark') return stored
-  return 'light'
-}
-
-function applyTheme(theme: UITheme) {
-  if (theme === 'dark') {
-    document.documentElement.classList.add('dark')
-  } else {
-    document.documentElement.classList.remove('dark')
-  }
-}
 
 function applyThemeWithoutTransitions(theme: UITheme) {
   const root = document.documentElement
   root.classList.add('disable-theme-transitions')
-  applyTheme(theme)
+  applyUITheme(theme)
   requestAnimationFrame(() => {
     root.classList.remove('disable-theme-transitions')
   })
@@ -37,8 +26,8 @@ interface UIThemeState {
 }
 
 export const useUIThemeStore = create<UIThemeState>((set, get) => {
-  const initial = getInitialTheme()
-  applyTheme(initial)
+  const initial = getStoredUITheme()
+  applyUITheme(initial)
   // Sync page background with initial theme (deferred to avoid circular init)
   queueMicrotask(() => {
     const scene = useSceneStore.getState()
@@ -62,9 +51,9 @@ useUIThemeStore.subscribe((state, prev) => {
   if (state.uiTheme !== prev.uiTheme) {
     applyThemeWithoutTransitions(state.uiTheme)
   } else {
-    applyTheme(state.uiTheme)
+    applyUITheme(state.uiTheme)
   }
-  localStorage.setItem(STORAGE_KEY, state.uiTheme)
+  localStorage.setItem(UI_THEME_STORAGE_KEY, state.uiTheme)
   if (state.uiTheme !== prev.uiTheme) {
     const scene = useSceneStore.getState()
     const oldDefault = prev.uiTheme === 'dark' ? PAGE_BG_DARK : PAGE_BG_LIGHT

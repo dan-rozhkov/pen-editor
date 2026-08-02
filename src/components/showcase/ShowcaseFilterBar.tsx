@@ -76,7 +76,7 @@ export function ShowcaseFilterBar({
                   "flex items-center justify-center rounded-full px-3 py-1.5 text-sm font-medium transition-colors sm:px-4",
                   FOCUS_RING,
                   active
-                    ? "bg-white text-text-primary shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
+                    ? "bg-surface-panel text-text-primary shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
                     : "text-text-muted hover:text-text-primary",
                 )}
               >

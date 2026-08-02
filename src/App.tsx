@@ -28,7 +28,7 @@ import { importShowcaseScreensFromHandoff } from "./lib/importShowcaseScreens";
 import { OfflineBanner } from "./components/pwa/OfflineBanner";
 import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
-import "./store/uiThemeStore"; // Initialize UI theme (applies .dark class before first render)
+import "./store/uiThemeStore"; // Initialize the editor theme store after the shared page bootstrap.
 
 const PixiCanvas = lazy(() => import("./pixi/PixiCanvas").then((m) => ({ default: m.PixiCanvas })));
 

@@ -255,19 +255,20 @@ html.disable-theme-transitions *::after {
    and content can extend under it (`viewport-fit=cover` in index.html makes
    that possible). ShowcasePage toggles this class on <html> for as long as
    it's mounted, instead of loosening the rule above globally, so "/app" keeps
-   its fixed-viewport lock untouched. White (not --color-surface-base) so
-   nothing grey can ever show through the safe-area strips. */
+   its fixed-viewport lock untouched. The panel surface matches the showcase
+   root in both themes so nothing mismatched shows through the safe-area
+   strips. */
 html.route-showcase,
 html.route-showcase body,
 html.route-showcase #root {
   height: auto;
   overflow: visible;
-  background-color: #fff;
+  background-color: var(--color-surface-panel);
 }
 
 /* Only on the root element does a percentage min-height resolve against the
    viewport, so this belongs here and not on body/#root (where `height:auto`
-   above would leave the percentage indefinite). It guarantees the white
+   above would leave the percentage indefinite). It guarantees the themed
    canvas covers the full screen even when the content is shorter than it. */
 html.route-showcase {
   min-height: 100%;

@@ -409,7 +409,7 @@ describe("<ShowcasePage />", () => {
     const appCarousel = scroller?.closest("[data-slot=showcase-app-carousel]");
     const grid = appCarousel?.parentElement;
 
-    expect(page?.classList.contains("bg-white")).toBe(true);
+    expect(page?.classList.contains("bg-surface-panel")).toBe(true);
     expect(appCarousel?.classList.contains("bg-surface-base")).toBe(true);
     expect(appCarousel?.classList.contains("py-10")).toBe(true);
     expect(appCarousel?.classList.contains("sm:py-12")).toBe(true);
@@ -455,10 +455,12 @@ describe("<ShowcasePage />", () => {
     expect(hairlineOverlay?.classList.contains("absolute")).toBe(true);
     expect(hairlineOverlay?.classList.contains("inset-0")).toBe(true);
     expect(hairlineOverlay?.classList.contains("inset-ring-1")).toBe(true);
-    expect(hairlineOverlay?.classList.contains("inset-ring-gray-200")).toBe(true);
+    expect(
+      hairlineOverlay?.classList.contains("inset-ring-border-default"),
+    ).toBe(true);
   });
 
-  it("pins <html> to the showcase light theme while mounted, restoring the editor theme on unmount", async () => {
+  it("preserves the editor theme while marking <html> as the showcase route", async () => {
     const meta = document.createElement("meta");
     meta.setAttribute("name", "theme-color");
     meta.setAttribute("content", "#111111");
@@ -482,8 +484,8 @@ describe("<ShowcasePage />", () => {
       expect(document.documentElement.classList.contains("route-showcase")).toBe(
         true,
       );
-      expect(document.documentElement.classList.contains("dark")).toBe(false);
-      expect(meta.getAttribute("content")).toBe("#ffffff");
+      expect(document.documentElement.classList.contains("dark")).toBe(true);
+      expect(meta.getAttribute("content")).toBe("#2a2a2a");
 
       unmount();
 

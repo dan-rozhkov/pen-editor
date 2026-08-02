@@ -2,9 +2,8 @@ import { Toaster as Sonner, type ToasterProps } from "sonner";
 
 // The styled sonner portal, with the theme passed in rather than read from a
 // store. Kept in its own module so the showcase route can mount it without
-// importing `./sonner` — that one pulls in uiThemeStore, which applies the
-// editor's `.dark` class on import (wrong for the showcase, whose shell is
-// hardcoded light) and drags the scene store into the entry bundle.
+// importing `./sonner` — that one pulls in uiThemeStore and drags the scene
+// store into the entry bundle.
 // Colours map onto the shadcn CSS variables so toasts match the panels.
 export const ToasterBase = ({ ...props }: ToasterProps) => (
   <Sonner

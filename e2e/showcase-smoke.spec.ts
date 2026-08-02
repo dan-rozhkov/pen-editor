@@ -41,6 +41,11 @@ test("/ shows the showcase, not the editor", async ({ page }, testInfo) => {
   // Cards are image-only, so the title lives in alt text, not a caption.
   await expect(page.getByAltText("Onboarding flow")).toBeVisible();
   await expect(page.locator("[data-canvas]")).toHaveCount(0);
+  await expect(page.locator("html")).not.toHaveClass(/dark/);
+  await expect(page.locator("body")).toHaveCSS(
+    "background-color",
+    "rgb(255, 255, 255)",
+  );
 
   // The `/app` navigation mounts the full WebGL/Pixi editor, which is
   // already covered on chromium. webkit-mobile (iPhone 14) exists only to
@@ -60,7 +65,7 @@ test("/ shows the showcase, not the editor", async ({ page }, testInfo) => {
   await expectEditorMounted(page);
 });
 
-test("the showcase stays light after returning from a dark editor", async ({
+test("the showcase follows the editor's dark theme across navigation", async ({
   page,
 }, testInfo) => {
   test.skip(
@@ -79,6 +84,15 @@ test("the showcase stays light after returning from a dark editor", async ({
   );
 
   await page.goto("/");
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  await expect(page.locator("body")).toHaveCSS(
+    "background-color",
+    "rgb(42, 42, 42)",
+  );
+  await expect(
+    page.getByRole("heading", { name: "Design, on autopilot." }),
+  ).toHaveCSS("color", "rgba(255, 255, 255, 0.87)");
+
   await page.getByRole("link", { name: /open the editor/i }).click();
   await expect(page).toHaveURL(/\/app$/);
   await expectEditorMounted(page);
@@ -89,14 +103,14 @@ test("the showcase stays light after returning from a dark editor", async ({
   await expect(
     page.getByRole("heading", { name: "Design, on autopilot." }),
   ).toBeVisible();
-  await expect(page.locator("html")).not.toHaveClass(/dark/);
+  await expect(page.locator("html")).toHaveClass(/dark/);
   await expect(page.locator("body")).toHaveCSS(
     "background-color",
-    "rgb(255, 255, 255)",
+    "rgb(42, 42, 42)",
   );
 
-  // Leaving the light-only showcase must restore the user's editor choice,
-  // even though the editor module/store is already cached from the first lap.
+  // The preference must remain stable even though the editor module/store is
+  // already cached from the first lap.
   await page.getByRole("link", { name: /open the editor/i }).click();
   await expect(page).toHaveURL(/\/app$/);
   await expect(page.locator("html")).toHaveClass(/dark/);

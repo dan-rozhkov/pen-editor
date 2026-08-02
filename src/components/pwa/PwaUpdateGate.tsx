@@ -1,6 +1,7 @@
 import { Suspense, lazy } from "react";
 import { useLocation } from "react-router";
 
+import { getAppliedUITheme } from "@/lib/uiTheme";
 import { autoApplyAlreadyTried, isEditorPath } from "@/pwa/updateSelfHeal";
 import { usePwaStore } from "@/store/pwaStore";
 
@@ -18,8 +19,8 @@ const PwaUpdateToast = lazy(() =>
 );
 // Sonner needs a mounted <Toaster /> portal to render into. The editor mounts
 // its own (themed by uiThemeStore) and hosts the prompt there; on the
-// showcase there is none, so bring one along — pinned light, since that shell
-// is hardcoded white and must not import the editor's theme store.
+// showcase there is none, so bring one along without importing the editor's
+// theme store.
 const ToasterBase = lazy(() =>
   import("@/components/ui/ToasterBase").then((m) => ({ default: m.ToasterBase })),
 );
@@ -33,6 +34,7 @@ export function PwaUpdateGate() {
   // as the editor route" is exactly the kind of footgun that check's own
   // comment warns about.
   const isEditorRoute = isEditorPath(useLocation().pathname);
+  const showcaseTheme = getAppliedUITheme();
 
   // Auto-applying the update itself no longer happens here — it runs from
   // registerServiceWorker's onNeedRefresh callback (see updateSelfHeal.ts),
@@ -54,7 +56,7 @@ export function PwaUpdateGate() {
 
   return (
     <Suspense fallback={null}>
-      {!isEditorRoute && <ToasterBase theme="light" />}
+      {!isEditorRoute && <ToasterBase theme={showcaseTheme} />}
       <PwaUpdateToast />
     </Suspense>
   );
