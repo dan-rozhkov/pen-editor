@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.73.0] - 2026-08-02
+
+### Added
+- **Auto layout now follows CSS flexbox the way Figma's July 2026 "updated auto layout" does — inside strokes count as `border`.** A new `resolveStrokeInsets` helper turns a node's `strokeAlign: 'inside'` stroke into per-side layout insets (center/outside strokes stay layout-inert `outline`s, and the default alignment is `center`, so existing documents barely move). The frame's own inside stroke now shrinks its content area exactly like padding: children start inside the border, hug frames grow to content + padding + stroke, and `fill_container` siblings distribute space border-box style — a thicker inside stroke earns proportionally more outer size so every fill sibling ends up with an equal inner content area, matching what the browser will do at handoff. The border also acts as a floor: a fill child never shrinks below its own stroke sum on either axis. Border-box treatment only applies to node types whose renderer actually honors `strokeAlign` (`rect`/`ellipse`/`polygon`/`path`/`frame`) — text and line nodes never reserve space for a stroke their renderer won't draw.
+- **"Padding always gets the room it needs":** a fixed-size auto-layout frame is never laid out smaller than its padding + inside-stroke box (content space can no longer go negative — over-padded fill children used to compute negative sizes), and dragging a resize handle now stops at that same floor (`autoLayoutMinSize`), matching the engine instead of leaving a dead zone.
+
+### Fixed
+- **Every consumer of "where does content start inside this frame" now shares one helper, `resolveContentInsets` (padding + inside stroke).** The final review caught four call sites hand-rolling raw padding that would have drifted from the engine on stroked frames: auto-layout inference (`enableAutoLayoutOnFrame` would have shifted children by the stroke width, breaking its appearance-preservation invariant — the overflow/grow pass now also re-bases children sitting inside the border band), the drag-and-drop insertion indicator, the drop ghost's final position, and the hover padding/gap spacing overlay (the band geometry now matches where children land, while the label keeps showing the set padding value). Layout and renderer also share one per-side-stroke predicate (`hasPerSideStroke`), so layout can no longer reserve space for a per-side stroke configuration the renderer paints as nothing.
+
+### Testing
+- 27 new unit tests across `strokeInsets`, `yogaLayout` (edge insets, border-box distribution, cross-axis floor, regression pins for the two behaviors that already matched CSS: space-between overflow clamping and single-child-at-start), store-level stroke-mutation reflow, `enableAutoLayoutOnFrame` appearance preservation, drop-indicator and hover-overlay geometry.
+
 ## [0.72.6] - 2026-07-28
 
 ### Reverted
