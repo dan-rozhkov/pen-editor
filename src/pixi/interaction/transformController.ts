@@ -12,6 +12,7 @@ import { resolveTextResize, minTextWidth } from "./textResize";
 import { computeConstrainedRect } from "@/utils/constraintsLayout";
 import { snapResizeEdge } from "@/utils/smartGuideUtils";
 import { computeHandleDragOrigin } from "./handleDragOrigin";
+import { autoLayoutMinSize } from "@/utils/strokeInsets";
 
 function clamp(value: number, min?: number, max?: number): number {
   let v = value;
@@ -209,16 +210,23 @@ export function createTransformController(context: InteractionContext): Transfor
         const clampingNode = state.nodeId
           ? useSceneStore.getState().nodesById[state.nodeId]
           : null;
-        if (clampingNode?.sizing) {
-          const { minWidth, maxWidth, minHeight, maxHeight } = clampingNode.sizing;
-          const clampedW = clamp(newW, minWidth, maxWidth);
+        if (clampingNode) {
+          const { minWidth, maxWidth, minHeight, maxHeight } =
+            clampingNode.sizing ?? {};
+          // Auto-layout frames additionally floor at their padding +
+          // inside-stroke sum (border-box: padding always gets its room).
+          const alMin = autoLayoutMinSize(clampingNode);
+          const effMinW = Math.max(minWidth ?? 0, alMin.minWidth) || undefined;
+          const effMinH = Math.max(minHeight ?? 0, alMin.minHeight) || undefined;
+
+          const clampedW = clamp(newW, effMinW, maxWidth);
           if (clampedW !== newW) {
             if (corner.includes("l")) {
               newX = state.startNodeX + (state.startNodeW - clampedW);
             }
             newW = clampedW;
           }
-          const clampedH = clamp(newH, minHeight, maxHeight);
+          const clampedH = clamp(newH, effMinH, maxHeight);
           if (clampedH !== newH) {
             if (corner.includes("t")) {
               newY = state.startNodeY + (state.startNodeH - clampedH);

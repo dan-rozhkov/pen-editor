@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveStrokeInsets } from "@/utils/strokeInsets";
+import { resolveStrokeInsets, autoLayoutMinSize } from "@/utils/strokeInsets";
 import type { BaseNode } from "@/types/scene";
 
 const node = (extra: Partial<BaseNode>): BaseNode =>
@@ -82,5 +82,34 @@ describe("resolveStrokeInsets", () => {
         node({ stroke: "#000", strokeWidth: 0, strokeAlign: "inside" }),
       ),
     ).toEqual({ top: 0, right: 0, bottom: 0, left: 0 });
+  });
+});
+
+describe("autoLayoutMinSize", () => {
+  it("returns zero for non-frames and non-auto-layout frames", () => {
+    expect(autoLayoutMinSize(node({}))).toEqual({ minWidth: 0, minHeight: 0 });
+    expect(
+      autoLayoutMinSize(node({ type: "frame" } as Partial<BaseNode>)),
+    ).toEqual({ minWidth: 0, minHeight: 0 });
+  });
+
+  it("sums padding and inside stroke per axis for an auto-layout frame", () => {
+    const f = node({
+      type: "frame",
+      stroke: "#000",
+      strokeWidth: 10,
+      strokeAlign: "inside",
+      layout: {
+        autoLayout: true,
+        paddingTop: 1,
+        paddingRight: 2,
+        paddingBottom: 3,
+        paddingLeft: 4,
+      },
+    } as Partial<BaseNode>);
+    expect(autoLayoutMinSize(f)).toEqual({
+      minWidth: 4 + 2 + 10 + 10,
+      minHeight: 1 + 3 + 10 + 10,
+    });
   });
 });

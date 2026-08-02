@@ -61,3 +61,35 @@ export function resolveStrokeInsets(node: StrokeGeometrySource): SideInsets {
   }
   return { top: uniform, right: uniform, bottom: uniform, left: uniform };
 }
+
+type LayoutSource = StrokeGeometrySource & {
+  type?: BaseNode["type"];
+  layout?: {
+    autoLayout?: boolean;
+    paddingTop?: number;
+    paddingRight?: number;
+    paddingBottom?: number;
+    paddingLeft?: number;
+  };
+};
+
+/**
+ * The border-box floor of an auto-layout frame: padding + inside stroke per
+ * axis. Interactive resize must not drag a frame below this (Figma updated
+ * auto layout: "padding always gets the room it needs"). Zero for anything
+ * that is not an auto-layout frame.
+ */
+export function autoLayoutMinSize(node: LayoutSource): {
+  minWidth: number;
+  minHeight: number;
+} {
+  if (node.type !== "frame" || !node.layout?.autoLayout) {
+    return { minWidth: 0, minHeight: 0 };
+  }
+  const insets = resolveStrokeInsets(node);
+  const l = node.layout;
+  return {
+    minWidth: (l.paddingLeft ?? 0) + (l.paddingRight ?? 0) + insets.left + insets.right,
+    minHeight: (l.paddingTop ?? 0) + (l.paddingBottom ?? 0) + insets.top + insets.bottom,
+  };
+}
