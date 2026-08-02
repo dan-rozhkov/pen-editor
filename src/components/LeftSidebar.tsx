@@ -82,22 +82,13 @@ export function LeftSidebar() {
             inputClassName="w-full h-7 px-1 py-0.5 rounded text-sm font-medium text-text-default bg-secondary outline-none"
           />
           {!isOnline && (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <span
-                    role="img"
-                    aria-label={OFFLINE_DOCUMENT_TITLE}
-                    className="shrink-0 flex items-center text-text-muted"
-                  >
-                    <CloudSlash size={14} />
-                  </span>
-                }
-              />
-              <TooltipContent side="bottom">
-                {OFFLINE_DOCUMENT_TITLE}
-              </TooltipContent>
-            </Tooltip>
+            <span
+              role="img"
+              aria-label={OFFLINE_DOCUMENT_TITLE}
+              className="shrink-0 flex items-center text-text-muted"
+            >
+              <CloudSlash size={14} />
+            </span>
           )}
           {mcpStatus !== "off" && (
             <Tooltip>

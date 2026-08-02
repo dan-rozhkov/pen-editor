@@ -179,7 +179,9 @@ describe("<LeftSidebar />", () => {
     setOnline(false);
     useDocumentStore.setState({ fileName: "design.pen" });
     render(<LeftSidebar />);
-    expect(screen.getByLabelText(OFFLINE_DOCUMENT_TITLE)).toBeTruthy();
+    const indicator = screen.getByLabelText(OFFLINE_DOCUMENT_TITLE);
+    expect(indicator).toBeTruthy();
+    expect(indicator.closest('[data-slot="tooltip-trigger"]')).toBeNull();
   });
 
   it("hides the offline document indicator while online", () => {

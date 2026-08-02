@@ -16,7 +16,7 @@ export interface ChatModelOption {
 }
 
 // Sentinel selection that resolves to whatever the backend reports as its
-// default model (currently DeepSeek V4 Pro). Exposed as a synthetic "Auto"
+// default model (currently DeepSeek V4 Flash 0731). Exposed as a synthetic "Auto"
 // option at the top of the list so the user doesn't have to track which
 // concrete model is the recommended default.
 export const AUTO_MODEL_VALUE = "auto";
@@ -59,8 +59,8 @@ const FALLBACK_MODELS: ChatModelOption[] = [
     supportsVision: true,
   },
   {
-    value: "deepseek/deepseek-v4-flash",
-    label: "DeepSeek V4 Flash",
+    value: "deepseek/deepseek-v4-flash-0731",
+    label: "DeepSeek V4 Flash 0731",
     supportsVision: false,
   },
   {
@@ -111,7 +111,7 @@ const FALLBACK_MODELS: ChatModelOption[] = [
   },
 ];
 
-const FALLBACK_AUTO_MODEL = "deepseek/deepseek-v4-pro";
+const FALLBACK_AUTO_MODEL = "deepseek/deepseek-v4-flash-0731";
 
 // Backend wire shape (pen-editor-backend GET /api/models).
 interface ModelsResponse {
