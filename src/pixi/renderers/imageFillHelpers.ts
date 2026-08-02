@@ -8,6 +8,7 @@ import { hasPerCornerRadius } from "@/utils/renderUtils";
 import { cropRectToPixels, coverPixelRect, type PixelRect } from "@/lib/imageCrop/cropRect";
 import { buildAdjustmentColorMatrix, isDefaultAdjustments } from "@/lib/imageAdjustments/imageAdjustments";
 import { normalizeSvgMarkup, svgTextToDataUrl } from "@/lib/htmlToDesign/svgHandling";
+import { resolveApiUrl } from "@/lib/apiBase";
 import { LruTextureCache } from "./lruTextureCache";
 
 /** Cache for loaded textures by URL (LRU, bounded — SVG keys include size/resolution,
@@ -127,6 +128,39 @@ async function loadRasterTextureFromUrl(url: string): Promise<Texture> {
     return createTextureFromImage(await loadImageElement(url, true));
   } catch {
     // fall through
+  }
+
+  // Public image objects uploaded by the editor/showcase may be readable by a
+  // normal <img> while still omitting Access-Control-Allow-Origin. WebGL
+  // cannot upload those pixels directly. Ask the backend's tightly
+  // allowlisted S3 proxy for the same immutable object so Pixi receives a
+  // CORS-safe response. The server rejects every URL outside the configured
+  // pen-editor bucket prefix, so this is not an open fetch proxy.
+  let parsedUrl: URL | null = null;
+  try {
+    parsedUrl = new URL(url, window.location.href);
+  } catch {
+    // Keep the original missing-image behavior for malformed URLs.
+  }
+  if (
+    parsedUrl &&
+    (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") &&
+    parsedUrl.origin !== window.location.origin
+  ) {
+    const proxyUrl = resolveApiUrl(
+      `/api/image-proxy?url=${encodeURIComponent(parsedUrl.href)}`,
+    );
+    try {
+      const tex = await Assets.load<Texture>(proxyUrl);
+      if (tex) return tex;
+    } catch {
+      // fall through to the explicit missing-image error below
+    }
+    try {
+      return createTextureFromImage(await loadImageElement(proxyUrl, true));
+    } catch {
+      // fall through to the explicit missing-image error below
+    }
   }
 
   // A remote image that only loads without CORS cannot be uploaded to WebGL:

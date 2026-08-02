@@ -7,6 +7,7 @@ import {
   normalizeSvgDataUrl,
   withTexture,
 } from "@/pixi/renderers/imageFillHelpers";
+import { resolveApiUrl } from "@/lib/apiBase";
 
 /** Decode a `data:image/svg+xml` URL (either `;base64,` or plain/percent-encoded)
  *  back to its markup string, for asserting on the normalized output. */
@@ -178,7 +179,7 @@ describe("loadRasterTextureFromUrl", () => {
       }
     }
 
-    vi.spyOn(Assets, "load").mockRejectedValueOnce(new Error("CORS blocked"));
+    vi.spyOn(Assets, "load").mockRejectedValue(new Error("CORS blocked"));
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.stubGlobal("Image", FakeImage);
 
@@ -189,7 +190,39 @@ describe("loadRasterTextureFromUrl", () => {
     await vi.waitFor(() => {
       expect(warn).toHaveBeenCalledWith("[pixi] Failed to load image fill", url);
     });
-    expect(crossOriginAtLoad).toEqual(["anonymous"]);
+    expect(crossOriginAtLoad).toEqual(["anonymous", "anonymous"]);
     expect(onReady).not.toHaveBeenCalled();
+  });
+
+  it("retries a CORS-blocked editor S3 image through the backend proxy", async () => {
+    class FakeImage {
+      crossOrigin: string | null = null;
+      naturalWidth = 100;
+      naturalHeight = 100;
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+
+      set src(_url: string) {
+        queueMicrotask(() => this.onerror?.());
+      }
+    }
+
+    const texture = {} as Awaited<ReturnType<typeof Assets.load>>;
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockRejectedValueOnce(new Error("CORS blocked"))
+      .mockResolvedValueOnce(texture);
+    vi.stubGlobal("Image", FakeImage);
+
+    const url = "https://s3.example.test/bucket/pen-editor/photo.jpg";
+    const onReady = vi.fn();
+    withTexture(url, 100, 100, new Container(), onReady);
+
+    await vi.waitFor(() => expect(onReady).toHaveBeenCalledWith(texture));
+    expect(load).toHaveBeenNthCalledWith(1, url);
+    expect(load).toHaveBeenNthCalledWith(
+      2,
+      resolveApiUrl(`/api/image-proxy?url=${encodeURIComponent(url)}`),
+    );
   });
 });
