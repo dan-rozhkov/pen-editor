@@ -60,6 +60,48 @@ test("/ shows the showcase, not the editor", async ({ page }, testInfo) => {
   await expectEditorMounted(page);
 });
 
+test("the showcase stays light after returning from a dark editor", async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name === "webkit-mobile",
+    "The mobile WebKit project only guards the showcase layout.",
+  );
+
+  await page.addInitScript(() => {
+    localStorage.setItem("ui-theme", "dark");
+  });
+  await page.route("**/api/showcase**", (route) =>
+    route.fulfill({ json: { apps: [], nextCursor: null } }),
+  );
+  await page.route("**/api/models", (route) =>
+    route.fulfill({ json: { models: [], default: null } }),
+  );
+
+  await page.goto("/");
+  await page.getByRole("link", { name: /open the editor/i }).click();
+  await expect(page).toHaveURL(/\/app$/);
+  await expectEditorMounted(page);
+  await expect(page.locator("html")).toHaveClass(/dark/);
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(
+    page.getByRole("heading", { name: "Design, on autopilot." }),
+  ).toBeVisible();
+  await expect(page.locator("html")).not.toHaveClass(/dark/);
+  await expect(page.locator("body")).toHaveCSS(
+    "background-color",
+    "rgb(255, 255, 255)",
+  );
+
+  // Leaving the light-only showcase must restore the user's editor choice,
+  // even though the editor module/store is already cached from the first lap.
+  await page.getByRole("link", { name: /open the editor/i }).click();
+  await expect(page).toHaveURL(/\/app$/);
+  await expect(page.locator("html")).toHaveClass(/dark/);
+});
+
 test("the model filter sizes itself to its selected option", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "field-sizing is verified in the target browser");
 

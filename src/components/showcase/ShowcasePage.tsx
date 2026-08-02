@@ -1,4 +1,11 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
 import { ShowcaseAgentComposer } from "@/components/showcase/ShowcaseAgentComposer";
@@ -349,14 +356,25 @@ export function ShowcasePage() {
   // inside a fixed-height box — only document scroll lets Safari collapse its
   // chrome and content pass under it. `route-showcase` (toggled below) turns
   // off the lock while this page is mounted, without touching it for "/app".
-  useEffect(() => {
+  //
+  // The showcase is also deliberately a light-only surface. Client-side
+  // navigation from a dark editor leaves `.dark` on <html>; keeping it here
+  // makes every token-backed showcase control dark while the explicit page
+  // background stays white. Remove it before paint, then restore it on route
+  // exit so a cached dark editor returns in the theme the user selected.
+  useLayoutEffect(() => {
     const html = document.documentElement;
+    const restoreDarkTheme = html.classList.contains("dark");
+    html.classList.remove("dark");
     html.classList.add("route-showcase");
     const meta = document.querySelector('meta[name="theme-color"]');
     const previousThemeColor = meta?.getAttribute("content") ?? null;
     meta?.setAttribute("content", "#ffffff");
     return () => {
       html.classList.remove("route-showcase");
+      if (restoreDarkTheme) {
+        html.classList.add("dark");
+      }
       if (previousThemeColor !== null) {
         meta?.setAttribute("content", previousThemeColor);
       }

@@ -458,11 +458,12 @@ describe("<ShowcasePage />", () => {
     expect(hairlineOverlay?.classList.contains("inset-ring-gray-200")).toBe(true);
   });
 
-  it("marks <html> as the showcase route and whitens theme-color while mounted, undoing both on unmount", async () => {
+  it("pins <html> to the showcase light theme while mounted, restoring the editor theme on unmount", async () => {
     const meta = document.createElement("meta");
     meta.setAttribute("name", "theme-color");
     meta.setAttribute("content", "#111111");
     document.head.appendChild(meta);
+    document.documentElement.classList.add("dark");
 
     vi.stubGlobal(
       "fetch",
@@ -473,6 +474,7 @@ describe("<ShowcasePage />", () => {
       expect(document.documentElement.classList.contains("route-showcase")).toBe(
         false,
       );
+      expect(document.documentElement.classList.contains("dark")).toBe(true);
 
       const { unmount } = renderPage();
       await screen.findByAltText("Onboarding flow");
@@ -480,6 +482,7 @@ describe("<ShowcasePage />", () => {
       expect(document.documentElement.classList.contains("route-showcase")).toBe(
         true,
       );
+      expect(document.documentElement.classList.contains("dark")).toBe(false);
       expect(meta.getAttribute("content")).toBe("#ffffff");
 
       unmount();
@@ -487,8 +490,10 @@ describe("<ShowcasePage />", () => {
       expect(document.documentElement.classList.contains("route-showcase")).toBe(
         false,
       );
+      expect(document.documentElement.classList.contains("dark")).toBe(true);
       expect(meta.getAttribute("content")).toBe("#111111");
     } finally {
+      document.documentElement.classList.remove("dark");
       meta.remove();
     }
   });
