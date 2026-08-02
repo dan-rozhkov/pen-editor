@@ -679,3 +679,78 @@ describe("negative gap (overlap)", () => {
     expect(size.height).toBe(55); // 40 + 30 - 15
   });
 });
+
+describe("CSS-aligned auto layout: frame edge insets and padding floor", () => {
+  it("frame inside stroke shrinks the content area like CSS border", () => {
+    // row frame 300x100, inside stroke 10, no padding, one fixed child
+    const f = frame(
+      { flexDirection: "row" },
+      { width: 300, height: 100 },
+      [rect("a", 50, 40)],
+      { stroke: "#000", strokeWidth: 10, strokeAlign: "inside" },
+    );
+    const r = byId(calculateFrameLayout(f));
+    expect(r.a.x).toBe(10); // children start inside the border
+    expect(r.a.y).toBe(10);
+  });
+
+  it("center stroke does not move children (outline semantics)", () => {
+    const f = frame(
+      { flexDirection: "row" },
+      { width: 300, height: 100 },
+      [rect("a", 50, 40)],
+      { stroke: "#000", strokeWidth: 10, strokeAlign: "center" },
+    );
+    const r = byId(calculateFrameLayout(f));
+    expect(r.a.x).toBe(0);
+    expect(r.a.y).toBe(0);
+  });
+
+  it("hug frame grows to content + padding + inside stroke", () => {
+    const f = frame(
+      { flexDirection: "row", gap: 0, paddingLeft: 5, paddingRight: 5 },
+      { width: 10, height: 10 },
+      [rect("a", 50, 40)],
+      { stroke: "#000", strokeWidth: 10, strokeAlign: "inside" },
+    );
+    const size = calculateFrameIntrinsicSize(f, {
+      fitWidth: true,
+      fitHeight: true,
+    });
+    // width: 50 content + 5+5 padding + 10+10 stroke
+    expect(size.width).toBe(80);
+    // height: 40 content + 10+10 stroke
+    expect(size.height).toBe(60);
+  });
+
+  it("fill-cross child in an over-padded fixed frame gets height 0, not negative", () => {
+    // frame 100 tall with 60+60 vertical padding: content space would be -20
+    const f = frame(
+      {
+        flexDirection: "row",
+        paddingTop: 60,
+        paddingBottom: 60,
+      },
+      { width: 100, height: 100 },
+      [rect("a", 50, 40, { sizing: { heightMode: "fill_container" } })],
+    );
+    const r = byId(calculateFrameLayout(f));
+    expect(r.a.height).toBe(0);
+    expect(r.a.y).toBe(60);
+  });
+
+  it("empty fixed frame's intrinsic size includes inside stroke", () => {
+    const f = frame(
+      { flexDirection: "row", paddingLeft: 5, paddingRight: 7 },
+      { width: 200, height: 100 },
+      [],
+      { stroke: "#000", strokeWidth: 10, strokeAlign: "inside" },
+    );
+    const size = calculateFrameIntrinsicSize(f, {
+      fitWidth: true,
+      fitHeight: true,
+    });
+    expect(size.width).toBe(5 + 7 + 10 + 10);
+    expect(size.height).toBe(10 + 10);
+  });
+});

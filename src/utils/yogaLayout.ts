@@ -19,6 +19,7 @@ import {
   measureTextAutoSize,
   measureTextFixedWidthHeight,
 } from "./textMeasure";
+import { resolveStrokeInsets } from "./strokeInsets";
 
 // ── Internal types ──────────────────────────────────────────────────────────
 
@@ -55,7 +56,7 @@ interface FlexContainer {
   // Gap between lines along the cross axis (only relevant when flexWrap is set)
   crossGap: number;
   flexWrap: boolean;
-  padding: [number, number, number, number]; // [top, right, bottom, left]
+  padding: [number, number, number, number]; // edge insets [top, right, bottom, left]: layout padding + the frame's own inside-stroke width
   alignItems: AlignItems;
   justifyContent: JustifyContent;
 }
@@ -112,31 +113,40 @@ function buildContainer(
   const mainGap = isHorizontal ? columnGap : rowGap;
   const crossGap = isHorizontal ? rowGap : columnGap;
 
+  // Edge insets: layout padding + the frame's own inside-stroke width.
+  // Inside strokes consume content space like CSS `border` under
+  // border-box; center/outside strokes are `outline` and contribute 0.
+  const strokeInsets = resolveStrokeInsets(frame);
+  const insetTop = (layout?.paddingTop ?? 0) + strokeInsets.top;
+  const insetRight = (layout?.paddingRight ?? 0) + strokeInsets.right;
+  const insetBottom = (layout?.paddingBottom ?? 0) + strokeInsets.bottom;
+  const insetLeft = (layout?.paddingLeft ?? 0) + strokeInsets.left;
+
+  // Border-box floor: a fixed-size frame is never laid out smaller than its
+  // padding+border box, so content space can't go negative downstream.
+  const effectiveWidth = Math.max(frame.width, insetLeft + insetRight);
+  const effectiveHeight = Math.max(frame.height, insetTop + insetBottom);
+
   return {
     direction,
     mainSize: isHorizontal
       ? fitWidth
         ? undefined
-        : frame.width
+        : effectiveWidth
       : fitHeight
         ? undefined
-        : frame.height,
+        : effectiveHeight,
     crossSize: isHorizontal
       ? fitHeight
         ? undefined
-        : frame.height
+        : effectiveHeight
       : fitWidth
         ? undefined
-        : frame.width,
+        : effectiveWidth,
     mainGap,
     crossGap,
     flexWrap: layout?.flexWrap ?? false,
-    padding: [
-      layout?.paddingTop ?? 0,
-      layout?.paddingRight ?? 0,
-      layout?.paddingBottom ?? 0,
-      layout?.paddingLeft ?? 0,
-    ],
+    padding: [insetTop, insetRight, insetBottom, insetLeft],
     alignItems: layout?.alignItems ?? "flex-start",
     justifyContent: layout?.justifyContent ?? "flex-start",
   };
