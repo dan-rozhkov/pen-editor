@@ -33,6 +33,20 @@ describe("embed UA reset", () => {
     expect(container.querySelector("body button")?.textContent).toBe("Go");
   });
 
+  it("preserves author-defined body margins and padding", () => {
+    const container = mount(
+      "<style>body { margin: 12px; padding: 16px; }</style><main>Wallet</main>",
+    );
+    const body = container.querySelector("body");
+
+    expect(body).not.toBeNull();
+    // The synthetic body may constrain the embed's viewport, but must not
+    // inject inline box fields: inline declarations would outrank the
+    // screen's own `body { ... }` stylesheet rules.
+    expect(body!.style.margin).toBe("");
+    expect(body!.style.padding).toBe("");
+  });
+
   it("keeps every rule inside a cascade layer so embed CSS always wins", () => {
     expect(EMBED_UA_RESET_CSS.startsWith("@layer embed-ua-reset {")).toBe(true);
     expect(EMBED_UA_RESET_CSS.trimEnd().endsWith("}")).toBe(true);

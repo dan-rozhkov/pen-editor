@@ -235,12 +235,14 @@ export function mountHtmlWithBodyStyles(
     }
 
     const body = document.createElement("body");
+    // Do not set margin/padding inline here. Showcase screens commonly put
+    // their outer gutters in `body { ... }`; an inline reset would outrank
+    // those author rules and make the gutters disappear in the editor even
+    // though the same HTML is correct in the showcase iframe.
     body.style.cssText = `
       width: ${width}px;
       height: ${height}px;
       overflow: hidden;
-      margin: 0;
-      padding: 0;
     `;
     if (parsed.body.className) body.className = parsed.body.className;
     const parsedBodyStyle = parsed.body.getAttribute("style");
