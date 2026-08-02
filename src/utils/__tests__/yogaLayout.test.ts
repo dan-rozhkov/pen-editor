@@ -817,3 +817,38 @@ describe("CSS-aligned auto layout: border-box fill distribution", () => {
     expect(r.b.x).toBe(50);
   });
 });
+
+describe("CSS-aligned auto layout: regression pins (Figma updated-AL behaviors 5-6)", () => {
+  it("space-between with overflowing children collapses to flex-start — no negative gaps", () => {
+    const f = frame(
+      { flexDirection: "row", justifyContent: "space-between", gap: 0 },
+      { width: 100, height: 100 },
+      [rect("a", 60, 40), rect("b", 60, 40), rect("c", 60, 40)],
+    );
+    const r = byId(calculateFrameLayout(f));
+    // Back-to-back from the start; adjacent items never overlap each other.
+    expect(r.a.x).toBe(0);
+    expect(r.b.x).toBe(60);
+    expect(r.c.x).toBe(120);
+  });
+
+  it("a single space-between child sits at the start, not the center", () => {
+    const f = frame(
+      { flexDirection: "row", justifyContent: "space-between" },
+      { width: 300, height: 100 },
+      [rect("a", 50, 40)],
+    );
+    const r = byId(calculateFrameLayout(f));
+    expect(r.a.x).toBe(0);
+  });
+
+  it("a single space-between child in a column sits at the top", () => {
+    const f = frame(
+      { flexDirection: "column", justifyContent: "space-between" },
+      { width: 100, height: 300 },
+      [rect("a", 50, 40)],
+    );
+    const r = byId(calculateFrameLayout(f));
+    expect(r.a.y).toBe(0);
+  });
+});
