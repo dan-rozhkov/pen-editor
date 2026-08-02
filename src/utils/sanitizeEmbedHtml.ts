@@ -71,9 +71,32 @@ DOMPurify.addHook("uponSanitizeElement", (node, data) => {
 // silently dropping them).
 const DOC_STRUCTURE_RE = /<\s*(?:html|head|body)[\s>]/i;
 
+/**
+ * DOMPurify deliberately drops an entire `<style>` when its text contains an
+ * HTML-looking tag, even inside a CSS comment. Showcase HTML often documents
+ * image implementation choices with comments such as `not an <img>`, so one
+ * harmless note can otherwise remove the screen's complete stylesheet.
+ *
+ * Replace `<` only inside CSS comments with a CSS escape before sanitizing.
+ * Comments have no rendering semantics, while leaving all non-comment style
+ * text untouched keeps DOMPurify's normal HTML/script handling in force.
+ */
+function neutralizeMarkupInStyleComments(html: string): string {
+  return html.replace(
+    /(<style\b[^>]*>)([\s\S]*?)(<\/style\s*>)/gi,
+    (_match, open: string, css: string, close: string) =>
+      open +
+      css.replace(/\/\*[\s\S]*?\*\//g, (comment) =>
+        comment.replaceAll("<", "\\3c "),
+      ) +
+      close,
+  );
+}
+
 export function sanitizeEmbedHtml(html: string): string {
   const wholeDocument = DOC_STRUCTURE_RE.test(html);
-  return DOMPurify.sanitize(html, {
+  const cssCommentSafeHtml = neutralizeMarkupInStyleComments(html);
+  return DOMPurify.sanitize(cssCommentSafeHtml, {
     USE_PROFILES: { html: true, svg: true, svgFilters: true },
     // <slot> is used for component slot regions, <style> carries embed CSS,
     // and <iframe> is allowed ONLY for the YouTube video-fill embed (see the

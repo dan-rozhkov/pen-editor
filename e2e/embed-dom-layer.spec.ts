@@ -57,3 +57,65 @@ test("embed renders as a DOM overlay and enters interactive state", async ({ pag
     .poll(async () => host.evaluate((el) => getComputedStyle(el).pointerEvents))
     .toBe("auto");
 });
+
+test("embed preserves every leading style block in a showcase HTML fragment", async ({ page }) => {
+  await page.route("**/api/models", (route) =>
+    route.fulfill({
+      json: {
+        models: [{ id: "test/smoke-model", label: "Smoke Model", supportsVision: true }],
+        default: "test/smoke-model",
+      },
+    }),
+  );
+
+  await page.goto("/app");
+  await expectEditorMounted(page);
+
+  await page.evaluate(() => {
+    const w = window as unknown as {
+      __sceneStore: { getState: () => { addNode: (n: unknown) => void } };
+    };
+    w.__sceneStore.getState().addNode({
+      id: "showcase-styles",
+      type: "embed",
+      name: "Showcase styles",
+      x: 500,
+      y: 300,
+      width: 200,
+      height: 120,
+      htmlContent: `
+        <style data-showcase-ua-reset>
+          @layer showcase-ua-reset { button { border: 0; } }
+        </style>
+        <!-- Showcase generation notes separate the reset from the design CSS. -->
+        <style>
+          /* The cut-out is a background, not an <img>: keep it inside the screen. */
+          body { margin: 0; background: rgb(244, 236, 224); }
+          .hero { position: absolute; left: 24px; color: rgb(36, 28, 22); }
+        </style>
+        <div class="hero">Care that keeps up with them.</div>
+      `,
+    });
+  });
+
+  const host = page.locator('[data-embed-id="showcase-styles"]');
+  await expect(host).toBeVisible();
+  const styles = await host.evaluate((el) => {
+    const shadow = (el as HTMLElement).shadowRoot!;
+    const hero = shadow.querySelector<HTMLElement>(".hero")!;
+    const body = shadow.querySelector<HTMLElement>("body")!;
+    return {
+      authorStylePresent: Array.from(shadow.querySelectorAll("style")).some((style) =>
+        style.textContent?.includes(".hero"),
+      ),
+      heroLeft: getComputedStyle(hero).left,
+      bodyBackground: getComputedStyle(body).backgroundColor,
+    };
+  });
+
+  expect(styles).toEqual({
+    authorStylePresent: true,
+    heroLeft: "24px",
+    bodyBackground: "rgb(244, 236, 224)",
+  });
+});
