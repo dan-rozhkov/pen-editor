@@ -117,6 +117,25 @@ describe("applyShadows", () => {
     expect(blurFilter.padding).toBeGreaterThanOrEqual(24);
   });
 
+  it("shrinks an outer shadow's source shape for negative CSS spread", () => {
+    const container = new Container();
+    applyShadows(
+      container,
+      [outerShadow({ offset: { x: 0, y: 14 }, blur: 30, spread: -12 })],
+      334,
+      58,
+      999,
+    );
+
+    const layer = container.getChildByLabel("shadow-layer") as Container;
+    const shape = layer.children[0] as Graphics;
+    const bounds = shape.getLocalBounds();
+    expect(bounds.minX).toBe(12);
+    expect(bounds.minY).toBe(12);
+    expect(bounds.maxX).toBe(322);
+    expect(bounds.maxY).toBe(46);
+  });
+
   it("an inner shadow's blur filter padding covers the full blur radius", () => {
     const container = new Container();
     applyShadows(container, [innerShadow({ blur: 18 })], 100, 80);

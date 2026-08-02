@@ -342,6 +342,32 @@ describe('convertH2dToSceneNodes (synthetic cases)', () => {
     expect(paragraph.height).toBe(40)
   })
 
+  it('preserves an explicit BR between direct text nodes as a wrapped line', () => {
+    const body = el('BODY', rect(0, 0, 390, 120), {}, [
+      el(
+        'H1',
+        rect(24, 16, 342, 88),
+        { fontSize: '36px', lineHeight: '44px', whiteSpace: 'normal' },
+        [
+          text('Morning walk', rect(24, 16, 210, 44)),
+          el('BR', rect(234, 16, 0, 0)),
+          text('with Marlowe', rect(24, 60, 220, 44)),
+        ],
+      ),
+    ])
+
+    const { nodes } = convertH2dToSceneNodes(buildDocument(body))
+    const heading = (nodes[0] as FrameNode).children[0] as TextNode
+
+    expect(heading.text).toBe('Morning walk\nwith Marlowe')
+    expect(heading.textWidthMode).toBe('fixed-height')
+    // The text box keeps H1's CSS content width, not the longest rendered
+    // line's glyph width (220px). Otherwise those already-wrapped lines wrap
+    // a second time after conversion.
+    expect(heading.width).toBe(342)
+    expect(heading.height).toBe(88)
+  })
+
   it('converts a captured search input with placeholder, icon, and solid background', () => {
     const input = el(
       'INPUT',

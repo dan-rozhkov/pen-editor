@@ -90,7 +90,24 @@ function buildShadowLayer(
   shadowContainer.position.set(effect.offset.x, effect.offset.y);
 
   const shadowGfx = new Graphics();
-  drawShadowShape(shadowGfx, shape, width, height, cornerRadius, cornerRadiusPerCorner, cornerSmoothing);
+  // CSS applies spread to the shadow's source shape before blur. Positive
+  // spread expands it; negative spread (common on soft elevated buttons)
+  // contracts it. Ignoring a negative spread such as `-12px` leaves a solid
+  // full-size pill underneath the node and makes a 30px blur look like a hard
+  // bar instead of a soft glow.
+  const shadowWidth = Math.max(0, width + effect.spread * 2);
+  const shadowHeight = Math.max(0, height + effect.spread * 2);
+  drawShadowShape(
+    shadowGfx,
+    shape,
+    shadowWidth,
+    shadowHeight,
+    cornerRadius,
+    cornerRadiusPerCorner,
+    -effect.spread,
+    -effect.spread,
+    cornerSmoothing,
+  );
   shadowGfx.fill({ color: parseColor(hexColor), alpha: opacity });
   shadowContainer.addChild(shadowGfx);
 

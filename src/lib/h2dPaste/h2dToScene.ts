@@ -536,8 +536,20 @@ function convertTextElement(node: H2dElementNode, textChildren: H2dTextNodeType[
     width: maxX - minX,
     height: maxY - minY,
   }
-  const text = normalizeCapturedText(textChildren.map((t) => t.text).join(''), node.styles.whiteSpace)
+  const text = capturedDirectText(node, textChildren)
   const isMultiline = text.includes('\n') || textChildren.some((child) => (child.lineCount ?? 1) > 1)
+  if (isMultiline) {
+    // Captured text rects describe the glyphs that happened to render on each
+    // line. Their union is therefore only as wide as the longest rendered
+    // line, not as wide as the CSS box that constrained wrapping. Reusing
+    // that narrower glyph width makes Pixi wrap the text a second time (the
+    // Plume heading went from 2 lines to 4). Preserve the element's content
+    // box instead; padding remains outside the editable text layer.
+    const paddingLeft = px(node.styles.paddingLeft) ?? 0
+    const paddingRight = px(node.styles.paddingRight) ?? 0
+    rel.x = node.rect.x + paddingLeft - parentRect.x
+    rel.width = Math.max(0, node.rect.width - paddingLeft - paddingRight)
+  }
   const textNode: TextNode = {
     id: generateId(),
     type: 'text',
@@ -564,6 +576,30 @@ function convertTextElement(node: H2dElementNode, textChildren: H2dTextNodeType[
     if (variableId) textNode.fillBinding = { variableId }
   }
   return textNode
+}
+
+/**
+ * Rebuild an element's direct text in DOM order, retaining explicit BRs.
+ * capture.js emits BR as a zero-size element between sibling text nodes; the
+ * normal visibility filter deliberately drops that element, so joining only
+ * `textChildren` turns `Hello<br>world` into `Helloworld`. Normalize each
+ * real text node independently (to remove source indentation) and insert the
+ * author-requested line break ourselves.
+ */
+function capturedDirectText(
+  node: H2dElementNode,
+  textChildren: H2dTextNodeType[],
+): string {
+  const visibleTextIds = new Set(textChildren.map((child) => child.id))
+  const parts: string[] = []
+  for (const child of node.childNodes) {
+    if (isH2dTextNode(child) && visibleTextIds.has(child.id)) {
+      parts.push(normalizeCapturedText(child.text, node.styles.whiteSpace))
+    } else if (isH2dElementNode(child) && child.tag.toUpperCase() === 'BR') {
+      parts.push('\n')
+    }
+  }
+  return parts.join('')
 }
 
 /**
