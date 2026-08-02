@@ -816,6 +816,60 @@ describe("CSS-aligned auto layout: border-box fill distribution", () => {
     expect(r.a.width).toBe(50);
     expect(r.b.x).toBe(50);
   });
+
+  it("fill-height child with an inside stroke keeps at least its own border sum (cross-axis floor)", () => {
+    // row frame height 100, paddingTop/Bottom 50 -> content space 0. A plain
+    // fill_container child would get height 0 (see the test above); one with
+    // a 10px inside stroke must keep at least 10+10=20.
+    const f = frame(
+      { flexDirection: "row", paddingTop: 50, paddingBottom: 50 },
+      { width: 100, height: 100 },
+      [
+        rect("a", 50, 40, {
+          sizing: { heightMode: "fill_container" },
+          stroke: "#000",
+          strokeWidth: 10,
+          strokeAlign: "inside",
+        }),
+      ],
+    );
+    const r = byId(calculateFrameLayout(f));
+    expect(r.a.height).toBe(20);
+  });
+
+  it("a fill-height text node with an inside stroke is NOT floored — text never renders strokeAlign", () => {
+    const f = frame(
+      { flexDirection: "row", paddingTop: 50, paddingBottom: 50 },
+      { width: 100, height: 100 },
+      [
+        rect("a", 50, 40, {
+          type: "text",
+          sizing: { heightMode: "fill_container" },
+          stroke: "#000",
+          strokeWidth: 10,
+          strokeAlign: "inside",
+        } as unknown as Partial<SceneNode>),
+      ],
+    );
+    const r = byId(calculateFrameLayout(f));
+    expect(r.a.height).toBe(0);
+  });
+
+  it("a fill-width text node with an inside stroke gets no extra basis on the main axis either — equal split with a plain sibling", () => {
+    const f = frame({ flexDirection: "row", gap: 0 }, { width: 300, height: 100 }, [
+      rect("a", 10, 40, { sizing: { widthMode: "fill_container" } }),
+      rect("b", 10, 40, {
+        type: "text",
+        sizing: { widthMode: "fill_container" },
+        stroke: "#000",
+        strokeWidth: 10,
+        strokeAlign: "inside",
+      } as unknown as Partial<SceneNode>),
+    ]);
+    const r = byId(calculateFrameLayout(f));
+    expect(r.a.width).toBe(150);
+    expect(r.b.width).toBe(150);
+  });
 });
 
 describe("CSS-aligned auto layout: regression pins (Figma updated-AL behaviors 5-6)", () => {

@@ -1,5 +1,6 @@
 import type { BaseNode, Paint } from "@/types/scene";
 import { getRenderableStrokes } from "./fillUtils";
+import { hasPerSideStroke } from "./renderUtils";
 
 /**
  * Per-side inside-stroke widths of a node, in px. This is the CSS `border`
@@ -39,13 +40,13 @@ export type StrokeGeometrySource = Pick<
 export function resolveStrokeInsets(node: StrokeGeometrySource): SideInsets {
   if ((node.strokeAlign ?? "center") !== "inside") return ZERO_INSETS;
 
+  // Per-side mode is a MODE switch, not a magnitude check: the renderer
+  // (hasPerSideStroke in renderUtils.ts, shared with fillStrokeHelpers.ts)
+  // takes the per-side branch whenever any side is explicitly set, even to
+  // 0 — an all-zero override paints nothing, and layout must agree it
+  // reserves nothing, rather than falling through to the uniform width.
   const per = node.strokeWidthPerSide;
-  const hasPerSide =
-    per != null &&
-    ((per.top ?? 0) > 0 ||
-      (per.right ?? 0) > 0 ||
-      (per.bottom ?? 0) > 0 ||
-      (per.left ?? 0) > 0);
+  const hasPerSide = hasPerSideStroke(per);
   const uniform = node.strokeWidth ?? 0;
   if (!hasPerSide && uniform <= 0) return ZERO_INSETS;
 
@@ -72,6 +73,50 @@ type LayoutSource = StrokeGeometrySource & {
     paddingLeft?: number;
   };
 };
+
+/**
+ * Where a frame's content starts on each side: layout padding + its own
+ * inside-stroke width (the CSS border-box analogue). This is the single
+ * source of truth for "where do children actually land inside this frame" —
+ * every consumer that needs that answer (the yoga layout engine, drag-drop
+ * geometry, hover/spacing overlays) must route through this rather than
+ * reading `layout.padding*` alone, or it drifts from the engine the moment a
+ * frame has an inside stroke.
+ */
+export function resolveContentInsets(frame: LayoutSource): SideInsets {
+  const strokeInsets = resolveStrokeInsets(frame);
+  const l = frame.layout;
+  return {
+    top: (l?.paddingTop ?? 0) + strokeInsets.top,
+    right: (l?.paddingRight ?? 0) + strokeInsets.right,
+    bottom: (l?.paddingBottom ?? 0) + strokeInsets.bottom,
+    left: (l?.paddingLeft ?? 0) + strokeInsets.left,
+  };
+}
+
+/** Node types whose renderer honors `strokeAlign` at all (see per-node files
+ * under `src/pixi/renderers/`). Layout must not reserve border-box space for
+ * an inside stroke on a node type that never paints one — `text` and `line`
+ * notably ignore strokeAlign entirely. */
+const STROKE_AWARE_TYPES = new Set<BaseNode["type"]>([
+  "rect",
+  "ellipse",
+  "polygon",
+  "path",
+  "frame",
+]);
+
+/**
+ * Inside-stroke insets that actually affect this node's rendered size —
+ * zero for node types whose renderer never honors `strokeAlign` (text,
+ * line, ...), even if the node has stroke data set. Used by the yoga engine
+ * (border-box fill_container distribution, main- and cross-axis) so it never
+ * reserves layout space for an invisible border.
+ */
+export function nodeStrokeAffectsLayout(node: LayoutSource): SideInsets {
+  if (!node.type || !STROKE_AWARE_TYPES.has(node.type)) return ZERO_INSETS;
+  return resolveStrokeInsets(node);
+}
 
 /**
  * The border-box floor of an auto-layout frame: padding + inside stroke per

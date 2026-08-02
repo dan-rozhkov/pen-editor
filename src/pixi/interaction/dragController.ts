@@ -25,6 +25,7 @@ import {
   getFrameAbsoluteRectWithLayout,
 } from "@/utils/dragUtils";
 import type { SiblingPosition } from "@/utils/dragUtils";
+import { resolveContentInsets } from "@/utils/strokeInsets";
 import type { DragItem, InteractionContext, DragState } from "./types";
 import { findFrameInTree } from "./hitTesting";
 import {
@@ -286,10 +287,12 @@ export function createDragController(context: InteractionContext): DragControlle
     const draggedHeight = draggedChild?.height ?? 0;
 
     if (siblings.length === 0) {
-      // Only child — goes to first layout position
-      const paddingLeft = layout?.paddingLeft ?? 0;
-      const paddingTop = layout?.paddingTop ?? 0;
-      return { x: frameRect.x + paddingLeft, y: frameRect.y + paddingTop };
+      // Only child — goes to first layout position. Use resolveContentInsets
+      // (padding + inside stroke), not raw padding — same fix as dragUtils'
+      // calculateDropPosition, or the drop ghost lands short by the stroke
+      // width on a stroked frame.
+      const contentInsets = resolveContentInsets(parentFrame);
+      return { x: frameRect.x + contentInsets.left, y: frameRect.y + contentInsets.top };
     }
 
     if (insertIndex <= 0) {

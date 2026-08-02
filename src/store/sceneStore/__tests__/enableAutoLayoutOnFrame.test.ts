@@ -172,6 +172,49 @@ describe("enableAutoLayoutOnFrame (FIR-60)", () => {
     expect(frame.layout?.paddingBottom).toBe(0);
   });
 
+  it("finding C: a child closer to the edge than the inside stroke keeps its absolute position (frame grows/shifts to absorb it)", () => {
+    // 10px inside stroke; child sits at local x=4 — inside the frame's box,
+    // but closer to the edge than the stroke width. Without the fix the
+    // frame wouldn't grow (child.x=4 >= 0), padding would clamp to 0, and
+    // the engine's own inset (10) would then place the child at x=10 —
+    // a silent +6px jump the moment auto-layout turns on.
+    seedFrameWithChildren(
+      { width: 100, height: 100 },
+      [rectNode("a", 4, 4, 50, 50)],
+    );
+    useSceneStore.setState({
+      nodesById: {
+        ...scene().nodesById,
+        frame1: {
+          ...scene().nodesById["frame1"],
+          stroke: "#000",
+          strokeWidth: 10,
+          strokeAlign: "inside",
+        } as FlatSceneNode,
+      },
+      _cachedTree: null,
+    });
+
+    expect(scene().enableAutoLayoutOnFrame("frame1")).toBe(true);
+
+    const s = scene();
+    const frame = s.nodesById["frame1"] as FlatFrameNode;
+    // Frame grew/shifted left+up by 6 (10 stroke - 4 child offset) so the
+    // engine's inset (padding 0 + stroke 10) reproduces the original x=4.
+    expect(frame.x).toBe(-6);
+    expect(frame.y).toBe(-6);
+    expect(frame.layout?.paddingLeft).toBe(0);
+    expect(frame.layout?.paddingTop).toBe(0);
+
+    // Re-derive the child's on-canvas position the same way the engine does:
+    // frame origin + (padding + stroke inset). Must equal the ORIGINAL
+    // absolute position (frame started at 0,0 + child at 4,4).
+    const insetLeft = (frame.layout?.paddingLeft ?? 0) + 10;
+    const insetTop = (frame.layout?.paddingTop ?? 0) + 10;
+    expect(frame.x + insetLeft).toBe(4);
+    expect(frame.y + insetTop).toBe(4);
+  });
+
   it("is a no-op (no history entry) for a non-frame node", () => {
     seedFrameWithChildren({ width: 100, height: 100 }, [rectNode("a", 0, 0, 50, 50)]);
     const before = pastLen();

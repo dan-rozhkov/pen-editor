@@ -5,6 +5,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useDevModeStore } from "@/store/devModeStore";
 import type { FlatFrameNode, TextNode } from "@/types/scene";
+import { resolveContentInsets } from "@/utils/strokeInsets";
 import type { OverlayHelpers, Rect } from "./helpers";
 import { drawTextBaselines, drawDashedRect, drawHatchedRect } from "./helpers";
 import {
@@ -246,26 +247,39 @@ function drawSpacingOverlays(
   scale: number,
 ): void {
   const layout = frameNode.layout!;
+  // `value`/label always shows the USER's padding property — that's what
+  // they set and what they'd type into the panel. The band GEOMETRY below
+  // uses resolveContentInsets (padding + inside stroke) instead, because the
+  // yoga engine (buildContainer in yogaLayout.ts) folds a visible inside
+  // stroke into the content offset on top of padding — on a stroked frame,
+  // children start further in than `layout.padding*` alone would suggest, so
+  // a band painted from padding alone would stop short of / overshoot where
+  // content actually begins. Two different questions, two different sources.
   const pt = layout.paddingTop ?? 0;
   const pr = layout.paddingRight ?? 0;
   const pb = layout.paddingBottom ?? 0;
   const pl = layout.paddingLeft ?? 0;
+  const contentInsets = resolveContentInsets(frameNode);
+  const ct = contentInsets.top;
+  const cr = contentInsets.right;
+  const cb = contentInsets.bottom;
+  const cl = contentInsets.left;
   const { x, y, width: w, height: h } = parentRect;
 
   const areas: SpacingArea[] = [];
 
   // Padding areas
   if (pt > 0) {
-    areas.push({ rect: { x, y, width: w, height: pt }, value: pt, color: SELECTION_COLOR, alpha: PADDING_OVERLAY_ALPHA, orientation: "horizontal" });
+    areas.push({ rect: { x, y, width: w, height: ct }, value: pt, color: SELECTION_COLOR, alpha: PADDING_OVERLAY_ALPHA, orientation: "horizontal" });
   }
   if (pb > 0) {
-    areas.push({ rect: { x, y: y + h - pb, width: w, height: pb }, value: pb, color: SELECTION_COLOR, alpha: PADDING_OVERLAY_ALPHA, orientation: "horizontal" });
+    areas.push({ rect: { x, y: y + h - cb, width: w, height: cb }, value: pb, color: SELECTION_COLOR, alpha: PADDING_OVERLAY_ALPHA, orientation: "horizontal" });
   }
   if (pl > 0) {
-    areas.push({ rect: { x, y: y + pt, width: pl, height: h - pt - pb }, value: pl, color: SELECTION_COLOR, alpha: PADDING_OVERLAY_ALPHA, orientation: "vertical" });
+    areas.push({ rect: { x, y: y + ct, width: cl, height: h - ct - cb }, value: pl, color: SELECTION_COLOR, alpha: PADDING_OVERLAY_ALPHA, orientation: "vertical" });
   }
   if (pr > 0) {
-    areas.push({ rect: { x: x + w - pr, y: y + pt, width: pr, height: h - pt - pb }, value: pr, color: SELECTION_COLOR, alpha: PADDING_OVERLAY_ALPHA, orientation: "vertical" });
+    areas.push({ rect: { x: x + w - cr, y: y + ct, width: cr, height: h - ct - cb }, value: pr, color: SELECTION_COLOR, alpha: PADDING_OVERLAY_ALPHA, orientation: "vertical" });
   }
 
   // Gap areas
@@ -284,10 +298,10 @@ function drawSpacingOverlays(
 
     flowChildRects.sort((a, b) => isRow ? a.x - b.x : a.y - b.y);
 
-    const contentX = x + pl;
-    const contentY = y + pt;
-    const contentW = w - pl - pr;
-    const contentH = h - pt - pb;
+    const contentX = x + cl;
+    const contentY = y + ct;
+    const contentW = w - cl - cr;
+    const contentH = h - ct - cb;
 
     for (let i = 0; i < flowChildRects.length - 1; i++) {
       const cur = flowChildRects[i];

@@ -12,6 +12,7 @@ import { convertDesignNodesToHtml } from "../../lib/designToHtml";
 import { loadGoogleFontsFromNodes } from "../../utils/fontUtils";
 import { calculateFrameLayout } from "../../utils/yogaLayout";
 import { inferAutoLayoutFromGeometry } from "../../utils/inferAutoLayoutFromGeometry";
+import { resolveStrokeInsets } from "../../utils/strokeInsets";
 import { saveHistory } from "./helpers/history";
 import { useMeasurementsStore } from "../measurementsStore";
 import {
@@ -429,10 +430,26 @@ export function createComplexOperations(
       // contain its children instead (what Figma does: an auto-layout frame
       // always encloses its content) and re-base the children into the grown
       // frame's local space, so every node keeps its on-screen position.
-      const overflowMinX = Math.min(0, ...rawChildren.map((c) => c.x));
-      const overflowMinY = Math.min(0, ...rawChildren.map((c) => c.y));
-      const contentMaxX = Math.max(frame.width, ...rawChildren.map((c) => c.x + c.width));
-      const contentMaxY = Math.max(frame.height, ...rawChildren.map((c) => c.y + c.height));
+      //
+      // An inside stroke needs the same treatment: the engine folds it into
+      // the content offset on top of padding (buildContainer in
+      // yogaLayout.ts), so a child sitting closer to the edge than the
+      // stroke width — even fully inside the frame's box — would otherwise
+      // hit the same "padding can't be negative" clamp (inferPadding floors
+      // at 0) and jump outward by the shortfall the moment auto-layout turns
+      // on. Treat `child - insets` like overflow on the near sides and
+      // `child + insets` like overflow on the far sides, symmetrically.
+      const insets = resolveStrokeInsets(frame);
+      const overflowMinX = Math.min(0, ...rawChildren.map((c) => c.x - insets.left));
+      const overflowMinY = Math.min(0, ...rawChildren.map((c) => c.y - insets.top));
+      const contentMaxX = Math.max(
+        frame.width,
+        ...rawChildren.map((c) => c.x + c.width + insets.right),
+      );
+      const contentMaxY = Math.max(
+        frame.height,
+        ...rawChildren.map((c) => c.y + c.height + insets.bottom),
+      );
       const frameX = frame.x + overflowMinX;
       const frameY = frame.y + overflowMinY;
       const frameWidth = contentMaxX - overflowMinX;

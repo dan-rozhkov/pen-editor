@@ -19,7 +19,7 @@ import {
   measureTextAutoSize,
   measureTextFixedWidthHeight,
 } from "./textMeasure";
-import { resolveStrokeInsets } from "./strokeInsets";
+import { resolveContentInsets, nodeStrokeAffectsLayout } from "./strokeInsets";
 
 // ── Internal types ──────────────────────────────────────────────────────────
 
@@ -113,14 +113,15 @@ function buildContainer(
   const mainGap = isHorizontal ? columnGap : rowGap;
   const crossGap = isHorizontal ? rowGap : columnGap;
 
-  // Edge insets: layout padding + the frame's own inside-stroke width.
+  // Edge insets: layout padding + the frame's own inside-stroke width
+  // (resolveContentInsets — the shared "where does content start" helper).
   // Inside strokes consume content space like CSS `border` under
   // border-box; center/outside strokes are `outline` and contribute 0.
-  const strokeInsets = resolveStrokeInsets(frame);
-  const insetTop = (layout?.paddingTop ?? 0) + strokeInsets.top;
-  const insetRight = (layout?.paddingRight ?? 0) + strokeInsets.right;
-  const insetBottom = (layout?.paddingBottom ?? 0) + strokeInsets.bottom;
-  const insetLeft = (layout?.paddingLeft ?? 0) + strokeInsets.left;
+  const contentInsets = resolveContentInsets(frame);
+  const insetTop = contentInsets.top;
+  const insetRight = contentInsets.right;
+  const insetBottom = contentInsets.bottom;
+  const insetLeft = contentInsets.left;
 
   // Border-box floor: a fixed-size frame is never laid out smaller than its
   // padding+border box, so content space can't go negative downstream.
@@ -258,7 +259,7 @@ function buildFlexItem(child: SceneNode, container: FlexContainer): FlexItem {
   const sizing = child.sizing;
   let mainMin = isHorizontal ? sizing?.minWidth : sizing?.minHeight;
   const mainMax = isHorizontal ? sizing?.maxWidth : sizing?.maxHeight;
-  const crossMin = isHorizontal ? sizing?.minHeight : sizing?.minWidth;
+  let crossMin = isHorizontal ? sizing?.minHeight : sizing?.minWidth;
   const crossMax = isHorizontal ? sizing?.maxHeight : sizing?.maxWidth;
 
   const mainBaseSize = clamp(
@@ -277,6 +278,12 @@ function buildFlexItem(child: SceneNode, container: FlexContainer): FlexItem {
   let flexBasis = mainBaseSize;
   let alignSelf: AlignItems | null = null;
 
+  // Border-box treatment only applies to node types whose renderer actually
+  // honors strokeAlign (rect/ellipse/polygon/path/frame) — text/line nodes
+  // ignore inside strokes entirely, so reserving layout space for one would
+  // shrink their content basis around an invisible border (finding F).
+  const childInsets = nodeStrokeAffectsLayout(child);
+
   if (mainSizeMode === "fill_container") {
     flexGrow = 1;
     flexShrink = 1;
@@ -285,7 +292,6 @@ function buildFlexItem(child: SceneNode, container: FlexContainer): FlexItem {
     // final outer size is contentShare + ownBorder — siblings with thicker
     // inside strokes get proportionally more outer size and equal content
     // areas. The border also floors the item: borders don't shrink.
-    const childInsets = resolveStrokeInsets(child);
     const mainBorder = isHorizontal
       ? childInsets.left + childInsets.right
       : childInsets.top + childInsets.bottom;
@@ -297,6 +303,14 @@ function buildFlexItem(child: SceneNode, container: FlexContainer): FlexItem {
 
   if (crossSizeMode === "fill_container") {
     alignSelf = "stretch";
+    // Mirror the main-axis border floor (above) on the cross axis: a
+    // stretched fill item still can't be squeezed below its own border sum.
+    const crossBorder = isHorizontal
+      ? childInsets.top + childInsets.bottom
+      : childInsets.left + childInsets.right;
+    if (crossBorder > 0) {
+      crossMin = Math.max(crossMin ?? 0, crossBorder);
+    }
   }
 
   return {
