@@ -15,6 +15,7 @@ import type {
   JustifyContent,
   LayoutProperties,
 } from "@/types/scene";
+import { resolveStrokeInsets, type StrokeGeometrySource } from "@/utils/strokeInsets";
 
 /** A child's rect in the SAME coordinate space as `frame` (frame origin = 0,0). */
 export interface InferChildRect {
@@ -25,8 +26,14 @@ export interface InferChildRect {
   height: number;
 }
 
+/**
+ * The frame's stroke fields are optional here: callers that don't have a real
+ * frame node yet (`wrapInAutoLayoutFrame`, which creates a strokeless frame)
+ * can pass a bare `{ width, height }` and get zero insets back from
+ * `resolveStrokeInsets` — the same "no strokeAlign" default it already uses.
+ */
 export interface InferAutoLayoutInput {
-  frame: { width: number; height: number };
+  frame: { width: number; height: number } & Partial<StrokeGeometrySource>;
   children: InferChildRect[];
 }
 
@@ -153,7 +160,7 @@ function inferGap(ordered: InferChildRect[], direction: FlexDirection): number {
 }
 
 function inferPadding(
-  frame: { width: number; height: number },
+  frame: InferAutoLayoutInput["frame"],
   children: InferChildRect[],
 ): Pick<InferredLayout, "paddingTop" | "paddingRight" | "paddingBottom" | "paddingLeft"> {
   if (children.length === 0) {
@@ -164,11 +171,19 @@ function inferPadding(
   const maxX = Math.max(...children.map((c) => c.x + c.width));
   const maxY = Math.max(...children.map((c) => c.y + c.height));
 
+  // The yoga engine folds a visible inside-stroke into padding on top of
+  // whatever's stored (`buildContainer` in yogaLayout.ts), so the child
+  // offset we're inferring padding FROM already includes that stroke width.
+  // Subtract it back out here or `enableAutoLayoutOnFrame` would double it,
+  // shifting every child outward by the stroke width the moment auto-layout
+  // turns on.
+  const insets = resolveStrokeInsets(frame);
+
   return {
-    paddingTop: clampRound(minY),
-    paddingLeft: clampRound(minX),
-    paddingBottom: clampRound(frame.height - maxY),
-    paddingRight: clampRound(frame.width - maxX),
+    paddingTop: clampRound(clampRound(minY) - insets.top),
+    paddingLeft: clampRound(clampRound(minX) - insets.left),
+    paddingBottom: clampRound(clampRound(frame.height - maxY) - insets.bottom),
+    paddingRight: clampRound(clampRound(frame.width - maxX) - insets.right),
   };
 }
 

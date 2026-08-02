@@ -21,7 +21,7 @@ const ZERO_INSETS: SideInsets = Object.freeze({
   left: 0,
 });
 
-type StrokeGeometrySource = Pick<
+export type StrokeGeometrySource = Pick<
   BaseNode,
   | "stroke"
   | "strokeOpacity"

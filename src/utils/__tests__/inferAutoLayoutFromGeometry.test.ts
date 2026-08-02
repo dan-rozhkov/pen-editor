@@ -97,6 +97,38 @@ describe("inferAutoLayoutFromGeometry", () => {
     expect(result.layout.paddingBottom).toBe(35); // 100 - 65
   });
 
+  it("subtracts the frame's inside-stroke width from inferred padding", () => {
+    const children: InferChildRect[] = [
+      { id: "a", x: 20, y: 20, width: 60, height: 20 },
+      { id: "b", x: 20, y: 50, width: 60, height: 20 },
+    ];
+    // frame 100x100, children bbox: x 20..80, y 20..70 -> raw padding 20/20/20/30
+    const strokedFrame = {
+      width: 100,
+      height: 100,
+      stroke: "#000",
+      strokeWidth: 10,
+      strokeAlign: "inside" as const,
+    };
+    const result = inferAutoLayoutFromGeometry({ frame: strokedFrame, children });
+
+    expect(result.layout.paddingLeft).toBe(10); // 20 - 10
+    expect(result.layout.paddingTop).toBe(10); // 20 - 10
+    expect(result.layout.paddingRight).toBe(10); // 20 - 10
+    expect(result.layout.paddingBottom).toBe(20); // 30 - 10
+  });
+
+  it("infers full offset as padding for a frame without a stroke (control)", () => {
+    const children: InferChildRect[] = [
+      { id: "a", x: 20, y: 20, width: 60, height: 20 },
+      { id: "b", x: 20, y: 50, width: 60, height: 20 },
+    ];
+    const result = inferAutoLayoutFromGeometry({ frame: frame(100, 100), children });
+
+    expect(result.layout.paddingLeft).toBe(20);
+    expect(result.layout.paddingTop).toBe(20);
+  });
+
   it("infers stretch alignItems when children span the full cross-axis content width", () => {
     const children: InferChildRect[] = [
       { id: "a", x: 0, y: 0, width: 100, height: 20 },

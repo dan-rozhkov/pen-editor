@@ -1,5 +1,6 @@
 import type { SceneNode, FrameNode, GroupNode } from '../types/scene'
 import type { DropIndicatorData, InsertInfo } from '../store/dragStore'
+import { resolveStrokeInsets } from './strokeInsets'
 
 export interface SiblingPosition {
   x: number
@@ -160,10 +161,15 @@ export function calculateDropPosition(
   // Default flexDirection is 'row' (horizontal) when undefined
   const isHorizontal = layout.flexDirection === 'row' || layout.flexDirection === undefined
   const gap = layout.gap ?? 0
-  const paddingTop = layout.paddingTop ?? 0
-  const paddingRight = layout.paddingRight ?? 0
-  const paddingBottom = layout.paddingBottom ?? 0
-  const paddingLeft = layout.paddingLeft ?? 0
+  // The yoga engine folds a visible inside-stroke into padding on top of
+  // the stored layout.padding* (buildContainer in yogaLayout.ts), so the
+  // indicator box needs the same insets added back in to line up with
+  // where children actually land inside a stroked frame.
+  const strokeInsets = resolveStrokeInsets(parentFrame)
+  const paddingTop = (layout.paddingTop ?? 0) + strokeInsets.top
+  const paddingRight = (layout.paddingRight ?? 0) + strokeInsets.right
+  const paddingBottom = (layout.paddingBottom ?? 0) + strokeInsets.bottom
+  const paddingLeft = (layout.paddingLeft ?? 0) + strokeInsets.left
 
   // Use layout-calculated children if provided, otherwise fall back to raw children
   // Layout children have correct x/y positions from Yoga (important for justify center/end)

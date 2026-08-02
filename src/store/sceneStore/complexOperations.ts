@@ -445,7 +445,7 @@ export function createComplexOperations(
       }));
 
       const inferred = inferAutoLayoutFromGeometry({
-        frame: { width: frameWidth, height: frameHeight },
+        frame: { ...frame, width: frameWidth, height: frameHeight },
         children,
       });
 
