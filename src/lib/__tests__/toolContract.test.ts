@@ -43,6 +43,7 @@ const EXPECTED_CLIENT_TOOLS = [
   "update_plugin",
   "list_plugins",
   "ask_user",
+  "draw_vector",
 ];
 
 // Tools whose schema also has a backend `execute` — they run server-side, the
