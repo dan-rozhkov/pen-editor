@@ -29,8 +29,22 @@ import { createPlugin } from "./tools/plugins/createPlugin";
 import { updatePlugin } from "./tools/plugins/updatePlugin";
 import { listPlugins } from "./tools/plugins/listPlugins";
 import { askUser } from "./tools/askUser";
+import { drawVector } from "./tools/drawVector";
+
+/**
+ * Per-call metadata threaded through to handlers that need to correlate
+ * with transient, non-scene state keyed by chat session + tool call (e.g.
+ * the AI vector drawing preview store). Optional and absent for direct MCP
+ * bridge calls, which have no chat session.
+ */
+export interface ToolExecutionContext {
+  sessionId?: string;
+  toolCallId?: string;
+}
+
 export type ToolHandler = (
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  context?: ToolExecutionContext
 ) => Promise<string>;
 
 export const toolHandlers: Record<string, ToolHandler> = {
@@ -68,4 +82,5 @@ export const toolHandlers: Record<string, ToolHandler> = {
   update_plugin: updatePlugin,
   list_plugins: listPlugins,
   ask_user: askUser,
+  draw_vector: drawVector,
 };

@@ -21,6 +21,7 @@ import { computeMeasurementLines, measureLineEndpoints } from "@/utils/measureUt
 import { formatMeasureLine } from "@/lib/inspect/units";
 import { getMarqueeRect, subscribeOverlayState } from "./pixiOverlayState";
 import { createOverlayHelpers } from "./selectionOverlay/helpers";
+import { createAiVectorPreviewLayer } from "./aiVectorPreviewLayer";
 import {
   getAnchorScreenPoints,
   getEditedAnchorTarget,
@@ -120,6 +121,13 @@ export function createOverlayRenderer(
   const penPreviewGfx = new Graphics();
   penPreviewGfx.label = "pen-preview";
   overlayContainer.addChild(penPreviewGfx);
+
+  // Streaming AI vector-drawing preview: its own dedicated Pixi layer with
+  // its own store subscription + RAF coalescing (see aiVectorPreviewLayer.ts)
+  // rather than the dirty-flag mechanism below, since it renders directly
+  // from useAiVectorPreviewStore rather than participating in this file's
+  // redraw functions.
+  const destroyAiVectorPreviewLayer = createAiVectorPreviewLayer(overlayContainer);
 
   const pathEditGfx = new Graphics();
   pathEditGfx.label = "path-edit";
@@ -785,6 +793,7 @@ export function createOverlayRenderer(
     unsubSelectionForPathEdit();
     unsubSceneForPathEdit();
     unsubViewport();
+    destroyAiVectorPreviewLayer();
     pixelGridGfx.destroy();
     guidesGfx.destroy();
     persistentGuidesGfx.destroy();

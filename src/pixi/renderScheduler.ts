@@ -41,6 +41,7 @@ import { useThemeStore } from "@/store/themeStore";
 import { useRenderModeStore } from "@/store/renderModeStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { useDevModeStore } from "@/store/devModeStore";
+import { useAiVectorPreviewStore } from "@/store/aiVectorPreviewStore";
 import { subscribeOverlayState } from "./pixiOverlayState";
 
 // Keep rendering this long after the last signal. Covers drop animations
@@ -138,6 +139,11 @@ export function setupRenderScheduler(app: Application): () => void {
     // Persistent pinned measurements drive their own overlay (like guides)
     // without writing sceneStore — same class of bug as outline mode.
     useMeasurementsStore.subscribe(markActivity),
+    // Streaming AI vector-drawing preview (aiVectorPreviewLayer.ts) mutates
+    // Pixi containers directly from its own store subscription, outside the
+    // cached scene frames — without this the repaint would only land on the
+    // next safety tick, same class of bug as the pen-tool-lag fix above.
+    useAiVectorPreviewStore.subscribe(markActivity),
     subscribeOverlayState(markActivity),
   ];
 
