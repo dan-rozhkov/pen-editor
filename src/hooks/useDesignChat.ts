@@ -14,9 +14,12 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useChatStore, NO_QUEUED_MESSAGES } from "@/store/chatStore";
-import { toolHandlers } from "@/lib/toolRegistry";
+import { toolHandlers, type ToolExecutionContext } from "@/lib/toolRegistry";
 import type { ChatLaunchPayload } from "@/types/chat";
 import { hasPendingAskUser } from "@/components/chat/pendingAskUser";
+import { useAiVectorPreviewStore } from "@/store/aiVectorPreviewStore";
+import { upsertStreamingVectorPreview } from "@/lib/tools/drawVector/previewController";
+import { extractStreamingVectorInputs } from "@/hooks/streamingVectorToolParts";
 
 const STREAM_RENDER_THROTTLE_MS = 50;
 
@@ -119,7 +122,8 @@ export function stripImageParts(messages: UIMessage[]): UIMessage[] {
 // Exported for tests.
 export async function executeToolCall(
   toolName: string,
-  input: unknown
+  input: unknown,
+  context?: ToolExecutionContext
 ): Promise<string> {
   const handler = toolHandlers[toolName];
   if (!handler) {
@@ -131,7 +135,7 @@ export async function executeToolCall(
       : {};
   try {
     return await Promise.race([
-      handler(args),
+      handler(args, context),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("Tool call timed out")), 30_000)
       ),
@@ -206,7 +210,10 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       if (toolCall.toolName === "ask_user") {
         return;
       }
-      const result = await executeToolCall(toolCall.toolName, toolCall.input);
+      const result = await executeToolCall(toolCall.toolName, toolCall.input, {
+        sessionId,
+        toolCallId: toolCall.toolCallId,
+      });
       chat.addToolOutput({
         tool: toolCall.toolName,
         toolCallId: toolCall.toolCallId,
@@ -240,12 +247,23 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   const awaitingAnswer = hasPendingAskUser(chat.messages);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Transient AI vector-drawing previews (src/store/aiVectorPreviewStore.ts)
+  // are keyed by sessionId+toolCallId and must never outlive this session on
+  // any terminal path except an ordinary "ready" — the final draw_vector
+  // handler owns commit-before-clear on success, and a paused ask_user turn
+  // is not a terminal path at all. clearSession only removes drafts/finalized
+  // keys for THIS session, so concurrent sessions are unaffected.
+  const clearVectorPreviewSession = useCallback(() => {
+    useAiVectorPreviewStore.getState().clearSession(sessionId);
+  }, [sessionId]);
+
   useEffect(() => {
     // Create an AbortController that calls chat.stop() when aborted
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
     const onAbort = () => {
+      clearVectorPreviewSession();
       chat.stop();
     };
     controller.signal.addEventListener("abort", onAbort);
@@ -255,9 +273,37 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     return () => {
       controller.signal.removeEventListener("abort", onAbort);
       unregisterAbortController(sessionId);
+      // Unmount cleanup: nothing else observes this session's previews once
+      // the hook is gone, so clear them here too.
+      clearVectorPreviewSession();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, registerAbortController, unregisterAbortController]);
+
+  // Observe partial draw_vector tool input as it streams in and stage it in
+  // the transient preview store. Complete, validated final input (delivered
+  // via the tool handler in onToolCall above) remains the sole barrier for
+  // creating the real scene node — this effect only ever renders a preview.
+  useEffect(() => {
+    for (const streamed of extractStreamingVectorInputs(chat.messages)) {
+      upsertStreamingVectorPreview({
+        sessionId,
+        toolCallId: streamed.toolCallId,
+        name: streamed.name,
+        commands: streamed.commands,
+      });
+    }
+  }, [chat.messages, sessionId]);
+
+  // A failed request is a terminal path for this turn — any in-flight
+  // preview belongs to a call that will never complete, so it must not
+  // linger. An ask_user pause is a distinct, non-error chat.status and is
+  // intentionally excluded from this effect.
+  useEffect(() => {
+    if (chat.status === "error") {
+      clearVectorPreviewSession();
+    }
+  }, [chat.status, clearVectorPreviewSession]);
 
   const sendPayload = useCallback(
     (payload: ChatLaunchPayload): boolean => {
@@ -413,6 +459,14 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     chat.clearError();
   }, [chat]);
 
+  // Wraps chat.stop() so a user-initiated stop clears this session's
+  // in-flight vector previews first — otherwise a stale preview would keep
+  // rendering after the stream that was drawing it was cancelled.
+  const stop = useCallback(() => {
+    clearVectorPreviewSession();
+    chat.stop();
+  }, [chat, clearVectorPreviewSession]);
+
   return {
     messages: chat.messages,
     input,
@@ -421,7 +475,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     submitLaunchPayload,
     status: chat.status,
     isLoading: chat.status === "submitted" || chat.status === "streaming",
-    stop: chat.stop,
+    stop,
     error: offlineError ?? chat.error,
     clearError,
     setMessages: chat.setMessages,

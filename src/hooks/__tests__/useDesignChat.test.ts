@@ -11,6 +11,8 @@ import {
 import { toolHandlers } from "@/lib/toolRegistry";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useChatStore } from "@/store/chatStore";
+import { useSceneStore } from "@/store/sceneStore";
+import { useAiVectorPreviewStore, vectorPreviewKey } from "@/store/aiVectorPreviewStore";
 import { resetStores, seedScene, seedVariables } from "@/test/fixtures";
 
 const TEST_TOOL = "__test_tool__";
@@ -883,5 +885,439 @@ describe("useDesignChat (hook + UI message stream)", () => {
     await waitForFakeTimers(() => expect(result.current.error).toBeDefined());
     expect(result.current.retryState).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(4); // initial + 3 retries
+  });
+
+  // Task 7: the hook observes partial `draw_vector` tool input while it
+  // streams (before the final tool-input-available chunk), stages it in the
+  // transient preview store, and clears it on every terminal path.
+  describe("streaming AI vector previews", () => {
+    beforeEach(() => {
+      useAiVectorPreviewStore.getState().reset();
+    });
+
+    afterEach(() => {
+      useAiVectorPreviewStore.getState().reset();
+    });
+
+    // Builds a `Response` whose SSE body is pushed chunk-by-chunk under test
+    // control (real ReadableStream, real delays), rather than one static
+    // string body — this is what lets the test assert on preview state
+    // BEFORE the final tool-input-available chunk is sent.
+    function controlledSseResponse() {
+      let controllerRef: ReadableStreamDefaultController<Uint8Array> | undefined;
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controllerRef = controller;
+        },
+      });
+      const push = (chunk: Record<string, unknown>) => {
+        controllerRef!.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+      };
+      const close = () => {
+        controllerRef!.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controllerRef!.close();
+      };
+      const response = new Response(stream, {
+        status: 200,
+        headers: {
+          "content-type": "text/event-stream",
+          "x-vercel-ai-ui-message-stream": "v1",
+        },
+      });
+      return { response, push, close };
+    }
+
+    function sseResponse(chunks: Array<Record<string, unknown>>): Response {
+      const body =
+        chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("") +
+        "data: [DONE]\n\n";
+      return new Response(body, {
+        status: 200,
+        headers: {
+          "content-type": "text/event-stream",
+          "x-vercel-ai-ui-message-stream": "v1",
+        },
+      });
+    }
+
+    // A short real-time yield so the AI SDK's stream reader gets a turn to
+    // process enqueued chunks and flush the throttled React update.
+    async function flushStream(ms = 20) {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, ms));
+      });
+    }
+
+    it("shows a preview before the final chunk, executes the handler once, and clears the preview on completion", async () => {
+      const { response: firstResponse, push, close } = controlledSseResponse();
+      const requests: Array<Record<string, unknown>> = [];
+      const fetchMock = vi.fn(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+          requests.push(JSON.parse(String(init?.body)));
+          if (requests.length === 1) {
+            return firstResponse;
+          }
+          return sseResponse([
+            { type: "start" },
+            { type: "start-step" },
+            { type: "text-start", id: "t1" },
+            { type: "text-delta", id: "t1", delta: "Drawn" },
+            { type: "text-end", id: "t1" },
+            { type: "finish-step" },
+            { type: "finish" },
+          ]);
+        }
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      const sessionId = `vector-session-${Date.now()}`;
+      const { result } = renderHook(() => useDesignChat({ sessionId }));
+
+      act(() => result.current.setInput("draw a leaf"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+      push({ type: "start" });
+      push({ type: "start-step" });
+      push({ type: "tool-input-start", toolCallId: "vector-1", toolName: "draw_vector" });
+      push({
+        type: "tool-input-delta",
+        toolCallId: "vector-1",
+        inputTextDelta: '{"name":"Leaf","commands":"M(10,10)\\n',
+      });
+      await flushStream();
+      push({
+        type: "tool-input-delta",
+        toolCallId: "vector-1",
+        inputTextDelta: 'L(20,20)\\n',
+      });
+      await flushStream();
+
+      // Preview must exist BEFORE the final chunk, and the scene must not
+      // have a committed path node yet.
+      await waitFor(() => {
+        const key = vectorPreviewKey(sessionId, "vector-1");
+        const draft = useAiVectorPreviewStore.getState().drafts[key];
+        expect(draft).toBeDefined();
+        expect(draft!.points.length).toBeGreaterThanOrEqual(2);
+      });
+      expect(
+        Object.values(useSceneStore.getState().nodesById).some(
+          (n) => n.type === "path"
+        )
+      ).toBe(false);
+
+      const fetchCallsBeforeFinal = fetchMock.mock.calls.length;
+
+      await act(async () => {
+        push({
+          type: "tool-input-delta",
+          toolCallId: "vector-1",
+          inputTextDelta: 'END()"}',
+        });
+        push({
+          type: "tool-input-available",
+          toolCallId: "vector-1",
+          toolName: "draw_vector",
+          input: { name: "Leaf", commands: "M(10,10)\nL(20,20)\nEND()" },
+        });
+        push({ type: "finish-step" });
+        push({ type: "finish" });
+        close();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+
+      // Exactly one automatic continuation request for the resolved tool call.
+      await waitFor(() =>
+        expect(fetchMock.mock.calls.length).toBe(fetchCallsBeforeFinal + 1)
+      );
+      await waitFor(() => expect(result.current.status).toBe("ready"));
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+
+      // The handler ran exactly once — one committed path node.
+      expect(
+        Object.values(useSceneStore.getState().nodesById).filter(
+          (n) => n.type === "path"
+        )
+      ).toHaveLength(1);
+
+      // Preview cleared after commit.
+      const key = vectorPreviewKey(sessionId, "vector-1");
+      expect(useAiVectorPreviewStore.getState().drafts[key]).toBeUndefined();
+
+      const secondMessages = requests[1].messages as Array<{
+        role: string;
+        parts: Array<Record<string, unknown>>;
+      }>;
+      const assistant = secondMessages.find((m) => m.role === "assistant");
+      const toolPart = assistant!.parts.find(
+        (p) => p.type === "tool-draw_vector"
+      );
+      expect(toolPart).toBeDefined();
+      expect(toolPart!.state).toBe("output-available");
+      const output = JSON.parse(String(toolPart!.output));
+      expect(output.success).toBe(true);
+    });
+
+    it("isolates previews between two sessions using the same tool call id", async () => {
+      const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+      vi.stubGlobal("fetch", fetchMock);
+
+      const sessionA = `vector-a-${Date.now()}`;
+      const sessionB = `vector-b-${Date.now()}`;
+      const { result: resultA } = renderHook(() =>
+        useDesignChat({ sessionId: sessionA })
+      );
+      const { result: resultB } = renderHook(() =>
+        useDesignChat({ sessionId: sessionB })
+      );
+
+      act(() => resultA.current.setInput("draw a"));
+      await act(async () => {
+        resultA.current.sendMessage();
+      });
+      act(() => resultB.current.setInput("draw b"));
+      await act(async () => {
+        resultB.current.sendMessage();
+      });
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+      act(() => {
+        useAiVectorPreviewStore.getState().upsert({
+          sessionId: sessionA,
+          toolCallId: "same-call",
+          name: "A",
+          commandText: "M(0,0)\nL(1,1)\n",
+          phase: "streaming",
+          receivedDuringStreaming: true,
+          points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+          geometry: "M 0 0 L 1 1",
+          bounds: { x: 0, y: 0, width: 1, height: 1 },
+          closed: false,
+          ended: false,
+        });
+      });
+
+      expect(
+        useAiVectorPreviewStore.getState().drafts[vectorPreviewKey(sessionA, "same-call")]
+      ).toBeDefined();
+      expect(
+        useAiVectorPreviewStore.getState().drafts[vectorPreviewKey(sessionB, "same-call")]
+      ).toBeUndefined();
+    });
+
+    it("stop clears only the owning session's previews", async () => {
+      const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+      vi.stubGlobal("fetch", fetchMock);
+
+      const sessionA = `vector-stop-a-${Date.now()}`;
+      const sessionB = `vector-stop-b-${Date.now()}`;
+      const { result: resultA } = renderHook(() =>
+        useDesignChat({ sessionId: sessionA })
+      );
+      renderHook(() => useDesignChat({ sessionId: sessionB }));
+
+      act(() => {
+        useAiVectorPreviewStore.getState().upsert({
+          sessionId: sessionA,
+          toolCallId: "call-a",
+          name: "A",
+          commandText: "M(0,0)\nL(1,1)\n",
+          phase: "streaming",
+          receivedDuringStreaming: true,
+          points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+          geometry: "M 0 0 L 1 1",
+          bounds: { x: 0, y: 0, width: 1, height: 1 },
+          closed: false,
+          ended: false,
+        });
+        useAiVectorPreviewStore.getState().upsert({
+          sessionId: sessionB,
+          toolCallId: "call-b",
+          name: "B",
+          commandText: "M(0,0)\nL(1,1)\n",
+          phase: "streaming",
+          receivedDuringStreaming: true,
+          points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+          geometry: "M 0 0 L 1 1",
+          bounds: { x: 0, y: 0, width: 1, height: 1 },
+          closed: false,
+          ended: false,
+        });
+      });
+
+      act(() => {
+        resultA.current.stop();
+      });
+
+      expect(
+        useAiVectorPreviewStore.getState().drafts[vectorPreviewKey(sessionA, "call-a")]
+      ).toBeUndefined();
+      expect(
+        useAiVectorPreviewStore.getState().drafts[vectorPreviewKey(sessionB, "call-b")]
+      ).toBeDefined();
+    });
+
+    it("the registered abort controller clears this session's previews", async () => {
+      const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+      vi.stubGlobal("fetch", fetchMock);
+
+      const sessionId = `vector-abort-${Date.now()}`;
+      renderHook(() => useDesignChat({ sessionId }));
+
+      act(() => {
+        useAiVectorPreviewStore.getState().upsert({
+          sessionId,
+          toolCallId: "call-abort",
+          name: "A",
+          commandText: "M(0,0)\nL(1,1)\n",
+          phase: "streaming",
+          receivedDuringStreaming: true,
+          points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+          geometry: "M 0 0 L 1 1",
+          bounds: { x: 0, y: 0, width: 1, height: 1 },
+          closed: false,
+          ended: false,
+        });
+      });
+
+      act(() => {
+        useChatStore.getState().abortControllers[sessionId]?.abort();
+      });
+
+      expect(
+        useAiVectorPreviewStore.getState().drafts[vectorPreviewKey(sessionId, "call-abort")]
+      ).toBeUndefined();
+    });
+
+    it("clears previews when chat.status becomes error", async () => {
+      vi.useFakeTimers();
+      const fetchMock = vi
+        .fn<typeof fetch>()
+        .mockRejectedValue(new TypeError("Failed to fetch"));
+      vi.stubGlobal("fetch", fetchMock);
+
+      const sessionId = `vector-error-${Date.now()}`;
+      const { result } = renderHook(() => useDesignChat({ sessionId }));
+
+      act(() => {
+        useAiVectorPreviewStore.getState().upsert({
+          sessionId,
+          toolCallId: "call-err",
+          name: "A",
+          commandText: "M(0,0)\nL(1,1)\n",
+          phase: "streaming",
+          receivedDuringStreaming: true,
+          points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+          geometry: "M 0 0 L 1 1",
+          bounds: { x: 0, y: 0, width: 1, height: 1 },
+          closed: false,
+          ended: false,
+        });
+      });
+
+      act(() => result.current.setInput("hello"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+
+      // createRetryingFetch retries a few times (real delays under fake
+      // timers) before the chat settles into "error" — mirror the pattern
+      // used by the "surfaces the error…" test above.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15_000);
+      });
+
+      await waitForFakeTimers(() => expect(result.current.status).toBe("error"));
+
+      expect(
+        useAiVectorPreviewStore.getState().drafts[vectorPreviewKey(sessionId, "call-err")]
+      ).toBeUndefined();
+    });
+
+    it("clears this session's previews on unmount", async () => {
+      const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+      vi.stubGlobal("fetch", fetchMock);
+
+      const sessionId = `vector-unmount-${Date.now()}`;
+      const { unmount } = renderHook(() => useDesignChat({ sessionId }));
+
+      act(() => {
+        useAiVectorPreviewStore.getState().upsert({
+          sessionId,
+          toolCallId: "call-unmount",
+          name: "A",
+          commandText: "M(0,0)\nL(1,1)\n",
+          phase: "streaming",
+          receivedDuringStreaming: true,
+          points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+          geometry: "M 0 0 L 1 1",
+          bounds: { x: 0, y: 0, width: 1, height: 1 },
+          closed: false,
+          ended: false,
+        });
+      });
+
+      unmount();
+
+      expect(
+        useAiVectorPreviewStore.getState().drafts[
+          vectorPreviewKey(sessionId, "call-unmount")
+        ]
+      ).toBeUndefined();
+    });
+
+    it("does not clear the preview on an ordinary ready transition (final handler owns commit-before-clear)", async () => {
+      // Regression guard: ready must not be treated as a terminal-clear path.
+      // Simulate a plain text-only turn completing (chat.status -> "ready")
+      // while an unrelated preview for a DIFFERENT (still in-flight) call
+      // remains staged; it must survive the ready transition.
+      const fetchMock = vi.fn(async () =>
+        sseResponse([
+          { type: "start" },
+          { type: "start-step" },
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", delta: "ok" },
+          { type: "text-end", id: "t1" },
+          { type: "finish-step" },
+          { type: "finish" },
+        ])
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      const sessionId = `vector-ready-${Date.now()}`;
+      const { result } = renderHook(() => useDesignChat({ sessionId }));
+
+      act(() => {
+        useAiVectorPreviewStore.getState().upsert({
+          sessionId,
+          toolCallId: "call-ready",
+          name: "A",
+          commandText: "M(0,0)\nL(1,1)\n",
+          phase: "streaming",
+          receivedDuringStreaming: true,
+          points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+          geometry: "M 0 0 L 1 1",
+          bounds: { x: 0, y: 0, width: 1, height: 1 },
+          closed: false,
+          ended: false,
+        });
+      });
+
+      act(() => result.current.setInput("hi"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+
+      await waitFor(() => expect(result.current.status).toBe("ready"));
+
+      expect(
+        useAiVectorPreviewStore.getState().drafts[vectorPreviewKey(sessionId, "call-ready")]
+      ).toBeDefined();
+    });
   });
 });
