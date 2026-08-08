@@ -107,6 +107,11 @@ if (import.meta.env.DEV) {
   import('@/lib/commands/registry').then(({ getCommands }) => {
     (window as unknown as Record<string, unknown>).__getCommands = getCommands;
   });
+  // Streaming AI vector drawing e2e (Task 8): assert the transient preview
+  // draft (points/geometry/phase) exists BEFORE the tool's final input lands.
+  import('@/store/aiVectorPreviewStore').then(({ useAiVectorPreviewStore }) => {
+    (window as unknown as Record<string, unknown>).__aiVectorPreviewStore = useAiVectorPreviewStore;
+  });
 }
 
 createRoot(document.getElementById('root')!).render(
