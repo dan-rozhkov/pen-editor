@@ -24,10 +24,20 @@ function isToolCallMessage(value: unknown): value is ToolCallMessage {
 }
 
 function resolveWsUrl(token: string): string {
-  // Same backend base resolution useDesignChat uses (VITE_AI_API_URL /
-  // VITE_DESIGN_AGENT_BACKEND_URL), http(s) swapped for ws(s).
-  const httpUrl = resolveApiUrl("/api/mcp/ws");
-  const wsUrl = httpUrl.replace(/^http/, "ws");
+  // VITE_MCP_WS_URL is set (dev-only, via vite.config.ts's define) when the
+  // token came from the ~/.pen-editor/mcp.json handshake file, and is
+  // derived from that handshake's own url/port — the backend instance that
+  // actually issued the token. VITE_AI_API_URL/VITE_DESIGN_AGENT_BACKEND_URL
+  // configure where the *chat* backend is, which can point at a different
+  // port (e.g. a backend started with PORT=3002 while VITE_AI_API_URL still
+  // hardcodes :3001) and would otherwise send this token to the wrong
+  // endpoint.
+  const handshakeWsUrl = import.meta.env.VITE_MCP_WS_URL as string | undefined;
+  const wsUrl =
+    handshakeWsUrl ??
+    // Same backend base resolution useDesignChat uses (VITE_AI_API_URL /
+    // VITE_DESIGN_AGENT_BACKEND_URL), http(s) swapped for ws(s).
+    resolveApiUrl("/api/mcp/ws").replace(/^http/, "ws");
   return `${wsUrl}?token=${encodeURIComponent(token)}`;
 }
 

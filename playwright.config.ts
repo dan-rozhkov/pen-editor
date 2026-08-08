@@ -39,5 +39,15 @@ export default defineConfig({
     url: "http://localhost:5173",
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
+    // Keeps the suite hermetic: vite.config.ts's zero-config MCP bridge
+    // pickup (see vite/mcpDevToken.ts) would otherwise load mcpBridge.ts
+    // (and its useDesignChat/toolRegistry/pixi.js import chain) on every
+    // page whenever the machine running this suite happens to have a
+    // ~/.pen-editor/mcp.json handshake file — e2e only stubs HTTP routes,
+    // not WebSockets, so a live MCP client could drive the page mid-
+    // assertion, and CI (no handshake file) would behave differently from a
+    // developer machine. This forces the pickup off unconditionally, so
+    // behavior no longer depends on whether a handshake file exists.
+    env: { PEN_EDITOR_E2E: "1" },
   },
 });

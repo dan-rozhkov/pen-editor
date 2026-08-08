@@ -79,6 +79,40 @@ describe("McpBridge", () => {
     bridge.stop();
   });
 
+  // Regression for finding #3: the WS target must follow the handshake's own
+  // host/port (VITE_MCP_WS_URL, set by vite.config.ts's define from the
+  // handshake's url/port) rather than always assuming VITE_AI_API_URL points
+  // at the same backend instance that issued the token.
+  it("connects to VITE_MCP_WS_URL when set, instead of the VITE_AI_API_URL-derived endpoint", () => {
+    vi.stubEnv("VITE_MCP_WS_URL", "ws://127.0.0.1:3002/api/mcp/ws");
+    vi.stubEnv("VITE_AI_API_URL", "http://localhost:3001/api/chat");
+
+    const factory = makeFactory();
+    const bridge = new McpBridge("secret-token", factory);
+    bridge.start();
+
+    const socket = FakeWebSocket.instances[0];
+    expect(socket.url).toBe("ws://127.0.0.1:3002/api/mcp/ws?token=secret-token");
+
+    bridge.stop();
+    vi.unstubAllEnvs();
+  });
+
+  it("falls back to the VITE_AI_API_URL-derived endpoint when VITE_MCP_WS_URL is unset", () => {
+    vi.stubEnv("VITE_MCP_WS_URL", undefined);
+    vi.stubEnv("VITE_AI_API_URL", "http://localhost:3001/api/chat");
+
+    const factory = makeFactory();
+    const bridge = new McpBridge("secret-token", factory);
+    bridge.start();
+
+    const socket = FakeWebSocket.instances[0];
+    expect(socket.url).toBe("ws://localhost:3001/api/mcp/ws?token=secret-token");
+
+    bridge.stop();
+    vi.unstubAllEnvs();
+  });
+
   it("dispatches a tool_call into toolHandlers and replies tool_result", async () => {
     const factory = makeFactory();
     const bridge = new McpBridge("secret-token", factory);
