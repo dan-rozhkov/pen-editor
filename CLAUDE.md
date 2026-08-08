@@ -101,8 +101,14 @@ received ids through the command-palette registry (`getCommands()`), so
 (`file-open`, `file-export-pen`, `file-export-json`, `file-export-tokens`,
 `file-import-tokens`). Renaming or removing one of these ids breaks the
 desktop menu — update `pen-editor-desktop/src/main/menu.ts` (and its
-CLAUDE.md) in the same change. On the web `window.penDesktop` is absent and
-the bridge is a no-op.
+CLAUDE.md) in the same change. `src/lib/__tests__/desktopMenuContract.test.ts`
+enforces this: the pinned id list is checked against `getCommands()` on every
+run, and when the sibling `../pen-editor-desktop` checkout exists it also
+builds the real menu template and asserts the forwarded ids match. The
+`contract` CI job checks out the desktop repo's **`main`** and sets
+`CONTRACT_REQUIRE_DESKTOP=1` so it cannot self-skip — same both-directions,
+merge-order-sensitive deal as the tool contract. On the web
+`window.penDesktop` is absent and the bridge is a no-op.
 
 ### MCP bridge
 
