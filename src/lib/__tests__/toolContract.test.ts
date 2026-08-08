@@ -1,7 +1,9 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it, expect } from "vitest";
+import { BRIDGED_MCP_TOOL_NAMES, STATIC_MCP_TOOL_NAMES } from "@/lib/mcpToolNames";
 import { toolHandlers } from "@/lib/toolRegistry";
+import { guidelines as clientGuidelines } from "@/lib/tools/staticTools";
 
 /**
  * The tool names the frontend can execute. This list is the contract between
@@ -73,25 +75,33 @@ describe("tool registry contract", () => {
 });
 
 // MCP bridged tool names (pen-editor-backend/src/mcp/server.ts
-// BRIDGED_TOOL_NAMES) — duplicated here rather than imported, matching this
-// file's existing convention of hardcoding the backend's tool-name list on
-// this side of the contract; pen-editor-backend/test/mcp-tools-contract.test.ts
-// pins the same list on the backend side.
-const EXPECTED_BRIDGED_MCP_TOOLS = [
-  "get_editor_state",
-  "batch_get",
-  "snapshot_layout",
-  "get_variables",
-  "get_screenshot",
-  "batch_design",
-  "set_variables",
-];
+// BRIDGED_TOOL_NAMES), imported from src/lib/mcpToolNames.ts — the single
+// source shared with desktopMcpBridge.ts, so the two can't silently drift.
+// That module's list is still, by necessity, hand-copied against the
+// backend's tool-name list across the repo boundary;
+// pen-editor-backend/test/mcp-tools-contract.test.ts pins the same list on
+// the backend side.
+const EXPECTED_BRIDGED_MCP_TOOLS = BRIDGED_MCP_TOOL_NAMES;
 
 describe("MCP bridged tool contract", () => {
   it("every bridged MCP tool name has a toolHandlers entry", () => {
     for (const name of EXPECTED_BRIDGED_MCP_TOOLS) {
       expect(name in toolHandlers, name).toBe(true);
     }
+  });
+});
+
+// Guard for finding 4 (desktop-mcp-bridge review): desktopMcpBridge.ts
+// advertises BACKEND_EXECUTED_TOOLS' 3 static guideline tools to the desktop
+// shell under the name STATIC_MCP_TOOL_NAMES (src/lib/mcpToolNames.ts). The
+// two lists describe overlapping-but-distinct concepts (backend-executed vs.
+// desktop-advertised-static) that happen to be identical today; nothing else
+// enforces that they stay identical if either list changes independently.
+describe("static MCP tool list matches the backend-executed tool list", () => {
+  it("BACKEND_EXECUTED_TOOLS and STATIC_MCP_TOOL_NAMES name the same tools", () => {
+    expect([...BACKEND_EXECUTED_TOOLS].sort()).toEqual(
+      [...STATIC_MCP_TOOL_NAMES].sort()
+    );
   });
 });
 
@@ -158,4 +168,62 @@ describe.runIf(backendExists)("backend penTools sync", () => {
 
 describe.runIf(!backendExists)("backend penTools sync (skipped)", () => {
   it.skip("pen-editor-backend not found next to pen-editor", () => {});
+});
+
+// GUIDELINES (pen-editor-backend/src/ai/tools.ts) is not exported — it backs
+// both the built-in chat agent's get_guidelines execute and the MCP server's
+// get_guidelines. staticTools.ts's `guidelines` map is a hand-maintained copy
+// used when the desktop bridge runs get_guidelines in the page instead of on
+// the backend (see plans/desktop-mcp-bridge.md finding 0.3). Reconstruct the
+// backend's map through the exported getGuidelinesImpl rather than exporting
+// GUIDELINES itself, so this test never needs a backend source change.
+describe.runIf(backendExists)("get_guidelines content sync", () => {
+  type GetGuidelinesResult =
+    | { topic: string; guidelines: string }
+    | { error: string };
+
+  async function loadBackendGuidelines(): Promise<Record<string, string>> {
+    const mod = (await import(
+      /* @vite-ignore */ backendToolsPath
+    )) as { getGuidelinesImpl: (topic: string) => Promise<GetGuidelinesResult> };
+
+    // An unknown topic's error message lists every real topic — the only way
+    // to discover the backend's full topic set without exporting GUIDELINES.
+    const probe = await mod.getGuidelinesImpl("__nonexistent_topic_probe__");
+    if (!("error" in probe)) {
+      throw new Error(
+        "Expected getGuidelinesImpl to reject an unknown topic with an error listing available topics"
+      );
+    }
+    const match = probe.error.match(/Available topics: (.+)$/);
+    if (!match) {
+      throw new Error(`Could not parse available topics from: ${probe.error}`);
+    }
+    const topics = match[1].split(", ");
+
+    const entries = await Promise.all(
+      topics.map(async (topic) => {
+        const result = await mod.getGuidelinesImpl(topic);
+        if ("error" in result) {
+          throw new Error(
+            `Unexpected error fetching backend guidelines for topic "${topic}": ${result.error}`
+          );
+        }
+        return [topic, result.guidelines] as const;
+      })
+    );
+    return Object.fromEntries(entries);
+  }
+
+  it("client guidelines topics match the backend's (same shape)", async () => {
+    const backendGuidelines = await loadBackendGuidelines();
+    expect(Object.keys(clientGuidelines).sort()).toEqual(
+      Object.keys(backendGuidelines).sort()
+    );
+  });
+
+  it("client guidelines content is byte-identical to the backend's", async () => {
+    const backendGuidelines = await loadBackendGuidelines();
+    expect(clientGuidelines).toEqual(backendGuidelines);
+  });
 });

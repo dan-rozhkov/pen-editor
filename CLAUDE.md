@@ -94,38 +94,85 @@ Pasting/converting external HTML (e.g. `convertEmbedToDesign`) renders the marku
 ### Desktop shell bridge
 
 The Electron app (`../pen-editor-desktop`, its own repo) loads the deployed
-editor and exposes `window.penDesktop = { onMenuCommand(cb), setDocumentTitle(title) }` from its
-preload. `src/lib/desktopBridge.ts` (called once in `main.tsx`) dispatches
-received ids through the command-palette registry (`getCommands()`), so
-**menu items in the desktop repo reference `PaletteCommand.id` values**
-(`file-open`, `file-export-pen`, `file-export-json`, `file-export-tokens`,
-`file-import-tokens`). Renaming or removing one of these ids breaks the
-desktop menu — update `pen-editor-desktop/src/main/menu.ts` (and its
-CLAUDE.md) in the same change. `src/lib/__tests__/desktopMenuContract.test.ts`
-enforces this: the pinned id list is checked against `getCommands()` on every
-run, and when the sibling `../pen-editor-desktop` checkout exists it also
-builds the real menu template and asserts the forwarded ids match. The
-`contract` CI job checks out the desktop repo's **`main`** and sets
-`CONTRACT_REQUIRE_DESKTOP=1` so it cannot self-skip — same both-directions,
-merge-order-sensitive deal as the tool contract. On the web
-`window.penDesktop` is absent and the bridge is a no-op.
+editor and exposes `window.penDesktop = { onMenuCommand(cb), setDocumentTitle(title), registerMcpBridge?(handler) }`
+from its preload. `src/lib/desktopBridge.ts` (called once in `main.tsx`)
+dispatches received menu-command ids through the command-palette registry
+(`getCommands()`), so **menu items in the desktop repo reference
+`PaletteCommand.id` values** (`file-open`, `file-export-pen`,
+`file-export-json`, `file-export-tokens`, `file-import-tokens`). Renaming or
+removing one of these ids breaks the desktop menu — update
+`pen-editor-desktop/src/main/menu.ts` (and its CLAUDE.md) in the same change.
+`src/lib/__tests__/desktopMenuContract.test.ts` enforces this: the pinned id
+list is checked against `getCommands()` on every run, and when the sibling
+`../pen-editor-desktop` checkout exists it also builds the real menu template
+and asserts the forwarded ids match. The `contract` CI job checks out the
+desktop repo's **`main`** and sets `CONTRACT_REQUIRE_DESKTOP=1` so it cannot
+self-skip — same both-directions, merge-order-sensitive deal as the tool
+contract. On the web `window.penDesktop` is absent and both bridges below are
+no-ops.
+
+`registerMcpBridge` is the desktop shell's loopback-MCP entry point — see
+"MCP bridge" below for the page-side half (`src/lib/desktopMcpBridge.ts`) and
+`../plans/desktop-mcp-bridge.md` for the full cross-repo design (handshake,
+token, tab routing, security).
 
 ### MCP bridge
 
-`src/lib/mcpBridge.ts` connects this tab to the backend's `/api/mcp/ws`
-(started once from `main.tsx` iff `VITE_MCP_WS_TOKEN` is set) so external
-MCP clients can drive the editor through the same `toolHandlers` the
-built-in chat uses. `src/store/mcpBridgeStore.ts` tracks
-`off | connecting | connected`, shown as a small dot next to the file name
-in `LeftSidebar.tsx` (beside the offline cloud indicator). See
-`pen-editor-backend/CLAUDE.md`'s "MCP server" section and
-`pen-editor-backend/docs/superpowers/specs/2026-07-23-mcp-server-design.md`
-for the full design.
+Two independent transports route external MCP calls into the same
+`toolHandlers`/`executeToolCall` path the built-in chat uses. Both share a
+transport-agnostic dispatch core, `src/lib/mcpDispatch.ts`
+(`createToolDispatcher({ send })`): a serial queue so two concurrent bridged
+calls can never interleave scene mutations mid-call, and the
+unknown-tool → `tool_error` branch. `executeToolCall` itself already never
+rejects — a throwing handler resolves to a JSON `{"error": "..."}` string —
+so a dispatcher failure always surfaces as a normal *outcome*, not a broken
+queue.
 
-**`VITE_MCP_WS_TOKEN` is baked into the public JS bundle at build time —
-local/dev builds only. Never set it on a publicly deployed frontend build:**
-every visitor's tab would get the secret and silently register itself as a
-bridge session that anyone holding the token can drive.
+- **WebSocket bridge** (`src/lib/mcpBridge.ts`, `McpBridge`): connects this
+  tab to the backend's `/api/mcp/ws` (started once from `main.tsx` iff
+  `VITE_MCP_WS_TOKEN` is set) so external MCP clients reach the editor over
+  the network. See `pen-editor-backend/CLAUDE.md`'s "MCP server" section and
+  `pen-editor-backend/docs/superpowers/specs/2026-07-23-mcp-server-design.md`
+  for the full design.
+
+  **`VITE_MCP_WS_TOKEN` is baked into the public JS bundle at build time —
+  local/dev builds only. Never set it on a publicly deployed frontend build:**
+  every visitor's tab would get the secret and silently register itself as a
+  bridge session that anyone holding the token can drive.
+
+- **Desktop IPC bridge** (`src/lib/desktopMcpBridge.ts`,
+  `initDesktopMcpBridge`): registers this tab with the Electron shell's
+  loopback MCP endpoint via `window.penDesktop.registerMcpBridge({ protocol,
+  tools, onCall })`, guarded so it is a no-op on the web and on desktop builds
+  predating this feature. `tools` is the MCP tool-name subset of
+  `toolHandlers` (the 7 backend-bridged tools plus the 3 client-side static
+  guideline tools), derived from `src/lib/mcpToolNames.ts` — the single
+  source also imported by `toolContract.test.ts`'s `BRIDGED_MCP_TOOL_NAMES`/
+  `STATIC_MCP_TOOL_NAMES`, so the two can't drift; `protocol` is a single
+  integer bumped only when the call envelope itself changes — adding or
+  removing a tool does not bump it. `onCall` routes through this bridge's own
+  `createToolDispatcher` instance (the same serial-queue dispatch core the
+  WebSocket bridge uses), so two overlapping `mcp:call` IPC messages cannot
+  interleave scene mutations, and it first checks the call's tool name
+  against the advertised `tools` allow-list — refusing anything outside it
+  with `"Unknown tool: <name>"` before the call ever reaches
+  `executeToolCall`/`toolHandlers` — so a shell bug or mismatched build can
+  never reach a tool this bridge doesn't advertise. The resulting promise
+  still resolves rather than rejects, matching `executeToolCall`'s contract.
+
+**Only one bridge may be active at a time.** A dev bundle built with
+`VITE_MCP_WS_TOKEN` and loaded inside the desktop shell would otherwise start
+both — two independent serial queues into the same `toolHandlers`, which
+could interleave scene mutations. `main.tsx` resolves this by ordering, not
+locking: it awaits `initDesktopMcpBridge()` settling before even importing
+`mcpBridge.ts`, and `mcpBridge.ts`'s `startMcpBridgeIfConfigured()` checks
+`desktopMcpBridge.ts`'s `isDesktopMcpBridgeActive()` and no-ops if the desktop
+bridge already registered — the desktop bridge always wins.
+
+Both bridges drive the same `src/store/mcpBridgeStore.ts`
+(`off | connecting | connected`), shown as a small dot next to the file name
+in `LeftSidebar.tsx` (beside the offline cloud indicator) — no UI change was
+needed to support the desktop path.
 
 ### File Format
 

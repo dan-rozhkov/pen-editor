@@ -189,6 +189,104 @@ describe("McpBridge", () => {
     bridge.stop();
   });
 
+  // Regression for finding 1: the socket-open guard used to run only before
+  // *sending* a reply, not before *executing* a queued call. A call queued
+  // behind an in-flight one whose socket then died would still run and
+  // mutate the document, with its result silently dropped — while the
+  // backend's own close handler tells the client both calls failed.
+  it("does not execute a queued call once the socket has died mid-call", async () => {
+    const factory = makeFactory();
+    const bridge = new McpBridge("secret-token", factory);
+    bridge.start();
+    const socket = FakeWebSocket.instances[0];
+    socket.open();
+
+    const originalVariables = toolHandlers.get_variables;
+    const originalStyles = toolHandlers.get_styles;
+    let resolveFirst: (() => void) | undefined;
+    toolHandlers.get_variables = vi.fn(async () => {
+      await new Promise<void>((resolve) => {
+        resolveFirst = resolve;
+      });
+      return "1";
+    });
+    const stylesHandler = vi.fn(async () => "2");
+    toolHandlers.get_styles = stylesHandler;
+
+    socket.message({ id: "call-1", type: "tool_call", tool: "get_variables", args: {} });
+    socket.message({ id: "call-2", type: "tool_call", tool: "get_styles", args: {} });
+
+    await vi.waitFor(() => expect(toolHandlers.get_variables).toHaveBeenCalledTimes(1));
+
+    // The socket dies while call-1 is still in flight — the backend's close
+    // handler now rejects both calls as far as the client can tell.
+    socket.close();
+    resolveFirst?.();
+
+    // Give the queue a chance to move on to call-2 before asserting it
+    // never ran.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(stylesHandler).not.toHaveBeenCalled();
+
+    toolHandlers.get_variables = originalVariables;
+    toolHandlers.get_styles = originalStyles;
+    bridge.stop();
+  });
+
+  // Regression for finding 1 (second round): the liveness guard used to
+  // check "is *some* socket open right now", which a reconnect satisfies
+  // for a call still sitting in the queue behind an in-flight one — even
+  // though that call arrived on the socket that died. This test, unlike
+  // the one above, lets a real reconnect complete (socket A closes, socket
+  // B opens) *before* the queue reaches call-2, and asserts call-2 still
+  // never runs.
+  it("does not execute a queued call after the socket it arrived on drops and a reconnect brings up a new one", async () => {
+    const factory = makeFactory();
+    const bridge = new McpBridge("secret-token", factory);
+    bridge.start();
+    const socketA = FakeWebSocket.instances[0];
+    socketA.open();
+
+    const originalVariables = toolHandlers.get_variables;
+    const originalStyles = toolHandlers.get_styles;
+    let resolveFirst: (() => void) | undefined;
+    toolHandlers.get_variables = vi.fn(async () => {
+      await new Promise<void>((resolve) => {
+        resolveFirst = resolve;
+      });
+      return "1";
+    });
+    const stylesHandler = vi.fn(async () => "2");
+    toolHandlers.get_styles = stylesHandler;
+
+    socketA.message({ id: "call-1", type: "tool_call", tool: "get_variables", args: {} });
+    socketA.message({ id: "call-2", type: "tool_call", tool: "get_styles", args: {} });
+
+    await vi.waitFor(() => expect(toolHandlers.get_variables).toHaveBeenCalledTimes(1));
+
+    // Socket A dies while call-1 is still in flight...
+    socketA.close();
+
+    // ...and a real reconnect completes: scheduleReconnect's real setTimeout
+    // fires (MIN_BACKOFF_MS=1000 * [0.5,1) jitter), a new socket is created,
+    // and it opens — all before call-1 finishes and the queue reaches
+    // call-2.
+    await vi.waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2), { timeout: 3000 });
+    const socketB = FakeWebSocket.instances[1];
+    socketB.open();
+
+    // Only now does call-1 finish, letting the queue move on to call-2.
+    resolveFirst?.();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(stylesHandler).not.toHaveBeenCalled();
+
+    toolHandlers.get_variables = originalVariables;
+    toolHandlers.get_styles = originalStyles;
+    bridge.stop();
+  }, 5000);
+
   it("reconnects with exponential backoff after a close, capped at 30s", () => {
     vi.useFakeTimers();
     const factory = makeFactory();

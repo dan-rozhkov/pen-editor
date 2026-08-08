@@ -10,6 +10,26 @@ import { useDocumentStore } from "@/store/documentStore";
 export interface PenDesktopApi {
   setDocumentTitle?(title: string): void;
   onMenuCommand(cb: (commandId: string) => void): () => void;
+  /**
+   * Registers this tab as the target for the desktop shell's loopback MCP
+   * endpoint. Optional — absent on the web and on desktop builds older than
+   * this feature, so callers must guard with `?.`. See
+   * src/lib/desktopMcpBridge.ts for the page-side registration and
+   * ../plans/desktop-mcp-bridge.md §2 for the full handshake/versioning
+   * design.
+   */
+  registerMcpBridge?(handler: {
+    /**
+     * Call-envelope version, bumped only when the shape of `onCall`
+     * changes. Adding/removing tools does not bump it — the desktop shell
+     * reconciles by intersecting its manifest with `tools`.
+     */
+    protocol: number;
+    /** The MCP tool-name subset of toolHandlers this tab can execute. */
+    tools: string[];
+    /** Routes a call through executeToolCall; resolves, never rejects. */
+    onCall(name: string, args: unknown): Promise<string>;
+  }): () => void;
 }
 
 declare global {

@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import { RootErrorBoundary } from '@/components/RootErrorBoundary'
+import { startBridges } from '@/lib/bridgeBootstrap'
 import { applyStoredUITheme } from '@/lib/uiTheme'
 import { registerServiceWorker } from '@/pwa/registerServiceWorker'
 import { recoverFromFatalError } from '@/pwa/updateSelfHeal'
@@ -42,20 +43,9 @@ if (import.meta.env.PROD) {
   })
 }
 
-// desktopBridge/mcpBridge statically import the command registry and the
-// full tool-execution registry respectively (menu dispatch, MCP-bridged tool
-// calls) — both drag in most of the editor's module graph (sceneStore,
-// selectionStore, canvasRefStore, pixi.js, ...). Both are no-ops on an
-// ordinary web visit anyway (desktopBridge bails without `window.penDesktop`;
-// mcpBridge bails without `VITE_MCP_WS_TOKEN`), so check the same conditions
-// *before* importing rather than after, to keep the showcase entry bundle
-// free of the editor's weight. Same runtime behavior, lazier import.
-if (window.penDesktop) {
-  import('@/lib/desktopBridge').then(({ initDesktopBridge }) => initDesktopBridge())
-}
-if (import.meta.env.VITE_MCP_WS_TOKEN) {
-  import('@/lib/mcpBridge').then(({ startMcpBridgeIfConfigured }) => startMcpBridgeIfConfigured())
-}
+// See bridgeBootstrap.ts for the desktop/websocket MCP bridge startup
+// ordering and its failure-falls-back-not-silently-disables contract.
+startBridges()
 
 // Dev-only: expose internals for E2E testing
 if (import.meta.env.DEV) {

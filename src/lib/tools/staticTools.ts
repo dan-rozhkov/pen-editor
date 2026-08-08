@@ -1,6 +1,10 @@
 import type { ToolHandler } from "../toolRegistry";
 
-const guidelines: Record<string, string> = {
+// Kept byte-identical to the backend's GUIDELINES map
+// (pen-editor-backend/src/ai/tools.ts) — the backend is the source of truth.
+// src/lib/__tests__/toolContract.test.ts enforces this against the sibling
+// checkout when it exists. Update the backend first, then copy verbatim here.
+export const guidelines: Record<string, string> = {
   "design-system":
     "## Sizing & Auto-Layout Rules\n" +
     "CRITICAL: When creating frames with layout (vertical/horizontal), you MUST explicitly set width and height. " +
@@ -12,13 +16,22 @@ const guidelines: Record<string, string> = {
     "- Only use fixed pixel values for elements with a known exact size (icons, avatars, fixed sidebars).\n" +
     "- Screen root frames: `width: 1440, height: \"fit_content(900)\"`.\n" +
     "- Content areas inside screens: `width: \"fill_container\", height: \"fit_content\"` or `height: \"fill_container\"`.\n" +
-    "- Wrapper/container frames: ALWAYS set `height: \"fit_content\"` — they should grow with content.\n\n" +
+    "- Wrapper/container frames: ALWAYS set `height: \"fit_content\"` — they should grow with content.\n" +
+    "- Card grids / tag lists: set `wrap: true` on the frame plus a fixed/fill `width` and `height: \"fit_content\"` so rows wrap and the frame hugs the total row height. Use `rowGap`/`columnGap` for independent row/column spacing (each falls back to `gap`).\n" +
+    "- Use `minWidth`/`maxWidth`/`minHeight`/`maxHeight` on a child to clamp its resolved size (e.g. a `fill_container` card capped at `maxWidth: 320` so it doesn't stretch too wide in a wide row).\n\n" +
     "### Examples\n" +
     "WRONG: `I(screen, {type: \"frame\", layout: \"vertical\", gap: 16})` — no width/height, will use fixed defaults!\n" +
     "RIGHT: `I(screen, {type: \"frame\", layout: \"vertical\", gap: 16, width: \"fill_container\", height: \"fit_content\"})`\n\n" +
     "## Component Usage\n" +
-    "- Use reusable frame components as building blocks.\n" +
-    "- Copy reusable components using the C() operation to create native instances or variations.\n\n" +
+    "- A reusable component is a native `frame` node with `reusable: true` — NOT an embed node. Use `get_editor_state`/`batch_get` to discover existing ones (search `type: \"frame\"`, check `reusable`).\n" +
+    "- An instance is a `ref` node: `inst=I(parent, {type: \"ref\", componentId: \"<componentFrameId>\", width, height})`. Do NOT recreate a component's UI from scratch with frame/rect/text — insert a `ref` pointing at it instead.\n" +
+    "- Per-instance customization goes through **overrides**, addressed by descendant path (a child's id, or `\"childId/grandchildId\"` for nested descendants): `U(inst+\"/label\", {text: \"Buy now\"})` sets a property on that instance only, leaving the component and other instances untouched.\n" +
+    "- **Component properties (variants)**: a component can declare typed, named switches via `properties` on the component frame — `variant` (enum, e.g. state=default/hover/pressed), `boolean` (e.g. showIcon), or `text` (e.g. label). Each property is `{id, name, type, variantOptions?, defaultValue, bindingPath, bindingProp}`, where `bindingPath`/`bindingProp` name the descendant path and field the property controls (the same addressing as an override). `bindingProp` must be the node's INTERNAL field name, not an AI-input alias — use `\"text\"` for a text node's content (NOT `\"content\"`, which is only accepted by `U()`'s own alias mapping, not by `bindingProp`).\n" +
+    "- **Important sequencing**: `componentId`, `bindingPath`, and any other id referenced *inside a nested `{...}`/`[...]` object* only resolve if written as a quoted string of a REAL, already-existing node id — same-call bindings (e.g. `comp=I(...)`) only substitute as bare top-level arguments (parent/sourceId/path), never inside nested JSON. So: create the component and its descendants in one `batch_design` call, read their real ids off the returned `createdNodes`, then in a follow-up call declare `properties` and/or create the `ref` instance using those ids as quoted strings.\n" +
+    "  Call 1: `comp=I(document, {type: \"frame\", name: \"Button\", reusable: true, width: 120, height: 40})\\nlabel=I(comp, {type: \"text\", content: \"Click me\", width: 80, height: 20})` → returns e.g. `comp` id `\"n1\"`, `label` id `\"n2\"`.\n" +
+    "  Call 2: `U(\"n1\", {properties: [{id: \"state\", name: \"State\", type: \"variant\", variantOptions: [\"default\",\"hover\"], defaultValue: \"default\", bindingPath: \"n2\", bindingProp: \"fill\"}]})\\ninst=I(document, {type: \"ref\", componentId: \"n1\", width: 120, height: 40})`.\n" +
+    "- An instance selects a property's value via `propertyValues` (keyed by property id), NOT via `overrides`: `U(inst, {propertyValues: {state: \"hover\"}})` (`inst` here is a real id from a previous result, quoted, or a same-call top-level binding). `U()` merges `propertyValues` by key (setting one property never clobbers others already selected on the instance), and switching a property never touches the instance's `overrides` — both apply together, with an explicit override at the same path winning.\n" +
+    "- When creating new designs, reuse existing components (and their declared variants) rather than building UI from scratch.\n\n" +
     "## Layout Patterns\n" +
     "- Sidebar + Content: sidebar with fixed width (240-280px), main with `width: \"fill_container\"`.\n" +
     "- Card grids: horizontal frame with `gap: 16-24`, cards with `width: \"fill_container\"`.\n" +
