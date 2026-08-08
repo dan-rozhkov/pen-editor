@@ -655,7 +655,8 @@ Assert:
 - `points`, `geometry`, `geometryBounds`, `closed`, `fill`, and `pathStroke` match;
 - inside an existing containing frame, auto-parenting produces parent-local `x/y`;
 - one undo removes the complete node;
-- invalid final script, wrong argument types, and missing context do not mutate scene/history;
+- invalid final script and wrong argument types do not mutate scene/history;
+- missing execution context (for example, a direct MCP registry call) commits synchronously without preview/replay;
 - a previously streamed preview skips replay;
 - no preview invokes bounded replay;
 - commit happens before the preview key is finalized/cleared.
