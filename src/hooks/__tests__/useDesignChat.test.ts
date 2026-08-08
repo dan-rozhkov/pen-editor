@@ -925,7 +925,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
           "x-vercel-ai-ui-message-stream": "v1",
         },
       });
-      return { response, push, close };
+      return { response, push, close, controller: controllerRef! };
     }
 
     function sseResponse(chunks: Array<Record<string, unknown>>): Response {
@@ -1318,6 +1318,111 @@ describe("useDesignChat (hook + UI message stream)", () => {
       expect(
         useAiVectorPreviewStore.getState().drafts[vectorPreviewKey(sessionId, "call-ready")]
       ).toBeDefined();
+    });
+
+    // Regression: AI SDK v6 deliberately keeps the partial assistant message
+    // (and its still-`input-streaming` tool part) in `chat.messages` after
+    // `Chat.stop()` — that's why `convertToModelMessages` has
+    // `ignoreIncompleteToolCalls`. clearVectorPreviewSession wipes drafts AND
+    // finalizedKeys on stop, so nothing blocks a later re-upsert. When the
+    // user then sends a follow-up message, `chat.messages` still contains
+    // that stale `input-streaming` part, and the staging effect re-runs on
+    // every messages update — it must NOT resurrect a preview for an
+    // abandoned tool call.
+    it("does not resurrect a preview for a stale input-streaming part after stop + follow-up send", async () => {
+      const { response: firstResponse, push, controller: firstController } =
+        controlledSseResponse();
+      const requests: Array<Record<string, unknown>> = [];
+      const fetchMock = vi.fn(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+          requests.push(JSON.parse(String(init?.body)));
+          if (requests.length === 1) {
+            // Mirror what a real fetch() does: aborting the request signal
+            // errors the response body stream, which is what lets
+            // chat.stop() actually settle chat.status back to "ready" in
+            // this test (chat.stop() only aborts a signal — nothing reads
+            // it unless the transport's stream honors it).
+            init?.signal?.addEventListener("abort", () => {
+              firstController.error(
+                new DOMException("The operation was aborted.", "AbortError")
+              );
+            });
+            return firstResponse;
+          }
+          // Follow-up request: plain text reply, no more vector tool calls.
+          return sseResponse([
+            { type: "start" },
+            { type: "start-step" },
+            { type: "text-start", id: "t1" },
+            { type: "text-delta", id: "t1", delta: "ok" },
+            { type: "text-end", id: "t1" },
+            { type: "finish-step" },
+            { type: "finish" },
+          ]);
+        }
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      const sessionId = `vector-stop-resurrect-${Date.now()}`;
+      const { result } = renderHook(() => useDesignChat({ sessionId }));
+
+      act(() => result.current.setInput("draw a leaf"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+      // Genuinely stream a partial draw_vector tool call — this creates a
+      // real `input-streaming` part in `chat.messages`, unlike the other
+      // stop/abort/error tests above which stage drafts synthetically.
+      push({ type: "start" });
+      push({ type: "start-step" });
+      push({ type: "tool-input-start", toolCallId: "vector-stop-1", toolName: "draw_vector" });
+      push({
+        type: "tool-input-delta",
+        toolCallId: "vector-stop-1",
+        inputTextDelta: '{"name":"Leaf","commands":"M(10,10)\\n',
+      });
+      await flushStream();
+      push({
+        type: "tool-input-delta",
+        toolCallId: "vector-stop-1",
+        inputTextDelta: 'L(20,20)\\n',
+      });
+      await flushStream();
+
+      const key = vectorPreviewKey(sessionId, "vector-stop-1");
+      await waitFor(() => {
+        expect(useAiVectorPreviewStore.getState().drafts[key]).toBeDefined();
+      });
+
+      // Stop mid-stream, WITHOUT ever sending tool-input-available. The tool
+      // part stays "input-streaming" forever in chat.messages.
+      act(() => {
+        result.current.stop();
+      });
+
+      await waitFor(() => {
+        expect(useAiVectorPreviewStore.getState().drafts[key]).toBeUndefined();
+      });
+      await waitFor(() => expect(result.current.status).toBe("ready"), {
+        timeout: 5000,
+      });
+
+      // Send a follow-up message — this pushes a new messages array through
+      // the hook and re-runs the staging effect over the FULL history,
+      // which still contains the stale input-streaming part.
+      act(() => result.current.setInput("something else"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(result.current.status).toBe("ready"));
+
+      // Give the staging effect every chance to re-run and re-upsert.
+      await flushStream();
+
+      expect(useAiVectorPreviewStore.getState().drafts[key]).toBeUndefined();
     });
   });
 });

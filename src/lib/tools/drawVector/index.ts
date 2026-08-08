@@ -24,7 +24,12 @@ export const drawVector: ToolHandler = async (
   const name = typeof args.name === "string" ? args.name.trim() : "";
   const commands = typeof args.commands === "string" ? args.commands : "";
 
+  const key = context?.sessionId && context.toolCallId
+    ? vectorPreviewKey(context.sessionId, context.toolCallId)
+    : undefined;
+
   if (!name || !commands) {
+    if (key) useAiVectorPreviewStore.getState().finalizeCall(key);
     return JSON.stringify({
       success: false,
       error: "draw_vector requires a non-empty name and commands string",
@@ -33,12 +38,9 @@ export const drawVector: ToolHandler = async (
 
   const parsed = parseVectorCommands(commands, "final");
   if (!parsed.ok) {
+    if (key) useAiVectorPreviewStore.getState().finalizeCall(key);
     return JSON.stringify({ success: false, error: parsed.error, line: parsed.line });
   }
-
-  const key = context?.sessionId && context.toolCallId
-    ? vectorPreviewKey(context.sessionId, context.toolCallId)
-    : undefined;
 
   const existing = key ? useAiVectorPreviewStore.getState().drafts[key] : undefined;
   const streamed = existing?.receivedDuringStreaming === true;
@@ -55,57 +57,65 @@ export const drawVector: ToolHandler = async (
 
   if (key) useAiVectorPreviewStore.getState().markCommitting(key);
 
-  const { points, geometry, bounds, closed, fill, stroke } = parsed.draft;
-  const id = generateId();
-  const node: PathNode = {
-    id,
-    type: "path",
-    name,
-    x: bounds.x,
-    y: bounds.y,
-    width: bounds.width,
-    height: bounds.height,
-    geometry,
-    geometryBounds: bounds,
-    points,
-    closed,
-    ...(fill ? { fill } : {}),
-    ...(stroke
-      ? {
-          pathStroke: {
-            fill: stroke.color,
-            thickness: stroke.width,
-            join: "round" as const,
-            cap: "round" as const,
-            align: "center" as const,
-          },
-        }
-      : {}),
-  };
+  try {
+    const { points, geometry, bounds, closed, fill, stroke } = parsed.draft;
+    const id = generateId();
+    const node: PathNode = {
+      id,
+      type: "path",
+      name,
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+      geometry,
+      geometryBounds: bounds,
+      points,
+      closed,
+      ...(fill ? { fill } : {}),
+      ...(stroke
+        ? {
+            pathStroke: {
+              fill: stroke.color,
+              thickness: stroke.width,
+              join: "round" as const,
+              cap: "round" as const,
+              align: "center" as const,
+            },
+          }
+        : {}),
+    };
 
-  // addDrawnNodeWithAutoParenting is add-node-then-select — two mutations
-  // that would otherwise land as two history entries (one undo would only
-  // revert selection, leaving the drawn node behind). Save once up front and
-  // batch the rest into a single undo step, mirroring the same collapse used
-  // by textPathController's path→text-on-path conversion.
-  saveHistory(useSceneStore.getState());
-  withHistoryBatch(() => {
-    addDrawnNodeWithAutoParenting(node, bounds, id);
-  });
+    // addDrawnNodeWithAutoParenting is add-node-then-select — two mutations
+    // that would otherwise land as two history entries (one undo would only
+    // revert selection, leaving the drawn node behind). Save once up front and
+    // batch the rest into a single undo step, mirroring the same collapse used
+    // by textPathController's path→text-on-path conversion.
+    saveHistory(useSceneStore.getState());
+    withHistoryBatch(() => {
+      addDrawnNodeWithAutoParenting(node, bounds, id);
+    });
 
-  if (key) {
-    const finalize = () => useAiVectorPreviewStore.getState().finalizeCall(key);
-    if (typeof requestAnimationFrame === "function") {
-      requestAnimationFrame(finalize);
-    } else {
-      setTimeout(finalize, 0);
+    if (key) {
+      const finalize = () => useAiVectorPreviewStore.getState().finalizeCall(key);
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(finalize);
+      } else {
+        setTimeout(finalize, 0);
+      }
     }
-  }
 
-  return JSON.stringify({
-    success: true,
-    createdNode: { id, name, type: "path" },
-    anchorCount: points.length,
-    streamed,
-  });
+    return JSON.stringify({
+      success: true,
+      createdNode: { id, name, type: "path" },
+      anchorCount: points.length,
+      streamed,
+    });
+  } catch (err) {
+    // Commit failed after the preview was marked committing (or mid-commit)
+    // — clear the staged preview immediately rather than leaving a ghost
+    // painted on the canvas until an unrelated stop/error/unmount.
+    if (key) useAiVectorPreviewStore.getState().finalizeCall(key);
+    throw err;
+  }
 };

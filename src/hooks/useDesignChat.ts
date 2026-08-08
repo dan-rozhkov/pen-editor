@@ -247,6 +247,22 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   const awaitingAnswer = hasPendingAskUser(chat.messages);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Every draw_vector toolCallId this session has ever staged a preview for,
+  // and the subset that were abandoned (stop/error/unmount) rather than
+  // completed. AI SDK v6 deliberately keeps the partial assistant message —
+  // and its still-`input-streaming` tool part — in `chat.messages` after
+  // `Chat.stop()`/an aborted request (that's what `ignoreIncompleteToolCalls`
+  // in `convertToModelMessages` exists for). `clearVectorPreviewSession`
+  // wipes both drafts and the preview store's own `finalizedKeys` on those
+  // terminal paths, so without a separate, never-cleared record here, the
+  // staging effect below would re-upsert a preview for that abandoned call
+  // the moment `chat.messages` next changes (e.g. sending a follow-up
+  // message) — painting a ghost path on the canvas indefinitely. Sets, not
+  // store state, because they must survive exactly the clears that wipe the
+  // store.
+  const seenVectorToolCallIdsRef = useRef<Set<string>>(new Set());
+  const abandonedVectorToolCallIdsRef = useRef<Set<string>>(new Set());
+
   // Transient AI vector-drawing previews (src/store/aiVectorPreviewStore.ts)
   // are keyed by sessionId+toolCallId and must never outlive this session on
   // any terminal path except an ordinary "ready" — the final draw_vector
@@ -254,6 +270,9 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   // is not a terminal path at all. clearSession only removes drafts/finalized
   // keys for THIS session, so concurrent sessions are unaffected.
   const clearVectorPreviewSession = useCallback(() => {
+    for (const id of seenVectorToolCallIdsRef.current) {
+      abandonedVectorToolCallIdsRef.current.add(id);
+    }
     useAiVectorPreviewStore.getState().clearSession(sessionId);
   }, [sessionId]);
 
@@ -284,8 +303,27 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   // the transient preview store. Complete, validated final input (delivered
   // via the tool handler in onToolCall above) remains the sole barrier for
   // creating the real scene node — this effect only ever renders a preview.
+  //
+  // Two guards, for two different failure modes of re-scanning the full
+  // `chat.messages` array on every update:
+  // - `chat.status !== "streaming"`: staging is only ever meaningful while a
+  //   turn is actively in flight, so skip entirely otherwise (cheap, and
+  //   covers most idle re-renders).
+  // - `abandonedVectorToolCallIdsRef`: the status guard alone is NOT enough —
+  //   a stale `input-streaming` part from an abandoned call survives inside
+  //   `chat.messages` (see the ref's declaration above) and `chat.status` is
+  //   "streaming" again the moment a follow-up message is sent, so the same
+  //   stale part would otherwise pass the status guard and get re-staged.
+  //   Once a toolCallId is recorded as abandoned it is blocked permanently.
   useEffect(() => {
+    if (chat.status !== "streaming") {
+      return;
+    }
     for (const streamed of extractStreamingVectorInputs(chat.messages)) {
+      if (abandonedVectorToolCallIdsRef.current.has(streamed.toolCallId)) {
+        continue;
+      }
+      seenVectorToolCallIdsRef.current.add(streamed.toolCallId);
       upsertStreamingVectorPreview({
         sessionId,
         toolCallId: streamed.toolCallId,
@@ -293,7 +331,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
         commands: streamed.commands,
       });
     }
-  }, [chat.messages, sessionId]);
+  }, [chat.messages, chat.status, sessionId]);
 
   // A failed request is a terminal path for this turn — any in-flight
   // preview belongs to a call that will never complete, so it must not

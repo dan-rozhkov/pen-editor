@@ -296,4 +296,41 @@ describe("createAiVectorPreviewLayer", () => {
 
     cleanup();
   });
+
+  it("redraws markers at the new scale when the viewport changes with no store update", () => {
+    const overlay = new Container();
+    const cleanup = createAiVectorPreviewLayer(overlay);
+
+    useAiVectorPreviewStore.getState().upsert(draft());
+    runRaf();
+
+    const rafCountBeforeZoom = rafCallbacks.length;
+    useViewportStore.setState({ scale: 4 });
+
+    // The viewport change alone must schedule a redraw even though the
+    // preview draft itself did not change.
+    expect(rafCallbacks.length - rafCountBeforeZoom).toBe(1);
+
+    const rectSpy = vi.spyOn(Graphics.prototype, "rect");
+    runRaf();
+
+    // Anchor markers must be re-baked at the new scale (4 / scale shrinks).
+    expect(rectSpy).toHaveBeenCalled();
+
+    cleanup();
+  });
+
+  it("unsubscribes from the viewport store on cleanup", () => {
+    const overlay = new Container();
+    const cleanup = createAiVectorPreviewLayer(overlay);
+
+    useAiVectorPreviewStore.getState().upsert(draft());
+    runRaf();
+
+    cleanup();
+
+    const rafCountAfterCleanup = rafCallbacks.length;
+    useViewportStore.setState({ scale: 8 });
+    expect(rafCallbacks.length).toBe(rafCountAfterCleanup);
+  });
 });

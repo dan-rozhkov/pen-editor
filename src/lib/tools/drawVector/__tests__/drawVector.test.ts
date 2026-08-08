@@ -219,4 +219,124 @@ describe("drawVector", () => {
     expect(useAiVectorPreviewStore.getState().finalizedKeys.has(key)).toBe(true);
     expect(useAiVectorPreviewStore.getState().drafts[key]).toBeUndefined();
   });
+
+  it("clears a staged preview when the final script fails validation (missing END)", async () => {
+    const key = vectorPreviewKey("s1", "c1");
+    useAiVectorPreviewStore.getState().upsert({
+      sessionId: "s1",
+      toolCallId: "c1",
+      name: "Leaf",
+      commandText: "M(100,100)\nL(200,100)\n",
+      points: [{ x: 100, y: 100 }, { x: 200, y: 100 }],
+      geometry: "M100,100L200,100",
+      bounds: { x: 100, y: 100, width: 100, height: 0 },
+      closed: false,
+      ended: false,
+      phase: "streaming",
+      receivedDuringStreaming: true,
+    });
+    expect(useAiVectorPreviewStore.getState().drafts[key]).toBeDefined();
+
+    const output = JSON.parse(
+      await drawVector(
+        { name: "Leaf", commands: "M(100,100)\nL(200,100)" },
+        { sessionId: "s1", toolCallId: "c1" },
+      ),
+    );
+
+    expect(output.success).not.toBe(true);
+    expect(pathNodes()).toHaveLength(0);
+    expect(useAiVectorPreviewStore.getState().drafts[key]).toBeUndefined();
+  });
+
+  it("clears a staged preview when the final script has only one anchor", async () => {
+    const key = vectorPreviewKey("s1", "c1");
+    useAiVectorPreviewStore.getState().upsert({
+      sessionId: "s1",
+      toolCallId: "c1",
+      name: "Dot",
+      commandText: "M(0,0)\n",
+      points: [{ x: 0, y: 0 }],
+      geometry: "M0,0",
+      bounds: { x: 0, y: 0, width: 0, height: 0 },
+      closed: false,
+      ended: false,
+      phase: "streaming",
+      receivedDuringStreaming: true,
+    });
+    expect(useAiVectorPreviewStore.getState().drafts[key]).toBeDefined();
+
+    const output = JSON.parse(
+      await drawVector(
+        { name: "Dot", commands: "M(0,0)\nEND()" },
+        { sessionId: "s1", toolCallId: "c1" },
+      ),
+    );
+
+    expect(output.success).not.toBe(true);
+    expect(pathNodes()).toHaveLength(0);
+    expect(useAiVectorPreviewStore.getState().drafts[key]).toBeUndefined();
+  });
+
+  it("clears a staged preview when the arguments are invalid", async () => {
+    const key = vectorPreviewKey("s1", "c1");
+    useAiVectorPreviewStore.getState().upsert({
+      sessionId: "s1",
+      toolCallId: "c1",
+      name: "Leaf",
+      commandText: "M(100,100)\n",
+      points: [{ x: 100, y: 100 }],
+      geometry: "M100,100",
+      bounds: { x: 100, y: 100, width: 0, height: 0 },
+      closed: false,
+      ended: false,
+      phase: "streaming",
+      receivedDuringStreaming: true,
+    });
+    expect(useAiVectorPreviewStore.getState().drafts[key]).toBeDefined();
+
+    const output = JSON.parse(
+      await drawVector(
+        { name: 42, commands: null } as unknown as Record<string, unknown>,
+        { sessionId: "s1", toolCallId: "c1" },
+      ),
+    );
+
+    expect(output.success).not.toBe(true);
+    expect(useAiVectorPreviewStore.getState().drafts[key]).toBeUndefined();
+  });
+
+  it("clears a staged preview and rethrows when the commit path throws", async () => {
+    const key = vectorPreviewKey("s1", "c1");
+    useAiVectorPreviewStore.getState().upsert({
+      sessionId: "s1",
+      toolCallId: "c1",
+      name: "Leaf",
+      commandText: LEAF_COMMANDS,
+      points: [{ x: 100, y: 100 }, { x: 200, y: 100 }, { x: 150, y: 200 }],
+      geometry: "M100,100L200,100L150,200Z",
+      bounds: { x: 100, y: 100, width: 100, height: 100 },
+      closed: true,
+      ended: true,
+      phase: "streaming",
+      receivedDuringStreaming: true,
+    });
+    expect(useAiVectorPreviewStore.getState().drafts[key]).toBeDefined();
+
+    const autoParenting = await import("@/pixi/interaction/autoParentPlacement");
+    const spy = vi
+      .spyOn(autoParenting, "addDrawnNodeWithAutoParenting")
+      .mockImplementation(() => {
+        throw new Error("boom");
+      });
+
+    await expect(
+      drawVector({ name: "Leaf", commands: LEAF_COMMANDS }, { sessionId: "s1", toolCallId: "c1" }),
+    ).rejects.toThrow("boom");
+
+    expect(pathNodes()).toHaveLength(0);
+    expect(useAiVectorPreviewStore.getState().drafts[key]).toBeUndefined();
+
+    spy.mockRestore();
+  });
 });

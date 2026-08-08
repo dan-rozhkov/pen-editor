@@ -175,6 +175,13 @@ export function createAiVectorPreviewLayer(overlayContainer: Container): () => v
   }
 
   const unsubscribe = useAiVectorPreviewStore.subscribe(scheduleFlush);
+  // Anchor/handle marker sizes and the default stroke width are baked at the
+  // current viewport scale (`4 / scale`, `1 / scale`), and every other
+  // overlay in OverlayRenderer.ts subscribes to the viewport for the same
+  // reason. Without this, zooming while a preview is staged (stream stalled,
+  // or the draft sits in `committing` awaiting the rAF finalize) leaves
+  // markers baked at a stale scale until an unrelated store update arrives.
+  const unsubscribeViewport = useViewportStore.subscribe(scheduleFlush);
 
   // Initial draw so a draft already present at mount time (unlikely, but
   // matches the rest of OverlayRenderer's "draw once, then subscribe" shape).
@@ -182,6 +189,7 @@ export function createAiVectorPreviewLayer(overlayContainer: Container): () => v
 
   return () => {
     unsubscribe();
+    unsubscribeViewport();
     if (rafId !== null) {
       cancelAnimationFrame(rafId);
       rafId = null;
