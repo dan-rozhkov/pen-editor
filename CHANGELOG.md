@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.74.1] - 2026-08-09
+
+### Fixed
+- **The cross-repo `contract` CI job went red when the desktop shell grew a menu item it doesn't forward.** `desktopMenuContract.test.ts` walks the real `pen-editor-desktop` menu template with a fake `actions` object and clicks every handler; `pen-editor-desktop` v0.2.0 added "Use this app for MCP", whose handler calls a shell-local action the fake didn't have, so every `pen-editor` push failed on `actions.useThisAppForMcp is not a function`. The fake is now a no-op proxy, keeping the contract scoped to the forwarded command ids — a rename of `forwardToActiveTab` still fails loudly, since nothing gets recorded.
+
 ## [0.74.0] - 2026-08-09
 
 ### Added

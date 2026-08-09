@@ -77,15 +77,21 @@ async function collectForwardedIds(): Promise<string[]> {
     ) => MenuTemplateItem[];
   };
   const forwarded: string[] = [];
-  const actions = {
-    newTab: () => {},
-    closeTab: () => {},
-    nextTab: () => {},
-    prevTab: () => {},
-    forwardToActiveTab: (commandId?: string) => {
-      forwarded.push(commandId as string);
-    },
-  };
+  // Only forwardToActiveTab is part of this contract; every other action is
+  // shell-local (tabs, MCP ownership). clickAll() invokes every handler, so a
+  // plain object would make this repo's CI red each time the shell grows a
+  // menu item it never forwards. A no-op proxy keeps the contract to the ids.
+  // A rename of forwardToActiveTab still fails loudly: nothing gets recorded.
+  const actions = new Proxy(
+    {
+      forwardToActiveTab: (commandId?: string) => {
+        forwarded.push(commandId as string);
+      },
+    } as Record<string, (commandId?: string) => void>,
+    {
+      get: (target, prop: string) => target[prop] ?? (() => {}),
+    }
+  );
   clickAll(mod.buildMenuTemplate(actions, { isMac: true }));
   return forwarded;
 }
