@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.74.0] - 2026-08-09
+
+### Added
+- **Watch the agent draw: `draw_vector` renders progressively while its arguments are still streaming.** The tool's newline-separated command script (`M`/`L`/`C`/`CLOSE`/`FILL`/`STROKE`/`END`) arrives over the ordinary AI SDK UI message stream as an `input-streaming` tool part; the chat reduces **only complete lines** into a transient Zustand draft that a dedicated Pixi overlay paints, so points and segments appear as the model emits them. A fully valid input is the single barrier to creating the real `PathNode` — one history entry, no partial commits. No WebSocket and no custom server data events were needed. A model that buffers its arguments doesn't lose the effect: a local replay (≤600 ms) plays the script back before the same final commit.
+- **The desktop shell can host the MCP bridge itself (page side).** `desktopMcpBridge.ts` registers with the Electron shell through the optional `window.penDesktop.registerMcpBridge`, advertising protocol 1 and the MCP tool subset; the web build and older shells are unaffected no-ops. Only one bridge is ever active — `bridgeBootstrap.ts` sequences the desktop bridge first and suppresses the WebSocket one when it registered, since both would otherwise dispatch into the same handlers through separate queues. This is what lets `pen-editor-desktop` serve MCP with no local backend and no tokens.
+- **Local development needs no MCP token.** The dev server reads `~/.pen-editor/mcp.json`, which `pen-editor-backend` writes in auto-token mode, and supplies the token and derived WebSocket URL through Vite `define`. Two independent gates keep it out of production bundles, where `VITE_*` values are inlined: `vite.config.ts` only uses the result under `command === "serve"`, and `resolveDevMcpHandshake` re-checks that itself. An explicit `VITE_MCP_WS_TOKEN` still wins.
+- `get_editor_state` now reports `fileName`, so a client can tell which document answered. `documentStore` has no stable id, so none is invented.
+
+### Fixed
+- **The client copy of the design-system guidelines had drifted to under half the backend's** — missing wrap/gap, min/max clamping, and the whole component-and-variants block. Invisible while MCP ran `get_guidelines` on the backend; not invisible once every tool runs in the page. `toolContract.test.ts` now pins byte equality against the sibling repo.
+- Three streaming-vector defects caught in review: AI SDK v6 deliberately leaves a truncated `input-streaming` tool part in `chat.messages` after Stop, which resurrected a ghost preview on the next send; an early `return` on failed final validation left the draft painted forever; and the overlay read the viewport scale without subscribing to it, so markers didn't rescale on zoom.
+
+### Changed
+- The transport-agnostic dispatch core (tool lookup, the serial queue that stops two agents interleaving scene mutations, the unknown-tool branch) moved out of `mcpBridge.ts` into `mcpDispatch.ts`. Liveness is now pinned to the socket a call arrived on via a generation counter — checking "is some socket open now" let a call queued behind a slow `batch_design` execute after a reconnect, mutating the document after the client had already been told the call failed. Teardown settles outstanding calls and stops the queue instead of leaving promises hanging.
+
 ## [0.73.0] - 2026-08-02
 
 ### Added
