@@ -417,7 +417,7 @@ export function ShowcasePage() {
             href={DESKTOP_DOWNLOAD_URL}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-surface-elevated px-4 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary"
           >
             <AppleLogoIcon size={16} weight="fill" aria-hidden />
             Download for Mac
