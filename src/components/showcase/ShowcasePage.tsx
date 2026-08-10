@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { AppleLogoIcon } from "@phosphor-icons/react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
 import { ShowcaseAgentComposer } from "@/components/showcase/ShowcaseAgentComposer";
@@ -27,6 +28,12 @@ import {
 import { ShowcaseAppCarousel } from "@/components/showcase/ShowcaseAppCarousel";
 
 type Status = "loading" | "ready" | "error";
+
+// The macOS build of the desktop shell (../pen-editor-desktop) is published as
+// a GitHub release asset. "/releases/latest" always resolves to the newest one,
+// so this URL survives every desktop release untouched.
+const DESKTOP_DOWNLOAD_URL =
+  "https://github.com/dan-rozhkov/pen-editor-desktop/releases/latest";
 
 function parseSort(value: string | null): ShowcaseSort {
   return value === "latest" ? "latest" : "popular";
@@ -400,15 +407,31 @@ export function ShowcasePage() {
             <span className="block">on autopilot.</span>
           </h1>
         </div>
-        {/* A real <Link>, not a button with navigate(): this is plain
-            navigation, so it must keep link semantics (middle-click / "open
-            in new tab", and the `link` role the e2e smoke test asserts). */}
-        <Link
-          to="/app"
-          className="absolute top-[calc(1rem+env(safe-area-inset-top))] right-[calc(1rem+env(safe-area-inset-right))] hidden shrink-0 items-center rounded-full bg-accent-primary/10 px-4 py-2 text-sm font-medium text-accent-primary transition-colors hover:bg-accent-primary/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary sm:inline-flex"
-        >
-          Open the editor →
-        </Link>
+        <div className="absolute top-[calc(1rem+env(safe-area-inset-top))] right-[calc(1rem+env(safe-area-inset-right))] hidden shrink-0 items-center gap-2 sm:flex">
+          {/* The desktop shell ships from its own repo (pen-editor-desktop),
+              so its build artifacts live on GitHub Releases, not here. The
+              asset filenames carry the version, which would make a direct
+              asset URL 404 on the next desktop release — link the "latest"
+              release page instead, which never goes stale. */}
+          <a
+            href={DESKTOP_DOWNLOAD_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary"
+          >
+            <AppleLogoIcon size={16} weight="fill" aria-hidden />
+            Download for Mac
+          </a>
+          {/* A real <Link>, not a button with navigate(): this is plain
+              navigation, so it must keep link semantics (middle-click / "open
+              in new tab", and the `link` role the e2e smoke test asserts). */}
+          <Link
+            to="/app"
+            className="inline-flex shrink-0 items-center rounded-full bg-accent-primary/10 px-4 py-2 text-sm font-medium text-accent-primary transition-colors hover:bg-accent-primary/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary"
+          >
+            Open the editor →
+          </Link>
+        </div>
         <p className="mx-auto mt-6 max-w-2xl text-center text-base text-text-muted">
           Every screen below was designed autonomously by the AI design
           agent — no human touched a mouse or keyboard.

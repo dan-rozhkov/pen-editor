@@ -192,13 +192,33 @@ describe("<ShowcasePage />", () => {
     expect(
       screen.getByPlaceholderText("Ask the design agent to create…"),
     ).toBeTruthy();
-    expect(editorLink.parentElement?.tagName).toBe("HEADER");
     expect(editorLink.getAttribute("href")).toBe("/app");
     expect(editorLink.classList.contains("bg-accent-primary/10")).toBe(true);
-    expect(editorLink.classList.contains("absolute")).toBe(true);
+
+    // Both header actions sit in one absolutely positioned row in the top
+    // right corner.
+    const actions = editorLink.parentElement;
+    expect(actions?.parentElement?.tagName).toBe("HEADER");
+    expect(actions?.classList.contains("absolute")).toBe(true);
     expect(
-      editorLink.classList.contains("right-[calc(1rem+env(safe-area-inset-right))]"),
+      actions?.classList.contains("right-[calc(1rem+env(safe-area-inset-right))]"),
     ).toBe(true);
+  });
+
+  it("offers the macOS desktop build next to the editor link", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+
+    renderPage();
+
+    const downloadLink = screen.getByRole("link", { name: "Download for Mac" });
+    const editorLink = screen.getByRole("link", { name: "Open the editor →" });
+
+    expect(downloadLink.getAttribute("href")).toBe(
+      "https://github.com/dan-rozhkov/pen-editor-desktop/releases/latest",
+    );
+    expect(downloadLink.getAttribute("target")).toBe("_blank");
+    expect(downloadLink.getAttribute("rel")).toBe("noreferrer");
+    expect(downloadLink.parentElement).toBe(editorLink.parentElement);
   });
 
   it("stores a trimmed prompt and navigates to the editor", async () => {
