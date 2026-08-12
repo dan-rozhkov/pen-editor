@@ -174,6 +174,40 @@ Both bridges drive the same `src/store/mcpBridgeStore.ts`
 in `LeftSidebar.tsx` (beside the offline cloud indicator) — no UI change was
 needed to support the desktop path.
 
+### The agent's self-improvement, seen from the frontend
+
+The backend (v0.38.0+) lets the design agent keep per-user memory and write its
+own skills. Everything here is the *visibility* half of that: the rule is that
+the agent never changes itself invisibly. All of it is inert when the backend
+has `MEMORY_ENABLED` / `SELF_SKILLS_ENABLED` off — the tools simply never
+appear in a turn and the activity endpoint returns nothing.
+
+- **`src/lib/userId.ts`** — `pen.userId`, an anonymous id generated once and
+  kept in `localStorage`, sent in every `/api/chat` body by `useDesignChat`.
+  It is what the backend scopes **memory** to. Not an account: another browser
+  or a cleared storage is a different identity with empty memory. Learned
+  **skills are global**, not scoped to it — a difference that surprises people.
+- **In-turn chips** (`MessageList.tsx` → `MemoryToolIndicator` /
+  `SkillToolIndicator`). `memory` and `skill_manage` are backend-executed, so
+  they arrive as ordinary tool parts. **Neither ever throws**: a refused write
+  (over capacity, ambiguous match, circuit breaker, a guard rejection) comes
+  back as normal output carrying `ok: false`. So a chip is rendered *only* for
+  a parsed, genuine success — anything else must fall through to
+  `ToolCallIndicator`, which shows the output and therefore the error. Parse
+  defensively; the output may be a JSON string, an object, or a shape nobody
+  anticipated.
+- **`useAgentActivityToast`** — the background review runs server-side *after*
+  the stream closes, so the model cannot mention it. This schedules two delayed
+  checks of `GET /api/memory/activity` per finished turn and toasts if a
+  `background_review` event appeared, naming the subsystem (memory, skills, or
+  both). It reads by **event-id cursor** kept in `localStorage`, never a
+  timestamp — the endpoint filters on Postgres `created_at`, so a browser clock
+  a few minutes off would silently suppress or repeat every toast. A baseline
+  against a server with no rows records a zero cursor: "checked, saw nothing"
+  has to be distinguishable from "never checked", or the very first review is
+  swallowed. The toast id is stable per event so parallel chat tabs collapse
+  into one notification.
+
 ### File Format
 
 The editor reads/writes `.pen` files. These are accessed exclusively through the Pencil MCP tools — never read `.pen` files directly with file I/O.
