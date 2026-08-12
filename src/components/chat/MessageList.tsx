@@ -16,6 +16,7 @@ import { ThinkingIndicator } from "./ThinkingIndicator";
 import { ImageLightbox } from "./ImageLightbox";
 import { AskUserForm } from "./AskUserForm";
 import { MemoryToolIndicator } from "./MemoryToolIndicator";
+import { SkillToolIndicator, type SkillManageKind } from "./SkillToolIndicator";
 import type { AskUserInput } from "@/types/askUser";
 import {
   Tooltip,
@@ -44,6 +45,56 @@ function isMemoryWriteSuccessful(output: unknown): boolean {
     parsed !== null &&
     (parsed as { ok?: unknown }).ok === true
   );
+}
+
+// `skill_manage` is the phase-2 counterpart to the memory tool above — also
+// backend-executed, also never throws (see pen-editor-backend's
+// src/ai/skills/tool.ts): every guard/validation failure returns an ordinary
+// `output-available` with `{ error: ... }` rather than an error state.
+// Parsed just as defensively as the memory output, and additionally needs
+// the tool's *input* (action + name) since the success message alone
+// doesn't carry the skill name in a machine-stable position.
+function parseSkillManageSuccess(
+  input: unknown,
+  output: unknown,
+): { kind: SkillManageKind; name: string } | null {
+  let parsedOutput = output;
+  if (typeof parsedOutput === "string") {
+    try {
+      parsedOutput = JSON.parse(parsedOutput);
+    } catch {
+      return null;
+    }
+  }
+  if (
+    typeof parsedOutput !== "object" ||
+    parsedOutput === null ||
+    (parsedOutput as { ok?: unknown }).ok !== true
+  ) {
+    return null;
+  }
+
+  if (typeof input !== "object" || input === null) return null;
+  const action = (input as { action?: unknown }).action;
+  const name = (input as { name?: unknown }).name;
+  if (typeof name !== "string" || name.length === 0) return null;
+  if (action !== "create" && action !== "patch" && action !== "delete") {
+    return null;
+  }
+
+  // `create` covers two distinct backend outcomes: a brand-new skill, or
+  // reviving an archived one at the same name (the "revive" branch of
+  // skill_manage's `create` action) — the input alone can't tell them
+  // apart, only the success message's wording can.
+  const message = (parsedOutput as { message?: unknown }).message;
+  if (
+    action === "create" &&
+    typeof message === "string" &&
+    message.startsWith("Revived archived skill")
+  ) {
+    return { kind: "revive", name };
+  }
+  return { kind: action, name };
 }
 
 interface ImagePreviewProps {
@@ -318,6 +369,31 @@ export function MessageList({ messages, isLoading, onRollback, addToolOutput }: 
                     isMemoryWriteSuccessful(tp.output)
                   ) {
                     return <MemoryToolIndicator key={tp.toolCallId} />;
+                  }
+                }
+                if (part.type === "tool-skill_manage") {
+                  const tp = part as {
+                    toolCallId: string;
+                    state?: string;
+                    errorText?: string;
+                    input?: unknown;
+                    output?: unknown;
+                  };
+                  // Same rule as tool-memory above: only a genuine success
+                  // gets the compact chip; a thrown-error state or an
+                  // ordinary `{ error: ... }` output falls through to the
+                  // generic ToolCallIndicator below.
+                  if (tp.state === "output-available" && !tp.errorText) {
+                    const success = parseSkillManageSuccess(tp.input, tp.output);
+                    if (success) {
+                      return (
+                        <SkillToolIndicator
+                          key={tp.toolCallId}
+                          kind={success.kind}
+                          name={success.name}
+                        />
+                      );
+                    }
                   }
                 }
                 if (isToolUIPart(part)) {

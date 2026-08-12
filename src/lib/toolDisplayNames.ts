@@ -29,6 +29,19 @@ const toolDisplayNames: Record<string, string> = {
   ask_user: "Ask a question",
   load_skill: "Load skill",
   memory: "Memory",
+  // "Manage skill" (sentence case, matching "Load skill"/"Ask a question"
+  // above) — this used to read "Manage Skill" (Title Case), inconsistent
+  // with every other entry here. Visible whenever an unsuccessful
+  // skill_manage call falls back to the plain ToolCallIndicator.
+  skill_manage: "Manage skill",
+  // No `skill_view` entry: that tool is only ever offered to the
+  // background-review LLM call (review.ts, includeView: true) — a separate,
+  // fire-and-forget generateText run whose tool calls are never part of the
+  // SSE stream the chat panel renders. chatTurn.ts's foreground turn (the
+  // one that actually reaches this UI) always passes includeView: false, so
+  // "tool-skill_view" can never appear in a message part here. A display
+  // name for it would be dead code; getToolDisplayName's fallback to the
+  // raw tool name already covers any future/unexpected tool safely.
 };
 
 export function getToolDisplayName(toolName: string): string {

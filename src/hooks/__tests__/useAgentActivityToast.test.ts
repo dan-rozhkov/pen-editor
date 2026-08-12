@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook } from "@testing-library/react";
-import { useMemoryActivityToast } from "@/hooks/useMemoryActivityToast";
+import { useAgentActivityToast } from "@/hooks/useAgentActivityToast";
 
 const toastMock = vi.fn();
 vi.mock("sonner", () => ({
   toast: (...args: unknown[]) => toastMock(...args),
 }));
 
+// The cursor key deliberately kept its original "memoryActivityCursor"
+// spelling when this hook grew skill support — see the hook's own comment.
 const CURSOR_KEY = "pen.memoryActivityCursor:user-1";
 
 beforeEach(() => {
@@ -41,12 +43,12 @@ function withFetch(impl: (url: string, callIndex: number) => Promise<Response> |
 
 function renderStatus() {
   return renderHook(
-    ({ status }) => useMemoryActivityToast({ userId: "user-1", status }),
+    ({ status }) => useAgentActivityToast({ userId: "user-1", status }),
     { initialProps: { status: "streaming" } },
   );
 }
 
-describe("useMemoryActivityToast", () => {
+describe("useAgentActivityToast", () => {
   it("establishes a baseline on the first-ever check (no stored cursor) and does not toast", async () => {
     const fetchMock = withFetch(() => jsonResponse({ events: [], latestId: 42 }));
 
@@ -66,7 +68,42 @@ describe("useMemoryActivityToast", () => {
     expect(localStorage.getItem(CURSOR_KEY)).toBe("42");
   });
 
-  it("uses the stored cursor as sinceId once a baseline exists, and toasts exactly once on a background_review event", async () => {
+  it("writes a 0 cursor on baseline when the server has no rows yet, so the very next check is no longer treated as baseline", async () => {
+    const fetchMock = withFetch((_url, callIndex) => {
+      if (callIndex <= 2) {
+        // Turn 1's two checks: brand-new user, no audit rows exist yet
+        // anywhere on the server.
+        return jsonResponse({ events: [], latestId: null });
+      }
+      // Turn 2's first check: a review has now written the user's
+      // first-ever row.
+      return jsonResponse({
+        events: [{ id: 1, subsystem: "memory", origin: "background_review" }],
+        latestId: 1,
+      });
+    });
+
+    const { rerender } = renderStatus();
+    rerender({ status: "ready" }); // turn 1: baseline, empty server
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(toastMock).not.toHaveBeenCalled();
+    // Must be the string "0", not absent — an absent key is what would send
+    // the hook back into the baseline branch on the next check.
+    expect(localStorage.getItem(CURSOR_KEY)).toBe("0");
+
+    rerender({ status: "streaming" });
+    rerender({ status: "ready" }); // turn 2: first row ever written
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    expect(fetchMock.mock.calls[2][0] as string).toContain("sinceId=0");
+    expect(toastMock).toHaveBeenCalledTimes(1);
+    expect(toastMock).toHaveBeenCalledWith("Агент обновил память о вас", {
+      id: "memory-activity-1",
+    });
+  });
+
+  it("uses the stored cursor as sinceId once a baseline exists, and toasts exactly once on a memory background_review event", async () => {
     localStorage.setItem(CURSOR_KEY, "10");
     const fetchMock = withFetch((_url, callIndex) => {
       if (callIndex === 1) {
@@ -97,6 +134,70 @@ describe("useMemoryActivityToast", () => {
     await vi.advanceTimersByTimeAsync(40_000);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(toastMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("toasts a skill-specific message when only skill events are present", async () => {
+    localStorage.setItem(CURSOR_KEY, "10");
+    withFetch(() =>
+      jsonResponse({
+        events: [
+          { id: 11, subsystem: "skill", action: "create", origin: "background_review" },
+        ],
+        latestId: 11,
+      }),
+    );
+
+    const { rerender } = renderStatus();
+    rerender({ status: "ready" });
+
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    expect(toastMock).toHaveBeenCalledTimes(1);
+    expect(toastMock).toHaveBeenCalledWith("Агент обновил свои скиллы", {
+      id: "memory-activity-11",
+    });
+  });
+
+  it("toasts a combined message when both memory and skill events land in the same check", async () => {
+    localStorage.setItem(CURSOR_KEY, "10");
+    withFetch(() =>
+      jsonResponse({
+        events: [
+          { id: 11, subsystem: "memory", action: "write", origin: "background_review" },
+          { id: 12, subsystem: "skill", action: "patch", origin: "background_review" },
+        ],
+        latestId: 12,
+      }),
+    );
+
+    const { rerender } = renderStatus();
+    rerender({ status: "ready" });
+
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    expect(toastMock).toHaveBeenCalledTimes(1);
+    expect(toastMock).toHaveBeenCalledWith("Агент обновил память и скиллы", {
+      id: "memory-activity-12",
+    });
+  });
+
+  it("treats an event with no subsystem field (older backend) as a memory event", async () => {
+    localStorage.setItem(CURSOR_KEY, "5");
+    withFetch(() =>
+      jsonResponse({
+        events: [{ id: 6, origin: "background_review" }],
+        latestId: 6,
+      }),
+    );
+
+    const { rerender } = renderStatus();
+    rerender({ status: "ready" });
+
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    expect(toastMock).toHaveBeenCalledWith("Агент обновил память о вас", {
+      id: "memory-activity-6",
+    });
   });
 
   it("catches a background review that only finishes after the first check, via the second (~60s) check", async () => {
@@ -134,6 +235,23 @@ describe("useMemoryActivityToast", () => {
     rerender({ status: "ready" });
 
     await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(toastMock).not.toHaveBeenCalled();
+  });
+
+  it("does not toast for a non-background_review event even with a skill subsystem", async () => {
+    localStorage.setItem(CURSOR_KEY, "1");
+    withFetch(() =>
+      jsonResponse({
+        events: [{ id: 2, subsystem: "skill", origin: "foreground" }],
+        latestId: 2,
+      }),
+    );
+
+    const { rerender } = renderStatus();
+    rerender({ status: "ready" });
+
+    await vi.advanceTimersByTimeAsync(20_000);
 
     expect(toastMock).not.toHaveBeenCalled();
   });
@@ -210,7 +328,7 @@ describe("useMemoryActivityToast", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { rerender } = renderHook(
-      ({ status }) => useMemoryActivityToast({ userId: undefined, status }),
+      ({ status }) => useAgentActivityToast({ userId: undefined, status }),
       { initialProps: { status: "streaming" } },
     );
     rerender({ status: "ready" });
