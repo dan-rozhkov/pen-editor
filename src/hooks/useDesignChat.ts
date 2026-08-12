@@ -7,6 +7,7 @@ import {
 } from "ai";
 import { modelSupportsVision, resolveModel } from "@/lib/chatModels";
 import { resolveApiUrl, isOffline, OFFLINE_MESSAGE } from "@/lib/apiBase";
+import { getUserId } from "@/lib/userId";
 import { createRetryingFetch, type RetryState } from "@/lib/retryFetch";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { useSelectionStore } from "@/store/selectionStore";
@@ -89,6 +90,7 @@ export function buildCanvasContext(sessionId?: string): object {
       })),
     }),
     model: resolveModel(model),
+    userId: getUserId(),
   };
 }
 

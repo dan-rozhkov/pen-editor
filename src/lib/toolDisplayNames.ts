@@ -28,6 +28,7 @@ const toolDisplayNames: Record<string, string> = {
   mcp_refero_get_design_guidance: "Design Guidance",
   ask_user: "Ask a question",
   load_skill: "Load skill",
+  memory: "Memory",
 };
 
 export function getToolDisplayName(toolName: string): string {

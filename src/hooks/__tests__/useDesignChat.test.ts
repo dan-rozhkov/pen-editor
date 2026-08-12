@@ -208,6 +208,13 @@ describe("buildCanvasContext", () => {
     const context = buildCanvasContext() as { model: string };
     expect(context.model).toBe("test/model-z");
   });
+
+  it("carries a stable userId in the request body", () => {
+    const first = (buildCanvasContext() as { userId: string }).userId;
+    expect(first).toBeTruthy();
+    expect((buildCanvasContext() as { userId: string }).userId).toBe(first);
+    expect(localStorage.getItem("pen.userId")).toBe(first);
+  });
 });
 
 describe("resolveChatApiUrl", () => {

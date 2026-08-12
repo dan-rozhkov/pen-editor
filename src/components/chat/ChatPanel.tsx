@@ -15,6 +15,8 @@ import { useChatStore } from "@/store/chatStore";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import type { ChatTab, ParallelCount } from "@/store/chatStore";
 import { useDesignChat } from "@/hooks/useDesignChat";
+import { useMemoryActivityToast } from "@/hooks/useMemoryActivityToast";
+import { getUserId } from "@/lib/userId";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
 import { hasPendingAskUser } from "./pendingAskUser";
@@ -182,7 +184,13 @@ function ChatSession({
     addToolOutput,
     queuedMessages,
     removeQueuedMessage,
+    status,
   } = useDesignChat({ sessionId });
+
+  // Surfaces server-side memory writes that happen after this turn's stream
+  // already closed (background review) — the model has no chance to mention
+  // these itself. See useMemoryActivityToast for the delayed-check design.
+  useMemoryActivityToast({ userId: getUserId(), status });
 
   const awaitingAnswer = hasPendingAskUser(messages);
 

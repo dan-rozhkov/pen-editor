@@ -15,12 +15,36 @@ import { ToolCallIndicator } from "./ToolCallIndicator";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 import { ImageLightbox } from "./ImageLightbox";
 import { AskUserForm } from "./AskUserForm";
+import { MemoryToolIndicator } from "./MemoryToolIndicator";
 import type { AskUserInput } from "@/types/askUser";
 import {
   Tooltip,
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
+
+// The memory tool's output is a plain object, never a thrown error — a
+// storage failure, an ambiguous `old_text`, `over_capacity`, or the circuit
+// breaker all arrive as ordinary `output-available` with `{ ok: false, ... }`
+// (see pen-editor-backend's src/ai/memory/tool.ts). Parse defensively: the
+// AI SDK can hand back the output as a JSON string or as an already-parsed
+// object depending on transport, and a malformed/unexpected shape must fall
+// through to the generic indicator rather than crash the message list.
+function isMemoryWriteSuccessful(output: unknown): boolean {
+  let parsed = output;
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return false;
+    }
+  }
+  return (
+    typeof parsed === "object" &&
+    parsed !== null &&
+    (parsed as { ok?: unknown }).ok === true
+  );
+}
 
 interface ImagePreviewProps {
   url: string;
@@ -270,6 +294,30 @@ export function MessageList({ messages, isLoading, onRollback, addToolOutput }: 
                         }
                       />
                     );
+                  }
+                }
+                if (part.type === "tool-memory") {
+                  const tp = part as {
+                    toolCallId: string;
+                    state?: string;
+                    errorText?: string;
+                    output?: unknown;
+                  };
+                  // The memory tool is backend-executed and arrives with an
+                  // output, never a client-side call — but it never throws
+                  // either: storage errors, over_capacity, an ambiguous
+                  // old_text, and the circuit breaker all resolve as a normal
+                  // `output-available` with `{ ok: false, error: ... }`. Only
+                  // a genuinely successful write gets the friendly chip;
+                  // everything else (state error, or an ok:false output)
+                  // falls through to the generic ToolCallIndicator so the
+                  // user can see what actually happened.
+                  if (
+                    tp.state === "output-available" &&
+                    !tp.errorText &&
+                    isMemoryWriteSuccessful(tp.output)
+                  ) {
+                    return <MemoryToolIndicator key={tp.toolCallId} />;
                   }
                 }
                 if (isToolUIPart(part)) {
