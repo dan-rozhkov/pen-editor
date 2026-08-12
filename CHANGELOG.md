@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.75.0] - 2026-08-12
+
+The frontend half of the backend's self-improvement loop (backend v0.38.0). The
+agent can now change what it remembers and rewrite its own skills; the rule
+this release implements is that it never does so invisibly. Inert unless the
+backend has `MEMORY_ENABLED` / `SELF_SKILLS_ENABLED` on.
+
+### Added
+- **`pen.userId`** — an anonymous client id generated locally and stored in `localStorage`, sent with every chat request. It is what the backend scopes memory to. Not an account: a different browser, a different device, or a cleared storage is a different identity with empty memory.
+- **Chips for the agent's writes to itself.** An in-turn `memory` call renders as "Память обновлена"; a `skill_manage` call names what happened and to which skill (created / updated / deleted / revived from the archive). Only a genuine success gets a chip — these tools never throw, so a refused write arrives as ordinary output and falls through to the regular indicator, where its error text is visible.
+- **A toast for writes made after the stream closed.** The background review runs server-side once the turn is over, so the model has no way to mention it. A delayed check of `GET /api/memory/activity` announces one, saying which subsystem changed: memory, skills, or both. It reads by event-id cursor rather than a client timestamp — a skewed clock would otherwise silently suppress or repeat toasts — and carries a stable toast id so parallel chat tabs collapse into a single notification.
+
+### Fixed
+- The very first background review of a new user was swallowed. With no audit rows yet the server returns no cursor, so every check re-entered the baseline branch and never advanced past the one event the feature exists to announce. A baseline against an empty server now records a zero cursor, making "checked, saw nothing" distinguishable from "never checked".
+
 ## [0.74.1] - 2026-08-09
 
 ### Fixed
