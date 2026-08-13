@@ -2,6 +2,11 @@ import { create } from "zustand";
 
 const STORAGE_KEY = "left-sidebar-section";
 const EXPANDED_STORAGE_KEY = "left-sidebar-expanded";
+const WIDTH_STORAGE_KEY = "left-sidebar-width";
+
+export const LEFT_SIDEBAR_MIN_WIDTH = 220;
+export const LEFT_SIDEBAR_MAX_WIDTH = 640;
+export const LEFT_SIDEBAR_DEFAULT_WIDTH = 300;
 
 export type LeftSection =
   | "pages"
@@ -38,6 +43,10 @@ interface LeftSidebarState {
   // (currently variables/textStyles/styles).
   isExpanded: boolean;
   toggleExpanded: () => void;
+  // Desktop-only panel width, user-resizable by dragging the right edge.
+  width: number;
+  setWidth: (width: number) => void;
+  persistWidth: () => void;
 }
 
 function getInitial(): LeftSection {
@@ -46,6 +55,18 @@ function getInitial(): LeftSection {
     return stored as LeftSection;
   }
   return "pages";
+}
+
+function clampWidth(width: number): number {
+  return Math.min(LEFT_SIDEBAR_MAX_WIDTH, Math.max(LEFT_SIDEBAR_MIN_WIDTH, width));
+}
+
+function getInitialWidth(): number {
+  const stored = localStorage.getItem(WIDTH_STORAGE_KEY);
+  if (!stored) return LEFT_SIDEBAR_DEFAULT_WIDTH;
+  const parsed = Number(stored);
+  if (!Number.isFinite(parsed)) return LEFT_SIDEBAR_DEFAULT_WIDTH;
+  return clampWidth(parsed);
 }
 
 export const useLeftSidebarStore = create<LeftSidebarState>((set, get) => ({
@@ -63,5 +84,13 @@ export const useLeftSidebarStore = create<LeftSidebarState>((set, get) => ({
     const next = !get().isExpanded;
     localStorage.setItem(EXPANDED_STORAGE_KEY, String(next));
     set({ isExpanded: next });
+  },
+  width: getInitialWidth(),
+  // In-memory only: a drag calls this on every pointermove, and a synchronous
+  // localStorage write per frame is not something a canvas app can afford.
+  // Callers persist once the interaction settles via persistWidth().
+  setWidth: (width) => set({ width: clampWidth(width) }),
+  persistWidth: () => {
+    localStorage.setItem(WIDTH_STORAGE_KEY, String(get().width));
   },
 }));

@@ -14,6 +14,7 @@ import { TextStylesPanelContent } from "./TextStylesPanel";
 import { StylesPanelContent } from "./StylesPanel";
 import { CommentsPanelContent } from "./CommentsPanel";
 import { Toolbar } from "./Toolbar";
+import { LeftSidebarResizer } from "./LeftSidebarResizer";
 import { useSceneStore } from "@/store/sceneStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { usePageStore } from "@/store/pageStore";
@@ -33,6 +34,7 @@ export function LeftSidebar() {
   const isMobile = useIsMobile();
   const isChatExpanded = useChatStore((s) => s.isExpanded);
   const isPanelExpanded = useLeftSidebarStore((s) => s.isExpanded);
+  const width = useLeftSidebarStore((s) => s.width);
   const collapseAllFrames = useSceneStore((s) => s.collapseAllFrames);
   const fileName = useDocumentStore((s) => s.fileName);
   const setFileName = useDocumentStore((s) => s.setFileName);
@@ -42,18 +44,20 @@ export function LeftSidebar() {
   const extension = fileName?.match(/\.[^.]+$/)?.[0] ?? "";
 
   // On mobile the panel is hidden until the rail opens it, then it covers the
-  // full screen width to the right of the rail. On desktop it is a fixed 300px
-  // column that is always visible.
+  // full screen width to the right of the rail. On desktop it is a
+  // user-resizable column (via LeftSidebarResizer) that is always visible.
   if (isMobile && !isPanelOpen) return null;
 
   return (
     <div
+      style={isMobile ? undefined : { width }}
       className={
         isMobile
           ? "fixed top-0 left-14 right-0 bottom-0 z-50 flex flex-col bg-surface-panel"
-          : "w-[300px] h-full flex flex-col bg-surface-panel border-r border-border-default"
+          : "relative shrink-0 h-full flex flex-col bg-surface-panel border-r border-border-default"
       }
     >
+      {!isMobile && <LeftSidebarResizer />}
       {/* Pages and Slides share the document header; Agents has its own header
           (inside the chat); Components gets a titled header styled like the
           chat's. */}
