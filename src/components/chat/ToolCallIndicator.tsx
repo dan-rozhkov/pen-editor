@@ -1,11 +1,11 @@
 import { useState } from "react";
 import {
-  SpinnerIcon,
   CheckCircleIcon,
   XCircleIcon,
   CaretDownIcon,
   DownloadSimpleIcon,
 } from "@phosphor-icons/react";
+import { Shimmer } from "@/components/ai-elements/shimmer";
 import { getToolName } from "ai";
 import { getToolDisplayName } from "@/lib/toolDisplayNames";
 import { downloadFile, filenameFromUrl } from "@/lib/downloadFile";
@@ -35,8 +35,10 @@ function getToolStatus(part: AnyToolPart): ToolStatus {
 
 function StatusIcon({ status }: { status: ToolStatus }) {
   switch (status) {
+    // The shimmering label carries the "in progress" signal, so a spinner
+    // next to it would be a second, redundant animation.
     case "running":
-      return <SpinnerIcon size={14} className="animate-spin" />;
+      return null;
     case "completed":
       return (
         <CheckCircleIcon size={14} weight="fill" className="text-green-500" />
@@ -104,9 +106,19 @@ export function ToolCallIndicator({ part }: ToolCallIndicatorProps) {
           className={`transition-transform shrink-0 ${open ? "" : "-rotate-90"}`}
         />
         <StatusIcon status={status} />
-        <span className="truncate">{displayName}</span>
+        {status === "running" ? (
+          <Shimmer as="span" className="truncate">
+            {displayName}
+          </Shimmer>
+        ) : (
+          <span className="truncate">{displayName}</span>
+        )}
         <span className="ml-auto text-text-disabled shrink-0">
-          {statusText(status)}
+          {status === "running" ? (
+            <Shimmer as="span">{statusText(status)}</Shimmer>
+          ) : (
+            statusText(status)
+          )}
         </span>
       </button>
       {status === "completed" && imageUrls.length > 0 && (
@@ -161,9 +173,8 @@ export function ToolCallIndicator({ part }: ToolCallIndicatorProps) {
               Output
             </div>
             {status === "running" ? (
-              <div className="flex items-center gap-1.5 p-2 rounded bg-surface-panel text-text-disabled">
-                <SpinnerIcon size={12} className="animate-spin" />
-                Running...
+              <div className="p-2 rounded bg-surface-panel">
+                <Shimmer as="span">Running...</Shimmer>
               </div>
             ) : status === "error" ? (
               <pre className="p-2 rounded bg-red-500/10 font-mono text-[11px] text-red-400 max-h-40 overflow-auto whitespace-pre-wrap break-all">

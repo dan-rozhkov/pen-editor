@@ -49,6 +49,23 @@ describe("<ToolCallIndicator />", () => {
     expect(screen.getByText("Running...")).toBeTruthy();
   });
 
+  it("shimmers the label while running instead of spinning an icon", () => {
+    const { container } = render(
+      <ToolCallIndicator part={toolPart({ state: "input-available" })} />
+    );
+    expect(container.querySelectorAll(".animate-shimmer").length).toBe(2);
+    expect(container.querySelector(".animate-spin")).toBeNull();
+  });
+
+  it("does not shimmer once the tool has finished", () => {
+    const { container } = render(
+      <ToolCallIndicator
+        part={toolPart({ state: "output-available", output: { ok: true } })}
+      />
+    );
+    expect(container.querySelector(".animate-shimmer")).toBeNull();
+  });
+
   it("shows Done when output is available", () => {
     render(
       <ToolCallIndicator

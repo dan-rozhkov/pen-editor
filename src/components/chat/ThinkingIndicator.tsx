@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { CaretDownIcon } from "@phosphor-icons/react";
 import { SimpleMarkdown } from "./SimpleMarkdown";
+import { Shimmer } from "@/components/ai-elements/shimmer";
 
 interface ReasoningPart {
   type: "reasoning";
@@ -62,9 +63,13 @@ export function ThinkingIndicator({ part }: ThinkingIndicatorProps) {
           size={10}
           className={`transition-transform shrink-0 ${open ? "" : "-rotate-90"}`}
         />
-        <span className="truncate">
-          {isStreaming ? "Thinking..." : "Thought"}
-        </span>
+        {isStreaming ? (
+          <Shimmer as="span" className="truncate">
+            Thinking...
+          </Shimmer>
+        ) : (
+          <span className="truncate">Thought</span>
+        )}
         <span className="ml-auto text-text-disabled shrink-0">
           {formatDuration(duration)}
         </span>
