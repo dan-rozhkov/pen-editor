@@ -211,8 +211,16 @@ function renderLines(text: string): React.ReactNode[] {
         </ol>
       );
     } else if (line.trim() === "") {
-      nodes.push(<br key={key++} />);
-      i++;
+      // Model output routinely ends with (and contains runs of) blank lines.
+      // One <br> per blank line turned a trailing "\n\n" into a visible hole
+      // between the message and the next tool chip, so a run collapses to a
+      // single separator and is dropped entirely at the block's start or end.
+      // The separator is a short spacer rather than a <br>, which would insert
+      // a whole empty line (~21px at this line-height) between paragraphs.
+      while (i < lines.length && lines[i].trim() === "") i++;
+      if (nodes.length > 0 && i < lines.length) {
+        nodes.push(<div key={key++} aria-hidden className="h-1.5" />);
+      }
     } else {
       nodes.push(
         <p key={key++} className="m-0">
@@ -239,9 +247,21 @@ export function SimpleMarkdown({ content }: SimpleMarkdownProps) {
           </pre>
         );
       }
+      // A blank-only text block (e.g. the newlines after a closing fence)
+      // would otherwise render an empty div and still take a space-y gap.
+      if (block.text.trim() === "") return null;
       return <div key={i}>{renderLines(block.text)}</div>;
     });
   }, [content]);
 
-  return <div className="space-y-1.5 text-[13px] leading-relaxed">{rendered}</div>;
+  // `break-words` (overflow-wrap, inherited by every child): reasoning text and
+  // tool chatter routinely contain long unbroken tokens — inline JSON, ids,
+  // urls — which otherwise overflow the narrow chat column and give the panel a
+  // horizontal scrollbar. Fenced code keeps its own `overflow-x-auto` instead,
+  // since breaking code mid-token would make it unreadable.
+  return (
+    <div className="space-y-1.5 text-[13px] leading-relaxed break-words">
+      {rendered}
+    </div>
+  );
 }

@@ -1,13 +1,12 @@
-import { useState } from "react";
+import { createElement, useState } from "react";
 import {
-  CheckCircleIcon,
-  XCircleIcon,
   CaretDownIcon,
   DownloadSimpleIcon,
 } from "@phosphor-icons/react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { getToolName } from "ai";
 import { getToolDisplayName } from "@/lib/toolDisplayNames";
+import { getToolIcon } from "@/lib/toolIcons";
 import { downloadFile, filenameFromUrl } from "@/lib/downloadFile";
 import { extractImageUrls } from "./extractImageUrls";
 import { ImagePreview } from "./MessageList";
@@ -33,19 +32,11 @@ function getToolStatus(part: AnyToolPart): ToolStatus {
   return "running";
 }
 
-function StatusIcon({ status }: { status: ToolStatus }) {
-  switch (status) {
-    // The shimmering label carries the "in progress" signal, so a spinner
-    // next to it would be a second, redundant animation.
-    case "running":
-      return null;
-    case "completed":
-      return (
-        <CheckCircleIcon size={14} weight="fill" className="text-green-500" />
-      );
-    case "error":
-      return <XCircleIcon size={14} weight="fill" className="text-red-500" />;
-  }
+// The icon component is looked up by name, so it is resolved here rather than
+// in ToolCallIndicator's body — assigning a component to a capitalized local
+// during render is what the react-compiler lint rule forbids.
+function ToolIcon({ name, className }: { name: string; className?: string }) {
+  return createElement(getToolIcon(name), { size: 14, className });
 }
 
 function statusText(status: ToolStatus): string {
@@ -96,16 +87,18 @@ export function ToolCallIndicator({ part }: ToolCallIndicatorProps) {
   };
 
   return (
-    <div className="my-2 px-2 py-1 rounded bg-secondary/60">
+    <div className="my-0.5">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 w-full py-0.5 text-xs text-text-muted hover:text-text-secondary"
+        className="flex items-center gap-1.5 w-full py-0.5 text-[13px] leading-relaxed text-text-muted hover:text-text-secondary"
       >
-        <CaretDownIcon
-          size={10}
-          className={`transition-transform shrink-0 ${open ? "" : "-rotate-90"}`}
+        {/* Per-tool icon, so a chip is recognisable before its label is read.
+            There is no separate status icon: "Running..."/"Done"/"Error" says
+            it in words, and on an error this icon turns red. */}
+        <ToolIcon
+          name={toolName}
+          className={`shrink-0 ${status === "error" ? "text-red-500" : ""}`}
         />
-        <StatusIcon status={status} />
         {status === "running" ? (
           <Shimmer as="span" className="truncate">
             {displayName}
@@ -113,20 +106,26 @@ export function ToolCallIndicator({ part }: ToolCallIndicatorProps) {
         ) : (
           <span className="truncate">{displayName}</span>
         )}
-        <span className="ml-auto text-text-disabled shrink-0">
+        <span
+          className={`shrink-0 ${status === "error" ? "text-red-500" : "text-text-disabled"}`}
+        >
           {status === "running" ? (
             <Shimmer as="span">{statusText(status)}</Shimmer>
           ) : (
             statusText(status)
           )}
         </span>
+        <CaretDownIcon
+          size={10}
+          className={`transition-transform shrink-0 ${open ? "" : "-rotate-90"}`}
+        />
       </button>
       {status === "completed" && imageUrls.length > 0 && (
-        <div className="ml-5 mt-1.5 mb-1.5">
+        <div className="mt-1.5 mb-1.5">
           {imageUrls.length >= 2 && (
             <button
               onClick={() => void downloadAll()}
-              className="mb-1.5 flex items-center gap-1 text-xs text-text-muted hover:text-text-secondary"
+              className="mb-1.5 flex items-center gap-1 text-[13px] text-text-muted hover:text-text-secondary"
             >
               <DownloadSimpleIcon size={12} />
               Download all
@@ -159,12 +158,12 @@ export function ToolCallIndicator({ part }: ToolCallIndicatorProps) {
         </div>
       )}
       {open && (
-        <div className="ml-5 mt-1 mb-1.5 space-y-1.5 text-xs">
+        <div className="mt-1 mb-1.5 space-y-1.5 text-[13px]">
           <div>
             <div className="text-text-disabled text-[10px] uppercase tracking-wider mb-0.5">
               Input
             </div>
-            <pre className="p-2 rounded bg-surface-panel font-mono text-[11px] text-text-muted max-h-40 overflow-auto whitespace-pre-wrap break-all">
+            <pre className="p-2 rounded bg-surface-elevated font-mono text-[11px] text-text-muted max-h-40 overflow-auto whitespace-pre-wrap break-all">
               {formatJson(toolPart.input)}
             </pre>
           </div>
@@ -173,7 +172,7 @@ export function ToolCallIndicator({ part }: ToolCallIndicatorProps) {
               Output
             </div>
             {status === "running" ? (
-              <div className="p-2 rounded bg-surface-panel">
+              <div className="p-2 rounded bg-surface-elevated">
                 <Shimmer as="span">Running...</Shimmer>
               </div>
             ) : status === "error" ? (
@@ -182,7 +181,7 @@ export function ToolCallIndicator({ part }: ToolCallIndicatorProps) {
               </pre>
             ) : (
               <>
-                <pre className="p-2 rounded bg-surface-panel font-mono text-[11px] text-text-muted max-h-40 overflow-auto whitespace-pre-wrap break-all">
+                <pre className="p-2 rounded bg-surface-elevated font-mono text-[11px] text-text-muted max-h-40 overflow-auto whitespace-pre-wrap break-all">
                   {formatJson(toolPart.output)}
                 </pre>
               </>

@@ -7,6 +7,7 @@ import { useGuidesStore } from "../store/guidesStore";
 import { useRenderModeStore } from "../store/renderModeStore";
 import { useViewportStore } from "../store/viewportStore";
 import { useCanvasRefStore } from "../store/canvasRefStore";
+import { useMcpBridgeStore } from "../store/mcpBridgeStore";
 
 import { exportDesignTokens, importDesignTokens, exportAsJson, exportAsPen, openDocument } from "../lib/commands/fileCommands";
 import { parsePixsoNodes } from "../utils/pixsoImportUtils";
@@ -35,9 +36,16 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
+const MCP_STATUS_LABEL: Record<"off" | "connecting" | "connected", string> = {
+  off: "MCP disconnected",
+  connecting: "MCP connecting…",
+  connected: "MCP connected",
+};
+
 export function Toolbar() {
   const addNode = useSceneStore((state) => state.addNode);
   const uiTheme = useUIThemeStore((s) => s.uiTheme);
+  const mcpStatus = useMcpBridgeStore((s) => s.status);
   const showPixelGrid = usePixelGridStore((s) => s.showPixelGrid);
   const togglePixelGrid = usePixelGridStore((s) => s.togglePixelGrid);
   const showRulers = useGuidesStore((s) => s.showRulers);
@@ -214,6 +222,26 @@ export function Toolbar() {
                 Outline mode
                 <TooltipShortcut className="ml-auto">{formatShortcut(["mod", "shift", "O"])}</TooltipShortcut>
               </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              {/* Read-only: the bridge connects itself (a WebSocket token or the
+                  desktop shell), so there is nothing to toggle here. "Off" is the
+                  normal state on the web and is shown rather than hidden — a row
+                  that disappears reads as a broken menu. A plain div, not
+                  DropdownMenuLabel: Base UI's label part throws unless it is
+                  wrapped in a Menu.Group, which took down the whole menu. */}
+              <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-text-muted">
+                <span
+                  className={
+                    "h-1.5 w-1.5 rounded-full shrink-0 " +
+                    (mcpStatus === "connected"
+                      ? "bg-green-500"
+                      : mcpStatus === "connecting"
+                        ? "bg-yellow-500"
+                        : "bg-text-disabled")
+                  }
+                />
+                {MCP_STATUS_LABEL[mcpStatus]}
+              </div>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
         </DropdownMenuContent>

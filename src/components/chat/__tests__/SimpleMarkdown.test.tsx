@@ -203,13 +203,47 @@ describe("<SimpleMarkdown />", () => {
   });
 
   describe("paragraphs and line breaks", () => {
-    it("renders a blank line as a <br>", () => {
+    it("separates paragraphs with a short spacer, not a full empty line", () => {
       const { container } = render(
         <SimpleMarkdown content={"first\n\nsecond"} />
       );
       const paras = container.querySelectorAll("p");
       expect(paras.length).toBe(2);
-      expect(container.querySelector("br")).toBeTruthy();
+      // A <br> would add a whole line of height; the spacer is 6px.
+      expect(container.querySelector("br")).toBeNull();
+      expect(container.querySelectorAll("div.h-1\\.5").length).toBe(1);
+    });
+
+    it("wraps long unbroken tokens instead of overflowing", () => {
+      const { container } = render(
+        <SimpleMarkdown content={'selectedNodes: [{"id":"i8ik44k","x":1468.87}]'} />
+      );
+      expect(
+        container.firstElementChild?.classList.contains("break-words")
+      ).toBe(true);
+    });
+
+    it("collapses a run of blank lines into a single spacer", () => {
+      const { container } = render(
+        <SimpleMarkdown content={"first\n\n\n\nsecond"} />
+      );
+      expect(container.querySelectorAll("div.h-1\\.5").length).toBe(1);
+    });
+
+    it("drops leading and trailing blank lines", () => {
+      const { container } = render(
+        <SimpleMarkdown content={"\n\nonly paragraph\n\n"} />
+      );
+      expect(container.querySelectorAll("div.h-1\\.5").length).toBe(0);
+      expect(container.querySelectorAll("p").length).toBe(1);
+    });
+
+    it("renders no empty block for newlines after a code fence", () => {
+      const { container } = render(
+        <SimpleMarkdown content={"```\ncode\n```\n\n"} />
+      );
+      expect(container.querySelectorAll("div.h-1\\.5").length).toBe(0);
+      expect(container.firstElementChild?.children.length).toBe(1);
     });
   });
 

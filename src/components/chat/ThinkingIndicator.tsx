@@ -54,15 +54,11 @@ export function ThinkingIndicator({ part }: ThinkingIndicatorProps) {
   const duration = useThinkingDuration(isStreaming);
 
   return (
-    <div className="my-2 px-2 py-1 rounded bg-secondary/60">
+    <div className="my-0.5">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 w-full py-0.5 text-xs text-text-muted hover:text-text-secondary"
+        className="flex items-center gap-1.5 w-full py-0.5 text-[13px] leading-relaxed text-text-muted hover:text-text-secondary"
       >
-        <CaretDownIcon
-          size={10}
-          className={`transition-transform shrink-0 ${open ? "" : "-rotate-90"}`}
-        />
         {isStreaming ? (
           <Shimmer as="span" className="truncate">
             Thinking...
@@ -70,12 +66,16 @@ export function ThinkingIndicator({ part }: ThinkingIndicatorProps) {
         ) : (
           <span className="truncate">Thought</span>
         )}
-        <span className="ml-auto text-text-disabled shrink-0">
+        <span className="text-text-disabled shrink-0">
           {formatDuration(duration)}
         </span>
+        <CaretDownIcon
+          size={10}
+          className={`transition-transform shrink-0 ${open ? "" : "-rotate-90"}`}
+        />
       </button>
       {open && (
-        <div className="ml-5 mt-1 mb-1.5 text-xs text-text-muted">
+        <div className="mt-1 mb-1.5 text-[13px] text-text-muted">
           <SimpleMarkdown content={part.text} />
         </div>
       )}

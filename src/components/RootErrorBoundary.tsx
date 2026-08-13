@@ -57,15 +57,27 @@ export class RootErrorBoundary extends Component<Props, State> {
         }}
       >
         <p style={{ margin: 0, fontSize: "14px" }}>Something went wrong.</p>
+        {/* Mirrors the editor's default <Button> (ui/button.tsx: h-7, px-2,
+            text-xs/relaxed, rounded-md, border-border, bg-primary) — spelled
+            out as inline styles because this file must stay free of the UI kit
+            and of Tailwind classes that this route's bundle may not generate. */}
         <button
           type="button"
           onClick={() => location.reload()}
           style={{
-            padding: "8px 16px",
-            fontSize: "14px",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            height: "28px",
+            padding: "0 8px",
+            fontSize: "12px",
+            lineHeight: "1.625",
+            fontWeight: 500,
+            fontFamily: "inherit",
             borderRadius: "6px",
-            border: "1px solid #d0d0d0",
+            border: "1px solid oklch(0.922 0 0)",
             background: "#fff",
+            color: "#1a1a1a",
             cursor: "pointer",
           }}
         >

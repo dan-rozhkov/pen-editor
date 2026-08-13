@@ -20,7 +20,6 @@ import { usePageStore } from "@/store/pageStore";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import { useChatStore } from "@/store/chatStore";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import { useMcpBridgeStore } from "@/store/mcpBridgeStore";
 
 function PagesPanelSection() {
   const hasPages = usePageStore((s) => s.pages.length > 0);
@@ -38,7 +37,6 @@ export function LeftSidebar() {
   const fileName = useDocumentStore((s) => s.fileName);
   const setFileName = useDocumentStore((s) => s.setFileName);
   const isOnline = useOnlineStatus();
-  const mcpStatus = useMcpBridgeStore((s) => s.status);
 
   const displayName = fileName ? fileName.replace(/\.[^.]+$/, "") : "Untitled";
   const extension = fileName?.match(/\.[^.]+$/)?.[0] ?? "";
@@ -89,29 +87,6 @@ export function LeftSidebar() {
             >
               <CloudSlash size={14} />
             </span>
-          )}
-          {mcpStatus !== "off" && (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <span
-                    role="img"
-                    aria-label={mcpStatus === "connected" ? "MCP connected" : "MCP connecting"}
-                    className="shrink-0 flex items-center"
-                  >
-                    <span
-                      className={
-                        "h-1.5 w-1.5 rounded-full " +
-                        (mcpStatus === "connected" ? "bg-green-500" : "bg-yellow-500")
-                      }
-                    />
-                  </span>
-                }
-              />
-              <TooltipContent side="bottom">
-                {mcpStatus === "connected" ? "MCP connected" : "MCP connecting…"}
-              </TooltipContent>
-            </Tooltip>
           )}
         </div>
       )}

@@ -3,6 +3,7 @@ import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { Toolbar } from "../Toolbar";
 import { useUIThemeStore } from "@/store/uiThemeStore";
 import { usePixelGridStore } from "@/store/pixelGridStore";
+import { useMcpBridgeStore } from "@/store/mcpBridgeStore";
 import { resetStores } from "@/test/fixtures";
 
 /**
@@ -80,6 +81,27 @@ describe("<Toolbar />", () => {
     expect(byLabel("Light theme").getAttribute("aria-checked")).toBe("true");
     expect(byLabel("Dark theme").getAttribute("aria-checked")).toBe("false");
     expect(byLabel("Pixel grid").getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("shows the MCP bridge status in File -> Settings", () => {
+    useMcpBridgeStore.setState({ status: "connected" });
+    render(<Toolbar />);
+    openSettings();
+    expect(screen.getByText("MCP connected")).toBeTruthy();
+  });
+
+  it("reports a connecting bridge in File -> Settings", () => {
+    useMcpBridgeStore.setState({ status: "connecting" });
+    render(<Toolbar />);
+    openSettings();
+    expect(screen.getByText("MCP connecting\u2026")).toBeTruthy();
+  });
+
+  it("still shows a row when no bridge is configured", () => {
+    useMcpBridgeStore.setState({ status: "off" });
+    render(<Toolbar />);
+    openSettings();
+    expect(screen.getByText("MCP disconnected")).toBeTruthy();
   });
 
   it("switches the UI theme to dark when the Dark theme item is clicked", () => {

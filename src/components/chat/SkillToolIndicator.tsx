@@ -26,7 +26,7 @@ interface SkillToolIndicatorProps {
 // see why the write didn't happen.
 export function SkillToolIndicator({ kind, name }: SkillToolIndicatorProps) {
   return (
-    <div className="my-2 px-2 py-1 rounded bg-secondary/60 flex items-center gap-1.5 text-xs text-text-muted">
+    <div className="my-0.5 py-0.5 flex items-center gap-1.5 text-[13px] leading-relaxed text-text-muted">
       <BookOpenIcon size={14} />
       <span>{KIND_TEXT[kind](name)}</span>
     </div>

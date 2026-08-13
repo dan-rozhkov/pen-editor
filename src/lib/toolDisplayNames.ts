@@ -1,9 +1,11 @@
-const toolDisplayNames: Record<string, string> = {
+export const toolDisplayNames: Record<string, string> = {
   get_editor_state: "Get Editor State",
   batch_get: "Read Nodes",
   snapshot_layout: "Snapshot Layout",
   get_screenshot: "Get Screenshot",
   get_variables: "Get Variables",
+  get_text_styles: "Get Text Styles",
+  set_text_styles: "Set Text Styles",
   batch_design: "Design",
   set_variables: "Set Variables",
   replace_all_matching_properties: "Replace Properties",

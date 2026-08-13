@@ -170,9 +170,11 @@ locking: it awaits `initDesktopMcpBridge()` settling before even importing
 bridge already registered — the desktop bridge always wins.
 
 Both bridges drive the same `src/store/mcpBridgeStore.ts`
-(`off | connecting | connected`), shown as a small dot next to the file name
-in `LeftSidebar.tsx` (beside the offline cloud indicator) — no UI change was
-needed to support the desktop path.
+(`off | connecting | connected`), shown as a coloured dot plus label in the
+**File → Settings** submenu (`Toolbar.tsx`) — no UI change was needed to
+support the desktop path. It is a plain `<div>`, not `DropdownMenuLabel`:
+Base UI's label part throws unless wrapped in a `Menu.Group`, which crashes
+the whole menu.
 
 ### The agent's self-improvement, seen from the frontend
 
