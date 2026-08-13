@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.75.1] - 2026-08-13
+
+### Changed
+- **A running tool call now shimmers its label instead of spinning an icon**, and the reasoning chip shimmers "Thinking..." while it streams — a bright band sweeping the glyphs reads as "in progress" without a second moving element next to the text. It is a port of AI SDK Elements' Shimmer written as a plain CSS keyframe rather than a `motion/react` dependency, with highlight and base bound to the project's text tokens so the sweep stays brighter than the label in both themes, and `prefers-reduced-motion` switches it off.
+
 ## [0.75.0] - 2026-08-12
 
 The frontend half of the backend's self-improvement loop (backend v0.38.0). The
