@@ -9,11 +9,11 @@ import {
 } from "@testing-library/react";
 import { Toaster } from "@/components/ui/sonner";
 import { PwaUpdateToast } from "@/components/pwa/PwaUpdateToast";
-import { getUpdateSW } from "@/pwa/registerServiceWorker";
+import { applyUpdateAndReload } from "@/pwa/updateSelfHeal";
 import { usePwaStore } from "@/store/pwaStore";
 
-vi.mock("@/pwa/registerServiceWorker", () => ({
-  getUpdateSW: vi.fn(),
+vi.mock("@/pwa/updateSelfHeal", () => ({
+  applyUpdateAndReload: vi.fn().mockResolvedValue(undefined),
 }));
 
 // PwaUpdateToast is headless — it fires a sonner toast into the portal that a
@@ -65,8 +65,6 @@ describe("PwaUpdateToast", () => {
   });
 
   it("reloads immediately on the first Update click — no confirm step", async () => {
-    const updateSW = vi.fn();
-    vi.mocked(getUpdateSW).mockReturnValue(updateSW);
     usePwaStore.setState({ updateReady: true });
 
     renderToast();
@@ -75,7 +73,10 @@ describe("PwaUpdateToast", () => {
     fireEvent.click(screen.getByRole("button", { name: /update/i }));
 
     // A single click applies the update — there is no "unsaved work" confirm.
-    expect(updateSW).toHaveBeenCalledWith(true);
+    // applyUpdateAndReload, not a bare skipWaiting message: the worker
+    // activates itself now, so a message-only click would leave the page on
+    // the old assets with nothing left to skip.
+    expect(applyUpdateAndReload).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(/unsaved work/i)).toBeNull();
   });
 
@@ -111,8 +112,6 @@ describe("PwaUpdateToast", () => {
   });
 
   it("dismissing clears updateReady without applying the update", async () => {
-    const updateSW = vi.fn();
-    vi.mocked(getUpdateSW).mockReturnValue(updateSW);
     usePwaStore.setState({ updateReady: true });
 
     renderToast();
@@ -123,7 +122,7 @@ describe("PwaUpdateToast", () => {
     await waitFor(() =>
       expect(usePwaStore.getState().updateReady).toBe(false),
     );
-    expect(updateSW).not.toHaveBeenCalled();
+    expect(applyUpdateAndReload).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(screen.queryByTestId("pwa-update-toast")).toBeNull(),
     );

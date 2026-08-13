@@ -37,6 +37,74 @@ describe("registerServiceWorker", () => {
     vi.resetModules();
   });
 
+  // The iOS fix, seen from the page: the worker activates itself now, so the
+  // only signal a stuck client gets is `controllerchange`. Nothing else in
+  // this file fires on that path — if these break, an update installs and the
+  // user is never told, which is the bug this whole thing exists to prevent.
+  function stubServiceWorkerContainer({ controlled }: { controlled: boolean }) {
+    const listeners: Record<string, Array<() => void>> = {};
+    const container = {
+      controller: controlled ? {} : null,
+      addEventListener: (event: string, handler: () => void) => {
+        (listeners[event] ??= []).push(handler);
+      },
+    };
+    vi.stubGlobal("navigator", { serviceWorker: container });
+    return {
+      container,
+      fireControllerChange: () => listeners.controllerchange?.forEach((h) => h()),
+    };
+  }
+
+  it("flips updateReady when a new worker takes control of the editor route", async () => {
+    const { fireControllerChange } = stubServiceWorkerContainer({ controlled: true });
+    setUrl("http://localhost/app");
+    const { registerSW, usePwaStore, registerServiceWorker } = await freshModules();
+    registerSW.mockReturnValue(vi.fn());
+    const reload = vi.fn();
+    vi.stubGlobal("location", { pathname: "/app", reload });
+
+    registerServiceWorker();
+    fireControllerChange();
+
+    expect(usePwaStore.getState().updateReady).toBe(true);
+    // Never reload the editor on our own — it may hold an unsaved document.
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("reloads the showcase when a new worker takes control", async () => {
+    const { fireControllerChange } = stubServiceWorkerContainer({ controlled: true });
+    setUrl("http://localhost/");
+    const { registerSW, registerServiceWorker } = await freshModules();
+    registerSW.mockReturnValue(vi.fn());
+    const reload = vi.fn();
+    vi.stubGlobal("location", { pathname: "/", reload });
+
+    registerServiceWorker();
+    fireControllerChange();
+
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(sessionStorage.getItem("pen.pwaAutoApplied")).toBe("1");
+  });
+
+  // `clientsClaim` claims an uncontrolled page on the very first install too.
+  // That is a first visit, not an update: prompting there would show "a new
+  // version is available" to someone who just arrived.
+  it("ignores the first-install claim on a page that loaded uncontrolled", async () => {
+    const { fireControllerChange } = stubServiceWorkerContainer({ controlled: false });
+    setUrl("http://localhost/");
+    const { registerSW, usePwaStore, registerServiceWorker } = await freshModules();
+    registerSW.mockReturnValue(vi.fn());
+    const reload = vi.fn();
+    vi.stubGlobal("location", { pathname: "/", reload });
+
+    registerServiceWorker();
+    fireControllerChange();
+
+    expect(usePwaStore.getState().updateReady).toBe(false);
+    expect(reload).not.toHaveBeenCalled();
+  });
+
   it("does not register when the browser has no serviceWorker support", async () => {
     vi.stubGlobal("navigator", {});
     const { registerSW, registerServiceWorker } = await freshModules();
@@ -47,7 +115,7 @@ describe("registerServiceWorker", () => {
   });
 
   it("registers the service worker and updates pwaStore on refresh/offline-ready callbacks", async () => {
-    vi.stubGlobal("navigator", { serviceWorker: {} });
+    stubServiceWorkerContainer({ controlled: true });
     setUrl("http://localhost/app");
     const { registerSW, usePwaStore, registerServiceWorker, getUpdateSW } = await freshModules();
     const updateSWFn = vi.fn();
@@ -79,7 +147,7 @@ describe("registerServiceWorker", () => {
   // This is the fix: on the editor route, onNeedRefresh only surfaces the
   // prompt — it must never reload out from under an unsaved document.
   it("does not auto-apply the update on the editor route", async () => {
-    vi.stubGlobal("navigator", { serviceWorker: {} });
+    stubServiceWorkerContainer({ controlled: true });
     setUrl("http://localhost/app");
     const { registerSW, registerServiceWorker } = await freshModules();
     const updateSWFn = vi.fn();
@@ -96,7 +164,7 @@ describe("registerServiceWorker", () => {
   // itself, right from this callback — no React component needs to mount for
   // this to happen (the whole point: a crashed render tree must not block it).
   it("auto-applies the update on the showcase route", async () => {
-    vi.stubGlobal("navigator", { serviceWorker: {} });
+    stubServiceWorkerContainer({ controlled: true });
     setUrl("http://localhost/");
     const { registerSW, registerServiceWorker } = await freshModules();
     const updateSWFn = vi.fn();
@@ -115,7 +183,7 @@ describe("registerServiceWorker", () => {
   // leave it to the toast fallback instead of reloading forever.
   it("does not auto-apply again on the showcase route once already tried this session", async () => {
     sessionStorage.setItem("pen.pwaAutoApplied", "1");
-    vi.stubGlobal("navigator", { serviceWorker: {} });
+    stubServiceWorkerContainer({ controlled: true });
     setUrl("http://localhost/");
     // autoApplyAlreadyTried is captured once at module import, from the
     // sessionStorage flag set above — freshModules() re-imports after that.

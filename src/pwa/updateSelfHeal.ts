@@ -121,6 +121,43 @@ export function applyUpdateNow(): void {
   }, 5000);
 }
 
+// Reloads into a build that is already installed and controlling. This is
+// the counterpart of applyUpdateNow for the self-activating worker
+// (workbox skipWaiting/clientsClaim, see vite.config.ts): by the time the
+// page hears about such an update there is nothing left to activate — the
+// new worker already controls this client — so the only remaining step is a
+// navigation. The session flag is written for the same reason applyUpdateNow
+// writes it: if the reload lands on a page that *still* reports an update,
+// the next load won't reload again and will show the prompt instead.
+export function reloadForUpdate(): void {
+  writeSessionFlag(AUTO_APPLY_KEY);
+  window.location.reload();
+}
+
+// What the update prompt's button does. A waiting worker (a client still
+// running a pre-skipWaiting build, or a browser that ignored skipWaiting)
+// has to be told to activate first, and vite-plugin-pwa reloads for us once
+// it takes control — the timer is only there in case that never lands.
+// Otherwise the new worker is already in charge and a plain reload is the
+// whole update.
+export async function applyUpdateAndReload(): Promise<void> {
+  let waiting = false;
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    waiting = reg?.waiting != null;
+  } catch {
+    // Treat an unreadable registration as "nothing waiting": a reload is
+    // both the safe fallback and the common case.
+  }
+  if (waiting) {
+    writeSessionFlag(AUTO_APPLY_KEY);
+    void getUpdateSW()?.(true);
+    setTimeout(() => window.location.reload(), 3000);
+    return;
+  }
+  reloadForUpdate();
+}
+
 // Last-resort safety net for a fatal render crash (see the module comment).
 // Fire-and-forget by design: callers (RootErrorBoundary, a top-level `error`
 // listener) are themselves reacting to a broken tree and must not be made to

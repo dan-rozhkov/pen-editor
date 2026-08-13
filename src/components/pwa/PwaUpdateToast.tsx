@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { XIcon } from "@phosphor-icons/react";
-import { getUpdateSW } from "@/pwa/registerServiceWorker";
+import { applyUpdateAndReload } from "@/pwa/updateSelfHeal";
 import { usePwaStore } from "@/store/pwaStore";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
@@ -20,7 +20,11 @@ import { IconButton } from "@/components/ui/IconButton";
 // `toastSuppressed` instead of by unmounting.
 //
 // The toast shows a single "Update" button that reloads immediately on the
-// first click via getUpdateSW()?.(true) — no confirm step. Its dismiss (X)
+// first click via applyUpdateAndReload() — no confirm step. It reloads rather
+// than only messaging the worker because the worker now activates itself
+// (vite.config.ts's skipWaiting/clientsClaim): by the time this toast is up
+// there is usually nothing left in `waiting` to skip, and the old
+// message-only path would have left the button doing nothing at all. Its dismiss (X)
 // button clears updateReady so the toast doesn't reappear this session; the
 // waiting worker still activates on the next natural page load, nothing about
 // the update itself is cancelled. (Custom sonner toasts don't render sonner's
@@ -52,7 +56,7 @@ export function PwaUpdateToast() {
             <span>A new version is available.</span>
             <Button
               size="sm"
-              onClick={() => getUpdateSW()?.(true)}
+              onClick={() => void applyUpdateAndReload()}
               className="bg-accent-primary text-white hover:bg-accent-primary/90"
             >
               Update

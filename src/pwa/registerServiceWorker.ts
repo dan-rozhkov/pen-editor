@@ -5,13 +5,43 @@ import {
   autoApplyAlreadyTried,
   getUpdateSW,
   isEditorPath,
+  reloadForUpdate,
   setUpdateSW,
 } from "@/pwa/updateSelfHeal";
+
+// The service worker activates itself now (workbox skipWaiting/clientsClaim,
+// see vite.config.ts), so `onNeedRefresh` — which fires off the *waiting*
+// state — is no longer the signal that a new build arrived. `controllerchange`
+// is: the freshly activated worker claims this client while the page keeps
+// running the assets it loaded from the old one. Everything the page still
+// lazy-imports from here on is resolved against the new precache, so this is
+// exactly the moment to say "reload to finish updating".
+//
+// `clientsClaim` also fires this event on a *first* install, when the page
+// loaded uncontrolled and the very first worker takes over. That is not an
+// update and must not prompt (or, on the showcase, reload) — hence the
+// `wasControlled` snapshot, taken before any of it happens.
+function watchForActivatedUpdate() {
+  const wasControlled = navigator.serviceWorker.controller != null;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!wasControlled) return;
+    usePwaStore.getState().setUpdateReady(true);
+    // Same split as onNeedRefresh below: the showcase has nothing at stake
+    // and applies the update itself; the editor may hold an unsaved document
+    // and only gets the prompt. autoApplyAlreadyTried keeps a reload that
+    // doesn't take from looping.
+    if (!isEditorPath(window.location.pathname) && !autoApplyAlreadyTried) {
+      reloadForUpdate();
+    }
+  });
+}
 
 export function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) {
     return;
   }
+
+  watchForActivatedUpdate();
 
   setUpdateSW(
     registerSW({

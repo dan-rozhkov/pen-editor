@@ -59,6 +59,14 @@ export async function checkForUpdate(): Promise<CheckForUpdateResult> {
       if (installing.state === "redundant" && !reg.waiting) {
         return "error";
       }
+      // A worker installed successfully — that *is* a newer version, whether
+      // or not it parks in `waiting`. Since the service worker now activates
+      // itself (workbox skipWaiting/clientsClaim, see vite.config.ts), the
+      // usual outcome here is "activating"/"activated" with `reg.waiting`
+      // permanently null, and the pre-skipWaiting version of this check
+      // reported that as "up-to-date" — the opposite of what happened.
+      usePwaStore.getState().setUpdateReady(true);
+      return "update-found";
     }
 
     if (reg.waiting || usePwaStore.getState().updateReady) {

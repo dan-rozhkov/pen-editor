@@ -141,7 +141,12 @@ describe("checkForUpdate", () => {
       },
     });
 
-    await expect(checkForUpdate()).resolves.toBe("up-to-date");
+    // The self-activating worker (skipWaiting) never parks in `waiting`, so
+    // "installed successfully, nothing waiting" is the *normal* shape of a
+    // found update — reporting "you're on the latest version" here is what
+    // made a manual check useless on a stuck client.
+    await expect(checkForUpdate()).resolves.toBe("update-found");
+    expect(usePwaStore.getState().updateReady).toBe(true);
     expect(installingWorker.addEventListener).not.toHaveBeenCalled();
   });
 

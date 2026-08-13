@@ -99,6 +99,27 @@ export default defineConfig(({ command, mode }) => {
           ],
         },
         workbox: {
+          // The service worker activates itself instead of parking in
+          // `waiting` until a page asks it to. This is the iOS fix: in prompt
+          // mode a waiting worker only ever activates when the *current*
+          // (stale) bundle sends SKIP_WAITING, or when every client of the
+          // origin goes away. On iOS Safari a tab is practically never
+          // released — reloading keeps the same client — so if the stale
+          // bundle's own prompt never appears (an old build, a dismissed
+          // toast, a crashed render), the update waits forever and the only
+          // escape is force-quitting Safari. Whatever is wrong with a shipped
+          // client can only be fixed by a build that client can't reach, so
+          // activation must not depend on it: the *new* worker's own script
+          // is the one piece of code we can still change for an already-stuck
+          // device.
+          //
+          // `registerType` stays "prompt": the page is still never reloaded
+          // out from under an unsaved document. What changes is that the new
+          // build is installed and controlling by then, so the prompt (and
+          // any later navigation) applies it — see registerServiceWorker.ts's
+          // controllerchange handler.
+          skipWaiting: true,
+          clientsClaim: true,
           navigateFallback: `${base}index.html`,
           // Matches API navigations regardless of base: "/pen-editor/api/..."
           // under the Pages subpath, "/api/..." locally. Anchoring on "/api/"

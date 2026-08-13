@@ -245,4 +245,58 @@ describe("updateSelfHeal", () => {
       expect(reload).not.toHaveBeenCalled();
     });
   });
+  // The update prompt's button. Since the worker activates itself now
+  // (vite.config.ts's skipWaiting/clientsClaim), "apply the update" is
+  // usually just a navigation — the old message-the-worker-and-wait path
+  // only still exists for a client that predates that config.
+  describe("applyUpdateAndReload", () => {
+    it("reloads straight away when no worker is waiting", async () => {
+      const { applyUpdateAndReload } = await freshImport();
+      const reload = vi.fn();
+      vi.stubGlobal("navigator", {
+        serviceWorker: { getRegistration: vi.fn().mockResolvedValue({ waiting: null }) },
+      });
+      vi.stubGlobal("location", { reload, pathname: "/app" });
+
+      await applyUpdateAndReload();
+
+      expect(reload).toHaveBeenCalledTimes(1);
+      expect(sessionStorage.getItem("pen.pwaAutoApplied")).toBe("1");
+    });
+
+    it("messages a waiting worker first, and still reloads if that never lands", async () => {
+      vi.useFakeTimers();
+      const { applyUpdateAndReload, setUpdateSW } = await freshImport();
+      const updateSW = vi.fn().mockResolvedValue(undefined);
+      setUpdateSW(updateSW);
+      const reload = vi.fn();
+      vi.stubGlobal("navigator", {
+        serviceWorker: { getRegistration: vi.fn().mockResolvedValue({ waiting: {} }) },
+      });
+      vi.stubGlobal("location", { reload, pathname: "/app" });
+
+      await applyUpdateAndReload();
+
+      expect(updateSW).toHaveBeenCalledWith(true);
+      // vite-plugin-pwa reloads on its own once the new worker takes control;
+      // this timer is the fallback for when it doesn't.
+      expect(reload).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(3000);
+      expect(reload).toHaveBeenCalledTimes(1);
+      vi.useRealTimers();
+    });
+
+    it("reloads even when the registration can't be read", async () => {
+      const { applyUpdateAndReload } = await freshImport();
+      const reload = vi.fn();
+      vi.stubGlobal("navigator", {
+        serviceWorker: { getRegistration: vi.fn().mockRejectedValue(new Error("nope")) },
+      });
+      vi.stubGlobal("location", { reload, pathname: "/app" });
+
+      await applyUpdateAndReload();
+
+      expect(reload).toHaveBeenCalledTimes(1);
+    });
+  });
 });
