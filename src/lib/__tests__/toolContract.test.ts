@@ -46,6 +46,7 @@ const EXPECTED_CLIENT_TOOLS = [
   "list_plugins",
   "ask_user",
   "draw_vector",
+  "analyze_image",
 ];
 
 // Tools whose schema also has a backend `execute` — they run server-side, the
@@ -54,11 +55,13 @@ const BACKEND_EXECUTED_TOOLS = [
   "get_guidelines",
   "get_style_guide_tags",
   "get_style_guide",
+  "analyze_image",
 ];
 
-// get_screenshot is declared only on the frontend (the backend schema is
-// commented out), so it is the only allowed frontend-extra name.
-const FRONTEND_ONLY_TOOLS = ["get_screenshot"];
+// get_screenshot is now a real (client-executed) backend schema too — see
+// pen-editor-backend/docs/specs/2026-08-14-agent-vision-design.md — so there
+// are currently no frontend-only handlers.
+const FRONTEND_ONLY_TOOLS: string[] = [];
 
 describe("tool registry contract", () => {
   it("toolHandlers contains exactly the expected tool names", () => {
@@ -92,16 +95,22 @@ describe("MCP bridged tool contract", () => {
 });
 
 // Guard for finding 4 (desktop-mcp-bridge review): desktopMcpBridge.ts
-// advertises BACKEND_EXECUTED_TOOLS' 3 static guideline tools to the desktop
-// shell under the name STATIC_MCP_TOOL_NAMES (src/lib/mcpToolNames.ts). The
-// two lists describe overlapping-but-distinct concepts (backend-executed vs.
-// desktop-advertised-static) that happen to be identical today; nothing else
-// enforces that they stay identical if either list changes independently.
+// advertises the 3 static guideline tools to the desktop shell under the name
+// STATIC_MCP_TOOL_NAMES (src/lib/mcpToolNames.ts). The two lists describe
+// overlapping-but-distinct concepts — backend-executed vs.
+// desktop-advertised-static — that happened to be identical before
+// analyze_image (2026-08-14, agent-vision-design): analyze_image is
+// backend-executed like the guideline tools, but it is not part of the
+// desktop MCP bridge's static allow-list (it isn't in DESKTOP_MCP_TOOL_NAMES
+// at all), so the sets have diverged on purpose. What must still hold is the
+// subset direction: everything the desktop bridge advertises as "static" is
+// in fact backend-executed — a static tool that silently stopped being
+// backend-executed would break under the bridge.
 describe("static MCP tool list matches the backend-executed tool list", () => {
-  it("BACKEND_EXECUTED_TOOLS and STATIC_MCP_TOOL_NAMES name the same tools", () => {
-    expect([...BACKEND_EXECUTED_TOOLS].sort()).toEqual(
-      [...STATIC_MCP_TOOL_NAMES].sort()
-    );
+  it("every STATIC_MCP_TOOL_NAMES entry is backend-executed", () => {
+    for (const name of STATIC_MCP_TOOL_NAMES) {
+      expect(BACKEND_EXECUTED_TOOLS, name).toContain(name);
+    }
   });
 });
 
@@ -140,7 +149,7 @@ describe.runIf(backendExists)("backend penTools sync", () => {
     expect(missing).toEqual([]);
   });
 
-  it("frontend-only handlers are limited to get_screenshot", async () => {
+  it("there are no frontend-only handlers", async () => {
     const penTools = await loadPenTools();
     const frontendOnly = Object.keys(toolHandlers).filter(
       (name) => !(name in penTools)

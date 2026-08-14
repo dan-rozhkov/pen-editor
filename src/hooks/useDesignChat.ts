@@ -3,9 +3,8 @@ import { useChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithToolCalls,
-  type UIMessage,
 } from "ai";
-import { modelSupportsVision, resolveModel } from "@/lib/chatModels";
+import { resolveModel } from "@/lib/chatModels";
 import { resolveApiUrl, isOffline, OFFLINE_MESSAGE } from "@/lib/apiBase";
 import { getUserId } from "@/lib/userId";
 import { createRetryingFetch, type RetryState } from "@/lib/retryFetch";
@@ -94,33 +93,6 @@ export function buildCanvasContext(sessionId?: string): object {
   };
 }
 
-function isImagePart(part: UIMessage["parts"][number]): boolean {
-  return (
-    part.type === "file" &&
-    typeof part.mediaType === "string" &&
-    part.mediaType.startsWith("image/")
-  );
-}
-
-// Non-vision models reject requests whose history contains image parts, which
-// would otherwise make a chat permanently broken after attaching an image.
-// Replace images with a text placeholder so the model still sees that an
-// attachment existed.
-// Exported for tests.
-export function stripImageParts(messages: UIMessage[]): UIMessage[] {
-  return messages.map((message) => {
-    if (!message.parts.some(isImagePart)) {
-      return message;
-    }
-    const parts = message.parts.filter((part) => !isImagePart(part));
-    parts.push({
-      type: "text",
-      text: "[Attached image omitted: the selected model cannot read images]",
-    });
-    return { ...message, parts };
-  });
-}
-
 // Exported for tests.
 export async function executeToolCall(
   toolName: string,
@@ -179,14 +151,16 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
         fetch: createRetryingFetch({ onRetryStateChange: setRetryState }),
         body: () => buildCanvasContext(sessionId),
         prepareSendMessagesRequest: ({ id, messages, body, trigger, messageId }) => {
-          const { model } = resolveSessionConfig(sessionId);
+          // Images always ride along regardless of the selected model's
+          // vision support — the backend decides native-vs-described per
+          // model (pen-editor-backend/src/ai/vision-messages.ts) and never
+          // forwards raw image parts to a model that can't read them. See
+          // pen-editor-backend/docs/specs/2026-08-14-agent-vision-design.md.
           return {
             body: {
               ...body,
               id,
-              messages: modelSupportsVision(model)
-                ? messages
-                : stripImageParts(messages),
+              messages,
               trigger,
               messageId,
             },

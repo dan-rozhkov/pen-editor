@@ -1,8 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, waitFor, act } from "@testing-library/react";
-import type { UIMessage } from "ai";
 import {
-  stripImageParts,
   executeToolCall,
   buildCanvasContext,
   resolveChatApiUrl,
@@ -29,68 +27,53 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function textMessage(id: string, text: string): UIMessage {
-  return { id, role: "user", parts: [{ type: "text", text }] };
-}
+// Regression: images must survive to the request body unchanged — the
+// backend now decides native-vs-described per model
+// (pen-editor-backend/src/ai/vision-messages.ts), so the frontend must never
+// strip or rewrite image parts before sending.
+describe("image parts in the outgoing request", () => {
+  it("sends messages with file/image parts unmodified", async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push(JSON.parse(String(init?.body)));
+      const body =
+        [{ type: "start" }, { type: "start-step" }, { type: "finish-step" }, { type: "finish" }]
+          .map((c) => `data: ${JSON.stringify(c)}\n\n`)
+          .join("") + "data: [DONE]\n\n";
+      return new Response(body, {
+        status: 200,
+        headers: {
+          "content-type": "text/event-stream",
+          "x-vercel-ai-ui-message-stream": "v1",
+        },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
 
-describe("stripImageParts", () => {
-  it("returns messages without image parts by reference (no copy)", () => {
-    const messages = [
-      textMessage("m1", "hello"),
-      {
-        id: "m2",
-        role: "user",
-        parts: [
-          { type: "file", mediaType: "application/pdf", url: "data:application/pdf;base64,AA" },
-          { type: "text", text: "see attachment" },
-        ],
-      } as UIMessage,
-    ];
+    const sessionId = `image-session-${Date.now()}`;
+    const { result } = renderHook(() => useDesignChat({ sessionId }));
 
-    const result = stripImageParts(messages);
-    expect(result[0]).toBe(messages[0]);
-    // non-image file parts are not images — message untouched
-    expect(result[1]).toBe(messages[1]);
-    expect(result[1].parts).toHaveLength(2);
-  });
+    await act(async () => {
+      result.current.submitLaunchPayload({
+        text: "look at this",
+        images: [{ dataUrl: "data:image/png;base64,AAAA", name: "shot.png" }],
+      });
+    });
 
-  it("replaces image file parts with a text placeholder", () => {
-    const withImage: UIMessage = {
-      id: "m1",
-      role: "user",
-      parts: [
-        { type: "file", mediaType: "image/png", url: "data:image/png;base64,AA" },
-        { type: "text", text: "look at this" },
-      ],
-    };
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
-    const [result] = stripImageParts([withImage]);
-    expect(result).not.toBe(withImage);
-    expect(result.parts.some((p) => p.type === "file")).toBe(false);
-    expect(result.parts).toEqual([
-      { type: "text", text: "look at this" },
-      {
-        type: "text",
-        text: "[Attached image omitted: the selected model cannot read images]",
-      },
-    ]);
-    // original message is not mutated
-    expect(withImage.parts).toHaveLength(2);
-    expect(withImage.parts[0].type).toBe("file");
-  });
-
-  it("strips multiple image parts from one message", () => {
-    const msg: UIMessage = {
-      id: "m1",
-      role: "user",
-      parts: [
-        { type: "file", mediaType: "image/png", url: "u1" },
-        { type: "file", mediaType: "image/jpeg", url: "u2" },
-      ],
-    };
-    const [result] = stripImageParts([msg]);
-    expect(result.parts).toHaveLength(1);
-    expect(result.parts[0].type).toBe("text");
+    const sentMessages = requests[0].messages as Array<{
+      role: string;
+      parts: Array<Record<string, unknown>>;
+    }>;
+    const userMessage = sentMessages.find((m) => m.role === "user");
+    expect(userMessage).toBeDefined();
+    const filePart = userMessage!.parts.find((p) => p.type === "file");
+    expect(filePart).toEqual({
+      type: "file",
+      mediaType: "image/png",
+      url: "data:image/png;base64,AAAA",
+    });
   });
 });
 

@@ -4,8 +4,10 @@
 // keep it roughly in sync with the backend's DEFAULT_MODELS, but the backend
 // always wins once it responds.
 //
-// `supportsVision: false` models get image parts stripped before sending (see
-// useDesignChat) and image attaching disabled in ChatInput.
+// `supportsVision` reports NATIVE vision only. Whether an image may be
+// attached at all is `canSendImages` below, which also allows a
+// non-native-vision model when the backend reports `visionFallback` (an
+// auxiliary vision model describes the image as text server-side).
 
 import { resolveApiUrl } from "@/lib/apiBase";
 
@@ -117,11 +119,18 @@ const FALLBACK_AUTO_MODEL = "deepseek/deepseek-v4-flash-0731";
 interface ModelsResponse {
   models: { id: string; label: string; supportsVision: boolean }[];
   default: string;
+  visionFallback: boolean;
 }
 
 let currentModels: ChatModelOption[] = [AUTO_OPTION, ...FALLBACK_MODELS];
 // The concrete model that "Auto" resolves to — the backend's reported default.
 let autoTargetModel: string = FALLBACK_AUTO_MODEL;
+// Whether the backend has an auxiliary vision model configured, so it can
+// accept images for ANY model (not just ones with native vision) by
+// describing them as text server-side. Default false — conservative until
+// the backend confirms it, since we can't promise a capability we haven't
+// verified.
+let visionFallback = false;
 const listeners = new Set<() => void>();
 
 function notify() {
@@ -153,6 +162,16 @@ export function modelSupportsVision(model: string): boolean {
   );
 }
 
+// Whether the app may let the user attach an image for this model at all.
+// True if the model has native vision, OR if the backend has an auxiliary
+// vision model configured (visionFallback) — in that case the image is
+// still sent, but the backend converts it to a text description before it
+// reaches a non-vision model, so fine visual detail (exact colors, small
+// text, precise layout) is lost even though the image itself is "read".
+export function canSendImages(model: string): boolean {
+  return modelSupportsVision(model) || visionFallback;
+}
+
 // Subscription surface for React (useSyncExternalStore) so dropdowns re-render
 // when the backend list lands.
 export function subscribeModels(listener: () => void): () => void {
@@ -181,6 +200,7 @@ export function loadModels(): Promise<void> {
         })),
       ];
       if (data.default) autoTargetModel = data.default;
+      visionFallback = data.visionFallback ?? false;
       notify();
     } catch {
       // Network/parse error — keep the hardcoded fallback.

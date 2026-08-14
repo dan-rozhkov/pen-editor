@@ -4,6 +4,7 @@ import { useLayoutStore } from "@/store/layoutStore";
 import { findPixiChild } from "@/utils/pixiUtils";
 import { captureEmbedScreenshot } from "@/lib/embedScreenshot";
 import { getNodeEffectiveSize } from "@/utils/nodeUtils";
+import { downscaleImageDataUrl } from "@/lib/tools/screenshotDownscale";
 import type { EmbedNode } from "@/types/scene";
 
 /**
@@ -13,8 +14,11 @@ import type { EmbedNode } from "@/types/scene";
  * a null as "no preview/context for this node".
  *
  * Shares the same extraction path as the `get_screenshot` tool
- * (`src/lib/tools/getScreenshot.ts`); this variant is for UI context (selection
- * previews attached to chat messages) rather than tool replies.
+ * (`src/lib/tools/getScreenshot.ts`), including the downscale
+ * (`screenshotDownscale.ts`) — a selected top-level frame at DPR 2 can
+ * extract to several thousand pixels on a side, whose PNG data URL can
+ * exceed the backend's data-URL size cap; this variant is for UI context
+ * (selection previews attached to chat messages) rather than tool replies.
  */
 export async function captureNodeScreenshot(
   nodeId: string,
@@ -41,7 +45,8 @@ export async function captureNodeScreenshot(
     const embedNode: EmbedNode = effectiveSize
       ? { ...(node as EmbedNode), width: effectiveSize.width, height: effectiveSize.height }
       : (node as EmbedNode);
-    return captureEmbedScreenshot(embedNode, undefined, nodeId);
+    const imageData = await captureEmbedScreenshot(embedNode, undefined, nodeId);
+    return imageData ? await downscaleImageDataUrl(imageData) : null;
   }
 
   const { pixiRefs } = useCanvasRefStore.getState();
@@ -54,7 +59,8 @@ export async function captureNodeScreenshot(
     const raw = await pixiRefs.app.renderer.extract.base64(target);
     // extract.base64 may or may not include the data URI prefix depending on
     // the PixiJS version — normalize either way (mirrors useComponentThumbnails).
-    return raw.startsWith("data:") ? raw : `data:image/png;base64,${raw}`;
+    const dataUrl = raw.startsWith("data:") ? raw : `data:image/png;base64,${raw}`;
+    return await downscaleImageDataUrl(dataUrl);
   } catch {
     return null;
   }

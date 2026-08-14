@@ -12,6 +12,32 @@ vi.mock("@/hooks/useSelectionScreenshots", () => ({
   useSelectionScreenshots: () => mockSelection,
 }));
 
+// Dropped/pasted files must be routed through the downscale helper (finding
+// B, 2026-08-14 code review) — a phone photo can exceed the backend's
+// data-URL size cap unscaled. Stub it so the test doesn't depend on a real
+// canvas/Image decode (happy-dom has neither) and can assert it was called.
+const downscaleImageDataUrl = vi.fn(async (dataUrl: string, _maxSide?: number) => `${dataUrl}-downscaled`);
+vi.mock("@/lib/tools/screenshotDownscale", () => ({
+  downscaleImageDataUrl: (dataUrl: string, maxSide?: number) =>
+    downscaleImageDataUrl(dataUrl, maxSide),
+}));
+
+// "fallback-only/model" stands in for a model with no native vision but
+// covered by the backend's auxiliary vision fallback (visionFallback: true) —
+// the real fallback model list has no such combination to test against, so a
+// synthetic id is patched onto the real functions for everything else.
+const FALLBACK_ONLY_MODEL = "fallback-only/model";
+vi.mock("@/lib/chatModels", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/chatModels")>();
+  return {
+    ...actual,
+    modelSupportsVision: (model: string) =>
+      model === FALLBACK_ONLY_MODEL ? false : actual.modelSupportsVision(model),
+    canSendImages: (model: string) =>
+      model === FALLBACK_ONLY_MODEL ? true : actual.canSendImages(model),
+  };
+});
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -26,6 +52,7 @@ beforeEach(() => {
     dismissedSelection: {},
   });
   mockSelection = [];
+  downscaleImageDataUrl.mockClear();
 });
 
 interface HarnessProps {
@@ -267,6 +294,26 @@ describe("<ChatInput />", () => {
     });
   });
 
+  it("routes a dropped/picked file through the downscale helper before attaching it", async () => {
+    const onSubmit = vi.fn();
+    render(<Harness onSubmit={onSubmit} />);
+
+    const fileInput = document.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+    const file = new File(["fake-bytes"], "photo.png", { type: "image/png" });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => expect(screen.getByAltText("photo.png")).toBeTruthy());
+    expect(downscaleImageDataUrl).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByLabelText("Send"));
+    const payload = onSubmit.mock.calls[0][0] as ChatLaunchPayload;
+    expect(payload.images?.[0].dataUrl).toBe(
+      `${downscaleImageDataUrl.mock.calls[0][0]}-downscaled`
+    );
+  });
+
   it("keeps attachments in the store when the input unmounts and remounts for the same session", async () => {
     const { unmount } = render(
       <Harness onSubmit={vi.fn()} sessionId="tab-A" />
@@ -312,6 +359,36 @@ describe("<ChatInput />", () => {
     render(<Harness onSubmit={vi.fn()} />);
     const attach = screen.getByLabelText("Attach image") as HTMLButtonElement;
     expect(attach.disabled).toBe(false);
+  });
+
+  it("allows attaching for a non-native-vision model when the backend has a vision fallback", async () => {
+    useChatStore.setState({ model: FALLBACK_ONLY_MODEL });
+    const onSubmit = vi.fn();
+    render(<Harness onSubmit={onSubmit} />);
+
+    // Attach control is enabled with copy explaining the description-only path.
+    const attach = screen.getByLabelText(
+      "Attach image (described as text for this model)"
+    ) as HTMLButtonElement;
+    expect(attach.disabled).toBe(false);
+
+    const fileInput = document.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+    const file = new File(["fake-bytes"], "ref.png", { type: "image/png" });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    await waitFor(() => expect(screen.getByAltText("ref.png")).toBeTruthy());
+
+    // Honest, non-blocking notice — attaching is allowed, not refused.
+    expect(
+      screen.getByText(/converted to a text description/)
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText("Send"));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    const payload = onSubmit.mock.calls[0][0] as ChatLaunchPayload;
+    expect(payload.images).toHaveLength(1);
+    expect(payload.images?.[0].name).toBe("ref.png");
   });
 
   describe("selected canvas elements as context", () => {

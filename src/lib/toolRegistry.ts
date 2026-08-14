@@ -18,6 +18,7 @@ import { findEmptySpace } from "./tools/findEmptySpace";
 import { renameLayers } from "./tools/renameLayers";
 import { booleanOperation } from "./tools/booleanOperation";
 import { getGuidelines, getStyleGuide, getStyleGuideTags } from "./tools/staticTools";
+import { analyzeImage } from "./tools/analyzeImage";
 import { generateImage, generateFrameImage } from "./tools/generateImage";
 import { setExportSettings } from "./tools/setExportSettings";
 import { exportLayersSvg } from "./tools/exportLayersSvg";
@@ -83,4 +84,5 @@ export const toolHandlers: Record<string, ToolHandler> = {
   list_plugins: listPlugins,
   ask_user: askUser,
   draw_vector: drawVector,
+  analyze_image: analyzeImage,
 };

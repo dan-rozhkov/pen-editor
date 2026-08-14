@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   AUTO_MODEL_VALUE,
+  canSendImages,
   getDefaultModel,
   getModelOptions,
   modelSupportsVision,
@@ -50,5 +51,56 @@ describe("chatModels Auto option", () => {
 
   it("uses the resolved model capabilities for Auto", () => {
     expect(modelSupportsVision(AUTO_MODEL_VALUE)).toBe(false);
+  });
+
+  it("canSendImages matches modelSupportsVision when no backend vision fallback has loaded", () => {
+    // Auto resolves to deepseek/deepseek-v4-flash-0731, which has no native
+    // vision in the fallback list; without a successful /api/models fetch,
+    // visionFallback stays at its conservative default (false).
+    expect(canSendImages(AUTO_MODEL_VALUE)).toBe(false);
+    expect(canSendImages("google/gemini-2.5-flash")).toBe(true);
+  });
+});
+
+describe("chatModels visionFallback", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  });
+
+  it("lets a non-vision model send images once the backend reports visionFallback: true", async () => {
+    vi.resetModules();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          models: [
+            { id: "text-only/model", label: "Text Only", supportsVision: false },
+          ],
+          default: "text-only/model",
+          visionFallback: true,
+        }),
+      })),
+    );
+
+    const fresh = await import("@/lib/chatModels");
+    await fresh.loadModels();
+
+    expect(fresh.modelSupportsVision("text-only/model")).toBe(false);
+    expect(fresh.canSendImages("text-only/model")).toBe(true);
+  });
+
+  it("keeps visionFallback false (and canSendImages gated on native vision) when the fetch fails", async () => {
+    vi.resetModules();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false })),
+    );
+
+    const fresh = await import("@/lib/chatModels");
+    await fresh.loadModels();
+
+    expect(fresh.canSendImages("deepseek/deepseek-v4-flash-0731")).toBe(false);
   });
 });

@@ -6,9 +6,19 @@ import { resetStores, seedScene } from "@/test/fixtures";
 import * as embedScreenshot from "@/lib/embedScreenshot";
 import type { EmbedNode } from "@/types/scene";
 
+// captureNodeScreenshot shares the downscale step with get_screenshot
+// (finding B, 2026-08-14 code review) — stub it so tests don't depend on a
+// real canvas/Image decode (happy-dom has neither) and can assert it runs.
+const downscaleImageDataUrl = vi.fn(async (dataUrl: string, _maxSide?: number) => `${dataUrl}-downscaled`);
+vi.mock("@/lib/tools/screenshotDownscale", () => ({
+  downscaleImageDataUrl: (dataUrl: string, maxSide?: number) =>
+    downscaleImageDataUrl(dataUrl, maxSide),
+}));
+
 beforeEach(() => {
   resetStores();
   seedScene();
+  downscaleImageDataUrl.mockClear();
 });
 
 function seedEmbedNode(): void {
@@ -44,8 +54,9 @@ describe("captureNodeScreenshot (FIR-56)", () => {
     // No PixiJS renderer registered — proves the embed path doesn't depend on it.
     const result = await captureNodeScreenshot("embed1");
 
-    expect(result).toBe("data:image/png;base64,EMBED");
+    expect(result).toBe("data:image/png;base64,EMBED-downscaled");
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({ id: "embed1" }), undefined, "embed1");
+    expect(downscaleImageDataUrl).toHaveBeenCalledWith("data:image/png;base64,EMBED", undefined);
     spy.mockRestore();
   });
 
@@ -89,7 +100,7 @@ describe("captureNodeScreenshot (FIR-56)", () => {
 
     const result = await captureNodeScreenshot("embed2");
 
-    expect(result).toBe("data:image/png;base64,EMBED");
+    expect(result).toBe("data:image/png;base64,EMBED-downscaled");
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({ width: 300, height: 50 }), undefined, "embed2");
     spy.mockRestore();
   });
@@ -103,7 +114,8 @@ describe("captureNodeScreenshot (FIR-56)", () => {
     useCanvasRefStore.getState().setPixiRefs(fakeRefs);
     try {
       const result = await captureNodeScreenshot("frame1");
-      expect(result).toBe("data:image/png;base64,PIXI");
+      expect(result).toBe("data:image/png;base64,PIXI-downscaled");
+      expect(downscaleImageDataUrl).toHaveBeenCalledWith("data:image/png;base64,PIXI", undefined);
     } finally {
       useCanvasRefStore.getState().setPixiRefs(null);
     }

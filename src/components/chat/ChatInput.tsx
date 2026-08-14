@@ -13,10 +13,14 @@ import {
   NO_ATTACHED_IMAGES,
   NO_DISMISSED_SELECTION,
 } from "@/store/chatStore";
-import { modelSupportsVision } from "@/lib/chatModels";
+import {
+  useCanSendImages,
+  useModelSupportsVision,
+} from "@/hooks/useImageSupport";
 import { useSelectionScreenshots } from "@/hooks/useSelectionScreenshots";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { OFFLINE_SEND_TITLE } from "@/lib/apiBase";
+import { downscaleImageDataUrl } from "@/lib/tools/screenshotDownscale";
 import {
   Tooltip,
   TooltipTrigger,
@@ -71,7 +75,13 @@ async function processFiles(files: FileList | File[]): Promise<AttachedImage[]> 
   return Promise.all(
     Array.from(files)
       .filter((f) => f.type.startsWith("image/"))
-      .map(async (f) => ({ dataUrl: await readFileAsDataUrl(f), name: f.name }))
+      .map(async (f) => {
+        const dataUrl = await readFileAsDataUrl(f);
+        // A phone photo (or other high-res drop/paste) can exceed the
+        // backend's data-URL size cap unscaled — same fix as get_screenshot
+        // and captureNodeScreenshot (screenshotDownscale.ts).
+        return { dataUrl: await downscaleImageDataUrl(dataUrl), name: f.name };
+      })
   );
 }
 
@@ -104,7 +114,13 @@ export function ChatInput({
   const [isDragOver, setIsDragOver] = useState(false);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const model = useChatStore((s) => s.model);
-  const supportsVision = modelSupportsVision(model);
+  // Whether an image may be attached at all — native vision OR the backend's
+  // auxiliary vision fallback. `nativeVision` (native support only) is used
+  // separately to keep the UI copy honest about what happens to the image.
+  // Both go through the models subscription so they update when the backend's
+  // list and visionFallback flag land, not on the next unrelated re-render.
+  const canAttachImages = useCanSendImages(model);
+  const nativeVision = useModelSupportsVision(model);
   // Sending always needs the backend — disable the send control while offline
   // (the pre-send guard in useDesignChat is kept as defense in depth).
   const isOnline = useOnlineStatus();
@@ -166,7 +182,7 @@ export function ChatInput({
   // image limit; explicit attachments are always kept and the overflow (extra
   // selected elements) is dropped — warn so nothing disappears silently.
   const overImageLimit =
-    supportsVision &&
+    canAttachImages &&
     visibleSelection.length + attachedImages.length > MAX_IMAGES;
   const canSubmit =
     isOnline &&
@@ -177,12 +193,14 @@ export function ChatInput({
       attachedImages.length > 0 ||
       visibleSelection.length > 0);
   const canAttach =
-    supportsVision && visibleSelection.length + attachedImages.length < MAX_IMAGES;
-  const attachLabel = !supportsVision
+    canAttachImages && visibleSelection.length + attachedImages.length < MAX_IMAGES;
+  const attachLabel = !canAttachImages
     ? "Selected model can't read images"
     : visibleSelection.length + attachedImages.length >= MAX_IMAGES
       ? `Max ${MAX_IMAGES} images`
-      : "Attach image";
+      : nativeVision
+        ? "Attach image"
+        : "Attach image (described as text for this model)";
   const openFilePicker = () => fileInputRef.current?.click();
 
   // Extract slash query from input (e.g. "/aud" -> "aud", "/" -> "")
@@ -225,7 +243,7 @@ export function ChatInput({
 
   const addImages = useCallback(
     async (files: FileList | File[]) => {
-      if (!supportsVision) return;
+      if (!canAttachImages) return;
       const newImages = await processFiles(files);
       if (newImages.length > 0) {
         setAttachedImages((prev) =>
@@ -233,7 +251,7 @@ export function ChatInput({
         );
       }
     },
-    [supportsVision, setAttachedImages]
+    [canAttachImages, setAttachedImages]
   );
 
   const removeImage = useCallback(
@@ -251,12 +269,12 @@ export function ChatInput({
       // order but only fill the room left under the per-message limit, so the
       // user's own attachments are never silently displaced.
       const room = Math.max(0, MAX_IMAGES - attachedImages.length);
-      const selectionImages: AttachedImage[] = supportsVision
+      const selectionImages: AttachedImage[] = canAttachImages
         ? visibleSelection
             .slice(0, room)
             .map((s) => ({ dataUrl: s.dataUrl, name: s.name }))
         : [];
-      const images = supportsVision
+      const images = canAttachImages
         ? [...selectionImages, ...attachedImages]
         : [];
       // Deliberately not gated on `isOnline`: the send button is already
@@ -283,7 +301,7 @@ export function ChatInput({
       input,
       attachedImages,
       visibleSelection,
-      supportsVision,
+      canAttachImages,
       awaitingAnswer,
       onSubmit,
       setAttachedImages,
@@ -311,7 +329,7 @@ export function ChatInput({
 
   const handlePaste = useCallback(
     (e: React.ClipboardEvent) => {
-      if (!supportsVision) return;
+      if (!canAttachImages) return;
       const items = e.clipboardData?.items;
       if (!items) return;
       const imageFiles: File[] = [];
@@ -326,7 +344,7 @@ export function ChatInput({
         addImages(imageFiles);
       }
     },
-    [supportsVision, addImages]
+    [canAttachImages, addImages]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -422,9 +440,15 @@ export function ChatInput({
       )}
 
       {/* Image previews */}
-      {attachedImages.length > 0 && !supportsVision && (
+      {attachedImages.length > 0 && !canAttachImages && (
         <div className="mb-2 text-xs text-amber-500">
           The selected model can't read images — attachments won't be sent.
+        </div>
+      )}
+      {attachedImages.length > 0 && canAttachImages && !nativeVision && (
+        <div className="mb-2 text-xs text-text-muted">
+          This model doesn't see images directly — attachments are converted
+          to a text description before it reads them.
         </div>
       )}
       {attachedImages.length > 0 && (

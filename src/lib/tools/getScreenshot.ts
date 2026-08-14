@@ -5,6 +5,7 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { findPixiChild } from "@/utils/pixiUtils";
 import { captureEmbedScreenshot } from "@/lib/embedScreenshot";
 import { getNodeEffectiveSize } from "@/utils/nodeUtils";
+import { downscaleImageDataUrl } from "./screenshotDownscale";
 import type { EmbedNode } from "@/types/scene";
 import type { ToolHandler } from "../toolRegistry";
 
@@ -52,7 +53,7 @@ export const getScreenshot: ToolHandler = async (args) => {
       : (node as EmbedNode);
     const imageData = await captureEmbedScreenshot(embedNode, undefined, nodeId);
     if (imageData) {
-      return JSON.stringify({ imageData });
+      return JSON.stringify({ imageData: await downscaleImageDataUrl(imageData) });
     }
     return JSON.stringify({
       error: `Embed "${nodeId}" could not be rendered to an image (its HTML may be empty, or contain a cross-origin image served without CORS headers).`,
@@ -71,7 +72,7 @@ export const getScreenshot: ToolHandler = async (args) => {
         const imageData = dataUrl.startsWith("data:")
           ? dataUrl
           : `data:image/png;base64,${dataUrl}`;
-        return JSON.stringify({ imageData });
+        return JSON.stringify({ imageData: await downscaleImageDataUrl(imageData) });
       } catch (e) {
         return JSON.stringify({
           error: `PixiJS screenshot failed: ${e instanceof Error ? e.message : "unknown error"}`,
