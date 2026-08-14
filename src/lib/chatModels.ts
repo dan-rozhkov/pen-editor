@@ -105,8 +105,8 @@ const FALLBACK_MODELS: ChatModelOption[] = [
     supportsVision: true,
   },
   {
-    value: "google/gemini-3.6-flash",
-    label: "Gemini 3.6 Flash",
+    value: "google/gemini-3.7-flash",
+    label: "Gemini 3.7 Flash",
     supportsVision: true,
   },
 ];
