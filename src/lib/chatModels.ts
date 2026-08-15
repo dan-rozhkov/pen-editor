@@ -18,7 +18,7 @@ export interface ChatModelOption {
 }
 
 // Sentinel selection that resolves to whatever the backend reports as its
-// default model (currently DeepSeek V4 Flash 0731). Exposed as a synthetic "Auto"
+// default model (currently DeepSeek V4 Pro). Exposed as a synthetic "Auto"
 // option at the top of the list so the user doesn't have to track which
 // concrete model is the recommended default.
 export const AUTO_MODEL_VALUE = "auto";
@@ -61,8 +61,8 @@ const FALLBACK_MODELS: ChatModelOption[] = [
     supportsVision: true,
   },
   {
-    value: "deepseek/deepseek-v4-flash-0731",
-    label: "DeepSeek V4 Flash 0731",
+    value: "deepseek/deepseek-v4-flash",
+    label: "DeepSeek V4 Flash",
     supportsVision: false,
   },
   {
@@ -113,7 +113,11 @@ const FALLBACK_MODELS: ChatModelOption[] = [
   },
 ];
 
-const FALLBACK_AUTO_MODEL = "deepseek/deepseek-v4-flash-0731";
+// Mirrors the backend's OPENROUTER_MODEL default (pen-editor-backend
+// src/config.ts). It must be an id the backend allows: a request sent before
+// GET /api/models resolves carries this id, and an unknown one is rejected
+// with a 400. `modelContract.test.ts` pins that against the sibling checkout.
+const FALLBACK_AUTO_MODEL = "deepseek/deepseek-v4-pro";
 
 // Backend wire shape (pen-editor-backend GET /api/models).
 interface ModelsResponse {
@@ -131,6 +135,13 @@ let autoTargetModel: string = FALLBACK_AUTO_MODEL;
 // the backend confirms it, since we can't promise a capability we haven't
 // verified.
 let visionFallback = false;
+// Whether loadModels() has settled — success OR failure. Callers that can
+// choose *when* to send (the showcase handoff, which auto-sends the moment the
+// editor mounts) wait on this so they travel with the backend's own list
+// instead of the fallback above. A failed fetch still flips it: the fallback is
+// then all we will ever have, and blocking forever would be worse.
+let modelsSettled = false;
+let loadPromise: Promise<void> | null = null;
 const listeners = new Set<() => void>();
 
 function notify() {
@@ -139,6 +150,17 @@ function notify() {
 
 export function getModelOptions(): ChatModelOption[] {
   return currentModels;
+}
+
+// True while a GET /api/models call is in flight — i.e. the cached list is
+// still the hardcoded fallback but a better one is on its way. Callers that
+// auto-send (queued launch payloads) hold off while this is true rather than
+// committing to a fallback model id the backend may not allow. It is false
+// before anyone starts a load at all, so a context that never calls
+// loadModels() (tests, embedded harnesses) is never blocked. Subscribers are
+// notified via subscribeModels when it flips, including on a failed fetch.
+export function isModelListPending(): boolean {
+  return loadPromise !== null && !modelsSettled;
 }
 
 // The default selection is always "Auto"; it resolves to the backend default.
@@ -179,8 +201,6 @@ export function subscribeModels(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-let loadPromise: Promise<void> | null = null;
-
 // Fetch the model list from the backend once. Safe to call repeatedly — the
 // in-flight promise is shared. On any failure we silently keep the fallback.
 export function loadModels(): Promise<void> {
@@ -201,9 +221,14 @@ export function loadModels(): Promise<void> {
       ];
       if (data.default) autoTargetModel = data.default;
       visionFallback = data.visionFallback ?? false;
-      notify();
     } catch {
       // Network/parse error — keep the hardcoded fallback.
+    } finally {
+      // Always, on every exit path (including the early returns above and a
+      // failed fetch): waiters must be released even when all we have is the
+      // fallback, or a backend that is down would hang the showcase handoff.
+      modelsSettled = true;
+      notify();
     }
   })();
   return loadPromise;

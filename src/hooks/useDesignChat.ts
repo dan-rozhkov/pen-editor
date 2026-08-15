@@ -9,6 +9,7 @@ import { resolveApiUrl, isOffline, OFFLINE_MESSAGE } from "@/lib/apiBase";
 import { getUserId } from "@/lib/userId";
 import { createRetryingFetch, type RetryState } from "@/lib/retryFetch";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { useModelListPending } from "@/hooks/useModelOptions";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
@@ -202,6 +203,10 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   // returns (see the effect for why offline must not consume the queue).
   const isOnline = useOnlineStatus();
 
+  // Same idea for the model list: the effect below must rerun once GET
+  // /api/models has settled, since it holds queued payloads until then.
+  const modelListPending = useModelListPending();
+
   // Register/unregister abort capability for this session
   const registerAbortController = useChatStore((s) => s.registerAbortController);
   const unregisterAbortController = useChatStore((s) => s.unregisterAbortController);
@@ -392,6 +397,21 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       return;
     }
 
+    // A launch payload is sent without anyone typing — the showcase "ask the
+    // agent" handoff fires it on the editor's very first render, which is
+    // strictly before GET /api/models can resolve. Sending then would resolve
+    // the "Auto" selection against the hardcoded fallback list, and any drift
+    // between that list and the backend's allow-list comes back as a 400
+    // ("Model X is not allowed"). Nothing is lost by waiting: the payload
+    // stays queued and `modelListPending` reruns this effect, including when
+    // the fetch fails outright (the fallback is then genuinely all there is).
+    // This holds back the user-facing messageQueue below too, which is the
+    // same situation: a message nobody is sending by hand right now, that
+    // would otherwise leave with an unverified model id.
+    if (modelListPending) {
+      return;
+    }
+
     const queuedPayload = consumeLaunchPayload(sessionId);
     if (queuedPayload) {
       sendPayload(cloneLaunchPayload(queuedPayload));
@@ -441,6 +461,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     chat.status,
     chat.messages,
     isOnline,
+    modelListPending,
     awaitingAnswer,
     consumeLaunchPayload,
     peekNextMessage,

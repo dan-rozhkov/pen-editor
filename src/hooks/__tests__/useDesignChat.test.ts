@@ -6,6 +6,7 @@ import {
   resolveChatApiUrl,
   useDesignChat,
 } from "@/hooks/useDesignChat";
+import { AUTO_MODEL_VALUE } from "@/lib/chatModels";
 import { toolHandlers } from "@/lib/toolRegistry";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useChatStore } from "@/store/chatStore";
@@ -553,6 +554,69 @@ describe("useDesignChat (hook + UI message stream)", () => {
     });
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(useChatStore.getState().launchQueue[sessionId]).toBeUndefined();
+  });
+
+  // Regression (showcase handoff): the "ask the design agent" composer on "/"
+  // navigates to the editor and queues a launch payload that is sent the
+  // instant the chat mounts — strictly before GET /api/models can answer. The
+  // send used to go out anyway, resolving "Auto" against the hardcoded
+  // fallback list; when that list drifted from the backend's
+  // (deepseek/deepseek-v4-flash-0731, an id the backend never had), every
+  // showcase prompt came back as 400 "Model ... is not allowed".
+  it("holds a queued launch payload until the backend model list has landed", async () => {
+    let resolveModels: (value: Response) => void = () => {};
+    const modelsResponse = new Promise<Response>((resolve) => {
+      resolveModels = resolve;
+    });
+
+    const chatCalls: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/api/models")) return modelsResponse;
+      chatCalls.push(JSON.parse(String(init?.body)));
+      return sseResponse([
+        { type: "start" },
+        { type: "start-step" },
+        { type: "finish-step" },
+        { type: "finish" },
+      ]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { loadModels } = await import("@/lib/chatModels");
+    void loadModels();
+
+    const sessionId = `test-session-models-${Date.now()}`;
+    // "Auto" is the selection the showcase handoff runs with, and the only one
+    // that resolves through the model list at send time.
+    useChatStore.setState({ model: AUTO_MODEL_VALUE });
+    useChatStore.getState().queueLaunchPayload(sessionId, { text: "make me an app" });
+    renderHook(() => useDesignChat({ sessionId }));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(chatCalls).toHaveLength(0);
+    expect(useChatStore.getState().launchQueue[sessionId]).toEqual({
+      text: "make me an app",
+    });
+
+    resolveModels(
+      new Response(
+        JSON.stringify({
+          models: [
+            { id: "backend/only-model", label: "Backend Only", supportsVision: false },
+          ],
+          default: "backend/only-model",
+          visionFallback: false,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+
+    await waitFor(() => expect(chatCalls).toHaveLength(1));
+    // The send now carries the backend's own default, never the fallback.
+    expect(chatCalls[0].model).toBe("backend/only-model");
     expect(useChatStore.getState().launchQueue[sessionId]).toBeUndefined();
   });
 

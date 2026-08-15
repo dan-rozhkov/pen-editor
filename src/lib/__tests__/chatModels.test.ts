@@ -27,7 +27,7 @@ describe("chatModels Auto option", () => {
       "minimax/minimax-m3",
       "xiaomi/mimo-v2.5-pro",
       "xiaomi/mimo-v2.5",
-      "deepseek/deepseek-v4-flash-0731",
+      "deepseek/deepseek-v4-flash",
       "deepseek/deepseek-v4-pro",
       "tencent/hy3",
       "nvidia/nemotron-3-ultra-550b-a55b",
@@ -41,8 +41,8 @@ describe("chatModels Auto option", () => {
     ]);
   });
 
-  it("resolves Auto to the backend default (DeepSeek V4 Flash 0731 by default)", () => {
-    expect(resolveModel(AUTO_MODEL_VALUE)).toBe("deepseek/deepseek-v4-flash-0731");
+  it("resolves Auto to the backend default (DeepSeek V4 Pro by default)", () => {
+    expect(resolveModel(AUTO_MODEL_VALUE)).toBe("deepseek/deepseek-v4-pro");
   });
 
   it("passes concrete model ids through unchanged", () => {
@@ -54,7 +54,7 @@ describe("chatModels Auto option", () => {
   });
 
   it("canSendImages matches modelSupportsVision when no backend vision fallback has loaded", () => {
-    // Auto resolves to deepseek/deepseek-v4-flash-0731, which has no native
+    // Auto resolves to deepseek/deepseek-v4-pro, which has no native
     // vision in the fallback list; without a successful /api/models fetch,
     // visionFallback stays at its conservative default (false).
     expect(canSendImages(AUTO_MODEL_VALUE)).toBe(false);
@@ -101,6 +101,6 @@ describe("chatModels visionFallback", () => {
     const fresh = await import("@/lib/chatModels");
     await fresh.loadModels();
 
-    expect(fresh.canSendImages("deepseek/deepseek-v4-flash-0731")).toBe(false);
+    expect(fresh.canSendImages("deepseek/deepseek-v4-flash")).toBe(false);
   });
 });

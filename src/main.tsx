@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 
 import { RootErrorBoundary } from '@/components/RootErrorBoundary'
 import { startBridges } from '@/lib/bridgeBootstrap'
+import { loadModels } from '@/lib/chatModels'
 import { applyStoredUITheme } from '@/lib/uiTheme'
 import { registerServiceWorker } from '@/pwa/registerServiceWorker'
 import { recoverFromFatalError } from '@/pwa/updateSelfHeal'
@@ -46,6 +47,16 @@ if (import.meta.env.PROD) {
 // See bridgeBootstrap.ts for the desktop/websocket MCP bridge startup
 // ordering and its failure-falls-back-not-silently-disables contract.
 startBridges()
+
+// Start fetching the chat model list here, before the first render, rather
+// than only from App's effect. A chat session's queued-payload effect holds
+// its send while this request is in flight (see useDesignChat), and effects
+// run child-first — App's own effect fires *after* the chat panel's, so a
+// showcase handoff (which auto-sends on mount) would already be gone before
+// the load ever started. App still calls loadModels() for its
+// `.then(reconcileModels)`; the promise is shared, so this is not a second
+// request.
+void loadModels()
 
 // Dev-only: expose internals for E2E testing
 if (import.meta.env.DEV) {
