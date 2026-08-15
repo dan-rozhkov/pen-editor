@@ -214,6 +214,38 @@ appear in a turn and the activity endpoint returns nothing.
 
 The editor reads/writes `.pen` files. These are accessed exclusively through the Pencil MCP tools — never read `.pen` files directly with file I/O.
 
+### Analytics
+
+Product analytics (PostHog) lives in `src/lib/analytics/` — `events.ts` (the
+`AnalyticsEventMap` typed catalog, one entry per event, showcase events
+included for the other agent instrumenting `src/components/showcase/**`),
+`index.ts` (public API: `initAnalytics()`, `track()`, `isAnalyticsEnabled()`,
+`capturePageview()`, `__resetAnalyticsForTests()`), `buckets.ts`
+(`bucketLength()`), `sessionTiming.ts` (the `first_prompt_sent` timer), and
+`RouteTracker.tsx` (mounted in `AppRouter.tsx`, fires `$pageview` on
+pathname change).
+
+- **No-op without a key.** `VITE_POSTHOG_KEY` unset (dev/test by default) ⇒
+  `track()` never touches the network and posthog-js is never imported.
+  `initAnalytics()` is called once, PROD-only, from `main.tsx`.
+- **Lazy-loaded.** `initAnalytics()` dynamically `import()`s posthog-js so
+  it's code-split out of the main bundle; events fired before that import
+  resolves are buffered (capped, oldest dropped) and flushed in order.
+- **NO PII EVER.** Event properties are enums, booleans, counts, or bucketed
+  numbers only (`bucketLength()`) — never prompt text, document content,
+  file names, node text, URLs of user assets, or any other user-typed
+  string. `track()` swallows all errors; a broken analytics call must never
+  break a user action.
+- Distinct id is the same anonymous id as `src/lib/userId.ts` (`pen.userId`,
+  also used for backend agent memory), passed via posthog-js's `bootstrap`
+  option so the frontend and backend agree on one identity — without
+  upgrading it to an "identified" (billed) profile (`person_profiles:
+  "identified_only"`, autocapture/pageview/session-recording all off;
+  explicit events only).
+- **New events must be added to `AnalyticsEventMap` in `events.ts` first** —
+  `track()` is typed against it, so an untyped event name is a compile
+  error.
+
 ## Code Style
 
 ### Naming

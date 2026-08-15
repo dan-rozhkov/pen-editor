@@ -1,4 +1,4 @@
-import { getCommands } from "@/lib/commands/registry";
+import { getCommands, runCommand } from "@/lib/commands/registry";
 import { useDocumentStore } from "@/store/documentStore";
 
 /**
@@ -52,7 +52,7 @@ export function initDesktopBridge(): () => void {
   const unsubscribeMenu = api.onMenuCommand((commandId) => {
     const command = getCommands().find((c) => c.id === commandId);
     if (command) {
-      command.run();
+      runCommand(command);
     } else {
       console.warn(`[desktopBridge] unknown menu command id: ${commandId}`);
     }

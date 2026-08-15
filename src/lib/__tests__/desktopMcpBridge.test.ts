@@ -73,7 +73,7 @@ describe("initDesktopMcpBridge", () => {
 
     const result = await handler.onCall("get_variables", { foo: 1 });
 
-    expect(executeSpy).toHaveBeenCalledWith("get_variables", { foo: 1 });
+    expect(executeSpy).toHaveBeenCalledWith("get_variables", { foo: 1 }, undefined, "bridge");
     expect(result).toBe('"ok"');
   });
 

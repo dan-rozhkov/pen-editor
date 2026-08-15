@@ -6,13 +6,19 @@ import { Button } from "@/components/ui/button";
 import { ShowcaseCard, type ShowcaseCopyFeedback } from "@/components/showcase/ShowcaseCard";
 import { getShowcaseModelLabel } from "@/components/showcase/showcaseApps";
 import { accumulateWindow, getInitialWindow } from "@/components/showcase/carouselWindow";
-import type { ShowcaseApp, ShowcaseScreen } from "@/lib/showcase";
+import { track } from "@/lib/analytics";
+import type { ShowcaseApp, ShowcasePlatform, ShowcaseScreen } from "@/lib/showcase";
 import { useShowcaseLikes } from "@/lib/showcaseLikes";
 import { storeShowcaseScreensHandoff } from "@/lib/showcaseScreenHandoff";
 import { cn } from "@/lib/utils";
 import { writeTextToClipboard } from "@/utils/clipboard";
 
 const COPY_FEEDBACK_DURATION_MS = 2000;
+
+// How long the carousel must sit on a screen before it counts as "viewed" —
+// a fast swipe through several screens must not emit one event per frame of
+// scroll, only for the screen it actually settles on.
+const SCREEN_VIEW_DEBOUNCE_MS = 400;
 
 // One stride is the distance between two neighbouring snap points — the item
 // width plus the scroller's column gap — measured from the DOM rather than
@@ -37,6 +43,12 @@ interface ShowcaseAppCarouselProps {
    * guaranteed above-the-fold.
    */
   isFirstInGrid?: boolean;
+  /** This app's index within the currently loaded feed — `showcase_app_opened`'s `feed_position`. */
+  feedPosition?: number;
+  /** The request-level platform filter active when this app was fetched — analytics context only. */
+  activePlatform?: ShowcasePlatform;
+  /** The request-level category filter active when this app was fetched — analytics context only. */
+  activeCategory?: string;
 }
 
 // Mobbin's own scroller (discover/apps/ios/latest) is a plain
@@ -47,13 +59,30 @@ interface ShowcaseAppCarouselProps {
 // (centering, smooth landing). We replicate that structure exactly and only
 // add what Mobbin doesn't need: hover arrows and selector dots, because a
 // plain-mouse user has no horizontal-scroll gesture at all.
-export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppCarouselProps) {
+export function ShowcaseAppCarousel({
+  app,
+  isFirstInGrid = false,
+  feedPosition,
+  activePlatform,
+  activeCategory,
+}: ShowcaseAppCarouselProps) {
   const hasMultipleScreens = app.screens.length > 1;
   const scrollerRef = useRef<HTMLOListElement>(null);
   const itemRefs = useRef<(HTMLLIElement | null)[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [canScrollPrev, setCanScrollPrev] = useState(false);
   const [canScrollNext, setCanScrollNext] = useState(hasMultipleScreens);
+
+  // `showcase_screen_viewed` bookkeeping: debounce the scroll-derived
+  // selected index so a fast swipe through several screens settles into one
+  // event, and never re-emit for a screen the visitor has already been
+  // credited as viewing (starting with screen 0, already "viewed" on mount).
+  // A `Set` of every already-credited index, not just the last one: normal
+  // back-and-forth browsing (0 -> 1 -> 0 -> 1) must not re-emit for a screen
+  // that was already credited, and comparing only against the previous
+  // index would still fire on every direction change.
+  const screenViewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const trackedScreenIndicesRef = useRef<Set<number>>(new Set([0]));
 
   // Identifies "this app's slide set" so the accumulated window below can
   // be reset if it ever changes under an existing instance. ShowcasePage
@@ -115,6 +144,10 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
   const navigate = useNavigate();
   const handleOpenInEditor = useCallback(
     (screen: ShowcaseScreen) => {
+      // Fired unconditionally on click — this is what the visitor did,
+      // independent of whether the handoff below actually succeeds. Source
+      // is "card": the button lives in each screen's ShowcaseCard overlay.
+      track("showcase_editor_cta_clicked", { app_id: app.runId, source: "card" });
       const stored = storeShowcaseScreensHandoff({
         runId: app.runId,
         screens: app.screens.map((s) => ({ id: s.id, title: s.title })),
@@ -145,6 +178,8 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
     if (!scroller) return;
 
     let rafId: number | null = null;
+    // This effect instance's app starts on screen 0 — already "viewed".
+    trackedScreenIndicesRef.current = new Set([0]);
 
     const measure = () => {
       rafId = null;
@@ -185,6 +220,19 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
       setCanScrollNext(
         scroller.scrollLeft < scroller.scrollWidth - scroller.clientWidth - 1,
       );
+
+      // Debounce: only the screen the scroller settles on for
+      // SCREEN_VIEW_DEBOUNCE_MS gets counted, and only once per screen.
+      if (screenViewTimeoutRef.current != null) {
+        clearTimeout(screenViewTimeoutRef.current);
+      }
+      screenViewTimeoutRef.current = setTimeout(() => {
+        screenViewTimeoutRef.current = null;
+        if (!trackedScreenIndicesRef.current.has(closestIndex)) {
+          trackedScreenIndicesRef.current.add(closestIndex);
+          track("showcase_screen_viewed", { app_id: app.runId, screen_index: closestIndex });
+        }
+      }, SCREEN_VIEW_DEBOUNCE_MS);
     };
 
     const onScroll = () => {
@@ -208,8 +256,12 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
       scroller.removeEventListener("scroll", onScroll);
       resizeObserver?.disconnect();
       if (rafId != null) cancelAnimationFrame(rafId);
+      if (screenViewTimeoutRef.current != null) {
+        clearTimeout(screenViewTimeoutRef.current);
+        screenViewTimeoutRef.current = null;
+      }
     };
-  }, [app.screens.length]);
+  }, [app.screens.length, app.runId]);
 
   const getItemStride = useCallback(() => {
     if (!scrollerRef.current) return 0;
@@ -319,6 +371,10 @@ export function ShowcaseAppCarousel({ app, isFirstInGrid = false }: ShowcaseAppC
               selected={index === selectedIndex}
               coverWidth={coverWidth}
               coverHeight={coverHeight}
+              appId={app.runId}
+              feedPosition={feedPosition}
+              analyticsPlatform={activePlatform}
+              analyticsCategory={activeCategory}
             />
           </li>
         ))}

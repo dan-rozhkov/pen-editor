@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { track } from "@/lib/analytics";
 import {
   publishScreensToShowcase,
   inferPlatformForSizes,
@@ -61,6 +62,7 @@ export function ShowcasePublishSection({
 
   async function onPublish() {
     if (readOnly || !sizeValidation.ok) return;
+    track("showcase_publish_clicked", { screen_count: orderedScreens.length });
     setStatus("publishing");
     setError(null);
 

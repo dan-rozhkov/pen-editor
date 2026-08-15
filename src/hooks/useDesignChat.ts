@@ -4,6 +4,8 @@ import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithToolCalls,
 } from "ai";
+import { track, bucketLength } from "@/lib/analytics";
+import { consumeFirstPromptTiming } from "@/lib/analytics/sessionTiming";
 import { resolveModel } from "@/lib/chatModels";
 import { resolveApiUrl, isOffline, OFFLINE_MESSAGE } from "@/lib/apiBase";
 import { getUserId } from "@/lib/userId";
@@ -94,14 +96,38 @@ export function buildCanvasContext(sessionId?: string): object {
   };
 }
 
-// Exported for tests.
+// Coarse, PII-free categorization of a tool failure for analytics. Never the
+// raw error message — that can contain user content (file names, prompt
+// fragments echoed back by a handler, etc.).
+function classifyToolError(err: unknown): string {
+  if (err instanceof Error && err.message === "Tool call timed out") {
+    return "timeout";
+  }
+  return "handler_error";
+}
+
+// Exported for tests. `source` distinguishes the chat UI path from the MCP
+// WebSocket/desktop IPC bridge paths (`src/lib/mcpDispatch.ts`), which all
+// funnel through this single choke point but can't otherwise be told apart
+// from inside it — callers must say which they are. Defaults to "bridge"
+// since `onToolCall` below is the one call site that passes "chat"
+// explicitly; every other caller is a bridge.
 export async function executeToolCall(
   toolName: string,
   input: unknown,
-  context?: ToolExecutionContext
+  context?: ToolExecutionContext,
+  source: "chat" | "bridge" = "bridge"
 ): Promise<string> {
+  const startedAt = performance.now();
   const handler = toolHandlers[toolName];
   if (!handler) {
+    track("agent_tool_executed", {
+      tool_name: toolName,
+      ok: false,
+      duration_ms: Math.round(performance.now() - startedAt),
+      error_kind: "unknown_tool",
+      source,
+    });
     return JSON.stringify({ error: `Unknown tool: ${toolName}` });
   }
   const args =
@@ -109,13 +135,39 @@ export async function executeToolCall(
       ? (input as Record<string, unknown>)
       : {};
   try {
-    return await Promise.race([
+    const result = await Promise.race([
       handler(args, context),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("Tool call timed out")), 30_000)
       ),
     ]);
+    // Handlers report failure as a JSON `{"error": ...}` string rather than
+    // throwing; detect that shape so `ok` reflects the real outcome. Cheap
+    // string check instead of `JSON.parse`-ing every result: some results
+    // (get_screenshot's base64 imageData, export_layers_svg, batch_get) can
+    // be hundreds of KB to several MB, and a full parse just to read one
+    // boolean is a synchronous main-thread cost the analytics layer must
+    // never impose. `executeToolCall`'s own error branches always produce
+    // exactly `{"error": ...}` (see below and the catch block), so a plain
+    // prefix check is sufficient and never a false negative for the shape
+    // this function itself produces.
+    const ok = !result.startsWith('{"error"');
+    track("agent_tool_executed", {
+      tool_name: toolName,
+      ok,
+      duration_ms: Math.round(performance.now() - startedAt),
+      ...(ok ? {} : { error_kind: "handler_error" }),
+      source,
+    });
+    return result;
   } catch (err) {
+    track("agent_tool_executed", {
+      tool_name: toolName,
+      ok: false,
+      duration_ms: Math.round(performance.now() - startedAt),
+      error_kind: classifyToolError(err),
+      source,
+    });
     return JSON.stringify({
       error: err instanceof Error ? err.message : "Tool call failed",
     });
@@ -187,10 +239,12 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       if (toolCall.toolName === "ask_user") {
         return;
       }
-      const result = await executeToolCall(toolCall.toolName, toolCall.input, {
-        sessionId,
-        toolCallId: toolCall.toolCallId,
-      });
+      const result = await executeToolCall(
+        toolCall.toolName,
+        toolCall.input,
+        { sessionId, toolCallId: toolCall.toolCallId },
+        "chat"
+      );
       chat.addToolOutput({
         tool: toolCall.toolName,
         toolCallId: toolCall.toolCallId,
@@ -321,7 +375,18 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   useEffect(() => {
     if (chat.status === "error") {
       clearVectorPreviewSession();
+      // Coarse categorization only — never chat.error.message itself, which
+      // can echo back request/response content.
+      const message = chat.error?.message;
+      const errorKind =
+        message === OFFLINE_MESSAGE
+          ? "offline"
+          : chat.error instanceof TypeError
+            ? "network"
+            : "unknown";
+      track("agent_turn_failed", { error_kind: errorKind });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.status, clearVectorPreviewSession]);
 
   const sendPayload = useCallback(
@@ -351,6 +416,16 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
         return false;
       }
       setOfflineError(undefined);
+
+      track("chat_message_sent", {
+        has_attachment: !!images && images.length > 0,
+        is_slash_command: text.startsWith("/"),
+        length_bucket: bucketLength(text.length),
+      });
+      const { msSinceOpen, isFirst } = consumeFirstPromptTiming();
+      if (isFirst) {
+        track("first_prompt_sent", { ms_since_open: Math.round(msSinceOpen) });
+      }
 
       if (images && images.length > 0) {
         const parts: Array<{ type: "text"; text: string } | { type: "file"; mediaType: string; url: string }> = [];

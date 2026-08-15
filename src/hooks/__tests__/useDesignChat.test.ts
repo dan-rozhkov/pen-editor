@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, waitFor, act } from "@testing-library/react";
+
+const { trackMock } = vi.hoisted(() => ({ trackMock: vi.fn() }));
+vi.mock("@/lib/analytics", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/analytics")>();
+  return { ...actual, track: trackMock };
+});
+
 import {
   executeToolCall,
   buildCanvasContext,
@@ -26,6 +33,7 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+  trackMock.mockClear();
 });
 
 // Regression: images must survive to the request body unchanged — the
@@ -121,6 +129,75 @@ describe("executeToolCall", () => {
     await vi.advanceTimersByTimeAsync(30_001);
     const result = await pending;
     expect(JSON.parse(result)).toEqual({ error: "Tool call timed out" });
+  });
+
+  it("emits agent_tool_executed with ok:false and error_kind:'timeout' on timeout", async () => {
+    vi.useFakeTimers();
+    toolHandlers[TEST_TOOL] = () => new Promise<string>(() => {});
+
+    const pending = executeToolCall(TEST_TOOL, {}, undefined, "chat");
+    await vi.advanceTimersByTimeAsync(30_001);
+    await pending;
+
+    expect(trackMock).toHaveBeenCalledWith(
+      "agent_tool_executed",
+      expect.objectContaining({
+        tool_name: TEST_TOOL,
+        ok: false,
+        error_kind: "timeout",
+        source: "chat",
+      }),
+    );
+  });
+
+  it("emits agent_tool_executed with ok:true on success", async () => {
+    toolHandlers[TEST_TOOL] = async () => "ok";
+    await executeToolCall(TEST_TOOL, {}, undefined, "chat");
+
+    expect(trackMock).toHaveBeenCalledWith(
+      "agent_tool_executed",
+      expect.objectContaining({
+        tool_name: TEST_TOOL,
+        ok: true,
+        source: "chat",
+      }),
+    );
+  });
+
+  it("emits ok:false when a handler returns the executeToolCall error shape (no JSON.parse needed)", async () => {
+    toolHandlers[TEST_TOOL] = async () => JSON.stringify({ error: "nodeId is required" });
+    await executeToolCall(TEST_TOOL, {}, undefined, "chat");
+
+    expect(trackMock).toHaveBeenCalledWith(
+      "agent_tool_executed",
+      expect.objectContaining({
+        tool_name: TEST_TOOL,
+        ok: false,
+        error_kind: "handler_error",
+        source: "chat",
+      }),
+    );
+  });
+
+  it("emits ok:true for a large JSON success payload without JSON.parse-ing it (get_screenshot shape)", async () => {
+    const hugeImageData = `data:image/png;base64,${"A".repeat(50_000)}`;
+    toolHandlers[TEST_TOOL] = async () => JSON.stringify({ imageData: hugeImageData });
+    await executeToolCall(TEST_TOOL, {}, undefined, "chat");
+
+    expect(trackMock).toHaveBeenCalledWith(
+      "agent_tool_executed",
+      expect.objectContaining({ tool_name: TEST_TOOL, ok: true, source: "chat" }),
+    );
+  });
+
+  it("defaults source to 'bridge' when the caller doesn't pass one", async () => {
+    toolHandlers[TEST_TOOL] = async () => "ok";
+    await executeToolCall(TEST_TOOL, {});
+
+    expect(trackMock).toHaveBeenCalledWith(
+      "agent_tool_executed",
+      expect.objectContaining({ source: "bridge" }),
+    );
   });
 });
 

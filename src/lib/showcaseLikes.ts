@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { track } from "@/lib/analytics";
 import { likeShowcaseApp } from "@/lib/showcase";
 
 // Which apps this visitor has ever clapped — cosmetic only (fills the heart),
@@ -78,6 +79,29 @@ export function useShowcaseLikes(runId: string, initialLikes: number) {
   const sendingRef = useRef(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  // Mirrors `liked` synchronously (state updates from `setLiked` don't land
+  // until the next render, and several `like()` calls can run in the same
+  // tick — see the "burst of clicks" case below) and is what `like()` below
+  // actually gates on, instead of re-reading `hasLikedShowcaseApp(runId)`
+  // from localStorage on every click.
+  //
+  // That re-read was the bug: `readLikedRunIds`/`markShowcaseAppLiked`
+  // swallow storage errors and degrade to "nothing is liked" / "nothing was
+  // written" (Safari private mode is the main case those catches exist
+  // for), so in that environment `hasLikedShowcaseApp` always reports
+  // false and every click of every debounced burst for the whole visit
+  // looked like a "genuine first like". This in-hook ref persists for the
+  // component's life regardless of whether the localStorage write behind it
+  // actually landed, so it bounds `showcase_liked` to at most one per app
+  // per mount either way.
+  const likedRef = useRef(liked);
+  // `showcase_liked` fires on a successful like only, and only for this
+  // visitor's genuinely first like of this app — not on the "duplicate"
+  // clicks a returning visitor's already-liked app would otherwise re-send.
+  // Set once, the first time `like()` observes `likedRef.current` still
+  // false; cleared once the resulting request actually confirms so a later,
+  // unrelated failed burst never fires it retroactively.
+  const awaitingFirstLikeConfirmationRef = useRef(false);
 
   const flush = useCallback(async () => {
     if (sendingRef.current) return;
@@ -112,6 +136,10 @@ export function useShowcaseLikes(runId: string, initialLikes: number) {
           }
           remaining -= chunk;
           lastAuthoritativeLikes = result.likes;
+          if (awaitingFirstLikeConfirmationRef.current) {
+            awaitingFirstLikeConfirmationRef.current = false;
+            track("showcase_liked", { app_id: runId });
+          }
         }
       }
       // Once every chunk of every burst in this flush has landed (no more
@@ -139,6 +167,14 @@ export function useShowcaseLikes(runId: string, initialLikes: number) {
   }, [flush]);
 
   const like = useCallback(() => {
+    // Must read before flipping `likedRef`: this is the check that
+    // distinguishes this visitor's genuine first like of this app (in this
+    // mount) from a later duplicate click — see the ref's own doc above for
+    // why this reads `likedRef` rather than `hasLikedShowcaseApp(runId)`.
+    if (!likedRef.current) {
+      awaitingFirstLikeConfirmationRef.current = true;
+      likedRef.current = true;
+    }
     setCount((c) => c + 1);
     pendingRef.current += 1;
     setLiked(true);

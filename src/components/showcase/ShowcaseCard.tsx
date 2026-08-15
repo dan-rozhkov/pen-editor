@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 
+import { track } from "@/lib/analytics";
 import type { ShowcaseScreen } from "@/lib/showcase";
 import { useShowcaseOverlayStore } from "@/store/showcaseOverlayStore";
+import { markShowcaseAppOpenedOnce } from "@/lib/showcaseAppOpenTracking";
 import { cn } from "@/lib/utils";
 
 // "success"/"error" are the "Copy Screen ID" outcomes; "handoff-error" is
@@ -161,6 +163,17 @@ interface ShowcaseCardProps {
    */
   coverWidth?: number;
   coverHeight?: number;
+  /**
+   * Analytics context for `showcase_app_opened`, fired when this card's
+   * hover/tap action overlay is *opened* (not closed). `appId` is the owning
+   * app's `runId`; `feedPosition` is that app's index in the currently
+   * loaded feed. Optional purely so pre-existing standalone renders (and
+   * tests) that never exercise the overlay don't have to pass them.
+   */
+  appId?: string;
+  feedPosition?: number;
+  analyticsPlatform?: string;
+  analyticsCategory?: string;
 }
 
 // The whole screen is a button (FIR-62): clicking/tapping it toggles a
@@ -191,6 +204,10 @@ export function ShowcaseCard({
   loadImage = true,
   coverWidth,
   coverHeight,
+  appId,
+  feedPosition,
+  analyticsPlatform,
+  analyticsCategory,
 }: ShowcaseCardProps) {
   // `??`, not `||`: an explicit 0 (a cover screen with missing dimensions)
   // must fall straight through to `resolveAspectRatio`'s own zero-guard
@@ -238,8 +255,24 @@ export function ShowcaseCard({
   const isOverlayOpen = useShowcaseOverlayStore((s) => s.openScreenId === screen.id);
   const toggleOverlay = useCallback(() => {
     const { openScreenId: current, setOpenScreenId } = useShowcaseOverlayStore.getState();
-    setOpenScreenId(current === screen.id ? null : screen.id);
-  }, [screen.id]);
+    const opening = current !== screen.id;
+    setOpenScreenId(opening ? screen.id : null);
+    // `showcase_app_opened` only on the transition into "open" — closing (or
+    // the store's own "at most one open" invariant swapping which card is
+    // open) must not double-count as another open. And only once per app:
+    // opening a different screen's overlay for an app already credited
+    // (`markShowcaseAppOpenedOnce`, shared across every ShowcaseCard for
+    // this app — see its doc) must not fire again, since it's still the
+    // same app open, not a new one.
+    if (opening && appId && markShowcaseAppOpenedOnce(appId)) {
+      track("showcase_app_opened", {
+        app_id: appId,
+        platform: analyticsPlatform,
+        category: analyticsCategory,
+        feed_position: feedPosition ?? 0,
+      });
+    }
+  }, [screen.id, appId, feedPosition, analyticsPlatform, analyticsCategory]);
   // The overlay background (not the action buttons — they stop propagation)
   // shares the same toggle as the card's own button: on touch it's what a
   // second tap actually hits once the overlay is covering the card, and on

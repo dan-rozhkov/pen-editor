@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/command";
 import { useCommandPaletteStore } from "@/store/commandPaletteStore";
 import { useDevModeStore } from "@/store/devModeStore";
-import { getCommands, commandFilter, type CommandGroupName } from "@/lib/commands/registry";
+import { getCommands, commandFilter, runCommand as dispatchCommand, type CommandGroupName } from "@/lib/commands/registry";
 import { isTypingTarget } from "@/components/canvas/keyboardShortcutUtils";
 
 const GROUP_ORDER: CommandGroupName[] = ["Tools", "Edit", "View", "File", "Plugins"];
@@ -55,9 +55,9 @@ export function CommandPalette() {
     commands: commands.filter((c) => c.group === group),
   })).filter((g) => g.commands.length > 0);
 
-  const runCommand = (run: () => void) => {
+  const runCommand = (command: (typeof commands)[number]) => {
     setOpen(false);
-    run();
+    dispatchCommand(command);
   };
 
   return (
@@ -75,7 +75,7 @@ export function CommandPalette() {
                     key={command.id}
                     value={command.label}
                     keywords={command.keywords}
-                    onSelect={() => runCommand(command.run)}
+                    onSelect={() => runCommand(command)}
                   >
                     {Icon && <Icon className="size-3.5" />}
                     <span>{command.label}</span>

@@ -1,5 +1,17 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+
+// The three File -> Export items must route through `runCommand()` (FIR:
+// undercounted `document_exported`) rather than calling the export
+// functions directly — spy on the real registry module (keep `getCommands`
+// real, so the lookup-by-id Toolbar does still resolves) so the export
+// side effects (real file downloads) never actually run in this suite.
+const { runCommandMock } = vi.hoisted(() => ({ runCommandMock: vi.fn() }));
+vi.mock("@/lib/commands/registry", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/commands/registry")>();
+  return { ...actual, runCommand: runCommandMock };
+});
+
 import { Toolbar } from "../Toolbar";
 import { useUIThemeStore } from "@/store/uiThemeStore";
 import { usePixelGridStore } from "@/store/pixelGridStore";
@@ -30,6 +42,7 @@ describe("<Toolbar />", () => {
     cleanup();
     useUIThemeStore.setState({ uiTheme: originalTheme });
     usePixelGridStore.setState({ showPixelGrid: originalGrid });
+    runCommandMock.mockClear();
   });
 
   /** Open the top-level File menu and return its menuitem labels. */
@@ -158,5 +171,35 @@ describe("<Toolbar />", () => {
     fireEvent.click(importButtons[importButtons.length - 1]);
 
     expect(screen.getByText("Please paste JSON content")).toBeTruthy();
+  });
+
+  it("routes File -> Export as .json through runCommand() with the file-export-json command", () => {
+    render(<Toolbar />);
+    openFileMenu();
+    fireEvent.click(screen.getByText("Export"));
+    fireEvent.click(screen.getByText("Export as .json"));
+
+    expect(runCommandMock).toHaveBeenCalledTimes(1);
+    expect(runCommandMock.mock.calls[0][0]).toMatchObject({ id: "file-export-json" });
+  });
+
+  it("routes File -> Export as .pen through runCommand() with the file-export-pen command", () => {
+    render(<Toolbar />);
+    openFileMenu();
+    fireEvent.click(screen.getByText("Export"));
+    fireEvent.click(screen.getByText("Export as .pen"));
+
+    expect(runCommandMock).toHaveBeenCalledTimes(1);
+    expect(runCommandMock.mock.calls[0][0]).toMatchObject({ id: "file-export-pen" });
+  });
+
+  it("routes File -> Export tokens through runCommand() with the file-export-tokens command", () => {
+    render(<Toolbar />);
+    openFileMenu();
+    fireEvent.click(screen.getByText("Export"));
+    fireEvent.click(screen.getByText("Export tokens as .tokens.json"));
+
+    expect(runCommandMock).toHaveBeenCalledTimes(1);
+    expect(runCommandMock.mock.calls[0][0]).toMatchObject({ id: "file-export-tokens" });
   });
 });

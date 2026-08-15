@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 
 import { PwaUpdateGate } from "@/components/pwa/PwaUpdateGate";
 import { ShowcasePage } from "@/components/showcase/ShowcasePage";
+import { RouteTracker } from "@/lib/analytics/RouteTracker";
 
 // The editor pulls in PixiJS and the whole canvas/tool stack; the showcase at
 // "/" must never pay that cost. Loading it via `lazy()` behind the "/app"
@@ -29,6 +30,10 @@ export function AppRouter() {
           also fires on the showcase at "/", where the editor (its previous
           host) never mounts. Lazy and self-gating; see PwaUpdateGate. */}
       <PwaUpdateGate />
+
+      {/* $pageview on every route change, across both the showcase and the
+          editor. No-op when analytics is disabled (no VITE_POSTHOG_KEY). */}
+      <RouteTracker />
     </BrowserRouter>
   );
 }

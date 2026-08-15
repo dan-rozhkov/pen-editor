@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import { RootErrorBoundary } from '@/components/RootErrorBoundary'
+import { initAnalytics } from '@/lib/analytics'
 import { startBridges } from '@/lib/bridgeBootstrap'
 import { loadModels } from '@/lib/chatModels'
 import { applyStoredUITheme } from '@/lib/uiTheme'
@@ -20,6 +21,14 @@ applyStoredUITheme()
 // (no devOptions are enabled), so only register there.
 if (import.meta.env.PROD) {
   registerServiceWorker()
+}
+
+// PROD-only, mirroring registerServiceWorker above — dev/test must never
+// emit. initAnalytics() is already a complete no-op without
+// VITE_POSTHOG_KEY, so this gate is belt-and-suspenders: it guarantees a
+// dev build never even attempts the dynamic posthog-js import.
+if (import.meta.env.PROD) {
+  initAnalytics()
 }
 
 // RootErrorBoundary only catches crashes that happen *during React's render*.

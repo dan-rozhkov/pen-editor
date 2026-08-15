@@ -32,6 +32,7 @@
     "martinez-polygon-clipping": "^0.8.1",
     "pdf-lib": "^1.17.1",
     "pixi.js": "^8.16.0",
+    "posthog-js": "^1.417.1",
     "react": "^19.2.0",
     "react-aria-components": "^1.14.0",
     "react-dom": "^19.2.0",

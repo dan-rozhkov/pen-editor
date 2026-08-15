@@ -1,6 +1,12 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+
+const { trackMock } = vi.hoisted(() => ({ trackMock: vi.fn() }));
+vi.mock("@/lib/analytics", () => ({
+  track: trackMock,
+}));
+
 import { resetStores, seedScene } from "@/test/fixtures";
-import { getCommands } from "../registry";
+import { getCommands, runCommand } from "../registry";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useHistoryStore } from "@/store/historyStore";
@@ -12,6 +18,7 @@ beforeEach(() => {
   resetStores();
   useDrawModeStore.setState({ activeTool: null });
   useUIVisibilityStore.setState({ isUIHidden: false });
+  trackMock.mockClear();
 });
 
 describe("getCommands", () => {
@@ -101,5 +108,36 @@ describe("command dispatch", () => {
     const before = useUIVisibilityStore.getState().isUIHidden;
     toggleUi!.run();
     expect(useUIVisibilityStore.getState().isUIHidden).toBe(!before);
+  });
+});
+
+describe("runCommand analytics", () => {
+  it("emits editor_command_run once and document_exported once for a file-export command", () => {
+    const runSpy = vi.fn();
+    runCommand({ id: "file-export-json", label: "Export as .json", group: "File", run: runSpy });
+
+    expect(runSpy).toHaveBeenCalledTimes(1);
+    expect(trackMock).toHaveBeenCalledTimes(2);
+    expect(trackMock).toHaveBeenCalledWith("editor_command_run", { command_id: "file-export-json" });
+    expect(trackMock).toHaveBeenCalledWith("document_exported", { format: "json" });
+  });
+
+  it("does not emit document_exported for a non-export command", () => {
+    const runSpy = vi.fn();
+    runCommand({ id: "edit-undo", label: "Undo", group: "Edit", run: runSpy });
+
+    expect(trackMock).toHaveBeenCalledTimes(1);
+    expect(trackMock).toHaveBeenCalledWith("editor_command_run", { command_id: "edit-undo" });
+  });
+
+  it("emits document_exported exactly once when a File -> Export item runs through runCommand — no double count with the palette path", () => {
+    // Same command object getCommands() (and therefore the palette) would
+    // resolve; running it exactly the way the Toolbar's rerouted handlers
+    // now do must not fire the export event twice.
+    const command = getCommands().find((c) => c.id === "file-export-tokens")!;
+    runCommand({ ...command, run: vi.fn() });
+
+    expect(trackMock.mock.calls.filter(([event]) => event === "document_exported")).toHaveLength(1);
+    expect(trackMock).toHaveBeenCalledWith("document_exported", { format: "tokens" });
   });
 });

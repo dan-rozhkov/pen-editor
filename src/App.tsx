@@ -1,4 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
+import { track } from "./lib/analytics";
+import { markEditorOpened } from "./lib/analytics/sessionTiming";
 import { loadModels } from "./lib/chatModels";
 import { reconcileModels } from "./store/chatStore";
 import { useCustomFontStore } from "./store/customFontStore";
@@ -42,6 +44,41 @@ function App() {
   const isPresent = mode === "present";
   const isView = mode === "view";
   const isDev = useDevModeStore((s) => s.active);
+
+  // Fires once per mount, before the two showcase-handoff effects below
+  // consume (and clear) their sessionStorage payloads — React runs a single
+  // component's passive effects in declaration order within one commit, so
+  // this synchronous read race-frees the "was a handoff pending" check.
+  // `is_first_session` is a plain localStorage marker: unset on a visitor's
+  // very first editor load, set here, so every load after the first reads
+  // it as already present. Neither key stores anything but presence/a
+  // boolean — see the NO PII rule in src/lib/analytics/index.ts.
+  useEffect(() => {
+    const EDITOR_SEEN_KEY = "pen.editorSeen";
+    let isFirstSession = false;
+    try {
+      isFirstSession = !localStorage.getItem(EDITOR_SEEN_KEY);
+      localStorage.setItem(EDITOR_SEEN_KEY, "1");
+    } catch {
+      // Private-mode Safari etc. — treat as not-first rather than crash.
+    }
+    // Keys owned by showcaseAgentHandoff.ts / showcaseScreenHandoff.ts;
+    // read directly (not exported) since only presence is needed here,
+    // before those modules' own effects consume (and clear) them.
+    let viaHandoff = false;
+    try {
+      viaHandoff =
+        sessionStorage.getItem("pen:showcase-agent-prompt:v1") !== null ||
+        sessionStorage.getItem("pen:showcase-editor-screens:v1") !== null;
+    } catch {
+      // Ignore — falls back to false, an honest "unknown" rather than a guess.
+    }
+    markEditorOpened();
+    track("editor_opened", {
+      is_first_session: isFirstSession,
+      via_showcase_handoff: viaHandoff,
+    });
+  }, []);
 
   // Pull the authoritative chat model list from the backend, then drop any saved
   // selection it no longer allows. Falls back to the hardcoded list on failure.

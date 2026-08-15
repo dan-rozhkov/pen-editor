@@ -78,7 +78,7 @@ export function createToolDispatcher({ send, isLive = () => true }: ToolDispatch
       send({ id: message.id, type: "tool_error", error: `Unknown tool: ${message.tool}` });
       return;
     }
-    const result = await executeToolCall(message.tool, message.args);
+    const result = await executeToolCall(message.tool, message.args, undefined, "bridge");
     send({ id: message.id, type: "tool_result", result });
   }
 

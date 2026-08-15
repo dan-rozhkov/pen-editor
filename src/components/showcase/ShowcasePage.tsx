@@ -12,6 +12,7 @@ import { Link, useNavigate, useSearchParams } from "react-router";
 import { ShowcaseAgentComposer } from "@/components/showcase/ShowcaseAgentComposer";
 import { ShowcaseFilterBar } from "@/components/showcase/ShowcaseFilterBar";
 import { Button } from "@/components/ui/button";
+import { track } from "@/lib/analytics";
 import { storeShowcaseAgentPrompt } from "@/lib/showcaseAgentHandoff";
 import { getAppliedUITheme } from "@/lib/uiTheme";
 import { cn } from "@/lib/utils";
@@ -150,6 +151,28 @@ export function ShowcasePage() {
   // and get appended after that sequence.
   const requestIdRef = useRef(0);
 
+  // Which loaded page the feed is currently on, for `showcase_feed_paginated`.
+  // Reset to 1 alongside the page-1 fetch below (a filter change starts a new
+  // feed, not a continuation of the previous one's page count).
+  const pageRef = useRef(1);
+
+  // `showcase_viewed` must fire exactly once per mount, with the filters
+  // active at that moment — never again as the visitor changes filters
+  // (that's `showcase_filter_applied`'s job, fired from the individual
+  // filter-bar handlers below). The ref guard is what makes this robust to
+  // `sort`/`category`/`platform`/`model` changing before this effect's first
+  // run finishes commit — exhaustive-deps still sees every value it reads.
+  const hasTrackedShowcaseViewRef = useRef(false);
+  useEffect(() => {
+    if (hasTrackedShowcaseViewRef.current) return;
+    hasTrackedShowcaseViewRef.current = true;
+    track("showcase_viewed", {
+      platform,
+      category: category ?? undefined,
+      sort,
+    });
+  }, [platform, category, sort]);
+
   // Drop back to the skeleton the moment the filters change, not after the
   // fetch effect below gets around to it — setting state synchronously
   // inside an effect body is a lint error (cascading renders), so this
@@ -218,6 +241,7 @@ export function ShowcasePage() {
     // request already in flight for the previous filters — see
     // `requestIdRef`'s comment above.
     requestIdRef.current += 1;
+    pageRef.current = 1;
     fetchShowcase(null, undefined, { sort, category, platform, model }).then((result) => {
       // `cancelled` (set by this effect's own cleanup, below) already covers
       // "this exact effect instance was torn down or superseded" — a
@@ -258,6 +282,11 @@ export function ShowcasePage() {
     if (requestIdRef.current === requestId && result.ok) {
       setApps((prev) => [...prev, ...result.data.apps]);
       setNextCursor(result.data.nextCursor);
+      pageRef.current += 1;
+      track("showcase_feed_paginated", {
+        page: pageRef.current,
+        apps_loaded: result.data.apps.length,
+      });
     }
     // A failure loading more leaves the current page in place; because the
     // sentinel remains mounted, scrolling away and back allows a retry. A
@@ -427,6 +456,7 @@ export function ShowcasePage() {
               in new tab", and the `link` role the e2e smoke test asserts). */}
           <Link
             to="/app"
+            onClick={() => track("showcase_editor_cta_clicked", { source: "header" })}
             className="inline-flex shrink-0 items-center rounded-full bg-accent-primary/10 px-4 py-2 text-sm font-medium text-accent-primary transition-colors hover:bg-accent-primary/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary"
           >
             Open the editor →
@@ -460,10 +490,25 @@ export function ShowcasePage() {
             platform={platform}
             model={model}
             models={models}
-            onSortChange={(newSort) => updateFilters({ sort: newSort })}
-            onCategoryChange={(newCategory) => updateFilters({ category: newCategory })}
-            onPlatformChange={handlePlatformChange}
-            onModelChange={(newModel) => updateFilters({ model: newModel })}
+            onSortChange={(newSort) => {
+              track("showcase_filter_applied", { filter: "sort", value: newSort });
+              updateFilters({ sort: newSort });
+            }}
+            onCategoryChange={(newCategory) => {
+              track("showcase_filter_applied", {
+                filter: "category",
+                value: newCategory ?? "all",
+              });
+              updateFilters({ category: newCategory });
+            }}
+            onPlatformChange={(newPlatform) => {
+              track("showcase_filter_applied", { filter: "platform", value: newPlatform });
+              handlePlatformChange(newPlatform);
+            }}
+            onModelChange={(newModel) => {
+              track("showcase_filter_applied", { filter: "model", value: newModel ?? "all" });
+              updateFilters({ model: newModel });
+            }}
           />
         </div>
 
@@ -512,7 +557,14 @@ export function ShowcasePage() {
           <>
             <ShowcaseGrid platform={platform}>
               {apps.map((app, index) => (
-                <ShowcaseAppCarousel key={app.runId} app={app} isFirstInGrid={index === 0} />
+                <ShowcaseAppCarousel
+                  key={app.runId}
+                  app={app}
+                  isFirstInGrid={index === 0}
+                  feedPosition={index}
+                  activePlatform={platform}
+                  activeCategory={category ?? undefined}
+                />
               ))}
             </ShowcaseGrid>
 

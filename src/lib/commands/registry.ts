@@ -1,3 +1,4 @@
+import { track } from "@/lib/analytics";
 import { getToolCommands } from "./toolCommands";
 import { getEditCommands } from "./editCommands";
 import { getViewCommands } from "./viewCommands";
@@ -24,4 +25,24 @@ export function getCommands(): PaletteCommand[] {
     ...getFileCommands(),
     ...getPluginCommands(),
   ];
+}
+
+// "file-export-<format>" ids (see fileCommands.ts) additionally emit
+// `document_exported`, with the format parsed straight from the id.
+const FILE_EXPORT_PREFIX = "file-export-";
+
+/**
+ * Single dispatch point for running a `PaletteCommand`, used by both the
+ * command palette (`CommandPalette.tsx`) and the Electron menu bridge
+ * (`desktopBridge.ts`) — the two places a command actually runs. Emits
+ * `editor_command_run` for every command, and `document_exported` in
+ * addition for file-export commands, so both entry points are covered by a
+ * single instrumentation site instead of two.
+ */
+export function runCommand(command: PaletteCommand): void {
+  track("editor_command_run", { command_id: command.id });
+  if (command.id.startsWith(FILE_EXPORT_PREFIX)) {
+    track("document_exported", { format: command.id.slice(FILE_EXPORT_PREFIX.length) });
+  }
+  command.run();
 }

@@ -9,7 +9,8 @@ import { useViewportStore } from "../store/viewportStore";
 import { useCanvasRefStore } from "../store/canvasRefStore";
 import { useMcpBridgeStore } from "../store/mcpBridgeStore";
 
-import { exportDesignTokens, importDesignTokens, exportAsJson, exportAsPen, openDocument } from "../lib/commands/fileCommands";
+import { importDesignTokens, openDocument } from "../lib/commands/fileCommands";
+import { getCommands, runCommand } from "../lib/commands/registry";
 import { parsePixsoNodes } from "../utils/pixsoImportUtils";
 import { getCanvasViewportMetrics } from "../utils/canvasViewport";
 import { Button } from "./ui/button";
@@ -107,8 +108,22 @@ export function Toolbar() {
     }
   };
 
+  // Routes through the same `runCommand()` choke point the command palette
+  // and the Electron menu bridge use, rather than calling the export
+  // functions directly — the File dropdown is the primary export UI, so
+  // calling them directly here left `document_exported` systematically
+  // undercounted. Looks the id up in `getCommands()` instead of duplicating
+  // the command definitions so there is exactly one source of truth for
+  // what each id does.
+  const runFileCommand = (id: string) => {
+    const command = getCommands().find((c) => c.id === id);
+    if (command) {
+      runCommand(command);
+    }
+  };
+
   const handleExportTokens = () => {
-    exportDesignTokens();
+    runFileCommand("file-export-tokens");
   };
 
   const handleImportTokens = () => {
@@ -195,10 +210,10 @@ export function Toolbar() {
               Export
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="min-w-56">
-              <DropdownMenuItem onClick={exportAsJson}>
+              <DropdownMenuItem onClick={() => runFileCommand("file-export-json")}>
                 Export as .json
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={exportAsPen}>
+              <DropdownMenuItem onClick={() => runFileCommand("file-export-pen")}>
                 Export as .pen
               </DropdownMenuItem>
               <DropdownMenuItem
