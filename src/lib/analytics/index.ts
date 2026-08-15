@@ -56,10 +56,14 @@ function readKey(): string | undefined {
   return key && key.length > 0 ? key : undefined;
 }
 
+// The default is the EU cloud because that is where this project's PostHog
+// instance lives, and a region mismatch fails SILENTLY: the wrong region's
+// ingest endpoint answers 200 to an unknown key and drops the event. A
+// deployment on the US cloud must set VITE_POSTHOG_HOST explicitly.
 function readHost(): string {
   return (
     (import.meta.env.VITE_POSTHOG_HOST as string | undefined) ||
-    "https://us.i.posthog.com"
+    "https://eu.i.posthog.com"
   );
 }
 

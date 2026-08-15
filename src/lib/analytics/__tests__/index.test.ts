@@ -78,7 +78,7 @@ describe("analytics — enabled (key present)", () => {
     expect(initMock).toHaveBeenCalledTimes(1);
     expect(initMock.mock.calls[0][0]).toBe("phc_test_key");
     expect(initMock.mock.calls[0][1]).toMatchObject({
-      api_host: "https://us.i.posthog.com",
+      api_host: "https://eu.i.posthog.com",
       person_profiles: "identified_only",
       autocapture: false,
       capture_pageview: false,
