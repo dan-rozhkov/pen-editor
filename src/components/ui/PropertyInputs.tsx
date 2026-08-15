@@ -395,6 +395,7 @@ interface TextInputProps {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  type?: "text" | "password";
 }
 
 export function TextInput({
@@ -402,13 +403,14 @@ export function TextInput({
   value,
   onChange,
   placeholder,
+  type = "text",
 }: TextInputProps) {
   const readOnly = useReadOnly();
   return (
     <div className="flex flex-col gap-1">
       {label && <Label className="text-[10px]">{label}</Label>}
       <Input
-        type="text"
+        type={type}
         value={value}
         onChange={(e) => !readOnly && onChange(e.target.value)}
         readOnly={readOnly}

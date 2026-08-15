@@ -27,7 +27,14 @@ import { PageProperties } from "@/components/properties/PageProperties";
 import { PencilToolProperties } from "@/components/properties/PencilToolProperties";
 import { PropertyEditor } from "@/components/properties/PropertyEditor";
 import { PrototypeExportSection } from "@/components/properties/PrototypeExportSection";
+import { ShowcasePublishSection, type ShowcaseScreenCandidate } from "@/components/properties/ShowcasePublishSection";
 import { SpacingSection } from "@/components/properties/AlignmentSection";
+import {
+  SHOWCASE_MAX_SCREENS,
+  getEffectiveScreenSize,
+  isGenericScreenName,
+  isPlausibleShowcaseSize,
+} from "@/lib/showcasePublish";
 import { CaretRightIcon } from "@phosphor-icons/react";
 import clsx from "clsx";
 
@@ -175,6 +182,7 @@ function FramePresetsPanel() {
 }
 
 const EMPTY_NODES: FlatSceneNode[] = [];
+const EMPTY_SHOWCASE_SCREENS: ShowcaseScreenCandidate[] = [];
 
 export function PropertiesPanel() {
   const selectedIds = useSelectionStore((s) => s.selectedIds);
@@ -223,6 +231,64 @@ export function PropertiesPanel() {
     }),
     [parentNode],
   );
+
+  // Node set the "Publish to Showcase" panel section considers, covering
+  // both a single node and a multi-selection (unlike `selectedNodes` above,
+  // which is empty for a single selection since the other multi-select
+  // sections don't apply there).
+  const showcaseNodes: FlatSceneNode[] = useMemo(
+    () => (selectedIds.length === 1 ? (selectedNode ? [selectedNode] : EMPTY_NODES) : selectedNodes),
+    [selectedIds.length, selectedNode, selectedNodes],
+  );
+
+  // Subscribed (not read via getState() inline) so the memos below recompute
+  // when a *descendant* edit resizes a fit_content ancestor, or an ancestor
+  // move shifts a screen's absolute position, without either changing the
+  // selected node objects themselves — the size/position read inside those
+  // memos would otherwise silently go stale (both the pre-flight size check
+  // and the reading-order sort).
+  const sceneNodesById = useSceneStore((s) => s.nodesById);
+  const sceneParentById = useSceneStore((s) => s.parentById);
+
+  // Type/count/tool preconditions only — NOT size. Size is checked below,
+  // separately, since a near-viewport-size mismatch should still show the
+  // section (with an actionable error) while a wildly-off size (e.g. a
+  // 120x40 button frame) should hide the section entirely rather than show
+  // pure noise.
+  const showcaseCandidate =
+    activeTool !== "frame" &&
+    showcaseNodes.length >= 1 &&
+    showcaseNodes.length <= SHOWCASE_MAX_SCREENS &&
+    showcaseNodes.every((n) => n.type === "embed" || n.type === "frame");
+
+  const showcaseScreens: ShowcaseScreenCandidate[] = useMemo(() => {
+    if (!showcaseCandidate) return EMPTY_SHOWCASE_SCREENS;
+    return showcaseNodes.map((n) => {
+      const abs = getAbsolutePositionFlat(n.id, sceneNodesById, sceneParentById);
+      const size = getEffectiveScreenSize(n.id) ?? { width: n.width, height: n.height };
+      return { nodeId: n.id, name: n.name, x: abs.x, y: abs.y, width: size.width, height: size.height };
+    });
+  }, [showcaseCandidate, showcaseNodes, sceneNodesById, sceneParentById]);
+
+  const showcaseEligible =
+    showcaseCandidate && showcaseScreens.every((s) => isPlausibleShowcaseSize(s));
+
+  // Default app name: the selection's common parent frame's name (the flow
+  // these screens belong to), or the first selected node's name otherwise —
+  // but never a generic default like "Frame 1"/"Embed 3", which would let
+  // one click publish an unnamed app onto the public homepage. When the
+  // derived default is generic, leave the field empty so the user must name it.
+  const showcaseDefaultName = useMemo(() => {
+    if (!showcaseEligible) return "";
+    const parentIds = new Set(showcaseNodes.map((n) => sceneParentById[n.id] ?? null));
+    if (parentIds.size === 1) {
+      const [onlyParentId] = parentIds;
+      const parent = onlyParentId ? sceneNodesById[onlyParentId] : null;
+      if (parent?.name && !isGenericScreenName(parent.name)) return parent.name;
+    }
+    const firstName = showcaseNodes[0]?.name;
+    return isGenericScreenName(firstName) ? "" : (firstName as string);
+  }, [showcaseEligible, showcaseNodes, sceneNodesById, sceneParentById]);
 
   const handleUpdate = useCallback(
     (updates: Partial<SceneNode>) => {
@@ -273,6 +339,13 @@ export function PropertiesPanel() {
               })}
             />
           )}
+        {showcaseEligible && (
+          <ShowcasePublishSection
+            key={showcaseNodes.map((n) => n.id).join(",")}
+            screens={showcaseScreens}
+            defaultName={showcaseDefaultName}
+          />
+        )}
         {instanceContext && activeTool !== "frame" && (
           <DescendantPropertyEditor
             instanceContext={instanceContext}
