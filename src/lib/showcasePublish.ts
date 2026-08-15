@@ -22,45 +22,8 @@ import { convertDesignNodesToHtml } from "@/lib/designToHtml";
 import { buildVariableStyleBlock } from "@/utils/variableCssUtils";
 import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
 import { resolveApiUrl, isOffline } from "@/lib/apiBase";
+import { getUserId } from "@/lib/userId";
 import type { EmbedNode } from "@/types/scene";
-
-// Where the publish-panel's rescue auth token lives. Deliberately NOT a
-// `VITE_*` env var: Vite bakes those into the public JS bundle at build
-// time, so every visitor of a deployed build would get the secret baked in
-// and could publish to the public showcase as this editor — same lesson
-// `VITE_MCP_WS_TOKEN` already teaches (see pen-editor/CLAUDE.md's "MCP
-// bridge" section). Instead this is a per-browser secret the operator pastes
-// in locally (`ShowcasePublishSection`'s token field), kept only in
-// localStorage and never sent anywhere but this one Authorization header.
-export const SHOWCASE_PUBLISH_TOKEN_KEY = "pen.showcasePublishToken";
-
-/** Reads the stored publish token, or null if unset/unreadable (private-mode
- * Safari and locked-down embeddings throw on localStorage access). */
-export function getStoredShowcasePublishToken(): string | null {
-  try {
-    const raw = localStorage.getItem(SHOWCASE_PUBLISH_TOKEN_KEY);
-    const trimmed = raw?.trim();
-    return trimmed ? trimmed : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Stores (or, with `null`/empty, clears) the publish token. Never throws. */
-export function setStoredShowcasePublishToken(token: string | null): void {
-  try {
-    const trimmed = token?.trim();
-    if (trimmed) {
-      localStorage.setItem(SHOWCASE_PUBLISH_TOKEN_KEY, trimmed);
-    } else {
-      localStorage.removeItem(SHOWCASE_PUBLISH_TOKEN_KEY);
-    }
-  } catch {
-    // Private-mode Safari / locked-down embeddings throw on localStorage
-    // writes — publishing without a stored token just falls back to
-    // whatever the backend allows unauthenticated (dev with no token set).
-  }
-}
 
 // Owned by pen-editor-backend/src/showcase/platform.ts (SHOWCASE_VIEWPORTS) —
 // duplicated here rather than imported, since this repo must not depend on
@@ -92,10 +55,7 @@ export interface ShowcasePublishRequest {
 
 export type ShowcasePublishOutcome =
   | { ok: true; runId: string; theme: string; screens: { title: string; imageUrl: string }[] }
-  // `authRequired` is set on a 401 (wrong/missing token) or 503 (publishing
-  // disabled on this server) so the panel knows to surface the token field
-  // instead of treating this like an ordinary publish failure.
-  | { ok: false; error: string; authRequired?: boolean };
+  | { ok: false; error: string };
 
 /** Wrap a design-node HTML fragment (from convertDesignNodesToHtml) into a
  * full document sized to the viewport, for storage as the screen's
@@ -326,6 +286,13 @@ export async function publishScreensToShowcase(
     theme,
     prompt: req.prompt,
     platform,
+    // Required by the backend (same anonymous client id /api/chat sends,
+    // via getUserId() — see src/lib/userId.ts). It's a modest gate, not
+    // authentication: a request missing it, or shaped implausibly, gets a
+    // 400. getUserId() always returns something usable (it creates and
+    // persists an id on first call, with a per-process fallback when
+    // localStorage throws), so this never needs its own error handling here.
+    userId: getUserId(),
     ...(coverIndex >= 0 ? { coverIndex: coverIndex + 1 } : {}),
     screens: resolved.map((screen, i) => ({
       name: screen.title,
@@ -336,18 +303,12 @@ export async function publishScreensToShowcase(
     })),
   };
 
-  // Sent whenever a token is stored locally; omitted entirely otherwise, so
-  // a local `npm run dev` backend with no `SHOWCASE_PUBLISH_TOKEN` configured
-  // keeps working untouched (see checkPublishAuth in the backend route).
-  const token = getStoredShowcasePublishToken();
-
   let res: Response;
   try {
     res = await fetch(resolveApiUrl("/api/showcase/publish"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(120_000),
@@ -372,25 +333,13 @@ export async function publishScreensToShowcase(
       // response body wasn't JSON — fall through to the status-only message
     }
 
-    // The backend's checkPublishAuth (showcasePublish.ts) maps both auth
-    // failure shapes onto plain status codes with no other signal — turn
-    // them back into something actionable instead of a bare "401"/"503".
-    if (res.status === 401) {
-      return {
-        ok: false,
-        authRequired: true,
-        error:
-          // Deliberately phrased for both callers: this string is shown in the
-          // Showcase panel AND handed to the agent as its tool result, so it
-          // can't say "set it below".
-          "Showcase publish token is missing or wrong. The user needs to enter it in the Showcase section of the properties panel (it is stored only in this browser).",
-      };
-    }
+    // A 503 means the server has no showcase storage or S3 configured —
+    // the backend returns this status for that specific misconfiguration,
+    // nothing else.
     if (res.status === 503) {
       return {
         ok: false,
-        authRequired: true,
-        error: "Publishing from the editor is not enabled on this server.",
+        error: "Publishing is not available on this server (showcase storage isn't configured).",
       };
     }
 

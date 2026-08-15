@@ -4,8 +4,6 @@ import {
   inferPlatformForSizes,
   sortByReadingOrder,
   screenTitleFor,
-  getStoredShowcasePublishToken,
-  setStoredShowcasePublishToken,
   type ShowcasePublishScreen,
 } from "@/lib/showcasePublish";
 import { PropertySection, TextInput } from "@/components/ui/PropertyInputs";
@@ -42,14 +40,6 @@ export function ShowcasePublishSection({
   const [appName, setAppName] = useState(defaultName);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
-  // Set on a 401/503 outcome — the token field is a rescue affordance, so it
-  // only appears once it's actually needed, or once a token is already
-  // stored (so it can be replaced without first breaking a publish).
-  const [authRequired, setAuthRequired] = useState(false);
-  const [tokenDraft, setTokenDraft] = useState(() => getStoredShowcasePublishToken() ?? "");
-  const [hasStoredToken, setHasStoredToken] = useState(() => getStoredShowcasePublishToken() !== null);
-
-  const showTokenField = authRequired || hasStoredToken;
 
   // Selection order isn't meaningful — publish left-to-right, top-to-bottom
   // reading order instead, and cover the first screen in that order.
@@ -69,16 +59,10 @@ export function ShowcasePublishSection({
 
   const canPublish = !readOnly && appName.trim().length > 0 && sizeValidation.ok && status !== "publishing";
 
-  function onSaveToken() {
-    setStoredShowcasePublishToken(tokenDraft);
-    setHasStoredToken(getStoredShowcasePublishToken() !== null);
-  }
-
   async function onPublish() {
     if (readOnly || !sizeValidation.ok) return;
     setStatus("publishing");
     setError(null);
-    setAuthRequired(false);
 
     const publishScreens: ShowcasePublishScreen[] = orderedScreens.map((s, i) => ({
       nodeId: s.nodeId,
@@ -97,7 +81,6 @@ export function ShowcasePublishSection({
         setStatus("done");
       } else {
         setError(outcome.error);
-        setAuthRequired(!!outcome.authRequired);
         setStatus("error");
       }
     } catch (e) {
@@ -117,25 +100,6 @@ export function ShowcasePublishSection({
       <div className="text-[10px] text-text-muted">
         {`Publishes ${screens.length} screen${screens.length === 1 ? "" : "s"} publicly to the gallery at /.`}
       </div>
-      {showTokenField && (
-        <>
-          <TextInput
-            label="Publish token"
-            type="password"
-            value={tokenDraft}
-            onChange={setTokenDraft}
-            placeholder="Only needed if this server requires one"
-          />
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-[10px] text-text-muted">Stored only in this browser.</div>
-            {!readOnly && (
-              <Button onClick={onSaveToken} variant="outline" size="sm">
-                Save
-              </Button>
-            )}
-          </div>
-        </>
-      )}
       <Button
         onClick={onPublish}
         disabled={!canPublish}

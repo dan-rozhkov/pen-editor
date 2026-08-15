@@ -25,7 +25,6 @@ vi.mock("@/lib/apiBase", async (importOriginal) => {
 });
 
 import { publishToShowcase } from "@/lib/tools/publishToShowcase";
-import { setStoredShowcasePublishToken } from "@/lib/showcasePublish";
 
 const MOBILE = { width: 390, height: 844 };
 const RASTER = { width: MOBILE.width * 2, height: MOBILE.height * 2 };
@@ -88,7 +87,6 @@ describe("publish_to_showcase", () => {
     useCanvasRefStore.setState({ pixiRefs: {} as never });
     global.fetch = vi.fn();
     offlineFlag = false;
-    setStoredShowcasePublishToken(null);
   });
 
   it("posts the expected body shape and returns the runId on the happy path", async () => {
@@ -134,10 +132,33 @@ describe("publish_to_showcase", () => {
       height: MOBILE.height,
     });
     expect(body.screens[0].image).toMatch(/^data:image\/png;base64,/);
+    // Backend rejects a publish with no userId (400) — see showcasePublish.ts.
+    expect(typeof body.userId).toBe("string");
 
     expect(result.published).toBe(2);
     expect(result.runId).toBe("run-123");
     expect(result.theme).toBe("My App");
+  });
+
+  it("always posts a userId matching the shape the backend accepts (dashed UUID or 32-hex)", async () => {
+    // Not stubbing getUserId here deliberately: the backend's isPlausibleUserId
+    // regex is the actual contract (POST /api/showcase/publish 400s on a
+    // shape-invalid id), so assert against the real value userId.ts produces
+    // rather than a mocked constant.
+    seedEmbedNode("embed1", "Home", "<html></html>");
+    captureEmbedCanvasMock.mockResolvedValue(fakeCanvas(RASTER.width, RASTER.height));
+    const fetchMock = global.fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ runId: "run-1", platform: "mobile", screens: [{ title: "Home", imageUrl: "x" }] }),
+    });
+
+    await publishToShowcase({ theme: "App", screens: [{ nodeId: "embed1", title: "Home" }] });
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    const DASHED_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const RAW_HEX_RE = /^[0-9a-f]{32}$/i;
+    expect(DASHED_UUID_RE.test(body.userId) || RAW_HEX_RE.test(body.userId)).toBe(true);
   });
 
   it("uses an embed node's htmlContent verbatim", async () => {
@@ -273,7 +294,7 @@ describe("publish_to_showcase", () => {
     expect(result.published).toBe(1);
   });
 
-  it("omits the Authorization header when no token is stored", async () => {
+  it("never sends an Authorization header on the publish request", async () => {
     seedEmbedNode("embed1", "Home", "<html></html>");
     captureEmbedCanvasMock.mockResolvedValue(fakeCanvas(RASTER.width, RASTER.height));
     const fetchMock = global.fetch as unknown as ReturnType<typeof vi.fn>;
@@ -289,41 +310,7 @@ describe("publish_to_showcase", () => {
     expect(headers.Authorization).toBeUndefined();
   });
 
-  it("sends the Authorization header when a token is stored", async () => {
-    setStoredShowcasePublishToken("secret-token");
-    seedEmbedNode("embed1", "Home", "<html></html>");
-    captureEmbedCanvasMock.mockResolvedValue(fakeCanvas(RASTER.width, RASTER.height));
-    const fetchMock = global.fetch as unknown as ReturnType<typeof vi.fn>;
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ runId: "run-1", platform: "mobile", screens: [{ title: "Home", imageUrl: "x" }] }),
-    });
-
-    await publishToShowcase({ theme: "App", screens: [{ nodeId: "embed1", title: "Home" }] });
-
-    const [, init] = fetchMock.mock.calls[0];
-    const headers = (init as RequestInit).headers as Record<string, string>;
-    expect(headers.Authorization).toBe("Bearer secret-token");
-  });
-
-  it("maps a 401 to an actionable token error", async () => {
-    seedEmbedNode("embed1", "Home", "<html></html>");
-    captureEmbedCanvasMock.mockResolvedValue(fakeCanvas(RASTER.width, RASTER.height));
-    const fetchMock = global.fetch as unknown as ReturnType<typeof vi.fn>;
-    fetchMock.mockResolvedValue({
-      ok: false,
-      status: 401,
-      json: async () => ({ error: "Unauthorized" }),
-    });
-
-    const result = JSON.parse(
-      await publishToShowcase({ theme: "App", screens: [{ nodeId: "embed1", title: "Home" }] }),
-    );
-
-    expect(result.error).toMatch(/token/i);
-  });
-
-  it("maps a 503 to an actionable 'not enabled' error", async () => {
+  it("maps a 503 to an actionable 'not configured' error", async () => {
     seedEmbedNode("embed1", "Home", "<html></html>");
     captureEmbedCanvasMock.mockResolvedValue(fakeCanvas(RASTER.width, RASTER.height));
     const fetchMock = global.fetch as unknown as ReturnType<typeof vi.fn>;
@@ -337,7 +324,7 @@ describe("publish_to_showcase", () => {
       await publishToShowcase({ theme: "App", screens: [{ nodeId: "embed1", title: "Home" }] }),
     );
 
-    expect(result.error).toMatch(/not enabled/i);
+    expect(result.error).toMatch(/isn.t configured/i);
   });
 
   it("returns ok:false rather than throwing when a 200 body isn't JSON", async () => {
