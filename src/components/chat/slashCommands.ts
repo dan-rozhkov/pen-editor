@@ -4,6 +4,10 @@ export interface SlashCommand {
   category: string;
 }
 
+/** Category label for user-authored custom skills, merged in by
+ * SlashCommandMenu alongside this file's hardcoded built-ins. */
+export const YOUR_SKILLS_CATEGORY = "Your skills";
+
 export const SLASH_COMMANDS: SlashCommand[] = [
   // Diagnostic
   { name: "audit", description: "Technical quality audit", category: "Diagnostic" },

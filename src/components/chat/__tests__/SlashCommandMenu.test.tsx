@@ -1,7 +1,12 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { SlashCommandMenu } from "../SlashCommandMenu";
 import { SLASH_COMMANDS } from "../slashCommands";
+import { useUserSkillStore } from "@/store/userSkillStore";
+
+beforeEach(() => {
+  useUserSkillStore.setState({ skills: [], builtIn: [], available: true, status: "idle", error: null });
+});
 
 afterEach(() => cleanup());
 
@@ -88,5 +93,153 @@ describe("<SlashCommandMenu />", () => {
     render(<SlashCommandMenu query="aud" onSelect={noop} onClose={noop} />);
     // audit is in the Diagnostic category — the heading should render.
     expect(screen.getByText("Diagnostic")).toBeTruthy();
+  });
+
+  it("lists enabled custom skills under a 'Your skills' category", () => {
+    useUserSkillStore.setState({
+      skills: [
+        {
+          name: "contrast-check",
+          description: "Flags low contrast text",
+          body: "…",
+          enabled: true,
+          source: "manual",
+          useCount: 0,
+          updatedAt: "2026-08-15T00:00:00.000Z",
+        },
+      ],
+    });
+    render(<SlashCommandMenu query="" onSelect={noop} onClose={noop} />);
+    expect(screen.getByText("Your skills")).toBeTruthy();
+    expect(screen.getByText("/contrast-check")).toBeTruthy();
+  });
+
+  it("omits disabled custom skills", () => {
+    useUserSkillStore.setState({
+      skills: [
+        {
+          name: "contrast-check",
+          description: "Flags low contrast text",
+          body: "…",
+          enabled: false,
+          source: "manual",
+          useCount: 0,
+          updatedAt: "2026-08-15T00:00:00.000Z",
+        },
+      ],
+    });
+    render(<SlashCommandMenu query="" onSelect={noop} onClose={noop} />);
+    expect(screen.queryByText("/contrast-check")).toBeNull();
+  });
+
+  it("fires onSelect with a matching custom skill", () => {
+    const onSelect = vi.fn();
+    useUserSkillStore.setState({
+      skills: [
+        {
+          name: "contrast-check",
+          description: "Flags low contrast text",
+          body: "…",
+          enabled: true,
+          source: "manual",
+          useCount: 0,
+          updatedAt: "2026-08-15T00:00:00.000Z",
+        },
+      ],
+    });
+    render(<SlashCommandMenu query="contrast" onSelect={onSelect} onClose={noop} />);
+    fireEvent.mouseDown(screen.getByText("/contrast-check"));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect.mock.calls[0][0]).toMatchObject({ name: "contrast-check", category: "Your skills" });
+  });
+
+  it("dedups a custom skill against the store's fetched built-in catalog, not just the static list", () => {
+    // A skill named "audit" is not in the hardcoded SLASH_COMMANDS list, but
+    // IS in the real backend catalog (e.g. it became a curated skill after
+    // this frontend build shipped) — it must not show up twice, and the
+    // dedup must come from `builtIn`, not the static fallback.
+    useUserSkillStore.setState({
+      builtIn: [{ name: "audit", description: "Server-curated audit" }],
+      skills: [
+        {
+          name: "audit",
+          description: "My custom audit",
+          body: "…",
+          enabled: true,
+          source: "manual",
+          useCount: 0,
+          updatedAt: "2026-08-15T00:00:00.000Z",
+        },
+      ],
+    });
+    render(<SlashCommandMenu query="" onSelect={noop} onClose={noop} />);
+    // Exactly one /audit entry — the built-in one from SLASH_COMMANDS, not a
+    // duplicate "Your skills" entry for the same name.
+    expect(screen.getAllByText("/audit")).toHaveLength(1);
+    expect(screen.queryByText("My custom audit")).toBeNull();
+  });
+
+  it("falls back to the static SLASH_COMMANDS list for dedup when builtIn hasn't loaded yet", () => {
+    useUserSkillStore.setState({
+      builtIn: [],
+      skills: [
+        {
+          name: "polish",
+          description: "My custom polish",
+          body: "…",
+          enabled: true,
+          source: "manual",
+          useCount: 0,
+          updatedAt: "2026-08-15T00:00:00.000Z",
+        },
+      ],
+    });
+    render(<SlashCommandMenu query="" onSelect={noop} onClose={noop} />);
+    expect(screen.getAllByText("/polish")).toHaveLength(1);
+    expect(screen.queryByText("My custom polish")).toBeNull();
+  });
+
+  it("reaches the 'Manage skills' footer row via ArrowDown and activates it on Enter", () => {
+    const onManageSkills = vi.fn();
+    const onClose = vi.fn();
+    const onSelect = vi.fn();
+    render(
+      <SlashCommandMenu query="intensity" onSelect={onSelect} onClose={onClose} onManageSkills={onManageSkills} />
+    );
+    // Two Intensity commands: quieter, bolder — then the footer row.
+    fireEvent.keyDown(window, { key: "ArrowDown" });
+    fireEvent.keyDown(window, { key: "ArrowDown" });
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(onManageSkills).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("wraps ArrowUp from the first command back to the 'Manage skills' row", () => {
+    const onManageSkills = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <SlashCommandMenu query="intensity" onSelect={noop} onClose={onClose} onManageSkills={onManageSkills} />
+    );
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(onManageSkills).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders a 'Manage skills' footer row that calls onManageSkills and closes", () => {
+    const onManageSkills = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <SlashCommandMenu query="" onSelect={noop} onClose={onClose} onManageSkills={onManageSkills} />
+    );
+    fireEvent.mouseDown(screen.getByTestId("manage-skills-row"));
+    expect(onManageSkills).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("omits the 'Manage skills' footer row when onManageSkills is not provided", () => {
+    render(<SlashCommandMenu query="" onSelect={noop} onClose={noop} />);
+    expect(screen.queryByTestId("manage-skills-row")).toBeNull();
   });
 });

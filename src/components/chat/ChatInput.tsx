@@ -50,6 +50,9 @@ interface ChatInputProps {
   queuedMessages: QueuedChatMessage[];
   /** Removes a queued message before it gets auto-sent. */
   onRemoveQueued: (id: string) => void;
+  /** Opens the "Manage skills" modal — forwarded to the slash menu's footer
+   * row. Omitted in contexts without skill management. */
+  onManageSkills?: () => void;
 }
 
 interface ChatInputFooterProps {
@@ -97,6 +100,7 @@ export function ChatInput({
   renderFooter,
   queuedMessages,
   onRemoveQueued,
+  onManageSkills,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -393,6 +397,14 @@ export function ChatInput({
           query={slashQuery}
           onSelect={handleSlashSelect}
           onClose={handleSlashClose}
+          onManageSkills={
+            onManageSkills
+              ? () => {
+                  setShowSlashMenu(false);
+                  onManageSkills();
+                }
+              : undefined
+          }
         />
       )}
 

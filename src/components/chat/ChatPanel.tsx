@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   XIcon,
   PlusIcon,
@@ -10,15 +10,18 @@ import {
   ImageIcon,
   ArrowLineLeftIcon,
   DotsThreeVerticalIcon,
+  BookOpenIcon,
 } from "@phosphor-icons/react";
 import { useChatStore } from "@/store/chatStore";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
+import { useUserSkillStore } from "@/store/userSkillStore";
 import type { ChatTab, ParallelCount } from "@/store/chatStore";
 import { useDesignChat } from "@/hooks/useDesignChat";
 import { useAgentActivityToast } from "@/hooks/useAgentActivityToast";
 import { getUserId } from "@/lib/userId";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
+import { SkillsPanel } from "./SkillsPanel";
 import { hasPendingAskUser } from "./pendingAskUser";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { InlineAlert } from "@/components/ui/inline-alert";
@@ -164,11 +167,13 @@ function ChatSession({
   isActive,
   shouldFocus,
   composerControls,
+  onManageSkills,
 }: {
   sessionId: string;
   isActive: boolean;
   shouldFocus: boolean;
   composerControls: ComposerControlsRenderer;
+  onManageSkills: () => void;
 }) {
   const {
     messages,
@@ -319,6 +324,7 @@ function ChatSession({
           awaitingAnswer={awaitingAnswer}
           queuedMessages={queuedMessages}
           onRemoveQueued={removeQueuedMessage}
+          onManageSkills={onManageSkills}
           renderFooter={(footerProps) => (
             <div className="flex items-center gap-1 px-2 pb-2 pt-1.5">
               {composerControls(footerProps)}
@@ -341,6 +347,15 @@ export function ChatPanelContent() {
   const tabs = useChatStore((s) => s.tabs);
   const activeTabId = useChatStore((s) => s.activeTabId);
   const isAgentsSectionActive = useLeftSidebarStore((s) => s.activeSection === "agents");
+  const [isSkillsPanelOpen, setSkillsPanelOpen] = useState(false);
+  const ensureSkillsHydrated = useUserSkillStore((s) => s.ensureHydrated);
+
+  // Hydrate the user's custom skills once the chat panel mounts (not on every
+  // slash-menu keystroke) so the slash menu can list them alongside the
+  // built-ins without each open needing a fresh fetch.
+  useEffect(() => {
+    void ensureSkillsHydrated();
+  }, [ensureSkillsHydrated]);
   const activeModelLabel =
     modelOptions.find((option) => option.value === model)?.label ?? "Model";
   const composerControls: ComposerControlsRenderer = ({
@@ -473,6 +488,20 @@ export function ChatPanelContent() {
           <TooltipTrigger
             render={
               <button
+                onClick={() => setSkillsPanelOpen(true)}
+                className="-my-0.5 p-1 rounded-lg hover:bg-secondary text-text-muted transition-colors"
+                aria-label="Manage skills"
+              >
+                <BookOpenIcon size={16} />
+              </button>
+            }
+          />
+          <TooltipContent>Manage skills</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
                 onClick={toggleExpanded}
                 className="-my-0.5 p-1 rounded-lg hover:bg-secondary text-text-muted transition-colors"
                 aria-label={isExpanded ? "Collapse panel" : "Expand panel"}
@@ -507,9 +536,12 @@ export function ChatPanelContent() {
             isActive={tab.id === activeTabId}
             shouldFocus={isAgentsSectionActive}
             composerControls={composerControls}
+            onManageSkills={() => setSkillsPanelOpen(true)}
           />
         </div>
       ))}
+
+      <SkillsPanel open={isSkillsPanelOpen} onOpenChange={setSkillsPanelOpen} />
     </div>
   );
 }
