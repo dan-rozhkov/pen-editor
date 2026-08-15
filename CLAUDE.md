@@ -210,6 +210,36 @@ appear in a turn and the activity endpoint returns nothing.
   swallowed. The toast id is stable per event so parallel chat tabs collapse
   into one notification.
 
+### User-authored skills (the Skills panel)
+
+Three kinds of skill now exist and they are easy to confuse. **Curated** skills
+are git-owned Markdown in the backend repo, read-only, listed by
+`GET /api/skills`. **Learned** skills are the ones the agent writes for itself
+(the section above) and have no frontend surface at all. **User** skills are the
+Figma-style custom ones the user writes, uploads as a `.md`, or has the agent
+draft — Postgres rows behind `/api/user-skills`, scoped to the same anonymous
+`pen.userId` as memory, and the only kind the editor can create or edit.
+
+- **`src/lib/userSkills.ts`** — the typed client, plus frontmatter parse and
+  serialize for upload/export. Every function returns an `ApiResult` union and
+  **never throws**, the same contract as `showcasePublish.ts`; the base URL
+  comes from `resolveApiUrl` (`apiBase.ts`), never a hardcoded `/api`.
+- **`src/store/userSkillStore.ts`** — modeled on `pluginStore.ts`: lazy
+  idempotent `ensureHydrated` with a shared in-flight promise, write-through
+  mutators, failures in `error` rather than exceptions. Two invariants worth
+  keeping: an `error` status must **not** short-circuit hydration (a single
+  failed request has to stay retryable — only success settles it), and
+  `pendingUpdates` gates a skill's row while a write is in flight, or a
+  double-clicked enable switch resolves out of order and leaves the toggle
+  lying about state.
+- **`available: false`** (the backend has no user-skills store configured) is
+  not an error — it renders as "the feature is off here", distinct from a
+  request that failed, which offers a Retry. Both live in `SkillsPanel.tsx`.
+- **`SlashCommandMenu.tsx`** merges the user's *enabled* skills under "Your
+  skills" alongside the hardcoded built-ins, so `/my-skill` is discoverable
+  where every other skill already was. Only user skills are slash-invocable;
+  the panel's built-in list is display-only.
+
 ### File Format
 
 The editor reads/writes `.pen` files. These are accessed exclusively through the Pencil MCP tools — never read `.pen` files directly with file I/O.
