@@ -262,7 +262,9 @@ export function hasNonUniformCornerRadius(pcr: PerCornerRadius | undefined): boo
  * renderable effects. Drop shadows use `feDropShadow` (spread is not
  * representable and is dropped — documented simplification, matching the
  * `box-shadow` spread-only-in-CSS behavior in designToHtml). Inner shadows are
- * not supported and are skipped with a warning.
+ * not supported and are skipped with a warning. Glass is not representable
+ * in SVG either (Figma itself refuses to export it) and is skipped with a
+ * warning.
  */
 export function buildEffectsFilter(node: FlatSceneNode, ctx: SvgConversionContext): string | null {
   const effects = getRenderableEffects(node);
@@ -275,6 +277,12 @@ export function buildEffectsFilter(node: FlatSceneNode, ctx: SvgConversionContex
   if (hasInnerShadow) {
     ctx.warnings.push(
       `Inner shadow on node "${nodeLabel(node)}" is not supported in SVG export and was skipped.`,
+    );
+  }
+  const hasGlass = effects.some((e) => e.type === "glass" && e.visible !== false);
+  if (hasGlass) {
+    ctx.warnings.push(
+      `Glass effect on node "${nodeLabel(node)}" is not supported in SVG export and was skipped.`,
     );
   }
   const blur = effects.find((e): e is BlurEffect => e.type === "blur" && e.radius > 0);

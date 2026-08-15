@@ -3,7 +3,7 @@ import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { resetStores, seedScene } from "@/test/fixtures";
 import type { FlatFrameNode, RectNode, TextNode } from "@/types/scene";
-import { computeScaleUpdates } from "@/store/sceneStore/scaleOperations";
+import { computeScaleUpdates, scaleNodeProps } from "@/store/sceneStore/scaleOperations";
 
 function scene() {
   return useSceneStore.getState();
@@ -116,6 +116,42 @@ describe("scaleOperations", () => {
       // Descendant positions are untouched by the root's anchor.
       expect(updates.rect1.x).toBe(20);
       expect(updates.rect1.y).toBe(40);
+    });
+  });
+
+  describe("scaleNodeProps effect scaling (pure)", () => {
+    it("scales a glass effect's px-valued fields (depth, frost) and leaves the unitless 0-1 params and angle alone", () => {
+      const node = scene().nodesById.rect1 as RectNode;
+      const withGlass: RectNode = {
+        ...node,
+        effects: [
+          {
+            type: "glass",
+            id: "glass-1",
+            lightAngle: 135,
+            lightIntensity: 0.5,
+            refraction: 0.35,
+            depth: 12,
+            dispersion: 0.15,
+            frost: 8,
+            splay: 0.4,
+          },
+        ],
+      };
+
+      const patch = scaleNodeProps(withGlass, 2);
+      const scaled = patch.effects?.[0];
+      expect(scaled).toEqual({
+        type: "glass",
+        id: "glass-1",
+        lightAngle: 135,
+        lightIntensity: 0.5,
+        refraction: 0.35,
+        depth: 24,
+        dispersion: 0.15,
+        frost: 16,
+        splay: 0.4,
+      });
     });
   });
 

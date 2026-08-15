@@ -170,6 +170,18 @@ function toShadowEffect(effect: FigEffect): ShadowEffect | null {
  * GLASS, CUSTOM, …) have no editor equivalent and are skipped rather than
  * mis-imported. Progressive blur (`blurOpType: PROGRESSIVE`) degrades to a
  * uniform blur of the same radius — the editor has no gradient-blur ramp.
+ *
+ * TODO(glass-import, plan 023 stage 5): `GLASS` is a confirmed real member
+ * name of Figma's `EffectType` enum (`__tests__/figFixture.ts`'s
+ * `TEST_SCHEMA` comment attests it mirrors a captured fig-kiwi v106
+ * payload), but `FigEffect` here only decodes `color`/`offset`/`radius`/
+ * `visible`/`spread` — none of which have confirmed wire semantics for a
+ * glass surface (no captured payload with a populated GLASS effect has been
+ * inspected, so it's unknown whether Figma's `radius` field even carries
+ * frost/blur radius on this kind, vs. e.g. bevel depth). Mapping it to our
+ * `GlassEffect` (frost/depth/refraction/dispersion/lightAngle/
+ * lightIntensity/splay) needs a real decoded GLASS payload to confirm field
+ * meaning before writing `toGlassEffect` — do not guess the field mapping.
  */
 function toEffect(effect: FigEffect): Effect | null {
   switch (effect.type) {

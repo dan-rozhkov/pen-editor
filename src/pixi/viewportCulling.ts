@@ -4,7 +4,7 @@ const OVERVIEW_SCALE = 0.2;
 const EFFECT_LABELS = new Set([
   "shadow-layer",
   "inner-shadow-layer",
-  "background-blur-fill",
+  "material-surface",
 ]);
 const previousEffectRenderability = new WeakMap<Container, boolean>();
 const previousFilterEnabled = new WeakMap<Filter, boolean>();

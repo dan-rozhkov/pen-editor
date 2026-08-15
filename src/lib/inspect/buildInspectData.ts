@@ -4,6 +4,7 @@ import type {
   ShadowEffect,
   BlurEffect,
   BackgroundBlurEffect,
+  GlassEffect,
   NoiseEffect,
   PathStroke,
 } from "@/types/scene";
@@ -359,7 +360,7 @@ function buildStrokesSection(
   return { title: "Strokes", rows };
 }
 
-function describeEffect(effect: ShadowEffect | BlurEffect | BackgroundBlurEffect | NoiseEffect, units: InspectUnits, remBase: number): InspectValue {
+function describeEffect(effect: ShadowEffect | BlurEffect | BackgroundBlurEffect | GlassEffect | NoiseEffect, units: InspectUnits, remBase: number): InspectValue {
   if (effect.type === "shadow") {
     const label = effect.shadowType === "inner" ? "Inner shadow" : "Shadow";
     const value = `${fmt(effect.offset.x, units, remBase)} ${fmt(effect.offset.y, units, remBase)} ${fmt(effect.blur, units, remBase)} ${fmt(effect.spread, units, remBase)} ${effect.color}`;
@@ -370,6 +371,10 @@ function describeEffect(effect: ShadowEffect | BlurEffect | BackgroundBlurEffect
   }
   if (effect.type === "background-blur") {
     return { label: "Background blur", value: fmt(effect.radius, units, remBase) };
+  }
+  if (effect.type === "glass") {
+    const value = `frost ${fmt(effect.frost, units, remBase)}, depth ${fmt(effect.depth, units, remBase)}, refraction ${effect.refraction}, dispersion ${effect.dispersion}, light ${effect.lightAngle}° @ ${effect.lightIntensity}, splay ${effect.splay}`;
+    return { label: "Glass", value };
   }
   return {
     label: "Noise",

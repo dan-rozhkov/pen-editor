@@ -5,6 +5,7 @@ import {
   type BlurEffect,
   type Effect,
   type FlatSceneNode,
+  type GlassEffect,
   type GradientFill,
   type GradientPaint,
   type ImageFill,
@@ -21,7 +22,7 @@ import {
   type VideoPaint,
   type VideoPlayback,
 } from '@/types/scene'
-import { getDefaultShadow } from '@/utils/shadowUtils'
+import { getDefaultShadow, parseHexAlpha } from '@/utils/shadowUtils'
 import type { EffectStyle, FillStyle } from '@/types/style'
 
 /**
@@ -202,6 +203,121 @@ export function createBackgroundBlurEffect(
     id: generateId(),
     ...init,
   }
+}
+
+/**
+ * Default Glass: a visible but restrained material — refraction and frost
+ * strong enough to read as glass over a busy backdrop, dispersion low enough
+ * not to fringe on a flat one.
+ */
+export function createGlassEffect(init?: Partial<Omit<GlassEffect, 'type'>>): GlassEffect {
+  return {
+    type: 'glass',
+    lightAngle: 135,
+    lightIntensity: 0.5,
+    refraction: 0.35,
+    depth: 12,
+    dispersion: 0.15,
+    frost: 8,
+    splay: 0.4,
+    id: generateId(),
+    ...init,
+  }
+}
+
+/** Clamp `value` into [min, max], substituting `fallback` for NaN/non-finite input. */
+function clampFinite(value: number, min: number, max: number, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
+  return Math.min(max, Math.max(min, value))
+}
+
+/**
+ * Coerce a `GlassEffect` from an imported/AI-authored document into the
+ * documented ranges (see `GlassEffect` in `@/types/scene`). Never rejects:
+ * NaN/missing/out-of-range values fall back to the defaults rather than
+ * disabling the effect, so a malformed document still renders something
+ * sensible. `lightAngle` wraps rather than clamps (an angle is cyclic).
+ */
+export function normalizeGlassEffect(effect: GlassEffect): GlassEffect {
+  const defaults = createGlassEffect()
+  const rawAngle = effect.lightAngle
+  const lightAngle =
+    typeof rawAngle === 'number' && Number.isFinite(rawAngle)
+      ? ((rawAngle % 360) + 360) % 360
+      : defaults.lightAngle
+  return {
+    ...effect,
+    lightAngle,
+    lightIntensity: clampFinite(effect.lightIntensity, 0, 1, defaults.lightIntensity),
+    refraction: clampFinite(effect.refraction, 0, 1, defaults.refraction),
+    depth: clampFinite(effect.depth, 1, 1000, defaults.depth),
+    dispersion: clampFinite(effect.dispersion, 0, 1, defaults.dispersion),
+    frost: clampFinite(effect.frost, 0, 100, defaults.frost),
+    splay: clampFinite(effect.splay, 0, 1, defaults.splay),
+  }
+}
+
+/**
+ * The one effect that owns a node's "material" slot, or `undefined`.
+ *
+ * Glass and background blur are mutually exclusive — Figma documents that a
+ * layer renders whichever of the two comes first in the stack and ignores the
+ * other. `effects` is bottom-to-top, so "first" means the lowest visible one.
+ * A second Glass (or a background blur under a Glass) is inert, which is why
+ * the renderer picks through here rather than `.find(e => e.type === 'glass')`
+ * — an imported document may legitimately carry several.
+ *
+ * Pass an already-renderable stack (`getRenderableEffects` /
+ * `getResolvedRenderableEffects`); this only re-checks `visible` defensively.
+ */
+export function pickMaterialEffect(
+  effects: Effect[],
+): GlassEffect | BackgroundBlurEffect | undefined {
+  for (const effect of effects) {
+    if (effect.visible === false) continue
+    if (effect.type === 'glass') return normalizeGlassEffect(effect)
+    if (effect.type === 'background-blur') return effect
+  }
+  return undefined
+}
+
+/**
+ * True when the node's paint stack certainly hides anything painted behind it,
+ * making a material (Glass/background blur) pass invisible and therefore
+ * skippable.
+ *
+ * SCOPE: "the fill covers the node's box" is only true for box-filling node
+ * types — `rect`, `ellipse`, `frame`. On a `text` node the fill is the GLYPH
+ * colour, and on `path`/`polygon`/`line` it fills a shape that is mostly not
+ * the bounding box; an opaque fill there hides almost none of the backdrop.
+ * Callers using this to skip a backdrop-dependent pass must gate on node type
+ * first (see `pixi/renderers/liveBackdropHelpers.ts`) — otherwise ordinary
+ * black text silently loses its material effect.
+ *
+ * Deliberately CONSERVATIVE: it returns true only for a stack whose opacity it
+ * can prove — a top solid/gradient-free paint at full alpha, full paint
+ * opacity, full node opacity, no blend mode and no variable binding. Anything
+ * it cannot read (a colour behind a `colorBinding`, an image/video/pattern
+ * paint, a non-normal blend mode) returns false, so the effect still renders.
+ * A wrong `true` would silently drop pixels the user asked for; a wrong
+ * `false` only costs a filter pass.
+ */
+export function hasOpaqueEffectiveFill(
+  node: FillSource & { opacity?: number },
+): boolean {
+  if ((node.opacity ?? 1) < 1) return false
+  const fills = getRenderableFills(node)
+  for (let i = fills.length - 1; i >= 0; i--) {
+    const paint = fills[i]
+    if ((paint.opacity ?? 1) < 1) continue
+    if (paint.blendMode && paint.blendMode !== 'normal') continue
+    if (paint.type !== 'solid') continue
+    // A bound colour resolves through the variable/theme chain at render time
+    // and may well be translucent — unreadable here, so never treated as opaque.
+    if (paint.colorBinding) continue
+    if (parseHexAlpha(paint.color).opacity >= 1) return true
+  }
+  return false
 }
 
 export function createNoiseEffect(init?: Partial<Omit<NoiseEffect, 'type'>>): NoiseEffect {

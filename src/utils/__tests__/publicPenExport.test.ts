@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { serializePublicPenDocument } from "@/utils/publicPenExport";
+import { serializePublicPenDocument, serializePublicPenDocumentWithWarnings } from "@/utils/publicPenExport";
 import type { RectNode } from "@/types/scene";
 
 function baseRect(overrides: Partial<RectNode>): RectNode {
@@ -82,6 +82,41 @@ describe("publicPenExport effects", () => {
         blendMode: "multiply",
       },
     ]);
+  });
+
+  it("exports a glass effect as a lossy background-blur with a warning, never an unknown 'glass' type", () => {
+    const node = baseRect({
+      effects: [
+        {
+          type: "glass",
+          lightAngle: 135,
+          lightIntensity: 0.5,
+          refraction: 0.35,
+          depth: 12,
+          dispersion: 0.15,
+          frost: 8,
+          splay: 0.4,
+        },
+      ],
+    });
+
+    const { json, warnings } = serializePublicPenDocumentWithWarnings([node], [], "light");
+    const doc = JSON.parse(json);
+    const exported = doc.children[0];
+
+    expect(exported.effect).toEqual([{ type: "background-blur", radius: 8 }]);
+    // The Pencil.dev public .pen schema has no "glass" type — assert it never
+    // leaks through raw, unmapped.
+    expect(json).not.toContain('"glass"');
+    expect(
+      warnings.some(
+        (w) =>
+          w.includes("Glass effect") &&
+          w.includes("background-blur") &&
+          w.includes("refraction") &&
+          w.includes("dispersion"),
+      ),
+    ).toBe(true);
   });
 
   it("preserves visible: false and still exports legacy single effect", () => {

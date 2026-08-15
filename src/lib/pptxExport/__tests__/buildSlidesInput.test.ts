@@ -60,6 +60,21 @@ describe("needsRaster", () => {
     expect(needsRaster(rect(), [], [{ type: "blur", radius: 4, visible: false }])).toBe(false);
   });
 
+  it("visible glass effect rasters", () => {
+    const glass = {
+      type: "glass" as const,
+      lightAngle: 135,
+      lightIntensity: 0.5,
+      refraction: 0.35,
+      depth: 12,
+      dispersion: 0.15,
+      frost: 8,
+      splay: 0.4,
+    };
+    expect(needsRaster(rect(), [], [glass])).toBe(true);
+    expect(needsRaster(rect(), [], [{ ...glass, visible: false }])).toBe(false);
+  });
+
   it("visible noise effect rasters", () => {
     expect(
       needsRaster(rect(), [], [{ type: "noise", noiseType: "mono", color: "#00000080", noiseSize: 4, density: 0.5 }]),

@@ -232,6 +232,49 @@ describe("designToHtml effect stack", () => {
     expect(styles["backdrop-filter"]).toBeUndefined();
   });
 
+  // Glass has no CSS analogue (refraction/dispersion/directional light need a
+  // real backdrop sample). It degrades to a `backdrop-filter: blur(frost)`
+  // fallback, matching the shape of the background-blur branch above.
+  it("converts a glass effect to a lossy backdrop-filter: blur(frost) fallback", () => {
+    const effects: Effect[] = [
+      {
+        type: "glass",
+        lightAngle: 135,
+        lightIntensity: 0.5,
+        refraction: 0.35,
+        depth: 12,
+        dispersion: 0.15,
+        frost: 8,
+        splay: 0.4,
+      },
+    ];
+    const styles = generateVisualStyles(rect({ effects }));
+    expect(styles["backdrop-filter"]).toBe("blur(8px)");
+    expect(styles["-webkit-backdrop-filter"]).toBe("blur(8px)");
+    expect(styles.filter).toBeUndefined();
+  });
+
+  // Material slot: Glass and background blur are mutually exclusive — only
+  // the first visible one in the bottom-to-top stack should ever emit a
+  // backdrop-filter (Figma semantics via `pickMaterialEffect`).
+  it("a glass effect below a background blur wins the material slot; the blur is ignored", () => {
+    const effects: Effect[] = [
+      { type: "glass", lightAngle: 0, lightIntensity: 0.5, refraction: 0.35, depth: 12, dispersion: 0.15, frost: 5, splay: 0.4 },
+      { type: "background-blur", radius: 20 },
+    ];
+    const styles = generateVisualStyles(rect({ effects }));
+    expect(styles["backdrop-filter"]).toBe("blur(5px)");
+  });
+
+  it("a background blur below a glass effect wins the material slot; the glass is ignored", () => {
+    const effects: Effect[] = [
+      { type: "background-blur", radius: 20 },
+      { type: "glass", lightAngle: 0, lightIntensity: 0.5, refraction: 0.35, depth: 12, dispersion: 0.15, frost: 5, splay: 0.4 },
+    ];
+    const styles = generateVisualStyles(rect({ effects }));
+    expect(styles["backdrop-filter"]).toBe("blur(20px)");
+  });
+
   // Pin: noise has no CSS analogue (like Figma's SVG export) — it must not
   // emit box-shadow/filter/backdrop-filter, and must not throw.
   it("noise effect produces no CSS and does not throw", () => {

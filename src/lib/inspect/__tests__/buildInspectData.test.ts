@@ -272,6 +272,39 @@ describe("buildInspectData", () => {
     expect(effects!.rows[0].swatchBackground).toBeUndefined();
   });
 
+  it("builds an Effects row for a glass effect, showing its params instead of crashing or omitting it", () => {
+    const rect: FlatSceneNode = {
+      id: "r4d",
+      type: "rect",
+      name: "Card2d",
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      effects: [
+        {
+          type: "glass",
+          lightAngle: 135,
+          lightIntensity: 0.5,
+          refraction: 0.35,
+          depth: 12,
+          dispersion: 0.15,
+          frost: 8,
+          splay: 0.4,
+        },
+      ],
+    };
+    const nodesById = { r4d: rect };
+    const data = buildOrThrow(baseArgs(nodesById, "r4d"));
+
+    const effects = data.sections.find((s) => s.title === "Effects");
+    expect(effects).toBeDefined();
+    expect(effects!.rows[0].label).toBe("Glass");
+    expect(effects!.rows[0].value).toBe(
+      "frost 8px, depth 12px, refraction 0.35, dispersion 0.15, light 135° @ 0.5, splay 0.4",
+    );
+  });
+
   it("builds a 4-value Radius row for per-corner radius", () => {
     const rect: FlatSceneNode = {
       id: "r5",

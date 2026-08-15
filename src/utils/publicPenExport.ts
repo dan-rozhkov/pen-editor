@@ -214,6 +214,13 @@ interface PenDocument {
 
 interface ExportContext {
   variableNamesById: Map<string, string>;
+  /**
+   * Human-readable notices about content this static export format cannot
+   * represent faithfully (mirrors `SvgConversionContext.warnings` in
+   * `designToSvg`). Populated during the walk, surfaced by
+   * `serializePublicPenDocumentWithWarnings` — never silently dropped.
+   */
+  warnings: string[];
 }
 
 const THEME_AXIS = "mode";
@@ -438,7 +445,7 @@ function exportStroke(node: StrokeSource, context: ExportContext): PenStroke | u
   };
 }
 
-function exportEffects(node: SceneNode): PenEffect[] | undefined {
+function exportEffects(node: SceneNode, context: ExportContext): PenEffect[] | undefined {
   const effects = getEffects(node);
   if (effects.length === 0) return undefined;
   return effects.map((e): PenEffect => {
@@ -446,6 +453,21 @@ function exportEffects(node: SceneNode): PenEffect[] | undefined {
       return {
         type: e.type,
         radius: e.radius,
+        ...(e.visible === false ? { visible: false } : {}),
+      };
+    }
+    if (e.type === "glass") {
+      // The public .pen schema (v${PUBLIC_PEN_VERSION}) has no `glass` effect
+      // type — an unknown type must never reach the output. Export a lossy
+      // `background-blur` fallback (radius = frost) instead, matching the
+      // HTML exporter's degradation, and record what was lost rather than
+      // silently dropping refraction/dispersion/light.
+      context.warnings.push(
+        `Glass effect on node "${node.name ?? node.id}" has no equivalent in the public .pen format (v${PUBLIC_PEN_VERSION}) and was exported as a lossy background-blur (radius = frost); light, refraction, dispersion, depth, and splay were dropped.`,
+      );
+      return {
+        type: "background-blur",
+        radius: e.frost,
         ...(e.visible === false ? { visible: false } : {}),
       };
     }
@@ -531,7 +553,7 @@ function exportSize(node: SceneNode, parentUsesLayout: boolean): Pick<PenBaseNod
 function exportNodeBase(node: SceneNode, context: ExportContext, parentUsesLayout: boolean): PenBaseNode {
   const { fill, fills } = exportFills(node, context);
   const stroke = exportStroke(node, context);
-  const effect = exportEffects(node);
+  const effect = exportEffects(node, context);
 
   return {
     id: node.id,
@@ -717,14 +739,22 @@ function exportNode(node: SceneNode, context: ExportContext, parentUsesLayout: b
   }
 }
 
-export function serializePublicPenDocument(
+/**
+ * Serialize the public `.pen` document plus any warnings about content this
+ * format could not represent faithfully (e.g. a Glass effect degraded to
+ * `background-blur`). Prefer this over `serializePublicPenDocument` when the
+ * caller can surface warnings to the user; the latter is a thin wrapper kept
+ * for its existing single call site and logs the same warnings to the
+ * console so nothing is silently dropped either way.
+ */
+export function serializePublicPenDocumentWithWarnings(
   nodes: SceneNode[],
   variables: Variable[],
   _activeTheme: ThemeName,
-): string {
+): { json: string; warnings: string[] } {
   const variableNamesById = buildVariableNameMap(variables);
   const exportedVariables = exportVariables(variables, variableNamesById);
-  const context: ExportContext = { variableNamesById };
+  const context: ExportContext = { variableNamesById, warnings: [] };
 
   const document: PenDocument = {
     version: PUBLIC_PEN_VERSION,
@@ -733,5 +763,17 @@ export function serializePublicPenDocument(
     children: nodes.map((node) => exportNode(node, context, false)),
   };
 
-  return JSON.stringify(document, null, 2);
+  return { json: JSON.stringify(document, null, 2), warnings: context.warnings };
+}
+
+export function serializePublicPenDocument(
+  nodes: SceneNode[],
+  variables: Variable[],
+  activeTheme: ThemeName,
+): string {
+  const { json, warnings } = serializePublicPenDocumentWithWarnings(nodes, variables, activeTheme);
+  for (const warning of warnings) {
+    console.warn(`[publicPenExport] ${warning}`);
+  }
+  return json;
 }

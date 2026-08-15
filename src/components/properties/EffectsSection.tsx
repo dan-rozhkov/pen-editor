@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { Effect, NoiseEffect, SceneNode, ShadowEffect } from "@/types/scene";
+import type { Effect, GlassEffect, NoiseEffect, SceneNode, ShadowEffect } from "@/types/scene";
 import { generateId } from "@/types/scene";
 import {
   ColorInput,
@@ -19,10 +19,14 @@ import { parseHexAlpha } from "@/utils/shadowUtils";
 import {
   createBackgroundBlurEffect,
   createBlurEffect,
+  createGlassEffect,
   createNoiseEffect,
   createShadowEffect,
   getEffects,
   clearLegacyEffectProps,
+  hasOpaqueEffectiveFill,
+  normalizeGlassEffect,
+  pickMaterialEffect,
 } from "@/utils/fillUtils";
 import {
   addEffect,
@@ -36,6 +40,9 @@ import { useStyleStore } from "@/store/styleStore";
 import { BlendModeDropdown, StackRowShell, useDragReorder } from "@/components/properties/stackRow";
 import { MAX_NOISE_EFFECTS } from "@/pixi/renderers/noiseEffectHelpers";
 
+// Figma parity: at most one Glass per node (mirrors MAX_NOISE_EFFECTS above).
+const MAX_GLASS_EFFECTS = 1;
+
 const NOISE_TYPE_OPTIONS: { value: NoiseEffect["noiseType"]; label: string }[] = [
   { value: "mono", label: "Mono" },
   { value: "duo", label: "Duo" },
@@ -46,6 +53,7 @@ const NOISE_TYPE_OPTIONS: { value: NoiseEffect["noiseType"]; label: string }[] =
 function effectLabel(effect: Effect): string {
   if (effect.type === "blur") return "Layer Blur";
   if (effect.type === "background-blur") return "Background Blur";
+  if (effect.type === "glass") return "Glass";
   if (effect.type === "noise") return "Noise";
   return effect.shadowType === "inner" ? "Inner Shadow" : "Drop Shadow";
 }
@@ -89,7 +97,20 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
     commit(updateEffectAt(effects, index, noise));
   };
 
+  // Reuses normalizeGlassEffect (the same clamp fillUtils.ts and the renderer
+  // apply) so the stored value can never disagree with what the canvas will
+  // actually render — see the "Glass effect UI" fix.
+  const updateGlass = (index: number, glass: GlassEffect) => {
+    commit(updateEffectAt(effects, index, normalizeGlassEffect(glass)));
+  };
+
   const noiseCount = effects.filter((e) => e.type === "noise").length;
+  const glassCount = effects.filter((e) => e.type === "glass").length;
+
+  // Glass and background blur share one "material" slot (Figma parity): the
+  // first visible one in bottom-to-top order wins. Used to flag every other
+  // material row in the stack as inactive.
+  const activeMaterialEffect = useMemo(() => pickMaterialEffect(effects), [effects]);
 
   // Drag-to-reorder is deliberately left off for effects (see plans/017) —
   // enabling it is a one-prop change (`canReorder`), a follow-up.
@@ -123,6 +144,12 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => handleAdd(createBackgroundBlurEffect())}>
               Background blur
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => handleAdd(createGlassEffect())}
+              disabled={glassCount >= MAX_GLASS_EFFECTS}
+            >
+              Glass
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => handleAdd(createNoiseEffect())}
@@ -238,6 +265,21 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
                     )}
                   </div>
 
+                  {(effect.type === "glass" || effect.type === "background-blur") &&
+                    isVisible &&
+                    activeMaterialEffect?.id !== effect.id && (
+                      <p className="text-[11px] text-text-muted">
+                        Inactive: another material effect lower in the stack renders instead.
+                        Glass and background blur share one material slot per node.
+                      </p>
+                    )}
+
+                  {effect.type === "glass" && hasOpaqueEffectiveFill(node) && (
+                    <p className="text-[11px] text-text-muted">
+                      This fill is fully opaque, so glass will not be visible through it.
+                    </p>
+                  )}
+
                   {effect.type === "shadow" && (
                     <>
                       {/* Color + opacity */}
@@ -335,6 +377,118 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
                         step={1}
                       />
                     </PropertyRow>
+                  )}
+
+                  {effect.type === "glass" && (
+                    <>
+                      <PropertyRow>
+                        <NumberInput
+                          label="Angle"
+                          labelOutside
+                          value={effect.lightAngle}
+                          onChange={(v) =>
+                            updateGlass(arrayIndex, {
+                              ...effect,
+                              lightAngle: v,
+                            })
+                          }
+                          step={1}
+                        />
+                        <NumberInput
+                          label="Intensity"
+                          labelOutside
+                          value={Math.round(effect.lightIntensity * 100)}
+                          onChange={(v) =>
+                            updateGlass(arrayIndex, {
+                              ...effect,
+                              lightIntensity: v / 100,
+                            })
+                          }
+                          min={0}
+                          max={100}
+                          step={1}
+                        />
+                      </PropertyRow>
+
+                      <PropertyRow>
+                        <NumberInput
+                          label="Refraction"
+                          labelOutside
+                          value={Math.round(effect.refraction * 100)}
+                          onChange={(v) =>
+                            updateGlass(arrayIndex, {
+                              ...effect,
+                              refraction: v / 100,
+                            })
+                          }
+                          min={0}
+                          max={100}
+                          step={1}
+                        />
+                        <NumberInput
+                          label="Depth"
+                          labelOutside
+                          value={effect.depth}
+                          onChange={(v) =>
+                            updateGlass(arrayIndex, {
+                              ...effect,
+                              depth: v,
+                            })
+                          }
+                          min={1}
+                          max={1000}
+                          step={1}
+                        />
+                      </PropertyRow>
+
+                      <PropertyRow>
+                        <NumberInput
+                          label="Dispersion"
+                          labelOutside
+                          value={Math.round(effect.dispersion * 100)}
+                          onChange={(v) =>
+                            updateGlass(arrayIndex, {
+                              ...effect,
+                              dispersion: v / 100,
+                            })
+                          }
+                          min={0}
+                          max={100}
+                          step={1}
+                        />
+                        <NumberInput
+                          label="Frost"
+                          labelOutside
+                          value={effect.frost}
+                          onChange={(v) =>
+                            updateGlass(arrayIndex, {
+                              ...effect,
+                              frost: v,
+                            })
+                          }
+                          min={0}
+                          max={100}
+                          step={1}
+                        />
+                      </PropertyRow>
+
+                      <PropertyRow>
+                        <NumberInput
+                          label="Splay"
+                          labelOutside
+                          value={Math.round(effect.splay * 100)}
+                          onChange={(v) =>
+                            updateGlass(arrayIndex, {
+                              ...effect,
+                              splay: v / 100,
+                            })
+                          }
+                          min={0}
+                          max={100}
+                          step={1}
+                        />
+                      </PropertyRow>
+                    </>
                   )}
 
                   {effect.type === "noise" && (

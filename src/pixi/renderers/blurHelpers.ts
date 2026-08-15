@@ -13,18 +13,6 @@ export function pickLayerBlurRadius(effects: Effect[]): number | null {
   return null;
 }
 
-/**
- * Effective background-blur radius from a renderable effect stack. Only ONE
- * background blur applies per node: the first visible one with radius > 0
- * wins (same convention as layer blur / the CSS export in designToHtml).
- */
-export function pickBackgroundBlurRadius(effects: Effect[]): number | null {
-  for (const effect of effects) {
-    if (effect.type === "background-blur" && effect.radius > 0) return effect.radius;
-  }
-  return null;
-}
-
 type TaggedFilter = Filter & { __layerBlur?: true };
 
 /** Containers that already have the layer-blur destroy-teardown hook registered (avoid double-attaching). */
@@ -43,10 +31,10 @@ const layerBlurFilterByContainer = new WeakMap<Container, TaggedFilter>();
  * BlurFilter when the container itself is destroyed. `syncNodeTree`'s
  * node-deletion path calls `container.destroy({ children: true })`, which
  * does NOT destroy `container.filters` (Pixi 8 leaves them alive — see the
- * matching comment in `backgroundBlurHelpers.ts`), so without this hook every
- * deleted node that had a layer blur permanently leaks a BlurFilter (bug-08).
- * Guarded by a WeakSet so it's only attached once per container, mirroring
- * `ensureBackgroundBlurDestroyHook`.
+ * matching comment in `liveBackdropHelpers.ts`'s `ensureMaterialDestroyHook`),
+ * so without this hook every deleted node that had a layer blur permanently
+ * leaks a BlurFilter (bug-08). Guarded by a WeakSet so it's only attached
+ * once per container, mirroring `ensureMaterialDestroyHook`.
  */
 function ensureLayerBlurDestroyHook(container: Container): void {
   if (destroyHooked.has(container)) return;

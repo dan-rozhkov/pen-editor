@@ -22,9 +22,11 @@ import { getEffects, type EffectSource } from "@/utils/fillUtils";
  * - Layer blur (`type: "blur"`): blurs the node itself in place; same
  *   `strength = radius / 2` convention, so it bleeds `radius` px past the
  *   node's rect (`renderers/blurHelpers.ts`).
- * - Background blur (`type: "background-blur"`): baked to a sprite masked to
- *   the node's own shape (`renderers/backgroundBlurHelpers.ts`) — never
- *   overhangs, contributes 0.
+ * - Background blur (`type: "background-blur"`) and Glass (`type: "glass"`):
+ *   both render through the live `material-surface` filter
+ *   (`renderers/liveBackdropHelpers.ts`, `renderers/filters/
+ *   GlassBackdropFilter.ts`), which is clipped to the node's own shape via
+ *   the surface's alpha mask — never overhangs, contributes 0.
  *
  * Deliberately reads only a node's own `effects`/`effect` fields (via
  * `getEffects`), not effect-style (`effectStyleId`) resolution — that needs
@@ -47,7 +49,7 @@ export function effectMargin(effects: Effect[] | undefined): number {
     } else if (effect.type === "blur") {
       if (effect.radius > margin) margin = effect.radius;
     }
-    // background-blur: intentionally contributes 0 (see doc above).
+    // background-blur / glass: intentionally contribute 0 (see doc above).
   }
   return margin;
 }

@@ -338,6 +338,17 @@ export function PixiCanvas() {
         backgroundAlpha: 0,
         resolution: window.devicePixelRatio || 1,
         autoDensity: true,
+        // `useBackBuffer` deliberately left at Pixi's default (false) here.
+        // Any `blendRequired: true` filter (e.g. GlassBackdropFilter,
+        // renderers/filters/GlassBackdropFilter.ts) needs it `true` on
+        // WebGL to receive a non-empty `activeBackTexture`, but turning it
+        // on unconditionally would pay for a full-screen back-buffer
+        // texture + blit every frame on every document, including the vast
+        // majority with no material effect at all. `renderer.backBuffer.
+        // useBackBuffer` is a plain mutable property (re-read fresh at the
+        // start of every render, not an init-only option), so
+        // `liveBackdropHelpers.ts` flips it on/off itself, ref-counted by
+        // how many material surfaces are currently live.
       })
       .then(() => {
         if (destroyed) {

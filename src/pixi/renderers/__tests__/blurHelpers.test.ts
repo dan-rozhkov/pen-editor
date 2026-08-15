@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { Container, Filter } from "pixi.js";
-import { pickLayerBlurRadius, pickBackgroundBlurRadius, applyLayerBlur } from "../blurHelpers";
+import { pickLayerBlurRadius, applyLayerBlur } from "../blurHelpers";
 import type { Effect, ShadowEffect } from "@/types/scene";
 
 const shadow: ShadowEffect = {
@@ -46,39 +46,6 @@ describe("pickLayerBlurRadius", () => {
 
   it("ignores background-blur effects", () => {
     expect(pickLayerBlurRadius([{ type: "background-blur", radius: 6 }])).toBeNull();
-  });
-});
-
-describe("pickBackgroundBlurRadius", () => {
-  it("returns null for an empty stack", () => {
-    expect(pickBackgroundBlurRadius([])).toBeNull();
-  });
-
-  it("returns null when the stack has only shadows or layer blur", () => {
-    expect(pickBackgroundBlurRadius([shadow, { type: "blur", radius: 5 }])).toBeNull();
-  });
-
-  it("returns the radius of a background-blur effect", () => {
-    const effects: Effect[] = [shadow, { type: "background-blur", radius: 10 }];
-    expect(pickBackgroundBlurRadius(effects)).toBe(10);
-  });
-
-  it("first background-blur in the stack wins when there are several", () => {
-    const effects: Effect[] = [
-      { type: "background-blur", radius: 3 },
-      { type: "background-blur", radius: 9 },
-    ];
-    expect(pickBackgroundBlurRadius(effects)).toBe(3);
-  });
-
-  it("ignores background blurs with radius <= 0", () => {
-    expect(pickBackgroundBlurRadius([{ type: "background-blur", radius: 0 }])).toBeNull();
-    expect(
-      pickBackgroundBlurRadius([
-        { type: "background-blur", radius: 0 },
-        { type: "background-blur", radius: 5 },
-      ]),
-    ).toBe(5);
   });
 });
 

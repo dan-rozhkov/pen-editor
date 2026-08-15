@@ -328,6 +328,28 @@ describe("convertDesignNodesToSvg", () => {
     expect(warnings.some((w) => w.includes("Inner shadow"))).toBe(true);
   });
 
+  it("warns and skips a glass effect", () => {
+    const nodesById: Record<string, FlatSceneNode> = {
+      rect1: rect("rect1", {
+        effects: [
+          {
+            type: "glass",
+            lightAngle: 135,
+            lightIntensity: 0.5,
+            refraction: 0.35,
+            depth: 12,
+            dispersion: 0.15,
+            frost: 8,
+            splay: 0.4,
+          },
+        ],
+      }),
+    };
+    const { svg, warnings } = convertDesignNodesToSvg("rect1", nodesById, {});
+    expect(svg).not.toContain("<filter");
+    expect(warnings.some((w) => w.includes("Glass effect") && w.includes("not supported"))).toBe(true);
+  });
+
   it("warns with a paint-specific message and skips an image fill", () => {
     const nodesById: Record<string, FlatSceneNode> = {
       rect1: rect("rect1", {

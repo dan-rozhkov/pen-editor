@@ -6,7 +6,7 @@ describe("applyOverviewEffectVisibility", () => {
   it("temporarily disables renderer-owned effects and restores them after overview", () => {
     const container = new Container();
     const shadow = new Container({ label: "shadow-layer" });
-    const backdrop = new Sprite({ label: "background-blur-fill" });
+    const backdrop = new Sprite({ label: "material-surface" });
     const blur = new BlurFilter() as BlurFilter & { __layerBlur?: true };
     blur.__layerBlur = true;
     container.addChild(shadow, backdrop);

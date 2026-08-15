@@ -1,9 +1,9 @@
-import type { BaseNode, TextNode, FrameNode, RectNode, ShadowEffect, BlurEffect, BackgroundBlurEffect, GradientFill, ImageFill, PerSideStroke, ColorBinding, SolidPaint, GradientPaint, ImagePaint, VideoFill, VideoPaint } from "@/types/scene";
+import type { BaseNode, TextNode, FrameNode, RectNode, ShadowEffect, BlurEffect, GradientFill, ImageFill, PerSideStroke, ColorBinding, SolidPaint, GradientPaint, ImagePaint, VideoFill, VideoPaint } from "@/types/scene";
 import type { Variable } from "@/types/variable";
 import { applyOpacity } from "@/utils/colorUtils";
 import { hasPerCornerRadius } from "@/utils/renderUtils";
 import { useVariableStore } from "@/store/variableStore";
-import { getRenderableFills, getRenderableStrokes, getRenderableEffects, getPrimarySolidPaint } from "@/utils/fillUtils";
+import { getRenderableFills, getRenderableStrokes, getRenderableEffects, getPrimarySolidPaint, pickMaterialEffect } from "@/utils/fillUtils";
 import { imageModeToCssSize, fillModeToObjectFit } from "@/lib/cssBackground";
 import { cropRectToBackgroundCss, isFullCropRect, coverPixelRect, containPixelRect, clampCropRect, FULL_CROP_RECT } from "@/lib/imageCrop/cropRect";
 import { toFontVariationSettingsCss } from "@/utils/variableFont";
@@ -145,14 +145,29 @@ export function generateVisualStyles(node: BaseNode): Record<string, string> {
   if (blurEffect) {
     styles.filter = `blur(${blurEffect.radius}px)`;
   }
-  // Background blur: blurs whatever is rendered behind the node (glassmorphism).
-  // First visible one with radius > 0 wins (matches the renderer).
-  const backgroundBlurEffect = effects.find(
-    (e): e is BackgroundBlurEffect => e.type === "background-blur" && e.radius > 0,
-  );
-  if (backgroundBlurEffect) {
-    styles["backdrop-filter"] = `blur(${backgroundBlurEffect.radius}px)`;
-    styles["-webkit-backdrop-filter"] = `blur(${backgroundBlurEffect.radius}px)`;
+  // Background blur / Glass: both share a single "material" slot (Figma
+  // semantics) — the first visible one in the bottom-to-top stack wins and
+  // the other is ignored. `pickMaterialEffect` implements that so a Glass
+  // and a background blur on the same node never both emit a
+  // `backdrop-filter`. Background blur maps to CSS exactly; Glass has no CSS
+  // analogue (refraction/dispersion/directional light need a real backdrop
+  // sample, which `backdrop-filter` cannot displace or split into RGB
+  // channels), so it degrades to a `blur(frost)` backdrop-filter and drops
+  // refraction/dispersion/light silently as far as the DOM goes — there is
+  // no warnings channel in this exporter (see `convertChildrenWithMasking`'s
+  // doc comment in `convertNode.ts` for the precedent: unsupported features
+  // are documented in code rather than surfaced through a return value this
+  // exporter doesn't have).
+  const materialEffect = pickMaterialEffect(effects);
+  if (materialEffect?.type === "background-blur" && materialEffect.radius > 0) {
+    styles["backdrop-filter"] = `blur(${materialEffect.radius}px)`;
+    styles["-webkit-backdrop-filter"] = `blur(${materialEffect.radius}px)`;
+  } else if (materialEffect?.type === "glass" && materialEffect.visible !== false) {
+    // Lossy fallback: frost (gaussian backdrop blur) is the only Glass
+    // parameter CSS can express. lightAngle/lightIntensity/refraction/
+    // dispersion/depth/splay are dropped.
+    styles["backdrop-filter"] = `blur(${materialEffect.frost}px)`;
+    styles["-webkit-backdrop-filter"] = `blur(${materialEffect.frost}px)`;
   }
 
   // Rotation and flip transforms

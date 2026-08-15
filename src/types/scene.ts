@@ -299,11 +299,56 @@ export interface NoiseEffect {
 }
 
 /**
+ * Figma-parity Glass effect: a refractive material layer painted from the
+ * pixels already rendered BEHIND the node in the current z-order (a live
+ * backdrop, unlike the older baked `BackgroundBlurEffect`). Renders as a
+ * backdrop-aware PixiJS filter on a service surface inserted as the node's
+ * first child — see `pixi/renderers/glassEffectHelpers.ts`.
+ *
+ * Units and ranges (the renderer and `normalizeGlassEffect` both clamp to
+ * these; out-of-range values from imported documents are corrected, never
+ * rejected):
+ *  - `lightAngle`   degrees, 0..360, wraps. 0 = light from the left, growing
+ *                   clockwise in screen space.
+ *  - `lightIntensity` 0..1, strength of the directional specular highlight.
+ *  - `refraction`   0..1, how far the backdrop is displaced by the surface
+ *                   normal. 0 = no displacement.
+ *  - `depth`        px, >= 1: thickness of the bevel band along the shape
+ *                   edge where the surface normal bends. Large values dome
+ *                   the whole shape.
+ *  - `dispersion`   0..1, chromatic spread between the R/G/B backdrop
+ *                   samples. 0 = all three sample the same point.
+ *  - `frost`        px, >= 0: gaussian blur radius applied to the backdrop
+ *                   before refraction. 0 skips the blur pass entirely.
+ *  - `splay`        0..1, how wide the specular highlight spreads along the
+ *                   edge (0 = tight glint, 1 = broad sheen).
+ *
+ * Stack semantics: at most ONE visible Glass renders per node (the first in
+ * bottom-to-top order wins). Glass and `BackgroundBlurEffect` share a single
+ * "material" slot exactly as Figma documents it — the first visible effect of
+ * either type in the bottom-to-top stack wins and the other is ignored. See
+ * `pickMaterialEffect` in `@/utils/fillUtils`.
+ */
+export interface GlassEffect {
+  type: 'glass'
+  lightAngle: number       // deg, 0-360 (wraps)
+  lightIntensity: number   // 0-1
+  refraction: number       // 0-1
+  depth: number            // px, >= 1
+  dispersion: number       // 0-1
+  frost: number            // px, >= 0
+  splay: number            // 0-1
+  // Stable id for UI list keys when used inside `effects: Effect[]`
+  id?: string
+  visible?: boolean   // defaults to true
+}
+
+/**
  * One effect layer in an effect stack. `effects: Effect[]` is ordered
- * bottom-to-top like `fills`. Shadows, layer blur, background blur, and
+ * bottom-to-top like `fills`. Shadows, layer blur, background blur, glass, and
  * noise/grain; future effect kinds extend this union.
  */
-export type Effect = ShadowEffect | BlurEffect | BackgroundBlurEffect | NoiseEffect
+export type Effect = ShadowEffect | BlurEffect | BackgroundBlurEffect | GlassEffect | NoiseEffect
 
 // Per-side stroke widths (like CSS border-top, border-right, etc.)
 export interface PerSideStroke {
