@@ -198,24 +198,36 @@ describe("publish_to_showcase", () => {
     expect(body.screens[0].htmlContent).toContain("<body>");
   });
 
-  it("rejects a wrong-sized screen, listing every offender, without calling fetch", async () => {
-    seedEmbedNode("embed1", "Home", "<html></html>", 300, 700);
-    seedEmbedNode("embed2", "Settings", "<html></html>", 390, 800);
+  it("normalizes a non-standard mobile screen without changing the scene node", async () => {
+    seedEmbedNode("embed1", "Product Listing", "<html><body>Listing</body></html>", 375, 812);
+    captureEmbedCanvasMock.mockResolvedValue(fakeCanvas(RASTER.width, RASTER.height));
     const fetchMock = global.fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        runId: "run-normalized",
+        platform: "mobile",
+        screens: [{ title: "Product Listing", imageUrl: "x" }],
+      }),
+    });
 
     const result = JSON.parse(
       await publishToShowcase({
         theme: "App",
-        screens: [
-          { nodeId: "embed1", title: "Home" },
-          { nodeId: "embed2", title: "Settings" },
-        ],
+        platform: "mobile",
+        screens: [{ nodeId: "embed1", title: "Product Listing" }],
       }),
     );
 
-    expect(result.error).toContain("Home");
-    expect(result.error).toContain("Settings");
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.published).toBe(1);
+    expect(captureEmbedCanvasMock).toHaveBeenCalledWith(
+      expect.objectContaining({ width: 375, height: 812 }),
+      2,
+    );
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.screens[0]).toMatchObject({ width: 390, height: 844 });
+    expect(body.screens[0].htmlContent).toContain("data-pen-showcase-viewport");
+    expect(useSceneStore.getState().nodesById.embed1).toMatchObject({ width: 375, height: 812 });
   });
 
   it("rejects more than 5 screens", async () => {

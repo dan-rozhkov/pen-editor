@@ -69,6 +69,23 @@ function hasRadius(radii: [number, number, number, number]): boolean {
   return radii[0] > 0 || radii[1] > 0 || radii[2] > 0 || radii[3] > 0;
 }
 
+function clipToElementBox(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  radii: [number, number, number, number],
+): void {
+  ctx.beginPath();
+  if (hasRadius(radii)) {
+    traceRoundedRect(ctx, x, y, w, h, radii);
+  } else {
+    ctx.rect(x, y, w, h);
+  }
+  ctx.clip();
+}
+
 /**
  * Parse a CSS linear-gradient() and create a CanvasGradient.
  * Supports: linear-gradient(angle, color1, color2, ...)
@@ -431,11 +448,10 @@ export function walkAndDraw(
     const img = bgUrl ? renderAssets.imageMap.get(bgUrl) : undefined;
     if (img && w > 0 && h > 0) {
       ctx.save();
-      if (rounded) {
-        ctx.beginPath();
-        traceRoundedRect(ctx, x, y, w, h, radii);
-        ctx.clip();
-      }
+      // CSS backgrounds never paint outside their element's border box.
+      // This is also required for square boxes: cover/explicit sizing can
+      // make the source larger than the box even without rounded corners.
+      clipToElementBox(ctx, x, y, w, h, radii);
       drawBackgroundImage(ctx, img, style, x, y, w, h);
       ctx.restore();
     }
@@ -447,11 +463,10 @@ export function walkAndDraw(
     const img = imgSrc ? renderAssets.imageMap.get(imgSrc) : undefined;
     if (img) {
       ctx.save();
-      if (rounded) {
-        ctx.beginPath();
-        traceRoundedRect(ctx, x, y, w, h, radii);
-        ctx.clip();
-      }
+      // Replaced <img> content is always clipped to the element's content
+      // box. In particular, object-fit: cover intentionally draws beyond one
+      // axis and relies on this clip, regardless of border-radius.
+      clipToElementBox(ctx, x, y, w, h, radii);
       // Draw image with object-fit behavior
       const objFit = style.objectFit;
       drawImgElement(ctx, img, objFit, x, y, w, h);

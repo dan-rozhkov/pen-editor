@@ -24,6 +24,12 @@ describe("inferPlatformForSizes", () => {
     expect(result).toEqual({ ok: true, platform: "desktop" });
   });
 
+  it("infers the nearest platform for a screen that will be normalized on publish", () => {
+    expect(
+      inferPlatformForSizes([{ title: "Product Listing", width: 375, height: 812 }]),
+    ).toEqual({ ok: true, platform: "mobile" });
+  });
+
   it("rejects a screen count of zero", () => {
     const result = inferPlatformForSizes([]);
     expect(result.ok).toBe(false);
@@ -41,17 +47,12 @@ describe("inferPlatformForSizes", () => {
     }
   });
 
-  it("rejects a screen matching neither viewport, naming it", () => {
+  it("infers one platform when every non-standard screen is closest to it", () => {
     const result = inferPlatformForSizes([
-      { title: "Home", width: 390, height: 844 },
-      { title: "Odd", width: 500, height: 500 },
+      { title: "Home", width: 375, height: 812 },
+      { title: "Settings", width: 414, height: 896 },
     ]);
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toContain("Odd");
-      expect(result.error).toContain("390");
-      expect(result.error).toContain("desktop");
-    }
+    expect(result).toEqual({ ok: true, platform: "mobile" });
   });
 });
 

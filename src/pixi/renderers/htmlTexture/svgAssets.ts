@@ -1,4 +1,5 @@
 import { extractCssUrl } from "@/lib/htmlToDesign";
+import { resolveApiUrl } from "@/lib/apiBase";
 import { loadImage } from "./foreignObject";
 import { isSourceVisuallyEmpty } from "./visualEmptinessCheck";
 
@@ -142,6 +143,37 @@ async function loadInlineSvgAsImage(svg: SVGSVGElement, styleTexts: string[]): P
   return loadSvgTextAsImage(basic);
 }
 
+async function loadRenderImage(url: string): Promise<HTMLImageElement> {
+  try {
+    return await loadImage(url);
+  } catch {
+    // Public editor uploads can be displayed by a regular <img> while still
+    // being unreadable by canvas because their object response omits CORS
+    // headers. Retry remote HTTP(S) images through the backend's tightly
+    // allowlisted pen-editor image proxy so Showcase screenshots can read
+    // their pixels. URLs outside that prefix are rejected by the backend.
+  }
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url, window.location.href);
+  } catch {
+    throw new Error(`Invalid image URL: ${url}`);
+  }
+
+  if (
+    (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") ||
+    parsedUrl.origin === window.location.origin
+  ) {
+    throw new Error(`Image URL is not available with CORS: ${url}`);
+  }
+
+  const proxyUrl = resolveApiUrl(
+    `/api/image-proxy?url=${encodeURIComponent(parsedUrl.href)}`,
+  );
+  return loadImage(proxyUrl);
+}
+
 /** Scan the container for image-like resources and preload them. */
 export async function preloadRenderAssets(
   container: HTMLElement,
@@ -180,7 +212,7 @@ export async function preloadRenderAssets(
   await Promise.all(
     [...urls].map(async (url) => {
       try {
-        const img = await loadImage(url);
+        const img = await loadRenderImage(url);
         imageMap.set(url, img);
       } catch {
         // Skip images that fail CORS-safe loading.

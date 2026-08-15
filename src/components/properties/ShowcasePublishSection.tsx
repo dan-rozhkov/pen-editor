@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { SlidersHorizontalIcon } from "@phosphor-icons/react";
 import { track } from "@/lib/analytics";
 import {
   publishScreensToShowcase,
@@ -9,6 +10,8 @@ import {
 } from "@/lib/showcasePublish";
 import { PropertySection, TextInput } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useReadOnly } from "@/hooks/useReadOnly";
 
 type Status = "idle" | "publishing" | "done" | "error";
@@ -59,6 +62,10 @@ export function ShowcasePublishSection({
   );
 
   const canPublish = !readOnly && appName.trim().length > 0 && sizeValidation.ok && status !== "publishing";
+  const publishLabel =
+    orderedScreens.length === 1
+      ? "Publish to showcase"
+      : `Publish ${orderedScreens.length} screens`;
 
   async function onPublish() {
     if (readOnly || !sizeValidation.ok) return;
@@ -96,12 +103,35 @@ export function ShowcasePublishSection({
     }
   }
 
+  const settings = (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <IconButton variant="ghost" size="icon-sm" tooltip="Showcase settings">
+            <SlidersHorizontalIcon />
+          </IconButton>
+        }
+      />
+      <PopoverContent
+        side="left"
+        align="start"
+        draggable
+        dragHandleContent={
+          <span className="text-[11px] font-semibold text-text-primary">Showcase settings</span>
+        }
+      >
+        <TextInput
+          label="App name"
+          value={appName}
+          onChange={setAppName}
+          placeholder="Name this app"
+        />
+      </PopoverContent>
+    </Popover>
+  );
+
   return (
-    <PropertySection title="Showcase">
-      <TextInput label="App name" value={appName} onChange={setAppName} placeholder="Name this app" />
-      <div className="text-[10px] text-text-muted">
-        {`Publishes ${screens.length} screen${screens.length === 1 ? "" : "s"} publicly to the gallery at /.`}
-      </div>
+    <PropertySection title="Showcase" action={settings}>
       <Button
         onClick={onPublish}
         disabled={!canPublish}
@@ -109,7 +139,7 @@ export function ShowcasePublishSection({
         className="w-full min-w-0"
       >
         <span className="min-w-0 truncate">
-          {status === "publishing" ? "Publishing…" : "Publish to Showcase"}
+          {status === "publishing" ? "Publishing…" : publishLabel}
         </span>
       </Button>
       {!sizeValidation.ok && (

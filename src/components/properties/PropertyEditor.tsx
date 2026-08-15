@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, type ReactNode } from "react";
 import type { SceneNode, FlatFrameNode, FrameNode } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
 import type { FlatParentContext, ParentContext } from "@/utils/nodeUtils";
@@ -31,6 +31,7 @@ interface PropertyEditorProps {
   parentContext: ParentContext | FlatParentContext;
   variables: Variable[];
   activeTheme: ThemeName;
+  beforeExport?: ReactNode;
 }
 
 export const PropertyEditor = memo(function PropertyEditor({
@@ -39,6 +40,7 @@ export const PropertyEditor = memo(function PropertyEditor({
   parentContext,
   variables,
   activeTheme,
+  beforeExport,
 }: PropertyEditorProps) {
   // O(1) flat lookup of the reusable component frame. Sections never read
   // `children` off `component`, so the flat node is safe (cast at the boundary).
@@ -168,6 +170,7 @@ export const PropertyEditor = memo(function PropertyEditor({
         <EmbedContentSection node={node} />
       )}
       <SelectionColorsSection nodes={selectionNodes} />
+      {beforeExport}
       <ExportSettingsSection node={node} onUpdate={onUpdate} />
     </div>
   );

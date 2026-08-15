@@ -100,7 +100,50 @@ interface ResolvedScreen {
   nodeId: string;
   title: string;
   cover: boolean;
+  sourceWidth: number;
+  sourceHeight: number;
   htmlContent: string;
+  rasterHtmlContent: string;
+}
+
+function viewportNormalizationStyle(
+  source: { width: number; height: number },
+  target: { width: number; height: number },
+): string {
+  if (matchesViewport(source, target)) return "";
+  const scaleX = target.width / source.width;
+  const scaleY = target.height / source.height;
+  return `<style data-pen-showcase-viewport>
+html, body {
+  width: ${source.width}px !important;
+  height: ${source.height}px !important;
+  overflow: hidden !important;
+}
+body {
+  transform: scale(${scaleX}, ${scaleY}) !important;
+  transform-origin: 0 0 !important;
+}
+</style>`;
+}
+
+function normalizeCanvasToViewport(
+  source: HTMLCanvasElement,
+  viewport: { width: number; height: number },
+  resolution: number,
+): HTMLCanvasElement {
+  const width = Math.round(viewport.width * resolution);
+  const height = Math.round(viewport.height * resolution);
+  if (source.width === width && source.height === height) return source;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Could not create a canvas for showcase viewport normalization");
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(source, 0, 0, source.width, source.height, 0, 0, width, height);
+  return canvas;
 }
 
 /**
@@ -149,11 +192,9 @@ export async function publishScreensToShowcase(
   const allNodes = sceneState.getNodes();
   const { calculateLayoutForFrame } = useLayoutStore.getState();
 
-  // Pass 1: resolve nodes, sizes and HTML. Collect every size mismatch
-  // before failing so the caller gets one actionable list instead of fixing
-  // screens one round-trip at a time.
+  // Pass 1: resolve nodes, source sizes and HTML. Screens are normalized into
+  // the platform viewport for publication without mutating their scene nodes.
   const resolved: ResolvedScreen[] = [];
-  const sizeMismatches: string[] = [];
 
   for (const screen of screens) {
     const node = nodesById[screen.nodeId];
@@ -164,21 +205,12 @@ export async function publishScreensToShowcase(
     const effectiveSize = getNodeEffectiveSize(allNodes, screen.nodeId, calculateLayoutForFrame);
     const size = effectiveSize ?? { width: node.width, height: node.height };
 
-    const widthOk = Math.abs(size.width - viewport.width) <= SIZE_TOLERANCE;
-    const heightOk = Math.abs(size.height - viewport.height) <= SIZE_TOLERANCE;
-    if (!widthOk || !heightOk) {
-      sizeMismatches.push(
-        `"${screen.title}" (${screen.nodeId}): ${Math.round(size.width)}x${Math.round(size.height)}, expected ${viewport.width}x${viewport.height}`,
-      );
-      continue;
-    }
-
     let htmlContent: string;
     if (node.type === "embed") {
       htmlContent = (node as EmbedNode).htmlContent;
     } else {
       const fragment = convertDesignNodesToHtml(screen.nodeId, nodesById, childrenById, allNodes);
-      htmlContent = wrapFragmentAsDocument(fragment, viewport.width, viewport.height);
+      htmlContent = wrapFragmentAsDocument(fragment, size.width, size.height);
     }
 
     if (!htmlContent || htmlContent.trim().length === 0) {
@@ -201,19 +233,18 @@ export async function publishScreensToShowcase(
       htmlContent += themeBlock;
     }
 
+    const rasterHtmlContent = htmlContent;
+    htmlContent += viewportNormalizationStyle(size, viewport);
+
     resolved.push({
       nodeId: screen.nodeId,
       title: screen.title,
       cover: screen.cover === true,
+      sourceWidth: size.width,
+      sourceHeight: size.height,
       htmlContent,
+      rasterHtmlContent,
     });
-  }
-
-  if (sizeMismatches.length > 0) {
-    return {
-      ok: false,
-      error: `Screen size doesn't match the ${platform} viewport (${viewport.width}x${viewport.height}): ${sizeMismatches.join("; ")}`,
-    };
   }
 
   // Pass 2: rasterize each screen at 2x.
@@ -230,7 +261,11 @@ export async function publishScreensToShowcase(
         // `captureEmbedCanvas` append a second, redundant (if harmless)
         // copy of the same block.
         const embedCanvas = await captureEmbedCanvas(
-          { htmlContent: screen.htmlContent, width: viewport.width, height: viewport.height },
+          {
+            htmlContent: screen.rasterHtmlContent,
+            width: screen.sourceWidth,
+            height: screen.sourceHeight,
+          },
           2,
         );
         if (!embedCanvas) {
@@ -239,12 +274,18 @@ export async function publishScreensToShowcase(
             error: `Screen "${screen.title}" (${screen.nodeId}) could not be rendered to an image (its HTML may be empty, or contain a cross-origin image served without CORS headers).`,
           };
         }
-        canvas = embedCanvas;
+        canvas = normalizeCanvasToViewport(embedCanvas, viewport, 2);
       } else {
         if (!pixiRefs) {
           return { ok: false, error: "No canvas renderer available" };
         }
-        canvas = await renderNodeToCanvas(pixiRefs, screen.nodeId, viewport, 2);
+        const sourceCanvas = await renderNodeToCanvas(
+          pixiRefs,
+          screen.nodeId,
+          { width: screen.sourceWidth, height: screen.sourceHeight },
+          2,
+        );
+        canvas = normalizeCanvasToViewport(sourceCanvas, viewport, 2);
       }
     } catch (e) {
       return {
@@ -399,7 +440,10 @@ export type PlatformInferenceResult =
   | { ok: true; platform: ShowcasePlatform }
   | { ok: false; error: string };
 
-function matchesViewport(candidate: ScreenSizeCandidate, viewport: { width: number; height: number }): boolean {
+function matchesViewport(
+  candidate: { width: number; height: number },
+  viewport: { width: number; height: number },
+): boolean {
   return (
     Math.abs(candidate.width - viewport.width) <= SIZE_TOLERANCE &&
     Math.abs(candidate.height - viewport.height) <= SIZE_TOLERANCE
@@ -417,26 +461,30 @@ export function inferPlatformForSizes(screens: ScreenSizeCandidate[]): PlatformI
     return { ok: false, error: "No screens selected" };
   }
 
-  for (const platform of Object.keys(SHOWCASE_VIEWPORTS) as ShowcasePlatform[]) {
-    if (screens.every((s) => matchesViewport(s, SHOWCASE_VIEWPORTS[platform]))) {
-      return { ok: true, platform };
-    }
+  const nearestPlatforms = screens.map((screen): ShowcasePlatform => {
+    const distance = (platform: ShowcasePlatform) => {
+      const viewport = SHOWCASE_VIEWPORTS[platform];
+      return Math.hypot(
+        Math.log(screen.width / viewport.width),
+        Math.log(screen.height / viewport.height),
+      );
+    };
+    return distance("mobile") <= distance("desktop") ? "mobile" : "desktop";
+  });
+
+  const platform = nearestPlatforms[0];
+  if (nearestPlatforms.every((candidate) => candidate === platform)) {
+    return { ok: true, platform };
   }
 
-  // Nothing matched a single viewport uniformly — report against whichever
-  // viewport the majority of screens are closer to, so the message names the
-  // actual offenders instead of every screen.
-  const mobileMatches = screens.filter((s) => matchesViewport(s, SHOWCASE_VIEWPORTS.mobile)).length;
-  const desktopMatches = screens.filter((s) => matchesViewport(s, SHOWCASE_VIEWPORTS.desktop)).length;
-  const target = desktopMatches > mobileMatches ? SHOWCASE_VIEWPORTS.desktop : SHOWCASE_VIEWPORTS.mobile;
   const offenders = screens
-    .filter((s) => !matchesViewport(s, target))
-    .map((s) => `"${s.title}" (${Math.round(s.width)}x${Math.round(s.height)})`)
+    .filter((_, index) => nearestPlatforms[index] !== platform)
+    .map((screen) => `"${screen.title}"`)
     .join(", ");
 
   return {
     ok: false,
-    error: `Screens must be 390×844 (mobile) or 1440×1024 (desktop): ${offenders}`,
+    error: `Selected screens mix mobile and desktop layouts. Select screens for one platform at a time: ${offenders}`,
   };
 }
 

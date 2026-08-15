@@ -15,7 +15,7 @@ const textureCache = new LruTextureCache(64);
 /** Dedup parallel renders for the same key */
 const pendingRenders = new Map<string, Promise<Texture | null>>();
 
-const HTML_TEXTURE_RENDER_VERSION = 12;
+const HTML_TEXTURE_RENDER_VERSION = 13;
 const EDGE_BLEED_RADIUS = 2;
 /** Fallback bound on the one-frame layout wait in `renderHtmlToCanvas` — see its comment. */
 const HTML_LAYOUT_FRAME_TIMEOUT_MS = 500;
@@ -186,14 +186,13 @@ export async function renderHtmlToCanvas(
   await ensureExternalFontStylesLoaded(normalizedHtml);
   const pixelWidth = Math.max(1, Math.round(width * resolution));
   const pixelHeight = Math.max(1, Math.round(height * resolution));
-  const hasInlineSvg = /<svg[\s>]/i.test(normalizedHtml);
-  const hasBodyStyles = hasBodyTargetedStyles(normalizedHtml);
 
   // Prefer browser-native HTML layout via SVG foreignObject.
   // This yields accurate flex/text positioning when supported.
-  // For inline SVG content we skip this path because foreignObject support is
-  // inconsistent across browsers for nested SVG.
-  if (!hasInlineSvg && !hasBodyStyles) {
+  // Asset-bearing markup uses the DOM renderer below: browsers don't reliably
+  // load external <img>/CSS url() resources inside a blob-backed SVG, which
+  // otherwise produces a valid-looking canvas with blank image boxes.
+  if (canUseForeignObjectFastPath(normalizedHtml)) {
     const foreignObjectCanvas = await renderViaForeignObject(
       normalizedHtml,
       width,
@@ -286,6 +285,13 @@ export async function renderHtmlToCanvas(
   } finally {
     document.body.removeChild(host);
   }
+}
+
+export function canUseForeignObjectFastPath(html: string): boolean {
+  const hasInlineSvg = /<svg[\s>]/i.test(html);
+  const hasBodyStyles = hasBodyTargetedStyles(html);
+  const hasRasterAssets = /<img[\s>]|url\s*\(/i.test(html);
+  return !hasInlineSvg && !hasBodyStyles && !hasRasterAssets;
 }
 
 /** Invalidate cached texture when content changes.

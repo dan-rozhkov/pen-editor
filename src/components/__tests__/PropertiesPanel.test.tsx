@@ -1,8 +1,11 @@
+import type { ReactNode } from "react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import { PropertiesPanel } from "../PropertiesPanel";
 import { useSelectionStore } from "@/store/selectionStore";
+import { useSceneStore } from "@/store/sceneStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
+import type { FlatSceneNode } from "@/types/scene";
 import { resetStores, seedScene } from "@/test/fixtures";
 
 /**
@@ -18,8 +21,12 @@ import { resetStores, seedScene } from "@/test/fixtures";
  */
 
 vi.mock("@/components/properties/PropertyEditor", () => ({
-  PropertyEditor: ({ node }: { node: { id: string; type: string } }) => (
-    <div data-testid="property-editor" data-node-id={node.id} data-node-type={node.type} />
+  PropertyEditor: ({ node, beforeExport }: { node: { id: string; type: string }; beforeExport?: ReactNode }) => (
+    <div data-testid="property-editor" data-node-id={node.id} data-node-type={node.type}>
+      <div data-testid="embed-section" />
+      {beforeExport}
+      <div data-testid="export-section" />
+    </div>
   ),
 }));
 vi.mock("@/components/properties/MultiSelectPropertyEditor", () => ({
@@ -39,8 +46,43 @@ vi.mock("@/components/properties/PencilToolProperties", () => ({
 vi.mock("@/components/properties/AlignmentSection", () => ({
   SpacingSection: () => <div data-testid="spacing-section" />,
 }));
+vi.mock("@/components/properties/PrototypeExportSection", () => ({
+  PrototypeExportSection: () => <div data-testid="prototype-section" />,
+}));
+vi.mock("@/components/properties/ShowcasePublishSection", () => ({
+  ShowcasePublishSection: () => <div data-testid="showcase-section" />,
+}));
+
 function select(ids: string[]) {
   useSelectionStore.setState({ selectedIds: ids });
+}
+
+function seedShowcaseEmbeds() {
+  const first = {
+    id: "embed1",
+    type: "embed",
+    name: "First screen",
+    x: 0,
+    y: 0,
+    width: 390,
+    height: 844,
+    htmlContent: "<main>First</main>",
+  } as FlatSceneNode;
+  const second = {
+    ...first,
+    id: "embed2",
+    name: "Second screen",
+    x: 420,
+    htmlContent: "<main>Second</main>",
+  } as FlatSceneNode;
+
+  useSceneStore.setState({
+    nodesById: { embed1: first, embed2: second },
+    parentById: { embed1: null, embed2: null },
+    childrenById: {},
+    rootIds: ["embed1", "embed2"],
+    _cachedTree: null,
+  });
 }
 
 describe("<PropertiesPanel /> (orchestration)", () => {
@@ -65,6 +107,18 @@ describe("<PropertiesPanel /> (orchestration)", () => {
   });
 
   describe("single selection", () => {
+    it("places Showcase after Embed and before Export for a single embed", () => {
+      seedShowcaseEmbeds();
+      select(["embed1"]);
+      render(<PropertiesPanel />);
+
+      const embed = screen.getByTestId("embed-section");
+      const showcase = screen.getByTestId("showcase-section");
+      const exportSection = screen.getByTestId("export-section");
+      expect(embed.compareDocumentPosition(showcase) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(showcase.compareDocumentPosition(exportSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
     it("routes a single root frame to the PropertyEditor", () => {
       select(["frame1"]);
       render(<PropertiesPanel />);
@@ -105,6 +159,16 @@ describe("<PropertiesPanel /> (orchestration)", () => {
   });
 
   describe("multi selection", () => {
+    it("keeps Showcase at the bottom after Prototype for multiple embeds", () => {
+      seedShowcaseEmbeds();
+      select(["embed1", "embed2"]);
+      render(<PropertiesPanel />);
+
+      const prototype = screen.getByTestId("prototype-section");
+      const showcase = screen.getByTestId("showcase-section");
+      expect(prototype.compareDocumentPosition(showcase) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
     it("routes 2+ nodes to the MultiSelectPropertyEditor plus spacing controls", () => {
       select(["rect1", "text1"]);
       render(<PropertiesPanel />);

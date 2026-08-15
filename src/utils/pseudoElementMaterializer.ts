@@ -10,6 +10,23 @@ export function materializePseudoElements(root: Element): void {
     materializeElementPseudo(el, "before");
     materializeElementPseudo(el, "after");
   }
+
+  // Once a pseudo-element has been copied into a real span, the original
+  // must stop participating in layout. Otherwise icon-font elements contain
+  // both the original ::before glyph and the materialized glyph: flex/grid
+  // centers their combined width, while the canvas walker only paints the
+  // real span, shifting the visible icon by half a glyph.
+  let suppression = root.querySelector<HTMLStyleElement>(
+    ":scope > style[data-embed-pseudo-suppression]",
+  );
+  if (!suppression) {
+    suppression = root.ownerDocument.createElement("style");
+    suppression.dataset.embedPseudoSuppression = "true";
+    root.prepend(suppression);
+  }
+  suppression.textContent =
+    '[data-embed-materialized-before="true"]::before { content: none !important; }\n' +
+    '[data-embed-materialized-after="true"]::after { content: none !important; }';
 }
 
 function materializeElementPseudo(el: HTMLElement, pseudoName: "before" | "after"): void {
@@ -17,6 +34,12 @@ function materializeElementPseudo(el: HTMLElement, pseudoName: "before" | "after
     `:scope > [data-embed-pseudo="${pseudoName}"][data-embed-generated-pseudo="true"]`,
   );
   if (existing) existing.remove();
+
+  const marker = `data-embed-materialized-${pseudoName}`;
+  // A previous materialization may already have installed the suppression
+  // rule. Temporarily unmark this element so getComputedStyle can see the
+  // source pseudo-element again when content is refreshed.
+  el.removeAttribute(marker);
 
   const pseudo = window.getComputedStyle(el, `::${pseudoName}`);
   if (pseudo.content === "none") return;
@@ -33,9 +56,11 @@ function materializeElementPseudo(el: HTMLElement, pseudoName: "before" | "after
   }
 
   pseudoEl.textContent = parsePseudoContent(pseudo.content);
+  if (!pseudoEl.textContent) return;
 
   if (pseudoName === "before") el.prepend(pseudoEl);
   else el.append(pseudoEl);
+  el.setAttribute(marker, "true");
 }
 
 function parsePseudoContent(content: string): string {
