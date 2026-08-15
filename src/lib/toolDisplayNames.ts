@@ -1,3 +1,32 @@
+// Refero (MCP), keyed by the bare tool name. The labels say what the tool does
+// to a *reference* — Refero's own vocabulary for the screens, flows and styles
+// it indexes — rather than echoing the raw tool name; the Refero mark in
+// `toolIcons` already says where the data comes from, so the label doesn't
+// repeat it.
+const referoLabels: Record<string, string> = {
+  search_screens: "Search Reference Screens",
+  get_screen: "Open Reference Screen",
+  get_screen_image: "Reference Screenshot",
+  get_similar_screens: "Find Similar Screens",
+  search_flows: "Search Reference Flows",
+  get_flow: "Open Reference Flow",
+  search_styles: "Search Design Styles",
+  get_style: "Open Design Style",
+  get_design_guidance: "Design Guidance",
+};
+
+// The same tool reaches this UI under up to three spellings: bare (the older
+// naming still used in the backend's research skill), `refero_`-prefixed (what
+// the MCP server advertises today) and `mcp_refero_`-prefixed. All three must
+// render identically, so they are generated rather than hand-listed — a
+// hand-written table is exactly how the bare aliases previously ended up with
+// a different label and a different icon from their prefixed twins.
+export const referoToolDisplayNames: Record<string, string> = Object.fromEntries(
+  Object.entries(referoLabels).flatMap(([name, label]) =>
+    ["", "refero_", "mcp_refero_"].map((prefix) => [`${prefix}${name}`, label]),
+  ),
+);
+
 export const toolDisplayNames: Record<string, string> = {
   get_editor_state: "Get Editor State",
   batch_get: "Read Nodes",
@@ -14,20 +43,7 @@ export const toolDisplayNames: Record<string, string> = {
   get_guidelines: "Get Guidelines",
   get_style_guide_tags: "Get Style Guide Tags",
   get_style_guide: "Get Style Guide",
-  search_screens: "Search Screens",
-  get_screen: "Get Screen",
-  search_flows: "Search Flows",
-  get_flow: "Get Flow",
-  get_design_guidance: "Design Guidance",
-  refero_search_screens: "Search Screens",
-  refero_get_screen: "Get Screen",
-  refero_search_flows: "Search Flows",
-  refero_get_flow: "Get Flow",
-  mcp_refero_search_screens: "Search Screens",
-  mcp_refero_get_screen: "Get Screen",
-  mcp_refero_search_flows: "Search Flows",
-  mcp_refero_get_flow: "Get Flow",
-  mcp_refero_get_design_guidance: "Design Guidance",
+  ...referoToolDisplayNames,
   ask_user: "Ask a question",
   load_skill: "Load skill",
   memory: "Memory",

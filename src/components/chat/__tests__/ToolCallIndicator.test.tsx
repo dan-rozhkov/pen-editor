@@ -178,7 +178,7 @@ describe("<ToolCallIndicator />", () => {
       />
     );
     // mapped display name for refero_search_screens
-    expect(screen.getByText("Search Screens")).toBeTruthy();
+    expect(screen.getByText("Search Reference Screens")).toBeTruthy();
     expect(screen.getByText("Done")).toBeTruthy();
   });
 
