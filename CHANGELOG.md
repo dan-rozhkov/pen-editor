@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.76.0] - 2026-08-16
+
+A second pass over the Glass material, driven by a side-by-side with a real iOS
+tab bar. The headline is a bug this comparison exposed rather than the tuning.
+
+### Fixed
+- **The rim hairline vanished around the ends of a capsule.** `figma-squircle` clamps corner smoothing to the space available along a corner's edges (`maxSmoothing = budget / radius - 1`), so a fully-rounded shape — radius equal to half the short side — is actually drawn with a plain circular cap. The shader knew nothing of that clamp and kept bulging its superellipse corner per the node's authored `cornerSmoothing`, which walked the rim off the outline and let the surface's own alpha mask cut it away: a highlight along the straight sides, nothing around the caps. The SDF now applies the same clamp.
+
+### Changed
+- **Refraction is lensed rather than spread.** The displacement now follows a much steeper edge profile, so the backdrop bends inside a narrow band hugging the outline while the interior stays optically flat — the way iOS squeezes content at a glass edge. `refraction` still means roughly the same maximum displacement it did before.
+- **The rim is a pair, not a line.** A thin darker contour sits immediately inside the lit hairline; that pairing is what reads as the material's own thickness, where a bright line on its own reads as a stroked outline. The hairline is also shaped by the light direction instead of running perfectly even.
+- **Vibrancy lifts as well as saturates.** A gentle gamma curve on the sampled backdrop makes the material read lighter than the content behind it — iOS materials brighten midtones; black stays black.
+- **Retuned defaults for newly added Glass** to match the above (stronger refraction, deeper bevel, more frost, more vibrancy). Existing documents are untouched: a stored value is never replaced by a default, only a missing or invalid one is.
+
+### Removed
+- **The Ultra Thin / Thin / Regular / Thick preset row.** Glass is parameters only now. The presets were four points in a space the sliders already cover, and they went stale the moment the defaults moved.
+
 ## [0.75.1] - 2026-08-13
 
 ### Changed
