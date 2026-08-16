@@ -10,6 +10,7 @@ import { buildAdjustmentColorMatrix, isDefaultAdjustments } from "@/lib/imageAdj
 import { normalizeSvgMarkup, svgTextToDataUrl } from "@/lib/htmlToDesign/svgHandling";
 import { resolveApiUrl } from "@/lib/apiBase";
 import { LruTextureCache } from "./lruTextureCache";
+import { registerPendingImageLoad } from "./pendingImageLoads";
 
 /** Cache for loaded textures by URL (LRU, bounded — SVG keys include size/resolution,
  *  so interactive resize/zoom would otherwise grow it without limit) */
@@ -294,7 +295,7 @@ function withCachedTexture(
   }
 
   loadingCallbacks.set(cacheKey, []);
-  load().then((texture) => {
+  const loadPromise = load().then((texture) => {
     textureCache.set(cacheKey, texture);
     if (!container.destroyed) onReady(texture);
     const cbs = loadingCallbacks.get(cacheKey);
@@ -304,6 +305,11 @@ function withCachedTexture(
     loadingCallbacks.delete(cacheKey);
     console.warn(`[pixi] Failed to load ${failureLabel}`, url);
   });
+  // Tracked so `get_screenshot`/`captureNodeScreenshot` can await in-flight
+  // image-fill loads before extracting pixels (see pendingImageLoads.ts) —
+  // otherwise a just-applied fill's Sprite may not be attached yet, since
+  // it's only added here in `onReady`, after this network round trip.
+  registerPendingImageLoad(loadPromise);
 }
 
 function withPatternTileTexture(

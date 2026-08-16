@@ -20,6 +20,7 @@ CI (`.github/workflows/ci.yml`) runs lint + unit tests + build and the e2e job o
 - **Tool-name contract**: `src/lib/__tests__/toolContract.test.ts` pins the `toolHandlers` name list and, when the sibling `../pen-editor-backend` checkout exists, imports its `src/ai/tools.ts` to assert the sets stay in sync (skipped otherwise). In CI the `contract` job checks out the backend's **`main`** at run time and sets `CONTRACT_REQUIRE_BACKEND=1`, so it cannot self-skip. It asserts both directions — every `penTools` entry has a handler here, and `FRONTEND_ONLY_TOOLS` is empty (`get_screenshot` was the lone exception until it regained a backend schema) — so a tool breaks the contract until both halves land, and this job is red for *every* push here while that gap is open. **Land a new tool's backend schema on backend `main` first, then merge the handler here**, back-to-back: that way this job passes on the first try. Handler-first fails your own push and needs a re-run after the backend lands.
 - **E2E** (`e2e/`, Playwright, chromium only): stubs `/api/chat` and `/api/models` with `page.route` — no backend or LLM needed — and verifies message → streamed tool call → local execution (node lands in sceneStore and LayersPanel) → auto-continuation. `window.__sceneStore` is exposed in dev mode (`src/main.tsx`) for assertions. Keep e2e out of Vitest (`exclude` in `vitest.config.ts`) and out of `tsc -b` (own `e2e/tsconfig.json`).
 - `get_screenshot` needs WebGL and cannot be unit-tested — e2e territory. PixiJS must never be initialized in unit tests.
+- **Screenshot capture must await pending image-fill loads.** `applyImageFill`/`applyImagePaintStack` (`src/pixi/renderers/imageFillHelpers.ts`) load remote textures fire-and-forget — the Sprite is attached only in an async `onReady`, well after `withTexture` returns, so an agent that sets an image fill and immediately calls `get_screenshot` could extract a container with no sprite yet (worse for R2 URLs, which usually fall through the CORS retry chain to `/api/image-proxy`). Both `getScreenshot.ts` and `captureNodeScreenshot.ts` call `waitForPendingImageFills()` (`src/pixi/renderers/pendingImageLoads.ts`, a Pixi-free module-level registry, unit-tested directly) before `extract.base64`. The full order matters: `requestCanvasRender()` + a frame wait *first* (pixiSync flushes on its own rAF, and that flush is where `withTexture` registers the load — waiting before it would race an empty registry), then the wait, then a final render + frame settle so the newly-attached sprites are in the frame extract reads. Every frame wait is bounded and skipped outright when `document.hidden` — plain `requestAnimationFrame` never fires in a background tab, which is exactly where the MCP/desktop bridge drives this tool (same gotcha as `src/lib/h2dCapture/captureEmbed.ts`). The wait never rejects and always resolves by its timeout, so a genuinely broken image still degrades to today's blank-sprite screenshot instead of hanging the tool call. The Pixi container is re-resolved *after* the awaits, since a `fullRebuild` can destroy every container while we wait.
 
 ## Path Alias
 
@@ -200,9 +201,10 @@ appear in a turn and the activity endpoint returns nothing.
   anticipated.
 - **`useAgentActivityToast`** — the background review runs server-side *after*
   the stream closes, so the model cannot mention it. This schedules two delayed
-  checks of `GET /api/memory/activity` per finished turn and toasts if a
-  `background_review` event appeared, naming the subsystem (memory, skills, or
-  both). It reads by **event-id cursor** kept in `localStorage`, never a
+  checks of `GET /api/memory/activity` per finished turn and toasts only when a
+  `background_review` event wrote a **skill** (FIR-71: memory writes are never
+  announced, whether alone or alongside a skill write — the cursor still
+  advances past them, but they produce no toast). It reads by **event-id cursor** kept in `localStorage`, never a
   timestamp — the endpoint filters on Postgres `created_at`, so a browser clock
   a few minutes off would silently suppress or repeat every toast. A baseline
   against a server with no rows records a zero cursor: "checked, saw nothing"

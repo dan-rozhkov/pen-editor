@@ -48,8 +48,9 @@ function writeCursor(userId: string, id: number): void {
 
 // `subsystem` is only populated by backends that carry the self-improvement
 // loop's phase-2 (skills) migration — an older backend's events simply omit
-// it, and are treated as "memory" below (see classifyActivity) since memory
-// (phase 1) was the only subsystem that could have written them.
+// it, and are therefore never classified as "skill" below (see
+// classifyActivity): memory (phase 1) was the only subsystem that could have
+// written an event with no `subsystem` at all, and memory writes never toast.
 type ActivityEvent = {
   id?: unknown;
   origin?: unknown;
@@ -75,34 +76,26 @@ function parseResponse(data: unknown): ParsedActivityResponse | undefined {
   return { events: events as ActivityEvent[], latestId };
 }
 
-// Classifies which subsystem(s) the background review actually touched, so
-// the toast can say what happened instead of always claiming "memory" (the
-// spec's phase 2 reuses this same endpoint/toast for skill_manage writes,
-// see pen-editor-backend's self-improvement-loop spec, "UI visibility").
-// An event whose `subsystem` is missing or anything other than "skill" is
-// counted as memory — this is both the phase-1 shape (no column existed
-// yet) and the backend's own "memory" | "skill" contract, so "not skill"
-// is the correct default rather than requiring an exact "memory" match.
-function classifyActivity(events: ActivityEvent[]): { memory: boolean; skill: boolean } {
-  let memory = false;
+// Memory writes are silent by design (FIR-71) — only skill writes are worth
+// interrupting the user for, so this only has to detect the skill subsystem.
+// An event whose `subsystem` is missing is a pre-phase-2 backend shape and
+// can never be "skill" (that column didn't exist yet), so it's correctly
+// ignored here without special-casing it.
+function classifyActivity(events: ActivityEvent[]): { skill: boolean } {
   let skill = false;
   for (const event of events) {
     if (typeof event !== "object" || event === null) continue;
     if (event.origin !== "background_review") continue;
     if (event.subsystem === "skill") {
       skill = true;
-    } else {
-      memory = true;
     }
   }
-  return { memory, skill };
+  return { skill };
 }
 
 function activityToastText(events: ActivityEvent[]): string | undefined {
-  const { memory, skill } = classifyActivity(events);
-  if (memory && skill) return "Агент обновил память и скиллы";
+  const { skill } = classifyActivity(events);
   if (skill) return "Агент обновил свои скиллы";
-  if (memory) return "Агент обновил память о вас";
   return undefined;
 }
 
@@ -177,10 +170,12 @@ interface UseAgentActivityToastOptions {
 // Schedules two delayed checks for server-side memory/skill writes that
 // happened after a chat turn finished (the model has no chance to surface
 // these itself — the review runs after the stream already closed) and
-// surfaces a transient toast describing whichever subsystem(s) the review
-// actually touched. Silent on any failure: this is a nice-to-have
-// notification, never something that should interrupt the user or throw
-// over a flaky network / an older backend without the endpoint.
+// surfaces a transient toast when the review wrote a skill (FIR-71: memory
+// writes are intentionally never announced — the cursor still advances past
+// them, but they produce no toast, memory-only or mixed with a skill write).
+// Silent on any failure: this is a nice-to-have notification, never
+// something that should interrupt the user or throw over a flaky network /
+// an older backend without the endpoint.
 //
 // Cursor-based (by event id, not client clock) so a skewed browser clock
 // can't hide or repeat events, and so events from a turn whose checks got
