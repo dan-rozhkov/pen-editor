@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup, within } from "@testing-library/react";
 import type { ComponentProps, ReactNode } from "react";
 import { EffectsSection } from "../EffectsSection";
+import { createGlassEffect } from "@/utils/fillUtils";
 import type {
   BackgroundBlurEffect,
   BlurEffect,
@@ -360,12 +361,13 @@ describe("<EffectsSection />", () => {
     expect(arg.effects[0]).toMatchObject({
       type: "glass",
       lightAngle: 135,
-      lightIntensity: 0.5,
-      refraction: 0.35,
-      depth: 12,
-      dispersion: 0.15,
-      frost: 8,
-      splay: 0.4,
+      lightIntensity: 0.55,
+      refraction: 0.45,
+      depth: 14,
+      dispersion: 0.06,
+      frost: 18,
+      splay: 0.55,
+      vibrancy: 0.5,
     });
     expect(arg.effect).toBeUndefined();
     // Figma silently drops fill alpha when adding Glass; this editor must not.
@@ -373,13 +375,15 @@ describe("<EffectsSection />", () => {
     expect(arg.fillOpacity).toBeUndefined();
   });
 
-  it("renders a glass effect row with its seven parameter values", () => {
-    render(<EffectsSection node={makeNode([glassFx()])} onUpdate={vi.fn()} />);
+  it("renders a glass effect row with its eight parameter values", () => {
+    render(
+      <EffectsSection node={makeNode([glassFx({ vibrancy: 0.6 })])} onUpdate={vi.fn()} />,
+    );
 
     expect(screen.getAllByText("Glass").length).toBeGreaterThan(0);
     const inputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
-    // DOM order: angle, intensity%, refraction%, depth, dispersion%, frost, splay%
-    expect(inputs).toHaveLength(7);
+    // DOM order: angle, intensity%, refraction%, depth, dispersion%, frost, splay%, vibrancy%
+    expect(inputs).toHaveLength(8);
     expect(inputs[0].value).toBe("135"); // lightAngle
     expect(inputs[1].value).toBe("50"); // lightIntensity 0.5 -> 50%
     expect(inputs[2].value).toBe("35"); // refraction 0.35 -> 35%
@@ -387,6 +391,24 @@ describe("<EffectsSection />", () => {
     expect(inputs[4].value).toBe("15"); // dispersion 0.15 -> 15%
     expect(inputs[5].value).toBe("8"); // frost
     expect(inputs[6].value).toBe("40"); // splay 0.4 -> 40%
+    expect(inputs[7].value).toBe("60"); // vibrancy 0.6 -> 60%
+  });
+
+  it("defaults the vibrancy display to 50% when the effect predates the field", () => {
+    render(<EffectsSection node={makeNode([glassFx()])} onUpdate={vi.fn()} />);
+    const inputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    expect(inputs[7].value).toBe("50");
+  });
+
+  it("edits the vibrancy control", () => {
+    const onUpdate = vi.fn();
+    render(<EffectsSection node={makeNode([glassFx()])} onUpdate={onUpdate} />);
+    const inputs = screen.getAllByRole("spinbutton");
+
+    fireEvent.focus(inputs[7]);
+    fireEvent.change(inputs[7], { target: { value: "75" } });
+    fireEvent.blur(inputs[7]);
+    expect(onUpdate.mock.calls[0][0].effects[0].vibrancy).toBe(0.75);
   });
 
   it("edits every glass control", () => {
@@ -420,6 +442,50 @@ describe("<EffectsSection />", () => {
 
     editAt(6, "90"); // splay 90% -> 0.9
     expect(onUpdate.mock.calls[6][0].effects[0].splay).toBe(0.9);
+
+    editAt(7, "80"); // vibrancy 80% -> 0.8
+    expect(onUpdate.mock.calls[7][0].effects[0].vibrancy).toBe(0.8);
+  });
+
+  it("applies an iOS material preset, overwriting glass params but keeping the effect id", () => {
+    const onUpdate = vi.fn();
+    render(<EffectsSection node={makeNode([glassFx({ id: "g1" })])} onUpdate={onUpdate} />);
+
+    fireEvent.click(screen.getByText("Thick"));
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    const applied = onUpdate.mock.calls[0][0].effects[0];
+    expect(applied.id).toBe("g1");
+    expect(applied).toMatchObject({
+      lightAngle: 135,
+      lightIntensity: 0.7,
+      refraction: 0.6,
+      depth: 22,
+      dispersion: 0.08,
+      frost: 34,
+      splay: 0.7,
+      vibrancy: 0.6,
+    });
+  });
+
+  it("applies the Regular preset, matching the default createGlassEffect() tuple", () => {
+    const onUpdate = vi.fn();
+    render(
+      <EffectsSection
+        node={makeNode([glassFx({ frost: 99, vibrancy: 0.1 })])}
+        onUpdate={onUpdate}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Regular"));
+
+    const applied = onUpdate.mock.calls[0][0].effects[0];
+    // Compare field-for-field against the factory's own output (not a
+    // hand-typed literal), so retuning `createGlassEffect()` without also
+    // updating the "Regular" preset fails this test instead of drifting
+    // silently — the documented "Regular === add Glass fresh" invariant.
+    const { id: _id, type: _type, ...defaultParams } = createGlassEffect();
+    expect(applied).toMatchObject(defaultParams);
   });
 
   it("clamps an over-range depth to the documented max (1000) on commit", () => {

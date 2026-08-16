@@ -149,25 +149,46 @@ export function generateVisualStyles(node: BaseNode): Record<string, string> {
   // semantics) — the first visible one in the bottom-to-top stack wins and
   // the other is ignored. `pickMaterialEffect` implements that so a Glass
   // and a background blur on the same node never both emit a
-  // `backdrop-filter`. Background blur maps to CSS exactly; Glass has no CSS
-  // analogue (refraction/dispersion/directional light need a real backdrop
-  // sample, which `backdrop-filter` cannot displace or split into RGB
-  // channels), so it degrades to a `blur(frost)` backdrop-filter and drops
-  // refraction/dispersion/light silently as far as the DOM goes — there is
-  // no warnings channel in this exporter (see `convertChildrenWithMasking`'s
-  // doc comment in `convertNode.ts` for the precedent: unsupported features
-  // are documented in code rather than surfaced through a return value this
-  // exporter doesn't have).
+  // `backdrop-filter`. Background blur has no `vibrancy` concept and maps to
+  // CSS exactly (plain `blur(radius)`, unchanged below).
+  //
+  // Glass has no exact CSS analogue — `backdrop-filter` can blur/saturate/
+  // brighten a backdrop sample but cannot displace it (refraction), split it
+  // into RGB channels (dispersion), or light it directionally (lightAngle/
+  // lightIntensity/depth/splay/rim) — so it degrades to the iOS
+  // `UIVisualEffectView` material recipe CSS *can* express: a gaussian
+  // `blur(frost)` plus a `saturate(...)` derived from `vibrancy` (the shader
+  // boosts saturation toward ~1.8x at vibrancy 1; mapped here to
+  // 100%..180%, i.e. `100% + vibrancy * 80%`, so the two stay visually
+  // consistent). `pickMaterialEffect` runs every glass through
+  // `normalizeGlassEffect`, which fills a missing `vibrancy` with the
+  // documented default of 0.5 (not 0) — so a pre-`vibrancy` document's glass
+  // export now GAINS a `saturate(...)` it never emitted before, picking up
+  // the current material look rather than staying byte-identical. `saturate()`
+  // is omitted only when `vibrancy` is genuinely 0 (explicitly set), where it
+  // would be a no-op. Still silently dropped: refraction, dispersion,
+  // lightAngle/lightIntensity, depth, splay — there is no warnings channel in
+  // this exporter (see `convertChildrenWithMasking`'s doc comment in
+  // `convertNode.ts` for the precedent: unsupported features are documented
+  // in code rather than surfaced through a return value this exporter
+  // doesn't have).
   const materialEffect = pickMaterialEffect(effects);
   if (materialEffect?.type === "background-blur" && materialEffect.radius > 0) {
     styles["backdrop-filter"] = `blur(${materialEffect.radius}px)`;
     styles["-webkit-backdrop-filter"] = `blur(${materialEffect.radius}px)`;
   } else if (materialEffect?.type === "glass" && materialEffect.visible !== false) {
-    // Lossy fallback: frost (gaussian backdrop blur) is the only Glass
-    // parameter CSS can express. lightAngle/lightIntensity/refraction/
-    // dispersion/depth/splay are dropped.
-    styles["backdrop-filter"] = `blur(${materialEffect.frost}px)`;
-    styles["-webkit-backdrop-filter"] = `blur(${materialEffect.frost}px)`;
+    const filterParts = [`blur(${materialEffect.frost}px)`];
+    // `pickMaterialEffect` always normalizes, so `vibrancy` is already a
+    // number here; the `?? 0` is defensive only, against a future caller
+    // that passes an un-normalized `GlassEffect` directly to this function.
+    const vibrancy = materialEffect.vibrancy ?? 0;
+    if (vibrancy > 0) {
+      const saturatePct = Math.round(100 + vibrancy * 80);
+      filterParts.push(`saturate(${saturatePct}%)`);
+    }
+    const filterCss = filterParts.join(" ");
+    styles["backdrop-filter"] = filterCss;
+    styles["-webkit-backdrop-filter"] = filterCss;
   }
 
   // Rotation and flip transforms

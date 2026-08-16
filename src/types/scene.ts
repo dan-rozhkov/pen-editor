@@ -322,6 +322,11 @@ export interface NoiseEffect {
  *                   before refraction. 0 skips the blur pass entirely.
  *  - `splay`        0..1, how wide the specular highlight spreads along the
  *                   edge (0 = tight glint, 1 = broad sheen).
+ *  - `vibrancy`     0..1, optional (defaults via `normalizeGlassEffect` —
+ *                   see below). Drives the iOS "vibrancy" look: saturation
+ *                   boost + a small S-curve contrast lift applied to the
+ *                   sampled backdrop, both scaled by this value. 0 = the
+ *                   backdrop's own colors, untouched.
  *
  * Stack semantics: at most ONE visible Glass renders per node (the first in
  * bottom-to-top order wins). Glass and `BackgroundBlurEffect` share a single
@@ -338,6 +343,10 @@ export interface GlassEffect {
   dispersion: number       // 0-1
   frost: number            // px, >= 0
   splay: number            // 0-1
+  // 0-1, optional — documents saved before this field existed have none.
+  // `normalizeGlassEffect` fills a missing/NaN value with the default
+  // (0.5), not with 0 — see its doc comment.
+  vibrancy?: number
   // Stable id for UI list keys when used inside `effects: Effect[]`
   id?: string
   visible?: boolean   // defaults to true

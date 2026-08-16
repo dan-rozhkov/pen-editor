@@ -84,6 +84,37 @@ describe("writeGlassGeometryUniforms", () => {
     writeGlassGeometryUniforms(group, rectNode(), 10, 10);
     expect(group.uniforms.uSize).toBe(sizeRef);
   });
+
+  it("defaults uCornerSmoothing to 0 when the node has none", () => {
+    const group = createGlassUniformGroup();
+    writeGlassGeometryUniforms(group, rectNode(), 100, 80);
+    expect(group.uniforms.uCornerSmoothing).toBe(0);
+  });
+
+  it("writes the node's cornerSmoothing fraction", () => {
+    const group = createGlassUniformGroup();
+    writeGlassGeometryUniforms(group, rectNode({ cornerSmoothing: 0.6 } as Partial<FlatSceneNode>), 100, 80);
+    expect(group.uniforms.uCornerSmoothing).toBeCloseTo(0.6, 5);
+  });
+
+  it("clamps uCornerSmoothing to 0..1", () => {
+    const group = createGlassUniformGroup();
+    writeGlassGeometryUniforms(group, rectNode({ cornerSmoothing: 5 } as Partial<FlatSceneNode>), 100, 80);
+    expect(group.uniforms.uCornerSmoothing).toBe(1);
+
+    const group2 = createGlassUniformGroup();
+    writeGlassGeometryUniforms(group2, rectNode({ cornerSmoothing: -3 } as Partial<FlatSceneNode>), 100, 80);
+    expect(group2.uniforms.uCornerSmoothing).toBe(0);
+  });
+
+  it("survives a resize (geometry writer preserves cornerSmoothing across repeated calls)", () => {
+    const group = createGlassUniformGroup();
+    const node = rectNode({ cornerSmoothing: 0.4 } as Partial<FlatSceneNode>);
+    writeGlassGeometryUniforms(group, node, 100, 80);
+    writeGlassGeometryUniforms(group, node, 200, 160);
+    expect(group.uniforms.uCornerSmoothing).toBeCloseTo(0.4, 5);
+    expect(Array.from(group.uniforms.uSize)).toEqual([200, 160]);
+  });
 });
 
 describe("writeGlassEffectUniforms", () => {
@@ -120,11 +151,32 @@ describe("writeGlassEffectUniforms", () => {
     expect(group.uniforms.uLight[1]).toBeCloseTo(0, 5);
   });
 
-  it("packs lightIntensity into uLight.z and leaves uLight.w at 0", () => {
+  it("packs lightIntensity into uLight.z and vibrancy into uLight.w", () => {
     const group = createGlassUniformGroup();
-    writeGlassEffectUniforms(group, createGlassEffect({ lightIntensity: 0.75 }), rectNode(), 100, 80);
+    writeGlassEffectUniforms(
+      group,
+      createGlassEffect({ lightIntensity: 0.75, vibrancy: 0.9 }),
+      rectNode(),
+      100,
+      80,
+    );
     expect(group.uniforms.uLight[2]).toBe(0.75);
+    expect(group.uniforms.uLight[3]).toBeCloseTo(0.9, 5);
+  });
+
+  it("packs vibrancy 0 into uLight.w (background-blur's zeroed mapping)", () => {
+    const group = createGlassUniformGroup();
+    writeGlassEffectUniforms(group, createGlassEffect({ vibrancy: 0 }), rectNode(), 100, 80);
     expect(group.uniforms.uLight[3]).toBe(0);
+  });
+
+  it("falls back to the documented default when vibrancy is missing (defensive — callers should pass an already-normalized effect)", () => {
+    const group = createGlassUniformGroup();
+    const effect = createGlassEffect();
+    // Simulate a not-yet-normalized effect missing the field entirely.
+    delete (effect as { vibrancy?: number }).vibrancy;
+    writeGlassEffectUniforms(group, effect, rectNode(), 100, 80);
+    expect(group.uniforms.uLight[3]).toBe(0.5);
   });
 
   it("also writes geometry fields (size, radii, ellipse flag) via the shared helper", () => {
@@ -133,6 +185,13 @@ describe("writeGlassEffectUniforms", () => {
     expect(Array.from(group.uniforms.uSize)).toEqual([100, 80]);
     expect(Array.from(group.uniforms.uRadii)).toEqual([4, 4, 4, 4]);
     expect(group.uniforms.uIsEllipse).toBe(0);
+  });
+
+  it("passes the node's cornerSmoothing through via the shared geometry helper, untouched by effect params", () => {
+    const group = createGlassUniformGroup();
+    const node = rectNode({ cornerSmoothing: 0.75 } as Partial<FlatSceneNode>);
+    writeGlassEffectUniforms(group, createGlassEffect({ refraction: 0.2, vibrancy: 0.9 }), node, 100, 80);
+    expect(group.uniforms.uCornerSmoothing).toBeCloseTo(0.75, 5);
   });
 });
 
@@ -149,6 +208,7 @@ describe("createGlassUniformGroup", () => {
     expect(group.uniforms.uWorldA.length).toBe(2);
     expect(group.uniforms.uWorldB.length).toBe(2);
     expect(group.uniforms.uIsEllipse).toBe(0);
+    expect(group.uniforms.uCornerSmoothing).toBe(0);
     expect(Array.from(group.uniforms.uToLocalA)).toEqual([0, 0, 0]);
     expect(Array.from(group.uniforms.uWorldA)).toEqual([0, 0]);
   });

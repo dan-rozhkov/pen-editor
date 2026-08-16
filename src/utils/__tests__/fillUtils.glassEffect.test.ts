@@ -22,12 +22,25 @@ describe("createGlassEffect", () => {
     expect(effect.id).toBeTruthy();
     expect(effect.lightAngle).toBeGreaterThanOrEqual(0);
     expect(effect.lightAngle).toBeLessThan(360);
-    for (const key of ["lightIntensity", "refraction", "dispersion", "splay"] as const) {
+    for (const key of ["lightIntensity", "refraction", "dispersion", "splay", "vibrancy"] as const) {
       expect(effect[key]).toBeGreaterThanOrEqual(0);
       expect(effect[key]).toBeLessThanOrEqual(1);
     }
     expect(effect.depth).toBeGreaterThanOrEqual(1);
     expect(effect.frost).toBeGreaterThanOrEqual(0);
+  });
+
+  it("defaults to Apple's 'regular' material tuple", () => {
+    expect(createGlassEffect()).toMatchObject({
+      lightAngle: 135,
+      lightIntensity: 0.55,
+      refraction: 0.45,
+      depth: 14,
+      dispersion: 0.06,
+      frost: 18,
+      splay: 0.55,
+      vibrancy: 0.5,
+    });
   });
 
   it("gives every instance its own id", () => {
@@ -50,12 +63,17 @@ describe("normalizeGlassEffect", () => {
 
   it("clamps the 0-1 params from both directions", () => {
     const normalized = normalizeGlassEffect(
-      glass({ lightIntensity: 5, refraction: -2, dispersion: 1.5, splay: -0.1 }),
+      glass({ lightIntensity: 5, refraction: -2, dispersion: 1.5, splay: -0.1, vibrancy: 5 }),
     );
     expect(normalized.lightIntensity).toBe(1);
     expect(normalized.refraction).toBe(0);
     expect(normalized.dispersion).toBe(1);
     expect(normalized.splay).toBe(0);
+    expect(normalized.vibrancy).toBe(1);
+  });
+
+  it("clamps vibrancy below 0 up to 0", () => {
+    expect(normalizeGlassEffect(glass({ vibrancy: -3 })).vibrancy).toBe(0);
   });
 
   it("holds depth at its >= 1 floor and frost at its >= 0 floor", () => {
@@ -86,6 +104,29 @@ describe("normalizeGlassEffect", () => {
     // Infinity is treated the same as NaN: non-finite input has no meaningful
     // clamp target, so it falls back to the default rather than to the ceiling.
     expect(normalized.depth).toBe(defaults.depth);
+  });
+
+  it("back-compat: a missing vibrancy field (a document saved before this field existed) normalizes to the DEFAULT, not to 0", () => {
+    const defaults = createGlassEffect();
+    // Bypass the `glass()` fixture's spread-of-defaults so `vibrancy` is
+    // genuinely absent, matching an old saved document.
+    const legacy: GlassEffect = {
+      type: "glass",
+      lightAngle: 10,
+      lightIntensity: 0.2,
+      refraction: 0.2,
+      depth: 5,
+      dispersion: 0.1,
+      frost: 3,
+      splay: 0.2,
+    };
+    expect(legacy.vibrancy).toBeUndefined();
+    expect(normalizeGlassEffect(legacy).vibrancy).toBe(defaults.vibrancy);
+  });
+
+  it("also substitutes the default for a NaN vibrancy", () => {
+    const defaults = createGlassEffect();
+    expect(normalizeGlassEffect(glass({ vibrancy: Number.NaN })).vibrancy).toBe(defaults.vibrancy);
   });
 
   it("preserves id and visible", () => {

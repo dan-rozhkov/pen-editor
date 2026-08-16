@@ -17,6 +17,7 @@ import { hasPerCornerRadius } from "@/utils/renderUtils";
 type CornerNode = FlatSceneNode & {
   cornerRadius?: number;
   cornerRadiusPerCorner?: PerCornerRadius;
+  cornerSmoothing?: number;
 };
 
 /**
@@ -91,6 +92,12 @@ export const MAX_MATERIAL_PADDING = 200;
  * `bounds.pad((padding | 0) * paddingMultiplier)` — note the `| 0`, so a
  * fractional value would silently truncate) and capped at
  * `MAX_MATERIAL_PADDING`.
+ *
+ * `vibrancy` does NOT extend the sampling reach and is deliberately excluded
+ * here: it's a post-process saturation/contrast adjustment applied to the
+ * pixels already fetched by `sampleDispersed` (`glassBackdrop.frag.ts`), not
+ * an additional displacement or blur — same reasoning as why `lightIntensity`
+ * (the specular/rim/shadow terms) isn't in this sum either.
  */
 export function computeMaterialSurfacePadding(effect: GlassEffect): number {
   const maxDisplacement = Math.max(0, effect.refraction) * Math.max(0, effect.depth) *
@@ -121,6 +128,15 @@ function glassUniformStructures() {
     uWorldA: { value: new Float32Array(2), type: "vec2<f32>" as const },
     uWorldB: { value: new Float32Array(2), type: "vec2<f32>" as const },
     uIsEllipse: { value: 0, type: "f32" as const },
+    // 0..1 fraction mirroring the node's `cornerSmoothing` (squircle) field —
+    // a GEOMETRY field, not an effect param, so it's written by
+    // `writeGlassGeometryUniforms` (also called on a pure resize via
+    // `resizeMaterialSurface`), same as `uSize`/`uRadii`/`uIsEllipse`. See
+    // `sdRoundedBoxProfile`'s doc comment in `glassBackdrop.frag.ts` for why
+    // the shader needs it (Finding 3: the material surface mask is drawn as
+    // a squircle via `drawRoundedShape`/`drawSquircleRoundRect` whenever
+    // this is set, and the rim highlight must follow the same outline).
+    uCornerSmoothing: { value: 0, type: "f32" as const },
   };
 }
 
@@ -172,6 +188,9 @@ export function writeGlassGeometryUniforms(
   u.uRadii[3] = bl;
 
   u.uIsEllipse = isEllipseShape(node) ? 1 : 0;
+
+  const cn = node as CornerNode;
+  u.uCornerSmoothing = Math.max(0, Math.min(1, cn.cornerSmoothing ?? 0));
 }
 
 /**
@@ -200,5 +219,10 @@ export function writeGlassEffectUniforms(
   u.uLight[0] = Math.cos(radians);
   u.uLight[1] = Math.sin(radians);
   u.uLight[2] = effect.lightIntensity;
-  u.uLight[3] = 0;
+  // `vibrancy` is optional on `GlassEffect` (back-compat), but this function
+  // is documented to only ever receive an already-normalized effect (see the
+  // doc comment above) — `normalizeGlassEffect` always fills it in. The `?? `
+  // fallback here is defensive only, matching `Math.max(1, effect.depth)`
+  // above for the same reason.
+  u.uLight[3] = effect.vibrancy ?? 0.5;
 }

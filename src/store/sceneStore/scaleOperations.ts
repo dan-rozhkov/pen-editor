@@ -55,9 +55,9 @@ function scaleEffect(effect: Effect, factor: number): Effect {
   }
   if (effect.type === "glass") {
     // Only the px-valued fields are geometry (bevel thickness / blur radius).
-    // The unitless 0-1 params (lightIntensity/refraction/dispersion/splay)
-    // and the angle are material properties, not geometry — left as-is, same
-    // treatment noise gets above.
+    // The unitless 0-1 params (lightIntensity/refraction/dispersion/splay/
+    // vibrancy) and the angle are material properties, not geometry — left
+    // as-is, same treatment noise gets above.
     return {
       ...effect,
       depth: roundTo(effect.depth * factor),

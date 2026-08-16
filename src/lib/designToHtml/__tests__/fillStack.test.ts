@@ -232,10 +232,13 @@ describe("designToHtml effect stack", () => {
     expect(styles["backdrop-filter"]).toBeUndefined();
   });
 
-  // Glass has no CSS analogue (refraction/dispersion/directional light need a
-  // real backdrop sample). It degrades to a `backdrop-filter: blur(frost)`
-  // fallback, matching the shape of the background-blur branch above.
-  it("converts a glass effect to a lossy backdrop-filter: blur(frost) fallback", () => {
+  // Glass has no exact CSS analogue (refraction/dispersion/directional light
+  // need a real backdrop sample). It degrades to the iOS material recipe CSS
+  // *can* express: `blur(frost)` plus `saturate(...)` derived from
+  // `vibrancy`. This effect has no explicit `vibrancy`, so `pickMaterialEffect`
+  // normalizes it to the documented default (0.5) — same as any pre-vibrancy
+  // document — which is why saturate() is still emitted here.
+  it("converts a glass effect to a lossy backdrop-filter: blur(frost) + saturate(vibrancy) fallback", () => {
     const effects: Effect[] = [
       {
         type: "glass",
@@ -249,9 +252,57 @@ describe("designToHtml effect stack", () => {
       },
     ];
     const styles = generateVisualStyles(rect({ effects }));
+    // vibrancy defaults (via normalizeGlassEffect) to 0.5 -> 100 + 0.5*80 = 140%.
+    expect(styles["backdrop-filter"]).toBe("blur(8px) saturate(140%)");
+    expect(styles["-webkit-backdrop-filter"]).toBe("blur(8px) saturate(140%)");
+    expect(styles.filter).toBeUndefined();
+  });
+
+  it("emits only blur() for a glass effect with vibrancy explicitly 0 (no saturate no-op)", () => {
+    const effects: Effect[] = [
+      {
+        type: "glass",
+        lightAngle: 135,
+        lightIntensity: 0.5,
+        refraction: 0.35,
+        depth: 12,
+        dispersion: 0.15,
+        frost: 8,
+        splay: 0.4,
+        vibrancy: 0,
+      },
+    ];
+    const styles = generateVisualStyles(rect({ effects }));
     expect(styles["backdrop-filter"]).toBe("blur(8px)");
     expect(styles["-webkit-backdrop-filter"]).toBe("blur(8px)");
-    expect(styles.filter).toBeUndefined();
+  });
+
+  it("maps a non-default vibrancy to its saturate percentage", () => {
+    const effects: Effect[] = [
+      {
+        type: "glass",
+        lightAngle: 135,
+        lightIntensity: 0.5,
+        refraction: 0.35,
+        depth: 12,
+        dispersion: 0.15,
+        frost: 8,
+        splay: 0.4,
+        vibrancy: 1,
+      },
+    ];
+    const styles = generateVisualStyles(rect({ effects }));
+    // vibrancy 1 -> 100 + 1*80 = 180%.
+    expect(styles["backdrop-filter"]).toBe("blur(8px) saturate(180%)");
+  });
+
+  // Background blur has no `vibrancy` concept — its output must stay
+  // byte-identical to before this change.
+  it("background blur output is unaffected by the glass vibrancy change", () => {
+    const effects: Effect[] = [{ type: "background-blur", radius: 12 }];
+    const styles = generateVisualStyles(rect({ effects }));
+    expect(styles["backdrop-filter"]).toBe("blur(12px)");
+    expect(styles["-webkit-backdrop-filter"]).toBe("blur(12px)");
   });
 
   // Material slot: Glass and background blur are mutually exclusive — only
@@ -259,7 +310,7 @@ describe("designToHtml effect stack", () => {
   // backdrop-filter (Figma semantics via `pickMaterialEffect`).
   it("a glass effect below a background blur wins the material slot; the blur is ignored", () => {
     const effects: Effect[] = [
-      { type: "glass", lightAngle: 0, lightIntensity: 0.5, refraction: 0.35, depth: 12, dispersion: 0.15, frost: 5, splay: 0.4 },
+      { type: "glass", lightAngle: 0, lightIntensity: 0.5, refraction: 0.35, depth: 12, dispersion: 0.15, frost: 5, splay: 0.4, vibrancy: 0 },
       { type: "background-blur", radius: 20 },
     ];
     const styles = generateVisualStyles(rect({ effects }));

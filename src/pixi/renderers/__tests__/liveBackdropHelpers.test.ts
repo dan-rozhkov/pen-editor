@@ -79,6 +79,50 @@ describe("applyMaterialSurface", () => {
     expect(c.getChildByLabel("material-surface")).toBeNull();
   });
 
+  // `vibrancy` alone saturates/contrast-lifts the backdrop, so a glass whose
+  // every other param is 0 is still a visible material — it must not be
+  // swallowed by the no-op skip.
+  it("renders a glass whose only non-zero param is vibrancy", () => {
+    const c = new Container();
+    applyMaterialSurface(c, rectNode(), [
+      {
+        type: "glass",
+        id: "g-vib",
+        lightAngle: 0,
+        lightIntensity: 0,
+        refraction: 0,
+        depth: 1,
+        dispersion: 0,
+        frost: 0,
+        splay: 0,
+        vibrancy: 0.6,
+      },
+    ]);
+    expect(c.getChildByLabel("material-surface")).toBeTruthy();
+    // Keep `liveMaterialSurfaceCount` net-zero for the useBackBuffer block
+    // below — see its doc comment.
+    c.destroy({ children: true });
+  });
+
+  it("does not render a glass with every param, vibrancy included, at zero", () => {
+    const c = new Container();
+    applyMaterialSurface(c, rectNode(), [
+      {
+        type: "glass",
+        id: "g-zero",
+        lightAngle: 0,
+        lightIntensity: 0,
+        refraction: 0,
+        depth: 1,
+        dispersion: 0,
+        frost: 0,
+        splay: 0,
+        vibrancy: 0,
+      },
+    ]);
+    expect(c.getChildByLabel("material-surface")).toBeNull();
+  });
+
   it("does not render for a hidden node", () => {
     const c = new Container();
     applyMaterialSurface(c, rectNode({ visible: false }), glassEffects);
@@ -341,8 +385,15 @@ describe("backgroundBlurToGlassEffect", () => {
       dispersion: 0,
       frost: 12,
       splay: 0,
+      vibrancy: 0,
       id: "e1",
       visible: true,
     });
+  });
+
+  it("keeps vibrancy at 0 — background blur must stay a pure gaussian blur with no vibrancy lift", () => {
+    expect(
+      backgroundBlurToGlassEffect({ type: "background-blur", radius: 4, id: "e2", visible: true }).vibrancy,
+    ).toBe(0);
   });
 });

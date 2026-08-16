@@ -206,20 +206,23 @@ export function createBackgroundBlurEffect(
 }
 
 /**
- * Default Glass: a visible but restrained material — refraction and frost
- * strong enough to read as glass over a busy backdrop, dispersion low enough
- * not to fringe on a flat one.
+ * Default Glass: tuned to read as Apple's iOS "Liquid Glass" *regular*
+ * material (UIVisualEffectView-style) rather than a decorative refraction
+ * effect — strong frost, moderate refraction/depth, low dispersion (real
+ * glass barely fringes), and `vibrancy` at its midpoint so the backdrop
+ * reads saturated/lifted without blowing out.
  */
 export function createGlassEffect(init?: Partial<Omit<GlassEffect, 'type'>>): GlassEffect {
   return {
     type: 'glass',
     lightAngle: 135,
-    lightIntensity: 0.5,
-    refraction: 0.35,
-    depth: 12,
-    dispersion: 0.15,
-    frost: 8,
-    splay: 0.4,
+    lightIntensity: 0.55,
+    refraction: 0.45,
+    depth: 14,
+    dispersion: 0.06,
+    frost: 18,
+    splay: 0.55,
+    vibrancy: 0.5,
     id: generateId(),
     ...init,
   }
@@ -254,6 +257,13 @@ export function normalizeGlassEffect(effect: GlassEffect): GlassEffect {
     dispersion: clampFinite(effect.dispersion, 0, 1, defaults.dispersion),
     frost: clampFinite(effect.frost, 0, 100, defaults.frost),
     splay: clampFinite(effect.splay, 0, 1, defaults.splay),
+    // `vibrancy` is optional on the type (back-compat: documents saved
+    // before this field existed have none). `clampFinite`'s NaN branch
+    // covers `undefined` too (`typeof undefined !== 'number'`), so a
+    // missing field falls back to the DEFAULT (0.5), not to 0 — an old
+    // document should read as the current default look, not as "no
+    // vibrancy".
+    vibrancy: clampFinite(effect.vibrancy as number, 0, 1, defaults.vibrancy!),
   }
 }
 

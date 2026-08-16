@@ -43,9 +43,11 @@ function isNodeRenderable(node: FlatSceneNode): boolean {
  * with everything but `frost` zeroed out: no refraction/dispersion/specular,
  * `depth: 1` (irrelevant when refraction is 0, but kept >= 1 per
  * `GlassEffect`'s documented range), `frost` set to the blur radius. With
- * `uParams.x`/`uParams.z`/`uLight.z` all 0 the shared shader collapses to
- * "frosted backdrop clipped to the shape" — the background-blur case — via
- * the same code path as Glass, not a branch.
+ * `uParams.x`/`uParams.z`/`uLight.z`/`uLight.w` all 0 the shared shader
+ * collapses to "frosted backdrop clipped to the shape" — the background-blur
+ * case — via the same code path as Glass, not a branch. `vibrancy: 0` is
+ * part of that same "must stay a pure gaussian blur" contract: background
+ * blur must not pick up the vibrancy saturation/contrast lift either.
  */
 export function backgroundBlurToGlassEffect(effect: BackgroundBlurEffect): GlassEffect {
   return {
@@ -57,6 +59,7 @@ export function backgroundBlurToGlassEffect(effect: BackgroundBlurEffect): Glass
     dispersion: 0,
     frost: effect.radius,
     splay: 0,
+    vibrancy: 0,
     id: effect.id,
     visible: effect.visible,
   };
@@ -66,9 +69,24 @@ function toGlassEffect(effect: GlassEffect | BackgroundBlurEffect): GlassEffect 
   return effect.type === "glass" ? effect : backgroundBlurToGlassEffect(effect);
 }
 
-/** True when the effect would render as a complete visual no-op (nothing displaced, nothing lit, nothing blurred) — skip the filter entirely rather than pay for an identity backdrop copy. */
+/**
+ * True when the effect would render as a complete visual no-op (nothing
+ * displaced, nothing lit, nothing blurred, no vibrancy shift) — skip the
+ * filter entirely rather than pay for an identity backdrop copy.
+ *
+ * `vibrancy` counts: it saturates/contrast-lifts the backdrop on its own (see
+ * `vibrancyAdjust` in `glassBackdrop.frag.ts`), so a glass whose only non-zero
+ * param is `vibrancy` is a visible effect, not an identity copy. Omitting it
+ * here would silently drop that material.
+ */
 function isMaterialNoOp(effect: GlassEffect): boolean {
-  return effect.refraction <= 0 && effect.dispersion <= 0 && effect.lightIntensity <= 0 && effect.frost <= 0;
+  return (
+    effect.refraction <= 0 &&
+    effect.dispersion <= 0 &&
+    effect.lightIntensity <= 0 &&
+    effect.frost <= 0 &&
+    !((effect.vibrancy ?? 0) > 0)
+  );
 }
 
 /**

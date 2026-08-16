@@ -301,7 +301,7 @@ describe("buildInspectData", () => {
     expect(effects).toBeDefined();
     expect(effects!.rows[0].label).toBe("Glass");
     expect(effects!.rows[0].value).toBe(
-      "frost 8px, depth 12px, refraction 0.35, dispersion 0.15, light 135° @ 0.5, splay 0.4",
+      "frost 8px, depth 12px, refraction 0.35, dispersion 0.15, light 135° @ 0.5, splay 0.4, vibrancy 0.5",
     );
   });
 

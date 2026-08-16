@@ -200,6 +200,11 @@ const GLASS_DEFAULTS = {
   dispersion: 0.15,
   frost: 8,
   splay: 0.4,
+  // Explicit, not omitted: a missing `vibrancy` normalizes to the 0.5
+  // default (see `normalizeGlassEffect`), which would silently exercise the
+  // saturation + S-curve path in every case below, including the baselines
+  // that zero every other parameter specifically to isolate one effect.
+  vibrancy: 0,
 };
 
 function glassCard(overrides: Record<string, unknown> = {}): SceneNodeInit {
@@ -319,6 +324,26 @@ test.describe("live glass material", () => {
     // A grey backdrop sampled at one point per channel cannot produce colour.
     expect(spreadWithout).toBeLessThan(10);
     expect(spreadWith).toBeGreaterThan(spreadWithout + 20);
+  });
+
+  test("vibrancy saturates the backdrop sampled through the glass", async ({ page }) => {
+    await openEditor(page);
+    // A flat, moderately-saturated backdrop: any increase in channel spread
+    // at the sample point can only come from the vibrancy saturation boost,
+    // not from stripe boundaries or displacement (refraction/dispersion/frost
+    // are all zeroed so only vibrancy can move the pixel).
+    await seedScene(page, [
+      { id: "bg", type: "rect", name: "Backdrop", x: 0, y: 0, width: 600, height: 400, fill: "#4060a0" },
+      glassCard({ vibrancy: 0, refraction: 0, dispersion: 0, frost: 0, lightIntensity: 0 }),
+    ]);
+    const unsaturated = await samplePixel(page, CARD_CENTER.x, CARD_CENTER.y);
+
+    await updateNode(page, "card", {
+      effects: [{ ...GLASS_DEFAULTS, vibrancy: 1, refraction: 0, dispersion: 0, frost: 0, lightIntensity: 0 }],
+    });
+    const saturated = await samplePixel(page, CARD_CENTER.x, CARD_CENTER.y);
+
+    expect(channelSpread(saturated)).toBeGreaterThan(channelSpread(unsaturated) + 10);
   });
 
   test("frost smooths a high-contrast backdrop measurably", async ({ page }) => {

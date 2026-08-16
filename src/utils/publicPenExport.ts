@@ -463,7 +463,7 @@ function exportEffects(node: SceneNode, context: ExportContext): PenEffect[] | u
       // HTML exporter's degradation, and record what was lost rather than
       // silently dropping refraction/dispersion/light.
       context.warnings.push(
-        `Glass effect on node "${node.name ?? node.id}" has no equivalent in the public .pen format (v${PUBLIC_PEN_VERSION}) and was exported as a lossy background-blur (radius = frost); light, refraction, dispersion, depth, and splay were dropped.`,
+        `Glass effect on node "${node.name ?? node.id}" has no equivalent in the public .pen format (v${PUBLIC_PEN_VERSION}) and was exported as a lossy background-blur (radius = frost); light, refraction, dispersion, depth, splay, and vibrancy were dropped.`,
       );
       return {
         type: "background-blur",

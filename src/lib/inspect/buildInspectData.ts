@@ -373,7 +373,7 @@ function describeEffect(effect: ShadowEffect | BlurEffect | BackgroundBlurEffect
     return { label: "Background blur", value: fmt(effect.radius, units, remBase) };
   }
   if (effect.type === "glass") {
-    const value = `frost ${fmt(effect.frost, units, remBase)}, depth ${fmt(effect.depth, units, remBase)}, refraction ${effect.refraction}, dispersion ${effect.dispersion}, light ${effect.lightAngle}° @ ${effect.lightIntensity}, splay ${effect.splay}`;
+    const value = `frost ${fmt(effect.frost, units, remBase)}, depth ${fmt(effect.depth, units, remBase)}, refraction ${effect.refraction}, dispersion ${effect.dispersion}, light ${effect.lightAngle}° @ ${effect.lightIntensity}, splay ${effect.splay}, vibrancy ${effect.vibrancy ?? 0.5}`;
     return { label: "Glass", value };
   }
   return {
