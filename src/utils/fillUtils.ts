@@ -208,21 +208,25 @@ export function createBackgroundBlurEffect(
 /**
  * Default Glass: tuned to read as Apple's iOS "Liquid Glass" *regular*
  * material (UIVisualEffectView-style) rather than a decorative refraction
- * effect — strong frost, moderate refraction/depth, low dispersion (real
- * glass barely fringes), and `vibrancy` at its midpoint so the backdrop
- * reads saturated/lifted without blowing out.
+ * effect — strong frost, pronounced refraction over a bevel band deep enough
+ * to lens visibly, low dispersion (real glass barely fringes), and a
+ * `vibrancy` above the midpoint so the backdrop reads saturated/lifted
+ * without blowing out. Retuning these numbers only affects newly created
+ * Glass effects; existing documents keep their own stored values
+ * (`normalizeGlassEffect` reaches for a default only on a missing/invalid
+ * field).
  */
 export function createGlassEffect(init?: Partial<Omit<GlassEffect, 'type'>>): GlassEffect {
   return {
     type: 'glass',
     lightAngle: 135,
-    lightIntensity: 0.55,
-    refraction: 0.45,
-    depth: 14,
+    lightIntensity: 0.6,
+    refraction: 0.7,
+    depth: 18,
     dispersion: 0.06,
-    frost: 18,
+    frost: 22,
     splay: 0.55,
-    vibrancy: 0.5,
+    vibrancy: 0.6,
     id: generateId(),
     ...init,
   }
@@ -260,7 +264,7 @@ export function normalizeGlassEffect(effect: GlassEffect): GlassEffect {
     // `vibrancy` is optional on the type (back-compat: documents saved
     // before this field existed have none). `clampFinite`'s NaN branch
     // covers `undefined` too (`typeof undefined !== 'number'`), so a
-    // missing field falls back to the DEFAULT (0.5), not to 0 — an old
+    // missing field falls back to the DEFAULT (0.6), not to 0 — an old
     // document should read as the current default look, not as "no
     // vibrancy".
     vibrancy: clampFinite(effect.vibrancy as number, 0, 1, defaults.vibrancy!),

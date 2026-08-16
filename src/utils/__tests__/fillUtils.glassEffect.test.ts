@@ -33,13 +33,13 @@ describe("createGlassEffect", () => {
   it("defaults to Apple's 'regular' material tuple", () => {
     expect(createGlassEffect()).toMatchObject({
       lightAngle: 135,
-      lightIntensity: 0.55,
-      refraction: 0.45,
-      depth: 14,
+      lightIntensity: 0.6,
+      refraction: 0.7,
+      depth: 18,
       dispersion: 0.06,
-      frost: 18,
+      frost: 22,
       splay: 0.55,
-      vibrancy: 0.5,
+      vibrancy: 0.6,
     });
   });
 

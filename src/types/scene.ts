@@ -345,7 +345,7 @@ export interface GlassEffect {
   splay: number            // 0-1
   // 0-1, optional — documents saved before this field existed have none.
   // `normalizeGlassEffect` fills a missing/NaN value with the default
-  // (0.5), not with 0 — see its doc comment.
+  // (0.6), not with 0 — see its doc comment.
   vibrancy?: number
   // Stable id for UI list keys when used inside `effects: Effect[]`
   id?: string

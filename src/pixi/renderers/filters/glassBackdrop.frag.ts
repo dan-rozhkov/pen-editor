@@ -23,6 +23,12 @@
  *  - `shadow`: a subtle darkening of the edge band opposite the light
  *    direction, grounding the material against its backdrop. Also scaled by
  *    `lightIntensity` so a 0 intensity stays a true no-op.
+ *  - `contact`: the thin darker contour immediately INSIDE the rim
+ *    hairline. The lit-hairline/dark-contour pair is what reads as the
+ *    material's own thickness; a bright line on its own reads as a stroke.
+ *  - A lens profile for the refraction displacement (`h` squared again):
+ *    iOS bends its backdrop almost entirely inside a narrow band at the
+ *    outline and leaves the interior optically flat.
  *  - Highlights (spec + bounce + rim) are combined with a screen blend
  *    (`rgb + h*(1-rgb)`) instead of plain addition, so they roll off toward
  *    white instead of clipping.
@@ -100,10 +106,28 @@ float sdRoundedBoxProfile(vec2 p, vec2 halfSize, vec4 radii)
     r = min(r, min(halfSize.x, halfSize.y));
     vec2 q = abs(p) - halfSize + r;
 
+    // Same budget clamp figma-squircle (and therefore
+    // 'buildSquircleRectPath' -> the drawn material surface) applies: a
+    // corner only gets as much smoothing as the space along its adjacent
+    // edges allows, 'maxCornerSmoothing = budget / cornerRadius - 1'
+    // (getCornerPathParams in src/lib/shapePath/squircleCorner.ts). The
+    // budget for equal radii is min(w, h) / 2, which is exactly the clamp 'r'
+    // just went through — so a fully-rounded capsule (r == budget) drops to
+    // smoothing 0 and is drawn as a plain circular cap. Without this, the SDF
+    // kept bulging its superellipse corner outward on a shape whose outline
+    // is a circle, and the rim hairline visibly vanished around the caps
+    // (clipped away by the surface's own alpha mask). Per-corner budgets for
+    // *unequal* radii are approximated by the same min(halfSize) figure, as
+    // the r clamp above already does.
+    float budget = min(halfSize.x, halfSize.y);
+    float smoothing = r > 0.0
+        ? min(clamp(uCornerSmoothing, 0.0, 1.0), max(0.0, budget / r - 1.0))
+        : 0.0;
+
     // Plain Euclidean corner (n=2), bit-identical to the original formula —
     // this is the path every node without corner smoothing still takes, so
     // there is no pow()/precision cost for the common case.
-    if (uCornerSmoothing <= 0.0) {
+    if (smoothing <= 0.0) {
         return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
     }
 
@@ -135,7 +159,7 @@ float sdRoundedBoxProfile(vec2 p, vec2 halfSize, vec4 radii)
     // land near the n~4-5 superellipse commonly cited as the closest visual
     // match for iOS's ~60%-100% corner-smoothing range — a judgment call
     // documented here, not an exact derivation.
-    float n = 2.0 + 3.0 * clamp(uCornerSmoothing, 0.0, 1.0);
+    float n = 2.0 + 3.0 * smoothing;
     vec2 qp = max(q, 0.0);
     float outside = pow(pow(qp.x, n) + pow(qp.y, n), 1.0 / n);
     return min(max(q.x, q.y), 0.0) + outside - r;
@@ -233,9 +257,15 @@ float specular(vec2 normalDir, float h, vec2 lightDir, float intensity, float sp
 vec3 vibrancyAdjust(vec3 rgb, float vibrancy)
 {
     float luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
-    vec3 saturated = mix(vec3(luma), rgb, mix(1.0, 1.8, vibrancy));
+    vec3 saturated = mix(vec3(luma), rgb, mix(1.0, 1.9, vibrancy));
     vec3 sCurve = smoothstep(0.0, 1.0, saturated);
-    return clamp(mix(saturated, sCurve, 0.25 * vibrancy), 0.0, 1.0);
+    vec3 adjusted = mix(saturated, sCurve, 0.25 * vibrancy);
+    // Gentle gamma lift: iOS materials read LIGHTER than the content behind
+    // them, not just more saturated — midtones come up while black stays
+    // black (pow keeps 0 at 0 and 1 at 1, so it can't wash out either end).
+    // 'mix' by vibrancy keeps the whole term an exact identity at 0.
+    vec3 lifted = mix(adjusted, pow(adjusted, vec3(0.82)), vibrancy);
+    return clamp(lifted, 0.0, 1.0);
 }
 
 // --- rimLight: thin, continuous highlight band hugging the whole outline ---
@@ -269,6 +299,23 @@ float rimLight(float d, float widthLocalPx, float intensity)
 {
     float rim = 1.0 - smoothstep(0.0, widthLocalPx, -d);
     return rim * intensity;
+}
+
+// --- contactShade: the thin dark contour just INSIDE the rim hairline ---
+//
+// What sells a real iOS glass edge is not the bright hairline alone but the
+// pair: a lit rim with a slightly darker band immediately inside it, which
+// reads as the material's own thickness. The band spans roughly
+// [width, CONTACT_SPAN * width] of depth below the outline — i.e. it starts
+// where 'rimLight' has already faded out, so the two never fight over the
+// same pixels — and it is returned as a positive darkening amount.
+float contactShade(float d, float widthLocalPx, float intensity)
+{
+    const float CONTACT_SPAN = 3.5;
+    float inner = -d; // distance inside the outline, positive
+    float band = smoothstep(0.0, widthLocalPx, inner)
+               * (1.0 - smoothstep(widthLocalPx, widthLocalPx * CONTACT_SPAN, inner));
+    return band * intensity;
 }
 
 // --- screenBlend: highlight compositing that rolls off instead of clipping ---
@@ -311,7 +358,16 @@ void main(void)
     // measure distinct from 'h' (which is normalized by 'depth').
     float edgeDist = shapeProfile(local);
 
-    vec2 displacementLocalPx = normalDir * h * refraction * depth;
+    // Lens profile for the displacement. 'h' (quadratic) is the right weight
+    // for the specular terms, but iOS glass bends its backdrop almost
+    // entirely inside a narrow band hugging the outline — the interior stays
+    // optically flat and the very edge squeezes the content hard. Squaring
+    // 'h' again concentrates the bend there, and LENS_GAIN restores the
+    // amplitude that concentration costs so the same 'refraction' value still
+    // means roughly the same maximum displacement at the edge.
+    const float LENS_GAIN = 2.4;
+    float lens = h * h;
+    vec2 displacementLocalPx = normalDir * lens * refraction * depth * LENS_GAIN;
     // Exact per-axis local-px -> UV Jacobian: forward worldTransform (local
     // delta -> global delta), then global delta -> UV delta via uInputSize
     // (uOutputFrame/uInputSize together define global = origin + uv * size).
@@ -344,8 +400,8 @@ void main(void)
     // column norms (the exact local-px -> global-px scale per axis, zoom
     // included), then clamped so an extreme zoom can neither erase the rim nor
     // let it eat the whole shape.
-    const float RIM_INTENSITY_SCALE = 0.5;
-    const float RIM_WIDTH_SCREEN_PX = 1.5;
+    const float RIM_INTENSITY_SCALE = 1.05;
+    const float RIM_WIDTH_SCREEN_PX = 1.6;
     const float RIM_WIDTH_MIN_LOCAL_PX = 0.001;         // zero-width-smoothstep guard only, see rimLight's doc comment
     const float RIM_WIDTH_MAX_LOCAL_FRACTION = 0.25;    // vs the node's own half-size, so a tiny node can't wash out
     const float RIM_WIDTH_MAX_LOCAL_PX = 8.0;           // absolute cap for large nodes at low zoom
@@ -361,7 +417,21 @@ void main(void)
         RIM_WIDTH_MIN_LOCAL_PX,
         rimWidthUpperBound
     );
-    float rim = rimLight(edgeDist, rimWidthLocalPx, lightIntensity * RIM_INTENSITY_SCALE);
+    // Shaped, not flat: the hairline runs the whole way around (that is the
+    // point of the omni rim) but is brightest where the outline faces the
+    // light and dimmest on the far side, never dropping below RIM_FLOOR of
+    // its own brightness. A perfectly even rim reads as a stroked outline,
+    // not as a lit edge.
+    const float RIM_FLOOR = 0.65;
+    float rimFacing = 0.5 + 0.5 * dot(normalDir, uLight.xy);
+    float rim = rimLight(edgeDist, rimWidthLocalPx, lightIntensity * RIM_INTENSITY_SCALE)
+              * mix(RIM_FLOOR, 1.0, rimFacing);
+
+    // The darker contour just inside the hairline — see 'contactShade'.
+    const float CONTACT_INTENSITY_SCALE = 0.22;
+    float contact = contactShade(
+        edgeDist, rimWidthLocalPx, lightIntensity * CONTACT_INTENSITY_SCALE
+    );
 
     // Shadow side: subtle darkening opposite the light direction, grounding
     // the material. Scaled by 'lightIntensity' so it's a true no-op at 0.
@@ -370,7 +440,7 @@ void main(void)
 
     vec3 tinted = vibrancyAdjust(backdrop.rgb, vibrancy);
     vec3 rgb = screenBlend(tinted, spec + bounce * 0.6 + rim);
-    rgb = clamp(rgb - shadow * rgb, 0.0, 1.0);
+    rgb = clamp(rgb - (shadow + contact) * rgb, 0.0, 1.0);
 
     // Glass is a REFRACTIVE material: where there is nothing behind it,
     // there is nothing to refract, so it must composite as fully

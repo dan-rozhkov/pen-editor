@@ -39,7 +39,6 @@ import { StylePicker } from "@/components/properties/StylePicker";
 import { useStyleStore } from "@/store/styleStore";
 import { BlendModeDropdown, StackRowShell, useDragReorder } from "@/components/properties/stackRow";
 import { MAX_NOISE_EFFECTS } from "@/pixi/renderers/noiseEffectHelpers";
-import { GLASS_MATERIAL_PRESETS, applyGlassPreset } from "@/components/properties/glassPresets";
 
 // Figma parity: at most one Glass per node (mirrors MAX_NOISE_EFFECTS above).
 const MAX_GLASS_EFFECTS = 1;
@@ -382,21 +381,6 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
 
                   {effect.type === "glass" && (
                     <>
-                      {/* iOS material presets: one-click overwrite of the params below,
-                          applied through updateGlass so normalizeGlassEffect still runs. */}
-                      <div className="flex gap-1">
-                        {GLASS_MATERIAL_PRESETS.map((preset) => (
-                          <button
-                            key={preset.name}
-                            type="button"
-                            className="flex-1 rounded bg-secondary px-1 py-1 text-[10px] text-text-primary hover:bg-secondary/80"
-                            onClick={() => updateGlass(arrayIndex, applyGlassPreset(effect, preset))}
-                          >
-                            {preset.name}
-                          </button>
-                        ))}
-                      </div>
-
                       <PropertyRow>
                         <NumberInput
                           label="Angle"

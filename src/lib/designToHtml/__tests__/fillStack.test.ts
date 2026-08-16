@@ -252,9 +252,9 @@ describe("designToHtml effect stack", () => {
       },
     ];
     const styles = generateVisualStyles(rect({ effects }));
-    // vibrancy defaults (via normalizeGlassEffect) to 0.5 -> 100 + 0.5*80 = 140%.
-    expect(styles["backdrop-filter"]).toBe("blur(8px) saturate(140%)");
-    expect(styles["-webkit-backdrop-filter"]).toBe("blur(8px) saturate(140%)");
+    // vibrancy defaults (via normalizeGlassEffect) to 0.6 -> 100 + 0.6*80 = 148%.
+    expect(styles["backdrop-filter"]).toBe("blur(8px) saturate(148%)");
+    expect(styles["-webkit-backdrop-filter"]).toBe("blur(8px) saturate(148%)");
     expect(styles.filter).toBeUndefined();
   });
 

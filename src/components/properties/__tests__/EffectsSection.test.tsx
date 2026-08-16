@@ -358,17 +358,12 @@ describe("<EffectsSection />", () => {
     expect(onUpdate).toHaveBeenCalledTimes(1);
     const arg = onUpdate.mock.calls[0][0];
     expect(arg.effects).toHaveLength(1);
-    expect(arg.effects[0]).toMatchObject({
-      type: "glass",
-      lightAngle: 135,
-      lightIntensity: 0.55,
-      refraction: 0.45,
-      depth: 14,
-      dispersion: 0.06,
-      frost: 18,
-      splay: 0.55,
-      vibrancy: 0.5,
-    });
+    // Compared against the factory's own tuple rather than a hand-typed
+    // literal: retuning the Glass defaults is a rendering decision, and this
+    // test is here to pin the *wiring* (the menu item adds a full glass
+    // effect), not the numbers.
+    const { id: _id, ...defaults } = createGlassEffect();
+    expect(arg.effects[0]).toMatchObject(defaults);
     expect(arg.effect).toBeUndefined();
     // Figma silently drops fill alpha when adding Glass; this editor must not.
     expect(arg.fills).toBeUndefined();
@@ -447,45 +442,15 @@ describe("<EffectsSection />", () => {
     expect(onUpdate.mock.calls[7][0].effects[0].vibrancy).toBe(0.8);
   });
 
-  it("applies an iOS material preset, overwriting glass params but keeping the effect id", () => {
-    const onUpdate = vi.fn();
-    render(<EffectsSection node={makeNode([glassFx({ id: "g1" })])} onUpdate={onUpdate} />);
+  it("shows no material preset buttons — Glass is params-only", () => {
+    // The Ultra Thin/Thin/Regular/Thick preset row was removed; the sliders
+    // below are the whole Glass UI. Guards against it creeping back in via a
+    // revert of the row's markup.
+    render(<EffectsSection node={makeNode([glassFx()])} onUpdate={vi.fn()} />);
 
-    fireEvent.click(screen.getByText("Thick"));
-
-    expect(onUpdate).toHaveBeenCalledTimes(1);
-    const applied = onUpdate.mock.calls[0][0].effects[0];
-    expect(applied.id).toBe("g1");
-    expect(applied).toMatchObject({
-      lightAngle: 135,
-      lightIntensity: 0.7,
-      refraction: 0.6,
-      depth: 22,
-      dispersion: 0.08,
-      frost: 34,
-      splay: 0.7,
-      vibrancy: 0.6,
-    });
-  });
-
-  it("applies the Regular preset, matching the default createGlassEffect() tuple", () => {
-    const onUpdate = vi.fn();
-    render(
-      <EffectsSection
-        node={makeNode([glassFx({ frost: 99, vibrancy: 0.1 })])}
-        onUpdate={onUpdate}
-      />,
-    );
-
-    fireEvent.click(screen.getByText("Regular"));
-
-    const applied = onUpdate.mock.calls[0][0].effects[0];
-    // Compare field-for-field against the factory's own output (not a
-    // hand-typed literal), so retuning `createGlassEffect()` without also
-    // updating the "Regular" preset fails this test instead of drifting
-    // silently — the documented "Regular === add Glass fresh" invariant.
-    const { id: _id, type: _type, ...defaultParams } = createGlassEffect();
-    expect(applied).toMatchObject(defaultParams);
+    for (const name of ["Ultra Thin", "Thin", "Regular", "Thick"]) {
+      expect(screen.queryByText(name)).toBeNull();
+    }
   });
 
   it("clamps an over-range depth to the documented max (1000) on commit", () => {
