@@ -117,18 +117,24 @@ export const replaceAllMatchingProperties: ToolHandler = async (args) => {
     }
 
     /**
-     * Apply color rules inside the Figma-style `fills` stack, matching/replacing
-     * the color of each SolidPaint and attaching/clearing its `colorBinding`
-     * when the replacement is a variable reference.
+     * Apply color rules inside a Figma-style paint stack (`fills` or
+     * `strokes`), matching/replacing the color of each SolidPaint and
+     * attaching/clearing its `colorBinding` when the replacement is a
+     * variable reference. Shared by the `fillColor`/`textColor` and
+     * `strokeColor` rule handlers below — they differ only in which stack
+     * field they read/write.
      */
-    function applyFillsColorRules(colorRules: ReplacementRule[]) {
-      const sourceFills = (
-        updated as unknown as { fills?: Paint[] } | null
-      )?.fills ?? node.fills;
-      if (!sourceFills) return;
+    function applyPaintStackColorRules(
+      colorRules: ReplacementRule[],
+      stackField: "fills" | "strokes",
+    ) {
+      const sourceStack = (
+        updated as unknown as Record<string, Paint[] | undefined> | null
+      )?.[stackField] ?? node[stackField];
+      if (!sourceStack) return;
 
       let changed = false;
-      const nextFills = sourceFills.map((paint): Paint => {
+      const nextStack = sourceStack.map((paint): Paint => {
         if (paint.type !== "solid") return paint;
         for (const rule of colorRules) {
           if (isColorEqual(paint.color, rule.from)) {
@@ -147,41 +153,7 @@ export const replaceAllMatchingProperties: ToolHandler = async (args) => {
 
       if (changed) {
         updated = updated ?? { ...node };
-        (updated as unknown as Record<string, unknown>).fills = nextFills;
-      }
-    }
-
-    /**
-     * Apply color rules inside the Figma-style `strokes` paint stack — the
-     * `strokeColor` analogue of `applyFillsColorRules`.
-     */
-    function applyStrokesColorRules(colorRules: ReplacementRule[]) {
-      const sourceStrokes = (
-        updated as unknown as { strokes?: Paint[] } | null
-      )?.strokes ?? node.strokes;
-      if (!sourceStrokes) return;
-
-      let changed = false;
-      const nextStrokes = sourceStrokes.map((paint): Paint => {
-        if (paint.type !== "solid") return paint;
-        for (const rule of colorRules) {
-          if (isColorEqual(paint.color, rule.from)) {
-            const replacement = getColorReplacement(rule.to);
-            changed = true;
-            replacements++;
-            return {
-              ...paint,
-              color: replacement.colorValue as string,
-              colorBinding: replacement.binding,
-            };
-          }
-        }
-        return paint;
-      });
-
-      if (changed) {
-        updated = updated ?? { ...node };
-        (updated as unknown as Record<string, unknown>).strokes = nextStrokes;
+        (updated as unknown as Record<string, unknown>)[stackField] = nextStack;
       }
     }
 
@@ -219,13 +191,13 @@ export const replaceAllMatchingProperties: ToolHandler = async (args) => {
     // fillColor → fill + fills solid paints (all nodes)
     if (rules.fillColor) {
       if (!hasFillsStack) applyColorRules(rules.fillColor, "fill", "fillBinding");
-      applyFillsColorRules(rules.fillColor);
+      applyPaintStackColorRules(rules.fillColor, "fills");
     }
 
     // textColor → fill + fills solid paints (text nodes only)
     if (rules.textColor && node.type === "text") {
       if (!hasFillsStack) applyColorRules(rules.textColor, "fill", "fillBinding");
-      applyFillsColorRules(rules.textColor);
+      applyPaintStackColorRules(rules.textColor, "fills");
     }
 
     // strokeColor → stroke + strokes solid paints + pathStroke.fill (icons)
@@ -235,7 +207,7 @@ export const replaceAllMatchingProperties: ToolHandler = async (args) => {
         applyColorRules(rules.strokeColor, "stroke", "strokeBinding");
         applyPathStrokeColorRule(rules.strokeColor);
       }
-      applyStrokesColorRules(rules.strokeColor);
+      applyPaintStackColorRules(rules.strokeColor, "strokes");
     }
 
     // strokeThickness → strokeWidth
