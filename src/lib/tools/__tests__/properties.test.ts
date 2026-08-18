@@ -286,6 +286,49 @@ describe("replace_all_matching_properties", () => {
     expect(frame.layout?.gap).toBe(12);
   });
 
+  it("replaces stroke color on a path icon stored in pathStroke.fill", async () => {
+    useSceneStore.setState((state) => ({
+      nodesById: {
+        ...state.nodesById,
+        pathIcon: {
+          id: "pathIcon",
+          type: "path",
+          x: 0,
+          y: 0,
+          width: 16,
+          height: 16,
+          points: [],
+          pathStroke: { fill: "#8c8c8c", thickness: 2 },
+        } as unknown as never,
+      },
+      parentById: { ...state.parentById, pathIcon: "frame1" },
+      childrenById: {
+        ...state.childrenById,
+        frame1: [...state.childrenById["frame1"], "pathIcon"],
+      },
+    }));
+
+    const result = JSON.parse(
+      await replaceAllMatchingProperties({
+        parents: ["frame1"],
+        properties: {
+          strokeColor: [{ from: "#8c8c8c", to: "#6b7280" }],
+        },
+      })
+    );
+    expect(result).toEqual({ success: true, replacements: 1 });
+    const icon = useSceneStore.getState().nodesById["pathIcon"] as Record<
+      string,
+      unknown
+    >;
+    expect((icon.pathStroke as { fill: string; thickness: number }).fill).toBe(
+      "#6b7280"
+    );
+    expect((icon.pathStroke as { fill: string; thickness: number }).thickness).toBe(
+      2
+    );
+  });
+
   it("replaces matching solid colors inside the fills stack", async () => {
     seedNodeWithFills("rectF", [
       { id: "p1", type: "solid", color: "#ff0000" },

@@ -610,6 +610,7 @@ function executeReplace(op: ParsedOperation, ctx: ExecutionContext): void {
     nodeData,
     resolveInheritedTheme(parentId ?? null, ctx.nodesById, ctx.parentById),
     ctx.issues,
+    existingNode,
   );
 
   // Expand document component tags in embed HTML

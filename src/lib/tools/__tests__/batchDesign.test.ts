@@ -162,6 +162,41 @@ describe("batch_design", () => {
         heightMode: "fit_content",
       });
     });
+
+    it("parses htmlContent whose HTML attributes reuse the string's own quote style unescaped", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'e=I(document, {type: "embed", name: "Home", width: 390, height: 844, ' +
+            'htmlContent: "<div class="card"><p style="color:red">Hi "quoted" text</p></div>"})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const node = sceneState().nodesById[result.createdNodes[0].id] as Record<
+        string,
+        unknown
+      >;
+      expect(node.htmlContent).toBe(
+        '<div class="card"><p style="color:red">Hi "quoted" text</p></div>'
+      );
+    });
+
+    it("parses a name field with an unescaped quote followed by more HTML with quotes", async () => {
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'e=I(document, {type: "embed", name: "Card "Pro"", width: 100, height: 100, ' +
+            'htmlContent: "<div class="wrap">ok</div>"})',
+        })
+      );
+      expect(result.success).toBe(true);
+      const node = sceneState().nodesById[result.createdNodes[0].id] as Record<
+        string,
+        unknown
+      >;
+      expect(node.name).toBe('Card "Pro"');
+      expect(node.htmlContent).toBe('<div class="wrap">ok</div>');
+    });
   });
 
   describe("shape params: star/arc/arrowheads", () => {
@@ -1547,6 +1582,90 @@ describe("batch_design", () => {
       expect(result.success).toBe(true);
       expect(sceneState().nodesById["conn1"]).toBeUndefined();
       expect(sceneState().rootIds).not.toContain("conn1");
+    });
+
+    it("R() inherits layout/sizing from the replaced node when nodeData omits them", async () => {
+      useSceneStore.setState((s) => ({
+        nodesById: {
+          ...s.nodesById,
+          frame1: {
+            ...s.nodesById["frame1"],
+            layout: { autoLayout: true, flexDirection: "column", gap: 8 },
+            sizing: { widthMode: "fill_container", heightMode: "fit_content" },
+          },
+        },
+      }));
+
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'R(frame1, {type: "frame", name: "New", children: [' +
+            '{type: "rect", name: "Item", width: "fill_container", height: 40}' +
+            "]})",
+        })
+      );
+
+      expect(result.success).toBe(true);
+      const newId = result.createdNodes[0].id;
+      const node = sceneState().nodesById[newId] as unknown as FlatFrameNode;
+      expect(node.layout).toEqual({ autoLayout: true, flexDirection: "column", gap: 8 });
+      expect(node.sizing).toEqual({ widthMode: "fill_container", heightMode: "fit_content" });
+    });
+
+    it("R() does not inherit layout when replacing a frame with a non-frame type", async () => {
+      useSceneStore.setState((s) => ({
+        nodesById: {
+          ...s.nodesById,
+          frame1: {
+            ...s.nodesById["frame1"],
+            layout: { autoLayout: true, flexDirection: "column", gap: 8 },
+          },
+        },
+      }));
+
+      const result = JSON.parse(
+        await batchDesign({
+          operations: 'R(frame1, {type: "rect", name: "Item", width: 10, height: 10})',
+        })
+      );
+
+      expect(result.success).toBe(true);
+      const newId = result.createdNodes[0].id;
+      const node = sceneState().nodesById[newId] as unknown as Record<
+        string,
+        unknown
+      >;
+      expect(node.layout).toBeUndefined();
+    });
+
+    it("R() does not apply the replaced node's inherited layout to its own new children", async () => {
+      useSceneStore.setState((s) => ({
+        nodesById: {
+          ...s.nodesById,
+          frame1: {
+            ...s.nodesById["frame1"],
+            layout: { autoLayout: true, flexDirection: "column", gap: 8 },
+          },
+        },
+      }));
+
+      const result = JSON.parse(
+        await batchDesign({
+          operations:
+            'R(frame1, {type: "frame", name: "New", children: [' +
+            '{type: "rect", name: "Item", width: 10, height: 10}' +
+            "]})",
+        })
+      );
+
+      expect(result.success).toBe(true);
+      const newId = result.createdNodes[0].id;
+      const childId = sceneState().childrenById[newId][0];
+      const child = sceneState().nodesById[childId] as unknown as Record<
+        string,
+        unknown
+      >;
+      expect(child.layout).toBeUndefined();
     });
 
     it("R() drops connectors anchored to a removed descendant of the replaced node", async () => {

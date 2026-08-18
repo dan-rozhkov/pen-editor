@@ -1,6 +1,6 @@
 import { useSceneStore } from "@/store/sceneStore";
 import { createSnapshot, saveHistory } from "@/store/sceneStore/helpers/history";
-import type { FlatSceneNode, LayoutProperties, Paint } from "@/types/scene";
+import type { FlatSceneNode, LayoutProperties, Paint, PathStroke } from "@/types/scene";
 import type { ToolHandler } from "../toolRegistry";
 import { resolveVariableReference } from "@/lib/tools/variableResolutionUtils";
 
@@ -151,6 +151,66 @@ export const replaceAllMatchingProperties: ToolHandler = async (args) => {
       }
     }
 
+    /**
+     * Apply color rules inside the Figma-style `strokes` paint stack — the
+     * `strokeColor` analogue of `applyFillsColorRules`.
+     */
+    function applyStrokesColorRules(colorRules: ReplacementRule[]) {
+      const sourceStrokes = (
+        updated as unknown as { strokes?: Paint[] } | null
+      )?.strokes ?? node.strokes;
+      if (!sourceStrokes) return;
+
+      let changed = false;
+      const nextStrokes = sourceStrokes.map((paint): Paint => {
+        if (paint.type !== "solid") return paint;
+        for (const rule of colorRules) {
+          if (isColorEqual(paint.color, rule.from)) {
+            const replacement = getColorReplacement(rule.to);
+            changed = true;
+            replacements++;
+            return {
+              ...paint,
+              color: replacement.colorValue as string,
+              colorBinding: replacement.binding,
+            };
+          }
+        }
+        return paint;
+      });
+
+      if (changed) {
+        updated = updated ?? { ...node };
+        (updated as unknown as Record<string, unknown>).strokes = nextStrokes;
+      }
+    }
+
+    /**
+     * `stroke` (legacy field) is only the resolved stroke color when it's
+     * set — path nodes drawn with the pen tool instead store their color in
+     * `pathStroke.fill`, with `node.stroke` left undefined (see
+     * `legacyStrokesToPaints`'s `node.stroke ?? node.pathStroke?.fill`
+     * priority in fillUtils.ts). Without this, `strokeColor` rules were
+     * silently invisible to every path/icon node using that fallback.
+     */
+    function applyPathStrokeColorRule(colorRules: ReplacementRule[]) {
+      if (node.type !== "path" || node.stroke !== undefined) return;
+      const pathStroke = (node as unknown as Record<string, unknown>)
+        .pathStroke as PathStroke | undefined;
+      if (!pathStroke) return;
+      for (const rule of colorRules) {
+        if (isColorEqual(pathStroke.fill, rule.from)) {
+          const replacement = getColorReplacement(rule.to);
+          updated = updated ?? { ...node };
+          (updated as unknown as Record<string, unknown>).pathStroke = {
+            ...pathStroke,
+            fill: replacement.colorValue,
+          };
+          replacements++;
+        }
+      }
+    }
+
     // When `fills` is set it is the single source of truth and the renderer
     // ignores the legacy `fill` field (see fillUtils contract) — "replacing"
     // legacy `fill` there would count a no-op as a replacement.
@@ -168,9 +228,14 @@ export const replaceAllMatchingProperties: ToolHandler = async (args) => {
       applyFillsColorRules(rules.textColor);
     }
 
-    // strokeColor → stroke
+    // strokeColor → stroke + strokes solid paints + pathStroke.fill (icons)
+    const hasStrokesStack = node.strokes !== undefined;
     if (rules.strokeColor) {
-      applyColorRules(rules.strokeColor, "stroke", "strokeBinding");
+      if (!hasStrokesStack) {
+        applyColorRules(rules.strokeColor, "stroke", "strokeBinding");
+        applyPathStrokeColorRule(rules.strokeColor);
+      }
+      applyStrokesColorRules(rules.strokeColor);
     }
 
     // strokeThickness → strokeWidth

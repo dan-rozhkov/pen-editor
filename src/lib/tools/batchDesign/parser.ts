@@ -85,18 +85,60 @@ function stripWrapperNoiseLines(input: string): string {
 }
 
 /**
+ * True iff the character at `text[quoteIndex]` (a quote matching the
+ * delimiter of the string currently open) is plausibly the TRUE closing
+ * delimiter — i.e. the next non-whitespace character is one that can
+ * legitimately follow a string value in this DSL's grammar: `,` (next
+ * arg/field), `)` (end of op call), `}` (end of object), `]` (end of
+ * array), `:` (this was a quoted object key), or end of input.
+ *
+ * Without this lookahead, the scanner treated the FIRST unescaped
+ * occurrence of the delimiter as the close — wrong whenever an
+ * `htmlContent`/`name` string embeds HTML written in the same quote style
+ * without escaping (`class="card"`), the single most common shape of the
+ * model's own output. That silently truncated the string mid-attribute,
+ * corrupting brace/paren depth tracking downstream and producing "Invalid
+ * JSON"/"Parse error" for batches that were otherwise well-formed. Mirrors
+ * the fix already shipped on the backend for the same bug class in
+ * pen-editor-backend/src/showcase/extractEmbeds.ts.
+ *
+ * Known residual gap: `:` is accepted as a terminator (a quoted DSL object
+ * key, e.g. `{"type": "embed"}`), but the scanner has no way to tell that
+ * apart from an unescaped `"key": value`-shaped fragment sitting INSIDE an
+ * HTML string (e.g. inline JSON-LD in a `<script>` tag, reusing the same
+ * quote char). That narrow case can still truncate early — same as before
+ * this fix, not a regression it introduces. Closing it fully needs the
+ * scanner to know whether it's at an object-key position, which none of
+ * its three callers currently track.
+ */
+function isLikelyStringEnd(text: string, quoteIndex: number): boolean {
+  let i = quoteIndex + 1;
+  while (i < text.length && /\s/.test(text[i])) i++;
+  if (i >= text.length) return true;
+  const ch = text[i];
+  return ch === "," || ch === ")" || ch === "}" || ch === "]" || ch === ":";
+}
+
+/**
  * Tracks backslash-escape and quote-string state across a character scan, so
  * callers can skip escape/string-interior characters before applying their
- * own depth-tracking (paren/brace/bracket). Shared by `splitOperationLines`
- * and `extractBalancedArgs`, which otherwise duplicate this exact state
- * machine around different depth-tracking logic.
+ * own depth-tracking (paren/brace/bracket). Shared by `splitOperationLines`,
+ * `extractBalancedArgs`, and `tokenizeArgs`, which otherwise duplicate this
+ * exact state machine around different depth-tracking logic.
  */
 function createQuoteScanner() {
   let escaped = false;
   let stringDelimiter: '"' | "'" | "`" | null = null;
   return {
-    /** Feed one character; returns true if the caller should skip further processing of it. */
-    consume(ch: string): boolean {
+    /**
+     * Feed the character at `text[i]`; returns true if the caller should
+     * skip further processing of it. The full text + index (rather than
+     * just the character) let a candidate closing quote be checked against
+     * what follows it — see `isLikelyStringEnd` — instead of always being
+     * taken as the true end.
+     */
+    consume(text: string, i: number): boolean {
+      const ch = text[i];
       if (escaped) {
         escaped = false;
         return true;
@@ -108,7 +150,7 @@ function createQuoteScanner() {
       }
 
       if (stringDelimiter) {
-        if (ch === stringDelimiter) {
+        if (ch === stringDelimiter && isLikelyStringEnd(text, i)) {
           stringDelimiter = null;
         }
         return true;
@@ -143,7 +185,7 @@ function splitOperationLines(input: string): Array<{ text: string; line: number 
       line++;
     }
 
-    if (scanner.consume(ch)) {
+    if (scanner.consume(input, i)) {
       continue;
     }
 
@@ -221,7 +263,7 @@ function extractBalancedArgs(str: string, lineNum: number): string {
   for (let i = 0; i < str.length; i++) {
     const ch = str[i];
 
-    if (scanner.consume(ch)) {
+    if (scanner.consume(str, i)) {
       continue;
     }
 
@@ -250,35 +292,13 @@ function tokenizeArgs(argsStr: string, lineNum: number): ParsedArg[] {
   const tokens: string[] = [];
   let braceDepth = 0;
   let bracketDepth = 0;
-  let stringDelimiter: '"' | "'" | "`" | null = null;
-  let escaped = false;
+  const scanner = createQuoteScanner();
   let current = "";
 
   for (let i = 0; i < argsStr.length; i++) {
     const ch = argsStr[i];
 
-    if (escaped) {
-      escaped = false;
-      current += ch;
-      continue;
-    }
-
-    if (ch === "\\") {
-      escaped = true;
-      current += ch;
-      continue;
-    }
-
-    if (stringDelimiter) {
-      if (ch === stringDelimiter) {
-        stringDelimiter = null;
-      }
-      current += ch;
-      continue;
-    }
-
-    if (ch === '"' || ch === "'" || ch === "`") {
-      stringDelimiter = ch;
+    if (scanner.consume(argsStr, i)) {
       current += ch;
       continue;
     }
@@ -404,8 +424,18 @@ function escapeRawNewlinesInStrings(input: string): string {
 
     if (stringDelimiter) {
       if (ch === stringDelimiter) {
-        result += ch;
-        stringDelimiter = null;
+        if (isLikelyStringEnd(input, i)) {
+          result += ch;
+          stringDelimiter = null;
+        } else {
+          // An internal, unescaped occurrence of the string's own delimiter
+          // — almost always an HTML attribute quote written in the same
+          // quote style as the surrounding string. Escape it so
+          // JSON.parse/JSON5 treat it as content instead of (wrongly)
+          // ending the string early; isLikelyStringEnd already located the
+          // true end.
+          result += "\\" + ch;
+        }
         continue;
       }
       if (ch === "\n") {

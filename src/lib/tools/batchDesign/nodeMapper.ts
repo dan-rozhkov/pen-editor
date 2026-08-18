@@ -682,6 +682,20 @@ export function mapNodeData(
     } else {
       result.layout = layout;
     }
+  } else if (mode === "insert" && existingNode && nodeTypeForFills === "frame") {
+    // Replace (R()) calls mapNodeData with mode:"insert" but a real
+    // existingNode (the node being replaced) — unlike Update, Replace does
+    // NOT spread the old node's fields back in, so if the AI's nodeData
+    // omits `layout` entirely (common when only rewriting children), the
+    // new node silently loses its container's auto-layout: Yoga bails out
+    // (`calculateFrameLayout` returns [] when `!frame.layout?.autoLayout`)
+    // and every fill_container child stays stuck at its placeholder 0×0
+    // forever. Real I() inserts never pass existingNode, so this is a
+    // no-op for them. Gated to `frame` because `layout` is a FrameNode-only
+    // field — replacing a frame with e.g. a rect must not inherit it.
+    const existingLayout = (existingNode as unknown as Record<string, unknown>)
+      .layout as LayoutProperties | undefined;
+    if (existingLayout) result.layout = existingLayout;
   }
 
   // Merge sizing properties
@@ -691,6 +705,8 @@ export function mapNodeData(
     } else {
       result.sizing = sizing;
     }
+  } else if (mode === "insert" && existingNode?.sizing) {
+    result.sizing = existingNode.sizing;
   }
 
   // Regular polygon / star: regenerate `points` from `sides`/`innerRadiusRatio`
@@ -737,9 +753,10 @@ export function createNodeFromAiDataWithTheme(
   data: AiNodeData,
   inheritedTheme?: ThemeName,
   warnings?: string[],
+  existingNode?: FlatSceneNode,
 ): SceneNode {
   const type = mapNodeType((data.type as string) ?? "frame");
-  const mapped = mapNodeData(data, "insert", undefined, {
+  const mapped = mapNodeData(data, "insert", existingNode, {
     theme: inheritedTheme,
   });
   const childrenData = mapped._children;
