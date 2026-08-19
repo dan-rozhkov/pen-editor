@@ -17,6 +17,8 @@ const EXPECTED_CLIENT_TOOLS = [
   "get_screenshot",
   "get_variables",
   "batch_design",
+  "read_embed_html",
+  "edit_embed_html",
   "set_variables",
   "get_text_styles",
   "set_text_styles",

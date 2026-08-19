@@ -32,6 +32,8 @@ import { listPlugins } from "./tools/plugins/listPlugins";
 import { askUser } from "./tools/askUser";
 import { drawVector } from "./tools/drawVector";
 import { publishToShowcase } from "./tools/publishToShowcase";
+import { readEmbedHtml } from "./tools/readEmbedHtml";
+import { editEmbedHtml } from "./tools/editEmbedHtml";
 
 /**
  * Per-call metadata threaded through to handlers that need to correlate
@@ -56,6 +58,8 @@ export const toolHandlers: Record<string, ToolHandler> = {
   get_screenshot: getScreenshot,
   get_variables: getVariables,
   batch_design: batchDesign,
+  read_embed_html: readEmbedHtml,
+  edit_embed_html: editEmbedHtml,
   set_variables: setVariables,
   get_text_styles: getTextStyles,
   set_text_styles: setTextStyles,
