@@ -106,6 +106,25 @@ function classifyToolError(err: unknown): string {
   return "handler_error";
 }
 
+// Default budget for a tool call before we give up and report a timeout to
+// the model. Per-tool overrides live in TOOL_CALL_TIMEOUT_MS_OVERRIDES below.
+const DEFAULT_TOOL_CALL_TIMEOUT_MS = 30_000;
+
+// Image generation can legitimately run close to the backend's own ceiling
+// (IMAGE_GENERATION_TIMEOUT_MS = 90_000 in pen-editor-backend/src/config.ts).
+// 95s is deliberately just above that: it lets the backend's clean 504 win
+// the race instead of this client cutting the call off first and reporting
+// a misleading "Tool call timed out" while the server keeps working (and
+// paying for it) in the background.
+const TOOL_CALL_TIMEOUT_MS_OVERRIDES: Record<string, number> = {
+  generate_image: 95_000,
+  generate_frame_image: 95_000,
+};
+
+function getToolCallTimeoutMs(toolName: string): number {
+  return TOOL_CALL_TIMEOUT_MS_OVERRIDES[toolName] ?? DEFAULT_TOOL_CALL_TIMEOUT_MS;
+}
+
 // Exported for tests. `source` distinguishes the chat UI path from the MCP
 // WebSocket/desktop IPC bridge paths (`src/lib/mcpDispatch.ts`), which all
 // funnel through this single choke point but can't otherwise be told apart
@@ -138,7 +157,10 @@ export async function executeToolCall(
     const result = await Promise.race([
       handler(args, context),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Tool call timed out")), 30_000)
+        setTimeout(
+          () => reject(new Error("Tool call timed out")),
+          getToolCallTimeoutMs(toolName)
+        )
       ),
     ]);
     // Handlers report failure as a JSON `{"error": ...}` string rather than

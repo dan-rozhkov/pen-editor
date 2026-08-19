@@ -52,6 +52,7 @@ export const batchDesign: ToolHandler = async (args) => {
     issues: [],
     componentTagMap,
     removedIdsForMeasurementCleanup: new Set(),
+    imageUrlRepairCount: 0,
   };
 
   // 3. Execute operations sequentially (only the first MAX_OPERATIONS when
@@ -122,6 +123,13 @@ export const batchDesign: ToolHandler = async (args) => {
     // once per affected node, so a script touching many nodes would otherwise
     // repeat identical strings and bloat the result returned to the model.
     response.issues = [...new Set(ctx.issues)];
+  }
+
+  if (ctx.imageUrlRepairCount > 0) {
+    // Same wording style as the backend showcase runner's own log line for
+    // this (pen-editor-backend/src/showcase/repairImageUrls.ts callers) —
+    // short, so it doesn't compete with the rest of the response.
+    response.imageUrlRepair = `repaired ${ctx.imageUrlRepairCount} mistyped image url(s)`;
   }
 
   if (truncated) {

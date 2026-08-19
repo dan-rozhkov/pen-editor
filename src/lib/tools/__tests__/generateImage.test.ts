@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { generateImage, generateFrameImage } from "@/lib/tools/generateImage";
+import { getIssuedImageUrls, resetIssuedImageUrls } from "@/lib/tools/generateImage/registry";
 import { useSceneStore } from "@/store/sceneStore";
 import { resetStores, seedScene } from "@/test/fixtures";
 import type { ImagePaint } from "@/types/scene";
@@ -14,6 +15,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 beforeEach(() => {
   resetStores();
   seedScene();
+  resetIssuedImageUrls();
 });
 
 afterEach(() => {
@@ -42,6 +44,32 @@ describe("generate_image (chat)", () => {
     const result = JSON.parse(await generateImage({ prompt: "x" }));
     expect(result.error).toBeTruthy();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("adds a note steering the model away from pasting a data url into HTML", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ url: "data:image/png;base64,AAAA" })));
+    const result = JSON.parse(await generateImage({ prompt: "a fox" }));
+    expect(result.note).toMatch(/data URL/i);
+    expect(result.note).toMatch(/picsum\.photos/);
+  });
+
+  it("does not add a note for a hosted url", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ url: "https://cdn/x.png" })));
+    const result = JSON.parse(await generateImage({ prompt: "a fox" }));
+    expect(result.note).toBeUndefined();
+  });
+
+  it("records only hosted urls in the session registry, not data urls", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ url: "data:image/png;base64,AAAA" })),
+    );
+    await generateImage({ prompt: "a fox" });
+    expect(getIssuedImageUrls()).toEqual([]);
+
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ url: "https://cdn/x.png" })));
+    await generateImage({ prompt: "a fox" });
+    expect(getIssuedImageUrls()).toEqual(["https://cdn/x.png"]);
   });
 });
 
@@ -82,5 +110,20 @@ describe("generate_frame_image (canvas)", () => {
     );
     expect(result.error).toBeTruthy();
     expect(JSON.stringify(useSceneStore.getState().nodesById["frame1"])).toBe(before);
+  });
+
+  it("sets the fill from a data url as before, and adds the model-facing note", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ url: "data:image/png;base64,AAAA" })),
+    );
+    const result = JSON.parse(
+      await generateFrameImage({ prompt: "a beach", frame_id: "frame1" }),
+    );
+    expect(result.note).toMatch(/data URL/i);
+
+    const frame = useSceneStore.getState().nodesById["frame1"];
+    const fills = (frame as { fills?: ImagePaint[] }).fills;
+    expect(fills?.[0].image.url).toBe("data:image/png;base64,AAAA");
   });
 });

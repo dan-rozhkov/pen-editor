@@ -32,6 +32,8 @@ import {
 } from "@/utils/fillUtils";
 import { normalizeEmbedHtmlForStorage } from "@/utils/embedTemplateUtils";
 import { getPropertyValuesUpdateError } from "@/utils/componentProperties";
+import { repairGeneratedImageUrls } from "../generateImage/repairImageUrls";
+import { getIssuedImageUrls } from "../generateImage/registry";
 import type { ParsedArg, ParsedOperation, ExecutionContext } from "./types";
 import {
   createNodeFromAiDataWithTheme,
@@ -74,25 +76,70 @@ function resolveInheritedTheme(
 }
 
 /**
- * If the node is an embed, expand any document component tags in its htmlContent
- * and set sourceTemplate accordingly.
+ * If the node is an embed: repair any mistyped generate_image/generate_frame_image
+ * URL found in its htmlContent, then expand any document component tags (set
+ * sourceTemplate accordingly). This is the single place htmlContent is
+ * finalized for created (I/R) and updated (U, when the op actually carries
+ * htmlContent) embeds, so it's the one choke point for both fixes rather
+ * than sprinkling them across executeInsert/executeUpdate/executeReplace.
+ *
+ * Repair must run BEFORE component-tag expansion: `normalizeEmbedHtmlForStorage`
+ * stores the pre-expansion HTML verbatim as `sourceTemplate`, and
+ * `propagateComponentChanges` (batchDesign/index.ts step 4) later re-expands
+ * from that template on every future component edit. Repairing after
+ * expansion would fix the rendered `htmlContent` once but leave the typo'd
+ * url sitting in `sourceTemplate`, silently reintroducing it on the next
+ * propagation.
+ *
+ * `htmlTouched` says whether this operation actually supplied htmlContent —
+ * false for a U() that only changes unrelated fields (e.g. `{x: 10}`), so an
+ * update that never touched the HTML doesn't get rewritten/re-repaired on
+ * every unrelated edit. I()/R() always carry a full nodeData including
+ * htmlContent for an embed, so callers pass true there unconditionally.
  */
 function normalizeEmbedNode(
   node: SceneNode | FlatSceneNode,
   ctx: ExecutionContext,
+  htmlTouched: boolean,
 ): void {
-  if (node.type !== "embed" || ctx.componentTagMap.size === 0) return;
+  if (node.type !== "embed") return;
   const embed = node as EmbedNode;
-  const { htmlContent, sourceTemplate, issues } = normalizeEmbedHtmlForStorage(
-    embed.htmlContent,
-    ctx.componentTagMap,
-  );
-  embed.htmlContent = htmlContent;
-  if (sourceTemplate) {
-    embed.sourceTemplate = sourceTemplate;
+
+  if (htmlTouched && embed.htmlContent) {
+    const issued = getIssuedImageUrls();
+    if (issued.length > 0) {
+      const { html, repairs, unresolved } = repairGeneratedImageUrls(
+        embed.htmlContent,
+        issued,
+      );
+      if (repairs.length > 0) {
+        embed.htmlContent = html;
+        ctx.imageUrlRepairCount += repairs.length;
+      }
+      // Too far off to be a transcription slip — a wholly invented id, which
+      // is a guaranteed 403 and a broken <img>. Can't be auto-fixed, but the
+      // model should at least be told which url is broken instead of finding
+      // out from a blank image.
+      for (const url of unresolved) {
+        ctx.issues.push(
+          `Embed "${embed.id}" references "${url}", which looks like a generated image url but doesn't match any url generate_image/generate_frame_image actually returned — it will 403. Re-check it or regenerate the image.`,
+        );
+      }
+    }
   }
-  for (const issue of issues) {
-    ctx.issues.push(issue);
+
+  if (ctx.componentTagMap.size > 0) {
+    const { htmlContent, sourceTemplate, issues } = normalizeEmbedHtmlForStorage(
+      embed.htmlContent,
+      ctx.componentTagMap,
+    );
+    embed.htmlContent = htmlContent;
+    if (sourceTemplate) {
+      embed.sourceTemplate = sourceTemplate;
+    }
+    for (const issue of issues) {
+      ctx.issues.push(issue);
+    }
   }
 }
 
@@ -213,8 +260,9 @@ function executeInsert(op: ParsedOperation, ctx: ExecutionContext): void {
   );
   const node = createNodeFromAiDataWithTheme(nodeData, inheritedTheme, ctx.issues);
 
-  // Expand document component tags in embed HTML
-  normalizeEmbedNode(node, ctx);
+  // Repair generated-image urls / expand document component tags in embed HTML.
+  // A fresh I() insert always supplies the embed's full htmlContent.
+  normalizeEmbedNode(node, ctx, true);
 
   // Insert into flat storage
   insertTreeIntoFlat(
@@ -577,8 +625,13 @@ function executeUpdate(op: ParsedOperation, ctx: ExecutionContext): void {
 
   let updated = { ...node, ...reconcileLegacyFillUpdate(node, mapped) } as FlatSceneNode;
 
-  // Expand document component tags in embed HTML
-  normalizeEmbedNode(updated, ctx);
+  // Repair generated-image urls / expand document component tags in embed
+  // HTML — but only when this U() actually supplied htmlContent (mapNodeData
+  // passes unrecognized keys straight through, so `mappedRecord.htmlContent`
+  // is only present when the update script set it). Otherwise an unrelated
+  // update (e.g. `{x: 10}`) would silently rewrite persisted HTML the model
+  // never submitted this turn.
+  normalizeEmbedNode(updated, ctx, mappedRecord.htmlContent !== undefined);
 
   // Sync text dimensions if text node
   if (updated.type === "text") {
@@ -613,8 +666,10 @@ function executeReplace(op: ParsedOperation, ctx: ExecutionContext): void {
     existingNode,
   );
 
-  // Expand document component tags in embed HTML
-  normalizeEmbedNode(newNode, ctx);
+  // Repair generated-image urls / expand document component tags in embed HTML.
+  // R() replaces the node wholesale with a fresh nodeData that always
+  // supplies the embed's full htmlContent.
+  normalizeEmbedNode(newNode, ctx, true);
 
   // Find position in parent's children
   if (parentId !== null && parentId !== undefined) {

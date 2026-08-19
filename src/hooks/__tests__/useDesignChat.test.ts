@@ -14,7 +14,7 @@ import {
   useDesignChat,
 } from "@/hooks/useDesignChat";
 import { AUTO_MODEL_VALUE } from "@/lib/chatModels";
-import { toolHandlers } from "@/lib/toolRegistry";
+import { toolHandlers, type ToolHandler } from "@/lib/toolRegistry";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useChatStore } from "@/store/chatStore";
 import { useSceneStore } from "@/store/sceneStore";
@@ -23,6 +23,14 @@ import { resetStores, seedScene, seedVariables } from "@/test/fixtures";
 
 const TEST_TOOL = "__test_tool__";
 
+// `generate_image` (unlike TEST_TOOL) is a real registry entry, so a test
+// that stubs it must restore the original handler afterward — otherwise it
+// permanently removes image generation for every test that runs later in
+// this file. Saved here and restored unconditionally in the top-level
+// afterEach below, so a failed assertion mid-test still can't leave the
+// hanging stub installed.
+let savedGenerateImageHandler: ToolHandler | undefined;
+
 function clearChatApiEnv() {
   vi.stubEnv("VITE_AI_API_URL", undefined);
   vi.stubEnv("VITE_DESIGN_AGENT_BACKEND_URL", undefined);
@@ -30,6 +38,10 @@ function clearChatApiEnv() {
 
 afterEach(() => {
   delete toolHandlers[TEST_TOOL];
+  if (savedGenerateImageHandler) {
+    toolHandlers.generate_image = savedGenerateImageHandler;
+    savedGenerateImageHandler = undefined;
+  }
   vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
@@ -127,6 +139,27 @@ describe("executeToolCall", () => {
 
     const pending = executeToolCall(TEST_TOOL, {});
     await vi.advanceTimersByTimeAsync(30_001);
+    const result = await pending;
+    expect(JSON.parse(result)).toEqual({ error: "Tool call timed out" });
+  });
+
+  it("does not time out image-generation tools at the default 30s budget", async () => {
+    vi.useFakeTimers();
+    savedGenerateImageHandler = toolHandlers.generate_image;
+    toolHandlers.generate_image = () => new Promise<string>(() => {});
+
+    const pending = executeToolCall("generate_image", {});
+    await vi.advanceTimersByTimeAsync(30_001);
+    // Still pending: generate_image gets the longer 95s budget, not the
+    // 30s default, so it must not have resolved/rejected yet.
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(95_001 - 30_001);
     const result = await pending;
     expect(JSON.parse(result)).toEqual({ error: "Tool call timed out" });
   });

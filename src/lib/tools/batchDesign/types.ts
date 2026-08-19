@@ -38,4 +38,11 @@ export interface ExecutionContext {
    * scene change.
    */
   removedIdsForMeasurementCleanup: Set<string>;
+  /**
+   * Count of mistyped generate_image/generate_frame_image URLs snapped back
+   * to the real one across all embeds touched this batch (see
+   * normalizeEmbedNode's call into repairGeneratedImageUrls). Surfaced in the
+   * response so the model knows its HTML got silently corrected.
+   */
+  imageUrlRepairCount: number;
 }
