@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.77.0] - 2026-08-20
+
+Editing a screen the agent already made no longer means regenerating it. Plus
+three bugs found by reading a week of agent traces, and the client-side half of
+prototype photography moving from stock frames to generated imagery.
+
+### Added
+- **Точечная правка HTML-экрана: `read_embed_html` + `edit_embed_html`.** Changing part of an existing embed meant rewriting its whole `htmlContent` through `batch_design` — thousands of tokens each way, a real risk of a truncated generation, and silent drift in parts nobody asked to change. `read_embed_html` reads a screen partially: an `outline` (structure with attributes intact, capped by depth, by repeated siblings and by total size), a `grep` over a literal pattern (multi-line anchors included; a single-line embed is reduced to exact character windows rather than dumped whole), or `full` with a warning above 20k chars. `edit_embed_html` then applies exact-anchor `oldString`→`newString` edits: matching is byte-exact with no whitespace normalization, a non-unique anchor is refused with its occurrence count and context instead of guessed at, and the batch is atomic — any failure leaves the store untouched, in one undo entry. Both target `sourceTemplate` when the embed has one, since that is the authoring text and editing the expanded `htmlContent` would be overwritten by the next expansion; an edit whose `<c-*>` tags no longer resolve is refused rather than flattening the screen's rendered markup. Arguments travel as an ordinary JSON tool call, so the `batch_design` DSL's truncation failure mode cannot apply to a tweak.
+
+### Fixed
+- **`batch_design`'s DSL parser truncated on the model's most common output shape.** The quote scanner treated the first unescaped occurrence of a string's own delimiter as its closing quote, so any `htmlContent`/`name` embedding HTML attributes in the same quote style (`class="card"`) cut off mid-string and corrupted brace/paren tracking downstream — surfacing as "Invalid JSON"/"Parse error" on a well-formed batch. The scanner now takes a one-token lookahead and only accepts a candidate closing quote when the next non-whitespace character can legitimately follow a string value, mirroring the fix already shipped in the backend's `extractEmbeds.ts`.
+- **`R()` silently dropped a frame's auto-layout.** Unlike `U()`, it rebuilt the replacement purely from the AI's `nodeData`; when `layout` was omitted — common when only rewriting a container's children — Yoga bailed out and every `fill_container` child stayed stuck at its 0×0 placeholder. Layout and sizing are now inherited from the replaced node when the AI didn't specify them, gated to frame-to-frame replacements and never applied to the replacement's own children.
+- **`replace_all_matching_properties`' `strokeColor` rule only matched `node.stroke`**, missing the paint-stack form.
+- **Image generation raced a timeout the backend didn't share.** `executeToolCall` capped every handler at a flat 30s while the backend allows an image 90s, so a slow generation came back as "Tool call timed out" while the server kept working — and kept paying. Timeouts are per-tool now: 30s by default, 95s for the two image tools, just above the backend's ceiling so its clean 504 wins the race.
+
+### Changed
+- **Generated image URLs are repaired before they reach an embed.** The model transcribes a random-UUID URL by hand into a large HTML blob and occasionally gets a character wrong, which ships as a 403 and a broken `<img>`. The showcase runner already repaired this server-side; the same repair now runs in `batch_design`'s single embed-HTML choke point, ahead of component-tag expansion so the corrected URL lands in `sourceTemplate` too and a later propagation cannot resurrect the typo. A URL too far off to snap is reported to the model as an issue rather than shipping as a silent blank.
+- **Both image handlers now say when a returned image is inline.** Without `S3_*` configured the backend answers with a multi-MB base64 `data:` URL; the note tells the model it must not go into `htmlContent` and that the spot takes a placeholder instead.
+- **`applyFillsColorRules`/`applyStrokesColorRules` merged** into one `applyPaintStackColorRules` parameterized by which stack it reads — the near-verbatim copy had pushed repo-wide duplication over the CI jscpd gate.
+
 ## [0.76.0] - 2026-08-16
 
 A second pass over the Glass material, driven by a side-by-side with a real iOS
