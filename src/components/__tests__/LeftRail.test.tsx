@@ -2,8 +2,12 @@ import { beforeEach, describe, expect, it, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { LeftRail } from "@/components/LeftRail";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
+import { useSharedViewStore } from "@/store/sharedViewStore";
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  useSharedViewStore.setState({ isSharedView: false });
+});
 
 describe("<LeftRail />", () => {
   beforeEach(() => {
@@ -55,5 +59,46 @@ describe("<LeftRail />", () => {
     render(<LeftRail />);
     fireEvent.click(screen.getByTestId("rail-text-styles"));
     expect(useLeftSidebarStore.getState().activeSection).toBe("textStyles");
+  });
+});
+
+describe("<LeftRail /> in a shared (/c/:shareId) view", () => {
+  beforeEach(() => {
+    useLeftSidebarStore.setState({ activeSection: "pages" });
+  });
+
+  it("hides the agents section when isSharedView is true", () => {
+    useSharedViewStore.setState({ isSharedView: true });
+    render(<LeftRail />);
+    expect(screen.queryByTestId("rail-agents")).toBeNull();
+    expect(screen.queryByTestId("rail-toolbox")).toBeNull();
+    expect(screen.queryByTestId("rail-comments")).toBeNull();
+    expect(screen.getByTestId("rail-pages")).toBeTruthy();
+  });
+
+  it("shows the agents section when isSharedView is false", () => {
+    useSharedViewStore.setState({ isSharedView: false });
+    render(<LeftRail />);
+    expect(screen.getByTestId("rail-agents")).toBeTruthy();
+  });
+
+  it("renders pages as active, WITHOUT persisting the fallback, when the active section becomes hidden", () => {
+    localStorage.removeItem("left-sidebar-section");
+    useLeftSidebarStore.setState({ activeSection: "agents" });
+    useSharedViewStore.setState({ isSharedView: true });
+    render(<LeftRail />);
+
+    // Pages renders as the active rail icon (the visible fallback)...
+    const pagesIcon = screen.getByTestId("rail-pages").querySelector("span");
+    expect(pagesIcon?.className).toContain("bg-accent-selection");
+
+    // ...but the underlying preference must be untouched: this is a pure
+    // render-time derivation (resolveVisibleLeftSection), not a
+    // setActiveSection() call. The old implementation called
+    // setActiveSection("pages") here, which persisted to localStorage and
+    // permanently changed which section the visitor's OWN editor opened to
+    // afterwards, just from having viewed one shared link.
+    expect(useLeftSidebarStore.getState().activeSection).toBe("agents");
+    expect(localStorage.getItem("left-sidebar-section")).toBeNull();
   });
 });

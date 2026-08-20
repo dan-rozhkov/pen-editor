@@ -21,6 +21,8 @@ import { usePageStore } from "@/store/pageStore";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import { useChatStore } from "@/store/chatStore";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { useSharedViewStore } from "@/store/sharedViewStore";
+import { resolveVisibleLeftSection } from "@/lib/sharedViewSections";
 
 function PagesPanelSection() {
   const hasPages = usePageStore((s) => s.pages.length > 0);
@@ -29,7 +31,13 @@ function PagesPanelSection() {
 }
 
 export function LeftSidebar() {
-  const activeSection = useLeftSidebarStore((s) => s.activeSection);
+  const rawActiveSection = useLeftSidebarStore((s) => s.activeSection);
+  const isSharedView = useSharedViewStore((s) => s.isSharedView);
+  // Must agree with LeftRail's derivation (same shared helper) — otherwise
+  // the rail could show "Pages" as active in the shared viewer while this
+  // panel still mounts whatever was persisted (e.g. the Agents chat, whose
+  // tool handlers mutate the scene below `canEditScene`).
+  const activeSection = resolveVisibleLeftSection(rawActiveSection, isSharedView);
   const isPanelOpen = useLeftSidebarStore((s) => s.isPanelOpen);
   const isMobile = useIsMobile();
   const isChatExpanded = useChatStore((s) => s.isExpanded);

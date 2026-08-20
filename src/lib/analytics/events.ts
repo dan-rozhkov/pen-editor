@@ -51,4 +51,10 @@ export interface AnalyticsEventMap {
   editor_command_run: { command_id: string };
   document_exported: { format: string };
   showcase_publish_clicked: { screen_count?: number };
+
+  // --- Canvas sharing ---
+  canvas_shared: Record<string, never>;
+  canvas_unshared: Record<string, never>;
+  shared_canvas_viewed: { share_id: string };
+  shared_canvas_forked: { share_id: string };
 }

@@ -4,6 +4,7 @@ import { useTextStyleStore } from "@/store/textStyleStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useUIThemeStore } from "@/store/uiThemeStore";
+import { saveShareCredentials } from "@/lib/shareCanvas";
 import type { ToolHandler } from "../toolRegistry";
 
 export const openDocument: ToolHandler = async (args) => {
@@ -21,6 +22,9 @@ export const openDocument: ToolHandler = async (args) => {
     useUIThemeStore.getState().setUITheme("light");
     useHistoryStore.getState().clear();
     useSelectionStore.getState().clearSelection();
+    // A brand-new document has no relationship to whatever share link was
+    // active for the previous one.
+    saveShareCredentials(null);
 
     return JSON.stringify({ success: true, message: "New document created" });
   }

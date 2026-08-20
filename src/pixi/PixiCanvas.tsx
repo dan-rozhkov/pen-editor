@@ -41,6 +41,7 @@ import { findResolvedDescendantByPath } from "@/utils/instanceRuntime";
 import type { RefNode } from "@/types/scene";
 import { findSlotContext } from "@/utils/componentUtils";
 import { applyOpenedDocument } from "@/utils/openDocumentIntoEditor";
+import { saveShareCredentials } from "@/lib/shareCanvas";
 import { createPixiSync } from "./pixiSync";
 import { setupPixiViewport } from "./pixiViewport";
 import { setupPixiInteraction } from "./interaction";
@@ -274,6 +275,12 @@ export function PixiCanvas() {
       documentData: import("@/utils/fileUtils").DocumentData,
       viewport: { width: number; height: number },
     ) => {
+      // Same reasoning as fileCommands.ts's openDocument() / tools/openDocument.ts's
+      // "new" branch: replacing the whole document invalidates any share
+      // link created for whatever was open before, so drop those
+      // credentials too — otherwise a later File -> Share… -> "Update"
+      // would silently overwrite that old share with this dropped document.
+      saveShareCredentials(null);
       applyOpenedDocument(documentData, {
         viewportWidth: viewport.width,
         viewportHeight: viewport.height,

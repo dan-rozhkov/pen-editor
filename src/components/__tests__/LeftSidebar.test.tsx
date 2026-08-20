@@ -4,6 +4,7 @@ import { resetStores } from "@/test/fixtures";
 import { useDocumentStore } from "@/store/documentStore";
 import { usePageStore } from "@/store/pageStore";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
+import { useSharedViewStore } from "@/store/sharedViewStore";
 
 /**
  * LeftSidebar is a layout container composing the Toolbar, an editable file
@@ -85,6 +86,7 @@ describe("<LeftSidebar />", () => {
   afterEach(() => {
     cleanup();
     useLeftSidebarStore.setState({ activeSection: "pages", isExpanded: false });
+    useSharedViewStore.setState({ isSharedView: false });
     usePageStore.setState({
       pages: baselinePages.pages,
       activePageId: baselinePages.activePageId,
@@ -208,5 +210,34 @@ describe("<LeftSidebar />", () => {
 
     // Extension is preserved.
     expect(useDocumentStore.getState().fileName).toBe("renamed.pen");
+  });
+
+  // Finding F (the second half): LeftRail derives its own "what to show as
+  // active" via the same resolveVisibleLeftSection helper, but this
+  // component reads leftSidebarStore's `activeSection` directly — without
+  // applying the same derivation here, the rail could show "Pages" as
+  // active in the shared viewer while this panel still mounts the real
+  // persisted section (Agents), whose chat can invoke tools that mutate
+  // the scene directly, below `canEditScene`.
+  it("mounts the Pages panel instead of the Agents chat when the persisted section is hidden in a shared view", () => {
+    useLeftSidebarStore.setState({ activeSection: "agents" });
+    useSharedViewStore.setState({ isSharedView: true });
+    render(<LeftSidebar />);
+
+    // Agents' wrapper is present (always-mounted so streams survive
+    // section switches) but must be hidden, not the active panel.
+    const chatWrapper = screen.getByTestId("chat-shim").parentElement;
+    expect(chatWrapper?.className).toContain("hidden");
+    // Pages/layers renders instead.
+    expect(screen.getByTestId("layers-shim")).toBeTruthy();
+  });
+
+  it("still mounts the Agents chat as the active panel outside a shared view", () => {
+    useLeftSidebarStore.setState({ activeSection: "agents" });
+    useSharedViewStore.setState({ isSharedView: false });
+    render(<LeftSidebar />);
+
+    const chatWrapper = screen.getByTestId("chat-shim").parentElement;
+    expect(chatWrapper?.className).not.toContain("hidden");
   });
 });

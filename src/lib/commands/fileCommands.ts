@@ -8,40 +8,64 @@ import { useThemeStore } from "@/store/themeStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { usePageStore } from "@/store/pageStore";
 import { downloadDocument, downloadPublicPen, openFilePicker } from "@/utils/fileUtils";
+import type { DocumentData } from "@/utils/fileUtils";
 import { applyOpenedDocument } from "@/utils/openDocumentIntoEditor";
 import { getCanvasViewportMetrics } from "@/utils/canvasViewport";
 import { toDtcg, fromDtcg, type ImportResult } from "@/lib/designTokens";
 import type { DtcgDocument } from "@/lib/designTokens";
 import { useHistoryStore } from "@/store/historyStore";
+import { saveShareCredentials } from "@/lib/shareCanvas";
 import type { PaletteCommand } from "./types";
 
 /**
  * Document-level file operations (open/export/import), consumed by both the
  * Toolbar's File menu and the command palette.
  */
-export function exportAsJson(): void {
+
+/**
+ * Gathers the live document state (all pages, variables, styles, theme,
+ * component artifacts) into the shape `serializeDocument`/`applyOpenedDocument`
+ * expect. This is the single source of truth for "what is the current
+ * document" — both `exportAsJson()` below and canvas sharing
+ * (`src/lib/shareCanvas.ts`) call it, so a `.json` export and a shared link
+ * can never drift apart by gathering the live document two different ways.
+ */
+export function collectDocumentData(): DocumentData {
   usePageStore.getState().saveCurrentPageState();
   const { pages, componentArtifactsById } = usePageStore.getState();
-  const pagesForExport = pages.map((page) => ({
-    id: page.id,
-    name: page.name,
-    nodes: buildTree(page.rootIds, page.nodesById, page.childrenById),
-    pageBackground: page.pageBackground,
-    guides: page.guides,
-    slideOrder: page.slideOrder,
-    measurements: page.measurements,
-    comments: page.comments,
-  }));
+  return {
+    pages: pages.map((page) => ({
+      id: page.id,
+      name: page.name,
+      nodes: buildTree(page.rootIds, page.nodesById, page.childrenById),
+      pageBackground: page.pageBackground,
+      guides: page.guides,
+      slideOrder: page.slideOrder,
+      measurements: page.measurements,
+      comments: page.comments,
+    })),
+    variables: useVariableStore.getState().variables,
+    textStyles: useTextStyleStore.getState().textStyles,
+    fillStyles: useStyleStore.getState().fillStyles,
+    effectStyles: useStyleStore.getState().effectStyles,
+    activeTheme: useThemeStore.getState().activeTheme,
+    componentArtifacts: componentArtifactsById,
+  };
+}
+
+export function exportAsJson(): void {
+  const { pages, variables, textStyles, fillStyles, effectStyles, activeTheme, componentArtifacts } =
+    collectDocumentData();
   const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
   downloadDocument(
-    pagesForExport,
-    useVariableStore.getState().variables,
-    useThemeStore.getState().activeTheme,
-    componentArtifactsById,
+    pages,
+    variables,
+    activeTheme,
+    componentArtifacts,
     `${name}.json`,
-    useTextStyleStore.getState().textStyles,
-    useStyleStore.getState().fillStyles,
-    useStyleStore.getState().effectStyles,
+    textStyles,
+    fillStyles,
+    effectStyles,
   );
 }
 
@@ -150,6 +174,10 @@ export async function openDocument(): Promise<void> {
   try {
     const result = await openFilePicker();
     useDocumentStore.getState().setFileName(result.fileName);
+    // Opening a different document invalidates any share link created for
+    // whatever was open before — the stored credentials point at that old
+    // document's server-side copy, not this one.
+    saveShareCredentials(null);
     const { width: viewportWidth, height: viewportHeight } = getCanvasViewportMetrics();
     applyOpenedDocument(result, { viewportWidth, viewportHeight });
   } catch (err) {

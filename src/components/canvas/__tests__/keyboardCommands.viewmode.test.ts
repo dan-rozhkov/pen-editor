@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createKeyDownHandler, type KeyDownHandlerDeps } from "../keyboardCommands";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
+import { useSharedViewStore } from "@/store/sharedViewStore";
 
 function makeDeps(): KeyDownHandlerDeps {
   return {
@@ -86,6 +87,24 @@ describe("keyboardCommands — view mode gating", () => {
   it("Escape exits view mode", () => {
     handler(key("Escape"));
     expect(useEditorModeStore.getState().mode).toBe("edit");
+  });
+
+  describe("in the shared-canvas viewer (isSharedView)", () => {
+    afterEach(() => {
+      useSharedViewStore.setState({ isSharedView: false });
+    });
+
+    it("Escape does NOT exit view mode — the 'View only' bar promises no in-app way to become editable", () => {
+      useSharedViewStore.setState({ isSharedView: true });
+      handler(key("Escape"));
+      expect(useEditorModeStore.getState().mode).toBe("view");
+    });
+
+    it("Escape still exits view mode for a plain ?view link (isSharedView false)", () => {
+      useSharedViewStore.setState({ isSharedView: false });
+      handler(key("Escape"));
+      expect(useEditorModeStore.getState().mode).toBe("edit");
+    });
   });
 
   it("in edit mode, Delete still deletes (gating only applies to view/present)", () => {

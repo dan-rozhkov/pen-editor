@@ -8,6 +8,8 @@ import { useRenderModeStore } from "../store/renderModeStore";
 import { useViewportStore } from "../store/viewportStore";
 import { useCanvasRefStore } from "../store/canvasRefStore";
 import { useMcpBridgeStore } from "../store/mcpBridgeStore";
+import { useSharedViewStore } from "../store/sharedViewStore";
+import { useShareDialogStore } from "../store/shareDialogStore";
 
 import { importDesignTokens, openDocument } from "../lib/commands/fileCommands";
 import { getCommands, runCommand } from "../lib/commands/registry";
@@ -57,6 +59,7 @@ export function Toolbar() {
   const hasSlides = useSceneStore((state) =>
     state.rootIds.some((id) => state.nodesById[id]?.type === "frame"),
   );
+  const isSharedView = useSharedViewStore((s) => s.isSharedView);
 
   const [importOpen, setImportOpen] = useState(false);
   const [jsonText, setJsonText] = useState("");
@@ -185,6 +188,13 @@ export function Toolbar() {
           <DropdownMenuItem onClick={() => void openDocument()}>
             Open
           </DropdownMenuItem>
+          {/* Hidden while viewing someone else's shared canvas — a viewer
+              must not be able to re-share it as their own (sharedViewStore.ts). */}
+          {!isSharedView && (
+            <DropdownMenuItem onClick={() => useShareDialogStore.getState().setOpen(true)}>
+              Share…
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
               Edit

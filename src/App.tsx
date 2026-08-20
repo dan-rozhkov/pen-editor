@@ -28,6 +28,8 @@ import { useOnlineStatus } from "./hooks/useOnlineStatus";
 import { launchShowcaseAgentChat } from "./lib/launchShowcaseAgentChat";
 import { importShowcaseScreensFromHandoff } from "./lib/importShowcaseScreens";
 import { OfflineBanner } from "./components/pwa/OfflineBanner";
+import { ShareDialog } from "./components/share/ShareDialog";
+import { useSharedViewStore } from "./store/sharedViewStore";
 import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
 import "./store/uiThemeStore"; // Initialize the editor theme store after the shared page bootstrap.
@@ -40,6 +42,7 @@ function App() {
   const is3DActive = useLayers3DStore((s) => s.active);
   const isMobile = useIsMobile();
   const isOnline = useOnlineStatus();
+  const isSharedView = useSharedViewStore((s) => s.isSharedView);
 
   const isPresent = mode === "present";
   const isView = mode === "view";
@@ -197,6 +200,19 @@ function App() {
           lives in the left sidebar's Toolbox section (PluginsPanel), not a
           modal here. */}
       {mode === "edit" && <PluginPanels />}
+
+      {/* Share dialog: mounted here (not in Toolbar, where it used to live)
+          because Toolbar itself only renders while the left sidebar's
+          active section is Pages/Slides, and not at all on mobile with the
+          panel closed — so ⌘K -> "Share…" (shareCommands.ts) had nowhere
+          to actually show a dialog on Assets/Variables/Styles/mobile, and
+          it would pop open unexpectedly later once the user switched back
+          to Pages. The File-menu item stays in Toolbar; it only flips
+          shareDialogStore. Gated the same way CommandPalette/PluginPanels
+          are dropped in present mode, plus out of the shared-canvas viewer
+          (a visitor there must not be able to re-share someone else's
+          canvas as their own — see sharedViewStore.ts). */}
+      {mode !== "present" && !isSharedView && <ShareDialog />}
 
       {/* UI panels — overlay on top of canvas */}
       {!isUIHidden && !isPresent && (

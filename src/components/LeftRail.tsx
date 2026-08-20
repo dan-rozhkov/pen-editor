@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode } from "react";
 import {
   FileIcon,
   CardsIcon,
@@ -13,6 +13,8 @@ import {
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import type { LeftSection } from "@/store/leftSidebarStore";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { useSharedViewStore } from "@/store/sharedViewStore";
+import { HIDDEN_IN_SHARED_VIEW, resolveVisibleLeftSection } from "@/lib/sharedViewSections";
 
 interface RailButtonProps {
   testid: string;
@@ -77,11 +79,24 @@ const STYLE_SECTIONS: {
 ];
 
 export function LeftRail() {
-  const activeSection = useLeftSidebarStore((s) => s.activeSection);
+  const rawActiveSection = useLeftSidebarStore((s) => s.activeSection);
   const setActiveSection = useLeftSidebarStore((s) => s.setActiveSection);
   const isPanelOpen = useLeftSidebarStore((s) => s.isPanelOpen);
   const setPanelOpen = useLeftSidebarStore((s) => s.setPanelOpen);
   const isMobile = useIsMobile();
+  const isSharedView = useSharedViewStore((s) => s.isSharedView);
+
+  // If the persisted preference points at a section hidden in the shared
+  // viewer (e.g. Agents was active before a share link was opened), render
+  // "pages" instead — a pure derivation, NOT a `setActiveSection` call.
+  // Writing through the persisted setter here used to survive the shared
+  // session and permanently change which section the visitor's OWN editor
+  // opens to next time, just from having viewed someone else's link.
+  const activeSection = resolveVisibleLeftSection(rawActiveSection, isSharedView);
+
+  const visibleSections = isSharedView
+    ? SECTIONS.filter((item) => !HIDDEN_IN_SHARED_VIEW.has(item.section))
+    : SECTIONS;
 
   // On mobile the panel is a full-width overlay the rail toggles: tapping the
   // active icon closes it, tapping another opens that section.
@@ -116,7 +131,7 @@ export function LeftRail() {
 
   return (
     <div className="w-14 h-full flex flex-col items-center gap-3 pt-2 pb-4 bg-surface-panel border-r border-border-default">
-      {SECTIONS.map(renderRailButton)}
+      {visibleSections.map(renderRailButton)}
       <div className="h-px w-5 bg-border-default" />
       {STYLE_SECTIONS.map(renderRailButton)}
     </div>

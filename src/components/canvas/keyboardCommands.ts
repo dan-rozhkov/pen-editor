@@ -5,6 +5,7 @@ import { ALL_TOOLS } from "@/lib/toolDefinitions";
 import { usePenToolStore } from "@/store/penToolStore";
 import { useUIVisibilityStore } from "@/store/uiVisibilityStore";
 import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
+import { useSharedViewStore } from "@/store/sharedViewStore";
 import { useDevModeStore } from "@/store/devModeStore";
 import { useMeasurementsStore } from "@/store/measurementsStore";
 import { useCommentsStore } from "@/store/commentsStore";
@@ -197,11 +198,17 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
           clearSelection();
           return;
         }
-        // Mirrors view mode's Escape handling exactly. `mode` is "view", so
-        // this is a harmless no-op (presentFrameIds/Index are already empty)
-        // rather than an actual mode transition.
+        // `mode` is "view" here. NOT a harmless no-op: exitToEdit() sets
+        // `mode: "edit"`, so calling it unconditionally would make the
+        // canvas fully editable the moment a shared-canvas viewer
+        // (SharedCanvasPage.tsx, `isSharedView`) presses Escape — while the
+        // "View only" bar keeps claiming otherwise. That viewer promises no
+        // in-app way to become editable, so skip the transition there; a
+        // plain `?view` link (not `isSharedView`) still exits normally.
         e.preventDefault();
-        useEditorModeStore.getState().exitToEdit();
+        if (!useSharedViewStore.getState().isSharedView) {
+          useEditorModeStore.getState().exitToEdit();
+        }
         return;
       }
 
