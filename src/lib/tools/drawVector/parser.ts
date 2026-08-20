@@ -14,11 +14,21 @@ const MAX_STROKE_WIDTH = 100;
 const MIN_STROKE_WIDTH = 0.1;
 const MIN_EXTENT = 1e-3;
 
-// Matches a whole command line: NAME(args). Args are parsed leniently by the
-// per-command handlers below (numbers separated by spaces and/or commas,
-// quoted color strings) rather than by a per-command regex, so odd-but-legible
-// spacing never turns into a hard failure.
+// Matches a whole command line in the parenthesized form: NAME(args). Args
+// are parsed leniently by the per-command handlers below (numbers separated
+// by spaces and/or commas, quoted color strings) rather than by a
+// per-command regex, so odd-but-legible spacing never turns into a hard
+// failure.
 const COMMAND_LINE = /^([A-Za-z]+)\s*\(([\s\S]*)\)$/;
+
+// Matches the bareword form some models default to out of plain-SVG habit —
+// `NAME` followed by whitespace-separated args, or no args at all (e.g. `m
+// 120 320`, or a bare `Z`/`CLOSE`/`END`). This is purely a different way to
+// slice a line into { name, argsRaw }: splitArgs already treats whitespace
+// and commas as interchangeable separators, so argsRaw feeds the exact same
+// per-command handlers as the parenthesized form above — there is no second,
+// parallel parsing path per command.
+const BARE_COMMAND_LINE = /^([A-Za-z]+)(?:\s+([\s\S]*))?$/;
 
 function clonePoints(points: PathAnchor[]): PathAnchor[] {
   return points.map((point) => ({
@@ -294,19 +304,23 @@ export function parseVectorCommands(text: string, mode: VectorParseMode): Vector
       continue;
     }
 
-    // Bare `Z`/`CLOSE`/`END` (no parens) is the SVG habit the `Z` alias
-    // exists for in the first place — reject only the parenthesized form and
-    // a bareword falls through to "unknown command".
-    const bareMatch = line.match(/^(Z|CLOSE|END)$/i);
-    const match = bareMatch ? null : line.match(COMMAND_LINE);
+    // Try the parenthesized form first; only fall back to the bareword form
+    // when the line isn't `NAME(...)` at all (e.g. `NAME(1,2) trailing junk`
+    // must still fail, not get reinterpreted as bareword with a garbage
+    // argsRaw). Argument-count/format validation for the bareword form is
+    // handled by the same per-command switch below, not here — e.g. bare
+    // `CLOSE extra` reaches the CLOSE case with a non-empty argsRaw and is
+    // rejected there exactly like `CLOSE(extra)` would be.
+    const parenMatch = line.match(COMMAND_LINE);
+    const bareMatch = parenMatch ? null : line.match(BARE_COMMAND_LINE);
     let rawName: string;
     let argsRaw: string;
-    if (bareMatch) {
+    if (parenMatch) {
+      rawName = parenMatch[1].toUpperCase();
+      argsRaw = parenMatch[2];
+    } else if (bareMatch) {
       rawName = bareMatch[1].toUpperCase();
-      argsRaw = "";
-    } else if (match) {
-      rawName = match[1].toUpperCase();
-      argsRaw = match[2];
+      argsRaw = bareMatch[2] ?? "";
     } else {
       return failure("Unknown command or invalid arguments", lineNumber);
     }
@@ -473,7 +487,11 @@ export function buildVectorReplayFrames(text: string): ParsedVectorDraft[] {
   const frames: ParsedVectorDraft[] = [];
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index].trim();
-    if (!/^(?:M|L|C|CLOSE|FILL|STROKE|Z)\s*\(/i.test(line)) continue;
+    // Recognize both the parenthesized and bareword command forms — `\b`
+    // rejects a longer identifier that merely starts with a command name
+    // (e.g. "CLOSEX") while accepting whatever separator follows a real one:
+    // "(", whitespace, ";", or end of line.
+    if (!/^(?:CLOSE|STROKE|FILL|M|L|C|Z)\b/i.test(line)) continue;
     const prefix = `${lines.slice(0, index + 1).join("\n")}\n`;
     const result = parseVectorCommands(prefix, "preview");
     if (result.ok) frames.push({ ...result.draft, ended: false });

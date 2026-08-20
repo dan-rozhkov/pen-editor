@@ -379,6 +379,88 @@ describe("code review fixes", () => {
   });
 });
 
+describe("bareword (no-parens) command form", () => {
+  it("parses bareword M/L/C exactly like the parenthesized form", () => {
+    const bareword = parseVectorCommands(
+      "m 120 320\nl 260 300\nc 300 420 360 240 440 340\nEND()",
+      "final",
+    );
+    const parenthesized = parseVectorCommands(
+      "M(120, 320)\nL(260, 300)\nC(300, 420, 360, 240, 440, 340)\nEND()",
+      "final",
+    );
+    expect(bareword.ok).toBe(true);
+    expect(parenthesized.ok).toBe(true);
+    if (!bareword.ok || !parenthesized.ok) return;
+    expect(bareword.draft.points).toEqual(parenthesized.draft.points);
+    expect(bareword.draft.geometry).toBe(parenthesized.draft.geometry);
+  });
+
+  it("parses bareword FILL with an unquoted hex color", () => {
+    const result = parseVectorCommands(
+      "M(0,0)\nL(1,0)\nL(1,1)\nCLOSE()\nfill #e0522a\nEND()",
+      "final",
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.draft.fill).toBe("#e0522a");
+  });
+
+  it("parses bareword STROKE with color and width", () => {
+    const result = parseVectorCommands(
+      "M(0,0)\nL(1,1)\nstroke #0d99ff 2\nEND()",
+      "final",
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.draft.stroke).toEqual({ color: "#0d99ff", width: 2 });
+  });
+
+  it("parses bareword FILL with an unquoted rgb() color, commas and all", () => {
+    const result = parseVectorCommands(
+      "M(0,0)\nL(1,0)\nL(1,1)\nCLOSE()\nfill rgb(255, 0, 0)\nEND()",
+      "final",
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.draft.fill).toBe("#ff0000");
+  });
+
+  it("mixes parenthesized and bareword lines in one script", () => {
+    const result = parseVectorCommands(
+      ["m 0 0", "L(10, 0)", "l 10 10", "CLOSE()", "fill #00ff00", "END()"].join("\n"),
+      "final",
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.draft.points).toHaveLength(3);
+    expect(result.draft.fill).toBe("#00ff00");
+  });
+
+  it("still fails fatally on a bareword command missing an argument", () => {
+    const result = parseVectorCommands("m 120\nEND()", "final");
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe("Unknown command or invalid arguments");
+    expect(result.line).toBe(1);
+  });
+
+  it("still fails fatally on a line that isn't a command at all", () => {
+    const result = parseVectorCommands("this is not a command\nEND()", "final");
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.line).toBe(1);
+  });
+
+  it("keeps bareword commands' feed into buildVectorReplayFrames working", () => {
+    const frames = buildVectorReplayFrames(
+      ["m 0 0", "l 10 0", "l 10 10", "CLOSE()", "fill #00ff00", "END()"].join("\n"),
+    );
+    expect(frames.length).toBeGreaterThan(0);
+    expect(frames.at(-1)?.fill).toBe("#00ff00");
+  });
+});
+
 describe("buildVectorReplayFrames", () => {
   it("returns an ordered frame for each visual command but not END", () => {
     const frames = buildVectorReplayFrames(VALID);
