@@ -180,13 +180,13 @@ describe("removeBackgroundOnNode", () => {
 
   it("uploads a data: source url before calling remove-background", async () => {
     seedImageFillOnRect1("data:image/png;base64,AAAA");
+    const calls: Array<{ url: string; body: unknown }> = [];
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url: url.toString(), body: JSON.parse(init!.body as string) });
       if (url.toString().includes("/api/upload-image")) {
-        expect(JSON.parse(init!.body as string)).toEqual({ image: "data:image/png;base64,AAAA" });
         return jsonResponse({ url: "https://cdn/uploaded.png" });
       }
       if (url.toString().includes("/api/remove-background")) {
-        expect(JSON.parse(init!.body as string)).toEqual({ image_url: "https://cdn/uploaded.png" });
         return jsonResponse({ url: "https://cdn/removed.png" });
       }
       throw new Error(`unexpected fetch: ${url}`);
@@ -196,6 +196,18 @@ describe("removeBackgroundOnNode", () => {
     const result = await removeBackgroundOnNode("rect1");
     expect(result.url).toBe("https://cdn/removed.png");
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    // Unconditional (moved out of the mock's branching): asserts both calls
+    // happened, in order, each with the exact request body the flow must send.
+    expect(calls).toEqual([
+      {
+        url: expect.stringContaining("/api/upload-image"),
+        body: { image: "data:image/png;base64,AAAA" },
+      },
+      {
+        url: expect.stringContaining("/api/remove-background"),
+        body: { image_url: "https://cdn/uploaded.png" },
+      },
+    ]);
   });
 
   it("errors and does not mutate the scene when the network fails", async () => {

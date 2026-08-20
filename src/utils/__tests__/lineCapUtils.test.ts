@@ -5,6 +5,7 @@ import {
   capPrimitiveBounds,
   capTrimLength,
 } from "@/utils/lineCapUtils";
+import { assertDefined, assertField } from "@/test/assertions";
 
 describe("buildCapPrimitive", () => {
   it("returns null for 'none'", () => {
@@ -13,54 +14,52 @@ describe("buildCapPrimitive", () => {
 
   it("builds an open chevron for 'arrow'", () => {
     const prim = buildCapPrimitive("arrow", 2);
-    expect(prim?.kind).toBe("lines");
-    if (prim?.kind === "lines") {
-      expect(prim.segments).toHaveLength(2);
-      // Every segment starts at the local origin (the endpoint).
-      for (const [x1, y1] of prim.segments) {
-        expect(x1).toBe(0);
-        expect(y1).toBe(0);
-      }
+    assertDefined(prim);
+    assertField(prim, "kind", "lines");
+    expect(prim.segments).toHaveLength(2);
+    // Every segment starts at the local origin (the endpoint).
+    for (const [x1, y1] of prim.segments) {
+      expect(x1).toBe(0);
+      expect(y1).toBe(0);
     }
   });
 
   it("builds a filled triangle for 'triangle' with the tip at the origin", () => {
     const prim = buildCapPrimitive("triangle", 4);
-    expect(prim?.kind).toBe("polygon");
-    if (prim?.kind === "polygon") {
-      expect(prim.points[0]).toBe(0);
-      expect(prim.points[1]).toBe(0);
-      expect(prim.points).toHaveLength(6);
-    }
+    assertDefined(prim);
+    assertField(prim, "kind", "polygon");
+    expect(prim.points[0]).toBe(0);
+    expect(prim.points[1]).toBe(0);
+    expect(prim.points).toHaveLength(6);
   });
 
   it("builds a circle for 'circle' offset backward from the origin", () => {
     const prim = buildCapPrimitive("circle", 3);
-    expect(prim?.kind).toBe("circle");
-    if (prim?.kind === "circle") {
-      expect(prim.cx).toBeLessThan(0);
-      expect(prim.radius).toBeGreaterThan(0);
-    }
+    assertDefined(prim);
+    assertField(prim, "kind", "circle");
+    expect(prim.cx).toBeLessThan(0);
+    expect(prim.radius).toBeGreaterThan(0);
   });
 
   it("builds a perpendicular bar for 'bar'", () => {
     const prim = buildCapPrimitive("bar", 2);
-    expect(prim?.kind).toBe("lines");
-    if (prim?.kind === "lines") {
-      const [x1, y1, x2, y2] = prim.segments[0];
-      expect(x1).toBe(0);
-      expect(x2).toBe(0);
-      expect(y1).toBeLessThan(0);
-      expect(y2).toBeGreaterThan(0);
-    }
+    assertDefined(prim);
+    assertField(prim, "kind", "lines");
+    const [x1, y1, x2, y2] = prim.segments[0];
+    expect(x1).toBe(0);
+    expect(x2).toBe(0);
+    expect(y1).toBeLessThan(0);
+    expect(y2).toBeGreaterThan(0);
   });
 
   it("scales geometry with strokeWidth", () => {
     const thin = buildCapPrimitive("triangle", 1);
     const thick = buildCapPrimitive("triangle", 5);
-    if (thin?.kind === "polygon" && thick?.kind === "polygon") {
-      expect(Math.abs(thick.points[2])).toBeGreaterThan(Math.abs(thin.points[2]));
-    }
+    assertDefined(thin);
+    assertDefined(thick);
+    assertField(thin, "kind", "polygon");
+    assertField(thick, "kind", "polygon");
+    expect(Math.abs(thick.points[2])).toBeGreaterThan(Math.abs(thin.points[2]));
   });
 });
 
@@ -80,12 +79,12 @@ describe("capTrimLength", () => {
     for (const strokeWidth of [1, 2, 5]) {
       const triangle = buildCapPrimitive("triangle", strokeWidth);
       const circle = buildCapPrimitive("circle", strokeWidth);
-      if (triangle?.kind === "polygon") {
-        expect(capTrimLength("triangle", strokeWidth)).toBe(-Math.min(...triangle.points.filter((_, i) => i % 2 === 0)));
-      }
-      if (circle?.kind === "circle") {
-        expect(capTrimLength("circle", strokeWidth)).toBe(circle.radius - circle.cx);
-      }
+      assertDefined(triangle);
+      assertDefined(circle);
+      assertField(triangle, "kind", "polygon");
+      assertField(circle, "kind", "circle");
+      expect(capTrimLength("triangle", strokeWidth)).toBe(-Math.min(...triangle.points.filter((_, i) => i % 2 === 0)));
+      expect(capTrimLength("circle", strokeWidth)).toBe(circle.radius - circle.cx);
     }
   });
 });

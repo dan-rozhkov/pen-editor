@@ -11,6 +11,7 @@ import { Layers3DOverlay } from "../Layers3DOverlay";
 import { Layers3DToggle } from "../Layers3DToggle";
 import { resetStores, seedScene } from "@/test/fixtures";
 import { useSelectionStore } from "@/store/selectionStore";
+import { restoreGlobalEvent } from "@/test/domGlobals";
 
 const plane = (nodeId: string, depth: number) => ({
   nodeId,
@@ -395,14 +396,7 @@ describe("Layers3DOverlay", () => {
       value: new Event("change"),
     });
     fireEvent.change(screen.getByLabelText(/spacing/i), { target: { value: "120" } });
-    if (previousEvent) {
-      Object.defineProperty(globalThis, "event", {
-        configurable: true,
-        value: previousEvent,
-      });
-    } else {
-      delete (globalThis as { event?: Event }).event;
-    }
+    restoreGlobalEvent(previousEvent);
     expect(useLayers3DStore.getState().spacing).toBe(120);
   });
 

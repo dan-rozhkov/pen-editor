@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildVectorReplayFrames, parseVectorCommands } from "../parser";
+import { assertErr, assertOk } from "@/test/assertions";
 
 const VALID = [
   "M(10, 20)",
@@ -14,8 +15,7 @@ const VALID = [
 describe("parseVectorCommands", () => {
   it("reduces a valid final script to anchors, geometry, bounds and paints", () => {
     const result = parseVectorCommands(VALID, "final");
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    assertOk(result);
     expect(result.draft.points).toHaveLength(3);
     expect(result.draft.points[1].handleOut).toEqual({ x: 60, y: 20 });
     expect(result.draft.points[2].handleIn).toEqual({ x: 80, y: 40 });
@@ -43,8 +43,8 @@ describe("parseVectorCommands", () => {
 
   it("accepts token whitespace and preserves color case", () => {
     const result = parseVectorCommands(' M ( -1 , 2 ) \n L ( 3 , 4 ) \n STROKE ( "#AaBbCcDD" , 0.5 ) \n END ( ) ', "final");
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.draft.stroke).toEqual({ color: "#AaBbCcDD", width: 0.5 });
+    assertOk(result);
+    expect(result.draft.stroke).toEqual({ color: "#AaBbCcDD", width: 0.5 });
   });
 
   it.each([
@@ -62,8 +62,8 @@ describe("parseVectorCommands", () => {
     ["JSON5", "{ commands: ['M(0,0)'] }", 1],
   ])("rejects %s", (_name, source, line) => {
     const result = parseVectorCommands(source, "final");
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.line).toBe(line);
+    assertErr(result);
+    expect(result.line).toBe(line);
   });
 
   it("rejects a script with zero usable geometry even though every line parses", () => {
@@ -74,8 +74,8 @@ describe("parseVectorCommands", () => {
 
   it("rejects more than 32,768 characters", () => {
     const result = parseVectorCommands(" ".repeat(32_769), "final");
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.line).toBe(1);
+    assertErr(result);
+    expect(result.line).toBe(1);
   });
 
   it("rejects complete invalid lines in preview mode", () => {
@@ -101,8 +101,7 @@ describe("parseVectorCommands", () => {
         ].join("\n"),
         "final",
       );
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
+      assertOk(result);
       expect(result.draft.contours).toHaveLength(2);
       expect(result.draft.contours[0]).toEqual({
         points: [
@@ -139,8 +138,7 @@ describe("parseVectorCommands", () => {
 
     it("closes an under-anchored closed contour as open instead of failing", () => {
       const result = parseVectorCommands("M(0,0)\nL(1,1)\nCLOSE()\nEND()", "final");
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
+      assertOk(result);
       expect(result.draft.closed).toBe(false);
       expect(result.draft.points).toHaveLength(2);
       expect(result.draft.warnings).toEqual(
@@ -150,8 +148,7 @@ describe("parseVectorCommands", () => {
 
     it("allows FILL on an open contour (SVG closes it implicitly for fill)", () => {
       const result = parseVectorCommands('M(0,0)\nL(1,1)\nFILL("#ffffff")\nEND()', "final");
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
+      assertOk(result);
       expect(result.draft.closed).toBe(false);
       expect(result.draft.fill).toBe("#ffffff");
       expect(result.draft.warnings).toEqual(
@@ -161,8 +158,7 @@ describe("parseVectorCommands", () => {
 
     it("ignores commands after END instead of failing", () => {
       const result = parseVectorCommands("M(0,0)\nL(1,1)\nEND()\nL(2,2)", "final");
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
+      assertOk(result);
       expect(result.draft.points).toHaveLength(2);
       expect(result.draft.warnings).toEqual(
         expect.arrayContaining([expect.stringContaining("ignored")]),
@@ -171,8 +167,7 @@ describe("parseVectorCommands", () => {
 
     it("treats a missing END as a completed stream", () => {
       const result = parseVectorCommands("M(0,0)\nL(1,1)", "final");
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
+      assertOk(result);
       expect(result.draft.ended).toBe(false);
       expect(result.draft.warnings).toEqual(
         expect.arrayContaining([expect.stringContaining("END() was missing")]),
@@ -188,8 +183,7 @@ describe("parseVectorCommands", () => {
         `M(0,0)\nL(1,1)\nSTROKE("#ffffff",${width})\nEND()`,
         "final",
       );
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
+      assertOk(result);
       expect(result.draft.stroke!.width).toBeGreaterThan(0);
       expect(result.draft.stroke!.width).toBeLessThanOrEqual(100);
       expect(result.draft.warnings).toEqual(
@@ -202,8 +196,7 @@ describe("parseVectorCommands", () => {
         "M(0,0)\nL(1,0)\nL(1,1)\nCLOSE()\nCLOSE()\nEND()",
         "final",
       );
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
+      assertOk(result);
       expect(result.draft.closed).toBe(true);
       expect(result.draft.warnings).toEqual(
         expect.arrayContaining([expect.stringContaining("duplicate CLOSE")]),
@@ -215,8 +208,7 @@ describe("parseVectorCommands", () => {
         'M(0,0)\nL(1,0)\nL(1,1)\nCLOSE()\nFILL("#ffffff")\nFILL("#000000")\nEND()',
         "final",
       );
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
+      assertOk(result);
       expect(result.draft.fill).toBe("#000000");
       expect(result.draft.warnings).toEqual(
         expect.arrayContaining([expect.stringContaining("duplicate FILL")]),
@@ -228,8 +220,7 @@ describe("parseVectorCommands", () => {
         'M(0,0)\nL(1,1)\nSTROKE("#ffffff",1)\nSTROKE("#000000",2)\nEND()',
         "final",
       );
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
+      assertOk(result);
       expect(result.draft.stroke).toEqual({ color: "#000000", width: 2 });
       expect(result.draft.warnings).toEqual(
         expect.arrayContaining([expect.stringContaining("duplicate STROKE")]),
@@ -243,8 +234,7 @@ describe("parseVectorCommands", () => {
         "END()",
       ].join("\n");
       const result = parseVectorCommands(source, "final");
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
+      assertOk(result);
       expect(result.draft.points.length).toBeLessThanOrEqual(512);
       expect(result.draft.warnings).toEqual(
         expect.arrayContaining([expect.stringContaining("512-anchor limit")]),
@@ -256,8 +246,7 @@ describe("parseVectorCommands", () => {
         ["m(0 0);", "l(10, 0);", "l(10 10);", "z();", "end();"].join("\n"),
         "final",
       );
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
+      assertOk(result);
       expect(result.draft.closed).toBe(true);
       expect(result.draft.points).toHaveLength(3);
     });
@@ -267,8 +256,7 @@ describe("parseVectorCommands", () => {
         ["```", "M(0,0)", "L(1,1)", "END()", "```"].join("\n"),
         "final",
       );
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
+      assertOk(result);
       expect(result.draft.points).toHaveLength(2);
     });
 
@@ -284,8 +272,7 @@ describe("parseVectorCommands", () => {
         `M(0,0)\nL(1,0)\nL(1,1)\nCLOSE()\nFILL("${input}")\nEND()`,
         "final",
       );
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
+      assertOk(result);
       expect(result.draft.fill).toBe(expected);
     });
   });
@@ -300,8 +287,7 @@ describe("code review fixes", () => {
       'M(0,0)\nL(1,1)\nFILL("rgb(1.2.3, 0, 0)")\nEND()',
       "final",
     );
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
+    assertErr(result);
     expect(result.error).toBe("Unrecognized color format");
     expect(result.line).toBe(3);
   });
@@ -325,8 +311,7 @@ describe("code review fixes", () => {
 
   it("still fails CLOSE() fatally when no M ever opened a contour", () => {
     const result = parseVectorCommands("CLOSE()\nEND()", "final");
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
+    assertErr(result);
     expect(result.error).toBe("CLOSE requires M");
     expect(result.line).toBe(1);
   });
@@ -336,8 +321,7 @@ describe("code review fixes", () => {
       "M(0,0)\nL(1,0)\nL(1,1)\nCLOSE()\nFILL(rgb(255, 0, 0))\nEND()",
       "final",
     );
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    assertOk(result);
     expect(result.draft.fill).toBe("#ff0000");
   });
 
@@ -346,22 +330,19 @@ describe("code review fixes", () => {
       'M(0,0)\nL(1,0)\nL(1,1)\nCLOSE()\nFILL("rgb(300, -5, 0)")\nEND()',
       "final",
     );
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    assertOk(result);
     expect(result.draft.fill).toBe("#ff0000");
   });
 
   it("accepts bare Z/END (no parens) the way the SVG-habit alias implies", () => {
     const result = parseVectorCommands("M(0,0)\nL(10,0)\nL(10,10)\nZ\nEND", "final");
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    assertOk(result);
     expect(result.draft.closed).toBe(true);
   });
 
   it("accepts bare CLOSE (no parens)", () => {
     const result = parseVectorCommands("M(0,0)\nL(10,0)\nL(10,10)\nCLOSE\nEND()", "final");
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    assertOk(result);
     expect(result.draft.closed).toBe(true);
   });
 
@@ -370,8 +351,7 @@ describe("code review fixes", () => {
       'M(0,0)\nL(1,1)\nSTROKE("#ffffff",1e-9)\nEND()',
       "final",
     );
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    assertOk(result);
     expect(result.draft.stroke!.width).toBeGreaterThanOrEqual(0.1);
     expect(result.draft.warnings).toEqual(
       expect.arrayContaining([expect.stringContaining("clamped")]),
@@ -389,9 +369,8 @@ describe("bareword (no-parens) command form", () => {
       "M(120, 320)\nL(260, 300)\nC(300, 420, 360, 240, 440, 340)\nEND()",
       "final",
     );
-    expect(bareword.ok).toBe(true);
-    expect(parenthesized.ok).toBe(true);
-    if (!bareword.ok || !parenthesized.ok) return;
+    assertOk(bareword);
+    assertOk(parenthesized);
     expect(bareword.draft.points).toEqual(parenthesized.draft.points);
     expect(bareword.draft.geometry).toBe(parenthesized.draft.geometry);
   });
@@ -401,8 +380,7 @@ describe("bareword (no-parens) command form", () => {
       "M(0,0)\nL(1,0)\nL(1,1)\nCLOSE()\nfill #e0522a\nEND()",
       "final",
     );
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    assertOk(result);
     expect(result.draft.fill).toBe("#e0522a");
   });
 
@@ -411,8 +389,7 @@ describe("bareword (no-parens) command form", () => {
       "M(0,0)\nL(1,1)\nstroke #0d99ff 2\nEND()",
       "final",
     );
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    assertOk(result);
     expect(result.draft.stroke).toEqual({ color: "#0d99ff", width: 2 });
   });
 
@@ -421,8 +398,7 @@ describe("bareword (no-parens) command form", () => {
       "M(0,0)\nL(1,0)\nL(1,1)\nCLOSE()\nfill rgb(255, 0, 0)\nEND()",
       "final",
     );
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    assertOk(result);
     expect(result.draft.fill).toBe("#ff0000");
   });
 
@@ -431,24 +407,21 @@ describe("bareword (no-parens) command form", () => {
       ["m 0 0", "L(10, 0)", "l 10 10", "CLOSE()", "fill #00ff00", "END()"].join("\n"),
       "final",
     );
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    assertOk(result);
     expect(result.draft.points).toHaveLength(3);
     expect(result.draft.fill).toBe("#00ff00");
   });
 
   it("still fails fatally on a bareword command missing an argument", () => {
     const result = parseVectorCommands("m 120\nEND()", "final");
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
+    assertErr(result);
     expect(result.error).toBe("Unknown command or invalid arguments");
     expect(result.line).toBe(1);
   });
 
   it("still fails fatally on a line that isn't a command at all", () => {
     const result = parseVectorCommands("this is not a command\nEND()", "final");
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
+    assertErr(result);
     expect(result.line).toBe(1);
   });
 

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup, within } from "@testing-library/react";
 import { TypographySection } from "../TypographySection";
 import { useTextStyleStore } from "@/store/textStyleStore";
+import { restoreGlobalEvent } from "@/test/domGlobals";
 import type { TextNode } from "@/types/scene";
 
 // FontCombobox has a debounced search effect that isn't under test here; stub
@@ -129,11 +130,7 @@ describe("<TypographySection />", () => {
       const previousEvent = (globalThis as { event?: Event }).event;
       Object.defineProperty(globalThis, "event", { configurable: true, value: new Event("change") });
       fireEvent.change(slider, { target: { value: "530" } });
-      if (previousEvent) {
-        Object.defineProperty(globalThis, "event", { configurable: true, value: previousEvent });
-      } else {
-        delete (globalThis as { event?: Event }).event;
-      }
+      restoreGlobalEvent(previousEvent);
 
       expect(onUpdate).toHaveBeenCalledWith({ fontVariations: { wght: 530 } });
     });

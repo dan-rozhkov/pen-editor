@@ -51,10 +51,13 @@ test("/ shows the showcase, not the editor", async ({ page }, testInfo) => {
   // already covered on chromium. webkit-mobile (iPhone 14) exists only to
   // guard showcase layout — mounting the editor there is new, unneeded
   // surface (and a plausible flake/slowness source in CI), so this project
-  // stops at the showcase-only assertions above.
-  if (testInfo.project.name === "webkit-mobile") {
-    return;
-  }
+  // stops at the showcase-only assertions above. Mid-test test.skip(): the
+  // showcase-only assertions above still need to run for this project, so
+  // this can't be a top-of-test skip.
+  test.skip(
+    testInfo.project.name === "webkit-mobile",
+    "webkit-mobile only guards the showcase layout, not the editor mount",
+  );
 
   // Navigating to /app still loads the editor.
   await page.route("**/api/models", (route) =>

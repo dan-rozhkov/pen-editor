@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetStores, seedScene } from "@/test/fixtures";
+import { assertDefined, assertField } from "@/test/assertions";
 
 const extractCanvas = vi.fn();
 const getNodeContainer = vi.fn();
@@ -113,7 +114,8 @@ describe("captureLayers", () => {
 
     const { useLayoutStore } = await import("@/store/layoutStore");
     const frame = useSceneStore.getState().getNodes()[0];
-    if (frame?.type !== "frame") throw new Error("Expected frame fixture");
+    assertDefined(frame, "Expected frame fixture");
+    assertField(frame, "type", "frame", "Expected frame fixture");
     const laidOutText = useLayoutStore
       .getState()
       .calculateLayoutForFrame(frame)

@@ -134,12 +134,11 @@ describe("updateSelfHeal", () => {
       const { recoverFromFatalError } = await freshImport();
       vi.stubGlobal("navigator", { serviceWorker: { controller: null } });
 
-      recoverFromFatalError();
+      // The assertion here IS "did not throw" — there is no registration to
+      // query in this branch, which is the point: it bails before touching
+      // the service worker at all.
+      expect(() => recoverFromFatalError()).not.toThrow();
       await Promise.resolve();
-
-      // Nothing to assert on directly beyond "did not throw" — there is no
-      // registration to query in this branch, which is the point: it bails
-      // before touching the service worker at all.
     });
 
     it("activates a waiting worker instead of reloading, when one is staged", async () => {

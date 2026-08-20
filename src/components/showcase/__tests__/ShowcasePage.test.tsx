@@ -171,6 +171,25 @@ function categoriesResponse(categories: ShowcaseCategory[]): Response {
   return jsonResponse({ categories });
 }
 
+/**
+ * A `fetch` mock that asserts every request (categories, models, and the
+ * apps page) carries `platform=<platform>`, then returns the fixture
+ * response for whichever endpoint was hit. This is a fake router — the
+ * per-endpoint branching is real dispatch logic, not an assertion-narrowing
+ * guard — so it's kept as a helper outside any `it(...)` body rather than an
+ * inline `if` chain in the test, per this project's vitest
+ * no-conditional-in-test convention.
+ */
+function makePlatformAssertingFetchMock(platform: "mobile" | "desktop") {
+  return vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    expect(url).toContain(`platform=${platform}`);
+    if (url.includes("/api/showcase/categories")) return categoriesResponse([]);
+    if (url.includes("/api/showcase/models")) return jsonResponse({ models: [] });
+    return jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null });
+  });
+}
+
 describe("<ShowcasePage />", () => {
   it("presents the design agent as the primary showcase action", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
@@ -242,7 +261,7 @@ describe("<ShowcasePage />", () => {
 
     fireEvent.click(screen.getByRole("link", { name: "Open the editor →" }));
 
-    await screen.findByText("Editor route");
+    expect(await screen.findByText("Editor route")).toBeTruthy();
   });
 
   it("renders one carousel per app, with all of its screens", async () => {
@@ -329,7 +348,7 @@ describe("<ShowcasePage />", () => {
 
     renderPage();
 
-    await screen.findByText("Nothing generated yet.");
+    expect(await screen.findByText("Nothing generated yet.")).toBeTruthy();
   });
 
   it("renders the same empty-state message on a 503 (storage not configured)", async () => {
@@ -342,7 +361,7 @@ describe("<ShowcasePage />", () => {
 
     renderPage();
 
-    await screen.findByText("Nothing generated yet.");
+    expect(await screen.findByText("Nothing generated yet.")).toBeTruthy();
   });
 
   it("shows an error message on other failures, without crashing", async () => {
@@ -353,8 +372,8 @@ describe("<ShowcasePage />", () => {
 
     renderPage();
 
-    await screen.findByText("Couldn't load the showcase.");
-    await screen.findByText("limit out of range");
+    expect(await screen.findByText("Couldn't load the showcase.")).toBeTruthy();
+    expect(await screen.findByText("limit out of range")).toBeTruthy();
   });
 
   it("loads the next page when the bottom sentinel enters the viewport", async () => {
@@ -667,19 +686,7 @@ describe("<ShowcasePage /> filters", () => {
   });
 
   it("defaults to the mobile platform with no query param, and requests platform=mobile without writing it to the URL", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.includes("/api/showcase/categories")) {
-        expect(url).toContain("platform=mobile");
-        return categoriesResponse([]);
-      }
-      if (url.includes("/api/showcase/models")) {
-        expect(url).toContain("platform=mobile");
-        return jsonResponse({ models: [] });
-      }
-      expect(url).toContain("platform=mobile");
-      return jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null });
-    });
+    const fetchMock = makePlatformAssertingFetchMock("mobile");
     vi.stubGlobal("fetch", fetchMock);
 
     renderPageAt("/");
@@ -756,18 +763,7 @@ describe("<ShowcasePage /> filters", () => {
   });
 
   it("restores platform=desktop from the URL and marks the Web toggle active", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.includes("/api/showcase/categories")) {
-        return categoriesResponse([]);
-      }
-      if (url.includes("/api/showcase/models")) {
-        expect(url).toContain("platform=desktop");
-        return jsonResponse({ models: [] });
-      }
-      expect(url).toContain("platform=desktop");
-      return jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null });
-    });
+    const fetchMock = makePlatformAssertingFetchMock("desktop");
     vi.stubGlobal("fetch", fetchMock);
 
     renderPageAt("/?platform=desktop");
@@ -872,18 +868,7 @@ describe("<ShowcasePage /> filters", () => {
   });
 
   it("treats an invalid platform value in the URL as the mobile default", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.includes("/api/showcase/categories")) {
-        return categoriesResponse([]);
-      }
-      if (url.includes("/api/showcase/models")) {
-        expect(url).toContain("platform=mobile");
-        return jsonResponse({ models: [] });
-      }
-      expect(url).toContain("platform=mobile");
-      return jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null });
-    });
+    const fetchMock = makePlatformAssertingFetchMock("mobile");
     vi.stubGlobal("fetch", fetchMock);
 
     renderPageAt("/?platform=nonsense");

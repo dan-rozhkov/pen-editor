@@ -20,6 +20,18 @@ const SW = path.resolve("dist/sw.js");
 // update check to notice the change.
 test.describe.configure({ mode: "serial" });
 
+// Each route entry point renders different mounted content; kept as a
+// standalone helper (rather than an inline if/else in the test body) per
+// this project's eslint-plugin playwright convention against conditionals in
+// test bodies.
+async function expectRouteMounted(page: import("@playwright/test").Page, route: string) {
+  if (route === "/app") {
+    await expectEditorMounted(page);
+  } else {
+    await expect(page.getByText("Pen Editor Showcase")).toBeVisible();
+  }
+}
+
 for (const route of ["/app", "/"]) {
   test(`prompts to update after a new deploy, entering at ${route}`, async ({
     page,
@@ -35,11 +47,7 @@ for (const route of ["/app", "/"]) {
     await page.route("**/api/showcase*", (r) => r.fulfill({ json: { apps: [], nextCursor: null } }));
 
     await page.goto(route);
-    if (route === "/app") {
-      await expectEditorMounted(page);
-    } else {
-      await expect(page.getByText("Pen Editor Showcase")).toBeVisible();
-    }
+    await expectRouteMounted(page, route);
 
     // No clientsClaim in the workbox config, so the visit that registers the
     // worker is never itself controlled by it — wait for activation, then
@@ -55,12 +63,18 @@ for (const route of ["/app", "/"]) {
       { timeout: 30_000 },
     );
     await page.reload();
-    for (let i = 0; i < 10; i++) {
-      if (await page.evaluate(() => !!navigator.serviceWorker.controller)) break;
-      await page.waitForTimeout(1000);
-      await page.reload();
-    }
-    expect(await page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+    // Retry-with-reload instead of a fixed sleep between attempts:
+    // expect.poll's own polling cadence replaces the manual
+    // waitForTimeout(1000) loop this used to be.
+    await expect
+      .poll(
+        async () => {
+          await page.reload();
+          return page.evaluate(() => !!navigator.serviceWorker.controller);
+        },
+        { timeout: 15_000 },
+      )
+      .toBe(true);
 
     const original = fs.readFileSync(SW, "utf8");
     try {

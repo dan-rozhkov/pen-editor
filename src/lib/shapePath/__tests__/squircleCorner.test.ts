@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildSquircleRectPath } from "../squircleCorner";
+import { assertField } from "@/test/assertions";
 
 const uniformRadii = (r: number) => ({
   topLeft: r,
@@ -25,25 +26,22 @@ describe("buildSquircleRectPath", () => {
 
     for (let corner = 0; corner < 4; corner++) {
       const [cubic1, arc, cubic2] = cornerSegments(segments, corner);
-      expect(cubic1.type).toBe("cubic");
-      expect(arc.type).toBe("arc");
+      assertField(cubic1, "type", "cubic");
+      assertField(arc, "type", "arc");
       expect(cubic2.type).toBe("cubic");
 
-      if (cubic1.type === "cubic") {
-        // Control points collapse onto the endpoint - a straight line in disguise.
-        expect(cubic1.cp1x).toBeCloseTo(cubic1.x, 5);
-        expect(cubic1.cp1y).toBeCloseTo(cubic1.y, 5);
-        expect(cubic1.cp2x).toBeCloseTo(cubic1.x, 5);
-        expect(cubic1.cp2y).toBeCloseTo(cubic1.y, 5);
-      }
-      if (arc.type === "arc") {
-        expect(arc.radius).toBeCloseTo(20, 5);
-        let delta = arc.endAngle - arc.startAngle;
-        while (delta > Math.PI) delta -= 2 * Math.PI;
-        while (delta < -Math.PI) delta += 2 * Math.PI;
-        // Full quarter circle, same as the old arcTo-based corner.
-        expect(Math.abs(delta)).toBeCloseTo(Math.PI / 2, 5);
-      }
+      // Control points collapse onto the endpoint - a straight line in disguise.
+      expect(cubic1.cp1x).toBeCloseTo(cubic1.x, 5);
+      expect(cubic1.cp1y).toBeCloseTo(cubic1.y, 5);
+      expect(cubic1.cp2x).toBeCloseTo(cubic1.x, 5);
+      expect(cubic1.cp2y).toBeCloseTo(cubic1.y, 5);
+
+      expect(arc.radius).toBeCloseTo(20, 5);
+      let delta = arc.endAngle - arc.startAngle;
+      while (delta > Math.PI) delta -= 2 * Math.PI;
+      while (delta < -Math.PI) delta += 2 * Math.PI;
+      // Full quarter circle, same as the old arcTo-based corner.
+      expect(Math.abs(delta)).toBeCloseTo(Math.PI / 2, 5);
     }
   });
 
@@ -54,28 +52,26 @@ describe("buildSquircleRectPath", () => {
     const [cubic1Zero] = cornerSegments(zero.segments, 0);
     const [cubic1Smoothed] = cornerSegments(smoothed.segments, 0);
 
-    expect(cubic1Zero.type).toBe("cubic");
-    expect(cubic1Smoothed.type).toBe("cubic");
-    if (cubic1Zero.type === "cubic" && cubic1Smoothed.type === "cubic") {
-      // The smoothed corner's first control point should no longer sit on the
-      // straight-line degenerate position.
-      expect(
-        Math.abs(cubic1Smoothed.cp1x - cubic1Smoothed.x) +
-          Math.abs(cubic1Smoothed.cp1y - cubic1Smoothed.y),
-      ).toBeGreaterThan(0.5);
-      expect(cubic1Smoothed).not.toEqual(cubic1Zero);
-    }
+    assertField(cubic1Zero, "type", "cubic");
+    assertField(cubic1Smoothed, "type", "cubic");
+    // The smoothed corner's first control point should no longer sit on the
+    // straight-line degenerate position.
+    expect(
+      Math.abs(cubic1Smoothed.cp1x - cubic1Smoothed.x) +
+        Math.abs(cubic1Smoothed.cp1y - cubic1Smoothed.y),
+    ).toBeGreaterThan(0.5);
+    expect(cubic1Smoothed).not.toEqual(cubic1Zero);
 
     const [, arcZero] = cornerSegments(zero.segments, 0);
     const [, arcSmoothed] = cornerSegments(smoothed.segments, 0);
-    if (arcZero.type === "arc" && arcSmoothed.type === "arc") {
-      let deltaZero = arcZero.endAngle - arcZero.startAngle;
-      let deltaSmoothed = arcSmoothed.endAngle - arcSmoothed.startAngle;
-      while (deltaZero > Math.PI) deltaZero -= 2 * Math.PI;
-      while (deltaSmoothed > Math.PI) deltaSmoothed -= 2 * Math.PI;
-      // Smoothing shrinks the actual arc portion (more of the corner is bezier).
-      expect(Math.abs(deltaSmoothed)).toBeLessThan(Math.abs(deltaZero));
-    }
+    assertField(arcZero, "type", "arc");
+    assertField(arcSmoothed, "type", "arc");
+    let deltaZero = arcZero.endAngle - arcZero.startAngle;
+    let deltaSmoothed = arcSmoothed.endAngle - arcSmoothed.startAngle;
+    while (deltaZero > Math.PI) deltaZero -= 2 * Math.PI;
+    while (deltaSmoothed > Math.PI) deltaSmoothed -= 2 * Math.PI;
+    // Smoothing shrinks the actual arc portion (more of the corner is bezier).
+    expect(Math.abs(deltaSmoothed)).toBeLessThan(Math.abs(deltaZero));
   });
 
   it("respects independent per-corner radii (larger corner reaches further along its edges)", () => {

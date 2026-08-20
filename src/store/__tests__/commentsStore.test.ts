@@ -4,6 +4,7 @@ import { usePageStore } from "@/store/pageStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { resetStores, seedScene } from "@/test/fixtures";
+import { assertDefined } from "@/test/assertions";
 
 function pastLen() {
   return useHistoryStore.getState().past.length;
@@ -183,10 +184,12 @@ describe("commentsStore", () => {
     // Undo then redo the scene edit.
     const s1 = createSnapshot(useSceneStore.getState());
     const prev = useHistoryStore.getState().undo(s1);
-    if (prev) useSceneStore.getState().restoreSnapshot(prev);
+    assertDefined(prev, "expected a history entry to undo into");
+    useSceneStore.getState().restoreSnapshot(prev);
     const s2 = createSnapshot(useSceneStore.getState());
     const next = useHistoryStore.getState().redo(s2);
-    if (next) useSceneStore.getState().restoreSnapshot(next);
+    assertDefined(next, "expected a history entry to redo into");
+    useSceneStore.getState().restoreSnapshot(next);
 
     expect(JSON.stringify(useCommentsStore.getState().threads)).toBe(before);
   });

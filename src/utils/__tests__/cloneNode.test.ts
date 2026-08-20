@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { cloneNodeWithNewId, deepCloneNode } from "@/utils/cloneNode";
 import { createShadowEffect, createSolidPaint } from "@/utils/fillUtils";
+import { assertField } from "@/test/assertions";
 import type { FrameNode, TextNode } from "@/types/scene";
 
 function makeTextNode(overrides: Partial<TextNode> = {}): TextNode {
@@ -43,8 +44,7 @@ describe("cloneNodeWithNewId — reusable frame -> ref", () => {
 
     const result = cloneNodeWithNewId(frame);
 
-    expect(result.type).toBe("ref");
-    if (result.type !== "ref") throw new Error("expected ref node");
+    assertField(result, "type", "ref", "expected ref node");
     expect(result.fills).toHaveLength(2);
     expect(result.fills?.[0].type).toBe("solid");
     expect(result.fills?.map((p) => (p.type === "solid" ? p.color : null))).toEqual([

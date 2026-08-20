@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import { ImageFillEditor } from "../ImageFillSection";
+import { restoreGlobalEvent } from "@/test/domGlobals";
 import type { ImageFillMode } from "@/types/scene";
 
 afterEach(() => cleanup());
@@ -254,11 +255,7 @@ describe("<ImageFillEditor />", () => {
     const previousEvent = (globalThis as { event?: Event }).event;
     Object.defineProperty(globalThis, "event", { configurable: true, value: new Event("change") });
     fireEvent.change(brightnessSlider, { target: { value: "500" } }); // out-of-range, should clamp
-    if (previousEvent) {
-      Object.defineProperty(globalThis, "event", { configurable: true, value: previousEvent });
-    } else {
-      delete (globalThis as { event?: Event }).event;
-    }
+    restoreGlobalEvent(previousEvent);
 
     expect(onUpdate).toHaveBeenCalledTimes(1);
     const arg = onUpdate.mock.calls[0][0] as { imageFill: { adjustments?: Record<string, number> } };

@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { assertDefined, assertField } from "@/test/assertions";
 
 import { buildSlidesInput, needsRaster } from "../buildSlidesInput";
 import type { BuildDeps } from "../buildSlidesInput";
@@ -176,10 +177,8 @@ describe("buildSlidesInput", () => {
     expect(input.widthPx).toBe(960);
     // 480×270 → fitScale 2, offset 0: child covers the full slide
     const shape = input.slides[1].shapes[0];
-    expect(shape.kind).toBe("rect");
-    if (shape.kind === "rect") {
-      expect(shape.rect).toEqual({ x: 0, y: 0, width: 960, height: 540 });
-    }
+    assertField(shape, "kind", "rect");
+    expect(shape.rect).toEqual({ x: 0, y: 0, width: 960, height: 540 });
   });
 
   it("image-filled rect becomes a picture via rasterizeNode", async () => {
@@ -209,10 +208,8 @@ describe("buildSlidesInput", () => {
     );
     expect(input.slides[0].shapes).toHaveLength(1);
     const shape = input.slides[0].shapes[0];
-    expect(shape.kind).toBe("picture");
-    if (shape.kind === "picture") {
-      expect(shape.rect).toEqual({ x: 0, y: 0, width: 960, height: 540 });
-    }
+    assertField(shape, "kind", "picture");
+    expect(shape.rect).toEqual({ x: 0, y: 0, width: 960, height: 540 });
   });
 
   it("rasterizeNode returning null skips the node", async () => {
@@ -265,10 +262,8 @@ describe("buildSlidesInput", () => {
       deps,
     );
     const shape = input.slides[0].shapes[0];
-    expect(shape.kind).toBe("rect");
-    if (shape.kind === "rect") {
-      expect(shape.rect).toMatchObject({ x: 15, y: 25 });
-    }
+    assertField(shape, "kind", "rect");
+    expect(shape.rect).toMatchObject({ x: 15, y: 25 });
   });
 
   it("ref nodes are resolved via deps.resolveRef and walked at the ref position", async () => {
@@ -288,10 +283,8 @@ describe("buildSlidesInput", () => {
       { ...deps, resolveRef: () => target },
     );
     const shape = input.slides[0].shapes[0];
-    expect(shape.kind).toBe("rect");
-    if (shape.kind === "rect") {
-      expect(shape.rect).toMatchObject({ x: 30, y: 30 });
-    }
+    assertField(shape, "kind", "rect");
+    expect(shape.rect).toMatchObject({ x: 30, y: 30 });
   });
 
   it("ref resolving to null is skipped without crashing", async () => {
@@ -335,12 +328,10 @@ describe("buildSlidesInput", () => {
       deps,
     );
     const shape = input.slides[0].shapes[0];
-    expect(shape.kind).toBe("text");
-    if (shape.kind === "text") {
-      expect(shape.paragraphs).toEqual([{ text: "HELLO", align: "ctr" }]);
-      expect(shape.anchor).toBe("ctr");
-      expect(shape.font.bold).toBe(true);
-    }
+    assertField(shape, "kind", "text");
+    expect(shape.paragraphs).toEqual([{ text: "HELLO", align: "ctr" }]);
+    expect(shape.anchor).toBe("ctr");
+    expect(shape.font.bold).toBe(true);
   });
 
   it("gradient angle math: vertical vector (0,0)→(0,1) is 90deg", async () => {
@@ -373,10 +364,10 @@ describe("buildSlidesInput", () => {
       deps,
     );
     const shape = input.slides[0].shapes[0];
-    expect(shape.kind).toBe("rect");
-    if (shape.kind === "rect" && shape.fill?.kind === "gradient") {
-      expect(shape.fill.angleDeg).toBe(90);
-    }
+    assertField(shape, "kind", "rect");
+    assertDefined(shape.fill);
+    assertField(shape.fill, "kind", "gradient");
+    expect(shape.fill.angleDeg).toBe(90);
   });
 
   it("per-side stroke collapses to the max side width", async () => {
@@ -385,8 +376,8 @@ describe("buildSlidesInput", () => {
       deps,
     );
     const shape = input.slides[0].shapes[0];
-    expect(shape.kind).toBe("rect");
-    if (shape.kind === "rect") expect(shape.stroke?.widthPx).toBe(3);
+    assertField(shape, "kind", "rect");
+    expect(shape.stroke?.widthPx).toBe(3);
   });
 
   it("gradient stroke is approximated with its first stop's color", async () => {
@@ -420,10 +411,8 @@ describe("buildSlidesInput", () => {
       deps,
     );
     const shape = input.slides[0].shapes[0];
-    expect(shape.kind).toBe("rect");
-    if (shape.kind === "rect") {
-      expect(shape.stroke).toMatchObject({ rgb: "FF0000", widthPx: 4 });
-    }
+    assertField(shape, "kind", "rect");
+    expect(shape.stroke).toMatchObject({ rgb: "FF0000", widthPx: 4 });
   });
 
   it("multi-paint stroke stack approximates with the topmost visible paint", async () => {
@@ -444,8 +433,8 @@ describe("buildSlidesInput", () => {
       deps,
     );
     const shape = input.slides[0].shapes[0];
-    expect(shape.kind).toBe("rect");
-    if (shape.kind === "rect") expect(shape.stroke).toMatchObject({ rgb: "00FF00", widthPx: 2 });
+    assertField(shape, "kind", "rect");
+    expect(shape.stroke).toMatchObject({ rgb: "00FF00", widthPx: 2 });
   });
 
   it("stroke stack with only a hidden paint yields no stroke, not a crash", async () => {
@@ -454,8 +443,8 @@ describe("buildSlidesInput", () => {
       deps,
     );
     const shape = input.slides[0].shapes[0];
-    expect(shape.kind).toBe("rect");
-    if (shape.kind === "rect") expect(shape.stroke).toBeUndefined();
+    assertField(shape, "kind", "rect");
+    expect(shape.stroke).toBeUndefined();
   });
 
   it("shadow effect mapping", async () => {
@@ -474,31 +463,29 @@ describe("buildSlidesInput", () => {
       deps,
     );
     const shape = input.slides[0].shapes[0];
-    expect(shape.kind).toBe("rect");
-    if (shape.kind === "rect") {
-      expect(shape.shadows).toHaveLength(1);
-      expect(shape.shadows?.[0]).toMatchObject({ variant: "outer", offsetY: 4, blurPx: 8 });
-    }
+    assertField(shape, "kind", "rect");
+    expect(shape.shadows).toHaveLength(1);
+    expect(shape.shadows?.[0]).toMatchObject({ variant: "outer", offsetY: 4, blurPx: 8 });
   });
 
   it("rect corner radii: per-corner overrides uniform, only emitted when > 0", async () => {
     const withUniform = await buildSlidesInput([frame({ children: [rect({ cornerRadius: 8 })] })], deps);
     const shape1 = withUniform.slides[0].shapes[0];
-    expect(shape1.kind).toBe("rect");
-    if (shape1.kind === "rect") expect(shape1.cornerRadii).toEqual([8, 8, 8, 8]);
+    assertField(shape1, "kind", "rect");
+    expect(shape1.cornerRadii).toEqual([8, 8, 8, 8]);
 
     const withPerCorner = await buildSlidesInput(
       [frame({ children: [rect({ cornerRadius: 8, cornerRadiusPerCorner: { topLeft: 2 } })] })],
       deps,
     );
     const shape2 = withPerCorner.slides[0].shapes[0];
-    expect(shape2.kind).toBe("rect");
-    if (shape2.kind === "rect") expect(shape2.cornerRadii).toEqual([2, 8, 8, 8]);
+    assertField(shape2, "kind", "rect");
+    expect(shape2.cornerRadii).toEqual([2, 8, 8, 8]);
 
     const sharp = await buildSlidesInput([frame({ children: [rect()] })], deps);
     const shape3 = sharp.slides[0].shapes[0];
-    expect(shape3.kind).toBe("rect");
-    if (shape3.kind === "rect") expect(shape3.cornerRadii).toBeUndefined();
+    assertField(shape3, "kind", "rect");
+    expect(shape3.cornerRadii).toBeUndefined();
   });
 
   it("line endpoints are absolute and pass through cap styles", async () => {
@@ -507,17 +494,15 @@ describe("buildSlidesInput", () => {
       deps,
     );
     const shape = input.slides[0].shapes[0];
-    expect(shape.kind).toBe("line");
-    if (shape.kind === "line") {
-      expect(shape).toMatchObject({ x1: 10, y1: 20, x2: 60, y2: 20, endCap: "arrow" });
-    }
+    assertField(shape, "kind", "line");
+    expect(shape).toMatchObject({ x1: 10, y1: 20, x2: 60, y2: 20, endCap: "arrow" });
   });
 
   it("leaf rotation passes through as rotationDeg", async () => {
     const input = await buildSlidesInput([frame({ children: [rect({ rotation: 33, stroke: "#000", strokeWidth: 1 })] })], deps);
     const shape = input.slides[0].shapes[0];
-    expect(shape.kind).toBe("rect");
-    if (shape.kind === "rect") expect(shape.rotationDeg).toBe(33);
+    assertField(shape, "kind", "rect");
+    expect(shape.rotationDeg).toBe(33);
   });
 
   it("group nodes have no own visuals and simply walk children", async () => {

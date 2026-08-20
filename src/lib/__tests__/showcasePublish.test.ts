@@ -6,6 +6,7 @@ import {
   screenTitleFor,
   isPlausibleShowcaseSize,
 } from "@/lib/showcasePublish";
+import { assertErr } from "@/test/assertions";
 
 describe("inferPlatformForSizes", () => {
   it("infers mobile when every screen matches the mobile viewport", () => {
@@ -40,11 +41,9 @@ describe("inferPlatformForSizes", () => {
       { title: "Home", width: 390, height: 844 },
       { title: "Wide", width: 1440, height: 1024 },
     ]);
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toContain("Wide");
-      expect(result.error).not.toContain('"Home"');
-    }
+    assertErr(result);
+    expect(result.error).toContain("Wide");
+    expect(result.error).not.toContain('"Home"');
   });
 
   it("infers one platform when every non-standard screen is closest to it", () => {

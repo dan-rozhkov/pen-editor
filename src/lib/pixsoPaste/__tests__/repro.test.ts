@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { convertPixsoClipboardHtml } from '../index'
+import { assertDefined } from '@/test/assertions'
 import type { SceneNode } from '@/types/scene'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -34,7 +35,7 @@ describe('pixso repro: frame10 (real, heavily-componentised capture)', () => {
   it('resolves component-instance text/visibility/swap props instead of losing them', async () => {
     const html = readFileSync(join(here, 'fixtures/frame10.html'), 'utf8')
     const res = await convertPixsoClipboardHtml(html)
-    if (!res) throw new Error('null result')
+    assertDefined(res, 'null result')
 
     let totalNodes = 0
     const texts: string[] = []

@@ -81,6 +81,10 @@ describe("pluginBootstrap", () => {
     vi.useFakeTimers();
     try {
       const promise = getPen().selection.get();
+      // Must register the rejection assertion before advancing fake timers
+      // (the timeout fires synchronously inside advanceTimersByTime), so the
+      // expect() and its await are necessarily split across two statements.
+      // eslint-disable-next-line vitest/valid-expect -- see comment above
       const rejection = expect(promise).rejects.toThrow(/timeout/);
       vi.advanceTimersByTime(30_001);
       await rejection;
@@ -130,10 +134,11 @@ describe("pluginBootstrap", () => {
   });
 
   it("ignores malformed messages", () => {
-    deliver(null);
-    deliver({ kind: "something-else" });
-    deliver({ kind: "pen-rpc-response", callId: 99999, ok: true }); // unknown callId
-    // no throw = pass
+    expect(() => {
+      deliver(null);
+      deliver({ kind: "something-else" });
+      deliver({ kind: "pen-rpc-response", callId: 99999, ok: true }); // unknown callId
+    }).not.toThrow();
   });
 
   it("ignores messages whose source is not window.parent", async () => {

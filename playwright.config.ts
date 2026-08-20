@@ -13,7 +13,17 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  reporter: "list",
+  // "list" for the live console; "html" (never auto-opened — CI has no
+  // browser to open it in, and locally `npx playwright show-report` is the
+  // normal way to look) makes flaky/failed runs inspectable after the fact,
+  // with the trace viewer for each retry attempt. "github" annotates PR
+  // diffs with failures inline, CI-only (it's a no-op locally, but keeping
+  // it local too would print duplicate ::error:: lines to the terminal).
+  reporter: [
+    ["list"],
+    ["html", { outputFolder: "playwright-report", open: "never" }],
+    ...(process.env.CI ? [["github"] as const] : []),
+  ],
   use: {
     baseURL: "http://localhost:5173",
     trace: "retain-on-failure",

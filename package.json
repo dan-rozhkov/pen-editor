@@ -12,6 +12,7 @@
     "test:e2e": "playwright test",
     "test:e2e:pwa": "playwright test --config=playwright.pwa.config.ts",
     "test:coverage": "vitest run --coverage",
+    "test:flaky-summary": "node scripts/flaky-summary.mjs",
     "check:dup": "jscpd src"
   },
   "dependencies": {
@@ -54,7 +55,9 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
     "@vitest/coverage-v8": "^4.1.8",
+    "@vitest/eslint-plugin": "^1.6.27",
     "eslint": "^9.39.1",
+    "eslint-plugin-playwright": "^2.11.0",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "fake-indexeddb": "^6.2.5",

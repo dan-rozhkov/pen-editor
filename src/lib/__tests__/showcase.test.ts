@@ -7,6 +7,7 @@ import {
   likeShowcaseApp,
   resolveShowcaseApiUrl,
 } from "@/lib/showcase";
+import { assertErr, assertField, assertOk } from "@/test/assertions";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -44,12 +45,10 @@ describe("fetchShowcase", () => {
     );
 
     const result = await fetchShowcase();
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.data.apps).toHaveLength(1);
-      expect(result.data.apps[0].runId).toBe("run-1");
-      expect(result.data.nextCursor).toBe("cursor-2");
-    }
+    assertOk(result);
+    expect(result.data.apps).toHaveLength(1);
+    expect(result.data.apps[0].runId).toBe("run-1");
+    expect(result.data.nextCursor).toBe("cursor-2");
   });
 
   it("tolerates unknown extra fields and missing optional fields (no false positive on API growth)", async () => {
@@ -65,11 +64,9 @@ describe("fetchShowcase", () => {
     );
 
     const result = await fetchShowcase();
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.data.apps).toHaveLength(1);
-      expect(result.data.apps[0].platform).toBeUndefined();
-    }
+    assertOk(result);
+    expect(result.data.apps).toHaveLength(1);
+    expect(result.data.apps[0].platform).toBeUndefined();
   });
 
   it("rejects the old {screens: [...]} shape instead of crashing, with a reload hint", async () => {
@@ -79,10 +76,9 @@ describe("fetchShowcase", () => {
     );
 
     const result = await fetchShowcase();
-    expect(result.ok).toBe(false);
-    if (!result.ok && !result.notConfigured) {
-      expect(result.error).toMatch(/reload/i);
-    }
+    assertErr(result);
+    assertField(result, "notConfigured", false);
+    expect(result.error).toMatch(/reload/i);
   });
 
   it("treats apps: null the same as a malformed envelope", async () => {
@@ -105,11 +101,9 @@ describe("fetchShowcase", () => {
     );
 
     const result = await fetchShowcase();
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.data.apps).toHaveLength(1);
-      expect(result.data.apps[0].runId).toBe("run-2");
-    }
+    assertOk(result);
+    expect(result.data.apps).toHaveLength(1);
+    expect(result.data.apps[0].runId).toBe("run-2");
   });
 
   it("drops an app whose screens is not an array", async () => {
@@ -121,10 +115,8 @@ describe("fetchShowcase", () => {
     );
 
     const result = await fetchShowcase();
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.data.apps).toHaveLength(0);
-    }
+    assertOk(result);
+    expect(result.data.apps).toHaveLength(0);
   });
 
   it("drops an app whose screens array is empty (app.screens[0] is read unconditionally)", async () => {
@@ -134,10 +126,8 @@ describe("fetchShowcase", () => {
     );
 
     const result = await fetchShowcase();
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.data.apps).toHaveLength(0);
-    }
+    assertOk(result);
+    expect(result.data.apps).toHaveLength(0);
   });
 
   it("returns a stale-client error instead of throwing on a non-JSON body", async () => {
@@ -147,10 +137,9 @@ describe("fetchShowcase", () => {
     );
 
     const result = await fetchShowcase();
-    expect(result.ok).toBe(false);
-    if (!result.ok && !result.notConfigured) {
-      expect(result.error).toMatch(/reload/i);
-    }
+    assertErr(result);
+    assertField(result, "notConfigured", false);
+    expect(result.error).toMatch(/reload/i);
   });
 });
 

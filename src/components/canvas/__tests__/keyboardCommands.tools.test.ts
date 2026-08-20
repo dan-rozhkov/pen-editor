@@ -64,25 +64,29 @@ describe("keyboardCommands — tool-letter dispatch matches toolDefinitions", ()
     expect(toolsWithShortcut.some((t) => t.tool === "frame")).toBe(true);
   });
 
-  it.each(toolsWithShortcut)(
+  // The dispatch goes straight to `useDrawModeStore` for every letter
+  // (including "comment", whose "toggleTool" dep type is a hand-maintained
+  // union that excludes it) — assert on store state, not the injected
+  // `toggleTool` mock. "cursor" behaves differently (it clears the active
+  // tool rather than setting one), so it gets its own case below instead of
+  // an in-test branch.
+  it.each(toolsWithShortcut.filter((t) => t.tool !== "cursor"))(
     "firing the shortcut for $label ($shortcut) activates $tool",
     (def) => {
-      // The dispatch now goes straight to `useDrawModeStore` for every
-      // letter (including "comment", whose "toggleTool" dep type is a
-      // hand-maintained union that excludes it) — assert on store state,
-      // not the injected `toggleTool` mock.
-      if (def.tool === "cursor") {
-        // Pre-seed a different active tool so we can observe it being cleared.
-        useDrawModeStore.setState({ activeTool: "rect" });
-        handler(key(`Key${def.shortcut}`));
-        expect(useDrawModeStore.getState().activeTool).toBeNull();
-        return;
-      }
-
       expect(useDrawModeStore.getState().activeTool).toBeNull();
       handler(key(`Key${def.shortcut}`));
       expect(useDrawModeStore.getState().activeTool).toBe(def.tool);
       expect(deps.toggleTool).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(toolsWithShortcut.filter((t) => t.tool === "cursor"))(
+    "firing the shortcut for $label ($shortcut) clears the active tool",
+    (def) => {
+      // Pre-seed a different active tool so we can observe it being cleared.
+      useDrawModeStore.setState({ activeTool: "rect" });
+      handler(key(`Key${def.shortcut}`));
+      expect(useDrawModeStore.getState().activeTool).toBeNull();
     },
   );
 

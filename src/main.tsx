@@ -122,6 +122,17 @@ if (import.meta.env.DEV) {
   import('@/store/aiVectorPreviewStore').then(({ useAiVectorPreviewStore }) => {
     (window as unknown as Record<string, unknown>).__aiVectorPreviewStore = useAiVectorPreviewStore;
   });
+  // Image-fill CORS-retry e2e (convertEmbed.spec.ts): the retry chain
+  // (Assets.load → <img crossOrigin> → /api/image-proxy) doesn't always reach
+  // every step — the browser may resolve/reject earlier attempts differently
+  // than a mocked unit test — so no single network request reliably marks
+  // "done". `waitForPendingImageFills` is the mechanism-agnostic signal
+  // already used internally by get_screenshot/captureNodeScreenshot: it
+  // resolves once every in-flight image-fill texture load (of any outcome)
+  // has settled.
+  import('@/pixi/renderers/pendingImageLoads').then(({ waitForPendingImageFills }) => {
+    (window as unknown as Record<string, unknown>).__waitForPendingImageFills = waitForPendingImageFills;
+  });
 }
 
 createRoot(document.getElementById('root')!).render(

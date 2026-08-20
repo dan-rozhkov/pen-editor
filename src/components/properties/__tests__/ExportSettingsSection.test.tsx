@@ -101,8 +101,13 @@ describe("<ExportSettingsSection />", () => {
     const node = makeNode({ exportSettings: [{ id: "a", format: "svg", scale: 1 }] });
     render(<ExportSettingsSection node={node} onUpdate={vi.fn()} />);
 
-    fireEvent.click(screen.getByText("Export all"));
-    // handleExportAll is async; flush microtasks so the status text settles.
+    // The assertion here IS "did not throw": with pixiRefs null and only an
+    // svg setting configured (svg export needs no pixiRefs), the click
+    // handler must not crash synchronously even though the node isn't
+    // actually registered in the scene store.
+    expect(() => fireEvent.click(screen.getByText("Export all"))).not.toThrow();
+    // handleExportAll is async; flush microtasks so it settles before this
+    // case's render tree tears down.
     await Promise.resolve();
     await Promise.resolve();
   });

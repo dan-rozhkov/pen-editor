@@ -13,7 +13,14 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  reporter: "list",
+  // Separate outputFolder from playwright.config.ts's "playwright-report" —
+  // both suites can run in the same checkout without one overwriting the
+  // other's report. See that config for why each reporter is here.
+  reporter: [
+    ["list"],
+    ["html", { outputFolder: "playwright-report-pwa", open: "never" }],
+    ...(process.env.CI ? [["github"] as const] : []),
+  ],
   use: {
     baseURL: "http://localhost:4174",
     trace: "retain-on-failure",

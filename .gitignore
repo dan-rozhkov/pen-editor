@@ -11,7 +11,11 @@ dist
 # Playwright
 test-results/
 playwright-report/
+playwright-report-pwa/
 
 # Vitest coverage output
 coverage/
 .worktrees/
+
+# Flaky-test visibility (scripts/flakyReporter.ts, scripts/flaky-summary.mjs)
+flaky-tests.json

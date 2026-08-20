@@ -173,11 +173,7 @@ describe("<Rulers />", () => {
         .map(([text]) => text),
     );
     const isTopRuler = accentTexts.has("600") || accentTexts.has("800");
-    if (isTopRuler) {
-      expect(accentTexts).toEqual(new Set(["600", "800"]));
-    } else {
-      expect(accentTexts).toEqual(new Set(["100", "200"]));
-    }
+    expect(accentTexts).toEqual(isTopRuler ? new Set(["600", "800"]) : new Set(["100", "200"]));
 
     // Boundary values are painted once in accent, rather than being drawn a
     // second time on top of the regular ruler label.

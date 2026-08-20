@@ -9,6 +9,7 @@ import {
   parseSkillMarkdown,
   serializeSkillMarkdown,
 } from "@/lib/userSkills";
+import { assertErr } from "@/test/assertions";
 
 const USER_ID = "test-user-id";
 
@@ -67,8 +68,8 @@ describe("listUserSkills", () => {
   it("returns ok:false on a network failure, never throwing", async () => {
     fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
     const result = await listUserSkills();
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toContain("Failed to fetch");
+    assertErr(result);
+    expect(result.error).toContain("Failed to fetch");
   });
 });
 
@@ -124,11 +125,9 @@ describe("createUserSkill", () => {
       jsonResponse({ error: "a skill named \"my-skill\" already exists" }, { ok: false, status: 409 }),
     );
     const result = await createUserSkill({ name: "my-skill", body: "x" });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.status).toBe(409);
-      expect(result.error).toContain("already exists");
-    }
+    assertErr(result);
+    expect(result.status).toBe(409);
+    expect(result.error).toContain("already exists");
   });
 });
 

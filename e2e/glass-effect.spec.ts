@@ -26,7 +26,16 @@ import { expectEditorMounted } from "./support/editor";
 
 type RGBA = [number, number, number, number];
 
-/** Wait long enough for a store flush + a render to land on the canvas. */
+/**
+ * Wait long enough for a store flush + a render to land on the canvas.
+ *
+ * Not reducible to an observable-state poll: the render scheduler
+ * (src/pixi/renderScheduler.ts) intentionally keeps rendering for a trailing
+ * debounce window (120-300ms) after the triggering signal to catch
+ * debounced re-renders and async rasterization, and nothing is exposed to
+ * the page for e2e to poll "that window has elapsed" other than time itself.
+ * PAINT_MS outlasts that window; every use below is annotated accordingly.
+ */
 const PAINT_MS = 250;
 
 /**
@@ -143,6 +152,7 @@ async function seedScene(page: Page, nodes: SceneNodeInit[]): Promise<void> {
     });
     w.__viewportStore.getState().setViewportState({ scale: 1, x: 0, y: 0 });
   }, nodes);
+  // eslint-disable-next-line playwright/no-wait-for-timeout -- outlasts renderScheduler's internal trailing debounce window (120-300ms); see PAINT_MS doc comment above
   await page.waitForTimeout(PAINT_MS);
 }
 
@@ -159,6 +169,7 @@ async function updateNode(page: Page, id: string, updates: Record<string, unknow
     },
     { id, updates },
   );
+  // eslint-disable-next-line playwright/no-wait-for-timeout -- outlasts renderScheduler's internal trailing debounce window (120-300ms); see PAINT_MS doc comment above
   await page.waitForTimeout(PAINT_MS);
 }
 
@@ -448,6 +459,7 @@ test.describe("live glass material", () => {
       },
       { glass: GLASS_DEFAULTS },
     );
+    // eslint-disable-next-line playwright/no-wait-for-timeout -- outlasts renderScheduler's internal trailing debounce window (120-300ms); see PAINT_MS doc comment above
     await page.waitForTimeout(PAINT_MS);
 
     // One sample inside each family, taken twice with a render in between:
@@ -459,6 +471,7 @@ test.describe("live glass material", () => {
       { x: 180, y: 360 }, // glass nested in a clipping frame
     ];
     const first = await Promise.all(points.map((p) => samplePixel(page, p.x, p.y)));
+    // eslint-disable-next-line playwright/no-wait-for-timeout -- outlasts renderScheduler's internal trailing debounce window (120-300ms); see PAINT_MS doc comment above
     await page.waitForTimeout(PAINT_MS);
     const second = await Promise.all(points.map((p) => samplePixel(page, p.x, p.y)));
 

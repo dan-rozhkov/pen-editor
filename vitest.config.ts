@@ -35,6 +35,17 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     // Playwright e2e specs live in e2e/ and must not run under Vitest.
     exclude: [...configDefaults.exclude, "e2e/**"],
+    // Retry under CI only — a local run should fail hard on the first try so
+    // flakiness is obvious while iterating; CI gets one retry so a single
+    // flaky test doesn't redden an unrelated PR, but that retry is made
+    // visible (not silently swallowed) via the flaky reporter below.
+    retry: process.env.CI ? 1 : 0,
+    // "default" keeps the normal console reporter; the custom flaky reporter
+    // (verified empirically — Vitest 4's built-in reporters don't expose
+    // retry counts anywhere actionable, see its doc comment) writes every
+    // test that passed only after a retry to flaky-tests.json, which
+    // scripts/flaky-summary.mjs turns into a CI step-summary table.
+    reporters: ["default", "./scripts/flakyReporter.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "json-summary"],

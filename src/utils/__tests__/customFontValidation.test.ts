@@ -5,6 +5,7 @@ import {
   isDuplicateFamily,
   validateCustomFontFile,
 } from "@/utils/customFontValidation";
+import { assertErr } from "@/test/assertions";
 
 describe("getFontFormatFromFileName", () => {
   it("recognizes accepted extensions case-insensitively", () => {
@@ -58,8 +59,8 @@ describe("validateCustomFontFile", () => {
 
   it("rejects unsupported extensions with a clear message", () => {
     const result = validateCustomFontFile({ name: "Brand.pdf", size: 1024 }, []);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toMatch(/unsupported/i);
+    assertErr(result);
+    expect(result.error).toMatch(/unsupported/i);
   });
 
   it("rejects empty files", () => {
@@ -69,20 +70,20 @@ describe("validateCustomFontFile", () => {
 
   it("rejects oversized files", () => {
     const result = validateCustomFontFile({ name: "Brand.ttf", size: 25 * 1024 * 1024 }, []);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toMatch(/large/i);
+    assertErr(result);
+    expect(result.error).toMatch(/large/i);
   });
 
   it("rejects a duplicate family name", () => {
     const result = validateCustomFontFile({ name: "Brand.ttf", size: 1024 }, ["Brand"]);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toMatch(/already uploaded/i);
+    assertErr(result);
+    expect(result.error).toMatch(/already uploaded/i);
   });
 
   it("rejects a name that collides with a reserved built-in font (case-insensitive)", () => {
     const result = validateCustomFontFile({ name: "arial.ttf", size: 1024 }, [], ["Arial", "Inter"]);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toMatch(/built-in font/i);
+    assertErr(result);
+    expect(result.error).toMatch(/built-in font/i);
   });
 
   it("accepts a name that does not collide with reserved fonts", () => {

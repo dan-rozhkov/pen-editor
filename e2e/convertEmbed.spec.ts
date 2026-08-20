@@ -169,9 +169,40 @@ test("a remote image without CORS does not blank the converted design", async ({
   expect(result.embedGone).toBe(true);
   expect(result.survivingText).toBe(true);
 
-  // Let the async image-fill loader reach its failure path and Pixi render a
-  // frame. Before the fix, the non-CORS fallback created a tainted texture and
-  // texImage2D aborted the entire batch here.
-  await page.waitForTimeout(500);
+  // Let the async image-fill loader settle and Pixi render a frame. Before
+  // the fix, the non-CORS fallback created a tainted texture and texImage2D
+  // aborted the entire batch here.
+  //
+  // A fixed delay can't stand in for "the loader is done": the retry chain
+  // in loadRasterTextureFromUrl (src/pixi/renderers/imageFillHelpers.ts) —
+  // Assets.load(url) → <img crossOrigin> → /api/image-proxy retry — doesn't
+  // deterministically reach every step in a real browser (e.g. Assets.load
+  // can itself resolve or reject depending on how the browser's fetch
+  // implementation treats the mocked cross-origin response, so the
+  // `/api/image-proxy` leg this test used to wait on isn't reliably hit at
+  // all: confirmed by instrumenting this spec, where the retry settled
+  // without ever requesting the proxy). So instead of waiting on one
+  // specific leg of the chain, wait on the mechanism-agnostic completion
+  // signal every leg feeds into regardless of which path it took:
+  // `waitForPendingImageFills` (src/pixi/renderers/pendingImageLoads.ts),
+  // already used internally by get_screenshot/captureNodeScreenshot for the
+  // same "has every in-flight image-fill texture load settled" question.
+  // Exposed dev-only on window in main.tsx, matching the existing
+  // __sceneStore-style e2e hooks. Then a couple of animation frames for Pixi
+  // to pick up the result and attempt the texture upload.
+  await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __waitForPendingImageFills: (timeoutMs?: number) => Promise<void>;
+        }
+      ).__waitForPendingImageFills(5_000),
+  );
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
   expect(textureUploadErrors).toEqual([]);
 });

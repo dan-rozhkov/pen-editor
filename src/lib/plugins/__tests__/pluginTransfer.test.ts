@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { exportPluginToFile, parsePluginImport } from "@/lib/plugins/pluginTransfer";
+import { assertOk } from "@/test/assertions";
 import type { PenPlugin } from "@/lib/plugins/types";
 
 function makePlugin(overrides: Partial<PenPlugin> = {}): PenPlugin {
@@ -31,8 +32,7 @@ describe("parsePluginImport", () => {
     const plugin = makePlugin();
     const result = parsePluginImport(JSON.stringify(plugin));
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error("expected ok result");
+    assertOk(result, "expected ok result");
     expect(result.input).toEqual({
       name: plugin.name,
       description: plugin.description,
@@ -49,8 +49,7 @@ describe("parsePluginImport", () => {
     const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, source: _source, ...withoutId } = plugin;
     const result = parsePluginImport(JSON.stringify(withoutId));
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error("expected ok result");
+    assertOk(result, "expected ok result");
     expect(result.input.id).toBeUndefined();
   });
 });

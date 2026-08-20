@@ -12,6 +12,7 @@ import { serializeDocument } from "@/utils/fileUtils";
 import { useDocumentStore } from "@/store/documentStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { resetStores } from "@/test/fixtures";
+import { assertErr, assertOk } from "@/test/assertions";
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -139,8 +140,8 @@ describe("shareCurrentCanvas", () => {
 
     const result = await shareCurrentCanvas();
 
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toMatch(/offline/i);
+    assertErr(result);
+    expect(result.error).toMatch(/offline/i);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -150,11 +151,9 @@ describe("shareCurrentCanvas", () => {
 
     const result = await shareCurrentCanvas();
 
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toMatch(/8 MB/);
-      expect(result.error).toMatch(/image/i);
-    }
+    assertErr(result);
+    expect(result.error).toMatch(/8 MB/);
+    expect(result.error).toMatch(/image/i);
   });
 
   it("never throws on a network failure", async () => {
@@ -204,13 +203,11 @@ describe("fetchSharedCanvas", () => {
 
     const result = await fetchSharedCanvas("shared-1");
 
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.canvas.id).toBe("shared-1");
-      expect(result.canvas.title).toBe("Shared Doc");
-      expect(result.canvas.data.pages).toHaveLength(1);
-      expect(result.canvas.data.pages[0].id).toBe("p1");
-    }
+    assertOk(result);
+    expect(result.canvas.id).toBe("shared-1");
+    expect(result.canvas.title).toBe("Shared Doc");
+    expect(result.canvas.data.pages).toHaveLength(1);
+    expect(result.canvas.data.pages[0].id).toBe("p1");
   });
 
   it("maps a 404 to a friendly message", async () => {

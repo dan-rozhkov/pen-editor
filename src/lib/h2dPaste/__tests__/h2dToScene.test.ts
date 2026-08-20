@@ -467,13 +467,17 @@ describe('convertH2dToSceneNodes (synthetic cases)', () => {
     const { nodes } = convertH2dToSceneNodes(doc)
     const root = nodes[0] as FrameNode
     const div = root.children[0] as FrameNode
-    if (div.effect) {
-      expect(div.effect.type).toBe('shadow')
-      expect(Number.isFinite(div.effect.offset.x)).toBe(true)
-      expect(Number.isFinite(div.effect.offset.y)).toBe(true)
-      expect(Number.isNaN(div.effect.offset.x)).toBe(false)
-      expect(Number.isNaN(div.effect.offset.y)).toBe(false)
-    }
+    // A boxShadow was set above, so an effect must have been produced —
+    // assert that directly instead of a conditional block, so an
+    // unexpectedly-missing effect fails the test instead of vacuously
+    // passing it.
+    expect(div.effect).toBeDefined()
+    const effect = div.effect!
+    expect(effect.type).toBe('shadow')
+    expect(Number.isFinite(effect.offset.x)).toBe(true)
+    expect(Number.isFinite(effect.offset.y)).toBe(true)
+    expect(Number.isNaN(effect.offset.x)).toBe(false)
+    expect(Number.isNaN(effect.offset.y)).toBe(false)
   })
 
   it('defaults an empty asset blob.type to a generic MIME type instead of an invalid data: URL', () => {

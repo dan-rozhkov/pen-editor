@@ -44,8 +44,7 @@ describe("<ShowcaseAgentComposer />", () => {
     });
     fireEvent.keyDown(input, { key: "Enter" });
 
-    expect(onSubmit).toHaveBeenCalledOnce();
-    expect(onSubmit).toHaveBeenCalledWith("Build a calm finance dashboard");
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith("Build a calm finance dashboard");
   });
 
   it("leaves Shift+Enter to the textarea without submitting", () => {
