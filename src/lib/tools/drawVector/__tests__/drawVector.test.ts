@@ -108,7 +108,9 @@ describe("drawVector", () => {
 
     const output = JSON.parse(
       await drawVector(
-        { name: "Bad", commands: "M(1,2)\nL(3,4)" },
+        // An unreadable command is still fatal — unlike a merely incomplete
+        // stream (missing END), there is no safe way to guess intent here.
+        { name: "Bad", commands: "M(1,2)\nL(3,4)\nWAT()" },
         { sessionId: "s1", toolCallId: "c1" },
       ),
     );
@@ -150,10 +152,12 @@ describe("drawVector", () => {
       name: "Leaf",
       commandText: "M(100,100)\n",
       points: [{ x: 100, y: 100 }],
+      contours: [{ points: [{ x: 100, y: 100 }], closed: false }],
       geometry: "M100,100",
       bounds: { x: 100, y: 100, width: 0, height: 0 },
       closed: false,
       ended: false,
+      warnings: [],
       phase: "streaming",
       receivedDuringStreaming: true,
     });
@@ -220,7 +224,25 @@ describe("drawVector", () => {
     expect(useAiVectorPreviewStore.getState().drafts[key]).toBeUndefined();
   });
 
-  it("clears a staged preview when the final script fails validation (missing END)", async () => {
+  it("commits successfully despite a missing END (recovered with a warning)", async () => {
+    // Missing END() is now a recoverable condition (the stream is treated as
+    // complete), not a fatal parse error — the whole point of the
+    // robustness work is that a call that never reaches END still commits.
+    const output = JSON.parse(
+      await drawVector(
+        { name: "Leaf", commands: "M(100,100)\nL(200,100)\nL(150,200)" },
+        { sessionId: "s1", toolCallId: "c1" },
+      ),
+    );
+
+    expect(output.success).toBe(true);
+    expect(pathNodes()).toHaveLength(1);
+    expect(output.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining("END() was missing")]),
+    );
+  });
+
+  it("clears a staged preview when the final script fails validation (unknown command)", async () => {
     const key = vectorPreviewKey("s1", "c1");
     useAiVectorPreviewStore.getState().upsert({
       sessionId: "s1",
@@ -228,10 +250,12 @@ describe("drawVector", () => {
       name: "Leaf",
       commandText: "M(100,100)\nL(200,100)\n",
       points: [{ x: 100, y: 100 }, { x: 200, y: 100 }],
+      contours: [{ points: [{ x: 100, y: 100 }, { x: 200, y: 100 }], closed: false }],
       geometry: "M100,100L200,100",
       bounds: { x: 100, y: 100, width: 100, height: 0 },
       closed: false,
       ended: false,
+      warnings: [],
       phase: "streaming",
       receivedDuringStreaming: true,
     });
@@ -239,7 +263,7 @@ describe("drawVector", () => {
 
     const output = JSON.parse(
       await drawVector(
-        { name: "Leaf", commands: "M(100,100)\nL(200,100)" },
+        { name: "Leaf", commands: "M(100,100)\nL(200,100)\nWAT()" },
         { sessionId: "s1", toolCallId: "c1" },
       ),
     );
@@ -257,10 +281,12 @@ describe("drawVector", () => {
       name: "Dot",
       commandText: "M(0,0)\n",
       points: [{ x: 0, y: 0 }],
+      contours: [{ points: [{ x: 0, y: 0 }], closed: false }],
       geometry: "M0,0",
       bounds: { x: 0, y: 0, width: 0, height: 0 },
       closed: false,
       ended: false,
+      warnings: [],
       phase: "streaming",
       receivedDuringStreaming: true,
     });
@@ -286,10 +312,12 @@ describe("drawVector", () => {
       name: "Leaf",
       commandText: "M(100,100)\n",
       points: [{ x: 100, y: 100 }],
+      contours: [{ points: [{ x: 100, y: 100 }], closed: false }],
       geometry: "M100,100",
       bounds: { x: 100, y: 100, width: 0, height: 0 },
       closed: false,
       ended: false,
+      warnings: [],
       phase: "streaming",
       receivedDuringStreaming: true,
     });
@@ -314,10 +342,17 @@ describe("drawVector", () => {
       name: "Leaf",
       commandText: LEAF_COMMANDS,
       points: [{ x: 100, y: 100 }, { x: 200, y: 100 }, { x: 150, y: 200 }],
+      contours: [
+        {
+          points: [{ x: 100, y: 100 }, { x: 200, y: 100 }, { x: 150, y: 200 }],
+          closed: true,
+        },
+      ],
       geometry: "M100,100L200,100L150,200Z",
       bounds: { x: 100, y: 100, width: 100, height: 100 },
       closed: true,
       ended: true,
+      warnings: [],
       phase: "streaming",
       receivedDuringStreaming: true,
     });
@@ -338,5 +373,115 @@ describe("drawVector", () => {
     expect(useAiVectorPreviewStore.getState().drafts[key]).toBeUndefined();
 
     spy.mockRestore();
+  });
+
+  it("commits a default black stroke and a warning when neither FILL nor STROKE is given", async () => {
+    const commands = ["M(0,0)", "L(10,0)", "L(10,10)", "L(0,10)", "CLOSE()", "END()"].join("\n");
+
+    const output = JSON.parse(
+      await drawVector({ name: "Bare", commands }, { sessionId: "s1", toolCallId: "c1" }),
+    );
+
+    expect(output.success).toBe(true);
+    expect(output.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining("default black stroke")]),
+    );
+
+    const [node] = pathNodes();
+    expect(node.fill).toBeUndefined();
+    expect(node.pathStroke).toEqual({
+      fill: "#000000",
+      thickness: 2,
+      join: "round",
+      cap: "round",
+      align: "center",
+    });
+  });
+
+  it("never omits paint when only FILL is given (no default stroke needed)", async () => {
+    const commands = [
+      "M(0,0)",
+      "L(10,0)",
+      "L(10,10)",
+      "L(0,10)",
+      "CLOSE()",
+      'FILL("#00ff00")',
+      "END()",
+    ].join("\n");
+
+    const output = JSON.parse(
+      await drawVector({ name: "Filled", commands }, { sessionId: "s1", toolCallId: "c1" }),
+    );
+
+    expect(output.success).toBe(true);
+    expect(output.warnings).toBeUndefined();
+
+    const [node] = pathNodes();
+    expect(node.fill).toBe("#00ff00");
+    expect(node.pathStroke).toBeUndefined();
+  });
+
+  it("falls back to a default stroke when FILL is fully transparent (alpha 00), not merely absent", async () => {
+    // FILL("#00000000") is truthy as a string, so the old `!fill` presence
+    // check missed it entirely — the shape committed with paint that is
+    // invisible on screen and no warning explaining why.
+    const commands = [
+      "M(0,0)",
+      "L(10,0)",
+      "L(10,10)",
+      "L(0,10)",
+      "CLOSE()",
+      'FILL("#00000000")',
+      "END()",
+    ].join("\n");
+
+    const output = JSON.parse(
+      await drawVector({ name: "Ghost", commands }, { sessionId: "s1", toolCallId: "c1" }),
+    );
+
+    expect(output.success).toBe(true);
+    expect(output.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining("default black stroke")]),
+    );
+
+    const [node] = pathNodes();
+    expect(node.pathStroke).toEqual({
+      fill: "#000000",
+      thickness: 2,
+      join: "round",
+      cap: "round",
+      align: "center",
+    });
+  });
+
+  it("commits a multi-contour script as one geometry with evenodd fill rule and no points array", async () => {
+    const commands = [
+      "M(0,0)",
+      "L(20,0)",
+      "L(20,20)",
+      "L(0,20)",
+      "CLOSE()",
+      "M(5,5)",
+      "L(15,5)",
+      "L(15,15)",
+      "L(5,15)",
+      "CLOSE()",
+      'FILL("#3366ff")',
+      "END()",
+    ].join("\n");
+
+    const output = JSON.parse(
+      await drawVector({ name: "Donut", commands }, { sessionId: "s1", toolCallId: "c1" }),
+    );
+
+    expect(output.success).toBe(true);
+    expect(output.anchorCount).toBe(8);
+
+    const [node] = pathNodes();
+    expect(node.points).toBeUndefined();
+    expect(node.closed).toBeUndefined();
+    expect(node.fillRule).toBe("evenodd");
+    expect(node.fill).toBe("#3366ff");
+    expect((node.geometry.match(/M/g) ?? []).length).toBe(2);
   });
 });

@@ -100,9 +100,11 @@ function renderDraft(entry: PreviewEntry, draft: AiVectorPreviewDraft, scale: nu
       height: draft.bounds.height,
       geometry: draft.geometry,
       geometryBounds: { ...draft.bounds },
-      // Fill only once the contour is closed — an open in-progress contour
-      // must never appear filled even if a (malformed/early) FILL landed.
-      fill: draft.closed ? draft.fill : undefined,
+      // FILL no longer requires a closed contour (SVG closes an open
+      // subpath implicitly for fill purposes), so the preview simply
+      // mirrors whatever paint the parser resolved.
+      fill: draft.fill,
+      fillRule: draft.fillRule,
       pathStroke: draft.stroke
         ? { fill: draft.stroke.color, thickness: draft.stroke.width, cap: "round", join: "round" }
         : { ...DEFAULT_PREVIEW_STROKE },

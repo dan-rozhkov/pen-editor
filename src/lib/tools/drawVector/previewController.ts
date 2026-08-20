@@ -12,13 +12,16 @@ interface VectorPreviewInput {
 }
 
 export function upsertStreamingVectorPreview(input: VectorPreviewInput): void {
-  const key = vectorPreviewKey(input.sessionId, input.toolCallId);
   const result = parseVectorCommands(input.commands, "preview");
 
-  if (!result.ok) {
-    useAiVectorPreviewStore.getState().finalizeCall(key);
-    return;
-  }
+  // A parse error on a partial stream almost always just means the model
+  // hasn't finished typing a command yet (or emitted something briefly
+  // malformed mid-stream, e.g. a stray unknown token that will be corrected
+  // a few tokens later). Finalizing the call here would permanently bury the
+  // preview for this tool call even though the eventual final script may be
+  // perfectly valid — simply ignore the bad frame and keep showing whatever
+  // was last successfully parsed.
+  if (!result.ok) return;
 
   if (result.draft.points.length === 0) return;
 

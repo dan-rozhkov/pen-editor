@@ -21,11 +21,21 @@ function makeDraft(
       { x: 10, y: 20, handleOut: { x: 15, y: 20 } },
       { x: 30, y: 40, handleIn: { x: 25, y: 30 } },
     ],
+    contours: [
+      {
+        points: [
+          { x: 10, y: 20, handleOut: { x: 15, y: 20 } },
+          { x: 30, y: 40, handleIn: { x: 25, y: 30 } },
+        ],
+        closed: false,
+      },
+    ],
     geometry: "M 10 20 C 15 20 25 30 30 40",
     bounds: { x: 10, y: 20, width: 20, height: 20 },
     closed: false,
     stroke: { color: "#123456", width: 2 },
     ended: false,
+    warnings: [],
     ...overrides,
   };
 }

@@ -25,13 +25,21 @@ export function vectorPreviewKey(sessionId: string, toolCallId: string): string 
   return `${sessionId}:${toolCallId}`;
 }
 
+function cloneAnchors(points: AiVectorPreviewDraft["points"]): AiVectorPreviewDraft["points"] {
+  return points.map((point) => ({
+    ...point,
+    handleIn: point.handleIn ? { ...point.handleIn } : point.handleIn,
+    handleOut: point.handleOut ? { ...point.handleOut } : point.handleOut,
+  }));
+}
+
 function cloneDraft(draft: AiVectorPreviewDraft): AiVectorPreviewDraft {
   return {
     ...draft,
-    points: draft.points.map((point) => ({
-      ...point,
-      handleIn: point.handleIn ? { ...point.handleIn } : point.handleIn,
-      handleOut: point.handleOut ? { ...point.handleOut } : point.handleOut,
+    points: cloneAnchors(draft.points),
+    contours: draft.contours.map((contour) => ({
+      points: cloneAnchors(contour.points),
+      closed: contour.closed,
     })),
     bounds: { ...draft.bounds },
     stroke: draft.stroke ? { ...draft.stroke } : undefined,
@@ -56,6 +64,7 @@ function draftsEqual(left: AiVectorPreviewDraft, right: AiVectorPreviewDraft): b
     left.receivedDuringStreaming !== right.receivedDuringStreaming ||
     left.geometry !== right.geometry ||
     left.closed !== right.closed ||
+    left.fillRule !== right.fillRule ||
     left.fill !== right.fill ||
     left.ended !== right.ended ||
     left.bounds.x !== right.bounds.x ||

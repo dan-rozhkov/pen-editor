@@ -67,14 +67,26 @@ describe("drawVector preview controller", () => {
       useAiVectorPreviewStore.getState().drafts[incompleteOnlyKey],
     ).toBeUndefined();
 
+    // A parse error on a partial stream (e.g. a stray unrecognizable token
+    // mid-type) must never bury the call: the last good frame stays visible
+    // and the call is not finalized, so a later, corrected stream can still
+    // update the same preview.
     const invalidKey = vectorPreviewKey(sessionId, "invalid");
     upsertStreamingVectorPreview(streamingInput("invalid", "M(1, 2)\n"));
     upsertStreamingVectorPreview(
       streamingInput("invalid", "M(1, 2)\nNOT_A_COMMAND()\n"),
     );
     const invalid = useAiVectorPreviewStore.getState();
-    expect(invalid.drafts[invalidKey]).toBeUndefined();
-    expect(invalid.finalizedKeys.has(invalidKey)).toBe(true);
+    expect(invalid.drafts[invalidKey]?.points).toEqual([{ x: 1, y: 2 }]);
+    expect(invalid.finalizedKeys.has(invalidKey)).toBe(false);
+
+    // A later, corrected stream for the same call still updates the draft.
+    upsertStreamingVectorPreview(
+      streamingInput("invalid", "M(1, 2)\nL(3, 4)\n"),
+    );
+    expect(
+      useAiVectorPreviewStore.getState().drafts[invalidKey]?.points,
+    ).toEqual([{ x: 1, y: 2 }, { x: 3, y: 4 }]);
   });
 
   it("preserves draft identity for the same streaming input", () => {
@@ -148,8 +160,11 @@ describe("drawVector preview controller", () => {
     vi.useFakeTimers();
     const before = useAiVectorPreviewStore.getState();
 
+    // "M(0, 0)\nL(10, 10)" (missing END) is no longer fatal on its own — use
+    // a genuinely unreadable script so replay still has zero frames to work
+    // with.
     await replayVectorPreview(
-      replayInput("invalid-replay", "M(0, 0)\nL(10, 10)"),
+      replayInput("invalid-replay", "M(0, 0)\nL(10, 10)\nWAT()"),
     );
 
     expect(useAiVectorPreviewStore.getState()).toBe(before);

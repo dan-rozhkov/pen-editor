@@ -14,10 +14,12 @@ function draft(overrides: Partial<AiVectorPreviewDraft> = {}): AiVectorPreviewDr
     phase: "streaming",
     receivedDuringStreaming: true,
     points: [{ x: 10, y: 10 }],
+    contours: [{ points: [{ x: 10, y: 10 }], closed: false }],
     geometry: "",
     bounds: { x: 10, y: 10, width: 0, height: 0 },
     closed: false,
     ended: false,
+    warnings: [],
     ...overrides,
   };
 }
@@ -120,7 +122,7 @@ describe("createAiVectorPreviewLayer", () => {
     cleanup();
   });
 
-  it("applies the streamed fill only once the draft is closed", () => {
+  it("applies the streamed fill for a closed draft", () => {
     const drawPathSpy = vi.spyOn(pathRendererModule, "drawPath");
     const overlay = new Container();
     const cleanup = createAiVectorPreviewLayer(overlay);
@@ -138,6 +140,69 @@ describe("createAiVectorPreviewLayer", () => {
 
     expect(drawPathSpy).toHaveBeenCalledTimes(1);
     expect(drawPathSpy.mock.calls[0][1].fill).toBe("#65a765");
+
+    cleanup();
+  });
+
+  it("applies a streamed FILL to an open (not-yet-CLOSEd) contour too", () => {
+    // FILL no longer requires CLOSE — SVG closes an open subpath implicitly
+    // for the purposes of filling it, so the preview must not gate fill on
+    // `closed` either.
+    const drawPathSpy = vi.spyOn(pathRendererModule, "drawPath");
+    const overlay = new Container();
+    const cleanup = createAiVectorPreviewLayer(overlay);
+
+    useAiVectorPreviewStore.getState().upsert(
+      draft({
+        points: [{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 50, y: 50 }],
+        geometry: "M0,0 L50,0 L50,50",
+        bounds: { x: 0, y: 0, width: 50, height: 50 },
+        closed: false,
+        fill: "#65a765",
+      }),
+    );
+    runRaf();
+
+    expect(drawPathSpy).toHaveBeenCalledTimes(1);
+    expect(drawPathSpy.mock.calls[0][1].fill).toBe("#65a765");
+
+    cleanup();
+  });
+
+  it("passes fillRule through to drawPath for a multi-contour draft and shows every contour's markers", () => {
+    const drawPathSpy = vi.spyOn(pathRendererModule, "drawPath");
+    const rectSpy = vi.spyOn(Graphics.prototype, "rect");
+    const overlay = new Container();
+    const cleanup = createAiVectorPreviewLayer(overlay);
+
+    useAiVectorPreviewStore.getState().upsert(
+      draft({
+        points: [
+          { x: 0, y: 0 },
+          { x: 20, y: 0 },
+          { x: 20, y: 20 },
+          { x: 5, y: 5 },
+          { x: 15, y: 5 },
+          { x: 15, y: 15 },
+        ],
+        contours: [
+          { points: [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 20 }], closed: true },
+          { points: [{ x: 5, y: 5 }, { x: 15, y: 5 }, { x: 15, y: 15 }], closed: true },
+        ],
+        geometry: "M0,0 L20,0 L20,20 Z M5,5 L15,5 L15,15 Z",
+        bounds: { x: 0, y: 0, width: 20, height: 20 },
+        closed: false,
+        fillRule: "evenodd",
+        fill: "#3366ff",
+      }),
+    );
+    runRaf();
+
+    expect(drawPathSpy).toHaveBeenCalledTimes(1);
+    expect(drawPathSpy.mock.calls[0][1].fillRule).toBe("evenodd");
+    expect(drawPathSpy.mock.calls[0][1].fill).toBe("#3366ff");
+    // One anchor square per anchor across both contours.
+    expect(rectSpy).toHaveBeenCalledTimes(6);
 
     cleanup();
   });

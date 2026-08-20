@@ -9,6 +9,32 @@ import type { ToolExecutionContext, ToolHandler } from "../../toolRegistry";
 import { parseVectorCommands } from "./parser";
 import { replayVectorPreview } from "./previewController";
 
+// Mirrors the pen tool's own default stroke (`penDraftCommit.ts`) — the
+// fallback applied when a script has neither FILL nor STROKE, so a
+// validated contour is never committed fully paint-less and invisible.
+const DEFAULT_STROKE = {
+  fill: "#000000",
+  thickness: 2,
+  join: "round" as const,
+  cap: "round" as const,
+  align: "center" as const,
+};
+
+/**
+ * True when a normalized `#RRGGBB`/`#RRGGBBAA` color would actually paint
+ * something. A `#RRGGBBAA` color whose alpha channel is `00` (e.g. from
+ * `FILL("#00000000")`) is "no paint" in every way that matters visually,
+ * but the string itself is still truthy — checking presence alone (as the
+ * old `!fill`/`!pathStroke` guard did) misses it and lets a fully
+ * transparent shape slip past the "never commit an invisible shape"
+ * invariant below.
+ */
+function hasVisiblePaint(color: string | undefined): boolean {
+  if (!color) return false;
+  if (color.length === 9 && color.slice(7, 9).toLowerCase() === "00") return false;
+  return true;
+}
+
 /**
  * Client-executed handler for the `draw_vector` tool. Complete, validated
  * final input is the sole barrier for creating the scene node: streaming
@@ -58,7 +84,39 @@ export const drawVector: ToolHandler = async (
   if (key) useAiVectorPreviewStore.getState().markCommitting(key);
 
   try {
-    const { points, geometry, bounds, closed, fill, stroke } = parsed.draft;
+    const { points, geometry, bounds, contours, fill, fillRule, stroke, warnings: parseWarnings } =
+      parsed.draft;
+    const warnings = [...parseWarnings];
+
+    // Multiple subcontours are represented purely through `geometry`
+    // (concatenated subpaths + evenodd fill rule) — `points`/`closed` stay
+    // in the single-contour shape the pen tool and point-edit mode expect,
+    // and are simply omitted (legitimately absent per PathNode) once there's
+    // more than one subcontour.
+    const singleContour = contours.length === 1 ? contours[0] : undefined;
+
+    let pathStroke = stroke
+      ? {
+          fill: stroke.color,
+          thickness: stroke.width,
+          join: "round" as const,
+          cap: "round" as const,
+          align: "center" as const,
+        }
+      : undefined;
+
+    // Guaranteed visibility: a validated contour must never be committed
+    // with no visible paint, or it silently vanishes from the canvas. This
+    // checks *effective* paint (hasVisiblePaint), not merely field
+    // presence — a zero-alpha FILL or a STROKE color is otherwise truthy
+    // and would defeat this exact guard.
+    if (!hasVisiblePaint(fill) && !hasVisiblePaint(pathStroke?.fill)) {
+      pathStroke = DEFAULT_STROKE;
+      warnings.push(
+        "No FILL or STROKE was specified; a default black stroke was applied so the shape stays visible.",
+      );
+    }
+
     const id = generateId();
     const node: PathNode = {
       id,
@@ -70,20 +128,10 @@ export const drawVector: ToolHandler = async (
       height: bounds.height,
       geometry,
       geometryBounds: bounds,
-      points,
-      closed,
+      ...(singleContour ? { points: singleContour.points, closed: singleContour.closed } : {}),
+      ...(fillRule ? { fillRule } : {}),
       ...(fill ? { fill } : {}),
-      ...(stroke
-        ? {
-            pathStroke: {
-              fill: stroke.color,
-              thickness: stroke.width,
-              join: "round" as const,
-              cap: "round" as const,
-              align: "center" as const,
-            },
-          }
-        : {}),
+      ...(pathStroke ? { pathStroke } : {}),
     };
 
     // addDrawnNodeWithAutoParenting is add-node-then-select — two mutations
@@ -110,6 +158,7 @@ export const drawVector: ToolHandler = async (
       createdNode: { id, name, type: "path" },
       anchorCount: points.length,
       streamed,
+      ...(warnings.length ? { warnings } : {}),
     });
   } catch (err) {
     // Commit failed after the preview was marked committing (or mid-commit)

@@ -1259,10 +1259,12 @@ describe("useDesignChat (hook + UI message stream)", () => {
           phase: "streaming",
           receivedDuringStreaming: true,
           points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+          contours: [{ points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], closed: false }],
           geometry: "M 0 0 L 1 1",
           bounds: { x: 0, y: 0, width: 1, height: 1 },
           closed: false,
           ended: false,
+          warnings: [],
         });
       });
 
@@ -1294,10 +1296,12 @@ describe("useDesignChat (hook + UI message stream)", () => {
           phase: "streaming",
           receivedDuringStreaming: true,
           points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+          contours: [{ points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], closed: false }],
           geometry: "M 0 0 L 1 1",
           bounds: { x: 0, y: 0, width: 1, height: 1 },
           closed: false,
           ended: false,
+          warnings: [],
         });
         useAiVectorPreviewStore.getState().upsert({
           sessionId: sessionB,
@@ -1307,10 +1311,12 @@ describe("useDesignChat (hook + UI message stream)", () => {
           phase: "streaming",
           receivedDuringStreaming: true,
           points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+          contours: [{ points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], closed: false }],
           geometry: "M 0 0 L 1 1",
           bounds: { x: 0, y: 0, width: 1, height: 1 },
           closed: false,
           ended: false,
+          warnings: [],
         });
       });
 
@@ -1342,10 +1348,12 @@ describe("useDesignChat (hook + UI message stream)", () => {
           phase: "streaming",
           receivedDuringStreaming: true,
           points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+          contours: [{ points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], closed: false }],
           geometry: "M 0 0 L 1 1",
           bounds: { x: 0, y: 0, width: 1, height: 1 },
           closed: false,
           ended: false,
+          warnings: [],
         });
       });
 
@@ -1377,10 +1385,12 @@ describe("useDesignChat (hook + UI message stream)", () => {
           phase: "streaming",
           receivedDuringStreaming: true,
           points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+          contours: [{ points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], closed: false }],
           geometry: "M 0 0 L 1 1",
           bounds: { x: 0, y: 0, width: 1, height: 1 },
           closed: false,
           ended: false,
+          warnings: [],
         });
       });
 
@@ -1419,10 +1429,12 @@ describe("useDesignChat (hook + UI message stream)", () => {
           phase: "streaming",
           receivedDuringStreaming: true,
           points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+          contours: [{ points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], closed: false }],
           geometry: "M 0 0 L 1 1",
           bounds: { x: 0, y: 0, width: 1, height: 1 },
           closed: false,
           ended: false,
+          warnings: [],
         });
       });
 
@@ -1465,10 +1477,12 @@ describe("useDesignChat (hook + UI message stream)", () => {
           phase: "streaming",
           receivedDuringStreaming: true,
           points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+          contours: [{ points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], closed: false }],
           geometry: "M 0 0 L 1 1",
           bounds: { x: 0, y: 0, width: 1, height: 1 },
           closed: false,
           ended: false,
+          warnings: [],
         });
       });
 
