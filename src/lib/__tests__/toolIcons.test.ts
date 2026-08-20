@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { toolDisplayNames, referoToolDisplayNames } from "../toolDisplayNames";
 import { getToolIcon } from "../toolIcons";
+import { toolHandlers } from "../toolRegistry";
 import { ReferoIcon } from "@/components/icons/ReferoIcon";
 
 describe("toolIcons", () => {
@@ -10,6 +11,38 @@ describe("toolIcons", () => {
       (name) => getToolIcon(name) === generic
     );
     expect(missing).toEqual([]);
+  });
+
+  it("has a readable name and dedicated icon for every design-agent tool", () => {
+    const generic = getToolIcon("definitely_not_a_tool");
+    const unreadableNames = Object.keys(toolHandlers).filter(
+      (name) =>
+        !toolDisplayNames[name] ||
+        toolDisplayNames[name] === name ||
+        toolDisplayNames[name].includes("_")
+    );
+    const missingIcons = Object.keys(toolHandlers).filter(
+      (name) => getToolIcon(name) === generic
+    );
+
+    expect(unreadableNames).toEqual([]);
+    expect(missingIcons).toEqual([]);
+  });
+
+  it("covers optional backend-executed tools shown in design chat", () => {
+    const generic = getToolIcon("definitely_not_a_tool");
+    const optionalTools = [
+      "web_search",
+      "fetch_url",
+      "load_skill",
+      "memory",
+      "skill_manage",
+    ];
+
+    for (const name of optionalTools) {
+      expect(toolDisplayNames[name]).toBeTruthy();
+      expect(getToolIcon(name)).not.toBe(generic);
+    }
   });
 
   it("falls back to a generic icon for an unmapped tool", () => {
