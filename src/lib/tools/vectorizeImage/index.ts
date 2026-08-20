@@ -7,8 +7,13 @@ import {
 } from "@/lib/imageOps/vectorize";
 import { recordIssuedImageUrl } from "@/lib/tools/generateImage/registry";
 
+// Mirrors the backend schema's `mode: z.enum(["layers", "image"]).default("layers")`
+// (pen-editor-backend/src/ai/tools.ts) — the two halves of this contract
+// must agree on the fallback, or an omitted `mode` reads as one thing on the
+// backend's declared default and another wherever this fallback actually
+// runs.
 function parseMode(raw: unknown): VectorizeMode {
-  return raw === "layers" ? "layers" : "image";
+  return raw === "image" ? "image" : "layers";
 }
 
 /**

@@ -13,6 +13,7 @@ import {
   vectorizeNode,
 } from "@/lib/imageOps/vectorize";
 import { stubSvgGetBBox } from "@/test/svgGetBBoxStub";
+import * as svgUtils from "@/utils/svgUtils";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -43,6 +44,25 @@ function seedImageFillOnRect1(url: string, extra?: Partial<ImagePaint["image"]>)
     ...clearLegacyFillProps(),
   });
   return paint;
+}
+
+/** Seeds frame1 (which has children rect1/text1, see fixtures.ts) with an
+ * image fill — `fills` lives on `BaseNode`, so a container can carry one
+ * too. Used to exercise the "refuse to vectorize a node with children"
+ * guard. */
+function seedImageFillOnFrame1(url: string) {
+  useSceneStore.getState().updateNode("frame1", {
+    fills: [createImagePaint({ url, mode: "fill" })],
+    ...clearLegacyFillProps(),
+  });
+}
+
+/** A SVG whose raw text alone (before parsing) already exceeds
+ * MAX_VECTORIZE_NODES, used to assert the cheap pre-parse guard rejects it
+ * without ever calling the expensive `parseSvgToNodes`. */
+function hugeSvg(count: number): string {
+  const paths = Array.from({ length: count }, () => `<path d="M0,0 L1,1" fill="#000"/>`).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10">${paths}</svg>`;
 }
 
 function rectSvg(): string {
@@ -360,6 +380,49 @@ describe("vectorizeNode mode: layers", () => {
   it("errors clearly when the node does not exist", async () => {
     await expect(vectorizeNode("nope", { mode: "layers" })).rejects.toThrow(/not found/i);
   });
+
+  it("refuses a node with children instead of deleting its subtree, without calling the backend", async () => {
+    seedImageFillOnFrame1("https://cdn/before.png");
+    const before = JSON.stringify(useSceneStore.getState().nodesById);
+    const fetchMock = vi.fn(async () => jsonResponse({ url: "https://cdn/vector.svg", svg: rectSvg() }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(vectorizeNode("frame1", { mode: "layers" })).rejects.toThrow(/child/i);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(JSON.stringify(useSceneStore.getState().nodesById)).toBe(before);
+    expect(useSceneStore.getState().nodesById["rect1"]).toBeTruthy();
+    expect(useSceneStore.getState().nodesById["text1"]).toBeTruthy();
+  });
+
+  it("mode: image is unaffected by the children guard (it never deletes the node)", async () => {
+    seedImageFillOnFrame1("https://cdn/before.png");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ url: "https://cdn/vector.svg", svg: rectSvg() })),
+    );
+
+    const result = await vectorizeNode("frame1", { mode: "image" });
+    expect(result.url).toBe("https://cdn/vector.svg");
+    expect(useSceneStore.getState().nodesById["rect1"]).toBeTruthy();
+    expect(useSceneStore.getState().nodesById["text1"]).toBeTruthy();
+  });
+
+  it("rejects a hopelessly large source SVG before parsing it (cheap pre-check, no forced layout)", async () => {
+    seedImageFillOnRect1("https://cdn/before.png");
+    const parseSpy = vi.spyOn(svgUtils, "parseSvgToNodes");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ url: "https://cdn/vector.svg", svg: hugeSvg(20000) })),
+    );
+
+    const result = await vectorizeNode("rect1", { mode: "layers" });
+    expect(result.tooComplex).toBe(true);
+    expect(result.nodeCount).toBeGreaterThan(MAX_VECTORIZE_NODES);
+    expect(parseSpy).not.toHaveBeenCalled();
+    // Nothing was inserted/deleted — the source node is exactly as it was.
+    expect(useSceneStore.getState().nodesById["rect1"]).toBeTruthy();
+  });
 });
 
 describe("vectorizeFromUrl", () => {
@@ -372,15 +435,59 @@ describe("vectorizeFromUrl", () => {
     expect(result).toEqual({ url: "https://cdn/vector.svg" });
   });
 
-  it("mode layers reports tooComplex without a node to insert into", async () => {
+  it("mode layers actually inserts the parsed tree at root level (not a silent no-op)", async () => {
+    const rootIdsBefore = [...useSceneStore.getState().rootIds];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ url: "https://cdn/vector.svg", svg: fullCanvasRectSvg() })),
+    );
+
+    const result = await vectorizeFromUrl("https://cdn/before.png", { mode: "layers" });
+    expect(result.tooComplex).toBeUndefined();
+    expect(result.nodeId).toBeTruthy();
+
+    const state = useSceneStore.getState();
+    expect(state.rootIds).toEqual([...rootIdsBefore, result.nodeId]);
+    expect(state.nodesById[result.nodeId!]).toBeTruthy();
+    expect(state.parentById[result.nodeId!]).toBeNull();
+    expect(useSelectionStore.getState().selectedIds).toEqual([result.nodeId]);
+  });
+
+  it("mode layers, empty canvas: inserts at the origin", async () => {
+    useSceneStore.setState({ nodesById: {}, parentById: {}, childrenById: {}, rootIds: [] });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ url: "https://cdn/vector.svg", svg: fullCanvasRectSvg() })),
+    );
+    const result = await vectorizeFromUrl("https://cdn/before.png", { mode: "layers" });
+    const node = useSceneStore.getState().nodesById[result.nodeId!];
+    expect(node.x).toBe(0);
+    expect(node.y).toBe(0);
+  });
+
+  it("mode layers reports tooComplex without inserting anything", async () => {
     const bigSvg = tooComplexSvg(MAX_VECTORIZE_NODES + 1);
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => jsonResponse({ url: "https://cdn/vector.svg", svg: bigSvg })),
     );
+    const rootIdsBefore = [...useSceneStore.getState().rootIds];
     const result = await vectorizeFromUrl("https://cdn/before.png", { mode: "layers" });
     expect(result.tooComplex).toBe(true);
     expect(result.nodeCount).toBeGreaterThan(MAX_VECTORIZE_NODES);
+    expect(result.nodeId).toBeUndefined();
+    expect(useSceneStore.getState().rootIds).toEqual(rootIdsBefore);
+  });
+
+  it("rejects a hopelessly large source SVG before parsing it", async () => {
+    const parseSpy = vi.spyOn(svgUtils, "parseSvgToNodes");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ url: "https://cdn/vector.svg", svg: hugeSvg(20000) })),
+    );
+    const result = await vectorizeFromUrl("https://cdn/before.png", { mode: "layers" });
+    expect(result.tooComplex).toBe(true);
+    expect(parseSpy).not.toHaveBeenCalled();
   });
 
   it("mode layers reports droppedShapes for fill/stroke-less source shapes", async () => {

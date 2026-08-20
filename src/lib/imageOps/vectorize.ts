@@ -6,7 +6,7 @@ import { createSnapshot, useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useHistoryStore, withHistoryBatch } from "@/store/historyStore";
 import { parseSvgToNodes } from "@/utils/svgUtils";
-import { scaleAndOffsetNode } from "@/lib/htmlToDesign/svgHandling";
+import { scaleAndOffsetNode, shiftNode } from "@/lib/htmlToDesign/svgHandling";
 import { isContainerNode, type SceneNode } from "@/types/scene";
 import { applyImagePaintUrl, findNodeImagePaint, resolveNodeImageUrl } from "./resolveSourceUrl";
 
@@ -127,10 +127,65 @@ function significantDrop(sourceShapeCount: number, resultShapeCount: number): nu
   return dropped;
 }
 
-/** Vectorize an arbitrary image url. `mode: "layers"` still parses+counts the
- * result (so a caller can learn `tooComplex`/`nodeCount`), but there is no
- * scene node to insert into — only `mode: "image"` on `vectorizeNode` below
- * actually places layers on the canvas. */
+/**
+ * Cheap pre-parse reject for a hopelessly large SVG. `parseSvgToNodes`
+ * forces a synchronous layout per shape — each one gets inserted into
+ * `document.body` and measured via `getBBox()` (see `getPathBBox` in
+ * svgUtils.ts) — so on a large trace (a photograph traced into tens of
+ * thousands of paths) parsing alone can freeze the tab for seconds before
+ * the exact node count is even known. Bail on the cheap regex count from
+ * `countSourceShapeElements` when it's already far over budget, so a
+ * hopeless input never reaches the expensive path. This is deliberately
+ * approximate (see that function's own comment) and does NOT replace the
+ * exact post-parse `nodeCount` check — it only skips parsing for the
+ * unambiguous case; a source that passes this can still trip the real
+ * guard afterward (e.g. stroke-only paths that split into extra nodes).
+ */
+function tooComplexBeforeParsing(svg: string): number | null {
+  const shapeCount = countSourceShapeElements(svg);
+  return shapeCount > MAX_VECTORIZE_NODES ? shapeCount : null;
+}
+
+const ROOT_INSERTION_PADDING = 50;
+
+/**
+ * A root-level position clear of existing top-level content — same idea as
+ * `find_empty_space_on_canvas` (`src/lib/tools/findEmptySpace.ts`), inlined
+ * here rather than shared: that tool returns a JSON string shaped for a
+ * model tool-call, and this needs a plain `{x,y}` plus root-only bounds
+ * (there is no source node here to inherit a parent/position from —
+ * `vectorizeFromUrl` always inserts fresh at the root). Places the result to
+ * the right of the current root-level bounding box, or at the origin on an
+ * empty canvas.
+ */
+function findRootLevelInsertionPoint(): { x: number; y: number } {
+  const { nodesById, rootIds } = useSceneStore.getState();
+  let bounds: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
+  for (const id of rootIds) {
+    const node = nodesById[id];
+    if (!node || node.visible === false) continue;
+    if (!bounds) {
+      bounds = { minX: node.x, minY: node.y, maxX: node.x + node.width, maxY: node.y + node.height };
+    } else {
+      bounds.minX = Math.min(bounds.minX, node.x);
+      bounds.minY = Math.min(bounds.minY, node.y);
+      bounds.maxX = Math.max(bounds.maxX, node.x + node.width);
+      bounds.maxY = Math.max(bounds.maxY, node.y + node.height);
+    }
+  }
+  if (!bounds) return { x: 0, y: 0 };
+  return { x: bounds.maxX + ROOT_INSERTION_PADDING, y: bounds.minY };
+}
+
+/**
+ * Vectorize an arbitrary image url (no source node in play — nothing to
+ * replace or to inherit a target size/parent from). `mode: "image"` just
+ * returns the url. `mode: "layers"` parses the returned SVG into a
+ * scene-node tree and actually inserts it into the scene at the root level,
+ * placed clear of existing top-level content (`findRootLevelInsertionPoint`)
+ * at the SVG's own natural size. Same `MAX_VECTORIZE_NODES`/dropped-shapes
+ * guards as `vectorizeNode` below; on `tooComplex`, nothing is inserted.
+ */
 export async function vectorizeFromUrl(
   url: string,
   opts: { mode: VectorizeMode },
@@ -139,6 +194,12 @@ export async function vectorizeFromUrl(
   if (opts.mode === "image") {
     return { url: resultUrl };
   }
+
+  const preParseCount = tooComplexBeforeParsing(svg);
+  if (preParseCount !== null) {
+    return { url: resultUrl, tooComplex: true, nodeCount: preParseCount };
+  }
+
   const parsed = parseSvgToNodes(svg);
   if (!parsed) {
     throw new Error("Vectorization succeeded but the SVG could not be parsed into layers.");
@@ -148,7 +209,23 @@ export async function vectorizeFromUrl(
   if (nodeCount > MAX_VECTORIZE_NODES) {
     return { url: resultUrl, tooComplex: true, nodeCount, ...(droppedShapes ? { droppedShapes } : {}) };
   }
-  return { url: resultUrl, nodeCount, ...(droppedShapes ? { droppedShapes } : {}) };
+
+  const insertionPoint = findRootLevelInsertionPoint();
+  shiftNode(parsed.node, insertionPoint.x - parsed.node.x, insertionPoint.y - parsed.node.y);
+
+  const { addNode } = useSceneStore.getState();
+  useHistoryStore.getState().saveHistory(createSnapshot(useSceneStore.getState()));
+  withHistoryBatch(() => {
+    addNode(parsed.node);
+    useSelectionStore.getState().setSelectedIds([parsed.node.id]);
+  });
+
+  return {
+    url: resultUrl,
+    nodeId: parsed.node.id,
+    nodeCount,
+    ...(droppedShapes ? { droppedShapes } : {}),
+  };
 }
 
 /**
@@ -162,7 +239,13 @@ export async function vectorizeFromUrl(
  * source node with it as a single undo step (insert + delete batched via
  * `withHistoryBatch`, see store/historyStore.ts). If the parsed tree has
  * more than MAX_VECTORIZE_NODES nodes, nothing is inserted — the scene is
- * left untouched and the result reports `tooComplex`.
+ * left untouched and the result reports `tooComplex`. `fills` lives on
+ * `BaseNode`, so a `frame`/`group` with an image fill is a valid target too
+ * — but `mode: "layers"` REFUSES one that has children: replacing it would
+ * delete its entire subtree (`deleteNode` removes descendants + attached
+ * connectors), which is never what "vectorize this image" means. `mode:
+ * "image"` has no such restriction — it only swaps the fill's url in place
+ * and never touches children.
  */
 export async function vectorizeNode(
   nodeId: string,
@@ -173,6 +256,17 @@ export async function vectorizeNode(
     throw new Error(`Node not found: ${nodeId}`);
   }
 
+  if (opts.mode === "layers") {
+    const childIds = useSceneStore.getState().childrenById[nodeId];
+    if (childIds && childIds.length > 0) {
+      throw new Error(
+        `Node ${nodeId} has ${childIds.length} child layer(s) — vectorizing its content would ` +
+          `delete them along with the node itself. Select the image fill's own node (one with no ` +
+          `children), or use mode: "image" to replace the fill in place without touching children.`,
+      );
+    }
+  }
+
   const paint = findNodeImagePaint(nodeId);
   const sourceUrl = await resolveNodeImageUrl(nodeId);
   const { url: resultUrl, svg } = await requestVectorize(sourceUrl);
@@ -180,6 +274,11 @@ export async function vectorizeNode(
   if (opts.mode === "image") {
     applyImagePaintUrl(nodeId, paint.id, resultUrl);
     return { url: resultUrl };
+  }
+
+  const preParseCount = tooComplexBeforeParsing(svg);
+  if (preParseCount !== null) {
+    return { url: resultUrl, tooComplex: true, nodeCount: preParseCount };
   }
 
   const parsed = parseSvgToNodes(svg);

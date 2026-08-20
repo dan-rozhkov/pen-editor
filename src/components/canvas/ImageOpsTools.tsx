@@ -38,6 +38,15 @@ export function ImageOpsTools() {
   const removeBackgroundAvailable = useCanRemoveBackground();
   const vectorizeAvailable = useCanVectorize();
 
+  // Dead in the current app: PrimitivesPanel (this component's only mount
+  // point) is only rendered when `!isView && !isDev` (App.tsx) and is never
+  // wrapped in a ReadOnlyProvider, so this always reads the context's
+  // default (false) — view-mode read-only is enforced upstream by not
+  // rendering the panel at all. Kept anyway as a cheap guard against a
+  // future reuse of this component somewhere that IS wrapped (e.g. a
+  // read-only preview), mirroring PluginsPanel's own belt-and-suspenders
+  // useReadOnly() check on a panel that (unlike this one) genuinely can be
+  // read-only.
   const isReadOnly = useReadOnly();
   const isOnline = useOnlineStatus();
 
@@ -62,6 +71,16 @@ export function ImageOpsTools() {
 
   // Same disabled condition on both buttons; only the label differs.
   const disabled = isReadOnly || !isOnline || runningOp !== null;
+  // `tooltip` carries the full explanation (name, or name + why it's
+  // disabled) for the visible hover popup. IconButton falls back to
+  // `tooltip` for `aria-label` when none is given — fine while the button
+  // is named "Remove background"/"Vectorize", but not once that string
+  // grows into "Remove background is disabled in view mode": a screen
+  // reader would announce that whole sentence as the button's *name*, and
+  // both buttons would announce the same generic offline sentence,
+  // erasing the one thing (which button is which) a name is for. Passing
+  // `aria-label` explicitly keeps the accessible name fixed to the action,
+  // independent of `tooltip`'s wording.
   const tooltipFor = (label: string) =>
     isReadOnly ? `${label} is disabled in view mode` : !isOnline ? OFFLINE_MESSAGE : label;
 
@@ -72,6 +91,7 @@ export function ImageOpsTools() {
           variant="ghost"
           size="lg"
           tooltip={tooltipFor("Remove background")}
+          aria-label="Remove background"
           side="top"
           disabled={disabled}
           onClick={() => run("remove-background", targetNodeId)}
@@ -89,6 +109,7 @@ export function ImageOpsTools() {
           variant="ghost"
           size="lg"
           tooltip={tooltipFor("Vectorize")}
+          aria-label="Vectorize"
           side="top"
           disabled={disabled}
           onClick={() => run("vectorize", targetNodeId)}

@@ -149,6 +149,24 @@ describe("<ImageOpsTools />", () => {
     for (const button of buttons) expect(button.disabled).toBe(true);
   });
 
+  it("keeps each button's own aria-label while offline, instead of both collapsing to the offline tooltip text", () => {
+    Object.defineProperty(navigator, "onLine", { value: false, configurable: true });
+    seedImageNode();
+    selectImageNode();
+    render(<ImageOpsTools />);
+
+    // getByLabelText itself proves each name is exact and unique — a
+    // shared/generic label (e.g. the offline sentence on both buttons)
+    // would make this ambiguous and throw.
+    const removeBackground = screen.getByLabelText("Remove background") as HTMLButtonElement;
+    const vectorize = screen.getByLabelText("Vectorize") as HTMLButtonElement;
+    expect(removeBackground).not.toBe(vectorize);
+    expect(removeBackground.getAttribute("aria-label")).toBe("Remove background");
+    expect(vectorize.getAttribute("aria-label")).toBe("Vectorize");
+    expect(removeBackground.disabled).toBe(true);
+    expect(vectorize.disabled).toBe(true);
+  });
+
   it("calls removeBackgroundOnNode on click and disables the button while pending", async () => {
     let resolve!: (v: { url: string }) => void;
     removeBackgroundOnNode.mockReturnValue(

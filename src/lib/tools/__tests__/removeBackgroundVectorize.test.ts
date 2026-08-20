@@ -58,9 +58,9 @@ describe("remove_background tool handler", () => {
 });
 
 describe("vectorize_image tool handler", () => {
-  it("defaults to mode image and returns the result as JSON", async () => {
+  it("defaults to mode layers (matches the backend schema's z.enum(...).default(\"layers\")), and returns JSON", async () => {
     seedImageFillOnRect1("https://cdn/before.png");
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10"><rect width="10" height="10"/></svg>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10"><rect width="10" height="10" fill="#f00"/></svg>`;
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => jsonResponse({ url: "https://cdn/vector.svg", svg })),
@@ -69,7 +69,20 @@ describe("vectorize_image tool handler", () => {
     const raw = await vectorizeImage({ node_id: "rect1" });
     const result = JSON.parse(raw);
     expect(result.url).toBe("https://cdn/vector.svg");
-    // mode "image": the source node still exists, just with a swapped fill.
+    // mode "layers": the source node was replaced by the parsed layers.
+    expect(useSceneStore.getState().nodesById["rect1"]).toBeUndefined();
+    expect(result.nodeId).toBeTruthy();
+    expect(useSceneStore.getState().nodesById[result.nodeId]).toBeTruthy();
+  });
+
+  it("mode: \"image\" must be requested explicitly", async () => {
+    seedImageFillOnRect1("https://cdn/before.png");
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ url: "https://cdn/vector.svg", svg: "<svg/>" })));
+
+    const raw = await vectorizeImage({ node_id: "rect1", mode: "image" });
+    const result = JSON.parse(raw);
+    expect(result.url).toBe("https://cdn/vector.svg");
+    // source node kept, only its fill swapped.
     expect(useSceneStore.getState().nodesById["rect1"]).toBeTruthy();
   });
 
