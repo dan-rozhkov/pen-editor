@@ -15,7 +15,8 @@ const PROTOCOL_VERSION = 1;
 // src/lib/mcpToolNames.ts, the single source shared with
 // src/lib/__tests__/toolContract.test.ts — no more hand-copying. toolHandlers
 // also contains tools with no MCP counterpart at all (generate_image,
-// read_comments, create_plugin, ask_user, draw_vector, ...); those are never
+// read_comments, create_plugin, ask_user, draw_vector, remove_background,
+// vectorize_image, ...); those are never
 // advertised to the desktop shell, and `dispatchCall` below refuses them even
 // if a shell bug or mismatched build asks for one by name.
 const MCP_TOOL_NAMES = DESKTOP_MCP_TOOL_NAMES;

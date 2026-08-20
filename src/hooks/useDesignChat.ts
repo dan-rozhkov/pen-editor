@@ -119,6 +119,12 @@ const DEFAULT_TOOL_CALL_TIMEOUT_MS = 30_000;
 const TOOL_CALL_TIMEOUT_MS_OVERRIDES: Record<string, number> = {
   generate_image: 95_000,
   generate_frame_image: 95_000,
+  // remove-background/vectorize call out to their own upstream provider and
+  // can run well past the default budget; 60s is generous headroom without
+  // matching generate_image's 95s (these aren't racing a comparable backend
+  // ceiling documented anywhere yet).
+  remove_background: 60_000,
+  vectorize_image: 60_000,
 };
 
 function getToolCallTimeoutMs(toolName: string): number {

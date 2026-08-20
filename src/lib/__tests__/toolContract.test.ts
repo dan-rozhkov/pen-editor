@@ -51,6 +51,8 @@ const EXPECTED_CLIENT_TOOLS = [
   "analyze_image",
   "publish_to_showcase",
   "update_tasks",
+  "remove_background",
+  "vectorize_image",
 ];
 
 // Tools whose schema also has a backend `execute` — they run server-side, the

@@ -104,3 +104,60 @@ describe("chatModels visionFallback", () => {
     expect(fresh.canSendImages("deepseek/deepseek-v4-flash")).toBe(false);
   });
 });
+
+describe("chatModels imageOps capabilities", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  });
+
+  it("default false before any /api/models response has landed", async () => {
+    vi.resetModules();
+    const fresh = await import("@/lib/chatModels");
+    expect(fresh.canRemoveBackground()).toBe(false);
+    expect(fresh.canVectorize()).toBe(false);
+  });
+
+  it("reflects the backend's imageOps flags once loaded", async () => {
+    vi.resetModules();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          models: [{ id: "m", label: "M", supportsVision: true }],
+          default: "m",
+          visionFallback: false,
+          imageOps: { removeBackground: true, vectorize: false },
+        }),
+      })),
+    );
+
+    const fresh = await import("@/lib/chatModels");
+    await fresh.loadModels();
+
+    expect(fresh.canRemoveBackground()).toBe(true);
+    expect(fresh.canVectorize()).toBe(false);
+  });
+
+  it("stays false when the backend response omits imageOps", async () => {
+    vi.resetModules();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          models: [{ id: "m", label: "M", supportsVision: true }],
+          default: "m",
+          visionFallback: false,
+        }),
+      })),
+    );
+
+    const fresh = await import("@/lib/chatModels");
+    await fresh.loadModels();
+
+    expect(fresh.canRemoveBackground()).toBe(false);
+    expect(fresh.canVectorize()).toBe(false);
+  });
+});

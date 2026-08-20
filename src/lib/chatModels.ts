@@ -124,6 +124,7 @@ interface ModelsResponse {
   models: { id: string; label: string; supportsVision: boolean }[];
   default: string;
   visionFallback: boolean;
+  imageOps?: { removeBackground: boolean; vectorize: boolean };
 }
 
 let currentModels: ChatModelOption[] = [AUTO_OPTION, ...FALLBACK_MODELS];
@@ -135,6 +136,13 @@ let autoTargetModel: string = FALLBACK_AUTO_MODEL;
 // the backend confirms it, since we can't promise a capability we haven't
 // verified.
 let visionFallback = false;
+// Whether the backend has each image-op route configured (remove-background/
+// vectorize need their own upstream provider credentials, independent of
+// OPENROUTER_*/VISION_MODEL). Same conservative-false-until-confirmed
+// reasoning as visionFallback above: canRemoveBackground()/canVectorize()
+// gate whether the corresponding agent tool/UI button is offered at all, and
+// offering one the backend can't actually serve would just fail every call.
+let imageOpsCapabilities = { removeBackground: false, vectorize: false };
 // Whether loadModels() has settled — success OR failure. Callers that can
 // choose *when* to send (the showcase handoff, which auto-sends the moment the
 // editor mounts) wait on this so they travel with the backend's own list
@@ -194,6 +202,16 @@ export function canSendImages(model: string): boolean {
   return modelSupportsVision(model) || visionFallback;
 }
 
+/** Whether the backend can serve `remove_background`/the "Remove background" button. */
+export function canRemoveBackground(): boolean {
+  return imageOpsCapabilities.removeBackground;
+}
+
+/** Whether the backend can serve `vectorize_image`/the "Vectorize" button. */
+export function canVectorize(): boolean {
+  return imageOpsCapabilities.vectorize;
+}
+
 // Subscription surface for React (useSyncExternalStore) so dropdowns re-render
 // when the backend list lands.
 export function subscribeModels(listener: () => void): () => void {
@@ -221,6 +239,10 @@ export function loadModels(): Promise<void> {
       ];
       if (data.default) autoTargetModel = data.default;
       visionFallback = data.visionFallback ?? false;
+      imageOpsCapabilities = {
+        removeBackground: data.imageOps?.removeBackground ?? false,
+        vectorize: data.imageOps?.vectorize ?? false,
+      };
     } catch {
       // Network/parse error — keep the hardcoded fallback.
     } finally {

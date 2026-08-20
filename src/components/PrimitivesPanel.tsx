@@ -23,6 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { Layers3DToggle } from "./canvas/Layers3DToggle";
+import { ImageOpsTools } from "./canvas/ImageOpsTools";
 import { SpeakerNotesCard } from "./SpeakerNotesCard";
 
 interface ToolDropdownGroupProps {
@@ -238,6 +239,7 @@ export function PrimitivesPanel() {
           style={{ alignSelf: "center" }}
         />
         <Layers3DToggle />
+        <ImageOpsTools />
         <SpeakerNotesCard />
       </div>
     </div>
