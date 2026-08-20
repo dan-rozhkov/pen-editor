@@ -81,6 +81,17 @@ function fullCanvasRectSvg(): string {
   </svg>`;
 }
 
+/** Two rects laid out inside one 60x60 canvas — a multi-shape SVG, so the
+ * parsed tree is a group with more than one child and child coordinates are
+ * parent-relative. Single-shape fixtures can't tell a correct root shift
+ * apart from one that also (wrongly) shifts the children. */
+function twoRectSvg(): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 60 60">
+    <rect x="0" y="0" width="50" height="50" fill="#ff0000" />
+    <rect x="50" y="50" width="10" height="10" fill="#00ff00" />
+  </svg>`;
+}
+
 /** An SVG with more `<rect>` elements than MAX_VECTORIZE_NODES, to exercise
  * the complexity guard. */
 function tooComplexSvg(count: number): string {
@@ -488,6 +499,27 @@ describe("vectorizeFromUrl", () => {
     const result = await vectorizeFromUrl("https://cdn/before.png", { mode: "layers" });
     expect(result.tooComplex).toBe(true);
     expect(parseSpy).not.toHaveBeenCalled();
+  });
+
+  it("mode layers shifts only the root — children stay parent-relative", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ url: "https://cdn/vector.svg", svg: twoRectSvg() })),
+    );
+
+    const result = await vectorizeFromUrl("https://cdn/before.png", { mode: "layers" });
+    const state = useSceneStore.getState();
+    const root = state.nodesById[result.nodeId!];
+    // Placed clear of the seeded scene's root-level content...
+    expect(root.x).toBeGreaterThan(0);
+    // ...and the children keep the coordinates parseSvgToNodes gave them,
+    // which are relative to that root, not shifted along with it.
+    const children = state.childrenById[result.nodeId!].map((id) => state.nodesById[id]);
+    expect(children).toHaveLength(2);
+    expect(children.map((c) => [c.x, c.y])).toEqual([
+      [0, 0],
+      [50, 50],
+    ]);
   });
 
   it("mode layers reports droppedShapes for fill/stroke-less source shapes", async () => {

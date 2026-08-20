@@ -6,7 +6,7 @@ import { createSnapshot, useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useHistoryStore, withHistoryBatch } from "@/store/historyStore";
 import { parseSvgToNodes } from "@/utils/svgUtils";
-import { scaleAndOffsetNode, shiftNode } from "@/lib/htmlToDesign/svgHandling";
+import { scaleAndOffsetNode } from "@/lib/htmlToDesign/svgHandling";
 import { isContainerNode, type SceneNode } from "@/types/scene";
 import { applyImagePaintUrl, findNodeImagePaint, resolveNodeImageUrl } from "./resolveSourceUrl";
 
@@ -211,7 +211,12 @@ export async function vectorizeFromUrl(
   }
 
   const insertionPoint = findRootLevelInsertionPoint();
-  shiftNode(parsed.node, insertionPoint.x - parsed.node.x, insertionPoint.y - parsed.node.y);
+  // Only the root moves: `parseSvgToNodes` already returns child coordinates
+  // relative to their parent (same reason `scaleAndOffsetNode` recurses with a
+  // zero offset), so a recursive `shiftNode` here would apply the placement
+  // twice and scatter every child by the insertion point.
+  parsed.node.x = insertionPoint.x;
+  parsed.node.y = insertionPoint.y;
 
   const { addNode } = useSceneStore.getState();
   useHistoryStore.getState().saveHistory(createSnapshot(useSceneStore.getState()));
