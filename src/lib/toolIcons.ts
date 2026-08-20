@@ -5,6 +5,7 @@ import {
   CameraIcon,
   CrosshairIcon,
   type Icon,
+  ListChecksIcon,
   MagnifyingGlassIcon,
   PaletteIcon,
   PencilSimpleIcon,
@@ -40,6 +41,7 @@ const toolIcons: Record<string, Icon> = {
   get_guidelines: BookOpenIcon,
   get_style_guide_tags: TagIcon,
   get_style_guide: PaletteIcon,
+  update_tasks: ListChecksIcon,
   // Every Refero-served tool carries the Refero mark instead of a
   // task-specific glyph: in a long turn the useful thing to spot at a glance
   // is that the agent went out to the reference library at all. The labels

@@ -7,7 +7,7 @@ import {
 } from "@phosphor-icons/react";
 import { SlashCommandMenu } from "./SlashCommandMenu";
 import type { SlashCommand } from "./slashCommands";
-import type { AttachedImage, ChatLaunchPayload, QueuedChatMessage } from "@/types/chat";
+import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
 import {
   useChatStore,
   NO_ATTACHED_IMAGES,
@@ -46,10 +46,6 @@ interface ChatInputProps {
   awaitingAnswer?: boolean;
   shouldFocus?: boolean;
   renderFooter?: (props: ChatInputFooterProps) => ReactNode;
-  /** Messages submitted while the agent was busy, shown as a stack above the input. */
-  queuedMessages: QueuedChatMessage[];
-  /** Removes a queued message before it gets auto-sent. */
-  onRemoveQueued: (id: string) => void;
   /** Opens the "Manage skills" modal — forwarded to the slash menu's footer
    * row. Omitted in contexts without skill management. */
   onManageSkills?: () => void;
@@ -98,8 +94,6 @@ export function ChatInput({
   awaitingAnswer,
   shouldFocus = false,
   renderFooter,
-  queuedMessages,
-  onRemoveQueued,
   onManageSkills,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -489,41 +483,6 @@ export function ChatInput({
                   }
                 />
                 <TooltipContent>Remove image</TooltipContent>
-              </Tooltip>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Messages submitted while the agent was busy — sent automatically,
-          one at a time, once the current turn finishes. */}
-      {queuedMessages.length > 0 && (
-        <div className="mb-2 flex flex-col gap-1">
-          {queuedMessages.map((queued) => (
-            <div
-              key={queued.id}
-              className="group flex items-center gap-2 rounded-md border border-border-default bg-secondary px-2 py-1 text-xs text-text-muted"
-            >
-              {queued.payload.images && queued.payload.images.length > 0 && (
-                <ImageIcon size={12} weight="light" className="shrink-0" />
-              )}
-              <span className="min-w-0 flex-1 truncate">
-                {queued.payload.text || "(image)"}
-              </span>
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <button
-                      type="button"
-                      onClick={() => onRemoveQueued(queued.id)}
-                      aria-label="Remove queued message"
-                      className="shrink-0 rounded p-0.5 text-text-muted opacity-0 transition-opacity hover:bg-secondary group-hover:opacity-100"
-                    >
-                      <XIcon size={10} />
-                    </button>
-                  }
-                />
-                <TooltipContent>Remove queued message</TooltipContent>
               </Tooltip>
             </div>
           ))}

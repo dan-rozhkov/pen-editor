@@ -34,6 +34,7 @@ import { drawVector } from "./tools/drawVector";
 import { publishToShowcase } from "./tools/publishToShowcase";
 import { readEmbedHtml } from "./tools/readEmbedHtml";
 import { editEmbedHtml } from "./tools/editEmbedHtml";
+import { updateTasks } from "./tools/updateTasks";
 
 /**
  * Per-call metadata threaded through to handlers that need to correlate
@@ -91,4 +92,5 @@ export const toolHandlers: Record<string, ToolHandler> = {
   draw_vector: drawVector,
   analyze_image: analyzeImage,
   publish_to_showcase: publishToShowcase,
+  update_tasks: updateTasks,
 };

@@ -50,6 +50,7 @@ const EXPECTED_CLIENT_TOOLS = [
   "draw_vector",
   "analyze_image",
   "publish_to_showcase",
+  "update_tasks",
 ];
 
 // Tools whose schema also has a backend `execute` — they run server-side, the

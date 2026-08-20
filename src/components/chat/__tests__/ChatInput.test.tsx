@@ -3,7 +3,7 @@ import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/re
 import { useState } from "react";
 import { ChatInput } from "../ChatInput";
 import { useChatStore } from "@/store/chatStore";
-import type { ChatLaunchPayload, QueuedChatMessage } from "@/types/chat";
+import type { ChatLaunchPayload } from "@/types/chat";
 import type { SelectionScreenshot } from "@/hooks/useSelectionScreenshots";
 
 // Controllable selection screenshots — the real hook needs the PixiJS renderer.
@@ -61,8 +61,6 @@ interface HarnessProps {
   stop?: () => void;
   initialInput?: string;
   sessionId?: string;
-  queuedMessages?: QueuedChatMessage[];
-  onRemoveQueued?: (id: string) => void;
 }
 
 /** Wrap ChatInput with local input state, mirroring the real parent wiring. */
@@ -72,8 +70,6 @@ function Harness({
   stop = () => {},
   initialInput = "",
   sessionId = "test-session",
-  queuedMessages = [],
-  onRemoveQueued = () => {},
 }: HarnessProps) {
   const [input, setInput] = useState(initialInput);
   return (
@@ -84,8 +80,6 @@ function Harness({
       onSubmit={onSubmit}
       isLoading={isLoading}
       stop={stop}
-      queuedMessages={queuedMessages}
-      onRemoveQueued={onRemoveQueued}
     />
   );
 }
@@ -526,39 +520,6 @@ describe("<ChatInput />", () => {
       mockSelection = selection;
       rerender(<Harness onSubmit={vi.fn()} />);
       expect(screen.getByAltText("Screen")).toBeTruthy();
-    });
-  });
-
-  describe("queued messages stack", () => {
-    const queued: QueuedChatMessage[] = [
-      { id: "q1", payload: { text: "first queued message" } },
-      { id: "q2", payload: { text: "second queued message" } },
-    ];
-
-    it("renders each queued message's text", () => {
-      render(<Harness onSubmit={vi.fn()} queuedMessages={queued} />);
-      expect(screen.getByText("first queued message")).toBeTruthy();
-      expect(screen.getByText("second queued message")).toBeTruthy();
-    });
-
-    it("calls onRemoveQueued with the item's id when its remove button is clicked", () => {
-      const onRemoveQueued = vi.fn();
-      render(
-        <Harness
-          onSubmit={vi.fn()}
-          queuedMessages={queued}
-          onRemoveQueued={onRemoveQueued}
-        />
-      );
-      const removeButtons = screen.getAllByLabelText("Remove queued message");
-      expect(removeButtons).toHaveLength(2);
-      fireEvent.click(removeButtons[0]);
-      expect(onRemoveQueued).toHaveBeenCalledWith("q1");
-    });
-
-    it("renders nothing when the queue is empty", () => {
-      render(<Harness onSubmit={vi.fn()} queuedMessages={[]} />);
-      expect(screen.queryByLabelText("Remove queued message")).toBeNull();
     });
   });
 });

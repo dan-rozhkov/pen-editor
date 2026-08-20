@@ -72,6 +72,25 @@ describe("<MessageList />", () => {
     expect(screen.getByText("Done")).toBeTruthy();
   });
 
+  it("does not render a ToolCallIndicator for update_tasks — its result is shown by AgentTaskPanel instead", () => {
+    const msg: UIMessage = {
+      id: "a1",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-update_tasks",
+          toolCallId: "call-1",
+          state: "output-available",
+          input: { tasks: [{ title: "Do a thing", status: "pending" }] },
+          output: "Tasks updated: 0/1 done",
+        } as unknown as UIMessage["parts"][number],
+      ],
+    };
+    render(<MessageList messages={[msg]} isLoading={false} />);
+    expect(screen.queryByText("Update tasks")).toBeNull();
+    expect(screen.queryByText("Done")).toBeNull();
+  });
+
   it("renders attached images on a user message", () => {
     const msg: UIMessage = {
       id: "u1",

@@ -12,7 +12,7 @@ import {
   DotsThreeVerticalIcon,
   BookOpenIcon,
 } from "@phosphor-icons/react";
-import { useChatStore } from "@/store/chatStore";
+import { useChatStore, NO_TASKS } from "@/store/chatStore";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import { useUserSkillStore } from "@/store/userSkillStore";
 import type { ChatTab, ParallelCount } from "@/store/chatStore";
@@ -21,6 +21,7 @@ import { useAgentActivityToast } from "@/hooks/useAgentActivityToast";
 import { getUserId } from "@/lib/userId";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
+import { AgentTaskPanel } from "./AgentTaskPanel";
 import { SkillsPanel } from "./SkillsPanel";
 import { hasPendingAskUser } from "./pendingAskUser";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -211,6 +212,8 @@ function ChatSession({
   const tabTitle = useChatStore(
     (s) => s.tabs.find((t) => t.id === sessionId)?.title,
   );
+  const tasks = useChatStore((s) => s.tasks[sessionId] ?? NO_TASKS);
+  const hasTaskPanel = tasks.length > 0 || queuedMessages.length > 0;
 
   // Publish export/clear handlers so the tab bar dropdown can drive this
   // session. A ref keeps the handlers reading the latest messages without
@@ -234,6 +237,9 @@ function ChatSession({
         // the auto-drain effect in useDesignChat sends a "cleared" message
         // into the now-empty session once the in-flight turn finishes.
         useChatStore.getState().clearMessageQueue(sessionId);
+        // And drop the task checklist — otherwise the previous conversation's
+        // (now-discarded) plan keeps showing above the empty composer.
+        useChatStore.getState().setTasks(sessionId, []);
       },
     });
     return () => unregisterSessionActions(sessionId);
@@ -275,6 +281,10 @@ function ChatSession({
 
     setMessages(messages.slice(0, index));
     setInput(text);
+    // The discarded tail may have been the turn that produced the current
+    // task list — drop it so a stale checklist doesn't linger over the
+    // rolled-back conversation.
+    useChatStore.getState().setTasks(sessionId, []);
   };
 
   return (
@@ -311,8 +321,23 @@ function ChatSession({
         addToolOutput={addToolOutput}
       />
 
+      {/* Task list + queued-message panel — sits between the transcript and
+          the composer, its bottom 12px hidden under the composer card. When
+          it renders (own `mt-2` matches the composer's usual top margin
+          below), the composer's top margin is dropped so the panel's `-mb-3`
+          overlap isn't undone by a competing positive margin. */}
+      <AgentTaskPanel
+        tasks={tasks}
+        queuedMessages={queuedMessages}
+        onRemoveQueued={removeQueuedMessage}
+      />
+
       {/* Composer */}
-      <div className="m-3 mt-2 shrink-0 overflow-hidden rounded-xl border border-border-default bg-surface-panel shadow-[0_1px_3px_rgba(0,0,0,0.08)] focus-within:border-accent-light">
+      <div
+        className={`relative z-10 m-3 shrink-0 overflow-hidden rounded-xl border border-border-default bg-surface-panel shadow-[0_1px_3px_rgba(0,0,0,0.08)] focus-within:border-accent-light ${
+          hasTaskPanel ? "mt-0" : "mt-2"
+        }`}
+      >
         <ChatInput
           sessionId={sessionId}
           input={input}
@@ -322,8 +347,6 @@ function ChatSession({
           stop={stop}
           shouldFocus={shouldFocus}
           awaitingAnswer={awaitingAnswer}
-          queuedMessages={queuedMessages}
-          onRemoveQueued={removeQueuedMessage}
           onManageSkills={onManageSkills}
           renderFooter={(footerProps) => (
             <div className="flex items-center gap-1 px-2 pb-2 pt-1.5">

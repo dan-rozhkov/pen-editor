@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AttachedImage, ChatLaunchPayload, QueuedChatMessage } from "@/types/chat";
+import type { AttachedImage, ChatLaunchPayload, QueuedChatMessage, Task } from "@/types/chat";
 import { getDefaultModel, getModelOptions } from "@/lib/chatModels";
 
 /** Stable empty reference so the per-session selector never returns a fresh
@@ -14,6 +14,10 @@ export const NO_DISMISSED_SELECTION: ReadonlySet<string> = new Set<string>();
 /** Stable empty reference for sessions with no queued messages, for the same
  * reason as NO_ATTACHED_IMAGES. Never mutated. */
 export const NO_QUEUED_MESSAGES: QueuedChatMessage[] = [];
+
+/** Stable empty reference for sessions with no agent task list, for the same
+ * reason as NO_ATTACHED_IMAGES. Never mutated. */
+export const NO_TASKS: Task[] = [];
 
 export interface ChatTab {
   id: string;
@@ -64,6 +68,12 @@ interface ChatState {
    * "remove from context" choices survive the input unmounting.
    */
   dismissedSelection: Record<string, Set<string>>;
+  /**
+   * The AI agent's current task list, keyed by tab id — set wholesale by the
+   * `update_tasks` tool (full replacement, not a merge). Rendered by
+   * AgentTaskPanel above the composer.
+   */
+  tasks: Record<string, Task[]>;
 
   toggleOpen: () => void;
   open: () => void;
@@ -98,6 +108,8 @@ interface ChatState {
     tabId: string,
     update: Set<string> | ((prev: Set<string>) => Set<string>),
   ) => void;
+
+  setTasks: (tabId: string, tasks: Task[]) => void;
 }
 
 const DEFAULT_PARALLEL_COUNT: ParallelCount = 1;
@@ -163,6 +175,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   sessionActions: {},
   attachedImages: {},
   dismissedSelection: {},
+  tasks: {},
 
   toggleOpen: () => set((s) => ({ isOpen: !s.isOpen })),
   open: () => set({ isOpen: true }),
@@ -213,6 +226,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messageQueue,
       attachedImages,
       dismissedSelection,
+      tasks,
     } = get();
 
     // Abort any ongoing request for this tab
@@ -236,6 +250,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       delete newAttachedImages[tabId];
       const newDismissedSelection = { ...dismissedSelection };
       delete newDismissedSelection[tabId];
+      const newTasks = { ...tasks };
+      delete newTasks[tabId];
       set({
         tabs: [{ id: newId, title: "Chat 1", model, parallelCount }],
         activeTabId: newId,
@@ -246,6 +262,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         messageQueue: newMessageQueue,
         attachedImages: newAttachedImages,
         dismissedSelection: newDismissedSelection,
+        tasks: newTasks,
       });
       return;
     }
@@ -256,11 +273,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const newMessageQueue = { ...messageQueue };
     const newAttachedImages = { ...attachedImages };
     const newDismissedSelection = { ...dismissedSelection };
+    const newTasks = { ...tasks };
     delete newControllers[tabId];
     delete newLaunchQueue[tabId];
     delete newMessageQueue[tabId];
     delete newAttachedImages[tabId];
     delete newDismissedSelection[tabId];
+    delete newTasks[tabId];
 
     let newActiveTabId = activeTabId;
     if (activeTabId === tabId) {
@@ -281,6 +300,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messageQueue: newMessageQueue,
       attachedImages: newAttachedImages,
       dismissedSelection: newDismissedSelection,
+      tasks: newTasks,
     });
   },
 
@@ -418,6 +438,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
         nextMap[tabId] = next;
       }
       return { dismissedSelection: nextMap };
+    });
+  },
+
+  setTasks: (tabId, tasks) => {
+    set((s) => {
+      const nextMap = { ...s.tasks };
+      if (tasks.length === 0) {
+        delete nextMap[tabId];
+      } else {
+        nextMap[tabId] = tasks;
+      }
+      return { tasks: nextMap };
     });
   },
 }));

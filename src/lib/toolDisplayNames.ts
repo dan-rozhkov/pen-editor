@@ -43,6 +43,7 @@ export const toolDisplayNames: Record<string, string> = {
   get_guidelines: "Get Guidelines",
   get_style_guide_tags: "Get Style Guide Tags",
   get_style_guide: "Get Style Guide",
+  update_tasks: "Update tasks",
   ...referoToolDisplayNames,
   ask_user: "Ask a question",
   load_skill: "Load skill",
