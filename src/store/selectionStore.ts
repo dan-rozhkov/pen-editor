@@ -8,6 +8,7 @@ import { useVariableStore } from './variableStore'
 import { useTextStyleStore } from './textStyleStore'
 import { useStyleStore } from './styleStore'
 import { useMeasurementsStore } from './measurementsStore'
+import { useEmbedPickerStore } from './embedPickerStore'
 
 export type EditingMode = 'text' | 'name' | 'embed' | 'path' | 'text-path' | null
 
@@ -293,6 +294,12 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
 
   exitContainer: () => {
     const { enteredContainerId, instanceContext, editingNodeId, enteredInstanceDescendantPath, activeEmbedId } = get()
+    // Step -1: Exit element-picking mode first — the user is mid-pick inside
+    // an embed, which takes priority over every other back-out step below.
+    if (useEmbedPickerStore.getState().pickingEmbedId) {
+      useEmbedPickerStore.getState().stopPicking()
+      return true
+    }
     // Step 0: Exit an active (interactive) embed first
     if (activeEmbedId) {
       set({ activeEmbedId: null })

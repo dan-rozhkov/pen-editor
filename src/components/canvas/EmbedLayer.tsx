@@ -3,6 +3,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useRenderModeStore } from "@/store/renderModeStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
+import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import {
   applyEmbedInheritedDefaults,
   mountHtmlWithBodyStyles,
@@ -12,6 +13,11 @@ import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
 import type { EmbedNode } from "@/types/scene";
 import { topLevelAncestorId } from "@/utils/topLevelAncestor";
 import { useOverlayHostRect } from "./useOverlayHostRect";
+import {
+  buildElementPath,
+  describeEmbedElement,
+  resolvePickableElement,
+} from "@/lib/embedElementPicker";
 
 /** One Shadow-DOM host for a single embed node, synced to the viewport. */
 function EmbedHost({ nodeId }: { nodeId: string }) {
@@ -20,6 +26,7 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
 
   const node = useSceneStore((s) => s.nodesById[nodeId]) as EmbedNode | undefined;
   const isActive = useSelectionStore((s) => s.activeEmbedId === nodeId);
+  const isPicking = useEmbedPickerStore((s) => s.pickingEmbedId === nodeId);
 
   const htmlContent = node?.htmlContent;
   const width = node?.width;
@@ -65,6 +72,131 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
     return () => { contentRef.current = null; };
   }, [position, nodeId, htmlContent, width, height]);
 
+  // Element-picking mode: hover highlights, click selects. Guarded against
+  // inline-edit mode (isActive) — that mode already owns pointer events on
+  // the host for real interaction with the embedded page.
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host || !isPicking || isActive) return;
+
+    const shadowRoot = () => host.shadowRoot ?? null;
+
+    // Last composedPath()[0] seen by handleMove, so a run of pointermove
+    // events over the *same* element (60+/s while the pointer drifts a
+    // pixel at a time) skips buildElementPath (a querySelectorAll per
+    // ancestor id) and the store write entirely instead of repeating both
+    // on every raw event.
+    let lastMoveTarget: EventTarget | null = null;
+
+    const handleMove = (e: PointerEvent) => {
+      const target = e.composedPath()[0] ?? null;
+      if (target === lastMoveTarget) return;
+      lastMoveTarget = target;
+      const root = shadowRoot();
+      if (!root) return;
+      const el = resolvePickableElement(target, root);
+      // An empty path (e.g. `el` resolving to `root` itself, or to the
+      // synthetic content container `mountHtmlWithBodyStyles` mounts
+      // directly into `root`) isn't a meaningful hover target — there's no
+      // anchor to resolve back to a specific element later. Treat it as "not
+      // hovering anything" rather than drawing an empty-path hover box.
+      const path = el ? buildElementPath(el, root) : "";
+      useEmbedPickerStore.getState().setHoveredPath(path || null);
+    };
+
+    const handleLeave = () => {
+      lastMoveTarget = null;
+      useEmbedPickerStore.getState().setHoveredPath(null);
+    };
+
+    const handleClick = (e: MouseEvent) => {
+      // Capture-phase, so this runs before any click handler inside the
+      // embed's own HTML (links, buttons) and before the event can reach the
+      // Pixi canvas underneath.
+      e.preventDefault();
+      e.stopPropagation();
+      const root = shadowRoot();
+      if (!root) return;
+      const target = e.composedPath()[0] ?? null;
+      const el = resolvePickableElement(target, root);
+      if (!el) return;
+      const selection = describeEmbedElement(el, root, nodeId);
+      // Reject an empty-path selection outright: with no anchor to resolve
+      // back to a specific element, drawing a highlight for it is
+      // impossible, and shipping it to the agent as "the element the user
+      // pointed at" would be actively misleading — it would carry the
+      // whole embed's outerHtml with no path to locate it by, and no
+      // highlight is ever drawn to tell the user anything was picked at all.
+      if (!selection.path) return;
+      // Read htmlContent fresh from the store rather than closing over the
+      // `node` prop — this effect's deps don't include htmlContent, so a
+      // closed-over `node` could be stale by the time of a click, which
+      // would snapshot the wrong "at pick time" html for staleness checks.
+      const currentHtml = useSceneStore.getState().nodesById[nodeId] as EmbedNode | undefined;
+      useEmbedPickerStore.getState().selectElement(selection, currentHtml?.htmlContent ?? "");
+    };
+
+    // While picking, the embed's own content must be fully inert: swallow
+    // every event that could trigger the embed's own behaviour (a
+    // prototype's mousedown handler, a native contextmenu, a text-selecting
+    // dblclick) before it reaches the embed's DOM. `click` is handled above
+    // instead of swallowed here — it's the picker's own selection signal.
+    const swallow = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    // Pixi's wheel listener is bound to the canvas element, which is a
+    // *sibling* of this host, not an ancestor — so a wheel event landing on
+    // the host (pointerEvents: "auto" while picking) never reaches it via
+    // bubbling. Re-dispatch a matching WheelEvent at the canvas so zoom/pan
+    // keeps working while picking a small element is exactly when you need
+    // to zoom in first. Preserve every field panController reads.
+    const forwardWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const canvas = host
+        .closest<HTMLElement>("[data-canvas]")
+        ?.querySelector<HTMLCanvasElement>("canvas");
+      if (!canvas) return;
+      canvas.dispatchEvent(
+        new WheelEvent("wheel", {
+          deltaX: e.deltaX,
+          deltaY: e.deltaY,
+          deltaZ: e.deltaZ,
+          deltaMode: e.deltaMode,
+          clientX: e.clientX,
+          clientY: e.clientY,
+          ctrlKey: e.ctrlKey,
+          metaKey: e.metaKey,
+          shiftKey: e.shiftKey,
+          altKey: e.altKey,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    };
+
+    host.addEventListener("pointermove", handleMove);
+    host.addEventListener("pointerleave", handleLeave);
+    host.addEventListener("click", handleClick, true);
+    host.addEventListener("pointerdown", swallow, true);
+    host.addEventListener("mousedown", swallow, true);
+    host.addEventListener("dblclick", swallow, true);
+    host.addEventListener("contextmenu", swallow, true);
+    host.addEventListener("wheel", forwardWheel, { capture: true, passive: false });
+
+    return () => {
+      host.removeEventListener("pointermove", handleMove);
+      host.removeEventListener("pointerleave", handleLeave);
+      host.removeEventListener("click", handleClick, true);
+      host.removeEventListener("pointerdown", swallow, true);
+      host.removeEventListener("mousedown", swallow, true);
+      host.removeEventListener("dblclick", swallow, true);
+      host.removeEventListener("contextmenu", swallow, true);
+      host.removeEventListener("wheel", forwardWheel, true);
+    };
+  }, [isPicking, isActive, nodeId]);
+
   if (!node) return null;
 
   return (
@@ -74,7 +206,8 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
       style={{
         position: "absolute",
         overflow: "hidden",
-        pointerEvents: isActive ? "auto" : "none",
+        pointerEvents: isActive || isPicking ? "auto" : "none",
+        cursor: isPicking && !isActive ? "crosshair" : undefined,
       }}
     />
   );

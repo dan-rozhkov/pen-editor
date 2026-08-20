@@ -17,6 +17,8 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useChatStore, NO_QUEUED_MESSAGES } from "@/store/chatStore";
+import { useEmbedPickerStore } from "@/store/embedPickerStore";
+import type { EmbedNode } from "@/types/scene";
 import { toolHandlers, type ToolExecutionContext } from "@/lib/toolRegistry";
 import type { ChatLaunchPayload } from "@/types/chat";
 import { hasPendingAskUser } from "@/components/chat/pendingAskUser";
@@ -78,6 +80,25 @@ export function buildCanvasContext(sessionId?: string): object {
 
   const { model } = resolveSessionConfig(sessionId);
 
+  // Element the user pointed at inside an embed via the element picker
+  // (EmbedActionBar's "Select element" mode). Only forwarded while the
+  // embed it belongs to still exists in the scene — a stale embedId (node
+  // deleted) is otherwise cleared by useEmbedPickerLifecycle, but this is a
+  // last-line guard against sending a dangling reference to the agent.
+  const pickerSelection = useEmbedPickerStore.getState().selection;
+  const selectedEmbedElement =
+    pickerSelection && nodesById[pickerSelection.embedId]
+      ? {
+          ...pickerSelection,
+          hasSourceTemplate: !!(nodesById[pickerSelection.embedId] as EmbedNode).sourceTemplate,
+          hint:
+            `The user pointed at this element inside embed ${pickerSelection.embedId}. ` +
+            "Locate it with read_embed_html (mode 'grep') to get a byte-exact anchor before " +
+            "calling edit_embed_html — this outerHtml comes from the rendered DOM and may " +
+            "differ from the stored source.",
+        }
+      : undefined;
+
   return {
     canvasContext: JSON.stringify({
       roots,
@@ -90,6 +111,7 @@ export function buildCanvasContext(sessionId?: string): object {
         value: v.value,
         themeValues: v.themeValues,
       })),
+      ...(selectedEmbedElement ? { selectedEmbedElement } : {}),
     }),
     model: resolveModel(model),
     userId: getUserId(),

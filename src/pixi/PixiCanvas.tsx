@@ -7,6 +7,8 @@ import { InlineEmbedEditor } from "@/components/InlineEmbedEditor";
 import { EmbedActionBar } from "@/components/canvas/EmbedActionBar";
 import { EmbedAgentButton } from "@/components/canvas/EmbedAgentButton";
 import { EmbedSelectionFrame } from "@/components/canvas/EmbedSelectionFrame";
+import { EmbedElementHighlight } from "@/components/canvas/EmbedElementHighlight";
+import { useEmbedPickerLifecycle } from "@/components/canvas/useEmbedPickerLifecycle";
 import { EmbedLayer } from "@/components/canvas/EmbedLayer";
 import { CommentLayer } from "@/components/comments/CommentLayer";
 import { FrameAgentButton } from "@/components/canvas/FrameAgentButton";
@@ -289,6 +291,10 @@ export function PixiCanvas() {
     [],
   );
 
+  // Keeps embedPickerStore in sync with selection/scene changes (deselect,
+  // inline-edit entry, embed deletion) — see the hook for the full list.
+  useEmbedPickerLifecycle();
+
   // Keyboard shortcuts (reuse existing hook)
   useCanvasKeyboardShortcuts({
     dimensions,
@@ -526,6 +532,12 @@ export function PixiCanvas() {
             showHandles={false}
           />
         )}
+      {/* Element-picker hover/selection highlight — only renders while
+          picking or once an element has been picked. Gated internally on
+          canEditScene(editorMode), the same way EmbedActionBar gates
+          itself, so it never paints over a presented slide or a
+          view-mode canvas. */}
+      <EmbedElementHighlight />
       {selectedEmbedNode && selectedEmbedPosition && editingMode !== "embed" && (
         <EmbedActionBar
           node={selectedEmbedNode}

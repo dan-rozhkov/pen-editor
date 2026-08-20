@@ -13,6 +13,7 @@ import { useCommentsStore } from "@/store/commentsStore";
 import { useDevExportStore } from "@/store/devExportStore";
 import { useMcpBridgeStore } from "@/store/mcpBridgeStore";
 import { useDocumentStore } from "@/store/documentStore";
+import { useEmbedPickerStore } from "@/store/embedPickerStore";
 
 /** Reset every store the tool handlers touch to a clean baseline. */
 export function resetStores(): void {
@@ -54,6 +55,7 @@ export function resetStores(): void {
   useDevExportStore.setState({ overrides: {} });
   useMcpBridgeStore.setState({ status: "off" });
   useDocumentStore.setState({ fileName: null });
+  useEmbedPickerStore.getState().reset();
 }
 
 /**

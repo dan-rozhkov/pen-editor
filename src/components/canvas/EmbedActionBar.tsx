@@ -1,11 +1,18 @@
 import { useCallback } from "react";
-import { CircleNotch, PenNibIcon, PencilSimpleLineIcon } from "@phosphor-icons/react";
+import {
+  CircleNotch,
+  CursorClickIcon,
+  PenNibIcon,
+  PencilSimpleLineIcon,
+} from "@phosphor-icons/react";
 import { IconButton } from "@/components/ui/IconButton";
 import type { EmbedNode } from "@/types/scene";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
 import { useConvertEmbedToDesign } from "@/components/properties/useConvertEmbedToDesign";
+import { useEmbedPickerStore } from "@/store/embedPickerStore";
+import { cn } from "@/lib/utils";
 
 interface EmbedActionBarProps {
   node: EmbedNode;
@@ -20,6 +27,7 @@ export function EmbedActionBar({
 }: EmbedActionBarProps) {
   const { converting: isConverting, convertToDesign } = useConvertEmbedToDesign(node.id);
   const editorMode = useEditorModeStore((s) => s.mode);
+  const isPicking = useEmbedPickerStore((s) => s.pickingEmbedId === node.id);
   const scale = useViewportStore((s) => s.scale);
   const panX = useViewportStore((s) => s.x);
   const panY = useViewportStore((s) => s.y);
@@ -39,6 +47,19 @@ export function EmbedActionBar({
       e.preventDefault();
       e.stopPropagation();
       useSelectionStore.getState().startEditing(node.id, "embed");
+    },
+    [node.id],
+  );
+
+  const handleToggleElementPicker = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (useEmbedPickerStore.getState().pickingEmbedId === node.id) {
+        useEmbedPickerStore.getState().stopPicking();
+      } else {
+        useEmbedPickerStore.getState().startPicking(node.id);
+      }
     },
     [node.id],
   );
@@ -75,6 +96,21 @@ export function EmbedActionBar({
         onClick={handleInlineEdit}
       >
         <PencilSimpleLineIcon className="size-6" weight="light" />
+      </IconButton>
+      <div className="h-5 w-px bg-border" />
+      <IconButton
+        tooltip={isPicking ? "Exit element select" : "Select element"}
+        side="top"
+        variant="ghost"
+        size="icon-sm"
+        className={cn(
+          "size-9 rounded-lg p-1",
+          isPicking && "bg-accent text-accent-foreground",
+        )}
+        aria-pressed={isPicking}
+        onClick={handleToggleElementPicker}
+      >
+        <CursorClickIcon className="size-6" weight="light" />
       </IconButton>
       <div className="h-5 w-px bg-border" />
       <IconButton

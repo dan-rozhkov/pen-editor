@@ -18,6 +18,7 @@ import { toolHandlers, type ToolHandler } from "@/lib/toolRegistry";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useChatStore } from "@/store/chatStore";
 import { useSceneStore } from "@/store/sceneStore";
+import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useAiVectorPreviewStore, vectorPreviewKey } from "@/store/aiVectorPreviewStore";
 import { resetStores, seedScene, seedVariables } from "@/test/fixtures";
 
@@ -308,6 +309,98 @@ describe("buildCanvasContext", () => {
     expect(first).toBeTruthy();
     expect((buildCanvasContext() as { userId: string }).userId).toBe(first);
     expect(localStorage.getItem("pen.userId")).toBe(first);
+  });
+
+  it("includes selectedEmbedElement when a picked element's embed still exists in the scene", () => {
+    useSceneStore.setState({
+      nodesById: {
+        ...useSceneStore.getState().nodesById,
+        embed1: {
+          id: "embed1",
+          type: "embed",
+          name: "Screen",
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 80,
+          htmlContent: "<div><button>Buy</button></div>",
+        },
+      },
+      parentById: { ...useSceneStore.getState().parentById, embed1: null },
+      rootIds: [...useSceneStore.getState().rootIds, "embed1"],
+    } as never);
+    useEmbedPickerStore.getState().selectElement({
+      embedId: "embed1",
+      path: "div:nth-of-type(1) > button:nth-of-type(1)",
+      tagName: "button",
+      classes: [],
+      textPreview: "Buy",
+      outerHtml: "<button>Buy</button>",
+    });
+
+    const context = buildCanvasContext() as { canvasContext: string };
+    const canvas = JSON.parse(context.canvasContext);
+
+    expect(canvas.selectedEmbedElement).toMatchObject({
+      embedId: "embed1",
+      path: "div:nth-of-type(1) > button:nth-of-type(1)",
+      tagName: "button",
+      outerHtml: "<button>Buy</button>",
+      hasSourceTemplate: false,
+    });
+    expect(canvas.selectedEmbedElement.hint).toMatch(/embed1/);
+    expect(canvas.selectedEmbedElement.hint).toMatch(/read_embed_html/);
+  });
+
+  it("reports hasSourceTemplate: true when the embed has a non-empty sourceTemplate", () => {
+    useSceneStore.setState({
+      nodesById: {
+        ...useSceneStore.getState().nodesById,
+        embed1: {
+          id: "embed1",
+          type: "embed",
+          name: "Screen",
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 80,
+          htmlContent: "<div></div>",
+          sourceTemplate: "<c-card />",
+        },
+      },
+      parentById: { ...useSceneStore.getState().parentById, embed1: null },
+      rootIds: [...useSceneStore.getState().rootIds, "embed1"],
+    } as never);
+    useEmbedPickerStore.getState().selectElement({
+      embedId: "embed1",
+      path: "div:nth-of-type(1)",
+      tagName: "div",
+      classes: [],
+      textPreview: "",
+      outerHtml: "<div></div>",
+    });
+
+    const canvas = JSON.parse((buildCanvasContext() as { canvasContext: string }).canvasContext);
+    expect(canvas.selectedEmbedElement.hasSourceTemplate).toBe(true);
+  });
+
+  it("omits selectedEmbedElement when there is no picked element", () => {
+    const canvas = JSON.parse((buildCanvasContext() as { canvasContext: string }).canvasContext);
+    expect(canvas).not.toHaveProperty("selectedEmbedElement");
+  });
+
+  it("omits selectedEmbedElement when the picked element's embed no longer exists in the scene", () => {
+    useEmbedPickerStore.getState().selectElement({
+      embedId: "ghost-embed",
+      path: "div:nth-of-type(1)",
+      tagName: "div",
+      classes: [],
+      textPreview: "",
+      outerHtml: "<div></div>",
+    });
+
+    const canvas = JSON.parse((buildCanvasContext() as { canvasContext: string }).canvasContext);
+    expect(canvas).not.toHaveProperty("selectedEmbedElement");
   });
 });
 
