@@ -3,6 +3,7 @@ import { toolDisplayNames, referoToolDisplayNames } from "../toolDisplayNames";
 import { getToolIcon } from "../toolIcons";
 import { toolHandlers } from "../toolRegistry";
 import { ReferoIcon } from "@/components/icons/ReferoIcon";
+import { BinocularsIcon, NotePencilIcon } from "@phosphor-icons/react";
 
 describe("toolIcons", () => {
   it("has a dedicated icon for every named tool", () => {
@@ -47,6 +48,13 @@ describe("toolIcons", () => {
 
   it("falls back to a generic icon for an unmapped tool", () => {
     expect(getToolIcon("some_future_tool")).toBeTruthy();
+  });
+
+  it("presents embed implementation tools as design actions", () => {
+    expect(toolDisplayNames.read_embed_html).toBe("Explore Design");
+    expect(toolDisplayNames.edit_embed_html).toBe("Make Changes to Design");
+    expect(getToolIcon("read_embed_html")).toBe(BinocularsIcon);
+    expect(getToolIcon("edit_embed_html")).toBe(NotePencilIcon);
   });
 
   it("brands every Refero-served tool with the Refero mark", () => {
