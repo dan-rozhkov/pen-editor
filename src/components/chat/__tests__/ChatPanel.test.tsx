@@ -151,42 +151,4 @@ describe("<ChatPanelContent />", () => {
     expect(useChatStore.getState().messageQueue["tab-1"]).toBeUndefined();
   });
 
-  // Defect fix: clearChat must also drop the session's task checklist, or a
-  // stale plan from the discarded conversation keeps showing above the
-  // now-empty composer.
-  it("clears the task list when Clear chat is used", () => {
-    useChatStore.getState().setTasks("tab-1", [{ title: "old task", status: "pending" }]);
-    mockState.messages = [
-      { id: "u1", role: "user", parts: [{ type: "text", text: "hi" }] },
-    ];
-    render(<ChatPanelContent />);
-
-    expect(useChatStore.getState().tasks["tab-1"]).toEqual([
-      { title: "old task", status: "pending" },
-    ]);
-
-    useChatStore.getState().sessionActions["tab-1"]?.clearChat();
-
-    expect(useChatStore.getState().tasks["tab-1"]).toBeUndefined();
-  });
-
-  // Defect fix: rolling back to an earlier message must also drop the task
-  // list, since the checklist may belong to the discarded conversation tail.
-  it("clears the task list on rollback", () => {
-    useChatStore.getState().setTasks("tab-1", [{ title: "stale task", status: "pending" }]);
-    mockState.messages = [
-      { id: "u1", role: "user", parts: [{ type: "text", text: "first message" }] },
-      { id: "a1", role: "assistant", parts: [{ type: "text", text: "reply" }] },
-    ];
-    render(<ChatPanelContent />);
-
-    expect(useChatStore.getState().tasks["tab-1"]).toEqual([
-      { title: "stale task", status: "pending" },
-    ]);
-
-    fireEvent.click(screen.getByLabelText("Roll back to this message"));
-
-    expect(setMessages).toHaveBeenCalledWith([]);
-    expect(useChatStore.getState().tasks["tab-1"]).toBeUndefined();
-  });
 });

@@ -34,7 +34,6 @@ import { drawVector } from "./tools/drawVector";
 import { publishToShowcase } from "./tools/publishToShowcase";
 import { readEmbedHtml } from "./tools/readEmbedHtml";
 import { editEmbedHtml } from "./tools/editEmbedHtml";
-import { updateTasks } from "./tools/updateTasks";
 import { removeBackground } from "./tools/removeBackground";
 import { vectorizeImage } from "./tools/vectorizeImage";
 
@@ -94,7 +93,6 @@ export const toolHandlers: Record<string, ToolHandler> = {
   draw_vector: drawVector,
   analyze_image: analyzeImage,
   publish_to_showcase: publishToShowcase,
-  update_tasks: updateTasks,
   remove_background: removeBackground,
   vectorize_image: vectorizeImage,
 };

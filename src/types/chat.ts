@@ -16,9 +16,3 @@ export interface QueuedChatMessage {
   id: string;
   payload: ChatLaunchPayload;
 }
-
-/** A single item in the agent's task list, set wholesale via `update_tasks`. */
-export interface Task {
-  title: string;
-  status: "pending" | "in_progress" | "completed";
-}

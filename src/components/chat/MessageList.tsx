@@ -288,19 +288,9 @@ export function MessageList({ messages, isLoading, onRollback, addToolOutput }: 
         }
 
         // Assistant: render parts inline in order
-        const hasAnyContent = msg.parts.some((p) => {
-          // update_tasks results are rendered as the AgentTaskPanel, not as a
-          // part in the transcript (see the render loop below) — so a
-          // successful/pending one must not count as "content" here, or the
-          // very first part of a message stalls StreamingIndicator and the
-          // user sees an empty bubble. An errored call *is* rendered (falls
-          // through to ToolCallIndicator) and must count.
-          if (p.type === "tool-update_tasks") {
-            const tp = p as { state?: string };
-            return tp.state === "output-error";
-          }
-          return (p.type === "text" && p.text) || p.type === "reasoning" || isToolUIPart(p);
-        });
+        const hasAnyContent = msg.parts.some(
+          (p) => (p.type === "text" && p.text) || p.type === "reasoning" || isToolUIPart(p),
+        );
         const isEmptyStreaming =
           isLoading &&
           msg === lastMessage &&
@@ -404,18 +394,6 @@ export function MessageList({ messages, isLoading, onRollback, addToolOutput }: 
                         />
                       );
                     }
-                  }
-                }
-                // update_tasks results are already visible as the
-                // AgentTaskPanel above the composer — a ToolCallIndicator row
-                // for it would just duplicate that panel in the transcript.
-                // An errored call is the exception: the panel has nothing to
-                // show for a failed update, so let it fall through to the
-                // generic ToolCallIndicator below instead of vanishing.
-                if (part.type === "tool-update_tasks") {
-                  const tp = part as { state?: string };
-                  if (tp.state !== "output-error") {
-                    return null;
                   }
                 }
                 if (isToolUIPart(part)) {
