@@ -87,8 +87,11 @@ get a fresh 3-retry budget.
 
 Where the chat panel currently renders the error / loading indicator: when
 `retryState != null`, show a neutral (non-red) status line —
-"Network error — retrying in 5 s (attempt N/3)…" (English, matching the rest
-of the UI) — instead of the error block. The red error only appears after all attempts are exhausted (or for
+"Connection problem — retrying in N s (attempt N/3)…" (English, matching the
+rest of the UI) — instead of the error block. The delay is read from
+`retryState.delayMs` rather than a constant: since the 2026-08-21 port of pi's
+retry policy the wait is exponential with jitter and can be named by the
+server via `Retry-After` (see the "Retry policy" note below). The red error only appears after all attempts are exhausted (or for
 non-retryable errors, immediately, as today). While retrying, `chat.status`
 stays `submitted`/`streaming`, so the existing spinner/Stop affordances remain
 correct.
@@ -126,3 +129,23 @@ correct.
   ended `null`. Uses the existing SSE chunk-format fixtures and fake timers.
 - **UI**: the status line is a small conditional render; covered by the hook
   test's `retryState` contract (no dedicated component test).
+
+## Retry policy (updated 2026-08-21)
+
+The original policy in this document — retry only fetch-level `TypeError`s,
+flat 5 s delay — was widened by porting pi's provider-retry policy
+(earendil-works/pi, MIT):
+
+- Retryable HTTP statuses are now retried too, but deliberately only the ones
+  that mean the server never started the turn: **408, 429, 503**. 500/502/504
+  are NOT retried — `POST /api/chat` is not idempotent and those usually mean
+  the turn was already running, so a re-send would pay for a second agent turn
+  and duplicate trace rows. A backend that knows better can opt in per response
+  with `x-should-retry: true` (and opt out with `false`).
+- `retry-after-ms` / `Retry-After` (seconds or HTTP-date) are honored; a
+  server-named delay above the 30 s cap ends the retries instead of waiting.
+- Backoff is exponential with jitter: `1000 * 2 ** (attempt - 1)`, reduced by
+  up to 25% at random, capped at 30 s. `RETRY_MAX_ATTEMPTS` stays 3.
+- Unchanged invariant: a 200 is returned on the first successful fetch and is
+  never re-fetched. Restarting a turn whose body already started streaming
+  would re-execute client tool calls against the scene graph.

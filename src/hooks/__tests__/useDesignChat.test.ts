@@ -877,21 +877,27 @@ describe("useDesignChat (hook + UI message stream)", () => {
     });
 
     await waitForFakeTimers(() =>
-      expect(result.current.retryState).toEqual({ attempt: 1, maxAttempts: 3 }),
+      expect(result.current.retryState).toMatchObject({
+        attempt: 1,
+        maxAttempts: 3,
+        reason: "network",
+      }),
     );
     // No red error while retrying.
     expect(result.current.error).toBeUndefined();
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5000);
-    });
+    // Backoff before retry 2 is at most base * 2**1 = 2000ms (jittered down
+    // by up to 25%). Advance in small steps via waitForFakeTimers so the
+    // intermediate attempt:2 state is observed rather than skipped over —
+    // a single large jump would also cross retry 3's shorter backoff and
+    // land straight on the final success.
     await waitForFakeTimers(() =>
-      expect(result.current.retryState).toEqual({ attempt: 2, maxAttempts: 3 }),
+      expect(result.current.retryState).toMatchObject({
+        attempt: 2,
+        maxAttempts: 3,
+        reason: "network",
+      }),
     );
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5000);
-    });
 
     await waitForFakeTimers(() => expect(result.current.retryState).toBeNull());
     await waitForFakeTimers(() => {

@@ -45,7 +45,6 @@ import {
 import type { ChatLaunchPayload } from "@/types/chat";
 import { useModelOptions } from "@/hooks/useModelOptions";
 import { chatToMarkdown, chatFilename, downloadMarkdown } from "@/lib/chatExport";
-import { RETRY_DELAY_MS } from "@/lib/retryFetch";
 
 const PARALLEL_COUNT_OPTIONS = [
   { value: "1", label: "x1" },
@@ -299,8 +298,11 @@ function ChatSession({
       {retryState && !error && (
         <div className="px-3 pt-2">
           <InlineAlert role="status">
-            Network error — retrying in {RETRY_DELAY_MS / 1000} s (attempt {retryState.attempt}/
-            {retryState.maxAttempts})…
+            Connection problem — retrying
+            {retryState.delayMs !== undefined
+              ? ` in ${Math.max(1, Math.round(retryState.delayMs / 1000))} s`
+              : ""}{" "}
+            (attempt {retryState.attempt}/{retryState.maxAttempts})…
           </InlineAlert>
         </div>
       )}
