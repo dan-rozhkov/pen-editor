@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import {
   CircleNotch,
-  CursorClickIcon,
+  HandTapIcon,
   PenNibIcon,
   PencilSimpleLineIcon,
 } from "@phosphor-icons/react";
@@ -105,12 +105,13 @@ export function EmbedActionBar({
         size="icon-sm"
         className={cn(
           "size-9 rounded-lg p-1",
-          isPicking && "bg-accent text-accent-foreground",
+          isPicking &&
+            "bg-accent-light text-white hover:bg-accent-light hover:text-white",
         )}
         aria-pressed={isPicking}
         onClick={handleToggleElementPicker}
       >
-        <CursorClickIcon className="size-6" weight="light" />
+        <HandTapIcon className="size-6" weight="light" />
       </IconButton>
       <div className="h-5 w-px bg-border" />
       <IconButton
