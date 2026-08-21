@@ -6,6 +6,7 @@ import {
 } from "@/lib/documentComponents";
 import { normalizeEmbedHtmlForStorage } from "@/utils/embedTemplateUtils";
 import { applyAnchorEdits, type AnchorEdit } from "@/lib/embedHtmlEdit/applyAnchorEdits";
+import { inspectEmbedHtml } from "@/lib/embedHtmlLint/inspectEmbedHtml";
 import type { EmbedNode, FlatSceneNode } from "@/types/scene";
 import type { ToolHandler } from "../toolRegistry";
 
@@ -102,7 +103,18 @@ export const editEmbedHtml: ToolHandler = async (args) => {
     delete updated.sourceTemplate;
   }
 
-  const issues = normalized.issues;
+  // Static HTML warnings (unknown Phosphor icon classes render as blank space
+  // with no error anywhere else). Only the ones this edit INTRODUCED: linting
+  // the whole screen would re-report every pre-existing bad name on each edit,
+  // which reads as "your edit broke this" and pulls the model into fixing
+  // markup nobody asked about.
+  // Compare rendered-against-rendered: `source` may be the authoring template,
+  // whose expansion pulls in component markup this edit never touched.
+  const preexisting = new Set(inspectEmbedHtml(embed.htmlContent));
+  const issues = [
+    ...normalized.issues,
+    ...inspectEmbedHtml(updated.htmlContent).filter((w) => !preexisting.has(w)),
+  ];
 
   const newNodesById: Record<string, FlatSceneNode> = {
     ...state.nodesById,
@@ -116,6 +128,7 @@ export const editEmbedHtml: ToolHandler = async (args) => {
     nodeId,
     editsApplied: edits.length,
     replacements: edited.replacements,
+    normalizedMatches: edited.normalizedMatches,
     htmlLength: updated.htmlContent.length,
     targetedSourceTemplate,
     issues,

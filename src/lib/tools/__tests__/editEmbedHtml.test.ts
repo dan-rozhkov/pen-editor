@@ -121,6 +121,47 @@ describe("editEmbedHtml", () => {
     expect(result.error).toMatch(/No edits/);
   });
 
+  it("applies a whitespace-drifted anchor and reports it as normalized", async () => {
+    seedEmbed("e1", "<div>\n  <p>\n    hi\n  </p>\n</div>");
+    const result = JSON.parse(
+      await editEmbedHtml({
+        nodeId: "e1",
+        edits: [{ oldString: "<p> hi </p>", newString: "<p>bye</p>" }],
+      }),
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.normalizedMatches).toBe(1);
+    expect(html("e1").htmlContent).toBe("<div>\n  <p>bye</p>\n</div>");
+  });
+
+  it("rejects an edit that breaks tag structure and leaves the store untouched", async () => {
+    const source = '<div class="top-bar"><span>title</span></div><div class="map-mini"></div>';
+    seedEmbed("e1", source);
+    const result = JSON.parse(
+      await editEmbedHtml({
+        nodeId: "e1",
+        edits: [{ oldString: "</span></div><div", newString: "</span><div" }],
+      }),
+    );
+    expect(result.error).toMatch(/unclosed/);
+    expect(html("e1").htmlContent).toBe(source);
+  });
+
+  it("still allows editing a screen that was already unbalanced before the edit", async () => {
+    const source = '<div class="top-bar"><span>title</span><div class="map-mini"></div>';
+    seedEmbed("e1", source);
+    const result = JSON.parse(
+      await editEmbedHtml({
+        nodeId: "e1",
+        edits: [{ oldString: "title", newString: "renamed" }],
+      }),
+    );
+    expect(result.error).toBeUndefined();
+    expect(html("e1").htmlContent).toBe(
+      '<div class="top-bar"><span>renamed</span><div class="map-mini"></div>',
+    );
+  });
+
   it("records exactly one undo entry", async () => {
     seedEmbed("e1", "<p>a</p>");
     const before = useHistoryStore.getState().past.length;
@@ -179,5 +220,51 @@ describe("editEmbedHtml false-positive component tags", () => {
     );
     expect(result.error).toBeUndefined();
     expect(html("e1").htmlContent).toBe("<script>for (let i = 0; i<c-1; i++) {}</script><p>bye</p>");
+  });
+});
+
+describe("editEmbedHtml Phosphor icon warnings", () => {
+  beforeEach(() => {
+    resetStores();
+  });
+
+  it("warns about an unknown icon class the edit introduced", async () => {
+    seedEmbed("e1", '<i class="ph ph-timer"></i>');
+    const result = JSON.parse(
+      await editEmbedHtml({
+        nodeId: "e1",
+        edits: [{ oldString: "ph-timer", newString: "ph-stopwatch" }],
+      }),
+    ) as { issues: string[] };
+
+    expect(result.issues).toHaveLength(1);
+    expect(result.issues[0]).toContain('Unknown Phosphor icon "ph-stopwatch"');
+    expect(result.issues[0]).toContain("blank space");
+  });
+
+  it("stays quiet about a bad icon name the edit did not introduce", async () => {
+    seedEmbed("e1", '<i class="ph ph-stopwatch"></i><p>hello</p>');
+    const result = JSON.parse(
+      await editEmbedHtml({
+        nodeId: "e1",
+        edits: [{ oldString: "<p>hello</p>", newString: "<p>bye</p>" }],
+      }),
+    ) as { issues: string[] };
+
+    // The screen is still wrong, but this edit did not touch it — re-reporting
+    // it every time reads as "your edit broke this".
+    expect(result.issues).toEqual([]);
+  });
+
+  it("does not warn about a valid icon class", async () => {
+    seedEmbed("e1", '<i class="ph ph-timer"></i>');
+    const result = JSON.parse(
+      await editEmbedHtml({
+        nodeId: "e1",
+        edits: [{ oldString: "ph-timer", newString: "ph-funnel" }],
+      }),
+    ) as { issues: string[] };
+
+    expect(result.issues).toEqual([]);
   });
 });

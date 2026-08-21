@@ -31,6 +31,7 @@ import {
   getFills,
 } from "@/utils/fillUtils";
 import { normalizeEmbedHtmlForStorage } from "@/utils/embedTemplateUtils";
+import { inspectEmbedHtml } from "@/lib/embedHtmlLint/inspectEmbedHtml";
 import { getPropertyValuesUpdateError } from "@/utils/componentProperties";
 import { repairGeneratedImageUrls } from "../generateImage/repairImageUrls";
 import { getIssuedImageUrls } from "../generateImage/registry";
@@ -139,6 +140,17 @@ function normalizeEmbedNode(
     }
     for (const issue of issues) {
       ctx.issues.push(issue);
+    }
+  }
+
+  // Static HTML checks (currently: unknown Phosphor icon classes, which
+  // render as blank space with no error anywhere else) — same "warning, not
+  // fatal" issues channel the model reads back from the tool result. Only
+  // when this op actually supplied htmlContent, same guard as the repair
+  // pass above, so an unrelated update isn't re-linted every time.
+  if (htmlTouched && embed.htmlContent) {
+    for (const warning of inspectEmbedHtml(embed.htmlContent)) {
+      ctx.issues.push(warning);
     }
   }
 }
