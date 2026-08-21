@@ -1,3 +1,4 @@
+import { boundedLevenshtein } from "@/utils/editDistance";
 import { PHOSPHOR_ICON_NAMES, PHOSPHOR_WEB_VERSION } from "./phosphorIconNames";
 
 /**
@@ -31,30 +32,6 @@ const MAX_SUGGESTION_DISTANCE = 3;
 const MIN_SHARED_SUBSTRING = 4;
 
 const CLASS_ATTR_RE = /class\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
-
-function levenshtein(a: string, b: string, limit: number): number {
-  if (a === b) return 0;
-  if (Math.abs(a.length - b.length) > limit) return limit + 1;
-
-  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    const curr = [i];
-    let rowMin = i;
-    for (let j = 1; j <= b.length; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      const value = Math.min(
-        curr[j - 1] + 1,
-        prev[j] + 1,
-        prev[j - 1] + cost,
-      );
-      curr.push(value);
-      rowMin = Math.min(rowMin, value);
-    }
-    if (rowMin > limit) return limit + 1;
-    prev = curr;
-  }
-  return prev[b.length];
-}
 
 /**
  * Closest known icon name, or undefined when nothing is close enough to be
@@ -90,7 +67,7 @@ function suggestIconName(unknown: string): string | undefined {
       }
     }
 
-    const distance = levenshtein(unknown, known, distanceBestValue - 1);
+    const distance = boundedLevenshtein(unknown, known, distanceBestValue - 1);
     if (distance < distanceBestValue) {
       distanceBestValue = distance;
       distanceBest = known;

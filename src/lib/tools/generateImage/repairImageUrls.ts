@@ -12,33 +12,13 @@
 // snapped to the nearest issued URL, as long as it's near enough to be a
 // transcription slip rather than a different image.
 
+import { boundedLevenshtein } from "@/utils/editDistance";
+
 // Max edit distance still treated as a typo. A UUID is 36 chars; a handful of
 // wrong characters is a slip, while a wholly invented id lands far past this
 // and is left alone (and reported) instead of being snapped to an unrelated
 // image.
 const MAX_TYPO_DISTANCE = 6;
-
-function levenshtein(a: string, b: string, limit: number): number {
-  if (a === b) return 0;
-  if (Math.abs(a.length - b.length) > limit) return limit + 1;
-
-  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    const curr = [i];
-    let rowMin = i;
-    for (let j = 1; j <= b.length; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      const value = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
-      curr.push(value);
-      if (value < rowMin) rowMin = value;
-    }
-    // Every future row can only grow, so once the whole row is past the limit
-    // the answer is too — bail instead of finishing the matrix.
-    if (rowMin > limit) return limit + 1;
-    prev = curr;
-  }
-  return prev[b.length];
-}
 
 function directoryOf(url: string): string {
   return url.slice(0, url.lastIndexOf("/") + 1);
@@ -79,7 +59,7 @@ export function repairGeneratedImageUrls(
     let best: string | undefined;
     let bestDistance = MAX_TYPO_DISTANCE + 1;
     for (const candidate of issued) {
-      const distance = levenshtein(match, candidate, bestDistance);
+      const distance = boundedLevenshtein(match, candidate, bestDistance);
       if (distance < bestDistance) {
         bestDistance = distance;
         best = candidate;
