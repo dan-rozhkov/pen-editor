@@ -112,6 +112,11 @@ const FALLBACK_MODELS: ChatModelOption[] = [
     supportsVision: true,
   },
   {
+    value: "google/gemini-3.8-flash",
+    label: "Gemini 3.8 Flash",
+    supportsVision: true,
+  },
+  {
     value: "meta/muse-spark-1.3-contributor",
     label: "Muse Spark 1.3",
     supportsVision: true,
