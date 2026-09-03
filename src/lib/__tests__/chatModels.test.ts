@@ -15,7 +15,10 @@ describe("chatModels Auto option", () => {
 
   it("lists Auto first in the options", () => {
     const options = getModelOptions();
-    expect(options[0]).toMatchObject({ value: AUTO_MODEL_VALUE, label: "Auto" });
+    expect(options[0]).toMatchObject({
+      value: AUTO_MODEL_VALUE,
+      label: "Auto",
+    });
   });
 
   it("uses the curated model list as its offline fallback", () => {
@@ -27,7 +30,7 @@ describe("chatModels Auto option", () => {
       "minimax/minimax-m3",
       "xiaomi/mimo-v2.5-pro",
       "xiaomi/mimo-v2.5",
-      "deepseek/deepseek-v4-flash",
+      "deepseek/deepseek-v4-flash-vision-exp",
       "deepseek/deepseek-v4-pro",
       "tencent/hy3",
       "nvidia/nemotron-3-ultra-550b-a55b",
@@ -77,7 +80,11 @@ describe("chatModels visionFallback", () => {
         ok: true,
         json: async () => ({
           models: [
-            { id: "text-only/model", label: "Text Only", supportsVision: false },
+            {
+              id: "text-only/model",
+              label: "Text Only",
+              supportsVision: false,
+            },
           ],
           default: "text-only/model",
           visionFallback: true,
@@ -102,7 +109,7 @@ describe("chatModels visionFallback", () => {
     const fresh = await import("@/lib/chatModels");
     await fresh.loadModels();
 
-    expect(fresh.canSendImages("deepseek/deepseek-v4-flash")).toBe(false);
+    expect(fresh.canSendImages("deepseek/deepseek-v4-pro")).toBe(false);
   });
 });
 

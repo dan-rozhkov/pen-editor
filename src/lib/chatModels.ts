@@ -61,9 +61,9 @@ const FALLBACK_MODELS: ChatModelOption[] = [
     supportsVision: true,
   },
   {
-    value: "deepseek/deepseek-v4-flash",
+    value: "deepseek/deepseek-v4-flash-vision-exp",
     label: "DeepSeek V4 Flash",
-    supportsVision: false,
+    supportsVision: true,
   },
   {
     value: "deepseek/deepseek-v4-pro",
