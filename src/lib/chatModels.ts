@@ -111,6 +111,11 @@ const FALLBACK_MODELS: ChatModelOption[] = [
     label: "Gemini 3.7 Flash",
     supportsVision: true,
   },
+  {
+    value: "meta/muse-spark-1.3-contributor",
+    label: "Muse Spark 1.3",
+    supportsVision: true,
+  },
 ];
 
 // Mirrors the backend's OPENROUTER_MODEL default (pen-editor-backend

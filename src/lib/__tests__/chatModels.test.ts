@@ -38,6 +38,7 @@ describe("chatModels Auto option", () => {
       "x-ai/grok-4.20",
       "google/gemini-3.5-flash-lite",
       "google/gemini-3.7-flash",
+      "meta/muse-spark-1.3-contributor",
     ]);
   });
 
