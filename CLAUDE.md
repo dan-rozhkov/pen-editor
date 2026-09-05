@@ -322,6 +322,39 @@ of its entry bundle, and this module statically imports all of it.
   **Recipe for an agent author:** poll `getTools()` until it is non-empty
   (a second or two is normal on a cold load) rather than sampling once. There
   is no readiness event, in this implementation or in the native API.
+- **The surface announces itself, because nothing else does.** WebMCP is
+  passive: a page that publishes tools looks exactly like one that does not,
+  so an agent finds them only by already knowing to look — which is the whole
+  problem for the audience this surface exists for. Two signals close that,
+  aimed at the two ways an agent meets the page.
+  **Console** (`announce.ts`): one banner when the context is installed
+  (`earlyInstall.ts`) saying the tools are still loading, and one when
+  registration finishes, listing them plus a copy-pastable
+  `executeTool("name", "{}")` call. Every line carries the literal `[webmcp] `
+  prefix on its own — no `%c`, no `console.group`, both of which some
+  harnesses fail to unwrap before regex-matching. The method name comes from
+  `keyof ModelContextLike`, so renaming it breaks the typecheck instead of
+  leaving the snippet quietly wrong. The registered banner is deduplicated on
+  the registered+withheld set, since registration re-runs on every mount, and
+  the whole body is guarded: `startWebMcp` calls it outside its own `try`, and
+  `App.tsx` invokes that as `void startWebMcp()`, so an escaping throw would
+  become an unhandled rejection.
+  **Static** (`manifest.ts` + `vite/webmcpManifest.ts`): `/webmcp.json`, for
+  an agent that only fetched the URL and got an empty SPA shell. It is built
+  from `WEBMCP_TOOL_SPECS` and emitted by a Vite plugin rather than committed,
+  so it cannot become a third copy of the contract that drifts — which is also
+  why `manifest.ts` and everything it imports must stay free of the `@/` alias
+  and of DOM globals (`vite.config.ts` is loaded by esbuild with neither), a
+  rule `manifest.test.ts` enforces against the module *source*. `index.html`
+  points at it with `<link rel="mcp-tools">` plus a `<meta name="webmcp">`;
+  both name the editor routes rather than claiming tools exist on the current
+  page, because that same HTML also serves the showcase at `/`. Routes in the
+  manifest are written under the configured `base` (the Pages build is not at
+  the origin root). Two deliberate deployment details: `json` stays out of
+  `workbox.globPatterns` so the manifest is never precached stale, and
+  `/webmcp.json` is in `navigateFallbackDenylist` so a *navigation* to it
+  (Playwright's `page.goto`, an extension opening the link) is not answered
+  with the precached SPA shell.
 - `webmcp.e2e.json` at the repo root is the expectation manifest — risk class,
   annotations and a safe fixture input per tool. Nothing executes it; it is
   what a person checks a running editor against.

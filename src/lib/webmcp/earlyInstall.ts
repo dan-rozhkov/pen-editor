@@ -1,3 +1,4 @@
+import { announceSurfaceInstalled } from "./announce";
 import { installModelContextPolyfill } from "./polyfill";
 
 /**
@@ -41,7 +42,9 @@ export function installModelContextForEditorRoute(
   pathname: string = window.location.pathname
 ): boolean {
   if (!isEditorRoute(pathname)) return false;
-  return installModelContextPolyfill().available;
+  const { available } = installModelContextPolyfill();
+  if (available) announceSurfaceInstalled();
+  return available;
 }
 
 /** Exported for tests; the route rule is easy to get wrong under a base path. */

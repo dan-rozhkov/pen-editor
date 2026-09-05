@@ -1,4 +1,4 @@
-import { BRIDGED_MCP_TOOL_NAMES, STATIC_MCP_TOOL_NAMES } from "@/lib/mcpToolNames";
+import { BRIDGED_MCP_TOOL_NAMES, STATIC_MCP_TOOL_NAMES } from "../mcpToolNames";
 import type { JsonSchema, ToolAnnotationHints } from "./types";
 
 /**

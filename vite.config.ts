@@ -5,6 +5,7 @@ import { VitePWA } from "vite-plugin-pwa";
 import path from "path";
 import { homedir } from "node:os";
 import { deriveMcpWsUrl, resolveDevMcpHandshake, resolveExistingMcpToken } from "./vite/mcpDevToken";
+import { webmcpManifest } from "./vite/webmcpManifest";
 
 // GitHub Pages serves this app from a subpath (e.g. /pen-editor/), while
 // local dev/preview/e2e need it to stay at "/". The deploy workflow sets
@@ -57,6 +58,7 @@ export default defineConfig(({ command, mode }) => {
     plugins: [
       tailwindcss(),
       react(),
+      webmcpManifest(),
       VitePWA({
         registerType: "prompt",
         // Service worker registration + update UI is added in a later task via
@@ -125,7 +127,14 @@ export default defineConfig(({ command, mode }) => {
           // under the Pages subpath, "/api/..." locally. Anchoring on "/api/"
           // (no leading `^`) keeps the same intent — never serve index.html
           // for an API path — under any base.
-          navigateFallbackDenylist: [/\/api\//],
+          // `/webmcp.json` is listed alongside "/api/" because a *navigation*
+          // to it (Playwright's page.goto, an extension opening the link, the
+          // desktop shell) would otherwise be answered by the precached SPA
+          // shell for any visitor whose service worker is already controlling
+          // the origin — handing an agent index.html where it asked for the
+          // tool manifest. fetch()/curl are unaffected, which is what makes
+          // this easy to miss.
+          navigateFallbackDenylist: [/\/api\//, /\/webmcp\.json$/],
           globPatterns: ["**/*.{js,css,html,ico,png,svg,webp,woff2}"],
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         },

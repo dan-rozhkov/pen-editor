@@ -11,6 +11,21 @@
     <meta name="theme-color" content="#111111" />
     <title>Pen Editor</title>
 
+    <!--
+      An agent that only fetches this HTML — curl, WebFetch, a crawler — never
+      runs the JS that registers navigator.modelContext, so it has no way to
+      discover the WebMCP tools this app publishes on its editor routes. These
+      two tags are that discovery path: a machine-readable link to the full
+      manifest, and a one-line human/agent-readable pointer to it. This same
+      HTML also serves the showcase gallery at "/", which has no tools of its
+      own — see webmcp.json's `routes` for which paths actually have them.
+    -->
+    <link rel="mcp-tools" type="application/json" href="%BASE_URL%webmcp.json" />
+    <meta
+      name="webmcp"
+      content="This app publishes agent tools via navigator.modelContext (WebMCP) on its editor routes (/app, /c/:id) — full manifest at the mcp-tools link above."
+    />
+
     <script type="module">
       if (import.meta.env.DEV) {
         import("react-grab");

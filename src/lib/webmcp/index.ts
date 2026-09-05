@@ -1,3 +1,4 @@
+import { announceToolsRegistered, resetAnnounceForTests } from "./announce";
 import { installModelContextPolyfill, type PolyfillResult } from "./polyfill";
 import {
   registerWebMcpTools,
@@ -54,14 +55,22 @@ export async function startWebMcp(): Promise<WebMcpStartResult> {
   // registering onto an inactive surface and refuse until a remount.
   setSurfaceActive(true);
 
+  let registration: RegistrationResult;
   try {
-    const registration = await registerWebMcpTools();
-    return { available, native, ...registration };
+    registration = await registerWebMcpTools();
   } catch (error) {
     // An agent surface failing to come up must never take the editor with it.
     console.error("[webmcp] failed to start", error);
     return { available: false, native, registered: [], withheld: [] };
   }
+
+  // Deliberately outside the try above: a failure inside the banner must never
+  // be caught here and reported as a registration failure. `announceToolsRegistered`
+  // swallows its own errors in full (not merely around the console call), so
+  // nothing escapes into this function's `void`-ed caller either.
+  announceToolsRegistered(registration);
+
+  return { available, native, ...registration };
 }
 
 /**
@@ -77,4 +86,5 @@ export function stopWebMcp(): void {
 export function resetWebMcpForTests(): void {
   polyfill = null;
   setSurfaceActive(false);
+  resetAnnounceForTests();
 }
