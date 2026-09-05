@@ -162,6 +162,32 @@ describe("registerWebMcpTools", () => {
       expect((await registerWebMcpTools()).withheld).toEqual(MUTATING);
     });
 
+    // attach_local_repo never touches the scene graph, but it writes session
+    // state (repoContextStore) the design agent's other tools then read from
+    // — a stranger's agent on a shared /c/:id canvas must not be able to push
+    // a repo into someone else's session, so it gets the same treatment as
+    // batch_design/set_variables even though it isn't a scene mutation.
+    it("withholds attach_local_repo specifically in the shared viewer", async () => {
+      useSharedViewStore.setState({ isSharedView: true });
+
+      const result = await registerWebMcpTools();
+
+      expect(result.withheld).toContain("attach_local_repo");
+      const names = (await getModelContext()!.getTools()).map((t) => t.name);
+      expect(names).not.toContain("attach_local_repo");
+    });
+
+    it("refuses attach_local_repo when the canvas becomes read-only after registration", async () => {
+      await registerWebMcpTools();
+      useSharedViewStore.setState({ isSharedView: true });
+
+      expect(await invoke("attach_local_repo", { name: "probe" })).toEqual({
+        isError: true,
+        error: READ_ONLY_REFUSAL,
+      });
+      expect(executeToolCall).not.toHaveBeenCalled();
+    });
+
     it("still publishes the read-only tools", async () => {
       useSharedViewStore.setState({ isSharedView: true });
 

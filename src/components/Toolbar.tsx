@@ -8,6 +8,7 @@ import { useRenderModeStore } from "../store/renderModeStore";
 import { useViewportStore } from "../store/viewportStore";
 import { useCanvasRefStore } from "../store/canvasRefStore";
 import { useMcpBridgeStore } from "../store/mcpBridgeStore";
+import { useRepoContextStore } from "../store/repoContextStore";
 import { useSharedViewStore } from "../store/sharedViewStore";
 import { useShareDialogStore } from "../store/shareDialogStore";
 
@@ -36,6 +37,8 @@ import { TooltipShortcut } from "./ui/tooltip";
 import { formatShortcut } from "../lib/commands/shortcutFormat";
 import {
   CaretDownIcon,
+  FolderPlusIcon,
+  XIcon,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -49,6 +52,8 @@ export function Toolbar() {
   const addNode = useSceneStore((state) => state.addNode);
   const uiTheme = useUIThemeStore((s) => s.uiTheme);
   const mcpStatus = useMcpBridgeStore((s) => s.status);
+  const attachedRepoName = useRepoContextStore((s) => s.name);
+  const attachedRepoFileCount = useRepoContextStore((s) => s.filesByPath.size);
   const showPixelGrid = usePixelGridStore((s) => s.showPixelGrid);
   const togglePixelGrid = usePixelGridStore((s) => s.togglePixelGrid);
   const showRulers = useGuidesStore((s) => s.showRulers);
@@ -267,6 +272,37 @@ export function Toolbar() {
                 />
                 {MCP_STATUS_LABEL[mcpStatus]}
               </div>
+              {/* A local repo pushed in by an external WebMCP agent
+                  (attach_local_repo) silently changes what read_design_repo/
+                  read_repo_files answer — this row is the only place that
+                  fact is visible to the person using the editor, same
+                  reasoning as the MCP status row above it. Only rendered
+                  once something is attached, so the common case (nothing
+                  attached) adds nothing to this menu. */}
+              {attachedRepoName !== null && (
+                // A DropdownMenuItem, not a bare <button>: Base UI's menu
+                // popup only puts its roving keyboard focus (arrow keys,
+                // type-ahead) on menu-item primitives — a plain <button>
+                // dropped inside the popup is invisible to that navigation,
+                // so keyboard-only users could never reach the only control
+                // that clears an attachment. `aria-label` still names the
+                // action explicitly rather than leaving the "×" glyph as
+                // the accessible name.
+                <DropdownMenuItem
+                  className="text-text-muted"
+                  aria-label={`Detach local repo ${attachedRepoName}`}
+                  onClick={() => useRepoContextStore.getState().detach()}
+                >
+                  <FolderPlusIcon className="size-3.5 shrink-0" />
+                  <span className="truncate" title={attachedRepoName}>
+                    {attachedRepoName}
+                  </span>
+                  <span className="shrink-0 text-text-disabled">
+                    · {attachedRepoFileCount} {attachedRepoFileCount === 1 ? "file" : "files"}
+                  </span>
+                  <XIcon className="ml-auto size-3 shrink-0" aria-hidden="true" />
+                </DropdownMenuItem>
+              )}
             </DropdownMenuSubContent>
           </DropdownMenuSub>
         </DropdownMenuContent>

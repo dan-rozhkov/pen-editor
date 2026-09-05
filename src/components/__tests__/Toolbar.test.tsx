@@ -16,6 +16,7 @@ import { Toolbar } from "../Toolbar";
 import { useUIThemeStore } from "@/store/uiThemeStore";
 import { usePixelGridStore } from "@/store/pixelGridStore";
 import { useMcpBridgeStore } from "@/store/mcpBridgeStore";
+import { useRepoContextStore } from "@/store/repoContextStore";
 import { resetStores } from "@/test/fixtures";
 
 /**
@@ -201,5 +202,51 @@ describe("<Toolbar />", () => {
 
     expect(runCommandMock).toHaveBeenCalledTimes(1);
     expect(runCommandMock.mock.calls[0][0]).toMatchObject({ id: "file-export-tokens" });
+  });
+
+  describe("attached local repo row", () => {
+    afterEach(() => {
+      useRepoContextStore.getState().detach();
+    });
+
+    it("renders no detach control in Settings when no repo is attached", () => {
+      render(<Toolbar />);
+      openSettings();
+      expect(screen.queryByLabelText(/detach local repo/i)).toBeNull();
+    });
+
+    it("exposes the detach control as a menuitem (keyboard-reachable), not a bare button", () => {
+      useRepoContextStore
+        .getState()
+        .attach({ name: "acme-app", files: [{ path: "a.ts", content: "a" }] });
+      render(<Toolbar />);
+      openSettings();
+
+      // A bare, non-menuitem <button> inside a Base UI menu popup is
+      // invisible to the popup's own keyboard navigation (arrow keys,
+      // type-ahead) — only menu-item primitives get that roving focus. This
+      // fails if the detach control regresses to a plain <button>.
+      const detachItem = screen
+        .getAllByRole("menuitem")
+        .find((el) => el.textContent?.includes("acme-app"));
+      expect(detachItem).toBeTruthy();
+      // Accessible name must name the action, not just render a bare "×".
+      expect(detachItem!.getAttribute("aria-label")).toMatch(/detach/i);
+    });
+
+    it("clears the attachment when the detach menuitem is activated", () => {
+      useRepoContextStore
+        .getState()
+        .attach({ name: "acme-app", files: [{ path: "a.ts", content: "a" }] });
+      render(<Toolbar />);
+      openSettings();
+
+      const detachItem = screen
+        .getAllByRole("menuitem")
+        .find((el) => el.textContent?.includes("acme-app"))!;
+      fireEvent.click(detachItem);
+
+      expect(useRepoContextStore.getState().isAttached()).toBe(false);
+    });
   });
 });

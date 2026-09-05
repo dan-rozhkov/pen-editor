@@ -1,5 +1,6 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { readRepoFiles } from "@/lib/tools/readRepoFiles";
+import { useRepoContextStore } from "@/store/repoContextStore";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -203,5 +204,165 @@ describe("read_repo_files", () => {
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     const body = JSON.parse(init.body as string);
     expect(body.paths).toEqual(["components/ui/button.tsx"]);
+  });
+});
+
+describe("read_repo_files with a local repo attached", () => {
+  beforeEach(() => {
+    useRepoContextStore.setState({ name: null, tree: [], filesByPath: new Map(), attachedAt: null });
+  });
+
+  it("serves requested files from the store with no network call", async () => {
+    useRepoContextStore.getState().attach({
+      name: "acme-app",
+      tree: ["a.ts"],
+      files: [{ path: "a.ts", content: "export const a = 1;" }],
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = JSON.parse(await readRepoFiles({ paths: ["a.ts"] }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.source).toBe("local");
+    expect(result.repo).toEqual({ name: "acme-app" });
+    expect(result.files).toEqual([
+      { path: "a.ts", content: "export const a = 1;", truncated: false, bytes: 19 },
+    ]);
+    expect(result.missing).toEqual([]);
+    // Always present (even empty) — matching the backend's response shape
+    // exactly, so a model can't tell which source answered from the shape.
+    expect(result.notRead).toEqual([]);
+  });
+
+  it("reports a requested path not in the snapshot as missing, not an error", async () => {
+    useRepoContextStore
+      .getState()
+      .attach({ name: "acme-app", files: [{ path: "a.ts", content: "a" }] });
+    vi.stubGlobal("fetch", vi.fn());
+
+    const result = JSON.parse(await readRepoFiles({ paths: ["a.ts", "missing.ts"] }));
+
+    expect(result.files.map((f: { path: string }) => f.path)).toEqual(["a.ts"]);
+    expect(result.missing).toEqual(["missing.ts"]);
+  });
+
+  it("truncates a file over 64KB on a UTF-8 boundary and marks it truncated", async () => {
+    const big = "a".repeat(70 * 1024);
+    useRepoContextStore
+      .getState()
+      .attach({ name: "acme-app", files: [{ path: "big.txt", content: big }] });
+    vi.stubGlobal("fetch", vi.fn());
+
+    const result = JSON.parse(await readRepoFiles({ paths: ["big.txt"] }));
+
+    expect(result.files).toHaveLength(1);
+    const file = result.files[0];
+    expect(file.truncated).toBe(true);
+    expect(file.content).toContain("truncated");
+    expect(file.content.length).toBeLessThan(big.length);
+    // `bytes` is the byte length of `content` as returned, truncation marker
+    // included (matching the backend's fetchFilesWithBudget, which measures
+    // the post-marker string) — so it sits a little OVER the 64KB per-file
+    // cap by the marker's own length, not under it.
+    const markerBytes = new TextEncoder().encode("\n/* ... truncated ... */").length;
+    expect(file.bytes).toBe(new TextEncoder().encode(file.content).length);
+    expect(file.bytes).toBeGreaterThan(64 * 1024);
+    expect(file.bytes).toBeLessThanOrEqual(64 * 1024 + markerBytes);
+  });
+
+  it("does not require a repo argument when a local repo is attached", async () => {
+    useRepoContextStore
+      .getState()
+      .attach({ name: "acme-app", files: [{ path: "a.ts", content: "a" }] });
+    vi.stubGlobal("fetch", vi.fn());
+
+    const result = JSON.parse(await readRepoFiles({ paths: ["a.ts"] }));
+    expect(result.error).toBeUndefined();
+  });
+
+  it("reports an ignored repo argument alongside source: local instead of silently dropping it", async () => {
+    useRepoContextStore
+      .getState()
+      .attach({ name: "acme-app", files: [{ path: "a.ts", content: "a" }] });
+    vi.stubGlobal("fetch", vi.fn());
+
+    const result = JSON.parse(
+      await readRepoFiles({ repo: "vercel/next.js", paths: ["a.ts"] })
+    );
+
+    expect(result.source).toBe("local");
+    expect(result.ignoredRepoArg).toBe("vercel/next.js");
+  });
+
+  it("omits ignoredRepoArg when no repo argument was sent", async () => {
+    useRepoContextStore
+      .getState()
+      .attach({ name: "acme-app", files: [{ path: "a.ts", content: "a" }] });
+    vi.stubGlobal("fetch", vi.fn());
+
+    const result = JSON.parse(await readRepoFiles({ paths: ["a.ts"] }));
+    expect(result).not.toHaveProperty("ignoredRepoArg");
+  });
+
+  // Prototype pollution: filesByPath used to be a plain object, so
+  // read_repo_files({paths:["constructor"]}) resolved to
+  // Object.prototype.constructor (a function) instead of reporting the path
+  // missing, and a file attached at "__proto__" was retrievable here even
+  // though the store lookup silently dropped it.
+  it.each(["constructor", "__proto__", "toString", "hasOwnProperty"])(
+    "reports an unattached dangerous path (%s) as missing, not as prototype content",
+    async (path) => {
+      useRepoContextStore
+        .getState()
+        .attach({ name: "acme-app", files: [{ path: "a.ts", content: "a" }] });
+      vi.stubGlobal("fetch", vi.fn());
+
+      const result = JSON.parse(await readRepoFiles({ paths: [path] }));
+
+      expect(result.files).toEqual([]);
+      expect(result.missing).toEqual([path]);
+    }
+  );
+
+  it("serves a file actually attached at a dangerous path like any other file", async () => {
+    useRepoContextStore
+      .getState()
+      .attach({ name: "acme-app", files: [{ path: "__proto__", content: "payload" }] });
+    vi.stubGlobal("fetch", vi.fn());
+
+    const result = JSON.parse(await readRepoFiles({ paths: ["__proto__"] }));
+
+    expect(result.missing).toEqual([]);
+    expect(result.files).toEqual([
+      { path: "__proto__", content: "payload", truncated: false, bytes: 7 },
+    ]);
+  });
+
+  it("applies a whole-response byte budget across multiple paths, reporting the rest as notRead", async () => {
+    // Each file is ~100KB, well over the per-file 64KB cap on its own, so
+    // each one gets truncated to ~64KB individually — but six of those
+    // still add up to ~384KB, well past the 256KB whole-response budget.
+    // Mirrors the backend's fetchFilesWithBudget, which this local path did
+    // not apply before this fix (it only mirrored the per-file cap).
+    const content = "x".repeat(100 * 1024);
+    const paths = ["a.txt", "b.txt", "c.txt", "d.txt", "e.txt", "f.txt"];
+    useRepoContextStore.getState().attach({
+      name: "acme-app",
+      files: paths.map((path) => ({ path, content })),
+    });
+    vi.stubGlobal("fetch", vi.fn());
+
+    const result = JSON.parse(await readRepoFiles({ paths }));
+
+    const totalBytes = (result.files as { bytes: number }[]).reduce((sum, f) => sum + f.bytes, 0);
+    expect(totalBytes).toBeLessThanOrEqual(256 * 1024 + 1024); // + generous marker slack
+    expect(result.notRead.length).toBeGreaterThan(0);
+    expect(result.missing).toEqual([]);
+    // Every notRead path really was skipped, not returned empty/truncated.
+    const readPaths = new Set((result.files as { path: string }[]).map((f) => f.path));
+    for (const path of result.notRead) {
+      expect(readPaths.has(path)).toBe(false);
+    }
   });
 });

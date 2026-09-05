@@ -54,9 +54,13 @@ describe("WebMCP tool specs", () => {
     }
   });
 
-  it("marks exactly the scene-writing tools as mutating", () => {
+  it("marks exactly the scene-writing (or session-state-writing) tools as mutating", () => {
     const mutating = WEBMCP_TOOL_SPECS.filter((spec) => spec.mutating).map((spec) => spec.name);
-    expect(mutating.sort()).toEqual(["batch_design", "set_variables"]);
+    // attach_local_repo never touches the scene graph, but it writes session
+    // state (repoContextStore) the design agent's own tools then read — same
+    // read-only-gate treatment as batch_design/set_variables (see its spec
+    // comment in schemas.ts).
+    expect(mutating.sort()).toEqual(["attach_local_repo", "batch_design", "set_variables"]);
   });
 
   // publish_to_showcase publishes a design to a public gallery: irreversible

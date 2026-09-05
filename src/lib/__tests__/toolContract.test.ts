@@ -54,6 +54,7 @@ const EXPECTED_CLIENT_TOOLS = [
   "vectorize_image",
   "read_design_repo",
   "read_repo_files",
+  "attach_local_repo",
 ];
 
 // Tools whose schema also has a backend `execute` — they run server-side, the

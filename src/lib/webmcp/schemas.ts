@@ -253,6 +253,58 @@ export const WEBMCP_TOOL_SPECS: readonly WebMcpToolSpec[] = [
     mutating: true,
   },
   {
+    name: "attach_local_repo",
+    description:
+      "Push a local repository (or a chunk of one) into this editor session so read_design_repo/read_repo_files serve from it instead of GitHub. Send name + tree + files to attach or replace; mode:\"append\" adds more files/tree paths to an existing attachment (how a large repo is chunked); detach:true clears the current attachment. Caps apply per call and per attachment — a rejected call reports the reason so you know whether to retry smaller or stop.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description:
+            'Name of the repo being attached (e.g. a folder or project name). Required unless detach is true or mode is "append" onto an existing attachment.',
+        },
+        tree: {
+          type: "array",
+          description: "Repo-relative file paths, for structure/listing purposes.",
+          items: { type: "string" },
+        },
+        files: {
+          type: "array",
+          description: "File contents to attach, as {path, content} objects.",
+          items: {
+            type: "object",
+            properties: {
+              path: { type: "string" },
+              content: { type: "string" },
+            },
+            required: ["path", "content"],
+            additionalProperties: false,
+          },
+        },
+        mode: {
+          type: "string",
+          enum: ["replace", "append"],
+          description:
+            'Default "replace" clears any current attachment first; "append" adds to the current attachment (requires one already attached).',
+        },
+        detach: {
+          type: "boolean",
+          description: "If true, clears the current attachment and ignores every other field.",
+        },
+      },
+      additionalProperties: false,
+    },
+    // Treated as mutating for the read-only gate even though it never
+    // touches the scene graph: it writes session state (repoContextStore)
+    // that the design agent's own tools then read from, so on a shared
+    // `/c/:id` canvas a stranger's agent must not be able to push a
+    // repository into someone else's session any more than it could call
+    // batch_design or set_variables there.
+    annotations: mutating,
+    mutating: true,
+  },
+  {
     name: "get_guidelines",
     description:
       "Get design guidelines and rules for a topic (design-system, code, table, tailwind, landing-page).",
@@ -301,8 +353,19 @@ export const WEBMCP_TOOL_SPECS: readonly WebMcpToolSpec[] = [
  */
 export const WEBMCP_TOOL_NAMES = WEBMCP_TOOL_SPECS.map((spec) => spec.name);
 
-/** The curated agent-facing set this surface is a subset of. */
+/**
+ * The curated agent-facing set this surface is a subset of.
+ *
+ * `attach_local_repo` is listed here directly rather than folded into
+ * `BRIDGED_MCP_TOOL_NAMES`/`mcpToolNames.ts`: it is a WebMCP-only tool, not
+ * part of the desktop shell's MCP bridge (`DESKTOP_MCP_TOOL_NAMES`) or the
+ * backend's `BRIDGED_TOOL_NAMES` — the only way to reach it is an agent
+ * driving this tab directly, which is the whole point (see the tool's own
+ * comment). Adding it to `mcpToolNames.ts` would incorrectly advertise it
+ * over the desktop bridge too.
+ */
 export const WEBMCP_ALLOWED_NAMES: readonly string[] = [
   ...BRIDGED_MCP_TOOL_NAMES,
   ...STATIC_MCP_TOOL_NAMES,
+  "attach_local_repo",
 ];

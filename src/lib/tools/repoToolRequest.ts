@@ -78,6 +78,37 @@ export async function postRepoRequest(
   return text;
 }
 
+/**
+ * When a local repo is attached, it wins over an explicit `repo` argument
+ * deliberately (the user attached it on purpose) — but silently dropping
+ * that argument on the floor is confusing, especially when it happens to
+ * name a real, different repository. This folds `ignoredRepoArg` into a
+ * successful JSON object response so the model can see its argument was
+ * overridden rather than guessing why the local repo answered instead.
+ *
+ * A no-op when `ignoredRepoArg` is empty (no argument was actually sent), or
+ * when `raw` isn't a plain JSON object (an error response, or anything the
+ * backend shape ever turns out not to be) — passed through unchanged rather
+ * than risking a malformed result.
+ */
+export function annotateIgnoredRepoArg(raw: string, ignoredRepoArg: string): string {
+  if (!ignoredRepoArg) return raw;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      parsed !== null &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed) &&
+      !("error" in parsed)
+    ) {
+      return JSON.stringify({ ...parsed, ignoredRepoArg });
+    }
+  } catch {
+    // Not JSON — pass through unchanged.
+  }
+  return raw;
+}
+
 function readErrorMessage(res: Response, text: string): string {
   try {
     const parsed = JSON.parse(text) as { error?: unknown };

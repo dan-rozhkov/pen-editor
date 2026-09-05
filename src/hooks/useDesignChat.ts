@@ -16,6 +16,7 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useVariableStore } from "@/store/variableStore";
+import { useRepoContextStore } from "@/store/repoContextStore";
 import { useChatStore, NO_QUEUED_MESSAGES } from "@/store/chatStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import type { EmbedNode } from "@/types/scene";
@@ -81,6 +82,26 @@ export function buildCanvasContext(sessionId?: string): object {
 
   const { model } = resolveSessionConfig(sessionId);
 
+  // A repo pushed in over WebMCP (attach_local_repo) otherwise silently
+  // changes what read_design_repo/read_repo_files answer with no signal to
+  // the model that it should reach for them — this is the only thing that
+  // tells it a local repo exists at all. Name + counts only, never file
+  // contents or the tree itself: this is rebuilt every request (including
+  // every tool-loop auto-continuation) and appended as a trailing user
+  // message, so it must stay tiny and it must never carry anything that
+  // would belong in the system prompt instead (see the root CLAUDE.md's
+  // prompt-cache invariants). Omitted entirely when nothing is attached, so
+  // a fresh session's canvasContext is byte-identical to before this
+  // existed.
+  const repoContextState = useRepoContextStore.getState();
+  const localRepo = repoContextState.isAttached()
+    ? {
+        name: repoContextState.name,
+        fileCount: repoContextState.filesByPath.size,
+        treeSize: repoContextState.tree.length,
+      }
+    : null;
+
   // Element the user pointed at inside an embed via the element picker
   // (EmbedActionBar's "Select element" mode). Only forwarded while the
   // embed it belongs to still exists in the scene — a stale embedId (node
@@ -113,6 +134,7 @@ export function buildCanvasContext(sessionId?: string): object {
         themeValues: v.themeValues,
       })),
       ...(selectedEmbedElement ? { selectedEmbedElement } : {}),
+      ...(localRepo ? { localRepo } : {}),
     }),
     model: resolveModel(model),
     userId: getUserId(),

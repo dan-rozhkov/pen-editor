@@ -14,6 +14,7 @@ import {
   ExportIcon,
   EyeIcon,
   FileCodeIcon,
+  FolderPlusIcon,
   GithubLogoIcon,
   GlobeIcon,
   ImageIcon,
@@ -93,6 +94,7 @@ const toolIcons: Record<string, Icon> = {
   publish_to_showcase: UploadSimpleIcon,
   read_design_repo: GithubLogoIcon,
   read_repo_files: FileCodeIcon,
+  attach_local_repo: FolderPlusIcon,
   web_search: GlobeIcon,
   fetch_url: LinkIcon,
   // Every Refero-served tool carries the Refero mark instead of a

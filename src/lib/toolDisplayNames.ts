@@ -71,6 +71,7 @@ export const toolDisplayNames: Record<string, string> = {
   publish_to_showcase: "Publish to Showcase",
   read_design_repo: "Read Design Repo",
   read_repo_files: "Read Repo Files",
+  attach_local_repo: "Attach Local Repo",
   web_search: "Search the Web",
   fetch_url: "Read Web Pages",
   ...referoToolDisplayNames,

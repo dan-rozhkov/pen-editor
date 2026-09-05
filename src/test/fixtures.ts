@@ -14,6 +14,7 @@ import { useDevExportStore } from "@/store/devExportStore";
 import { useMcpBridgeStore } from "@/store/mcpBridgeStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
+import { useRepoContextStore } from "@/store/repoContextStore";
 
 /** Reset every store the tool handlers touch to a clean baseline. */
 export function resetStores(): void {
@@ -56,6 +57,7 @@ export function resetStores(): void {
   useMcpBridgeStore.setState({ status: "off" });
   useDocumentStore.setState({ fileName: null });
   useEmbedPickerStore.getState().reset();
+  useRepoContextStore.setState({ name: null, tree: [], filesByPath: new Map(), attachedAt: null });
 }
 
 /**

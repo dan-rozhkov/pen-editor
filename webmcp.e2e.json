@@ -49,6 +49,13 @@
       "input": { "variables": { "--webmcp-probe": "#3b82f6" } }
     },
     {
+      "name": "attach_local_repo",
+      "risk": "reversible",
+      "expectedAnnotations": { "readOnly": false, "untrustedContent": true },
+      "input": { "detach": true },
+      "$comment": "Reversible: writes only repoContextStore session state (never the scene graph), and detach:true clears it. Treated as mutating for the read-only gate anyway — see its comment in schemas.ts. The fixture input is detach:true itself, not an actual attach: a real attach() call would leave a probe-run's fake attachment sitting in repoContextStore with no follow-up call to clear it, and a manual run of this manifest would leave the tab serving both repo tools from an empty/fake attachment afterward. detach:true is a safe no-op when nothing is attached (attachLocalRepo.ts), so this exercises the tool without leaving any state behind."
+    },
+    {
       "name": "get_guidelines",
       "risk": "read-only",
       "expectedAnnotations": { "readOnly": true, "untrustedContent": true },
@@ -69,6 +76,6 @@
   ],
   "readOnlyCanvas": {
     "$comment": "On /c/:shareId and on /app?view the mutating tools must not be published at all, and must refuse if editability changes after registration.",
-    "withheld": ["batch_design", "set_variables"]
+    "withheld": ["batch_design", "set_variables", "attach_local_repo"]
   }
 }

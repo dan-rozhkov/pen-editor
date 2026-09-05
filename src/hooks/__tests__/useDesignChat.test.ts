@@ -19,6 +19,7 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useChatStore } from "@/store/chatStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
+import { useRepoContextStore } from "@/store/repoContextStore";
 import { useAiVectorPreviewStore, vectorPreviewKey } from "@/store/aiVectorPreviewStore";
 import { resetStores, seedScene, seedVariables } from "@/test/fixtures";
 
@@ -401,6 +402,34 @@ describe("buildCanvasContext", () => {
 
     const canvas = JSON.parse((buildCanvasContext() as { canvasContext: string }).canvasContext);
     expect(canvas).not.toHaveProperty("selectedEmbedElement");
+  });
+
+  // FIR: an attached local repo (attach_local_repo, over WebMCP) used to be
+  // invisible to the design agent — nothing in canvasContext hinted one
+  // existed, so read_design_repo/read_repo_files serving from it instead of
+  // GitHub was only reachable by accident.
+  it("omits localRepo entirely when nothing is attached — a fresh session serializes byte-identically to before this existed", () => {
+    const canvas = JSON.parse((buildCanvasContext() as { canvasContext: string }).canvasContext);
+    expect(canvas).not.toHaveProperty("localRepo");
+  });
+
+  it("includes a compact localRepo marker (name/fileCount/treeSize only) once a repo is attached", () => {
+    useRepoContextStore.getState().attach({
+      name: "acme-app",
+      tree: ["package.json", "src/index.ts", "README.md"],
+      files: [
+        { path: "package.json", content: '{"name":"acme-app"}' },
+        { path: "src/index.ts", content: "export {};" },
+      ],
+    });
+
+    const canvas = JSON.parse((buildCanvasContext() as { canvasContext: string }).canvasContext);
+
+    expect(canvas.localRepo).toEqual({ name: "acme-app", fileCount: 2, treeSize: 3 });
+    // Never file contents or the tree itself — only a name and counts.
+    const serialized = (buildCanvasContext() as { canvasContext: string }).canvasContext;
+    expect(serialized).not.toContain("export {};");
+    expect(serialized).not.toContain("README.md");
   });
 });
 

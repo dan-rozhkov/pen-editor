@@ -38,6 +38,7 @@ import { removeBackground } from "./tools/removeBackground";
 import { vectorizeImage } from "./tools/vectorizeImage";
 import { readDesignRepo } from "./tools/readDesignRepo";
 import { readRepoFiles } from "./tools/readRepoFiles";
+import { attachLocalRepo } from "./tools/attachLocalRepo";
 
 /**
  * Per-call metadata threaded through to handlers that need to correlate
@@ -99,4 +100,5 @@ export const toolHandlers: Record<string, ToolHandler> = {
   vectorize_image: vectorizeImage,
   read_design_repo: readDesignRepo,
   read_repo_files: readRepoFiles,
+  attach_local_repo: attachLocalRepo,
 };
