@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.78.2] - 2026-09-05
+
+A fix for the first thing an outside agent actually hit when handed a link.
+
+### Fixed
+- **The WebMCP model context is installed before the editor's chunk loads.** An agent that waits for `load` and checks the page once — the default behaviour of every browser-driving agent — found no model context at all and reasonably concluded the page does not support WebMCP. Reproduced by measurement on production: the tools register from `App.tsx`, which is a lazily imported chunk, and that chunk does not begin downloading until *after* the `load` event (entry bundle 432-767 ms, `load` at 1312 ms, editor chunk 1311-1656 ms), with the registering effect running later still. `installModelContextForEditorRoute()` now runs from `main.tsx`, route-gated to `/app` and `/c/` and never on the showcase. This does not make the tools appear sooner — nothing can, and the native API has no readiness signal either — it changes the shape of the answer an early caller gets: an empty `getTools()`, meaning "not yet, ask again", instead of a missing API, meaning "never". The polling recipe for agent authors is in CLAUDE.md.
+
 ## [0.78.1] - 2026-09-05
 
 Groundwork for a Content Security Policy. The app had none, and `src/lib/webmcp/`
