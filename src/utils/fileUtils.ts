@@ -5,6 +5,7 @@ import type { TextStyle } from '../types/textStyle'
 import type { FillStyle, EffectStyle } from '../types/style'
 import { generateId } from '../types/scene'
 import { serializePublicPenDocument } from "@/utils/publicPenExport";
+import { saveBlob } from "@/lib/downloadFile";
 import type { Guide } from "@/store/guidesStore";
 import type { PersistedMeasurement } from "@/store/measurementsStore";
 import type { CommentThread } from "@/store/commentsStore";
@@ -167,15 +168,7 @@ export function downloadPublicPen(
 }
 
 function downloadTextFile(text: string, filename: string) {
-  const blob = new Blob([text], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-
-  URL.revokeObjectURL(url)
+  saveBlob(new Blob([text], { type: 'application/json' }), filename)
 }
 
 export interface OpenFileResult extends DocumentData {
