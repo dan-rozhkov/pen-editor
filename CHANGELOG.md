@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.79.0] - 2026-09-05
+
+Two themes: an agent in the tab can now bring a real codebase with it, and the
+PWA layer is gone.
+
+### Added
+- **The agent can design from a real repository.** `read_design_repo` returns a repo's design truth (framework, styling system, tokens, component inventory) and `read_repo_files` pulls the specific component sources it intends to reproduce, so a concept is built from a product's actual code instead of invented. Both are client-executed handlers proxying to the backend's `/api/repo/*`; what lands on canvas stays a plain HTML embed, built from the repo's real token values as CSS (embeds strip `<script>`, so there is no React runtime to lean on).
+- **A repository no longer has to be on GitHub.** `attach_local_repo` lets an agent driving this tab — the Chrome extension, Playwright, CDP, the Electron shell — push a local tree and its file contents over WebMCP in chunks; `read_design_repo`/`read_repo_files` then answer from that snapshot without a network call. WebMCP is what makes this work on the deployed build at all, since the backend MCP endpoint is 503 in production. The snapshot lives in memory and dies with the tab: it is someone's source code, so it is never persisted, and only the handful of files the analyzer reads ever leave the browser. It counts as *mutating* for the read-only gate — a stranger's agent on a shared `/c/:id` canvas must not push a repository into someone else's session.
+- **The WebMCP surface announces itself.** WebMCP is passive: a page publishing tools looks exactly like one that does not, so an agent finds them only by already knowing to look — which is the whole problem for the audience the surface exists for. Two signals now close that, aimed at the two ways an agent meets the page: a `[webmcp] `-prefixed console banner (on install, and again with the tool list plus a copy-pastable call once registration finishes) and a static `/webmcp.json` manifest linked from `index.html`, for an agent that only fetched the URL and got an empty SPA shell. The banner's real payload is the call snippet — arguments are a JSON *string*, and an agent that does not know that breaks on its first call and concludes the surface is broken.
+
+### Changed
+- **The model context is published under both of its names.** `navigator.modelContext` (what the proposal says) and `document.modelContext` (where the Chrome builds that expose the API put it) now name the *same object*. An external agent had reported this editor as supporting no WebMCP at all after checking only the second one; an agent only ever checks the address its own reference named, and nothing tells it to look elsewhere. The `document` write is best-effort — a browser that refused it must not cost us the working `navigator` surface — and the two names must stay one object, or a caller registering through one and executing through the other gets "Unknown tool".
+
+### Removed
+- **The service worker, and the whole PWA layer with it.** Every incident it caused came from one place: a worker deciding on its own which bundle a visitor runs — the showcase pinned to an old build behind a toast nobody clicked, an iOS Safari update deadlock, a stale precache serving a bundle that crashed on a changed API shape. Against that it offered offline support for an editor whose documents are in memory and whose AI features need the network anyway. A plain reload is once again the whole update story. Chrome's install prompt is the one capability given up.
+- `public/sw.js` **stays, as a tombstone, permanently.** Browsers that loaded any previous build still have the old worker registered at that URL; it now clears every cache, unregisters itself and reloads the tabs it was controlling. Deleting the file would not retire that worker — measured in chromium and webkit, a `404` leaves the registration, the precache and the stale page fully intact, because a 404 fails the update check rather than signalling unregistration. It skips `/app` on purpose: an editor document lives only in memory, so force-reloading that tab would discard unsaved work. **Consequence for a returning visitor: the first `/app` load still runs the old bundle** — the tombstone frees the registration and caches, but the tab picks up the live build on the user's own next reload.
+
 ## [0.78.2] - 2026-09-05
 
 A fix for the first thing an outside agent actually hit when handed a link.
