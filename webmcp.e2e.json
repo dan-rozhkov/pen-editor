@@ -1,0 +1,74 @@
+{
+  "$comment": "Expectation manifest for the WebMCP surface (src/lib/webmcp/). Checked by hand against a running editor at /app — see the WebMCP section of CLAUDE.md. Every tool must be discovered; only read-only and reversible cases carry an `input` and get invoked. Nothing consumes this automatically.",
+  "url": "http://localhost:5173/app",
+  "timeoutMs": 5000,
+  "tools": [
+    {
+      "name": "get_editor_state",
+      "risk": "read-only",
+      "expectedAnnotations": { "readOnly": true, "untrustedContent": true },
+      "input": { "include_schema": false }
+    },
+    {
+      "name": "batch_get",
+      "risk": "read-only",
+      "expectedAnnotations": { "readOnly": true, "untrustedContent": true },
+      "input": { "readDepth": 1 }
+    },
+    {
+      "name": "snapshot_layout",
+      "risk": "read-only",
+      "expectedAnnotations": { "readOnly": true, "untrustedContent": true },
+      "input": { "problemsOnly": true }
+    },
+    {
+      "name": "get_variables",
+      "risk": "read-only",
+      "expectedAnnotations": { "readOnly": true, "untrustedContent": true },
+      "input": {}
+    },
+    {
+      "name": "get_screenshot",
+      "risk": "read-only",
+      "expectedAnnotations": { "readOnly": true, "untrustedContent": true },
+      "$comment": "Discovery-only: needs WebGL and a selected node, and returns a multi-megabyte data URL. Covered by e2e, not by an invocation here."
+    },
+    {
+      "name": "batch_design",
+      "risk": "reversible",
+      "expectedAnnotations": { "readOnly": false, "untrustedContent": true },
+      "input": {
+        "operations": "I(document, {type: \"frame\", name: \"WebMCP probe\", width: 120, height: 80})"
+      },
+      "$comment": "Reversible: creates a node in the open document, undoable by the user. Only ever invoked against a scratch canvas."
+    },
+    {
+      "name": "set_variables",
+      "risk": "reversible",
+      "expectedAnnotations": { "readOnly": false, "untrustedContent": true },
+      "input": { "variables": { "--webmcp-probe": "#3b82f6" } }
+    },
+    {
+      "name": "get_guidelines",
+      "risk": "read-only",
+      "expectedAnnotations": { "readOnly": true, "untrustedContent": true },
+      "input": { "topic": "design-system" }
+    },
+    {
+      "name": "get_style_guide_tags",
+      "risk": "read-only",
+      "expectedAnnotations": { "readOnly": true, "untrustedContent": true },
+      "$comment": "Discovery-only by default: reaches the backend, so an invocation needs a backend running."
+    },
+    {
+      "name": "get_style_guide",
+      "risk": "read-only",
+      "expectedAnnotations": { "readOnly": true, "untrustedContent": true },
+      "$comment": "Discovery-only by default, same backend dependency as get_style_guide_tags."
+    }
+  ],
+  "readOnlyCanvas": {
+    "$comment": "On /c/:shareId and on /app?view the mutating tools must not be published at all, and must refuse if editability changes after registration.",
+    "withheld": ["batch_design", "set_variables"]
+  }
+}

@@ -46,10 +46,11 @@ export interface ToolDispatcherOptions {
 
 export interface ToolDispatcher {
   /**
-   * Enqueue a tool call. Calls are serialized: a second call queued while an
-   * earlier one is still in flight will not start executing until the first
-   * has sent its outcome. This guarantees two agents driving the same
-   * transport can never interleave scene mutations mid-call.
+   * Enqueue a tool call. Calls on this transport are serialized: a second
+   * call queued while an earlier one is still in flight will not start
+   * executing until the first has sent its outcome. Serialization *across*
+   * surfaces (chat, the other bridge, WebMCP, plugins) is handled below this
+   * layer, by `runToolCall` in toolCallQueue.ts.
    */
   dispatch: (message: ToolCallMessage) => void;
 }
@@ -66,6 +67,10 @@ export interface ToolDispatcher {
  * dispatch in its own try/catch.
  */
 export function createToolDispatcher({ send, isLive = () => true }: ToolDispatcherOptions): ToolDispatcher {
+  // Per-dispatcher ordering only: it keeps *this* transport's outcomes in the
+  // order its calls arrived. Mutual exclusion against other surfaces is not
+  // its job — `executeToolCall` runs every mutating call through the shared
+  // queue in toolCallQueue.ts.
   let queue: Promise<void> = Promise.resolve();
 
   async function handle(message: ToolCallMessage): Promise<void> {

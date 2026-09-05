@@ -96,6 +96,13 @@ if (import.meta.env.DEV) {
   import('@/store/editorModeStore').then(({ useEditorModeStore }) => {
     (window as unknown as Record<string, unknown>).__editorModeStore = useEditorModeStore;
   });
+  // Exposed for the same reason as the others, plus one specific to WebMCP:
+  // this flag decides whether the read tools narrow their results to what a
+  // shared viewer can see (src/lib/webmcp/sharedViewRedaction.ts), and that
+  // branch is otherwise only reachable by holding a real /c/:shareId link.
+  import('@/store/sharedViewStore').then(({ useSharedViewStore }) => {
+    (window as unknown as Record<string, unknown>).__sharedViewStore = useSharedViewStore;
+  });
   import('@/store/canvasRefStore').then(({ useCanvasRefStore }) => {
     (window as unknown as Record<string, unknown>).__canvasRefStore = useCanvasRefStore;
   });

@@ -101,19 +101,21 @@ export default defineConfig([
   },
   {
     // toolContract.test.ts / pluginAllowlistContract.test.ts /
-    // desktopMenuContract.test.ts intentionally self-skip (describe.runIf)
+    // desktopMenuContract.test.ts / webmcp/webmcpContract.test.ts
+    // intentionally self-skip (describe.runIf)
     // when a sibling repo isn't checked out locally — that's the documented,
     // deliberate pattern for a contract test that only runs for real in CI's
     // `contract` job (see .github/workflows/ci.yml) or when the sibling repo
     // is present locally. The lone `it.skip(...)` in each file's "(skipped)"
     // branch is a deliberate visible marker (not an abandoned test) that the
     // real contract was skipped for this environment; `.todo()` would
-    // misrepresent it as unwritten. Both rules are off only for these three
+    // misrepresent it as unwritten. Both rules are off only for these
     // files, per the pattern this project's test-quality doc calls out.
     files: [
       'src/lib/__tests__/toolContract.test.ts',
       'src/lib/plugins/__tests__/pluginAllowlistContract.test.ts',
       'src/lib/__tests__/desktopMenuContract.test.ts',
+      'src/lib/webmcp/__tests__/webmcpContract.test.ts',
     ],
     rules: {
       'vitest/no-conditional-tests': 'off',

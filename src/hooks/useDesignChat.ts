@@ -20,6 +20,7 @@ import { useChatStore, NO_QUEUED_MESSAGES } from "@/store/chatStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import type { EmbedNode } from "@/types/scene";
 import { toolHandlers, type ToolExecutionContext } from "@/lib/toolRegistry";
+import { runToolCall } from "@/lib/toolCallQueue";
 import type { ChatLaunchPayload } from "@/types/chat";
 import { hasPendingAskUser } from "@/components/chat/pendingAskUser";
 import { useAiVectorPreviewStore } from "@/store/aiVectorPreviewStore";
@@ -163,7 +164,7 @@ export async function executeToolCall(
   toolName: string,
   input: unknown,
   context?: ToolExecutionContext,
-  source: "chat" | "bridge" = "bridge"
+  source: "chat" | "bridge" | "webmcp" = "bridge"
 ): Promise<string> {
   const startedAt = performance.now();
   const handler = toolHandlers[toolName];
@@ -182,15 +183,27 @@ export async function executeToolCall(
       ? (input as Record<string, unknown>)
       : {};
   try {
-    const result = await Promise.race([
-      handler(args, context),
-      new Promise<never>((_, reject) =>
-        setTimeout(
-          () => reject(new Error("Tool call timed out")),
-          getToolCallTimeoutMs(toolName)
-        )
-      ),
-    ]);
+    // Serialized here, at the funnel, rather than at each call site: chat,
+    // both MCP bridges and the WebMCP surface all arrive through this
+    // function, so this is the one place where "two agents cannot interleave
+    // scene mutations" can be true by construction instead of by convention.
+    // Read-only tools are not queued (see toolCallQueue.ts).
+    //
+    // The timeout starts inside the queued task, not around it: a call that
+    // waited behind a long batch_design must still get its full budget once
+    // it actually starts, or a busy editor would time out calls that never
+    // ran.
+    const result = await runToolCall(toolName, () =>
+      Promise.race([
+        handler(args, context),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Tool call timed out")),
+            getToolCallTimeoutMs(toolName)
+          )
+        ),
+      ])
+    );
     // Handlers report failure as a JSON `{"error": ...}` string rather than
     // throwing; detect that shape so `ok` reflects the real outcome. Cheap
     // string check instead of `JSON.parse`-ing every result: some results

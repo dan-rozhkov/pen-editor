@@ -1,5 +1,6 @@
 import { toast } from "sonner";
 import { toolHandlers } from "@/lib/toolRegistry";
+import { runToolCall } from "@/lib/toolCallQueue";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
@@ -40,7 +41,11 @@ async function runTool(name: unknown, args: unknown): Promise<string> {
   }
   const handler = toolHandlers[name];
   if (!handler) throw new Error(`tools.run: unknown tool "${name}"`);
-  return handler((args ?? {}) as Record<string, unknown>);
+  // Plugins reach the handlers without going through `executeToolCall`, so
+  // they need the shared queue explicitly: a plugin's batch_design running
+  // alongside one from chat or the WebMCP surface would interleave, and the
+  // later commit would discard the earlier one's nodes.
+  return runToolCall(name, () => handler((args ?? {}) as Record<string, unknown>));
 }
 
 /**

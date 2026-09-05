@@ -45,7 +45,10 @@ export interface AnalyticsEventMap {
     ok: boolean;
     duration_ms: number;
     error_kind?: string;
-    source: "chat" | "bridge";
+    // "webmcp": an in-page agent calling through navigator.modelContext
+    // (src/lib/webmcp/). Kept distinct from "bridge" so the MCP bridges'
+    // numbers stay comparable across the change.
+    source: "chat" | "bridge" | "webmcp";
   };
   agent_turn_failed: { error_kind: string };
   editor_command_run: { command_id: string };

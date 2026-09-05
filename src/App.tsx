@@ -26,6 +26,7 @@ import { useLayers3DStore } from "./store/layers3dStore";
 import { useIsMobile } from "./hooks/useIsMobile";
 import { useOnlineStatus } from "./hooks/useOnlineStatus";
 import { launchShowcaseAgentChat } from "./lib/launchShowcaseAgentChat";
+import { startWebMcp, stopWebMcp } from "./lib/webmcp";
 import { importShowcaseScreensFromHandoff } from "./lib/importShowcaseScreens";
 import { OfflineBanner } from "./components/pwa/OfflineBanner";
 import { ShareDialog } from "./components/share/ShareDialog";
@@ -134,6 +135,26 @@ function App() {
     if (view !== null && view !== "0" && view !== "false") {
       useEditorModeStore.getState().enterView();
     }
+  }, []);
+
+  // Publish the editor's tools to in-page agents over WebMCP
+  // (src/lib/webmcp/). Mounted here rather than in main.tsx's startBridges()
+  // on purpose: this route is where a document exists, and the showcase at
+  // "/" must keep the editor's module graph out of its entry bundle.
+  //
+  // Declared *after* the `?view` effect above, and that ordering is load
+  // bearing: passive effects in one component run in declaration order, so
+  // registering first would advertise the editing tools on `/app?view` a
+  // moment before view mode is entered. The call-time gate in
+  // registerTools.ts would still refuse them, but discovery would have
+  // promised an agent something this page will never do.
+  // Torn down on unmount: the tools cannot be unregistered (no browser API
+  // for it), so the surface is marked unowned instead and refuses calls
+  // until an editor mounts again — otherwise browser Back to the showcase
+  // would leave an in-page agent editing a document nothing renders.
+  useEffect(() => {
+    void startWebMcp();
+    return () => stopWebMcp();
   }, []);
 
   // Dev-only synthetic document seeding for perf work, via `?perf=N` (approx

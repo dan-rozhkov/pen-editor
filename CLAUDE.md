@@ -18,6 +18,8 @@ CI (`.github/workflows/ci.yml`) runs lint + unit tests + build and the e2e job o
 - **Unit tests** (Vitest + happy-dom) live in `src/**/__tests__/`. Tool handlers are tested against the real Zustand stores: call `resetStores()`/`seedScene()` from `src/test/fixtures.ts` in `beforeEach`, invoke the handler, assert on store state plus the returned string. `src/test/setup.ts` stubs the canvas 2D context (happy-dom has none; sceneStore measures text with it). Test files compile under `tsconfig.test.json` — a separate project so the strict app build (`tsc -b`) never sees test code or node types.
 - **`useDesignChat`** is tested with a stubbed `fetch` that returns an AI SDK v6 UI message stream (SSE). `src/hooks/__tests__/useDesignChat.test.ts` is the reference for the chunk format (`data: {"type":"tool-input-available",...}`, `x-vercel-ai-ui-message-stream: v1` header, `data: [DONE]` terminator).
 - **Tool-name contract**: `src/lib/__tests__/toolContract.test.ts` pins the `toolHandlers` name list and, when the sibling `../pen-editor-backend` checkout exists, imports its `src/ai/tools.ts` to assert the sets stay in sync (skipped otherwise). In CI the `contract` job checks out the backend's **`main`** at run time and sets `CONTRACT_REQUIRE_BACKEND=1`, so it cannot self-skip. It asserts both directions — every `penTools` entry has a handler here, and `FRONTEND_ONLY_TOOLS` is empty (`get_screenshot` was the lone exception until it regained a backend schema) — so a tool breaks the contract until both halves land, and this job is red for *every* push here while that gap is open. **Land a new tool's backend schema on backend `main` first, then merge the handler here**, back-to-back: that way this job passes on the first try. Handler-first fails your own push and needs a re-run after the backend lands.
+- **`batch_get` search patterns are compiled through `src/lib/tools/namePattern.ts`**, which refuses patterns that nest a quantifier inside a quantified group (`(a+)+`) and anything over 200 characters. `batch_get` compiles a caller-supplied regex and tests it against every node name, synchronously: catastrophic backtracking freezes the tab for the *user*, and nothing downstream can stop it — the timeout in `executeToolCall` cannot preempt synchronous work, and this tool is deliberately off the serial queue. The check is a heuristic tuned to false-negative on purpose: it is shared with the chat agent, and wrongly rejecting an ordinary layer search (`^Button`, `Card \d+`) is a worse everyday outcome than missing an exotic hang.
+
 - **E2E** (`e2e/`, Playwright, chromium only): stubs `/api/chat` and `/api/models` with `page.route` — no backend or LLM needed — and verifies message → streamed tool call → local execution (node lands in sceneStore and LayersPanel) → auto-continuation. `window.__sceneStore` is exposed in dev mode (`src/main.tsx`) for assertions. Keep e2e out of Vitest (`exclude` in `vitest.config.ts`) and out of `tsc -b` (own `e2e/tsconfig.json`).
 - **Lint rules against flaky/sloppy tests**: `eslint.config.js` scopes `eslint-plugin-playwright`'s flat/recommended config to `e2e/**` (`no-wait-for-timeout`/`no-focused-test`/`no-skipped-test` — the last with `allowConditional: true` so `test.skip(condition, "reason")` still works — forced to `error`), and `@vitest/eslint-plugin`'s recommended config to `src/**/__tests__/**`/`src/test/**` (`no-conditional-tests`/`no-conditional-in-test`/`no-disabled-tests`/`no-focused-tests` forced to `error`). `src/test/assertions.ts` (`assertDefined`/`assertOk`/`assertErr`/`assertField`) replaces the `expect(result.ok).toBe(true); if (!result.ok) return;` guard-clause idiom with a real assertion + TS type predicate, so a discriminated-union-narrowing test body doesn't need an `if` at all.
 - **Flaky-test visibility**: Vitest retries once under CI (`retry` in `vitest.config.ts`); `scripts/flakyReporter.ts` (a custom reporter — Vitest's built-in reporters don't expose retry counts anywhere actionable) records every test that only passed after a retry to `flaky-tests.json`, and `npm run test:flaky-summary` (`scripts/flaky-summary.mjs`) turns that into a `$GITHUB_STEP_SUMMARY` table in CI. Playwright's `reporter` in both configs is `["list", "html", ...(CI ? ["github"] : [])]` — the HTML report (with the trace viewer per retry attempt) is uploaded as a CI artifact.
@@ -124,9 +126,36 @@ token, tab routing, security).
 Two independent transports route external MCP calls into the same
 `toolHandlers`/`executeToolCall` path the built-in chat uses. Both share a
 transport-agnostic dispatch core, `src/lib/mcpDispatch.ts`
-(`createToolDispatcher({ send })`): a serial queue so two concurrent bridged
-calls can never interleave scene mutations mid-call, and the
-unknown-tool → `tool_error` branch. `executeToolCall` itself already never
+(`createToolDispatcher({ send })`): the unknown-tool → `tool_error` branch,
+plus a per-dispatcher queue that keeps one transport's outcomes in the order
+its calls arrived.
+
+Mutual exclusion *across* surfaces is a layer below, in
+`src/lib/toolCallQueue.ts` (`runToolCall`). The scene-mutating handlers —
+`batch_design` above all — build from a snapshot of `useSceneStore.getState()`
+and commit a whole replacement `nodesById`/`childrenById`/`rootIds`, so two in
+flight at once means the second commit discards the first's nodes. That was
+once prevented by arrangement (one queue per transport, and the two bridges
+are mutually exclusive), but chat, WebMCP and plugins are all reachable in one
+editor tab at the same time.
+
+`runToolCall` is called from `executeToolCall` itself, so chat, both bridges
+and the WebMCP surface inherit it without any of them opting in — do **not**
+wrap a call site in it again, or the inner call will wait on the queue the
+outer one holds. Plugins are the one path that bypasses `executeToolCall`
+(`pluginApi.ts`'s `runTool` calls the handler directly, for its own allow-list
+and Dev Mode gate), so they call `runToolCall` explicitly.
+
+**Read-only tools are not queued.** `UNSERIALIZED_TOOL_NAMES` lists them, and
+anything absent from it is serialized — a new tool is safe by default, since
+wrongly serializing a read costs latency while wrongly parallelizing a write
+loses work. The list exists because one global queue otherwise couples
+transports that share nothing: `get_screenshot` in a backgrounded tab (where
+`rAF` never fires) burns its whole timeout, and would stall unrelated traffic
+for that window. The timeout starts *inside* the queued task, so a call that
+waited still gets its full budget.
+
+`executeToolCall` itself already never
 rejects — a throwing handler resolves to a JSON `{"error": "..."}` string —
 so a dispatcher failure always surfaces as a normal *outcome*, not a broken
 queue.
@@ -165,9 +194,11 @@ queue.
 
 **Only one bridge may be active at a time.** A dev bundle built with
 `VITE_MCP_WS_TOKEN` and loaded inside the desktop shell would otherwise start
-both — two independent serial queues into the same `toolHandlers`, which
-could interleave scene mutations. `main.tsx` resolves this by ordering, not
-locking: it awaits `initDesktopMcpBridge()` settling before even importing
+both — two transports advertising the same tab as their editor session, with
+duplicated status reporting and two sockets to keep alive. (Interleaved scene
+mutations used to be the headline reason too; `runToolCall` now rules that out
+on its own, but the mutual exclusion is still the intended arrangement.)
+`main.tsx` resolves this by ordering, not locking: it awaits `initDesktopMcpBridge()` settling before even importing
 `mcpBridge.ts`, and `mcpBridge.ts`'s `startMcpBridgeIfConfigured()` checks
 `desktopMcpBridge.ts`'s `isDesktopMcpBridgeActive()` and no-ops if the desktop
 bridge already registered — the desktop bridge always wins.
@@ -178,6 +209,106 @@ Both bridges drive the same `src/store/mcpBridgeStore.ts`
 support the desktop path. It is a plain `<div>`, not `DropdownMenuLabel`:
 Base UI's label part throws unless wrapped in a `Menu.Group`, which crashes
 the whole menu.
+
+### WebMCP (in-page agents)
+
+`src/lib/webmcp/` publishes the editor's agent-facing tools on the page's
+model context, so an agent that can run JavaScript in the tab — the Chrome
+extension, Playwright, CDP, the Electron shell — reaches them without the
+WebSocket or desktop bridge. Started from `App.tsx` (not `main.tsx`), so it
+exists only where a document does; `/` must keep the editor's module graph out
+of its entry bundle, and this module statically imports all of it.
+
+- **The API is polyfilled** (`polyfill.ts`). No stable browser ships WebMCP
+  yet — Chrome 152 exposes neither `document.modelContext` nor
+  `navigator.modelContext` — and Electron lags Chrome by definition, so
+  waiting for it would mean shipping nothing. The polyfill installs **only**
+  when the browser has none, and everything else talks to `getModelContext()`,
+  which prefers the native object. When Chrome ships the API the polyfill
+  stops installing itself and nothing else changes. It deliberately mirrors
+  the native API's awkward parts (arguments as a JSON *string*; a handler's
+  error message replaced by a generic "Tool invocation failed") — being nicer
+  than Chrome would let client code depend on detail Chrome will never give.
+- **Ten tools**, the same curated set as the desktop bridge
+  (`DESKTOP_MCP_TOOL_NAMES`), of which two write to the scene: `batch_design`
+  and `set_variables`. Nothing consequential is exposed —
+  `publish_to_showcase` in particular is not, and `webmcpContract.test.ts`
+  fails if it drifts in.
+- **Schemas live in `schemas.ts`** because they must ship in the bundle, which
+  makes them a second copy of contracts owned by the backend's zod shapes.
+  `__tests__/webmcpContract.test.ts` imports the sibling backend checkout the
+  same way `toolContract.test.ts` does and asserts the copy is *tighter*,
+  never looser: no property the backend does not declare, nothing required
+  the backend does not accept. `batch_design` is the one deliberate
+  tightening — the backend shape carries three alias keys for models that emit
+  the wrong name, and this surface publishes canonical `operations` alone.
+- **A failed tool call comes back as a result, not a rejection.** A rejection
+  loses its message — the WebMCP layer replaces it with a generic "Tool
+  invocation failed", which the polyfill mirrors on purpose — so tool-level
+  failures return `{isError: true, error, ...}` instead, MCP's own convention
+  for the split. The handler's other fields ride along, which is what makes
+  `batch_design`'s resume point (`completedOperations`, `truncated`) reach a
+  caller that needs to continue a long script rather than restart it. Only
+  protocol-level problems still throw: an unknown tool, or arguments that are
+  not a JSON string.
+- **Input is validated at execute time** (`validateInput.ts`, a small
+  JSON-Schema subset) and unknown keys are *rejected, not stripped*: a closed
+  schema whose runtime quietly accepts extras is a decorative contract. If the
+  schemas ever outgrow that subset, replace the validator rather than
+  extending it — one that ignores a keyword it does not understand is worse
+  than none.
+- **The read-only gate is the safety-critical part, and it is two-layered.**
+  `sharedViewStore.ts` is explicit that tool handlers mutate the scene stores
+  *below* every UI-level guard, so hiding entry points is the only real
+  protection — and WebMCP is a new entry point. Mutating tools are therefore
+  withheld from registration when the canvas is not editable, **and** refused
+  again inside `execute`. Both are needed: registration alone races
+  (`/c/:shareId` sets its flag from a parent effect while the editor mounts
+  lazily underneath, and editability can change after registration), while
+  refusal alone would advertise tools that always fail. Editability is read
+  from the app's own rules — `isSharedView` plus `canEditScene(mode)`, the
+  latter being what also covers `/app?view`, which never sets the shared-view
+  flag. Note what each is worth: `isSharedView` is a real boundary (the
+  viewer refuses to leave view mode — `keyboardCommands.ts:209`), while
+  `?view` on your own document is a UI mode, not a security control — Escape
+  exits it by design, and a synthetic `KeyboardEvent` can do the same. Gating
+  on it is honesty about what the page currently is, not a defence.
+  **The `startWebMcp()` effect in `App.tsx` is declared after the
+  `?view` effect on purpose**: passive effects run in declaration order, so
+  registering first would advertise the editing tools a moment before view
+  mode is entered.
+- **Registration re-runs on every editor mount, and the surface is torn down
+  on unmount.** Neither is optional. Forking a shared canvas
+  (`SharedCanvasBar`) navigates `/c/:shareId` → `/app` client-side, so a
+  result memoized from the read-only mount would leave the forked, editable
+  document advertising read-only tools for the rest of the tab session. In the
+  other direction, browser Back to the showcase unmounts the editor while the
+  tools stay published (nothing can unregister one), so `stopWebMcp()` marks
+  the surface unowned and `execute` refuses everything until an editor mounts
+  again.
+- **On someone else's canvas, reads are narrowed to what the viewer can see**
+  (`sharedViewRedaction.ts`). This answers a threat that needs no XSS: on
+  `/c/:shareId` the read tools stay published, so anyone who can send a share
+  link can write instructions into a document that a stranger's agent will
+  read. The rule is provenance — an agent must see what the victim's screen
+  can show — so hidden nodes keep only id/type/name (the layers panel shows
+  those anyway) and embed/component source HTML is removed, since it is never
+  rendered as text and is the densest hiding place in the format. Redaction is
+  marked, never silent, or the agent would describe an embed as empty. **Its
+  honest limit: it removes the invisible channels, not the inattentive ones** —
+  text that is genuinely drawn, just far from the viewport, still reaches the
+  agent, and only refusing to publish the tools at all would change that.
+  `untrustedContentHint` does not help here; nothing enforces it.
+- **A published tool's name cannot be silently taken over.** `registerTool`
+  replaces by name (remounts, hot reload), so `polyfill.ts` requires a claim
+  token to replace a name the page already claimed. This is not a defence
+  against script that already runs in the page — that script can do worse
+  directly — it exists because `getTools()` omits `execute`, which makes a
+  substituted tool byte-identical to the real one for the agent, the one party
+  with no way to detect it.
+- `webmcp.e2e.json` at the repo root is the expectation manifest — risk class,
+  annotations and a safe fixture input per tool. Nothing executes it; it is
+  what a person checks a running editor against.
 
 ### The agent's self-improvement, seen from the frontend
 
