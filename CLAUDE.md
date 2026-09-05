@@ -366,11 +366,35 @@ of its entry bundle, and this module statically imports all of it.
 This app deliberately ships none, and `public/sw.js` is a tombstone rather
 than a worker: browsers that loaded a pre-removal build still have the old
 workbox worker registered at that URL and keep polling it, so the file has to
-keep existing to tell them to unregister, drop their caches and reload. **Do
-not delete it**, and do not add a `fetch` handler to it. It skips `/app`
-clients on purpose — an editor document is in-memory only, so force-reloading
-that tab would discard unsaved work; those tabs are unregistered too and pick
-up the live bundle on the user's own next reload.
+keep existing to tell them to unregister, drop their caches and reload. It
+skips `/app` clients on purpose — an editor document is in-memory only, so
+force-reloading that tab would discard unsaved work; those tabs are
+unregistered too and pick up the live bundle on the user's own next reload.
+Do not add a `fetch` handler to it.
+
+**Never delete `public/sw.js`, and do not treat that as a temporary state.**
+The obvious assumption — that once the removal shipped, a missing `/sw.js`
+would simply 404 and the browser would give up on the worker — is wrong, and
+was measured rather than reasoned about. Serving `404 text/plain` (exactly
+what this host returns for a deleted file — it does *not* fall back to the SPA
+shell) leaves the registration, the precache and the stale page fully intact
+after repeated navigations, in both chromium and webkit. A 404 is not an
+unregister signal; it just fails the update check and keeps what is already
+installed. So deleting this file does not retire the worker, it freezes every
+client that still holds one, permanently.
+
+There is also no way to know when the last such client has checked in. That
+would need `/sw.js` request counts, and the Render static site emits only
+build logs — no request logs at all. Nothing else ever fetches this file (the
+app registers no worker), so its traffic is exactly the population still stuck
+— which is precisely the number that cannot be observed here. With no
+observable stopping condition and a 2 kB cost, the file is permanent.
+
+To verify a change to it, drive a real browser: serve a page whose old worker
+precaches a stale copy of itself, swap `/sw.js` to the candidate script, and
+assert the client ends up unregistered, cacheless and on the live bundle
+without a reload loop, while an open `/app` tab keeps its document. Vitest
+cannot: it never executes a service worker.
 
 Nothing may call `serviceWorker.register()` again. `src/__tests__/
 serviceWorkerRemoval.test.ts` enforces both halves — the tombstone's contents

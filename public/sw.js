@@ -6,9 +6,15 @@
 // code we can still change for an already-registered client is the script at
 // the URL it polls.
 //
-// DO NOT DELETE. Nothing in the app registers a worker any more, so a new
+// DO NOT DELETE, and not "delete this later" either. Serving 404 here does
+// NOT retire the worker: measured in chromium and webkit, a 404 leaves the
+// registration, the precache and the stale page intact across repeated
+// navigations — it fails the update check and keeps what is installed. So
+// deleting this file does not end the old worker's life, it makes it
+// permanent. Nothing in the app registers a worker any more, so a new
 // visitor never fetches this file at all; it exists purely for the clients
-// that already hold a registration. Verified end-to-end in chromium and
+// that already hold a registration, and their number is unobservable (the
+// static host emits no request logs). Verified end-to-end in chromium and
 // webkit: a client pinned to a stale precache takes exactly one /sw.js
 // fetch to end up unregistered, cacheless and reloaded onto the live
 // bundle, with no reload loop.
