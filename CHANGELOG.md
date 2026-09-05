@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.78.1] - 2026-09-05
+
+Groundwork for a Content Security Policy. The app had none, and `src/lib/webmcp/`
+now publishes an API that can read and rewrite the whole document from page
+context — which does not create an XSS, but raises what one would be worth.
+
+### Added
+- **A CSP, and the changes that let the app actually run under it.** The policy is `script-src 'self'` with no escape hatches; `docs/csp.md` carries the exact string, the rationale per directive, and the Render dashboard steps. The header cannot ship from this repo — the frontend is a static site configured entirely in Render's dashboard — so `scripts/csp-policy.mjs` is the single source of truth and `scripts/csp-serve.mjs` serves `dist/` with it as a real response header, which is how the enforcing version was tested (`npm run preview` cannot set headers). Report-Only and enforcing carry an identical value; switching is a one-word change.
+
+### Fixed
+- **PixiJS did not degrade without `'unsafe-eval'` — it threw, and no canvas was created at all.** `pixi.js/unsafe-eval` swaps its code-generating uniform paths for interpreted ones. The large-document frame-time budgets still pass with room to spare (2.7 ms max flush against the spec's ceiling).
+- **posthog-js injected a third-party `<script>`** for its remote config, which would have put an external origin in `script-src` for no benefit — none of those bundles are used here. `disable_external_dependency_loading` stops it.
+- **HTML paste and "convert embed to design" would have broken under the policy.** `captureEmbed` inlined its vendored bundle as an inline `<script>` inside a `srcdoc` iframe, and a `srcdoc` iframe inherits the embedder's CSP. It now loads the same bundle from a same-origin URL.
+
+### Known
+- **Plugins do not run under the enforcing policy** and are the reason to ship Report-Only first. `pluginHost` runs each plugin as inline script in a sandboxed `srcdoc` iframe; sandboxing does not change CSP inheritance, and neither a hash nor a nonce can cover code the user authored. The fix is to give the sandbox its own document URL so it gets its own CSP — a design change of its own.
+- `frame-src` names the R2 bucket host for the showcase lightbox. Object storage has already moved once; the next move must carry this line with it or every lightbox silently empties.
+
 ## [0.78.0] - 2026-09-05
 
 An agent running inside the tab can now use the editor. Until now it could
