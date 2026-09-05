@@ -350,14 +350,37 @@ of its entry bundle, and this module statically imports all of it.
   both name the editor routes rather than claiming tools exist on the current
   page, because that same HTML also serves the showcase at `/`. Routes in the
   manifest are written under the configured `base` (the Pages build is not at
-  the origin root). Two deliberate deployment details: `json` stays out of
-  `workbox.globPatterns` so the manifest is never precached stale, and
-  `/webmcp.json` is in `navigateFallbackDenylist` so a *navigation* to it
-  (Playwright's `page.goto`, an extension opening the link) is not answered
-  with the precached SPA shell.
+  the origin root). This used to need two workbox carve-outs — keeping `json`
+  out of the precache so the manifest could not go stale, and denylisting
+  `/webmcp.json` from the navigation fallback so `page.goto` got the manifest
+  rather than the precached SPA shell. Both are gone with the service worker
+  (see "No service worker" below): nothing precaches, and the host's
+  single-page-application fallback only applies to paths with no real file,
+  which `/webmcp.json` is not.
 - `webmcp.e2e.json` at the repo root is the expectation manifest — risk class,
   annotations and a safe fixture input per tool. Nothing executes it; it is
   what a person checks a running editor against.
+
+### No service worker
+
+This app deliberately ships none, and `public/sw.js` is a tombstone rather
+than a worker: browsers that loaded a pre-removal build still have the old
+workbox worker registered at that URL and keep polling it, so the file has to
+keep existing to tell them to unregister, drop their caches and reload. **Do
+not delete it**, and do not add a `fetch` handler to it. It skips `/app`
+clients on purpose — an editor document is in-memory only, so force-reloading
+that tab would discard unsaved work; those tabs are unregistered too and pick
+up the live bundle on the user's own next reload.
+
+Nothing may call `serviceWorker.register()` again. `src/__tests__/
+serviceWorkerRemoval.test.ts` enforces both halves — the tombstone's contents
+and the absence of any registration in `src/**` — because neither is visible
+to any other test: the worker never runs under Vitest.
+
+The web app manifest stays (`public/manifest.webmanifest`, base-relative URLs
+so it works under any deploy base), so icons, theme colour and iOS
+add-to-home-screen are unaffected. Chrome's install prompt needs a worker and
+is the one capability given up.
 
 ### The agent's self-improvement, seen from the frontend
 

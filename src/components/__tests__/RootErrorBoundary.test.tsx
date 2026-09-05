@@ -1,11 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { RootErrorBoundary } from "@/components/RootErrorBoundary";
-import { recoverFromFatalError } from "@/pwa/updateSelfHeal";
-
-vi.mock("@/pwa/updateSelfHeal", () => ({
-  recoverFromFatalError: vi.fn(),
-}));
 
 function Bomb(): never {
   throw new Error("boom");
@@ -24,12 +19,9 @@ afterEach(() => {
 });
 
 describe("RootErrorBoundary", () => {
-  // This is the whole point of the boundary: a render crash (the incident
-  // that motivated this — a stale bundle throwing on a changed API shape)
-  // must not just leave a blank #root. It also triggers the same recovery
-  // that would otherwise depend on the tree that just failed to mount — see
-  // updateSelfHeal.ts's module comment.
-  it("renders a fallback and triggers recovery when a child throws while rendering", () => {
+  // This is the whole point of the boundary: a render crash must not just
+  // leave a blank #root — it renders a static fallback with a Reload button.
+  it("renders a fallback when a child throws while rendering", () => {
     render(
       <RootErrorBoundary>
         <Bomb />
@@ -37,7 +29,6 @@ describe("RootErrorBoundary", () => {
     );
 
     expect(screen.getByText(/something went wrong/i)).toBeTruthy();
-    expect(recoverFromFatalError).toHaveBeenCalledTimes(1);
   });
 
   it("renders children normally when nothing throws", () => {
@@ -48,7 +39,6 @@ describe("RootErrorBoundary", () => {
     );
 
     expect(screen.getByText("all good")).toBeTruthy();
-    expect(recoverFromFatalError).not.toHaveBeenCalled();
   });
 
   it("reloads the page when the Reload button is clicked", () => {

@@ -1,7 +1,6 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 
-import { PwaUpdateGate } from "@/components/pwa/PwaUpdateGate";
 import { ShowcasePage } from "@/components/showcase/ShowcasePage";
 import { RouteTracker } from "@/lib/analytics/RouteTracker";
 
@@ -38,11 +37,6 @@ export function AppRouter() {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-
-      {/* "A new version is available" prompt — above the route split so it
-          also fires on the showcase at "/", where the editor (its previous
-          host) never mounts. Lazy and self-gating; see PwaUpdateGate. */}
-      <PwaUpdateGate />
 
       {/* $pageview on every route change, across both the showcase and the
           editor. No-op when analytics is disabled (no VITE_POSTHOG_KEY). */}

@@ -37,7 +37,7 @@ vi.mock("@/store/chatStore", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/store/chatStore")>();
   return { ...actual, reconcileModels: vi.fn() };
 });
-vi.mock("@/components/pwa/OfflineBanner", () => ({ OfflineBanner: () => <div data-testid="offline-banner-shim" /> }));
+vi.mock("@/components/status/OfflineBanner", () => ({ OfflineBanner: () => <div data-testid="offline-banner-shim" /> }));
 vi.mock("@/components/share/ShareDialog", () => ({ ShareDialog: () => <div data-testid="share-dialog-shim" /> }));
 
 import App from "@/App";

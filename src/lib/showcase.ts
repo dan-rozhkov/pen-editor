@@ -152,10 +152,10 @@ export async function fetchShowcase(
   return { ok: true, data };
 }
 
-// Both repos deploy independently and a returning visitor's service worker
-// can keep serving an old bundle against a newer backend (this is exactly
-// how a prior outage happened: a stale client crashed on a response shape
-// the backend had since changed). A response shape this client doesn't
+// Both repos deploy independently, and a visitor's browser can still be
+// holding an old cached bundle against a newer backend (this is exactly how
+// a prior outage happened: a stale client crashed on a response shape the
+// backend had since changed). A response shape this client doesn't
 // recognize is the signature of that same skew, so the error nudges toward
 // the fix that actually works (reload to pick up the matching bundle)
 // rather than a generic "something broke".

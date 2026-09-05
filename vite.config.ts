@@ -1,7 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { VitePWA } from "vite-plugin-pwa";
 import path from "path";
 import { homedir } from "node:os";
 import { deriveMcpWsUrl, resolveDevMcpHandshake, resolveExistingMcpToken } from "./vite/mcpDevToken";
@@ -55,91 +54,7 @@ export default defineConfig(({ command, mode }) => {
           "import.meta.env.VITE_MCP_WS_URL": JSON.stringify(deriveMcpWsUrl(mcpHandshake)),
         }
       : undefined,
-    plugins: [
-      tailwindcss(),
-      react(),
-      webmcpManifest(),
-      VitePWA({
-        registerType: "prompt",
-        // Service worker registration + update UI is added in a later task via
-        // `virtual:pwa-register` in React. Disable the auto-injected
-        // registerSW.js script so the two registration paths don't conflict.
-        injectRegister: false,
-        // includeAssets globs match files under publicDir (physical paths),
-        // not URLs — they must stay base-independent even though the
-        // manifest/workbox URL fields below are base-prefixed.
-        includeAssets: ["icons/*.png", "icons/*.svg", "favicon.ico"],
-        manifest: {
-          name: "Pen Editor",
-          short_name: "Pen",
-          description: "AI-first canvas design editor.",
-          // The showcase now lives at `base` ("/"); an installed PWA should
-          // still open straight into the editor at "/app", not the showcase.
-          start_url: `${base}app`,
-          scope: base,
-          display: "standalone",
-          background_color: "#111111",
-          theme_color: "#111111",
-          orientation: "any",
-          icons: [
-            {
-              src: `${base}icons/icon-192.png`,
-              sizes: "192x192",
-              type: "image/png",
-            },
-            {
-              src: `${base}icons/icon-512.png`,
-              sizes: "512x512",
-              type: "image/png",
-            },
-            {
-              src: `${base}icons/maskable-512.png`,
-              sizes: "512x512",
-              type: "image/png",
-              purpose: "maskable",
-            },
-          ],
-        },
-        workbox: {
-          // The service worker activates itself instead of parking in
-          // `waiting` until a page asks it to. This is the iOS fix: in prompt
-          // mode a waiting worker only ever activates when the *current*
-          // (stale) bundle sends SKIP_WAITING, or when every client of the
-          // origin goes away. On iOS Safari a tab is practically never
-          // released — reloading keeps the same client — so if the stale
-          // bundle's own prompt never appears (an old build, a dismissed
-          // toast, a crashed render), the update waits forever and the only
-          // escape is force-quitting Safari. Whatever is wrong with a shipped
-          // client can only be fixed by a build that client can't reach, so
-          // activation must not depend on it: the *new* worker's own script
-          // is the one piece of code we can still change for an already-stuck
-          // device.
-          //
-          // `registerType` stays "prompt": the page is still never reloaded
-          // out from under an unsaved document. What changes is that the new
-          // build is installed and controlling by then, so the prompt (and
-          // any later navigation) applies it — see registerServiceWorker.ts's
-          // controllerchange handler.
-          skipWaiting: true,
-          clientsClaim: true,
-          navigateFallback: `${base}index.html`,
-          // Matches API navigations regardless of base: "/pen-editor/api/..."
-          // under the Pages subpath, "/api/..." locally. Anchoring on "/api/"
-          // (no leading `^`) keeps the same intent — never serve index.html
-          // for an API path — under any base.
-          // `/webmcp.json` is listed alongside "/api/" because a *navigation*
-          // to it (Playwright's page.goto, an extension opening the link, the
-          // desktop shell) would otherwise be answered by the precached SPA
-          // shell for any visitor whose service worker is already controlling
-          // the origin — handing an agent index.html where it asked for the
-          // tool manifest. fetch()/curl are unaffected, which is what makes
-          // this easy to miss.
-          navigateFallbackDenylist: [/\/api\//, /\/webmcp\.json$/],
-          globPatterns: ["**/*.{js,css,html,ico,png,svg,webp,woff2}"],
-          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-        },
-      }),
-    ],
+    plugins: [tailwindcss(), react(), webmcpManifest()],
     build: {
       modulePreload: {
         // The showcase route ("/") never touches the editor, but Rolldown's

@@ -1,7 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
-import { recoverFromFatalError } from "@/pwa/updateSelfHeal";
-
 interface Props {
   children: ReactNode;
 }
@@ -13,12 +11,9 @@ interface State {
 // Mounted above AppRouter (see main.tsx) so it catches a crash from either
 // route — the showcase at "/" or the editor at "/app". Its only job is to
 // replace React's default "white screen + console error" with something a
-// visitor can act on, and to trigger recoverFromFatalError(): the incident
-// this exists for was a stale service-worker bundle whose render threw on a
-// changed API shape, which meant the *previous* recovery mechanism (an
-// effect inside the very tree that just failed to mount) never ran either.
-// recoverFromFatalError() lives outside React for exactly that reason — see
-// its module comment in @/pwa/updateSelfHeal.
+// visitor can act on: a static Reload button. A plain reload always fetches
+// a fresh bundle over the network (there is no service worker cache to get
+// stuck behind), so that is the whole recovery story now.
 //
 // Deliberately dependency-free: this file is reachable from the showcase
 // entry chunk, so it must not pull in any editor code or UI kit component —
@@ -33,7 +28,6 @@ export class RootErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: unknown, info: ErrorInfo) {
     console.error("Root render crashed", error, info.componentStack);
-    recoverFromFatalError();
   }
 
   render() {

@@ -65,39 +65,6 @@ export function Toolbar() {
   const [jsonText, setJsonText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isExportingPptx, setIsExportingPptx] = useState(false);
-  const [isCheckingForUpdate, setIsCheckingForUpdate] = useState(false);
-
-  const handleCheckForUpdate = async () => {
-    if (isCheckingForUpdate) return;
-    setIsCheckingForUpdate(true);
-    // The menu closes on click, so the item's own "Checking…" label is never
-    // seen — this toast is the only progress the user gets while the service
-    // worker refetches.
-    const toastId = toast.loading("Checking for updates…");
-    try {
-      const { checkForUpdate } = await import("@/pwa/checkForUpdate");
-      const result = await checkForUpdate();
-      if (result === "up-to-date") {
-        toast.success("You're on the latest version.", { id: toastId });
-      } else if (result === "unsupported") {
-        toast("Updates aren't available in this build.", { id: toastId });
-      } else if (result === "error") {
-        toast.error("Couldn't check for updates. Try again.", { id: toastId });
-      } else {
-        // "update-found" needs no toast of its own — the existing update
-        // banner (PwaUpdateToast) takes over from here.
-        toast.dismiss(toastId);
-      }
-    } catch (err) {
-      // checkForUpdate itself never rejects, but the dynamic import can — a
-      // hashed chunk that 404s after a deploy would otherwise leave the
-      // loading toast (duration: Infinity) spinning for the whole session.
-      console.warn("Check for updates failed", err);
-      toast.error("Couldn't check for updates. Try again.", { id: toastId });
-    } finally {
-      setIsCheckingForUpdate(false);
-    }
-  };
 
   const handleExportPptx = async () => {
     if (!pixiRefs || !hasSlides || isExportingPptx) return;
@@ -300,13 +267,6 @@ export function Toolbar() {
                 />
                 {MCP_STATUS_LABEL[mcpStatus]}
               </div>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => void handleCheckForUpdate()}
-                disabled={isCheckingForUpdate}
-              >
-                {isCheckingForUpdate ? "Checking for updates…" : "Check for updates"}
-              </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
         </DropdownMenuContent>

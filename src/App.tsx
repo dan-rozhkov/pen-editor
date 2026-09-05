@@ -6,7 +6,6 @@ import { reconcileModels } from "./store/chatStore";
 import { useCustomFontStore } from "./store/customFontStore";
 import { usePluginStore } from "./store/pluginStore";
 import { useSceneStore } from "./store/sceneStore";
-import { usePwaStore } from "./store/pwaStore";
 import { LeftRail } from "./components/LeftRail";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { RightPanel } from "./components/RightPanel";
@@ -28,7 +27,7 @@ import { useOnlineStatus } from "./hooks/useOnlineStatus";
 import { launchShowcaseAgentChat } from "./lib/launchShowcaseAgentChat";
 import { startWebMcp, stopWebMcp } from "./lib/webmcp";
 import { importShowcaseScreensFromHandoff } from "./lib/importShowcaseScreens";
-import { OfflineBanner } from "./components/pwa/OfflineBanner";
+import { OfflineBanner } from "./components/status/OfflineBanner";
 import { ShareDialog } from "./components/share/ShareDialog";
 import { useSharedViewStore } from "./store/sharedViewStore";
 import { Toaster } from "./components/ui/sonner";
@@ -118,16 +117,6 @@ function App() {
     void usePluginStore.getState().init();
   }, [mode]);
 
-  // Present mode hides all editor chrome, and the PWA update toast is no
-  // exception — but it's mounted in AppRouter now (so it can also fire on the
-  // showcase route), out of reach of conditional rendering here. Flag it
-  // instead; leaving present mode brings the toast back, since `updateReady`
-  // is never cleared by this.
-  useEffect(() => {
-    usePwaStore.getState().setToastSuppressed(isPresent);
-    return () => usePwaStore.getState().setToastSuppressed(false);
-  }, [isPresent]);
-
   // Read-only view mode is entered only via the `?view` URL parameter
   // (e.g. ?view or ?view=1). There is no in-app toggle.
   useEffect(() => {
@@ -194,8 +183,8 @@ function App() {
         </CanvasContextMenu>
       </div>
 
-      {/* Sonner toast portal — hosts the editor's toasts plus the
-          router-level PwaUpdateToast. Themed with the editor's UI theme. */}
+      {/* Sonner toast portal — hosts the editor's toasts. Themed with the
+          editor's UI theme. */}
       <Toaster />
 
       {/* Keeps the present-mode frame fitted to the window; no-op otherwise. */}

@@ -10,7 +10,6 @@
     "test": "vitest run",
     "preview": "vite preview",
     "test:e2e": "playwright test",
-    "test:e2e:pwa": "playwright test --config=playwright.pwa.config.ts",
     "test:coverage": "vitest run --coverage",
     "test:flaky-summary": "node scripts/flaky-summary.mjs",
     "check:dup": "jscpd src"
@@ -69,7 +68,6 @@
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
     "vite": "^8.0.16",
-    "vite-plugin-pwa": "^1.3.0",
     "vitest": "^4.1.8"
   }
 }

@@ -12,7 +12,6 @@ A canvas-based design editor with an AI design agent, built with React, TypeScri
 - **Tailwind CSS v4** — utility-first styling (via the Vite plugin)
 - **Yoga** — auto-layout engine
 - **Vercel AI SDK** — streaming chat with the design agent backend
-- **Workbox** — PWA / offline support
 
 ## Features
 
@@ -59,7 +58,7 @@ A canvas-based design editor with an AI design agent, built with React, TypeScri
 ### App
 - **Present** and read-only **view** modes
 - Pages
-- **PWA** — installable, works offline
+- Installable web app manifest (add to home screen / desktop) — no service worker; updates just arrive on the next reload. `public/sw.js` is a tombstone that unregisters any service worker a browser registered from an older build and must not be deleted.
 
 ### Performance
 - Built for **large documents**: incremental dirty-set sync (only changed nodes are re-processed), spatial-index viewport culling and hit-testing, and raster caching of unchanged top-level frames (Figma-style tiles)

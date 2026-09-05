@@ -8,7 +8,7 @@ import { StatusPill } from "./StatusPill";
 // (AI chat, image generation, model list refresh) are unavailable.
 export function OfflineBanner() {
   return (
-    <StatusPill top="top-2" testId="offline-banner">
+    <StatusPill testId="offline-banner">
       <WifiSlashIcon size={14} className="shrink-0" />
       <span>
         Offline. The editor shell is available; AI and backend features are

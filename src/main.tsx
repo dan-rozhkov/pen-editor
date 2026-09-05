@@ -7,8 +7,6 @@ import { startBridges } from '@/lib/bridgeBootstrap'
 import { installModelContextForEditorRoute } from '@/lib/webmcp/earlyInstall'
 import { loadModels } from '@/lib/chatModels'
 import { applyStoredUITheme } from '@/lib/uiTheme'
-import { registerServiceWorker } from '@/pwa/registerServiceWorker'
-import { recoverFromFatalError } from '@/pwa/updateSelfHeal'
 
 import './index.css'
 import { AppRouter } from './AppRouter'
@@ -26,40 +24,12 @@ applyStoredUITheme()
 // Route-gated, and deliberately not on the showcase at "/".
 installModelContextForEditorRoute()
 
-// vite-plugin-pwa's generateSW output only exists for production builds
-// (no devOptions are enabled), so only register there.
-if (import.meta.env.PROD) {
-  registerServiceWorker()
-}
-
-// PROD-only, mirroring registerServiceWorker above — dev/test must never
-// emit. initAnalytics() is already a complete no-op without
-// VITE_POSTHOG_KEY, so this gate is belt-and-suspenders: it guarantees a
-// dev build never even attempts the dynamic posthog-js import.
+// PROD-only — dev/test must never emit. initAnalytics() is already a
+// complete no-op without VITE_POSTHOG_KEY, so this gate is
+// belt-and-suspenders: it guarantees a dev build never even attempts the
+// dynamic posthog-js import.
 if (import.meta.env.PROD) {
   initAnalytics()
-}
-
-// RootErrorBoundary only catches crashes that happen *during React's render*.
-// By ES module semantics, every static import above this line (RootErrorBoundary,
-// registerServiceWorker, updateSelfHeal, AppRouter, index.css) has already
-// finished evaluating by the time this listener is registered, so it cannot
-// catch a crash while THIS module or its static imports are still evaluating
-// — catching that would need an inline script in index.html, which is
-// deliberately out of scope here. What it *does* catch: a crash while
-// evaluating a module loaded via dynamic `import()` after this point (the
-// editor itself, since AppRouter lazy-loads App), and any async error thrown
-// before React's first commit. Guarded to production only (mirrors
-// registerServiceWorker above — there's no service worker to recover from in
-// dev) and to an empty #root specifically, so a later, unrelated runtime
-// error in a fully-mounted app doesn't reload a live session out from under
-// the user.
-if (import.meta.env.PROD) {
-  window.addEventListener('error', () => {
-    if (!document.getElementById('root')?.childElementCount) {
-      recoverFromFatalError()
-    }
-  })
 }
 
 // See bridgeBootstrap.ts for the desktop/websocket MCP bridge startup
@@ -89,9 +59,6 @@ if (import.meta.env.DEV) {
   });
   import('@/store/themeStore').then(({ useThemeStore }) => {
     (window as unknown as Record<string, unknown>).__themeStore = useThemeStore;
-  });
-  import('@/store/pwaStore').then(({ usePwaStore }) => {
-    (window as unknown as Record<string, unknown>).__pwaStore = usePwaStore;
   });
   import('@/store/variableStore').then(({ useVariableStore }) => {
     (window as unknown as Record<string, unknown>).__variableStore = useVariableStore;
