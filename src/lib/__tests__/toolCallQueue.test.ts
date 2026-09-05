@@ -101,3 +101,14 @@ describe("runToolCall", () => {
     ).rejects.toThrow("specific");
   });
 });
+
+// The repo tools are pure backend reads that hold a connection for up to 25s.
+// Serializing them would stall chat, both MCP bridges and WebMCP for that
+// whole window — the same coupling `get_screenshot` forced this list to exist
+// for.
+describe("repo-reading tools are not serialized", () => {
+  it.each(["read_design_repo", "read_repo_files"])("%s skips the queue", (name) => {
+    expect(UNSERIALIZED_TOOL_NAMES).toContain(name);
+    expect(isSerializedTool(name)).toBe(false);
+  });
+});

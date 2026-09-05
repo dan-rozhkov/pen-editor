@@ -13,6 +13,8 @@ import {
   EraserIcon,
   ExportIcon,
   EyeIcon,
+  FileCodeIcon,
+  GithubLogoIcon,
   GlobeIcon,
   ImageIcon,
   ImageSquareIcon,
@@ -89,6 +91,8 @@ const toolIcons: Record<string, Icon> = {
   vectorize_image: VectorThreeIcon,
   analyze_image: EyeIcon,
   publish_to_showcase: UploadSimpleIcon,
+  read_design_repo: GithubLogoIcon,
+  read_repo_files: FileCodeIcon,
   web_search: GlobeIcon,
   fetch_url: LinkIcon,
   // Every Refero-served tool carries the Refero mark instead of a

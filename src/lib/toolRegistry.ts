@@ -36,6 +36,8 @@ import { readEmbedHtml } from "./tools/readEmbedHtml";
 import { editEmbedHtml } from "./tools/editEmbedHtml";
 import { removeBackground } from "./tools/removeBackground";
 import { vectorizeImage } from "./tools/vectorizeImage";
+import { readDesignRepo } from "./tools/readDesignRepo";
+import { readRepoFiles } from "./tools/readRepoFiles";
 
 /**
  * Per-call metadata threaded through to handlers that need to correlate
@@ -95,4 +97,6 @@ export const toolHandlers: Record<string, ToolHandler> = {
   publish_to_showcase: publishToShowcase,
   remove_background: removeBackground,
   vectorize_image: vectorizeImage,
+  read_design_repo: readDesignRepo,
+  read_repo_files: readRepoFiles,
 };

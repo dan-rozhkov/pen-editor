@@ -47,6 +47,11 @@ export const UNSERIALIZED_TOOL_NAMES: readonly string[] = [
   "get_guidelines",
   "get_style_guide_tags",
   "get_style_guide",
+  // Pure network reads against the backend's GitHub proxy — nothing they can
+  // touch is in the scene graph, and each holds its connection for up to 25s,
+  // which is exactly the window that would stall unrelated bridge traffic.
+  "read_design_repo",
+  "read_repo_files",
 ];
 
 const unserialized = new Set(UNSERIALIZED_TOOL_NAMES);

@@ -69,6 +69,8 @@ export const toolDisplayNames: Record<string, string> = {
   vectorize_image: "Vectorize Image",
   analyze_image: "Analyze Image",
   publish_to_showcase: "Publish to Showcase",
+  read_design_repo: "Read Design Repo",
+  read_repo_files: "Read Repo Files",
   web_search: "Search the Web",
   fetch_url: "Read Web Pages",
   ...referoToolDisplayNames,
