@@ -306,6 +306,22 @@ of its entry bundle, and this module statically imports all of it.
   directly — it exists because `getTools()` omits `execute`, which makes a
   substituted tool byte-identical to the real one for the agent, the one party
   with no way to detect it.
+- **The context is installed from the entry bundle; the tools arrive later.**
+  `installModelContextForEditorRoute()` runs in `main.tsx` (`earlyInstall.ts`),
+  route-gated to `/app` and `/c/`, and never on the showcase. Registration
+  still happens from `App.tsx`, which is a lazily imported chunk — measured on
+  production, that chunk does not begin downloading until *after* the `load`
+  event (entry 432-767ms, `load` 1312ms, editor chunk 1311-1656ms), and the
+  effect runs later still. An agent that waits for `load` and looks once —
+  the default behaviour of every browser-driving agent — used to find no
+  model context at all and conclude the page does not support WebMCP. It now
+  finds an empty `getTools()`, which means "not yet, ask again". Keep
+  `earlyInstall.ts` cheap enough for the entry bundle: `polyfill.ts`'s only
+  import is type-only, and nothing here may reach the tool registry or the
+  stores.
+  **Recipe for an agent author:** poll `getTools()` until it is non-empty
+  (a second or two is normal on a cold load) rather than sampling once. There
+  is no readiness event, in this implementation or in the native API.
 - `webmcp.e2e.json` at the repo root is the expectation manifest — risk class,
   annotations and a safe fixture input per tool. Nothing executes it; it is
   what a person checks a running editor against.

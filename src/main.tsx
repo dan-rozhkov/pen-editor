@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { RootErrorBoundary } from '@/components/RootErrorBoundary'
 import { initAnalytics } from '@/lib/analytics'
 import { startBridges } from '@/lib/bridgeBootstrap'
+import { installModelContextForEditorRoute } from '@/lib/webmcp/earlyInstall'
 import { loadModels } from '@/lib/chatModels'
 import { applyStoredUITheme } from '@/lib/uiTheme'
 import { registerServiceWorker } from '@/pwa/registerServiceWorker'
@@ -16,6 +17,14 @@ import { AppRouter } from './AppRouter'
 // dependency-free theme bootstrap here keeps the showcase out of the editor
 // store graph while still preventing a light flash on a direct dark visit.
 applyStoredUITheme()
+
+// Install the WebMCP model context before the editor's lazy chunk is even
+// requested. The tools still register later, from App.tsx, but an agent that
+// checks the page as soon as it loads now finds an empty tool list — a state
+// worth polling — rather than a missing API, which reads as "this page does
+// not support WebMCP at all". See earlyInstall.ts for the measurements.
+// Route-gated, and deliberately not on the showcase at "/".
+installModelContextForEditorRoute()
 
 // vite-plugin-pwa's generateSW output only exists for production builds
 // (no devOptions are enabled), so only register there.
