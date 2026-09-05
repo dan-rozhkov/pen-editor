@@ -4,6 +4,7 @@ import { getVariableValue } from "@/types/variable";
 import type { FlatSceneNode } from "@/types/scene";
 import type { ToolHandler } from "../toolRegistry";
 import { serializeNodeToDepth } from "./serializeUtils";
+import { compileNamePattern } from "./namePattern";
 
 interface SearchPattern {
   type?: string;
@@ -33,8 +34,11 @@ function normalizeWireType(type: string): string {
 function matchesPattern(node: FlatSceneNode, pattern: SearchPattern): boolean {
   if (pattern.type !== undefined && node.type !== normalizeWireType(pattern.type)) return false;
   if (pattern.name !== undefined) {
-    const regex = new RegExp(pattern.name, "i");
-    if (!regex.test(node.name ?? "")) return false;
+    // Compiled through namePattern.ts, which refuses shapes that can hang the
+    // main thread. Rejected patterns are caught before the search starts (see
+    // the handler below), so reaching here with one is not possible.
+    const compiled = compileNamePattern(pattern.name);
+    if (!compiled.ok || !compiled.regex.test(node.name ?? "")) return false;
   }
   if (pattern.reusable !== undefined) {
     const isReusable = node.type === "frame" && node.reusable === true;
@@ -90,6 +94,16 @@ export const batchGet: ToolHandler = async (args) => {
   const searchDepth = args.searchDepth as number | undefined;
   const resolveVariables = args.resolveVariables as boolean | undefined;
   const preferSourceTemplate = args.preferSourceTemplate as boolean | undefined;
+
+  // Compile every search pattern before touching the scene: an unsafe or
+  // malformed regex has to come back as a message the caller can act on,
+  // rather than silently matching nothing (which reads as "no such layers")
+  // or hanging the tab.
+  for (const pattern of patterns ?? []) {
+    if (pattern.name === undefined) continue;
+    const compiled = compileNamePattern(pattern.name);
+    if (!compiled.ok) return JSON.stringify({ error: compiled.error });
+  }
 
   const { nodesById, childrenById, rootIds } = useSceneStore.getState();
 
