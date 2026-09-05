@@ -229,6 +229,16 @@ of its entry bundle, and this module statically imports all of it.
   the native API's awkward parts (arguments as a JSON *string*; a handler's
   error message replaced by a generic "Tool invocation failed") — being nicer
   than Chrome would let client code depend on detail Chrome will never give.
+  **It publishes one object under two names** — `navigator.modelContext` and
+  `document.modelContext` — because the proposal says `navigator` while the
+  Chrome builds that expose the API at all put it on `document`, so an agent
+  checks whichever its own reference named and concludes "unsupported" if it
+  looks at the other. That is not hypothetical: it is exactly how an external
+  agent reported this surface missing. The `document` write is best-effort —
+  a failure there is logged and the install still succeeds, since the surface
+  already exists and `getModelContext()` finds it — and the two names must
+  stay the *same* object, or a caller that registers through one and executes
+  through the other gets "Unknown tool".
 - **Ten tools**, the same curated set as the desktop bridge
   (`DESKTOP_MCP_TOOL_NAMES`), of which two write to the scene: `batch_design`
   and `set_variables`. Nothing consequential is exposed —

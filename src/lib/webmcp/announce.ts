@@ -48,7 +48,7 @@ function printBanner(lines: string[]): void {
  */
 export function announceSurfaceInstalled(): void {
   printBanner([
-    "This page publishes agent tools via WebMCP on navigator.modelContext.",
+    "This page publishes agent tools via WebMCP. Look at navigator.modelContext or document.modelContext — both name the same object, because references disagree about which one is the address.",
     "No tools are registered yet — the editor loads in a separate chunk, so getTools() returns [] for a moment. Poll it; this is \"ask again\", not \"unsupported\".",
     "A second banner prints here once tools are registered.",
   ]);

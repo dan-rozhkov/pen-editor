@@ -35,6 +35,8 @@ export interface WebMcpManifest {
     kind: "in-page";
     description: string;
     api: string;
+    /** The same object's second address; see the value for why both exist. */
+    alsoAt: string;
     callMethod: string;
     argsEncoding: string;
     example: string;
@@ -74,6 +76,13 @@ export function buildWebMcpManifest(base = "/"): WebMcpManifest {
       description:
         "These tools are not an HTTP API — there is no endpoint to POST to. They exist only inside the loaded page, registered on navigator.modelContext (the WebMCP proposal; polyfilled here since no stable browser ships it yet — see src/lib/webmcp/polyfill.ts). An agent must run JavaScript in the tab (a browser extension, Playwright, CDP, or the desktop shell) to discover or call them.",
       api: "navigator.modelContext",
+      // The same object under a second name. Not decoration: the shipped
+      // Chrome builds that expose this API at all put it on `document`,
+      // while the proposal says `navigator`, so an agent checks whichever
+      // one its own reference named and concludes "unsupported" if it looks
+      // at the other. Naming both here is cheaper than being right about
+      // which one wins.
+      alsoAt: "document.modelContext",
       callMethod: "navigator.modelContext.executeTool(tool, args)",
       argsEncoding:
         "`args` is a JSON *string*, not a plain object — passing an object fails with \"Failed to parse input arguments\". Encode the tool's inputSchema fields, then JSON.stringify them.",

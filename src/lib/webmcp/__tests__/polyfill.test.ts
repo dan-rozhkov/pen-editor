@@ -46,6 +46,52 @@ describe("installModelContextPolyfill", () => {
     expect(getModelContext()).toBe(native);
   });
 
+  it("publishes the same object on document as well as navigator", async () => {
+    // Two names for one object, because the shipped Chrome builds that expose
+    // this API put it on `document` while the proposal says `navigator`, and
+    // an agent that checks only the address its reference named must not
+    // conclude the page supports nothing. Identity is the assertion that
+    // matters: a second, separate context would split the tool registry, so
+    // a caller registering through one name and executing through the other
+    // would get "Unknown tool".
+    installModelContextPolyfill();
+
+    const viaNavigator = (navigator as unknown as { modelContext?: unknown }).modelContext;
+    const viaDocument = (document as unknown as { modelContext?: unknown }).modelContext;
+
+    expect(viaDocument).toBe(viaNavigator);
+    expect(viaDocument).toBeDefined();
+  });
+
+  it("keeps the surface installed when document refuses the alias", () => {
+    // The alias is a convenience; the install is not. A browser that made
+    // `document.modelContext` non-configurable between the read and the write
+    // must not cost us the working `navigator` surface.
+    //
+    // The refusal is staged on `defineProperty` rather than by actually
+    // defining a non-configurable property: that would be undeletable, and
+    // `clearModelContext` could not reset `document` for the rest of the file.
+    const define = Object.defineProperty;
+    const spy = vi
+      .spyOn(Object, "defineProperty")
+      .mockImplementation((target, key, descriptor) => {
+        if (target === document && key === "modelContext") {
+          throw new TypeError("Cannot redefine property: modelContext");
+        }
+        return define(target, key, descriptor);
+      });
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = installModelContextPolyfill();
+
+    expect(result).toEqual({ available: true, native: false });
+    expect(getModelContext()).toBeDefined();
+    expect(error).toHaveBeenCalled();
+    expect((document as unknown as { modelContext?: unknown }).modelContext).toBeUndefined();
+    spy.mockRestore();
+    error.mockRestore();
+  });
+
   it("keeps the tools registered on the first install when called again", async () => {
     installModelContextPolyfill();
     const context = getModelContext();

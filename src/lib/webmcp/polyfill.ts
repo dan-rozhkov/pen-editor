@@ -180,12 +180,7 @@ export function installModelContextPolyfill(): PolyfillResult {
 
   const context = new PolyfilledModelContext();
   try {
-    Object.defineProperty(navigator, "modelContext", {
-      value: context,
-      configurable: true,
-      enumerable: false,
-      writable: false,
-    });
+    publish(navigator, context);
   } catch (error) {
     // A future browser could define the property as non-configurable
     // between the read above and this write. Failing to install is not
@@ -194,5 +189,32 @@ export function installModelContextPolyfill(): PolyfillResult {
     console.error("[webmcp] could not install the model context polyfill", error);
     return { available: false, native: false };
   }
+
+  // The same object is also published on `document`, because that is where
+  // the Chrome builds that expose the API at all put it, and an agent looks
+  // wherever its own reference says to look. A surface that exists only at
+  // the address half the callers do not check is, for them, a surface that
+  // does not exist — this cost a real agent a whole investigation before it
+  // concluded the editor supports nothing. One object, two names: whichever
+  // one a caller reads, it registers against and executes the same tools.
+  //
+  // Failing here is not fatal the way the `navigator` write is: the surface
+  // is already installed and `getModelContext()` finds it, so the alias is
+  // reported and skipped rather than unwinding a working install.
+  try {
+    publish(document, context);
+  } catch (error) {
+    console.error("[webmcp] could not alias the model context onto document", error);
+  }
   return { available: true, native: false };
+}
+
+/** Defines `modelContext` on a host object with the native API's shape. */
+function publish(host: object, context: ModelContextLike): void {
+  Object.defineProperty(host, "modelContext", {
+    value: context,
+    configurable: true,
+    enumerable: false,
+    writable: false,
+  });
 }
