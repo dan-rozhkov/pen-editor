@@ -1,4 +1,22 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
+// Must be imported before the renderer is created: it swaps PixiJS's
+// code-generating uniform/UBO/shader-sync paths (`new Function(...)`) for
+// interpreted equivalents and disables the internal unsafe-eval assertion.
+//
+// Without it PixiJS does not degrade under a Content-Security-Policy that
+// omits 'unsafe-eval' — `AbstractRenderer._unsafeEvalCheck` *throws*
+// ("Current environment does not allow unsafe-eval, please use
+// pixi.js/unsafe-eval module to enable support") and no canvas is created at
+// all, so the editor renders nothing. The alternative was putting
+// 'unsafe-eval' in `script-src`, which would let any injected string be
+// compiled into code and would gut the point of having a policy. This import
+// is what makes `script-src 'self'` possible; see docs/csp.md.
+//
+// Cost: the polyfilled uniform sync is interpreted rather than generated. If
+// the frame-time budgets in e2e/pixi-large-document-performance.spec.ts start
+// failing, that is the trade-off to re-measure — not a reason to relax the
+// policy.
+import "pixi.js/unsafe-eval";
 import { Application, Container } from "pixi.js";
 import { useShallow } from "zustand/react/shallow";
 import { InlineNameEditor} from "@/components/InlineNameEditor";

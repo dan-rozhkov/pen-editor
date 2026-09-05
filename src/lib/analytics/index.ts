@@ -89,6 +89,17 @@ export function initAnalytics(): void {
         capture_pageview: false,
         capture_pageleave: true,
         disable_session_recording: true,
+        // Keep posthog-js from injecting <script> tags for its remote
+        // config/extension bundles (eu-assets.i.posthog.com/array/<key>/config.js
+        // and the recorder/surveys/toolbar bundles). Without this the app's
+        // Content-Security-Policy would have to carry a third-party origin in
+        // `script-src` — the one directive that must stay 'self' — to let an
+        // external party ship executable code into the page that owns the
+        // user's whole document. Nothing we use needs those bundles: session
+        // recording, autocapture, surveys and the toolbar are all off, and
+        // feature flags/config still resolve over the normal API host. See
+        // docs/csp.md.
+        disable_external_dependency_loading: true,
         // Reuse the existing anonymous id (src/lib/userId.ts) so the
         // frontend and backend agree on the same person, without upgrading
         // this to an "identified" (billed) profile.

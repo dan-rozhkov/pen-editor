@@ -5,7 +5,14 @@ import {
   EMBED_UA_RESET_CSS,
   forceEagerImageLoading,
 } from "@/utils/embedHtmlUtils";
-import captureBundleSource from "@/vendor/h2dCapture/capture.js?raw";
+// `?url` (not `?raw`): the bundle is emitted as a real same-origin asset and
+// referenced with <script src>, rather than inlined into the iframe's srcdoc.
+// A srcdoc iframe inherits the embedder's Content-Security-Policy, so an
+// inline <script> here would be blocked by `script-src 'self'` and HTML paste
+// / "convert embed to design" would fail outright. A same-origin <script src>
+// satisfies 'self' without the policy having to allow inline script anywhere.
+// See docs/csp.md.
+import captureBundleUrl from "@/vendor/h2dCapture/capture.js?url";
 import { inlinePhosphorIconSvgs } from "./phosphorIcons";
 
 interface H2dCaptureWindow extends Window {
@@ -104,8 +111,7 @@ export async function captureEmbedHtmlToH2d(
     "visibility:hidden",
     "pointer-events:none",
   ].join(";");
-  // Close any dangling </script> in the capture source defensively. The
-  // embed body HTML is untrusted (AI output, pasted markup, shared .pen
+  // The embed body HTML is untrusted (AI output, pasted markup, shared .pen
   // files) and is DOMPurify-sanitized here with the same policy used to
   // mount embeds for rendering (`sanitizeEmbedHtml`) before it rides into
   // <body> — the iframe is same-origin, so unsanitized markup with a
@@ -119,12 +125,16 @@ export async function captureEmbedHtmlToH2d(
   // real control here, not the iframe's sandboxing.
   const safeHtmlContent = sanitizeEmbedHtml(htmlContent);
   iframe.srcdoc =
-    `<!doctype html><html style="line-height:${EMBED_DEFAULT_LINE_HEIGHT}"><head><script>` +
-    captureBundleSource.replace(/<\/script>/gi, "<\\/script>") +
+    `<!doctype html><html style="line-height:${EMBED_DEFAULT_LINE_HEIGHT}"><head>` +
+    // A classic <script src> in <head> still blocks parsing until it has run,
+    // and the `load` event awaited below waits for subresources, so the
+    // bundle is installed before anything touches `win.__h2d_clone` — the
+    // same ordering the inlined bundle had.
+    `<script src="${captureBundleUrl}"></script>` +
     // The same layered UA reset the live shadow-DOM mount applies. Capture and
     // canvas must see one document: without it, converting an embed to design
     // would bake Chromium's bevelled button border into real nodes.
-    `</script><style>${EMBED_UA_RESET_CSS}</style></head><body style="margin:0">` +
+    `<style>${EMBED_UA_RESET_CSS}</style></head><body style="margin:0">` +
     safeHtmlContent +
     "</body></html>";
 

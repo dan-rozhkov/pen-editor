@@ -8,7 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * *can* pin is the security-relevant seam: the embed HTML must be routed
  * through `sanitizeEmbedHtml` (the same helper the live embed-mount pipeline
  * uses, see `embedHtmlUtils.ts`) before it is concatenated into the iframe
- * markup, and the vendored capture bundle in <head> must survive untouched.
+ * markup, and the vendored capture bundle must be referenced from <head> as a
+ * same-origin `<script src>` rather than inlined (see docs/csp.md).
  *
  * `sanitizeEmbedHtml`'s own DOMPurify tag-stripping is not re-verified here
  * for the same happy-dom reason documented in `sanitizeEmbedHtml.test.ts`.
@@ -48,7 +49,7 @@ describe("captureEmbedHtmlToH2d", () => {
     expect(srcdoc).not.toContain("<script>alert(2)</script>");
   });
 
-  it("still injects the vendored capture bundle into <head>, unsanitized", () => {
+  it("loads the vendored capture bundle from a same-origin URL, not inline", () => {
     void captureEmbedHtmlToH2d("<p>hi</p>", 50, 50).catch(() => {});
 
     const iframe = document.querySelector("iframe");
@@ -56,8 +57,12 @@ describe("captureEmbedHtmlToH2d", () => {
     // The <html> tag carries EMBED_DEFAULT_LINE_HEIGHT (see captureEmbed.ts —
     // "preserve embed conversion styles"); match the structure without pinning
     // the exact numeric default.
-    expect(srcdoc).toMatch(/^<!doctype html><html style="line-height:[\d.]+"><head><script>/);
-    expect(srcdoc).toContain("__h2d_clone");
+    expect(srcdoc).toMatch(/^<!doctype html><html style="line-height:[\d.]+"><head><script src="/);
+    // A srcdoc iframe inherits the embedder's Content-Security-Policy, so the
+    // bundle must arrive as a same-origin <script src> — inlining it again
+    // would be blocked by `script-src 'self'` and silently break HTML paste
+    // and "convert embed to design". See docs/csp.md.
+    expect(srcdoc).not.toContain("__h2d_clone");
     expect(srcdoc).toContain(`<body style="margin:0">${SANITIZED_MARKER}</body>`);
   });
 
