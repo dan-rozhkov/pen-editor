@@ -52,6 +52,29 @@ test("embed renders as a DOM overlay and enters interactive state", async ({ pag
   // The host is pointer-events:none, so the double-click reaches the Pixi
   // canvas at the embed's screen position, where the dblclick handler resolves
   // the embed and calls setActiveEmbed.
+  //
+  // That resolution goes through the canvas hit test, which prunes root
+  // subtrees against the culling index — and pixiSync only refreshes that
+  // index on its rAF-deferred flush. The host above becomes visible on
+  // React's commit, which happens first, so a visible overlay does not mean
+  // a click would reach the embed: measured, the index is still empty for
+  // the first frame after `addNode`, the hit test returns null, and the
+  // single double-click below is consumed doing nothing (this made the test
+  // fail ~50-90% of the time in isolation, on both the current and the
+  // pre-dependency-bump lockfile). Wait for the editor to actually resolve a
+  // click at the point we are about to click, then click once.
+  const box = await host.boundingBox();
+  const clickPoint = { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 };
+  await page.waitForFunction((point) => {
+    const w = window as unknown as {
+      __hitTestScreenPoint?: (x: number, y: number) => string | null;
+    };
+    const canvas = document.querySelector("[data-canvas] canvas");
+    if (!w.__hitTestScreenPoint || !canvas) return false;
+    const rect = canvas.getBoundingClientRect();
+    return w.__hitTestScreenPoint(point.x - rect.left, point.y - rect.top) === "e1";
+  }, clickPoint);
+
   await host.dblclick({ force: true });
   await expect
     .poll(async () => host.evaluate((el) => getComputedStyle(el).pointerEvents))

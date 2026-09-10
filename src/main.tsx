@@ -116,6 +116,26 @@ if (import.meta.env.DEV) {
   import('@/pixi/renderers/pendingImageLoads').then(({ waitForPendingImageFills }) => {
     (window as unknown as Record<string, unknown>).__waitForPendingImageFills = waitForPendingImageFills;
   });
+  // Canvas-interaction e2e (embed-dom-layer.spec.ts): a node is in the scene
+  // store the instant `addNode` returns, and its DOM overlay renders on
+  // React's next commit — but a click is resolved by `findCanvasHitTargetAtPoint`,
+  // which prunes root subtrees against the culling index, and pixiSync only
+  // refreshes that index on its rAF-deferred flush (see the prune comment in
+  // hitTesting.ts). So "the overlay is visible" is NOT evidence that a click
+  // at that node would hit it: measured, the index is still empty for the
+  // first frame(s) after the store write, and a spec that clicks once in
+  // that window silently does nothing. Expose the same hit test the pointer
+  // handlers use, in canvas-relative screen coordinates, so a spec can wait
+  // for the click to be resolvable instead of racing the flush.
+  import('@/pixi/interaction/hitTesting').then(({ findNodeAtPoint, screenToWorld }) => {
+    (window as unknown as Record<string, unknown>).__hitTestScreenPoint = (
+      screenX: number,
+      screenY: number,
+    ): string | null => {
+      const world = screenToWorld(screenX, screenY);
+      return findNodeAtPoint(world.x, world.y);
+    };
+  });
 }
 
 createRoot(document.getElementById('root')!).render(
