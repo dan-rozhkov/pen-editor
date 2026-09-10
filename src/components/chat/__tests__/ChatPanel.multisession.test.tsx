@@ -191,6 +191,21 @@ describe("ChatPanel streaming across two sessions", () => {
     await act(async () => {
       streamText(streams[1], "t2", "BBB-from-chat-2");
     });
+    // Wait for the delta to actually render, the same way the sibling test
+    // above does. `useDesignChat` sets `experimental_throttle: 50`, and since
+    // @ai-sdk/react 3.0.283 that throttle is authoritative: `useChat`'s
+    // `useSyncExternalStore` snapshot used to read `chat.messages` live, so an
+    // unthrottled re-render (the status subscription) published streamed text
+    // ahead of the throttle. It now returns a ref advanced only inside the
+    // throttled messages callback, so rendered text lags the stream by up to
+    // the throttle window and a single `act()` no longer flushes it.
+    await waitFor(() =>
+      expect(
+        within(screen.getByTestId(`chat-session-${newTabId}`)).queryByText(
+          /BBB-from-chat-2/,
+        ),
+      ).toBeTruthy(),
+    );
 
     // Finish tab-1's stream after the new tab streamed.
     await act(async () => {

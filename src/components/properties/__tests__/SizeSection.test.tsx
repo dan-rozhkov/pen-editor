@@ -126,7 +126,15 @@ describe("<SizeSection />", () => {
       render(
         <SizeSection node={sceneNode("rect2")} onUpdate={vi.fn()} parentContext={AUTO_LAYOUT_CONTEXT} />,
       );
-      expect((screen.getByLabelText("Set min/max sizes") as HTMLInputElement).checked).toBe(false);
+      // Queried by role, not by label text: @base-ui/react 1.3.0 gave
+      // `Checkbox.Root` an automatic `aria-labelledby` (#4142), so the wrapping
+      // <label> now names BOTH the visible `role="checkbox"` element and the
+      // aria-hidden form input it has always wrapped, and `getByLabelText`
+      // matches two elements. The role query picks exactly the control the user
+      // sees and operates, and still pins the accessible name and checked state.
+      expect(
+        screen.getByRole("checkbox", { name: "Set min/max sizes" }).getAttribute("aria-checked"),
+      ).toBe("false");
       const inputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
       expect(inputs.map((i) => i.value)).toEqual(["200", "100"]);
     });
@@ -150,7 +158,18 @@ describe("<SizeSection />", () => {
       render(
         <SizeSection node={sceneNode("rect2")} onUpdate={onUpdate} parentContext={AUTO_LAYOUT_CONTEXT} />,
       );
-      fireEvent.click(screen.getByLabelText("Set min/max sizes"));
+      // Clicking the label, not the box, and only because of a happy-dom
+      // deviation: happy-dom runs a <label>'s click-forwarding *inside*
+      // `dispatchEvent` while the click is still bubbling, rather than as the
+      // post-dispatch activation behaviour the DOM spec defines. React 19
+      // delegates listeners to the root container, above the label, so
+      // base-ui's `preventDefault()` on the control's click — which exists
+      // precisely to suppress that forwarding — runs too late, and clicking
+      // the box activates the checkbox twice, toggling this stateful control
+      // straight back off. Verified in real chromium that a box click toggles
+      // exactly once, so there is nothing to fix in the component. A label
+      // click is an equally real user action and activates once in both.
+      fireEvent.click(screen.getByText("Set min/max sizes"));
       const inputs = screen.getAllByRole("spinbutton");
       fireEvent.focus(inputs[3]);
       fireEvent.change(inputs[3], { target: { value: "320" } }); // Max W

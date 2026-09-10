@@ -19,7 +19,15 @@ import * as exportSettingsUtils from "@/utils/exportSettingsUtils";
  */
 function selectOption(name: string) {
   const option = screen.getByRole("option", { name });
-  fireEvent.mouseMove(option);
+  // The press must *start* on the item. @base-ui/react's `Select.Item` only
+  // commits a mouse click whose `pointerdown` landed on that same item — a
+  // click arriving without one is discarded as an "invalid mouse click"
+  // (SelectItem's `allowMouseSelectionRef`, armed in `onPointerDown`). That
+  // guard exists because our `SelectContent` uses `alignItemWithTrigger`, which
+  // can open the popup with an item already under the cursor, so the very click
+  // that opened the trigger would otherwise select whatever it landed on.
+  // A real mouse always sends pointerdown before click; mirror that.
+  fireEvent.pointerDown(option);
   fireEvent.click(option);
 }
 

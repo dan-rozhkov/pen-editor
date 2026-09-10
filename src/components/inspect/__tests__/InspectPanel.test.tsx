@@ -33,7 +33,10 @@ function select(ids: string[]) {
  */
 function selectOption(name: string) {
   const option = screen.getByRole("option", { name });
-  fireEvent.mouseMove(option);
+  // See the identical helper in DevExportSection.test.tsx: @base-ui/react's
+  // `Select.Item` discards a click whose `pointerdown` did not land on the same
+  // item, so the press has to start there the way a real mouse does.
+  fireEvent.pointerDown(option);
   fireEvent.click(option);
 }
 

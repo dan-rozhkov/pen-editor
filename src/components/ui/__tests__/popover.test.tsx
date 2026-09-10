@@ -48,7 +48,19 @@ describe("PopoverContent draggable", () => {
   it("stays anchor-positioned (no inline position override) before any drag", () => {
     renderPopover(true);
     const handle = screen.getByTitle("Drag to move");
-    expect(positionerOf(handle).style.position).not.toBe("fixed");
+    const { style } = positionerOf(handle);
+    // `position` alone no longer distinguishes anchored from torn off:
+    // @base-ui/react 1.7.0 parks a not-yet-positioned popup at the viewport
+    // origin with `position: fixed` ("Keep unpositioned popups at the viewport
+    // origin", #5299), and under happy-dom — which has no layout — Floating
+    // UI's positioning pass never completes, so it stays `fixed` forever.
+    // What still tells the two apart is our own override block: the torn-off
+    // style additionally pins `right`/`bottom`/`transform` (popover.tsx:126),
+    // and base-ui writes none of those. Asserting they are unset fails the
+    // moment this component applies the tear-off style before a drag.
+    expect(style.right).toBe("");
+    expect(style.bottom).toBe("");
+    expect(style.transform).toBe("");
   });
 
   it("tears off into a fixed, pointer-tracked position once dragged", () => {
