@@ -386,26 +386,39 @@ test("horizontal wheel snaps the carousel; vertical wheel scrolls the page, not 
   const cardCenterX = cardBox.x + cardBox.width / 2;
   const cardCenterY = cardBox.y + cardBox.height / 2;
 
+  // Wait on the platform's own settled signal, `scrollend`, rather than
+  // sampling `scrollLeft` until two reads match. A wheel gesture here moves
+  // the scroller in two distinct steps: the delta is applied instantly
+  // (scrollLeft 0 -> 401), and only ~60-150ms later does the snap animation
+  // run (401 -> 444, the centred snap position). Two consecutive samples
+  // landing inside that plateau — routine, since expect.poll's interval is
+  // 100ms+ — declared the scroll "settled" at 401 and asserted alignment
+  // against a mid-gesture position, failing by exactly 444-401 = 43px.
+  // Chromium fires `scrollend` once, after the snap animation completes.
+  await scroller.evaluate((el) => {
+    (window as unknown as { __carouselScrollEnds?: number }).__carouselScrollEnds = 0;
+    el.addEventListener("scrollend", () => {
+      const w = window as unknown as { __carouselScrollEnds?: number };
+      w.__carouselScrollEnds = (w.__carouselScrollEnds ?? 0) + 1;
+    });
+  });
+
   await page.mouse.move(cardCenterX, cardCenterY);
   await page.mouse.wheel(400, 0);
 
   await expect
-    .poll(async () => scroller.evaluate((el) => el.scrollLeft))
-    .toBeGreaterThan(initialScrollLeft);
+    .poll(async () =>
+      page.evaluate(
+        () => (window as unknown as { __carouselScrollEnds?: number }).__carouselScrollEnds ?? 0
+      )
+    )
+    .toBeGreaterThan(0);
 
-  // Wait for the scroll-snap "scroll_smooth" animation to settle, then assert
-  // it landed exactly on a snap position: the centred child's centre lines
+  expect(await scroller.evaluate((el) => el.scrollLeft)).toBeGreaterThan(initialScrollLeft);
+
+  // It landed exactly on a snap position: the centred child's centre lines
   // up with the scroller's centre (within a couple of px for subpixel/scroll
   // rounding).
-  let settledScrollLeft = -1;
-  await expect
-    .poll(async () => {
-      const current = await scroller.evaluate((el) => el.scrollLeft);
-      const settled = current === settledScrollLeft;
-      settledScrollLeft = current;
-      return settled;
-    })
-    .toBe(true);
 
   const alignment = await scroller.evaluate((el) => {
     const scrollerRect = el.getBoundingClientRect();
