@@ -28,6 +28,22 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+      testIgnore: /pixi-large-document-performance\.spec\.ts/,
+    },
+    // The frame-time probe measures wall-clock JS work, so it cannot share a
+    // machine with the rest of the suite: measured here, running it inside
+    // the 5-worker pool instead of alone raised mean flush avg 0.38ms -> 0.52ms
+    // and single-frame flush max 3.5ms -> 9.7ms, which failed its (unchanged)
+    // budgets on 3 of 5 full runs versus 1 of 10 runs alone. Its own project
+    // with `dependencies` on the others runs it only once everything else has
+    // finished, so it has the machine to itself. Trade-off: a failure in a
+    // dependency project skips this one — in a run that is already red, the
+    // perf number is not trustworthy anyway.
+    {
+      name: "chromium-perf",
+      use: { ...devices["Desktop Chrome"] },
+      testMatch: /pixi-large-document-performance\.spec\.ts/,
+      dependencies: ["chromium", "webkit-mobile"],
     },
     // Regression coverage for a WebKit-only border-box/content-box layout
     // divergence in the showcase (see showcase-smoke.spec.ts). Scoped to the
