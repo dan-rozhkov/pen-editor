@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   LinkSimple,
   LinkSimpleBreak,
@@ -183,6 +183,27 @@ async function measureEmbedContentSize(
 }
 
 /**
+ * Deep-copy the node's auto-layout parent into a tree the layout engine can
+ * run, or null when the node isn't inside one. Reads the scene store at call
+ * time rather than subscribing: every caller either runs inside a memo that
+ * `relevantSubtreeSnapshot` already invalidates, or runs from an event handler
+ * where the live store IS the wanted value.
+ */
+function materializeParentFrame(
+  parentContext: ParentContext | FlatParentContext,
+): FrameNode | null {
+  if (
+    !parentContext.isInsideAutoLayout ||
+    !parentContext.parent ||
+    parentContext.parent.type !== "frame"
+  ) {
+    return null;
+  }
+  const { nodesById, childrenById } = useSceneStore.getState();
+  return materializeLayoutRefs(parentContext.parent as FrameNode, nodesById, childrenById);
+}
+
+/**
  * Compute the effective size a node would have in a given sizing mode.
  * Returns undefined when the mode is "fixed" or computation isn't applicable.
  */
@@ -195,7 +216,9 @@ function computeSizeForMode(
   nodesById: Record<string, FlatSceneNode>,
   childrenById: Record<string, string[]>,
   isMultiSelect: boolean,
-  getMaterializedParent: () => FrameNode | null,
+  // Materialized once by the caller so a single click shares one instance
+  // (and one layoutCache identity) with `reflowAutoLayoutSiblings`.
+  materializedParent: FrameNode | null,
 ): number | undefined {
   if (mode === "fixed") return undefined;
 
@@ -224,7 +247,7 @@ function computeSizeForMode(
     parentContext.parent &&
     parentContext.parent.type === "frame"
   ) {
-    const parent = getMaterializedParent();
+    const parent = materializedParent;
     if (!parent) return undefined;
     const sizingKey = dimension === "width" ? "widthMode" : "heightMode";
     const modifiedChildren = parent.children.map((child) => {
@@ -281,7 +304,7 @@ export function SizeSection({
   // (covers descendants, for fit_content sizing). Reading the maps directly
   // (via `useSceneStore.getState()`) elsewhere in this component instead of
   // subscribing to them is what makes this narrowing effective — see
-  // `getMaterializedParent`/`effectiveWidth` below and the sizing-mode click
+  // `materializeParentFrame`/`effectiveWidth` below and the sizing-mode click
   // handlers.
   const relevantSubtreeRootId =
     parentContext.isInsideAutoLayout && parentContext.parent
@@ -297,62 +320,34 @@ export function SizeSection({
   const updateNode = useSceneStore((s) => s.updateNode);
   const updateNodeWithoutHistory = useSceneStore((s) => s.updateNodeWithoutHistory);
   const [isFitting, setIsFitting] = useState(false);
-  const [minMaxVisibleOverride, setMinMaxVisibleOverride] = useState<boolean | null>(null);
+  // Keyed on the node it was set for: selecting a different node makes the
+  // override stale rather than needing an effect to reset it, so there is no
+  // render where the previous node's toggle still applies to the new one.
+  const [minMaxVisibleOverride, setMinMaxVisibleOverride] = useState<{
+    nodeId: string;
+    visible: boolean;
+  } | null>(null);
 
-  // Memoizes a THUNK, not a value: materializing the parent's subtree is a
-  // full recursive deep copy (materializeLayoutRefs), and up to three sites
-  // may need it (fill_container sizing in computeSizeForMode, the reflow
-  // below, and the effectiveWidth/effectiveHeight useMemo's gated branch).
-  // Most renders enter none of those branches (e.g. a fixed/fixed child), so
-  // the thunk lets the render path pay nothing unless something actually
-  // calls it — while still sharing exactly ONE materialized instance across
-  // all callers within a render (preserving the layoutCache WeakMap identity
-  // hit at layoutStore.ts:63). `computed` (not `??=` on the cache alone)
-  // distinguishes "not yet computed" from "gate legitimately produced null",
-  // so a null result is cached and not recomputed on every call.
-  const getMaterializedParent = useMemo(() => {
-    let computed = false;
-    let cached: FrameNode | null = null;
-    return () => {
-      if (!computed) {
-        if (
-          parentContext.isInsideAutoLayout &&
-          parentContext.parent &&
-          parentContext.parent.type === "frame"
-        ) {
-          const { nodesById, childrenById } = useSceneStore.getState();
-          cached = materializeLayoutRefs(parentContext.parent as FrameNode, nodesById, childrenById);
-        } else {
-          cached = null;
-        }
-        computed = true;
-      }
-      return cached;
-    };
-    // `relevantSubtreeSnapshot` (not `nodesById`/`childrenById` directly) is
-    // the recompute trigger: it only changes reference when a node inside
-    // the relevant subtree actually changed, so this thunk is invalidated
-    // exactly as often as the shallow-compared subscription re-renders this
-    // component — see the comment on `relevantSubtreeSnapshot` above. It's
-    // not referenced in the body (the lookup happens via `getState()`
-    // inside the thunk), hence the lint override below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [parentContext.isInsideAutoLayout, parentContext.parent, relevantSubtreeSnapshot]);
+  // Materializing the parent's subtree is a full recursive deep copy
+  // (materializeLayoutRefs), and three sites may need it: fill_container
+  // sizing in computeSizeForMode, the reflow below, and the
+  // effectiveWidth/effectiveHeight useMemo's gated branch. It is therefore
+  // NOT computed here: the two handler sites materialize once per click (and
+  // share that one instance, preserving the layoutCache WeakMap identity hit
+  // at layoutStore.ts:63), and the render site materializes inside its own
+  // already-gated branch — so the common render (e.g. a fixed/fixed child)
+  // still pays nothing. Deriving it at each use, from the store as it is
+  // then, also removes the previous cross-render cache and with it any way
+  // for a caller to see a parent that no longer exists.
 
   const reflowAutoLayoutSiblings = (
     dimension: "width" | "height",
     newMode: SizingMode,
-    computedSize?: number,
+    computedSize: number | undefined,
+    // Same instance the caller handed to `computeSizeForMode`.
+    materializedParent: FrameNode | null,
   ) => {
-    if (
-      !parentContext.isInsideAutoLayout ||
-      !parentContext.parent ||
-      parentContext.parent.type !== "frame"
-    ) {
-      return;
-    }
-
-    const parent = getMaterializedParent();
+    const parent = materializedParent;
     if (!parent) return;
     const sizingKey = dimension === "width" ? "widthMode" : "heightMode";
     const modifiedChildren = parent.children.map((child) => {
@@ -423,7 +418,7 @@ export function SizeSection({
       const widthMode = node.sizing?.widthMode ?? "fixed";
       const heightMode = node.sizing?.heightMode ?? "fixed";
       if (widthMode !== "fixed" || heightMode !== "fixed") {
-        const materializedParent = getMaterializedParent();
+        const materializedParent = materializeParentFrame(parentContext);
         if (materializedParent) {
           const layoutChildren = calculateLayoutForFrame(materializedParent);
           const layoutNode = layoutChildren.find((n) => n.id === node.id);
@@ -447,7 +442,6 @@ export function SizeSection({
     calculateLayoutForFrame,
     relevantSubtreeSnapshot,
     isMultiSelect,
-    getMaterializedParent,
   ]);
 
   const canFitToContent = !isMultiSelect && (node.type === "frame" || node.type === "embed")
@@ -465,14 +459,13 @@ export function SizeSection({
     mixedKeys?.has("sizing.minHeight") ||
     mixedKeys?.has("sizing.maxHeight") ||
     false;
-  const showMinMaxConstraints = minMaxVisibleOverride ?? hasMinMaxConstraints;
-
-  useEffect(() => {
-    setMinMaxVisibleOverride(null);
-  }, [node.id]);
+  const showMinMaxConstraints =
+    minMaxVisibleOverride && minMaxVisibleOverride.nodeId === node.id
+      ? minMaxVisibleOverride.visible
+      : hasMinMaxConstraints;
 
   const handleMinMaxVisibleChange = (checked: boolean) => {
-    setMinMaxVisibleOverride(checked);
+    setMinMaxVisibleOverride({ nodeId: node.id, visible: checked });
     if (!checked) {
       onUpdate({
         sizing: {
@@ -512,6 +505,9 @@ export function SizeSection({
                   onClick={() => {
                     const newMode = option.value as SizingMode;
                     const { nodesById, childrenById } = useSceneStore.getState();
+                    // One materialization per click, shared by the size
+                    // computation and the reflow below.
+                    const materializedParent = materializeParentFrame(parentContext);
                     const computedWidth = computeSizeForMode(
                       node,
                       parentContext,
@@ -521,7 +517,7 @@ export function SizeSection({
                       nodesById,
                       childrenById,
                       !!isMultiSelect,
-                      getMaterializedParent,
+                      materializedParent,
                     );
                     onUpdate({
                       sizing: {
@@ -543,7 +539,12 @@ export function SizeSection({
                         : {}),
                     } as Partial<SceneNode>);
                     if (!isMultiSelect && !useDirectUpdateOnly) {
-                      reflowAutoLayoutSiblings("width", newMode, computedWidth);
+                      reflowAutoLayoutSiblings(
+                        "width",
+                        newMode,
+                        computedWidth,
+                        materializedParent,
+                      );
                     }
                   }}
                 >
@@ -571,6 +572,9 @@ export function SizeSection({
                   onClick={() => {
                     const newMode = option.value as SizingMode;
                     const { nodesById, childrenById } = useSceneStore.getState();
+                    // One materialization per click, shared by the size
+                    // computation and the reflow below.
+                    const materializedParent = materializeParentFrame(parentContext);
                     const computedHeight = computeSizeForMode(
                       node,
                       parentContext,
@@ -580,7 +584,7 @@ export function SizeSection({
                       nodesById,
                       childrenById,
                       !!isMultiSelect,
-                      getMaterializedParent,
+                      materializedParent,
                     );
                     onUpdate({
                       sizing: {
@@ -602,7 +606,12 @@ export function SizeSection({
                         : {}),
                     } as Partial<SceneNode>);
                     if (!isMultiSelect && !useDirectUpdateOnly) {
-                      reflowAutoLayoutSiblings("height", newMode, computedHeight);
+                      reflowAutoLayoutSiblings(
+                        "height",
+                        newMode,
+                        computedHeight,
+                        materializedParent,
+                      );
                     }
                   }}
                 >

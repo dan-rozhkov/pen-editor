@@ -15,6 +15,10 @@ export interface SelectionScreenshot {
 // paying for a render extraction.
 const CAPTURE_DEBOUNCE_MS = 200;
 
+// Stable identity so consumers that memo on the returned array don't re-run
+// every render while nothing is selected.
+const NO_SCREENSHOTS: SelectionScreenshot[] = [];
+
 /**
  * Screenshots of the currently selected canvas nodes, kept in sync with the
  * selection. Used to show selected elements as image previews above the chat
@@ -40,7 +44,16 @@ export function useSelectionScreenshots(): SelectionScreenshot[] {
   const selectedIds = useSelectionStore((s) => s.selectedIds);
   const model = useChatStore((s) => s.model);
   const canAttach = useModelSupportsVision(model);
-  const [screenshots, setScreenshots] = useState<SelectionScreenshot[]>([]);
+  // Captures are tagged with the selection they were taken for, so the
+  // result can be DERIVED rather than reset by the effect: a selection the
+  // capture doesn't match (nothing selected, a new selection whose capture is
+  // still debouncing, or a model without vision) simply reads as empty. That
+  // also closes a real gap — during the debounce this used to keep returning
+  // the *previous* selection's screenshots, which the chat would attach.
+  const [captured, setCaptured] = useState<{
+    key: string;
+    screenshots: SelectionScreenshot[];
+  } | null>(null);
 
   // Re-run only when the *set* of selected ids changes, not on every store
   // write (selectionStore replaces the array on unrelated edits too).
@@ -48,7 +61,6 @@ export function useSelectionScreenshots(): SelectionScreenshot[] {
 
   useEffect(() => {
     if (!canAttach || selectedIds.length === 0) {
-      setScreenshots([]);
       return;
     }
 
@@ -65,9 +77,12 @@ export function useSelectionScreenshots(): SelectionScreenshot[] {
         }),
       );
       if (cancelled) return;
-      setScreenshots(
-        captured.filter((s): s is SelectionScreenshot => s !== null),
-      );
+      setCaptured({
+        key: selectionKey,
+        screenshots: captured.filter(
+          (s): s is SelectionScreenshot => s !== null,
+        ),
+      });
     }, CAPTURE_DEBOUNCE_MS);
 
     return () => {
@@ -78,5 +93,8 @@ export function useSelectionScreenshots(): SelectionScreenshot[] {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectionKey, canAttach]);
 
-  return screenshots;
+  if (!canAttach || selectedIds.length === 0 || captured?.key !== selectionKey) {
+    return NO_SCREENSHOTS;
+  }
+  return captured.screenshots;
 }

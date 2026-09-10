@@ -110,7 +110,10 @@ export function ChatInput({
     [setSessionAttachedImages, sessionId],
   );
   const [isDragOver, setIsDragOver] = useState(false);
-  const [showSlashMenu, setShowSlashMenu] = useState(false);
+  // The slash query the user explicitly dismissed the menu for. Openness is
+  // derived from the input (see `showSlashMenu` below), so only the dismissal
+  // — a real user event — needs to be remembered.
+  const [dismissedSlashQuery, setDismissedSlashQuery] = useState<string | null>(null);
   const model = useChatStore((s) => s.model);
   // Whether an image may be attached at all — native vision OR the backend's
   // auxiliary vision fallback. `nativeVision` (native support only) is used
@@ -207,22 +210,24 @@ export function ChatInput({
     return match ? match[1] : null;
   }, [input]);
 
-  useEffect(() => {
-    setShowSlashMenu(slashQuery !== null);
-  }, [slashQuery]);
+  // Derived, not mirrored: the menu is open for any bare slash query except
+  // the one it was dismissed for. Editing the query past the dismissed one
+  // reopens it, exactly as when this was an effect writing state.
+  const showSlashMenu = slashQuery !== null && slashQuery !== dismissedSlashQuery;
 
   const handleSlashSelect = useCallback(
     (cmd: SlashCommand) => {
+      // The trailing space makes this no longer a bare slash query, so the
+      // menu closes on its own.
       setInput(`/${cmd.name} `);
-      setShowSlashMenu(false);
       textareaRef.current?.focus();
     },
     [setInput]
   );
 
   const handleSlashClose = useCallback(() => {
-    setShowSlashMenu(false);
-  }, []);
+    setDismissedSlashQuery(slashQuery);
+  }, [slashQuery]);
 
   const resize = useCallback(() => {
     const ta = textareaRef.current;
@@ -394,7 +399,7 @@ export function ChatInput({
           onManageSkills={
             onManageSkills
               ? () => {
-                  setShowSlashMenu(false);
+                  setDismissedSlashQuery(slashQuery);
                   onManageSkills();
                 }
               : undefined

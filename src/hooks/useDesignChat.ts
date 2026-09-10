@@ -270,13 +270,19 @@ function cloneLaunchPayload(payload: ChatLaunchPayload): ChatLaunchPayload {
   };
 }
 
+// One instance: the offline error carries no per-attempt information, and a
+// stable identity keeps it from re-rendering consumers that memo on `error`.
+const OFFLINE_SEND_ERROR = new Error(OFFLINE_MESSAGE);
+
 export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   const [input, setInput] = useState("");
-  // Set when a send is attempted while offline. Surfaced the same way as
-  // `chat.error` (network/provider errors) so the chat UI doesn't need a
-  // second error path, but it never touches the network — the request is
-  // never issued, so there is nothing to hang.
-  const [offlineError, setOfflineError] = useState<Error | undefined>();
+  // Set when a send is refused because the browser is offline. The error
+  // itself is DERIVED from this plus live connectivity (see `offlineError`
+  // below) rather than stored: an "you are offline" banner is stale the
+  // moment the connection is back, so nothing has to clear it — in
+  // particular the queued-message drain effect doesn't, which is what keeps
+  // that effect free of setState.
+  const [offlineSendRefused, setOfflineSendRefused] = useState(false);
 
   // Non-null while the transport is auto-retrying a network failure; drives
   // the neutral "retrying…" status line instead of the red error banner.
@@ -474,33 +480,18 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.status, clearVectorPreviewSession]);
 
-  const sendPayload = useCallback(
+  // Hands a payload to the transport. Writes no React state of its own, so
+  // the queue-drain effect below can call it directly without triggering a
+  // cascading render (react-hooks/set-state-in-effect). Callers are
+  // responsible for the preconditions `sendPayload` checks: connectivity and
+  // a chat that is actually ready to take a message.
+  const deliverPayload = useCallback(
     (payload: ChatLaunchPayload): boolean => {
       const text = payload.text.trim();
       const images = payload.images;
       if (!text && (!images || images.length === 0)) {
         return false;
       }
-      // Fail fast and locally instead of issuing a request that will hang or
-      // reject once the browser notices it has no connection.
-      if (isOffline()) {
-        setOfflineError(new Error(OFFLINE_MESSAGE));
-        return false;
-      }
-      // A failed request leaves the chat in "error" status; clear it so the
-      // user can retry instead of the chat being stuck.
-      if (chat.status === "error") {
-        chat.clearError();
-      } else if (chat.status === "submitted" || chat.status === "streaming") {
-        // The agent is busy — queue instead of dropping the message. The
-        // caller (ChatInput) treats a `true` return as "accepted" and clears
-        // the composer, even though nothing was sent to the network yet.
-        enqueueMessage(sessionId, payload);
-        return true;
-      } else if (chat.status !== "ready") {
-        return false;
-      }
-      setOfflineError(undefined);
 
       track("chat_message_sent", {
         has_attachment: !!images && images.length > 0,
@@ -527,7 +518,38 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       }
       return true;
     },
-    [chat, enqueueMessage, sessionId]
+    [chat]
+  );
+
+  const sendPayload = useCallback(
+    (payload: ChatLaunchPayload): boolean => {
+      const text = payload.text.trim();
+      const images = payload.images;
+      if (!text && (!images || images.length === 0)) {
+        return false;
+      }
+      // Fail fast and locally instead of issuing a request that will hang or
+      // reject once the browser notices it has no connection.
+      if (isOffline()) {
+        setOfflineSendRefused(true);
+        return false;
+      }
+      // A failed request leaves the chat in "error" status; clear it so the
+      // user can retry instead of the chat being stuck.
+      if (chat.status === "error") {
+        chat.clearError();
+      } else if (chat.status === "submitted" || chat.status === "streaming") {
+        // The agent is busy — queue instead of dropping the message. The
+        // caller (ChatInput) treats a `true` return as "accepted" and clears
+        // the composer, even though nothing was sent to the network yet.
+        enqueueMessage(sessionId, payload);
+        return true;
+      } else if (chat.status !== "ready") {
+        return false;
+      }
+      return deliverPayload(payload);
+    },
+    [chat, deliverPayload, enqueueMessage, sessionId]
   );
 
   // Drains, at most once per "ready" transition, either the one-shot
@@ -550,10 +572,8 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       // The extra live `isOffline()` check guards the narrow race where the
       // isOnline *state* is still stale-true (the browser's "offline" event
       // hasn't landed yet) but connectivity is already gone: bail here,
-      // before any consume/send, so we never reach sendPayload's
-      // setOfflineError side-effect from inside this effect. Doing so would
-      // schedule a re-render that reruns this effect and — with the queue
-      // still non-empty — spin until the "offline" event finally arrives.
+      // before any consume/send, so a payload is never handed to the
+      // transport for a connection that is already down.
       return;
     }
 
@@ -574,7 +594,11 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
 
     const queuedPayload = consumeLaunchPayload(sessionId);
     if (queuedPayload) {
-      sendPayload(cloneLaunchPayload(queuedPayload));
+      // `deliverPayload`, not `sendPayload`: every precondition sendPayload
+      // would re-check (online, status === "ready", non-empty) is already
+      // established above, and going straight to the transport keeps this
+      // effect from writing React state.
+      deliverPayload(cloneLaunchPayload(queuedPayload));
       return;
     }
 
@@ -608,7 +632,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       return;
     }
 
-    const sent = sendPayload(cloneLaunchPayload(next.payload));
+    const sent = deliverPayload(cloneLaunchPayload(next.payload));
     if (sent) {
       // Only drop it from the queue once it's actually been handed off —
       // sendPayload can return false (offline race, re-entered "busy" state,
@@ -626,7 +650,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     consumeLaunchPayload,
     peekNextMessage,
     removeQueuedMessage,
-    sendPayload,
+    deliverPayload,
     sessionId,
   ]);
 
@@ -650,7 +674,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   );
 
   const clearError = useCallback(() => {
-    setOfflineError(undefined);
+    setOfflineSendRefused(false);
     chat.clearError();
   }, [chat]);
 
@@ -661,6 +685,12 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     clearVectorPreviewSession();
     chat.stop();
   }, [chat, clearVectorPreviewSession]);
+
+  // Derived, not stored: the offline banner is exactly "a send was refused
+  // and we are still offline". Coming back online retires it on its own, so
+  // no send path — user-facing or the queue drain — has to clear it.
+  const offlineError =
+    offlineSendRefused && !isOnline ? OFFLINE_SEND_ERROR : undefined;
 
   return {
     messages: chat.messages,
