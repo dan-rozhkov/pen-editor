@@ -652,8 +652,28 @@ describe("useDesignChat (hook + UI message stream)", () => {
   // schema must accept it, or the whole stream is rejected with a
   // TypeValidationError and the tool call hangs forever on "Running…".
   it("accepts a dynamic MCP tool chunk carrying toolMetadata", async () => {
-    const fetchMock = vi.fn(async () =>
-      sseResponse([
+    // The tool part arrives already resolved (`tool-output-available` with no
+    // `providerExecuted`), so `lastAssistantMessageIsCompleteWithToolCalls`
+    // fires and the hook auto-continues exactly once — model the backend's
+    // second turn as the plain-text answer it really is. A mock that replayed
+    // the tool call on every request would never terminate: as of ai 6.0.280
+    // `updateDynamicToolPart` looks the tool call up within the *current step*
+    // instead of the whole message, so a replayed `toolCallId` appends a fresh
+    // resolved dynamic-tool part to each new step and re-arms the predicate
+    // forever, growing the request body until the worker heap is gone.
+    const fetchMock = vi.fn(async () => {
+      if (fetchMock.mock.calls.length > 1) {
+        return sseResponse([
+          { type: "start" },
+          { type: "start-step" },
+          { type: "text-start", id: "t2" },
+          { type: "text-delta", id: "t2", delta: "Here is what I found" },
+          { type: "text-end", id: "t2" },
+          { type: "finish-step" },
+          { type: "finish" },
+        ]);
+      }
+      return sseResponse([
         { type: "start" },
         { type: "start-step" },
         {
@@ -683,8 +703,8 @@ describe("useDesignChat (hook + UI message stream)", () => {
         { type: "text-end", id: "t1" },
         { type: "finish-step" },
         { type: "finish" },
-      ])
-    );
+      ]);
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     const sessionId = `test-session-mcp-${Date.now()}`;
@@ -703,11 +723,16 @@ describe("useDesignChat (hook + UI message stream)", () => {
     });
     expect(result.current.error).toBeUndefined();
 
-    const assistant = result.current.messages.at(-1);
-    expect(assistant?.role).toBe("assistant");
-    const toolPart = assistant?.parts.find(
-      (p) => p.type === "dynamic-tool"
-    ) as { state?: string; toolName?: string } | undefined;
+    // One turn for the tool call, one auto-continuation carrying its result —
+    // and then it stops.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const toolPart = result.current.messages
+      .filter((m) => m.role === "assistant")
+      .flatMap((m) => m.parts)
+      .find((p) => p.type === "dynamic-tool") as
+      | { state?: string; toolName?: string }
+      | undefined;
     expect(toolPart).toBeDefined();
     expect(toolPart!.toolName).toBe("refero_search_screens");
     expect(toolPart!.state).toBe("output-available");
