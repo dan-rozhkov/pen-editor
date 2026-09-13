@@ -22,19 +22,16 @@ vi.mock("@/lib/tools/screenshotDownscale", () => ({
     downscaleImageDataUrl(dataUrl, maxSide),
 }));
 
-// "fallback-only/model" stands in for a model with no native vision but
-// covered by the backend's auxiliary vision fallback (visionFallback: true) —
-// the real fallback model list has no such combination to test against, so a
-// synthetic id is patched onto the real functions for everything else.
-const FALLBACK_ONLY_MODEL = "fallback-only/model";
+// The shipped model reads images natively, so the "no native vision but the
+// backend has an auxiliary vision fallback" case has no real fixture — these
+// flags stand in for it. Default is the shipped shape (native vision).
+const vision = vi.hoisted(() => ({ native: true, canSend: true }));
 vi.mock("@/lib/chatModels", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/chatModels")>();
   return {
     ...actual,
-    modelSupportsVision: (model: string) =>
-      model === FALLBACK_ONLY_MODEL ? false : actual.modelSupportsVision(model),
-    canSendImages: (model: string) =>
-      model === FALLBACK_ONLY_MODEL ? true : actual.canSendImages(model),
+    modelSupportsVision: () => vision.native,
+    canSendImages: () => vision.canSend,
   };
 });
 
@@ -44,10 +41,12 @@ afterEach(() => {
 });
 
 beforeEach(() => {
-  // A known vision-capable model so the attach button is enabled, and a clean
-  // per-session attachment map so tests don't leak attachments into each other.
+  // Native vision (the shipped model) so the attach button is enabled, and a
+  // clean per-session attachment map so tests don't leak attachments into
+  // each other.
+  vision.native = true;
+  vision.canSend = true;
   useChatStore.setState({
-    model: "google/gemini-2.5-flash",
     attachedImages: {},
     dismissedSelection: {},
   });
@@ -349,14 +348,15 @@ describe("<ChatInput />", () => {
     expect(useChatStore.getState().attachedImages["tab-B"]).toBeUndefined();
   });
 
-  it("offers an enabled Attach image button for a vision-capable model", () => {
+  it("offers an enabled Attach image button when the model reads images", () => {
     render(<Harness onSubmit={vi.fn()} />);
     const attach = screen.getByLabelText("Attach image") as HTMLButtonElement;
     expect(attach.disabled).toBe(false);
   });
 
-  it("allows attaching for a non-native-vision model when the backend has a vision fallback", async () => {
-    useChatStore.setState({ model: FALLBACK_ONLY_MODEL });
+  it("allows attaching without native vision when the backend has a vision fallback", async () => {
+    vision.native = false;
+    vision.canSend = true;
     const onSubmit = vi.fn();
     render(<Harness onSubmit={onSubmit} />);
 

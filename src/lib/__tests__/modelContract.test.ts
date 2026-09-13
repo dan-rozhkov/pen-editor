@@ -1,16 +1,13 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it, expect } from "vitest";
-import { AUTO_MODEL_VALUE, getModelOptions, resolveModel } from "@/lib/chatModels";
+import { getChatModel } from "@/lib/chatModels";
 
-// The hardcoded fallback list in src/lib/chatModels.ts is only a
-// first-paint/offline safety net — but it is not inert. Anything the editor
-// sends before GET /api/models resolves (the showcase "ask the agent" handoff
-// auto-sends on mount) travels with a model id taken from that list, and the
-// backend rejects an id outside its allow-list with a 400. A fallback entry
-// that drifts from the backend's DEFAULT_MODELS is therefore a live bug, not
-// stale documentation — this is exactly how "deepseek/deepseek-v4-flash-0731"
-// (an id that never existed on the backend) broke the showcase handoff.
+// The hardcoded fallback in src/lib/chatModels.ts is only a
+// first-paint/offline safety net — no request carries a model id any more, so
+// a drifting id can no longer 400 a turn. It is still what the composer shows
+// and what decides whether the attach button is live before GET /api/models
+// answers, so it must keep naming the model the backend actually runs.
 //
 // Vitest runs with cwd = pen-editor/, the sibling backend repo lives next to it.
 const backendConfigPath = resolve(
@@ -35,35 +32,9 @@ describe.runIf(backendExists)("chat model fallback contract", () => {
     return mod.DEFAULT_MODELS;
   }
 
-  it("every fallback model exists in the backend's DEFAULT_MODELS", async () => {
-    const backendIds = new Set((await loadBackendModels()).map((m) => m.id));
-    const fallbackIds = getModelOptions()
-      .map((option) => option.value)
-      .filter((value) => value !== AUTO_MODEL_VALUE);
-
-    expect(fallbackIds.length).toBeGreaterThan(0);
-    for (const id of fallbackIds) {
-      expect(backendIds, id).toContain(id);
-    }
-  });
-
-  it("the model Auto falls back to is one the backend allows", async () => {
-    const backendIds = new Set((await loadBackendModels()).map((m) => m.id));
-    expect(backendIds).toContain(resolveModel(AUTO_MODEL_VALUE));
-  });
-
-  it("fallback labels and vision flags match the backend's", async () => {
-    const backendById = new Map(
-      (await loadBackendModels()).map((m) => [m.id, m])
-    );
-    for (const option of getModelOptions()) {
-      if (option.value === AUTO_MODEL_VALUE) continue;
-      const backend = backendById.get(option.value);
-      if (!backend) continue; // covered by the id test above
-      expect({ label: option.label, supportsVision: option.supportsVision }).toEqual({
-        label: backend.label,
-        supportsVision: backend.supportsVision,
-      });
-    }
+  it("the fallback model is the backend's single shipped model", async () => {
+    const backendModels = await loadBackendModels();
+    expect(backendModels).toHaveLength(1);
+    expect(getChatModel()).toEqual(backendModels[0]);
   });
 });

@@ -6,12 +6,10 @@ import {
 } from "ai";
 import { track, bucketLength } from "@/lib/analytics";
 import { consumeFirstPromptTiming } from "@/lib/analytics/sessionTiming";
-import { resolveModel } from "@/lib/chatModels";
 import { resolveApiUrl, isOffline, OFFLINE_MESSAGE } from "@/lib/apiBase";
 import { getUserId } from "@/lib/userId";
 import { createRetryingFetch, type RetryState } from "@/lib/retryFetch";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
-import { useModelListPending } from "@/hooks/useModelOptions";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
@@ -38,23 +36,8 @@ export function resolveChatApiUrl(): string {
   return explicitApiUrl ?? resolveApiUrl("/api/chat");
 }
 
-// A session must use ITS OWN tab's model rather than the global active-tab
-// value, which setActiveTab overwrites on every tab switch. Without this,
-// switching tabs while a background session streams hijacks that session's
-// auto-continuation request with the foreground tab's model.
 // Exported for tests.
-export function resolveSessionConfig(sessionId?: string): {
-  model: string;
-} {
-  const { model, tabs } = useChatStore.getState();
-  const tab = sessionId ? tabs.find((t) => t.id === sessionId) : undefined;
-  return {
-    model: tab?.model ?? model,
-  };
-}
-
-// Exported for tests.
-export function buildCanvasContext(sessionId?: string): object {
+export function buildCanvasContext(): object {
   const { selectedIds } = useSelectionStore.getState();
   const { rootIds, nodesById } = useSceneStore.getState();
   const { activeTheme } = useThemeStore.getState();
@@ -79,8 +62,6 @@ export function buildCanvasContext(sessionId?: string): object {
       height: rec.height,
     };
   });
-
-  const { model } = resolveSessionConfig(sessionId);
 
   // A repo pushed in over WebMCP (attach_local_repo) otherwise silently
   // changes what read_design_repo/read_repo_files answer with no signal to
@@ -136,7 +117,6 @@ export function buildCanvasContext(sessionId?: string): object {
       ...(selectedEmbedElement ? { selectedEmbedElement } : {}),
       ...(localRepo ? { localRepo } : {}),
     }),
-    model: resolveModel(model),
     userId: getUserId(),
   };
 }
@@ -293,11 +273,11 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       new DefaultChatTransport({
         api: resolveChatApiUrl(),
         fetch: createRetryingFetch({ onRetryStateChange: setRetryState }),
-        body: () => buildCanvasContext(sessionId),
+        body: () => buildCanvasContext(),
         prepareSendMessagesRequest: ({ id, messages, body, trigger, messageId }) => {
-          // Images always ride along regardless of the selected model's
-          // vision support — the backend decides native-vs-described per
-          // model (pen-editor-backend/src/ai/vision-messages.ts) and never
+          // Images always ride along regardless of the model's own vision
+          // support — the backend decides native-vs-described
+          // (pen-editor-backend/src/ai/vision-messages.ts) and never
           // forwards raw image parts to a model that can't read them. See
           // pen-editor-backend/docs/specs/2026-08-14-agent-vision-design.md.
           return {
@@ -311,7 +291,9 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
           };
         },
       }),
-    [sessionId]
+    // Built once per mounted session: nothing in it varies any more (the
+    // request body is read fresh from the stores on every send).
+    []
   );
 
   const chat = useChat({
@@ -347,10 +329,6 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   // Drives re-running the queued-payload effect below once connectivity
   // returns (see the effect for why offline must not consume the queue).
   const isOnline = useOnlineStatus();
-
-  // Same idea for the model list: the effect below must rerun once GET
-  // /api/models has settled, since it holds queued payloads until then.
-  const modelListPending = useModelListPending();
 
   // Register/unregister abort capability for this session
   const registerAbortController = useChatStore((s) => s.registerAbortController);
@@ -577,21 +555,6 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       return;
     }
 
-    // A launch payload is sent without anyone typing — the showcase "ask the
-    // agent" handoff fires it on the editor's very first render, which is
-    // strictly before GET /api/models can resolve. Sending then would resolve
-    // the "Auto" selection against the hardcoded fallback list, and any drift
-    // between that list and the backend's allow-list comes back as a 400
-    // ("Model X is not allowed"). Nothing is lost by waiting: the payload
-    // stays queued and `modelListPending` reruns this effect, including when
-    // the fetch fails outright (the fallback is then genuinely all there is).
-    // This holds back the user-facing messageQueue below too, which is the
-    // same situation: a message nobody is sending by hand right now, that
-    // would otherwise leave with an unverified model id.
-    if (modelListPending) {
-      return;
-    }
-
     const queuedPayload = consumeLaunchPayload(sessionId);
     if (queuedPayload) {
       // `deliverPayload`, not `sendPayload`: every precondition sendPayload
@@ -645,7 +608,6 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     chat.status,
     chat.messages,
     isOnline,
-    modelListPending,
     awaitingAnswer,
     consumeLaunchPayload,
     peekNextMessage,

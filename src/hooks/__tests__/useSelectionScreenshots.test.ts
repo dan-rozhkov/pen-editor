@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, waitFor, cleanup } from "@testing-library/react";
 import { useSelectionScreenshots } from "../useSelectionScreenshots";
-import { useChatStore } from "@/store/chatStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { resetStores, seedScene } from "@/test/fixtures";
 
@@ -13,28 +12,24 @@ vi.mock("@/lib/captureNodeScreenshot", () => ({
   ),
 }));
 
-// Drive vision support off the model name so a non-vision case is testable
-// (the real fallback model list is all vision-capable). Keep the rest of the
-// module intact — chatStore depends on getDefaultModel(). The hook is gated
-// on modelSupportsVision (native vision only) — see useSelectionScreenshots.ts
+// The shipped model reads images natively, so the vision-less cases below
+// have no real fixture — these flags stand in for them. The hook is gated on
+// modelSupportsVision (native vision only) — see useSelectionScreenshots.ts
 // for why it deliberately does NOT use canSendImages the way ChatInput does.
+const vision = vi.hoisted(() => ({ native: true, canSend: true }));
 vi.mock("@/lib/chatModels", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/chatModels")>();
   return {
     ...actual,
-    // "non-vision/*" — no native vision, no backend fallback either.
-    // "fallback-only/*" — no native vision, but the backend's auxiliary
-    // vision model can still describe an attached image as text.
-    // Anything else — native vision.
-    modelSupportsVision: (model: string) =>
-      !model.includes("non-vision") && !model.includes("fallback-only"),
-    canSendImages: (model: string) => !model.includes("non-vision"),
+    modelSupportsVision: () => vision.native,
+    canSendImages: () => vision.canSend,
   };
 });
 
 beforeEach(() => {
   resetStores();
-  useChatStore.setState({ model: "google/gemini-2.5-flash" });
+  vision.native = true;
+  vision.canSend = true;
 });
 
 afterEach(() => cleanup());
@@ -70,9 +65,10 @@ describe("useSelectionScreenshots", () => {
     expect(result.current[0].nodeId).toBe("frame1");
   });
 
-  it("returns empty for non-vision models without capturing", async () => {
+  it("returns empty for a vision-less model without capturing", async () => {
     seedScene();
-    useChatStore.setState({ model: "non-vision/text-only" });
+    vision.native = false;
+    vision.canSend = false;
     useSelectionStore.getState().setSelectedIds(["frame1"]);
 
     const { result } = renderHook(() => useSelectionScreenshots());
@@ -82,16 +78,16 @@ describe("useSelectionScreenshots", () => {
     expect(result.current).toEqual([]);
   });
 
-  it("returns empty for a fallback-only model, even though canSendImages would allow it", async () => {
-    // "fallback-only/model" fails the mocked modelSupportsVision but passes
-    // the mocked canSendImages — standing in for a model without native
-    // vision that only reads images via the backend's auxiliary vision
-    // fallback. This hook must stay gated on native vision (see
+  it("returns empty without native vision, even though canSendImages would allow it", async () => {
+    // No native vision, but the backend's auxiliary vision model could still
+    // describe an attached image as text. This hook must stay gated on
+    // native vision (see
     // useSelectionScreenshots.ts's doc comment): auto-attaching here would
     // silently trigger a blocking describeImage round trip per screenshot
     // the user never asked for.
     seedScene();
-    useChatStore.setState({ model: "fallback-only/model" });
+    vision.native = false;
+    vision.canSend = true;
     useSelectionStore.getState().setSelectedIds(["frame1"]);
 
     const { result } = renderHook(() => useSelectionScreenshots());

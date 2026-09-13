@@ -60,12 +60,10 @@ beforeEach(() => {
   // Single deterministic tab, vision model.
   useChatStore.setState({
     isExpanded: false,
-    model: "google/gemini-2.5-flash",
     tabs: [
       {
         id: "tab-1",
         title: "Chat 1",
-        model: "google/gemini-2.5-flash",
         parallelCount: 1,
       },
     ],

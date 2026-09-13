@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import type { AttachedImage, ChatLaunchPayload, QueuedChatMessage } from "@/types/chat";
-import { getDefaultModel, getModelOptions } from "@/lib/chatModels";
 
 /** Stable empty reference so the per-session selector never returns a fresh
  * array for tabs without attachments (which would re-render on every store
@@ -18,7 +17,6 @@ export const NO_QUEUED_MESSAGES: QueuedChatMessage[] = [];
 export interface ChatTab {
   id: string;
   title: string;
-  model: string;
   parallelCount: ParallelCount;
 }
 
@@ -34,7 +32,6 @@ export interface ChatSessionActions {
 interface ChatState {
   isOpen: boolean;
   isExpanded: boolean;
-  model: string;
   parallelCount: ParallelCount;
   tabs: ChatTab[];
   activeTabId: string;
@@ -68,7 +65,6 @@ interface ChatState {
   open: () => void;
   close: () => void;
   toggleExpanded: () => void;
-  setModel: (model: string) => void;
   setParallelCount: (count: ParallelCount) => void;
 
   createTab: () => string;
@@ -102,28 +98,11 @@ interface ChatState {
 
 const DEFAULT_PARALLEL_COUNT: ParallelCount = 1;
 
-function normalizeModel(model: string | null): string {
-  // The backend-served list is the authority and isn't loaded yet at init, so
-  // accept any saved id here rather than rejecting it against the fallback list.
-  // reconcileModels() resets ids the backend actually rejects, once it responds.
-  return model || getDefaultModel();
-}
-
-// Re-validate the active/tab models against the freshly loaded backend list.
-// Called after loadModels() resolves; resets any selection the backend rejects.
-export function reconcileModels() {
-  const { model, tabs, setModel } = useChatStore.getState();
-  const known = getModelOptions();
-  const isValid = (m: string) => known.some((option) => option.value === m);
-  if (tabs.some((t) => !isValid(t.model)) || !isValid(model)) {
-    useChatStore.setState((s) => ({
-      tabs: s.tabs.map((t) =>
-        isValid(t.model) ? t : { ...t, model: getDefaultModel() },
-      ),
-    }));
-    if (!isValid(model)) setModel(getDefaultModel());
-  }
-}
+// The design agent runs on one model chosen by the backend, so there is no
+// per-tab or per-user model any more. Drop the key every previous build wrote:
+// a stale selection must not survive as a value anything could read back, and
+// the request no longer carries a model id at all.
+localStorage.removeItem("chat-model");
 
 function normalizeParallelCount(count: string | null): ParallelCount {
   if (count === "2") return 2;
@@ -148,12 +127,10 @@ const initialTabId = generateTabId();
 export const useChatStore = create<ChatState>((set, get) => ({
   isOpen: false,
   isExpanded: localStorage.getItem("chat-expanded") === "true",
-  model: normalizeModel(localStorage.getItem("chat-model")),
   parallelCount: normalizeParallelCount(localStorage.getItem("chat-parallel-count")),
   tabs: [{
     id: initialTabId,
     title: "Chat 1",
-    model: normalizeModel(localStorage.getItem("chat-model")),
     parallelCount: normalizeParallelCount(localStorage.getItem("chat-parallel-count")),
   }],
   activeTabId: initialTabId,
@@ -172,14 +149,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     localStorage.setItem("chat-expanded", String(next));
     set({ isExpanded: next });
   },
-  setModel: (model) => {
-    localStorage.setItem("chat-model", model);
-    const { activeTabId } = get();
-    set((s) => ({
-      model,
-      tabs: s.tabs.map((t) => t.id === activeTabId ? { ...t, model } : t),
-    }));
-  },
   setParallelCount: (parallelCount) => {
     localStorage.setItem("chat-parallel-count", String(parallelCount));
     const { activeTabId } = get();
@@ -193,12 +162,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const id = generateTabId();
     const { tabs } = get();
     const title = `Chat ${tabs.length + 1}`;
-    const model = normalizeModel(localStorage.getItem("chat-model"));
     const parallelCount = normalizeParallelCount(localStorage.getItem("chat-parallel-count"));
     set({
-      tabs: [...tabs, { id, title, model, parallelCount }],
+      tabs: [...tabs, { id, title, parallelCount }],
       activeTabId: id,
-      model,
       parallelCount,
     });
     return id;
@@ -226,7 +193,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const newId = generateTabId();
       const newControllers = { ...abortControllers };
       delete newControllers[tabId];
-      const model = normalizeModel(localStorage.getItem("chat-model"));
       const parallelCount = normalizeParallelCount(localStorage.getItem("chat-parallel-count"));
       const newLaunchQueue = { ...launchQueue };
       delete newLaunchQueue[tabId];
@@ -237,9 +203,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const newDismissedSelection = { ...dismissedSelection };
       delete newDismissedSelection[tabId];
       set({
-        tabs: [{ id: newId, title: "Chat 1", model, parallelCount }],
+        tabs: [{ id: newId, title: "Chat 1", parallelCount }],
         activeTabId: newId,
-        model,
         parallelCount,
         abortControllers: newControllers,
         launchQueue: newLaunchQueue,
@@ -274,7 +239,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({
       tabs: newTabs,
       activeTabId: newActiveTabId,
-      model: switchToTab?.model ?? get().model,
       parallelCount: switchToTab?.parallelCount ?? get().parallelCount,
       abortControllers: newControllers,
       launchQueue: newLaunchQueue,
@@ -289,7 +253,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (tab) {
       set({
         activeTabId: tabId,
-        model: tab.model,
         parallelCount: tab.parallelCount,
       });
     }

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
-import { useChatStore } from "@/store/chatStore";
 import { useModelSupportsVision } from "@/hooks/useImageSupport";
 import { captureNodeScreenshot } from "@/lib/captureNodeScreenshot";
 
@@ -29,8 +28,9 @@ const NO_SCREENSHOTS: SelectionScreenshot[] = [];
  * explicit "Attach image" control, which uses `useCanSendImages` (native
  * vision OR the backend's auxiliary vision fallback): this hook fires
  * automatically, without the user asking, and can attach up to 4 screenshots
- * per canvas selection. With the default config `visionFallback` is true and
- * Auto can resolve to a vision-less model, so gating this hook on
+ * per canvas selection. With the default config `visionFallback` is true, and
+ * an operator can point the backend at a vision-less model, so gating this
+ * hook on
  * `canSendImages` would silently attach screenshots the user never
  * requested — each paying for a blocking `describeImage` round trip on the
  * backend before the stream even starts. An explicit attachment is worth
@@ -42,8 +42,7 @@ const NO_SCREENSHOTS: SelectionScreenshot[] = [];
  */
 export function useSelectionScreenshots(): SelectionScreenshot[] {
   const selectedIds = useSelectionStore((s) => s.selectedIds);
-  const model = useChatStore((s) => s.model);
-  const canAttach = useModelSupportsVision(model);
+  const canAttach = useModelSupportsVision();
   // Captures are tagged with the selection they were taken for, so the
   // result can be DERIVED rather than reset by the effect: a selection the
   // capture doesn't match (nothing selected, a new selection whose capture is

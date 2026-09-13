@@ -13,7 +13,6 @@ import {
   resolveChatApiUrl,
   useDesignChat,
 } from "@/hooks/useDesignChat";
-import { AUTO_MODEL_VALUE } from "@/lib/chatModels";
 import { toolHandlers, type ToolHandler } from "@/lib/toolRegistry";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useChatStore } from "@/store/chatStore";
@@ -243,14 +242,15 @@ describe("buildCanvasContext", () => {
     seedVariables();
   });
 
-  it("serializes scene roots, selection, variables and model, with no agentMode", () => {
+  it("serializes scene roots, selection and variables, with no agentMode", () => {
     useSelectionStore.setState({ selectedIds: ["rect1"] });
-    useChatStore.setState({ model: "test/model-x" });
 
     const context = buildCanvasContext() as Record<string, unknown>;
 
-    expect(context.model).toBe("test/model-x");
     expect(context).not.toHaveProperty("agentMode");
+    // The agent runs on one backend-chosen model, so no request carries a
+    // model id — a leftover one would be a stale user selection resurfacing.
+    expect(context).not.toHaveProperty("model");
 
     const canvas = JSON.parse(context.canvasContext as string);
     expect(canvas.roots).toEqual([
@@ -278,31 +278,6 @@ describe("buildCanvasContext", () => {
     const context = buildCanvasContext() as { canvasContext: string };
     const canvas = JSON.parse(context.canvasContext);
     expect(canvas.selectedNodes).toEqual([{ id: "ghost" }]);
-  });
-
-  // A streaming session must use ITS OWN tab's model, not the global
-  // active-tab value — otherwise switching tabs mid-stream hijacks the
-  // background session's auto-continuation request with the wrong model.
-  it("uses the session's own tab model, not the active-tab global", () => {
-    useChatStore.setState({
-      // Global reflects whatever tab is currently active (tab-active).
-      model: "active/model",
-      tabs: [
-        { id: "tab-active", title: "A", model: "active/model", parallelCount: 1 },
-        { id: "tab-bg", title: "B", model: "background/model", parallelCount: 1 },
-      ],
-      activeTabId: "tab-active",
-    });
-
-    const context = buildCanvasContext("tab-bg") as { model: string };
-
-    expect(context.model).toBe("background/model");
-  });
-
-  it("falls back to the global model when no sessionId is given", () => {
-    useChatStore.setState({ model: "test/model-z" });
-    const context = buildCanvasContext() as { model: string };
-    expect(context.model).toBe("test/model-z");
   });
 
   it("carries a stable userId in the request body", () => {
@@ -462,10 +437,10 @@ describe("useDesignChat (hook + UI message stream)", () => {
     });
   }
 
-  // Regression: a background (non-active) session must send requests with ITS
-  // OWN tab model — switching tabs (which moves the global model to the active
-  // tab) must not hijack a streaming background session's request.
-  it("sends with the session's own tab model, not the active-tab global", async () => {
+  // Regression guard for "one model for everyone": no request may carry a
+  // model id. A stale per-tab selection leaking back into the body is exactly
+  // what the removal of the picker was meant to make impossible.
+  it("sends no model id with a chat request", async () => {
     const requests: Array<Record<string, unknown>> = [];
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       requests.push(JSON.parse(String(init?.body)));
@@ -481,13 +456,10 @@ describe("useDesignChat (hook + UI message stream)", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    // The user is viewing tab-active; tab-bg is mid-conversation in the
-    // background. The global model reflects the active tab.
     useChatStore.setState({
-      model: "active/model",
       tabs: [
-        { id: "tab-active", title: "A", model: "active/model", parallelCount: 1 },
-        { id: "tab-bg", title: "B", model: "background/model", parallelCount: 1 },
+        { id: "tab-active", title: "A", parallelCount: 1 },
+        { id: "tab-bg", title: "B", parallelCount: 1 },
       ],
       activeTabId: "tab-active",
     });
@@ -499,7 +471,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
     });
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
-    expect(requests[0].model).toBe("background/model");
+    expect(requests[0]).not.toHaveProperty("model");
     expect(requests[0]).not.toHaveProperty("agentMode");
   });
 
@@ -563,7 +535,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
 
     expect(requests[0].url).toBe("/api/chat");
     expect(requests[0].body.canvasContext).toBeTypeOf("string");
-    expect(requests[0].body.model).toBeTypeOf("string");
+    expect(requests[0].body).not.toHaveProperty("model");
 
     // The second request must contain the locally-executed tool result
     const secondMessages = requests[1].body.messages as Array<{
@@ -821,15 +793,15 @@ describe("useDesignChat (hook + UI message stream)", () => {
   // fallback list; when that list drifted from the backend's
   // (deepseek/deepseek-v4-flash-0731, an id the backend never had), every
   // showcase prompt came back as 400 "Model ... is not allowed".
-  it("holds a queued launch payload until the backend model list has landed", async () => {
-    let resolveModels: (value: Response) => void = () => {};
-    const modelsResponse = new Promise<Response>((resolve) => {
-      resolveModels = resolve;
-    });
-
+  // The showcase handoff auto-sends on the editor's very first render, long
+  // before GET /api/models can resolve. That used to have to wait for the
+  // model list (a fallback id the backend didn't allow came back as a 400);
+  // with no model id in the body there is nothing left to wait for.
+  it("sends a queued launch payload without waiting for GET /api/models", async () => {
     const chatCalls: Array<Record<string, unknown>> = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input).includes("/api/models")) return modelsResponse;
+      // Never resolves — the send must not depend on it.
+      if (String(input).includes("/api/models")) return new Promise<Response>(() => {});
       chatCalls.push(JSON.parse(String(init?.body)));
       return sseResponse([
         { type: "start" },
@@ -844,36 +816,11 @@ describe("useDesignChat (hook + UI message stream)", () => {
     void loadModels();
 
     const sessionId = `test-session-models-${Date.now()}`;
-    // "Auto" is the selection the showcase handoff runs with, and the only one
-    // that resolves through the model list at send time.
-    useChatStore.setState({ model: AUTO_MODEL_VALUE });
     useChatStore.getState().queueLaunchPayload(sessionId, { text: "make me an app" });
     renderHook(() => useDesignChat({ sessionId }));
 
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(chatCalls).toHaveLength(0);
-    expect(useChatStore.getState().launchQueue[sessionId]).toEqual({
-      text: "make me an app",
-    });
-
-    resolveModels(
-      new Response(
-        JSON.stringify({
-          models: [
-            { id: "backend/only-model", label: "Backend Only", supportsVision: false },
-          ],
-          default: "backend/only-model",
-          visionFallback: false,
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      ),
-    );
-
     await waitFor(() => expect(chatCalls).toHaveLength(1));
-    // The send now carries the backend's own default, never the fallback.
-    expect(chatCalls[0].model).toBe("backend/only-model");
+    expect(chatCalls[0]).not.toHaveProperty("model");
     expect(useChatStore.getState().launchQueue[sessionId]).toBeUndefined();
   });
 

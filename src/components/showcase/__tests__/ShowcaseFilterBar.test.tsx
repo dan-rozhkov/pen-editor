@@ -282,8 +282,10 @@ describe("<ShowcaseFilterBar />", () => {
     expect(select.classList.contains("focus-visible:outline-accent-primary")).toBe(false);
     const options = Array.from(select.querySelectorAll("option")).map((o) => o.textContent);
     expect(options[0]).toBe("All models");
-    expect(options).toContain("DeepSeek V4 Pro");
-    expect(options).not.toContain("DeepSeek V4 Pro (12)");
+    // Labels are derived from the model id: published apps carry whatever
+    // model generated them, including ones the editor never ran on.
+    expect(options).toContain("Deepseek V4 Pro");
+    expect(options).not.toContain("Deepseek V4 Pro (12)");
 
     fireEvent.change(select, { target: { value: "deepseek/deepseek-v4-pro" } });
 

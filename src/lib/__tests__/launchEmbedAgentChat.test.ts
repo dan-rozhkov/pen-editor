@@ -15,7 +15,7 @@ beforeEach(() => {
   mockCapture.mockReset();
   mockCapture.mockResolvedValue("data:image/png;base64,SHOT");
   useChatStore.setState({
-    tabs: [{ id: "tab-0", title: "Chat 1", model: "m", parallelCount: 1 }],
+    tabs: [{ id: "tab-0", title: "Chat 1", parallelCount: 1 }],
     activeTabId: "tab-0",
     launchQueue: {},
   });

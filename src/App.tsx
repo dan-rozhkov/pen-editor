@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect } from "react";
 import { track } from "./lib/analytics";
 import { markEditorOpened } from "./lib/analytics/sessionTiming";
 import { loadModels } from "./lib/chatModels";
-import { reconcileModels } from "./store/chatStore";
 import { useCustomFontStore } from "./store/customFontStore";
 import { usePluginStore } from "./store/pluginStore";
 import { useSceneStore } from "./store/sceneStore";
@@ -83,10 +82,11 @@ function App() {
     });
   }, []);
 
-  // Pull the authoritative chat model list from the backend, then drop any saved
-  // selection it no longer allows. Falls back to the hardcoded list on failure.
+  // Pull the authoritative model metadata (which model, whether it reads
+  // images, which image ops exist) from the backend. Falls back to the
+  // hardcoded defaults on failure.
   useEffect(() => {
-    loadModels().then(reconcileModels);
+    void loadModels();
   }, []);
 
   useEffect(() => {

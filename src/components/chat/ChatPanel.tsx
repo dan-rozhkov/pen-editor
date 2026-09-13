@@ -3,7 +3,6 @@ import {
   XIcon,
   PlusIcon,
   LightningIcon,
-  SphereIcon,
   ArrowUpIcon,
   StopIcon,
   CaretDownIcon,
@@ -43,7 +42,6 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import type { ChatLaunchPayload } from "@/types/chat";
-import { useModelOptions } from "@/hooks/useModelOptions";
 import { chatToMarkdown, chatFilename, downloadMarkdown } from "@/lib/chatExport";
 
 const PARALLEL_COUNT_OPTIONS = [
@@ -355,9 +353,6 @@ function ChatSession({
 export function ChatPanelContent() {
   const isExpanded = useChatStore((s) => s.isExpanded);
   const toggleExpanded = useChatStore((s) => s.toggleExpanded);
-  const model = useChatStore((s) => s.model);
-  const setModel = useChatStore((s) => s.setModel);
-  const modelOptions = useModelOptions();
   const parallelCount = useChatStore((s) => s.parallelCount);
   const setParallelCount = useChatStore((s) => s.setParallelCount);
   const tabs = useChatStore((s) => s.tabs);
@@ -372,8 +367,6 @@ export function ChatPanelContent() {
   useEffect(() => {
     void ensureSkillsHydrated();
   }, [ensureSkillsHydrated]);
-  const activeModelLabel =
-    modelOptions.find((option) => option.value === model)?.label ?? "Model";
   const composerControls: ComposerControlsRenderer = ({
     formId,
     canSubmit,
@@ -398,34 +391,11 @@ export function ChatPanelContent() {
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
-            <IconButton
-              variant="ghost"
-              size="icon"
-              tooltip={`Model: ${activeModelLabel}`}
-              className="ml-auto size-[30px] text-text-muted hover:bg-secondary"
-            >
-              <SphereIcon size={18} weight="light" />
-            </IconButton>
-          }
-        />
-        <DropdownMenuContent side="top" align="start" className="w-56">
-          <DropdownMenuRadioGroup value={model} onValueChange={setModel}>
-            {modelOptions.map((option) => (
-              <DropdownMenuRadioItem key={option.value} value={option.value}>
-                {option.label}
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
             <Button
               type="button"
               variant="ghost"
               size="default"
-              className="-ml-1 inline-flex h-[30px] items-center gap-1 rounded-lg px-2 text-xs leading-none text-text-muted hover:bg-secondary"
+              className="ml-auto inline-flex h-[30px] items-center gap-1 rounded-lg px-2 text-xs leading-none text-text-muted hover:bg-secondary"
               aria-label={`Parallel agents: x${parallelCount}`}
             >
               <LightningIcon className="size-4" />

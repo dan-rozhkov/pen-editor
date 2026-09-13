@@ -99,8 +99,8 @@ describe("chatStore — message queue", () => {
     it("clears the message queue when closing one of several tabs", () => {
       useChatStore.setState({
         tabs: [
-          { id: "tab-A", title: "A", model: "m", parallelCount: 1 },
-          { id: "tab-B", title: "B", model: "m", parallelCount: 1 },
+          { id: "tab-A", title: "A", parallelCount: 1 },
+          { id: "tab-B", title: "B", parallelCount: 1 },
         ],
         activeTabId: "tab-A",
       });
@@ -113,7 +113,7 @@ describe("chatStore — message queue", () => {
 
     it("clears the message queue when closing the last remaining tab", () => {
       useChatStore.setState({
-        tabs: [{ id: "tab-only", title: "Only", model: "m", parallelCount: 1 }],
+        tabs: [{ id: "tab-only", title: "Only", parallelCount: 1 }],
         activeTabId: "tab-only",
       });
       useChatStore.getState().enqueueMessage("tab-only", { text: "queued" });

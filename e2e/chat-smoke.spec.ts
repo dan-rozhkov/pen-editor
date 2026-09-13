@@ -16,7 +16,6 @@ const FINAL_TURN_TEXT = "The frame has been created. Smoke test complete.";
 
 interface ChatRequestBody {
   canvasContext?: unknown;
-  model?: unknown;
   messages?: Array<{
     role: string;
     parts: Array<Record<string, unknown>>;
@@ -28,7 +27,7 @@ test("AI chat streams a batch_design tool call, executes it locally and auto-con
 }) => {
   const chatRequests: ChatRequestBody[] = [];
 
-  // Keep the model list deterministic (the app fetches it at startup and
+  // Keep the model metadata deterministic (the app fetches it at startup and
   // silently falls back on failure; stubbing avoids a 404 in the dev server).
   await page.route("**/api/models", (route) =>
     route.fulfill({
