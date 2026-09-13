@@ -4,7 +4,7 @@ import { useLayoutStore } from "@/store/layoutStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { findPixiChild } from "@/utils/pixiUtils";
 import { captureEmbedScreenshot } from "@/lib/embedScreenshot";
-import { getNodeEffectiveSize } from "@/utils/nodeUtils";
+import { findHiddenSelfOrAncestor, getNodeEffectiveSize } from "@/utils/nodeUtils";
 import { downscaleImageDataUrl } from "./screenshotDownscale";
 import { waitForPendingImageFills } from "@/pixi/renderers/pendingImageLoads";
 import { requestCanvasRender } from "@/pixi/renderScheduler";
@@ -58,10 +58,34 @@ export const getScreenshot: ToolHandler = async (args) => {
     nodeId = selectedIds[0];
   }
 
-  const { nodesById } = useSceneStore.getState();
+  const { nodesById, parentById } = useSceneStore.getState();
   const node = nodesById[nodeId];
   if (!node) {
     return JSON.stringify({ error: `Node not found: ${nodeId}` });
+  }
+
+  // A hidden node — `visible === false` on itself, or on any ancestor (a
+  // hidden frame/group takes its whole subtree off screen), or `enabled ===
+  // false` on itself/an ancestor (how a `ref` instance's overrides hide a
+  // component-internal node, see `enabled?: boolean` in `types/scene.ts`) —
+  // is never drawn on the real canvas. Refuse BEFORE attempting either
+  // capture path: for the embed path, `captureEmbedScreenshot` renders raw
+  // `htmlContent` with no visibility check of its own, so a hidden embed
+  // would otherwise leak its content as an image even though the canvas
+  // never draws it — the same class of leak `read_embed_html` was fixed for
+  // (see `withheldOnSharedView` in webmcp/schemas.ts); for the PixiJS path
+  // this also avoids wasting a render on what would only ever come back
+  // blank. `findHiddenSelfOrAncestor` is the same predicate `EmbedLayer.tsx`
+  // uses to decide what to mount, so this refusal matches what the canvas
+  // actually draws.
+  const hidden = findHiddenSelfOrAncestor(nodesById, parentById, nodeId);
+  if (hidden) {
+    const who = hidden.isSelf
+      ? `Node "${nodeId}"`
+      : `An ancestor of node "${nodeId}" (node "${hidden.nodeId}")`;
+    return JSON.stringify({
+      error: `${who} is hidden (${hidden.reason}: false), so there is nothing to capture. Make it visible and try again.`,
+    });
   }
 
   // Embeds render as a live Shadow-DOM overlay above the PixiJS canvas (see

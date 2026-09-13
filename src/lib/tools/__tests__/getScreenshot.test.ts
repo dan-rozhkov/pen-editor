@@ -96,6 +96,160 @@ describe("get_screenshot", () => {
     }
   });
 
+  // Leak fix: a hidden node (or one inside a hidden ancestor) is never drawn
+  // on the real canvas, but neither capture path used to check that —
+  // `captureEmbedScreenshot` renders raw `htmlContent` unconditionally, and
+  // the PixiJS path would just extract a blank frame. Both must refuse
+  // BEFORE attempting any capture, so a hidden embed's HTML never leaks as
+  // an image (same class of leak `read_embed_html` was fixed for).
+  describe("hidden nodes", () => {
+    it("refuses a hidden node without attempting a PixiJS extraction", async () => {
+      const scene = useSceneStore.getState();
+      useSceneStore.setState({
+        nodesById: { ...scene.nodesById, frame1: { ...scene.nodesById.frame1, visible: false } },
+      });
+      const result = JSON.parse(await getScreenshot({ nodeId: "frame1" }));
+      expect(result.imageData).toBeUndefined();
+      expect(result.error).toMatch(/frame1.*hidden/i);
+      // No renderer was registered at all — proves the PixiJS extraction
+      // branch was never reached.
+    });
+
+    it("refuses a node whose ancestor is hidden, naming the ancestor", async () => {
+      const scene = useSceneStore.getState();
+      useSceneStore.setState({
+        nodesById: { ...scene.nodesById, frame1: { ...scene.nodesById.frame1, visible: false } },
+      });
+      const result = JSON.parse(await getScreenshot({ nodeId: "rect1" }));
+      expect(result.imageData).toBeUndefined();
+      expect(result.error).toMatch(/ancestor/i);
+      expect(result.error).toMatch(/frame1/);
+    });
+
+    it("refuses a hidden embed without rendering its HTML", async () => {
+      seedEmbedNode({ visible: false });
+      const spy = vi.spyOn(embedScreenshot, "captureEmbedScreenshot");
+      const result = JSON.parse(await getScreenshot({ nodeId: "embed1" }));
+      expect(result.imageData).toBeUndefined();
+      expect(result.error).toMatch(/embed1.*hidden/i);
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    it("refuses an embed nested inside a hidden ancestor frame", async () => {
+      const scene = useSceneStore.getState();
+      const hiddenWrap = {
+        id: "wrap1",
+        type: "frame",
+        name: "Wrap",
+        x: 0,
+        y: 0,
+        width: 300,
+        height: 200,
+        visible: false,
+      } as unknown as EmbedNode;
+      const embed = {
+        id: "embed1",
+        type: "embed",
+        name: "Code",
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 100,
+        htmlContent: '<img src="https://picsum.photos/200">',
+      } as unknown as EmbedNode;
+      useSceneStore.setState({
+        nodesById: { ...scene.nodesById, wrap1: hiddenWrap, embed1: embed },
+        parentById: { ...scene.parentById, wrap1: null, embed1: "wrap1" },
+        childrenById: { ...scene.childrenById, wrap1: ["embed1"] },
+        rootIds: [...scene.rootIds, "wrap1"],
+      });
+      const spy = vi.spyOn(embedScreenshot, "captureEmbedScreenshot");
+      const result = JSON.parse(await getScreenshot({ nodeId: "embed1" }));
+      expect(result.imageData).toBeUndefined();
+      expect(result.error).toMatch(/ancestor/i);
+      expect(result.error).toMatch(/wrap1/);
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    // `enabled: false` is how a `ref` instance's overrides hide a
+    // component-internal node (types/scene.ts) — the same real-canvas
+    // invisibility as `visible: false`, just via a different flag. The gate
+    // used to check only `visible`, leaving this leak open.
+    it("refuses a node that is disabled (enabled: false), not just hidden", async () => {
+      const scene = useSceneStore.getState();
+      useSceneStore.setState({
+        nodesById: { ...scene.nodesById, frame1: { ...scene.nodesById.frame1, enabled: false } },
+      });
+      const result = JSON.parse(await getScreenshot({ nodeId: "frame1" }));
+      expect(result.imageData).toBeUndefined();
+      expect(result.error).toMatch(/frame1.*hidden/i);
+      expect(result.error).toMatch(/enabled: false/);
+    });
+
+    it("refuses a node whose ancestor is disabled (enabled: false), naming the ancestor", async () => {
+      const scene = useSceneStore.getState();
+      useSceneStore.setState({
+        nodesById: { ...scene.nodesById, frame1: { ...scene.nodesById.frame1, enabled: false } },
+      });
+      const result = JSON.parse(await getScreenshot({ nodeId: "rect1" }));
+      expect(result.imageData).toBeUndefined();
+      expect(result.error).toMatch(/ancestor/i);
+      expect(result.error).toMatch(/frame1/);
+      expect(result.error).toMatch(/enabled: false/);
+    });
+
+    it("refuses a disabled embed (enabled: false) without rendering its HTML", async () => {
+      seedEmbedNode({ enabled: false });
+      const spy = vi.spyOn(embedScreenshot, "captureEmbedScreenshot");
+      const result = JSON.parse(await getScreenshot({ nodeId: "embed1" }));
+      expect(result.imageData).toBeUndefined();
+      expect(result.error).toMatch(/embed1.*hidden/i);
+      expect(result.error).toMatch(/enabled: false/);
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    it("refuses an embed nested inside an ancestor frame disabled via enabled: false, without rendering its HTML", async () => {
+      const scene = useSceneStore.getState();
+      const disabledWrap = {
+        id: "wrap1",
+        type: "frame",
+        name: "Wrap",
+        x: 0,
+        y: 0,
+        width: 300,
+        height: 200,
+        enabled: false,
+      } as unknown as EmbedNode;
+      const embed = {
+        id: "embed1",
+        type: "embed",
+        name: "Code",
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 100,
+        htmlContent: '<img src="https://picsum.photos/200">',
+      } as unknown as EmbedNode;
+      useSceneStore.setState({
+        nodesById: { ...scene.nodesById, wrap1: disabledWrap, embed1: embed },
+        parentById: { ...scene.parentById, wrap1: null, embed1: "wrap1" },
+        childrenById: { ...scene.childrenById, wrap1: ["embed1"] },
+        rootIds: [...scene.rootIds, "wrap1"],
+      });
+      const spy = vi.spyOn(embedScreenshot, "captureEmbedScreenshot");
+      const result = JSON.parse(await getScreenshot({ nodeId: "embed1" }));
+      expect(result.imageData).toBeUndefined();
+      expect(result.error).toMatch(/ancestor/i);
+      expect(result.error).toMatch(/wrap1/);
+      expect(result.error).toMatch(/enabled: false/);
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+  });
+
   // FIR-56: embeds render as a live Shadow-DOM overlay, not PixiJS scene
   // content — their PixiJS container is intentionally empty (embedRenderer.ts),
   // so extract.base64 on an embed node always returns a blank image regardless

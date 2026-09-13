@@ -10,6 +10,7 @@ import {
 } from "@/utils/embedHtmlUtils";
 import { buildVariableStyleBlock } from "@/utils/variableCssUtils";
 import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
+import { findHiddenSelfOrAncestor } from "@/utils/nodeUtils";
 import type { EmbedNode } from "@/types/scene";
 import { topLevelAncestorId } from "@/utils/topLevelAncestor";
 import { useOverlayHostRect } from "./useOverlayHostRect";
@@ -235,11 +236,20 @@ export function EmbedLayer() {
 
     return Object.keys(nodesById).filter((id) => {
       const node = nodesById[id];
-      // Render only visible, enabled embeds — mirrors the Pixi visibility
-      // rule so hiding a layer also hides its DOM overlay.
-      if (node?.type !== "embed" || node.visible === false || node.enabled === false) {
-        return false;
-      }
+      if (node?.type !== "embed") return false;
+
+      // Render only embeds that are actually drawn on the canvas: hidden or
+      // disabled on themselves, OR on any ancestor, takes the whole subtree
+      // off screen (Pixi containment — a hidden/disabled frame hides its
+      // children too, not just itself). This embed is DOM content mounted
+      // outside Pixi's own render tree, so nothing else enforces that
+      // containment for it: without this ancestor walk, an embed nested
+      // inside a frame the user just hid would keep rendering as a live
+      // Shadow-DOM overlay on top of the (now empty) canvas underneath it.
+      // The walk only runs per embed (post the type filter above), not per
+      // node, so it stays cheap even in large documents — bounded by
+      // (embed count × tree depth), not document size.
+      if (findHiddenSelfOrAncestor(nodesById, parentById, id)) return false;
 
       if (mode !== "present") return true;
       return topLevelAncestorId(parentById, id) === activeSlideId;

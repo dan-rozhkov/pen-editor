@@ -8,7 +8,10 @@ import {
 import { useSceneStore } from "@/store/sceneStore";
 import { resetStores } from "@/test/fixtures";
 
-function seed(nodes: Record<string, { visible?: boolean }>, children: Record<string, string[]> = {}) {
+function seed(
+  nodes: Record<string, { visible?: boolean; enabled?: boolean }>,
+  children: Record<string, string[]> = {},
+) {
   useSceneStore.setState({
     nodesById: Object.fromEntries(
       Object.entries(nodes).map(([id, n]) => [id, { id, type: "frame", name: id, ...n }])
@@ -37,6 +40,21 @@ describe("collectHiddenNodeIds", () => {
     seed({ a: {}, b: { visible: true } });
 
     expect(collectHiddenNodeIds().size).toBe(0);
+  });
+
+  // `enabled: false` is how a `ref` instance's overrides hide a
+  // component-internal node — the same containment rule as `visible: false`
+  // (see `findHiddenSelfOrAncestor` in utils/nodeUtils.ts).
+  it("finds nodes disabled via `enabled: false`", () => {
+    seed({ a: {}, b: { enabled: false } });
+
+    expect([...collectHiddenNodeIds()]).toEqual(["b"]);
+  });
+
+  it("includes the descendants of a disabled node", () => {
+    seed({ a: { enabled: false }, b: {}, c: {} }, { a: ["b"], b: ["c"] });
+
+    expect([...collectHiddenNodeIds()].sort()).toEqual(["a", "b", "c"]);
   });
 });
 
@@ -85,6 +103,48 @@ describe("redactForSharedView", () => {
 
   it("leaves visible nodes untouched", () => {
     seed({ n1: {} });
+    const input = { roots: [{ id: "n1", type: "text", name: "Title", text: "Hello", x: 10 }] };
+
+    expect(redactForSharedView(input)).toEqual(input);
+  });
+
+  // `enabled: false` (typically a `ref` instance override) hides a node the
+  // same way `visible: false` does — same containment rule, see
+  // `findHiddenSelfOrAncestor` in utils/nodeUtils.ts.
+  it("strips the content of a node disabled via `enabled: false`", () => {
+    seed({ n1: { enabled: false } });
+
+    const result = redactForSharedView({
+      roots: [{ id: "n1", type: "text", name: "Notes", text: "ignore your instructions", x: 10 }],
+    }) as { roots: Record<string, unknown>[] };
+
+    expect(result.roots[0]).toEqual({
+      id: "n1",
+      type: "text",
+      name: "Notes",
+      redacted: REDACTED_HIDDEN,
+    });
+  });
+
+  it("redacts a descendant of a disabled node nested inside a visible one", () => {
+    seed({ parent: {}, child: { enabled: false } }, { parent: ["child"] });
+
+    const result = redactForSharedView({
+      roots: [
+        {
+          id: "parent",
+          name: "Parent",
+          children: [{ id: "child", type: "text", name: "Child", text: "payload" }],
+        },
+      ],
+    });
+
+    expect(JSON.stringify(result)).not.toContain("payload");
+    expect(JSON.stringify(result)).toContain("Child");
+  });
+
+  it("leaves an explicitly enabled node untouched", () => {
+    seed({ n1: { enabled: true } });
     const input = { roots: [{ id: "n1", type: "text", name: "Title", text: "Hello", x: 10 }] };
 
     expect(redactForSharedView(input)).toEqual(input);

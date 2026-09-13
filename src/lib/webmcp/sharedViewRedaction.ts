@@ -48,12 +48,23 @@ export const REDACTED_SOURCE = "[redacted: source HTML is not exposed on a share
 export const REDACTED_HIDDEN = "[redacted: this layer is hidden and is not drawn]";
 
 /**
- * Ids of every node the canvas does not draw: those explicitly hidden, plus
- * their descendants, which a hidden ancestor takes off screen with it.
+ * Ids of every node the canvas does not draw: those explicitly hidden or
+ * disabled, plus their descendants, which a hidden/disabled ancestor takes
+ * off screen with it.
+ *
+ * `visible === false` and `enabled === false` are the same containment rule —
+ * see `findHiddenSelfOrAncestor` in `utils/nodeUtils.ts`, which documents why
+ * both flags matter (`enabled` is how a `ref` instance's overrides hide a
+ * component-internal node) and is the per-node, bottom-up counterpart of the
+ * top-down sweep below. Not reused here: that helper walks one node's
+ * ancestor chain via `parentById` per call, which would mean re-walking to
+ * the root for every node in the document; this sweep instead flags hidden
+ * roots once and floods each subtree with `childrenById`, staying linear in
+ * the tree size.
  *
  * Read from the store rather than from the tool's own output, because the
- * serializer does not emit `visible` at all — there is nothing in the result
- * to filter on.
+ * serializer does not emit `visible`/`enabled` at all — there is nothing in
+ * the result to filter on.
  */
 export function collectHiddenNodeIds(): Set<string> {
   const { nodesById, childrenById } = useSceneStore.getState();
@@ -66,7 +77,7 @@ export function collectHiddenNodeIds(): Set<string> {
   };
 
   for (const [id, node] of Object.entries(nodesById)) {
-    if (node.visible === false) bury(id);
+    if (node.visible === false || node.enabled === false) bury(id);
   }
   return hidden;
 }

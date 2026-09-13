@@ -66,6 +66,58 @@ describe("<EmbedLayer />", () => {
     expect(container.querySelector('[data-embed-id="dis"]')).toBeNull();
   });
 
+  // A hidden/disabled frame takes its whole subtree off screen (Pixi
+  // containment) — the DOM overlay must not keep an embed alive underneath a
+  // frame the user just hid, since nothing else (Pixi isn't rendering this
+  // node at all) would stop it from doing so.
+  it("does not render an embed nested inside a hidden ancestor frame", () => {
+    useSceneStore.setState({
+      nodesById: {
+        wrap: { id: "wrap", type: "frame", name: "Wrap", x: 0, y: 0, width: 200, height: 150, visible: false } as unknown as FlatSceneNode,
+        inner: { id: "inner", type: "embed", name: "Inner", x: 0, y: 0, width: 50, height: 50, htmlContent: "<p>i</p>" } as unknown as FlatSceneNode,
+      },
+      parentById: { wrap: null, inner: "wrap" },
+      childrenById: { wrap: ["inner"] },
+      rootIds: ["wrap"],
+      componentArtifactsById: {},
+      _cachedTree: null,
+    });
+    const { container } = render(<EmbedLayer />);
+    expect(container.querySelector('[data-embed-id="inner"]')).toBeNull();
+  });
+
+  it("does not render an embed nested inside an ancestor frame disabled via enabled:false", () => {
+    useSceneStore.setState({
+      nodesById: {
+        wrap: { id: "wrap", type: "frame", name: "Wrap", x: 0, y: 0, width: 200, height: 150, enabled: false } as unknown as FlatSceneNode,
+        inner: { id: "inner", type: "embed", name: "Inner", x: 0, y: 0, width: 50, height: 50, htmlContent: "<p>i</p>" } as unknown as FlatSceneNode,
+      },
+      parentById: { wrap: null, inner: "wrap" },
+      childrenById: { wrap: ["inner"] },
+      rootIds: ["wrap"],
+      componentArtifactsById: {},
+      _cachedTree: null,
+    });
+    const { container } = render(<EmbedLayer />);
+    expect(container.querySelector('[data-embed-id="inner"]')).toBeNull();
+  });
+
+  it("still renders an embed nested inside a visible, enabled ancestor frame", () => {
+    useSceneStore.setState({
+      nodesById: {
+        wrap: { id: "wrap", type: "frame", name: "Wrap", x: 0, y: 0, width: 200, height: 150 } as unknown as FlatSceneNode,
+        inner: { id: "inner", type: "embed", name: "Inner", x: 0, y: 0, width: 50, height: 50, htmlContent: "<p>i</p>" } as unknown as FlatSceneNode,
+      },
+      parentById: { wrap: null, inner: "wrap" },
+      childrenById: { wrap: ["inner"] },
+      rootIds: ["wrap"],
+      componentArtifactsById: {},
+      _cachedTree: null,
+    });
+    const { container } = render(<EmbedLayer />);
+    expect(container.querySelector('[data-embed-id="inner"]')).not.toBeNull();
+  });
+
   it("removes the host when the embed node is deleted", () => {
     const { container } = render(<EmbedLayer />);
     expect(container.querySelector('[data-embed-id="e1"]')).not.toBeNull();

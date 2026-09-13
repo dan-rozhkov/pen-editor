@@ -244,6 +244,63 @@ export function getAncestorIds(
 }
 
 /**
+ * Result of `findHiddenSelfOrAncestor`: identifies the single node — the
+ * target itself, or the nearest ancestor walking up `parentById` — whose own
+ * `visible === false` or `enabled === false` makes the target effectively
+ * invisible on the real canvas. `null` means the target actually renders
+ * (every node in its ancestor chain, itself included, is both visible and
+ * enabled).
+ */
+export interface HiddenAncestorResult {
+  /** The id of the node carrying the hiding flag. */
+  nodeId: string;
+  /** True when it's the target node itself, false when it's an ancestor. */
+  isSelf: boolean;
+  /** Which flag made the node hidden — `enabled` covers instance overrides. */
+  reason: "visible" | "enabled";
+}
+
+/**
+ * A node is only actually drawn on the canvas when it — AND every one of its
+ * ancestors — has `visible !== false` AND `enabled !== false` (Figma/Pixi
+ * containment: a hidden or disabled frame/group takes its whole subtree off
+ * screen; `enabled` in particular is how a `ref` instance's overrides hide a
+ * component-internal node, see `enabled?: boolean` on scene nodes in
+ * `types/scene.ts`). `EmbedLayer.tsx` and `collectHiddenNodeIds` in
+ * `webmcp/sharedViewRedaction.ts` apply the same containment rule for the
+ * same reason. Reuses `getAncestorIds` rather than re-walking `parentById` —
+ * mirror, don't duplicate, that walk.
+ *
+ * Returns the *nearest* hidden node in the chain (self checked first, then
+ * immediate parent upward) so a caller can report specifically what needs to
+ * become visible/enabled again — reporting only "something is hidden" would
+ * leave an agent guessing between the node and an ancestor several levels up.
+ */
+export function findHiddenSelfOrAncestor(
+  nodesById: Record<string, { visible?: boolean; enabled?: boolean }>,
+  parentById: Record<string, string | null>,
+  nodeId: string,
+): HiddenAncestorResult | null {
+  const hiddenReason = (node: { visible?: boolean; enabled?: boolean } | undefined) => {
+    if (node?.visible === false) return "visible" as const;
+    if (node?.enabled === false) return "enabled" as const;
+    return null;
+  };
+
+  const selfReason = hiddenReason(nodesById[nodeId]);
+  if (selfReason) {
+    return { nodeId, isSelf: true, reason: selfReason };
+  }
+  for (const ancestorId of getAncestorIds(parentById, nodeId)) {
+    const ancestorReason = hiddenReason(nodesById[ancestorId]);
+    if (ancestorReason) {
+      return { nodeId: ancestorId, isSelf: false, reason: ancestorReason };
+    }
+  }
+  return null;
+}
+
+/**
  * Resolve effective theme for a node by walking ancestor frames.
  * Frame `themeOverride` affects descendants, not the frame itself.
  */
