@@ -19,6 +19,7 @@ import { useChatStore } from "@/store/chatStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useRepoContextStore } from "@/store/repoContextStore";
+import { useHistoryStore } from "@/store/historyStore";
 import { useAiVectorPreviewStore, vectorPreviewKey } from "@/store/aiVectorPreviewStore";
 import { resetStores, seedScene, seedVariables } from "@/test/fixtures";
 
@@ -1719,6 +1720,509 @@ describe("useDesignChat (hook + UI message stream)", () => {
       await flushStream();
 
       expect(useAiVectorPreviewStore.getState().drafts[key]).toBeUndefined();
+    });
+
+    // Task: prove the generalized streaming-tool registry (src/lib/streamingTools/,
+    // src/hooks/streamingToolParts.ts) actually dispatches a streamed frame to
+    // its adapter, and that the registered abort controller path (not just
+    // `stop()`) permanently blocks a later frame for the same tool call — the
+    // same guarantee `abandonedStreamingToolKeysRef` gave `draw_vector` alone
+    // before this generalization.
+    it("dispatches a streamed frame to its registered adapter, and the abort path permanently blocks a later frame for the same call", async () => {
+      const { response: firstResponse, push, controller: firstController } =
+        controlledSseResponse();
+      const requests: Array<Record<string, unknown>> = [];
+      const fetchMock = vi.fn(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+          requests.push(JSON.parse(String(init?.body)));
+          if (requests.length === 1) {
+            init?.signal?.addEventListener("abort", () => {
+              firstController.error(
+                new DOMException("The operation was aborted.", "AbortError")
+              );
+            });
+            return firstResponse;
+          }
+          return sseResponse([
+            { type: "start" },
+            { type: "start-step" },
+            { type: "text-start", id: "t1" },
+            { type: "text-delta", id: "t1", delta: "ok" },
+            { type: "text-end", id: "t1" },
+            { type: "finish-step" },
+            { type: "finish" },
+          ]);
+        }
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      const sessionId = `registry-abort-${Date.now()}`;
+      const { result: hookResult } = renderHook(() =>
+        useDesignChat({ sessionId })
+      );
+
+      act(() => hookResult.current.setInput("draw something"));
+      await act(async () => {
+        hookResult.current.sendMessage();
+      });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+      push({ type: "start" });
+      push({ type: "start-step" });
+      push({
+        type: "tool-input-start",
+        toolCallId: "registry-1",
+        toolName: "draw_vector",
+      });
+      push({
+        type: "tool-input-delta",
+        toolCallId: "registry-1",
+        inputTextDelta: '{"name":"Leaf","commands":"M(10,10)\\n',
+      });
+      await flushStream();
+      push({
+        type: "tool-input-delta",
+        toolCallId: "registry-1",
+        inputTextDelta: "L(20,20)\\n",
+      });
+      await flushStream();
+
+      // The frame reached draw_vector's registered adapter: a draft now
+      // exists in the preview store, proving the generic dispatch path
+      // (extractStreamingToolInputs -> getStreamingToolAdapter -> onFrame)
+      // wired the real adapter up correctly.
+      const key = vectorPreviewKey(sessionId, "registry-1");
+      await waitFor(() => {
+        expect(useAiVectorPreviewStore.getState().drafts[key]).toBeDefined();
+      });
+
+      // Abort via the registered AbortController (not `stop()`) — this is
+      // the path chat.stop()-independent callers (e.g. navigating away) use.
+      act(() => {
+        useChatStore.getState().abortControllers[sessionId]?.abort();
+      });
+
+      await waitFor(() => {
+        expect(useAiVectorPreviewStore.getState().drafts[key]).toBeUndefined();
+      });
+      await waitFor(() => expect(hookResult.current.status).toBe("ready"), {
+        timeout: 5000,
+      });
+
+      // A follow-up send re-runs the staging effect over the full message
+      // history, which still contains the abandoned call's stale
+      // input-streaming part. It must not be resurrected.
+      act(() => hookResult.current.setInput("something else"));
+      await act(async () => {
+        hookResult.current.sendMessage();
+      });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(hookResult.current.status).toBe("ready"));
+      await flushStream();
+
+      expect(useAiVectorPreviewStore.getState().drafts[key]).toBeUndefined();
+    });
+  });
+
+  // Design-doc test plan item (docs/superpowers/specs/2026-09-13-streaming-tool-mutations-design.md,
+  // "Testing"): "a streamed batch_design part mutates the store before the
+  // tool call completes, and the completed call leaves one undo entry". This
+  // is the end-to-end proof that the generic streaming registry
+  // (src/lib/streamingTools/) actually drives the real progressive-mutation
+  // path (src/lib/tools/batchDesign/progressive.ts) — not just a synthetic
+  // preview store, the way the draw_vector tests above do — through real AI
+  // SDK v6 stream chunks.
+  describe("streaming batch_design mutations", () => {
+    function sseResponse(chunks: Array<Record<string, unknown>>): Response {
+      const body =
+        chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("") +
+        "data: [DONE]\n\n";
+      return new Response(body, {
+        status: 200,
+        headers: {
+          "content-type": "text/event-stream",
+          "x-vercel-ai-ui-message-stream": "v1",
+        },
+      });
+    }
+
+    // Same shape as the vector describe block's own helper above — kept
+    // local rather than shared, matching that block's existing convention
+    // (__tests__ files are exempt from the jscpd duplication gate).
+    function controlledSseResponse() {
+      let controllerRef: ReadableStreamDefaultController<Uint8Array> | undefined;
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controllerRef = controller;
+        },
+      });
+      const push = (chunk: Record<string, unknown>) => {
+        controllerRef!.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+      };
+      const close = () => {
+        controllerRef!.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controllerRef!.close();
+      };
+      const response = new Response(stream, {
+        status: 200,
+        headers: {
+          "content-type": "text/event-stream",
+          "x-vercel-ai-ui-message-stream": "v1",
+        },
+      });
+      return { response, push, close, controller: controllerRef! };
+    }
+
+    async function flushStream(ms = 20) {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, ms));
+      });
+    }
+
+    afterEach(() => {
+      // Progressive batch_design sessions live in a module-level Map that
+      // outlives resetStores() — the kill switch is the one bit of state
+      // that could otherwise leak into a later test in this file.
+      try {
+        globalThis.localStorage?.removeItem("pen.streamingMutations");
+      } catch {
+        // ignore
+      }
+    });
+
+    it("mutates the store before the tool call completes, and the completed call leaves exactly one undo entry", async () => {
+      const { response: firstResponse, push, close } = controlledSseResponse();
+      const requests: Array<Record<string, unknown>> = [];
+      const fetchMock = vi.fn(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+          requests.push(JSON.parse(String(init?.body)));
+          if (requests.length === 1) {
+            return firstResponse;
+          }
+          return sseResponse([
+            { type: "start" },
+            { type: "start-step" },
+            { type: "text-start", id: "t1" },
+            { type: "text-delta", id: "t1", delta: "done" },
+            { type: "text-end", id: "t1" },
+            { type: "finish-step" },
+            { type: "finish" },
+          ]);
+        }
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      const pastBefore = useHistoryStore.getState().past.length;
+      const sessionId = `batch-stream-${Date.now()}`;
+      const { result } = renderHook(() => useDesignChat({ sessionId }));
+
+      act(() => result.current.setInput("build a card"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+      push({ type: "start" });
+      push({ type: "start-step" });
+      push({
+        type: "tool-input-start",
+        toolCallId: "batch-1",
+        toolName: "batch_design",
+      });
+      push({
+        type: "tool-input-delta",
+        toolCallId: "batch-1",
+        inputTextDelta:
+          '{"operations":"card=I(document, {type: \\"frame\\", name: \\"Card\\", width: 100, height: 100})\\n',
+      });
+      await flushStream();
+
+      // Mid-stream, well before tool-input-available: the first statement
+      // has already landed on the REAL scene, and no undo entry exists yet
+      // (streaming never calls saveHistory).
+      await waitFor(() => {
+        expect(
+          Object.values(useSceneStore.getState().nodesById).some(
+            (n) => n.name === "Card"
+          )
+        ).toBe(true);
+      });
+      expect(useHistoryStore.getState().past.length).toBe(pastBefore);
+
+      push({
+        type: "tool-input-delta",
+        toolCallId: "batch-1",
+        inputTextDelta:
+          'card2=I(document, {type: \\"frame\\", name: \\"Card2\\", width: 50, height: 50})\\n',
+      });
+      await flushStream();
+
+      await waitFor(() => {
+        expect(
+          Object.values(useSceneStore.getState().nodesById).some(
+            (n) => n.name === "Card2"
+          )
+        ).toBe(true);
+      });
+      expect(useHistoryStore.getState().past.length).toBe(pastBefore);
+
+      const fullOperations =
+        'card=I(document, {type: "frame", name: "Card", width: 100, height: 100})\n' +
+        'card2=I(document, {type: "frame", name: "Card2", width: 50, height: 50})\n';
+
+      await act(async () => {
+        push({
+          type: "tool-input-available",
+          toolCallId: "batch-1",
+          toolName: "batch_design",
+          input: { operations: fullOperations },
+        });
+        push({ type: "finish-step" });
+        push({ type: "finish" });
+        close();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2), {
+        timeout: 5000,
+      });
+      await waitFor(() => expect(result.current.status).toBe("ready"), {
+        timeout: 5000,
+      });
+
+      const cards = Object.values(useSceneStore.getState().nodesById).filter(
+        (n) => n.name === "Card"
+      );
+      const card2s = Object.values(useSceneStore.getState().nodesById).filter(
+        (n) => n.name === "Card2"
+      );
+      expect(cards).toHaveLength(1);
+      expect(card2s).toHaveLength(1);
+      // The whole batch — streamed part included — is exactly one undo step.
+      expect(useHistoryStore.getState().past.length).toBe(pastBefore + 1);
+    });
+  });
+
+  // HIGH finding regression: a progressive batch_design session must be
+  // abandoned (rolled back, no undo entry) even when the turn ends WITHOUT
+  // `onToolCall` ever firing for that call — the only two terminal paths
+  // that previously cleaned up a streaming session (abort / chat.status ===
+  // "error") don't cover either of these. See the "ready" sweep effect in
+  // useDesignChat.ts for the full explanation of why chat.status === "ready"
+  // is the right (and only) signal for both.
+  describe("abandoning a streaming batch_design call that never reaches onToolCall", () => {
+    function sseResponse(chunks: Array<Record<string, unknown>>): Response {
+      const body =
+        chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("") +
+        "data: [DONE]\n\n";
+      return new Response(body, {
+        status: 200,
+        headers: {
+          "content-type": "text/event-stream",
+          "x-vercel-ai-ui-message-stream": "v1",
+        },
+      });
+    }
+
+    function controlledSseResponse() {
+      let controllerRef: ReadableStreamDefaultController<Uint8Array> | undefined;
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controllerRef = controller;
+        },
+      });
+      const push = (chunk: Record<string, unknown>) => {
+        controllerRef!.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+      };
+      const close = () => {
+        controllerRef!.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controllerRef!.close();
+      };
+      const response = new Response(stream, {
+        status: 200,
+        headers: {
+          "content-type": "text/event-stream",
+          "x-vercel-ai-ui-message-stream": "v1",
+        },
+      });
+      return { response, push, close, controller: controllerRef! };
+    }
+
+    async function flushStream(ms = 20) {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, ms));
+      });
+    }
+
+    afterEach(() => {
+      try {
+        globalThis.localStorage?.removeItem("pen.streamingMutations");
+      } catch {
+        // ignore
+      }
+    });
+
+    // Path 1: a truncated turn. The provider (one of the models used here
+    // fails this way roughly half the time) stops streaming mid-call: no
+    // tool-input-available, no tool-input-error, just finish-step/finish.
+    // The tool part is stuck at state "input-streaming" forever, so
+    // onToolCall never fires and lastAssistantMessageIsCompleteWithToolCalls
+    // never lets the SDK auto-continue either — chat.status settles into
+    // "ready" for good, with the call abandoned by the provider.
+    it("rolls back a batch_design mutation when the turn ends with the tool part still input-streaming", async () => {
+      const { response, push, close } = controlledSseResponse();
+      const fetchMock = vi.fn(async () => response);
+      vi.stubGlobal("fetch", fetchMock);
+
+      const pastBefore = useHistoryStore.getState().past.length;
+      const sessionId = `batch-truncated-${Date.now()}`;
+      const { result } = renderHook(() => useDesignChat({ sessionId }));
+
+      act(() => result.current.setInput("build a card"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+      push({ type: "start" });
+      push({ type: "start-step" });
+      push({
+        type: "tool-input-start",
+        toolCallId: "batch-trunc-1",
+        toolName: "batch_design",
+      });
+      push({
+        type: "tool-input-delta",
+        toolCallId: "batch-trunc-1",
+        inputTextDelta:
+          '{"operations":"card=I(document, {type: \\"frame\\", name: \\"Card\\", width: 100, height: 100})\\n',
+      });
+      await flushStream();
+
+      await waitFor(() => {
+        expect(
+          Object.values(useSceneStore.getState().nodesById).some(
+            (n) => n.name === "Card"
+          )
+        ).toBe(true);
+      });
+
+      // The provider stops here — the turn ends without ever resolving the
+      // tool call.
+      await act(async () => {
+        push({ type: "finish-step" });
+        push({ type: "finish" });
+        close();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+
+      await waitFor(() => expect(result.current.status).toBe("ready"));
+
+      // Never auto-continues: the tool part never resolved to output-available
+      // or output-error, so lastAssistantMessageIsCompleteWithToolCalls stays
+      // false and the SDK has nothing to send a follow-up request for.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      await waitFor(() => {
+        expect(
+          Object.values(useSceneStore.getState().nodesById).some(
+            (n) => n.name === "Card"
+          )
+        ).toBe(false);
+      });
+      expect(useHistoryStore.getState().past.length).toBe(pastBefore);
+    });
+
+    // Path 2: a tool-input validation failure (e.g. the backend's zod
+    // `.transform()` rejecting the final batch_design args). The SDK's
+    // "tool-input-error" chunk flips the part straight to state
+    // "output-error" WITHOUT ever invoking onToolCall — that callback is
+    // wired only to the sibling "tool-input-available" branch. output-error
+    // DOES count as "complete", so the SDK auto-continues with the error as
+    // the tool result — but the progressive mutation still needs rolling
+    // back, and chat.status still passes through "ready" once, which is what
+    // the sweep effect needs.
+    it("rolls back a batch_design mutation when the tool call errors out without onToolCall (tool-input-error)", async () => {
+      const { response: firstResponse, push, close } = controlledSseResponse();
+      const requests: Array<Record<string, unknown>> = [];
+      const fetchMock = vi.fn(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+          requests.push(JSON.parse(String(init?.body)));
+          if (requests.length === 1) {
+            return firstResponse;
+          }
+          return sseResponse([
+            { type: "start" },
+            { type: "start-step" },
+            { type: "text-start", id: "t1" },
+            { type: "text-delta", id: "t1", delta: "ok" },
+            { type: "text-end", id: "t1" },
+            { type: "finish-step" },
+            { type: "finish" },
+          ]);
+        }
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      const pastBefore = useHistoryStore.getState().past.length;
+      const sessionId = `batch-input-error-${Date.now()}`;
+      const { result } = renderHook(() => useDesignChat({ sessionId }));
+
+      act(() => result.current.setInput("build a card"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+      push({ type: "start" });
+      push({ type: "start-step" });
+      push({
+        type: "tool-input-start",
+        toolCallId: "batch-err-1",
+        toolName: "batch_design",
+      });
+      push({
+        type: "tool-input-delta",
+        toolCallId: "batch-err-1",
+        inputTextDelta:
+          '{"operations":"card=I(document, {type: \\"frame\\", name: \\"Card\\", width: 100, height: 100})\\n',
+      });
+      await flushStream();
+
+      await waitFor(() => {
+        expect(
+          Object.values(useSceneStore.getState().nodesById).some(
+            (n) => n.name === "Card"
+          )
+        ).toBe(true);
+      });
+
+      await act(async () => {
+        push({
+          type: "tool-input-error",
+          toolCallId: "batch-err-1",
+          toolName: "batch_design",
+          input: { operations: "rejected by the backend's zod .transform()" },
+          errorText: "Invalid tool input",
+        });
+        push({ type: "finish-step" });
+        push({ type: "finish" });
+        close();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+
+      await waitFor(() => expect(result.current.status).toBe("ready"));
+
+      await waitFor(() => {
+        expect(
+          Object.values(useSceneStore.getState().nodesById).some(
+            (n) => n.name === "Card"
+          )
+        ).toBe(false);
+      });
+      expect(useHistoryStore.getState().past.length).toBe(pastBefore);
     });
   });
 });

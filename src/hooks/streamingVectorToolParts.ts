@@ -1,10 +1,14 @@
 import type { UIMessage } from "ai";
+import { extractStreamingToolInputs } from "@/hooks/streamingToolParts";
 
 /**
  * Partial `draw_vector` input observed mid-stream, extracted from a
  * `tool-draw_vector` UI message part while it is still `input-streaming`.
- * Pure and typed against no other tool part shape, so this stays correct
- * even as more streaming tools are added later.
+ *
+ * This is now a thin, `draw_vector`-shaped wrapper over the generic
+ * `extractStreamingToolInputs` — behavior (dedupe, state filter, ordering)
+ * is unchanged; only the extraction plumbing moved to
+ * `src/hooks/streamingToolParts.ts` so other streaming tools can reuse it.
  */
 export interface StreamingVectorInput {
   toolCallId: string;
@@ -12,23 +16,7 @@ export interface StreamingVectorInput {
   commands: string;
 }
 
-interface PartialDrawVectorInput {
-  name?: unknown;
-  commands?: unknown;
-}
-
-interface DrawVectorToolPart {
-  type: "tool-draw_vector";
-  state: string;
-  toolCallId: string;
-  input?: PartialDrawVectorInput;
-}
-
-function isDrawVectorPart(
-  part: UIMessage["parts"][number]
-): part is UIMessage["parts"][number] & DrawVectorToolPart {
-  return (part as { type?: unknown }).type === "tool-draw_vector";
-}
+const DRAW_VECTOR_TOOL_NAMES = new Set(["draw_vector"]);
 
 /**
  * Extracts every currently-streaming `draw_vector` tool call across the
@@ -40,28 +28,19 @@ function isDrawVectorPart(
 export function extractStreamingVectorInputs(
   messages: UIMessage[]
 ): StreamingVectorInput[] {
-  const byToolCallId = new Map<string, StreamingVectorInput>();
+  const results: StreamingVectorInput[] = [];
 
-  for (const message of messages) {
-    if (message.role !== "assistant") continue;
+  for (const { toolCallId, input } of extractStreamingToolInputs(
+    messages,
+    DRAW_VECTOR_TOOL_NAMES
+  )) {
+    const commands = input.commands;
+    if (typeof commands !== "string") continue;
 
-    for (const part of message.parts) {
-      if (!isDrawVectorPart(part)) continue;
-      if (part.state !== "input-streaming") continue;
+    const name = typeof input.name === "string" ? input.name : "Vector";
 
-      const commands = part.input?.commands;
-      if (typeof commands !== "string") continue;
-
-      const name =
-        typeof part.input?.name === "string" ? part.input.name : "Vector";
-
-      byToolCallId.set(part.toolCallId, {
-        toolCallId: part.toolCallId,
-        name,
-        commands,
-      });
-    }
+    results.push({ toolCallId, name, commands });
   }
 
-  return Array.from(byToolCallId.values());
+  return results;
 }

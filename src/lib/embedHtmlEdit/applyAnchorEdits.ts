@@ -40,6 +40,20 @@ export interface AnchorEditResult {
   normalizedMatches: number;
 }
 
+export interface ApplyAnchorEditsOptions {
+  /**
+   * Best-effort mode for progressive (streaming) application: an edit whose
+   * anchor is missing, or ambiguous while `replaceAll` is not set, is SKIPPED
+   * instead of throwing, and a would-be tag-balance violation is left in the
+   * result rather than rejected. The caller always re-derives from the
+   * original HTML on the next frame, so a lenient result is a throwaway
+   * intermediate render, never the authoritative one — the final,
+   * non-lenient pass still enforces every rule below. Off by default so
+   * every existing (non-streaming) caller is byte-identical.
+   */
+  lenient?: boolean;
+}
+
 export class AnchorEditError extends Error {
   constructor(message: string) {
     super(message);
@@ -166,17 +180,27 @@ function spliceAll(source: string, matches: NormalizedMatch[], newString: string
   return result;
 }
 
-export function applyAnchorEdits(html: string, edits: AnchorEdit[]): AnchorEditResult {
+export function applyAnchorEdits(
+  html: string,
+  edits: AnchorEdit[],
+  options: ApplyAnchorEditsOptions = {},
+): AnchorEditResult {
+  const { lenient = false } = options;
   let current = html;
   let replacements = 0;
   let normalizedMatches = 0;
 
-  const originalBalance = checkTagBalance(html);
+  // Skipped entirely in lenient mode: its only consumer below is gated on
+  // `!lenient` too, and lenient runs on every streaming frame — computing a
+  // result that can never be used would waste main-thread work on exactly
+  // the window this feature exists to keep responsive.
+  const originalBalance = lenient ? null : checkTagBalance(html);
 
   for (let i = 0; i < edits.length; i += 1) {
     const edit = edits[i];
     const label = `Edit ${i + 1}`;
     if (edit.oldString.length === 0) {
+      if (lenient) continue;
       throw new AnchorEditError(`${label}: oldString must not be empty.`);
     }
 
@@ -189,6 +213,7 @@ export function applyAnchorEdits(html: string, edits: AnchorEdit[]): AnchorEditR
       const normMatches = findNormalizedMatches(current, edit.oldString);
 
       if (normMatches.length === 0) {
+        if (lenient) continue;
         const hints = nearMissContexts(current, edit.oldString);
         throw new AnchorEditError(
           `${label}: oldString not found. Nothing was changed. ` +
@@ -201,6 +226,7 @@ export function applyAnchorEdits(html: string, edits: AnchorEdit[]): AnchorEditR
       }
 
       if (normMatches.length > 1 && !edit.replaceAll) {
+        if (lenient) continue;
         throw new AnchorEditError(
           `${label}: oldString was not found byte-exact, and a whitespace-normalized match is ` +
             `ambiguous (${normMatches.length} occurrences). Nothing was changed. ` +
@@ -215,6 +241,7 @@ export function applyAnchorEdits(html: string, edits: AnchorEdit[]): AnchorEditR
     }
 
     if (occurrences > 1 && !edit.replaceAll) {
+      if (lenient) continue;
       throw new AnchorEditError(
         `${label}: oldString occurs ${occurrences} times. Nothing was changed. ` +
           `Extend the anchor with surrounding text to make it unique, or pass replaceAll: true. ` +
@@ -236,7 +263,11 @@ export function applyAnchorEdits(html: string, edits: AnchorEdit[]): AnchorEditR
 
   // Differential check: only refuse when the edit is what broke the balance —
   // a screen that was already malformed before the edit must stay editable.
-  if (originalBalance.balanced) {
+  // In lenient mode a transient imbalance is expected (an anchor edit may
+  // straddle a still-streaming close tag) and is left as-is: the caller
+  // re-derives from scratch on the next frame, and the final, non-lenient
+  // pass is what actually gates this.
+  if (!lenient && originalBalance !== null && originalBalance.balanced) {
     const resultBalance = checkTagBalance(current);
     if (!resultBalance.balanced && resultBalance.unclosed) {
       const { tagName, index } = resultBalance.unclosed;

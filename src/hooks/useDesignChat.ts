@@ -22,9 +22,12 @@ import { toolHandlers, type ToolExecutionContext } from "@/lib/toolRegistry";
 import { runToolCall } from "@/lib/toolCallQueue";
 import type { ChatLaunchPayload } from "@/types/chat";
 import { hasPendingAskUser } from "@/components/chat/pendingAskUser";
-import { useAiVectorPreviewStore } from "@/store/aiVectorPreviewStore";
-import { upsertStreamingVectorPreview } from "@/lib/tools/drawVector/previewController";
-import { extractStreamingVectorInputs } from "@/hooks/streamingVectorToolParts";
+import { extractStreamingToolInputs } from "@/hooks/streamingToolParts";
+import {
+  streamingToolAdapters,
+  streamingToolNames,
+  getStreamingToolAdapter,
+} from "@/lib/streamingTools";
 
 const STREAM_RENDER_THROTTLE_MS = 50;
 
@@ -323,6 +326,18 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
         toolCallId: toolCall.toolCallId,
         output: result,
       });
+      // Record that this streaming-tool call's handler actually ran (see
+      // `completedStreamingCallKeysRef` below) — the "ready" sweep effect
+      // uses this, not part state, to tell "handler resolved" apart from
+      // "handler never got to run". `completedStreamingCallKeysRef` is
+      // declared further down in this function body, but that's fine: this
+      // closure isn't invoked until the AI SDK calls back into it, by which
+      // time every hook in this render has already run and the ref exists.
+      if (streamingToolNames.has(toolCall.toolName)) {
+        completedStreamingCallKeysRef.current.add(
+          streamingToolKey(toolCall.toolName, toolCall.toolCallId)
+        );
+      }
     },
   });
 
@@ -351,33 +366,58 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   const awaitingAnswer = hasPendingAskUser(chat.messages);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Every draw_vector toolCallId this session has ever staged a preview for,
-  // and the subset that were abandoned (stop/error/unmount) rather than
-  // completed. AI SDK v6 deliberately keeps the partial assistant message —
-  // and its still-`input-streaming` tool part — in `chat.messages` after
-  // `Chat.stop()`/an aborted request (that's what `ignoreIncompleteToolCalls`
-  // in `convertToModelMessages` exists for). `clearVectorPreviewSession`
-  // wipes both drafts and the preview store's own `finalizedKeys` on those
-  // terminal paths, so without a separate, never-cleared record here, the
-  // staging effect below would re-upsert a preview for that abandoned call
-  // the moment `chat.messages` next changes (e.g. sending a follow-up
-  // message) — painting a ghost path on the canvas indefinitely. Sets, not
-  // store state, because they must survive exactly the clears that wipe the
-  // store.
-  const seenVectorToolCallIdsRef = useRef<Set<string>>(new Set());
-  const abandonedVectorToolCallIdsRef = useRef<Set<string>>(new Set());
+  // Every `${toolName}:${toolCallId}` this session has ever staged a
+  // streaming frame for (across every registered streaming-tool adapter,
+  // src/lib/streamingTools/), and the subset that were abandoned
+  // (stop/error/unmount) rather than completed. AI SDK v6 deliberately keeps
+  // the partial assistant message — and its still-`input-streaming` tool
+  // part — in `chat.messages` after `Chat.stop()`/an aborted request (that's
+  // what `ignoreIncompleteToolCalls` in `convertToModelMessages` exists for).
+  // `clearStreamingToolSession` wipes each adapter's own per-session state
+  // (drafts, in-progress mutations, `finalizedKeys`, ...) on those terminal
+  // paths, so without a separate, never-cleared record here, the staging
+  // effect below would re-dispatch a frame for that abandoned call the
+  // moment `chat.messages` next changes (e.g. sending a follow-up message).
+  // A ref Set, not store state, because it must survive exactly the clears
+  // that wipe each adapter's own store.
+  const seenStreamingCallsRef = useRef<Map<string, { toolName: string; toolCallId: string }>>(
+    new Map()
+  );
+  const abandonedStreamingToolKeysRef = useRef<Set<string>>(new Set());
 
-  // Transient AI vector-drawing previews (src/store/aiVectorPreviewStore.ts)
-  // are keyed by sessionId+toolCallId and must never outlive this session on
-  // any terminal path except an ordinary "ready" — the final draw_vector
-  // handler owns commit-before-clear on success, and a paused ask_user turn
-  // is not a terminal path at all. clearSession only removes drafts/finalized
-  // keys for THIS session, so concurrent sessions are unaffected.
-  const clearVectorPreviewSession = useCallback(() => {
-    for (const id of seenVectorToolCallIdsRef.current) {
-      abandonedVectorToolCallIdsRef.current.add(id);
+  // Every `${toolName}:${toolCallId}` whose handler actually ran to
+  // completion (the `onToolCall` branch above resolved and delivered
+  // `addToolOutput`). This is deliberately NOT derived from a tool part's
+  // `state` in `chat.messages` — see the "ready" sweep effect below for why
+  // that would be unreliable for the one case it exists to catch (a
+  // validation failure never invokes `onToolCall` at all, yet still reaches
+  // `state: "output-available"`'s sibling terminal state before this hook
+  // gets a chance to look). A ref, not store state: it only gates the sweep
+  // effect's own read, so it never needs to trigger a re-render.
+  const completedStreamingCallKeysRef = useRef<Set<string>>(new Set());
+
+  function streamingToolKey(toolName: string, toolCallId: string): string {
+    return `${toolName}:${toolCallId}`;
+  }
+
+  // Every streaming-tool adapter's per-session state (transient previews,
+  // in-flight progressive mutations, ...) must never outlive this session on
+  // any terminal path except an ordinary "ready" — the final tool handler
+  // owns commit-before-clear on success, and a paused ask_user turn is not a
+  // terminal path at all. Each adapter's `onSessionClear` only touches THIS
+  // session, so concurrent sessions are unaffected.
+  const clearStreamingToolSession = useCallback(() => {
+    for (const [key, call] of seenStreamingCallsRef.current) {
+      if (abandonedStreamingToolKeysRef.current.has(key)) continue;
+      abandonedStreamingToolKeysRef.current.add(key);
+      getStreamingToolAdapter(call.toolName)?.onAbandon({
+        sessionId,
+        toolCallId: call.toolCallId,
+      });
     }
-    useAiVectorPreviewStore.getState().clearSession(sessionId);
+    for (const adapter of streamingToolAdapters) {
+      adapter.onSessionClear(sessionId);
+    }
   }, [sessionId]);
 
   useEffect(() => {
@@ -386,7 +426,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     abortControllerRef.current = controller;
 
     const onAbort = () => {
-      clearVectorPreviewSession();
+      clearStreamingToolSession();
       chat.stop();
     };
     controller.signal.addEventListener("abort", onAbort);
@@ -396,54 +436,63 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     return () => {
       controller.signal.removeEventListener("abort", onAbort);
       unregisterAbortController(sessionId);
-      // Unmount cleanup: nothing else observes this session's previews once
-      // the hook is gone, so clear them here too.
-      clearVectorPreviewSession();
+      // Unmount cleanup: nothing else observes this session's streaming-tool
+      // state once the hook is gone, so clear it here too.
+      clearStreamingToolSession();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, registerAbortController, unregisterAbortController]);
 
-  // Observe partial draw_vector tool input as it streams in and stage it in
-  // the transient preview store. Complete, validated final input (delivered
-  // via the tool handler in onToolCall above) remains the sole barrier for
-  // creating the real scene node — this effect only ever renders a preview.
+  // Observe partial tool input as it streams in and dispatch it to whichever
+  // registered adapter (src/lib/streamingTools/) owns that tool name.
+  // Complete, validated final input (delivered via the tool handler in
+  // onToolCall above) remains the sole barrier for a tool's "real" effect —
+  // a transient preview for `draw_vector`, or a real (but rollback-able)
+  // scene mutation for the progressive-mutation adapters — this effect only
+  // ever forwards partial frames.
   //
   // Two guards, for two different failure modes of re-scanning the full
   // `chat.messages` array on every update:
   // - `chat.status !== "streaming"`: staging is only ever meaningful while a
   //   turn is actively in flight, so skip entirely otherwise (cheap, and
   //   covers most idle re-renders).
-  // - `abandonedVectorToolCallIdsRef`: the status guard alone is NOT enough —
+  // - `abandonedStreamingToolKeysRef`: the status guard alone is NOT enough —
   //   a stale `input-streaming` part from an abandoned call survives inside
   //   `chat.messages` (see the ref's declaration above) and `chat.status` is
   //   "streaming" again the moment a follow-up message is sent, so the same
-  //   stale part would otherwise pass the status guard and get re-staged.
-  //   Once a toolCallId is recorded as abandoned it is blocked permanently.
+  //   stale part would otherwise pass the status guard and get re-dispatched.
+  //   Once a key is recorded as abandoned it is blocked permanently.
   useEffect(() => {
     if (chat.status !== "streaming") {
       return;
     }
-    for (const streamed of extractStreamingVectorInputs(chat.messages)) {
-      if (abandonedVectorToolCallIdsRef.current.has(streamed.toolCallId)) {
+    for (const streamed of extractStreamingToolInputs(
+      chat.messages,
+      streamingToolNames
+    )) {
+      const key = streamingToolKey(streamed.toolName, streamed.toolCallId);
+      if (abandonedStreamingToolKeysRef.current.has(key)) {
         continue;
       }
-      seenVectorToolCallIdsRef.current.add(streamed.toolCallId);
-      upsertStreamingVectorPreview({
+      seenStreamingCallsRef.current.set(key, {
+        toolName: streamed.toolName,
+        toolCallId: streamed.toolCallId,
+      });
+      getStreamingToolAdapter(streamed.toolName)?.onFrame({
         sessionId,
         toolCallId: streamed.toolCallId,
-        name: streamed.name,
-        commands: streamed.commands,
+        input: streamed.input,
       });
     }
   }, [chat.messages, chat.status, sessionId]);
 
   // A failed request is a terminal path for this turn — any in-flight
-  // preview belongs to a call that will never complete, so it must not
-  // linger. An ask_user pause is a distinct, non-error chat.status and is
-  // intentionally excluded from this effect.
+  // streaming-tool state belongs to a call that will never complete, so it
+  // must not linger. An ask_user pause is a distinct, non-error chat.status
+  // and is intentionally excluded from this effect.
   useEffect(() => {
     if (chat.status === "error") {
-      clearVectorPreviewSession();
+      clearStreamingToolSession();
       // Coarse categorization only — never chat.error.message itself, which
       // can echo back request/response content.
       const message = chat.error?.message;
@@ -456,7 +505,65 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       track("agent_turn_failed", { error_kind: errorKind });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chat.status, clearVectorPreviewSession]);
+  }, [chat.status, clearStreamingToolSession]);
+
+  // A "ready" transition is the other terminal path for a streaming-tool
+  // call, alongside abort/error/unmount above — and it is the ONLY signal
+  // for two provider failure modes that never touch `chat.status ===
+  // "error"` at all (see the HIGH finding in
+  // docs/superpowers/specs/2026-09-13-streaming-tool-mutations-design.md):
+  //
+  // - A truncated turn: the provider stops streaming mid-call, so the tool
+  //   part is stuck at `state: "input-streaming"` forever. `onToolCall` is
+  //   only invoked from the SDK's "tool-input-available" branch (see
+  //   node_modules/ai/dist/index.mjs, the `case "tool-input-available":`
+  //   block awaiting `onToolCall`), so it never fires here either.
+  //   `lastAssistantMessageIsCompleteWithToolCalls` (same file, `every` over
+  //   `state === "output-available" || state === "output-error"`) treats an
+  //   `input-streaming` part as incomplete, so the SDK never auto-continues
+  //   — the turn just settles into "ready" for good, with the call
+  //   abandoned by the model.
+  // - A tool-input validation failure (e.g. the backend's zod
+  //   `.transform()` rejecting the final `batch_design` args under the
+  //   embed-only prototype policy): the SDK's `case "tool-input-error":`
+  //   branch (same file) flips the part straight to `state: "output-error"`
+  //   WITHOUT ever calling `onToolCall` — that callback lives only in the
+  //   sibling "tool-input-available" case. `output-error` DOES count as
+  //   "complete" for `lastAssistantMessageIsCompleteWithToolCalls`, so this
+  //   path is usually transient (the SDK auto-continues with the error as
+  //   the tool result) — but `chat.status` still passes through "ready" once
+  //   on the way, which is all this effect needs.
+  //
+  // Both leave `seenStreamingCallsRef` holding a call whose handler never
+  // ran — so `completedStreamingCallKeysRef` (set only from inside the
+  // `onToolCall` branch above) never gained its key — while progressive
+  // mutations may already be committed to the scene with no undo entry
+  // (streaming never calls `saveHistory`). Sweep every such call on every
+  // "ready" transition and abandon it (roll back / restore original HTML),
+  // exactly like the abort/error/unmount paths.
+  //
+  // This can NEVER misfire on a call that is merely between
+  // "tool-input-available" and its handler resolving: the stream reader
+  // above `await`s `onToolCall` synchronously, in place, before it advances
+  // to any later chunk — so `chat.status` cannot reach "ready" while a
+  // handler is still in flight. By the time "ready" is observed, every call
+  // that ever reached "tool-input-available" has either completed (recorded
+  // in `completedStreamingCallKeysRef`) or errored out (never recorded, and
+  // correctly swept here).
+  useEffect(() => {
+    if (chat.status !== "ready") {
+      return;
+    }
+    for (const [key, call] of seenStreamingCallsRef.current) {
+      if (abandonedStreamingToolKeysRef.current.has(key)) continue;
+      if (completedStreamingCallKeysRef.current.has(key)) continue;
+      abandonedStreamingToolKeysRef.current.add(key);
+      getStreamingToolAdapter(call.toolName)?.onAbandon({
+        sessionId,
+        toolCallId: call.toolCallId,
+      });
+    }
+  }, [chat.status, chat.messages, sessionId]);
 
   // Hands a payload to the transport. Writes no React state of its own, so
   // the queue-drain effect below can call it directly without triggering a
@@ -641,12 +748,13 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   }, [chat]);
 
   // Wraps chat.stop() so a user-initiated stop clears this session's
-  // in-flight vector previews first — otherwise a stale preview would keep
-  // rendering after the stream that was drawing it was cancelled.
+  // in-flight streaming-tool state first — otherwise a stale preview or
+  // partially-applied mutation would keep rendering after the stream that
+  // produced it was cancelled.
   const stop = useCallback(() => {
-    clearVectorPreviewSession();
+    clearStreamingToolSession();
     chat.stop();
-  }, [chat, clearVectorPreviewSession]);
+  }, [chat, clearStreamingToolSession]);
 
   // Derived, not stored: the offline banner is exactly "a send was refused
   // and we are still offline". Coming back online retires it on its own, so

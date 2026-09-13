@@ -13,16 +13,26 @@ const OP_TYPES = new Set<string>(["I", "C", "U", "R", "M", "D", "G"]);
 export const MAX_OPERATIONS = 25;
 
 /**
+ * True for a physical line that contributes nothing to the script: blank,
+ * a `//`/`#` comment, or wrapper/fence noise. Shared by `parseOperations`,
+ * `parseCompleteOperationsPrefix` and `createCachedOperationsParser` so the
+ * three don't drift on what "skip this line" means.
+ */
+function isSkippableLine(raw: string): boolean {
+  return !raw || raw.startsWith("//") || raw.startsWith("#") || isWrapperNoiseLine(raw);
+}
+
+/**
  * Parse a batch_design operations script into structured operations.
  * Each line is: [binding=]OP(arg1, arg2, ...)
  */
 export function parseOperations(input: string): ParsedOperation[] {
-  const lines = splitOperationLines(stripWrapperNoiseLines(input));
+  const { lines } = splitOperationLines(stripWrapperNoiseLines(input));
   const operations: ParsedOperation[] = [];
 
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i].text.trim();
-    if (!raw || raw.startsWith("//") || raw.startsWith("#") || isWrapperNoiseLine(raw)) {
+    if (isSkippableLine(raw)) {
       continue;
     }
 
@@ -166,11 +176,25 @@ function createQuoteScanner() {
   };
 }
 
-function splitOperationLines(input: string): Array<{ text: string; line: number }> {
+/**
+ * Result of the character-level line scan. `lastFlushedAtNewline` says how
+ * the LAST entry in `lines` was produced: `true` if it ended at a top-level
+ * `\n` (a genuinely finished statement), `false` if it was only flushed
+ * because the input ran out (the tail-flush after the loop) — i.e. it is
+ * whatever statement was still being typed when the input was cut off.
+ * Irrelevant to `parseOperations` (which always sees the whole, final
+ * script and treats a trailing unterminated line as complete, same as
+ * before), but load-bearing for `parseCompleteOperationsPrefix`, which must
+ * drop exactly that in-progress tail.
+ */
+function splitOperationLines(
+  input: string,
+): { lines: Array<{ text: string; line: number }>; lastFlushedAtNewline: boolean } {
   const parts: Array<{ text: string; line: number }> = [];
   let current = "";
   let currentStartLine = 1;
   let line = 1;
+  let lastFlushedAtNewline = false;
 
   let parenDepth = 0;
   let braceDepth = 0;
@@ -207,14 +231,143 @@ function splitOperationLines(input: string): Array<{ text: string; line: number 
       parts.push({ text: current, line: currentStartLine });
       current = "";
       currentStartLine = line;
+      lastFlushedAtNewline = true;
     }
   }
 
   if (current.trim()) {
     parts.push({ text: current, line: currentStartLine });
+    lastFlushedAtNewline = false;
   }
 
-  return parts;
+  return { lines: parts, lastFlushedAtNewline };
+}
+
+/**
+ * Parse only the statements that are already syntactically COMPLETE in a
+ * partial (still-streaming) `batch_design` script. Used by
+ * `progressive.ts` to apply a script statement-by-statement while the model
+ * is still typing it — see "2. `batch_design` — progressive real
+ * application" in
+ * docs/superpowers/specs/2026-09-13-streaming-tool-mutations-design.md.
+ *
+ * Reuses the exact same noise-stripping + character-level scanner as
+ * `parseOperations`, so "complete" here means precisely what a finished
+ * script would parse as up to that point — no separate, potentially
+ * drifting notion of completeness. Two differences from `parseOperations`:
+ *
+ * 1. The statement still being typed (the tail flushed at end-of-input
+ *    rather than a top-level `\n`) is always DROPPED, even if it happens to
+ *    already look parseable — a later delta can still change its shape
+ *    (e.g. `I(document, {name: "Car` looks like a truncated string, but so
+ *    does `I(document, {name: "Card"})` one delta earlier, before the
+ *    closing brace/paren arrived). Only a statement terminated by its own
+ *    top-level newline is trusted as final.
+ * 2. Never throws. `parseLine` can still throw on a genuinely malformed
+ *    statement (not just an incomplete one) — for example a stray token
+ *    that will never become valid no matter how much more text streams in.
+ *    Rather than fail the whole frame, this stops at (excluding) the first
+ *    statement it can't parse and returns everything before it. The caller
+ *    sees whatever prefix was good and simply gets nothing new next frame
+ *    until the model's output resolves the issue (or the final, complete
+ *    script is parsed normally by `parseOperations`, which DOES surface the
+ *    error).
+ */
+export function parseCompleteOperationsPrefix(partial: string): ParsedOperation[] {
+  // Delegates to a throwaway `CachedOperationsParser` — a cache that starts
+  // (and stays) empty for a single one-shot call behaves identically to the
+  // un-cached loop this used to be, so standalone callers/tests see no
+  // difference. See `createCachedOperationsParser` for the stateful version
+  // `progressive.ts` actually uses across frames of the same stream.
+  return createCachedOperationsParser().parse(partial);
+}
+
+/** The physical lines of `partial` that are already syntactically complete
+ * — i.e. exactly what `parseCompleteOperationsPrefix`'s doc comment above
+ * describes, factored out so both it and `createCachedOperationsParser`
+ * share one implementation of "what counts as complete" instead of two.
+ */
+function collectCompleteOperationLines(partial: string): Array<{ text: string; line: number }> {
+  const { lines, lastFlushedAtNewline } = splitOperationLines(stripWrapperNoiseLines(partial));
+  return lastFlushedAtNewline ? lines : lines.slice(0, -1);
+}
+
+export interface CachedOperationsParser {
+  /**
+   * Feed the LATEST full accumulated partial script (never a delta — the
+   * caller always has the whole string streamed so far) and get back every
+   * operation that is complete so far. A statement whose raw text is
+   * unchanged from a previous call comes back as the SAME `ParsedOperation`
+   * object — `parseLine` (and the `JSON5.parse` inside it) never runs twice
+   * for the same statement.
+   */
+  parse(partial: string): ParsedOperation[];
+}
+
+/**
+ * A per-stream, stateful wrapper around `parseCompleteOperationsPrefix`'s
+ * logic. `progressive.ts` calls `parse` once per streamed input delta of a
+ * single `batch_design` tool call; without this cache, every one of those
+ * calls re-ran `parseLine` → `tokenizeArgs` → `JSON5.parse` for every
+ * statement that was ALREADY complete in a previous delta — for a
+ * showcase-sized batch (25 statements, tens of KB of embed HTML) streamed
+ * over 20-40s at up to ~20 frames/sec, that's thousands of redundant JSON5
+ * parses of multi-KB objects on the main thread, quadratic in script length.
+ * This keeps the (cheap) character-level line scan re-running each frame —
+ * it's a plain scan with no JSON parsing, negligible next to the cost this
+ * exists to remove — but reuses the already-parsed `ParsedOperation` for any
+ * statement whose raw text didn't change, so the expensive part scales with
+ * the number of NEWLY completed statements, not the total.
+ */
+export function createCachedOperationsParser(): CachedOperationsParser {
+  let cached: ParsedOperation[] = [];
+
+  return {
+    parse(partial: string): ParsedOperation[] {
+      const completeLines = collectCompleteOperationLines(partial);
+
+      const operations: ParsedOperation[] = [];
+      let cacheIndex = 0;
+      // Once one statement fails to match the cache at its position, every
+      // later one is guaranteed new too (the prefix only ever grows in the
+      // normal streaming case) — stop even TRYING the cache at that point,
+      // rather than keep probing `cached[cacheIndex]` at a now-frozen index,
+      // which could otherwise coincidentally match an unrelated cached
+      // statement that happens to share raw text.
+      let reuseExhausted = false;
+      for (const entry of completeLines) {
+        const raw = entry.text.trim();
+        if (isSkippableLine(raw)) {
+          continue;
+        }
+
+        if (!reuseExhausted) {
+          const reusable = cached[cacheIndex];
+          if (reusable && reusable.raw === raw) {
+            operations.push(reusable);
+            cacheIndex++;
+            continue;
+          }
+          reuseExhausted = true;
+        }
+
+        try {
+          operations.push(parseLine(raw, entry.line));
+        } catch {
+          // Stop at (excluding) the first unparseable statement rather than
+          // failing the whole frame — see `parseCompleteOperationsPrefix`'s
+          // doc comment.
+          break;
+        }
+      }
+
+      // Cache what THIS call produced, not what was reused from before: a
+      // statement that stopped matching (or a newly-unparseable one) must
+      // not linger in the cache and get silently reused again.
+      cached = operations;
+      return operations;
+    },
+  };
 }
 
 function parseLine(raw: string, lineNum: number): ParsedOperation {

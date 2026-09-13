@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { batchDesign } from "@/lib/tools/batchDesign";
-import { useSceneStore } from "@/store/sceneStore";
+import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { resetStores, seedScene, seedVariables } from "@/test/fixtures";
 import { useMeasurementsStore } from "@/store/measurementsStore";
@@ -1546,6 +1546,34 @@ describe("batch_design", () => {
     it("does not record history for a failed batch", async () => {
       await batchDesign({ operations: "D(nonexistent)" });
       expect(useHistoryStore.getState().past).toHaveLength(0);
+    });
+
+    it("undo after a plain insert into an existing parent restores the exact original child order (second review finding 3)", async () => {
+      // frame1 already has children (rect1, text1) from seedScene — inserting
+      // into it pushes onto childrenById.frame1's array IN PLACE
+      // (executeOperation's I() does `.push()`). If the pre-batch snapshot
+      // saved to history shared that same array (a shallow `{ ...childrenById
+      // }`, as `buildHistorySnapshot` and this fallback ctx-build both do),
+      // the push would retroactively mutate the "original" snapshot too, and
+      // undo would restore a childrenById that already includes the inserted
+      // node — the bug `cloneChildrenById` exists to prevent.
+      const originalChildrenById = JSON.parse(JSON.stringify(sceneState().childrenById));
+
+      const result = JSON.parse(
+        await batchDesign({
+          operations: 'I("frame1", {type: "rect", name: "Inserted", width: 5, height: 5})',
+        }),
+      );
+      expect(result.success).toBe(true);
+      // Sanity: the insert actually changed frame1's children.
+      expect(sceneState().childrenById["frame1"]).not.toEqual(originalChildrenById["frame1"]);
+
+      const snapshot = createSnapshot(useSceneStore.getState());
+      const prev = useHistoryStore.getState().undo(snapshot);
+      expect(prev).not.toBeNull();
+      useSceneStore.getState().restoreSnapshot(prev!);
+
+      expect(sceneState().childrenById).toEqual(originalChildrenById);
     });
   });
 

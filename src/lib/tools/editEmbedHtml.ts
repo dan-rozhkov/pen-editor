@@ -5,8 +5,13 @@ import {
   buildDocumentComponentTagMap,
 } from "@/lib/documentComponents";
 import { normalizeEmbedHtmlForStorage } from "@/utils/embedTemplateUtils";
-import { applyAnchorEdits, type AnchorEdit } from "@/lib/embedHtmlEdit/applyAnchorEdits";
+import { applyAnchorEdits } from "@/lib/embedHtmlEdit/applyAnchorEdits";
+import { parseAnchorEditsInput } from "@/lib/embedHtmlEdit/parseEdits";
 import { inspectEmbedHtml } from "@/lib/embedHtmlLint/inspectEmbedHtml";
+import {
+  takeProgressiveEmbedHtmlSession,
+  restoreProgressiveSessionHtml,
+} from "./editEmbedHtmlProgressive";
 import type { EmbedNode, FlatSceneNode } from "@/types/scene";
 import type { ToolHandler } from "../toolRegistry";
 
@@ -16,36 +21,35 @@ import type { ToolHandler } from "../toolRegistry";
  */
 const COMPONENT_TAG_RE = /<c-[a-z0-9-]+[\s/>]/i;
 
-/** Coerce the tool args into AnchorEdit[], or null when unusable. */
-function parseEdits(raw: unknown): AnchorEdit[] | null {
-  let value = raw;
-  if (typeof value === "string") {
-    try {
-      value = JSON.parse(value);
-    } catch {
-      return null;
+export const editEmbedHtml: ToolHandler = async (args, context) => {
+  const nodeId = typeof args.nodeId === "string" ? args.nodeId : "";
+
+  // Take (and permanently finalize) any progressive session for this call
+  // FIRST, on every exit path below — including the early-return validation
+  // errors that follow. A truncated stream (e.g. a mid-stream `newString`
+  // followed by a final call whose `edits` fails to parse) must never leave
+  // streamed html on the node with the session still sitting in the map and
+  // nothing left to ever restore it.
+  if (context?.sessionId && context?.toolCallId) {
+    const session = takeProgressiveEmbedHtmlSession(context.sessionId, context.toolCallId);
+    if (session) {
+      const { conflicted } = restoreProgressiveSessionHtml(session);
+      if (conflicted) {
+        // Say so honestly rather than silently running the strict path below
+        // against unrelated content while claiming "nothing was changed."
+        return JSON.stringify({
+          error:
+            `Node ${session.nodeId}'s HTML changed from another source while this edit was still ` +
+            "streaming in, so the streamed edit was discarded instead of being applied. " +
+            "Re-run edit_embed_html against the node's current content to make further changes.",
+        });
+      }
     }
   }
-  if (!Array.isArray(value)) return null;
-  const edits: AnchorEdit[] = [];
-  for (const item of value) {
-    if (!item || typeof item !== "object") return null;
-    const { oldString, newString, replaceAll } = item as Record<string, unknown>;
-    if (typeof oldString !== "string" || typeof newString !== "string") return null;
-    edits.push({
-      oldString,
-      newString,
-      ...(replaceAll === true ? { replaceAll: true } : {}),
-    });
-  }
-  return edits;
-}
 
-export const editEmbedHtml: ToolHandler = async (args) => {
-  const nodeId = typeof args.nodeId === "string" ? args.nodeId : "";
   if (!nodeId) return JSON.stringify({ error: "nodeId is required" });
 
-  const edits = parseEdits(args.edits);
+  const edits = parseAnchorEditsInput(args.edits);
   if (!edits) return JSON.stringify({ error: "edits must be an array of {oldString, newString}" });
   if (edits.length === 0) return JSON.stringify({ error: "No edits provided" });
 

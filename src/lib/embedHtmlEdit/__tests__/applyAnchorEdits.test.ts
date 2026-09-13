@@ -131,3 +131,64 @@ describe("applyAnchorEdits", () => {
     );
   });
 });
+
+describe("applyAnchorEdits lenient mode", () => {
+  it("skips a missing anchor instead of throwing, and applies the rest", () => {
+    const result = applyAnchorEdits(
+      "<p>a</p><p>b</p>",
+      [
+        { oldString: "nope", newString: "x" },
+        { oldString: "<p>b</p>", newString: "<p>B</p>" },
+      ],
+      { lenient: true },
+    );
+    expect(result.html).toBe("<p>a</p><p>B</p>");
+    expect(result.replacements).toBe(1);
+  });
+
+  it("skips an ambiguous anchor (replaceAll not set) instead of throwing", () => {
+    const result = applyAnchorEdits("<i></i><i></i>", [{ oldString: "<i>", newString: "<b>" }], {
+      lenient: true,
+    });
+    expect(result.html).toBe("<i></i><i></i>");
+    expect(result.replacements).toBe(0);
+  });
+
+  it("skips an anchor that is only ambiguous after whitespace normalization", () => {
+    // Neither occurrence is an exact match for "<p> hi </p>" (different
+    // whitespace in both), so this only becomes ambiguous once whitespace is
+    // normalized — the ambiguity path this test targets.
+    const result = applyAnchorEdits(
+      "<p>\n  hi\n</p><p>\thi\t</p>",
+      [{ oldString: "<p> hi </p>", newString: "<p>bye</p>" }],
+      { lenient: true },
+    );
+    expect(result.html).toBe("<p>\n  hi\n</p><p>\thi\t</p>");
+  });
+
+  it("leaves a would-be-unbalanced result in place instead of throwing", () => {
+    const input = '<div class="top-bar"><span>title</span></div><div class="map-mini"></div>';
+    const result = applyAnchorEdits(
+      input,
+      [{ oldString: "</span></div><div", newString: "</span><div" }],
+      { lenient: true },
+    );
+    expect(result.html).toBe(
+      '<div class="top-bar"><span>title</span><div class="map-mini"></div>',
+    );
+  });
+
+  it("skips an empty oldString instead of throwing", () => {
+    const result = applyAnchorEdits("<p>a</p>", [{ oldString: "", newString: "x" }], {
+      lenient: true,
+    });
+    expect(result.html).toBe("<p>a</p>");
+  });
+
+  it("still throws in the default (strict) mode for the exact same inputs", () => {
+    expect(() => applyAnchorEdits("<p>a</p><p>b</p>", [{ oldString: "nope", newString: "x" }]))
+      .toThrow(AnchorEditError);
+    expect(() => applyAnchorEdits("<i></i><i></i>", [{ oldString: "<i>", newString: "<b>" }]))
+      .toThrow(AnchorEditError);
+  });
+});
