@@ -44,6 +44,18 @@ export const READ_ONLY_REFUSAL =
   "This canvas is not editable right now (read-only shared view, ?view mode, or present mode); editing tools are unavailable.";
 
 /**
+ * Refusal message for a tool marked `withheldOnSharedView`, called on a
+ * `/c/:shareId` shared canvas. Deliberately worded differently from
+ * `READ_ONLY_REFUSAL`: that one is about the canvas not being *editable*;
+ * this one is about a *read* tool that is still refused because its result
+ * would expose someone else's document beyond what their own viewer draws.
+ * Conflating the two would tell a caller "make it editable and retry", which
+ * is not true here — the tool never becomes available in the shared viewer.
+ */
+export const SHARED_VIEW_REFUSAL =
+  "This tool is not available on someone else's shared canvas.";
+
+/**
  * Whether the scene may currently be mutated, decided by the application's
  * own rules rather than a copy of them.
  *
@@ -66,6 +78,19 @@ export const READ_ONLY_REFUSAL =
 function canMutateScene(): boolean {
   if (useSharedViewStore.getState().isSharedView) return false;
   return canEditScene(useEditorModeStore.getState().mode);
+}
+
+/**
+ * Whether this tab is showing a `/c/:shareId` shared, read-only canvas —
+ * someone else's document, not merely the current user's own document in a
+ * non-editable mode. `withheldOnSharedView` gates on this alone, never on
+ * `canMutateScene()`/`?view` mode: a tool like `read_embed_html` is perfectly
+ * safe on your own `/app?view` document (nobody's document but yours to
+ * read), and only becomes a problem when the document belongs to whoever
+ * published the share link.
+ */
+function isSharedView(): boolean {
+  return useSharedViewStore.getState().isSharedView;
 }
 
 /**
@@ -152,6 +177,14 @@ function buildDefinition(spec: WebMcpToolSpec): ToolDefinition {
         return toolError(READ_ONLY_REFUSAL);
       }
 
+      // Same race, same fix, different reason: a tool marked
+      // withheldOnSharedView is refused here even if it slipped into
+      // registration before isSharedView flipped true (fork from `/c/:id`
+      // happens the other way too, but the ordering risk is symmetric).
+      if (spec.withheldOnSharedView && isSharedView()) {
+        return toolError(SHARED_VIEW_REFUSAL);
+      }
+
       const validation = validateInput(input, spec.inputSchema);
       if (!validation.ok) {
         // Every problem, not just the first: a caller fixing one field at a
@@ -215,9 +248,14 @@ export async function registerWebMcpTools(
   }
 
   const mutable = canMutateScene();
+  const shared = isSharedView();
 
   for (const spec of WEBMCP_TOOL_SPECS) {
     if (spec.mutating && !mutable) {
+      result.withheld.push(spec.name);
+      continue;
+    }
+    if (spec.withheldOnSharedView && shared) {
       result.withheld.push(spec.name);
       continue;
     }

@@ -87,6 +87,36 @@ describe("validateInput", () => {
     expect(errors({ name: "x", tags: ["a", 2] })).toContain("tags[1]: expected string, got number");
   });
 
+  it("enforces minItems", () => {
+    const minItemsSchema: JsonSchema = {
+      type: "object",
+      properties: {
+        items: { type: "array", minItems: 1, items: { type: "string" } },
+      },
+      required: ["items"],
+      additionalProperties: false,
+    };
+    const result = validateInput({ items: [] }, minItemsSchema);
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.errors).toContain("items: fewer than minItems 1");
+    expect(validateInput({ items: ["a"] }, minItemsSchema).ok).toBe(true);
+  });
+
+  it("enforces both minItems and maxItems together", () => {
+    const boundedSchema: JsonSchema = {
+      type: "object",
+      properties: {
+        items: { type: "array", minItems: 1, maxItems: 2, items: { type: "string" } },
+      },
+      required: ["items"],
+      additionalProperties: false,
+    };
+    expect(validateInput({ items: [] }, boundedSchema).ok).toBe(false);
+    expect(validateInput({ items: ["a"] }, boundedSchema).ok).toBe(true);
+    expect(validateInput({ items: ["a", "b"] }, boundedSchema).ok).toBe(true);
+    expect(validateInput({ items: ["a", "b", "c"] }, boundedSchema).ok).toBe(false);
+  });
+
   it("rejects an array where an object is expected", () => {
     expect(errors({ name: "x", nested: [] })).toContain("nested: expected object, got array");
   });

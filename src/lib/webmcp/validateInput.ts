@@ -54,6 +54,9 @@ function checkValue(
         // Do not then walk a deliberately huge array item by item.
         return;
       }
+      if (schema.minItems !== undefined && (value as unknown[]).length < schema.minItems) {
+        errors.push(`${path}: fewer than minItems ${schema.minItems}`);
+      }
       if (schema.items) {
         (value as unknown[]).forEach((item, index) =>
           checkValue(item, schema.items as JsonSchema, `${path}[${index}]`, errors)

@@ -6,6 +6,7 @@ vi.mock("@/hooks/useDesignChat", () => ({ executeToolCall }));
 import { installModelContextPolyfill, getModelContext } from "@/lib/webmcp/polyfill";
 import {
   READ_ONLY_REFUSAL,
+  SHARED_VIEW_REFUSAL,
   SURFACE_INACTIVE,
   registerWebMcpTools,
   setSurfaceActive,
@@ -15,6 +16,13 @@ import { useEditorModeStore } from "@/store/editorModeStore";
 import { useSharedViewStore } from "@/store/sharedViewStore";
 
 const MUTATING = WEBMCP_TOOL_SPECS.filter((spec) => spec.mutating).map((spec) => spec.name);
+// Everything withheld specifically on a `/c/:shareId` shared canvas: the
+// mutating tools, plus any read-only tool marked withheldOnSharedView (right
+// now, just read_embed_html — its result can't be safely narrowed to what
+// the viewer can see; see its spec comment in schemas.ts).
+const WITHHELD_ON_SHARED_VIEW = WEBMCP_TOOL_SPECS.filter(
+  (spec) => spec.mutating || spec.withheldOnSharedView
+).map((spec) => spec.name);
 
 async function freshContext() {
   Reflect.deleteProperty(navigator, "modelContext");
@@ -149,9 +157,47 @@ describe("registerWebMcpTools", () => {
 
       const result = await registerWebMcpTools();
 
-      expect(result.withheld).toEqual(MUTATING);
+      expect(result.withheld).toEqual(WITHHELD_ON_SHARED_VIEW);
       const names = (await getModelContext()!.getTools()).map((t) => t.name);
-      for (const name of MUTATING) expect(names).not.toContain(name);
+      for (const name of WITHHELD_ON_SHARED_VIEW) expect(names).not.toContain(name);
+    });
+
+    // read_embed_html is read-only (never writes to the scene) but still
+    // must not reach a stranger's document: its "full"/"grep" results carry
+    // raw embed source under keys sharedViewRedaction.ts's SOURCE_HTML_KEYS
+    // doesn't recognize, so redacting the result isn't safe — the tool has
+    // to be withheld outright, the same as a mutating tool but for a
+    // different reason (see withheldOnSharedView's doc comment).
+    it("withholds read_embed_html specifically in the shared viewer, even though it never mutates", () => {
+      const spec = WEBMCP_TOOL_SPECS.find((s) => s.name === "read_embed_html")!;
+      expect(spec.mutating).toBe(false);
+      expect(spec.withheldOnSharedView).toBe(true);
+    });
+
+    it("does not withhold read_embed_html in ?view mode on the user's own document", async () => {
+      useEditorModeStore.getState().enterView();
+
+      const result = await registerWebMcpTools();
+
+      expect(result.withheld).not.toContain("read_embed_html");
+      const names = (await getModelContext()!.getTools()).map((t) => t.name);
+      expect(names).toContain("read_embed_html");
+    });
+
+    it("refuses read_embed_html when the canvas becomes a shared view after registration", async () => {
+      await registerWebMcpTools();
+      useSharedViewStore.setState({ isSharedView: true });
+
+      expect(await invoke("read_embed_html", { nodeId: "n1" })).toEqual({
+        isError: true,
+        error: SHARED_VIEW_REFUSAL,
+      });
+      expect(executeToolCall).not.toHaveBeenCalled();
+    });
+
+    it("names the shared-view refusal distinctly from the read-only-canvas refusal", () => {
+      expect(SHARED_VIEW_REFUSAL).toMatch(/shared canvas/i);
+      expect(SHARED_VIEW_REFUSAL).not.toBe(READ_ONLY_REFUSAL);
     });
 
     // `/app?view` never sets the shared-view flag; only the editor mode says
@@ -292,13 +338,13 @@ describe("registerWebMcpTools", () => {
   // same tab, a remount, and a document that is now the user's to edit.
   it("publishes the mutating tools after a read-only canvas becomes editable", async () => {
     useSharedViewStore.setState({ isSharedView: true });
-    expect((await registerWebMcpTools()).withheld).toEqual(MUTATING);
+    expect((await registerWebMcpTools()).withheld).toEqual(WITHHELD_ON_SHARED_VIEW);
 
     useSharedViewStore.setState({ isSharedView: false });
     const afterFork = await registerWebMcpTools();
 
     expect(afterFork.withheld).toEqual([]);
     const names = (await getModelContext()!.getTools()).map((t) => t.name);
-    for (const name of MUTATING) expect(names).toContain(name);
+    for (const name of WITHHELD_ON_SHARED_VIEW) expect(names).toContain(name);
   });
 });

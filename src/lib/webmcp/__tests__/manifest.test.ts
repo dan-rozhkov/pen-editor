@@ -105,6 +105,34 @@ describe("buildWebMcpManifest", () => {
     expect(manifest.readOnly.note).toMatch(/set_variables/);
   });
 
+  it("names every withheld tool in the read-only note, derived from WEBMCP_TOOL_SPECS rather than hardcoded", () => {
+    const manifest = buildWebMcpManifest();
+    // "Withheld" means never published on a shared canvas: every mutating
+    // tool, plus any read-only tool marked withheldOnSharedView (e.g.
+    // read_embed_html, whose result can't be safely narrowed to what the
+    // viewer can see — see its spec comment).
+    const withheldNames = WEBMCP_TOOL_SPECS.filter(
+      (spec) => spec.mutating || spec.withheldOnSharedView
+    ).map((spec) => spec.name);
+
+    // Guard against the note silently going stale as tools are added/removed:
+    // there must be more than the two names the note used to hardcode, and
+    // every withheld tool's name — not just those two — must appear in it.
+    expect(withheldNames.length).toBeGreaterThan(2);
+    expect(withheldNames).toContain("read_embed_html");
+    for (const name of withheldNames) {
+      expect(manifest.readOnly.note).toMatch(new RegExp(`\\b${name}\\b`));
+    }
+
+    // And nothing that stays published should be named as if it were withheld.
+    const publishedNames = WEBMCP_TOOL_SPECS.filter(
+      (spec) => !spec.mutating && !spec.withheldOnSharedView
+    ).map((spec) => spec.name);
+    for (const name of publishedNames) {
+      expect(manifest.readOnly.note).not.toMatch(new RegExp(`\\b${name}\\b`));
+    }
+  });
+
   it("warns that an empty getTools() means 'not yet', not 'unsupported'", () => {
     const manifest = buildWebMcpManifest();
     expect(manifest.readiness.note.toLowerCase()).toContain("gettools");

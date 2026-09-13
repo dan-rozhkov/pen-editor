@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { readComments } from "@/lib/tools/readComments";
 import { replyComment } from "@/lib/tools/replyComment";
 import { resolveComment } from "@/lib/tools/resolveComment";
-import { leaveComment } from "@/lib/tools/leaveComment";
+import { leaveComment, MAX_COMMENTS_PER_BATCH } from "@/lib/tools/leaveComment";
 import { useCommentsStore } from "@/store/commentsStore";
 import { resetStores, seedScene } from "@/test/fixtures";
 import type { CommentThread } from "@/store/commentsStore";
@@ -234,5 +234,29 @@ describe("leave_comment", () => {
     const result = await leaveComment({ comments: [] });
     expect(useCommentsStore.getState().threads).toHaveLength(0);
     expect(result.toLowerCase()).toMatch(/no comments|empty|invalid/);
+  });
+
+  it("rejects a batch over the 50-item limit without creating a partial result", async () => {
+    const comments = Array.from({ length: MAX_COMMENTS_PER_BATCH + 1 }, (_, i) => ({
+      nodeId: "rect1",
+      text: `finding ${i}`,
+    }));
+
+    const result = await leaveComment({ comments });
+
+    expect(useCommentsStore.getState().threads).toHaveLength(0);
+    expect(result.toLowerCase()).toMatch(/invalid|limit|50/);
+  });
+
+  it("accepts a batch at exactly the 50-item limit", async () => {
+    const comments = Array.from({ length: MAX_COMMENTS_PER_BATCH }, (_, i) => ({
+      nodeId: "rect1",
+      text: `finding ${i}`,
+    }));
+
+    const result = await leaveComment({ comments });
+
+    expect(useCommentsStore.getState().threads).toHaveLength(MAX_COMMENTS_PER_BATCH);
+    expect(result.toLowerCase()).not.toMatch(/invalid|limit/);
   });
 });

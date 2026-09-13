@@ -27,13 +27,28 @@ interface RawCommentItem {
  * the agent has no way to re-derive which node it meant.
  *
  * Comments are outside undo/redo (cmt-01 decision) — `addAgentThread` never
- * touches history.
+ * touches history. That makes the upper bound below load-bearing, not
+ * cosmetic: nothing can roll back a batch that got out of hand. This mirrors
+ * the backend zod shape's `.max(50)` (and the desktop MCP manifest's
+ * `maxItems: 50`) — every entry point into this tool enforces the same
+ * ceiling, not just the WebMCP schema, since this handler is also reachable
+ * from the desktop MCP bridge without going through WebMCP's validator at
+ * all.
  */
+export const MAX_COMMENTS_PER_BATCH = 50;
+
 export const leaveComment: ToolHandler = async (args) => {
   const rawComments = Array.isArray(args.comments) ? (args.comments as RawCommentItem[]) : null;
 
   if (!rawComments || rawComments.length === 0) {
-    return "No comments were left: the `comments` array was empty or invalid.";
+    return "Invalid input: the `comments` array must contain at least 1 item.";
+  }
+
+  if (rawComments.length > MAX_COMMENTS_PER_BATCH) {
+    // No partial result: creating the first 50 and silently dropping the
+    // rest would leave the agent citing thread numbers for comments it
+    // thinks it left but didn't, with nothing to undo the batch by.
+    return `Invalid input: the \`comments\` array has ${rawComments.length} items, more than the ${MAX_COMMENTS_PER_BATCH}-item limit. Split it into smaller batches.`;
   }
 
   const store = useCommentsStore.getState();

@@ -60,7 +60,16 @@ describe("WebMCP tool specs", () => {
     // state (repoContextStore) the design agent's own tools then read — same
     // read-only-gate treatment as batch_design/set_variables (see its spec
     // comment in schemas.ts).
-    expect(mutating.sort()).toEqual(["attach_local_repo", "batch_design", "set_variables"]);
+    expect(mutating.sort()).toEqual([
+      "attach_local_repo",
+      "batch_design",
+      "edit_embed_html",
+      "leave_comment",
+      "rename_layers",
+      "reply_comment",
+      "resolve_comment",
+      "set_variables",
+    ]);
   });
 
   // publish_to_showcase publishes a design to a public gallery: irreversible
@@ -95,6 +104,14 @@ describe.runIf(backendExists)("WebMCP schemas against the backend zod shapes", (
       get_variables: mod.getVariablesInputShape as Record<string, ZodLike>,
       set_variables: mod.setVariablesInputShape as Record<string, ZodLike>,
       batch_design: mod.batchDesignInputShape as Record<string, ZodLike>,
+      read_comments: mod.readCommentsInputShape as Record<string, ZodLike>,
+      reply_comment: mod.replyCommentInputShape as Record<string, ZodLike>,
+      resolve_comment: mod.resolveCommentInputShape as Record<string, ZodLike>,
+      leave_comment: mod.leaveCommentInputShape as Record<string, ZodLike>,
+      rename_layers: mod.renameLayersInputShape as Record<string, ZodLike>,
+      read_embed_html: mod.readEmbedHtmlInputShape as Record<string, ZodLike>,
+      edit_embed_html: mod.editEmbedHtmlInputShape as Record<string, ZodLike>,
+      find_empty_space_on_canvas: mod.findEmptySpaceOnCanvasInputShape as Record<string, ZodLike>,
     };
   }
 
