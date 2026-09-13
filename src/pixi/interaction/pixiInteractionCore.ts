@@ -55,6 +55,7 @@ import { resolveTextHandleReset } from "./textResize";
 import { findSlotContext } from "@/utils/componentUtils";
 import { saveHistory } from "@/store/sceneStore/helpers/history";
 import { createSnapshot } from "@/store/sceneStore";
+import { useEmbedPickerStore } from "@/store/embedPickerStore";
 
 const EMPTY_POINTER_EVENT = {} as PointerEvent;
 
@@ -645,8 +646,9 @@ export function setupPixiInteraction(
     // since `mode` itself stays "edit" while dev mode is active (canEditScene
     // alone wouldn't catch it).
     if (useDevModeStore.getState().active) return;
-    // Double-click only starts inline editing (text/name/embed) — disabled
-    // outside edit mode so view/present stay read-only.
+    // Double-click starts inline editing for text/name, drills into
+    // frames/groups/instances, and starts the "select element" picker for
+    // embeds — disabled outside edit mode so view/present stay read-only.
     if (!canEditScene(useEditorModeStore.getState().mode)) return;
     const rect = canvas.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
@@ -773,7 +775,13 @@ export function setupPixiInteraction(
     } else if (node.type === "path") {
       enterPathEditMode(hitId);
     } else if (node.type === "embed") {
-      useSelectionStore.getState().setActiveEmbed(hitId);
+      // Select the embed alone first, then start picking — order matters:
+      // useEmbedPickerLifecycle stops picking as soon as the picking embed
+      // isn't the sole selected node, so starting picking before select()
+      // would have it shut off immediately (selectedIds wouldn't yet be
+      // exactly [hitId]).
+      useSelectionStore.getState().select(hitId);
+      useEmbedPickerStore.getState().startPicking(hitId);
     } else if (node.type === "frame" || node.type === "group") {
       // Enter container (fallback when no selected container context)
       useSelectionStore.getState().enterContainer(hitId);

@@ -3,10 +3,13 @@ import { expectEditorMounted } from "./support/editor";
 
 // Smoke test for the code-layer DOM overlay (EmbedLayer). An embed node is
 // added to the scene store (dev-only global), and we verify it renders as a
-// Shadow-DOM host above the canvas, is non-interactive by default, and becomes
-// interactive (pointer-events: auto) after a double-click.
+// Shadow-DOM host above the canvas, is non-interactive by default, and a
+// double-click selects it and enters the element-picker mode (`pickingEmbedId`,
+// not `activeEmbedId` — nothing in the UI sets `activeEmbedId` today).
 
-test("embed renders as a DOM overlay and enters interactive state", async ({ page }) => {
+test("embed renders as a DOM overlay and enters element-picker mode on double-click", async ({
+  page,
+}) => {
   // The app fetches the model list at startup; stub it so the dev server
   // doesn't 404 and slow the page down.
   await page.route("**/api/models", (route) =>
@@ -48,10 +51,12 @@ test("embed renders as a DOM overlay and enters interactive state", async ({ pag
   // Default: not interactive (pointer-events: none).
   expect(await host.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe("none");
 
-  // Double-click enters interactive state → pointer-events: auto.
+  // Double-click selects the embed and enters element-picker mode
+  // (pointer-events: auto while picking too, so the picker overlay can
+  // receive pointer events inside the shadow DOM).
   // The host is pointer-events:none, so the double-click reaches the Pixi
-  // canvas at the embed's screen position, where the dblclick handler resolves
-  // the embed and calls setActiveEmbed.
+  // canvas at the embed's screen position, where the dblclick handler
+  // resolves the embed, selects it, and calls startPicking.
   //
   // That resolution goes through the canvas hit test, which prunes root
   // subtrees against the culling index — and pixiSync only refreshes that
@@ -79,6 +84,14 @@ test("embed renders as a DOM overlay and enters interactive state", async ({ pag
   await expect
     .poll(async () => host.evaluate((el) => getComputedStyle(el).pointerEvents))
     .toBe("auto");
+
+  // Picker mode: the embed's "Select element" toggle in EmbedActionBar reads
+  // `pickingEmbedId` and shows as pressed/"Exit element select" — there is
+  // no dev global for the picker store, so the button's own aria-pressed
+  // state is the visible signal.
+  const selectElementToggle = page.getByRole("button", { name: "Exit element select" });
+  await expect(selectElementToggle).toBeVisible();
+  await expect(selectElementToggle).toHaveAttribute("aria-pressed", "true");
 });
 
 test("embed preserves every leading style block in a showcase HTML fragment", async ({ page }) => {

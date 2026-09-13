@@ -164,6 +164,34 @@ describe("useEmbedPickerLifecycle", () => {
     expect(useEmbedPickerStore.getState().selection).toBeNull();
   });
 
+  it("stops picking when the inline HTML editor opens on the picking embed", () => {
+    seedEmbed("e1");
+    useSelectionStore.setState({ selectedIds: ["e1"] });
+    useEmbedPickerStore.getState().startPicking("e1");
+    render(<Harness />);
+    expect(useEmbedPickerStore.getState().pickingEmbedId).toBe("e1");
+
+    // The "Inline edit" button in EmbedActionBar calls this — it sets
+    // editingMode/editingNodeId, not activeEmbedId.
+    act(() => useSelectionStore.getState().startEditing("e1", "embed"));
+
+    expect(useEmbedPickerStore.getState().pickingEmbedId).toBeNull();
+  });
+
+  it("stops picking when activeEmbedId is set on the picking embed", () => {
+    seedEmbed("e1");
+    useSelectionStore.setState({ selectedIds: ["e1"] });
+    useEmbedPickerStore.getState().startPicking("e1");
+    render(<Harness />);
+    expect(useEmbedPickerStore.getState().pickingEmbedId).toBe("e1");
+
+    // No UI affordance calls setActiveEmbed today, but the lifecycle check
+    // still honors it if one is added back.
+    act(() => useSelectionStore.getState().setActiveEmbed("e1"));
+
+    expect(useEmbedPickerStore.getState().pickingEmbedId).toBeNull();
+  });
+
   it("clears the selection when the embed node is deleted", () => {
     seedEmbed("e1");
     useSelectionStore.setState({ selectedIds: ["e1"] });

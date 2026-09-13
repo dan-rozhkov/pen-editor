@@ -8,12 +8,17 @@ import type { EmbedNode } from "@/types/scene";
  * Keeps the embed element picker store honest as selection/scene state
  * changes elsewhere — mounted once at the PixiCanvas level.
  *
- * - Deselecting the picking embed, selecting something else, or entering
- *   inline-edit mode on it (`activeEmbedId`) all exit picking mode. Escape
- *   already exits picking with priority via `selectionStore.exitContainer`;
- *   this covers every OTHER way the same states can change (clicking
- *   elsewhere on the canvas, opening a different node from the layers
- *   panel, double-clicking the embed to inline-edit, etc).
+ * - Deselecting the picking embed, selecting something else, or opening the
+ *   inline HTML editor on it (`editingMode === "embed"` + `editingNodeId`,
+ *   from the "Inline edit" button in `EmbedActionBar`) all exit picking
+ *   mode. Escape already exits picking with priority via
+ *   `selectionStore.exitContainer`; this covers every OTHER way the same
+ *   states can change (clicking elsewhere on the canvas, opening a
+ *   different node from the layers panel, etc). The `activeEmbedId` check
+ *   below is kept alongside the inline-edit one — nothing in the UI sets
+ *   `activeEmbedId` today (no "Interact" affordance exists), so it is
+ *   currently a no-op, but it is cheap and correct if that affordance comes
+ *   back.
  * - A stored `selection` is cleared as soon as its embed is no longer the
  *   SOLE selected node — the highlight (and the element context sent to the
  *   agent) is meant to stay visible exactly while the picked element's
@@ -35,13 +40,16 @@ export function useEmbedPickerLifecycle(): void {
     const check = () => {
       const { pickingEmbedId, selection, selectionHtmlSnapshot } =
         useEmbedPickerStore.getState();
-      const { selectedIds, activeEmbedId } = useSelectionStore.getState();
+      const { selectedIds, activeEmbedId, editingNodeId, editingMode } =
+        useSelectionStore.getState();
 
       if (pickingEmbedId) {
         const stillSelectedAlone =
           selectedIds.length === 1 && selectedIds[0] === pickingEmbedId;
-        const enteredInlineEdit = activeEmbedId === pickingEmbedId;
-        if (!stillSelectedAlone || enteredInlineEdit) {
+        const enteredInteractMode = activeEmbedId === pickingEmbedId;
+        const enteredInlineEdit =
+          editingMode === "embed" && editingNodeId === pickingEmbedId;
+        if (!stillSelectedAlone || enteredInteractMode || enteredInlineEdit) {
           useEmbedPickerStore.getState().stopPicking();
         }
       }
