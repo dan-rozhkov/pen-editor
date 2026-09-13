@@ -215,7 +215,13 @@ test("a showcase prompt opens a new agent chat and sends the message", async ({
   await expect(page).toHaveURL(/\/app$/);
   await expectEditorMounted(page);
   await expect(page.getByText("Design Agent", { exact: true })).toBeVisible();
-  await expect(page.getByText(prompt, { exact: true })).toBeVisible();
+  // The prompt now surfaces twice: the chat derives its title from the first
+  // user message, and the message itself sits in the transcript. Assert both
+  // rather than a bare getByText, which matches either one ambiguously.
+  await expect(page.getByTestId("chat-header-title")).toHaveText(prompt);
+  await expect(
+    page.locator('[data-testid^="chat-session-"]').getByText(prompt, { exact: true }),
+  ).toBeVisible();
   await expect.poll(() => chatRequests.length).toBe(1);
 });
 

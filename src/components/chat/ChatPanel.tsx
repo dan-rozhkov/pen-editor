@@ -90,11 +90,14 @@ function OpenChatHeader({ chatId }: { chatId: string }) {
       >
         <ArrowLeftIcon className="size-4" weight="light" />
       </IconButton>
-      <span className="min-w-0 flex-1 truncate px-1 text-sm font-medium text-text-primary">
+      <span
+        data-testid="chat-header-title"
+        className="min-w-0 flex-1 truncate px-1 text-sm font-medium text-text-primary"
+      >
         {chatTitle}
       </span>
       <IconButton
-        data-testid="create-tab-button"
+        data-testid="create-chat-button"
         variant="ghost"
         size="icon"
         onClick={() => createChat()}
